@@ -63,7 +63,7 @@ export async function productSnapshot(db: AppDb, productId: string): Promise<Rec
       .innerJoin(schema.warehouses, eq(schema.warehouses.id, prl.warehouseId))
       .where(eq(prl.productId, productId))
   )
-    .map((l) => `${l.code} ${l.min}–${l.max}`)
+    .map((l) => `${l.code} ${l.min} to ${l.max}`)
     .join(', ');
   const allocations = (
     await db

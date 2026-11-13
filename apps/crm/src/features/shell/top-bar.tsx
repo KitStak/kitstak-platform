@@ -144,7 +144,7 @@ export function TopBar() {
         className="mr-1 flex h-9 shrink-0 items-center rounded-md px-1.5 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus lg:mr-3"
       >
         <Logo size={22} />
-        <span className="sr-only"> – home</span>
+        <span className="sr-only">, home</span>
       </Link>
 
       <TopNav />

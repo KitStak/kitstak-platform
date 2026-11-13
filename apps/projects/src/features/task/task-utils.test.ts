@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseBlocks, parseInline } from './markdown';
 import {
+  datePatch,
   decodeMentions,
   encodeMentions,
   formatBytes,
@@ -131,5 +132,22 @@ describe('comment markdown', () => {
   it('never links unsafe protocols', () => {
     const inline = parseInline('[x](javascript:alert(1))');
     expect(inline.every((i) => i.type === 'text')).toBe(true);
+  });
+});
+
+describe('datePatch', () => {
+  const task = { startDate: '2026-11-18', dueDate: '2026-11-19' };
+  it('keeps a valid due date as is', () => {
+    expect(datePatch(task, 'dueDate', '2026-11-25')).toEqual({ patch: { dueDate: '2026-11-25' }, moved: null });
+  });
+  it('pulls the start along when the due date moves before it', () => {
+    expect(datePatch(task, 'dueDate', '2026-11-13')).toEqual({ patch: { dueDate: '2026-11-13', startDate: '2026-11-13' }, moved: 'startDate' });
+  });
+  it('pushes the due date along when the start moves after it', () => {
+    expect(datePatch(task, 'startDate', '2026-11-22')).toEqual({ patch: { startDate: '2026-11-22', dueDate: '2026-11-22' }, moved: 'dueDate' });
+  });
+  it('clearing a date never moves the other', () => {
+    expect(datePatch(task, 'dueDate', null)).toEqual({ patch: { dueDate: null }, moved: null });
+    expect(datePatch({ startDate: null, dueDate: null }, 'startDate', '2026-12-01')).toEqual({ patch: { startDate: '2026-12-01' }, moved: null });
   });
 });

@@ -1078,7 +1078,7 @@ function TestPanel({ form }: { readonly form: Form }) {
                 {result.changes.map((c) => (
                   <li key={c.field} className="text-xs">
                     <span className="font-medium">{c.field}</span>{' '}
-                    {!c.from || c.from === '—' ? (
+                    {!c.from || c.from === '\u2014' ? (
                       <span className="italic text-faint">(none)</span>
                     ) : (
                       <span className="text-faint line-through">{c.from}</span>

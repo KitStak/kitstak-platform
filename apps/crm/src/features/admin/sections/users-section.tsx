@@ -234,7 +234,7 @@ export function UsersSection() {
             )}
           >
             <span className="text-sm text-fg-secondary">{label}</span>
-            <span className="text-xl font-semibold text-fg tabular-nums">{users.data ? value : '–'}</span>
+            <span className="text-xl font-semibold text-fg tabular-nums">{users.data ? value : '…'}</span>
           </button>
         ))}
       </div>

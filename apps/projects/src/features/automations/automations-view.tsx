@@ -547,7 +547,7 @@ export function AutomationsView({
       }
       tabs={
         <Tabs value={tab} onValueChange={(value) => set({ tab: value === 'rules' ? null : value })}>
-          <div className="-mx-1 overflow-x-auto px-1">
+          <div className="-mx-1 overflow-x-auto px-1 max-md:pr-6 max-md:[mask-image:linear-gradient(to_right,#000_calc(100%-32px),transparent)]">
             <TabsList aria-label="Automations sections" className="min-w-max [&>button]:whitespace-nowrap">
               <TabsTrigger value="rules" count={list.length} data-testid="automations-tab-rules">
                 Your automations

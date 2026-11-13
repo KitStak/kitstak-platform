@@ -46,7 +46,7 @@ function SubtaskProgress({ done, total }: { readonly done: number; readonly tota
   return (
     <span className="inline-flex items-center gap-1" title={`${done} of ${total} subtasks done`}>
       <span aria-hidden className="h-1 w-6 overflow-hidden rounded-full bg-[var(--border-subtle)]">
-        <span className={cn('block h-full rounded-full', done === total ? 'bg-success' : 'bg-primary')} style={{ width: `${percent}%` }} />
+        <span className={cn('block h-full rounded-full', done === total ? 'bg-success' : 'bg-[var(--logo-ink)]')} style={{ width: `${percent}%` }} />
       </span>
       <span className="tabular-nums">
         {done}/{total}
@@ -55,12 +55,26 @@ function SubtaskProgress({ done, total }: { readonly done: number; readonly tota
   );
 }
 
+/**
+ * "No priority" on a card is empty signal bars, shown on hover as the way to set one. The shared
+ * no-priority glyph is three dots, which next to the card's "..." menu read as a second menu.
+ */
+function EmptyPriorityIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" aria-hidden data-testid="card-priority-empty">
+      {[0, 1, 2].map((index) => (
+        <rect key={index} x={2.5 + index * 4.5} y={10.5 - index * 3} width="2" height={3 + index * 3} rx="1" fill="none" stroke="var(--border-strong)" strokeWidth="1" />
+      ))}
+    </svg>
+  );
+}
+
 export function CardBody({ task, labels, links, ops, canEdit, interactive = true }: Pick<BoardCardProps, 'task' | 'labels' | 'links' | 'ops' | 'canEdit'> & { readonly interactive?: boolean }) {
   const done = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
   const editable = canEdit && interactive;
   const priority = (
     <span className="inline-flex size-5 items-center justify-center rounded-xs">
-      <PriorityIcon priority={task.priority} />
+      {task.priority === 'none' ? <EmptyPriorityIcon /> : <PriorityIcon priority={task.priority} />}
     </span>
   );
   return (

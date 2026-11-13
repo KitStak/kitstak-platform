@@ -32,7 +32,7 @@ import { useShell } from '@/features/shell/shell-context';
 import { SectionHeading } from './property-row';
 import { useTaskContext } from './task-context';
 import { fileKind, formatBytes, isImageType } from './task-utils';
-import type { useTaskUploads } from './use-task-uploads';
+import { localPreviewFor, type useTaskUploads } from './use-task-uploads';
 
 type Uploads = ReturnType<typeof useTaskUploads>;
 
@@ -78,7 +78,7 @@ function FileTile({
       >
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element -- private, auth-checked file route; next/image can't proxy it
-          <img src={file.url} alt="" loading="lazy" className="h-24 w-full bg-sunken object-cover" />
+          <img src={localPreviewFor(file.id) ?? file.url} alt="" loading="lazy" className="h-24 w-full bg-sunken object-cover" />
         ) : (
           <span className="flex h-24 w-full flex-col items-center justify-center gap-1 bg-sunken text-icon">
             <KindIcon file={file} className="size-7" />

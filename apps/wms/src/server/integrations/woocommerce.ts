@@ -137,7 +137,7 @@ function productOf(p: Record<string, unknown>, v: Record<string, unknown> | null
     id: v ? `${String(p.id)}:${String(v.id)}` : String(p.id),
     sku: strOrNull(src.sku),
     title: v
-      ? `${String(p.name)} — ${
+      ? `${String(p.name)} · ${
           arr(v.attributes)
             .map(rec)
             .map((x) => String(x.option ?? ''))

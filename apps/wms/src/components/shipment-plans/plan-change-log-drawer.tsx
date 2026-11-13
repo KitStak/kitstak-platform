@@ -132,7 +132,7 @@ export function PlanChangeLogDrawer({
           </div>
           <div className="flex items-center justify-between text-xs text-secondary">
             <span className="tabular-nums">
-              {(page - 1) * CHANGE_LOG_PAGE_SIZE + 1}–{Math.min(page * CHANGE_LOG_PAGE_SIZE, total)} of{' '}
+              {(page - 1) * CHANGE_LOG_PAGE_SIZE + 1} to {Math.min(page * CHANGE_LOG_PAGE_SIZE, total)} of{' '}
               {total}
             </span>
             <div className="flex items-center gap-1">

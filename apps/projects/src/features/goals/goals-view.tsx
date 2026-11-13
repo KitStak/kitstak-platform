@@ -47,7 +47,9 @@ import {
 } from '@/components/ui';
 import { DueDate, EntityIcon, PersonAvatar } from '@/components/pm';
 import { Page } from '@/components/layout/page';
-import { GOAL_HEALTHS, GOAL_HEALTH_LABELS, type GoalHealth } from '@/lib/constants';
+import { GOAL_HEALTHS, GOAL_HEALTH_LABELS, PROJECT_HEALTH_LABELS, type GoalHealth, type ProjectHealth } from '@/lib/constants';
+import { healthProgressTone } from '@/lib/health';
+import { ProjectHealthMark } from '@/features/projects/health';
 import { formatRange } from '@/lib/dates';
 import { useGoalCheckIns, useGoals, useProjects } from '@/lib/hooks/use-data';
 import { usePeopleMap } from '@/lib/hooks/use-people';
@@ -68,16 +70,34 @@ type DialogState =
 
 const MODE_TEXT = { key_results: 'from key results', projects: 'from linked projects', manual: 'set by hand' } as const;
 
-function ringTone(health: GoalHealth) {
-  // Red only means trouble: on-track progress is green, not brand red.
-  return health === 'off_track' || health === 'missed' ? 'danger' : health === 'at_risk' ? 'warning' : 'success';
-}
+// Progress is coloured by health, never by how full it is: neutral ink on track, amber at risk,
+// red off track (the shared rule in @/lib/health).
+const ringTone = (health: GoalHealth | ProjectHealth) => healthProgressTone(health);
 
-function GoalHealthBadge({ health }: { readonly health: GoalHealth }) {
-  return (
+const PROJECT_RANK = { on_track: 0, at_risk: 1, off_track: 2 } as const;
+
+/**
+ * One chip: the owner's call. When linked projects are in worse shape than the goal says (an On
+ * track goal with an At risk project), a small amber dot on the chip says so in its tooltip, the
+ * same way project health chips flag numbers that disagree.
+ */
+function GoalHealthBadge({ health, linked = [] }: { readonly health: GoalHealth; readonly linked?: readonly ProjectSummary[] }) {
+  const worst = health === 'on_track' || health === 'at_risk'
+    ? linked.reduce<ProjectSummary | null>((acc, p) => (p.status === 'completed' || p.status === 'archived' ? acc : !acc || PROJECT_RANK[p.health] > PROJECT_RANK[acc.health] ? p : acc), null)
+    : null;
+  const flagged = worst && PROJECT_RANK[worst.health] > PROJECT_RANK[health as 'on_track' | 'at_risk'] ? worst : null;
+  const badge = (
     <Badge tone={GOAL_TONE[health]} icon={<span aria-hidden className="size-1.5 rounded-full" style={{ background: GOAL_HEALTH_COLOR[health] }} />}>
       {GOAL_HEALTH_LABELS[health]}
     </Badge>
+  );
+  if (!flagged) return badge;
+  const tip = `Linked project ${flagged.name} is ${PROJECT_HEALTH_LABELS[flagged.health]} · Check in to update`;
+  return (
+    <span className="relative inline-flex" title={tip} aria-label={`${GOAL_HEALTH_LABELS[health]}. ${tip}`} role="img" data-testid="goal-health-flag">
+      {badge}
+      <span aria-hidden className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-warning ring-2 ring-[var(--surface-panel)]" />
+    </span>
   );
 }
 
@@ -298,7 +318,7 @@ function GoalCard({
 
                 {goal.name}
               </button>
-              <GoalHealthBadge health={goal.health} />
+              <GoalHealthBadge health={goal.health} linked={linked} />
               {goal.period ? <Badge tone="outline" size="sm">{goal.period}</Badge> : null}
             </div>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-fg-muted">
@@ -382,11 +402,12 @@ function GoalCard({
                 <span className="text-xs text-fg-muted">Projects:</span>
                 {linked.map((project) => (
                   <span key={project.id} className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-panel py-0.5 pr-1 pl-1 text-xs">
-                    <ProgressRing percent={project.progress.percent} size={18} strokeWidth={2.5} showLabel={false} label={`${project.name} progress`} />
+                    <ProgressRing percent={project.progress.percent} size={18} strokeWidth={2.5} showLabel={false} label={`${project.name} progress`} tone={ringTone(project.health)} />
                     <Link href={routes.project(project.key)} className="max-w-48 truncate font-medium text-fg hover:underline">
                       {project.name}
                     </Link>
                     <span className="text-fg-muted tabular-nums">{project.progress.percent}%</span>
+                    <ProjectHealthMark project={project} />
                     {canEdit ? (
                       <button type="button" aria-label={`Unlink ${project.name}`} onClick={() => void unlink(project.id)} className="inline-flex size-4 items-center justify-center rounded-full text-icon outline-none hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus">
                         <X aria-hidden className="size-3" />

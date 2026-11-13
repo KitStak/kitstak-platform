@@ -31,7 +31,7 @@ const TYPE_OPTIONS = [
 
 const SORT_OPTIONS = [
   { value: 'updated', label: 'Last updated' },
-  { value: 'name', label: 'Name (A–Z)' },
+  { value: 'name', label: 'Name (A to Z)' },
   { value: 'type', label: 'Type' },
 ];
 

@@ -64,7 +64,7 @@ export function exportCell(column: ColumnDto, item: ItemDto, ctx: ExportContext)
           : { date: value.date }
         : null;
     case 'timeline':
-      return isRecord(value) ? `${String(value.from ?? '')} – ${String(value.to ?? '')}` : null;
+      return isRecord(value) ? `${String(value.from ?? '')} to ${String(value.to ?? '')}` : null;
     case 'number':
     case 'rating':
       return typeof value === 'number' ? value : null;

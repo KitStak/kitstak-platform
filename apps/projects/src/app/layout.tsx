@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Providers } from './providers';
 import { ThemeScript } from './theme-script';
+import { EarlyKeysScript } from '@/features/command/early-keys';
 import '@/styles/globals.css';
 
 /** Sibling-app origins for the cross-app theme handoff; dev defaults match the dev ports. */
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className={`${inter.variable} h-full`} suppressHydrationWarning>
       <head>
         <ThemeScript />
+        <EarlyKeysScript />
       </head>
       <body className="min-h-full">
         <Providers siblingUrls={SIBLING_APP_URLS}>{children}</Providers>

@@ -25,11 +25,13 @@ import {
   Signal,
   Tag,
   UserRoundPen,
+  UserPlus,
 } from 'lucide-react';
 import { Button, Popover, PopoverContent, PopoverTrigger, Tooltip, toast } from '@/components/ui';
 import { DueDate, LabelPill, PersonAvatar, PriorityIcon, StatusIcon } from '@/components/pm';
 import { CUSTOM_FIELD_TYPE_LABELS, PRIORITY_LABELS, type CustomFieldType } from '@/lib/constants';
 import { formatDue, formatMinutes } from '@/lib/dates';
+import { setDateWithUndo } from './task-keys';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { qk } from '@/lib/query-keys';
 import type { TaskDetail } from '@/lib/types';
@@ -46,7 +48,7 @@ import { useShell } from '@/features/shell/shell-context';
 import { CustomFieldEditor } from './custom-field-editor';
 import { PROPERTY_TRIGGER, PropertyRow } from './property-row';
 import { useTaskContext } from './task-context';
-import { parseDuration } from './task-utils';
+import { datePatch, parseDuration } from './task-utils';
 import { LocalTime } from './local-time';
 
 const EMPTY = 'text-fg-muted';
@@ -74,6 +76,8 @@ function FieldTypeIcon({ type }: { readonly type: CustomFieldType }) {
   }
 }
 
+const POINTS_HELP = 'Type a number of points like 3, or a time like 2h in the box below.';
+
 function EstimateEditor() {
   const { task, canEdit, patch } = useTaskContext();
   const [open, setOpen] = useState(false);
@@ -90,8 +94,14 @@ function EstimateEditor() {
   ].filter(Boolean);
 
   const save = async () => {
-    const nextPoints = points.trim() === '' ? null : Number(points);
-    if (nextPoints !== null && (!Number.isInteger(nextPoints) || nextPoints < 0 || nextPoints > 1000)) {
+    const rawPoints = points.trim();
+    // Only a plain whole number counts: "QZGL-1" or "3 pts?" is not quietly read as a number.
+    if (rawPoints !== '' && !/^\d+$/.test(rawPoints)) {
+      setError(POINTS_HELP);
+      return;
+    }
+    const nextPoints = rawPoints === '' ? null : Number(rawPoints);
+    if (nextPoints !== null && nextPoints > 1000) {
       setError('Points must be a whole number from 0 to 1000.');
       return;
     }
@@ -164,9 +174,9 @@ function EstimateEditor() {
                   });
                   return;
                 }
-                const digits = raw.replace(/[^0-9]/g, '');
-                if (digits !== raw) setError('Story points are whole numbers, like 3. Put hours in the box below.');
-                setPoints(digits);
+                // Keep what was typed (no silent digit picking) and say why it can't be saved.
+                if (raw.trim() !== '' && !/^\s*\d+\s*$/.test(raw)) setError(POINTS_HELP);
+                setPoints(raw);
               }}
               aria-invalid={error ? true : undefined}
               placeholder="e.g. 3"
@@ -303,6 +313,12 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
   const status = statusById.get(task.statusId);
   const done = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
   const datesBackwards = Boolean(task.startDate && task.dueDate && task.startDate > task.dueDate);
+  /** Never saves backwards dates: the other date moves along, and the toast says so with Undo. */
+  const changeDate = (field: 'startDate' | 'dueDate', value: string | null) => {
+    const { patch: next, moved } = datePatch(task, field, value);
+    if (moved) void setDateWithUndo({ task, field, value, save: patch });
+    else void patch(next);
+  };
   const creator = task.createdBy ? peopleMap.get(task.createdBy) : undefined;
 
   return (
@@ -330,34 +346,42 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
       </PropertyRow>
 
       <PropertyRow icon={<CircleUserRound aria-hidden />} label="Assignee">
-        <AssigneePicker
-          value={task.assigneeId}
-          onChange={(assigneeId) => void patch({ assigneeId })}
-          disabled={!canEdit}
-          align="start"
-        >
-          <button
-            type="button"
-            className={PROPERTY_TRIGGER}
+        {/* One line in every layout: the narrow page sidebar gets an icon button instead of the words. */}
+        <div className="@container flex min-w-0 flex-1 flex-nowrap items-center">
+          <AssigneePicker
+            value={task.assigneeId}
+            onChange={(assigneeId) => void patch({ assigneeId })}
             disabled={!canEdit}
-            data-testid="task-assignee-trigger"
+            align="start"
           >
-            {task.assigneeId ? (
-              <PersonAvatar userId={task.assigneeId} size="xs" showName />
-            ) : (
-              <span className={EMPTY}>No one yet</span>
-            )}
-          </button>
-        </AssigneePicker>
-        {!task.assigneeId && canEdit ? (
-          <button
-            type="button"
-            onClick={() => void patch({ assigneeId: user.id })}
-            className="ml-1 shrink-0 rounded-sm px-1.5 py-1 text-xs font-medium text-fg-link hover:bg-hover hover:underline"
-          >
-            Assign to me
-          </button>
-        ) : null}
+            <button
+              type="button"
+              className={PROPERTY_TRIGGER}
+              disabled={!canEdit}
+              data-testid="task-assignee-trigger"
+            >
+              {task.assigneeId ? (
+                <PersonAvatar userId={task.assigneeId} size="xs" showName />
+              ) : (
+                <span className={EMPTY}>No one yet</span>
+              )}
+            </button>
+          </AssigneePicker>
+          {!task.assigneeId && canEdit ? (
+            <Tooltip content="Assign to me">
+              <button
+                type="button"
+                onClick={() => void patch({ assigneeId: user.id })}
+                aria-label="Assign to me"
+                data-testid="task-assign-me"
+                className="ml-1 inline-flex h-7 shrink-0 items-center gap-1 rounded-sm px-1.5 text-xs font-medium whitespace-nowrap text-fg-link hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus"
+              >
+                <UserPlus aria-hidden className="size-4 @min-[13rem]:hidden" />
+                <span className="hidden @min-[13rem]:inline">Assign to me</span>
+              </button>
+            </Tooltip>
+          ) : null}
+        </div>
       </PropertyRow>
 
       <PropertyRow icon={<UserRoundPen aria-hidden />} label="Reporter">
@@ -396,7 +420,7 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
       <PropertyRow icon={<CalendarClock aria-hidden />} label="Start date">
         <DuePicker
           value={task.startDate}
-          onChange={(startDate) => void patch({ startDate })}
+          onChange={(startDate) => changeDate('startDate', startDate)}
           disabled={!canEdit}
           align="start"
           title="Start date"
@@ -414,7 +438,7 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
       <PropertyRow icon={<CalendarDays aria-hidden />} label="Due date">
         <DuePicker
           value={task.dueDate}
-          onChange={(dueDate) => void patch({ dueDate })}
+          onChange={(dueDate) => changeDate('dueDate', dueDate)}
           disabled={!canEdit}
           align="start"
         >

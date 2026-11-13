@@ -102,10 +102,10 @@ export function formatTimelineRange(from: string, to: string, now: Date, locale 
   const spansYears = start.getFullYear() !== end.getFullYear();
   const withYear = (date: Date) =>
     date.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
-  if (spansYears) return `${withYear(start)} – ${withYear(end)}`;
+  if (spansYears) return `${withYear(start)} to ${withYear(end)}`;
   if (start.getTime() === end.getTime()) return formatShortDate(start, now, locale);
-  if (start.getFullYear() !== now.getFullYear()) return `${formatShortDate(start, start, locale)} – ${withYear(end)}`;
-  return `${formatShortDate(start, now, locale)} – ${formatShortDate(end, now, locale)}`;
+  if (start.getFullYear() !== now.getFullYear()) return `${formatShortDate(start, start, locale)} to ${withYear(end)}`;
+  return `${formatShortDate(start, now, locale)} to ${formatShortDate(end, now, locale)}`;
 }
 
 /** Inclusive length in days ("May 1 – May 1" is 1 day). */

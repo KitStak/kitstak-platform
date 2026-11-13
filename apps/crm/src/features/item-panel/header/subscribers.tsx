@@ -14,7 +14,6 @@ import {
   PopoverContent,
   PopoverTrigger,
   SearchInput,
-  Skeleton,
   cn,
 } from '@/components/ui';
 import type { UserSummaryDto } from '@/server/services/contracts/dto';
@@ -86,11 +85,9 @@ export function Subscribers({
 
   return (
     <div className="flex shrink-0 items-center gap-1.5" data-testid="item-subscribers">
-      {query.isLoading ? (
-        <Skeleton width={56} height={24} rounded="full" className="hidden @min-[480px]:block" />
-      ) : people.length > 0 ? (
-        <SubscriberStack people={people} />
-      ) : null}
+      {/* No placeholder while loading: the stack is a nice-to-have next to Invite, and a grey pill
+          that waits on a slow or remounted query reads as broken. It appears when it arrives. */}
+      {people.length > 0 ? <SubscriberStack people={people} /> : null}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="secondary" size="sm" leadingIcon={<UserPlus aria-hidden />} aria-label={`Subscribers: ${people.length}. Invite`}>

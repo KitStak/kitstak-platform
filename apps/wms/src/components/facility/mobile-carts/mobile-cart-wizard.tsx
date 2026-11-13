@@ -133,7 +133,7 @@ function AddCartTypePanel({
   const submit = async () => {
     if (!valid) {
       setError(
-        name.trim() ? `Levels 1–${MAX_CART_LEVELS}, columns 1–${MAX_CART_COLUMNS}` : 'Name is required',
+        name.trim() ? `Levels 1 to ${MAX_CART_LEVELS}, columns 1 to ${MAX_CART_COLUMNS}` : 'Name is required',
       );
       return;
     }

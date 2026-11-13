@@ -112,6 +112,14 @@ export function formatRelative(iso: string, now: Date = new Date()): string {
 }
 
 /** Minutes → "1h 30m", "45m", "0m". */
+/**
+ * Minutes a stopped timer logs: rounded to the nearest minute, never less than one. The server
+ * (stopTimer) and every optimistic UI (toast, totals, entry rows) use this one rule.
+ */
+export function timerMinutes(elapsedMs: number): number {
+  return Math.max(1, Math.round(Math.max(0, elapsedMs) / 60_000));
+}
+
 export function formatMinutes(minutes: number | null | undefined): string {
   const total = Math.max(0, Math.round(minutes ?? 0));
   const h = Math.floor(total / 60);

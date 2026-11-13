@@ -97,7 +97,7 @@ function RangeInput({
           className="text-center"
         />
         <span className="text-faint" aria-hidden>
-          –
+          to
         </span>
         <TextField
           aria-label={`${label} to`}
@@ -345,7 +345,7 @@ export function LocationGeneratorDrawer({
           <div className="flex min-w-0 flex-col gap-5">
             <FormSection
               title="Pattern"
-              description="Each range is letters (A–F) or numbers (01–10). Leading zeros are kept."
+              description="Each range is letters (A to F) or numbers (01 to 10). Leading zeros are kept."
             >
               <FormGrid>
                 <ComboField<G>
@@ -381,7 +381,7 @@ export function LocationGeneratorDrawer({
                   value={values.aisles}
                   onChange={(v) => form.setValue('aisles', v, { shouldDirty: true })}
                   error={shownErrors.aisles}
-                  hint="e.g. A – F"
+                  hint="e.g. A to F"
                 />
                 <RangeInput
                   label="Racks"
@@ -389,21 +389,21 @@ export function LocationGeneratorDrawer({
                   value={values.racks}
                   onChange={(v) => form.setValue('racks', v, { shouldDirty: true })}
                   error={shownErrors.racks}
-                  hint="e.g. 01 – 10"
+                  hint="e.g. 01 to 10"
                 />
                 <RangeInput
                   label="Levels"
                   value={values.levels}
                   onChange={(v) => form.setValue('levels', v, { shouldDirty: true })}
                   error={shownErrors.levels}
-                  hint="Optional, e.g. 1 – 4"
+                  hint="Optional, e.g. 1 to 4"
                 />
                 <RangeInput
                   label="Positions"
                   value={values.positions}
                   onChange={(v) => form.setValue('positions', v, { shouldDirty: true })}
                   error={shownErrors.positions}
-                  hint="Optional, e.g. A – B"
+                  hint="Optional, e.g. A to B"
                 />
                 <SelectField<G>
                   name="separator"

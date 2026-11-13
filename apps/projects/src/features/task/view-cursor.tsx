@@ -14,7 +14,6 @@ import './view-cursor.css';
  *   <ViewCursor rootRef={listRef} mode="list" tasks={tasks} ops={ops} canEdit onOpen={open} />
  */
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { toast } from '@/components/ui';
 import { isEditableTarget } from '@/lib/hooks/use-hotkeys';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import type { TaskSummary } from '@/lib/types';
@@ -25,7 +24,8 @@ import { useCurrentProject } from '@/features/projects/project-context';
 import { useShell } from '@/features/shell/shell-context';
 import { fieldForKey, neighbourCell, stepIndex, type CursorField } from './view-cursor-nav';
 import { toggleDoneWithUndo } from './done-toggle';
-import { copyTaskLink, taskKeyAction } from './task-keys';
+import { datePatch } from './task-utils';
+import { copyTaskLink, letterKeysPaused, setDateWithUndo, startLetterKeyGuard, taskKeyAction, writeWithUndo, type TaskSave } from './task-keys';
 
 export const VIEW_CURSOR_ATTR = 'data-view-cursor';
 
@@ -169,17 +169,14 @@ export function ViewCursor({
     }
     if (!editable) return;
     const today = todayIso();
+    const save: TaskSave = (patch, options) => taskOps.updateTask(task.id, patch, options);
     if (action === 'assign-me') {
       if (task.assigneeId === userId) return;
-      const previous = task.assigneeId;
-      void taskOps.updateTask(task.id, { assigneeId: userId });
-      toast.undo(`Assigned ${task.key} to you`, { onUndo: () => void taskOps.updateTask(task.id, { assigneeId: previous }) });
+      void writeWithUndo({ taskKey: task.key, message: `Assigned ${task.key} to you`, patch: { assigneeId: userId }, undo: { assigneeId: task.assigneeId }, save });
     } else if (action === 'due-today' || action === 'due-tomorrow') {
       const dueDate = action === 'due-today' ? today : addDaysIso(today, 1);
       if (task.dueDate === dueDate) return;
-      const previous = task.dueDate;
-      void taskOps.updateTask(task.id, { dueDate });
-      toast.undo(`${task.key} is due ${action === 'due-today' ? 'today' : 'tomorrow'}`, { onUndo: () => void taskOps.updateTask(task.id, { dueDate: previous }) });
+      void setDateWithUndo({ task, field: 'dueDate', value: dueDate, save });
     } else if (action === 'toggle-done') {
       const closed = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
       const target = closed
@@ -191,6 +188,7 @@ export function ViewCursor({
   }, []);
 
   useEffect(() => {
+    startLetterKeyGuard();
     let lastG = 0;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey) return;
@@ -276,10 +274,13 @@ export function ViewCursor({
         return;
       }
 
+      // Letters right after a dialog or the palette closed were meant for it, not for this task.
+      if (letterKeysPaused()) return;
       const quick = taskKeyAction(event);
       if (quick === 'assign-me' || quick === 'due-today' || quick === 'due-tomorrow') {
         if (!latest.current.canEdit) return;
         event.preventDefault();
+        if (letterKeysPaused({ writes: true })) return;
         mark(task.key);
         runAction(quick, task);
         return;
@@ -339,7 +340,16 @@ export function ViewCursor({
       );
     case 'due':
       return (
-        <DuePicker {...common} value={live.dueDate} onChange={(dueDate) => void updateTask(task.id, { dueDate })}>
+        <DuePicker
+          {...common}
+          value={live.dueDate}
+          onChange={(dueDate) => {
+            const { patch, moved } = datePatch(live, 'dueDate', dueDate);
+            // A due date before the start moves the start along (and says so) instead of failing.
+            if (moved) void setDateWithUndo({ task: live, field: 'dueDate', value: dueDate, save: (next, options) => updateTask(task.id, next, options) });
+            else void updateTask(task.id, patch);
+          }}
+        >
           {trigger}
         </DuePicker>
       );

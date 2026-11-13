@@ -1,5 +1,6 @@
 'use client';
 /** Public intake form at /forms/<token>: anyone with the link fills it in and a task is created. */
+import { cn } from '@/components/ui/cn';
 import { useState, type FormEvent } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { Button, Checkbox, Field, Input, IsoDatePicker, Textarea } from '@/components/ui';
@@ -49,18 +50,24 @@ export function FormFieldControl({
     case 'select':
       return (
         <div className="flex flex-col gap-1.5" role="radiogroup" aria-labelledby={`${id}-label`}>
-          {field.options?.map((option) => (
-            <label key={option.id} className="flex items-center gap-2 text-sm text-fg">
-              <input
-                type="radio"
-                name={field.id}
-                checked={value === option.id}
-                onChange={() => onChange(option.id)}
-                className="accent-[var(--primary)]"
-              />
-              {option.label}
-            </label>
-          ))}
+          {field.options?.map((option) => {
+            const checked = value === option.id;
+            return (
+              <label
+                key={option.id}
+                className={cn(
+                  'flex min-h-10 cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-sm text-fg transition-colors duration-[var(--duration-fast)] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-focus',
+                  checked ? 'border-primary bg-primary-subtle' : 'border-border-default bg-panel hover:border-border-strong hover:bg-hover',
+                )}
+              >
+                <input type="radio" name={field.id} checked={checked} onChange={() => onChange(option.id)} className="sr-only" />
+                <span aria-hidden className={cn('flex size-4 shrink-0 items-center justify-center rounded-full border-[1.5px] bg-panel', checked ? 'border-primary' : 'border-border-strong')}>
+                  {checked ? <span className="size-2 rounded-full bg-primary" /> : null}
+                </span>
+                {option.label}
+              </label>
+            );
+          })}
         </div>
       );
     case 'multiselect': {
@@ -153,7 +160,7 @@ export function PublicForm({ form }: { readonly form: PublicFormDTO }) {
     <div className="min-h-dvh bg-app px-4 py-10">
       <div className="mx-auto w-full max-w-[620px]">
         <div className="mb-6 flex items-center gap-2 text-sm text-fg-muted">
-          <ProjectsMark size={20} /> {form.orgName} · {form.projectName}
+          <ProjectsMark size={20} /> {form.orgName}
         </div>
         <div className="rounded-2xl border border-border-subtle bg-panel p-6 shadow-sm sm:p-8">
           {done ? (

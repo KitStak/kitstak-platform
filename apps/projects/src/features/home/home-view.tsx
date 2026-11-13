@@ -31,7 +31,8 @@ import { useShellStore } from '@/features/shell/store';
 import { CustomersCard } from './customers-card';
 import { GettingStartedCard } from './getting-started';
 import { GoalsSnapshot, InboxPreview, RecentProjects } from './home-rail';
-import { greetingFor, homeBuckets, homeStats, summarySentence } from './home-model';
+import { useGreeting } from '@kitstak/ui/text';
+import { homeBuckets, homeStats, summarySentence } from './home-model';
 
 type Bucket = 'today' | 'overdue' | 'week';
 
@@ -64,6 +65,7 @@ export function HomeView({
   const [sessionStart] = useState(() => new Date(Date.now() - 1000).toISOString());
   const today = todayIso();
   const firstName = user.name.trim().split(/\s+/)[0] || 'there';
+  const greeting = useGreeting();
   const list = useMemo(() => tasks.data ?? [], [tasks.data]);
 
   // Tasks you finish while looking at Home stay in place (struck through) until you leave.
@@ -106,11 +108,13 @@ export function HomeView({
             {DATE.format(new Date())} · {org.name}
           </p>
           <h1
-            className="mt-1 text-xl font-semibold tracking-[-0.01em] text-fg sm:text-2xl"
-            suppressHydrationWarning
+            className={cn(
+              'mt-1 text-xl font-semibold tracking-[-0.01em] text-fg transition-opacity sm:text-2xl',
+              greeting ? 'opacity-100' : 'opacity-0',
+            )}
             data-testid="home-greeting"
           >
-            {greetingFor(new Date())}, {firstName}
+            {greeting ?? 'Good morning'}, {firstName}
           </h1>
           <p className="mt-1 text-base text-fg-secondary">{summarySentence(stats)}</p>
         </div>
@@ -145,7 +149,7 @@ export function HomeView({
           icon={<Sun aria-hidden />}
           tone={stats.dueToday ? 'warning' : 'neutral'}
           onClick={() => setBucket('today')}
-          active={bucket === 'today'}
+          active={bucketChoice === 'today'}
         />
         <StatTile
           label="Overdue"
@@ -153,14 +157,11 @@ export function HomeView({
           icon={<AlarmClock aria-hidden />}
           tone={stats.overdue ? 'danger' : 'neutral'}
           onClick={() => setBucket('overdue')}
-          active={bucket === 'overdue'}
+          active={bucketChoice === 'overdue'}
         />
         <StatTile
-          label={
-            openSubtasks
-              ? `open ${stats.open - openSubtasks === 1 ? 'task' : 'tasks'} and ${openSubtasks} ${openSubtasks === 1 ? 'subtask' : 'subtasks'}`
-              : 'Open tasks'
-          }
+          label="Open"
+          hint={openSubtasks ? `+${openSubtasks} ${openSubtasks === 1 ? 'subtask' : 'subtasks'}` : undefined}
           value={stats.open - openSubtasks}
           icon={<ListTodo aria-hidden />}
           tone="primary"
@@ -333,7 +334,7 @@ function StatTile({
         </span>
         <span className="line-clamp-2 text-sm text-fg-muted">
           {label}
-          {hint ? <span className="text-xs"> · {hint}</span> : null}
+          {hint ? <span className="text-xs"> ({hint})</span> : null}
         </span>
       </span>
     </>

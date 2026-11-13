@@ -18,6 +18,7 @@ import { routes } from '@/lib/routes';
 import type { ProjectSummary, ReportDTO, SpaceDTO } from '@/lib/types';
 import { useShell } from '@/features/shell/shell-context';
 import { ProjectHealthBadge, healthMismatch } from '@/features/projects/health';
+import { healthProgressTone } from '@/lib/health';
 import { ProgressRing } from './charts';
 import { BurnPanel, CompletedPanel, CycleTimePanel, KpiTiles, OverduePanel, StatusPanel, VelocityPanel, WorkloadPanel } from './report-panels';
 
@@ -50,7 +51,8 @@ function PortfolioProjects({ projects, spaces }: { readonly projects: readonly P
   const total = Math.max(1, projects.length);
   // Needs attention: off track, or the numbers say worse than the owner's health. Those sort first.
   const attention = (project: ProjectSummary) => project.health === 'off_track' || healthMismatch(project);
-  const needsAttention = projects.filter(attention).length;
+  // Same count and words as the Projects directory: the amber dot means "needs a status check".
+  const needsAttention = projects.filter((project) => healthMismatch(project)).length;
   const sorted = [...projects].sort((a, b) => Number(attention(b)) - Number(attention(a)));
   return (
     <Panel title="Projects at a glance" bodyClassName="p-0">
@@ -67,8 +69,8 @@ function PortfolioProjects({ projects, spaces }: { readonly projects: readonly P
           ))}
           {needsAttention ? (
             <li className="inline-flex items-center gap-1.5 font-medium text-warning-text" data-testid="needs-attention-count">
-              <span aria-hidden className="size-2 rounded-full border border-warning" />
-              Needs attention <strong className="font-semibold tabular-nums">{needsAttention}</strong>
+              <span aria-hidden className="size-2 rounded-full bg-warning" />
+              Need a status check <strong className="font-semibold tabular-nums">{needsAttention}</strong>
             </li>
           ) : null}
         </ul>
@@ -79,7 +81,7 @@ function PortfolioProjects({ projects, spaces }: { readonly projects: readonly P
         <ul className="divide-y divide-border-subtle">
           {sorted.map((project) => (
             <li key={project.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5">
-              <ProgressRing percent={project.progress.percent} size={36} strokeWidth={3.5} label={`${project.name} progress`} tone={project.health === 'off_track' ? 'danger' : project.health === 'at_risk' ? 'warning' : 'success'} />
+              <ProgressRing percent={project.progress.percent} size={36} strokeWidth={3.5} label={`${project.name} progress`} tone={healthProgressTone(project.health)} />
               <div className="min-w-0 flex-1">
                 <Link href={routes.project(project.key)} className="flex min-w-0 items-center gap-2 text-sm font-medium text-fg hover:underline">
                   <EntityIcon icon={project.icon} color={project.color} size={18} />

@@ -652,10 +652,10 @@ export function krProgressFormula(kr: Pick<KeyResultDTO, 'kind' | 'unit' | 'star
   return { text: `Progress counts from where it started, not from zero. ${lead}`, steps: backwards ? null : steps };
 }
 
-/** Bar color follows the goal's health (red only means trouble), and goes green when hit. */
-export function krBarTone(progress: number, health: GoalHealth): 'success' | 'warning' | 'danger' {
+/** Bar color follows the goal's health (neutral on track, red only means trouble), and goes green when hit. */
+export function krBarTone(progress: number, health: GoalHealth): 'primary' | 'success' | 'warning' | 'danger' {
   if (progress >= 100) return 'success';
   if (health === 'off_track' || health === 'missed') return 'danger';
   if (health === 'at_risk') return 'warning';
-  return 'success';
+  return 'primary';
 }

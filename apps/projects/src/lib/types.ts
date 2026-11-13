@@ -667,7 +667,15 @@ export interface CustomerPulseRowDTO {
   readonly customerName: string;
   readonly customerUrl: string | null;
   readonly projects: readonly { readonly id: string; readonly key: string; readonly name: string; readonly openTasks: number; readonly overdue: number }[];
-  readonly deal: { readonly name: string; readonly stage: string | null; readonly outcome: 'won' | 'lost' | 'open'; readonly closeDate: string | null; readonly url: string } | null;
+  readonly deal: {
+    readonly name: string;
+    readonly stage: string | null;
+    readonly outcome: 'won' | 'lost' | 'open';
+    readonly closeDate: string | null;
+    readonly amount: number | null;
+    readonly currency: string | null;
+    readonly url: string;
+  } | null;
   readonly lateReceipts: number;
   readonly exceptions: number;
   readonly openOrders: number;
@@ -676,8 +684,24 @@ export interface CustomerPulseRowDTO {
   readonly risks: readonly { readonly id: string; readonly tone: 'danger' | 'warning'; readonly text: string; readonly href: string | null }[];
 }
 
+export interface CustomerMismatchDTO {
+  readonly id: string;
+  readonly kind: 'deal-closed-task-open' | 'deal-lost-project-open' | 'receipts-late';
+  readonly tone: 'danger' | 'warning';
+  readonly customer: string | null;
+  readonly fact: string;
+  readonly task: { readonly id: string; readonly ref: string; readonly title: string; readonly href: string } | null;
+  readonly work: string;
+  readonly projectHref: string;
+  readonly dealUrl: string | null;
+  readonly receiptsUrl: string | null;
+  readonly text: string;
+  readonly href: string;
+}
+
 export interface CustomerPulseDTO {
   readonly available: { readonly crm: boolean; readonly wms: boolean };
+  readonly sources: { readonly deals: boolean; readonly warehouse: boolean };
   readonly rows: readonly CustomerPulseRowDTO[];
-  readonly mismatches: readonly { readonly id: string; readonly tone: 'danger' | 'warning'; readonly text: string; readonly href: string }[];
+  readonly mismatches: readonly CustomerMismatchDTO[];
 }

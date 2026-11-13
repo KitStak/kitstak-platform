@@ -312,7 +312,7 @@ describe("LP numbers inherit their type's dimensions", () => {
 
 describe('small copy helpers', () => {
   it('location detail position and capacity summary', () => {
-    expect(positionTriple(null, 'A', '01')).toBe('— / A / 01');
+    expect(positionTriple(null, 'A', '01')).toBe('None / A / 01');
     expect(positionTriple('', '', '')).toBeNull();
     expect(capacityRulesSummary(0, 0)).toBe('0 products · 0 LPs');
     expect(capacityRulesSummary(1, 1)).toBe('1 product · 1 LP');

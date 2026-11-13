@@ -322,11 +322,12 @@ const codesOf = (s: string): string[] =>
  * "Status is modified. Open --> Shipped" → "Status changed from Open to Shipped". Unknown text passes through.
  */
 export function humanizePlanChange(message: string): string {
-  const m = /^(.+?) is modified\.\s*([\s\S]*?)\s*-->\s*([\s\S]*)$/.exec(message.trim());
+  // Stored rows use "-->"; `changeLogMessage` output uses "→" with "None" for an empty side.
+  const m = /^(.+?) is modified\.\s*([\s\S]*?)\s*(?:-->|→)\s*([\s\S]*)$/.exec(message.trim());
   if (!m) return message.replace(/\s{2,}/g, ' ').trim();
   const field = m[1].trim();
-  const before = m[2].trim().replace(/^—$/, '');
-  const after = m[3].trim().replace(/^—$/, '');
+  const before = m[2].trim().replace(/^(?:—|None)$/, '');
+  const after = m[3].trim().replace(/^(?:—|None)$/, '');
   if (field === 'Orders') {
     const b = new Set(codesOf(before));
     const a = new Set(codesOf(after));

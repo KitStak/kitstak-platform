@@ -113,10 +113,17 @@ function runUndo(onUndo: () => void | Promise<void>): void {
  * after destructive operations.
  */
 export const toast = {
+  // Replacing a toast in place (same id) drops its Undo button: sonner merges the old fields in.
   success: (message: string, description?: string, options?: ToastOptions) =>
-    sonnerToast.success(message, { description, id: options?.id }),
-  error: (message: string, description?: string, options?: ToastOptions) =>
-    sonnerToast.error(message, { description, id: options?.id }),
+    sonnerToast.success(message, { description, id: options?.id, action: undefined, icon: undefined }),
+  /**
+   * With an id this replaces that toast in place, e.g. an optimistic "OPS-6 is due today · Undo"
+   * becomes "Couldn't save your change": one toast, no Undo for a change that never happened.
+   */
+  error: (message: string, description?: string, options?: ToastOptions) => {
+    if (options?.id !== undefined && lastUndo?.id === options.id) lastUndo = null;
+    return sonnerToast.error(message, { description, id: options?.id, action: undefined, icon: undefined });
+  },
   info: (message: string, description?: string, options?: ToastOptions) =>
     sonnerToast.info(message, { description, id: options?.id }),
   warning: (message: string, description?: string, options?: ToastOptions) =>

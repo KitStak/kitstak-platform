@@ -26,7 +26,7 @@ export interface TaskContextValue {
   readonly canDelete: boolean;
   readonly canCreate: boolean;
   /** Optimistic task update (detail + every cached list). Resolves false on failure (already toasted). */
-  readonly patch: (patch: TaskPatch) => Promise<boolean>;
+  readonly patch: (patch: TaskPatch, options?: { readonly toastId?: string | number }) => Promise<boolean>;
   /** Refetch the task and everything under it (comments, activity, files, time) + lists. */
   readonly refresh: () => void;
   /** Open another task in the same surface (drawer: swaps; page: navigates). */
@@ -82,8 +82,10 @@ export function TaskContextProvider({
   }, [queryClient, task.id, task.projectKey, taskRef]);
 
   const patch = useCallback(
-    async (value: TaskPatch) => {
+    async (value: TaskPatch, options?: { readonly toastId?: string | number }) => {
       const key = qk.task(taskRef);
+      // A refetch still in flight (from the previous edit) must not paint over this optimistic value.
+      await queryClient.cancelQueries({ queryKey: key, exact: true });
       const before = queryClient.getQueryData<TaskDetail>(key);
       if (before) {
         const next: Record<string, unknown> = { ...before };
@@ -106,9 +108,11 @@ export function TaskContextProvider({
         }
         queryClient.setQueryData(key, next as unknown as TaskDetail);
       }
-      const result = await updateTask(task.id, value);
+      const result = await updateTask(task.id, value, options);
       if (!result) {
         if (before) queryClient.setQueryData(key, before);
+        // Two quick edits can overlap: refetch so the server's value wins over any stale snapshot.
+        refresh();
         return false;
       }
       refresh();

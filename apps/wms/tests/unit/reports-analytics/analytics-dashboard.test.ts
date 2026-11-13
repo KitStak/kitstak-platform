@@ -65,7 +65,7 @@ describe('analytics formulas', () => {
     expect(quadrantOf(5, 150, med)).toBe(QUADRANT_LABELS[2]);
     expect(quadrantOf(5, 50, med)).toBe(QUADRANT_LABELS[3]);
     const now = new Date('2026-11-06T00:00:00Z');
-    expect(agingBucket('2026-10-30T00:00:00Z', now)).toBe('0–30 days');
+    expect(agingBucket('2026-10-30T00:00:00Z', now)).toBe('0 to 30 days');
     expect(agingBucket('2026-07-01T00:00:00Z', now)).toBe('90+ days');
     expect(onTimePct(4, 3)).toBe(75);
     expect(onTimePct(0, 0)).toBe(0);

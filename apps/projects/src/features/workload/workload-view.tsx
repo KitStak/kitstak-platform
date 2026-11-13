@@ -5,7 +5,7 @@
  * Drag a task to another person or week to rebalance; it's saved right away with Undo.
  * Capacity (team default + per person) is saved on the project for everyone.
  */
-import { useCallback, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Gauge, Move, Scale, UserRound } from 'lucide-react';
 import {
@@ -149,13 +149,15 @@ export function WorkloadView() {
   const nameWidth = narrow ? 108 : 248;
   const colMin = narrow ? (gridWidth > 0 ? Math.max(200, gridWidth - nameWidth - 28) : 240) : 168;
   const fitWeeks = gridWidth > 0 && !narrow ? Math.max(1, Math.floor((gridWidth - nameWidth - 2 * colMin) / colMin)) : Number(prefs.weeks);
-  const weekCount = Math.min(narrow ? 4 : 12, Number(prefs.weeks), fitWeeks);
+  // Phones show one week at a time as a list of people (swipe or use the arrows for other weeks).
+  const weekCount = narrow ? 1 : Math.min(12, Number(prefs.weeks), fitWeeks);
   const weeks = useMemo(() => weekStarts(anchor, weekCount), [anchor, weekCount]);
   const settings = useMemo(() => readWorkloadSettings(project.settings, unit), [project.settings, unit]);
   const collapsed = useMemo(() => new Set(prefs.collapsed), [prefs.collapsed]);
 
   const taskById = useMemo(() => new Map(openTasks.map((task) => [task.id, task])), [openTasks]);
   const rows = useMemo(() => buildWorkload(openTasks, weeks, unit), [openTasks, weeks, unit]);
+  if (typeof window !== "undefined") console.log("WLDBG", JSON.stringify(weeks), unit, JSON.stringify(openTasks.filter((t) => t.number === 6).map((t) => [t.startDate, t.dueDate])));
 
   const hasEarlier = useMemo(() => [...rows.values()].some((row) => row.cells.has(EARLIER)), [rows]);
   const buckets = useMemo(() => [...(hasEarlier ? [EARLIER] : []), ...weeks, NO_DATE], [hasEarlier, weeks]);
@@ -278,7 +280,9 @@ export function WorkloadView() {
 
   const gridTemplate = narrow ? `${nameWidth}px repeat(${buckets.length}, ${colMin}px)` : `${nameWidth}px repeat(${buckets.length}, minmax(${colMin}px, 1fr))`;
   const lastWeek = weeks.at(-1) as IsoDate;
-  const rangeTitle = `${SHORT.format(parseIsoDate(weeks[0] as IsoDate))} to ${SHORT.format(parseIsoDate(addDaysIso(lastWeek, 6)))}`;
+  const rangeTitle = narrow
+    ? `Week of ${SHORT.format(parseIsoDate(weeks[0] as IsoDate))}`
+    : `${SHORT.format(parseIsoDate(weeks[0] as IsoDate))} to ${SHORT.format(parseIsoDate(addDaysIso(lastWeek, 6)))}`;
   const unitLabel = UNIT_LABELS[unit];
 
   const bucketHeader = (bucket: string) => {
@@ -494,6 +498,30 @@ export function WorkloadView() {
         <div className="flex flex-1 items-center justify-center bg-sunken p-6">
           <EmptyState illustration="board" title="No open work to balance" description="When tasks are assigned and dated, you’ll see how the work is spread across the team, week by week." />
         </div>
+      ) : narrow ? (
+        <PhoneWeek
+          onSwipe={(delta) => setAnchor((a) => addDaysIso(a, delta * 7))}
+          week={weeks[0] as IsoDate}
+          isThisWeek={weeks[0] === thisWeek}
+          teamLoad={[...rows.values()].reduce((sum, row) => sum + (row.cells.get(weeks[0] as IsoDate)?.load ?? 0), 0)}
+          teamCapacity={teamCapacity}
+          meter={meter}
+          people={personIds.map((id) => {
+            const row = rows.get(id);
+            const cell = row?.cells.get(weeks[0] as IsoDate);
+            const person = id === UNASSIGNED ? null : people.get(id);
+            return {
+              id,
+              name: person?.name ?? (id === UNASSIGNED ? 'Unassigned' : null),
+              image: person?.image ?? null,
+              load: cell?.load ?? 0,
+              capacity: id === UNASSIGNED ? null : capacityFor(settings, id),
+              overdue: row?.cells.get(EARLIER)?.tasks.length ?? 0,
+              noDate: row?.cells.get(NO_DATE)?.tasks.length ?? 0,
+              chips: !collapsed.has(id) && cell ? cell.tasks.map((entry) => chip(entry, id, weeks[0] as IsoDate)) : [],
+            };
+          })}
+        />
       ) : (
         <div ref={measureGrid} className="min-h-0 flex-1 overflow-auto bg-sunken" data-testid="workload-grid">
           <div role="grid" aria-label={`${project.name} workload`} className="grid min-w-full" style={{ gridTemplateColumns: gridTemplate, width: narrow ? 'max-content' : '100%' }}>
@@ -797,5 +825,88 @@ function PersonCapacity({
         ) : null}
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** Phones: one week as a list of people, each with a load bar and that week's tasks. Swipe sideways for other weeks. */
+function PhoneWeek({
+  week,
+  isThisWeek,
+  teamLoad,
+  teamCapacity,
+  people,
+  meter,
+  onSwipe,
+}: {
+  readonly week: IsoDate;
+  readonly isThisWeek: boolean;
+  readonly teamLoad: number;
+  readonly teamCapacity: number;
+  readonly people: readonly {
+    readonly id: string;
+    readonly name: string | null;
+    readonly image: string | null;
+    readonly load: number;
+    readonly capacity: number | null;
+    readonly overdue: number;
+    readonly noDate: number;
+    readonly chips: readonly ReactNode[];
+  }[];
+  readonly meter: (load: number, capacity: number | null, team?: boolean) => ReactNode;
+  readonly onSwipe: (delta: 1 | -1) => void;
+}) {
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  return (
+    <div
+      className="min-h-0 flex-1 overflow-y-auto bg-sunken px-4 py-3"
+      data-testid="workload-phone"
+      data-week={week}
+      onTouchStart={(event) => {
+        const t = event.touches[0];
+        touch.current = t ? { x: t.clientX, y: t.clientY } : null;
+      }}
+      onTouchEnd={(event) => {
+        const start = touch.current;
+        const t = event.changedTouches[0];
+        touch.current = null;
+        if (!start || !t) return;
+        const dx = t.clientX - start.x;
+        if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(t.clientY - start.y)) onSwipe(dx < 0 ? 1 : -1);
+      }}
+    >
+      <p className="mb-2 flex items-center gap-2 text-xs text-fg-muted">
+        {isThisWeek ? <span className="rounded-full bg-primary px-1.5 text-2xs leading-4 font-semibold text-primary-fg">This week</span> : null}
+        Swipe sideways for other weeks
+      </p>
+      <div className="mb-3 rounded-lg border border-border-subtle bg-muted px-3 py-2.5" data-testid="workload-team-row">
+        <p className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-fg">
+          <Gauge aria-hidden className="size-4 text-icon" />
+          Whole team
+        </p>
+        {meter(teamLoad, teamCapacity, true)}
+      </div>
+      <ul className="flex flex-col gap-2">
+        {people.map((person) => (
+          <li key={person.id} className="rounded-lg border border-border-subtle bg-panel px-3 py-2.5" data-testid="workload-row" data-person={person.id}>
+            <div className="mb-1.5 flex min-w-0 items-center gap-2">
+              {person.name && person.id !== UNASSIGNED ? (
+                <Avatar name={person.name} src={person.image} size="xs" />
+              ) : person.id === UNASSIGNED ? (
+                <span aria-hidden className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-icon">
+                  <UserRound className="size-3" />
+                </span>
+              ) : (
+                <Skeleton width={20} height={20} rounded="full" />
+              )}
+              {person.name ? <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{person.name}</span> : <Skeleton width={96} height={12} rounded="full" className="flex-1" />}
+              {person.overdue ? <span className="shrink-0 text-2xs font-semibold text-danger-text">{person.overdue} overdue</span> : null}
+              {person.noDate ? <span className="shrink-0 text-2xs text-fg-muted">{person.noDate} no date</span> : null}
+            </div>
+            {person.capacity !== null || person.load > 0 ? meter(person.load, person.capacity) : null}
+            {person.chips.length ? <ul className="mt-2 flex flex-col gap-1">{person.chips}</ul> : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

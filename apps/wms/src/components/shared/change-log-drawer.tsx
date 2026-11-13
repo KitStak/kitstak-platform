@@ -7,6 +7,7 @@
  */
 import * as React from 'react';
 import { ChevronLeft, ChevronRight, FilePlus2, PencilLine, Trash2 } from 'lucide-react';
+import { EMPTY_VALUE, displayText } from '@kitstak/ui/text';
 import { cn } from '@/lib/utils';
 import { useFormat } from '@/lib/format';
 import { formatInZone, localizeIsoInText } from '@/lib/format-zone';
@@ -32,8 +33,24 @@ export interface ChangeLogMessageOptions {
 }
 
 function side(value: string | null | undefined, isStatus: boolean): string {
-  if (value === null || value === undefined || value.trim() === '') return '—';
+  if (value === null || value === undefined || value.trim() === '' || /^[—–-]$/.test(value.trim())) return EMPTY_VALUE;
   return isStatus ? statusLabel(value) : value;
+}
+
+/**
+ * Brand rule for log text on screen: no em dashes and no double dashes. Stored rows keep the
+ * Logiwa form ("Status is modified. — --> Ready"); people read "Status is modified. None → Ready".
+ * An empty side becomes "None", the ASCII arrow becomes "→", and any other em dash goes through
+ * the shared `displayText` (" · ").
+ */
+export function changeLogDisplay(text: string): string {
+  const arrows = text
+    .replace(/\s*-->\s*/g, ' → ')
+    .replace(/ is modified\.\s+→/g, ` is modified. ${EMPTY_VALUE} →`)
+    .replace(/→\s*$/, `→ ${EMPTY_VALUE}`)
+    .replace(/(^|\s)[—–](?=\s*→)/g, `$1${EMPTY_VALUE}`)
+    .replace(/(→\s*)[—–](?=\s|$|[.,;)])/g, `$1${EMPTY_VALUE}`);
+  return displayText(arrows, '');
 }
 
 /**
@@ -49,14 +66,13 @@ export function changeLogMessage(entry: ChangeLogEntry, options: ChangeLogMessag
     text = `${prefix}${entry.fieldLabel} is modified. ${side(entry.fromValue, isStatus)} --> ${side(entry.toValue, isStatus)}`;
   } else {
     text = entry.message.startsWith(prefix) ? entry.message : `${prefix}${entry.message}`;
-    // Legacy rows: an empty from-side left a double space before the arrow.
-    text = text.replace(/ is modified\.\s{2,}-->/, ' is modified. — -->').replace(/-->\s*$/, '--> —');
+    // Legacy rows (an empty side left a double space before the arrow) are tidied by changeLogDisplay.
     if (isStatus) {
       for (const v of [entry.fromValue, entry.toValue])
         if (v && statusLabel(v) !== v) text = text.split(v).join(statusLabel(v));
     }
   }
-  return options.formatIso ? localizeIsoInText(text, options.formatIso) : text;
+  return changeLogDisplay(options.formatIso ? localizeIsoInText(text, options.formatIso) : text);
 }
 
 /** Operation date: the record's warehouse zone with a suffix when given, else the viewer's format. */
@@ -205,7 +221,7 @@ export function ChangeLogDrawer({
           </div>
           <div className="flex items-center justify-between text-xs text-secondary">
             <span>
-              {fmt.number((page - 1) * CHANGE_LOG_PAGE_SIZE + 1)}–
+              {fmt.number((page - 1) * CHANGE_LOG_PAGE_SIZE + 1)} to{' '}
               {fmt.number(Math.min(page * CHANGE_LOG_PAGE_SIZE, total))} of {fmt.number(total)}
             </span>
             <div className="flex items-center gap-1">

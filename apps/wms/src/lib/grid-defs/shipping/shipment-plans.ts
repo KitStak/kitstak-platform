@@ -368,8 +368,8 @@ export function reachedPlanStages(status: string, messages: readonly string[]): 
       /^Status is modified\.\s*(.*?)\s*-->\s*(.*)$/.exec(t) ??
       /^Status changed from (.*?) to (.*?)\.?$/.exec(t);
     if (hit) {
-      if (hit[1] && hit[1] !== '—') reached.add(hit[1].trim());
-      if (hit[2] && hit[2] !== '—') reached.add(hit[2].trim());
+      if (hit[1] && hit[1] !== '\u2014') reached.add(hit[1].trim());
+      if (hit[2] && hit[2] !== '\u2014') reached.add(hit[2].trim());
     }
   }
   return reached;

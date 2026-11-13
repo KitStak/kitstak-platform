@@ -365,7 +365,7 @@ export function StepReview({ model, onDraft }: StepReviewProps) {
               disabled={built.issues.length === 0}
               data-testid="import-download-errors"
               onClick={() =>
-                downloadBlob(buildErrorReport(built.issues), `${baseFileName(draft.file?.fileName ?? 'import')} – problems.csv`, 'text/csv;charset=utf-8')
+                downloadBlob(buildErrorReport(built.issues), `${baseFileName(draft.file?.fileName ?? 'import')} problems.csv`, 'text/csv;charset=utf-8')
               }
             >
               Error report

@@ -9,7 +9,7 @@
  * Every change is optimistic (useTaskMutations) with an Undo toast.
  */
 import { useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, CircleCheck, Inbox, Keyboard, MousePointerClick, Move, Plus } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Inbox, Keyboard, MousePointerClick, Move, Plus } from 'lucide-react';
 import {
   Button,
   EmptyState,
@@ -35,7 +35,9 @@ import { useTaskMutations } from '@/lib/hooks/use-task-mutations';
 import type { TaskSummary } from '@/lib/types';
 import { useCurrentProject } from '@/features/projects/project-context';
 import { useShellStore } from '@/features/shell/store';
-import { isClosed, taskColor, type ColorBy } from '@/features/timeline/task-colors';
+import { PRIORITY_LABEL_COLORS, isClosed, taskColor, type ColorBy } from '@/features/timeline/task-colors';
+import { toLabelColor } from '@/components/ui/label-color';
+import { PRIORITIES, PRIORITY_LABELS } from '@/lib/constants';
 import { dragSpan, spanPatch, taskSpan, type Span } from '@/features/timeline/timeline-model';
 import { SavedViewsMenu } from '@/features/timeline/saved-views';
 import { TASK_MIME, UnscheduledTray } from '@/features/timeline/unscheduled-tray';
@@ -76,6 +78,10 @@ const DAY_HEADER_H = 30;
 const SLOT_H = 24;
 const MIN_ROW_H = 132;
 const WEEK_SLOT_H = 52;
+/** Tasks longer than a week draw as slim bands above the day's lanes, so one-day tasks keep room. */
+const BAND_H = 16;
+const MAX_BANDS = 3;
+const isLongEvent = (event: { readonly start: IsoDate; readonly end: IsoDate }) => diffDays(event.start, event.end) >= 7;
 
 type TaskEvent = CalendarEvent<TaskSummary>;
 
@@ -110,7 +116,7 @@ export function CalendarSkeleton() {
 }
 
 export function CalendarView() {
-  const { project, statusById, capabilities } = useCurrentProject();
+  const { project, statuses, statusById, capabilities } = useCurrentProject();
   const tasksQuery = useProjectTasks(project.key);
   const people = usePeopleMap();
   const { openTask } = useTaskDrawer();
@@ -162,6 +168,16 @@ export function CalendarView() {
     }
     return out;
   }, [tasks, prefs.plot]);
+  const longEvents = useMemo(() => events.filter(isLongEvent), [events]);
+  const shortEvents = useMemo(() => events.filter((event) => !isLongEvent(event)), [events]);
+  // Legend: what each color means (statuses with their Board icon, or priorities).
+  const legend = useMemo(() => {
+    if (prefs.colorBy === 'priority')
+      return PRIORITIES.map((priority) => ({ id: priority, label: PRIORITY_LABELS[priority], color: PRIORITY_LABEL_COLORS[priority], icon: priority === 'none' ? null : <PriorityIcon priority={priority} size={12} /> }));
+    return statuses
+      .filter((status) => prefs.showCompleted || (status.category !== 'done' && status.category !== 'cancelled'))
+      .map((status) => ({ id: status.id, label: status.name, color: toLabelColor(status.color, 'blue'), icon: <StatusIcon category={status.category} color={status.color} size={12} /> }));
+  }, [prefs.colorBy, prefs.showCompleted, statuses]);
   const unscheduled = useMemo(() => tasks.filter((task) => !task.startDate && !task.dueDate), [tasks]);
 
   const weeks = useMemo(() => {
@@ -287,7 +303,7 @@ export function CalendarView() {
 
   const look = (task: TaskSummary) => labelColorStyle(taskColor(task, prefs.colorBy, statusById));
 
-  const chip = (task: TaskSummary, options: { days: readonly IsoDate[]; segment?: WeekSegment<TaskSummary>; style?: CSSProperties; className?: string; variant: 'chip' | 'card' | 'list' }) => {
+  const chip = (task: TaskSummary, options: { days: readonly IsoDate[]; segment?: WeekSegment<TaskSummary>; style?: CSSProperties; className?: string; variant: 'chip' | 'band' | 'card' | 'list' }) => {
     const { segment, variant } = options;
     const done = isClosed(task);
     const span = taskSpan(task);
@@ -295,10 +311,10 @@ export function CalendarView() {
     const assignee = task.assigneeId ? people.get(task.assigneeId)?.name : null;
     const status = statusById.get(task.statusId);
     const dateText = span ? (span.start === span.end ? WEEKDAY_LONG.format(parseIsoDate(span.end)) : formatRange(span.start, span.end)) : 'No date';
-    // Long tasks (5+ days) draw as a light tinted band with a start marker, so the solid
-    // single-day chips are what you see first. Done work is a quiet tint with readable text.
-    const long = variant === 'chip' && Boolean(span) && diffDays(span?.start ?? '', span?.end ?? '') >= 4;
-    const quiet = variant === 'chip' && (done || long);
+    // One bar style for every task, keyed to its status color (the same color and icon as the
+    // Board column): a light tint with readable text, and a solid left edge where the task starts.
+    // A segment that continues from the week before starts with an arrow instead of the edge.
+    const starts = !segment?.continuesBefore;
     const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
       if (!canEdit || !event.altKey) return;
       const delta = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : event.key === 'ArrowUp' ? -7 : event.key === 'ArrowDown' ? 7 : 0;
@@ -337,10 +353,10 @@ export function CalendarView() {
           className={cn(
             'group/chip flex min-w-0 items-center gap-1.5 overflow-hidden text-left text-xs font-medium outline-none',
             'transition-[filter,box-shadow,opacity] duration-[var(--duration-fast)] hover:shadow-sm hover:brightness-[0.97] active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus',
-            variant === 'chip' && 'h-[22px] rounded-sm px-1.5',
-            variant === 'chip' && !quiet && 'bg-[var(--lc-bg)] text-[var(--lc-fg)]',
-            quiet && 'bg-[color-mix(in_srgb,var(--lc-bg)_16%,var(--surface-panel))] text-fg-secondary',
-            long && !done && !segment?.continuesBefore && 'border-l-[3px] border-[var(--lc-bg)] text-fg',
+            variant === 'chip' && 'h-[22px] rounded-sm bg-[color-mix(in_srgb,var(--lc-bg)_18%,var(--surface-panel))] px-1.5 text-fg',
+            variant === 'chip' && starts && 'border-l-[3px] border-[var(--lc-bg)] pl-1',
+            variant === 'band' && 'h-[14px] gap-1 rounded-full bg-[color-mix(in_srgb,var(--lc-bg)_24%,var(--surface-panel))] px-1.5 text-2xs leading-none font-medium text-fg-secondary',
+            variant === 'band' && starts && 'shadow-[inset_3px_0_0_var(--lc-bg)]',
             variant === 'card' &&
               'flex-col items-stretch justify-center gap-0.5 rounded-md border border-l-[3px] border-[color-mix(in_srgb,var(--lc-bg)_45%,transparent)] border-l-[var(--lc-bg)] bg-[color-mix(in_srgb,var(--lc-bg)_14%,var(--surface-panel))] px-2 py-1.5 text-fg',
             variant === 'list' && 'h-8 w-full rounded-md border-l-[3px] border-[var(--lc-bg)] px-2 text-fg hover:bg-hover',
@@ -350,7 +366,7 @@ export function CalendarView() {
             canEdit ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
             dragging?.taskId === task.id && 'opacity-40',
             done && variant !== 'chip' && 'text-fg-muted',
-            done && variant === 'chip' && 'hover:text-fg',
+            done && (variant === 'chip' || variant === 'band') && 'text-fg-muted hover:text-fg',
             options.className,
           )}
         >
@@ -371,11 +387,13 @@ export function CalendarView() {
             </>
           ) : (
             <>
-              {variant === 'list' ? <StatusIcon category={task.statusCategory} color={status?.color} size={12} /> : null}
-              {segment?.continuesBefore ? <ArrowLeft aria-label="Continued from the week before" className="size-3 shrink-0 opacity-70" /> : null}
-              {overdue ? <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full bg-danger', variant === 'chip' && 'ring-1 ring-panel')} /> : null}
-              {done && variant === 'chip' ? <CircleCheck aria-label="Done" className="size-3 shrink-0 text-[var(--lc-bg)]" /> : null}
-              <span className={cn('truncate', done && variant !== 'chip' && 'line-through decoration-1')}>{task.title}</span>
+              {segment?.continuesBefore ? (
+                <ArrowLeft aria-label="Continued from the week before" className={cn('shrink-0 opacity-70', variant === 'band' ? 'size-2.5' : 'size-3')} />
+              ) : (
+                <StatusIcon category={task.statusCategory} color={status?.color} size={variant === 'band' ? 10 : 12} />
+              )}
+              {overdue ? <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-danger" /> : null}
+              <span className={cn('truncate', done && variant === 'list' && 'line-through decoration-1')}>{task.title}</span>
               {variant === 'list' ? (
                 <span className="ml-auto flex shrink-0 items-center gap-1.5">
                   <span className="font-key text-2xs font-normal text-fg-muted">{task.key}</span>
@@ -424,15 +442,21 @@ export function CalendarView() {
         // Every task, long or short, is one bar style at full height in the lanes. A task that runs
         // across weeks repeats its title on every week row (with an arrow when it started earlier),
         // so a continuation is never an unlabeled strip.
-        const segments = layoutWeek(days, events);
+        // Tasks longer than a week are slim labelled bands under the day numbers; everything else
+        // gets the full-height lanes below them.
+        const bandSegments = layoutWeek(days, longEvents);
+        const bandLanes = Math.min(MAX_BANDS, bandSegments.reduce((max, segment) => Math.max(max, segment.slot + 1), 0));
+        const shownBands = bandSegments.filter((segment) => segment.slot < bandLanes);
+        const segments = layoutWeek(days, shortEvents);
+        const lanesTop = DAY_HEADER_H + (bandLanes ? bandLanes * BAND_H + 4 : 0);
         // Rows grow to show up to 5 lanes before folding into "+N more" (the grid scrolls instead).
         const lanesNeeded = segments.reduce((max, segment) => Math.max(max, segment.slot + 1), 0);
-        const height = Math.max(rowHeight, DAY_HEADER_H + Math.max(4, Math.min(5, lanesNeeded)) * SLOT_H + 6);
-        const slots = Math.max(3, Math.floor((height - DAY_HEADER_H - 6) / SLOT_H));
+        const height = Math.max(rowHeight, lanesTop + Math.max(3, Math.min(5, lanesNeeded)) * SLOT_H + 6);
+        const slots = Math.max(3, Math.floor((height - lanesTop - 6) / SLOT_H));
         const hiddenShort = hiddenPerColumn(segments, days.length, slots);
         const hidden = hiddenShort;
-        const extraOnly = hiddenShort.map(() => 0);
-        const lanesTop = DAY_HEADER_H;
+        // Bands past MAX_BANDS still count in the day's "+N more".
+        const extraOnly = days.map((_, col) => bandSegments.filter((segment) => segment.slot >= bandLanes && col >= segment.startCol && col < segment.startCol + segment.span).length);
         return (
           <div role="row" key={days[0]} data-week-row className="relative grid shrink-0" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, height }}>
             {days.map((day, col) => {
@@ -496,7 +520,7 @@ export function CalendarView() {
                               style={(hidden[col] ?? 0) > 0 ? { top: lanesTop + (slots - 1) * SLOT_H } : { bottom: 2 }}
                               className="absolute right-1 left-1 z-[2] flex h-[22px] items-center rounded-sm px-1.5 text-xs font-semibold text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
                             >
-                              +{(hidden[col] ?? 0) || (extraOnly[col] ?? 0)}
+                              +{(hidden[col] ?? 0) + (extraOnly[col] ?? 0)}
                               <span className={cn(narrow && 'sr-only')}>&nbsp;more</span>
                             </button>
                           </PopoverAnchor>
@@ -516,6 +540,19 @@ export function CalendarView() {
                 </Popover>
               );
             })}
+            {shownBands.map((segment) =>
+              chip(segment.event.item, {
+                days,
+                segment,
+                variant: 'band',
+                className: 'absolute z-[1]',
+                style: {
+                  top: DAY_HEADER_H + segment.slot * BAND_H,
+                  left: `calc(${(segment.startCol / columns) * 100}% + ${segment.continuesBefore ? 0 : 4}px)`,
+                  width: `calc(${(segment.span / columns) * 100}% - ${(segment.continuesBefore ? 0 : 4) + (segment.continuesAfter ? 0 : 4)}px)`,
+                },
+              }),
+            )}
             {segments
               .filter((segment) => isSegmentVisible(segment, hiddenShort, slots))
               .map((segment) =>
@@ -745,7 +782,21 @@ export function CalendarView() {
               />
             </div>
           ) : mode === 'month' ? (
-            monthGrid
+            <>
+              {monthGrid}
+              <ul className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-border-subtle bg-panel px-3 py-1.5 text-xs text-fg-secondary" aria-label="Color key" data-testid="calendar-legend">
+                {legend.map((entry) => (
+                  <li key={entry.id} className="inline-flex items-center gap-1.5" style={labelColorStyle(entry.color)}>
+                    {entry.icon ?? <span aria-hidden className="size-2.5 rounded-full bg-[var(--lc-bg)]" />}
+                    {entry.label}
+                  </li>
+                ))}
+                <li className="inline-flex items-center gap-1.5 text-fg-muted max-sm:hidden">
+                  <span aria-hidden className="h-1.5 w-6 rounded-full bg-sunken shadow-[inset_0_0_0_1px_var(--border-default)]" />
+                  Slim bands run longer than a week
+                </li>
+              </ul>
+            </>
           ) : narrow ? (
             agendaList
           ) : (

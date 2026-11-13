@@ -22,6 +22,27 @@ export interface UploadItem {
 
 let sequence = 0;
 
+/**
+ * Local previews of images this tab just uploaded, by attachment id. The tile paints the picture
+ * the moment the upload finishes instead of a blank grey box while the file route loads it.
+ * Kept for a few minutes, then released.
+ */
+const localPreviews = new Map<string, string>();
+const PREVIEW_TTL_MS = 5 * 60_000;
+
+/** The local preview for a just-uploaded attachment, if this tab has one. */
+export function localPreviewFor(attachmentId: string): string | undefined {
+  return localPreviews.get(attachmentId);
+}
+
+function keepPreview(attachmentId: string, url: string): void {
+  localPreviews.set(attachmentId, url);
+  window.setTimeout(() => {
+    localPreviews.delete(attachmentId);
+    URL.revokeObjectURL(url);
+  }, PREVIEW_TTL_MS);
+}
+
 export function useTaskUploads(
   task: { readonly id: string; readonly projectKey: string },
   options: { readonly silent?: boolean } = {},
@@ -54,17 +75,27 @@ export function useTaskUploads(
       await Promise.all(
         accepted.map(async (file, index) => {
           const item = items[index];
+          let kept = false;
           const form = new FormData();
           form.set('file', file);
           form.set('taskId', task.id);
           try {
             const result = await uploadAttachmentAction(form);
-            if (result.ok) uploaded.push(result.data);
-            else toast.error(`Couldn't upload “${file.name}”`, result.error.message);
+            if (result.ok) {
+              uploaded.push(result.data);
+              if (item.previewUrl) {
+                keepPreview(result.data.id, item.previewUrl);
+                kept = true;
+              }
+              // Show the new tile now (with its local preview), not after the refetch.
+              queryClient.setQueryData<AttachmentDTO[]>(qk.taskAttachments(task.id), (list) =>
+                Array.isArray(list) && !list.some((entry) => entry.id === result.data.id) ? [...list, result.data] : list,
+              );
+            } else toast.error(`Couldn't upload “${file.name}”`, result.error.message);
           } catch {
             toast.error(`Couldn't upload “${file.name}”`, 'Check your connection and try again.');
           } finally {
-            if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+            if (item.previewUrl && !kept) URL.revokeObjectURL(item.previewUrl);
             setQueue((current) => current.filter((entry) => entry.id !== item.id));
           }
         }),

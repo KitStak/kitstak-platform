@@ -80,5 +80,5 @@ export function zodMessage(error: z.ZodError): string {
   const first = error.issues[0];
   if (!first) return 'Invalid query';
   const path = first.path.join('.');
-  return path ? `Invalid query: ${path} — ${first.message}` : `Invalid query: ${first.message}`;
+  return path ? `Invalid query: ${path}: ${first.message}` : `Invalid query: ${first.message}`;
 }

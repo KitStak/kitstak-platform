@@ -25,7 +25,13 @@ export function useTaskDrawer() {
   );
 
   const openTask = useCallback((taskKey: string) => router.push(hrefWith(taskKey), { scroll: false }), [hrefWith, router]);
-  const closeTask = useCallback(() => router.push(hrefWith(null), { scroll: false }), [hrefWith, router]);
+  // Closing only drops `?task=` from the URL: a shallow history entry (Next keeps
+  // useSearchParams in sync) closes the drawer in the same frame, instead of waiting for a server
+  // round trip (on a page first loaded with `?task=`, Esc looked like it did nothing).
+  const closeTask = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.history.pushState(null, '', hrefWith(null));
+  }, [hrefWith]);
 
   // `open` / `close` are aliases (task drawer contract): open(taskKeyOrUuid).
   return { taskKey: current, openTask, closeTask, open: openTask, close: closeTask, hrefFor: hrefWith } as const;

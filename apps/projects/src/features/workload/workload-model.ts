@@ -166,10 +166,11 @@ export function buildWorkload(tasks: readonly TaskSummary[], weeks: readonly Iso
         add(person, EARLIER, task, 1);
         counted = true;
       } else if (unit === 'tasks') {
-        // One task, one place: its due week (or the last visible week while it is still running).
-        if (a <= addDaysIso(last, 6)) {
-          const dueWeek = startOfWeekIso(b);
-          add(person, dueWeek > last ? last : dueWeek, task, 1);
+        // One task, one place: its due week. Never clamp to the last visible week, or the same
+        // task would land in different weeks on a phone (one week) and a desktop (six weeks).
+        const dueWeek = startOfWeekIso(b);
+        if (visible.has(dueWeek)) {
+          add(person, dueWeek, task, 1);
           counted = true;
         }
       } else {

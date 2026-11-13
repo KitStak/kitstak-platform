@@ -73,7 +73,7 @@ export function cellText(column: ColumnDto, item: ItemDto, users: UsersById = ne
         ? `${raw.date}${raw.time ? ` ${String(raw.time)}` : ''}`
         : '';
     case 'timeline':
-      return isRecord(raw) && typeof raw.from === 'string' ? `${raw.from} – ${String(raw.to ?? '')}` : '';
+      return isRecord(raw) && typeof raw.from === 'string' ? `${raw.from} to ${String(raw.to ?? '')}` : '';
     case 'number':
     case 'rating':
     case 'progress':

@@ -168,7 +168,7 @@ function priceLines(f: FeeView, currency: string): string[] {
   return f.tiers.map((t) =>
     f.tiers.length === 1 && (t.fromQty ?? 1) <= 1 && t.toQty === null
       ? `${moneyGrid(t.rate, currency)} per ${unit}`
-      : `${t.fromQty ?? 1}–${t.toQty ?? '∞'} @ ${moneyGrid(t.rate, currency)}`,
+      : `${t.fromQty ?? 1} to ${t.toQty ?? '∞'} @ ${moneyGrid(t.rate, currency)}`,
   );
 }
 

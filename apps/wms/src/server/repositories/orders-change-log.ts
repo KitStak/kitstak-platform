@@ -12,7 +12,7 @@ import { and, eq, gt, inArray, sql } from 'drizzle-orm';
 import type { AppDb } from '@/server/api/db';
 import { schema } from '@/server/db';
 
-/** Same glyph as `EMPTY_VALUE` in `@/lib/format` (not imported: that module carries React context for components). */
+/** Stored glyph for an empty side (Logiwa parity, locked by tests). Screens never show it: `changeLogDisplay` reads it as "None". */
 const EMPTY_VALUE = '—';
 import { effectiveRank, priorityFromRank } from '@/lib/grid-defs/orders/priority';
 import { dbGet, withWriteTx } from '@/server/db/sql';

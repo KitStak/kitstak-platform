@@ -543,7 +543,7 @@ function Tiers({ form, unit }: { readonly form: UseFormReturn<F>; readonly unit:
             </tbody>
           </table>
           <p className="border-t border-border bg-surface-sunken/60 px-3 py-1.5 text-2xs text-faint">
-            Each charge starts where the previous one ends: 0–100 then 100–500 bills everything above 100
+            Each charge starts where the previous one ends: 0 to 100 then 100 to 500 bills everything above 100
             (including fractions such as 100.5) at the second rate.
           </p>
         </div>

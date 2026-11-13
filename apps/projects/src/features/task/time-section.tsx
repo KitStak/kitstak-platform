@@ -22,7 +22,7 @@ import {
   toast,
 } from '@/components/ui';
 import { PersonAvatar } from '@/components/pm';
-import { formatDue, formatMinutes, formatRelative, todayIso } from '@/lib/dates';
+import { formatDue, formatMinutes, formatRelative, timerMinutes, todayIso } from '@/lib/dates';
 import { useRunningTimer, useTaskTime } from '@/lib/hooks/use-data';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { qk } from '@/lib/query-keys';
@@ -391,7 +391,7 @@ export function TimeSection() {
       [qk.taskTime(task.id), queryClient.getQueryData(qk.taskTime(task.id))] as const,
     ];
     const stopping = Boolean(mine);
-    const loggedMinutes = Math.max(1, runningMinutes);
+    const loggedMinutes = timerMinutes(elapsedMs);
     const optimistic: TimeEntryDTO | null = stopping
       ? null
       : {

@@ -107,7 +107,7 @@ describe('step schemas', () => {
     );
     expect(byPath.salesPrice).toBe('Must be 0 or more');
     expect(byPath.purchasePrice).toBe('Must be 0 or more');
-    expect(byPath.taxRate).toBe('Tax rate must be 0–100%');
+    expect(byPath.taxRate).toBe('Tax rate must be 0 to 100%');
     expect(generalStepSchema.safeParse({ ...base, salesPrice: 12.5, taxRate: 8 }).success).toBe(true);
   });
 

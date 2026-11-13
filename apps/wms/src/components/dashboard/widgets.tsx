@@ -153,7 +153,7 @@ function ShiftSummary({ shifts }: { readonly shifts: readonly ShiftInfo[] }) {
                 w.phase === 'during' ? 'font-semibold text-success' : 'text-faint',
               )}
             >
-              {w.phase === 'during' ? `${w.nowLabel} – ${s.end}` : w.statusLabel}
+              {w.phase === 'during' ? `${w.nowLabel} to ${s.end}` : w.statusLabel}
             </span>
             <div
               className="col-span-2 h-1 overflow-hidden rounded-full bg-border"
@@ -195,7 +195,7 @@ function ShiftClock({ shift }: { readonly shift: ShiftInfo }) {
           {w.phase === 'during' ? (
             <>
               <span className="text-success">{w.nowLabel}</span>
-              <span className="text-faint"> – {shift.end}</span>
+              <span className="text-faint"> to {shift.end}</span>
             </>
           ) : (
             <span className="text-secondary">{w.statusLabel}</span>
@@ -396,7 +396,7 @@ function ProgressRow({
       </div>
       <div className="mt-1 flex items-center justify-between text-2xs tabular-nums text-faint">
         <span>
-          <span className="font-semibold text-success">{fmt(p.done)}</span> – {fmt(p.total)}
+          <span className="font-semibold text-success">{fmt(p.done)}</span> of {fmt(p.total)}
         </span>
         <ChevronRight
           className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100"
@@ -1000,7 +1000,7 @@ export function describeNights(days: readonly string[]): string {
     });
   if (days.length === 0) return '';
   if (days.length >= 4)
-    return `${label(days[0] ?? '')} – ${label(days[days.length - 1] ?? '')} (${days.length} nights)`;
+    return `${label(days[0] ?? '')} to ${label(days[days.length - 1] ?? '')} (${days.length} nights)`;
   const parts = days.map(label);
   return parts.length === 1
     ? (parts[0] ?? '')

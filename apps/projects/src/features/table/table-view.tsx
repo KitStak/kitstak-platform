@@ -575,6 +575,9 @@ function HeaderCell({
   );
 }
 
+/** Narrowest an unresized Task column gets when other columns don't fit. */
+const TITLE_SQUEEZE_MIN = 260;
+
 export function TableView() {
   const { project, statusById, labelById, sectionById, capabilities } = useCurrentProject();
   const tasksQuery = useProjectTasks(project.key);
@@ -930,7 +933,15 @@ export function TableView() {
   const savedTitleWidth = titleResized ? widthOf(titleColumn) : (phoneTitle ?? Math.max(widthOf(titleColumn), titleFit));
   const otherWidth = ROW_HEADER_WIDTH + shown.slice(1).reduce((sum, column) => sum + widthOf(column), 0) + 48;
   // Task takes any spare room so the table always reaches the right edge (never while resizing it).
-  const titleWidth = widthDraft?.key === shown[0]?.key || (phoneTitle !== null && !titleResized) ? savedTitleWidth : Math.max(savedTitleWidth, gridWidth - otherWidth);
+  // When other columns run off the right edge, an unresized Task column gives back room down to
+  // TITLE_SQUEEZE_MIN, so Labels and the rest show in full instead of a wide, mostly empty Task.
+  const spare = gridWidth - otherWidth;
+  const titleWidth =
+    widthDraft?.key === shown[0]?.key || (phoneTitle !== null && !titleResized)
+      ? savedTitleWidth
+      : !titleResized && gridWidth > 0 && spare < savedTitleWidth
+        ? Math.max(TITLE_SQUEEZE_MIN, Math.min(savedTitleWidth, spare))
+        : Math.max(savedTitleWidth, spare);
   const tableWidth = otherWidth + titleWidth;
   const allSelected = rows.length > 0 && selection.count === new Set(rows.map((task) => task.id)).size;
   const sumCells = shown.map((column) => defByKey.get(column.key)?.sum?.(rows) ?? null);
@@ -1166,7 +1177,7 @@ export function TableView() {
           <button
             type="button"
             onClick={() => gridRef.current?.scrollBy({ left: Math.max(200, (gridRef.current?.clientWidth ?? 600) * 0.6), behavior: 'smooth' })}
-            className="absolute top-1 right-2 z-[9] inline-flex h-7 items-center gap-1 rounded-full border border-border-default bg-panel px-2.5 text-xs font-medium text-fg-secondary shadow-sm outline-none hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
+            className="absolute right-2 bottom-1 z-[9] inline-flex h-7 items-center gap-1 rounded-full border border-border-default bg-panel px-2.5 text-xs font-medium text-fg-secondary shadow-sm outline-none hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
             data-testid="table-more-columns"
           >
             {moreRight === 1 ? '1 more column' : `${moreRight} more columns`}

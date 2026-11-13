@@ -5,11 +5,13 @@ import { db } from '@/server/db';
 import { projects, tasks, timeEntries, type TimeEntry } from '@/server/db/schema';
 import { forbidden, invalid, notFound } from '@/server/errors';
 import type { TimeEntryDTO } from '@/lib/types';
+import { timerMinutes } from '@/lib/dates';
 import { cleanText, toTimeEntryDTO, type DomainContext } from './_shared';
 import { requireTask } from './access';
 import { logActivity } from './activity';
 
-const minutesBetween = (start: Date, end: Date): number => Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000));
+// A stopped timer logs at least one minute, with the same rounding the UI shows right away.
+const minutesBetween = (start: Date, end: Date): number => timerMinutes(end.getTime() - start.getTime());
 
 /** The actor's running timer anywhere in the org, or null. */
 export async function getRunningTimer(ctx: DomainContext): Promise<TimeEntryDTO | null> {

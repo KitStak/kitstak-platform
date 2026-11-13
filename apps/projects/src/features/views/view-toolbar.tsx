@@ -243,7 +243,10 @@ export function ViewToolbar({ view, tasks, shownCount, totalCount, controls, con
   // Save/Reset is always reserved so typing a search never flips the layout.
   const needed =
     440 + FILTER_KEYS.reduce((sum, key) => sum + (summaryNow[key] ? 60 + Math.min(150, 7.5 * (FILTER_META[key].label.length + (summaryNow[key]?.length ?? 0))) : 92), 0) + 130 + (controlsWidth ?? 100);
-  const separate = width >= needed;
+  // When the separate filters only fit with icon-only view controls (Table's Columns + Display),
+  // shrink those controls first: every view keeps the same filter bar at the same width.
+  const iconControls = width < needed && width >= needed - (controlsWidth ?? 100) + 80;
+  const separate = width >= needed || iconControls;
   const compact = width < 640;
   const summary = summaryNow;
   const searchExpanded = !compact || searchOpen || text.length > 0;
@@ -345,7 +348,7 @@ export function ViewToolbar({ view, tasks, shownCount, totalCount, controls, con
         {controls ? (
           <>
             <ToolbarDivider className="max-[480px]:hidden" />
-            {controls({ iconOnly: width < 900 })}
+            {controls({ iconOnly: width < 900 || iconControls })}
           </>
         ) : null}
         </div>

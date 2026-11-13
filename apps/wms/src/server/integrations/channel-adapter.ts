@@ -147,7 +147,7 @@ export async function fetchJson(
         typeof body === 'object' && body && 'errors' in body
           ? JSON.stringify((body as { errors: unknown }).errors).slice(0, 300)
           : String(text).slice(0, 300);
-      throw new ChannelApiError(`${res.status} ${res.statusText}${detail ? ` — ${detail}` : ''}`, res.status);
+      throw new ChannelApiError(`${res.status} ${res.statusText}${detail ? `: ${detail}` : ''}`, res.status);
     }
     return body;
   } catch (error) {

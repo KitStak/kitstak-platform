@@ -358,7 +358,7 @@ export async function applyReplenishmentImport(
     replenishmentStrategy: 'Per Warehouse',
     replenishmentLevels: levels,
   });
-  return { ...result, message: `${product.sku} @ ${warehouse.code}: ${min}–${max}` };
+  return { ...result, message: `${product.sku} @ ${warehouse.code}: ${min} to ${max}` };
 }
 
 async function findChannel(db: AppDb, clientId: string, channel: string): Promise<typeof cc.$inferSelect> {

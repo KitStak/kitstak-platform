@@ -75,7 +75,7 @@ export function ClientProjectsStrip({ clientId }: { readonly clientId: string })
               title={`${project.name}: ${HEALTH[project.health].label}, ${project.progress.percent}% done`}
             >
               <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: HEALTH[project.health].dot }} />
-              <span className="font-mono text-2xs text-faint">{project.key}</span>
+              <span className="font-sans text-2xs font-medium tabular-nums tracking-[0.01em] text-faint">{project.key}</span>
               <span className="truncate">{project.name}</span>
               <span className="tabular-nums text-faint">{project.progress.percent}%</span>
               <ArrowUpRight aria-hidden className="size-3 shrink-0 opacity-0 group-hover:opacity-100" />

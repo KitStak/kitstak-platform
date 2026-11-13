@@ -82,7 +82,7 @@ describe('billing contract change log (round 4)', () => {
       new Date('2026-11-09T12:00:00Z'),
     );
     const calc = (await logs(contract.id)).find((l) => l.field === 'lastCalculatedAt');
-    expect(calc?.message).toMatch(/^Calculated bill \d{16} for 11\/01\/2026 – 11\/08\/2026\.$/);
+    expect(calc?.message).toMatch(/^Calculated bill \d{16} for 11\/01\/2026 to 11\/08\/2026\.$/);
 
     await deleteFee(w.db, auth, actor(), contract.id, fee.id);
     expect((await logs(contract.id)).find((l) => l.type === 'Delete')?.message).toBe(

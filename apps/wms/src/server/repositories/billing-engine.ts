@@ -1166,7 +1166,7 @@ export async function calculateContract(
     field: 'lastCalculatedAt',
     from: prevCalc ?? '',
     to: now.toISOString(),
-    message: `${existing ? 'Recalculated' : 'Calculated'} bill ${number} for ${usDate(period.start)} – ${usDate(addDays(period.end, -1))}${error ? ` (failed: ${error})` : ''}.`,
+    message: `${existing ? 'Recalculated' : 'Calculated'} bill ${number} for ${usDate(period.start)} to ${usDate(addDays(period.end, -1))}${error ? ` (failed: ${error})` : ''}.`,
   });
   return {
     reportId: report.id,

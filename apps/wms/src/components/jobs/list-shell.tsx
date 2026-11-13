@@ -120,10 +120,10 @@ const JOBS_SHELL_CSS = `
 [data-ks-jobs-shell] [aria-label="Applied filters"] > span { min-width: 150px; }
 [data-ks-jobs-shell] [aria-label="Applied filters"] { flex-shrink: 0; max-width: 60%; }
 @media (max-width: 1599px) { [data-ks-jobs-shell="actions"] .basis-\\[28rem\\] { flex-basis: 100%; } }
-/* Critic R4-1: while the first page loads the footer reads "Total: —", never "Total: 0". */
+/* Critic R4-1: while the first page loads the footer reads "Total: …", never "Total: 0" (and never a dash). */
 [data-ks-jobs-loading] [aria-label="Row density"] ~ span[aria-live] > span:first-child { font-size: 0; }
 [data-ks-jobs-loading] [aria-label="Row density"] ~ span[aria-live] > span:first-child > * { display: none; }
-[data-ks-jobs-loading] [aria-label="Row density"] ~ span[aria-live] > span:first-child::after { content: "\\2014"; font-size: 12px; }
+[data-ks-jobs-loading] [aria-label="Row density"] ~ span[aria-live] > span:first-child::after { content: "\\2026"; font-size: 12px; }
 @media (max-width: 1023px) { [data-ks-jobs-shell] input[type="search"] { width: 11rem; } }
 `;
 

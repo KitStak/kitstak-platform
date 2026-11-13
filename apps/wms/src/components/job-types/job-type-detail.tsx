@@ -127,7 +127,7 @@ export function JobTypeDetailDrawer({
                   </span>
                 </Row>
                 <Row label="Batch size">
-                  {s.batch.method === 'Nof Order' ? 'Orders' : 'Items'} {s.batch.min} – {s.batch.max}
+                  {s.batch.method === 'Nof Order' ? 'Orders' : 'Items'} {s.batch.min} to {s.batch.max}
                 </Row>
                 <Row label="Mobile screens">
                   {[
@@ -194,7 +194,7 @@ export function JobTypeDetailDrawer({
                   <YesNoPill value={s.workOrder.pickingAndKitting} />
                 </Row>
                 <Row label="Batch size">
-                  {s.batch.min} – {s.batch.max}
+                  {s.batch.min} to {s.batch.max}
                 </Row>
                 <Row label="Conditions">
                   <Chips list={d.productConditions} />

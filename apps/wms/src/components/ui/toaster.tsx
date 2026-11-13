@@ -35,7 +35,9 @@ function ToastCard({ item }: { readonly item: ToastItem }) {
       }}
       className={cn(
         'group relative flex w-[360px] max-w-[calc(100vw-32px)] items-start gap-2.5 overflow-hidden rounded-lg border border-border bg-surface py-3 pl-4 pr-9 shadow-lg',
-        'data-[swipe=move]:translate-y-[var(--radix-toast-swipe-move-y)] data-[swipe=end]:-translate-y-full transition-transform',
+        item.placement === 'bottom-start'
+          ? 'data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=end]:-translate-x-full transition-transform'
+          : 'data-[swipe=move]:translate-y-[var(--radix-toast-swipe-move-y)] data-[swipe=end]:-translate-y-full transition-transform',
       )}
       data-variant={item.variant}
       data-toast=""
@@ -82,12 +84,26 @@ function ToastCard({ item }: { readonly item: ToastItem }) {
  */
 export function Toaster() {
   const items = useToasts();
+  const top = items.filter((item) => item.placement !== 'bottom-start');
+  const bottom = items.filter((item) => item.placement === 'bottom-start');
   return (
-    <ToastPrimitive.Provider swipeDirection="up" label="Notifications">
-      {items.map((item) => (
-        <ToastCard key={item.id} item={item} />
-      ))}
-      <ToastPrimitive.Viewport className="fixed left-1/2 top-[var(--toast-offset-top,68px)] z-[100] flex max-h-[calc(100vh-80px)] -translate-x-1/2 flex-col items-center gap-2 outline-none" />
-    </ToastPrimitive.Provider>
+    <>
+      <ToastPrimitive.Provider swipeDirection="up" label="Notifications">
+        {top.map((item) => (
+          <ToastCard key={item.id} item={item} />
+        ))}
+        <ToastPrimitive.Viewport className="fixed left-1/2 top-[var(--toast-offset-top,68px)] z-[100] flex max-h-[calc(100vh-80px)] -translate-x-1/2 flex-col items-center gap-2 outline-none" />
+      </ToastPrimitive.Provider>
+      {/* Cross-app confirmations (KitStak Projects tasks) sit bottom left, as in Projects and CRM. */}
+      <ToastPrimitive.Provider swipeDirection="left" label="Project notifications">
+        {bottom.map((item) => (
+          <ToastCard key={item.id} item={item} />
+        ))}
+        <ToastPrimitive.Viewport
+          data-testid="toast-viewport-bottom-start"
+          className="fixed bottom-4 left-4 z-[100] flex max-h-[calc(100vh-80px)] flex-col-reverse items-start gap-2 outline-none"
+        />
+      </ToastPrimitive.Provider>
+    </>
   );
 }

@@ -28,7 +28,7 @@ import {
 } from '@/components/ui';
 import { EntityIcon } from '@/components/pm';
 import { Page } from '@/components/layout/page';
-import { addDaysIso, formatDue, todayIso } from '@/lib/dates';
+import { addDaysIso, todayIso } from '@/lib/dates';
 import { useMyTasks, useProjects } from '@/lib/hooks/use-data';
 import { useHotkey } from '@/lib/hooks/use-hotkeys';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
@@ -50,7 +50,7 @@ import {
   type WhenGroup,
 } from './my-work-model';
 import { MyWorkRow, TASK_DRAG_TYPE } from './my-work-row';
-import { copyTaskLink } from '@/features/task/task-keys';
+import { copyTaskLink, letterKeysPaused, setDateWithUndo, writeWithUndo } from '@/features/task/task-keys';
 import { useCompleteTask } from './use-complete-task';
 
 type Scope = 'assigned' | 'created' | 'watching';
@@ -135,10 +135,9 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
   const reschedule = useCallback(
     async (task: TaskSummary, date: string | null) => {
       if (date === task.dueDate) return;
-      const saved = await updateTask(task.id, { dueDate: date });
-      if (!saved) return;
-      const label = date ? formatDue(date) : null;
-      toast.success(label ? `Now due ${/^(Today|Tomorrow|Yesterday)$/.test(label) ? label.toLowerCase() : label}` : 'Due date removed', task.title);
+      // Same rule as the drawer and List: a due date before the start moves the start along, with
+      // Undo, instead of failing on save; a refused save turns this toast into the error.
+      await setDateWithUndo({ task, field: 'dueDate', value: date, save: (patch, options) => updateTask(task.id, patch, options) });
     },
     [updateTask],
   );
@@ -172,13 +171,18 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
     const row = listRef.current?.querySelector<HTMLElement>(`[data-task-id="${active?.id ?? ''}"]`);
     row?.querySelector<HTMLButtonElement>('[data-testid="my-work-due"]:not(:disabled)')?.click();
   }, { enabled: keysOn });
-  useHotkey('t', () => active && void reschedule(active, today), { enabled: keysOn });
-  useHotkey('shift+t', () => active && void reschedule(active, addDaysIso(today, 1)), { enabled: keysOn });
+  // Keyboard writes wait for the previous one to save and for a closing dialog to settle.
+  useHotkey('t', () => active && !letterKeysPaused({ writes: true }) && void reschedule(active, today), { enabled: keysOn });
+  useHotkey('shift+t', () => active && !letterKeysPaused({ writes: true }) && void reschedule(active, addDaysIso(today, 1)), { enabled: keysOn });
   useHotkey('i', () => {
-    if (!active || active.assigneeId === user.id) return;
-    const previous = active.assigneeId;
-    void updateTask(active.id, { assigneeId: user.id });
-    toast.undo(`Assigned ${active.key} to you`, { onUndo: () => void updateTask(active.id, { assigneeId: previous }) });
+    if (!active || active.assigneeId === user.id || letterKeysPaused({ writes: true })) return;
+    void writeWithUndo({
+      taskKey: active.key,
+      message: `Assigned ${active.key} to you`,
+      patch: { assigneeId: user.id },
+      undo: { assigneeId: active.assigneeId },
+      save: (patch, options) => updateTask(active.id, patch, options),
+    });
   }, { enabled: keysOn });
   useHotkey('f', () => startFocus(), { enabled: queue.length > 0 && !focusOpen });
 

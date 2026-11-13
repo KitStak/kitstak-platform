@@ -32,6 +32,9 @@ import { Select } from '@/components/ui/select';
 import { TextField } from '@/components/ui/text-field';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
+
+/** Project task confirmations land bottom left, where KitStak Projects and CRM show theirs. */
+const PROJECT_TOAST = { placement: 'bottom-start' } as const;
 import { Tooltip } from '@/components/ui/tooltip';
 import { RailCard } from '@/components/orders/wizard/order-summary';
 import type { ProjectOptionsDto, RecordProjectsDto } from '@/server/projects/bridge';
@@ -133,7 +136,8 @@ function TaskItem({ task, onUnlink }: { readonly task: BridgeTask; readonly onUn
           {displayText(task.title)}
         </a>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-secondary">
-          <span className="shrink-0 font-mono">{task.key}</span>
+          {/* Task keys use the UI face with tabular figures: mono stacks draw "OPS" like "0PS". */}
+          <span className="shrink-0 font-sans font-medium tabular-nums tracking-[0.01em]" data-testid="project-task-key">{task.key}</span>
           <span aria-hidden>·</span>
           <span className="shrink-0">{task.status.name}</span>
           {task.dueDate ? (
@@ -260,7 +264,7 @@ function CreateTaskForm({
           },
         },
       );
-      toast.success(`${task.key} created in ${task.projectName}`, `It’s linked to ${recordLabel}.`);
+      toast.success(`${task.key} created in ${task.projectName}`, `It’s linked to ${recordLabel}.`, PROJECT_TOAST);
       onOpenChange(false);
       onCreated(task);
     } catch (error) {
@@ -269,7 +273,7 @@ function CreateTaskForm({
         Object.entries(fieldErrors).map(([field, messages]) => [field, messages[0] ?? '']),
       );
       if (Object.keys(first).length) setErrors(first);
-      toast.error('Couldn’t create the task', error instanceof Error ? error.message : 'Please try again.');
+      toast.error('Couldn’t create the task', error instanceof Error ? error.message : 'Please try again.', PROJECT_TOAST);
     } finally {
       setSaving(false);
     }
@@ -480,10 +484,10 @@ export function ProjectTasksCard({
       await apiFetch(`${API_BASE[kind]}/${encodeURIComponent(recordId)}/project-tasks/${linkId}`, {
         method: 'DELETE',
       });
-      toast.success(`${name} unlinked`, 'It’s still in KitStak Projects.');
+      toast.success(`${name} unlinked`, 'It’s still in KitStak Projects.', PROJECT_TOAST);
       refresh();
     } catch (error) {
-      toast.error('Couldn’t unlink it', error instanceof Error ? error.message : 'Please try again.');
+      toast.error('Couldn’t unlink it', error instanceof Error ? error.message : 'Please try again.', PROJECT_TOAST);
     }
   };
 

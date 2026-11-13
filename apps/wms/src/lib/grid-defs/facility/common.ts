@@ -292,12 +292,12 @@ export function cleanChangeMessage(message: string): string {
     .trim();
 }
 
-/** "— / A / 01": every slot shown, blanks as an em dash, so it is never ambiguous which part is empty; null when all are blank. */
+/** "None / A / 01": every slot shown, blanks as "None", so it is never ambiguous which part is empty; null when all are blank. */
 export function positionTriple(...parts: readonly (string | null | undefined)[]): string | null {
   const shown = parts.map((p) =>
-    p === null || p === undefined || String(p).trim() === '' ? '—' : String(p).trim(),
+    p === null || p === undefined || String(p).trim() === '' ? 'None' : String(p).trim(),
   );
-  return shown.every((p) => p === '—') ? null : shown.join(' / ');
+  return shown.every((p) => p === 'None') ? null : shown.join(' / ');
 }
 
 /** "0 products · 1 LP" (critic R4: "0 product · 0 LP"). */

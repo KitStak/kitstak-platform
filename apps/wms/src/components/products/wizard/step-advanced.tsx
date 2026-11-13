@@ -666,7 +666,7 @@ export function StepAdvanced() {
               String(v.replenishmentStrategy ?? 'Global') === 'Per Warehouse'
                 ? `${((v.replenishmentLevels as unknown[]) ?? []).length} warehouse level(s)`
                 : v.replenishmentMax
-                  ? `Global ${String(v.replenishmentMin ?? 0)}–${String(v.replenishmentMax)}`
+                  ? `Global ${String(v.replenishmentMin ?? 0)} to ${String(v.replenishmentMax)}`
                   : null
             }
           >

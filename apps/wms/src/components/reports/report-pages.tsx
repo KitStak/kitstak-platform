@@ -164,7 +164,7 @@ export function describeDays(days: readonly string[]): string {
     });
   if (days.length === 0) return '';
   if (days.length >= 4)
-    return `${label(days[0] ?? '')} – ${label(days[days.length - 1] ?? '')} (${days.length} days)`;
+    return `${label(days[0] ?? '')} to ${label(days[days.length - 1] ?? '')} (${days.length} days)`;
   const parts = days.map(label);
   return parts.length === 1
     ? (parts[0] ?? '')

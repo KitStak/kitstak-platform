@@ -260,7 +260,7 @@ function WarehouseDetailDrawer({
               { label: 'Email', value: d.email, wide: true },
               {
                 label: 'Day shift',
-                value: `${d.shiftStart} ${d.shiftStartZone} – ${d.shiftEnd} ${d.shiftEndZone}`,
+                value: `${d.shiftStart} ${d.shiftStartZone} to ${d.shiftEnd} ${d.shiftEndZone}`,
                 wide: true,
               },
             ]}

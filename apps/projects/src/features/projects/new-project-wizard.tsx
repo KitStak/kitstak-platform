@@ -277,7 +277,9 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
   const [nameInput, setName] = useState<string | null>(prefill.name ?? null);
   const [keyInput, setKey] = useState<string | null>(null);
   const [description, setDescription] = useState('');
-  const [spaceId, setSpaceId] = useState<string>(prefill.spaceId ?? 'none');
+  // undefined = not picked yet: the space whose name matches the template's category (Warehouse
+  // go-live is 'Operations' → the Operations space), else 'No space'.
+  const [spaceChoice, setSpaceId] = useState<string | undefined>(prefill.spaceId);
   const [ownerId, setOwnerId] = useState<string | null>(user.id);
   const [startDate, setStartDate] = useState<string | null>(todayIso());
   const [dueChoice, setDueDate] = useState<string | null | undefined>(undefined);
@@ -320,6 +322,14 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
 
   const allTemplates = useMemo(() => templates.data ?? [], [templates.data]);
   const template = useMemo(() => allTemplates.find((t) => t.id === templateId) ?? null, [allTemplates, templateId]);
+  const spaceId = useMemo(() => {
+    if (spaceChoice !== undefined) return spaceChoice;
+    const category = template?.category?.trim().toLowerCase();
+    if (!category) return 'none';
+    const list = spaces.data ?? [];
+    const match = list.find((space) => space.name.trim().toLowerCase() === category) ?? list.find((space) => space.name.toLowerCase().includes(category) || category.includes(space.name.trim().toLowerCase()));
+    return match?.id ?? 'none';
+  }, [spaceChoice, template, spaces.data]);
   const taken = useMemo(() => new Set((projects.data ?? []).map((p) => p.key)), [projects.data]);
   const categories = useMemo(() => ['All', ...new Set(allTemplates.map((t) => t.category))], [allTemplates]);
   const visibleTemplates = useMemo(() => {

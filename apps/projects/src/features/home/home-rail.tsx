@@ -5,7 +5,9 @@ import { useMemo, type ReactNode } from 'react';
 import { ArrowRight, FolderPlus, Inbox, Target } from 'lucide-react';
 import { ProgressBar, cn } from '@/components/ui';
 import { EntityIcon } from '@/components/pm';
-import { GOAL_HEALTH_LABELS, PROJECT_HEALTH_LABELS, type GoalHealth, type ProjectHealth } from '@/lib/constants';
+import { GOAL_HEALTH_LABELS, type GoalHealth, type ProjectHealth } from '@/lib/constants';
+import { healthProgressTone } from '@/lib/health';
+import { ProjectHealthMark } from '@/features/projects/health';
 import { formatRelative } from '@/lib/dates';
 import { useRecents } from '@/lib/hooks/use-data';
 import { routes } from '@/lib/routes';
@@ -62,13 +64,6 @@ export function InboxPreview({ items, unread }: { readonly items: readonly Notif
   );
 }
 
-const GOAL_TONE: Record<GoalHealth, 'primary' | 'success' | 'warning' | 'danger'> = {
-  on_track: 'success',
-  at_risk: 'warning',
-  off_track: 'danger',
-  achieved: 'success',
-  missed: 'danger',
-};
 const HEALTH_DOT: Record<ProjectHealth | GoalHealth, string> = {
   on_track: 'bg-success',
   at_risk: 'bg-warning-accent',
@@ -108,7 +103,7 @@ export function GoalsSnapshot({ goals }: { readonly goals: readonly GoalDTO[] })
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{goal.name}</span>
                   <span className="text-xs text-fg-muted tabular-nums">{Math.round(goal.progress)}%</span>
                 </span>
-                <ProgressBar value={goal.progress} size="sm" tone={GOAL_TONE[goal.health]} label={`${goal.name}: ${Math.round(goal.progress)}%, ${GOAL_HEALTH_LABELS[goal.health]}`} />
+                <ProgressBar value={goal.progress} size="sm" tone={healthProgressTone(goal.health)} label={`${goal.name}: ${Math.round(goal.progress)}%, ${GOAL_HEALTH_LABELS[goal.health]}`} />
               </Link>
             </li>
           ))}
@@ -159,11 +154,11 @@ export function RecentProjects({ projects }: { readonly projects: readonly Proje
               <Link href={routes.project(project.key)} className="flex items-center gap-3 rounded-md px-2 py-2 outline-none hover:bg-hover focus-visible:bg-hover focus-visible:ring-2 focus-visible:ring-focus">
                 <EntityIcon icon={project.icon} color={project.color} size={28} />
                 <span className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="flex items-center gap-1.5">
+                  <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate text-sm font-medium text-fg">{project.name}</span>
-                    <span aria-label={PROJECT_HEALTH_LABELS[project.health]} title={PROJECT_HEALTH_LABELS[project.health]} className={cn('size-1.5 shrink-0 rounded-full', HEALTH_DOT[project.health])} />
+                    <ProjectHealthMark project={project} />
                   </span>
-                  <ProgressBar value={project.progress.percent} size="sm" tone={project.health === 'off_track' ? 'danger' : project.health === 'at_risk' ? 'warning' : 'success'} label={`${project.name} progress`} />
+                  <ProgressBar value={project.progress.percent} size="sm" tone={healthProgressTone(project.health)} label={`${project.name} progress`} />
                 </span>
                 <span className="w-9 text-right text-xs text-fg-muted tabular-nums">{project.progress.percent}%</span>
               </Link>

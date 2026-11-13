@@ -133,7 +133,7 @@ describe('dashboard filters', () => {
     expect(isFiltered(state)).toBe(true);
     expect(activeFilterCount(state)).toBe(2);
     expect(isFiltered({ range: 'all', personIds: [], search: '' })).toBe(false);
-    expect(describeRange({ range: 'custom', from: '2026-01-01', to: '2026-01-31', personIds: [], search: '' }, today)).toBe('Jan 1, 2026 – Jan 31, 2026');
+    expect(describeRange({ range: 'custom', from: '2026-01-01', to: '2026-01-31', personIds: [], search: '' }, today)).toBe('Jan 1, 2026 to Jan 31, 2026');
   });
 });
 

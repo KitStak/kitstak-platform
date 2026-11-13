@@ -396,7 +396,7 @@ export function TemplatesView({
           aria-label="Search templates"
           containerClassName="w-full lg:w-64"
         />
-        <div className="-mx-1 min-w-0 overflow-x-auto px-1">
+        <div className="-mx-1 min-w-0 overflow-x-auto px-1 max-md:pr-6 max-md:[mask-image:linear-gradient(to_right,#000_calc(100%-32px),transparent)]">
           <ToggleGroup
             label="Category"
             className="min-w-max [&>button]:whitespace-nowrap"
@@ -436,7 +436,7 @@ export function TemplatesView({
           }
         />
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="templates-grid">
+        <ul className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="templates-grid">
           {visible.map((template) => (
             <TemplateCard
               key={template.id}

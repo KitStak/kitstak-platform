@@ -27,6 +27,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import { CountBadge, IconButton, Tooltip, cn } from '@/components/ui';
+import { ProjectHealthDot } from '@/features/projects/health';
 import { EntityIcon } from '@/components/pm';
 import { useProjects, useSpaces, useUnreadCount } from '@/lib/hooks/use-data';
 import { qk } from '@/lib/query-keys';
@@ -112,12 +113,7 @@ function ProjectRow({ project, depth = 0 }: { readonly project: ProjectSummary; 
     >
       <EntityIcon icon={project.icon} color={project.color} size={18} />
       <span className="min-w-0 flex-1 truncate">{project.name}</span>
-      {project.health !== 'on_track' ? (
-        <span
-          aria-label={project.health === 'at_risk' ? 'At risk' : 'Off track'}
-          className={cn('size-1.5 shrink-0 rounded-full', project.health === 'at_risk' ? 'bg-warning' : 'bg-danger')}
-        />
-      ) : null}
+      <ProjectHealthDot project={project} hideOnTrack showHint={false} />
     </Link>
   );
 }

@@ -221,8 +221,8 @@ describe('format: dates and timelines', () => {
   });
 
   it('formats timeline ranges, durations and progress', () => {
-    expect(formatTimelineRange('2026-05-01', '2026-10-30', NOW)).toBe('May 1 – Oct 30');
-    expect(formatTimelineRange('2025-12-20', '2026-01-05', NOW)).toBe('Dec 20, 2025 – Jan 5, 2026');
+    expect(formatTimelineRange('2026-05-01', '2026-10-30', NOW)).toBe('May 1 to Oct 30');
+    expect(formatTimelineRange('2025-12-20', '2026-01-05', NOW)).toBe('Dec 20, 2025 to Jan 5, 2026');
     expect(formatTimelineRange('2026-05-01', '2026-05-01', NOW)).toBe('May 1');
     expect(timelineDays('2026-05-01', '2026-10-30')).toBe(183);
     expect(formatDuration(183)).toBe('6 mo');

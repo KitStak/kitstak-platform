@@ -7,20 +7,20 @@ import './task.css';
  * CRM/WMS records, files, time tracking, and comments interleaved with history. Wide layouts
  * (≥ 880px) move properties and time into a right sidebar. Files dropped anywhere attach.
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronDown, ChevronRight, ChevronUp, X } from 'lucide-react';
-import { Button, EmptyState, IconButton, Skeleton, Tooltip, cn, toast } from '@/components/ui';
+import { Button, EmptyState, IconButton, Skeleton, Tooltip, cn } from '@/components/ui';
 import { EntityIcon, StatusIcon } from '@/components/pm';
 import { isEditableTarget, useHotkey } from '@/lib/hooks/use-hotkeys';
-import { useProject, useTask, useTaskAttachments } from '@/lib/hooks/use-data';
+import { useProject, useTask, useTaskActivity, useTaskAttachments, useTaskComments, useTaskTime, type ActivityPage } from '@/lib/hooks/use-data';
 import { TASKS_DELETED_EVENT } from '@/lib/hooks/use-task-mutations';
 import { addDaysIso, todayIso } from '@/lib/dates';
 import { routes } from '@/lib/routes';
 import { parseTaskKey } from '@/lib/task-key';
-import type { TaskDetail } from '@/lib/types';
+import type { CommentDTO, TaskDetail, TimeEntryDTO } from '@/lib/types';
 import { ProjectProvider } from '@/features/projects/project-context';
 import { ActivityFeed } from './activity-feed';
 import { AttachmentsSection, DropOverlay } from './attachments-section';
@@ -35,7 +35,7 @@ import { TaskProperties } from './task-properties';
 import { TimeSection } from './time-section';
 import { useTaskUploads } from './use-task-uploads';
 import { WatchersButton } from './watchers';
-import { taskKeyAction } from './task-keys';
+import { letterKeysPaused, setDateWithUndo, taskKeyAction, startLetterKeyGuard, writeWithUndo } from './task-keys';
 import { useShell } from '@/features/shell/shell-context';
 
 export interface TaskDetailViewProps {
@@ -44,11 +44,42 @@ export interface TaskDetailViewProps {
   readonly variant?: 'drawer' | 'page';
   readonly onDeleted?: () => void;
   readonly initialData?: TaskDetail;
+  /** Server-loaded comments, first history page and time entries (task page), so they render in the first HTML. */
+  readonly initialFeed?: TaskFeedInitial;
   /** Drawer: close button handler. */
   readonly onClose?: () => void;
   /** Open another task in place (drawer swaps the `?task=` param; page navigates). */
   readonly onOpenTask?: (key: string, options?: { replace?: boolean }) => void;
+  /**
+   * Replaces the header's previous/next task control (the task's position in its project). The
+   * Inbox preview passes its own "3 of 12" stepper so the counter matches the inbox list.
+   */
+  readonly headerNav?: ReactNode;
 }
+
+/** What the task page loads on the server besides the task itself. Undefined parts load on the client. */
+export interface TaskFeedInitial {
+  readonly taskId: string;
+  readonly loadedAt: number;
+  readonly comments?: readonly CommentDTO[];
+  readonly activity?: ActivityPage;
+  readonly time?: readonly TimeEntryDTO[];
+}
+
+/**
+ * Puts the server-loaded feed into the query cache before the sections below read it (same
+ * pattern as the project Overview), so Activity and Time render real rows on the server.
+ */
+function SeedTaskFeed({ feed, live }: { readonly feed: TaskFeedInitial; readonly live: boolean }) {
+  const seed = { initialDataUpdatedAt: feed.loadedAt, notifyOnChangeProps: [] as [], enabled: live };
+  useTaskComments(feed.taskId, { initialData: feed.comments ? [...feed.comments] : undefined, ...seed });
+  useTaskActivity(feed.taskId, { initialData: feed.activity, ...seed });
+  useTaskTime(feed.taskId, { initialData: feed.time ? [...feed.time] : undefined, ...seed });
+  return null;
+}
+
+/** Header nav override from `TaskDetailViewProps.headerNav` (undefined: the default TaskNav). */
+const HeaderNavSlot = createContext<ReactNode | undefined>(undefined);
 
 /** Keys pressed inside these belong to them, not to task navigation. */
 const BUSY_KEYS_SELECTOR =
@@ -96,17 +127,21 @@ function useTaskKeys(actions: ReturnType<typeof useTaskActions>) {
         void current.toggleDone();
         return true;
       }
+      // Writes wait for the last keyboard write to save, and for a closing dialog to settle.
+      if ((action === 'assign-me' || action === 'due-today' || action === 'due-tomorrow') && letterKeysPaused({ writes: true })) return true;
       if (action === 'assign-me' && shown.assigneeId !== userId) {
-        const previous = shown.assigneeId;
-        void save({ assigneeId: userId });
-        toast.undo(`Assigned ${shown.key} to you`, { onUndo: () => void save({ assigneeId: previous }) });
+        void writeWithUndo({
+          taskKey: shown.key,
+          message: `Assigned ${shown.key} to you`,
+          patch: { assigneeId: userId },
+          undo: { assigneeId: shown.assigneeId },
+          save,
+        });
         return true;
       }
       if (action === 'due-today' || action === 'due-tomorrow') {
         const dueDate = action === 'due-today' ? todayIso() : addDaysIso(todayIso(), 1);
-        const previous = shown.dueDate;
-        void save({ dueDate });
-        toast.undo(`${shown.key} is due ${action === 'due-today' ? 'today' : 'tomorrow'}`, { onUndo: () => void save({ dueDate: previous }) });
+        if (shown.dueDate !== dueDate) void setDateWithUndo({ task: shown, field: 'dueDate', value: dueDate, save });
         return true;
       }
       return false;
@@ -115,12 +150,14 @@ function useTaskKeys(actions: ReturnType<typeof useTaskActions>) {
       if (event.defaultPrevented || event.altKey) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (isEditableTarget(target) || target?.closest(BUSY_KEYS_SELECTOR)) return;
-      if (variant === 'page' && document.querySelector('[role="dialog"][data-state="open"], [role="menu"], [cmdk-root]')) return;
+      // Quick add, the palette or a menu is open (or just closed): its keys never edit this task.
+      if (letterKeysPaused()) return;
       if (run(event)) {
         event.preventDefault();
         event.stopPropagation();
       }
     };
+    startLetterKeyGuard();
     if (variant === 'page') {
       window.addEventListener('keydown', onKey);
       return () => window.removeEventListener('keydown', onKey);
@@ -316,6 +353,7 @@ function TaskHeader({
   readonly onNavigate: (key: string) => void;
 }) {
   const { variant } = useTaskContext();
+  const navSlot = useContext(HeaderNavSlot);
   return (
     <header
       className={cn(
@@ -324,7 +362,7 @@ function TaskHeader({
       )}
     >
       <Breadcrumb />
-      <TaskNav onNavigate={onNavigate} />
+      {navSlot !== undefined ? navSlot : <TaskNav onNavigate={onNavigate} />}
       <span aria-hidden className="mx-0.5 hidden h-5 w-px shrink-0 bg-border-subtle sm:block" />
       <WatchersButton />
       {variant === 'drawer' ? <OpenFullPageLink /> : null}
@@ -566,8 +604,10 @@ export function TaskDetailView({
   variant = 'drawer',
   onDeleted,
   initialData,
+  initialFeed,
   onClose,
   onOpenTask,
+  headerNav,
 }: TaskDetailViewProps) {
   const router = useRouter();
   const [live, setLive] = useState(true);
@@ -631,7 +671,10 @@ export function TaskDetailView({
         live={live}
         retire={retire}
       >
-        <TaskBody onClose={onClose} onNavigate={(key) => openTask(key, { replace: true })} />
+        {initialFeed && initialFeed.taskId === data.id ? <SeedTaskFeed feed={initialFeed} live={live} /> : null}
+        <HeaderNavSlot.Provider value={headerNav}>
+          <TaskBody onClose={onClose} onNavigate={(key) => openTask(key, { replace: true })} />
+        </HeaderNavSlot.Provider>
       </TaskContextProvider>
     </ProjectProvider>
   );

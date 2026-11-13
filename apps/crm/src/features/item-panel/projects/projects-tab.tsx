@@ -136,7 +136,7 @@ function ProjectCard({
             >
               {displayText(project.name)}
             </a>
-            <span className="shrink-0 font-mono text-xs text-fg-muted">{project.key}</span>
+            <span className="shrink-0 font-sans text-xs font-medium tabular-nums tracking-[0.01em] text-fg-muted">{project.key}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {finished ? (
@@ -241,7 +241,7 @@ function TaskRow({ task, onUnlink }: { readonly task: BridgeTask; readonly onUnl
           {displayText(task.title)}
         </a>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-fg-muted">
-          <span className="shrink-0 font-mono">{task.key}</span>
+          <span className="shrink-0 font-sans font-medium tabular-nums tracking-[0.01em]">{task.key}</span>
           <span aria-hidden className="shrink-0">
             ·
           </span>

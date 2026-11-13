@@ -32,7 +32,7 @@ interface Item {
   readonly source: string;
 }
 
-const EMPTY = new Set(['', 'None', '-', 'null']);
+const EMPTY = new Set(['', 'None', '-', '\u2014', '\u2013', 'null']);
 
 type ChangeFields = Pick<
   ChangeLogEntry,

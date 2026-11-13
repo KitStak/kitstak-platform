@@ -86,6 +86,7 @@ export function ProgressRing({
   readonly percent: number;
   readonly size?: number;
   readonly strokeWidth?: number;
+  /** 'primary' is the neutral ink (navy on light, cream on dark): progress is not an error, so never brand red. */
   readonly tone?: 'primary' | 'success' | 'warning' | 'danger';
   readonly label: string;
   readonly className?: string;
@@ -94,7 +95,7 @@ export function ProgressRing({
   const clamped = Math.max(0, Math.min(100, Math.round(percent)));
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const color = clamped === 100 ? 'var(--success)' : tone === 'primary' ? 'var(--primary)' : `var(--${tone})`;
+  const color = clamped === 100 ? 'var(--success)' : tone === 'primary' ? 'var(--logo-ink)' : `var(--${tone})`;
   return (
     <span className={cn('relative inline-flex shrink-0 items-center justify-center', className)} style={{ width: size, height: size }} role="img" aria-label={`${label}: ${clamped}%`}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden className="-rotate-90">

@@ -138,16 +138,24 @@ export function useTaskMutations(options: { readonly statusCategory?: StatusCate
     [statusCategory],
   );
 
-  /** Patch one task. Resolves to the server's TaskSummary, or undefined on failure (already toasted). */
+  /**
+   * Patch one task. Resolves to the server's TaskSummary, or undefined on failure (already toasted).
+   * The failure toast has one id per task (or `options.toastId`, e.g. the optimistic Undo toast it
+   * should replace), so repeated failures never stack identical error toasts.
+   */
   const updateTask = useCallback(
-    async (taskId: string, patch: TaskPatch): Promise<TaskSummary | undefined> => {
+    async (taskId: string, patch: TaskPatch, options?: { readonly toastId?: string | number }): Promise<TaskSummary | undefined> => {
       await queryClient.cancelQueries({ predicate: (query) => taskListPredicate(query.queryKey) });
       const saved = snapshot(queryClient);
       patchLists(queryClient, new Set([taskId]), (task) => applyPatch(task, patch));
-      const result = await updateTaskAction({ taskId, patch });
+      // A dropped connection rolls back like a refused save (never leaves the optimistic value up).
+      const result = await updateTaskAction({ taskId, patch }).catch(() => ({
+        ok: false as const,
+        error: { message: 'Check your connection and try again.' },
+      }));
       if (!result.ok) {
         restore(queryClient, saved);
-        toast.error("Couldn't save your change", result.error.message);
+        toast.error("Couldn't save your change", result.error.message, { id: options?.toastId ?? `save-error:${taskId}` });
         return undefined;
       }
       patchLists(queryClient, new Set([taskId]), () => result.data);

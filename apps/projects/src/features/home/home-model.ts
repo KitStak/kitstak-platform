@@ -2,12 +2,8 @@
 import { addDaysIso, startOfWeekIso, todayIso, type IsoDate } from '@/lib/dates';
 import type { TaskSummary } from '@/lib/types';
 
-export function greetingFor(now: Date): string {
-  const hour = now.getHours();
-  if (hour >= 5 && hour < 12) return 'Good morning';
-  if (hour >= 12 && hour < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+/** The shared KitStak greeting (same boundaries as CRM). */
+export { greetingFor } from '@kitstak/ui/text';
 
 export const isOpenTask = (task: TaskSummary) => task.statusCategory !== 'done' && task.statusCategory !== 'cancelled';
 

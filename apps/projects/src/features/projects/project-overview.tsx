@@ -6,11 +6,10 @@
  */
 import Link from 'next/link';
 import { useMemo, useState, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowRight,
   BarChart3,
-  CalendarRange,
   Check,
   ExternalLink,
   Flag,
@@ -65,15 +64,19 @@ import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { qk } from '@/lib/query-keys';
 import { routes } from '@/lib/routes';
-import { expectedProgress, suggestHealth } from '@/lib/rollups';
-import type { MilestoneDTO, ProjectDetail, ProjectUpdateDTO } from '@/lib/types';
+import type { GoalDTO, IntegrationLinkDTO, MilestoneDTO, ProjectDetail, ProjectUpdateDTO } from '@/lib/types';
+import type { ActivityPage } from '@/lib/hooks/use-data';
+import type { Customer360 } from '@/server/integrations/customer360';
+import { apiGet, apiPath } from '@/lib/api-client';
+import { customer360Key } from '@/features/integrations/customer-360-strip';
 import { addLinkAction, refreshLinksAction, removeLinkAction } from '@/server/actions/links';
 import { postProjectUpdateAction } from '@/server/actions/portfolio';
 import { updateProjectAction } from '@/server/actions/projects';
 import { createMilestoneAction, deleteMilestoneAction, updateMilestoneAction } from '@/server/actions/structure';
 import { LocalTime } from '@/features/task/local-time';
 import { ProgressRing } from '@/features/dashboards/charts';
-import { HEALTH_HELP, HEALTH_TONE, HealthIcon } from './health';
+import { HEALTH_HELP, HealthIcon } from './health';
+import { healthProgressTone } from '@/lib/health';
 import { withoutUpdateEchoes } from './project-activity';
 import { useCurrentProject } from './project-context';
 import { ProjectDescription } from './project-description';
@@ -159,9 +162,6 @@ function StatusUpdatesPanel({ project, canEdit }: { readonly project: ProjectDet
     successMessage: 'Update posted. The team will see it in their inbox.',
     onSuccess: () => setNote(''),
   });
-  const actual = project.progress.percent;
-  const expected = expectedProgress(project.startDate, project.dueDate, todayIso());
-  const suggested = suggestHealth(actual, expected);
   const list = updates.data ?? [];
   const shown = showAll ? list : list.slice(0, 3);
   const changed = health !== project.health || status !== project.status || note.trim().length > 0;
@@ -185,17 +185,6 @@ function StatusUpdatesPanel({ project, canEdit }: { readonly project: ProjectDet
           }}
         >
           <HealthChoice value={health} onChange={setHealth} />
-          {expected !== null && suggested !== health && project.status !== 'completed' ? (
-            <p className="flex items-start gap-2 rounded-md bg-sunken px-3 py-2 text-xs text-fg-secondary" data-testid="health-hint">
-              <CalendarRange aria-hidden className="mt-0.5 size-3.5 shrink-0 text-icon" />
-              <span>
-                The numbers suggest <strong className="font-semibold text-fg">{PROJECT_HEALTH_LABELS[suggested]}</strong>: {expected}% of the time is used and {actual}% of tasks are done.{' '}
-                <button type="button" className="font-medium text-fg-link hover:underline" onClick={() => setHealth(suggested)}>
-                  Use “{PROJECT_HEALTH_LABELS[suggested]}”
-                </button>
-              </span>
-            </p>
-          ) : null}
           <Textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} maxLength={2000} placeholder="What happened since the last update? Anything blocking you? What’s next?" aria-label="Update note" data-testid="status-update-note" />
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -248,7 +237,10 @@ function Stat({ label, value, tone, hint }: { readonly label: string; readonly v
   );
 }
 
-function ScheduleBar({ start, due, percent }: { readonly start: string | null; readonly due: string | null; readonly percent: number }) {
+// Same colour language as the ring: neutral ink when on track, amber at risk, red off track.
+const HEALTH_BAR: Readonly<Record<ProjectHealth, string>> = { on_track: 'bg-[var(--logo-ink)]', at_risk: 'bg-warning', off_track: 'bg-danger' };
+
+function ScheduleBar({ start, due, percent, health }: { readonly start: string | null; readonly due: string | null; readonly percent: number; readonly health: ProjectHealth }) {
   const today = todayIso();
   if (!start || !due || due <= start) return <p className="text-xs text-fg-muted">{formatRange(start, due) || 'No dates yet. Add a start and due date in Settings to track pace.'}</p>;
   const total = diffDays(start, due);
@@ -258,7 +250,7 @@ function ScheduleBar({ start, due, percent }: { readonly start: string | null; r
   return (
     <div className="flex flex-col gap-1.5">
       <div className="relative h-2 rounded-full bg-sunken" role="img" aria-label={`${percent}% of tasks done, ${timePercent}% of the time used`}>
-        <span className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width] duration-[var(--duration-slower)] motion-reduce:transition-none" style={{ width: `${percent}%` }} />
+        <span className={cn('absolute inset-y-0 left-0 rounded-full transition-[width] duration-[var(--duration-slower)] motion-reduce:transition-none', HEALTH_BAR[health])} data-health={health} style={{ width: `${percent}%` }} />
         <span aria-hidden className="absolute -top-1 -bottom-1 w-0.5 rounded-full bg-fg" style={{ left: `calc(${timePercent}% - 1px)` }} />
       </div>
       <div className="flex items-center justify-between text-xs text-fg-muted">
@@ -291,7 +283,7 @@ function ProgressPanel({ project }: { readonly project: ProjectDetail }) {
       }
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <ProgressRing percent={project.progress.percent} size={88} strokeWidth={8} label="Tasks done" tone={HEALTH_TONE[project.health]} />
+        <ProgressRing percent={project.progress.percent} size={88} strokeWidth={8} label="Tasks done" tone={healthProgressTone(project.health)} />
         <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Tasks" value={project.progress.total} />
           <Stat label="In progress" value={inProgress === undefined ? '…' : inProgress} />
@@ -300,7 +292,7 @@ function ProgressPanel({ project }: { readonly project: ProjectDetail }) {
         </div>
       </div>
       <div className="mt-4">
-        <ScheduleBar start={project.startDate} due={project.dueDate} percent={project.progress.percent} />
+        <ScheduleBar start={project.startDate} due={project.dueDate} percent={project.progress.percent} health={project.health} />
       </div>
       {data ? (
         <p className="mt-3 text-xs text-fg-muted">
@@ -742,7 +734,37 @@ function LinksPanel({ project, canEdit }: { readonly project: ProjectDetail; rea
 
 // --- Page -------------------------------------------------------------------------------------
 
-export function ProjectOverview() {
+/** Overview data loaded on the server with the page, so its sections paint without skeletons. */
+export interface OverviewInitial {
+  readonly loadedAt: number;
+  readonly updates?: readonly ProjectUpdateDTO[];
+  readonly activity?: ActivityPage;
+  readonly links?: readonly IntegrationLinkDTO[];
+  readonly goals?: readonly GoalDTO[];
+  readonly integrationStatus?: { readonly crm: boolean; readonly wms: boolean; readonly targetTypes: readonly IntegrationTargetType[] };
+  readonly customer360?: Customer360 | null;
+}
+
+/** Seeds the Overview queries (notifyOnChangeProps: [] so it never re-renders). */
+function SeedOverview({ projectKey, initial }: { readonly projectKey: string; readonly initial: OverviewInitial }) {
+  const at = initial.loadedAt;
+  const seed = { initialDataUpdatedAt: at, notifyOnChangeProps: [] as [] };
+  useProjectUpdates(projectKey, { initialData: initial.updates ? [...initial.updates] : undefined, ...seed });
+  useProjectActivity(projectKey, { initialData: initial.activity, ...seed });
+  useProjectLinks(projectKey, { initialData: initial.links ? [...initial.links] : undefined, ...seed });
+  useProjectGoals(projectKey, { initialData: initial.goals ? [...initial.goals] : undefined, ...seed });
+  useIntegrationStatus({ initialData: initial.integrationStatus ? { ...initial.integrationStatus, targetTypes: [...initial.integrationStatus.targetTypes] } : undefined, ...seed });
+  useQuery({
+    queryKey: customer360Key(projectKey),
+    queryFn: () => apiGet<Customer360>(apiPath(`projects/${encodeURIComponent(projectKey)}/customer-360`)),
+    initialData: initial.customer360 ?? undefined,
+    staleTime: 30_000,
+    ...seed,
+  });
+  return null;
+}
+
+export function ProjectOverview({ initial }: { readonly initial?: OverviewInitial } = {}) {
   const { project, capabilities } = useCurrentProject();
   const refresh = useRefreshProject();
   const canEdit = capabilities['project:update'];
@@ -760,6 +782,7 @@ export function ProjectOverview() {
 
   return (
     <div className="mx-auto grid w-full max-w-[1240px] grid-cols-1 gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]" data-testid="project-overview">
+      {initial ? <SeedOverview projectKey={project.key} initial={initial} /> : null}
       {project.archivedAt ? (
         <div className="flex items-center gap-3 rounded-lg border border-warning bg-warning-subtle px-4 py-3 text-sm text-warning-text lg:col-span-2">
           <span className="flex-1">This project is archived. It’s read-only in lists and reports until you restore it.</span>

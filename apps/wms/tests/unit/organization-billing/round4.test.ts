@@ -63,7 +63,7 @@ describe('pricing modes', () => {
     });
     expect(priceQuantity(150, tiers, 'graduated').total).toBe(140);
     expect(priceQuantity(600, tiers, 'tierBase').total).toBe(300);
-    expect(priceFormula(150, tiers, 'tierBase')).toBe('150 lands in 101–500: 150 × 0.80 = 120.00');
+    expect(priceFormula(150, tiers, 'tierBase')).toBe('150 lands in 101 to 500: 150 × 0.80 = 120.00');
     expect(priceFormula(150, [{ fromQty: 101, toQty: null, rate: 2 }], 'fromQuantity')).toBe(
       '150 − 100 free = 50 × 2.00 = 100.00',
     );

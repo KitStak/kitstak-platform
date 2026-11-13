@@ -83,6 +83,9 @@ describe('workload model', () => {
     // Counting tasks, a task spanning two weeks counts once, in its due week.
     expect(counted.get('maya')?.cells.get('2026-11-09')).toBeUndefined();
     expect(counted.get('maya')?.cells.get('2026-11-16')?.load).toBe(1);
+    // The phone (one visible week) and the desktop (many weeks) bucket the same task the same way.
+    const phone = buildWorkload([task({ id: 'b', assigneeId: 'maya', startDate: '2026-11-12', dueDate: '2026-11-17' })], ['2026-11-09'], 'tasks');
+    expect(phone.get('maya')?.cells.get('2026-11-09')).toBeUndefined();
   });
 
   it('rates how full a week is', () => {

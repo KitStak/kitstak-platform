@@ -33,7 +33,7 @@ function aliasSearch(params: URLSearchParams) {
   const parsed = parseGridQuery(copy);
   const first = parsed.issues[0];
   if (first)
-    throw new AppError('VALIDATION', `Invalid query: ${first.param} — ${first.message}`, {
+    throw new AppError('VALIDATION', `Invalid query: ${first.param}: ${first.message}`, {
       fieldErrors: Object.fromEntries(parsed.issues.map((i) => [i.param, [i.message]])),
     });
   return parsed.query;

@@ -20,7 +20,7 @@ export interface TimelineGroup {
 
 export type TimelineRow =
   | { readonly kind: 'milestones'; readonly key: string }
-  | { readonly kind: 'group'; readonly key: string; readonly group: TimelineGroup; readonly count: number; readonly summary: Span | null; readonly collapsed: boolean }
+  | { readonly kind: 'group'; readonly key: string; readonly group: TimelineGroup; readonly count: number; readonly subtasks: number; readonly summary: Span | null; readonly collapsed: boolean }
   | {
       readonly kind: 'task';
       readonly key: string;
@@ -113,10 +113,13 @@ export function buildTimelineRows(input: BuildRowsInput): TimelineRow[] {
     if (grouped && list.length === 0 && (!input.canCreate || group.id === 'none')) continue;
     const groupCollapsed = grouped && collapsed.has(`g:${group.id}`);
     const body: TimelineRow[] = [];
+    // `count` is top-level tasks only, the same rule as List; subtasks are counted on their own.
     let count = 0;
+    let subtasks = 0;
     let summary: Span | null = null;
     const visit = (task: TaskSummary, depth: number, hidden: boolean) => {
-      count += 1;
+      if (depth === 0) count += 1;
+      else subtasks += 1;
       const span = spans.get(task.id);
       if (span) summary = summary ? { start: span.start < summary.start ? span.start : summary.start, end: span.end > summary.end ? span.end : summary.end } : span;
       const kids = (children.get(task.id) ?? []).filter(isIncluded).sort((a, b) => compareRank(a.position, b.position));
@@ -125,7 +128,7 @@ export function buildTimelineRows(input: BuildRowsInput): TimelineRow[] {
       for (const kid of kids) visit(kid, depth + 1, hidden || folded);
     };
     for (const task of list) visit(task, 0, groupCollapsed);
-    if (grouped) rows.push({ kind: 'group', key: `g:${group.id}`, group, count, summary, collapsed: groupCollapsed });
+    if (grouped) rows.push({ kind: 'group', key: `g:${group.id}`, group, count, subtasks, summary, collapsed: groupCollapsed });
     if (!groupCollapsed) {
       rows.push(...body);
       if (input.canCreate) rows.push({ kind: 'add', key: `a:${group.id}`, group });

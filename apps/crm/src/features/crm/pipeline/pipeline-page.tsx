@@ -131,7 +131,7 @@ export function PipelinePage() {
           />
           {data?.periodRange ? (
             <span className="text-sm text-fg-muted">
-              Closing {formatDay(data.periodRange.from)} – {formatDay(data.periodRange.to)}
+              Closing {formatDay(data.periodRange.from)} to {formatDay(data.periodRange.to)}
             </span>
           ) : null}
           {pipeline.isFetching && data ? (

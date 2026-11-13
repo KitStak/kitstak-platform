@@ -262,7 +262,7 @@ async function assertNoApprovedOverlap(
   if (other)
     throw new AppError(
       'INVALID_STATE',
-      `${other.billStatus} bill ${other.billNumber} already covers ${usDay(other.periodStart)} – ${usDay(other.periodEnd)}; bill ${row.billNumber} would bill the period twice. Cancel one of them first.`,
+      `${other.billStatus} bill ${other.billNumber} already covers ${usDay(other.periodStart)} to ${usDay(other.periodEnd)}; bill ${row.billNumber} would bill the period twice. Cancel one of them first.`,
     );
 }
 
@@ -542,7 +542,7 @@ async function previewOne(
       today,
       conflicts: [],
       period: open,
-      blocked: `No closed period yet. ${contract.name}'s first period (${usDay(open.start)} – ${usDay(lastDayOf(open.end))}) closes after ${usDay(lastDayOf(open.end))}. Use "Current period to date" to bill it so far.`,
+      blocked: `No closed period yet. ${contract.name}'s first period (${usDay(open.start)} to ${usDay(lastDayOf(open.end))}) closes after ${usDay(lastDayOf(open.end))}. Use "Current period to date" to bill it so far.`,
     };
   }
   const period = resolved;
@@ -555,7 +555,7 @@ async function previewOne(
       : period.start > today
         ? `${contract.name}'s period starts after today`
         : approved
-          ? `Approved bill ${approved.billNumber} already covers ${usDay(approved.periodStart)} – ${usDay(approved.periodEnd)}. Cancel that bill first to bill the period again.`
+          ? `Approved bill ${approved.billNumber} already covers ${usDay(approved.periodStart)} to ${usDay(approved.periodEnd)}. Cancel that bill first to bill the period again.`
           : null;
   return {
     contractId: id,
@@ -671,7 +671,7 @@ export async function calculateContracts(
     if (drafts.length && !input.replaceDrafts) {
       throw new AppError(
         'DUPLICATE',
-        `Draft bill ${drafts.map((d) => d.billNumber).join(', ')} already covers ${usDay(drafts[0]!.periodStart)} – ${usDay(drafts[0]!.periodEnd)}. Confirm to replace it.`,
+        `Draft bill ${drafts.map((d) => d.billNumber).join(', ')} already covers ${usDay(drafts[0]!.periodStart)} to ${usDay(drafts[0]!.periodEnd)}. Confirm to replace it.`,
       );
     }
     // Recalculate in place: the exact-period Draft (newest first) keeps its id and bill number; any other overlapping Draft is canceled.

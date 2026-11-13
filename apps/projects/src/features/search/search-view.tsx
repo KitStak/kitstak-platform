@@ -28,7 +28,9 @@ import {
 import { DueDate, EntityIcon, PersonAvatar, PriorityIcon, StatusIcon } from '@/components/pm';
 import { Page } from '@/components/layout/page';
 import { apiGet, apiPath } from '@/lib/api-client';
-import { GOAL_HEALTH_LABELS, PROJECT_HEALTH_LABELS } from '@/lib/constants';
+import { GOAL_HEALTH_LABELS } from '@/lib/constants';
+import { healthProgressTone } from '@/lib/health';
+import { ProjectHealthMark } from '@/features/projects/health';
 import { formatRelative } from '@/lib/dates';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 import { usePeople, useProjects } from '@/lib/hooks/use-data';
@@ -546,11 +548,9 @@ function ProjectResult({ project, q }: { readonly project: ProjectSummary; reado
             <Highlight text={project.name} query={q} className="truncate text-sm font-medium text-fg" />
             <span className="shrink-0 text-xs text-fg-muted">{project.key}</span>
           </span>
-          <ProgressBar value={project.progress.percent} size="sm" tone={project.health === 'off_track' ? 'danger' : project.health === 'at_risk' ? 'warning' : 'success'} label={`${project.name} progress`} className="max-w-56" />
+          <ProgressBar value={project.progress.percent} size="sm" tone={healthProgressTone(project.health)} label={`${project.name} progress`} className="max-w-56" />
         </span>
-        <Badge tone={HEALTH_TONE[project.health]} size="sm" className="hidden sm:inline-flex">
-          {PROJECT_HEALTH_LABELS[project.health]}
-        </Badge>
+        <ProjectHealthMark project={project} className="max-sm:hidden" />
         <span className="w-10 text-right text-xs text-fg-muted tabular-nums">{project.progress.percent}%</span>
       </Link>
     </li>
@@ -589,7 +589,7 @@ function GoalResult({ goal, q }: { readonly goal: GoalDTO; readonly q: string })
             <Highlight text={goal.name} query={q} className="truncate text-sm font-medium text-fg" />
             {goal.period ? <span className="shrink-0 text-xs text-fg-muted">{goal.period}</span> : null}
           </span>
-          <ProgressBar value={goal.progress} size="sm" label={`${goal.name} progress`} className="max-w-56" />
+          <ProgressBar value={goal.progress} size="sm" tone={healthProgressTone(goal.health)} label={`${goal.name} progress`} className="max-w-56" />
         </span>
         <Badge tone={HEALTH_TONE[goal.health]} size="sm" className="hidden sm:inline-flex">
           {GOAL_HEALTH_LABELS[goal.health]}

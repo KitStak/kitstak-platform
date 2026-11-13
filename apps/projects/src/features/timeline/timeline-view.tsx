@@ -923,7 +923,13 @@ export function TimelineView() {
             >
               {row.collapsed ? <ChevronRight aria-hidden className="size-4 shrink-0 text-icon" /> : <ChevronDown aria-hidden className="size-4 shrink-0 text-icon" />}
               <span className="truncate">{group.title}</span>
-              <span className="shrink-0 text-xs font-normal text-fg-muted tabular-nums">{row.count}</span>
+              <span
+                className="shrink-0 text-xs font-normal text-fg-muted tabular-nums"
+                title={row.subtasks ? `${row.count} ${row.count === 1 ? 'task' : 'tasks'}, ${row.subtasks} ${row.subtasks === 1 ? 'subtask' : 'subtasks'}` : `${row.count} ${row.count === 1 ? 'task' : 'tasks'}`}
+                data-testid="timeline-group-count"
+              >
+                {row.count}
+              </span>
             </button>
             {canCreate ? (
               <IconButton

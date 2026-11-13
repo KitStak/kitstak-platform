@@ -57,6 +57,7 @@ import { archiveProjectAction, deleteProjectAction, duplicateProjectAction, rest
 import { useShell } from '@/features/shell/shell-context';
 import { ProgressRing } from '@/features/dashboards/charts';
 import { ProjectHealthBadge, healthMismatch } from './health';
+import { healthProgressTone } from '@/lib/health';
 
 export { HealthBadge } from './health';
 
@@ -136,7 +137,7 @@ function sortProjects(list: readonly ProjectSummary[], sort: SortKey, dir: 'asc'
   return [...list].sort((a, b) => sign * compare(a, b) || a.name.localeCompare(b.name));
 }
 
-const ringTone = (health: ProjectHealth) => (health === 'off_track' ? 'danger' : health === 'at_risk' ? 'warning' : 'success');
+const ringTone = healthProgressTone;
 
 /** Star / archive / restore / delete with optimistic cache updates and undo toasts. */
 function useProjectOps() {
@@ -531,7 +532,7 @@ export function ProjectsDirectory({
   const counts = useMemo(() => {
     const all = (active.data ?? []).filter((p) => !p.archivedAt && !p.isTemplate);
     const live = all.filter((p) => p.status !== 'completed');
-    return { total: live.length, completed: all.length - live.length, atRisk: live.filter((p) => p.health === 'at_risk').length, offTrack: live.filter((p) => p.health === 'off_track').length, starred: live.filter((p) => p.starred).length };
+    return { total: live.length, completed: all.length - live.length, atRisk: live.filter((p) => p.health === 'at_risk').length, offTrack: live.filter((p) => p.health === 'off_track').length, review: live.filter((p) => healthMismatch(p)).length, starred: live.filter((p) => p.starred).length };
   }, [active.data]);
 
   const filtersOn = query.trim() !== '' || space !== 'all' || status !== 'all' || health !== 'all' || starredOnly || customer !== null;
@@ -568,6 +569,12 @@ export function ProjectsDirectory({
             {counts.offTrack ? <span className="text-danger-text"> · {counts.offTrack} off track</span> : null}
             {counts.atRisk ? <span className="text-warning-text"> · {counts.atRisk} at risk</span> : null}
             {!counts.offTrack && !counts.atRisk ? ' · all on track' : null}
+            {counts.review ? (
+              <span title="The owner's status and the numbers (time used vs tasks done) disagree. Look for the amber dot." data-testid="projects-review-count">
+                {' · '}
+                <span aria-hidden className="relative -top-px inline-block size-1.5 rounded-full bg-warning align-middle" /> {counts.review} {counts.review === 1 ? 'needs' : 'need'} a status check
+              </span>
+            ) : null}
             {counts.completed ? <span> · {counts.completed} completed</span> : null}
           </span>
         )

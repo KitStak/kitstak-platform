@@ -150,7 +150,7 @@ export function describeRange(state: DashboardFilterState, today?: Date): string
   const { from, to } = resolveRange(state, today);
   const fmt = (value: string) =>
     new Date(`${value}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  if (from && to) return `${fmt(from)} – ${fmt(to)}`;
+  if (from && to) return `${fmt(from)} to ${fmt(to)}`;
   if (from) return `From ${fmt(from)}`;
   if (to) return `Until ${fmt(to)}`;
   return RANGE_LABELS.custom;

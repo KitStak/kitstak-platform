@@ -7,14 +7,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Upload, UserPlus } from 'lucide-react';
-import { Button } from '@/components/ui';
+import { useGreeting } from '@kitstak/ui/text';
+import { Button, cn } from '@/components/ui';
 import { useShellHome, useWorkspaces } from '@/features/shell/api';
 import { useCan, useOrg } from '@/features/shell/org-context';
 import { routes } from '@/features/shell/routes';
 import { startRouteProgress } from '@/features/shell/route-progress';
 import { useShellStore } from '@/features/shell/store';
 import { weekWindow } from '@/server/services/shell-home-model';
-import { greetingFor } from './format';
 import { FavoritesCard, InboxPreview, TemplatesRail } from './home-rail';
 import { MyWorkSection, RecentSection, UpdatesSection } from './home-sections';
 import { SetupGuideCard } from './setup-guide-card';
@@ -87,6 +87,7 @@ export function HomePage() {
   const home = useShellHome(org.id, window);
   const workspaceId = useActiveWorkspaceId();
   const firstName = user.name.split(' ')[0] ?? user.name;
+  const greeting = useGreeting();
   const dateLine = useMemo(
     () => new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
     [],
@@ -100,8 +101,14 @@ export function HomePage() {
           <p className="text-sm text-fg-muted" suppressHydrationWarning>
             {dateLine} · {org.name}
           </p>
-          <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em] text-fg sm:text-2xl" suppressHydrationWarning>
-            {greetingFor(new Date())}, {firstName}
+          <h1
+            className={cn(
+              'mt-1 text-xl font-semibold tracking-[-0.01em] text-fg transition-opacity sm:text-2xl',
+              greeting ? 'opacity-100' : 'opacity-0',
+            )}
+            data-testid="home-greeting"
+          >
+            {greeting ?? 'Good morning'}, {firstName}
           </h1>
         </div>
         <QuickActions workspaceId={workspaceId} />

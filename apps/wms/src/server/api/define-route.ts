@@ -262,7 +262,7 @@ export function defineRoute<
             const first = parsed.issues[0];
             if (first) {
               const fieldErrors = Object.fromEntries(parsed.issues.map((i) => [i.param, [i.message]]));
-              throw new AppError('VALIDATION', `Invalid query: ${first.param} — ${first.message}`, {
+              throw new AppError('VALIDATION', `Invalid query: ${first.param}: ${first.message}`, {
                 fieldErrors,
               });
             }

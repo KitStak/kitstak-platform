@@ -205,3 +205,27 @@ export function rankPeople<T extends { readonly name: string; readonly email: st
     .slice(0, limit)
     .map((entry) => entry.person);
 }
+
+export interface TaskDates {
+  readonly startDate: string | null;
+  readonly dueDate: string | null;
+}
+
+/**
+ * The patch for changing one of a task's dates without ever making them backwards (the server
+ * refuses a start after the due date). Like Linear and Asana, the other date moves along instead
+ * of the save failing: a due date before the start pulls the start to that day, a start after
+ * the due date pushes the due date to that day. `moved` names the date that moved, or null.
+ */
+export function datePatch(
+  current: TaskDates,
+  field: 'startDate' | 'dueDate',
+  value: string | null,
+): { readonly patch: { startDate?: string | null; dueDate?: string | null }; readonly moved: 'startDate' | 'dueDate' | null } {
+  if (field === 'dueDate') {
+    if (!value || !current.startDate || current.startDate <= value) return { patch: { dueDate: value }, moved: null };
+    return { patch: { dueDate: value, startDate: value }, moved: 'startDate' };
+  }
+  if (!value || !current.dueDate || value <= current.dueDate) return { patch: { startDate: value }, moved: null };
+  return { patch: { startDate: value, dueDate: value }, moved: 'dueDate' };
+}

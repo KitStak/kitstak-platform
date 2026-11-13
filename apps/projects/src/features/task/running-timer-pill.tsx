@@ -8,7 +8,7 @@ import { toast as sonnerToast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { CircleStop } from 'lucide-react';
 import { Tooltip, cn, toast } from '@/components/ui';
-import { formatMinutes } from '@/lib/dates';
+import { formatMinutes, timerMinutes } from '@/lib/dates';
 import { useRunningTimer, useTask } from '@/lib/hooks/use-data';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { qk } from '@/lib/query-keys';
@@ -111,7 +111,7 @@ function Pill() {
       return;
     }
     const stopped = result.data as TimeEntryDTO | null;
-    toast.success(`Logged ${formatMinutes(stopped?.durationMinutes ?? Math.floor(elapsed / 60000))}${task ? ` on ${task.key}` : ''}`);
+    toast.success(`Logged ${formatMinutes(stopped?.durationMinutes ?? timerMinutes(elapsed))}${task ? ` on ${task.key}` : ''}`);
     queryClient.setQueryData(qk.runningTimer(), null);
     void queryClient.invalidateQueries({ queryKey: qk.runningTimer() });
     void queryClient.invalidateQueries({ queryKey: qk.me() });

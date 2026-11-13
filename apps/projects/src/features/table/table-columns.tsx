@@ -295,7 +295,7 @@ export function renderCell(def: ColumnDef, task: TaskSummary, ctx: RenderContext
       return task.subtaskCount ? (
         <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary tabular-nums">
           <span aria-hidden className="h-1.5 w-12 overflow-hidden rounded-full bg-[var(--border-subtle)]">
-            <span className={`block h-full rounded-full ${task.subtaskDoneCount === task.subtaskCount ? 'bg-success' : 'bg-primary'}`} style={{ width: `${Math.round((task.subtaskDoneCount / task.subtaskCount) * 100)}%` }} />
+            <span className={`block h-full rounded-full ${task.subtaskDoneCount === task.subtaskCount ? 'bg-success' : 'bg-[var(--logo-ink)]'}`} style={{ width: `${Math.round((task.subtaskDoneCount / task.subtaskCount) * 100)}%` }} />
           </span>
           {task.subtaskDoneCount}/{task.subtaskCount}
         </span>

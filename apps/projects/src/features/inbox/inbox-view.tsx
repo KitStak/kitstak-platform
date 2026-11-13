@@ -10,7 +10,7 @@
  * the next item slides into the preview.
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { BellRing } from 'lucide-react';
+import { BellRing, ChevronDown, ChevronUp } from 'lucide-react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, CheckCheck, CircleDot, MailOpen } from 'lucide-react';
 import {
@@ -80,7 +80,11 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [cursor, setCursor] = useState(0);
+  // The row being previewed, by id (positions shift as items are read or archived). Nothing is
+  // selected until the user picks a row or presses J, and selecting never marks anything read on
+  // its own: only a click, Enter or U does.
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [pinned, setPinned] = useState<NotificationDTO | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const { markRead, archive, markAll, open } = useInboxActions();
   const projects = useProjects();
@@ -115,22 +119,44 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
   const groups = useMemo(() => groupByDate(items), [items]);
   const selectedItems = items.filter((item) => selected.has(item.id));
   const allSelected = items.length > 0 && selectedItems.length === items.length;
-  const active = items[Math.min(cursor, items.length - 1)];
+  const cursor = activeId ? items.findIndex((item) => item.id === activeId) : -1;
+  // A picked item that just left this list (read in Unread, archived) stays in the preview.
+  const active: NotificationDTO | undefined =
+    cursor >= 0 ? items[cursor] : pinned && pinned.id === activeId ? pinned : undefined;
   // Split view: list plus live task preview at 1200px and wider.
   const split = useIsNarrow('(min-width: 1200px)');
   const { openTask } = useTaskDrawer();
   const previewTask = split && active?.taskId ? active.taskId : null;
-  // Previewing an unread item for a moment marks it read (like opening it would).
-  useEffect(() => {
-    if (!split || !active || active.readAt) return;
-    const timer = window.setTimeout(() => void markRead([active], true), 1200);
-    return () => window.clearTimeout(timer);
-  }, [split, active, markRead]);
 
   const changeFilter = (value: InboxFilter) => {
     setFilter(value);
     setSelected(new Set());
-    setCursor(0);
+    setActiveId(null);
+    setPinned(null);
+  };
+  const pick = (item: NotificationDTO | undefined, focus = true) => {
+    if (!item) return;
+    setActiveId(item.id);
+    setPinned(item);
+    if (focus)
+      listRef.current?.querySelector<HTMLElement>(`[data-row-id="${item.id}"]`)?.focus({ preventScroll: false });
+  };
+  /** Click / Enter: in the split view it previews and marks read; on narrow screens it opens. */
+  const choose = (item: NotificationDTO) => {
+    pick(item, false);
+    if (split) {
+      if (!item.readAt) void markRead([item], true);
+    } else open(item);
+  };
+  const archiveActive = (item: NotificationDTO) => {
+    const index = items.findIndex((entry) => entry.id === item.id);
+    const next = items[index + 1] ?? items[index - 1];
+    void archive([item], !item.archivedAt);
+    if (next && next.id !== item.id) pick(next);
+    else {
+      setActiveId(null);
+      setPinned(null);
+    }
   };
   const toggleSelect = (id: string) =>
     setSelected((current) => {
@@ -141,14 +167,13 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
     });
   const focusRow = (index: number) => {
     const clamped = Math.max(0, Math.min(index, items.length - 1));
-    setCursor(clamped);
-    listRef.current?.querySelector<HTMLElement>(`[data-row-index="${clamped}"]`)?.focus();
+    pick(items[clamped]);
   };
 
   // Keyboard control (outside text fields and dialogs).
   useHotkey(['j', 'ArrowDown'], () => focusRow(cursor + 1), { enabled: items.length > 0 });
   useHotkey(['k', 'ArrowUp'], () => focusRow(cursor - 1), { enabled: items.length > 0 });
-  useHotkey('e', () => active && void archive([active], !active.archivedAt), { enabled: Boolean(active) });
+  useHotkey('e', () => active && archiveActive(active), { enabled: Boolean(active) });
   useHotkey('u', () => active && void markRead([active], !active.readAt), { enabled: Boolean(active) });
   useHotkey('x', () => active && toggleSelect(active.id), { enabled: Boolean(active) });
   useHotkey('shift+r', () => void markAll(), { enabled: unreadCount > 0 });
@@ -157,7 +182,7 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       event.stopPropagation();
-      open(item);
+      choose(item);
     }
   };
 
@@ -295,12 +320,13 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
                           projectKey={item.projectId ? projectKeys.get(item.projectId) : undefined}
                           selected={selected.has(item.id)}
                           current={index === cursor}
-                          onFocus={() => setCursor(index)}
+                          tabbable={index === Math.max(0, cursor)}
+                          onFocus={() => pick(item, false)}
                           onKeyDown={(event) => onRowKeyDown(event, item)}
-                          onOpen={() => open(item)}
+                          onOpen={() => choose(item)}
                           onSelect={() => toggleSelect(item.id)}
                           onRead={() => void markRead([item], !item.readAt)}
-                          onArchive={() => void archive([item], !item.archivedAt)}
+                          onArchive={() => archiveActive(item)}
                         />
                       );
                     })}
@@ -334,6 +360,13 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
                   taskRef={previewTask}
                   variant="drawer"
                   onOpenTask={(key) => openTask(key)}
+                  headerNav={
+                    <InboxStepper
+                      index={cursor}
+                      total={items.length}
+                      onStep={(delta) => focusRow((cursor < 0 ? -1 : cursor) + delta)}
+                    />
+                  }
                 />
               </div>
             ) : active ? (
@@ -343,7 +376,16 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
                 {active.body ? <p className="max-w-md text-sm text-fg-secondary">{active.body}</p> : null}
               </div>
             ) : (
-              <p className="m-auto p-8 text-sm text-fg-muted">Pick a notification to see it here.</p>
+              <div
+                className="m-auto flex flex-col items-center gap-2 p-8 text-center"
+                data-testid="inbox-preview-empty"
+              >
+                <MailOpen aria-hidden className="size-6 text-icon" />
+                <p className="text-sm font-semibold text-fg">Pick a notification</p>
+                <p className="max-w-xs text-sm text-fg-muted">
+                  Click one on the left, or press <Kbd>J</Kbd> to start at the top.
+                </p>
+              </div>
             )}
           </aside>
         ) : null}
@@ -358,6 +400,7 @@ function InboxRow({
   projectKey,
   selected,
   current,
+  tabbable,
   onFocus,
   onKeyDown,
   onOpen,
@@ -370,6 +413,7 @@ function InboxRow({
   readonly projectKey?: string;
   readonly selected: boolean;
   readonly current: boolean;
+  readonly tabbable: boolean;
   readonly onFocus: () => void;
   readonly onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
   readonly onOpen: () => void;
@@ -382,11 +426,14 @@ function InboxRow({
     <li
       data-testid="inbox-item"
       data-unread={unread || undefined}
+      data-current={current || undefined}
+      aria-current={current || undefined}
       onClick={onOpen}
       className={cn(
         'group relative flex cursor-pointer items-start gap-3 border-b border-border-subtle px-3 py-3 last:border-b-0 sm:px-4',
         'hover:bg-hover has-[[data-row-main]:focus-visible]:bg-hover has-[[data-row-main]:focus-visible]:shadow-[inset_2px_0_0_var(--color-primary)]',
         selected && 'bg-selected hover:bg-selected-hover',
+        current && 'bg-selected shadow-[inset_3px_0_0_var(--color-primary)] hover:bg-selected-hover',
       )}
     >
       <span className="hidden pt-1.5 sm:block" onClick={(event) => event.stopPropagation()}>
@@ -406,7 +453,8 @@ function InboxRow({
         type="button"
         data-row-main
         data-row-index={index}
-        tabIndex={current ? 0 : -1}
+        data-row-id={item.id}
+        tabIndex={tabbable ? 0 : -1}
         onFocus={onFocus}
         onKeyDown={onKeyDown}
         onClick={(event) => {
@@ -466,5 +514,46 @@ function InboxRow({
         ) : null}
       </span>
     </li>
+  );
+}
+
+/** Preview header stepper: position in this inbox list, not in the task's project. */
+function InboxStepper({
+  index,
+  total,
+  onStep,
+}: {
+  readonly index: number;
+  readonly total: number;
+  readonly onStep: (delta: 1 | -1) => void;
+}) {
+  if (total < 1) return null;
+  return (
+    <div className="flex shrink-0 items-center" role="group" aria-label={index >= 0 ? `Notification ${index + 1} of ${total}` : 'Notifications'}>
+      <IconButton
+        size="sm"
+        label="Previous notification"
+        shortcut={['K']}
+        icon={<ChevronUp aria-hidden />}
+        disabled={index <= 0}
+        onClick={() => onStep(-1)}
+        data-testid="inbox-prev"
+      />
+      <span
+        className="hidden min-w-14 text-center text-xs text-fg-muted tabular-nums sm:inline"
+        data-testid="inbox-position"
+      >
+        {index >= 0 ? `${index + 1} of ${total}` : `${total} in list`}
+      </span>
+      <IconButton
+        size="sm"
+        label="Next notification"
+        shortcut={['J']}
+        icon={<ChevronDown aria-hidden />}
+        disabled={index >= total - 1}
+        onClick={() => onStep(1)}
+        data-testid="inbox-next"
+      />
+    </div>
   );
 }

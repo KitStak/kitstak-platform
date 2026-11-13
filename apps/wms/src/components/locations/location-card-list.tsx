@@ -127,7 +127,7 @@ export function LocationCardList({
       )}
       <div className="sticky bottom-0 -mx-4 mt-auto flex items-center justify-between gap-2 border-t border-border bg-surface px-4 py-2 text-xs text-secondary">
         <span className="tabular-nums" aria-live="polite">
-          {from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}
+          {from.toLocaleString()} to {to.toLocaleString()} of {total.toLocaleString()}
         </span>
         <div className="flex items-center gap-1">
           <ExportButton gridKey={gridKey} queryString={queryString} total={total} />

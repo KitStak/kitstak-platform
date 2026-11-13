@@ -162,7 +162,7 @@ export function ContractSummary({
               >
                 <span className="font-medium text-secondary">Period {i + 1}</span>
                 <span className="tabular-nums text-foreground">
-                  {pretty(p.start)} – {pretty(p.end)}
+                  {pretty(p.start)} to {pretty(p.end)}
                 </span>
               </li>
             ))}

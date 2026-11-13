@@ -176,7 +176,7 @@ function SignInPolicyCard() {
       <SettingRow label="Password requirements" description="Checked at sign-up, password change and reset.">
         <ul className="flex flex-col gap-1 text-base text-fg">
           <li>
-            {PASSWORD_POLICY.minLength}–{PASSWORD_POLICY.maxLength} characters
+            {PASSWORD_POLICY.minLength} to {PASSWORD_POLICY.maxLength} characters
           </li>
           <li className="text-fg-secondary">Resetting a password signs out every other session</li>
         </ul>

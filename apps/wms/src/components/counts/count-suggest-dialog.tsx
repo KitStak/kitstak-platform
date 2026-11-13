@@ -232,7 +232,7 @@ function RiskBadge({ score }: { readonly score: number }) {
         'inline-flex min-w-[36px] justify-center rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums',
         tone,
       )}
-      title="Count risk score (0–100)"
+      title="Count risk score (0 to 100)"
     >
       {score}
     </span>

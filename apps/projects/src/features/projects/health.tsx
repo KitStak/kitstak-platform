@@ -8,7 +8,7 @@ import { qk } from '@/lib/query-keys';
 import { postProjectUpdateAction } from '@/server/actions/portfolio';
 import { PROJECT_HEALTH_LABELS, type ProjectHealth } from '@/lib/constants';
 import { todayIso } from '@/lib/dates';
-import { expectedProgress, suggestHealth } from '@/lib/rollups';
+import { HEALTH_DOT_CLASS, healthHint, projectHealth } from '@/lib/health';
 import type { ProjectSummary } from '@/lib/types';
 
 export const HEALTH_TONE: Readonly<Record<ProjectHealth, 'success' | 'warning' | 'danger'>> = {
@@ -39,32 +39,73 @@ export function HealthBadge({ health, size = 'md' }: { readonly health: ProjectH
 type HealthInputs = Pick<ProjectSummary, 'health' | 'status' | 'startDate' | 'dueDate' | 'progress'>;
 
 /**
- * What the numbers say: share of time passed vs share of tasks done. `null` when the project has
- * no date range or is finished, so there is nothing to compare.
+ * What the numbers say when they disagree with the owner: share of time passed vs share of tasks
+ * done. `null` when they agree, or when there is nothing to compare (no dates, not started, done).
+ * Thin wrapper over `projectHealth` in `@/lib/health`, the single source of truth.
  */
 export function dataHealth(project: HealthInputs, today: string = todayIso()): { readonly health: ProjectHealth; readonly expected: number; readonly actual: number } | null {
-  if (project.status === 'completed' || project.status === 'archived') return null;
-  const expected = expectedProgress(project.startDate, project.dueDate, today);
-  if (expected === null) return null;
-  return { health: suggestHealth(project.progress.percent, expected), expected, actual: project.progress.percent };
+  const view = projectHealth(project, today);
+  if (view.expected === null) return null;
+  return { health: view.suggested ?? view.health, expected: view.expected, actual: view.actual };
 }
 
-/** True when the owner's health and the data disagree (used to sort "Needs attention first"). */
+/** True when the owner's health and the numbers disagree (the amber dot, "needs a status check"). */
 export function healthMismatch(project: HealthInputs, today?: string): boolean {
-  const data = dataHealth(project, today);
-  return data !== null && data.health !== project.health;
+  return projectHealth(project, today).suggested !== null;
+}
+
+/** The amber "numbers disagree" dot, drawn on top of a chip or a health dot. */
+function MismatchDot({ size }: { readonly size: 'xs' | 'sm' | 'md' }) {
+  return (
+    <span
+      aria-hidden
+      data-testid="health-mismatch-dot"
+      className={cn('absolute -top-0.5 -right-0.5 rounded-full bg-warning ring-2 ring-[var(--surface-panel)]', size === 'xs' ? 'size-1.5 ring-1' : size === 'sm' ? 'size-2' : 'size-2.5')}
+    />
+  );
 }
 
 /**
- * One truth for health: the owner's pill. When the numbers disagree, the pill says so in words
- * right beside it ("On track · Data says At risk"), never as an unexplained dot. Clicking it shows
- * why ("56% of the time used, 31% of tasks done") and, for people who can edit the project, updates
- * the status in one click (posted as a status update).
+ * Static (non-interactive) version of the health chip, for places that sit inside a link (search
+ * results). Same chip, same amber dot, same words as the header.
  */
-const HEALTH_RANK: Readonly<Record<ProjectHealth, number>> = { on_track: 0, at_risk: 1, off_track: 2 };
+export function ProjectHealthMark({ project, size = 'sm', className }: { readonly project: HealthInputs; readonly size?: 'sm' | 'md'; readonly className?: string }) {
+  const view = projectHealth(project);
+  const hint = healthHint(view);
+  return (
+    <span className={cn('relative inline-flex shrink-0', className)} title={hint ?? undefined} data-testid={hint ? 'health-mismatch' : 'health-chip'} data-health={view.health}>
+      <HealthBadge health={view.health} size={size} />
+      {hint ? <MismatchDot size={size} /> : null}
+      {hint ? <span className="sr-only">. {hint}</span> : null}
+    </span>
+  );
+}
 
-const worse = (a: ProjectHealth, b: ProjectHealth): ProjectHealth => (HEALTH_RANK[a] >= HEALTH_RANK[b] ? a : b);
+/**
+ * Compact health dot: the owner's colour. With `showHint`, the amber dot rides on it when the
+ * numbers disagree (Goals project chips). The sidebar passes `hideOnTrack` and no hint: it is
+ * navigation, so it only marks projects whose owner says At risk or Off track.
+ */
+export function ProjectHealthDot({ project, hideOnTrack = false, showHint = true }: { readonly project: HealthInputs; readonly hideOnTrack?: boolean; readonly showHint?: boolean }) {
+  const view = projectHealth(project);
+  const hint = showHint ? healthHint(view) : null;
+  if (hideOnTrack && view.health === 'on_track' && !hint) return null;
+  const label = `${PROJECT_HEALTH_LABELS[view.health]}${hint ? `. ${hint}` : ''}`;
+  return (
+    <span role="img" aria-label={label} title={label} className="relative inline-flex size-2 shrink-0 items-center justify-center" data-testid="health-dot" data-health={view.health} data-suggested={view.suggested ?? undefined}>
+      <span className={cn('size-1.5 rounded-full', HEALTH_DOT_CLASS[view.health])} />
+      {hint ? <MismatchDot size="xs" /> : null}
+    </span>
+  );
+}
 
+/**
+ * One truth for health: the owner's chip, and only that chip. When the numbers (time used vs
+ * tasks done) disagree, a small amber dot sits on the chip with a tooltip ("Numbers suggest At
+ * risk · Update status"); clicking explains why and, for editors, updates the status in one click.
+ * Customer 360 risks (late receipts, inventory exceptions) never change the project's health: they
+ * are listed in the same popover as a separate customer note.
+ */
 /** A cross-app risk (late receipts, inventory exceptions, a deal closing early) from Customer 360. */
 export interface HealthRisk {
   readonly id: string;
@@ -81,79 +122,79 @@ export function ProjectHealthBadge({
   readonly project: HealthInputs & { readonly id?: string; readonly key?: string };
   readonly size?: 'sm' | 'md';
   readonly canEdit?: boolean;
-  /** Customer 360 risks: any of them makes the data say at least At risk. */
+  /** Customer 360 risks: listed as a customer note, never a health change. */
   readonly risks?: readonly HealthRisk[];
 }) {
-  const timeData = dataHealth(project);
-  // What the data says: time used vs work done, made worse by live CRM and warehouse risks.
-  const riskHealth: ProjectHealth | null = risks.length && project.status !== 'completed' && project.status !== 'archived' ? 'at_risk' : null;
-  const combined: ProjectHealth | null =
-    timeData || riskHealth ? worse(timeData?.health ?? 'on_track', riskHealth ?? 'on_track') : null;
-  const data = combined ? { health: combined, expected: timeData?.expected ?? null, actual: timeData?.actual ?? null } : null;
-  const mismatch = data !== null && data.health !== project.health;
+  // What the numbers say: time used vs work done. Customer risks are a separate note, not health.
+  const view = projectHealth(project);
+  const data = view.suggested && view.expected !== null ? { health: view.suggested, expected: view.expected, actual: view.actual } : null;
+  const mismatch = data !== null;
+  const liveRisks = project.status === 'completed' || project.status === 'archived' ? [] : risks;
   const [open, setOpen] = useState(false);
   const accept = useServerAction(postProjectUpdateAction, {
     invalidate: project.key ? [qk.project(project.key), qk.projects()] : [qk.projects()],
     successMessage: data ? `Health set to ${PROJECT_HEALTH_LABELS[data.health]}` : undefined,
     onSuccess: () => setOpen(false),
   });
-  if (!mismatch || !data) return <HealthBadge health={project.health} size={size} />;
-  const suggested = PROJECT_HEALTH_LABELS[data.health];
-  const tone = HEALTH_TONE[data.health];
+  if ((!mismatch || !data) && liveRisks.length === 0) return <HealthBadge health={project.health} size={size} />;
+  const suggested = mismatch && data ? PROJECT_HEALTH_LABELS[data.health] : null;
+  const owner = PROJECT_HEALTH_LABELS[project.health];
+  const tip = suggested
+    ? `Numbers suggest ${suggested} · ${canEdit && project.id ? 'Update status' : 'Show why'}`
+    : `${liveRisks.length === 1 ? '1 customer note' : `${liveRisks.length} customer notes`} · Show`;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`${PROJECT_HEALTH_LABELS[project.health]}, set by the owner. The data says ${suggested}. Show why`}
-          title={`Set by the owner: ${PROJECT_HEALTH_LABELS[project.health]}. The data says ${suggested}.`}
+          aria-label={suggested ? `${owner}, set by the owner. Numbers suggest ${suggested}. Show why` : `${owner}. ${tip}`}
+          title={tip}
           onClick={(event) => event.stopPropagation()}
-          className="inline-flex min-w-0 items-center gap-1 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          data-testid="health-mismatch"
+          className="relative inline-flex min-w-0 items-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          data-testid={suggested ? 'health-mismatch' : 'health-chip'}
         >
           <HealthBadge health={project.health} size={size} />
-          <span
-            className={cn(
-              'inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed font-medium whitespace-nowrap',
-              size === 'sm' ? 'h-5 px-1.5 text-2xs' : 'h-6 px-2 text-xs',
-              tone === 'danger' ? 'border-danger/50 text-danger-text' : tone === 'warning' ? 'border-warning/60 text-warning-text' : 'border-success/50 text-success-text',
-            )}
-          >
-            <HealthIcon health={data.health} />
-            {size === 'sm' ? `Data: ${suggested}` : `Data says ${suggested}`}
-          </span>
+          {suggested ? <MismatchDot size={size} /> : null}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72" onClick={(event) => event.stopPropagation()}>
-        <p className="flex items-start gap-2 text-sm text-fg">
-          <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning-text" />
-          <span>
-            The owner set <strong className="font-semibold">{PROJECT_HEALTH_LABELS[project.health]}</strong>. The data says <strong className="font-semibold">{suggested}</strong>
-            {data.expected !== null && data.actual !== null ? `: ${data.expected}% of the time is used and ${data.actual}% of tasks are done.` : '.'}
-          </span>
-        </p>
-        {risks.length ? (
-          <ul className="mt-2 flex flex-col gap-1 border-t border-border-subtle pt-2 text-xs text-fg-secondary">
-            {risks.slice(0, 4).map((risk) => (
-              <li key={risk.id} className="flex items-start gap-1.5">
-                <span aria-hidden className={cn('mt-1 size-1.5 shrink-0 rounded-full', risk.tone === 'danger' ? 'bg-danger' : 'bg-warning')} />
-                {risk.text}
-              </li>
-            ))}
-          </ul>
+        {suggested && data ? (
+          <p className="flex items-start gap-2 text-sm text-fg">
+            <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning-text" />
+            <span>
+              The owner set <strong className="font-semibold">{owner}</strong>. The numbers suggest <strong className="font-semibold">{suggested}</strong>: {data.expected}% of the time is used and {data.actual}% of tasks are done.
+            </span>
+          </p>
+        ) : (
+          <p className="text-sm text-fg">
+            Health is <strong className="font-semibold">{owner}</strong>, set by the owner.
+          </p>
+        )}
+        {liveRisks.length ? (
+          <div className="mt-2 border-t border-border-subtle pt-2" data-testid="health-customer-notes">
+            <p className="text-xs font-semibold text-fg-secondary">Customer notes</p>
+            <ul className="mt-1 flex flex-col gap-1 text-xs text-fg-secondary">
+              {liveRisks.slice(0, 4).map((risk) => (
+                <li key={risk.id} className="flex items-start gap-1.5">
+                  <span aria-hidden className={cn('mt-1 size-1.5 shrink-0 rounded-full', risk.tone === 'danger' ? 'bg-danger' : 'bg-warning')} />
+                  {risk.text}
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : null}
-        {canEdit && project.id ? (
+        {suggested && data && canEdit && project.id ? (
           <div className="mt-3 flex items-center justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Keep {PROJECT_HEALTH_LABELS[project.health]}
+              Keep {owner}
             </Button>
             <Button size="sm" loading={accept.pending} onClick={() => void accept.run({ projectId: project.id as string, health: data.health, note: null })} data-testid="health-accept">
               Update status to {suggested}
             </Button>
           </div>
-        ) : (
+        ) : suggested ? (
           <p className="mt-2 text-xs text-fg-muted">The project owner sets the health.</p>
-        )}
+        ) : null}
       </PopoverContent>
     </Popover>
   );

@@ -75,6 +75,13 @@ function TaskDrawerInner() {
   // Keep showing the last task while the panel animates closed.
   const [shownKey, setShownKey] = useState<string | null>(taskKey);
   if (taskKey && taskKey !== shownKey) setShownKey(taskKey);
+  // Closing hides the panel in this frame; the URL (`?task=` removed) catches up right after.
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+  if (dismissedKey && taskKey !== dismissedKey) setDismissedKey(null);
+  const close = useCallback(() => {
+    setDismissedKey(taskKey);
+    closeTask();
+  }, [closeTask, taskKey]);
 
   useEffect(() => {
     const onResize = () => setWidth((current) => clampWidth(current));
@@ -128,8 +135,8 @@ function TaskDrawerInner() {
 
   return (
     <DialogPrimitive.Root
-      open={Boolean(taskKey)}
-      onOpenChange={(open) => (open ? undefined : closeTask())}
+      open={Boolean(taskKey) && taskKey !== dismissedKey}
+      onOpenChange={(open) => (open ? undefined : close())}
       modal={false}
     >
       <DialogPrimitive.Portal>
@@ -151,6 +158,8 @@ function TaskDrawerInner() {
             event.preventDefault();
             const target = returnFocus.current;
             returnFocus.current = null;
+            // The palette or quick add opened while the panel slid away: focus stays with it.
+            if (document.querySelector('[role="dialog"][data-state="open"]:not([data-task-panel]), [cmdk-root]')) return;
             if (target && document.contains(target)) target.focus({ preventScroll: true });
           }}
           onEscapeKeyDown={(event) => {
@@ -184,7 +193,7 @@ function TaskDrawerInner() {
             // Clicking another task in the view swaps the drawer instead of closing it.
             if (target.closest('[data-task-key]')) event.preventDefault();
           }}
-          className="ks-task-panel fixed top-0 right-0 bottom-0 z-[var(--z-modal)] flex flex-col border-l border-border-subtle bg-raised text-fg shadow-modal outline-none data-[state=closed]:animate-slide-out-right data-[state=open]:animate-slide-in-right"
+          className="ks-task-panel fixed top-0 right-0 bottom-0 z-[calc(var(--z-overlay)-1)] flex flex-col border-l border-border-subtle bg-raised text-fg shadow-modal outline-none data-[state=closed]:animate-slide-out-right data-[state=open]:animate-slide-in-right"
         >
           <div
             role="separator"
@@ -214,8 +223,8 @@ function TaskDrawerInner() {
                 key={shownKey}
                 taskRef={shownKey}
                 variant="drawer"
-                onDeleted={closeTask}
-                onClose={closeTask}
+                onDeleted={close}
+                onClose={close}
                 onOpenTask={openInPlace}
               />
             </>

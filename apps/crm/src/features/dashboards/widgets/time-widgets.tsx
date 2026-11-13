@@ -170,7 +170,7 @@ export function CalendarWidget({ insight, settings, orgSlug, filtered, onConfigu
   const title =
     view === 'month'
       ? monthAnchor.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
-      : `${shortDate(days[0]!)} – ${shortDate(days[6]!)}`;
+      : `${shortDate(days[0]!)} to ${shortDate(days[6]!)}`;
   const weeks = days.length / 7;
   const perCell = view === 'week' ? 12 : Math.max(1, Math.floor((size.height - 80) / weeks / 22) - 1);
   // Agenda: default to today, or the next day of the week that has something on it.
@@ -431,7 +431,7 @@ export function TimelineWidget({ insight, settings, orgSlug, filtered, onConfigu
             const cutEnd = row.to > end;
             const left = Math.max(pct(row.from), 0);
             const right = Math.min(pct(row.to) + (DAY_MS / span) * 100, 100);
-            const dates = row.from === row.to ? shortDate(row.from) : `${shortDate(row.from)} – ${shortDate(row.to)}`;
+            const dates = row.from === row.to ? shortDate(row.from) : `${shortDate(row.from)} to ${shortDate(row.to)}`;
             return (
               <li key={row.item.id} className="grid grid-cols-[minmax(120px,28%)_1fr] items-center border-b border-border-subtle/60 py-1 hover:bg-hover">
                 <Link href={itemHref(orgSlug, row.item)} className="truncate pr-2 text-sm text-fg outline-none hover:underline focus-visible:outline-2 focus-visible:outline-focus">
@@ -481,7 +481,7 @@ export function TimelineWidget({ insight, settings, orgSlug, filtered, onConfigu
       </div>
       <p className="shrink-0 pt-1.5 text-xs text-fg-muted">
         {hidden > 0 ? `Showing ${visible.length} of ${inWindow.length} items` : `${visible.length} ${visible.length === 1 ? 'item' : 'items'}`} ·{' '}
-        {shortDate(start)} – {shortDate(end)}
+        {shortDate(start)} to {shortDate(end)}
       </p>
     </div>
   );

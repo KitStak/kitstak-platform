@@ -9,7 +9,8 @@ import { CommandPalette } from '@/features/command/command-palette';
 import { OnboardingHost } from '@/features/onboarding/onboarding-host';
 import { QuickAddDialog } from '@/features/quick-add/quick-add-dialog';
 import { TaskDrawerHost } from '@/features/task/task-drawer';
-import type { ProjectSummary, SpaceDTO } from '@/lib/types';
+import type { OrgPerson, ProjectSummary, SpaceDTO } from '@/lib/types';
+import { usePeople } from '@/lib/hooks/use-data';
 import { MobileNav } from './mobile-nav';
 import { ShellProvider, type ShellContextValue } from './shell-context';
 import { ShortcutsDialog } from './shortcuts-dialog';
@@ -22,7 +23,16 @@ export interface AppShellProps {
   readonly initialProjects: readonly ProjectSummary[];
   readonly initialSpaces: readonly SpaceDTO[];
   readonly initialUnread: number;
+  /** Server-loaded org people: every page resolves names on first paint (no "Former member" flash). */
+  readonly initialPeople?: readonly OrgPerson[];
+  readonly peopleLoadedAt?: number;
   readonly children: ReactNode;
+}
+
+/** Seeds the people cache before any page renders (notifyOnChangeProps: [] so it never re-renders). */
+function SeedPeople({ people, loadedAt }: { readonly people?: readonly OrgPerson[]; readonly loadedAt?: number }) {
+  usePeople({ initialData: people ? [...people] : undefined, initialDataUpdatedAt: loadedAt, notifyOnChangeProps: [] });
+  return null;
 }
 
 function Hotkeys() {
@@ -30,9 +40,10 @@ function Hotkeys() {
   return null;
 }
 
-export function AppShell({ context, initialProjects, initialSpaces, initialUnread, children }: AppShellProps) {
+export function AppShell({ context, initialProjects, initialSpaces, initialUnread, initialPeople, peopleLoadedAt, children }: AppShellProps) {
   return (
     <ShellProvider value={context}>
+      <SeedPeople people={initialPeople} loadedAt={peopleLoadedAt} />
       <Hotkeys />
       <a
         href="#main-content"

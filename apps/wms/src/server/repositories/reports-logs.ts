@@ -149,7 +149,7 @@ export function changeLogHref(
   if (sqlHref) return sqlHref;
   const list = CHANGE_LOG_LIST_HREF[entityType];
   if (!list) return null;
-  return code && code !== '—' ? `${list}?q=${encodeURIComponent(code)}&qm=eq` : list;
+  return code && code !== 'None' && code !== '\u2014' ? `${list}?q=${encodeURIComponent(code)}&qm=eq` : list;
 }
 
 function hrefExpr(): SQL {
@@ -211,7 +211,7 @@ export function changeLogSql(auth: AuthContext): SQL {
   const allClients = auth.viewScope.clientIds === 'all';
   return sql`
     SELECT cl.id AS "id", cl.type AS "type", ${moduleExpr()} AS "module", cl.entity_type AS "entityType",
-           COALESCE(cl.entity_code, '—') || COALESCE(' / ' || ${lineSkuExpr()}, '') AS "code", ${lineSkuExpr()} AS "lineSku", ${hrefExpr()} AS "href",
+           COALESCE(cl.entity_code, 'None') || COALESCE(' / ' || ${lineSkuExpr()}, '') AS "code", ${lineSkuExpr()} AS "lineSku", ${hrefExpr()} AS "href",
            (EXISTS (SELECT 1 FROM change_log d WHERE d.entity_type = cl.entity_type AND d.entity_id = cl.entity_id AND d.type = 'Delete'))::int AS "recordDeleted",
            COALESCE(cl.field_label, cl.field) AS "property", cl.field AS "field",
            cl.from_value AS "fromValue", cl.to_value AS "toValue", cl.message AS "message",
@@ -269,7 +269,7 @@ export async function presentChangeLogRows(db: AppDb, rows: readonly Row[]): Pro
   ];
   const names = await resolveIds(db, ids);
   const show = (v: unknown): string | null => {
-    if (typeof v !== 'string' || v === '') return null;
+    if (typeof v !== 'string' || v === '' || /^[—–]$/.test(v.trim())) return null;
     return UUID_RE.test(v) ? (names.get(v) ?? 'Removed item') : v;
   };
   return rows.map((r) => {
@@ -319,6 +319,10 @@ export function presentMessage(message: unknown, names: ReadonlyMap<string, stri
     )
     .replace(/\b[A-Za-z]+\.NameKey\.([A-Za-z0-9_]+)/g, (_, k: string) => humanizeProperty(k) ?? k)
     .replace(/\s+-->\s+/g, ' → ')
+    // Stored rows write an em dash for an empty side; the screen never shows one.
+    .replace(/(^|\s)[—–](?=\s+→)/g, '$1(empty)')
+    .replace(/(→\s+)[—–](?=\s|$)/g, '$1(empty)')
+    .replace(/\s+[—–]\s+/g, ' · ')
     .replace(/\.\s+→/g, '. (empty) →')
     .replace(/\s{2,}/g, ' ')
     .trim();

@@ -611,7 +611,7 @@ export async function createRecounts(
             planId,
             planCode: plan.code,
             line: { id: line.id, label: await lineLabel(inner, line) },
-            text: `Recount created in job ${newJob?.code ?? '—'}; this count is superseded until the recount is done`,
+            text: `Recount created in job ${newJob?.code ?? 'None'}; this count is superseded until the recount is done`,
           });
         }
         await recordJobEvent(inner, ctx, plan, jobId, 'recount', {

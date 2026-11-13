@@ -1159,7 +1159,7 @@ function Body({
                   <div>
                     <dt className="text-faint">Actual finish</dt>
                     <dd className="font-semibold tabular-nums text-foreground">
-                      {build >= remaining ? formatInZone(finishAt, d.warehouseTimeZone) : '– (partial build)'}
+                      {build >= remaining ? formatInZone(finishAt, d.warehouseTimeZone) : 'Not set (partial build)'}
                     </dd>
                   </div>
                 </dl>

@@ -303,8 +303,8 @@ describe('Productivity: busiest hour of the day', () => {
       { day: '2026-11-01', hour: 14, n: 150 },
       { day: '2026-11-03', hour: 9, n: 30 },
     ];
-    expect(busiestHourOfDay(cells)).toEqual({ hour: 10, avg: 220 / 3, days: 3, label: '10:00–11:00' });
+    expect(busiestHourOfDay(cells)).toEqual({ hour: 10, avg: 220 / 3, days: 3, label: '10:00 to 11:00' });
     expect(busiestHourOfDay([])).toBeNull();
-    expect(busiestHourOfDay([{ day: 'd', hour: 23, n: 1 }])?.label).toBe('23:00–00:00');
+    expect(busiestHourOfDay([{ day: 'd', hour: 23, n: 1 }])?.label).toBe('23:00 to 00:00');
   });
 });

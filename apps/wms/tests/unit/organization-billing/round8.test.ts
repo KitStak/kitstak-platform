@@ -91,7 +91,7 @@ describe('billing round 8', () => {
     const preview = (await previewCalculation(w.db, auth, { ids: [c.id], mode: 'lastClosed' }, nov10))
       .previews[0]!;
     expect(preview.blocked).toMatch(/^No closed period yet/);
-    expect(preview.blocked).toContain('11/01/2026 – 11/30/2026');
+    expect(preview.blocked).toContain('11/01/2026 to 11/30/2026');
     const out = await calculateContracts(w.db, auth, actor(), { ids: [c.id], mode: 'lastClosed' }, nov10);
     expect(out.succeeded).toHaveLength(0);
     expect(out.failed[0]?.message).toMatch(/No closed period yet/);

@@ -180,7 +180,7 @@ export function InputsShowcase() {
             aria-label="Barcodes"
             value={barcodes}
             onChange={setBarcodes}
-            validate={(t) => (BARCODE_RE.test(t) ? null : '4–40 letters, digits or dashes')}
+            validate={(t) => (BARCODE_RE.test(t) ? null : '4 to 40 letters, digits or dashes')}
             placeholder="Scan or type, press Enter"
             className="w-full"
           />

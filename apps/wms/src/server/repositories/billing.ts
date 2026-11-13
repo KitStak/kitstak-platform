@@ -717,7 +717,7 @@ function feeSummary(input: FeeSave): string {
   const split = input.calculationType === 'Split Month Storage';
   const price = split
     ? `${(input.standardRate ?? 0).toFixed(2)}/${(input.alternateRate ?? 0).toFixed(2)} split day ${input.splitDay}`
-    : `${PRICING_MODE_META[input.pricingMode ?? 'graduated'].title}: ${input.tiers.map((t) => `${t.fromQty}–${t.toQty ?? '∞'} @ ${t.rate.toFixed(2)}`).join('; ')}`;
+    : `${PRICING_MODE_META[input.pricingMode ?? 'graduated'].title}: ${input.tiers.map((t) => `${t.fromQty} to ${t.toQty ?? '∞'} @ ${t.rate.toFixed(2)}`).join('; ')}`;
   const calc = input.calculationType ? ` · ${input.calculationType}` : '';
   const mm = [
     input.useMinPrice ? `min ${input.minPrice}` : '',

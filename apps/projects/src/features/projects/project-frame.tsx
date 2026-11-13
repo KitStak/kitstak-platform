@@ -212,7 +212,7 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
   const taskPage = /^\d+$/.test(frameSegment(pathname, project.key));
   const triage = useTriage(project.key, 'open', { staleTime: 30_000, enabled: !taskPage });
   const triageCount = triage.data?.counts.pending ?? 0;
-  // Live CRM and warehouse risks feed the header's "data says" health (same query as the Overview card).
+  // Live CRM and warehouse risks: listed as customer notes in the health chip popover, never a health change.
   const customer = useCustomer360(project.key, { enabled: !taskPage });
 
   const toggleStar = async () => {
@@ -239,11 +239,14 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="project-frame">
       <header className="shrink-0 border-b border-border-subtle bg-panel">
-        <div className="flex flex-wrap items-center gap-3 px-6 pt-4">
-          <EntityIcon icon={project.icon} color={project.color} size={32} />
-          <div className="min-w-0 flex-1 basis-[calc(100%-56px)] sm:basis-0">
-            <div className="flex min-w-0 items-center gap-2 max-sm:flex-wrap max-sm:items-start">
-              <h1 className="min-w-0 text-xl font-semibold tracking-[-0.01em] text-fg max-sm:line-clamp-2 max-sm:text-lg max-sm:leading-snug sm:truncate">{project.name}</h1>
+        <div className="flex flex-wrap items-center gap-3 px-4 pt-3 sm:px-6 sm:pt-4">
+          <span className="max-sm:hidden">
+            <EntityIcon icon={project.icon} color={project.color} size={32} />
+          </span>
+          <div className="min-w-0 flex-1 basis-[calc(100%-56px)] max-sm:basis-full sm:basis-0">
+            {/* Phones: one line, the title and the health chip. Details live on Overview. */}
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="min-w-0 truncate text-xl font-semibold tracking-[-0.01em] text-fg max-sm:text-lg max-sm:leading-snug" title={project.name}>{project.name}</h1>
               <IconButton
                 label={project.starred ? 'Remove star' : 'Star this project'}
                 icon={<Star aria-hidden className={cn(project.starred && 'fill-warning text-warning')} />}
@@ -257,7 +260,7 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
               {project.healthNote ? ` · ${project.healthNote}` : ''}
             </p>
             {/* Phones: progress on its own line, the latest update as a tappable line that opens in full. */}
-            <div className="text-xs text-fg-muted sm:hidden">
+            <div className={cn('text-xs text-fg-muted sm:hidden', tab !== 'overview' && 'hidden')} data-testid="project-phone-meta">
               <p>
                 <span className="font-key">{project.key}</span> · {project.progress.done} of {project.progress.total} tasks done
               </p>
@@ -268,7 +271,7 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
               ) : null}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 max-sm:hidden">
             <AvatarGroup className="hidden -space-x-1 sm:flex" people={project.members.map((m) => ({ id: m.userId, name: m.person.name, src: m.person.image }))} max={4} size="md" />
             {capabilities['project:update'] ? (
               <Link href={`${routes.projectTab(project.key, 'settings')}?section=members`} className="hidden sm:block">
@@ -285,6 +288,17 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
           </div>
         </div>
         <ProjectTabs tabs={tabs} active={tab} projectKey={project.key} triageCount={triageCount} />
+        {capabilities['task:create'] ? (
+          <button
+            type="button"
+            aria-label={`Add a task to ${project.name}`}
+            onClick={() => openQuickAdd({ projectId: project.id })}
+            className="fixed right-4 bottom-[calc(20px+env(safe-area-inset-bottom))] z-[var(--z-sticky)] inline-flex size-14 items-center justify-center rounded-full bg-primary text-primary-fg shadow-lg outline-none hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus active:scale-95 sm:hidden"
+            data-testid="project-add-task-fab"
+          >
+            <Plus aria-hidden className="size-6" />
+          </button>
+        ) : null}
         {tab === 'board' || tab === 'list' ? <CycleStrip projectKey={project.key} /> : null}
       </header>
       <div className="min-h-0 flex-1 overflow-auto">{children}</div>
