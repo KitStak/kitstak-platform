@@ -1,4 +1,4 @@
-import { StakMark } from '../stak-mark';
+import { AppIcon } from '../app-icon';
 import mock from './mock.module.css';
 import styles from './account-link.module.css';
 
@@ -33,7 +33,7 @@ export function AccountLink() {
       <div className={styles.split}>
         <div className={styles.crm}>
           <div className={styles.cardLabel}>
-            <StakMark lit="crm" size={20} /> CRM
+            <AppIcon app="crm" size={26} /> CRM
           </div>
           <dl className={styles.facts}>
             <div>
@@ -53,7 +53,7 @@ export function AccountLink() {
 
         <div className={styles.wms}>
           <div className={styles.cardLabel}>
-            <StakMark lit="wms" size={20} /> Warehouse (WMS)
+            <AppIcon app="wms" size={26} /> Warehouse (WMS)
           </div>
           <div className={styles.onHand}>
             <span className={`numeral ${styles.onHandValue}`}>4,812</span>

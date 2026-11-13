@@ -8,7 +8,7 @@ import { Faq, FounderBand } from '@/components/product/cta';
 import type { FaqItem } from '@/components/product/cta';
 import { SubNav } from '@/components/product/sub-nav';
 import type { SubNavSection } from '@/components/product/sub-nav';
-import { Compare, Lineup, StackHero, StartSteps } from '@/components/products/products-sections';
+import { Compare, Lineup, ProjectsTeaser, StackHero, StartSteps } from '@/components/products/products-sections';
 import { BundleCalculator } from '@/components/stak/bundle-calculator';
 import styles from './products.module.css';
 
@@ -90,6 +90,7 @@ export default function ProductsPage() {
         </section>
 
         <StartSteps />
+        <ProjectsTeaser />
         <Faq items={FAQ} />
         <FounderBand
           title="Rather be walked through it?"

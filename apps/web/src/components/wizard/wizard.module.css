@@ -312,6 +312,12 @@
   gap: 20px;
   padding: 22px 24px;
 }
+.stackGlyph {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+}
 .stackText {
   display: grid;
   gap: 4px;
@@ -373,7 +379,8 @@
 .productHead {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
+  margin-left: -6px;
   font-size: var(--type-xl);
   letter-spacing: -0.02em;
 }
@@ -693,9 +700,9 @@
     gap: 14px;
     padding: 18px 16px;
   }
-  .stack > svg {
-    width: 40px;
-    height: 20px;
+  .stackGlyph {
+    width: 48px;
+    height: 48px;
   }
   .nav :global(.btn-lg) {
     height: 52px;

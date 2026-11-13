@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { PRICING, formatUsd, percentLabel } from '@/lib/pricing';
 import { ROUTES, getStartedHref } from '../site-links';
+import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import styles from './products-sections.module.css';
 
@@ -120,7 +121,7 @@ export function Lineup() {
           {CARDS.map((card, i) => (
             <article key={card.id} className={styles.card} data-reveal style={{ '--reveal-delay': 100 * i } as React.CSSProperties}>
               <header className={styles.cardHead}>
-                <StakMark lit={card.id} size={44} />
+                <AppIcon app={card.id} size={56} />
                 <span className={styles.cardName}>{card.name}</span>
                 <span className={styles.cardPrice}>
                   from {formatUsd(PRICING[card.id].monthlyCents)} / {PRICING[card.id].unit}
@@ -201,13 +202,13 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
                   <span className="visually-hidden">Feature</span>
                 </th>
                 <th scope="col">
-                  <StakMark lit="crm" size={28} /> CRM
+                  <AppIcon app="crm" size={40} /> CRM
                 </th>
                 <th scope="col">
-                  <StakMark lit="wms" size={28} /> WMS
+                  <AppIcon app="wms" size={40} /> WMS
                 </th>
                 <th scope="col" className={styles.bothCol}>
-                  <StakMark lit="both" size={28} /> Both
+                  <StakMark lit="both" size={32} /> Both
                 </th>
               </tr>
             </thead>
@@ -229,6 +230,32 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
             </tbody>
           </table>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ Preview product */
+
+/** A short band for the product that is announced but not yet available. */
+export function ProjectsTeaser() {
+  return (
+    <section className={styles.teaser} aria-labelledby="teaser-heading">
+      <div className={`container ${styles.teaserInner}`}>
+        <AppIcon app="projects" size={88} />
+        <div>
+          <p className={styles.teaserBadge}>Preview · in development</p>
+          <h2 id="teaser-heading" className={styles.teaserTitle}>
+            A third bar is on the way.
+          </h2>
+          <p className={styles.teaserBody}>
+            KitStak Projects puts tasks, timelines and workload on the same stack, linked to the deals and warehouse
+            records the work is about.
+          </p>
+        </div>
+        <Link href={ROUTES.projects} className="btn btn-ghost-inverse btn-lg">
+          Preview KitStak Projects <span className="btn-arrow" aria-hidden>→</span>
+        </Link>
       </div>
     </section>
   );

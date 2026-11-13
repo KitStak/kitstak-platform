@@ -17,6 +17,7 @@ Marketing site for the KitStak platform, served at **https://kitstak.com**
 | `/` | Home |
 | `/products` | Both products, the comparison, and the bundle price calculator (`#pricing`) |
 | `/wms`, `/crm` | In-depth product pages. Copy lives in `src/components/{wms,crm}/*-content.ts` |
+| `/projects` | Preview page for KitStak Projects, which is in development. Copy in `src/components/projects/projects-content.ts` |
 | `/get-started` | The "Set up your Stak" wizard (`src/components/wizard`, model in `src/lib/stak.ts`) |
 | `/contact` | Contact and "talk to the founder" (`?topic=founder\|demo\|sales`) |
 

@@ -57,7 +57,10 @@
   border-bottom: 1px solid var(--border-default);
 }
 .product > svg {
-  margin-top: 6px;
+  margin-top: 10px;
+}
+.product > img {
+  margin-top: -2px;
 }
 .product[aria-current='page'] .productName {
   text-decoration: underline;
@@ -106,4 +109,16 @@
   .panel {
     display: none;
   }
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  vertical-align: middle;
 }

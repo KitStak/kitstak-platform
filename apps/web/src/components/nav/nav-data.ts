@@ -45,6 +45,15 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
   },
 ];
 
+/** A product that is announced but not yet available. Listed apart from the ones you can buy. */
+export const PREVIEW_PRODUCT = {
+  id: 'projects',
+  href: ROUTES.projects,
+  name: 'KitStak Projects',
+  badge: 'Preview',
+  blurb: 'Plans, tasks and timelines on the same stack. In development.',
+} as const;
+
 /** Top-level header links (the Products menu is rendered separately, before these). */
 export const PRIMARY_NAV: readonly NavLink[] = [
   { href: ROUTES.platform, label: 'Platform' },
@@ -53,7 +62,7 @@ export const PRIMARY_NAV: readonly NavLink[] = [
 ];
 
 /** Routes that light up the Products menu trigger. */
-export const PRODUCT_PATHS: readonly string[] = [ROUTES.products, ROUTES.wms, ROUTES.crm];
+export const PRODUCT_PATHS: readonly string[] = [ROUTES.products, ROUTES.wms, ROUTES.crm, ROUTES.projects];
 
 /** True when `href` is the page at `pathname`. Links to a section (`#...`) are never "the page". */
 export function isCurrentPath(pathname: string, href: string): boolean {

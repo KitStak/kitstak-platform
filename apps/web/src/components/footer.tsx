@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Logo } from './logo';
-import { PRODUCT_NAV } from './nav/nav-data';
+import { PREVIEW_PRODUCT, PRODUCT_NAV } from './nav/nav-data';
 import { LINKS, ROUTES, getStartedHref } from './site-links';
 import styles from './footer.module.css';
 
@@ -15,6 +15,7 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
     title: 'Products',
     links: [
       ...PRODUCT_NAV.map((p) => ({ href: p.href, label: p.name })),
+      { href: PREVIEW_PRODUCT.href, label: `${PREVIEW_PRODUCT.name} (preview)` },
       { href: ROUTES.products, label: 'Compare products' },
       { href: ROUTES.bundle, label: 'Bundle and save' },
       { href: ROUTES.pricing, label: 'Pricing' },

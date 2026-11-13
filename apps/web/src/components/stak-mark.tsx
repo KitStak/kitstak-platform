@@ -1,6 +1,7 @@
 /**
  * The KitStak mark (two stacked bars, 5:1, gap half a bar) used as the product glyph across the
- * site: the top bar is the CRM, the bottom bar is the WMS, and both lit is the full stack.
+ * site for the brand and for the bundle. A single app is identified by its own icon instead
+ * (see app-icon.tsx).
  */
 export type StakMarkLit = 'crm' | 'wms' | 'both' | 'none';
 
