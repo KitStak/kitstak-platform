@@ -1,3 +1,4 @@
+import { KITSTAK_SITE_URL } from '@kitstak/ui/logo';
 import Link from 'next/link';
 import { Logo } from '@/features/shell/logo';
 import { AuthIllustration } from './_components/auth-illustration';
@@ -8,13 +9,13 @@ export default function AuthLayout({ children }: { readonly children: React.Reac
     <div className="grid min-h-dvh bg-panel lg:grid-cols-[minmax(480px,1fr)_minmax(0,1.1fr)]">
       <div className="flex flex-col px-6 py-6 sm:px-12">
         <header>
-          <Link
-            href="/login"
-            aria-label="KitStak home"
+          <a
+            href={KITSTAK_SITE_URL}
+            aria-label="KitStak website"
             className="inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
           >
             <Logo size={30} />
-          </Link>
+          </a>
         </header>
         <main className="flex flex-1 items-center justify-center py-10">
           <div className="w-full max-w-[400px] animate-fade-in">{children}</div>
