@@ -38,7 +38,9 @@ import { TaskDetailView } from '@/features/task/task-detail';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { useIsNarrow } from '@/features/timeline/use-view-prefs';
 
-export type InboxFilter = 'all' | 'unread' | 'mentions' | 'assigned' | 'comments' | 'due' | 'archived';
+import type { InboxFilter } from './inbox-filter';
+
+export type { InboxFilter };
 
 const FILTERS: readonly { value: InboxFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -76,9 +78,15 @@ const EMPTY: Record<InboxFilter, { title: string; description: string }> = {
   },
 };
 
-export function InboxView({ initial }: { readonly initial: InboxPage }) {
+export function InboxView({
+  initial,
+  initialFilter = 'all',
+}: {
+  readonly initial: InboxPage;
+  readonly initialFilter?: InboxFilter;
+}) {
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<InboxFilter>('all');
+  const [filter, setFilter] = useState<InboxFilter>(initialFilter);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   // The row being previewed, by id (positions shift as items are read or archived). Nothing is
   // selected until the user picks a row or presses J, and selecting never marks anything read on
@@ -99,7 +107,7 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
       apiGet<InboxPage>(apiPath('notifications', { filter, before: pageParam ?? undefined })),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
-    initialData: filter === 'all' ? { pages: [initial], pageParams: [null] } : undefined,
+    initialData: filter === initialFilter ? { pages: [initial], pageParams: [null] } : undefined,
   });
   const items = useMemo(() => inbox.data?.pages.flatMap((page) => page.items) ?? [], [inbox.data]);
   const unread = useUnreadCount();
@@ -130,6 +138,11 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
 
   const changeFilter = (value: InboxFilter) => {
     setFilter(value);
+    // Keep the tab in the URL so links, reloads and Back land on the same tab.
+    const url = new URL(window.location.href);
+    if (value === 'all') url.searchParams.delete('filter');
+    else url.searchParams.set('filter', value);
+    window.history.replaceState(window.history.state, '', url);
     setSelected(new Set());
     setActiveId(null);
     setPinned(null);

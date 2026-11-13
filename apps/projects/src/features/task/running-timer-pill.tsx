@@ -130,7 +130,7 @@ function Pill() {
           onClick={() => task && openTask(task.key)}
           disabled={!task}
           aria-label={`Timer running on ${label}, ${formatClock(elapsed)}. Open the task`}
-          className="flex h-full items-center gap-1.5 rounded-l-full pr-1.5 pl-2.5 text-xs font-semibold outline-none hover:bg-[color-mix(in_srgb,var(--danger-subtle),var(--danger)_10%)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+          className="flex h-full items-center gap-1.5 rounded-full pr-2.5 pl-2.5 sm:rounded-r-none sm:pr-1.5 text-xs font-semibold outline-none hover:bg-[color-mix(in_srgb,var(--danger-subtle),var(--danger)_10%)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
         >
           <span aria-hidden className="relative flex size-2">
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-danger opacity-60 motion-reduce:hidden" />
@@ -148,7 +148,8 @@ function Pill() {
           aria-label={`Stop the timer on ${label}`}
           data-testid="topbar-timer-stop"
           className={cn(
-            'flex h-full items-center rounded-r-full border-l border-danger/30 pr-2 pl-1.5 outline-none hover:bg-[color-mix(in_srgb,var(--danger-subtle),var(--danger)_10%)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:opacity-60',
+            // Phones: the pill opens the task, where the timer can be stopped, so the top bar fits 390px.
+            'hidden h-full items-center rounded-r-full border-l sm:flex border-danger/30 pr-2 pl-1.5 outline-none hover:bg-[color-mix(in_srgb,var(--danger-subtle),var(--danger)_10%)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:opacity-60',
           )}
         >
           <CircleStop aria-hidden className="size-4" />

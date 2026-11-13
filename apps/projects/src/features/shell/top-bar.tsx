@@ -95,7 +95,7 @@ export function TopBar() {
       <span aria-hidden className="hidden h-5 w-px bg-border-default sm:block" />
       <OrgSwitcher />
 
-      <div className="ml-auto flex min-w-0 items-center gap-1.5">
+      <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-1.5">
         <RunningTimerPill />
         <Tooltip
           content={

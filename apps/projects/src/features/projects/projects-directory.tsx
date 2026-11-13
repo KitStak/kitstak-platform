@@ -548,7 +548,7 @@ export function ProjectsDirectory({
 
   const renderList = (list: readonly ProjectSummary[]) =>
     prefs.layout === 'cards' ? (
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="projects-grid">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="projects-grid">
         {list.map((project) => (
           <ProjectCard key={project.id} project={project} space={prefs.grouped ? undefined : project.spaceId ? spaceById.get(project.spaceId) : undefined} ops={ops} canCreate={canCreate} />
         ))}
@@ -710,7 +710,7 @@ export function ProjectsDirectory({
       </div>
 
       {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading projects">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading projects">
           {Array.from({ length: 3 }, (_, i) => (
             <div key={i} className="ks-skeleton h-[190px] rounded-xl" />
           ))}

@@ -10,7 +10,7 @@
  * Participants (creator, assignee, commenters, mentioned) automatically become watchers.
  */
 import 'server-only';
-import { and, count, desc, eq, inArray, isNotNull, isNull, lt, sql, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
 import { notifications, userPrefs, watchers } from '@/server/db/schema';
 import type { NotificationKind } from '@/lib/constants';
@@ -180,7 +180,8 @@ export async function archiveNotifications(ctx: DomainContext, ids: readonly str
   if (ids.length === 0) return;
   await db
     .update(notifications)
-    .set(archived ? { archivedAt: new Date(), readAt: sql`coalesce(${notifications.readAt}, now())` } : { archivedAt: null })
+    // Archiving leaves the read state alone, so Undo brings an unread item back as unread.
+    .set({ archivedAt: archived ? new Date() : null })
     .where(own(ctx, ids));
 }
 

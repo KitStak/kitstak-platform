@@ -3,6 +3,7 @@ import { InboxPage } from '@/features/inbox';
 
 export const metadata: Metadata = { title: 'Inbox' };
 
-export default function Page() {
-  return <InboxPage />;
+export default async function Page({ searchParams }: { searchParams: Promise<{ filter?: string | string[] }> }) {
+  const { filter } = await searchParams;
+  return <InboxPage filter={filter} />;
 }
