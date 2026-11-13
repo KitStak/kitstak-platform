@@ -89,3 +89,6 @@ Use them for each app's favicon/top-bar mark, the shared app switcher entries (`
 
 ### Logo font
 Bebas Neue (SIL OFL) lives in `packages/ui/src/fonts/` (woff2 + ttf + OFL-LICENSE.txt, license must ship with it). Use only for logo lettering / wordmarks (`KITSTAK PROJECTS`, etc.) with `letter-spacing: 0.0485em` and `font-kerning: none`, via an `@font-face` in `@kitstak/ui` (`font-display: swap`). Body/UI text stays on the existing token fonts.
+
+### Loaders (all apps)
+Animated SVG loaders (reduced-motion safe) per app: `apps/crm/public/brand/kitstak-loader-crm.svg`, `apps/wms/public/brand/kitstak-loader-wms.svg`, `apps/portal/public/brand/kitstak-loader-portal.svg`, `apps/projects/public/brand/kitstak-loader-projects.svg`, plus the KitStak company loader `kitstak-loader-kitstak.svg` in every app's `public/brand/` (use it for auth/sign-in and cross-app handoff screens). Use as `<img src="/brand/..." width="64" height="64" alt="Loading">` in `loading.tsx` and long-running states instead of generic spinners.
