@@ -6,9 +6,11 @@ const sessionMock = vi.hoisted(() => ({
   findOrgMembership: vi.fn(),
 }));
 const auditMock = vi.hoisted(() => ({ recordAudit: vi.fn().mockResolvedValue(undefined) }));
+const passwordChangeMock = vi.hoisted(() => ({ mustChangePassword: vi.fn().mockResolvedValue(false) }));
 
 vi.mock('@/server/auth/session', () => sessionMock);
 vi.mock('@/server/audit', () => auditMock);
+vi.mock('@/server/auth/password-change', () => passwordChangeMock);
 vi.mock('@/server/db', () => ({ db: {} }));
 vi.mock('@/server/env', () => ({ trustedOrigins: () => ['http://localhost:3100'] }));
 // The org IP allow-list stage reads org metadata through the real `db`; stub it as "disabled".
@@ -54,6 +56,7 @@ beforeEach(() => {
   sessionMock.getSessionFromHeaders.mockResolvedValue({ user: USER, session: { id: 's1' } });
   sessionMock.findOrgMembership.mockResolvedValue(membership('owner'));
   auditMock.recordAudit.mockClear();
+  passwordChangeMock.mustChangePassword.mockResolvedValue(false);
 });
 
 describe('withApi', () => {
@@ -83,6 +86,27 @@ describe('withApi', () => {
     const response = await withApi({ rateLimit: false }, async () => 'x')(request('GET'), noParams);
     expect(response.status).toBe(401);
     expect((await json(response)).error?.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('blocks a session that still has an administrator-set password, before the handler runs', async () => {
+    passwordChangeMock.mustChangePassword.mockResolvedValue(true);
+    const handler = vi.fn(async () => 'x');
+    const response = await withApi({ permission: 'board:read', rateLimit: false }, handler)(request('GET'), noParams);
+
+    expect(response.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+    expect(passwordChangeMock.mustChangePassword).toHaveBeenCalledWith(USER.id);
+  });
+
+  it('does not check for a required password change on a public endpoint', async () => {
+    passwordChangeMock.mustChangePassword.mockClear();
+    const response = await withApi({ auth: 'none', org: 'none', rateLimit: false }, async () => 'x')(
+      new Request('http://localhost:3100/api/v1/test'),
+      noParams,
+    );
+
+    expect(response.status).toBe(200);
+    expect(passwordChangeMock.mustChangePassword).not.toHaveBeenCalled();
   });
 
   it('returns 404 for non-members so org ids cannot be probed', async () => {

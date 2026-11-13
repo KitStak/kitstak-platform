@@ -2,13 +2,14 @@
   "name": "@kitstak/db",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared KitStak core database layer: Drizzle schema for the core/crm/wms pgSchemas, driver factories, and core migrations (TypeScript source-shipped — consumers transpile via Next transpilePackages).",
+  "description": "Shared KitStak core database layer: Drizzle schema for the core/crm/wms pgSchemas, driver factories, and core migrations (TypeScript source-shipped \u2014 consumers transpile via Next transpilePackages).",
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
     "./schema/core/auth": "./src/schema/core/auth.ts",
     "./schema/core/auth-policy": "./src/schema/core/auth-policy.ts",
     "./schema/core/rate-limit": "./src/schema/core/rate-limit.ts",
+    "./password-change": "./src/password-change.ts",
     "./client-pg": "./src/client-pg.ts",
     "./client-postgres-js": "./src/client-postgres-js.ts"
   },

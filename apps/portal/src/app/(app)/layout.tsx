@@ -1,9 +1,11 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { AppSwitcher } from '@kitstak/ui/app-switcher';
 import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
+import { mustChangePassword } from '@/server/password-change';
 import { CommandPalette } from '@/features/shell/command-palette';
 import { Logo } from '@/features/shell/logo';
 import { OrgSwitcher } from '@/features/shell/org-switcher';
@@ -13,6 +15,8 @@ import { UserMenu } from '@/features/shell/user-menu';
 /** Signed-in portal shell: top bar with org switcher, nav, theme toggle and account menu. */
 export default async function AppLayout({ children }: { readonly children: React.ReactNode }) {
   const session = await requirePageSession('/');
+  // An administrator-set password has to be replaced before anything else is shown.
+  if (await mustChangePassword(session.user.id)) redirect('/change-password');
   const orgs = await listUserOrgs(session.user.id);
   const activeOrg = await resolveActiveOrg(session, orgs);
 

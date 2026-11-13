@@ -85,6 +85,20 @@ function fileHash(contents: string): string {
   return createHash('sha256').update(contents).digest('hex');
 }
 
+/**
+ * Hashes a migration file accepts as "unchanged": the bytes as checked out, and the same text
+ * with Unix and with Windows line endings. Git on Windows checks files out with CRLF, so the same committed
+ * migration hashes differently on different machines; without this, a migration applied from
+ * one checkout reads as "changed after being applied" from another and nothing can run.
+ * New rows record the Unix-line-ending hash, which is the same everywhere.
+ */
+export function migrationHashes(contents: string): { readonly canonical: string; readonly accepted: readonly string[] } {
+  const canonical = fileHash(contents.replace(/\r\n/g, '\n'));
+  const unix = contents.replace(/\r\n/g, '\n');
+  const windows = unix.replace(/\n/g, '\r\n');
+  return { canonical, accepted: [...new Set([canonical, fileHash(contents), fileHash(windows)])] };
+}
+
 async function ensureBookkeeping(sql: postgres.Sql): Promise<void> {
   await sql.unsafe('CREATE SCHEMA IF NOT EXISTS drizzle');
   await sql.unsafe(
@@ -114,10 +128,10 @@ async function applyPending(
   for (const entry of entries) {
     const filePath = path.join(migrationsFolder, `${entry.tag}.sql`);
     const contents = fs.readFileSync(filePath, 'utf8');
-    const hash = fileHash(contents);
+    const { canonical: hash, accepted } = migrationHashes(contents);
     const existing = applied.get(entry.tag);
     if (existing !== undefined) {
-      if (existing !== hash) {
+      if (!accepted.includes(existing)) {
         throw new Error(
           `Migration ${entry.tag} changed after being applied (hash mismatch). ` +
             'Applied migrations are immutable; add a new migration instead.',
