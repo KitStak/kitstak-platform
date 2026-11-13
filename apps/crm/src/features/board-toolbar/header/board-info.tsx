@@ -140,7 +140,7 @@ export function BoardInfoButton({ board, users, location, totalItems, onEditDesc
               {creator ? <span className="text-fg-muted"> by {creator.name}</span> : null}
             </dd>
             <dt className="text-fg-muted">Workspace</dt>
-            <dd className="truncate text-fg">{location.workspace?.name ?? '—'}</dd>
+            <dd className="truncate text-fg">{location.workspace?.name ?? 'None'}</dd>
             <dt className="text-fg-muted">Privacy</dt>
             <dd className="text-fg capitalize">{board.privacy === 'main' ? 'Main (everyone in the workspace)' : board.privacy}</dd>
           </dl>

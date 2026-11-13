@@ -99,7 +99,7 @@ export function PoLinesTable({
 }) {
   const fmt = useFormat();
   const all = lines.length > 0 && lines.every((l) => selected.has(l.key));
-  const dash = <span className="text-faint">—</span>;
+  const dash = <span className="text-faint">None</span>;
   return (
     // `relative`: the scroller is the containing block of the checkboxes' absolutely positioned
     // form inputs, so they never widen the document (page-level horizontal scroll).

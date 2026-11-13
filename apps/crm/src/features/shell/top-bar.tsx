@@ -37,11 +37,12 @@ import { UserMenu } from './user-menu';
 import { NotificationsRealtime } from '@/features/notifications';
 import { useSetupGuideAction } from '@/features/home/use-setup-guide';
 
-/** Cross-app origins for the shared AppSwitcher (BLUEPRINT.md §6); dev defaults match the three dev ports. */
+/** Cross-app origins for the shared AppSwitcher (BLUEPRINT.md §6); dev defaults match the dev ports. */
 const APP_URLS = {
   portal: process.env.NEXT_PUBLIC_PORTAL_URL ?? 'http://localhost:3300',
   crm: process.env.NEXT_PUBLIC_CRM_URL ?? 'http://localhost:3100',
   wms: process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
+  projects: process.env.NEXT_PUBLIC_PROJECTS_URL ?? 'http://localhost:3400',
 } as const;
 
 function HelpMenu() {
@@ -113,7 +114,7 @@ function HelpMenu() {
  * navigation, search with its shortcut hint, notifications, help and the account menu.
  */
 export function TopBar() {
-  const { org } = useOrg();
+  const { org, apps } = useOrg();
   const me = useMe(org.id);
   const panel = useShellStore((state) => state.panel);
   const openPanel = useShellStore((state) => state.openPanel);
@@ -143,7 +144,7 @@ export function TopBar() {
         className="mr-1 flex h-9 shrink-0 items-center rounded-md px-1.5 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus lg:mr-3"
       >
         <Logo size={22} />
-        <span className="sr-only"> – home</span>
+        <span className="sr-only">, home</span>
       </Link>
 
       <TopNav />
@@ -202,7 +203,7 @@ export function TopBar() {
             badge={<CountBadge count={unread} ringClassName="ring-[var(--surface-panel)]" />}
           />
         </nav>
-        <AppSwitcher current="crm" urls={APP_URLS} />
+        <AppSwitcher current="crm" urls={apps?.urls ?? APP_URLS} entitled={apps?.entitled} notInPlan={apps?.notInPlan} />
         <UserMenu />
       </div>
     </header>

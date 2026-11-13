@@ -212,7 +212,7 @@ export function buildProductSeeds(): ProductSeed[] {
       out.push(
         product('APX', 'Apparel', {
           sku: `APX-TEE-${cc}-${size}`,
-          name: `Apex Classic Tee — ${colorName} / ${size}`,
+          name: `Apex Classic Tee · ${colorName} / ${size}`,
           price: 24,
           weightOz: 6.4,
           dims: [10, 8, 1],
@@ -230,7 +230,7 @@ export function buildProductSeeds(): ProductSeed[] {
       out.push(
         product('BLB', 'Apparel', {
           sku: `BLB-HOOD-${cc}-${size}`,
-          name: `Bluebird Fleece Hoodie — ${colorName} / ${size}`,
+          name: `Bluebird Fleece Hoodie · ${colorName} / ${size}`,
           price: 58,
           weightOz: 19,
           dims: [13, 11, 3],
@@ -241,7 +241,7 @@ export function buildProductSeeds(): ProductSeed[] {
   out.push(
     product('BLB', 'Apparel', {
       sku: 'BLB-CAP-OS-BLK',
-      name: 'Bluebird Dad Cap — Black',
+      name: 'Bluebird Dad Cap · Black',
       price: 28,
       weightOz: 4,
       dims: [8, 7, 4],
@@ -250,7 +250,7 @@ export function buildProductSeeds(): ProductSeed[] {
   out.push(
     product('BLB', 'Apparel', {
       sku: 'BLB-CAP-OS-KHK',
-      name: 'Bluebird Dad Cap — Khaki',
+      name: 'Bluebird Dad Cap · Khaki',
       price: 28,
       weightOz: 4,
       dims: [8, 7, 4],
@@ -266,7 +266,7 @@ export function buildProductSeeds(): ProductSeed[] {
       out.push(
         product('SMT', 'Apparel', {
           sku: `SMT-JKT-${cc}-${size}`,
-          name: `Summit Shell Jacket — ${colorName} / ${size}`,
+          name: `Summit Shell Jacket · ${colorName} / ${size}`,
           price: 129,
           weightOz: 15,
           dims: [14, 11, 2.5],
@@ -286,7 +286,7 @@ export function buildProductSeeds(): ProductSeed[] {
   out.push(
     product('SMT', 'Apparel', {
       sku: 'SMT-BND-OS',
-      name: 'Summit Trail Headband — One Size',
+      name: 'Summit Trail Headband · One Size',
       price: 16,
       weightOz: 1.6,
       dims: [6, 4, 1],
@@ -297,21 +297,21 @@ export function buildProductSeeds(): ProductSeed[] {
   const novaItems: readonly ProductTemplate[] = [
     {
       sku: 'NOVA-CBL-USBC-1M',
-      name: 'NovaForge USB-C Cable 1m — Braided',
+      name: 'NovaForge USB-C Cable 1m · Braided',
       price: 14,
       weightOz: 2.1,
       dims: [4, 4, 1],
     },
     {
       sku: 'NOVA-CBL-USBC-2M',
-      name: 'NovaForge USB-C Cable 2m — Braided',
+      name: 'NovaForge USB-C Cable 2m · Braided',
       price: 18,
       weightOz: 3.2,
       dims: [4, 4, 1.2],
     },
     {
       sku: 'NOVA-CBL-USBC-3M',
-      name: 'NovaForge USB-C Cable 3m — Braided',
+      name: 'NovaForge USB-C Cable 3m · Braided',
       price: 22,
       weightOz: 4.4,
       dims: [5, 5, 1.2],
@@ -371,7 +371,7 @@ export function buildProductSeeds(): ProductSeed[] {
   const vltItems: readonly ProductTemplate[] = [
     {
       sku: 'VLT-EBD-PRO',
-      name: 'Voltbyte Earbuds Pro — ANC',
+      name: 'Voltbyte Earbuds Pro · ANC',
       price: 129,
       weightOz: 2.4,
       dims: [3, 3, 1.4],
@@ -387,7 +387,7 @@ export function buildProductSeeds(): ProductSeed[] {
     },
     {
       sku: 'VLT-SPK-MINI',
-      name: 'Voltbyte Mini Speaker — Slate',
+      name: 'Voltbyte Mini Speaker · Slate',
       price: 45,
       weightOz: 9.5,
       dims: [4, 4, 4],
@@ -395,7 +395,7 @@ export function buildProductSeeds(): ProductSeed[] {
     },
     {
       sku: 'VLT-SPK-XL',
-      name: 'Voltbyte XL Speaker — Slate',
+      name: 'Voltbyte XL Speaker · Slate',
       price: 119,
       weightOz: 32,
       dims: [8, 4.5, 4.5],
@@ -440,21 +440,21 @@ export function buildProductSeeds(): ProductSeed[] {
   const pxpItems: readonly ProductTemplate[] = [
     {
       sku: 'PXP-CASE-IP15',
-      name: 'Pixel & Pine Walnut Case — iPhone 15',
+      name: 'Pixel & Pine Walnut Case · iPhone 15',
       price: 42,
       weightOz: 1.8,
       dims: [6.5, 3.5, 0.6],
     },
     {
       sku: 'PXP-CASE-IP16',
-      name: 'Pixel & Pine Walnut Case — iPhone 16',
+      name: 'Pixel & Pine Walnut Case · iPhone 16',
       price: 42,
       weightOz: 1.8,
       dims: [6.5, 3.5, 0.6],
     },
     {
       sku: 'PXP-SCR-IP15',
-      name: 'Pixel & Pine Glass Screen Protector — iPhone 15',
+      name: 'Pixel & Pine Glass Screen Protector · iPhone 15',
       price: 18,
       weightOz: 1,
       dims: [7, 4, 0.3],
@@ -462,13 +462,13 @@ export function buildProductSeeds(): ProductSeed[] {
     },
     {
       sku: 'PXP-SCR-IP16',
-      name: 'Pixel & Pine Glass Screen Protector — iPhone 16',
+      name: 'Pixel & Pine Glass Screen Protector · iPhone 16',
       price: 18,
       weightOz: 1,
       dims: [7, 4, 0.3],
       isFragile: true,
     },
-    { sku: 'PXP-GRIP-POP', name: 'Pixel & Pine Phone Grip — Ash', price: 14, weightOz: 0.8, dims: [3, 3, 1] },
+    { sku: 'PXP-GRIP-POP', name: 'Pixel & Pine Phone Grip · Ash', price: 14, weightOz: 0.8, dims: [3, 3, 1] },
     { sku: 'PXP-MNT-CAR', name: 'Pixel & Pine MagSafe Car Mount', price: 34, weightOz: 4.5, dims: [4, 3, 3] },
     {
       sku: 'PXP-CHG-MAG',
@@ -493,35 +493,35 @@ export function buildProductSeeds(): ProductSeed[] {
   const cplItems: readonly ProductTemplate[] = [
     {
       sku: 'CPL-BAG-ESP-12',
-      name: 'Copperline Espresso Blend — 12oz Whole Bean',
+      name: 'Copperline Espresso Blend · 12oz Whole Bean',
       price: 18.5,
       weightOz: 13,
       dims: [4, 2.5, 7],
     },
     {
       sku: 'CPL-BAG-MED-12',
-      name: 'Copperline Morning Medium Roast — 12oz',
+      name: 'Copperline Morning Medium Roast · 12oz',
       price: 17,
       weightOz: 13,
       dims: [4, 2.5, 7],
     },
     {
       sku: 'CPL-BAG-DRK-12',
-      name: 'Copperline Midnight Dark Roast — 12oz',
+      name: 'Copperline Midnight Dark Roast · 12oz',
       price: 17,
       weightOz: 13,
       dims: [4, 2.5, 7],
     },
     {
       sku: 'CPL-BAG-DEC-12',
-      name: 'Copperline Water-Process Decaf — 12oz',
+      name: 'Copperline Water-Process Decaf · 12oz',
       price: 18,
       weightOz: 13,
       dims: [4, 2.5, 7],
     },
     {
       sku: 'CPL-BAG-ESP-32',
-      name: 'Copperline Espresso Blend — 2lb Bulk',
+      name: 'Copperline Espresso Blend · 2lb Bulk',
       price: 42,
       weightOz: 34,
       dims: [6, 3.5, 10],
@@ -543,7 +543,7 @@ export function buildProductSeeds(): ProductSeed[] {
     },
     {
       sku: 'CPL-MUG-12OZ',
-      name: 'Copperline Diner Mug — 12oz',
+      name: 'Copperline Diner Mug · 12oz',
       price: 16,
       weightOz: 14,
       dims: [5, 4, 4.5],
@@ -556,21 +556,21 @@ export function buildProductSeeds(): ProductSeed[] {
   const hrbItems: readonly ProductTemplate[] = [
     {
       sku: 'HRB-BAG-HSE-12',
-      name: 'Harbor House Blend — 12oz Whole Bean',
+      name: 'Harbor House Blend · 12oz Whole Bean',
       price: 16.5,
       weightOz: 13,
       dims: [4, 2.5, 7],
     },
     {
       sku: 'HRB-BAG-SNG-12',
-      name: 'Harbor Single Origin Huila — 12oz',
+      name: 'Harbor Single Origin Huila · 12oz',
       price: 21,
       weightOz: 13,
       dims: [4, 2.5, 7],
     },
     {
       sku: 'HRB-BAG-CLD-12',
-      name: 'Harbor Cold Brew Coarse Grind — 12oz',
+      name: 'Harbor Cold Brew Coarse Grind · 12oz',
       price: 17.5,
       weightOz: 13,
       dims: [4, 2.5, 7],
@@ -586,7 +586,7 @@ export function buildProductSeeds(): ProductSeed[] {
     },
     {
       sku: 'HRB-GRND-BRL',
-      name: 'Harbor Burr Grinder — Matte Black',
+      name: 'Harbor Burr Grinder · Matte Black',
       price: 89,
       weightOz: 46,
       dims: [7, 7, 11],

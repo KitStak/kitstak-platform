@@ -68,6 +68,11 @@ import { UpdatesTab as UpdatesTabView } from './updates/updates-tab';
 import { FilesTab as FilesTabView } from './files/files-tab';
 import { ActivityTab as ActivityTabView } from './activity/activity-tab';
 import { ItemCardTab as ItemCardTabView } from './item-card/item-card-tab';
+import { ProjectsTab } from './projects/projects-tab';
+import { openWorkCount, ProjectsHealthLine } from './projects/projects-health';
+import { ProjectsMark } from './projects/projects-mark';
+import { useItemProjects } from './projects/api';
+import { useOptionalOrg } from '@/features/shell/org-context';
 
 // Memoized: switching tabs re-renders the body, not every mounted tab.
 const UpdatesTab = memo(UpdatesTabView);
@@ -494,6 +499,17 @@ function PanelBody({
   };
   const updates = useItemUpdates(itemId);
   const files = useItemFiles(itemId);
+  // KitStak Projects tab: only when the org has Projects (and its tables exist). Top-level records only.
+  const shellOrg = useOptionalOrg();
+  const projectsEntitled = shellOrg?.apps?.entitled.projects ?? false;
+  const projectsEligible = projectsEntitled && data.item?.parentItemId === null;
+  // Fetched in parallel with the record itself (not after it), so a ?itemTab=projects deep link
+  // shows linked work as soon as the panel does. Subitems turn it off once the record is known.
+  const projectsQuery = useItemProjects(itemId, projectsEntitled && data.item?.parentItemId == null);
+  // Entitlement comes from the server-rendered shell, so the tab (and a ?itemTab=projects deep
+  // link) renders right away with a skeleton; it only disappears if the pm schema turns out missing.
+  const projectsAvailable = projectsEligible && projectsQuery.data?.available !== false;
+  const projectsCount = projectsAvailable ? (projectsQuery.data?.work.projects.length ?? 0) + (projectsQuery.data?.work.openTasks ?? 0) : 0;
   const actions = useItemActions(data.boardId, data.term);
   const baseServices = useBoardCellServices(data.boardId, data.payload?.items ?? []);
   const linked = data.detail?.linkedItems;
@@ -697,6 +713,15 @@ function PanelBody({
           </div>
           <div className={cn('px-2 pt-1 pb-2', inner)}>
             <ItemNameEditor name={item.name} term={data.term} readOnly={!canEdit} onRename={(name) => actions.rename(item, name)} />
+            {projectsAvailable && projectsQuery.data?.available ? (
+              <div className="px-2 pt-1">
+                <ProjectsHealthLine
+                  projects={projectsQuery.data.work.projects}
+                  openTasks={openWorkCount(projectsQuery.data.work)}
+                  onOpen={() => setTab('projects')}
+                />
+              </div>
+            ) : null}
           </div>
           {removed ? (
             <div className={cn('px-4 pb-2', inner)}>
@@ -728,6 +753,11 @@ function PanelBody({
                 <TabsTrigger value="card" icon={<FileText aria-hidden />} data-testid="tab-card">
                   {data.term} card
                 </TabsTrigger>
+                {projectsAvailable ? (
+                  <TabsTrigger value="projects" icon={<ProjectsMark size={14} />} count={projectsCount || undefined} data-testid="tab-projects">
+                    Projects
+                  </TabsTrigger>
+                ) : null}
               </TabsList>
             </TabStrip>
           </div>
@@ -772,6 +802,11 @@ function PanelBody({
                     canEdit={canEdit}
                     onOpenItem={navigate}
                   />
+                </TabsContent>
+              ) : null}
+              {visited.has('projects') && projectsAvailable ? (
+                <TabsContent value="projects" forceMount className={KEEP_MOUNTED}>
+                  <ProjectsTab itemId={item.id} recordName={item.name} term={data.term} canEdit={canEdit} />
                 </TabsContent>
               ) : null}
             </div>

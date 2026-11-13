@@ -6,6 +6,7 @@
  * (inline edit of currency + 28 switches) · Addresses (inline editor) · Users with access ·
  * Billing contracts · Activity (change log + notes). Tab state lives in the URL.
  */
+import { ClientProjectsStrip } from '@/components/projects/client-projects-strip';
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -522,6 +523,7 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
             href={`/purchase-orders?f.clientId=in:${c.id}`}
           />
         </div>
+        <ClientProjectsStrip clientId={c.id} />
         <TabFocusGuard>
           <UnderlineTabs
             tabs={tabs}

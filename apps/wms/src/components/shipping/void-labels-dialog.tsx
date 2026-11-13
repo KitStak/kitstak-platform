@@ -176,7 +176,7 @@ export function VoidLabelsDialog({ ids, onClose, onVoided }: VoidLabelsDialogPro
                           {r.orderCode}
                         </td>
                         <td className="whitespace-nowrap px-2.5 py-1.5 text-body">
-                          {r.packageSeq ? `#${r.packageSeq}` : '—'}
+                          {r.packageSeq ? `#${r.packageSeq}` : 'None'}
                           {r.selected ? null : (
                             <span className="ml-1.5 rounded-full bg-warning-soft px-1.5 py-0.5 text-2xs font-medium text-warning">
                               also voided

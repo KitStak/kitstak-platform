@@ -447,7 +447,7 @@ export function SummaryCard({ detail }: { readonly detail: OrderDetail }) {
         />
         <Row label="Client" value={detail.clientName} />
         <Row label="Order type" value={detail.orderTypeName} />
-        <Row label="Store order #" value={o.storeOrderNumber ?? '—'} />
+        <Row label="Store order #" value={o.storeOrderNumber ?? 'None'} />
         <Row label="Last update" value={fmt.dateTime(o.updatedAt)} />
         {detail.masterOrderCode ? (
           <Row
@@ -477,7 +477,7 @@ export function SummaryCard({ detail }: { readonly detail: OrderDetail }) {
           />
         ) : null}
         {o.status === 'Cancelled' ? (
-          <Row label="Cancel reason" value={detail.cancelReasonName ?? '—'} />
+          <Row label="Cancel reason" value={detail.cancelReasonName ?? 'None'} />
         ) : null}
       </div>
       <DisabledReason reason={logReason}>

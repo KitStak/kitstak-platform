@@ -63,9 +63,17 @@ export interface SetupSignals {
   readonly wmsWarehouses: number | null;
   readonly wmsProducts: number | null;
   readonly wmsOrders: number | null;
+  /** KitStak Projects module (omitted = not licensed: no Projects steps). */
+  readonly projectsEntitled?: boolean;
+  /** Real projects (not templates, not the sample project). */
+  readonly pmProjects?: number | null;
+  /** Tasks someone has been assigned. */
+  readonly pmAssignedTasks?: number | null;
+  /** Projects/tasks linked to a CRM or WMS record. */
+  readonly pmLinks?: number | null;
 }
 
-export type SetupScope = 'portal' | 'crm' | 'wms';
+export type SetupScope = 'portal' | 'crm' | 'wms' | 'projects';
 export type SetupStepStatus = 'todo' | 'done' | 'skipped';
 
 export type SetupStepKey =
@@ -75,7 +83,10 @@ export type SetupStepKey =
   | 'crm_first_deal'
   | 'wms_warehouse'
   | 'wms_catalog'
-  | 'wms_first_order';
+  | 'wms_first_order'
+  | 'projects_first_project'
+  | 'projects_assign_task'
+  | 'projects_connect';
 
 export const SETUP_STEP_KEYS: readonly SetupStepKey[] = [
   'profile',
@@ -85,6 +96,9 @@ export const SETUP_STEP_KEYS: readonly SetupStepKey[] = [
   'wms_warehouse',
   'wms_catalog',
   'wms_first_order',
+  'projects_first_project',
+  'projects_assign_task',
+  'projects_connect',
 ];
 
 export function isSetupStepKey(value: string): value is SetupStepKey {
@@ -126,6 +140,10 @@ const wantsCrm = (signals: SetupSignals, profile: SetupProfile | null): boolean 
   signals.crmEntitled && (profile === null || profile.focus !== 'wms');
 const wantsWms = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
   signals.wmsEntitled && (profile === null || profile.focus !== 'crm');
+const wantsProjects = (signals: SetupSignals): boolean => signals.projectsEntitled === true;
+/** The cross-app step only makes sense when there is a CRM or WMS to connect to. */
+const wantsConnect = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
+  wantsProjects(signals) && (wantsCrm(signals, profile) || wantsWms(signals, profile));
 /** Solo founders skip the invite step — unless a teammate or invite shows up anyway. */
 const wantsInvite = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
   profile?.teamSize !== 'solo' || signals.memberCount > 1 || signals.pendingInvites > 0;
@@ -203,7 +221,7 @@ const BLUEPRINTS: readonly StepBlueprint[] = [
     key: 'wms_first_order',
     scope: 'wms',
     title: 'Create your first order',
-    description: 'Run one order through pick, pack and ship — the whole loop, end to end.',
+    description: 'Run one order through pick, pack and ship: the whole loop, end to end.',
     cta: 'Create order',
     minutes: 2,
     auto: true,
@@ -211,13 +229,48 @@ const BLUEPRINTS: readonly StepBlueprint[] = [
     requires: 'wms_catalog',
     include: wantsWms,
   },
+  {
+    key: 'projects_first_project',
+    scope: 'projects',
+    title: 'Start your first project',
+    description: 'Pick a template like Client onboarding or Warehouse go-live, or start from a blank board.',
+    cta: 'Start a project',
+    minutes: 2,
+    auto: true,
+    detect: (signals) => count(signals.pmProjects ?? null) > 0,
+    include: (signals) => wantsProjects(signals),
+  },
+  {
+    key: 'projects_assign_task',
+    scope: 'projects',
+    title: 'Give someone a task',
+    description: 'Assign one task with a due date. They see it in My work and get a heads-up in their inbox.',
+    cta: 'Add a task',
+    minutes: 1,
+    auto: true,
+    detect: (signals) => count(signals.pmAssignedTasks ?? null) > 0,
+    requires: 'projects_first_project',
+    include: (signals) => wantsProjects(signals),
+  },
+  {
+    key: 'projects_connect',
+    scope: 'projects',
+    title: 'Connect work to a deal or order',
+    description: 'Link a project or task to a CRM deal or WMS order so both teams see the same progress.',
+    cta: 'Link a record',
+    minutes: 1,
+    auto: true,
+    detect: (signals) => count(signals.pmLinks ?? null) > 0,
+    requires: 'projects_first_project',
+    include: wantsConnect,
+  },
 ];
 
 /** 3PLs and distributors set up the warehouse first; brands start from the pipeline. */
 function scopeOrder(profile: SetupProfile | null): readonly SetupScope[] {
   const wmsFirst =
     profile !== null && (profile.businessType === '3pl' || profile.businessType === 'distributor');
-  return wmsFirst ? ['portal', 'wms', 'crm'] : ['portal', 'crm', 'wms'];
+  return wmsFirst ? ['portal', 'wms', 'crm', 'projects'] : ['portal', 'crm', 'wms', 'projects'];
 }
 
 /** Explicit per-step override rows from core.onboarding_progress. */

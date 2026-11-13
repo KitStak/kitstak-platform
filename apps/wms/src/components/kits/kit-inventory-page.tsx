@@ -64,7 +64,7 @@ export function disassembleReason(r: KitInventoryRow, allowed: boolean): string 
   return null;
 }
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
   v === null || v === undefined || v === '' ? dash : <span className="truncate">{String(v)}</span>;
 const qty = (

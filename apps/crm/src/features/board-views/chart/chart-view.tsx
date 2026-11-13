@@ -482,9 +482,9 @@ export function ChartView({ boardId, view, onOpenItem, initialSettingsOpen, clas
                         className="grid h-10 w-full grid-cols-[minmax(0,1fr)_minmax(0,9rem)_6.5rem] items-center gap-3 px-3 text-left text-sm text-fg hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus max-[480px]:grid-cols-[minmax(0,1fr)_5.5rem]"
                       >
                         <span className="min-w-0 truncate">{item.name}</span>
-                        <span className="truncate text-xs text-fg-muted max-[480px]:hidden">{groups.find((group) => group.id === item.groupId)?.title ?? '—'}</span>
+                        <span className="truncate text-xs text-fg-muted max-[480px]:hidden">{groups.find((group) => group.id === item.groupId)?.title ?? 'None'}</span>
                         <span className={cn('text-right tabular-nums', typeof number === 'number' ? 'font-medium' : 'text-fg-disabled')}>
-                          {typeof number === 'number' ? formatFull(number, currency) : settings.yColumnKey ? '—' : ''}
+                          {typeof number === 'number' ? formatFull(number, currency) : settings.yColumnKey ? 'None' : ''}
                         </span>
                       </button>
                     </li>

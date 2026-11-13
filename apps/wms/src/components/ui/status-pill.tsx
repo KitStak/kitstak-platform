@@ -75,7 +75,7 @@ export function PillDot({
 /** One soft treatment for every priority; High gets an up arrow, Urgent a double arrow. */
 export function PriorityFlag({ priority }: { priority: string | null }) {
   if (!priority || priority.toLowerCase() === 'none') {
-    return <span className="text-xs text-fg-muted">—</span>;
+    return <span className="text-xs text-fg-muted">None</span>;
   }
   const key = priority.toLowerCase();
   const tone = statusTone(priority, 'priority');

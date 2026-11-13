@@ -376,7 +376,7 @@ export function StepImport({ run, onAnother, onBackground }: StepImportProps) {
                 onClick={() =>
                   downloadBlob(
                     buildErrorReport(run.clientIssues, failures),
-                    `${baseFileName(run.fileName)} – import report.csv`,
+                    `${baseFileName(run.fileName)} import report.csv`,
                     'text/csv;charset=utf-8',
                   )
                 }

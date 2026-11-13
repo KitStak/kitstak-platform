@@ -123,7 +123,7 @@ export function WoStatusPills({ grid }: { readonly grid: GridUrlState }) {
   const data = counts.data?.data;
   const failed = !data && counts.isError;
   const fmt = (n: number | undefined): string | null =>
-    data ? (n ?? 0).toLocaleString() : counts.isPending ? null : '—';
+    data ? (n ?? 0).toLocaleString() : counts.isPending ? null : 'None';
   const countTitle = failed ? `Counts unavailable: ${counts.error?.message ?? 'request failed'}` : undefined;
   const total = data ? Object.values(data).reduce((s, n) => s + n, 0) : undefined;
   return (

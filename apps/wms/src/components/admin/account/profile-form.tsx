@@ -143,7 +143,7 @@ export function ProfileForm({ profile }: { readonly profile: ProfileData }) {
         </dd>
         <dt className="text-secondary">Last sign-in</dt>
         <dd className="text-foreground">
-          {profile.lastLoginAt ? fmt.gridDateTime(profile.lastLoginAt) : '—'}
+          {profile.lastLoginAt ? fmt.gridDateTime(profile.lastLoginAt) : 'None'}
         </dd>
         <dt className="text-secondary">Password changed</dt>
         <dd className="text-foreground">

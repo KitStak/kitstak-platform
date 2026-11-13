@@ -12,7 +12,7 @@ import { DARK_SAFE_PILL } from './returns-client';
 import type { ReturnLineRow } from './return-types';
 import { localDateFromIso } from './date-only';
 
-const dash = <span className="text-secondary">—</span>;
+const dash = <span className="text-secondary">None</span>;
 /** Plain text cell; the full value is the native tooltip so truncated cells stay readable. */
 const text = (v: unknown) =>
   v === null || v === undefined || v === '' ? (

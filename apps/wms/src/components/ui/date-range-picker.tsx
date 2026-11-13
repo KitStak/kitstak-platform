@@ -47,7 +47,7 @@ export function formatRange(value: DateRangeValue): string {
   if (!value.from && !value.to) return '';
   const from = value.from ? formatPattern(value.from, INPUT_DATE_FORMAT) : '…';
   const to = value.to ? formatPattern(value.to, INPUT_DATE_FORMAT) : '…';
-  return `${from} – ${to}`;
+  return `${from} to ${to}`;
 }
 
 export interface DateRangePickerProps {

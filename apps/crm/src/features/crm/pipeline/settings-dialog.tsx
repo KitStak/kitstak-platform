@@ -162,7 +162,7 @@ function SettingsForm({
             <TabsTrigger value="risk">{tabLabel('At-risk rule', invalid.risk)}</TabsTrigger>
           </TabsList>
           <TabsContent value="stages" className="flex flex-col gap-2">
-            <p className="mb-1 text-sm text-fg-secondary">Weighted value = deal value × stage probability (0–100%). Won is always 100%, lost 0%.</p>
+            <p className="mb-1 text-sm text-fg-secondary">Weighted value = deal value × stage probability (0 to 100%). Won is always 100%, lost 0%.</p>
             {stages.map((stage) => {
               const locked = stage.kind !== 'open';
               const error = locked ? null : (probErrors[stage.label.id] ?? null);

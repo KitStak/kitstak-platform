@@ -54,14 +54,14 @@ const COLUMNS: ColumnDef<OrderPick, unknown>[] = [
     meta: { alwaysVisible: true },
     cell: ({ row }) => <span className="font-semibold text-foreground">{row.original.code}</span>,
   },
-  { id: 'storeOrderCode', header: 'Store order #', cell: ({ row }) => row.original.storeOrderCode ?? '—' },
+  { id: 'storeOrderCode', header: 'Store order #', cell: ({ row }) => row.original.storeOrderCode ?? 'None' },
   {
     id: 'clientName',
     header: 'Client',
     enableSorting: false,
-    cell: ({ row }) => row.original.clientName ?? '—',
+    cell: ({ row }) => row.original.clientName ?? 'None',
   },
-  { id: 'customerName', header: 'Customer', cell: ({ row }) => row.original.customerName ?? '—' },
+  { id: 'customerName', header: 'Customer', cell: ({ row }) => row.original.customerName ?? 'None' },
   {
     id: 'status',
     header: 'Status',

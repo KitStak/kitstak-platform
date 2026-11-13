@@ -11,7 +11,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { WorkOrderRow } from './wo-client';
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
   v === null || v === undefined || v === '' ? dash : <span className="truncate">{String(v)}</span>;
 const longText = (v: unknown) => {

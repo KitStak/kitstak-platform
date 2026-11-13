@@ -70,7 +70,7 @@ function ZoneCard({
 }) {
   const pct = occupancyPct(zone);
   const t = tone(pct);
-  const badge = zone.zoneId === null ? '—' : zone.zone.slice(0, 4).toUpperCase();
+  const badge = zone.zoneId === null ? 'None' : zone.zone.slice(0, 4).toUpperCase();
   return (
     <button
       type="button"
@@ -190,7 +190,7 @@ export function ZoneSummaryStrip({
                     >
                       <span className="text-2xs font-medium text-faint">Warehouse</span>
                       <span className="text-sm font-semibold text-foreground">
-                        {grp.warehouseCode || '—'}
+                        {grp.warehouseCode || 'None'}
                       </span>
                     </div>
                   ) : null}

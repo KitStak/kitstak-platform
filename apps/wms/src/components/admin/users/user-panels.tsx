@@ -385,7 +385,7 @@ export function UserSessionsDrawer({
                       ? fmt.age(sess.lastSeenAt) === 'now'
                         ? 'just now'
                         : `${fmt.age(sess.lastSeenAt)} ago`
-                      : '—'}
+                      : 'None'}
                   </p>
                 </div>
                 <DisabledReason
@@ -424,7 +424,7 @@ export function UserSessionsDrawer({
             { key: 'device', label: 'Device' },
             { key: 'ip', label: 'IP address' },
           ],
-          rows: rows.map((r) => ({ device: deviceOf(r.userAgent).label, ip: r.ip ?? '—' })),
+          rows: rows.map((r) => ({ device: deviceOf(r.userAgent).label, ip: r.ip ?? 'None' })),
         }}
         onConfirm={async () => {
           if (!user) return;

@@ -37,7 +37,7 @@ export const HIGH_FREQUENCY_RUNS = 48;
  */
 export function formatInZone(iso: string | Date, timeZone: string): string {
   const at = typeof iso === 'string' ? new Date(iso) : iso;
-  if (Number.isNaN(at.getTime())) return '—';
+  if (Number.isNaN(at.getTime())) return 'None';
   let parts: Intl.DateTimeFormatPart[];
   try {
     parts = new Intl.DateTimeFormat('en-US', {

@@ -47,7 +47,7 @@ export function UtilizationBar({
   readonly band: string;
   readonly estimated: boolean;
 }) {
-  if (pct === null) return <span className="text-faint">—</span>;
+  if (pct === null) return <span className="text-faint">None</span>;
   const tone = toneOf(band);
   const width = Math.max(Math.min(pct, 100), pct > 0 ? 2 : 0);
   const label = formatUtilizationPct(pct);

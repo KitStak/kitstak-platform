@@ -249,7 +249,7 @@ function PickerBody({
                   <span className="w-[92px] shrink-0">
                     <span className="block font-semibold text-foreground">{r.code}</span>
                     <span className="block text-2xs text-secondary">
-                      {r.shippedAt ? fmt.date(r.shippedAt) : '—'}
+                      {r.shippedAt ? fmt.date(r.shippedAt) : 'None'}
                     </span>
                   </span>
                   <span className="min-w-0 flex-1">

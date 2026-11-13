@@ -556,7 +556,7 @@ export function ReturnOrdersPage() {
             { key: 'rma', label: 'RMA' },
             { key: 'tracking', label: 'Tracking' },
           ],
-          rows: voidable.map((r) => ({ rma: r.rmaCode, tracking: r.trackingNumber ?? '—' })),
+          rows: voidable.map((r) => ({ rma: r.rmaCode, tracking: r.trackingNumber ?? 'None' })),
         }}
         confirmLabel="Void"
         cancelLabel="Keep"

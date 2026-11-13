@@ -71,7 +71,7 @@ export function useCancelReceipt(onDone?: () => void) {
               rows: [
                 {
                   id: <Nowrap mono>{target.masterId}</Nowrap>,
-                  po: <Nowrap mono>{target.poCode ?? '—'}</Nowrap>,
+                  po: <Nowrap mono>{target.poCode ?? 'None'}</Nowrap>,
                   sku: <Nowrap mono>{target.sku}</Nowrap>,
                   qty: <Nowrap>{`${target.quantity.toLocaleString()} ${target.packType}`}</Nowrap>,
                   loc: <Nowrap>{target.locationCode}</Nowrap>,

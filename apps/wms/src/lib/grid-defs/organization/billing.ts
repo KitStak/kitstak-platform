@@ -765,7 +765,7 @@ export function priceFormula(quantity: number, tiers: readonly PriceTier[], mode
   if (mode === 'fromQuantity')
     return `${quantity} − ${parts[0]!.fromQty - 1} free = ${parts[0]!.quantity} × ${rate(parts[0]!.rate)} = ${total.toFixed(2)}`;
   if (mode === 'tierBase')
-    return `${quantity} lands in ${parts[0]!.fromQty}–${parts[0]!.toQty ?? '∞'}: ${quantity} × ${rate(parts[0]!.rate)} = ${total.toFixed(2)}`;
+    return `${quantity} lands in ${parts[0]!.fromQty} to ${parts[0]!.toQty ?? '∞'}: ${quantity} × ${rate(parts[0]!.rate)} = ${total.toFixed(2)}`;
   return `${parts.map((p) => `${p.quantity} × ${rate(p.rate)}`).join(' + ')} = ${total.toFixed(2)}`;
 }
 

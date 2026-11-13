@@ -198,7 +198,7 @@ export function BoardOverview({ boardId }: { readonly boardId: string }) {
   }, [boardId, recordVisit]);
 
   useEffect(() => {
-    if (board.data) document.title = `${board.data.board.name} · KitStak`;
+    if (board.data) document.title = `${board.data.board.name} · KitStak CRM`;
   }, [board.data]);
 
   if (board.isPending) {

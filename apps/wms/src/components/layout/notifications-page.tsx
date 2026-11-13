@@ -37,7 +37,7 @@ export function pageCount(total: number, pageSize: number): number {
 export function rangeLabel(page: number, pageSize: number, total: number): string {
   if (total === 0) return '0 of 0';
   const start = (page - 1) * pageSize + 1;
-  return `${start}–${Math.min(total, page * pageSize)} of ${total}`;
+  return `${start} to ${Math.min(total, page * pageSize)} of ${total}`;
 }
 
 const SEVERITY_OPTIONS: readonly { value: Severity; label: string }[] = [

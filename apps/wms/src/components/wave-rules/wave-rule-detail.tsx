@@ -167,7 +167,7 @@ export function WaveRuleDetailDrawer({
                   {formatInZone(d.nextRunAt, d.timezone)}
                 </span>
               ) : (
-                '—'
+                'None'
               )}
             </Row>
             {d.operationType !== 'Order Merge' ? (
@@ -180,7 +180,7 @@ export function WaveRuleDetailDrawer({
               </Row>
             ) : null}
             <Row label="Runs">
-              {d.runCount} · last by {d.lastRunBy === 'Integration' ? 'Auto Run' : (d.lastRunBy ?? '—')}
+              {d.runCount} · last by {d.lastRunBy === 'Integration' ? 'Auto Run' : (d.lastRunBy ?? 'None')}
             </Row>
           </dl>
           <section>

@@ -57,8 +57,8 @@ describe('change-log formatting helpers', () => {
   });
 
   it('writes the empty-value glyph for an empty side', () => {
-    expect(logSide('')).toBe('—');
-    expect(logSide(null)).toBe('—');
+    expect(logSide('')).toBe('None');
+    expect(logSide(null)).toBe('None');
     expect(logSide('Job005302')).toBe('Job005302');
   });
 
@@ -67,7 +67,7 @@ describe('change-log formatting helpers', () => {
     expect(priorityDisplay('5', 'Urgent')).toBe('5 · Urgent');
     expect(priorityDisplay('', 'High')).toBe('3 · High');
     expect(priorityDisplay('0', 'None')).toBe('0 · None');
-    expect(priorityDisplay(null, null)).toBe('—');
+    expect(priorityDisplay(null, null)).toBe('None');
   });
 });
 
@@ -83,7 +83,7 @@ describe('change log written by order commands', () => {
     const entries = (await logs(o.id)).filter((l) => l.type === 'Update');
     expect(entries.some((l) => l.field === 'priorityRank' || /Priority Rank/.test(l.message))).toBe(false);
     expect(entries.filter((l) => l.field === 'priority').map((l) => l.message)).toEqual([
-      'Priority is modified. 3 · High --> 5 · Urgent',
+      'Priority is modified. 3 · High → 5 · Urgent',
     ]);
   });
 
@@ -107,10 +107,10 @@ describe('change log written by order commands', () => {
     expect(messages.some((m) => /Note is modified/.test(m))).toBe(false);
     const cancelledAt = (await logs(o.id)).find((l) => l.field === 'cancelledAt');
     expect(cancelledAt?.message).toMatch(
-      /^Cancelled At is modified\. — --> \d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2} (AM|PM) [A-Z]{2,5}$/,
+      /^Cancelled At is modified\. None → \d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2} (AM|PM) [A-Z]{2,5}$/,
     );
     expect(messages.some((m) => /\d{4}-\d{2}-\d{2}T/.test(m))).toBe(false);
-    expect(messages.some((m) => m.includes('  -->'))).toBe(false);
+    expect(messages.some((m) => /\s\s(?:-->|→)|—/.test(m))).toBe(false);
   });
 });
 

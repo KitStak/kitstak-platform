@@ -147,7 +147,7 @@ export function RateShoppingPage() {
             </span>
           </Tooltip>
         ) : (
-          <span className="text-faint">—</span>
+          <span className="text-faint">None</span>
         ),
     },
   ];

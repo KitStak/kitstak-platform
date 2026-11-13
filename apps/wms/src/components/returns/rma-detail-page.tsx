@@ -56,7 +56,7 @@ import { TextField } from '@/components/ui/text-field';
 import { bulkMessage, type BulkOutcome, type ReturnDetail } from './return-types';
 import { errorText, openFileId, RETURN_KEYS, useInvalidateReturns, useHydratedCan } from './returns-client';
 
-const dash = <span className="text-secondary">—</span>;
+const dash = <span className="text-secondary">None</span>;
 
 const DETAIL_TABS: readonly TabItem[] = [
   { key: 'lines', label: 'Lines & receipts', icon: Box },

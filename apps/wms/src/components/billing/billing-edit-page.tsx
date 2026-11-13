@@ -168,7 +168,7 @@ function priceLines(f: FeeView, currency: string): string[] {
   return f.tiers.map((t) =>
     f.tiers.length === 1 && (t.fromQty ?? 1) <= 1 && t.toQty === null
       ? `${moneyGrid(t.rate, currency)} per ${unit}`
-      : `${t.fromQty ?? 1}–${t.toQty ?? '∞'} @ ${moneyGrid(t.rate, currency)}`,
+      : `${t.fromQty ?? 1} to ${t.toQty ?? '∞'} @ ${moneyGrid(t.rate, currency)}`,
   );
 }
 
@@ -736,7 +736,7 @@ export function BillingEditPage({ id }: { readonly id: string }) {
                       <td className="px-3 py-2">
                         <OperationPill operation={f.operationType} />
                       </td>
-                      <td className="px-3 py-2">{f.calculationType ?? '—'}</td>
+                      <td className="px-3 py-2">{f.calculationType ?? 'None'}</td>
                       <td className="px-3 py-2">{f.feeBy}</td>
                       <td className="px-3 py-2">{f.chargeBy}</td>
                       <td className="whitespace-nowrap px-3 py-2 tabular-nums">
@@ -745,13 +745,13 @@ export function BillingEditPage({ id }: { readonly id: string }) {
                         ))}
                       </td>
                       <td className="px-3 py-2 tabular-nums">
-                        {f.useMinPrice ? moneyGrid(f.minPrice, c.currency) : '—'}
+                        {f.useMinPrice ? moneyGrid(f.minPrice, c.currency) : 'None'}
                       </td>
                       <td className="px-3 py-2 tabular-nums">
-                        {f.useMaxPrice ? moneyGrid(f.maxPrice, c.currency) : '—'}
+                        {f.useMaxPrice ? moneyGrid(f.maxPrice, c.currency) : 'None'}
                       </td>
                       <td className="px-3 py-2 text-secondary">
-                        {f.conditions.length ? f.conditions.map((x) => x.text).join('; ') : '—'}
+                        {f.conditions.length ? f.conditions.map((x) => x.text).join('; ') : 'None'}
                       </td>
                     </tr>
                   ))}

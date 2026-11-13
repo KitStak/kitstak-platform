@@ -1,6 +1,6 @@
-import { DetailPageSkeleton } from '@/components/layout/shell-skeleton';
+import { BrandLoader } from '@/components/ui/brand-loader';
 
-/** Instant feedback when a location code / "Show details" is clicked. */
-export default function LocationDetailLoading() {
-  return <DetailPageSkeleton />;
+/** Route loading state: the WMS brand loader, centered in the content area (the shell stays put). */
+export default function Loading() {
+  return <BrandLoader label="Loading location" />;
 }

@@ -254,7 +254,7 @@ export function WorkspaceMenu({ workspace, onRename, size = 'sm' }: WorkspaceMen
                 onValueChange={(value) => setTreeSort(workspace.id, value === 'alpha' ? 'alpha' : 'manual')}
               >
                 <DropdownMenuRadioItem value="alpha" icon={<ArrowDownAZ aria-hidden />}>
-                  Alphabetical (A–Z)
+                  Alphabetical (A to Z)
                 </DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="manual" icon={<GripVertical aria-hidden />}>
                   Manual (drag to reorder)

@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { HandoffScreen } from '@kitstak/ui/handoff';
 import { Button } from '@/components/ui/button';
 import { SsoButton } from './sso-sign-in';
 import { Input } from '@/components/ui/input';
@@ -116,6 +117,7 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
 
   return (
     <div className="w-full max-w-[400px]">
+      {isSubmitting ? <HandoffScreen title="Signing you in" detail="Opening your warehouse" /> : null}
       <div className="rounded-xl border border-border bg-surface p-8 shadow-lg">
         <h1 className="text-xl font-bold tracking-tight text-foreground">Log in</h1>
         <p className="mt-1 text-sm text-secondary">

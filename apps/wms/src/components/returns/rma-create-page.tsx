@@ -129,7 +129,7 @@ function OrderCard({ order }: { readonly order: ShippableOrder }) {
       </div>
       <div>
         <p className="text-2xs font-semibold text-secondary">Shipped</p>
-        <p className="mt-0.5">{order.shippedAt ? fmt.gridDateTime(order.shippedAt) : '—'}</p>
+        <p className="mt-0.5">{order.shippedAt ? fmt.gridDateTime(order.shippedAt) : 'None'}</p>
         <p className="text-2xs text-secondary">
           {order.deliveredAt ? `Delivered ${fmt.date(order.deliveredAt)}` : 'Not delivered yet'}
         </p>
@@ -595,12 +595,12 @@ export function RmaCreatePage() {
         });
         return (
           <WizardRail title="Return summary" percent={p.percent} statusLabel={p.label}>
-            <RailRow label="Order">{order?.code ?? (q.isFetching && v.orderId ? 'Loading…' : '—')}</RailRow>
-            <RailRow label="Customer">{order?.customerName ?? '—'}</RailRow>
+            <RailRow label="Order">{order?.code ?? (q.isFetching && v.orderId ? 'Loading…' : 'None')}</RailRow>
+            <RailRow label="Customer">{order?.customerName ?? 'None'}</RailRow>
             <RailRow label="Lines">{(v.lines ?? []).filter((l) => l.selected).length}</RailRow>
             <RailRow label="Units">{selectedUnits({ lines: v.lines ?? [] })}</RailRow>
             <RailRow label="Expected">
-              {v.expectedReturnDate ? fmt.date(localDateFromIso(v.expectedReturnDate)) : '—'}
+              {v.expectedReturnDate ? fmt.date(localDateFromIso(v.expectedReturnDate)) : 'None'}
             </RailRow>
             <RailRow label="Return address">
               {order?.returnAddresses?.find((a) => a.id === v.returnAddressId)?.label ?? 'Warehouse'}

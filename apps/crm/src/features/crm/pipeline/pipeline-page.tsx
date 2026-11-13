@@ -131,7 +131,7 @@ export function PipelinePage() {
           />
           {data?.periodRange ? (
             <span className="text-sm text-fg-muted">
-              Closing {formatDay(data.periodRange.from)} – {formatDay(data.periodRange.to)}
+              Closing {formatDay(data.periodRange.from)} to {formatDay(data.periodRange.to)}
             </span>
           ) : null}
           {pipeline.isFetching && data ? (
@@ -220,7 +220,7 @@ function PipelineBody({
         <MetricTile label="Win rate" value={formatPercent(summary.winRate)} hint={`${summary.wonCount} won · ${summary.lostCount} lost`} />
         <MetricTile
           label="Avg won deal"
-          value={summary.avgDealSize !== null ? formatMoney(summary.avgDealSize, currency) : '—'}
+          value={summary.avgDealSize !== null ? formatMoney(summary.avgDealSize, currency) : 'None'}
           exact={summary.avgDealSize !== null ? formatExactMoney(summary.avgDealSize, currency) : undefined}
           hint="Closed won in period"
         />

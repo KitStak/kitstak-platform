@@ -38,7 +38,7 @@ const CTA_LABELS: Readonly<Record<SetupStepKey, string>> = {
 };
 
 const DASHBOARD_DISABLED_REASON =
-  'Your workspaces are still loading — try again in a moment.';
+  'Your workspaces are still loading. Try again in a moment.';
 
 /** In-context arrival (contract): navigating CTAs carry ?setup=<step_key>. */
 function withSetupParam(href: string, key: SetupStepKey): string {
@@ -162,7 +162,7 @@ function Celebration({
             All set
           </h2>
           <p className="text-sm text-fg-muted">
-            Your CRM is up and running — boards, pipeline, team and dashboards are in place.
+            Your CRM is up and running. Boards, pipeline, team and dashboards are in place.
           </p>
         </div>
         {canManage ? (
@@ -245,7 +245,7 @@ export function SetupGuideCard({ workspaceId }: { readonly workspaceId: string |
           </h2>
           {allSettled ? (
             <p className="text-xs text-fg-muted" data-testid="setup-guide-wrapped-up">
-              Wrapped up — {skippedCount} skipped. Undo a skip below to pick it back up.
+              Wrapped up: {skippedCount} skipped. Undo a skip below to pick it back up.
             </p>
           ) : (
             <p className="text-xs text-fg-muted">
@@ -313,7 +313,7 @@ export function SetupGuideCard({ workspaceId }: { readonly workspaceId: string |
                     </p>
                   ) : step.status === 'skipped' ? (
                     <p className="hidden truncate text-xs text-fg-muted md:block">
-                      Skipped — you can finish this any time.
+                      Skipped. You can finish this any time.
                     </p>
                   ) : step.status === 'ready' ? (
                     <p className="hidden truncate text-xs text-fg-muted md:block">{step.description}</p>

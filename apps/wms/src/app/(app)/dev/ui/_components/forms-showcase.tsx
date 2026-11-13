@@ -263,9 +263,9 @@ function WizardDemo() {
         railTitle="Product summary"
         railSummary={(values) => (
           <div className="space-y-1.5 text-xs">
-            <RailRow label="SKU">{values.sku || '—'}</RailRow>
-            <RailRow label="Name">{values.name || '—'}</RailRow>
-            <RailRow label="Components">{values.componentCount ?? '—'}</RailRow>
+            <RailRow label="SKU">{values.sku || 'None'}</RailRow>
+            <RailRow label="Name">{values.name || 'None'}</RailRow>
+            <RailRow label="Components">{values.componentCount ?? 'None'}</RailRow>
           </div>
         )}
         success={

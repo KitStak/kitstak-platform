@@ -89,7 +89,7 @@ export function ForecastWidget({ insight, settings, filtered, onConfigure }: Wid
   const months = buckets.filter((bucket) => bucket.key !== 'overdue');
   const first = months[0]?.label;
   const lastMonth = months[months.length - 1]?.label;
-  const closeWindow = first && lastMonth ? `closing ${first}–${lastMonth}` : undefined;
+  const closeWindow = first && lastMonth ? `closing ${first} to ${lastMonth}` : undefined;
   const wonHint = closeWindow
     ? `Deals marked won with a close date from ${first} to ${lastMonth}. A closed-won KPI without a date filter counts every close date.`
     : undefined;

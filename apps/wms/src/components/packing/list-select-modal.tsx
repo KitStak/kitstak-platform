@@ -226,8 +226,8 @@ export function ListSelectModal({
                       </td>
                       <td className="px-3 py-2">{r.clientName}</td>
                       <td className="px-3 py-2">{r.customerName}</td>
-                      <td className="px-3 py-2">{r.jobCode ?? '—'}</td>
-                      <td className="px-3 py-2">{r.expectedShipDate ? fmt.date(r.expectedShipDate) : '—'}</td>
+                      <td className="px-3 py-2">{r.jobCode ?? 'None'}</td>
+                      <td className="px-3 py-2">{r.expectedShipDate ? fmt.date(r.expectedShipDate) : 'None'}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.unitsToPack}</td>
                       <td className="px-3 py-2">
                         <StatusPill status={r.status} domain="shipmentOrder" size="sm" />

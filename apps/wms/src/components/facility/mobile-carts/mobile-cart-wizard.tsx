@@ -85,7 +85,7 @@ export function cartDimensionText(
     meta && typeof meta === 'object' && typeof (meta as Record<string, unknown>).dimensionUnit === 'string'
       ? ` ${(meta as Record<string, string>).dimensionUnit}`
       : '';
-  return `${h ?? '—'} × ${l ?? '—'} × ${w ?? '—'}${unit}`;
+  return `${h ?? 'None'} × ${l ?? 'None'} × ${w ?? 'None'}${unit}`;
 }
 
 function CartTypeDimensions({ meta }: { readonly meta: Record<string, unknown> | null | undefined }) {
@@ -133,7 +133,7 @@ function AddCartTypePanel({
   const submit = async () => {
     if (!valid) {
       setError(
-        name.trim() ? `Levels 1–${MAX_CART_LEVELS}, columns 1–${MAX_CART_COLUMNS}` : 'Name is required',
+        name.trim() ? `Levels 1 to ${MAX_CART_LEVELS}, columns 1 to ${MAX_CART_COLUMNS}` : 'Name is required',
       );
       return;
     }
@@ -454,7 +454,7 @@ function CellStep({ form, locked }: { readonly form: UseFormReturn<F>; readonly 
                       className="truncate rounded-md border border-border border-t-[3px] bg-surface px-1.5 py-1 text-center font-mono text-2xs text-body shadow-xs"
                       style={{ borderTopColor: color.hex }}
                     >
-                      {cell?.barcode.slice(code.length + 1) || '—'}
+                      {cell?.barcode.slice(code.length + 1) || 'None'}
                     </span>
                   );
                 })}

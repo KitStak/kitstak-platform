@@ -124,7 +124,7 @@ function InfoPopover({ row, state }: { readonly row: ListingRow; readonly state:
           {linked ? (
             <>
               <dt className="text-faint">Status</dt>
-              <dd className="text-body">{row.productStatus ?? '—'}</dd>
+              <dd className="text-body">{row.productStatus ?? 'None'}</dd>
             </>
           ) : null}
           {linked && row.linkedAt ? (
@@ -134,7 +134,7 @@ function InfoPopover({ row, state }: { readonly row: ListingRow; readonly state:
             </>
           ) : null}
           <dt className="text-faint">Description</dt>
-          <dd className="line-clamp-3 text-body">{description || '—'}</dd>
+          <dd className="line-clamp-3 text-body">{description || 'None'}</dd>
         </dl>
         {!linked ? (
           <p className="border-t border-border px-3 py-2 text-xs text-secondary">
@@ -209,12 +209,12 @@ export function ListingProductCell({
             href={`/products/${row.productId}`}
             onClick={(e) => e.stopPropagation()}
             className="font-mono font-semibold text-primary hover:underline"
-            title={`${sku} — ${name ?? ''}`}
+            title={`${sku} · ${name ?? ''}`}
           >
             {sku}
           </Link>
         ) : (
-          <span className="font-mono font-semibold text-body" title={`${sku} — ${name ?? ''}`}>
+          <span className="font-mono font-semibold text-body" title={`${sku} · ${name ?? ''}`}>
             {sku}
           </span>
         )}

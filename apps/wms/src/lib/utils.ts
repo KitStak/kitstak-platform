@@ -35,9 +35,9 @@ export function formatNumber(value: number): string {
 }
 
 export function formatDate(iso: string | Date | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return 'None';
   const d = typeof iso === 'string' ? new Date(iso) : iso;
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return 'None';
   return d.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -46,9 +46,9 @@ export function formatDate(iso: string | Date | null | undefined): string {
 }
 
 export function formatDateTime(iso: string | Date | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return 'None';
   const d = typeof iso === 'string' ? new Date(iso) : iso;
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return 'None';
   return d.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',

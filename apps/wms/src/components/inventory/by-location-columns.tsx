@@ -46,7 +46,7 @@ export interface BucketActionHandlers {
   };
 }
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 
 const text = (
   id: keyof BucketRow & string,

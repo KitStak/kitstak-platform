@@ -22,7 +22,11 @@ export interface ToastItem {
   readonly action?: ToastAction;
   /** ms; default 5000. `Infinity` keeps it until dismissed. */
   readonly duration: number;
+  /** Where it shows. 'top' (default) is the WMS stack; 'bottom-start' matches KitStak Projects and CRM. */
+  readonly placement: ToastPlacement;
 }
+
+export type ToastPlacement = 'top' | 'bottom-start';
 
 export interface ToastInput {
   readonly variant?: ToastVariant;
@@ -32,6 +36,8 @@ export interface ToastInput {
   readonly duration?: number;
   /** Re-using an id replaces that toast instead of stacking a new one. */
   readonly id?: string;
+  /** 'bottom-start' for cross-app confirmations (Project tasks), so they land where Projects puts them. */
+  readonly placement?: ToastPlacement;
 }
 
 export const TOAST_DEFAULT_DURATION = 5000;
@@ -65,6 +71,7 @@ export function showToast(input: ToastInput): string {
     message: input.message,
     action: input.action,
     duration: input.duration ?? TOAST_DEFAULT_DURATION,
+    placement: input.placement ?? 'top',
   };
   const without = items.filter((t) => t.id !== item.id);
   emit([...without, item].slice(-TOAST_LIMIT));

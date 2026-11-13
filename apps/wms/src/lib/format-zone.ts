@@ -51,7 +51,7 @@ export function formatLogDateTime(value: string, timeZone = 'UTC'): string {
 
 /** "MM/DD/YYYY hh:mm AM TZ" in `timeZone` (the viewer's zone when omitted). */
 export function formatInZone(value: string | Date | null | undefined, timeZone?: string | null): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return 'None';
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
   try {

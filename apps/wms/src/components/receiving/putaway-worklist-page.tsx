@@ -435,7 +435,7 @@ function BulkPutawayDialog({
   );
 }
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 type Col = ColumnDef<PutawayTaskRow, unknown>;
 const plain = (id: keyof PutawayTaskRow & string, header: string, size = 130, mono = false): Col => ({
   id,

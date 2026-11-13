@@ -28,7 +28,7 @@ import {
 import { priorityFromRank } from '@/lib/grid-defs/orders/priority';
 import type { OrderRow } from './orders-client';
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
   v === null || v === undefined || v === '' ? (
     dash

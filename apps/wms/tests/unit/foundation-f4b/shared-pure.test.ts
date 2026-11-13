@@ -193,7 +193,7 @@ describe('tags, change log, timeline, printouts', () => {
         toValue: '24',
         lineLabel: 'MLT-WIDGET-01',
       }),
-    ).toBe('MLT-WIDGET-01 -> Received Qty is modified. 0 --> 24');
+    ).toBe('MLT-WIDGET-01 -> Received Qty is modified. 0 → 24');
     expect(
       changeLogMessage({ ...base, message: 'Added orders SO1, SO2.', fieldLabel: 'Orders', lineLabel: null }),
     ).toBe('Added orders SO1, SO2.');
@@ -205,13 +205,13 @@ describe('tags, change log, timeline, printouts', () => {
         fromValue: '',
         toValue: 'Ready To Count',
       }),
-    ).toBe('Status is modified. — --> Ready to Count');
+    ).toBe('Status is modified. None → Ready to Count');
     expect(
       changeLogMessage(
         { ...base, message: 'Loading Started At is modified.  --> 2026-11-10T09:26:15.767Z' },
         { formatIso: () => 'LOCAL' },
       ),
-    ).toBe('Loading Started At is modified. — --> LOCAL');
+    ).toBe('Loading Started At is modified. None → LOCAL');
     expect(changeLogMessage({ ...base, type: 'Create', message: 'Order created' })).toBe('Order created');
   });
 

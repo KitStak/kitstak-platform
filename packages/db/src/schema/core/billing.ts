@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm';
 import { check, integer, jsonb, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { coreSchema, createdAt, id, orgId, updatedAt } from '../_shared';
 
-export const ENTITLEMENT_MODULES = ['crm', 'wms'] as const;
+export const ENTITLEMENT_MODULES = ['crm', 'wms', 'projects'] as const;
 export type EntitlementModule = (typeof ENTITLEMENT_MODULES)[number];
 
 export const ENTITLEMENT_STATUSES = ['active', 'trialing', 'past_due', 'canceled'] as const;
@@ -43,7 +43,7 @@ export const entitlements = coreSchema.table(
   },
   (t) => [
     unique('entitlements_org_id_module_unique').on(t.orgId, t.module),
-    check('entitlements_module_check', sql`${t.module} IN ('crm', 'wms')`),
+    check('entitlements_module_check', sql`${t.module} IN ('crm', 'wms', 'projects')`),
     check(
       'entitlements_status_check',
       sql`${t.status} IN ('active', 'trialing', 'past_due', 'canceled')`,

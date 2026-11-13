@@ -238,7 +238,7 @@ describe('Cancel order short-closes a Started PO with receipts', () => {
 });
 
 describe('Actual Receiving Date after a cancelled receipt', () => {
-  it('logs (empty) --> date when the final receipt completes the PO', async () => {
+  it('logs (empty) → date when the final receipt completes the PO', async () => {
     const po = await createPo('KS-R7-ARD', 5);
     const lineId = po.lines[0]?.id ?? '';
     const first = await receive(po.id, lineId, 2, w.loc.storageA);
@@ -250,7 +250,7 @@ describe('Actual Receiving Date after a cancelled receipt', () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]?.fromValue).toBe('(empty)');
     expect(entries[0]?.message).toMatch(
-      /^Actual Receiving Date is modified\. \(empty\) --> [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M /,
+      /^Actual Receiving Date is modified\. \(empty\) → [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M /,
     );
   });
 });

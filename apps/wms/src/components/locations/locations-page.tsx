@@ -592,7 +592,7 @@ export function LocationsPage() {
           rows: (toDelete ?? []).map((r) => ({
             code: r.code,
             warehouse: r.warehouseCode,
-            area: r.areaType ?? '—',
+            area: r.areaType ?? 'None',
             status: <AvailabilityPill status={r.inventoryStatus} />,
           })),
         }}

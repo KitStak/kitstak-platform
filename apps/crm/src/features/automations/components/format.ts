@@ -27,7 +27,7 @@ export function formatDateTime(iso: string): string {
 }
 
 export function formatDuration(ms: number | null): string {
-  if (ms === null) return '—';
+  if (ms === null) return 'None';
   if (ms < 1000) return `${ms} ms`;
   return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
 }

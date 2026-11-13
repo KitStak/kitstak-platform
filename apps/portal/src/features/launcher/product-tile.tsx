@@ -15,10 +15,12 @@ export interface ProductTileProps {
   readonly entitled: boolean;
   readonly access: ModuleAccess;
   readonly periodEnd: Date | null;
-  /** Live numbers from the shared db (null: stats unavailable — render nothing). */
+  /** Live numbers from the shared db (null: stats unavailable, render nothing). */
   readonly stats?: readonly TileStat[] | null;
   /** Deep link for the empty-state CTA cell (e.g. the CRM pipeline). */
   readonly emptyStateHref?: string;
+  /** Extra grid classes from the launcher (e.g. span a full row). */
+  readonly className?: string;
 }
 
 const ACCESS_BADGE: Readonly<
@@ -33,7 +35,7 @@ const ACCESS_BADGE: Readonly<
 
 const dateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-/** Shown in place of the stat grid when every stat is zero — '0 / 0' reads like a bug. */
+/** Shown in place of the stat grid when every stat is zero: '0 / 0' reads like a bug. */
 interface EmptyStateCopy {
   readonly message: string;
   readonly cta: string;
@@ -42,6 +44,7 @@ interface EmptyStateCopy {
 const EMPTY_STATS_COPY: Readonly<Record<Module, EmptyStateCopy>> = {
   crm: { message: 'No deals yet', cta: 'Create your first deal' },
   wms: { message: 'No open orders', cta: 'Create your first order' },
+  projects: { message: 'No projects yet', cta: 'Start your first project' },
 };
 
 /** Matches the stat-cell geometry (text-lg value line + text-xs label line) so both tiles stay equal height. */
@@ -61,8 +64,8 @@ function EmptyStats({ module, ctaHref }: { readonly module: Module; readonly cta
   return (
     <div className="mt-5 grid grid-cols-2 gap-2">
       <p className={EMPTY_CELL_CLASS}>
-        <span aria-hidden className="text-lg font-semibold text-fg-muted">
-          &mdash;
+        <span aria-hidden className="text-lg font-semibold text-fg-muted tabular-nums">
+          0
         </span>
         <span className="text-xs text-fg-muted">{copy.message}</span>
       </p>
@@ -98,6 +101,7 @@ export function ProductTile({
   periodEnd,
   stats,
   emptyStateHref,
+  className,
 }: ProductTileProps) {
   const badge = ACCESS_BADGE[access];
   const body = (
@@ -122,7 +126,7 @@ export function ProductTile({
         stats.every((stat) => stat.value === 0) ? (
           <EmptyStats module={module} ctaHref={emptyStateHref} />
         ) : (
-          <dl className="mt-5 grid grid-cols-2 gap-2">
+          <dl className={cn('mt-5 grid gap-2', stats.length >= 3 ? 'grid-cols-3' : 'grid-cols-2')}>
             {stats.map((stat) => (
               <div key={stat.label} className="flex flex-col rounded-lg bg-sunken px-3 py-2">
                 <dd className="order-1 text-lg font-semibold text-fg tabular-nums">{stat.value}</dd>
@@ -174,6 +178,7 @@ export function ProductTile({
     entitled
       ? 'border-border-default shadow-xs hover:-translate-y-0.5 hover:border-border-strong hover:shadow-md'
       : 'border-border-subtle bg-muted/60 hover:border-border-default',
+    className,
   );
 
   if (entitled) {

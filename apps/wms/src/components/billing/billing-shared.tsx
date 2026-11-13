@@ -57,7 +57,7 @@ export function useBillingDates() {
     return {
       day,
       at: (iso: string | null | undefined) => f.gridDateTime(iso),
-      period: (start: string, end: string) => `${day(start)} – ${day(end)}`,
+      period: (start: string, end: string) => `${day(start)} to ${day(end)}`,
     };
   }, [f]);
 }
@@ -711,8 +711,8 @@ export function printContract(c: ContractDetail, dates: PrintDates = DEFAULT_PRI
       (
         f,
       ) => `<tr><td><strong>${esc(f.name)}</strong>${f.conditions.length ? `<div class="muted">If ${esc(f.conditions.map((x) => x.text).join(' and '))}</div>` : ''}</td><td>${esc(f.operationType)}${f.calculationType ? `<div class="muted">${esc(f.calculationType)}</div>` : ''}</td><td>${esc(f.feeBy)}</td><td>${esc(f.chargeBy)}</td>
-    <td>${f.calculationType === 'Split Month Storage' ? `${esc((f.standardRate ?? 0).toFixed(2))} through day ${esc(f.splitDay)}, then ${esc((f.alternateRate ?? 0).toFixed(2))}` : `<div class="muted">${esc(PRICING_MODE_META[f.pricingMode ?? 'graduated'].title)}${f.chargeOneTime ? ' · one time' : ''}</div>${f.tiers.map((t) => `${esc(t.fromQty ?? 1)}–${t.toQty ?? '∞'} @ ${esc(t.rate.toFixed(2))}`).join('<br>')}`}</td>
-    <td class="r">${f.useMinPrice ? esc(moneyGrid(f.minPrice, c.currency)) : '—'}</td><td class="r">${f.useMaxPrice ? esc(moneyGrid(f.maxPrice, c.currency)) : '—'}</td></tr>`,
+    <td>${f.calculationType === 'Split Month Storage' ? `${esc((f.standardRate ?? 0).toFixed(2))} through day ${esc(f.splitDay)}, then ${esc((f.alternateRate ?? 0).toFixed(2))}` : `<div class="muted">${esc(PRICING_MODE_META[f.pricingMode ?? 'graduated'].title)}${f.chargeOneTime ? ' · one time' : ''}</div>${f.tiers.map((t) => `${esc(t.fromQty ?? 1)} to ${t.toQty ?? '∞'} @ ${esc(t.rate.toFixed(2))}`).join('<br>')}`}</td>
+    <td class="r">${f.useMinPrice ? esc(moneyGrid(f.minPrice, c.currency)) : 'None'}</td><td class="r">${f.useMaxPrice ? esc(moneyGrid(f.maxPrice, c.currency)) : 'None'}</td></tr>`,
     )
     .join('');
   openPrint(
@@ -767,7 +767,7 @@ function billBody(
   const cons = b.consolidated
     .map(
       (l) =>
-        `<tr><td>${esc(l.feeName)}</td><td>${esc(l.operationType)}</td><td>${esc(l.chargeBy)}</td><td class="r">${l.fromQty !== null ? `${esc(l.fromQty)}–${l.toQty ?? '∞'}` : ''}</td><td class="r">${esc(l.quantity)}</td><td class="r">${esc(l.unitPrice.toFixed(2))}</td><td class="r">${esc(l.minMaxAdjustment ? l.minMaxAdjustment.toFixed(2) : '')}</td><td class="r">${esc(moneyGrid(l.adjustedPrice, b.currency))}</td></tr>`,
+        `<tr><td>${esc(l.feeName)}</td><td>${esc(l.operationType)}</td><td>${esc(l.chargeBy)}</td><td class="r">${l.fromQty !== null ? `${esc(l.fromQty)} to ${l.toQty ?? '∞'}` : ''}</td><td class="r">${esc(l.quantity)}</td><td class="r">${esc(l.unitPrice.toFixed(2))}</td><td class="r">${esc(l.minMaxAdjustment ? l.minMaxAdjustment.toFixed(2) : '')}</td><td class="r">${esc(moneyGrid(l.adjustedPrice, b.currency))}</td></tr>`,
     )
     .join('');
   const det = detail
@@ -778,7 +778,7 @@ function billBody(
     )
     .join('');
   return `<h1>Bill ${esc(b.billNumber)}</h1><div class="muted">${esc(b.contractName)} · ${esc(b.billStatus)}</div>
-    <div class="meta"><div><span>Client</span>${esc(b.clientName)}</div><div><span>Warehouse</span>${esc(b.warehouseCode)}</div><div><span>Period</span>${esc(printDay(b.periodStart))} – ${esc(printDay(b.periodEnd))}</div><div><span>Calculated</span>${esc(dates.at(b.calculatedAt))}</div></div>
+    <div class="meta"><div><span>Client</span>${esc(b.clientName)}</div><div><span>Warehouse</span>${esc(b.warehouseCode)}</div><div><span>Period</span>${esc(printDay(b.periodStart))} to ${esc(printDay(b.periodEnd))}</div><div><span>Calculated</span>${esc(dates.at(b.calculatedAt))}</div></div>
     ${section === 'detailed' ? '' : `<h2>Consolidated</h2><table><thead><tr><th>Fee</th><th>Operation</th><th>Charge by</th><th class="r">Tier</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Min/max adj.</th><th class="r">Amount</th></tr></thead><tbody>${cons}</tbody></table>`}
     <div class="total">Total ${esc(moneyRail(b.totalPrice, b.currency))}</div>${det && section !== 'consolidated' ? `<h2>Detail</h2><table><thead><tr><th>Fee</th><th>Date</th><th>Reference</th><th>LP</th><th>SKU</th><th>Note</th><th class="r">Qty</th><th class="r">Unit</th><th class="r">Amount</th></tr></thead><tbody>${det}</tbody></table>` : ''}`;
 }

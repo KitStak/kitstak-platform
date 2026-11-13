@@ -41,7 +41,8 @@ function makePieces(count: number): readonly Piece[] {
 export function ConfettiBurst({ pieceCount = 26 }: { readonly pieceCount?: number }) {
   const [pieces, setPieces] = useState<readonly Piece[]>([]);
   useEffect(() => {
-    setPieces(makePieces(pieceCount));
+    const frame = requestAnimationFrame(() => setPieces(makePieces(pieceCount)));
+    return () => cancelAnimationFrame(frame);
   }, [pieceCount]);
   return (
     <span

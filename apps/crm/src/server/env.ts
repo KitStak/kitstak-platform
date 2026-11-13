@@ -51,6 +51,8 @@ const envSchema = z.object({
     .optional(),
   BETTER_AUTH_URL: z.url('BETTER_AUTH_URL must be an absolute URL'),
   NEXT_PUBLIC_APP_URL: z.url().optional(),
+  /** KitStak Projects origin (deep links, app switcher). */
+  NEXT_PUBLIC_PROJECTS_URL: z.url().default('http://localhost:3400'),
   TRUSTED_ORIGINS: commaList,
   /**
    * Cookie Domain for cross-subdomain SSO (`.kitstak.io` in prod). Leave unset in dev —

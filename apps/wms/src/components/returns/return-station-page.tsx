@@ -475,7 +475,7 @@ export function ReturnStationPage() {
           </Card>
           <StatTile
             label="Returned orders today"
-            value={k?.returnedOrdersToday ?? '—'}
+            value={k?.returnedOrdersToday ?? 'None'}
             icon={Undo2}
             loading={meLoading || (kpis.isPending && Boolean(warehouseId))}
             tone="primary"
@@ -483,7 +483,7 @@ export function ReturnStationPage() {
           />
           <StatTile
             label="Returned products today"
-            value={k?.returnedProductsToday ?? '—'}
+            value={k?.returnedProductsToday ?? 'None'}
             icon={PackageCheck}
             loading={meLoading || (kpis.isPending && Boolean(warehouseId))}
             tone="success"
@@ -491,7 +491,7 @@ export function ReturnStationPage() {
           />
           <StatTile
             label="Open RMAs"
-            value={k?.openReturns ?? '—'}
+            value={k?.openReturns ?? 'None'}
             icon={ClipboardList}
             loading={meLoading || (kpis.isPending && Boolean(warehouseId))}
             tone="warning"

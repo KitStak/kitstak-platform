@@ -581,7 +581,7 @@ async function summarize(
     toLocationId: string | null;
   }[],
 ): Promise<TransferResult> {
-  const code = async (locId: string | null) => (locId ? (await getLocation(tx, locId)).code : '—');
+  const code = async (locId: string | null) => (locId ? (await getLocation(tx, locId)).code : 'None');
   const map = new Map<string, MovedLine>();
   for (const t of txns) {
     const key = `${t.productId}:${t.fromLocationId}:${t.toLocationId}`;

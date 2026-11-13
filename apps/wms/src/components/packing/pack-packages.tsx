@@ -280,7 +280,7 @@ export function PackageBoxes({
                               </span>
                             </td>
                             <td className="whitespace-nowrap px-2 py-1.5 text-secondary">
-                              {l?.packType ?? '—'}
+                              {l?.packType ?? 'None'}
                             </td>
                             <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-secondary">
                               {l && l.weightOz > 0 ? (
@@ -293,7 +293,7 @@ export function PackageBoxes({
                                   </span>
                                 </>
                               ) : (
-                                '—'
+                                'None'
                               )}
                             </td>
                             <td className="px-2 py-1.5">
@@ -309,7 +309,7 @@ export function PackageBoxes({
                                   ))}
                                 </span>
                               ) : (
-                                <span className="text-secondary">—</span>
+                                <span className="text-secondary">None</span>
                               )}
                             </td>
                             <td className="whitespace-nowrap px-2 py-1.5 text-secondary">

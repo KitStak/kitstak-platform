@@ -121,7 +121,7 @@ async function bucketsFor(
   return rows.map((r) => ({
     inventoryId: r.id,
     productId: r.productId,
-    sku: products.get(r.productId)?.sku ?? '—',
+    sku: products.get(r.productId)?.sku ?? 'None',
     productName: products.get(r.productId)?.name ?? '',
     lotNumber: r.lotNumber,
     expiryDate: r.expiryDate,

@@ -411,7 +411,7 @@ export function StepGeneral() {
           decimals={2}
           suffix="%"
           max={100}
-          rangeText="Tax rate must be 0–100%"
+          rangeText="Tax rate must be 0 to 100%"
           unclamped
         />
       )}

@@ -151,7 +151,7 @@ export function CreateLpNumberDrawer({
       });
       const range =
         data.numbers.length > 1
-          ? `${data.numbers[0]} – ${data.numbers[data.numbers.length - 1]}`
+          ? `${data.numbers[0]} to ${data.numbers[data.numbers.length - 1]}`
           : data.numbers[0];
       toast.success('Success', `${plural(data.created, 'LP number')} created: ${range}`);
       onCreated(data.numbers);
@@ -391,7 +391,7 @@ function EditForm({
           </div>
           <div>
             <dt className="text-2xs text-faint">Location</dt>
-            <dd>{detail.locationCode ?? '—'}</dd>
+            <dd>{detail.locationCode ?? 'None'}</dd>
           </div>
         </dl>
       </FormSection>

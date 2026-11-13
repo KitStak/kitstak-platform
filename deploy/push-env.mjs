@@ -1,5 +1,6 @@
 /**
- * Pushes every environment variable to the three Vercel projects via the Vercel CLI.
+ * Pushes every environment variable to the four Vercel projects (portal, crm, wms, projects)
+ * via the Vercel CLI.
  * Prereqs: `npm i -g vercel`, `vercel login`, and deploy/secrets.env filled in.
  * Usage: node deploy/push-env.mjs   (from the repo root)
  *
@@ -41,8 +42,15 @@ const { BETTER_AUTH_SECRET, WEBHOOK_KDF_SECRET, INTEGRATION_KEY } = s;
 
 const pooled = `postgres://postgres.${SUPABASE_REF}:${s.DB_PASSWORD}@aws-1-us-west-1.pooler.supabase.com:6543/postgres`;
 const direct = `postgres://postgres.${SUPABASE_REF}:${s.DB_PASSWORD}@aws-1-us-west-1.pooler.supabase.com:5432/postgres`; // session mode: the db.<ref> direct host is IPv6-only
-const urls = { portal: s.URL_PORTAL, crm: s.URL_CRM, wms: s.URL_WMS };
-const LEGACY = ['https://portal-kitstakllc.vercel.app','https://crm-kitstakllc.vercel.app','https://wms-kitstakllc.vercel.app'];
+if (!s.URL_PROJECTS || !s.PROJECT_PROJECTS)
+  fail('Add URL_PROJECTS (e.g. https://projects.kitstak.app) and PROJECT_PROJECTS (the Vercel project name, e.g. projects) to deploy/secrets.env');
+const urls = { portal: s.URL_PORTAL, crm: s.URL_CRM, wms: s.URL_WMS, projects: s.URL_PROJECTS };
+const LEGACY = [
+  'https://portal-kitstakllc.vercel.app',
+  'https://crm-kitstakllc.vercel.app',
+  'https://wms-kitstakllc.vercel.app',
+  'https://projects-kitstakllc.vercel.app',
+];
 const trusted = (...own) => [...own, ...LEGACY].join(',');
 const COOKIE_DOMAIN = '.kitstak.app';
 const scope = s.VERCEL_TEAM ? ['--scope', s.VERCEL_TEAM] : [];
@@ -56,7 +64,8 @@ const PLANS = {
     ['NEXT_PUBLIC_APP_URL', urls.portal, false],
     ['NEXT_PUBLIC_CRM_URL', urls.crm, false],
     ['NEXT_PUBLIC_WMS_URL', urls.wms, false],
-    ['TRUSTED_ORIGINS', trusted(urls.crm, urls.wms), false],
+    ['NEXT_PUBLIC_PROJECTS_URL', urls.projects, false],
+    ['TRUSTED_ORIGINS', trusted(urls.crm, urls.wms, urls.projects), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
   ],
   [s.PROJECT_CRM]: [
@@ -67,7 +76,9 @@ const PLANS = {
     ['BETTER_AUTH_URL', urls.crm, false],
     ['NEXT_PUBLIC_APP_URL', urls.crm, false],
     ['NEXT_PUBLIC_PORTAL_URL', urls.portal, false],
-    ['TRUSTED_ORIGINS', trusted(urls.portal, urls.wms), false],
+    ['NEXT_PUBLIC_WMS_URL', urls.wms, false],
+    ['NEXT_PUBLIC_PROJECTS_URL', urls.projects, false],
+    ['TRUSTED_ORIGINS', trusted(urls.portal, urls.wms, urls.projects), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
   ],
   [s.PROJECT_WMS]: [
@@ -80,8 +91,30 @@ const PLANS = {
     ['BETTER_AUTH_URL', urls.wms, false],
     ['NEXT_PUBLIC_PORTAL_URL', urls.portal, false],
     ['NEXT_PUBLIC_CRM_URL', urls.crm, false],
-    ['TRUSTED_ORIGINS', trusted(urls.portal, urls.crm), false],
+    ['NEXT_PUBLIC_WMS_URL', urls.wms, false],
+    ['NEXT_PUBLIC_PROJECTS_URL', urls.projects, false],
+    ['TRUSTED_ORIGINS', trusted(urls.portal, urls.crm, urls.projects), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
+  ],
+  // KitStak Projects (Root Directory apps/projects). Reads CRM/WMS through the shared database;
+  // WMS data is offered only to the org that owns the single-tenant WMS install.
+  [s.PROJECT_PROJECTS]: [
+    ['DATABASE_URL', pooled, true],
+    ['DIRECT_URL', direct, true],
+    ['BETTER_AUTH_SECRET', BETTER_AUTH_SECRET, true],
+    ['BETTER_AUTH_URL', urls.projects, false],
+    ['NEXT_PUBLIC_APP_URL', urls.projects, false],
+    ['NEXT_PUBLIC_PORTAL_URL', urls.portal, false],
+    ['NEXT_PUBLIC_CRM_URL', urls.crm, false],
+    ['NEXT_PUBLIC_WMS_URL', urls.wms, false],
+    ['TRUSTED_ORIGINS', trusted(urls.portal, urls.crm, urls.wms), false],
+    ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
+    ['WMS_PLATFORM_ORG_SLUG', s.WMS_PLATFORM_ORG_SLUG || 'kitstak', false],
+    ['ENTITLEMENTS_DEV_ALLOW_ALL', '1', false],
+    // Vercel Cron authenticates with this (drains CRM/WMS events into Projects automations).
+    ...(s.CRON_SECRET ? [['CRON_SECRET', s.CRON_SECRET, true]] : []),
+    // Attachments go to Vercel Blob when set (else stored in the database).
+    ...(s.BLOB_READ_WRITE_TOKEN ? [['BLOB_READ_WRITE_TOKEN', s.BLOB_READ_WRITE_TOKEN, true]] : []),
   ],
 };
 

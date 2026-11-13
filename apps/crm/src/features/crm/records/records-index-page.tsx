@@ -242,7 +242,7 @@ function RecordsTable({
 }
 
 function Cell({ children }: { readonly children: ReactNode }) {
-  return children ? <span className="block truncate text-fg-secondary">{children}</span> : <span className="text-fg-muted">—</span>;
+  return children ? <span className="block truncate text-fg-secondary">{children}</span> : <span className="text-fg-muted">None</span>;
 }
 
 function RecordsSkeleton() {

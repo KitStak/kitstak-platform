@@ -339,7 +339,7 @@ export function ProductThumb({
     label
       .replace(/[^A-Za-z0-9]/g, '')
       .slice(0, 2)
-      .toUpperCase() || '—';
+      .toUpperCase() || 'None';
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-sunken text-2xs font-semibold text-faint"
@@ -371,7 +371,7 @@ export function ZonedTime({
   readonly value: string | null | undefined;
   readonly timeZone: string | null | undefined;
 }) {
-  if (!value) return <span className="text-faint">—</span>;
+  if (!value) return <span className="text-faint">None</span>;
   const text = formatZoned(value, timeZone);
   return (
     <span className="whitespace-nowrap tabular-nums text-body" title={`${text} (warehouse time)`}>

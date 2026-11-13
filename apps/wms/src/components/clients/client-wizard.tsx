@@ -211,7 +211,7 @@ function InformationStep({
       </FormSection>
       {!isEdit ? (
         <p className="text-xs text-faint">
-          Code preview: <code className="font-mono text-secondary">{getValues('code') || '—'}</code>
+          Code preview: <code className="font-mono text-secondary">{getValues('code') || 'None'}</code>
         </p>
       ) : null}
     </div>
@@ -345,7 +345,7 @@ function SsccSection() {
           maxLength={1}
           transform={digitsOnly}
           placeholder="e.g. 0"
-          info="0–9; often used to tell pallets (e.g. 1) from cartons (e.g. 0)"
+          info="0 to 9; often used to tell pallets (e.g. 1) from cartons (e.g. 0)"
         />
         <TextInput<F>
           name="sscc.gs1CompanyPrefix"
@@ -353,7 +353,7 @@ function SsccSection() {
           maxLength={10}
           transform={digitsOnly}
           placeholder="e.g. 0614141"
-          info="The 7–10 digit prefix GS1 assigned to the client"
+          info="The 7 to 10 digit prefix GS1 assigned to the client"
         />
         <TextInput<F>
           name="sscc.serialNumber"
@@ -410,7 +410,7 @@ function OthersStep({ form }: { readonly form: UseFormReturn<F> }) {
               value={(c.value as string | null) ?? ''}
               maxLength={1000}
               rows={3}
-              placeholder="e.g. Peak season Oct–Dec; ship-by cutoff 2 pm CT"
+              placeholder="e.g. Peak season Oct to Dec; ship-by cutoff 2 pm CT"
             />
           )}
         </FormField>

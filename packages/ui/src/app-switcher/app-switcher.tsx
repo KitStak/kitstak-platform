@@ -1,7 +1,7 @@
 'use client';
 /**
  * Shared cross-app launcher menu (BLUEPRINT.md §6): a module-grid trigger in each app's top bar
- * opening a popover that lists Portal / CRM / WMS. Purely presentational — origins and
+ * opening a popover that lists Portal / CRM / WMS / Projects. Purely presentational: origins and
  * entitlement flags arrive as props (no data fetching here), and styling uses tokens.css custom
  * properties exclusively so the menu inherits the host app's light/dark theme. Keyboard and
  * focus behavior (aria-haspopup/expanded, Escape, focus return) come from the Radix popover.
@@ -9,29 +9,41 @@
 import * as React from 'react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import { AppIcon } from '../app-icon';
+import { HandoffScreen, useHandoff } from '../handoff';
 import './app-switcher.css';
 
 /** Icon box in a row. The supplied artwork carries its own padding, so it fills the tile. */
 const MARK_SIZE = 32;
 
-export type AppSwitcherAppId = 'portal' | 'crm' | 'wms';
+export type AppSwitcherAppId = 'portal' | 'crm' | 'wms' | 'projects';
 
 export interface AppSwitcherUrls {
   readonly portal: string;
   readonly crm: string;
   readonly wms: string;
+  /** KitStak Projects origin. Omitted → the Projects row is hidden (app not deployed for this host). */
+  readonly projects?: string;
 }
 
-/** Per-module unlock state. Omit the prop entirely to show both product apps unlocked. */
+/**
+ * Per-module unlock state. Omit the prop entirely to show every product app unlocked; an
+ * omitted `projects` flag counts as unlocked so hosts that predate Projects keep working.
+ */
 export interface AppSwitcherEntitled {
   readonly crm: boolean;
   readonly wms: boolean;
+  readonly projects?: boolean;
 }
 
 export interface AppSwitcherProps {
   readonly current: AppSwitcherAppId;
   readonly urls: AppSwitcherUrls;
   readonly entitled?: AppSwitcherEntitled;
+  /**
+   * Apps this org cannot use on any plan (for example WMS outside the platform org). Their rows
+   * read "Not in your plan" with a lock and open Portal billing, whatever `entitled` says.
+   */
+  readonly notInPlan?: readonly AppSwitcherAppId[];
 }
 
 interface AppMeta {
@@ -44,6 +56,7 @@ const APPS: readonly AppMeta[] = [
   { id: 'portal', name: 'KitStak Portal', descriptor: 'Launcher, billing and organization' },
   { id: 'crm', name: 'KitStak CRM', descriptor: 'Pipelines, boards and automations' },
   { id: 'wms', name: 'KitStak WMS', descriptor: 'Receiving, inventory and shipping' },
+  { id: 'projects', name: 'KitStak Projects', descriptor: 'Projects, tasks and timelines' },
 ];
 
 function GridIcon() {
@@ -95,21 +108,27 @@ function LockIcon() {
 
 function isUnlocked(id: AppSwitcherAppId, entitled: AppSwitcherEntitled | undefined): boolean {
   if (id === 'portal' || entitled === undefined) return true;
-  return entitled[id];
+  return entitled[id] ?? true;
+}
+
+function appUrl(id: AppSwitcherAppId, urls: AppSwitcherUrls): string | undefined {
+  return urls[id];
 }
 
 function AppRow({
   app,
   current,
   locked,
+  lockedLabel,
   href,
   onNavigate,
 }: {
   readonly app: AppMeta;
   readonly current: boolean;
   readonly locked: boolean;
+  readonly lockedLabel: string;
   readonly href: string;
-  readonly onNavigate: () => void;
+  readonly onNavigate: (event: React.MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
     <li>
@@ -127,7 +146,7 @@ function AppRow({
         <span className="ks-appswitcher-text">
           <span className="ks-appswitcher-name">{app.name}</span>
           <span className="ks-appswitcher-desc">
-            {locked ? 'Locked — unlock in Portal billing' : app.descriptor}
+            {locked ? lockedLabel : app.descriptor}
           </span>
         </span>
         {current ? (
@@ -138,7 +157,7 @@ function AppRow({
         ) : locked ? (
           <span className="ks-appswitcher-end">
             <LockIcon />
-            <span className="ks-appswitcher-sr">Locked — opens billing</span>
+            <span className="ks-appswitcher-sr">Locked, opens billing</span>
           </span>
         ) : null}
       </a>
@@ -146,9 +165,11 @@ function AppRow({
   );
 }
 
-/** Module-grid button + popover listing Portal / CRM / WMS with entitlement-aware rows. */
-export function AppSwitcher({ current, urls, entitled }: AppSwitcherProps) {
+/** Module-grid button + popover listing Portal / CRM / WMS / Projects with entitlement-aware rows. */
+export function AppSwitcher({ current, urls, entitled, notInPlan }: AppSwitcherProps) {
   const [open, setOpen] = React.useState(false);
+  const [handoff, startHandoff] = useHandoff();
+  const [handoffTitle, setHandoffTitle] = React.useState('');
   const billingHref = `${urls.portal.replace(/\/+$/, '')}/billing`;
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
@@ -172,21 +193,35 @@ export function AppSwitcher({ current, urls, entitled }: AppSwitcherProps) {
           <p className="ks-appswitcher-heading">KitStak apps</p>
           <ul className="ks-appswitcher-list">
             {APPS.map((app) => {
-              const locked = !isUnlocked(app.id, entitled);
+              const href = appUrl(app.id, urls);
+              // The current app always lists itself; another app with no configured origin is hidden.
+              if (href === undefined && app.id !== current) return null;
+              const unavailable = app.id !== current && (notInPlan?.includes(app.id) ?? false);
+              const locked = unavailable || !isUnlocked(app.id, entitled);
               return (
                 <AppRow
                   key={app.id}
                   app={app}
                   current={app.id === current}
                   locked={locked}
-                  href={locked ? billingHref : urls[app.id]}
-                  onNavigate={() => setOpen(false)}
+                  lockedLabel={unavailable ? 'Not in your plan' : 'Locked. Unlock it in Portal billing'}
+                  href={locked ? billingHref : (href ?? '/')}
+                  onNavigate={(event) => {
+                    setOpen(false);
+                    // Plain left click that leaves this app: show the KitStak handoff screen until
+                    // the next app paints. New-tab clicks and the current app skip it.
+                    const newTab = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
+                    if (app.id === current || newTab) return;
+                    setHandoffTitle(locked ? 'Opening Portal billing' : `Opening ${app.name}`);
+                    startHandoff();
+                  }}
                 />
               );
             })}
           </ul>
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
+      {handoff ? <HandoffScreen title={handoffTitle} detail="Taking you there with the same account" /> : null}
     </PopoverPrimitive.Root>
   );
 }

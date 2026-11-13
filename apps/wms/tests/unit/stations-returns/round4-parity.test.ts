@@ -152,8 +152,8 @@ describe('hospital move back', () => {
       .where(eq(schema.changeLog.entityType, 'inventory'));
     const msgs = rows.map((r) => `${r.parentEntityId === hosp ? 'from' : 'to'}: ${r.message}`).sort();
     expect(msgs).toHaveLength(2);
-    expect(msgs[0]).toMatch(/^from: .+ -> .+ is modified\. 3 --> 1$/);
-    expect(msgs[1]).toMatch(/^to: .+ is modified\. 0 --> 2$/);
+    expect(msgs[0]).toMatch(/^from: .+ -> .+ is modified\. 3 → 1$/);
+    expect(msgs[1]).toMatch(/^to: .+ is modified\. 0 → 2$/);
     const txn = (await w.db.select().from(schema.inventoryTransactions)).find((t) =>
       (t.note ?? '').includes('Hospital move back'),
     );

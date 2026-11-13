@@ -861,7 +861,7 @@ export function WorkflowBlockedPage() {
             { key: 'b', label: 'Block' },
             { key: 'w', label: 'Workflow' },
           ],
-          rows: (release ?? []).map((r) => ({ o: r.orderCode, b: r.blockType, w: r.workflowName ?? '—' })),
+          rows: (release ?? []).map((r) => ({ o: r.orderCode, b: r.blockType, w: r.workflowName ?? 'None' })),
         }}
         onConfirm={async () => {
           const res = await action.run<BulkResponse>('/api/monitoring/workflow-blocked/release', 'POST', {

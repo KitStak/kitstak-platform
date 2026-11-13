@@ -3,6 +3,8 @@ import { notFound, redirect } from 'next/navigation';
 import { getPageOrgMembership, getSession } from '@/server/auth/session';
 import { passwordChangeRedirect } from '@/server/auth/password-change';
 import type { OrgContextValue } from '@/features/shell/org-context';
+import { orgModuleFlags } from '@/server/entitlements';
+import { env } from '@/server/env';
 import { ShellClient } from './shell-client';
 
 interface OrgLayoutProps {
@@ -13,7 +15,7 @@ interface OrgLayoutProps {
 export async function generateMetadata({ params }: OrgLayoutProps): Promise<Metadata> {
   const { orgSlug } = await params;
   const result = await getPageOrgMembership(orgSlug);
-  return { title: { default: result?.membership.organization.name ?? 'KitStak', template: '%s · KitStak' } };
+  return { title: { default: result ? `${result.membership.organization.name} · KitStak CRM` : 'KitStak CRM', template: '%s · KitStak CRM' } };
 }
 
 /**
@@ -33,6 +35,7 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   // An administrator-set password has to be replaced first; the portal hosts that screen.
   const changePasswordUrl = await passwordChangeRedirect(session.user.id, membership.organization.slug);
   if (changePasswordUrl) redirect(changePasswordUrl);
+  const entitled = await orgModuleFlags(membership.organization.id);
   const context: OrgContextValue = {
     org: {
       id: membership.organization.id,
@@ -48,6 +51,17 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
     },
     role: membership.role,
     permissions: membership.permissions,
+    apps: {
+      urls: {
+        portal: process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3300',
+        crm: env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3100',
+        wms: process.env.NEXT_PUBLIC_WMS_URL || 'http://localhost:3000',
+        projects: env.NEXT_PUBLIC_PROJECTS_URL,
+      },
+      entitled,
+      // WMS is single-tenant: only the platform org can use it (apps/wms PLATFORM_ORG_SLUG).
+      notInPlan: membership.organization.slug === (process.env.WMS_PLATFORM_ORG_SLUG || 'kitstak') ? [] : ['wms'],
+    },
   };
 
   return <ShellClient context={context}>{children}</ShellClient>;

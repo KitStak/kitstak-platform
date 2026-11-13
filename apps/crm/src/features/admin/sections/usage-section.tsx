@@ -88,12 +88,12 @@ export function UsageSection() {
           </SettingsCard>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            <StatTile label="Boards" icon={<Boxes aria-hidden />} value={data ? formatNumber(data.boards) : '–'} hint={data ? `Across ${pluralize(data.workspaces, 'workspace')}` : '\u00a0'} testId="usage-boards" />
-            <StatTile label="Items" icon={<Rows3 aria-hidden />} value={data ? formatNumber(data.items) : '–'} hint="On live boards, excluding trash" testId="usage-items" />
-            <StatTile label="Automations" icon={<Zap aria-hidden />} value={data ? formatNumber(data.automations.total) : '–'} hint={data ? `${formatNumber(data.automations.enabled)} on · ${pluralize(data.automationRuns.failedThisMonth, 'failed run')} this month` : '\u00a0'} />
-            <StatTile label="Dashboards" icon={<LayoutDashboard aria-hidden />} value={data ? formatNumber(data.dashboards) : '–'} hint={data ? `Shared views over ${pluralize(data.boards, 'board')}` : '\u00a0'} />
-            <StatTile label="Files" icon={<FileStack aria-hidden />} value={data ? formatNumber(data.files.count) : '–'} hint={data ? `${formatStorage(data.files.bytes)} used` : '\u00a0'} />
-            <StatTile label="Active API tokens" icon={<KeyRound aria-hidden />} value={data ? formatNumber(data.apiTokens) : '–'} hint={data ? `${pluralize(data.apiTokensRevokedThisMonth, 'token')} revoked this month` : '\u00a0'} testId="usage-tokens" />
+            <StatTile label="Boards" icon={<Boxes aria-hidden />} value={data ? formatNumber(data.boards) : '…'} hint={data ? `Across ${pluralize(data.workspaces, 'workspace')}` : '\u00a0'} testId="usage-boards" />
+            <StatTile label="Items" icon={<Rows3 aria-hidden />} value={data ? formatNumber(data.items) : '…'} hint="On live boards, excluding trash" testId="usage-items" />
+            <StatTile label="Automations" icon={<Zap aria-hidden />} value={data ? formatNumber(data.automations.total) : '…'} hint={data ? `${formatNumber(data.automations.enabled)} on · ${pluralize(data.automationRuns.failedThisMonth, 'failed run')} this month` : '\u00a0'} />
+            <StatTile label="Dashboards" icon={<LayoutDashboard aria-hidden />} value={data ? formatNumber(data.dashboards) : '…'} hint={data ? `Shared views over ${pluralize(data.boards, 'board')}` : '\u00a0'} />
+            <StatTile label="Files" icon={<FileStack aria-hidden />} value={data ? formatNumber(data.files.count) : '…'} hint={data ? `${formatStorage(data.files.bytes)} used` : '\u00a0'} />
+            <StatTile label="Active API tokens" icon={<KeyRound aria-hidden />} value={data ? formatNumber(data.apiTokens) : '…'} hint={data ? `${pluralize(data.apiTokensRevokedThisMonth, 'token')} revoked this month` : '\u00a0'} testId="usage-tokens" />
           </div>
 
           <SettingsCard title="Seats by role" description="Deactivated members don’t use a seat.">

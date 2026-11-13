@@ -46,6 +46,19 @@ const UPGRADE_COPY: Readonly<Record<Module, UpgradeCopy>> = {
       'Client-scoped access for 3PL customers',
     ],
   },
+  projects: {
+    name: 'KitStak Projects',
+    tagline: 'Projects, tasks and timelines',
+    pitch:
+      'Plan launches, onboardings and warehouse go-lives in one place, with tasks tied to the deals and orders behind them.',
+    features: [
+      'List, board, timeline, calendar and workload views',
+      'Templates, goals, forms and automations',
+      'Tasks linked to CRM deals and WMS orders',
+      'Time tracking, comments and an inbox for every update',
+      'Members, teams and role-based permissions',
+    ],
+  },
 };
 
 /**

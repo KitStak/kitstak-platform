@@ -116,7 +116,7 @@ describe('dead jobs (zombie job settlement)', () => {
     expect(job?.taskCount).toBe(0);
     expect(await jobOrders(jobId)).toHaveLength(0);
     const log = (await jobLog(jobId)).find((r) => r.field === 'status');
-    expect(log?.message).toMatch(/Pending --> Cancelled · last order released/);
+    expect(log?.message).toMatch(/Pending → Cancelled · last order released/);
     expect(await deadJobCandidates(w.db)).toEqual([]);
     expect(await settleDeadJobs(w.db, w.ctx)).toEqual([]); // idempotent
   });

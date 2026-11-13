@@ -144,7 +144,7 @@ export function ContractSummary({
       {row(
         <Building2 className="h-4 w-4" />,
         'Client · warehouse',
-        client || wh ? `${client ?? '—'} · ${wh ?? '—'}` : '',
+        client || wh ? `${client ?? 'None'} · ${wh ?? 'None'}` : '',
       )}
       {row(
         <CalendarRange className="h-4 w-4" />,
@@ -162,7 +162,7 @@ export function ContractSummary({
               >
                 <span className="font-medium text-secondary">Period {i + 1}</span>
                 <span className="tabular-nums text-foreground">
-                  {pretty(p.start)} – {pretty(p.end)}
+                  {pretty(p.start)} to {pretty(p.end)}
                 </span>
               </li>
             ))}

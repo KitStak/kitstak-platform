@@ -48,7 +48,7 @@ function PreviewCell({
   readonly value: unknown;
   readonly onCycle: () => void;
 }) {
-  const muted = <span className="text-fg-muted">—</span>;
+  const muted = <span className="text-fg-muted">None</span>;
   switch (column.type) {
     case 'status': {
       const label = labelFor(column, value);
@@ -111,7 +111,7 @@ function PreviewCell({
       if (!from || !to) return muted;
       return (
         <span className="inline-flex h-5 items-center rounded-full bg-primary px-2 text-xs font-medium text-primary-fg">
-          {from === to ? from : `${from} – ${to}`}
+          {from === to ? from : `${from} to ${to}`}
         </span>
       );
     }

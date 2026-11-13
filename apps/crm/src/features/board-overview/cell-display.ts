@@ -114,7 +114,7 @@ function displayStored(
       if (!isRecord(value)) return EMPTY;
       const from = formatIsoDate(value.from);
       const to = formatIsoDate(value.to);
-      return from && to ? { kind: 'text', text: `${from} – ${to}` } : EMPTY;
+      return from && to ? { kind: 'text', text: `${from} to ${to}` } : EMPTY;
     }
     case 'number':
     case 'rating':

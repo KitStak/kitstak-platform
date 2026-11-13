@@ -82,7 +82,7 @@ function Total({
         className="flex h-9 items-center justify-end rounded-md border border-border bg-surface-sunken px-3 text-sm font-semibold tabular-nums text-foreground"
         aria-live="polite"
       >
-        {total === null ? '—' : fmt.money(total)}
+        {total === null ? 'None' : fmt.money(total)}
       </span>
     </div>
   );

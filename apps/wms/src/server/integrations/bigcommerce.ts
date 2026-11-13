@@ -168,7 +168,7 @@ export function bigcommerceProducts(p: Record<string, unknown>): ChannelProduct[
     barcode: strOrNull(v.upc),
     weightOz: num(v.calculated_weight ?? v.weight ?? p.weight) * 16,
     ...base,
-    title: `${base.title} — ${
+    title: `${base.title} · ${
       arr(v.option_values)
         .map(rec)
         .map((x) => String(x.label ?? ''))

@@ -295,7 +295,7 @@ describe('change-log read normalization and channel', () => {
     };
     expect(normalizeChangeRow(legacy)).toMatchObject({
       fieldLabel: 'Locked',
-      message: 'Locked is modified. No --> Yes',
+      message: 'Locked is modified. No → Yes',
     });
     expect(
       normalizeChangeRow({
@@ -306,7 +306,7 @@ describe('change-log read normalization and channel', () => {
         toValue: '',
         message: 'Max Sku Qty is modified. 7 --> ',
       }),
-    ).toMatchObject({ fieldLabel: 'Max SKU qty', message: 'Max SKU qty is modified. 7 --> (blank)' });
+    ).toMatchObject({ fieldLabel: 'Max SKU qty', message: 'Max SKU qty is modified. 7 → (blank)' });
     const cap = {
       type: 'Update',
       field: 'productCapacity',

@@ -85,7 +85,7 @@ function EligibilityStep({
               <li key={r.id} className="flex gap-3 px-3 py-1.5">
                 {/* The record code, never the error code (INVALID_STATE / NOT_FOUND). */}
                 <span className="w-28 shrink-0 font-semibold text-foreground">
-                  {r.recordCode ?? (r.code && !/^[A-Z_]+$/.test(r.code) ? r.code : '—')}
+                  {r.recordCode ?? (r.code && !/^[A-Z_]+$/.test(r.code) ? r.code : 'None')}
                 </span>
                 <span className="text-secondary">{r.reason}</span>
               </li>

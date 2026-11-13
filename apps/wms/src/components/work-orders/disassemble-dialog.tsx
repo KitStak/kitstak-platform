@@ -105,7 +105,7 @@ export function bucketLabel(b: StockBucket): string {
     b.lotNumber ? `lot ${b.lotNumber}` : null,
     b.expiryDate ? `exp ${b.expiryDate.slice(0, 10)}` : null,
   ].filter(Boolean);
-  return `${bits.join(' · ')} — ${b.freeQty} free${b.lockedBy ? ` · locked by ${b.lockedBy}` : ''}`;
+  return `${bits.join(' · ')}: ${b.freeQty} free${b.lockedBy ? ` · locked by ${b.lockedBy}` : ''}`;
 }
 
 type Key = 'warehouseId' | 'clientId' | 'kitProductId' | 'sourceInventoryId' | 'qty' | 'targetLocationId';
@@ -350,13 +350,13 @@ function Steps({
     ? disassembleDeltas(
         {
           sku: kit.sku,
-          location: bucket ? bucketLabel(bucket).split(' — ')[0]! : '—',
+          location: bucket ? bucketLabel(bucket).split(': ')[0]! : 'None',
           current: bucket?.onHand ?? null,
         },
         comps.map((c) => ({
           id: c.productId,
           sku: c.sku,
-          location: [targetLabel ?? '—', targetLpLabel].filter(Boolean).join(' · '),
+          location: [targetLabel ?? 'None', targetLpLabel].filter(Boolean).join(' · '),
           current: !targetId
             ? 0
             : compStock.data

@@ -2,8 +2,8 @@
  * Manual entitlement CLI (the production write path while Stripe is deferred).
  *
  * Usage (from the repo root; DATABASE_URL must point at the core database):
- *   pnpm --filter @kitstak/entitlements grant grant <org-slug> <crm|wms>
- *   pnpm --filter @kitstak/entitlements grant revoke <org-slug> <crm|wms>
+ *   pnpm --filter @kitstak/entitlements grant grant <org-slug> <crm|wms|projects>
+ *   pnpm --filter @kitstak/entitlements grant revoke <org-slug> <crm|wms|projects>
  *   pnpm --filter @kitstak/entitlements grant list <org-slug>
  *
  * Grants/revokes are written with source 'manual'.

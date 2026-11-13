@@ -830,7 +830,7 @@ export async function varianceSummary(
         warehouseIds.add(plan.warehouseId);
       }
     } catch {
-      blocked.push({ id, code: '—', reason: 'Not found' });
+      blocked.push({ id, code: 'None', reason: 'Not found' });
     }
   }
   const raw =

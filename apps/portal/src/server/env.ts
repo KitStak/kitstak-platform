@@ -28,6 +28,7 @@ const envSchema = z.object({
   /** Launcher tile targets (BLUEPRINT.md §6). Absolute origins of the sibling apps. */
   NEXT_PUBLIC_CRM_URL: z.url().default('http://localhost:3100'),
   NEXT_PUBLIC_WMS_URL: z.url().default('http://localhost:3000'),
+  NEXT_PUBLIC_PROJECTS_URL: z.url().default('http://localhost:3400'),
   /**
    * Cookie domain for cross-subdomain SSO (`.kitstak.io` in prod). Leave unset in dev —
    * localhost ports already share host-only `kitstak.*` cookies (BLUEPRINT.md §1.2).

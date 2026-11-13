@@ -1,0 +1,61 @@
+/**
+ * WMS record codes typed into task names ("Investigate putaway delays on PO2240").
+ * WMS formats every code as a prefix plus six digits (PO002240, SO010858, WO000094, CNT000144),
+ * so a short or lowercase form is rewritten to that exact code. The title and the linked-record
+ * chip then always show the same identifier.
+ */
+import type { IntegrationTargetType } from './constants';
+
+export type WmsCodeType = Extract<IntegrationTargetType, 'wms_order' | 'wms_work_order' | 'wms_receipt' | 'wms_count'>;
+
+const PREFIX_TYPE: Readonly<Record<string, WmsCodeType>> = {
+  PO: 'wms_receipt',
+  SO: 'wms_order',
+  WO: 'wms_work_order',
+  CNT: 'wms_count',
+};
+
+export const WMS_CODE_DIGITS = 6;
+
+export interface WmsCodeMatch {
+  readonly start: number;
+  readonly end: number;
+  /** What was typed ("po2240"). */
+  readonly raw: string;
+  /** The code exactly as WMS formats it ("PO002240"). */
+  readonly code: string;
+  readonly type: WmsCodeType;
+}
+
+// A word on its own: "PO2240", "po 2240", "PO-2240", "PO#2240". Not inside longer words or numbers.
+const PATTERN = /(?<![\p{L}\p{N}])(PO|SO|WO|CNT)[\s#-]?(\d{1,6})(?![\p{L}\p{N}])/giu;
+
+export function formatWmsCode(prefix: string, digits: string): string {
+  return `${prefix.toUpperCase()}${digits.padStart(WMS_CODE_DIGITS, '0')}`;
+}
+
+export function findWmsCodes(text: string, limit = 3): WmsCodeMatch[] {
+  const found: WmsCodeMatch[] = [];
+  const seen = new Set<string>();
+  for (const match of text.matchAll(PATTERN)) {
+    const [raw, prefix = '', digits = ''] = match;
+    const type = PREFIX_TYPE[prefix.toUpperCase()];
+    if (!type || Number(digits) === 0) continue;
+    const code = formatWmsCode(prefix, digits);
+    if (seen.has(code)) continue;
+    seen.add(code);
+    const start = match.index ?? 0;
+    found.push({ start, end: start + raw.length, raw, code, type });
+    if (found.length >= limit) break;
+  }
+  return found;
+}
+
+/** The text with each matched code written the way WMS writes it. */
+export function normalizeWmsCodes(text: string, matches: readonly Pick<WmsCodeMatch, 'start' | 'end' | 'code'>[]): string {
+  let out = text;
+  for (const match of [...matches].sort((a, b) => b.start - a.start)) {
+    out = `${out.slice(0, match.start)}${match.code}${out.slice(match.end)}`;
+  }
+  return out;
+}

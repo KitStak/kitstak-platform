@@ -46,6 +46,7 @@ import { OrderWizardShell } from '../wizard/order-wizard-shell';
 import type { WizardController } from '@/components/ui/wizard';
 import { UnderlineTabs } from '@/components/ui/tabs';
 import { DocumentsCards, JobsCard, OrderActionsMenu, SummaryCard } from './order-detail-rail';
+import { ProjectTasksCard } from '@/components/projects/project-tasks-card';
 import {
   OrderLinesTab,
   OrderOverviewCards,
@@ -355,6 +356,7 @@ export function OrderDetailPage({ initial }: { readonly initial: OrderDetail }) 
                 <OrderActionsMenu detail={detail} onChanged={onChanged} />
                 <SummaryCard detail={detail} />
                 <JobsCard detail={detail} onChanged={onChanged} />
+                <ProjectTasksCard kind="order" recordId={detail.order.id} recordLabel={detail.order.code} />
                 <DocumentsCards detail={detail} onChanged={onChanged} />
               </>
             )}

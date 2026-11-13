@@ -23,7 +23,7 @@ import { DIFFERENCE_THRESHOLD_HINT, DifferenceBadge } from './count-badges';
 export type CountPlanRow = CountPlanListRow;
 export type CountLineRow = CountLineListRow;
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
   v === null || v === undefined || v === '' ? dash : <span className="truncate">{String(v)}</span>;
 
@@ -399,7 +399,7 @@ function ApprovedQtyCell({
         <span className="shrink-0 rounded bg-surface-sunken px-1 text-2xs font-semibold text-faint">
           {superseded.tag}
         </span>
-        <span className="text-faint">—</span>
+        <span className="text-faint">None</span>
       </span>
     </Tooltip>
   );
@@ -583,7 +583,7 @@ export function buildLineColumns(
               width: 150,
               always: true,
               cell: ({ row }) => (
-                <span className="truncate font-semibold text-foreground">{row.original.lpNumber ?? '—'}</span>
+                <span className="truncate font-semibold text-foreground">{row.original.lpNumber ?? 'None'}</span>
               ),
             },
             skus,

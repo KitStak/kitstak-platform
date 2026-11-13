@@ -917,7 +917,7 @@ export function OrderBulkMenus({
           ],
           rows: (modal?.kind === 'cancelPicking' ? modal.target : []).map((r) => ({
             code: r.code,
-            job: r.jobCode ?? '—',
+            job: r.jobCode ?? 'None',
             status: <OrderStatusPill status={r.status} size="sm" />,
           })),
         }}

@@ -129,7 +129,7 @@ function ResultRow({ product, facts, factsLoading, alreadyAdded, onAdd }: RowPro
                     : 'text-success',
             )}
           >
-            {atp === null ? '—' : fmt.quantity(atp)}
+            {atp === null ? 'None' : fmt.quantity(atp)}
           </span>
         )}
         {tone === 'over' && atp !== null ? (

@@ -176,7 +176,7 @@ export function etsyProducts(
         imageUrl: image,
         title:
           values.length > 0
-            ? `${String(listing.title ?? 'Listing')} — ${values.join(' / ')}`
+            ? `${String(listing.title ?? 'Listing')} · ${values.join(' / ')}`
             : String(listing.title ?? 'Listing'),
       };
     });

@@ -232,7 +232,7 @@ function Body({
     setForm((f) => ({ ...f, settings: patch(f.settings) }));
     setErrors({});
   };
-  const wh = (wid: string) => warehouses.short.find((w) => w.value === wid)?.label ?? '—';
+  const wh = (wid: string) => warehouses.short.find((w) => w.value === wid)?.label ?? 'None';
 
   const save = async () => {
     const body = {
@@ -360,7 +360,7 @@ function Body({
           </div>
           {detail.isSandbox ? (
             <Callout variant="info" title="KitStak Sandbox">
-              No credentials needed. Each Download Orders run creates 2–6 realistic orders from this client’s
+              No credentials needed. Each Download Orders run creates 2 to 6 realistic orders from this client’s
               SKUs. Scheduled runs never fail on purpose; to practise Missing Orders and Retry Download, use
               Simulate error (flask icon) on the Download Orders row in Channel Methods.
             </Callout>

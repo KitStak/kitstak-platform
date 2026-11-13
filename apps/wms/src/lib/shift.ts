@@ -87,6 +87,6 @@ export function shiftWindow({ now, timeZone, start, end }: ShiftWindowInput): Sh
     percent,
     nowLabel: clock.label,
     dateLabel,
-    statusLabel: `${clock.label} – ${end}`,
+    statusLabel: `${clock.label} to ${end}`,
   };
 }

@@ -566,7 +566,7 @@ function ReviewPanel({
                   ) : null}
                 </td>
                 <td className="px-2.5 py-1.5 text-secondary">
-                  {[d.lotNumber, d.lpNumber].filter(Boolean).join(' · ') || '—'}
+                  {[d.lotNumber, d.lpNumber].filter(Boolean).join(' · ') || 'None'}
                 </td>
                 <td className="px-2.5 py-1.5 text-right tabular-nums">{d.systemQty.toLocaleString()}</td>
                 <td className="px-2.5 py-1.5 text-right tabular-nums">{(d.counted ?? 0).toLocaleString()}</td>

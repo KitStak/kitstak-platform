@@ -24,6 +24,8 @@ export interface ShellContextValue {
    * `null` outside the authenticated shell: app-gated nav items are then shown.
    */
   readonly activeApps: ReadonlySet<string> | null;
+  /** KitStak module unlock state for the app switcher (undefined = show every app unlocked). */
+  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
 }
 
 const ShellContext = React.createContext<ShellContextValue>({
@@ -38,12 +40,14 @@ export function ShellProvider({
   permissions,
   initialContext = null,
   activeApps,
+  entitledApps,
   children,
 }: {
   readonly user: ShellUser;
   readonly permissions: readonly string[];
   readonly initialContext?: InitialShellContext | null;
   readonly activeApps?: readonly string[] | null;
+  readonly entitledApps?: ShellContextValue['entitledApps'];
   readonly children: React.ReactNode;
 }) {
   const value = React.useMemo<ShellContextValue>(
@@ -52,8 +56,9 @@ export function ShellProvider({
       permissions: new Set(permissions),
       initialContext,
       activeApps: activeApps ? new Set(activeApps) : null,
+      entitledApps,
     }),
-    [user, permissions, initialContext, activeApps],
+    [user, permissions, initialContext, activeApps, entitledApps],
   );
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }

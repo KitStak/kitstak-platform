@@ -23,7 +23,7 @@ import {
   type VendorDetail,
 } from '@/components/receiving/receiving-shared';
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 
 function Row({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (

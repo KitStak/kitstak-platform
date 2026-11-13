@@ -302,7 +302,7 @@ export const clientSsccSchema = z
     if (!/^\d$/.test(v.extensionDigit))
       issue(
         'extensionDigit',
-        v.extensionDigit ? 'Use one digit (0–9)' : 'Extension digit is required for SSCC-18',
+        v.extensionDigit ? 'Use one digit (0 to 9)' : 'Extension digit is required for SSCC-18',
       );
     if (!/^\d{7,10}$/.test(v.gs1CompanyPrefix))
       issue(
@@ -354,7 +354,7 @@ export const clientInfoShape = {
     .trim()
     .toUpperCase()
     .min(1, 'Client code is required')
-    .regex(CLIENT_CODE_RE, '2–20 letters, numbers, dash or underscore'),
+    .regex(CLIENT_CODE_RE, '2 to 20 letters, numbers, dash or underscore'),
   officialName: requiredText('Official name', 200),
   status: z.enum(ACTIVE_STATUSES).default('Active'),
   contactName: optionalText(100),

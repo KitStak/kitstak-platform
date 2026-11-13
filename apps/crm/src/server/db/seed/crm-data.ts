@@ -416,7 +416,7 @@ export function generateCrmData(rng: Rng, users: UserIds, today: Date): CrmDatas
       id: rng.uuid(),
       board: 'crm-activities',
       group: upcoming ? 'upcoming' : 'completed',
-      name: `${rng.pick(ACTIVITY_SUBJECTS[type] ?? ['Follow-up'])} — ${deal.name.split(' — ')[0]?.split(':')[0] ?? deal.name}`,
+      name: `${rng.pick(ACTIVITY_SUBJECTS[type] ?? ['Follow-up'])} · ${deal.name.split(' · ')[0]?.split(':')[0] ?? deal.name}`,
       createdAt: daysAgo(today, Math.max(1, -day + rng.int(0, 5))),
       createdBy: owner,
       values: {
@@ -536,7 +536,7 @@ export function generateCrmData(rng: Rng, users: UserIds, today: Date): CrmDatas
       id: rng.uuid(),
       board: 'cs-renewals',
       group: closed ? 'closed' : offset < 90 ? 'next_90' : 'later',
-      name: `${account.name} — FY${(today.getUTCFullYear() + (offset > 60 ? 1 : 0)) % 100} renewal`,
+      name: `${account.name} · FY${(today.getUTCFullYear() + (offset > 60 ? 1 : 0)) % 100} renewal`,
       createdAt: daysAgo(today, rng.int(20, 200)),
       createdBy: users.hannah,
       values: {

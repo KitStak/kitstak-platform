@@ -147,7 +147,7 @@ function ChangePasswordCard() {
   return (
     <SettingsCard
       title="Change password"
-      description={`${PASSWORD_POLICY.minLength}–${PASSWORD_POLICY.maxLength} characters. A mix of words, numbers and symbols is strongest.`}
+      description={`${PASSWORD_POLICY.minLength} to ${PASSWORD_POLICY.maxLength} characters. A mix of words, numbers and symbols is strongest.`}
       testId="change-password"
       footer={
         <Button loading={pending} onClick={() => void submit()} data-testid="password-submit">

@@ -110,7 +110,7 @@ export function CalendarView({ boardId, view, onOpenItem, initialSettingsOpen, c
       const days = narrow ? source : filterDays(source);
       const first = days[0] ?? anchor;
       const last = days.at(-1) ?? anchor;
-      return { weeks: [days], days, title: `${formatIso(first)} – ${formatIso(last, 'full')}`, shortTitle: first.slice(0, 7) === last.slice(0, 7) ? `${formatIso(first)}–${Number(last.slice(8))}` : `${formatIso(first)} – ${formatIso(last)}` };
+      return { weeks: [days], days, title: `${formatIso(first)} to ${formatIso(last, 'full')}`, shortTitle: first.slice(0, 7) === last.slice(0, 7) ? `${formatIso(first)} to ${Number(last.slice(8))}` : `${formatIso(first)} to ${formatIso(last)}` };
     }
     return { weeks: [[anchor]], days: [anchor], title: formatIso(anchor, 'weekdayLong'), shortTitle: formatIso(anchor, 'full') };
   }, [anchor, mode, narrow, settings.hideWeekends, settings.weekStartsOn]);

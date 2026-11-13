@@ -50,7 +50,7 @@ export function rangeError(
   if (!from || !to) return `Enter both ends of the ${label.toLowerCase()} range`;
   const letters = LETTERS.test(from) && LETTERS.test(to);
   const digits = DIGITS.test(from) && DIGITS.test(to);
-  if (!letters && !digits) return `${label} range must be letters (A–F) or numbers (01–10)`;
+  if (!letters && !digits) return `${label} range must be letters (A to F) or numbers (01 to 10)`;
   const a = letters ? letterIndex(from) : Number(from);
   const b = letters ? letterIndex(to) : Number(to);
   if (b < a) return `${label} range must go from low to high`;

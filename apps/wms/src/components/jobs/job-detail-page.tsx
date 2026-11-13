@@ -63,7 +63,7 @@ function Fact({ label, children }: { readonly label: string; readonly children: 
   );
 }
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 
 function OrdersTab({ detail, onChanged }: { readonly detail: Detail; readonly onChanged: () => void }) {
   const { permissions } = usePermissionSet();
@@ -350,15 +350,15 @@ function TaskRowView({
         )}
       </td>
       <td className="px-3 py-2">
-        <span className="font-medium">{t.sku ?? '—'}</span>
+        <span className="font-medium">{t.sku ?? 'None'}</span>
         <span className="block max-w-[200px] truncate text-2xs text-faint">{t.productName}</span>
       </td>
       <td className="px-3 py-2">
-        {t.sourceLocation ?? '—'}
+        {t.sourceLocation ?? 'None'}
         {t.sourceLpn ? <span className="block text-2xs text-faint">{t.sourceLpn}</span> : null}
       </td>
       <td className="px-3 py-2">
-        {t.targetLocation ?? '—'}
+        {t.targetLocation ?? 'None'}
         {t.targetLpn ? <span className="block text-2xs text-faint">{t.targetLpn}</span> : null}
       </td>
       <td className="px-3 py-2 text-right tabular-nums">{t.plannedQty}</td>
@@ -369,7 +369,7 @@ function TaskRowView({
       <td className="px-3 py-2">{t.assignee ?? dash}</td>
       <td className="px-3 py-2">{t.executedBy ?? dash}</td>
       <td className="px-3 py-2 whitespace-nowrap text-secondary">
-        {t.finishedAt ? fmt.gridDateTime(t.finishedAt) : '—'}
+        {t.finishedAt ? fmt.gridDateTime(t.finishedAt) : 'None'}
       </td>
     </tr>
   );
@@ -489,7 +489,7 @@ function PickPathTab({ detail }: { readonly detail: Detail }) {
                   {s.lines.map((l) => (
                     <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
                       <span className="min-w-0 truncate">
-                        <span className="font-semibold text-foreground">{l.sku ?? '—'}</span>{' '}
+                        <span className="font-semibold text-foreground">{l.sku ?? 'None'}</span>{' '}
                         <span className="text-secondary">{l.productName}</span>
                         {l.orderCode ? <span className="text-faint"> · {l.orderCode}</span> : null}
                       </span>
@@ -517,7 +517,7 @@ function PickPathTab({ detail }: { readonly detail: Detail }) {
 function Header({ detail, onChanged }: { readonly detail: Detail; readonly onChanged: () => void }) {
   const fmt = useFormat();
   const j = detail.job;
-  const dt = (v: unknown) => (v ? fmt.gridDateTime(String(v)) : '—');
+  const dt = (v: unknown) => (v ? fmt.gridDateTime(String(v)) : 'None');
   const facts: JobFacts = {
     id: j.id,
     code: String(j.code),
@@ -620,10 +620,10 @@ function Header({ detail, onChanged }: { readonly detail: Detail; readonly onCha
                 {detail.rule.name}
               </Link>
             ) : (
-              '—'
+              'None'
             )}
           </Fact>
-          <Fact label="Mobile cart">{j.mobileCart ? String(j.mobileCart) : '—'}</Fact>
+          <Fact label="Mobile cart">{j.mobileCart ? String(j.mobileCart) : 'None'}</Fact>
           <Fact label="Planned start">{dt(j.plannedStartAt)}</Fact>
           <Fact label="Planned end">
             {overdue ? (
@@ -640,10 +640,10 @@ function Header({ detail, onChanged }: { readonly detail: Detail; readonly onCha
             {dt(j.createdAt)} · {String(j.createdBy ?? 'Integration')}
           </Fact>
           {isOrderlessJob(String(j.operationType)) ? null : (
-            <Fact label="Label status">{String(j.labelStatus ?? '—')}</Fact>
+            <Fact label="Label status">{String(j.labelStatus ?? 'None')}</Fact>
           )}
           {isOrderlessJob(String(j.operationType)) ? null : (
-            <Fact label="Pick list">{String(j.pickListStatus ?? '—')}</Fact>
+            <Fact label="Pick list">{String(j.pickListStatus ?? 'None')}</Fact>
           )}
           <Fact label="Orders · SKUs">
             {Number(j.orderCount)} · {Number(j.productCount)}

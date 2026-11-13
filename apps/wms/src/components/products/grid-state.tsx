@@ -149,7 +149,7 @@ export function GridFetchFrame({
         '[&_th.sticky[style*=right]]:before:bg-[linear-gradient(to_right,transparent,var(--color-surface)_55%)]',
         '[&_tbody]:transition-opacity [&_tbody]:duration-150 [&[data-stale]_tbody]:opacity-55',
         // First load: the shared footer would print "Total: 0" under the skeleton.
-        "[&[data-pending]_[aria-live=polite]>span:first-child]:text-[0px] [&[data-pending]_[aria-live=polite]>span:first-child]:after:text-xs [&[data-pending]_[aria-live=polite]>span:first-child]:after:text-faint [&[data-pending]_[aria-live=polite]>span:first-child]:after:content-['—']",
+        "[&[data-pending]_[aria-live=polite]>span:first-child]:text-[0px] [&[data-pending]_[aria-live=polite]>span:first-child]:after:text-xs [&[data-pending]_[aria-live=polite]>span:first-child]:after:text-faint [&[data-pending]_[aria-live=polite]>span:first-child]:after:content-['None']",
       )}
     >
       {fetching ? (

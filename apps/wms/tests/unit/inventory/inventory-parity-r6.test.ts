@@ -42,7 +42,7 @@ describe('change-log wording for Change Attributes', () => {
     });
     afterEach(() => w.close());
 
-    it("reads 'SKU (1 unit) -> Damage Reason is modified. (none) --> Damaged'", async () => {
+    it("reads 'SKU (1 unit) -> Damage Reason is modified. (none) → Damaged'", async () => {
       const b = (
         await ledger.add(w.db, w.ctx, {
           warehouseId: w.warehouseId,
@@ -63,7 +63,7 @@ describe('change-log wording for Change Attributes', () => {
       const row = (
         await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.field, 'damageReason')).limit(1)
       )[0];
-      expect(row?.message).toMatch(/^\S+ \(1 unit\) -> Damage Reason is modified\. \(none\) --> Damaged$/);
+      expect(row?.message).toMatch(/^\S+ \(1 unit\) -> Damage Reason is modified\. \(none\) → Damaged$/);
       expect(row?.message).not.toContain('  ');
     });
   });

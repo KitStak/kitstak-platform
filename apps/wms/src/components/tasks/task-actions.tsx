@@ -259,8 +259,8 @@ function ExecuteDrawer({
                 <tr key={t.id} className="border-b border-border last:border-b-0">
                   <td className="px-3 py-1.5 tabular-nums">{t.taskNo}</td>
                   <td className="px-3 py-1.5">{t.taskType}</td>
-                  <td className="px-3 py-1.5 font-medium">{t.sku ?? '—'}</td>
-                  <td className="px-3 py-1.5">{t.sourceLocation ?? '—'}</td>
+                  <td className="px-3 py-1.5 font-medium">{t.sku ?? 'None'}</td>
+                  <td className="px-3 py-1.5">{t.sourceLocation ?? 'None'}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">
                     {Math.max(0, t.plannedQty - t.actualQty)}
                   </td>
@@ -593,11 +593,11 @@ export function TaskActions({
               ],
               rows: pending.map((t) => ({
                 no: t.taskNo,
-                phase: t.replenishmentPhase ?? '—',
+                phase: t.replenishmentPhase ?? 'None',
                 sku: t.sku ?? '',
-                from: t.sourceLocation ?? '—',
-                to: t.targetLocation ?? '—',
-                lp: t.sourceLpn ?? '—',
+                from: t.sourceLocation ?? 'None',
+                to: t.targetLocation ?? 'None',
+                lp: t.sourceLpn ?? 'None',
               })),
             }
           : {

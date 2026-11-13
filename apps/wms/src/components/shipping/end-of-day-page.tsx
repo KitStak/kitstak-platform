@@ -103,7 +103,7 @@ const SPECS: readonly ColumnSpec<EodRow>[] = [
     label: 'Prefix',
     width: 110,
     always: true,
-    cell: (r) => <span className="font-semibold">{r.carrierPrefix || '—'}</span>,
+    cell: (r) => <span className="font-semibold">{r.carrierPrefix || 'None'}</span>,
   },
   // Carrier mark + code never truncate; only the carrier setup name ellipsizes (full text in the title).
   {
@@ -202,7 +202,7 @@ const SPECS: readonly ColumnSpec<EodRow>[] = [
           {formatInZone(r.closeDate, r.timezone)}
         </span>
       ) : (
-        <span className="text-faint">—</span>
+        <span className="text-faint">None</span>
       ),
   },
   { id: 'isPrinted', label: 'Report printed?', kind: 'boolean', width: 128 },
@@ -215,7 +215,7 @@ const SPECS: readonly ColumnSpec<EodRow>[] = [
       r.scheduledPickupAt ? (
         <span className="whitespace-nowrap tabular-nums">{shipDateTime(r.scheduledPickupAt)}</span>
       ) : (
-        <span className="text-faint">—</span>
+        <span className="text-faint">None</span>
       ),
   },
   {

@@ -224,7 +224,7 @@ export function usePlanActions({
       status: <StatusPill status={r.status} domain="shipmentPlan" />,
       orders: r.orderCount,
       loaded: `${r.loadedCount} of ${r.orderCount}`,
-      planned: r.plannedShipmentAt ? formatDateTime(r.plannedShipmentAt) : '—',
+      planned: r.plannedShipmentAt ? formatDateTime(r.plannedShipmentAt) : 'None',
     })),
   });
 

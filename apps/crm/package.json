@@ -33,6 +33,7 @@
     "@kitstak/auth": "workspace:*",
     "@kitstak/db": "workspace:*",
     "@kitstak/entitlements": "workspace:*",
+    "@kitstak/pm-bridge": "workspace:*",
     "@kitstak/ui": "workspace:*",
     "@next/env": "16.4.5",
     "@radix-ui/react-avatar": "^1.3.1",

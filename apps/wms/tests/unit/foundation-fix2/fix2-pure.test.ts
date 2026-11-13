@@ -59,7 +59,7 @@ describe('shiftWindow', () => {
     expect(mid).toMatchObject({
       phase: 'during',
       nowLabel: '12:45',
-      statusLabel: '12:45 – 17:00',
+      statusLabel: '12:45 to 17:00',
       percent: 53,
     });
     const early = shiftWindow({ ...base, now: new Date('2026-11-05T12:00:00Z') });

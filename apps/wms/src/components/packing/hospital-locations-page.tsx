@@ -388,7 +388,7 @@ export function HospitalLocationsPage() {
                             {s.productName}
                           </span>
                         </td>
-                        <td className="px-2 py-2 text-secondary">{s.clientName ?? '—'}</td>
+                        <td className="px-2 py-2 text-secondary">{s.clientName ?? 'None'}</td>
                         <td className="px-2 py-2 text-right tabular-nums">{s.onHand}</td>
                         <td className="px-2 py-2 text-right tabular-nums">{s.allocated}</td>
                         <td className="px-2 py-2 text-right tabular-nums">{s.free}</td>
@@ -409,7 +409,7 @@ export function HospitalLocationsPage() {
                               </Link>
                             ))
                           ) : (
-                            <span className="text-secondary">—</span>
+                            <span className="text-secondary">None</span>
                           )}
                         </td>
                         <td className="px-4 py-2 text-right">

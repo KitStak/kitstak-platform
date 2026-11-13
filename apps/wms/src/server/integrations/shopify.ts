@@ -175,7 +175,7 @@ export const shopifyAdapter: ChannelAdapter = {
         .map((v) => ({
           id: `${String(v.id)}:${String(v.inventory_item_id ?? '')}`,
           sku: strOrNull(v.sku),
-          title: arr(p.variants).length > 1 ? `${String(p.title)} — ${String(v.title)}` : String(p.title),
+          title: arr(p.variants).length > 1 ? `${String(p.title)} · ${String(v.title)}` : String(p.title),
           price: num(v.price),
           barcode: strOrNull(v.barcode),
           weightOz: num(v.grams) / 28.3495,

@@ -151,7 +151,7 @@ function Heatmap({ chart }: { readonly chart: AnalyticsChart }) {
             {xs.map((x) => {
               const v = Number(r[x] ?? 0);
               const href = r[`${HEAT_HREF_PREFIX}${x}`];
-              const label = `${r[chart.xKey]} ${x}:00 — ${v} ${v === 1 ? 'task' : 'tasks'}`;
+              const label = `${r[chart.xKey]} ${x}:00 · ${v} ${v === 1 ? 'task' : 'tasks'}`;
               const style = {
                 backgroundColor:
                   v === 0
@@ -448,7 +448,7 @@ function Chart({
   const kind = seriesKind(chart);
   const dayAxis = isDayAxis(rows, chart.xKey);
   const fmtValue = (v: unknown, key: string): string => {
-    if (v === null || v === undefined) return '—';
+    if (v === null || v === undefined) return 'None';
     const col = chart.columns.find((c) => c.key === key) ?? {
       key,
       label: '',

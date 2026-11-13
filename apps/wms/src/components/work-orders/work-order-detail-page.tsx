@@ -86,6 +86,7 @@ import {
 } from './wo-client';
 import { WorkOrderWizard } from './wizard/work-order-wizard';
 import { WoStatusPill } from './wo-status';
+import { ProjectTasksCard } from '@/components/projects/project-tasks-card';
 
 const TABS = [
   'components',
@@ -568,7 +569,7 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
                 {job.code}
               </Link>
             ) : (
-              '—'
+              'None'
             )
           }
           sublabel={
@@ -687,7 +688,7 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
                     {r.quantity}
                   </span>,
                   r.locationCode,
-                  r.lotNumber ?? '–',
+                  r.lotNumber ?? 'None',
                   <span key="d" className="tabular-nums">
                     {formatInZone(r.receivedAt, data.warehouseTimeZone)}
                   </span>,
@@ -720,8 +721,8 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
                         ? `−${Math.abs(t.qty)}`
                         : t.qty}
                   </span>,
-                  t.fromLocationCode ?? '–',
-                  t.toLocationCode ?? '–',
+                  t.fromLocationCode ?? 'None',
+                  t.toLocationCode ?? 'None',
                   <span key="d" className="tabular-nums">
                     {formatInZone(t.createdAt, data.warehouseTimeZone)}
                   </span>,
@@ -739,14 +740,14 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
                 head={['SKU', 'Explanation', 'Free stock', 'Required', 'Run at', 'Run by']}
                 rows={exceptions.map((e) => [
                   <span key="s" className="font-semibold text-foreground">
-                    {e.sku ?? '–'}
+                    {e.sku ?? 'None'}
                   </span>,
                   <span key="x" className="inline-flex items-center gap-1 text-warning">
                     <AlertTriangle className="h-3 w-3" aria-hidden />
                     {e.explanation}
                   </span>,
-                  e.inventoryQty ?? '–',
-                  e.requiredQty ?? '–',
+                  e.inventoryQty ?? 'None',
+                  e.requiredQty ?? 'None',
                   <span key="d" className="tabular-nums">
                     {formatInZone(e.runAt, data.warehouseTimeZone)}
                   </span>,
@@ -769,7 +770,7 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
               items={[
                 { key: 'op', label: 'Operation', value: wo.operationType },
                 { key: 'out', label: 'Output location', value: data.outputLocationCode ?? 'Kitting area' },
-                { key: 'lot', label: 'Output lot', value: wo.outputLot ?? '–' },
+                { key: 'lot', label: 'Output lot', value: wo.outputLot ?? 'None' },
                 {
                   key: 'created',
                   label: 'Created',
@@ -778,22 +779,22 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
                 {
                   key: 'ps',
                   label: 'Planned start',
-                  value: wo.plannedStartAt ? formatInZone(wo.plannedStartAt, data.warehouseTimeZone) : '–',
+                  value: wo.plannedStartAt ? formatInZone(wo.plannedStartAt, data.warehouseTimeZone) : 'None',
                 },
                 {
                   key: 'pf',
                   label: 'Planned finish',
-                  value: wo.plannedFinishAt ? formatInZone(wo.plannedFinishAt, data.warehouseTimeZone) : '–',
+                  value: wo.plannedFinishAt ? formatInZone(wo.plannedFinishAt, data.warehouseTimeZone) : 'None',
                 },
                 {
                   key: 'as',
                   label: 'Actual start',
-                  value: wo.actualStartAt ? formatInZone(wo.actualStartAt, data.warehouseTimeZone) : '–',
+                  value: wo.actualStartAt ? formatInZone(wo.actualStartAt, data.warehouseTimeZone) : 'None',
                 },
                 {
                   key: 'af',
                   label: 'Actual finish',
-                  value: wo.actualFinishAt ? formatInZone(wo.actualFinishAt, data.warehouseTimeZone) : '–',
+                  value: wo.actualFinishAt ? formatInZone(wo.actualFinishAt, data.warehouseTimeZone) : 'None',
                 },
                 ...(wo.cancelledAt
                   ? [
@@ -807,7 +808,7 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
                 {
                   key: 'tags',
                   label: 'Tags',
-                  value: wo.tags.length ? wo.tags.map((t) => t.name).join(', ') : '–',
+                  value: wo.tags.length ? wo.tags.map((t) => t.name).join(', ') : 'None',
                 },
               ]}
             />
@@ -820,6 +821,7 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
               {wo.kittingInstructions || 'No kitting instructions.'}
             </p>
           </section>
+          <ProjectTasksCard kind="work-order" variant="aside" recordId={wo.id} recordLabel={wo.code} />
         </aside>
       </div>
 
@@ -983,8 +985,8 @@ function ComponentsTab({ data }: { readonly data: WorkOrderDetail }) {
                 <td className="px-3 py-2 text-right font-semibold tabular-nums text-foreground">
                   {c.totalQty}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{withPicking ? c.allocatedQty : '–'}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{withPicking ? c.pickedQty : '–'}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{withPicking ? c.allocatedQty : 'None'}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{withPicking ? c.pickedQty : 'None'}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{c.consumedQty}</td>
                 <td
                   className={cn(
@@ -997,7 +999,7 @@ function ComponentsTab({ data }: { readonly data: WorkOrderDetail }) {
                   )}
                 >
                   {terminal ? (
-                    '–'
+                    'None'
                   ) : (
                     <>
                       {c.availableQty ?? c.freeQty}
@@ -1163,11 +1165,11 @@ function JobTab({ data }: { readonly data: WorkOrderDetail }) {
           t.taskNo,
           t.taskType,
           <StatusPill key="s" status={t.status} domain="job" size="sm" />,
-          t.sku ?? '–',
+          t.sku ?? 'None',
           t.plannedQty,
           t.actualQty,
-          t.sourceLocationCode ?? '–',
-          t.targetLocationCode ?? '–',
+          t.sourceLocationCode ?? 'None',
+          t.targetLocationCode ?? 'None',
         ])}
       />
     </div>

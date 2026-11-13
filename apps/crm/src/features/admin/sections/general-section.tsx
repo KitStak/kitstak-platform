@@ -166,7 +166,7 @@ export function GeneralSection() {
                     testId="admin-logo-upload"
                   />
                 </SettingRow>
-                <SettingRow label="Organization name" description="2–80 characters.">
+                <SettingRow label="Organization name" description="2 to 80 characters.">
                   <Field label={<span className="sr-only">Organization name</span>} error={errors.name}>
                     {({ inputId, describedBy, invalid }) => (
                       <Input

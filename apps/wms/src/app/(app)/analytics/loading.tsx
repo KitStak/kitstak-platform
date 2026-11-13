@@ -1,6 +1,6 @@
-import { AnalyticsSkeleton } from '@/components/analytics/analytics-skeleton';
+import { BrandLoader } from '@/components/ui/brand-loader';
 
-/** Analytics dashboards are KPI tiles + chart cards, not a grid: mirror that while the route loads. */
-export default function AnalyticsLoading() {
-  return <AnalyticsSkeleton />;
+/** Route loading state: the WMS brand loader, centered in the content area (the shell stays put). */
+export default function Loading() {
+  return <BrandLoader label="Loading analytics" />;
 }

@@ -44,8 +44,8 @@ describe('format', () => {
   });
 
   it('returns an em dash for empty or invalid dates', () => {
-    expect(formatDateTime(null)).toBe('—');
-    expect(formatDate('not a date')).toBe('—');
+    expect(formatDateTime(null)).toBe('None');
+    expect(formatDate('not a date')).toBe('None');
   });
 
   it('round-trips the picker format', () => {
@@ -61,7 +61,7 @@ describe('format', () => {
     expect(formatMoney(66.03, 'USD', 'summary')).toBe('$66.03');
     expect(formatMoney(-5, 'EUR', 'summary')).toBe('-€5.00');
     expect(formatMoney(1234.5, 'XOF', 'summary')).toBe('XOF 1,234.50');
-    expect(formatMoney(null)).toBe('—');
+    expect(formatMoney(null)).toBe('None');
   });
 
   it('formats numbers with the European preference', () => {

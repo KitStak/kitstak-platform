@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
 import { after } from 'next/server';
-import { CalendarDays, CreditCard, LayoutGrid, Package, Plus, Settings2, Users, type LucideIcon } from 'lucide-react';
+import { CalendarDays, CreditCard, FolderKanban, LayoutGrid, ListChecks, Package, Plus, Settings2, Users, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { Module } from '@kitstak/entitlements';
 import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
 import { getOrgGlance, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
-import { getLauncherStats } from '@/server/product-stats';
+import { getCustomerWork, getLauncherStats } from '@/server/product-stats';
+import { CustomerWorkPanel } from '@/features/launcher/customer-work';
 import { getSetupState, markGuideSeen } from '@/server/onboarding';
 import { CreateOrgForm } from '@/features/launcher/create-org-form';
 import { ProductTile } from '@/features/launcher/product-tile';
@@ -34,17 +35,34 @@ const PRODUCTS: Readonly<Record<Module, ProductCopy>> = {
     tagline: 'Warehouse operations',
     description: 'Receiving, inventory, picking and shipping for high-volume fulfillment.',
   },
+  projects: {
+    name: 'KitStak Projects',
+    tagline: 'Projects, tasks and timelines',
+    description: 'Plan work, assign tasks and see every deadline on boards, lists and timelines.',
+  },
 };
 
 function productUrl(module: Module): string {
-  return module === 'crm' ? env.NEXT_PUBLIC_CRM_URL : env.NEXT_PUBLIC_WMS_URL;
+  switch (module) {
+    case 'crm':
+      return env.NEXT_PUBLIC_CRM_URL;
+    case 'wms':
+      return env.NEXT_PUBLIC_WMS_URL;
+    case 'projects':
+      return env.NEXT_PUBLIC_PROJECTS_URL;
+  }
 }
 
 /** Where the tile's empty-state CTA deep-links: straight to the screen that creates the first record. */
 function emptyStateUrl(module: Module, orgSlug: string): string {
-  return module === 'crm'
-    ? `${env.NEXT_PUBLIC_CRM_URL}/${orgSlug}/crm/pipeline`
-    : `${env.NEXT_PUBLIC_WMS_URL}/orders`;
+  switch (module) {
+    case 'crm':
+      return `${env.NEXT_PUBLIC_CRM_URL}/${orgSlug}/crm/pipeline`;
+    case 'wms':
+      return `${env.NEXT_PUBLIC_WMS_URL}/orders`;
+    case 'projects':
+      return `${env.NEXT_PUBLIC_PROJECTS_URL}/projects/new`;
+  }
 }
 
 function firstName(name: string): string {
@@ -131,9 +149,10 @@ export default async function LauncherPage({
     );
   }
 
-  const [{ devAllowAll, modules }, stats, glance, setup, params] = await Promise.all([
+  const [{ devAllowAll, modules }, stats, customerWork, glance, setup, params] = await Promise.all([
     getOrgModuleStates(activeOrg.id),
     getLauncherStats(activeOrg.id),
+    getCustomerWork(activeOrg.id),
     getOrgGlance(activeOrg.id),
     getSetupState(activeOrg),
     searchParams,
@@ -164,6 +183,12 @@ export default async function LauncherPage({
     ...(entitledFor('wms')
       ? [{ label: 'Orders', href: `${env.NEXT_PUBLIC_WMS_URL}/orders`, icon: Package, external: true }]
       : []),
+    ...(entitledFor('projects')
+      ? [
+          { label: 'New project', href: `${env.NEXT_PUBLIC_PROJECTS_URL}/projects/new`, icon: FolderKanban, external: true },
+          { label: 'My work', href: `${env.NEXT_PUBLIC_PROJECTS_URL}/my-work`, icon: ListChecks, external: true },
+        ]
+      : []),
     { label: 'Billing', href: '/billing', icon: CreditCard, external: false },
     { label: 'Org settings', href: '/settings/organization', icon: Settings2, external: false },
   ];
@@ -185,11 +210,14 @@ export default async function LauncherPage({
       ) : null}
 
       <section aria-label="Your apps" className="grid gap-4 sm:grid-cols-2">
-        {modules.map((state) => {
+        {modules.map((state, index) => {
           const copy = PRODUCTS[state.module];
+          // An odd last tile spans the row so the grid never ends on a lonely half-width card.
+          const spanRow = modules.length % 2 === 1 && index === modules.length - 1;
           return (
             <ProductTile
               key={state.module}
+              className={spanRow ? 'sm:col-span-2' : undefined}
               module={state.module}
               name={copy.name}
               tagline={copy.tagline}
@@ -204,6 +232,10 @@ export default async function LauncherPage({
           );
         })}
       </section>
+
+      {entitledFor('projects') ? (
+        <CustomerWorkPanel rows={customerWork} projectsUrl={env.NEXT_PUBLIC_PROJECTS_URL} />
+      ) : null}
 
       <section aria-label="Quick links">
         <h2 className="text-2xs font-semibold tracking-[0.08em] text-fg-muted uppercase">Quick links</h2>
@@ -229,8 +261,9 @@ export default async function LauncherPage({
             />
             <GlanceCell
               item={{
-                label: 'Modules active',
-                value: `${modules.filter((state) => state.entitled).length} of ${modules.length}`,
+                // Counts the licensed apps (CRM, WMS, Projects); the Portal itself is always on.
+                label: 'Apps on your plan',
+                value: `${modules.filter((state) => state.entitled).length} of ${modules.length} apps`,
                 icon: LayoutGrid,
               }}
             />

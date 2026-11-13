@@ -61,10 +61,10 @@ const COLUMN = 'mx-auto w-full max-w-[600px] xl:max-w-[1040px]';
 
 const TEAM_SIZE_COPY: Readonly<Record<TeamSize, { title: string; description: string }>> = {
   '1': { title: 'Just me', description: 'Solo seller or founder' },
-  '2-5': { title: '2–5 people', description: 'A small, close team' },
-  '6-20': { title: '6–20 people', description: 'A growing sales team' },
-  '21-100': { title: '21–100 people', description: 'Several teams' },
-  '101-500': { title: '101–500 people', description: 'Multiple departments' },
+  '2-5': { title: '2 to 5 people', description: 'A small, close team' },
+  '6-20': { title: '6 to 20 people', description: 'A growing sales team' },
+  '21-100': { title: '21 to 100 people', description: 'Several teams' },
+  '101-500': { title: '101 to 500 people', description: 'Multiple departments' },
   '500+': { title: '500+ people', description: 'Enterprise rollout' },
 };
 

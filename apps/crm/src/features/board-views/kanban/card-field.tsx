@@ -59,7 +59,7 @@ function FieldValue({ column, item, userMap, closed }: Pick<CardFieldProps, 'col
         </span>
       );
     case 'check':
-      return display.checked ? <Check aria-label="Checked" className="size-4 text-success" /> : <span className="text-sm text-fg-disabled">—</span>;
+      return display.checked ? <Check aria-label="Checked" className="size-4 text-success" /> : <span className="text-sm text-fg-disabled">None</span>;
     case 'text': {
       const overdue = !closed && isOverdue(column, item);
       return (
@@ -70,7 +70,7 @@ function FieldValue({ column, item, userMap, closed }: Pick<CardFieldProps, 'col
       );
     }
     default:
-      return <span className="text-sm text-fg-disabled">—</span>;
+      return <span className="text-sm text-fg-disabled">None</span>;
   }
 }
 

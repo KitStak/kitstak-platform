@@ -125,7 +125,7 @@ const TYPE_LABEL: Readonly<Record<string, string>> = {
 export function columnRule(c: ImportColumn): string {
   const parts = [TYPE_LABEL[c.type] ?? c.type];
   if (c.maxLength) parts.push(`max ${c.maxLength} characters`);
-  if (c.min !== undefined && c.max !== undefined) parts.push(`${c.min}–${c.max}`);
+  if (c.min !== undefined && c.max !== undefined) parts.push(`${c.min} to ${c.max}`);
   else if (c.min !== undefined) parts.push(`at least ${c.min}`);
   else if (c.max !== undefined) parts.push(`at most ${c.max}`);
   if (c.options && c.options.length > 0) parts.push(`one of: ${c.options.join(', ')}`);
@@ -201,7 +201,7 @@ function ImportManual({
                     </td>
                     <td className="border-b border-border px-2 py-2 text-secondary">{columnRule(c)}</td>
                     <td className="border-b border-border px-2 py-2 font-mono text-2xs text-body">
-                      {c.example || '—'}
+                      {c.example || 'None'}
                     </td>
                     <td className="border-b border-border px-2 py-2 text-secondary">
                       {c.description ?? (c.required ? 'Required.' : 'Optional.')}

@@ -367,7 +367,7 @@ describe('returns and packing (DB)', () => {
     const msgs = (
       await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, rma.id))
     ).map((r) => r.message);
-    expect(msgs).toContain(`${sku} -> Disposition is modified. — --> Quarantine`);
+    expect(msgs).toContain(`${sku} -> Disposition is modified. None → Quarantine`);
     expect(msgs.some((m) => m.startsWith('Disposition is modified'))).toBe(false);
   });
 

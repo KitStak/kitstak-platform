@@ -90,10 +90,10 @@ export function initialsOf(name: string): string {
   return `${first}${last}`.toUpperCase() || '?';
 }
 
-/** Change-log wire format ("Roles is modified. a --> b", Logiwa parity) as UI copy: "Roles changed: a → b". */
+/** Change-log sentence ("Roles is modified. a → b", legacy rows "a --> b") as UI copy: "Roles changed: a → b". */
 export function prettyLogMessage(message: string): string {
   return message
-    .replace(/^(.*?) is modified\. ([\s\S]*?) --> ([\s\S]*)$/, '$1 changed: $2 → $3')
+    .replace(/^(.*?) is modified\. ([\s\S]*?) (?:-->|→) ([\s\S]*)$/, '$1 changed: $2 → $3')
     .replace(/ --> /g, ' → ')
     .replace(/ -> /g, ' › ');
 }

@@ -68,7 +68,7 @@ export function cellToText(column: Pick<ColumnDto, 'type' | 'settings'>, value: 
     }
     case 'timeline': {
       const range = readTimeline(value);
-      return range ? `${range.from} – ${range.to}` : '';
+      return range ? `${range.from} to ${range.to}` : '';
     }
     case 'number':
     case 'rating': {

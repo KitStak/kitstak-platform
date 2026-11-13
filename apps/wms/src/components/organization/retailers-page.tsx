@@ -692,10 +692,10 @@ function RetailerDetailsDrawer({
                 label: 'Status',
                 value: <StatusPill status={d.isActive ? 'Active' : 'Inactive'} domain="active" />,
               },
-              { key: 'business', label: 'Business name', value: d.businessName ?? '—' },
-              { key: 'address', label: 'Address', value: d.address || '—' },
-              { key: 'email', label: 'E-mail', value: d.email ?? '—' },
-              { key: 'phone', label: 'Phone', value: d.phone ?? '—' },
+              { key: 'business', label: 'Business name', value: d.businessName ?? 'None' },
+              { key: 'address', label: 'Address', value: d.address || 'None' },
+              { key: 'email', label: 'E-mail', value: d.email ?? 'None' },
+              { key: 'phone', label: 'Phone', value: d.phone ?? 'None' },
               {
                 key: 'case',
                 label: 'Create case labels',
@@ -703,7 +703,7 @@ function RetailerDetailsDrawer({
               },
               { key: 'lp', label: 'LP label print qty', value: String(d.lpLabelPrintQty) },
               { key: 'orders', label: 'Shipment orders', value: d.orderCount.toLocaleString('en-US') },
-              { key: 'desc', label: 'Description', value: d.description ?? '—' },
+              { key: 'desc', label: 'Description', value: d.description ?? 'None' },
             ]}
           />
           <section className="flex flex-col gap-2" aria-label="Documents">

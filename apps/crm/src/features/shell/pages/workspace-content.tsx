@@ -31,7 +31,7 @@ const TYPE_OPTIONS = [
 
 const SORT_OPTIONS = [
   { value: 'updated', label: 'Last updated' },
-  { value: 'name', label: 'Name (A–Z)' },
+  { value: 'name', label: 'Name (A to Z)' },
   { value: 'type', label: 'Type' },
 ];
 
@@ -252,9 +252,9 @@ export function WorkspaceContentTab({ tree, view, onViewChange }: WorkspaceConte
                     <RowName row={row} href={href} onOpenFolder={(folderId) => onViewChange({ folder: folderId, type: 'all' })} />
                   )}
                   <span className="hidden truncate text-sm text-fg-secondary md:block">{typeLabel}</span>
-                  <span className="hidden truncate text-sm text-fg-secondary md:block">{row.folderName ?? '—'}</span>
+                  <span className="hidden truncate text-sm text-fg-secondary md:block">{row.folderName ?? 'None'}</span>
                   <span className="hidden text-sm text-fg-muted tabular-nums md:block">
-                    {row.updatedAt ? formatRelativeTime(row.updatedAt) : '—'}
+                    {row.updatedAt ? formatRelativeTime(row.updatedAt) : 'None'}
                   </span>
                   <span className="flex justify-end opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:has-[[data-state=open]]:opacity-100">
                     {row.type === 'board' ? (

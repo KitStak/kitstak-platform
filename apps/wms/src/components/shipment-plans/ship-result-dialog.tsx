@@ -97,7 +97,7 @@ export function ShipResultDialog({
                           {r.orderCode}
                         </Link>
                       ) : (
-                        '—'
+                        'None'
                       )}
                     </td>
                     <td className="px-4 py-2">

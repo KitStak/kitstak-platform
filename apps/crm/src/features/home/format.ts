@@ -4,12 +4,8 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-export function greetingFor(now: Date): string {
-  const hour = now.getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-}
+/** The shared KitStak greeting (same boundaries as Projects and WMS). */
+export { greetingFor } from '@kitstak/ui/text';
 
 /** "just now", "5m ago", "3h ago", "2d ago", then a short date. Invalid input → "". */
 export function formatRelativeTime(iso: string, now: Date = new Date()): string {

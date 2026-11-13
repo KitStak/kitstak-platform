@@ -90,8 +90,8 @@ export async function countAccuracy(
       GROUP BY ${raw(keyExpr)}, ${raw(labelExpr)}, ${raw(subExpr)} ORDER BY "absVarianceUnits" DESC, buckets DESC LIMIT 10`,
       )
     ).map((r) => ({
-      key: String(r.key ?? '—'),
-      label: String(r.label ?? '—'),
+      key: String(r.key ?? 'None'),
+      label: String(r.label ?? 'None'),
       sub: r.sub === null || r.sub === undefined ? null : String(r.sub),
       buckets: num(r.buckets),
       exactBuckets: num(r.exactBuckets),

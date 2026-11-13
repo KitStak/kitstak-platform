@@ -105,7 +105,7 @@ const COLUMNS: GridColumnDef<ContractRow>[] = [
     id: 'nextPeriodStart',
     header: 'Next period',
     size: 116,
-    cell: ({ row }) => (row.original.nextPeriodStart ? <Day value={row.original.nextPeriodStart} /> : '—'),
+    cell: ({ row }) => (row.original.nextPeriodStart ? <Day value={row.original.nextPeriodStart} /> : 'None'),
   },
   {
     id: 'reportCount',

@@ -16,7 +16,7 @@ export const RECEIVING_TYPE_LABELS: Readonly<Record<(typeof RECEIVING_TYPES)[num
 
 /** "DisassembleKit" → "Disassemble kit"; unknown values are split on case and sentence-cased. */
 export function receivingTypeLabel(type: string | null | undefined): string {
-  if (!type) return '—';
+  if (!type) return 'None';
   const known = (RECEIVING_TYPE_LABELS as Readonly<Record<string, string>>)[type];
   if (known) return known;
   const words = type

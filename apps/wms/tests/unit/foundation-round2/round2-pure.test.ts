@@ -29,7 +29,7 @@ describe('foundation round 2', () => {
     expect(humanize('maxSkuQty')).toBe('Max SKU Qty');
     expect(humanize('jobId')).toBe('Job');
     expect(humanize('shipCity')).toBe('Ship City');
-    expect(messageSide('')).toBe('—');
+    expect(messageSide('')).toBe('None');
     expect(messageSide('2026-11-10T06:16:20.639Z', 'America/Chicago')).toMatch(
       /^11\/10\/2026 12:16:20 AM CST$/,
     );

@@ -13,7 +13,10 @@
     "./logo": "./src/logo/index.ts",
     "./styles/tokens.css": "./src/styles/tokens.css",
     "./theme": "./src/theme/index.ts",
-    "./theme-handoff": "./src/theme/handoff.tsx"
+    "./theme-handoff": "./src/theme/handoff.tsx",
+    "./handoff": "./src/handoff/index.ts",
+    "./status-icon": "./src/status-icon/index.ts",
+    "./text": "./src/text/index.ts"
   },
   "scripts": {
     "test": "vitest run",

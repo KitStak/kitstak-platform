@@ -29,7 +29,7 @@ describe('percentDifference', () => {
     expect(percentDifference(0, 0)).toBe(0);
     expect(percentDifference(0, 4)).toBe(100);
     expect(percentDifference(5, null)).toBeNull();
-    expect(formatDifference(null)).toBe('—');
+    expect(formatDifference(null)).toBe('None');
     expect(formatDifference(2.5)).toBe('+2.50');
     expect(formatDifference(0)).toBe('0.00');
   });

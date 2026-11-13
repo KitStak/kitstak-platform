@@ -288,7 +288,7 @@ export function AuditSection() {
 }
 
 function AuditTarget({ entry }: { readonly entry: AdminAuditEntryDto }) {
-  if (!entry.targetType && !entry.targetLabel) return <span className="text-fg-muted">—</span>;
+  if (!entry.targetType && !entry.targetLabel) return <span className="text-fg-muted">None</span>;
   const type = entry.targetType ? targetTypeLabel(entry.targetType) : null;
   if (entry.targetState === 'deleted') {
     return <span className="text-fg-muted italic">Deleted {type ? type.toLowerCase() : 'item'}</span>;
@@ -399,13 +399,13 @@ function AuditRow({ entry, open, onToggle }: { readonly entry: AdminAuditEntryDt
                   ? entry.targetState === 'deleted'
                     ? `Deleted ${targetTypeLabel(entry.targetType).toLowerCase()}`
                     : `${targetTypeLabel(entry.targetType)}${entry.targetLabel ? ` · ${entry.targetLabel}` : ''}`
-                  : '—'}
+                  : 'None'}
               </dd>
               <dt className="text-fg-muted">IP address</dt>
               <dd className="font-mono text-xs text-fg">{formatIp(entry.ipAddress)}</dd>
               <dt className="text-fg-muted">Device</dt>
               <dd className="text-fg" title={entry.userAgent ?? undefined}>
-                {entry.userAgent ? `${parseUserAgent(entry.userAgent).browser} on ${parseUserAgent(entry.userAgent).os}` : '—'}
+                {entry.userAgent ? `${parseUserAgent(entry.userAgent).browser} on ${parseUserAgent(entry.userAgent).os}` : 'None'}
               </dd>
               {details.map((row) => (
                 <Fragment key={row.key}>

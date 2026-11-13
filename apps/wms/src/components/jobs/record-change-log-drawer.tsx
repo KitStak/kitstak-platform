@@ -118,7 +118,7 @@ export function RecordChangeLogDrawer({ open, onOpenChange, path, entityCode }: 
           </div>
           <div className="flex items-center justify-between text-xs text-secondary">
             <span>
-              {fmt.number((page - 1) * CHANGE_LOG_PAGE_SIZE + 1)}–
+              {fmt.number((page - 1) * CHANGE_LOG_PAGE_SIZE + 1)} to{' '}
               {fmt.number(Math.min(page * CHANGE_LOG_PAGE_SIZE, total))} of {fmt.number(total)}
             </span>
             <div className="flex items-center gap-1">

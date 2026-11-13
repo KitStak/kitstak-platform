@@ -138,7 +138,7 @@ const COLUMNS: GridColumnDef<ReportRow>[] = [
     meta: { clip: false },
     cell: ({ row }) =>
       row.original.calcStatus === 'Failed' ? (
-        <span className="text-faint">—</span>
+        <span className="text-faint">None</span>
       ) : (
         <span className="inline-flex items-center gap-1">
           <BillingPill status={row.original.billStatus} />
@@ -236,7 +236,7 @@ function AutoRunsDrawer({
             </div>
             <div>
               <dt className="text-2xs font-semibold text-faint">Last result</dt>
-              <dd className="mt-0.5 text-foreground">{d.task?.lastMessage ?? '—'}</dd>
+              <dd className="mt-0.5 text-foreground">{d.task?.lastMessage ?? 'None'}</dd>
             </div>
           </dl>
           <section aria-label="Job history">
@@ -265,7 +265,7 @@ function AutoRunsDrawer({
                       <td
                         className={`py-1.5 text-right tabular-nums ${r.failed ? 'text-error' : 'text-faint'}`}
                       >
-                        {r.failed || '—'}
+                        {r.failed || 'None'}
                       </td>
                       <td className="py-1.5 text-right font-semibold tabular-nums">
                         {moneyGrid(r.total, 'USD')}

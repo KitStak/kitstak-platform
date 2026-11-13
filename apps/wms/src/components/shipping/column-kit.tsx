@@ -13,12 +13,12 @@ import { pillStyle, statusTone } from '@/lib/status-colors';
 
 /** One module-wide date-time format: zero-padded, no seconds ("11/05/2026 9:15 AM"). */
 export const shipDateTime = (value: string | Date | null | undefined): string =>
-  value ? formatGridDateTime(value) : '—';
+  value ? formatGridDateTime(value) : 'None';
 /** Date-only twin of shipDateTime ("11/05/2026"); a bare YYYY-MM-DD is read as that calendar day. */
 export const shipDay = (value: string | null | undefined): string => {
-  if (!value) return '—';
+  if (!value) return 'None';
   const v = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) ? `${value}T12:00:00` : value;
-  return formatGridDateTime(v).split(' ')[0] ?? '—';
+  return formatGridDateTime(v).split(' ')[0] ?? 'None';
 };
 
 /**
@@ -29,9 +29,9 @@ export function formatInZone(
   value: string | Date | null | undefined,
   timeZone: string | null | undefined,
 ): string {
-  if (!value) return '—';
+  if (!value) return 'None';
   const d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return 'None';
   const make = (tz?: string) =>
     new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
@@ -110,7 +110,7 @@ export interface ColumnSpec<T> {
   readonly exportKey?: string;
 }
 
-export const dash = <span className="text-faint">—</span>;
+export const dash = <span className="text-faint">None</span>;
 
 export function textCell(value: unknown): React.ReactNode {
   if (value === null || value === undefined || value === '') return dash;

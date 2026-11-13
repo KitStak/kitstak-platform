@@ -80,7 +80,7 @@ function ResultRow({
             atp === null ? 'text-faint' : atp <= 0 ? 'text-danger' : over ? 'text-warning' : 'text-success',
           )}
         >
-          {atp === null ? '—' : fmt.quantity(atp)}
+          {atp === null ? 'None' : fmt.quantity(atp)}
         </span>
       </span>
       <NumberInput

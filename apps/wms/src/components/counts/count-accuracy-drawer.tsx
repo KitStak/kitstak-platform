@@ -50,7 +50,7 @@ interface Accuracy {
 
 const PERIODS = [30, 90, 180, 365] as const;
 const pct = (exact: number, total: number): string =>
-  total === 0 ? '—' : `${Math.round((exact / total) * 1000) / 10}%`;
+  total === 0 ? 'None' : `${Math.round((exact / total) * 1000) / 10}%`;
 
 export function CountAccuracyDrawer({
   open,
@@ -131,7 +131,7 @@ function Body() {
               value={
                 d.totals.systemUnits
                   ? `${Math.max(0, Math.round((1 - d.totals.absVarianceUnits / d.totals.systemUnits) * 1000) / 10)}%`
-                  : '—'
+                  : 'None'
               }
               sublabel={`${d.totals.absVarianceUnits.toLocaleString()} units off of ${d.totals.systemUnits.toLocaleString()}`}
             />

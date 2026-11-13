@@ -125,7 +125,7 @@ function columns(onOpen: (r: AuditRow) => void): GridColumnDef<AuditRow>[] {
       size: 170,
       cell: ({ row }) => (
         <span className="block truncate text-body" title={row.original.entityLabel ?? undefined}>
-          {row.original.entityLabel ?? '—'}
+          {row.original.entityLabel ?? 'None'}
         </span>
       ),
     },
@@ -153,7 +153,7 @@ function columns(onOpen: (r: AuditRow) => void): GridColumnDef<AuditRow>[] {
       header: 'Device',
       size: 260,
       meta: hidden,
-      cell: ({ row }) => <span className="truncate text-faint">{row.original.userAgent ?? '—'}</span>,
+      cell: ({ row }) => <span className="truncate text-faint">{row.original.userAgent ?? 'None'}</span>,
     },
   ];
 }

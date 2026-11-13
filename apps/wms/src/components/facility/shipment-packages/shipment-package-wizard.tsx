@@ -507,7 +507,7 @@ function OtherStep({ form, canManage }: { readonly form: UseFormReturn<F>; reado
           <div>
             <dt className="text-2xs text-faint">Package</dt>
             <dd className="font-medium">
-              {v.code || '—'} · {v.length} × {v.width} × {v.height} {v.dimensionUnit}
+              {v.code || 'None'} · {v.length} × {v.width} × {v.height} {v.dimensionUnit}
             </dd>
           </div>
           <div>

@@ -142,7 +142,7 @@ describe('small helpers', () => {
 
   it('date range label', () => {
     expect(formatRange({ from: new Date(2026, 0, 2), to: new Date(2026, 0, 9) })).toBe(
-      '2026/01/02 – 2026/01/09',
+      '2026/01/02 to 2026/01/09',
     );
     expect(formatRange({ from: null, to: null })).toBe('');
   });

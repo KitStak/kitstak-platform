@@ -16,11 +16,21 @@ export interface ShellOrg {
   readonly logo: string | null;
 }
 
+/** Sibling KitStak apps: origins and per-module unlock state (app switcher, cross-app panels). */
+export interface ShellApps {
+  readonly urls: { readonly portal: string; readonly crm: string; readonly wms: string; readonly projects: string };
+  readonly entitled: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  /** Apps this org cannot use on any plan (WMS outside the platform org). */
+  readonly notInPlan?: readonly ('crm' | 'wms' | 'projects')[];
+}
+
 export interface OrgContextValue {
   readonly org: ShellOrg;
   readonly user: ShellUser;
   readonly role: OrgRole;
   readonly permissions: readonly Permission[];
+  /** Omitted in dev harnesses; the shell then shows every app unlocked. */
+  readonly apps?: ShellApps;
 }
 
 const OrgContext = createContext<OrgContextValue | null>(null);
@@ -40,6 +50,11 @@ export function useOrg(): OrgContextValue {
   const context = useContext(OrgContext);
   if (!context) throw new Error('useOrg must be used inside the app shell');
   return context;
+}
+
+/** Like `useOrg`, but null outside the app shell (dev harnesses, embedded panels). */
+export function useOptionalOrg(): OrgContextValue | null {
+  return useContext(OrgContext);
 }
 
 /** UI-only affordance check; the server re-checks every request. */

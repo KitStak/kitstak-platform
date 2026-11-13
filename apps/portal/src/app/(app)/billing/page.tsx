@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AppMark } from '@/features/launcher/app-mark';
 import Link from 'next/link';
 import { CreditCard } from 'lucide-react';
 import { isModule } from '@kitstak/entitlements';
@@ -10,7 +11,11 @@ import type { ModuleAccess } from '@/server/entitlements';
 
 export const metadata: Metadata = { title: 'Billing' };
 
-const MODULE_NAMES: Readonly<Record<string, string>> = { crm: 'KitStak CRM', wms: 'KitStak WMS' };
+const MODULE_NAMES: Readonly<Record<string, string>> = {
+  crm: 'KitStak CRM',
+  wms: 'KitStak WMS',
+  projects: 'KitStak Projects',
+};
 
 const STATUS_BADGE: Readonly<
   Record<ModuleAccess, { label: string; tone: 'success' | 'info' | 'warning' | 'neutral' }>
@@ -128,7 +133,12 @@ export default async function BillingPage({
               const badge = STATUS_BADGE[state.access];
               return (
                 <tr key={state.module} className="border-b border-border-subtle last:border-b-0">
-                  <td className="px-5 py-4 font-medium text-fg">{MODULE_NAMES[state.module]}</td>
+                  <td className="px-5 py-4 font-medium text-fg">
+                    <span className="flex items-center gap-3">
+                      <AppMark module={state.module} locked={!state.entitled} className="size-8" />
+                      {MODULE_NAMES[state.module]}
+                    </span>
+                  </td>
                   <td className="px-5 py-4">
                     <Badge tone={badge.tone}>{badge.label}</Badge>
                   </td>

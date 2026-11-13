@@ -9,6 +9,7 @@
  */
 import * as React from 'react';
 import Link from 'next/link';
+import { ProjectTasksCard } from '@/components/projects/project-tasks-card';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { RowSelectionState } from '@tanstack/react-table';
 import {
@@ -584,7 +585,7 @@ function Loaded({
                 <span className="text-sm font-normal text-secondary">/ {systemTotal.toLocaleString()}</span>
               </span>
             ) : (
-              '—'
+              'None'
             )
           }
           sublabel={
@@ -606,7 +607,7 @@ function Loaded({
           label="Unit variance"
           value={
             !accuracyLines.length ? (
-              '—'
+              'None'
             ) : (
               <span className="tabular-nums">
                 {varianceUnits > 0
@@ -628,10 +629,14 @@ function Loaded({
         />
         <StatTile
           label="Exact lines"
-          value={accuracyLines.length ? `${Math.round((exact / accuracyLines.length) * 100)}%` : '—'}
+          value={accuracyLines.length ? `${Math.round((exact / accuracyLines.length) * 100)}%` : 'None'}
           sublabel={`${exact} of ${plural(accuracyLines.length, 'counted line', 'counted lines')} ${exact === 1 && accuracyLines.length === 1 ? 'matches' : 'match'}`}
           tone={accuracyLines.length && exact === accuracyLines.length ? 'success' : 'default'}
         />
+      </div>
+      {/* KitStak Projects work linked to this count (hidden when Projects is not available). */}
+      <div className="px-6 pb-4 empty:hidden">
+        <ProjectTasksCard kind="count" variant="aside" recordId={plan.id} recordLabel={plan.code} />
       </div>
       <div className="relative">
         <div ref={tabStrip}>
@@ -1018,14 +1023,14 @@ function EntriesTable({
               </td>
               <td className="py-1 pr-3">{e.locationCode}</td>
               <td className="py-1 pr-3 text-secondary">
-                {[e.lotNumber, e.lpNumber].filter(Boolean).join(' · ') || '—'}
+                {[e.lotNumber, e.lpNumber].filter(Boolean).join(' · ') || 'None'}
               </td>
               <td className="py-1 pr-3 text-right tabular-nums">{e.systemQty}</td>
               <td className="py-1 pr-3 text-right tabular-nums">{e.countedQty}</td>
               <td className="py-1 pr-3 text-right">
                 <DeltaBadge value={e.countedQty - e.systemQty} system={e.systemQty} />
               </td>
-              <td className="py-1 pr-3">{e.countedBy ?? '—'}</td>
+              <td className="py-1 pr-3">{e.countedBy ?? 'None'}</td>
               <td className="py-1">
                 <DateCell value={e.countedAt} />
               </td>

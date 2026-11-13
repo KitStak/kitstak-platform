@@ -10,3 +10,4 @@ export * from './badge';
 export * from './kbd';
 export * from './spinner';
 export * from './dropdown-menu';
+export * from './brand-loader';

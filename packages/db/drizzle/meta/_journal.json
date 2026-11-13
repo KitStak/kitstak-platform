@@ -29,6 +29,13 @@
       "when": 1794700800000,
       "tag": "0003_core_password_change_required",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794787200000,
+      "tag": "0004_core_projects_module",
+      "breakpoints": true
     }
   ]
 }

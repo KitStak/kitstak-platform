@@ -176,17 +176,17 @@ describe('change-log repair (entries other modules wrote raw)', () => {
       } as typeof schema.changeLog.$inferInsert);
     expect(await repairOrderChangeLog(w.db)).toBe(3);
     const after = await messages(o.id);
-    expect(after).toContain('Job is modified. — --> Job005319');
-    expect(after).toContain('Merged Into Order is modified. — --> SO010907');
+    expect(after).toContain('Job is modified. None → Job005319');
+    expect(after).toContain('Merged Into Order is modified. None → SO010907');
     expect(
       after.some((m) =>
-        /^Cancelled At is modified\. — --> \d{1,2}\/\d{1,2}\/2026 \d{1,2}:\d{2}:\d{2} (AM|PM) [A-Z]{2,5}$/.test(
+        /^Cancelled At is modified\. None → \d{1,2}\/\d{1,2}\/2026 \d{1,2}:\d{2}:\d{2} (AM|PM) [A-Z]{2,5}$/.test(
           m,
         ),
       ),
     ).toBe(true);
     expect(after).toContain('Cancel note: x');
-    expect(after.some((m) => m.includes('.  -->'))).toBe(false);
+    expect(after.some((m) => /\.\s\s(?:-->|→)|—/.test(m))).toBe(false);
     expect(await repairOrderChangeLog(w.db, [o.id])).toBe(0);
   });
 });

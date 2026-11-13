@@ -111,7 +111,7 @@ export function PlanChangeLogDrawer({
                       <td className="break-words px-3 py-2.5 text-body">
                         {localizeIsoInText(
                           humanizePlanChange(
-                            / is modified\.|-->/.test(entry.message) || !entry.message
+                            / is modified\.|-->|→/.test(entry.message) || !entry.message
                               ? changeLogMessage(entry)
                               : entry.message,
                           ),
@@ -132,7 +132,7 @@ export function PlanChangeLogDrawer({
           </div>
           <div className="flex items-center justify-between text-xs text-secondary">
             <span className="tabular-nums">
-              {(page - 1) * CHANGE_LOG_PAGE_SIZE + 1}–{Math.min(page * CHANGE_LOG_PAGE_SIZE, total)} of{' '}
+              {(page - 1) * CHANGE_LOG_PAGE_SIZE + 1} to {Math.min(page * CHANGE_LOG_PAGE_SIZE, total)} of{' '}
               {total}
             </span>
             <div className="flex items-center gap-1">

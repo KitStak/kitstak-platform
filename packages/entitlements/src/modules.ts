@@ -4,9 +4,9 @@
  */
 import type { EntitlementModule } from '@kitstak/db/schema';
 
-export type Module = 'crm' | 'wms';
+export type Module = 'crm' | 'wms' | 'projects';
 
-export const MODULES: readonly Module[] = ['crm', 'wms'] as const;
+export const MODULES: readonly Module[] = ['crm', 'wms', 'projects'] as const;
 
 /**
  * Compile-time lockstep guard: `Module` must stay identical to the schema's

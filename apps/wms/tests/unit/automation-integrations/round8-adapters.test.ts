@@ -340,7 +340,7 @@ describe('Etsy', () => {
           ],
         },
       )[0],
-    ).toMatchObject({ id: '3:30', sku: 'RING-7', title: 'Ring — 7', price: 50 });
+    ).toMatchObject({ id: '3:30', sku: 'RING-7', title: 'Ring · 7', price: 50 });
   });
   it('sends the keystring and bearer token, scoped to the shop', async () => {
     const calls = mockFetch(() => ({ shop_name: 'BluebirdAndMain' }));

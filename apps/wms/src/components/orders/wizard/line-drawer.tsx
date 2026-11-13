@@ -149,7 +149,7 @@ export function LineDrawer({ line, warehouseId, readOnly, onOpenChange, onApply 
             {facts.isLoading && (atp === null || atp === undefined) ? (
               'Loading…'
             ) : atp === null || atp === undefined ? (
-              '—'
+              'None'
             ) : (
               <span
                 className={

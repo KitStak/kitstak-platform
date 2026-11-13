@@ -179,7 +179,7 @@ describe('API contract', () => {
   it('validates tax rate with an inline message instead of clamping', () => {
     const r = productInputSchema.safeParse(input('TAX-250', { taxRate: 250 }));
     expect(r.success).toBe(false);
-    expect(r.error?.issues.find((i) => i.path[0] === 'taxRate')?.message).toBe('Tax rate must be 0–100%');
+    expect(r.error?.issues.find((i) => i.path[0] === 'taxRate')?.message).toBe('Tax rate must be 0 to 100%');
     const neg = productInputSchema.safeParse(input('NEG', { salesPrice: -5 }));
     expect(neg.error?.issues.find((i) => i.path[0] === 'salesPrice')?.message).toBe('Must be 0 or more');
   });

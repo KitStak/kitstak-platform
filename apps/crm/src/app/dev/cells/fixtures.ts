@@ -174,7 +174,7 @@ interface Seed {
 
 const SEEDS: Seed[] = [
   {
-    name: 'Acme Robotics — platform expansion',
+    name: 'Acme Robotics · platform expansion',
     group: 0,
     values: {
       text: 'Send revised MSA',
@@ -201,7 +201,7 @@ const SEEDS: Seed[] = [
     computed: { mirror: { display: 'Strategic', values: ['Strategic'] }, formula: { result: 862500 } },
   },
   {
-    name: 'Globex — logistics suite',
+    name: 'Globex · logistics suite',
     group: 0,
     values: {
       text: 'Security review call',
@@ -226,7 +226,7 @@ const SEEDS: Seed[] = [
     computed: { mirror: { display: 'Strategic, Mid-market', values: ['Strategic', 'Mid-market'] }, formula: { result: 142250 } },
   },
   {
-    name: 'Initech — renewal',
+    name: 'Initech · renewal',
     group: 0,
     values: {
       status: { labelId: 'stuck' },
@@ -242,10 +242,10 @@ const SEEDS: Seed[] = [
     computed: { formula: { result: null, error: 'Unknown column {probability}' } },
   },
   {
-    name: 'Umbrella Health — pilot',
+    name: 'Umbrella Health · pilot',
     group: 1,
     values: {
-      text: 'Signed — kickoff Monday',
+      text: 'Signed · kickoff Monday',
       status: { labelId: 'done' },
       priority: { labelId: 'low' },
       people: { ids: [uuid(105), uuid(103)] },
@@ -261,7 +261,7 @@ const SEEDS: Seed[] = [
     computed: { formula: { result: 96000 } },
   },
   {
-    name: 'Stark Manufacturing — new logo',
+    name: 'Stark Manufacturing · new logo',
     group: 1,
     values: {
       status: { labelId: 'working' },
@@ -273,7 +273,7 @@ const SEEDS: Seed[] = [
       tags: { tags: ['partner'] },
     },
   },
-  { name: 'Wayne Freight — discovery', group: 1, values: {} },
+  { name: 'Wayne Freight · discovery', group: 1, values: {} },
 ];
 
 const created = new Date(Date.now() - 3 * 86_400_000).toISOString();

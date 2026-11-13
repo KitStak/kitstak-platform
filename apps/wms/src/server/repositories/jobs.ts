@@ -18,6 +18,7 @@ import type { GridQuery } from '@/server/query/grid-query';
 import { pageOffset } from '@/server/query/paginate';
 import { asBool, compileGrid, n0, type FieldSqlMap, qc } from './jobs-grid';
 import { dbAll, dbGet, mapSeq, withWriteTx } from '@/server/db/sql';
+import { modifiedMessage } from '@/lib/change-log-text';
 
 const j = schema.jobs;
 
@@ -367,7 +368,7 @@ export async function markPickListPrinted(db: AppDb, ctx: DomainCtx, ids: readon
       fieldLabel: 'Pick List Status',
       fromValue: job.pickListStatus,
       toValue: 'Printed',
-      message: 'Pick List Status is modified. Not Printed --> Printed',
+      message: modifiedMessage('Pick List Status', 'Not Printed', 'Printed'),
       userId: ctx.userId,
       source: ctx.source,
     });

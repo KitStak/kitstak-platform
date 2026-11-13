@@ -80,7 +80,7 @@ function RateCell({ value }: { readonly value: number | null }) {
   if (value === null)
     return (
       <span className="text-faint" title="No calls in the last 24 hours">
-        — <span className="text-2xs">No data</span>
+        <span className="text-2xs">No data</span>
       </span>
     );
   const low = value < LOW_PERFORMING_PCT;
@@ -268,7 +268,7 @@ export function HealthOverviewPage() {
                             className="text-lg font-semibold text-faint"
                             title="No calls in the last 24 hours"
                           >
-                            —
+                            None
                           </span>
                         ) : (
                           <span
@@ -649,7 +649,7 @@ export function SetupDetailsPage() {
                 // No ring at all when there is nothing to chart: a muted placeholder circle with the text inside it.
                 <div className="flex h-48 items-center justify-center">
                   <div className="flex h-36 w-36 flex-col items-center justify-center gap-1 rounded-full border-[10px] border-border px-3 text-center">
-                    <span className="text-lg font-semibold text-faint">—</span>
+                    <span className="text-lg font-semibold text-faint">None</span>
                     <span className="text-2xs leading-tight text-secondary">
                       No downloads in the last 24 hours
                     </span>
@@ -766,7 +766,7 @@ export function SetupDetailsPage() {
             >
               <MiniTable
                 heads={['Order code', 'Block', 'Workflow']}
-                rows={d.blocked.map((b) => [b.orderCode, b.blockType, b.workflowName ?? '—'])}
+                rows={d.blocked.map((b) => [b.orderCode, b.blockType, b.workflowName ?? 'None'])}
               />
             </CardShell>
             <CardShell

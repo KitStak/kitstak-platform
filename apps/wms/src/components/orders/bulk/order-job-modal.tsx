@@ -406,7 +406,7 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, 'open'>
                 {jobType ? (
                   <span className="font-normal text-faint">
                     {jobType.batchMethod === 'Nof Item' ? 'Units' : 'Orders'} per job · job type allows{' '}
-                    {jobType.batchMin}–{jobType.batchMax}
+                    {jobType.batchMin} to {jobType.batchMax}
                   </span>
                 ) : null}
               </label>

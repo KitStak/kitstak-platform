@@ -401,8 +401,8 @@ function ProductCapacityStep({ form }: { readonly form: UseFormReturn<F> }) {
       <CapacityTable<ProductCapacityRow>
         rows={rows}
         columns={[
-          { label: 'Product', render: (r) => <span className="font-medium">{r.sku ?? '—'}</span> },
-          { label: 'Client', render: (r) => r.clientName ?? '—' },
+          { label: 'Product', render: (r) => <span className="font-medium">{r.sku ?? 'None'}</span> },
+          { label: 'Client', render: (r) => r.clientName ?? 'None' },
           { label: 'Pack type', render: (r) => r.packType },
           { label: 'Min qty', render: (r) => r.minQty, align: 'right' },
           { label: 'Max qty', render: (r) => r.maxQty, align: 'right' },
@@ -445,7 +445,7 @@ function LpCapacityStep({ form }: { readonly form: UseFormReturn<F> }) {
       <CapacityTable<LpCapacityRow>
         rows={rows}
         columns={[
-          { label: 'LP type', render: (r) => <span className="font-medium">{r.lpTypeCode ?? '—'}</span> },
+          { label: 'LP type', render: (r) => <span className="font-medium">{r.lpTypeCode ?? 'None'}</span> },
           { label: 'Min qty', render: (r) => r.minQty, align: 'right' },
           { label: 'Max qty', render: (r) => r.maxQty, align: 'right' },
           { label: 'Product SKU', render: (r) => r.sku ?? <span className="text-faint">Any</span> },

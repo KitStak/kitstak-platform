@@ -230,8 +230,8 @@ export const generalStepSchema = z
       (v) => (v === null || v === undefined || v === '' ? 0 : v),
       z
         .number({ error: 'Enter a number' })
-        .min(0, 'Tax rate must be 0–100%')
-        .max(100, 'Tax rate must be 0–100%'),
+        .min(0, 'Tax rate must be 0 to 100%')
+        .max(100, 'Tax rate must be 0 to 100%'),
     ),
     minSafetyStock: int(10_000_000),
     fnsku: optText(BARCODE_MAX),

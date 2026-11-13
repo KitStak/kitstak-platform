@@ -37,7 +37,9 @@ export interface CommandPaletteProps {
   readonly activeOrgId: string | null;
   readonly crmUrl: string;
   readonly wmsUrl: string;
-  readonly entitled: { readonly crm: boolean; readonly wms: boolean };
+  /** KitStak Projects origin (omitted: the Projects entry is hidden). */
+  readonly projectsUrl?: string;
+  readonly entitled: { readonly crm: boolean; readonly wms: boolean; readonly projects?: boolean };
 }
 
 const groupClass =
@@ -106,7 +108,7 @@ function PaletteItem({
   );
 }
 
-export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, entitled }: CommandPaletteProps) {
+export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl, entitled }: CommandPaletteProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -262,6 +264,36 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, entitled }: 
             >
               Open WMS
             </PaletteItem>
+            {projectsUrl ? (
+              <PaletteItem
+                value="open-projects"
+                keywords={['projects', 'tasks', 'timeline', 'gantt', 'board', 'my work', 'goals']}
+                onSelect={() => (entitled.projects ? openApp(projectsUrl) : go('/billing?module=projects'))}
+                icon={
+                  entitled.projects ? (
+                    <ArrowUpRight aria-hidden className="size-4" />
+                  ) : (
+                    <Lock aria-hidden className="size-4" />
+                  )
+                }
+                meta={entitled.projects ? 'Projects, tasks and timelines' : 'Locked. View billing'}
+                external={entitled.projects}
+              >
+                Open Projects
+              </PaletteItem>
+            ) : null}
+            {projectsUrl && entitled.projects ? (
+              <PaletteItem
+                value="projects-my-work"
+                keywords={['my work', 'my tasks', 'assigned', 'todo', 'projects']}
+                onSelect={() => openApp(`${projectsUrl.replace(/\/+$/, '')}/my-work`)}
+                icon={<ArrowUpRight aria-hidden className="size-4" />}
+                meta="Everything assigned to you in Projects"
+                external
+              >
+                My work
+              </PaletteItem>
+            ) : null}
           </Command.Group>
           <Command.Group heading="Portal" className={groupClass}>
             <PaletteItem

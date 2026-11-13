@@ -150,7 +150,7 @@ export function describeFilterValue(filter: GridFilter, def?: FilterFieldDef): s
     case 'empty':
       return TEXT_FILTER_OP_LABELS.empty;
     case 'rng':
-      if (filter.min !== undefined && filter.max !== undefined) return `${filter.min} – ${filter.max}`;
+      if (filter.min !== undefined && filter.max !== undefined) return `${filter.min} to ${filter.max}`;
       return filter.min !== undefined ? `≥ ${filter.min}` : `≤ ${filter.max ?? ''}`;
     case 'bool':
       return filter.value ? 'Yes' : 'No';

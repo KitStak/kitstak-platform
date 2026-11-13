@@ -66,15 +66,16 @@ function Logo() {
   );
 }
 
-/** Cross-app origins for the shared AppSwitcher (BLUEPRINT.md §6); dev defaults match the three dev ports. */
+/** Cross-app origins for the shared AppSwitcher (BLUEPRINT.md §6); dev defaults match the dev ports. */
 const APP_URLS = {
   portal: process.env.NEXT_PUBLIC_PORTAL_URL ?? 'http://localhost:3300',
   crm: process.env.NEXT_PUBLIC_CRM_URL ?? 'http://localhost:3100',
   wms: process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
+  projects: process.env.NEXT_PUBLIC_PROJECTS_URL ?? 'http://localhost:3400',
 } as const;
 
 function TopBar() {
-  const { permissions, activeApps: ssrApps } = useShell();
+  const { permissions, activeApps: ssrApps, entitledApps } = useShell();
   const allows = useShellAllows();
   // `/api/me` refreshes the active add-on apps after Settings → Apps changes; SSR value until then.
   const liveApps = useMe().data?.data.activeApps;
@@ -107,7 +108,7 @@ function TopBar() {
             <HelpMenu />
             <NotificationsBell />
           </div>
-          <AppSwitcher current="wms" urls={APP_URLS} />
+          <AppSwitcher current="wms" urls={APP_URLS} entitled={entitledApps} />
           <UserMenu />
         </div>
       </div>
@@ -136,6 +137,7 @@ export function AppShell({
   permissions,
   initialContext,
   activeApps,
+  entitledApps,
   passwordChange = null,
   idleMinutes = null,
   children,
@@ -144,6 +146,7 @@ export function AppShell({
   readonly permissions: readonly string[];
   readonly initialContext?: InitialShellContext | null;
   readonly activeApps?: readonly string[] | null;
+  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
   readonly passwordChange?: 'reset' | 'expired' | null;
   readonly idleMinutes?: number | null;
   readonly children: React.ReactNode;
@@ -154,6 +157,7 @@ export function AppShell({
       permissions={permissions}
       initialContext={initialContext}
       activeApps={activeApps}
+      entitledApps={entitledApps}
     >
       <PreferencesBoundary>
         <div className="flex min-h-screen flex-col">

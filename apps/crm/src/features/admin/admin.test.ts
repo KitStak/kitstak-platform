@@ -54,7 +54,7 @@ describe('relativeTime', () => {
   const now = new Date('2026-11-05T12:00:00Z');
   it('formats past and future times', () => {
     expect(relativeTime(null, now)).toBe('Never');
-    expect(relativeTime('bad', now)).toBe('—');
+    expect(relativeTime('bad', now)).toBe('None');
     expect(relativeTime('2026-11-05T11:59:40Z', now)).toBe('just now');
     expect(relativeTime('2026-11-05T11:15:00Z', now)).toBe('45 min ago');
     expect(relativeTime('2026-11-05T07:00:00Z', now)).toBe('5 hr ago');
@@ -85,7 +85,7 @@ describe('number helpers', () => {
     expect(formatIp('0000:0000:0000:0000:0000:0000:0000:0000')).toBe('::');
     expect(formatIp('2001:0db8:0000:0000:0000:ff00:0042:8329')).toBe('2001:db8::ff00:42:8329');
     expect(formatIp('203.0.113.1')).toBe('203.0.113.1');
-    expect(formatIp(null)).toBe('—');
+    expect(formatIp(null)).toBe('None');
   });
 });
 

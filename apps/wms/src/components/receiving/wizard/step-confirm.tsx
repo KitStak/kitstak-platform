@@ -268,7 +268,7 @@ export function StepConfirm({
             <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-2 text-xs">
               <div className="col-span-2">
                 <dt className="text-faint">PO number</dt>
-                <dd className="text-base font-semibold text-foreground">{v.code || '—'}</dd>
+                <dd className="text-base font-semibold text-foreground">{v.code || 'None'}</dd>
               </div>
               <div>
                 <dt className="text-faint">PO type</dt>
@@ -276,30 +276,30 @@ export function StepConfirm({
               </div>
               <div>
                 <dt className="text-faint">Client</dt>
-                <dd className="text-foreground">{client ? client.name : v.clientLabel || '—'}</dd>
+                <dd className="text-foreground">{client ? client.name : v.clientLabel || 'None'}</dd>
               </div>
               <div>
                 <dt className="text-faint">PO date</dt>
                 <dd className="flex items-center gap-1 text-foreground">
                   <CalendarDays className="h-3 w-3 text-faint" aria-hidden />
-                  {v.poDate ? fmt.date(v.poDate) : '—'}
+                  {v.poDate ? fmt.date(v.poDate) : 'None'}
                 </dd>
               </div>
               <div>
                 <dt className="text-faint">Warehouse</dt>
                 <dd className="text-foreground">
-                  {warehouse ? `${warehouse.code} · ${warehouse.name}` : '—'}
+                  {warehouse ? `${warehouse.code} · ${warehouse.name}` : 'None'}
                 </dd>
               </div>
               <div>
                 <dt className="text-faint">Planned receiving</dt>
                 <dd className="text-foreground">
-                  {v.plannedReceivingDate ? fmt.dateTime(v.plannedReceivingDate) : '—'}
+                  {v.plannedReceivingDate ? fmt.dateTime(v.plannedReceivingDate) : 'None'}
                 </dd>
               </div>
               <div>
                 <dt className="text-faint">Reference number</dt>
-                <dd className="text-foreground">{v.referenceNumber || '—'}</dd>
+                <dd className="text-foreground">{v.referenceNumber || 'None'}</dd>
               </div>
               {v.note ? (
                 <div className="col-span-2">

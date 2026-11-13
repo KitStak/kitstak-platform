@@ -288,7 +288,7 @@ export async function seedAutomations(ctx: SeedContext, seedItems: readonly Seed
             config: {
               boardId: deals.boardId,
               groupId: deals.groupIds.get('this_quarter'),
-              nameTemplate: '{name} — new opportunity',
+              nameTemplate: '{name} · new opportunity',
               copyValues: { owner: 'owner', source: 'source' },
             },
           },

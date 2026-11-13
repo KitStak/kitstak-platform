@@ -445,7 +445,7 @@ export function CodeCell({
 }
 
 export function Muted({ children }: { readonly children?: React.ReactNode }) {
-  return <span className="text-faint">{children ?? '—'}</span>;
+  return <span className="text-faint">{children ?? 'None'}</span>;
 }
 
 export function Num({

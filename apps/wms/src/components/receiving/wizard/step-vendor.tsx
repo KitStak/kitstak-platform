@@ -95,7 +95,7 @@ export function StepVendor({ form }: { readonly form: UseFormReturn<PoFormValues
         enableSorting: false,
         cell: ({ row }) => (
           <span className="truncate text-secondary">
-            {[row.original.city, row.original.state].filter(Boolean).join(', ') || '—'}
+            {[row.original.city, row.original.state].filter(Boolean).join(', ') || 'None'}
           </span>
         ),
       },
