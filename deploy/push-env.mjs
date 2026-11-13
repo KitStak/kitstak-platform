@@ -58,7 +58,6 @@ const PLANS = {
     ['NEXT_PUBLIC_WMS_URL', urls.wms, false],
     ['TRUSTED_ORIGINS', trusted(urls.crm, urls.wms), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
-    ['ENTITLEMENTS_DEV_ALLOW_ALL', '1', false],
   ],
   [s.PROJECT_CRM]: [
     ['DATABASE_URL', pooled, true],
@@ -70,7 +69,6 @@ const PLANS = {
     ['NEXT_PUBLIC_PORTAL_URL', urls.portal, false],
     ['TRUSTED_ORIGINS', trusted(urls.portal, urls.wms), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
-    ['ENTITLEMENTS_DEV_ALLOW_ALL', '1', false],
   ],
   [s.PROJECT_WMS]: [
     ['DATABASE_URL', pooled, true],
@@ -84,7 +82,6 @@ const PLANS = {
     ['NEXT_PUBLIC_CRM_URL', urls.crm, false],
     ['TRUSTED_ORIGINS', trusted(urls.portal, urls.crm), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
-    ['ENTITLEMENTS_DEV_ALLOW_ALL', '1', false],
   ],
 };
 
