@@ -169,9 +169,9 @@ describe('M10 change-log copy', () => {
 
   it('never stores a double space for an empty side', () => {
     expect(facilityUpdateMessage('Walking path priority', '', '77')).toBe(
-      'Walking path priority is modified. (blank) --> 77',
+      'Walking path priority is modified. (blank) → 77',
     );
-    expect(facilityUpdateMessage('Aisle', 'B', ' ')).toBe('Aisle is modified. B --> (blank)');
+    expect(facilityUpdateMessage('Aisle', 'B', ' ')).toBe('Aisle is modified. B → (blank)');
   });
 
   it('location create and edit write polished rows and one row per capacity line', async () => {
@@ -205,9 +205,9 @@ describe('M10 change-log copy', () => {
     );
     const msgs = (await rows()).map((r) => r.message);
     expect(msgs).toContain(
-      'MLT-WIDGET-01 -> Product capacity is modified. Min 10, Max 50 --> Min 10, Max 60',
+      'MLT-WIDGET-01 -> Product capacity is modified. Min 10, Max 50 → Min 10, Max 60',
     );
-    expect(msgs).toContain('Locked is modified. No --> Yes');
+    expect(msgs).toContain('Locked is modified. No → Yes');
     expect(msgs.some((m) => /^Walking path priority is modified\. \S/.test(m))).toBe(true);
     expect(msgs.some((m) => m.includes('  '))).toBe(false);
     const capRow = (await rows()).find((r) => r.field === 'productCapacity' && r.type === 'Update');

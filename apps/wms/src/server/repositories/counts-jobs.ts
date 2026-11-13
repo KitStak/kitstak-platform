@@ -34,6 +34,7 @@ import {
 } from '@/server/domain/task-handlers/count';
 import type { BulkResult, DomainCtx, Tx } from '@/server/domain/types';
 import { dbAll, dbGet, forEachSeq, mapSeq, withWriteTx } from '@/server/db/sql';
+import { CHANGE_EMPTY } from '@/lib/change-log-text';
 
 export const createCountJobSchema = z.object({
   ids: z.array(z.string().min(1).max(64)).min(1, 'Select at least one count plan').max(1000),
@@ -576,7 +577,7 @@ export async function createRecounts(
             lineEntityId: fresh.id,
             lineLabel: await lineLabel(inner, fresh),
             field: 'status',
-            from: '—',
+            from: CHANGE_EMPTY,
             to: 'Ready To Count',
           });
           await moveLine(inner, ctx, line, 'Recount Created', { recounted: true });

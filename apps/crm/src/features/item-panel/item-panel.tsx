@@ -69,7 +69,7 @@ import { FilesTab as FilesTabView } from './files/files-tab';
 import { ActivityTab as ActivityTabView } from './activity/activity-tab';
 import { ItemCardTab as ItemCardTabView } from './item-card/item-card-tab';
 import { ProjectsTab } from './projects/projects-tab';
-import { ProjectsHealthLine } from './projects/projects-health';
+import { openWorkCount, ProjectsHealthLine } from './projects/projects-health';
 import { ProjectsMark } from './projects/projects-mark';
 import { useItemProjects } from './projects/api';
 import { useOptionalOrg } from '@/features/shell/org-context';
@@ -717,7 +717,7 @@ function PanelBody({
               <div className="px-2 pt-1">
                 <ProjectsHealthLine
                   projects={projectsQuery.data.work.projects}
-                  openTasks={projectsQuery.data.work.openTasks}
+                  openTasks={openWorkCount(projectsQuery.data.work)}
                   onOpen={() => setTab('projects')}
                 />
               </div>

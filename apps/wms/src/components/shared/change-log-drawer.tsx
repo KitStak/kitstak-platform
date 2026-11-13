@@ -8,6 +8,7 @@
 import * as React from 'react';
 import { ChevronLeft, ChevronRight, FilePlus2, PencilLine, Trash2 } from 'lucide-react';
 import { EMPTY_VALUE, displayText } from '@kitstak/ui/text';
+import { modifiedMessage } from '@/lib/change-log-text';
 import { cn } from '@/lib/utils';
 import { useFormat } from '@/lib/format';
 import { formatInZone, localizeIsoInText } from '@/lib/format-zone';
@@ -63,7 +64,7 @@ export function changeLogMessage(entry: ChangeLogEntry, options: ChangeLogMessag
   const isStatus = (entry.field ?? '').toLowerCase() === 'status';
   let text: string;
   if (entry.message.trim() === '' && entry.type === 'Update' && entry.fieldLabel) {
-    text = `${prefix}${entry.fieldLabel} is modified. ${side(entry.fromValue, isStatus)} --> ${side(entry.toValue, isStatus)}`;
+    text = `${prefix}${modifiedMessage(entry.fieldLabel, side(entry.fromValue, isStatus), side(entry.toValue, isStatus))}`;
   } else {
     text = entry.message.startsWith(prefix) ? entry.message : `${prefix}${entry.message}`;
     // Legacy rows (an empty side left a double space before the arrow) are tidied by changeLogDisplay.

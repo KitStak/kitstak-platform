@@ -23,15 +23,17 @@ import { useChangeSubscribers, useItemSubscribers } from '../hooks/use-panel-que
 /** Visible avatars before the "+N" chip (keeps the breadcrumb readable at the default width). */
 const MAX_VISIBLE = 3;
 /** 2px ring in the panel surface colour separates overlapping avatars (BT-004). */
+/** Overlap kept to 2px (about 10% of the 24px tile, like cells/parts/avatar-stack) so both initials stay whole. */
+const OVERLAP = 2;
 const RING = { boxShadow: '0 0 0 2px var(--surface-raised)' } as const;
 
 function SubscriberStack({ people }: { readonly people: readonly UserSummaryDto[] }) {
   const visible = people.slice(0, MAX_VISIBLE);
   const hidden = people.slice(MAX_VISIBLE);
   return (
-    <div role="group" aria-label={`${people.length} subscribers`} className="hidden shrink-0 items-center -space-x-1.5 pl-0.5 @min-[480px]:flex">
+    <div role="group" aria-label={`${people.length} subscribers`} className="isolate hidden shrink-0 items-center pl-0.5 @min-[480px]:flex">
       {visible.map((person, index) => (
-        <span key={person.id} className="relative inline-flex rounded-full" style={{ ...RING, zIndex: MAX_VISIBLE - index }}>
+        <span key={person.id} className="relative inline-flex rounded-full" style={{ ...RING, zIndex: index + 1, marginLeft: index === 0 ? 0 : -OVERLAP }}>
           <Avatar name={person.name} src={person.image} colorKey={person.id} size="sm" showTooltip />
         </span>
       ))}
@@ -41,7 +43,7 @@ function SubscriberStack({ people }: { readonly people: readonly UserSummaryDto[
             tabIndex={0}
             aria-label={`${hidden.length} more: ${hidden.map((person) => person.name).join(', ')}`}
             className="relative inline-flex size-6 items-center justify-center rounded-full bg-muted text-2xs font-semibold text-fg-secondary tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            style={RING}
+            style={{ ...RING, zIndex: MAX_VISIBLE + 1, marginLeft: OVERLAP }}
           >
             +{hidden.length}
           </span>

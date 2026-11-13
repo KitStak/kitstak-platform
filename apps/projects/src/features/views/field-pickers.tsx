@@ -116,26 +116,60 @@ export function DuePicker({
   align,
   disabled,
   title = 'Due date',
+  shade,
   ...rest
-}: PickerBase & { readonly value: string | null; readonly onChange: (date: string | null) => void; readonly title?: string }) {
+}: PickerBase & {
+  readonly value: string | null;
+  readonly onChange: (date: string | null) => void;
+  readonly title?: string;
+  /**
+   * Days that also move the task's other date (a due date before the start date): shaded in the
+   * grid, quick picks show `hint` ("Moves start too") and `note` explains it under the grid.
+   */
+  readonly shade?: { readonly before?: string | null; readonly after?: string | null; readonly hint: string; readonly note: string };
+}) {
   const [open, setOpen] = useControlled(rest.open, rest.onOpenChange);
   const choose = (date: Date | null) => {
     setOpen(false);
     const iso = date ? toIsoDate(date) : null;
     if (iso !== value) onChange(iso);
   };
+  const shaded = (iso: string) => Boolean(shade && ((shade.before && iso < shade.before) || (shade.after && iso > shade.after)));
+  const shadeMatchers = shade
+    ? [
+        ...(shade.before ? [{ before: parseIsoDate(shade.before) }] : []),
+        ...(shade.after ? [{ after: parseIsoDate(shade.after) }] : []),
+      ]
+    : [];
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild disabled={disabled}>
         {children}
       </PopoverTrigger>
       <PopoverContent flush align={align} className="flex max-sm:flex-col" onClick={(event) => event.stopPropagation()} aria-label={title}>
-        <div className="flex w-32 flex-col gap-0.5 border-r border-border-subtle p-2 max-sm:w-full max-sm:flex-row max-sm:flex-wrap max-sm:border-r-0 max-sm:border-b">
-          {QUICK_DATES.map((pick) => (
-            <Button key={pick.label} variant="ghost" size="sm" className="justify-start" onClick={() => choose(pick.date())}>
-              {pick.label}
-            </Button>
-          ))}
+        <div className={`flex ${shadeMatchers.length ? 'w-36' : 'w-32'} flex-col gap-0.5 border-r border-border-subtle p-2 max-sm:w-full max-sm:flex-row max-sm:flex-wrap max-sm:border-r-0 max-sm:border-b`}>
+          {QUICK_DATES.map((pick) => {
+            const moves = shaded(toIsoDate(pick.date()));
+            return (
+              <Button
+                key={pick.label}
+                variant="ghost"
+                size="sm"
+                className={moves ? 'h-auto min-h-7 justify-start py-1 text-left' : 'justify-start'}
+                onClick={() => choose(pick.date())}
+                data-moves-other={moves ? '' : undefined}
+              >
+                {moves && shade ? (
+                  <span className="flex flex-col items-start">
+                    <span>{pick.label}</span>
+                    <span className="text-2xs font-normal text-fg-muted">{shade.hint}</span>
+                  </span>
+                ) : (
+                  pick.label
+                )}
+              </Button>
+            );
+          })}
           {value ? (
             <Button variant="danger-ghost" size="sm" className="mt-auto justify-start" onClick={() => choose(null)}>
               Remove date
@@ -143,7 +177,20 @@ export function DuePicker({
           ) : null}
         </div>
         <div className="p-3">
-          <Calendar selected={value ? parseIsoDate(value) : undefined} onSelect={(date) => choose(date ?? null)} />
+          <Calendar
+            selected={value ? parseIsoDate(value) : undefined}
+            onSelect={(date) => choose(date ?? null)}
+            modifiers={shadeMatchers.length ? { movesOther: shadeMatchers } : undefined}
+            modifiersClassNames={{ movesOther: 'ks-moves-other [&>button]:bg-sunken/70 [&>button]:text-fg-muted' }}
+            footer={
+              shadeMatchers.length && shade ? (
+                <p className="mt-2 flex max-w-[252px] items-center gap-1.5 text-xs text-fg-muted">
+                  <span aria-hidden className="inline-block size-3 shrink-0 rounded-xs bg-sunken ring-1 ring-border-subtle" />
+                  {shade.note}
+                </p>
+              ) : undefined
+            }
+          />
         </div>
       </PopoverContent>
     </Popover>

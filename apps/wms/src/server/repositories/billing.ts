@@ -40,6 +40,7 @@ import {
   type Actor,
   type GridBinding,
 } from './clients-shared';
+import { modifiedMessage } from '@/lib/change-log-text';
 
 const c = s.billingContracts;
 const f = s.billingFees;
@@ -877,7 +878,7 @@ export async function updateFee(
       label,
       from: old,
       to: now,
-      message: `${label} is modified. ${old} --> ${now}`,
+      message: modifiedMessage(label, old, now),
     });
   return { id: feeId, name: input.name.trim() };
 }

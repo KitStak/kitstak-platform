@@ -115,6 +115,7 @@ function subscribeFilter(listener: () => void) {
 
 function HistoryLine({ event }: { readonly event: ActivityDTO }) {
   const { task, project, statusById, openTask } = useTaskContext();
+  const { user } = useShell();
   const people = usePeopleMap();
   const actor =
     event.actorKind === 'automation'
@@ -130,6 +131,7 @@ function HistoryLine({ event }: { readonly event: ActivityDTO }) {
     personName: (id) => people.get(id)?.name,
     labelName: (id) => project.labels.find((label) => label.id === id)?.name,
     sectionName: (id) => project.sections.find((section) => section.id === id)?.name,
+    viewerId: user.id,
   });
   return (
     <li className="flex items-start gap-3 py-1.5 pl-1" data-testid="history-item">

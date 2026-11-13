@@ -856,7 +856,7 @@ export function TimelineView() {
               const x = dayToX(range, day, px) + px / 2;
               const complete = Boolean(milestone.completedAt);
               return (
-                <div key={milestone.id} className="absolute top-1/2 z-[1] -translate-y-1/2" style={{ left: x - 8 }}>
+                <div key={milestone.id} className="absolute top-1/2 z-[3] -translate-y-1/2" style={{ left: x - 8 }}>
                   {delta !== 0 ? <LiveLabel text={formatRange(null, day)} /> : null}
                   <Tooltip
                     open={!gesture && tipFor === milestone.id}
@@ -897,7 +897,8 @@ export function TimelineView() {
                     />
                   </Tooltip>
                   {showName || delta !== 0 ? (
-                    <span className="pointer-events-none absolute top-1/2 left-6 -translate-y-1/2 text-xs font-semibold whitespace-nowrap text-fg-secondary">{milestone.name}</span>
+                    // Above the today line (z-[2]) on a panel chip, so a milestone just before today stays readable.
+                    <span className="pointer-events-none absolute top-1/2 left-5 -translate-y-1/2 rounded-xs bg-panel px-1 text-xs leading-5 font-semibold whitespace-nowrap text-fg-secondary">{milestone.name}</span>
                   ) : null}
                 </div>
               );

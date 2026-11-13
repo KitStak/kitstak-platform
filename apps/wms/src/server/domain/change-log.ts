@@ -8,6 +8,7 @@ import * as schema from '@/server/db/schema';
 import { formatLogDateTime, isIsoDateTime } from '@/lib/format-zone';
 import { bestEffort, chunked, dbGet } from '@/server/db/sql';
 import type { DomainCtx, Tx } from './types';
+import { CHANGE_EMPTY, modifiedMessage } from '@/lib/change-log-text';
 
 /** Display names per entity type (used in messages, e.g. "Shipment Order SO000123 is created."). */
 export const ENTITY_LABELS: Readonly<Record<string, string>> = {
@@ -206,9 +207,9 @@ export function humanize(field: string): string {
     .join(' ');
 }
 
-/** Message side: empty → "—", ISO date-time → "M/D/YYYY h:mm:ss AM TZ" in `timeZone`. */
+/** Message side: empty → "None", ISO date-time → "M/D/YYYY h:mm:ss AM TZ" in `timeZone`. */
 export function messageSide(value: string, timeZone?: string): string {
-  if (value.trim() === '') return '—';
+  if (value.trim() === '') return CHANGE_EMPTY;
   return isIsoDateTime(value) ? formatLogDateTime(value, timeZone ?? 'UTC') : value;
 }
 
@@ -319,7 +320,7 @@ export function diffRows(
   return changes;
 }
 
-/** Writes one row per changed field: "<Label> is modified. old --> new". Returns the count. */
+/** Writes one row per changed field: "<Label> is modified. old → new". Returns the count. */
 export async function recordUpdate(
   tx: Tx,
   ctx: DomainCtx,
@@ -352,7 +353,7 @@ export async function recordUpdate(
       userId: ctx.userId,
     });
   }
-  // from/to stay machine-readable; the message gets "—" for an empty side and zoned datetimes.
+  // from/to stay machine-readable; the message gets "None" for an empty side and zoned datetimes.
   const zone = changes.some((c) => isIsoDateTime(c.from) || isIsoDateTime(c.to))
     ? await snapshotZone(tx, { ...ref.before, ...ref.after })
     : undefined;
@@ -368,13 +369,13 @@ export async function recordUpdate(
       fieldLabel: c.label,
       fromValue: c.from,
       toValue: c.to,
-      message: `${c.label} is modified. ${messageSide(c.from, zone)} --> ${messageSide(c.to, zone)}`,
+      message: modifiedMessage(c.label, messageSide(c.from, zone), messageSide(c.to, zone)),
       source: ctx.source,
     })),
   );
 }
 
-/** Line-level entry, e.g. "MLT-WIDGET-01 -> Received Qty is modified. 0 --> 24". */
+/** Line-level entry, e.g. "MLT-WIDGET-01 -> Received Qty is modified. 0 → 24". */
 export async function recordLine(
   tx: Tx,
   ctx: DomainCtx,
@@ -403,7 +404,7 @@ export async function recordLine(
       fieldLabel: label,
       fromValue: from,
       toValue: to,
-      message: `${ref.lineLabel} -> ${label} is modified. ${messageSide(from)} --> ${messageSide(to)}`,
+      message: `${ref.lineLabel} -> ${modifiedMessage(label, messageSide(from), messageSide(to))}`,
       source: ctx.source,
     },
   ]);

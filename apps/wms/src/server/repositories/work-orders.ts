@@ -21,6 +21,7 @@ import { assertVersion } from './platform-common';
 import { componentAvailability } from './work-orders-availability';
 import { compileWorkOrderQuery } from './work-orders-grid';
 import { forEachSeq, mapSeq } from '@/server/db/sql';
+import { CHANGE_EMPTY, modifiedMessage } from '@/lib/change-log-text';
 
 const wo = schema.workOrders;
 export type WorkOrderRecord = typeof schema.workOrders.$inferSelect;
@@ -1015,7 +1016,7 @@ export async function recordWorkOrderChanges(
         fieldLabel: label,
         fromValue: c.from,
         toValue: c.to,
-        message: `${label} is modified. ${c.from || '—'} --> ${c.to || '—'}`,
+        message: modifiedMessage(label, c.from || CHANGE_EMPTY, c.to || CHANGE_EMPTY),
         userId: ctx.userId,
         source: ctx.source,
       };

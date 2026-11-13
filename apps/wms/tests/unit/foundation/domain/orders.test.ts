@@ -97,8 +97,8 @@ describe('updateOrder', () => {
     );
     expect(msgs).toEqual(
       expect.arrayContaining([
-        'City is modified. Little Rock --> Hot Springs',
-        'Priority is modified. None --> High',
+        'City is modified. Little Rock → Hot Springs',
+        'Priority is modified. None → High',
       ]),
     );
     await expect(
@@ -126,8 +126,8 @@ describe('updateOrder', () => {
     // createOrder logs one entry per line (orders-outbound REQ-2), then the replacement entries.
     expect(lineMsgs).toEqual([
       'MLT-WIDGET-01 -> Shipment Order Line is created.',
-      'MLT-WIDGET-01 -> Quantity is modified. 2 --> 5',
-      'MLT-GADGET-02 -> Quantity is modified. 0 --> 1',
+      'MLT-WIDGET-01 -> Quantity is modified. 2 → 5',
+      'MLT-GADGET-02 -> Quantity is modified. 0 → 1',
     ]);
     const u2 = await updateOrder(w.db, w.ctx, {
       id: o.id,

@@ -19,6 +19,16 @@ export function countTemplateTaskTree(payload: Pick<TemplatePayload, 'tasks'>): 
   return { tasks: top.length, subtasks: top.reduce((sum, task) => sum + walk(task.subtasks), 0) };
 }
 
+/**
+ * "Day N" label for a template offset. The start date is Day 1, so an offset of 14 is Day 15.
+ * Used by the template preview and the New project wizard so both show the same number.
+ */
+export function templateDayText(offset: number | undefined): string | null {
+  if (offset === undefined) return null;
+  if (offset <= 0) return 'Day 1';
+  return `Day ${offset + 1}`;
+}
+
 /** "11 tasks + 3 subtasks", "1 task", "No tasks". */
 export function describeTemplateTaskCounts(counts: TemplateTaskCounts, noun = 'tasks'): string {
   if (counts.tasks === 0) return `No ${noun}`;

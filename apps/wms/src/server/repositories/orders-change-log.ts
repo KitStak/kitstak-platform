@@ -12,10 +12,11 @@ import { and, eq, gt, inArray, sql } from 'drizzle-orm';
 import type { AppDb } from '@/server/api/db';
 import { schema } from '@/server/db';
 
-/** Stored glyph for an empty side (Logiwa parity, locked by tests). Screens never show it: `changeLogDisplay` reads it as "None". */
-const EMPTY_VALUE = '—';
+/** Stored word for an empty side; the brand rule keeps dashes out of log text. */
+const EMPTY_VALUE = CHANGE_EMPTY;
 import { effectiveRank, priorityFromRank } from '@/lib/grid-defs/orders/priority';
 import { dbGet, withWriteTx } from '@/server/db/sql';
+import { CHANGE_EMPTY, modifiedMessage } from '@/lib/change-log-text';
 
 const cl = schema.changeLog;
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:?\d{2})$/;
@@ -161,7 +162,7 @@ export async function tidyOrderChangeLog(
  * change_log is indexed by entity), so the order detail can repair its own history on read and a
  * one-off backfill can repair everything (`repairOrderChangeLog(db)`).
  */
-const NEEDS_REPAIR = sql`(${cl.message} ILIKE '%.  -->%' OR ${cl.message} ILIKE '% --> ' OR ${cl.fromValue} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' OR ${cl.toValue} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' OR ${cl.fromValue} ~ '[0-9]:[0-9]{2}:[0-9]{2} [AP]M$' OR ${cl.toValue} ~ '[0-9]:[0-9]{2}:[0-9]{2} [AP]M$' OR ${cl.fieldLabel} ILIKE '% Id' OR ${cl.field} IN (${sql.join(
+const NEEDS_REPAIR = sql`(${cl.message} ILIKE '%.  -->%' OR ${cl.message} ILIKE '% --> ' OR ${cl.message} ILIKE '%.  →%' OR ${cl.message} ILIKE '% → ' OR ${cl.fromValue} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' OR ${cl.toValue} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' OR ${cl.fromValue} ~ '[0-9]:[0-9]{2}:[0-9]{2} [AP]M$' OR ${cl.toValue} ~ '[0-9]:[0-9]{2}:[0-9]{2} [AP]M$' OR ${cl.fieldLabel} ILIKE '% Id' OR ${cl.field} IN (${sql.join(
   Object.keys(ORDER_LOG_LABELS).map((k) => sql`${k}`),
   sql`, `,
 )}))`;
@@ -221,7 +222,9 @@ async function tidyRows(db: AppDb, rows: readonly Row[]): Promise<number> {
 }
 
 function isDefaultMessage(r: Row): boolean {
-  return r.message === `${r.fieldLabel} is modified. ${r.fromValue ?? ''} --> ${r.toValue ?? ''}`;
+  const from = r.fromValue ?? '';
+  const to = r.toValue ?? '';
+  return r.message === modifiedMessage(r.fieldLabel ?? '', from, to) || r.message === `${r.fieldLabel} is modified. ${from} --> ${to}`;
 }
 
 async function write(
@@ -239,7 +242,7 @@ async function write(
       fieldLabel: label,
       fromValue: from,
       toValue: to,
-      message: `${label} is modified. ${from} --> ${to}`,
+      message: modifiedMessage(label, from, to),
     })
     .where(sql`${cl}.rowid = ${rowid}`);
 }

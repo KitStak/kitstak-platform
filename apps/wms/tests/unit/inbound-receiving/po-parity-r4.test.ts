@@ -104,7 +104,7 @@ describe('Actual Receiving Date change log', () => {
     const entries = (await poLog(po.id)).filter((l) => l.field === 'receivedAt');
     expect(entries).toHaveLength(1);
     expect(entries[0]?.message).toMatch(
-      /^Actual Receiving Date is modified\. \(empty\) --> [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M /,
+      /^Actual Receiving Date is modified\. \(empty\) → [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M /,
     );
     expect((await getPurchaseOrder(w.db, auth.scope, po.id)).status).toBe('Completed');
   });

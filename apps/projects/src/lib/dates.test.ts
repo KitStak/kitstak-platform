@@ -57,3 +57,29 @@ describe('dates', () => {
     expect(formatRelative(new Date(2026, 10, 1, 12, 0).toISOString(), now)).toBe('Nov 1');
   });
 });
+
+describe('template offsets skip weekends', () => {
+  it('rolls Saturday and Sunday to the next Monday', async () => {
+    const { rollToWorkdayIso, templateOffsetDateIso } = await import('./dates');
+    expect(rollToWorkdayIso('2026-11-14')).toBe('2026-11-16');
+    expect(rollToWorkdayIso('2026-11-15')).toBe('2026-11-16');
+    expect(rollToWorkdayIso('2026-11-13')).toBe('2026-11-13');
+    // Friday start: +2 is Sunday, +30 is Sunday Dec 13.
+    expect(templateOffsetDateIso('2026-11-13', 2)).toBe('2026-11-16');
+    expect(templateOffsetDateIso('2026-11-13', 30)).toBe('2026-12-14');
+    // Monday start: +6 is Sunday.
+    expect(templateOffsetDateIso('2026-11-16', 6)).toBe('2026-11-23');
+  });
+
+  it('never lands the Warehouse go-live work on a weekend, in order, for any start day', async () => {
+    const { templateOffsetDateIso, parseIsoDate, addDaysIso } = await import('./dates');
+    const offsets = [2, 6, 8, 10, 11, 14, 16, 22, 25, 30, 35];
+    for (let i = 0; i < 7; i += 1) {
+      const start = addDaysIso('2026-11-09', i);
+      const dates = offsets.map((o) => templateOffsetDateIso(start, o));
+      for (const date of dates) expect([0, 6]).not.toContain(parseIsoDate(date).getDay());
+      expect([...dates].sort()).toEqual(dates);
+      expect(dates[dates.length - 1] > dates[offsets.indexOf(30)]).toBe(true);
+    }
+  });
+});

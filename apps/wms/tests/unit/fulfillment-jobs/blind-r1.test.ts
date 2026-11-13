@@ -94,7 +94,7 @@ describe('wave rules', () => {
     const rows = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, rule.id));
     const orderBy = rows.find((r) => r.field === 'orderBy');
     expect(orderBy?.message).toBe(
-      'Order By is modified. Priority (descending) --> Shipment order date (ascending)',
+      'Order By is modified. Priority (descending) → Shipment order date (ascending)',
     );
     expect(rows.some((r) => /orderDate|[0-9a-f]{8}-[0-9a-f]{4}/.test(r.message ?? ''))).toBe(false);
   });

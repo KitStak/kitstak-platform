@@ -15,7 +15,7 @@ export interface ProductTileProps {
   readonly entitled: boolean;
   readonly access: ModuleAccess;
   readonly periodEnd: Date | null;
-  /** Live numbers from the shared db (null: stats unavailable — render nothing). */
+  /** Live numbers from the shared db (null: stats unavailable, render nothing). */
   readonly stats?: readonly TileStat[] | null;
   /** Deep link for the empty-state CTA cell (e.g. the CRM pipeline). */
   readonly emptyStateHref?: string;
@@ -35,7 +35,7 @@ const ACCESS_BADGE: Readonly<
 
 const dateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-/** Shown in place of the stat grid when every stat is zero — '0 / 0' reads like a bug. */
+/** Shown in place of the stat grid when every stat is zero: '0 / 0' reads like a bug. */
 interface EmptyStateCopy {
   readonly message: string;
   readonly cta: string;
@@ -64,8 +64,8 @@ function EmptyStats({ module, ctaHref }: { readonly module: Module; readonly cta
   return (
     <div className="mt-5 grid grid-cols-2 gap-2">
       <p className={EMPTY_CELL_CLASS}>
-        <span aria-hidden className="text-lg font-semibold text-fg-muted">
-          &mdash;
+        <span aria-hidden className="text-lg font-semibold text-fg-muted tabular-nums">
+          0
         </span>
         <span className="text-xs text-fg-muted">{copy.message}</span>
       </p>

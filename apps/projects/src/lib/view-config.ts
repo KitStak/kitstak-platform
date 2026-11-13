@@ -71,6 +71,8 @@ export interface ViewColumn {
   /** Built-in key (title, status, assignee, priority, dueDate, startDate, labels, estimate, …) or `custom:<fieldId>`. */
   readonly key: string;
   readonly width?: number;
+  /** True once the person dragged this column's width: only then is `width` kept over the automatic fit. */
+  readonly sized?: boolean;
   readonly hidden?: boolean;
 }
 

@@ -157,7 +157,16 @@ export function WorkloadView() {
 
   const taskById = useMemo(() => new Map(openTasks.map((task) => [task.id, task])), [openTasks]);
   const rows = useMemo(() => buildWorkload(openTasks, weeks, unit), [openTasks, weeks, unit]);
-  if (typeof window !== "undefined") console.log("WLDBG", JSON.stringify(weeks), unit, JSON.stringify(openTasks.filter((t) => t.number === 6).map((t) => [t.startDate, t.dueDate])));
+  // "<n> open tasks" counts every open task the person has, not only those inside the visible weeks
+  // (so it matches the List and Table).
+  const openByPerson = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of openTasks) {
+      const key = task.assigneeId ?? UNASSIGNED;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [openTasks]);
 
   const hasEarlier = useMemo(() => [...rows.values()].some((row) => row.cells.has(EARLIER)), [rows]);
   const buckets = useMemo(() => [...(hasEarlier ? [EARLIER] : []), ...weeks, NO_DATE], [hasEarlier, weeks]);
@@ -579,7 +588,7 @@ export function WorkloadView() {
               const capacity = id === UNASSIGNED ? null : capacityFor(settings, id);
               const isCollapsed = collapsed.has(id);
               const custom = id !== UNASSIGNED && settings.perPerson[id] !== undefined;
-              const openCount = new Set([...(row?.cells.values() ?? [])].flatMap((cell) => cell.tasks.map((t) => t.task.id))).size;
+              const openCount = openByPerson.get(id) ?? 0;
               return (
                 <div role="row" key={id} className="group/row contents" data-testid="workload-row" data-person={id}>
                   <div role="rowheader" className="sticky left-0 z-[var(--z-sticky)] flex items-start gap-2 border-r border-b border-border-subtle bg-panel px-2 py-2.5">
@@ -858,7 +867,7 @@ function PhoneWeek({
   const touch = useRef<{ x: number; y: number } | null>(null);
   return (
     <div
-      className="min-h-0 flex-1 overflow-y-auto bg-sunken px-4 py-3"
+      className="min-h-0 flex-1 overflow-y-auto bg-sunken px-4 py-3 max-sm:pb-[calc(88px+env(safe-area-inset-bottom))]"
       data-testid="workload-phone"
       data-week={week}
       onTouchStart={(event) => {

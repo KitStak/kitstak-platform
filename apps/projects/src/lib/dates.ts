@@ -36,6 +36,28 @@ export function addDaysIso(value: IsoDate, days: number): IsoDate {
   return toIsoDate(date);
 }
 
+/** True on Saturday or Sunday. */
+export function isWeekendIso(value: IsoDate): boolean {
+  const day = parseIsoDate(value).getDay();
+  return day === 0 || day === 6;
+}
+
+/** The same date on a weekday, or the Monday after when it falls on a weekend. */
+export function rollToWorkdayIso(value: IsoDate): IsoDate {
+  let date = value;
+  while (isWeekendIso(date)) date = addDaysIso(date, 1);
+  return date;
+}
+
+/**
+ * Date for a template "day offset" counted from a project start: the calendar day `offset`
+ * days later, moved to the following Monday when it lands on a weekend, so template work is
+ * never due on a Saturday or Sunday.
+ */
+export function templateOffsetDateIso(start: IsoDate, offset: number): IsoDate {
+  return rollToWorkdayIso(addDaysIso(start, offset));
+}
+
 /** Whole days from `a` to `b` (b - a). */
 export function diffDays(a: IsoDate, b: IsoDate): number {
   const ms = parseIsoDate(b).getTime() - parseIsoDate(a).getTime();

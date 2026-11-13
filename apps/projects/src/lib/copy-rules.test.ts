@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = path.resolve(__dirname, '..');
 const EM_DASH = String.fromCharCode(0x2014);
+const EN_DASH = String.fromCharCode(0x2013);
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -28,6 +29,12 @@ describe('copy rules', () => {
   it('has no em dashes in UI source or seed data', () => {
     const files = [...walk(path.join(ROOT, 'features')), ...walk(path.join(ROOT, 'components')), ...walk(path.join(ROOT, 'app')), ...walk(path.join(ROOT, 'server/db/seed'))];
     const offenders = files.filter((file) => stripComments(readFileSync(file, 'utf8')).includes(EM_DASH)).map((file) => path.relative(ROOT, file));
+    expect(offenders).toEqual([]);
+  });
+
+  it('has no en dashes in UI source (ranges read "to": "A to Z", "2 to 10")', () => {
+    const files = [...walk(path.join(ROOT, 'features')), ...walk(path.join(ROOT, 'components')), ...walk(path.join(ROOT, 'app'))];
+    const offenders = files.filter((file) => stripComments(readFileSync(file, 'utf8')).includes(EN_DASH)).map((file) => path.relative(ROOT, file));
     expect(offenders).toEqual([]);
   });
 

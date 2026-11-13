@@ -121,7 +121,7 @@ export function ProjectActivity() {
                               return (
                                 <>
                                   {parts.before}{' '}
-                                  <button type="button" data-task-key={task.key} onClick={() => openTask(task.key)} className="rounded-sm font-medium text-fg-link outline-none hover:underline focus-visible:outline-2 focus-visible:outline-focus">
+                                  <button type="button" data-task-key={task.key} onClick={() => openTask(task.key)} className="rounded-sm text-left font-medium text-fg-link outline-none hover:underline focus-visible:outline-2 focus-visible:outline-focus">
                                     {task.key} {task.title}
                                   </button>
                                   {parts.after ? ` ${parts.after}` : null}

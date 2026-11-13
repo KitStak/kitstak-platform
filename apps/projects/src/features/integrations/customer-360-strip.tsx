@@ -28,6 +28,7 @@ import { Avatar, Button, IconButton, Skeleton, Tooltip, cn } from '@/components/
 import { buttonVariants } from '@/components/ui/button';
 import { apiGet, apiPath } from '@/lib/api-client';
 import { diffDays, formatRelative, todayIso } from '@/lib/dates';
+import { formatMoney } from '@/lib/money';
 import { qk } from '@/lib/query-keys';
 import type { IntegrationTargetType } from '@/lib/constants';
 import type { Customer360, Customer360Contact, Customer360Deal, Customer360Risk } from '@/server/integrations/customer360';
@@ -45,19 +46,6 @@ export function useCustomer360(projectKey: string, options: { readonly enabled?:
     refetchInterval: 120_000,
     enabled: options.enabled ?? true,
   });
-}
-
-function money(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      notation: amount >= 100_000 ? 'compact' : 'standard',
-      maximumFractionDigits: amount >= 100_000 ? 1 : 0,
-    }).format(amount);
-  } catch {
-    return `${Math.round(amount).toLocaleString()} ${currency}`;
-  }
 }
 
 function dayLabel(iso: string): string {
@@ -154,15 +142,17 @@ function ContactAvatars({ contacts }: { readonly contacts: readonly Customer360C
   return (
     <div className="flex items-center gap-2 px-2.5" data-testid="c360-contacts">
       <span className="text-xs text-fg-muted">Contacts</span>
-      <ul className="flex items-center -space-x-1.5">
-        {shown.map((contact) => (
-          <li key={contact.id}>
+      {/* Overlap is 2px (about 10% of the tile, like the CRM avatar stack) and each avatar sits above
+          the one before it, so a 2px ring in the card colour cuts a clean gap and both initials stay whole. */}
+      <ul className="isolate flex items-center">
+        {shown.map((contact, index) => (
+          <li key={contact.id} className="relative" style={{ zIndex: index + 1, marginLeft: index === 0 ? 0 : -2 }}>
             <Tooltip content={[contact.name, contact.title, contact.email].filter(Boolean).join(' · ')}>
               <a
                 href={contact.url}
                 {...external}
                 aria-label={`${contact.name}${contact.title ? `, ${contact.title}` : ''}. Opens in CRM`}
-                className="block rounded-full ring-2 ring-panel outline-none hover:z-10 hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-focus"
+                className="block rounded-full leading-none ring-2 ring-[var(--surface-panel)] outline-none hover:z-10 hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-focus"
                 data-testid="c360-contact"
               >
                 <Avatar name={contact.name} size="sm" decorative />
@@ -183,8 +173,8 @@ function DealRow({ deal, currency }: { readonly deal: Customer360Deal; readonly 
       <a href={deal.url} {...external} className="group/deal flex min-h-8 items-center gap-2 rounded-md px-2.5 py-1 text-sm hover:bg-hover" data-testid="c360-deal">
         <span className="min-w-0 flex-1 truncate text-fg-secondary">{deal.name}</span>
         <RecordStatus status={deal.stage} />
-        <span className="w-16 shrink-0 text-right text-xs text-fg-secondary tabular-nums">
-          {deal.amount !== null ? money(deal.amount, deal.currency ?? currency) : 'No value'}
+        <span className="w-20 shrink-0 text-right text-xs text-fg-secondary tabular-nums">
+          {deal.amount !== null ? formatMoney(deal.amount, deal.currency ?? currency) : 'No value'}
         </span>
       </a>
     </li>
@@ -260,6 +250,8 @@ function CrmStrip({
   }
   const hint = deal.closeDate ? closeHint(deal.closeDate) : null;
   const others = crm.deals.filter((entry) => entry.id !== deal.id);
+  // Open value of the other deals only (the headline deal's own value is shown above).
+  const otherOpen = crm.openPipeline - (deal.outcome === 'open' ? (deal.amount ?? 0) : 0);
   return (
     <div className="flex min-w-0 flex-col gap-2" data-testid="c360-crm">
       <StripHeading app="crm" label="CRM" href={data.account?.url} linkLabel="Open account in CRM" />
@@ -278,8 +270,7 @@ function CrmStrip({
         />
         <Metric
           label="Value"
-          value={deal.amount !== null ? money(deal.amount, deal.currency ?? crm.currency) : 'Not set'}
-          hint={crm.openPipeline > 0 && others.length ? `${money(crm.openPipeline, crm.currency)} open pipeline` : null}
+          value={deal.amount !== null ? formatMoney(deal.amount, deal.currency ?? crm.currency) : 'Not set'}
           href={deal.url}
           tone={deal.outcome === 'won' ? 'success' : 'default'}
           testId="c360-value"
@@ -328,7 +319,15 @@ function CrmStrip({
       ) : null}
       {others.length > 0 ? (
         <div className="flex flex-col gap-0.5 border-t border-border-subtle pt-2">
-          <span className="px-2.5 text-2xs font-semibold tracking-[0.06em] text-fg-muted uppercase">Other deals</span>
+          <div className="flex items-baseline justify-between gap-2 px-2.5">
+            <span className="text-2xs font-semibold tracking-[0.06em] text-fg-muted uppercase">Other deals</span>
+            {/* The total of the open deals belongs to this list, not under the headline deal's value. */}
+            {otherOpen > 0 ? (
+              <span className="text-xs text-fg-muted tabular-nums" data-testid="c360-open-pipeline">
+                {formatMoney(otherOpen, crm.currency)} open pipeline
+              </span>
+            ) : null}
+          </div>
           <ul className="flex flex-col" aria-label="Other deals">
             {others.slice(0, 3).map((entry) => (
               <DealRow key={entry.id} deal={entry} currency={crm.currency} />

@@ -251,6 +251,7 @@ function LabelsRow() {
         type="button"
         className={`${PROPERTY_TRIGGER} h-auto min-h-8 flex-wrap py-1`}
         disabled={!canEdit}
+        data-task-field="labels"
         aria-label={labels.length ? `Labels: ${labels.map((l) => l.name).join(', ')}` : 'Add labels'}
       >
         {labels.length ? (
@@ -338,6 +339,7 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
             className={PROPERTY_TRIGGER}
             disabled={!canEdit}
             data-testid="task-status-trigger"
+            data-task-field="status"
           >
             <StatusIcon category={task.statusCategory} color={status?.color} />
             <span className="truncate font-medium">{status?.name ?? 'Unknown'}</span>
@@ -359,6 +361,7 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
               className={PROPERTY_TRIGGER}
               disabled={!canEdit}
               data-testid="task-assignee-trigger"
+              data-task-field="assignee"
             >
               {task.assigneeId ? (
                 <PersonAvatar userId={task.assigneeId} size="xs" showName />
@@ -408,7 +411,7 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
           disabled={!canEdit}
           align="start"
         >
-          <button type="button" className={PROPERTY_TRIGGER} disabled={!canEdit}>
+          <button type="button" className={PROPERTY_TRIGGER} disabled={!canEdit} data-task-field="priority">
             <PriorityIcon priority={task.priority} />
             <span className={task.priority === 'none' ? EMPTY : 'truncate'}>
               {PRIORITY_LABELS[task.priority]}
@@ -424,6 +427,7 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
           disabled={!canEdit}
           align="start"
           title="Start date"
+          shade={task.dueDate ? { after: task.dueDate, hint: 'Moves due too', note: 'Shaded days are after the due date. Picking one moves the due date too.' } : undefined}
         >
           <button type="button" className={PROPERTY_TRIGGER} disabled={!canEdit}>
             {task.startDate ? (
@@ -441,12 +445,14 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
           onChange={(dueDate) => changeDate('dueDate', dueDate)}
           disabled={!canEdit}
           align="start"
+          shade={task.startDate ? { before: task.startDate, hint: 'Moves start too', note: 'Shaded days are before the start date. Picking one moves the start date too.' } : undefined}
         >
           <button
             type="button"
             className={PROPERTY_TRIGGER}
             disabled={!canEdit}
             data-testid="task-due-trigger"
+            data-task-field="due"
           >
             {task.dueDate ? (
               <DueDate date={task.dueDate} done={done} className="text-sm" />

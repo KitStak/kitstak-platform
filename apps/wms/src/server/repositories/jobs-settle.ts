@@ -24,6 +24,7 @@ import { stateMachines } from '@/server/domain';
 import { rollupJob } from '@/server/domain/progress';
 import { nowIso, systemCtx, type DomainCtx, type Tx } from '@/server/domain/types';
 import { dbAll, withWriteTx } from '@/server/db/sql';
+import { modifiedMessage } from '@/lib/change-log-text';
 
 type JobStatus = (typeof schema.jobs.$inferSelect)['status'];
 
@@ -160,7 +161,7 @@ export async function settleJob(tx: Tx, ctx: DomainCtx, jobId: string): Promise<
         fieldLabel: 'Status',
         fromValue: after.status,
         toValue: to,
-        message: `Status is modified. ${after.status} --> ${to} · ${await closingReason(tx, jobId, released, to)}`,
+        message: `${modifiedMessage('Status', after.status, to)} · ${await closingReason(tx, jobId, released, to)}`,
         userId: ctx.userId,
         source: ctx.source,
       });

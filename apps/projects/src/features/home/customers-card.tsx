@@ -3,7 +3,7 @@
  * Home "Your customers today": the cross-app view only KitStak can show. One row per customer
  * behind your active projects: CRM deal stage and close date, warehouse late receipts and
  * exceptions, open tasks, and a one-click "Create task". Above the rows, a "Mismatches" strip calls
- * out what no single app sees on its own (deal won but a task still open, receipts late while work
+ * out what no single app sees on its own (a task due before a deal closed is still open, receipts late while work
  * waits). Hidden when neither CRM nor WMS is connected.
  */
 import Link from 'next/link';
@@ -14,6 +14,7 @@ import { Button, Skeleton, cn, toast } from '@/components/ui';
 import { useCustomerPulse } from '@/lib/hooks/use-data';
 import { diffDays, formatDue, todayIso } from '@/lib/dates';
 import { qk } from '@/lib/query-keys';
+import { formatMoney } from '@/lib/money';
 import type { CustomerMismatchDTO, CustomerPulseDTO, CustomerPulseRowDTO } from '@/lib/types';
 import { setTaskDoneAction } from '@/server/actions/tasks';
 import { useShellStore } from '@/features/shell/store';
@@ -29,12 +30,7 @@ export function customersSubtitle(sources: CustomerPulseDTO['sources']): string 
 /** "$120,000" or "120,000 EUR"; null when there is no value. */
 export function dealValueText(amount: number | null, currency: string | null): string | null {
   if (amount === null || !Number.isFinite(amount)) return null;
-  const code = (currency ?? 'USD').toUpperCase();
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, maximumFractionDigits: 0 }).format(amount);
-  } catch {
-    return `${Math.round(amount).toLocaleString('en-US')} ${code}`;
-  }
+  return formatMoney(amount, currency);
 }
 
 const SNOOZE_KEY = 'kitstak.projects.home.snoozedMismatches';
@@ -51,13 +47,19 @@ function readSnoozed(): Record<string, number> {
   }
 }
 
-/** Snoozes last until tomorrow morning, per viewer and browser. */
+/** "Keep" hides a question about a task for good (well, a year); per viewer and browser. */
+const KEEP_MS = 365 * 24 * 60 * 60 * 1000;
+
+/** Snoozes last until tomorrow morning ("Keep" for a year), per viewer and browser. */
 function useSnoozed() {
   const [snoozed, setSnoozed] = useState<Record<string, number>>(() => (typeof window === 'undefined' ? {} : readSnoozed()));
-  const snooze = useCallback((id: string) => {
+  const snooze = useCallback((id: string, mode: 'snooze' | 'keep' = 'snooze') => {
     const until = new Date();
-    until.setDate(until.getDate() + 1);
-    until.setHours(6, 0, 0, 0);
+    if (mode === 'keep') until.setTime(until.getTime() + KEEP_MS);
+    else {
+      until.setDate(until.getDate() + 1);
+      until.setHours(6, 0, 0, 0);
+    }
     setSnoozed((current) => {
       const next = { ...current, [id]: until.getTime() };
       try {
@@ -86,9 +88,11 @@ function useSnoozed() {
 function MismatchRow({
   item,
   onSnooze,
+  onKeep,
 }: {
   readonly item: CustomerMismatchDTO;
   readonly onSnooze: (item: CustomerMismatchDTO) => void;
+  readonly onKeep: (item: CustomerMismatchDTO) => void;
 }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -123,9 +127,14 @@ function MismatchRow({
         <span>{item.fact}</span>
         <span aria-hidden className="text-fg-muted"> · </span>
         {item.task ? (
-          <Link href={item.task.href} className="hover:underline">
-            <span className="font-key font-medium text-fg-secondary">{item.task.ref}</span> {item.task.title}
-          </Link>
+          // A closed deal does not finish the work by itself, so this asks instead of telling.
+          <span data-testid="home-mismatch-question">
+            Is{' '}
+            <Link href={item.task.href} className="hover:underline">
+              <span className="font-key font-medium text-fg-secondary">{item.task.ref}</span> {item.task.title}
+            </Link>{' '}
+            still needed?
+          </span>
         ) : (
           <Link href={item.projectHref} className="hover:underline">
             {item.work}
@@ -136,6 +145,11 @@ function MismatchRow({
         {item.task ? (
           <Button size="sm" variant="secondary" leadingIcon={<Check aria-hidden />} loading={busy} onClick={() => void markDone()}>
             Mark {item.task.ref} done
+          </Button>
+        ) : null}
+        {item.task ? (
+          <Button size="sm" variant="ghost" onClick={() => onKeep(item)} aria-label={`Keep ${item.task.ref}, it is still needed`}>
+            Keep
           </Button>
         ) : null}
         {item.dealUrl ? (
@@ -215,21 +229,38 @@ function CustomerRow({ row, today }: { readonly row: CustomerPulseRowDTO; readon
           ) : null}
           {row.lateReceipts === 0 && row.exceptions === 0 && row.deal === null ? <li className="text-fg-muted">No open deal or warehouse issues</li> : null}
         </ul>
-        <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
-          <span className={cn('font-medium', openTasks ? 'text-fg-secondary' : '')}>
-            {openTasks} open {openTasks === 1 ? 'task' : 'tasks'}
-            {overdue ? <span className="text-danger-text"> ({overdue} overdue)</span> : null}
-          </span>
-          <span aria-hidden>·</span>
-          {row.projects.map((project, index) => (
-            <span key={project.id}>
-              <Link href={`/p/${project.key}`} className="text-fg-link hover:underline">
-                {project.name}
-              </Link>
-              {index < row.projects.length - 1 ? ',' : ''}
+        {row.projects.length <= 1 ? (
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted" data-testid="home-customer-work">
+            <span className={cn('font-medium', openTasks ? 'text-fg-secondary' : '')}>
+              {openTasks} open {openTasks === 1 ? 'task' : 'tasks'}
+              {overdue ? <span className="text-danger-text"> ({overdue} overdue)</span> : null}
             </span>
-          ))}
-        </p>
+            {mainProject ? (
+              <>
+                <span aria-hidden>·</span>
+                <Link href={`/p/${mainProject.key}`} className="text-fg-link hover:underline">
+                  <span className="font-key">{mainProject.key}</span> {mainProject.name}
+                </Link>
+              </>
+            ) : null}
+          </p>
+        ) : (
+          // Several projects for one customer: a count per project, named by key, so each number
+          // matches the mismatch line above ("APX has 7 open tasks") instead of a silent sum.
+          <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted" data-testid="home-customer-work">
+            {row.projects.map((project) => (
+              <li key={project.id} className="inline-flex min-w-0 items-center gap-1.5">
+                <Link href={`/p/${project.key}`} className="truncate text-fg-link hover:underline">
+                  <span className="font-key">{project.key}</span> {project.name}
+                </Link>
+                <span className={cn('shrink-0 font-medium', project.openTasks ? 'text-fg-secondary' : '')}>
+                  {project.openTasks} open {project.openTasks === 1 ? 'task' : 'tasks'}
+                  {project.overdue ? <span className="text-danger-text"> ({project.overdue} overdue)</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       {mainProject ? (
         <Button size="sm" variant="secondary" leadingIcon={<Plus aria-hidden />} onClick={() => openQuickAdd({ projectId: mainProject.id })} className="shrink-0 self-start" aria-label={`Create a task for ${row.customerName}`}>
@@ -249,6 +280,13 @@ export function CustomersCard() {
     (item: CustomerMismatchDTO) => {
       snooze(item.id);
       toast.undo('Snoozed until tomorrow', { onUndo: () => unsnooze(item.id) });
+    },
+    [snooze, unsnooze],
+  );
+  const onKeep = useCallback(
+    (item: CustomerMismatchDTO) => {
+      snooze(item.id, 'keep');
+      toast.undo(item.task ? `Keeping ${item.task.ref}` : 'Kept', { onUndo: () => unsnooze(item.id) });
     },
     [snooze, unsnooze],
   );
@@ -284,7 +322,7 @@ export function CustomersCard() {
               </p>
               <ul className="mt-0.5 flex flex-col divide-y divide-border-subtle/70">
                 {mismatches.map((item) => (
-                  <MismatchRow key={item.id} item={item} onSnooze={onSnooze} />
+                  <MismatchRow key={item.id} item={item} onSnooze={onSnooze} onKeep={onKeep} />
                 ))}
               </ul>
             </div>

@@ -142,8 +142,8 @@ describe('updateOrder (detail edit)', () => {
     expect(u.version).toBeGreaterThan(o.version);
     expect((await logs(o.id)).map((l) => l.message)).toEqual(
       expect.arrayContaining([
-        'Note is modified. — --> Leave at door',
-        expect.stringMatching(/is modified\. — --> PRO-77$/),
+        'Note is modified. None → Leave at door',
+        expect.stringMatching(/is modified\. None → PRO-77$/),
       ]),
     );
     await expect(

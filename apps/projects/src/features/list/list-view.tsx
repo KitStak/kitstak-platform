@@ -512,7 +512,7 @@ export function ListView() {
     <div className="flex h-full flex-col" data-testid="list-view">
       {toolbar}
       <ViewCursor rootRef={listRef} mode="list" tasks={all} ops={ops} canEdit={canEdit} onOpen={onOpen} />
-      <div className="min-h-0 flex-1 overflow-auto [scrollbar-width:thin]" onKeyDown={listKeyDown}>
+      <div className="min-h-0 flex-1 overflow-auto [scrollbar-width:thin] max-sm:pb-[calc(88px+env(safe-area-inset-bottom))]" onKeyDown={listKeyDown}>
         <div ref={listRef} role="grid" aria-label={`${project.name} tasks`} aria-multiselectable className="mx-auto w-full max-w-[1320px] px-4 pt-3 pb-28 sm:px-6">
           {all.length === 0 ? (
             <EmptyState

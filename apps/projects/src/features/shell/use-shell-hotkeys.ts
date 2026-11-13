@@ -11,7 +11,7 @@ import { routes } from '@/lib/routes';
 import { toast } from '@/components/ui';
 import { takeEarlyKeys } from '@/features/command/early-keys';
 import { PALETTE_INPUT, QUICK_ADD_INPUT, catchTypeAhead } from '@/features/command/type-ahead';
-import { letterKeysPaused, startLetterKeyGuard } from '@/features/task/task-keys';
+import { overlayIsOpen, startLetterKeyGuard } from '@/features/task/task-keys';
 import { useShellStore } from './store';
 
 export function useShellHotkeys(): void {
@@ -42,7 +42,10 @@ export function useShellHotkeys(): void {
   useHotkey(
     'c',
     (event) => {
-      if (letterKeysPaused()) return;
+      // A capital C (Caps Lock) is text, not the shortcut. Only an open dialog, menu or palette
+      // keeps c; right after Esc closed one, c still means "new task" (ignoring it let the next
+      // letters of the name fall through to page shortcuts and lost the first letter).
+      if (event.key !== 'c' || overlayIsOpen()) return;
       event.preventDefault();
       catchTypeAhead(QUICK_ADD_INPUT);
       store.getState().openQuickAdd();

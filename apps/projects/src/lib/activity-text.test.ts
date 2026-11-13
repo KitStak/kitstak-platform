@@ -27,3 +27,18 @@ describe('time and subtasks', () => {
     expect(describeSubtaskAdded(event({ after: { number: 16, title: 'Get label specs' } }), 'QAA')).toBe('added the subtask QAA-16 Get label specs');
   });
 });
+
+describe('assignments and templates', () => {
+  const people = { personName: (id: string) => ({ u1: 'Mike Lunsford', u2: 'Thao Nguyen' })[id] };
+  it('says themselves for a self-assignment, and you for the viewer', () => {
+    expect(describeActivity(event({ verb: 'task.updated', field: 'assignee', after: 'u1' }), people)).toBe('assigned this to themselves');
+    expect(describeActivity(event({ verb: 'task.updated', field: 'assignee', after: 'u2' }), { ...people, viewerId: 'u2' })).toBe('assigned this to you');
+    expect(describeActivity(event({ verb: 'task.updated', field: 'assignee', after: 'u2' }), people)).toBe('assigned this to Thao Nguyen');
+    expect(describeActivityParts(event({ verb: 'task.updated', field: 'assignee', after: 'u1' }), people)).toEqual({ before: 'assigned', after: 'to themselves' });
+  });
+  it('names the template a project was created from', () => {
+    expect(describeActivity(event({ verb: 'template.used', entityType: 'template', meta: { template: 'Warehouse go-live' } }))).toBe('created this project from the Warehouse go-live template');
+    expect(describeActivity(event({ verb: 'template.used', meta: { template: 'Client onboarding template' } }))).toBe('created this project from the Client onboarding template');
+    expect(describeActivity(event({ verb: 'template.used', meta: {} }))).toBe('created this project from a template');
+  });
+});

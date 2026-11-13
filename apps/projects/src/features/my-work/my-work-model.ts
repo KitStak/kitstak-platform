@@ -19,7 +19,7 @@ export const SORT_LABELS: Readonly<Record<MyWorkSort, string>> = {
   priority: 'Priority',
   project: 'Project',
   updated: 'Recently updated',
-  title: 'Name (A–Z)',
+  title: 'Name (A to Z)',
 };
 
 const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 } as const;

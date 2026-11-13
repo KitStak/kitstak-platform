@@ -11,6 +11,7 @@ export function PersonAvatar({
   size = 'sm',
   showName = false,
   decorative = false,
+  firstNameOnly = false,
   className,
 }: {
   readonly userId: string | null | undefined;
@@ -18,6 +19,8 @@ export function PersonAvatar({
   readonly showName?: boolean;
   /** The name is written right next to it (comment header, time entry): screen readers skip the avatar. */
   readonly decorative?: boolean;
+  /** With `showName`: just the first name (tight table columns); the full name is in the tooltip. */
+  readonly firstNameOnly?: boolean;
   readonly className?: string;
 }) {
   const people = usePeopleMap();
@@ -43,9 +46,9 @@ export function PersonAvatar({
     );
   }
   return (
-    <span className={cn('inline-flex min-w-0 items-center gap-1.5', className)}>
+    <span className={cn('inline-flex min-w-0 items-center gap-1.5', className)} title={showName && firstNameOnly ? person.name : undefined}>
       <Avatar name={person.name} src={person.image} size={size} showTooltip={!showName && !decorative} decorative={showName || decorative} />
-      {showName ? <span className="truncate text-sm text-fg">{person.name}</span> : null}
+      {showName ? <span className="truncate text-sm text-fg">{firstNameOnly ? (person.name.split(/\s+/)[0] ?? person.name) : person.name}</span> : null}
     </span>
   );
 }

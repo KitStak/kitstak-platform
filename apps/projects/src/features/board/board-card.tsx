@@ -46,7 +46,7 @@ function SubtaskProgress({ done, total }: { readonly done: number; readonly tota
   return (
     <span className="inline-flex items-center gap-1" title={`${done} of ${total} subtasks done`}>
       <span aria-hidden className="h-1 w-6 overflow-hidden rounded-full bg-[var(--border-subtle)]">
-        <span className={cn('block h-full rounded-full', done === total ? 'bg-success' : 'bg-[var(--logo-ink)]')} style={{ width: `${percent}%` }} />
+        <span className="block h-full rounded-full bg-success" style={{ width: `${percent}%` }} />
       </span>
       <span className="tabular-nums">
         {done}/{total}

@@ -4,7 +4,7 @@
  * their tasks and "day N" dates, milestones, labels, custom fields and the automations that come
  * with it, written as plain sentences.
  */
-import { describeTemplateTaskCounts } from '@/lib/template-math';
+import { describeTemplateTaskCounts, templateDayText } from '@/lib/template-math';
 import Link from 'next/link';
 import { ArrowRight, CalendarRange, Diamond, Flag, ListChecks, Tag, Workflow, Zap } from 'lucide-react';
 import { Badge, SheetContent, buttonVariants, cn, labelColorStyle, toLabelColor } from '@/components/ui';
@@ -15,11 +15,7 @@ import { routes } from '@/lib/routes';
 import type { TemplatePayload, TemplateTask } from '@/lib/template-types';
 import type { TemplateDTO } from '@/lib/types';
 
-function dayText(offset: number | undefined): string | null {
-  if (offset === undefined) return null;
-  if (offset <= 0) return 'Day 1';
-  return `Day ${offset + 1}`;
-}
+const dayText = templateDayText;
 
 function weeks(days: number | undefined): string | null {
   if (!days) return null;

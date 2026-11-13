@@ -110,14 +110,14 @@ function HealthChoice({ value, onChange, disabled }: { readonly value: ProjectHe
             onClick={() => onChange(health)}
             data-testid={`health-${health}`}
             className={cn(
-              'flex min-w-0 flex-col items-start gap-0.5 rounded-lg border px-3 py-2 text-left outline-none transition-[border-color,background-color,box-shadow] duration-[var(--duration-fast)]',
+              'flex min-w-0 flex-col items-start gap-0.5 rounded-lg border px-3 py-2 text-left outline-none max-sm:px-2 transition-[border-color,background-color,box-shadow] duration-[var(--duration-fast)]',
               'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:opacity-50',
               checked ? 'shadow-xs' : 'border-border-subtle bg-panel hover:border-border-default',
             )}
             style={checked ? { borderColor: HEALTH_COLOR[health], background: `color-mix(in srgb, ${HEALTH_COLOR[health]} 9%, var(--surface-panel))` } : undefined}
           >
-            <span className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: checked ? HEALTH_COLOR[health] : undefined }}>
-              <HealthIcon health={health} className="size-4" />
+            <span className="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap max-sm:gap-1" style={{ color: checked ? HEALTH_COLOR[health] : undefined }}>
+              <HealthIcon health={health} className="size-4 shrink-0" />
               {PROJECT_HEALTH_LABELS[health]}
             </span>
             <span className="hidden truncate text-2xs text-fg-muted sm:block">{HEALTH_HELP[health]}</span>

@@ -288,17 +288,8 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
           </div>
         </div>
         <ProjectTabs tabs={tabs} active={tab} projectKey={project.key} triageCount={triageCount} />
-        {capabilities['task:create'] ? (
-          <button
-            type="button"
-            aria-label={`Add a task to ${project.name}`}
-            onClick={() => openQuickAdd({ projectId: project.id })}
-            className="fixed right-4 bottom-[calc(20px+env(safe-area-inset-bottom))] z-[var(--z-sticky)] inline-flex size-14 items-center justify-center rounded-full bg-primary text-primary-fg shadow-lg outline-none hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus active:scale-95 sm:hidden"
-            data-testid="project-add-task-fab"
-          >
-            <Plus aria-hidden className="size-6" />
-          </button>
-        ) : null}
+        {/* No floating Add button on phones: it covered row menus, due dates and card footers in every
+            view. The top bar's red New task button is always visible and adds to this project. */}
         {tab === 'board' || tab === 'list' ? <CycleStrip projectKey={project.key} /> : null}
       </header>
       <div className="min-h-0 flex-1 overflow-auto">{children}</div>

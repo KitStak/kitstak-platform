@@ -102,6 +102,7 @@ import type { WorkflowDetail, WorkflowRunRow, WorkflowTestResult } from '@/serve
 import { ConditionModal, type ConditionModalState } from '../rules/rule-modals';
 import { useRuleNames } from '../rules/rule-names';
 import { ActionParamField } from './workflow-action-params';
+import { isEmptySide } from '@/lib/change-log-text';
 
 type Form = Required<
   Pick<WorkflowSaveInput, 'name' | 'trigger' | 'match' | 'conditions' | 'isActive' | 'stopProcessing'>
@@ -1078,7 +1079,7 @@ function TestPanel({ form }: { readonly form: Form }) {
                 {result.changes.map((c) => (
                   <li key={c.field} className="text-xs">
                     <span className="font-medium">{c.field}</span>{' '}
-                    {!c.from || c.from === '\u2014' ? (
+                    {isEmptySide(c.from) ? (
                       <span className="italic text-faint">(none)</span>
                     ) : (
                       <span className="text-faint line-through">{c.from}</span>

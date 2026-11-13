@@ -29,7 +29,7 @@ export function OrgProfileForm({
     event.preventDefault();
     const trimmed = value.trim();
     if (trimmed.length < NAME_MIN || trimmed.length > NAME_MAX) {
-      setError(`Use ${NAME_MIN}–${NAME_MAX} characters.`);
+      setError(`Use ${NAME_MIN} to ${NAME_MAX} characters.`);
       return;
     }
     setError(null);

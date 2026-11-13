@@ -7,7 +7,7 @@
 import { useState, type ReactNode } from 'react';
 import { Command } from 'cmdk';
 import { Building2, Check, ChevronsUpDown, Handshake, Package, Search, Users, Warehouse } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger, Spinner, cn } from '@/components/ui';
+import { Button, Popover, PopoverContent, PopoverTrigger, Spinner, cn } from '@/components/ui';
 import { INTEGRATION_TARGET_LABELS, type IntegrationTargetType } from '@/lib/constants';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 import { useIntegrationSearch, type ResolvedTargetDTO } from '@/lib/hooks/use-data';
@@ -51,6 +51,7 @@ export function RecordPicker({
   className,
   excludeIds,
   align = 'start',
+  emptyActions,
 }: {
   readonly type: IntegrationTargetType;
   /** The picked record (null = none). */
@@ -61,6 +62,8 @@ export function RecordPicker({
   readonly className?: string;
   readonly excludeIds?: readonly string[];
   readonly align?: 'start' | 'end';
+  /** Next steps shown under the "No results" message (e.g. open CRM, switch record type). */
+  readonly emptyActions?: (ctx: { readonly query: string; readonly close: () => void }) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -116,7 +119,17 @@ export function RecordPicker({
           </div>
           <Command.List className="min-h-0 flex-1 overflow-y-auto p-1">
             {!results.isFetching && list.length === 0 ? (
-              <p className="px-3 py-6 text-center text-sm text-fg-muted">{debounced ? `No ${NOUN[type]} match “${debounced}”` : `No ${NOUN[type]} yet`}</p>
+              <div className="flex flex-col items-center gap-2 px-3 py-5 text-center" data-testid="record-picker-empty">
+                <p className="text-sm text-fg-muted">{debounced ? `No ${NOUN[type]} match “${debounced}”` : `No ${NOUN[type]} yet`}</p>
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  {debounced ? (
+                    <Button variant="secondary" size="sm" onClick={() => setQuery('')} data-testid="record-picker-clear">
+                      Clear search
+                    </Button>
+                  ) : null}
+                  {emptyActions?.({ query: debounced, close: () => setOpen(false) })}
+                </div>
+              </div>
             ) : null}
             {value ? (
               <Command.Item value="__clear__" onSelect={() => { onChange(null); setOpen(false); }} className="ks-menu-item text-fg-secondary">

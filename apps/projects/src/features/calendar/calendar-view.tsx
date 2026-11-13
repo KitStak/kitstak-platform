@@ -185,7 +185,8 @@ export function CalendarView() {
     return prefs.showWeekends ? raw : raw.map((days) => days.filter((day) => !isWeekendIso(day)));
   }, [anchor, mode, prefs.showWeekends]);
   const columns = weeks[0]?.length ?? 7;
-  const rowHeight = Math.max(MIN_ROW_H, Math.floor((gridHeight - 32) / Math.max(1, weeks.length)));
+  // The 32px weekday header and the 30px color key share the height with the week rows.
+  const rowHeight = Math.max(MIN_ROW_H, Math.floor((gridHeight - 32 - 30) / Math.max(1, weeks.length)));
   const title = mode === 'month' ? MONTH_TITLE.format(parseIsoDate(anchor)) : weekTitle(weekOf(anchor));
   const visibleCount = useMemo(() => {
     const first = weeks[0]?.[0];
@@ -429,8 +430,26 @@ export function CalendarView() {
     </PopoverContent>
   );
 
+  // The color key is the last thing inside the scrolling month (never a bar pinned over it), so it
+  // can't cover the bottom week's bands when the month is taller than the screen.
+  const legendKey = (
+    <ul className="mt-auto flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-border-subtle bg-panel px-3 py-1.5 text-xs text-fg-secondary" aria-label="Color key" data-testid="calendar-legend">
+      {legend.map((entry) => (
+        <li key={entry.id} className="inline-flex items-center gap-1.5" style={labelColorStyle(entry.color)}>
+          {entry.icon ?? <span aria-hidden className="size-2.5 rounded-full bg-[var(--lc-bg)]" />}
+          {entry.label}
+        </li>
+      ))}
+      <li className="inline-flex items-center gap-1.5 text-fg-muted max-sm:hidden">
+        <span aria-hidden className="h-1.5 w-6 rounded-full bg-sunken shadow-[inset_0_0_0_1px_var(--border-default)]" />
+        Slim bands run longer than a week
+      </li>
+    </ul>
+  );
+
   const monthGrid = (
-    <div ref={measureGrid} role="grid" aria-label={title} className="flex min-h-0 flex-1 flex-col overflow-auto" data-testid="calendar-month">
+    <div ref={measureGrid} className="flex min-h-0 flex-1 flex-col overflow-auto" data-testid="calendar-month">
+      <div role="grid" aria-label={title} className="flex shrink-0 flex-col">
       <div role="row" className="sticky top-0 z-[var(--z-sticky)] grid shrink-0 border-b border-border-subtle bg-panel" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         {(weeks[0] ?? []).map((day) => (
           <div role="columnheader" key={day} className="h-8 px-2 text-xs leading-8 font-semibold text-fg-muted">
@@ -571,6 +590,8 @@ export function CalendarView() {
           </div>
         );
       })}
+      </div>
+      {legendKey}
     </div>
   );
 
@@ -580,7 +601,7 @@ export function CalendarView() {
   // Phones: the week as an agenda, one day per row with full-width task lines (Google Calendar's
   // schedule view). Seven columns at 390px leave about 45px per task, too little to read.
   const agendaList = (
-    <div role="list" aria-label={title} className="flex min-h-0 flex-1 flex-col overflow-auto" data-testid="calendar-agenda">
+    <div role="list" aria-label={title} className="flex min-h-0 flex-1 flex-col overflow-auto max-sm:pb-[calc(88px+env(safe-area-inset-bottom))]" data-testid="calendar-agenda">
       {weekDays.map((day) => {
         const isToday = day === today;
         const dayEvents = eventsOn(day, events);
@@ -782,21 +803,7 @@ export function CalendarView() {
               />
             </div>
           ) : mode === 'month' ? (
-            <>
-              {monthGrid}
-              <ul className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-border-subtle bg-panel px-3 py-1.5 text-xs text-fg-secondary" aria-label="Color key" data-testid="calendar-legend">
-                {legend.map((entry) => (
-                  <li key={entry.id} className="inline-flex items-center gap-1.5" style={labelColorStyle(entry.color)}>
-                    {entry.icon ?? <span aria-hidden className="size-2.5 rounded-full bg-[var(--lc-bg)]" />}
-                    {entry.label}
-                  </li>
-                ))}
-                <li className="inline-flex items-center gap-1.5 text-fg-muted max-sm:hidden">
-                  <span aria-hidden className="h-1.5 w-6 rounded-full bg-sunken shadow-[inset_0_0_0_1px_var(--border-default)]" />
-                  Slim bands run longer than a week
-                </li>
-              </ul>
-            </>
+            monthGrid
           ) : narrow ? (
             agendaList
           ) : (

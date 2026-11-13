@@ -2,6 +2,7 @@
  * Shipment Plan grids: plans (`shipment-plans`), plan orders (`shipment-plan-orders`) and
  * plan LPs (`shipment-plan-lps`), plus the pure plan rules shared by the drawer and the API.
  */
+import { isEmptySide } from '@/lib/change-log-text';
 import { SHIPMENT_PLAN_STATUSES, SO_STATUSES } from '@/lib/enums';
 import { optionsOf, type ShippingField } from './common';
 
@@ -365,11 +366,11 @@ export function reachedPlanStages(status: string, messages: readonly string[]): 
     const t = m.trim();
     // Legacy wire format ("Status is modified. A --> B") and the stored sentence ("Status changed from A to B").
     const hit =
-      /^Status is modified\.\s*(.*?)\s*-->\s*(.*)$/.exec(t) ??
+      /^Status is modified\.\s*(.*?)\s*(?:-->|→)\s*(.*)$/.exec(t) ??
       /^Status changed from (.*?) to (.*?)\.?$/.exec(t);
     if (hit) {
-      if (hit[1] && hit[1] !== '\u2014') reached.add(hit[1].trim());
-      if (hit[2] && hit[2] !== '\u2014') reached.add(hit[2].trim());
+      if (hit[1] && !isEmptySide(hit[1])) reached.add(hit[1].trim());
+      if (hit[2] && !isEmptySide(hit[2])) reached.add(hit[2].trim());
     }
   }
   return reached;

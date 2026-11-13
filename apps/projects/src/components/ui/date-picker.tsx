@@ -1,13 +1,13 @@
 'use client';
-import { useState } from 'react';
-import { DayPicker, type DateRange } from 'react-day-picker';
+import { useState, type ReactNode } from 'react';
+import { DayPicker, type DateRange, type Matcher } from 'react-day-picker';
 import { addDays, format, isValid, nextMonday, startOfToday } from 'date-fns';
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from './cn';
 import { Button } from './button';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 
-export type { DateRange };
+export type { DateRange, Matcher };
 
 /** Shared DayPicker theming: tokens drive every color; layout via our utility classes. */
 const dayPickerClassNames = {
@@ -44,11 +44,16 @@ export interface CalendarProps {
   readonly selected: Date | undefined;
   readonly onSelect: (date: Date | undefined) => void;
   readonly weekStartsOn?: 0 | 1;
+  /** Extra day modifiers (e.g. days that also move another date), styled with `modifiersClassNames`. */
+  readonly modifiers?: Record<string, Matcher | Matcher[]>;
+  readonly modifiersClassNames?: Record<string, string>;
+  /** Small note under the grid. */
+  readonly footer?: ReactNode;
 }
 
 /** Inline single-date calendar. */
 /** Weeks start on Monday, like the project Calendar and Workload views. */
-export function Calendar({ selected, onSelect, weekStartsOn = 1 }: CalendarProps) {
+export function Calendar({ selected, onSelect, weekStartsOn = 1, modifiers, modifiersClassNames, footer }: CalendarProps) {
   return (
     <DayPicker
       mode="single"
@@ -60,6 +65,9 @@ export function Calendar({ selected, onSelect, weekStartsOn = 1 }: CalendarProps
       fixedWeeks
       classNames={dayPickerClassNames}
       components={components}
+      modifiers={modifiers}
+      modifiersClassNames={modifiersClassNames}
+      footer={footer}
     />
   );
 }
@@ -96,6 +104,8 @@ export interface DatePickerProps {
   readonly id?: string;
   readonly 'aria-label'?: string;
   readonly className?: string;
+  /** Trigger height: `md` 32px (default), `lg` 40px to line up with `size="lg"` inputs and selects. */
+  readonly size?: 'md' | 'lg';
 }
 
 interface QuickPick {
@@ -120,6 +130,7 @@ export function DatePicker({
   clearable = true,
   id,
   className,
+  size = 'md',
   ...aria
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
@@ -138,7 +149,8 @@ export function DatePicker({
             aria-label={aria['aria-label']}
             disabled={disabled}
             className={cn(
-              'inline-flex h-8 w-full items-center gap-2 rounded-md border border-border-input bg-panel px-2.5 text-left text-sm',
+              'inline-flex w-full items-center gap-2 rounded-md border border-border-input bg-panel text-left text-sm',
+              size === 'lg' ? 'h-10 px-3' : 'h-8 px-2.5',
               'transition-[border-color,box-shadow] duration-[var(--duration-fast)] outline-none hover:border-border-input-hover',
               'focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)] data-[state=open]:border-primary',
               'disabled:cursor-not-allowed disabled:opacity-60',

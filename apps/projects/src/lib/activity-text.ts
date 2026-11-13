@@ -11,6 +11,8 @@ export interface ActivityLookups {
   readonly personName?: (id: string) => string | undefined;
   readonly labelName?: (id: string) => string | undefined;
   readonly sectionName?: (id: string) => string | undefined;
+  /** The person reading the feed: "assigned this to you" instead of their own name. */
+  readonly viewerId?: string;
 }
 
 const FIELD_WORDS: Readonly<Record<string, string>> = {
@@ -46,6 +48,8 @@ export function describeActivity(event: ActivityDTO, lookups: ActivityLookups = 
       if (event.field === 'assignee') {
         const to = str(event.after);
         if (!to) return 'unassigned this';
+        if (event.actorId && to === event.actorId) return 'assigned this to themselves';
+        if (lookups.viewerId && to === lookups.viewerId) return 'assigned this to you';
         return `assigned this to ${lookups.personName?.(to) ?? 'a teammate'}`;
       }
       if (event.field === 'priority') {
@@ -107,6 +111,10 @@ export function describeActivity(event: ActivityDTO, lookups: ActivityLookups = 
       return `ran the rule “${str(meta.name) ?? 'Untitled'}”`;
     case 'project.created':
       return 'created this project';
+    case 'template.used': {
+      const name = str(meta.template)?.replace(/\s+template$/i, '').trim();
+      return name ? `created this project from the ${name} template` : 'created this project from a template';
+    }
     case 'project.updated':
       if (event.field === 'health') return `marked the project ${String(event.after).replace('_', ' ')}`;
       if (event.field === 'healthNote') return 'updated the status note';

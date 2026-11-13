@@ -20,7 +20,7 @@ import { TASKS_DELETED_EVENT } from '@/lib/hooks/use-task-mutations';
 import { addDaysIso, todayIso } from '@/lib/dates';
 import { routes } from '@/lib/routes';
 import { parseTaskKey } from '@/lib/task-key';
-import type { CommentDTO, TaskDetail, TimeEntryDTO } from '@/lib/types';
+import type { AttachmentDTO, CommentDTO, TaskDetail, TimeEntryDTO } from '@/lib/types';
 import { ProjectProvider } from '@/features/projects/project-context';
 import { ActivityFeed } from './activity-feed';
 import { AttachmentsSection, DropOverlay } from './attachments-section';
@@ -44,7 +44,7 @@ export interface TaskDetailViewProps {
   readonly variant?: 'drawer' | 'page';
   readonly onDeleted?: () => void;
   readonly initialData?: TaskDetail;
-  /** Server-loaded comments, first history page and time entries (task page), so they render in the first HTML. */
+  /** Server-loaded comments, first history page, files and time entries (task page), so they render in the first HTML. */
   readonly initialFeed?: TaskFeedInitial;
   /** Drawer: close button handler. */
   readonly onClose?: () => void;
@@ -64,6 +64,7 @@ export interface TaskFeedInitial {
   readonly comments?: readonly CommentDTO[];
   readonly activity?: ActivityPage;
   readonly time?: readonly TimeEntryDTO[];
+  readonly attachments?: readonly AttachmentDTO[];
 }
 
 /**
@@ -100,21 +101,81 @@ function useWide(ref: React.RefObject<HTMLElement | null>): boolean {
   return wide;
 }
 
+type KeyPress = Pick<KeyboardEvent, 'key' | 'shiftKey' | 'metaKey' | 'ctrlKey' | 'altKey'>;
+
+/** Keys a task surface ignores: typing, menus and lists keep their own keys, and a dialog that just closed. */
+function ignoredTaskKey(event: KeyboardEvent, variant: 'drawer' | 'page'): boolean {
+  if (event.defaultPrevented || event.altKey) return true;
+  const target = event.target instanceof Element ? event.target : null;
+  // Drawer: only keys pressed inside the panel; the view behind acts on its cursor task otherwise.
+  if (variant === 'drawer' && !target?.closest(`[${TASK_PANEL_ATTR}]`)) return true;
+  if (isEditableTarget(target) || target?.closest(BUSY_KEYS_SELECTOR)) return true;
+  // Quick add, the palette or a menu is open (or just closed): its keys never edit this task.
+  return letterKeysPaused();
+}
+
 /**
- * The shared task key map inside the drawer and on the task page: Ctrl/Cmd+Enter marks it done
+ * A task key pressed in the drawer while it is still loading (right after a URL load the panel
+ * takes focus before the task has drawn). Replayed once the task is ready, so it is not lost.
+ */
+let pendingKey: { readonly taskRef: string; readonly press: KeyPress; readonly at: number } | null = null;
+const PENDING_MS = 4000;
+
+function useEarlyTaskKeys(taskRef: string, variant: 'drawer' | 'page', waiting: boolean) {
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (ignoredTaskKey(event, variant) || !taskKeyAction(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const { key, shiftKey, metaKey, ctrlKey, altKey } = event;
+      pendingKey = { taskRef, press: { key, shiftKey, metaKey, ctrlKey, altKey }, at: Date.now() };
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [taskRef, variant, waiting]);
+}
+
+/**
+ * The shared task key map inside the drawer and on the task page: S / A / P / D / # open the
+ * status, assignee, priority, due date and labels pickers, Ctrl/Cmd+Enter marks it done
  * (or reopens it), Ctrl/Cmd+. copies its link, I assigns it to you, T / Shift+T make it due
  * today / tomorrow. In the drawer the keys only count while focus is in the panel; outside it,
  * the view behind acts on its cursor task (which is the task the drawer shows).
+ *
+ * One document listener that checks where the key was pressed, not a listener on the panel node:
+ * the panel may mount (or be replaced) after this effect runs, which used to drop keys right
+ * after a URL load.
  */
-function useTaskKeys(actions: ReturnType<typeof useTaskActions>) {
-  const { task, canEdit, patch, variant } = useTaskContext();
+const PICKER_ACTIONS = new Set(['status', 'assignee', 'priority', 'due', 'labels']);
+
+/**
+ * Opens a property picker (S, A, P, D, #) of the task surface `anchor` sits in, by pressing its
+ * trigger in the properties panel. Waits a couple of frames when asked: right after a URL load the
+ * properties may still move from the compact block to the sidebar, which would close the picker.
+ */
+function openTaskPicker(anchor: HTMLElement | null, field: string, settle: boolean): void {
+  const press = () => {
+    const surface = anchor?.closest<HTMLElement>('[data-testid="task-detail"]');
+    const trigger = surface?.querySelector<HTMLButtonElement>(`[data-task-field="${field}"]`);
+    if (trigger && !trigger.disabled) trigger.click();
+  };
+  if (!settle) {
+    press();
+    return;
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(press, 30)));
+}
+
+function useTaskKeys(actions: ReturnType<typeof useTaskActions>, anchorRef: React.RefObject<HTMLElement | null>) {
+  const { task, taskRef, canEdit, patch, variant } = useTaskContext();
   const { user } = useShell();
   const ref = useRef({ actions, task, canEdit, patch, userId: user.id });
   useEffect(() => {
     ref.current = { actions, task, canEdit, patch, userId: user.id };
   });
   useEffect(() => {
-    const run = (event: KeyboardEvent): boolean => {
+    const run = (event: KeyPress, replay = false): boolean => {
       const action = taskKeyAction(event);
       if (!action) return false;
       const { actions: current, task: shown, canEdit: editable, patch: save, userId } = ref.current;
@@ -123,6 +184,11 @@ function useTaskKeys(actions: ReturnType<typeof useTaskActions>) {
         return true;
       }
       if (!editable) return false;
+      // S status, A assignee, P priority, D due date, # labels: the panel's own pickers.
+      if (PICKER_ACTIONS.has(action)) {
+        openTaskPicker(anchorRef.current, action, replay);
+        return true;
+      }
       if (action === 'toggle-done') {
         void current.toggleDone();
         return true;
@@ -147,32 +213,29 @@ function useTaskKeys(actions: ReturnType<typeof useTaskActions>) {
       return false;
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey) return;
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      if (isEditableTarget(target) || target?.closest(BUSY_KEYS_SELECTOR)) return;
-      // Quick add, the palette or a menu is open (or just closed): its keys never edit this task.
-      if (letterKeysPaused()) return;
+      if (ignoredTaskKey(event, variant)) return;
       if (run(event)) {
         event.preventDefault();
         event.stopPropagation();
       }
     };
     startLetterKeyGuard();
-    if (variant === 'page') {
-      window.addEventListener('keydown', onKey);
-      return () => window.removeEventListener('keydown', onKey);
+    // A key pressed while this task was still loading in the drawer.
+    const pending = pendingKey;
+    pendingKey = null;
+    if (pending && Date.now() - pending.at < PENDING_MS && (pending.taskRef === taskRef || pending.taskRef === ref.current.task.key)) {
+      run(pending.press, true);
     }
-    const panel = document.querySelector<HTMLElement>(`[${TASK_PANEL_ATTR}]`);
-    if (!panel) return undefined;
-    panel.addEventListener('keydown', onKey);
-    return () => panel.removeEventListener('keydown', onKey);
-  }, [variant]);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [variant, taskRef, anchorRef]);
 }
 
 function TaskTitle() {
   const { task, canEdit, patch, statusById } = useTaskContext();
   const actions = useTaskActions();
-  useTaskKeys(actions);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  useTaskKeys(actions, anchorRef);
   const [draft, setDraft] = useState<string | null>(null);
   const status = statusById.get(task.statusId);
   const closed = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
@@ -182,7 +245,7 @@ function TaskTitle() {
     if (next && next !== task.title) void patch({ title: next });
   };
   return (
-    <div className="flex items-start gap-2.5">
+    <div ref={anchorRef} className="flex items-start gap-2.5">
       <Tooltip content={!canEdit ? (status?.name ?? '') : closed ? 'Reopen' : 'Mark done'}>
         <button
           type="button"
@@ -289,24 +352,24 @@ function TaskNav({ onNavigate }: { readonly onNavigate: (key: string) => void })
     goRef.current = go;
   });
 
-  // Drawer: ↑/↓ and j/k while focus is in the panel. Listening on the panel itself runs before
-  // any page-level shortcut of the view behind (a list's own arrow keys), and stops it.
+  // Drawer: ↑/↓ and j/k while focus is in the panel. A document listener runs before any
+  // window-level shortcut of the view behind (a list's own arrow keys), and stops it; it checks
+  // where the key was pressed, so it works even when the panel node mounts after this effect.
   useEffect(() => {
     if (variant !== 'drawer') return;
-    const panel = document.querySelector<HTMLElement>(`[${TASK_PANEL_ATTR}]`);
-    if (!panel) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       const delta = event.key === 'ArrowDown' || event.key === 'j' ? 1 : event.key === 'ArrowUp' || event.key === 'k' ? -1 : 0;
       if (!delta) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (isEditableTarget(target) || target?.closest(BUSY_KEYS_SELECTOR)) return;
+      if (!target?.closest(`[${TASK_PANEL_ATTR}]`)) return;
+      if (isEditableTarget(target) || target.closest(BUSY_KEYS_SELECTOR)) return;
       event.preventDefault();
       event.stopPropagation();
       goRef.current(delta);
     };
-    panel.addEventListener('keydown', onKey);
-    return () => panel.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [variant]);
 
   // Full page: j / k (arrows keep scrolling the page).
@@ -617,7 +680,15 @@ export function TaskDetailView({
   const project = useProject(data?.projectKey ?? '', { enabled: Boolean(data) });
   // Files load next to the project, not after the body renders, so the Files tiles draw real
   // names and sizes on the first paint of the panel.
-  useTaskAttachments(data?.id, { enabled: live && Boolean(data?.id) && (data?.attachmentCount ?? 0) > 0 });
+  // On the task page the server already loaded them (initialFeed): seeded here, where the query starts.
+  const seededFiles = initialFeed && initialFeed.taskId === data?.id ? initialFeed.attachments : undefined;
+  useTaskAttachments(data?.id, {
+    enabled: live && Boolean(data?.id) && (data?.attachmentCount ?? 0) > 0,
+    initialData: seededFiles ? [...seededFiles] : undefined,
+    initialDataUpdatedAt: initialFeed?.loadedAt,
+  });
+  // Keys pressed in the drawer before the task has drawn are kept and replayed when it has.
+  useEarlyTaskKeys(taskRef, variant, !data || !project.data);
   const retire = useCallback(() => {
     liveRef.current = false;
     setLive(false);

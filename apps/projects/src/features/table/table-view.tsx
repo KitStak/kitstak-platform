@@ -54,9 +54,12 @@ import { useViewState } from '@/features/views/use-view-state';
 import { ViewToolbar } from '@/features/views/view-toolbar';
 import { GROUP_LABELS } from '@/features/views/view-state';
 import { ColumnsMenu } from './columns-menu';
-import { COMPACT_WIDTHS, TITLE_KEY, buildColumns, csvValue, fieldOptions, isCustomerLink, renderCell, resolveColumns, toCsv, type ColumnDef, type RenderContext } from './table-columns';
+import { COMPACT_WIDTHS, FIT_FLOORS, FIT_WIDTHS, TITLE_KEY, fitColumns, buildColumns, csvValue, fieldOptions, isCustomerLink, renderCell, resolveColumns, toCsv, type ColumnDef, type RenderContext } from './table-columns';
 
-const ROW_HEADER_WIDTH = 112;
+/** Checkbox plus the task key ("DEAL-123" fits). */
+const ROW_HEADER_WIDTH = 104;
+/** The trailing "Add a column" column. */
+const ADD_COLUMN_WIDTH = 44;
 const ROW_HEIGHT = 'h-9';
 
 type Entry = { readonly type: 'group'; readonly key: string; readonly count: number; readonly tasks: readonly TaskSummary[] } | { readonly type: 'task'; readonly task: TaskSummary; readonly group: string };
@@ -502,7 +505,7 @@ function HeaderCell({
         >
           <span className="text-icon">{def.icon}</span>
           {/* Compact columns (Assignee and Priority on narrow screens) show the icon only. */}
-          <span className={cn('truncate', width < 96 && 'sr-only')}>{def.label}</span>
+          <span className={cn('truncate', width < 80 && 'sr-only')}>{def.label}</span>
           {sortDir ? (
             <span className="inline-flex items-center text-primary-text">
               {sortDir === 'asc' ? <ArrowUp aria-label="sorted ascending" /> : <ArrowDown aria-label="sorted descending" />}
@@ -575,8 +578,9 @@ function HeaderCell({
   );
 }
 
-/** Narrowest an unresized Task column gets when other columns don't fit. */
-const TITLE_SQUEEZE_MIN = 260;
+/** An undragged Task column takes the leftover width between these two (Linear and Asana style). */
+const TITLE_MIN = 280;
+const TITLE_MAX = 520;
 
 export function TableView() {
   const { project, statusById, labelById, sectionById, capabilities } = useCurrentProject();
@@ -589,8 +593,8 @@ export function TableView() {
   const canEdit = capabilities['task:update'];
   const canCreate = capabilities['task:create'];
   const all = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
-  // The Task column fits the longest title (up to 480px) when nobody has resized it, so titles are
-  // not cut while there is room. Measured after mount (the server has no fonts to measure with).
+  // The Task column never grows past the longest title (up to TITLE_MAX) when nobody has resized
+  // it, so the spare room goes after the last column instead of into an empty Task column. Measured after mount (the server has no fonts to measure with).
   const [titleFit, setTitleFit] = useState(0);
   useEffect(() => {
     const context = document.createElement('canvas').getContext('2d');
@@ -600,7 +604,7 @@ export function TableView() {
     for (const task of all) if (!task.parentTaskId) longest = Math.max(longest, context.measureText(task.title).width);
     // Measuring needs the DOM (fonts), so it can only happen after mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTitleFit(Math.min(480, Math.ceil(longest) + 40));
+    setTitleFit(Math.min(TITLE_MAX, Math.ceil(longest) + 40));
   }, [all]);
   const defs = useMemo(() => buildColumns(project.customFields), [project.customFields]);
   const defByKey = useMemo(() => new Map(defs.map((def) => [def.key, def])), [defs]);
@@ -609,22 +613,52 @@ export function TableView() {
   // The grid's visible width: the Task column grows to fill it, and an edge shadow shows when
   // more columns sit off to the right.
   const [gridWidth, setGridWidth] = useState(0);
-  // Narrow grids (laptops under ~1366px wide, tablets) fit more columns: Assignee becomes an avatar
-  // and Priority an icon, unless the person resized those columns themselves.
-  const compactGrid = gridWidth > 0 && gridWidth < 1120;
   const widthOf = useCallback(
     (column: ViewColumn) => {
       if (widthDraft?.key === column.key) return widthDraft.width;
       const def = defByKey.get(column.key);
-      const saved = column.width ?? def?.defaultWidth ?? 140;
-      // Narrow grids cap Assignee, Priority, Status and dates at compact widths.
-      const compactWidth = COMPACT_WIDTHS[column.key];
-      if (compactGrid && compactWidth !== undefined) return Math.min(saved, compactWidth);
-      return saved;
+      // A width the person dragged is kept as is. Every other column gets its automatic width
+      // (Assignee as avatar plus first name, Priority as icon plus word); fitColumns then shrinks
+      // those before the Task column gives up room.
+      if (column.sized && column.width !== undefined) return column.width;
+      return FIT_WIDTHS[column.key] ?? def?.defaultWidth ?? column.width ?? 140;
     },
-    [compactGrid, defByKey, widthDraft],
+    [defByKey, widthDraft],
   );
   const shown = useMemo(() => columns.filter((column) => !column.hidden && defByKey.has(column.key)), [columns, defByKey]);
+  const titleColumn = useMemo<ViewColumn>(() => shown[0] ?? { key: TITLE_KEY }, [shown]);
+  const titleResized = widthDraft?.key === titleColumn.key || Boolean(titleColumn.sized && titleColumn.width !== undefined);
+  // Phones scroll sideways by design: the Task column fits the screen next to the ID so the next
+  // column peeks in. Wider grids fit every column, with Task as the flexible one (fitColumns).
+  const phone = gridWidth > 0 && gridWidth < 640;
+  const titleCap = Math.max(TITLE_MIN, Math.min(TITLE_MAX, titleFit || TITLE_MAX));
+  const layout = useMemo(() => {
+    const others = shown.slice(1).map((column) => {
+      const natural = widthOf(column);
+      const auto = !(column.sized && column.width !== undefined) && widthDraft?.key !== column.key;
+      const def = defByKey.get(column.key);
+      return {
+        key: column.key,
+        natural,
+        floor: auto ? Math.min(natural, Math.max(def?.minWidth ?? natural, FIT_FLOORS[column.key] ?? def?.minWidth ?? natural)) : natural,
+        compact: auto ? COMPACT_WIDTHS[column.key] : undefined,
+      };
+    });
+    const fixed = ROW_HEADER_WIDTH + ADD_COLUMN_WIDTH;
+    if (gridWidth <= 0) return { widths: new Map(others.map((column) => [column.key, column.natural])), titleWidth: 360, compact: false };
+    if (phone) {
+      return {
+        widths: new Map(others.map((column) => [column.key, column.compact !== undefined ? Math.min(column.natural, column.compact) : column.natural])),
+        titleWidth: titleResized ? widthOf(titleColumn) : Math.max(180, gridWidth - ROW_HEADER_WIDTH - 36),
+        compact: true,
+      };
+    }
+    const target = titleResized ? widthOf(titleColumn) : titleCap;
+    const fit = fitColumns(others, gridWidth - fixed, target, titleResized ? target : TITLE_MIN);
+    return { ...fit, titleWidth: titleResized ? target : Math.min(titleCap, fit.titleWidth) };
+  }, [defByKey, gridWidth, phone, shown, titleCap, titleColumn, titleResized, widthDraft, widthOf]);
+  const compactGrid = layout.compact;
+  const colWidth = (column: ViewColumn) => layout.widths.get(column.key) ?? widthOf(column);
   const sort = view.settings.sort;
   const sorter = useSorter(sort);
   const groupBy = view.settings.groupBy;
@@ -653,6 +687,8 @@ export function TableView() {
     return map;
   }, [cyclesQuery.data]);
   const [moreRight, setMoreRight] = useState(0);
+  // The sticky footer (add row plus totals): the "more columns" button sits just above it.
+  const [footHeight, setFootHeight] = useState(36);
   const ctx = useMemo<RenderContext>(() => ({ statusById, labelById, sectionById, links: linksByTask, projectCustomer, cycleByTask, compact: compactGrid }), [compactGrid, cycleByTask, labelById, linksByTask, projectCustomer, sectionById, statusById]);
   useEffect(() => {
     const element = gridRef.current;
@@ -667,6 +703,7 @@ export function TableView() {
           if (th.offsetLeft + th.offsetWidth > edge) count += 1;
         });
       setMoreRight(count);
+      setFootHeight(element.querySelector('tfoot')?.offsetHeight ?? 36);
     };
     update();
     const observer = new ResizeObserver(update);
@@ -924,25 +961,11 @@ export function TableView() {
     );
   }
 
-  const titleColumn = shown[0] ?? { key: TITLE_KEY };
-  const titleDefault = defByKey.get(TITLE_KEY)?.defaultWidth;
-  const titleResized = widthDraft?.key === titleColumn.key || (titleColumn.width !== undefined && titleColumn.width !== titleDefault);
-  // Phones: the Task column fits the screen next to the ID, so the next column peeks in (a visible
-  // hint that the table scrolls sideways) instead of the title running off the edge.
-  const phoneTitle = gridWidth > 0 && gridWidth < 640 ? Math.max(180, gridWidth - ROW_HEADER_WIDTH - 36) : null;
-  const savedTitleWidth = titleResized ? widthOf(titleColumn) : (phoneTitle ?? Math.max(widthOf(titleColumn), titleFit));
-  const otherWidth = ROW_HEADER_WIDTH + shown.slice(1).reduce((sum, column) => sum + widthOf(column), 0) + 48;
-  // Task takes any spare room so the table always reaches the right edge (never while resizing it).
-  // When other columns run off the right edge, an unresized Task column gives back room down to
-  // TITLE_SQUEEZE_MIN, so Labels and the rest show in full instead of a wide, mostly empty Task.
-  const spare = gridWidth - otherWidth;
-  const titleWidth =
-    widthDraft?.key === shown[0]?.key || (phoneTitle !== null && !titleResized)
-      ? savedTitleWidth
-      : !titleResized && gridWidth > 0 && spare < savedTitleWidth
-        ? Math.max(TITLE_SQUEEZE_MIN, Math.min(savedTitleWidth, spare))
-        : Math.max(savedTitleWidth, spare);
-  const tableWidth = otherWidth + titleWidth;
+  const titleWidth = layout.titleWidth;
+  const otherWidth = ROW_HEADER_WIDTH + shown.slice(1).reduce((sum, column) => sum + colWidth(column), 0) + ADD_COLUMN_WIDTH;
+  // Room left after a Task column capped at the longest title goes to the trailing column, so rows still reach the edge.
+  const fillWidth = gridWidth > 0 ? Math.max(0, gridWidth - otherWidth - titleWidth) : 0;
+  const tableWidth = otherWidth + titleWidth + fillWidth;
   const allSelected = rows.length > 0 && selection.count === new Set(rows.map((task) => task.id)).size;
   const sumCells = shown.map((column) => defByKey.get(column.key)?.sum?.(rows) ?? null);
 
@@ -983,7 +1006,7 @@ export function TableView() {
                   <HeaderCell
                     key={column.key}
                     def={def}
-                    width={index === 0 ? titleWidth : widthOf(column)}
+                    width={index === 0 ? titleWidth : colWidth(column)}
                     stickyLeft={index === 0 ? ROW_HEADER_WIDTH : undefined}
                     sortIndex={sortIndex}
                     sortDir={sortIndex >= 0 ? (sort[sortIndex]?.dir ?? null) : null}
@@ -995,12 +1018,12 @@ export function TableView() {
                     onResize={(width) => setWidthDraft({ key: column.key, width })}
                     onResizeEnd={(width) => {
                       setWidthDraft(null);
-                      commitColumns(columns.map((entry) => (entry.key === column.key ? { ...entry, width } : entry)));
+                      commitColumns(columns.map((entry) => (entry.key === column.key ? { ...entry, width, sized: true } : entry)));
                     }}
                   />
                 );
               })}
-              <th scope="col" className="h-9 border-b border-border-subtle bg-sunken p-0" style={{ width: 48 }}>
+              <th scope="col" className="h-9 border-b border-border-subtle bg-sunken p-0" style={{ width: ADD_COLUMN_WIDTH + fillWidth }}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button type="button" aria-label="Add a column" title="Add a column" className="mx-auto flex size-7 items-center justify-center rounded-sm text-icon outline-none hover:bg-hover hover:text-icon-strong focus-visible:outline-2 focus-visible:outline-focus data-[state=open]:bg-hover" data-testid="add-column">
@@ -1090,7 +1113,7 @@ export function TableView() {
                             active={isActive}
                             editing={isEditing}
                             seed={isEditing ? (editing?.seed ?? null) : null}
-                            width={index === 0 ? titleWidth : widthOf(column)}
+                            width={index === 0 ? titleWidth : colWidth(column)}
                             stickyLeft={index === 0 ? ROW_HEADER_WIDTH : undefined}
                             onActivate={() => setActive({ taskId: task.id, col: column.key })}
                             onEdit={(on, seed) => {
@@ -1107,7 +1130,7 @@ export function TableView() {
                           />
                         );
                       })}
-                      <td className="border-b border-border-subtle p-0" style={{ width: 48 }}>
+                      <td className="border-b border-border-subtle p-0" style={{ width: ADD_COLUMN_WIDTH + fillWidth }}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button type="button" aria-label={`More actions for ${task.key}`} className="mx-auto flex size-7 items-center justify-center rounded-sm text-icon opacity-0 outline-none group-hover/row:opacity-100 hover:bg-pressed focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus data-[state=open]:opacity-100 max-md:opacity-100">
@@ -1177,7 +1200,8 @@ export function TableView() {
           <button
             type="button"
             onClick={() => gridRef.current?.scrollBy({ left: Math.max(200, (gridRef.current?.clientWidth ?? 600) * 0.6), behavior: 'smooth' })}
-            className="absolute right-2 bottom-1 z-[9] inline-flex h-7 items-center gap-1 rounded-full border border-border-default bg-panel px-2.5 text-xs font-medium text-fg-secondary shadow-sm outline-none hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
+            style={{ bottom: footHeight + 6 }}
+            className="absolute right-2 z-[9] inline-flex h-7 items-center gap-1 rounded-full border border-border-default bg-panel px-2.5 text-xs font-medium text-fg-secondary shadow-sm outline-none hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
             data-testid="table-more-columns"
           >
             {moreRight === 1 ? '1 more column' : `${moreRight} more columns`}

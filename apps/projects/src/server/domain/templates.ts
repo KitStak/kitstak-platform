@@ -21,7 +21,7 @@ import {
 } from '@/server/db/schema';
 import { invalid, notFound } from '@/server/errors';
 import type { AutomationAction, AutomationTrigger } from '@/lib/automation-types';
-import { addDaysIso, diffDays, todayIso } from '@/lib/dates';
+import { diffDays, templateOffsetDateIso, todayIso } from '@/lib/dates';
 import { ranksBetween } from '@/lib/rank';
 import type { TemplatePayload, TemplateTask } from '@/lib/template-types';
 import type { ProjectDetail, TemplateDTO } from '@/lib/types';
@@ -287,7 +287,7 @@ async function materialize(
   options: InstantiateOptions & { templateId?: string | null },
 ): Promise<string> {
   const start = options.startDate ?? todayIso();
-  const due = options.dueDate ?? (payload.durationDays !== undefined ? addDaysIso(start, payload.durationDays) : null);
+  const due = options.dueDate ?? (payload.durationDays !== undefined ? templateOffsetDateIso(start, payload.durationDays) : null);
   const project = await insertProject(tx, ctx, {
     ...options,
     description: options.description ?? payload.description ?? null,
@@ -356,7 +356,7 @@ async function materialize(
           orgId: ctx.orgId,
           projectId: project.id,
           name: m.name,
-          dueDate: m.dueOffsetDays !== undefined ? addDaysIso(start, m.dueOffsetDays) : null,
+          dueDate: m.dueOffsetDays !== undefined ? templateOffsetDateIso(start, m.dueOffsetDays) : null,
           position: ranks[index],
           createdBy: ctx.userId,
         })),
@@ -382,8 +382,8 @@ async function materialize(
           })(),
           sectionId: item.sectionKey ? (sectionMap.get(item.sectionKey) ?? null) : null,
           priority: item.priority ?? 'none',
-          startDate: item.startOffsetDays !== undefined ? addDaysIso(start, item.startOffsetDays) : null,
-          dueDate: item.dueOffsetDays !== undefined ? addDaysIso(start, item.dueOffsetDays) : null,
+          startDate: item.startOffsetDays !== undefined ? templateOffsetDateIso(start, item.startOffsetDays) : null,
+          dueDate: item.dueOffsetDays !== undefined ? templateOffsetDateIso(start, item.dueOffsetDays) : null,
           estimatePoints: item.estimatePoints ?? null,
           parentTaskId,
           milestoneId: item.milestoneKey ? (milestoneMap.get(item.milestoneKey) ?? null) : null,

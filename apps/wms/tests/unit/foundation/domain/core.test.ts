@@ -138,7 +138,7 @@ describe('change log', () => {
     const rows = await w.db.select().from(schema.changeLog);
     expect(rows.map((r) => r.message)).toEqual([
       'Shipment Order SO1 is created.',
-      'Status is modified. Open --> On Hold',
+      'Status is modified. Open → On Hold',
       'Widget is deleted.',
     ]);
     expect(rows[1].source).toBe('admin@test.io');

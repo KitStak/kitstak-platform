@@ -3,6 +3,7 @@
  * as "Is Locked" / "Max Sku Qty", and a double space when the old value was empty). PURE: shared
  * by the module's change-log writers and their tests.
  */
+import { modifiedMessage } from '@/lib/change-log-text';
 
 /** Display name per M10 entity type ("LP Type KS-TOTE is created."). */
 export const FACILITY_ENTITY_LABELS: Readonly<Record<string, string>> = {
@@ -83,9 +84,9 @@ export function blankAware(value: string): string {
   return value.trim() === '' ? '(blank)' : value;
 }
 
-/** "Walking path priority is modified. (blank) --> 77" */
+/** "Walking path priority is modified. (blank) → 77" */
 export function facilityUpdateMessage(label: string, from: string, to: string): string {
-  return `${label} is modified. ${blankAware(from)} --> ${blankAware(to)}`;
+  return modifiedMessage(label, blankAware(from), blankAware(to));
 }
 
 /* ---------------- capacity lines (location wizard steps 2 and 3) ---------------- */
@@ -151,7 +152,7 @@ export function capacityLineChanges(
           fieldLabel: `${c.label} · ${kind}`,
           from: minMax(old),
           to: minMax(c),
-          message: `${c.label} -> ${kind} is modified. ${minMax(old)} --> ${minMax(c)}`,
+          message: `${c.label} -> ${modifiedMessage(kind, minMax(old), minMax(c))}`,
         },
       });
     }

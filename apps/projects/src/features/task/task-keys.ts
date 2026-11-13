@@ -120,6 +120,14 @@ function overlayOpen(): boolean {
 }
 
 /**
+ * True only while a dialog, menu or the palette is open right now (no settle window). For keys
+ * that open something new, like `c`: pressing it right after Esc closed a dialog means "new task".
+ */
+export function overlayIsOpen(): boolean {
+  return overlayOpen();
+}
+
+/**
  * True while letter shortcuts should be ignored: a dialog, menu or the palette is open or closed
  * less than 300ms ago (keys typed into it must not land on the page), or, with `writes`, a
  * keyboard write is still saving.

@@ -190,7 +190,7 @@ describe('change log', () => {
     expect(lines.map((l) => l.message)).toEqual(
       expect.arrayContaining(['MLT-WIDGET-01 -> Purchase Order Line is created.']),
     );
-    expect(lines.some((l) => /is modified\.\s+-->/.test(l.message))).toBe(false);
+    expect(lines.some((l) => /is modified\.\s+(?:-->|→)/.test(l.message))).toBe(false);
   });
   it('formats header dates for humans and writes (empty) for nulls', async () => {
     const po = await createPo();
@@ -215,7 +215,7 @@ describe('change log', () => {
     };
     await updatePurchaseOrder(w.db, w.ctx, auth.scope, po.id, body);
     const msg = (await poLog(po.id)).find((l) => l.field === 'plannedArrivalDate')?.message;
-    expect(msg).toBe(`Planned Arrival Date is modified. ${EMPTY_LOG_VALUE} --> 2026/11/20`);
+    expect(msg).toBe(`Planned Arrival Date is modified. ${EMPTY_LOG_VALUE} → 2026/11/20`);
   });
   it('writes an explicit receipt-cancel entry naming the master id, quantity and location', async () => {
     const po = await createPo();

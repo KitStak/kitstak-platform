@@ -48,8 +48,71 @@ export interface RenderContext {
   readonly compact?: boolean;
 }
 
+/**
+ * Automatic widths for columns nobody has dragged: Assignee is an avatar plus first name and
+ * Priority an icon plus word, so the Task column keeps the room.
+ */
+export const FIT_WIDTHS: Readonly<Record<string, number>> = { assignee: 132, priority: 112, status: 140, dueDate: 120, startDate: 120, labels: 180 };
+
 /** Widths used for the compact Assignee and Priority columns (when the user has not resized them). */
 export const COMPACT_WIDTHS: Readonly<Record<string, number>> = { assignee: 64, priority: 64, status: 132, dueDate: 112, startDate: 112 };
+
+/** The narrowest an automatic column gets when the table has to make room for the Task column. */
+export const FIT_FLOORS: Readonly<Record<string, number>> = { status: 128, dueDate: 108, startDate: 108, labels: 120, estimate: 84, estimateTime: 92, customer: 124, links: 124 };
+
+export interface FitColumn {
+  readonly key: string;
+  /** Automatic (or dragged) width. */
+  readonly natural: number;
+  /** Narrowest automatic width; equal to natural for dragged columns. */
+  readonly floor: number;
+  /** Width when the grid goes compact (Assignee as avatar, Priority as icon); omit when it does not change. */
+  readonly compact?: number;
+}
+
+export interface FitResult {
+  readonly widths: ReadonlyMap<string, number>;
+  readonly titleWidth: number;
+  /** True when Assignee and Priority had to go compact to leave the Task column its room. */
+  readonly compact: boolean;
+}
+
+/**
+ * Fits the columns to the grid with the Task column as the flexible one: it gets the room it
+ * needs (`titleTarget`, the longest title) first, the other automatic columns shrink toward their
+ * floors to make that room, then Assignee and Priority go compact, and only then does the table
+ * scroll sideways (Task never under `titleMin`). Spare room beyond the Task target is returned
+ * implicitly: callers put it after the last column.
+ */
+export function fitColumns(columns: readonly FitColumn[], available: number, titleTarget: number, titleMin: number): FitResult {
+  const attempt = (compact: boolean) => {
+    const base = columns.map((column) => {
+      const natural = compact && column.compact !== undefined ? Math.min(column.natural, column.compact) : column.natural;
+      return { key: column.key, natural, floor: Math.min(natural, column.floor) };
+    });
+    const natural = base.reduce((sum, column) => sum + column.natural, 0);
+    const deficit = titleTarget - (available - natural);
+    const widths = new Map<string, number>();
+    if (deficit <= 0) {
+      for (const column of base) widths.set(column.key, column.natural);
+      return { widths, titleWidth: Math.max(titleMin, available - natural), short: 0 };
+    }
+    const room = base.reduce((sum, column) => sum + column.natural - column.floor, 0);
+    const ratio = room > 0 ? Math.min(1, deficit / room) : 0;
+    let used = 0;
+    for (const column of base) {
+      const width = Math.round(column.natural - (column.natural - column.floor) * ratio);
+      widths.set(column.key, width);
+      used += width;
+    }
+    const titleWidth = Math.max(titleMin, available - used);
+    return { widths, titleWidth, short: Math.max(0, titleTarget - (available - used)) };
+  };
+  const relaxed = attempt(false);
+  if (relaxed.short === 0 || !columns.some((column) => column.compact !== undefined && column.compact < column.natural)) return { widths: relaxed.widths, titleWidth: relaxed.titleWidth, compact: false };
+  const tight = attempt(true);
+  return { widths: tight.widths, titleWidth: tight.titleWidth, compact: true };
+}
 
 const CUSTOMER_TYPES = new Set(['core_customer', 'crm_account']);
 
@@ -252,7 +315,7 @@ export function renderCell(def: ColumnDef, task: TaskSummary, ctx: RenderContext
       );
     }
     case 'assignee':
-      return <PersonAvatar userId={task.assigneeId} size={ctx.compact ? 'sm' : 'xs'} showName={!ctx.compact} />;
+      return <PersonAvatar userId={task.assigneeId} size={ctx.compact ? 'sm' : 'xs'} showName={!ctx.compact} firstNameOnly />;
     case 'priority':
       if (ctx.compact)
         return (
@@ -295,7 +358,7 @@ export function renderCell(def: ColumnDef, task: TaskSummary, ctx: RenderContext
       return task.subtaskCount ? (
         <span className="inline-flex items-center gap-1.5 text-xs text-fg-secondary tabular-nums">
           <span aria-hidden className="h-1.5 w-12 overflow-hidden rounded-full bg-[var(--border-subtle)]">
-            <span className={`block h-full rounded-full ${task.subtaskDoneCount === task.subtaskCount ? 'bg-success' : 'bg-[var(--logo-ink)]'}`} style={{ width: `${Math.round((task.subtaskDoneCount / task.subtaskCount) * 100)}%` }} />
+            <span className="block h-full rounded-full bg-success" style={{ width: `${Math.round((task.subtaskDoneCount / task.subtaskCount) * 100)}%` }} />
           </span>
           {task.subtaskDoneCount}/{task.subtaskCount}
         </span>

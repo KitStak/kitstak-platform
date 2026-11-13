@@ -111,7 +111,7 @@ export function PlanChangeLogDrawer({
                       <td className="break-words px-3 py-2.5 text-body">
                         {localizeIsoInText(
                           humanizePlanChange(
-                            / is modified\.|-->/.test(entry.message) || !entry.message
+                            / is modified\.|-->|→/.test(entry.message) || !entry.message
                               ? changeLogMessage(entry)
                               : entry.message,
                           ),

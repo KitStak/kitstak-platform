@@ -233,8 +233,8 @@ export function WelcomeWizard({ firstName, orgName, crmEntitled, wmsEntitled }: 
                 onChange={setTeamSize}
                 options={[
                   { value: 'solo', label: 'Just me' },
-                  { value: 'small', label: '2–10' },
-                  { value: 'medium', label: '11–50' },
+                  { value: 'small', label: '2 to 10' },
+                  { value: 'medium', label: '11 to 50' },
                   { value: 'large', label: '50+' },
                 ]}
               />

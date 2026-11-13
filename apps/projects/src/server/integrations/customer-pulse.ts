@@ -12,9 +12,10 @@ import { db } from '@/server/db';
 import { integrationLinks } from '@/server/db/schema';
 import type { DomainContext } from '@/server/domain/_shared';
 import { listProjects } from '@/server/domain';
-import { getCrmItems } from './crm';
+import { crmItemUrl, getCrmItems } from './crm';
 import { customer360, type Customer360 } from './customer360';
 import { integrationAvailability } from './detect';
+import { closedDealTaskNeedsReview } from '@/lib/closed-deal-review';
 
 export interface CustomerPulseRow {
   readonly key: string;
@@ -90,7 +91,7 @@ export function dealTitleWithoutCustomer(dealName: string, customer: string | nu
 }
 
 export function mismatchText(m: Pick<CustomerMismatch, 'customer' | 'fact' | 'task' | 'work'>): string {
-  const tail = m.task ? `${m.task.ref} ${m.task.title}` : m.work;
+  const tail = m.task ? `Is ${m.task.ref} ${m.task.title} still needed?` : m.work;
   return [m.customer, m.fact, tail].filter(Boolean).join(' · ');
 }
 
@@ -212,12 +213,14 @@ export async function customerPulse(ctx: DomainContext): Promise<CustomerPulse> 
     });
   }
 
-  // Task-level: open tasks linked to a CRM deal that is already won or lost ("Send revised pricing"
-  // still open on a Closed won deal).
+  // Task-level: open tasks linked directly to a CRM deal that is already won or lost ("Send revised
+  // pricing" still open on a Closed won deal). A won deal only flags work that was meant to happen
+  // before the close (see `closedDealTaskNeedsReview`); later follow-ups such as "Phase 3 expansion
+  // proposal" are real work, so they are left alone. Phrased as a question with Mark done / Keep / Snooze.
   if (available.crm) {
     const visible = projects.map((project) => project.id);
-    const result = await db.execute<{ task_id: string; number: number; title: string; key: string; deal_id: string }>(sql`
-      select t.id as task_id, t.number, t.title, p.key, l.target_id as deal_id
+    const result = await db.execute<{ task_id: string; number: number; title: string; key: string; deal_id: string; due_date: string | null; created_day: string }>(sql`
+      select t.id as task_id, t.number, t.title, p.key, l.target_id as deal_id, t.due_date::text as due_date, t.created_at::date::text as created_day
       from pm.integration_links l
       join pm.tasks t on t.id = l.task_id and t.deleted_at is null
       join pm.statuses s on s.id = t.status_id
@@ -227,18 +230,25 @@ export async function customerPulse(ctx: DomainContext): Promise<CustomerPulse> 
         and t.project_id = any(${sql.param(visible)}::uuid[])
       limit 200`);
     const dealIds = result.rows.map((row) => row.deal_id);
-    const [deals, accounts] = await Promise.all([getCrmItems(ctx, dealIds), dealAccountNames(ctx, dealIds)]);
+    const [deals, accounts, closeDates, facts] = await Promise.all([
+      getCrmItems(ctx, dealIds),
+      dealAccountNames(ctx, dealIds),
+      dealCloseDates(ctx, dealIds),
+      dealFacts(ctx, dealIds),
+    ]);
+    const today = todayIsoUtc();
     for (const row of result.rows) {
       const deal = deals.get(row.deal_id);
       const stage = `${deal?.status ?? ''}`.toLowerCase();
       const won = /\bwon\b/.test(stage);
       const lost = /\blost\b/.test(stage);
       if (!deal || (!won && !lost)) continue;
+      if (!closedDealTaskNeedsReview({ outcome: won ? 'won' : 'lost', closeDate: closeDates.get(row.deal_id) ?? null, dueDate: row.due_date, createdDay: row.created_day })) continue;
       const customer = accounts.get(row.deal_id) ?? null;
       const ref = `${row.key}-${row.number}`;
       const parts = {
         customer,
-        fact: `Deal ${dealTitleWithoutCustomer(deal.name, customer)} is ${deal.status ?? (won ? 'Won' : 'Lost')}, task still open`,
+        fact: `Deal ${dealTitleWithoutCustomer(deal.name, customer)} is ${deal.status ?? (won ? 'Won' : 'Lost')}`,
         task: { id: row.task_id, ref, title: undash(row.title), href: `/p/${row.key}/${row.number}` },
         work: `${row.key} task`,
       };
@@ -253,6 +263,47 @@ export async function customerPulse(ctx: DomainContext): Promise<CustomerPulse> 
         text: mismatchText(parts),
         href: `/p/${row.key}/${row.number}`,
       });
+
+      // Every mismatch customer gets a row below, even when the task lives in a project that is not
+      // linked to that customer (a "Q4 enterprise deals" pipeline project). Without it the strip
+      // named Pinnacle Aerospace and the rows under it had no Pinnacle at all.
+      if (customer && ![...byCustomer.values()].some((existing) => sameName(existing.customerName, customer))) {
+        const fact = facts.get(row.deal_id);
+        const project = projects.find((candidate) => candidate.key === row.key);
+        const accountKey = fact?.accountId ?? `deal:${row.deal_id}`;
+        const linkedOpen = result.rows.filter((other) => other.key === row.key && sameName(accounts.get(other.deal_id) ?? '', customer));
+        byCustomer.set(accountKey, {
+          key: accountKey,
+          customerName: customer,
+          customerUrl: fact?.accountId && fact.accountBoardId ? crmItemUrl(ctx.orgSlug, fact.accountBoardId, fact.accountId) : null,
+          projects: project
+            ? [
+                {
+                  id: project.id,
+                  key: project.key,
+                  name: project.name,
+                  openTasks: linkedOpen.length,
+                  overdue: linkedOpen.filter((other) => other.due_date !== null && other.due_date < today).length,
+                },
+              ]
+            : [],
+          deal: {
+            name: dealTitleWithoutCustomer(deal.name, customer),
+            stage: deal.status,
+            outcome: won ? 'won' : 'lost',
+            closeDate: closeDates.get(row.deal_id) ?? null,
+            amount: fact?.amount ?? null,
+            currency: fact?.currency ?? null,
+            url: deal.url,
+          },
+          lateReceipts: 0,
+          exceptions: 0,
+          openOrders: 0,
+          receiptsUrl: null,
+          exceptionsUrl: null,
+          risks: [],
+        });
+      }
     }
   }
 
@@ -260,6 +311,56 @@ export async function customerPulse(ctx: DomainContext): Promise<CustomerPulse> 
     (a, b) => b.risks.length + b.lateReceipts + b.exceptions - (a.risks.length + a.lateReceipts + a.exceptions) || a.customerName.localeCompare(b.customerName),
   );
   return { available, sources, rows, mismatches: mismatches.slice(0, 6) };
+}
+
+/** Deal id to its close date (YYYY-MM-DD) from the deal's Close date column. */
+async function dealCloseDates(ctx: DomainContext, dealIds: readonly string[]): Promise<Map<string, string>> {
+  const valid = dealIds.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  if (valid.length === 0) return new Map();
+  try {
+    const result = await db.execute<{ id: string; close_date: string | null }>(sql`
+      select d.id, d.values #>> '{close_date,date}' as close_date
+      from crm.items d
+      where d.org_id = ${ctx.orgId} and d.id = any(${sql.param(valid)}::uuid[]) and d.deleted_at is null`);
+    return new Map(result.rows.filter((row) => row.close_date && /^\d{4}-\d{2}-\d{2}$/.test(row.close_date)).map((row) => [row.id, row.close_date as string]));
+  } catch {
+    return new Map();
+  }
+}
+
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Deal id to its value and its account (id and board, for the account link). */
+async function dealFacts(
+  ctx: DomainContext,
+  dealIds: readonly string[],
+): Promise<Map<string, { amount: number | null; currency: string | null; accountId: string | null; accountBoardId: string | null }>> {
+  const valid = dealIds.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  if (valid.length === 0) return new Map();
+  try {
+    const result = await db.execute<{ id: string; amount: string | null; currency: string | null; account_id: string | null; account_board_id: string | null }>(sql`
+      select d.id, d.values #>> '{deal_value,amount}' as amount, d.values #>> '{deal_value,currency}' as currency,
+             a.id as account_id, a.board_id as account_board_id
+      from crm.items d
+      left join crm.items a on a.id::text = d.values #>> '{account,itemIds,0}' and a.org_id = d.org_id and a.deleted_at is null
+      where d.org_id = ${ctx.orgId} and d.id = any(${sql.param(valid)}::uuid[]) and d.deleted_at is null`);
+    return new Map(
+      result.rows.map((row) => {
+        const amount = row.amount !== null && row.amount !== '' ? Number(row.amount) : null;
+        return [
+          row.id,
+          {
+            amount: amount !== null && Number.isFinite(amount) ? amount : null,
+            currency: row.currency,
+            accountId: row.account_id,
+            accountBoardId: row.account_board_id,
+          },
+        ];
+      }),
+    );
+  } catch {
+    return new Map();
+  }
 }
 
 /** True when the org has at least one live CRM deal (an entitled but empty CRM promises nothing). */

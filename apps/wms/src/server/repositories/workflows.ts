@@ -47,6 +47,7 @@ import {
   type GridBinding,
 } from './integration-logs-kit';
 import { dbAll, flatMapSeq, forEachSeq, withWriteTx } from '@/server/db/sql';
+import { CHANGE_EMPTY } from '@/lib/change-log-text';
 
 type OrderStatus = (typeof s.shipmentOrders.$inferSelect)['status'];
 const t = s.workflows;
@@ -654,7 +655,7 @@ export async function testWorkflow(
       (await tx.select().from(s.shipmentOrders).where(eq(s.shipmentOrders.id, order.id)).limit(1))[0] ??
       order;
     const label = async (k: string, v: unknown) => {
-      if (v === null || v === undefined || v === '') return '—';
+      if (v === null || v === undefined || v === '') return CHANGE_EMPTY;
       if (k === 'warehouseId')
         return (await labelsOf(tx, 'warehouses', [String(v)])).get(String(v)) ?? String(v);
       if (k === 'rateShoppingPresetId')
@@ -710,7 +711,7 @@ export async function testWorkflow(
     ).map((x) => x.name);
     const added = tagsAfter.filter((x) => !tagsBefore.has(x));
     if (added.length > 0)
-      changes.push({ field: 'Tags', from: [...tagsBefore].join(', ') || '—', to: tagsAfter.join(', ') });
+      changes.push({ field: 'Tags', from: [...tagsBefore].join(', ') || CHANGE_EMPTY, to: tagsAfter.join(', ') });
     return {
       orderCode: order.code,
       inScope: notes.length === 0,

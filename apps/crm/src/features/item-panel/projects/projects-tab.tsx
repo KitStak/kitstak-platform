@@ -48,6 +48,7 @@ import { errorMessage } from '@/lib/hooks';
 import { useItemProjects, useLinkItemProject, useProjectOptions, useUnlinkItemWork } from './api';
 import { CreateTaskDialog } from './create-task-dialog';
 import { ProjectsMark } from './projects-mark';
+import { openWorkCount } from './projects-health';
 
 const HEALTH: Readonly<
   Record<BridgeProject['health'], { label: string; color: 'green' | 'orange' | 'red' }>
@@ -412,6 +413,7 @@ export function ProjectsTab({ itemId, recordName, term }: ProjectsTabProps) {
   const openTasks = useMemo(() => tasks.filter((task) => !task.done), [tasks]);
   const doneTasks = tasks.length - openTasks.length;
   const visibleTasks = showDone ? tasks : openTasks;
+  const totalOpen = useMemo(() => (data ? openWorkCount(data.work) : 0), [data]);
 
   if (query.isPending) return <TabSkeleton />;
   if (query.isError) {
@@ -502,7 +504,7 @@ export function ProjectsTab({ itemId, recordName, term }: ProjectsTabProps) {
                 ? 'Plan the work for this record'
                 : [
                     projects.length ? `${projects.length} project${projects.length === 1 ? '' : 's'}` : null,
-                    `${openTasks.length} open task${openTasks.length === 1 ? '' : 's'}`,
+                    `${totalOpen} open task${totalOpen === 1 ? '' : 's'}`,
                   ]
                     .filter(Boolean)
                     .join(' · ')}
@@ -573,7 +575,7 @@ export function ProjectsTab({ itemId, recordName, term }: ProjectsTabProps) {
         <section aria-labelledby="ip-pm-tasks" className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
             <SectionTitle id="ip-pm-tasks" count={openTasks.length}>
-              Open tasks
+              {`Open tasks linked to this ${term.toLowerCase()}`}
             </SectionTitle>
             {doneTasks > 0 ? (
               <Button
@@ -589,7 +591,7 @@ export function ProjectsTab({ itemId, recordName, term }: ProjectsTabProps) {
           <div className="overflow-hidden rounded-lg border border-border-subtle bg-panel">
             {visibleTasks.length === 0 ? (
               <p className="px-4 py-5 text-center text-sm text-fg-secondary">
-                Every linked task is done. Nice work.
+                {`Every task linked to this ${term.toLowerCase()} is done.`}
               </p>
             ) : (
               <ul className="divide-y divide-border-subtle">

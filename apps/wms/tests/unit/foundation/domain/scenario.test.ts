@@ -86,7 +86,7 @@ describe('F8.6 end-to-end ledger scenario', () => {
     expect(after?.status).toBe('Receiving');
     expect(after?.receivedQuantity).toBe(10);
     const log = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, po.id));
-    expect(log.map((l) => l.message)).toContain('MLT-WIDGET-01 -> Received Qty is modified. 0 --> 10');
+    expect(log.map((l) => l.message)).toContain('MLT-WIDGET-01 -> Received Qty is modified. 0 → 10');
     await reconciled();
   });
 

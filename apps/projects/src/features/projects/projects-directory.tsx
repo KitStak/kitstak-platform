@@ -700,7 +700,7 @@ export function ProjectsDirectory({
                 { value: 'health', label: 'Needs attention first' },
                 { value: 'due', label: 'Due soonest' },
                 { value: 'progress', label: 'Least progress' },
-                { value: 'name', label: 'Name A–Z' },
+                { value: 'name', label: 'Name A to Z' },
                 { value: 'updated', label: 'Recently updated' },
               ]}
               className="w-44"

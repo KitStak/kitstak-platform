@@ -4,7 +4,7 @@
  * deal or account and whether any are at risk or off track. Clicking it opens the Projects tab.
  * Reads the same query as the tab (no extra request); renders nothing without linked projects.
  */
-import type { BridgeHealth, BridgeProject } from '@kitstak/pm-bridge/types';
+import type { BridgeHealth, BridgeProject, LinkedWork } from '@kitstak/pm-bridge/types';
 import { ProjectsMark } from './projects-mark';
 
 const HEALTH_DOT: Readonly<Record<BridgeHealth, string>> = {
@@ -12,6 +12,21 @@ const HEALTH_DOT: Readonly<Record<BridgeHealth, string>> = {
   at_risk: 'var(--warning)',
   off_track: 'var(--danger)',
 };
+
+/**
+ * Open work across everything linked to a record: each linked project's open tasks, plus open
+ * tasks linked straight to the record that sit in a project not linked to it (no double
+ * counting). Counting only the direct task links read "0 open tasks" next to a linked project
+ * with 7 open tasks.
+ */
+export function openWorkCount(work: Pick<LinkedWork, 'projects' | 'tasks'>): number {
+  const projectIds = new Set(work.projects.map((project) => project.id));
+  const inProjects = work.projects.reduce(
+    (sum, project) => sum + Math.max(0, project.progress.total - project.progress.done),
+    0,
+  );
+  return inProjects + work.tasks.filter((task) => !task.done && !projectIds.has(task.projectId)).length;
+}
 
 export function projectsHealthSummary(projects: readonly BridgeProject[]): { label: string; worst: BridgeHealth } | null {
   const live = projects.filter((project) => !project.archived && project.status !== 'completed');

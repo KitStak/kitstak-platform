@@ -22,6 +22,7 @@ import {
   ToggleGroup,
   UserPicker,
   WizardSteps,
+  buttonVariants,
   cn,
   toLabelColor,
   toast,
@@ -29,13 +30,13 @@ import {
 import { EntityIcon, PersonAvatar, StatusIcon } from '@/components/pm';
 import { Page } from '@/components/layout/page';
 import { PROJECT_KEY_PATTERN, PROJECT_ROLES, PROJECT_ROLE_LABELS, type ProjectRole } from '@/lib/constants';
-import { addDaysIso, diffDays, formatRange, todayIso } from '@/lib/dates';
+import { diffDays, templateOffsetDateIso, formatRange, todayIso } from '@/lib/dates';
 import { useServerAction } from '@/lib/hooks/use-action';
 import { useIntegrationSearch, useIntegrationStatus, usePeople, useProjects, useSpaces, useTemplates, type ResolvedTargetDTO } from '@/lib/hooks/use-data';
 import { qk } from '@/lib/query-keys';
 import { routes } from '@/lib/routes';
 import { suggestProjectKey } from '@/lib/task-key';
-import { describeTemplateTaskCounts, startingStatusKey } from '@/lib/template-math';
+import { describeTemplateTaskCounts, startingStatusKey, templateDayText } from '@/lib/template-math';
 import type { TemplatePayload } from '@/lib/template-types';
 import type { TemplateDTO } from '@/lib/types';
 import { addLinkAction } from '@/server/actions/links';
@@ -204,7 +205,7 @@ function TemplatePreview({ template, onUse }: { readonly template: TemplateDTO |
             {payload.milestones.map((milestone) => (
               <li key={milestone.key} className="flex items-center justify-between gap-2">
                 <span className="truncate text-fg">{milestone.name}</span>
-                {milestone.dueOffsetDays !== undefined ? <span className="shrink-0 text-xs text-fg-muted">Day {milestone.dueOffsetDays}</span> : null}
+                {templateDayText(milestone.dueOffsetDays) ? <span className="shrink-0 text-xs text-fg-muted tabular-nums">{templateDayText(milestone.dueOffsetDays)}</span> : null}
               </li>
             ))}
           </ul>
@@ -264,7 +265,7 @@ interface MemberChoice {
 
 export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPrefill }) {
   const router = useRouter();
-  const { user, can } = useShell();
+  const { user, can, appUrls } = useShell();
   const templates = useTemplates();
   const spaces = useSpaces();
   const people = usePeople();
@@ -342,7 +343,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
   const key = keyInput ?? (name.trim() ? suggestProjectKey(name, taken) : '');
   const color = colorChoice ?? template?.color ?? 'blue';
   const icon = iconChoice ?? template?.icon ?? 'folder-kanban';
-  const dueDate = dueChoice !== undefined ? dueChoice : template?.payload.durationDays && startDate ? addDaysIso(startDate, template.payload.durationDays) : null;
+  const dueDate = dueChoice !== undefined ? dueChoice : template?.payload.durationDays && startDate ? templateOffsetDateIso(startDate, template.payload.durationDays) : null;
 
   const keyError = key && !PROJECT_KEY_PATTERN.test(key) ? 'Use 2 to 6 letters or numbers, starting with a letter.' : taken.has(key) ? 'Another project already uses this key.' : undefined;
   const dateError = startDate && dueDate && startDate > dueDate ? 'The due date has to be on or after the start date.' : undefined;
@@ -547,11 +548,11 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
             </div>
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-fg-secondary">Start date</span>
-              <IsoDatePicker value={startDate} onChange={setStartDate} aria-label="Start date" />
+              <IsoDatePicker size="lg" value={startDate} onChange={setStartDate} aria-label="Start date" />
             </div>
             <div className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-fg-secondary">Due date</span>
-              <IsoDatePicker value={dueDate} onChange={setDueDate} placeholder="No due date" aria-label="Due date" />
+              <IsoDatePicker size="lg" value={dueDate} onChange={setDueDate} placeholder="No due date" aria-label="Due date" />
               {dateError ? (
                 <span role="alert" className="text-2xs font-medium text-danger-text">{dateError}</span>
               ) : startDate && dueDate ? (
@@ -607,7 +608,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
                 value={memberIds}
                 onChange={(ids) => setMembers(ids.map((id) => members.find((m) => m.userId === id) ?? { userId: id, role: 'editor' }))}
                 trigger={
-                  <Button variant="secondary" leadingIcon={<UserPlus aria-hidden />} data-testid="add-members">
+                  <Button variant="secondary" size="lg" leadingIcon={<UserPlus aria-hidden />} data-testid="add-members">
                     Add people
                   </Button>
                 }
@@ -668,7 +669,39 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
                       ]}
                     />
                   </span>
-                  <RecordPicker type={crmKind} value={crmRecord} onChange={setCrmRecord} placeholder={crmKind === 'crm_item' ? 'Pick a deal' : 'Pick an account'} />
+                  <RecordPicker
+                    type={crmKind}
+                    value={crmRecord}
+                    onChange={setCrmRecord}
+                    placeholder={crmKind === 'crm_item' ? 'Pick a deal' : 'Pick an account'}
+                    emptyActions={({ close }) => (
+                      <>
+                        {crmKind === 'crm_item' ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            data-testid="record-picker-use-account"
+                            onClick={() => {
+                              setCrmKind('crm_account');
+                              setCrmRecord(null);
+                              close();
+                            }}
+                          >
+                            Link an account instead
+                          </Button>
+                        ) : null}
+                        <a
+                          href={appUrls.crm}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                          data-testid="record-picker-open-crm"
+                        >
+                          {crmKind === 'crm_item' ? 'Create a deal in CRM' : 'Add an account in CRM'}
+                        </a>
+                      </>
+                    )}
+                  />
                 </div>
               ) : crmRecord ? (
                 <div className="flex flex-col gap-1.5">

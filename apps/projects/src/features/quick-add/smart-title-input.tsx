@@ -38,6 +38,9 @@ const CHIP_PREFIX: Record<QuickAddTokenKind, string> = {
 // Shared box metrics so the mirror and the textarea line up pixel for pixel.
 const BOX = 'w-full px-3 py-2.5 text-md leading-6 whitespace-pre-wrap break-words [overflow-wrap:anywhere]';
 
+/** Rows under the title that show what was understood; the suggestion list opens below them. */
+const UNDERSTOOD_ROWS = ['#quick-add-understood', '[data-testid="quick-add-wms-links"]', '[data-testid="quick-add-final-title"]'];
+
 export interface SmartTitleInputHandle {
   focus(): void;
   /** Closes the @/#/+ suggestion list if it's open; true when it was (so Escape shouldn't close the dialog). */
@@ -143,9 +146,27 @@ export const SmartTitleInput = forwardRef<
     if (mirrorRef.current) mirrorRef.current.scrollTop = el.scrollTop;
   }, [value]);
 
+  // The suggestion list opens below what we understood (the chips, WMS links and final name), never
+  // over it: the chips are how you see that "tomorrow" and "!high" were picked up while you type.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [listTop, setListTop] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!open || !box) return;
+    const top = box.getBoundingClientRect().top;
+    let bottom = box.getBoundingClientRect().bottom;
+    for (const selector of UNDERSTOOD_ROWS) {
+      const row = document.querySelector(selector);
+      if (row && box.parentElement?.contains(row)) bottom = Math.max(bottom, row.getBoundingClientRect().bottom);
+    }
+    const next = Math.round(bottom - top);
+    setListTop((current) => (current === next ? current : next));
+  }, [open, value, tokens]);
+
   const segments = segmentQuickAdd(value, tokens);
   return (
     <div
+      ref={boxRef}
       className={cn(
         'relative rounded-lg border bg-panel transition-colors',
         invalid ? 'border-danger' : 'border-border-input hover:border-border-input-hover',
@@ -208,6 +229,7 @@ export const SmartTitleInput = forwardRef<
           role="listbox"
           aria-label={token.sigil === '@' ? 'People' : token.sigil === '#' ? 'Labels' : 'Projects'}
           data-testid="quick-add-suggestions"
+          style={listTop === null ? undefined : { top: listTop }}
           className="absolute top-full left-0 z-10 mt-1 w-72 max-w-full overflow-hidden rounded-lg border border-border-subtle bg-raised p-1 shadow-modal"
         >
           <li role="presentation" className="px-2 pt-1 pb-1.5 text-2xs font-semibold tracking-[0.06em] text-fg-muted uppercase">
