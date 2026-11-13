@@ -1,6 +1,6 @@
 # Deploying KitStak Platform to Vercel
 
-Three Vercel projects, all importing the same repo `KitStak/kitstak-platform`,
+Four Vercel projects (portal, crm, wms + the `kitstak-website` marketing site at `apps/web`), all importing the same repo `KitStak/kitstak-platform`,
 distinguished only by **Root Directory**.
 
 ## Per-project settings
@@ -93,3 +93,10 @@ theirs. Seeding is optional — `db:seed` in each app for demo data.)
 - Entitlements: when ready to enforce, remove `ENTITLEMENTS_DEV_ALLOW_ALL` and
   grant modules: `pnpm --filter @kitstak/entitlements grant grant <org-slug> <crm|wms>`.
 - Stripe: deferred — nothing to configure yet.
+
+## Marketing site (`apps/web` → kitstak.com)
+
+Vercel project `kitstak-website`, Root Directory `apps/web`, no env vars
+(fully static). Domains: `kitstak.com` (primary) and `www.kitstak.com`
+(redirects to apex). The legacy hub app that previously held these domains is
+retired. The product apps stay on `*.kitstak.app`.

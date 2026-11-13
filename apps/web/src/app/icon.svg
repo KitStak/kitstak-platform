@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Kitstak Icon Mark: Square version for favicons, app icons, social avatars -->
+
+  <!-- Navy background square -->
+  <rect width="512" height="512" fill="#0a1628"/>
+
+  <!-- Two stacked bars centered -->
+  <g transform="translate(96, 176)">
+    <rect x="0" y="0" width="320" height="64" fill="#c8102e"/>
+    <rect x="0" y="96" width="320" height="64" fill="#c8102e" opacity="0.7"/>
+  </g>
+</svg>

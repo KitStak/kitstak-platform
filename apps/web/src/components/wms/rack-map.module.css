@@ -1,0 +1,143 @@
+.wrap {
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-lg);
+  padding: 24px;
+}
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.title {
+  font-weight: var(--weight-semibold);
+  font-family: var(--font-mono);
+  font-size: var(--type-base);
+}
+.sub {
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+}
+.next {
+  border: 1px solid var(--border-default);
+  background: var(--surface-panel);
+  border-radius: var(--radius-md);
+  height: var(--control-height-md);
+  padding: 0 12px;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-normal) var(--ease-out),
+    border-color var(--duration-normal) var(--ease-out);
+}
+.next:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+.svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.aisle {
+  font-family: var(--font-display);
+  font-size: 26px;
+  fill: var(--text-muted);
+}
+.dock {
+  fill: var(--surface-inverse);
+}
+.dockLabel {
+  fill: var(--text-inverse);
+  font-size: 11px;
+  font-weight: 600;
+}
+.bin rect {
+  fill: var(--surface-sunken);
+  stroke: var(--border-default);
+  stroke-width: 1;
+  transition:
+    fill 400ms var(--ease-out),
+    stroke 400ms var(--ease-out);
+  cursor: default;
+}
+.bin:hover rect {
+  fill: var(--surface-selected-hover);
+  stroke: var(--border-input-hover);
+}
+.bin text {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+.wrap[data-visible] .bin[data-stop] rect {
+  animation: light 500ms var(--ease-out) forwards;
+  animation-delay: calc(400ms + var(--order) * 480ms);
+}
+.wrap[data-visible] .bin[data-stop] text {
+  animation: show 300ms var(--ease-out) forwards;
+  animation-delay: calc(500ms + var(--order) * 480ms);
+}
+.path {
+  fill: none;
+  stroke: var(--brand-red);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  pointer-events: none;
+}
+.wrap[data-visible] .path {
+  animation: walk var(--walk) var(--ease-standard) 200ms forwards;
+}
+.readout {
+  margin-top: 16px;
+  min-height: 40px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--type-base);
+}
+.loc {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.qty {
+  font-size: 32px;
+  margin-left: auto;
+}
+.unit,
+.hint {
+  color: var(--text-muted);
+  font-size: var(--type-sm);
+}
+@keyframes walk {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes light {
+  to {
+    fill: var(--brand-red);
+    stroke: var(--brand-oxblood);
+  }
+}
+@keyframes show {
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .path {
+    stroke-dashoffset: 0;
+  }
+}

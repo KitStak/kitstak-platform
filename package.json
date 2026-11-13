@@ -11,6 +11,7 @@
     "dev": "turbo dev",
     "dev:crm": "turbo dev --filter=kitstak-crm",
     "dev:wms": "turbo dev --filter=kitstak-wms",
+    "dev:web": "turbo dev --filter=kitstak-web",
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",

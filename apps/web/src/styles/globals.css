@@ -1,0 +1,182 @@
+/* Site-level tokens layered on the shared KitStak tokens from @kitstak/ui. */
+:root {
+  --site-max: 1200px;
+  --site-gutter: clamp(16px, 4vw, 40px);
+  --section-y: clamp(72px, 10vw, 140px);
+  --type-hero: clamp(44px, 7.2vw, 104px);
+  --type-h2: clamp(32px, 4.4vw, 60px);
+  --type-lead: clamp(17px, 1.4vw, 20px);
+  --ease-site: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--surface-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--type-md);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+}
+
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.container {
+  width: 100%;
+  max-width: calc(var(--site-max) + var(--site-gutter) * 2);
+  margin: 0 auto;
+  padding: 0 var(--site-gutter);
+}
+
+.section {
+  padding: var(--section-y) 0;
+}
+
+.h2 {
+  font-size: var(--type-h2);
+  max-width: 14ch;
+  text-wrap: balance;
+}
+
+.lead {
+  font-size: var(--type-lead);
+  color: var(--text-secondary);
+  max-width: 46ch;
+  line-height: 1.6;
+}
+
+.h2 + .lead {
+  margin-top: 24px;
+}
+
+.numeral {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+  line-height: 0.9;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 22px;
+  border-radius: var(--radius-md);
+  font-weight: var(--weight-semibold);
+  font-size: var(--type-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-normal) var(--ease-out),
+    border-color var(--duration-normal) var(--ease-out),
+    transform var(--duration-normal) var(--ease-out);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+.btn-primary .btn-arrow {
+  transition: transform var(--duration-slow) var(--ease-site);
+}
+.btn-primary:hover .btn-arrow {
+  transform: translateX(4px);
+}
+.btn-ghost {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.btn-ghost:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-input-hover);
+}
+.btn-ghost-inverse {
+  border-color: rgb(244 241 233 / 0.28);
+  color: var(--brand-cream);
+}
+.btn-ghost-inverse:hover {
+  background: rgb(244 241 233 / 0.08);
+  border-color: rgb(244 241 233 / 0.5);
+}
+
+/* Scroll reveal (see useReveal). Content is visible without JS. */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 700ms var(--ease-site),
+    transform 900ms var(--ease-site);
+  transition-delay: calc(var(--reveal-delay, 0) * 1ms);
+}
+.js [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+  .js [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}

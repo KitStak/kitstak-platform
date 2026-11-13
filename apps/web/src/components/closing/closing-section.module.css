@@ -1,0 +1,23 @@
+.band {
+  background: var(--surface-brand);
+  color: var(--brand-cream);
+  padding: clamp(96px, 12vw, 168px) 0;
+}
+.inner {
+  display: grid;
+  justify-items: start;
+}
+.title {
+  margin-top: 48px;
+  font-size: var(--type-hero);
+  letter-spacing: -0.045em;
+  line-height: 0.96;
+  font-weight: 800;
+  max-width: 13ch;
+}
+.actions {
+  margin-top: 48px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
