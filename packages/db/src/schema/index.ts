@@ -16,5 +16,6 @@ export * from './core/customers';
 export * from './core/items';
 export * from './core/billing';
 export * from './core/onboarding';
+export * from './core/password-change';
 export * from './core/links';
 export * from './core/wms-profiles';

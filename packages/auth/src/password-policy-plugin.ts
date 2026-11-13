@@ -90,6 +90,21 @@ export function validatePassword(
   return issues;
 }
 
+/** Code returned when `/change-password` is asked to keep the current password. */
+export const PASSWORD_UNCHANGED_CODE = 'PASSWORD_UNCHANGED';
+export const PASSWORD_UNCHANGED_MESSAGE = 'Choose a password that is different from your current one.';
+
+/**
+ * True when a change-password request would keep the same password. Without this, a user
+ * who has been told to replace an administrator-set password could "change" it to itself.
+ */
+export function isUnchangedPassword(currentPassword: unknown, newPassword: unknown): boolean {
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') return false;
+  // Compare the normalized forms: the same password typed with composed and decomposed
+  // Unicode characters must not count as a change.
+  return currentPassword.normalize('NFKC') === newPassword.normalize('NFKC');
+}
+
 /** True when the password is older than `maxAgeDays` (no max age → never expires). */
 export function isPasswordExpired(
   passwordChangedAt: string | null,
@@ -413,6 +428,12 @@ export function passwordPolicyPlugin(options: PasswordPolicyPluginOptions = {}) 
             const body = (ctx.body ?? {}) as Record<string, unknown>;
             const password = body[field];
             if (typeof password !== 'string') return; // core validation rejects missing passwords
+            if (ctx.path === '/change-password' && isUnchangedPassword(body.currentPassword, password)) {
+              throw new APIError('BAD_REQUEST', {
+                message: PASSWORD_UNCHANGED_MESSAGE,
+                code: PASSWORD_UNCHANGED_CODE,
+              });
+            }
             const sessionUser = ctx.context.session?.user as { email?: string; name?: string } | undefined;
             const context: PasswordContext = {
               email: normalizeEmail(body.email) ?? sessionUser?.email,

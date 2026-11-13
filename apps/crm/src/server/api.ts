@@ -26,6 +26,7 @@ import {
   type OrgMembership,
   type Session,
 } from '@/server/auth/session';
+import { mustChangePassword } from '@/server/auth/password-change';
 import { db, type Database } from '@/server/db';
 import { orgHasCrmModule } from '@/server/entitlements';
 import { trustedOrigins } from '@/server/env';
@@ -188,6 +189,12 @@ export function withApi<const O extends ApiOptions, T>(
         throw new ForbiddenError('This endpoint does not accept API tokens', { reason: 'token_not_allowed' });
       }
       actorId = session?.user.id ?? null;
+      // A browser session still on an administrator-set password may not use the API: the page
+      // guard alone would leave room to mint an API token that outlives the password change.
+      // Tokens are unaffected (none can exist before the first change).
+      if (session && !tokenAuth && (await mustChangePassword(session.user.id))) {
+        throw new ForbiddenError('Choose a new password to continue', { reason: 'password_change_required' });
+      }
 
       const rawParams = (await routeContext.params) ?? {};
       let membership: OrgMembership | null = null;

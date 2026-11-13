@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { getPageOrgMembership, getSession } from '@/server/auth/session';
+import { passwordChangeRedirect } from '@/server/auth/password-change';
 import type { OrgContextValue } from '@/features/shell/org-context';
 import { ShellClient } from './shell-client';
 
@@ -29,6 +30,9 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   }
 
   const { session, membership } = result;
+  // An administrator-set password has to be replaced first; the portal hosts that screen.
+  const changePasswordUrl = await passwordChangeRedirect(session.user.id, membership.organization.slug);
+  if (changePasswordUrl) redirect(changePasswordUrl);
   const context: OrgContextValue = {
     org: {
       id: membership.organization.id,
