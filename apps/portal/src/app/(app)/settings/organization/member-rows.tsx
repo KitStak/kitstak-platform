@@ -17,6 +17,7 @@ function initials(name: string, email: string): string {
 
 export function MemberRow({
   memberId,
+  orgId,
   name,
   email,
   role,
@@ -24,6 +25,8 @@ export function MemberRow({
   canManage,
 }: {
   readonly memberId: string;
+  /** Passed explicitly: portal sessions don't always carry an active organization. */
+  readonly orgId: string;
   readonly name: string;
   readonly email: string;
   readonly role: string;
@@ -41,7 +44,7 @@ export function MemberRow({
     setError(null);
     setPending(true);
     try {
-      const result = await organization.updateMemberRole({ memberId, role: next });
+      const result = await organization.updateMemberRole({ memberId, role: next, organizationId: orgId });
       if (result.error) {
         setError(result.error.message ?? 'Role change failed.');
         return;
@@ -58,7 +61,7 @@ export function MemberRow({
     setError(null);
     setPending(true);
     try {
-      const result = await organization.removeMember({ memberIdOrEmail: memberId });
+      const result = await organization.removeMember({ memberIdOrEmail: memberId, organizationId: orgId });
       if (result.error) {
         setError(result.error.message ?? 'Removal failed.');
         return;

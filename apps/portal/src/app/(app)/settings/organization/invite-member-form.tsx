@@ -11,7 +11,8 @@ type InviteRole = (typeof INVITE_ROLES)[number];
 
 const emailSchema = z.email('Enter a valid email address.');
 
-export function InviteMemberForm() {
+/** `orgId` is passed explicitly: portal sessions don't always carry an active organization. */
+export function InviteMemberForm({ orgId }: { readonly orgId: string }) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<InviteRole>('member');
@@ -30,7 +31,7 @@ export function InviteMemberForm() {
     setSent(false);
     setPending(true);
     try {
-      const result = await organization.inviteMember({ email: parsed.data, role });
+      const result = await organization.inviteMember({ email: parsed.data, role, organizationId: orgId });
       if (result.error) {
         setError(result.error.message ?? 'We couldn’t send the invitation. Try again.');
         return;

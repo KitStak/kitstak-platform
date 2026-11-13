@@ -157,6 +157,7 @@ export default async function OrganizationSettingsPage() {
               <MemberRow
                 key={row.memberId}
                 memberId={row.memberId}
+                orgId={activeOrg.id}
                 name={row.name}
                 email={row.email}
                 role={row.role}
@@ -169,7 +170,7 @@ export default async function OrganizationSettingsPage() {
             <div className="border-t border-border-subtle px-6 py-5">
               <h3 className="text-sm font-semibold text-fg">Invite someone</h3>
               <div className="mt-3">
-                <InviteMemberForm />
+                <InviteMemberForm orgId={activeOrg.id} />
               </div>
             </div>
           ) : (
