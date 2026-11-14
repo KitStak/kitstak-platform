@@ -4,7 +4,7 @@
  * mentions (`span[data-type=mention][data-id]`). Everything else is stripped.
  */
 import 'server-only';
-import DOMPurify from 'isomorphic-dompurify';
+import sanitizeHtml from 'sanitize-html';
 
 const MAX_HTML_CHARS = 200_000;
 
@@ -14,28 +14,29 @@ const ALLOWED_TAGS = [
 ];
 const ALLOWED_ATTR = ['href', 'target', 'rel', 'data-type', 'data-id', 'data-label', 'data-checked', 'type', 'checked', 'class', 'start'];
 
-let hooked = false;
-
-function ensureHooks(): void {
-  if (hooked) return;
-  hooked = true;
-  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-    if (node.tagName === 'A') {
-      const href = node.getAttribute('href') ?? '';
-      if (!/^(https?:|mailto:)/i.test(href)) node.removeAttribute('href');
-      node.setAttribute('target', '_blank');
-      node.setAttribute('rel', 'noopener noreferrer nofollow');
-    }
-    if (node.tagName === 'INPUT' && node.getAttribute('type') !== 'checkbox') node.remove();
-  });
-}
+// Pure-JS parser (htmlparser2): no jsdom, so it loads in any serverless runtime.
+const OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: ALLOWED_TAGS,
+  allowedAttributes: { '*': ALLOWED_ATTR },
+  allowedSchemes: ['http', 'https', 'mailto'],
+  allowedSchemesAppliedToAttributes: ['href'],
+  allowProtocolRelative: false,
+  disallowedTagsMode: 'discard',
+  transformTags: {
+    a: (tagName, attribs) => {
+      const next: Record<string, string> = { ...attribs, target: '_blank', rel: 'noopener noreferrer nofollow' };
+      if (!/^(https?:|mailto:)/i.test(attribs.href ?? '')) delete next.href;
+      return { tagName, attribs: next };
+    },
+  },
+  // Only task-list checkboxes survive as inputs.
+  exclusiveFilter: (frame) => frame.tag === 'input' && frame.attribs.type !== 'checkbox',
+};
 
 /** Sanitized HTML, or null when the document is empty. */
 export function sanitizeRichText(html: string | null | undefined): string | null {
   if (html === null || html === undefined) return null;
-  const input = html.slice(0, MAX_HTML_CHARS);
-  ensureHooks();
-  const clean = DOMPurify.sanitize(input, { ALLOWED_TAGS, ALLOWED_ATTR, ALLOW_DATA_ATTR: false });
+  const clean = sanitizeHtml(html.slice(0, MAX_HTML_CHARS), OPTIONS);
   const textOnly = clean.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
   if (textOnly.length === 0 && !/<(hr|input)\b/i.test(clean)) return null;
   return clean;
