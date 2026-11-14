@@ -43,7 +43,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Workspace packages are shipped as TypeScript source; Next transpiles them.
   transpilePackages: ['@kitstak/auth', '@kitstak/db', '@kitstak/entitlements', '@kitstak/ui'],
-  serverExternalPackages: ['pg', 'isomorphic-dompurify', 'jsdom'],
+  serverExternalPackages: ['pg'],
   turbopack: {
     rules: {
       '*.css': {
