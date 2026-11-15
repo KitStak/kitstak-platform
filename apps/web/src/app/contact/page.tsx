@@ -25,13 +25,13 @@ const PATHS = [
   },
   {
     title: 'See what it costs',
-    body: 'Price the CRM, the WMS or the bundle for your team.',
+    body: 'Price the CRM, the WMS, Projects or a bundle for your team.',
     href: ROUTES.pricing,
     label: 'Price your stack',
   },
   {
     title: 'Read up first',
-    body: 'Every feature of both products, chapter by chapter.',
+    body: 'Every feature of every product, chapter by chapter.',
     href: ROUTES.products,
     label: 'Compare products',
   },
@@ -51,7 +51,7 @@ export default function ContactPage() {
                 Talk to the founder.
               </h1>
               <p className={styles.lead}>
-                Skip the sales team. Ask your question and get an answer from the person responsible for both products,
+                Skip the sales team. Ask your question and get an answer from the person responsible for every product,
                 start to finish.
               </p>
               <ul className={styles.promises}>

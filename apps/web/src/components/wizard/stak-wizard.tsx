@@ -68,8 +68,8 @@ export function StakWizard() {
     headingRef.current?.focus({ preventScroll: true });
   }, [view, isReady]);
 
-  const estimate = answers.focus
-    ? quote({ stack: answers.focus, seats: answers.seats, warehouses: answers.warehouses, billing: answers.billing })
+  const estimate = answers.products.length > 0
+    ? quote({ stack: answers.products, seats: answers.seats, warehouses: answers.warehouses, billing: answers.billing })
     : null;
 
   const submit = (event: React.FormEvent) => {

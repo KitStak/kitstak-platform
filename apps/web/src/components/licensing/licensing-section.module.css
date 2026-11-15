@@ -54,6 +54,9 @@
 .switch[data-product='wms'][aria-checked='true'] .slab {
   background: var(--brand-oxblood);
 }
+.switch[data-product='projects'][aria-checked='true'] .slab {
+  background: var(--stak-projects);
+}
 .switchLabel {
   font-weight: var(--weight-semibold);
 }
@@ -89,11 +92,14 @@
     opacity 400ms var(--ease-out),
     background-color 400ms var(--ease-out);
 }
-.stackTop[data-on] {
+.stack span[data-product='crm'][data-on] {
   background: var(--brand-red);
 }
-.stackBottom[data-on] {
+.stack span[data-product='wms'][data-on] {
   background: var(--brand-oxblood);
+}
+.stack span[data-product='projects'][data-on] {
+  background: var(--stak-projects);
 }
 .stack span[data-on] {
   transform: none;

@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { ROUTES, getStartedHref } from '../site-links';
+import { FULL_STACK, ROUTES, getStartedHref } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
-import { PREVIEW_PRODUCT, PRODUCT_NAV, isCurrentPath } from './nav-data';
+import { PRODUCT_NAV, isCurrentPath } from './nav-data';
 import styles from './products-menu.module.css';
 
 interface ProductsMenuProps {
@@ -12,7 +12,7 @@ interface ProductsMenuProps {
   readonly onNavigate: () => void;
 }
 
-/** Full-width panel under the header: both products, their deep links, and the bundle. */
+/** Full-width panel under the header: every product, its deep links, and the bundle. */
 export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuProps) {
   return (
     <div id={id} className={styles.panel} data-open={isOpen || undefined} inert={!isOpen}>
@@ -47,32 +47,17 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
 
         <aside className={styles.bundle} aria-label="Bundle">
           <StakMark lit="both" size={36} />
-          <p className={styles.bundleTitle}>Run both. Pay less.</p>
+          <p className={styles.bundleTitle}>Run more. Pay less.</p>
           <p className={styles.bundleBody}>
-            The CRM and the WMS share customers, items and one sign-in. License them together and save.
+            The CRM, the WMS and Projects share customers, items and one sign-in. License two or more and save.
           </p>
-          <Link href={getStartedHref('both')} className={`btn btn-primary ${styles.bundleCta}`} onClick={onNavigate}>
+          <Link href={getStartedHref(FULL_STACK)} className={`btn btn-primary ${styles.bundleCta}`} onClick={onNavigate}>
             Build the bundle <span className="btn-arrow" aria-hidden>→</span>
           </Link>
           <Link href={ROUTES.products} className={styles.all} onClick={onNavigate}>
             Compare all products
           </Link>
         </aside>
-
-        <Link
-          href={PREVIEW_PRODUCT.href}
-          className={styles.preview}
-          aria-current={isCurrentPath(pathname, PREVIEW_PRODUCT.href) ? 'page' : undefined}
-          onClick={onNavigate}
-        >
-          <AppIcon app="projects" size={34} />
-          <span className={styles.previewName}>{PREVIEW_PRODUCT.name}</span>
-          <span className={styles.previewBadge}>{PREVIEW_PRODUCT.badge}</span>
-          <span className={styles.previewBlurb}>{PREVIEW_PRODUCT.blurb}</span>
-          <span className={styles.previewGo}>
-            See what is coming <span aria-hidden>→</span>
-          </span>
-        </Link>
       </div>
     </div>
   );

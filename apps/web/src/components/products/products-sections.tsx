@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
 import { PRICING, formatUsd, percentLabel } from '@/lib/pricing';
 import { ROUTES, getStartedHref } from '../site-links';
 import { AppIcon } from '../app-icon';
@@ -20,6 +21,12 @@ const SLABS = [
     name: 'KitStak WMS',
     line: 'Receiving, inventory, picking, packing, shipping and returns.',
   },
+  {
+    id: 'projects',
+    href: ROUTES.projects,
+    name: 'KitStak Projects',
+    line: 'Tasks, timelines and workload, linked to the deals and orders they are for.',
+  },
 ] as const;
 
 /** The mark as navigation: each bar of the stack is a product you can open. */
@@ -29,12 +36,13 @@ export function StackHero() {
       <div className={`container ${styles.heroInner}`}>
         <div>
           <h1 id="hero-heading" className={styles.heroTitle}>
-            <span>Two products.</span>
+            <span>Three products.</span>
             <span>One stack.</span>
           </h1>
           <p className={styles.heroLead}>
-            A CRM for the people who sell and a WMS for the people who ship. Each one stands on its own. Together they
-            share customers, one sign-in and one bill, and cost {percentLabel(PRICING.bundleDiscount)} less.
+            A CRM for the people who sell, a WMS for the people who ship, and Projects for the work in between. Each one
+            stands on its own. Stack any two and they share customers, one sign-in and one bill, and cost{' '}
+            {percentLabel(PRICING.bundleDiscount)} less.
           </p>
           <div className={styles.heroActions}>
             <Link href={ROUTES.getStarted} className="btn btn-primary btn-lg">
@@ -56,7 +64,7 @@ export function StackHero() {
               </span>
             </Link>
           ))}
-          <p className={styles.slabNote}>The top bar is the CRM. The bottom bar is the WMS. That is the logo.</p>
+          <p className={styles.slabNote}>One bar per product. Stack the ones you need.</p>
         </nav>
       </div>
     </section>
@@ -66,7 +74,7 @@ export function StackHero() {
 /* ------------------------------------------------------------------ Line-up */
 
 interface ProductCard {
-  readonly id: 'wms' | 'crm';
+  readonly id: 'wms' | 'crm' | 'projects';
   readonly name: string;
   readonly title: string;
   readonly body: string;
@@ -105,6 +113,22 @@ const CARDS: readonly ProductCard[] = [
     ],
     href: ROUTES.crm,
   },
+  {
+    id: 'projects',
+    name: 'KitStak Projects',
+    title: 'For the work in between.',
+    body: 'The onboarding, the go-live and the follow-up, planned next to the deal or order they exist for.',
+    // Counts come from the Projects app's own code (src/generated/projects).
+    points: [
+      `${PROJECTS_CATALOG.views.length} views, from board to timeline and workload`,
+      'Quick add that reads dates, people and labels',
+      'Cycles, triage, goals and time tracking',
+      `${PROJECTS_CATALOG.automation.recipes.length} ready-made automations`,
+      `${PROJECTS_CATALOG.templates.length} project templates`,
+      'Tasks linked to CRM deals and WMS orders',
+    ],
+    href: ROUTES.projects,
+  },
 ];
 
 export function Lineup() {
@@ -115,7 +139,7 @@ export function Lineup() {
           Pick where to start.
         </h2>
         <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-          Most teams start with the one that hurts most today, and add the other when they are ready.
+          Most teams start with the one that hurts most today, and add the others when they are ready.
         </p>
         <div className={styles.cards}>
           {CARDS.map((card, i) => (
@@ -139,7 +163,7 @@ export function Lineup() {
                   Explore {card.name} <span className="btn-arrow" aria-hidden>→</span>
                 </Link>
                 <Link href={getStartedHref(card.id)} className="text-link">
-                  Start with the {card.id.toUpperCase()}
+                  Start with {card.id === 'projects' ? 'Projects' : `the ${card.id.toUpperCase()}`}
                 </Link>
               </div>
             </article>
@@ -154,16 +178,36 @@ export function Lineup() {
 
 type Cell = boolean | string;
 
-const ROWS: readonly { readonly label: string; readonly crm: Cell; readonly wms: Cell; readonly both: Cell }[] = [
-  { label: 'One sign-in and one launcher', crm: true, wms: true, both: true },
-  { label: 'Shared customer list', crm: true, wms: true, both: true },
-  { label: 'Team invites that cover every app', crm: true, wms: true, both: true },
-  { label: 'Boards, pipeline, automations, dashboards', crm: true, wms: false, both: true },
-  { label: 'Receiving, inventory, picking, packing, shipping', crm: false, wms: true, both: true },
-  { label: 'Stock and open orders on the account page', crm: false, wms: false, both: true },
-  { label: 'A setup plan that covers sales and the floor', crm: false, wms: false, both: true },
-  { label: 'Bundle price', crm: 'List', wms: 'List', both: `${percentLabel(PRICING.bundleDiscount)} off both` },
+interface Row {
+  readonly label: string;
+  readonly crm: Cell;
+  readonly wms: Cell;
+  readonly projects: Cell;
+  /** Two or more products together. */
+  readonly stacked: Cell;
+}
+
+const ROWS: readonly Row[] = [
+  { label: 'One sign-in and one launcher', crm: true, wms: true, projects: true, stacked: true },
+  { label: 'Shared customer list', crm: true, wms: true, projects: true, stacked: true },
+  { label: 'Team invites that cover every app', crm: true, wms: true, projects: true, stacked: true },
+  { label: 'Boards, pipeline, automations, dashboards', crm: true, wms: false, projects: false, stacked: true },
+  { label: 'Receiving, inventory, picking, packing, shipping', crm: false, wms: true, projects: false, stacked: true },
+  { label: 'Tasks, timelines, workload and cycles', crm: false, wms: false, projects: true, stacked: true },
+  { label: 'Stock and open orders on the account page', crm: false, wms: false, projects: false, stacked: 'CRM + WMS' },
+  { label: 'Tasks linked to deals, orders and receipts', crm: false, wms: false, projects: false, stacked: 'With Projects' },
+  { label: 'A won deal starts its delivery project', crm: false, wms: false, projects: false, stacked: 'CRM + Projects' },
+  {
+    label: 'Bundle price',
+    crm: 'List',
+    wms: 'List',
+    projects: 'List',
+    stacked: `${percentLabel(PRICING.bundleDiscount)} off each`,
+  },
 ];
+
+const COLUMNS = ['crm', 'wms', 'projects'] as const;
+const COLUMN_LABEL = { crm: 'CRM', wms: 'WMS', projects: 'Projects' } as const;
 
 function CellMark({ value }: { readonly value: Cell }) {
   if (typeof value === 'string') return <span className={styles.cellText}>{value}</span>;
@@ -186,8 +230,9 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
               Better stacked.
             </h2>
             <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-              Both apps read the same customer record. Link a CRM account to the customer your warehouse ships for, and
-              sales can see what is on the shelf and what is on its way out.
+              Every app reads the same customer record. Link a CRM account to the customer your warehouse ships for, and
+              sales can see what is on the shelf. Add Projects, and the work for that customer points at the deal and the
+              order it is about.
             </p>
           </div>
           <div data-reveal>{visual}</div>
@@ -195,20 +240,19 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
 
         <div className={styles.tableWrap} data-reveal tabIndex={0} role="region" aria-label="Product comparison">
           <table className={styles.table}>
-            <caption className="visually-hidden">What you get with each product and with both</caption>
+            <caption className="visually-hidden">What you get with each product and with two or more stacked</caption>
             <thead>
               <tr>
                 <th scope="col">
                   <span className="visually-hidden">Feature</span>
                 </th>
-                <th scope="col">
-                  <AppIcon app="crm" size={40} /> CRM
-                </th>
-                <th scope="col">
-                  <AppIcon app="wms" size={40} /> WMS
-                </th>
+                {COLUMNS.map((id) => (
+                  <th key={id} scope="col">
+                    <AppIcon app={id} size={40} /> {COLUMN_LABEL[id]}
+                  </th>
+                ))}
                 <th scope="col" className={styles.bothCol}>
-                  <StakMark lit="both" size={32} /> Both
+                  <StakMark lit="both" size={32} /> Stacked
                 </th>
               </tr>
             </thead>
@@ -216,46 +260,19 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
               {ROWS.map((row) => (
                 <tr key={row.label}>
                   <th scope="row">{row.label}</th>
-                  <td>
-                    <CellMark value={row.crm} />
-                  </td>
-                  <td>
-                    <CellMark value={row.wms} />
-                  </td>
+                  {COLUMNS.map((id) => (
+                    <td key={id}>
+                      <CellMark value={row[id]} />
+                    </td>
+                  ))}
                   <td className={styles.bothCol}>
-                    <CellMark value={row.both} />
+                    <CellMark value={row.stacked} />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ Preview product */
-
-/** A short band for the product that is announced but not yet available. */
-export function ProjectsTeaser() {
-  return (
-    <section className={styles.teaser} aria-labelledby="teaser-heading">
-      <div className={`container ${styles.teaserInner}`}>
-        <AppIcon app="projects" size={88} />
-        <div>
-          <p className={styles.teaserBadge}>Preview · in development</p>
-          <h2 id="teaser-heading" className={styles.teaserTitle}>
-            A third bar is on the way.
-          </h2>
-          <p className={styles.teaserBody}>
-            KitStak Projects puts tasks, timelines and workload on the same stack, linked to the deals and warehouse
-            records the work is about.
-          </p>
-        </div>
-        <Link href={ROUTES.projects} className="btn btn-ghost-inverse btn-lg">
-          Preview KitStak Projects <span className="btn-arrow" aria-hidden>→</span>
-        </Link>
       </div>
     </section>
   );
@@ -274,7 +291,7 @@ const STEPS = [
   },
   {
     title: 'Follow your setup plan',
-    body: 'A checklist built from your answers walks you through the first warehouse, the first board and the first order.',
+    body: 'A checklist built from your answers walks you through the first warehouse, the first board, the first order and the first project.',
   },
 ] as const;
 

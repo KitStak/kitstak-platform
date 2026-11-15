@@ -12,7 +12,14 @@ interface WizardSummaryProps {
   readonly estimate: Quote | null;
 }
 
-const STACK_NAME = { crm: 'KitStak CRM', wms: 'KitStak WMS', both: 'CRM and WMS' } as const;
+const SHORT_NAME = { crm: 'CRM', wms: 'WMS', projects: 'Projects' } as const;
+
+function stackName(products: StakAnswers['products']): string {
+  if (products.length === 0) return 'Nothing yet';
+  if (products.length === 1) return `KitStak ${SHORT_NAME[products[0]!]}`;
+  const names = products.map((p) => SHORT_NAME[p]);
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
 
 function labelOf<T extends string>(options: readonly { value: T; label: string }[], value: T | null): string | null {
   return options.find((option) => option.value === value)?.label ?? null;
@@ -24,7 +31,7 @@ export function summaryFacts(answers: StakAnswers): readonly { readonly label: s
   return [
     ...(business ? [{ label: 'Business', value: business }] : []),
     ...(answers.businessType ? [{ label: 'Team', value: labelOf(TEAM_SIZES, answers.teamSize) ?? '' }] : []),
-    ...(answers.focus ? [{ label: 'Start', value: labelOf(START_MODES, answers.startMode) ?? '' }] : []),
+    ...(answers.products.length > 0 ? [{ label: 'Start', value: labelOf(START_MODES, answers.startMode) ?? '' }] : []),
   ];
 }
 
@@ -32,7 +39,7 @@ function SummaryBody({ answers, estimate }: WizardSummaryProps) {
   const facts = summaryFacts(answers);
   return (
     <>
-      <StakVisual stack={answers.focus} extras={answers.guided ? ['Guided setup'] : []} />
+      <StakVisual stack={answers.products} extras={answers.guided ? ['Guided setup'] : []} />
       {facts.length > 0 ? (
         <dl className={styles.facts}>
           {facts.map((fact) => (
@@ -45,7 +52,7 @@ function SummaryBody({ answers, estimate }: WizardSummaryProps) {
       ) : null}
       {estimate ? (
         <div className={styles.estimate}>
-          <QuoteSummary quote={estimate} billing={answers.billing} isBundle={answers.focus === 'both'} />
+          <QuoteSummary quote={estimate} billing={answers.billing} />
         </div>
       ) : (
         <p className={styles.empty}>Choose a product and your stack builds here.</p>
@@ -56,7 +63,7 @@ function SummaryBody({ answers, estimate }: WizardSummaryProps) {
 
 /** "Your Stak": a sticky panel on wide screens, a collapsible strip on small ones. */
 export function WizardSummary({ answers, estimate }: WizardSummaryProps) {
-  const headline = answers.focus ? STACK_NAME[answers.focus] : 'Nothing yet';
+  const headline = stackName(answers.products);
   return (
     <>
       <aside className={styles.summary} aria-label="Your Stak">

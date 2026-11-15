@@ -4,16 +4,19 @@ import { PRICING, percentLabel } from '@/lib/pricing';
 import {
   BUSINESS_TYPES,
   CRM_BOARDS,
+  PROJECT_TEMPLATES,
   START_MODES,
   TEAM_SIZES,
   WMS_NEEDS,
   hasCrm,
+  hasProjects,
   hasWms,
   toggleIn,
   withTeamSize,
 } from '@/lib/stak';
 import type { Option, StakAnswers } from '@/lib/stak';
-import type { StackChoice } from '../site-links';
+import { FULL_STACK, toggleProduct } from '../site-links';
+import type { ProductId } from '../site-links';
 import { BillingToggle, Stepper } from '../stak/stak-parts';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
@@ -101,47 +104,65 @@ function ChipGroup({ legend, hint, options, values, onToggle }: ChipGroupProps) 
 
 /* ------------------------------------------------------------------ 1. Stack */
 
-const STACKS: readonly { readonly value: StackChoice; readonly label: string; readonly note: string }[] = [
-  { value: 'both', label: 'Both', note: 'Sales and the warehouse on one stack, with one sign-in.' },
+const PRODUCTS: readonly { readonly value: ProductId; readonly label: string; readonly note: string }[] = [
   { value: 'wms', label: 'KitStak WMS', note: 'Receiving, inventory, picking, packing and shipping.' },
   { value: 'crm', label: 'KitStak CRM', note: 'Leads, deals, accounts and follow-ups on boards.' },
+  { value: 'projects', label: 'KitStak Projects', note: 'Tasks, timelines and workload, linked to deals and orders.' },
 ];
 
 export function StackStep({ answers, update }: StepProps) {
+  const isEverything = answers.products.length === FULL_STACK.length;
+  const isPartial = answers.products.length > 0 && !isEverything;
   return (
     <fieldset className={styles.group}>
       <legend className="visually-hidden">Products</legend>
       <div className={styles.stacks}>
-        {STACKS.map((stack) => (
-          <label key={stack.value} className={styles.stack} data-checked={answers.focus === stack.value || undefined}>
-            <input
-              type="radio"
-              name="stack"
-              className="visually-hidden"
-              checked={answers.focus === stack.value}
-              onChange={() => update({ focus: stack.value })}
-            />
-            {stack.value === 'both' ? (
-              <span className={styles.stackGlyph}>
-                <StakMark lit="both" size={44} />
-              </span>
-            ) : (
-              <AppIcon app={stack.value} size={64} className={styles.stackGlyph} />
-            )}
-            <span className={styles.stackText}>
-              <span className={styles.stackLabel}>
-                {stack.label}
-                {stack.value === 'both' ? (
-                  <span className={styles.badge}>Save {percentLabel(PRICING.bundleDiscount)}</span>
-                ) : null}
-              </span>
-              <span className={styles.tileNote}>{stack.note}</span>
+        <label className={styles.stack} data-checked={isEverything || undefined}>
+          <input
+            type="checkbox"
+            className="visually-hidden"
+            checked={isEverything}
+            ref={(input) => {
+              if (input) input.indeterminate = isPartial;
+            }}
+            onChange={() => update({ products: isEverything ? [] : FULL_STACK })}
+          />
+          <span className={styles.stackGlyph}>
+            <StakMark lit="both" size={44} />
+          </span>
+          <span className={styles.stackText}>
+            <span className={styles.stackLabel}>
+              The whole stack
+              <span className={styles.badge}>Save {percentLabel(PRICING.bundleDiscount)}</span>
             </span>
-            <span className={styles.radio} aria-hidden />
-          </label>
-        ))}
+            <span className={styles.tileNote}>Sales, the warehouse and the work between them, with one sign-in.</span>
+          </span>
+          <span className={styles.radio} data-multi aria-hidden />
+        </label>
+        {PRODUCTS.map((product) => {
+          const isChecked = answers.products.includes(product.value);
+          return (
+            <label key={product.value} className={styles.stack} data-checked={isChecked || undefined}>
+              <input
+                type="checkbox"
+                className="visually-hidden"
+                checked={isChecked}
+                onChange={() => update({ products: toggleProduct(answers.products, product.value) })}
+              />
+              <AppIcon app={product.value} size={64} className={styles.stackGlyph} />
+              <span className={styles.stackText}>
+                <span className={styles.stackLabel}>{product.label}</span>
+                <span className={styles.tileNote}>{product.note}</span>
+              </span>
+              <span className={styles.radio} data-multi aria-hidden />
+            </label>
+          );
+        })}
       </div>
-      <p className={styles.reassure}>You can add the other product later. Your team and customers carry over.</p>
+      <p className={styles.reassure}>
+        Pick one or more. Two or more take {percentLabel(PRICING.bundleDiscount)} off each, and you can add the rest
+        later: your team and customers carry over.
+      </p>
     </fieldset>
   );
 }
@@ -169,6 +190,20 @@ export function BusinessStep({ answers, update }: StepProps) {
 }
 
 /* ------------------------------------------------------------------ 3. Shape */
+
+/** One seat count for every per-user app: the CRM and Projects share a sign-in. */
+function SeatsQuantity({ answers, update }: StepProps) {
+  const apps = [hasCrm(answers) ? 'the CRM' : null, hasProjects(answers) ? 'Projects' : null].filter(Boolean);
+  return (
+    <div className={styles.quantity}>
+      <span>
+        <span className={styles.quantityName}>How many people will use it?</span>
+        <span className={styles.tileNote}>Anyone who signs in to {apps.join(' or ')}.</span>
+      </span>
+      <Stepper label="Users" value={answers.seats} max={PRICING.crm.max} onChange={(seats) => update({ seats })} />
+    </div>
+  );
+}
 
 export function ShapeStep({ answers, update }: StepProps) {
   return (
@@ -205,19 +240,29 @@ export function ShapeStep({ answers, update }: StepProps) {
           <h3 className={styles.productHead}>
             <AppIcon app="crm" size={38} /> Your CRM
           </h3>
-          <div className={styles.quantity}>
-            <span>
-              <span className={styles.quantityName}>How many people will use it?</span>
-              <span className={styles.tileNote}>Anyone who signs in to the CRM.</span>
-            </span>
-            <Stepper label="CRM users" value={answers.seats} max={PRICING.crm.max} onChange={(seats) => update({ seats })} />
-          </div>
+          <SeatsQuantity answers={answers} update={update} />
           <ChipGroup
             legend="Which boards do you want on day one?"
             hint="Pick any. You can add the rest later."
             options={CRM_BOARDS}
             values={answers.crmBoards}
             onToggle={(value) => update({ crmBoards: toggleIn(answers.crmBoards, value) })}
+          />
+        </section>
+      ) : null}
+
+      {hasProjects(answers) ? (
+        <section className={styles.product} aria-label="Projects">
+          <h3 className={styles.productHead}>
+            <AppIcon app="projects" size={38} /> Your projects
+          </h3>
+          {hasCrm(answers) ? null : <SeatsQuantity answers={answers} update={update} />}
+          <ChipGroup
+            legend="Which templates should we start from?"
+            hint="Pick any. Each one comes with its tasks, dates and rules."
+            options={PROJECT_TEMPLATES}
+            values={answers.projectTemplates}
+            onToggle={(value) => update({ projectTemplates: toggleIn(answers.projectTemplates, value) })}
           />
         </section>
       ) : null}

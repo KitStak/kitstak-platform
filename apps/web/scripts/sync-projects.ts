@@ -1,0 +1,170 @@
+/**
+ * Pulls the lists and counts the marketing site shows for KitStak Projects straight out of the
+ * Projects app's code (apps/projects), so they follow the app. Hand-written claims on /projects
+ * are checked separately by src/lib/projects-claims.test.ts.
+ *
+ *   pnpm --filter kitstak-web sync:projects          # rewrite src/generated/projects/*
+ *   pnpm --filter kitstak-web sync:projects --check  # exit 1 if the snapshot is stale
+ *
+ * It writes two kinds of file into src/generated/projects/:
+ *   - catalog.ts: data read from the app's own catalogues (views, field types, automation
+ *     triggers/actions/recipes, cross-app record triggers, built-in templates, link targets).
+ *   - parser copies: the app's pure quick-add and WMS-code parsers, byte for byte under a header,
+ *     so the demo on /projects runs the same code the app runs.
+ *
+ * Run by `prebuild`, so every deploy of the site reflects the Projects code it was built from.
+ * The snapshot is committed, so dev and tests work without running it.
+ */
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import {
+  CUSTOM_FIELD_TYPE_LABELS,
+  CUSTOM_FIELD_TYPES,
+  INTEGRATION_TARGET_LABELS,
+  INTEGRATION_TARGET_TYPES,
+  PROJECT_ROLE_LABELS,
+  PROJECT_ROLES,
+  VIEW_TYPE_LABELS,
+  VIEW_TYPES,
+} from '../../projects/src/lib/constants';
+import {
+  ACTION_OPTIONS,
+  CONDITION_OPTIONS,
+  RECIPES,
+  TRIGGER_OPTIONS,
+  actionOption,
+  triggerOption,
+} from '../../projects/src/features/automations/catalog';
+import { RECORD_TRIGGER_RECIPES } from '../../projects/src/lib/record-trigger-types';
+import { BUILTIN_TEMPLATES } from '../../projects/src/server/domain/templates-builtin';
+import { countTemplateTaskTree } from '../../projects/src/lib/template-math';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const webRoot = path.resolve(here, '..');
+const projectsSrc = path.resolve(webRoot, '../projects/src');
+const outDir = path.resolve(webRoot, 'src/generated/projects');
+
+/** Pure Projects modules copied verbatim (they import only each other). */
+const COPIED: readonly string[] = ['lib/constants.ts', 'lib/dates.ts', 'lib/nl-parse.ts', 'lib/wms-codes.ts'];
+
+/** Every file the catalogue is read from, listed in the generated header. */
+const CATALOG_SOURCES: readonly string[] = [
+  'lib/constants.ts',
+  'features/automations/catalog.ts',
+  'lib/record-trigger-types.ts',
+  'server/domain/templates-builtin.ts',
+  'lib/template-math.ts',
+];
+
+function sentence(first: string, rest: readonly string[]): string {
+  if (rest.length === 0) return first;
+  if (rest.length === 1) return `${first} and ${rest[0]}`;
+  return `${first}, ${rest.slice(0, -1).join(', ')} and ${rest.at(-1)}`;
+}
+
+function buildCatalog() {
+  return {
+    views: VIEW_TYPES.map((type) => ({ type, label: VIEW_TYPE_LABELS[type] })),
+    customFieldTypes: CUSTOM_FIELD_TYPES.map((type) => ({ type, label: CUSTOM_FIELD_TYPE_LABELS[type] })),
+    projectRoles: PROJECT_ROLES.map((role) => PROJECT_ROLE_LABELS[role]),
+    linkTargets: INTEGRATION_TARGET_TYPES.map((type) => ({
+      type,
+      label: INTEGRATION_TARGET_LABELS[type],
+      app: type.startsWith('crm_') ? 'crm' : type.startsWith('wms_') ? 'wms' : 'core',
+    })),
+    automation: {
+      triggers: TRIGGER_OPTIONS.map((t) => ({ type: t.type, label: t.label, group: t.group, needs: t.needs ?? null })),
+      actions: ACTION_OPTIONS.map((a) => ({ type: a.type, label: a.label, group: a.group })),
+      conditions: CONDITION_OPTIONS.map((c) => c.label),
+      recipes: RECIPES.map((r) => {
+        const actions = r.actions.map((a) => actionOption(a.type).label);
+        return {
+          id: r.id,
+          name: r.name,
+          blurb: r.blurb,
+          categories: [...r.categories],
+          needs: r.needs ?? null,
+          sentence: `When ${triggerOption(r.trigger.type).label}${r.conditions?.length ? ' (with conditions)' : ''}, ${sentence(actions[0] ?? '', actions.slice(1))}.`,
+        };
+      }),
+    },
+    recordTriggers: RECORD_TRIGGER_RECIPES.map((r) => ({
+      kind: r.kind,
+      app: r.app,
+      title: r.title,
+      description: r.description,
+    })),
+    templates: BUILTIN_TEMPLATES.map((t) => {
+      const counts = countTemplateTaskTree(t.payload);
+      return {
+        slug: t.slug,
+        name: t.name,
+        description: t.description,
+        category: t.category,
+        tasks: counts.tasks,
+        subtasks: counts.subtasks,
+        sections: (t.payload.sections ?? []).map((s) => s.name),
+        statuses: (t.payload.statuses ?? []).map((s) => s.name),
+        milestones: (t.payload.milestones ?? []).length,
+        automations: (t.payload.automations ?? []).length,
+      };
+    }),
+  };
+}
+
+const HEADER = (sources: readonly string[]) =>
+  [
+    '/* eslint-disable */',
+    '// GENERATED by apps/web/scripts/sync-projects.ts. Do not edit: run `pnpm --filter kitstak-web sync:projects`.',
+    `// Source: ${sources.map((s) => `apps/projects/src/${s}`).join(', ')}`,
+    '',
+  ].join('\n');
+
+function renderCatalog(): string {
+  const json = JSON.stringify(buildCatalog(), null, 2);
+  return `${HEADER(CATALOG_SOURCES)}
+/** What KitStak Projects does, read from its own code. */
+export const PROJECTS_CATALOG = ${json} as const;
+
+export type ProjectsCatalog = typeof PROJECTS_CATALOG;
+`;
+}
+
+function renderCopy(file: string): string {
+  return `${HEADER([file])}${readFileSync(path.join(projectsSrc, file), 'utf8')}`;
+}
+
+function outputs(): ReadonlyMap<string, string> {
+  return new Map<string, string>([
+    ['catalog.ts', renderCatalog()],
+    ...COPIED.map((file): [string, string] => [path.basename(file), renderCopy(file)]),
+  ]);
+}
+
+function main(): void {
+  if (!existsSync(projectsSrc)) {
+    // A checkout without the Projects app (not expected on Vercel): keep the committed snapshot.
+    console.warn(`[sync-projects] ${projectsSrc} not found; keeping the committed snapshot.`);
+    return;
+  }
+  const isCheck = process.argv.includes('--check');
+  const stale: string[] = [];
+  mkdirSync(outDir, { recursive: true });
+  for (const [name, content] of outputs()) {
+    const target = path.join(outDir, name);
+    const current = existsSync(target) ? readFileSync(target, 'utf8').replace(/\r\n/g, '\n') : null;
+    const next = content.replace(/\r\n/g, '\n');
+    if (current === next) continue;
+    if (isCheck) stale.push(name);
+    else writeFileSync(target, next);
+  }
+  if (isCheck && stale.length > 0) {
+    console.error(`[sync-projects] stale: ${stale.join(', ')}. Run: pnpm --filter kitstak-web sync:projects`);
+    process.exit(1);
+  }
+  if (!isCheck) console.log(`[sync-projects] wrote ${outDir}`);
+}
+
+main();
