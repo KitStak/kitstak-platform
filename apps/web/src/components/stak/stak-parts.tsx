@@ -1,28 +1,28 @@
-import { PRICING, PRICING_IS_PLACEHOLDER, formatUsd, percentLabel } from '@/lib/pricing';
+import { PRICING, PRICING_IS_PLACEHOLDER, formatUsd, isBundle, percentLabel } from '@/lib/pricing';
 import type { Billing, Quote } from '@/lib/pricing';
-import type { StackChoice } from '../site-links';
+import { PRODUCT_IDS } from '../site-links';
+import type { ProductId, Stack } from '../site-links';
 import styles from './stak-parts.module.css';
 
 /* ------------------------------------------------------------------ The stack, drawn large */
 
 interface StakVisualProps {
-  readonly stack: StackChoice | null;
-  /** Extra thin slabs under the two products, one per add-on (e.g. "Guided setup"). */
+  readonly stack: Stack;
+  /** Extra thin slabs under the products, one per add-on (e.g. "Guided setup"). */
   readonly extras?: readonly string[];
 }
 
-/** The KitStak mark as a live diagram: the top bar is the CRM, the bottom bar is the WMS. */
+const SLAB_LABEL: Readonly<Record<ProductId, string>> = { crm: 'CRM', wms: 'WMS', projects: 'Projects' };
+
+/** The stack as a live diagram: one bar per product, lit when it is in the stack. */
 export function StakVisual({ stack, extras = [] }: StakVisualProps) {
-  const hasCrm = stack === 'crm' || stack === 'both';
-  const hasWms = stack === 'wms' || stack === 'both';
   return (
     <div className={styles.visual} aria-hidden>
-      <div className={styles.slab} data-product="crm" data-on={hasCrm || undefined}>
-        <span>CRM</span>
-      </div>
-      <div className={styles.slab} data-product="wms" data-on={hasWms || undefined}>
-        <span>WMS</span>
-      </div>
+      {PRODUCT_IDS.map((id) => (
+        <div key={id} className={styles.slab} data-product={id} data-on={stack.includes(id) || undefined}>
+          <span>{SLAB_LABEL[id]}</span>
+        </div>
+      ))}
       {extras.map((extra) => (
         <div key={extra} className={styles.extra}>
           <span>{extra}</span>
@@ -37,11 +37,11 @@ export function StakVisual({ stack, extras = [] }: StakVisualProps) {
 interface QuoteSummaryProps {
   readonly quote: Quote;
   readonly billing: Billing;
-  readonly isBundle: boolean;
 }
 
 /** Line items, savings and the monthly figure. Sits on the navy brand surface. */
-export function QuoteSummary({ quote, billing, isBundle }: QuoteSummaryProps) {
+export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
+  const hasBundle = isBundle(quote.lines.map((line) => line.product));
   return (
     <div aria-live="polite">
       <ul className={styles.lines}>
@@ -56,7 +56,7 @@ export function QuoteSummary({ quote, billing, isBundle }: QuoteSummaryProps) {
             <span className={styles.lineAmount}>{formatUsd(line.subtotalCents)}</span>
           </li>
         ))}
-        {isBundle ? (
+        {hasBundle ? (
           <li className={styles.saving}>
             <span>Bundle saving ({percentLabel(PRICING.bundleDiscount)})</span>
             <span className={styles.lineAmount}>−{formatUsd(quote.bundleSavingsCents)}</span>
@@ -83,7 +83,7 @@ export function QuoteSummary({ quote, billing, isBundle }: QuoteSummaryProps) {
         </p>
       ) : (
         <p className={styles.saved}>
-          Add the other product and take {percentLabel(PRICING.bundleDiscount)} off both.
+          Add another product and take {percentLabel(PRICING.bundleDiscount)} off every one.
         </p>
       )}
       {PRICING_IS_PLACEHOLDER ? <p className={styles.fine}>Preliminary pricing, shown for planning.</p> : null}

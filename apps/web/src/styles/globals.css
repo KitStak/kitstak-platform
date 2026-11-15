@@ -12,6 +12,8 @@
   /* Cream ink at reading strength on the navy brand surface. */
   --on-brand-muted: rgb(244 241 233 / 0.74);
   --on-brand-rule: rgb(244 241 233 / 0.16);
+  /* The third bar of the stack (Projects): the rose already used inside every app icon. */
+  --stak-projects: #d65a6e;
 }
 
 *,

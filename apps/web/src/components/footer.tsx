@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Logo } from './logo';
-import { PREVIEW_PRODUCT, PRODUCT_NAV } from './nav/nav-data';
+import { PRODUCT_NAV } from './nav/nav-data';
 import { LINKS, ROUTES, getStartedHref } from './site-links';
 import styles from './footer.module.css';
 
@@ -15,7 +15,6 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
     title: 'Products',
     links: [
       ...PRODUCT_NAV.map((p) => ({ href: p.href, label: p.name })),
-      { href: PREVIEW_PRODUCT.href, label: `${PREVIEW_PRODUCT.name} (preview)` },
       { href: ROUTES.products, label: 'Compare products' },
       { href: ROUTES.bundle, label: 'Bundle and save' },
       { href: ROUTES.pricing, label: 'Pricing' },
@@ -27,6 +26,7 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: ROUTES.getStarted, label: 'Set up your Stak' },
       { href: getStartedHref('wms'), label: 'Start with the WMS' },
       { href: getStartedHref('crm'), label: 'Start with the CRM' },
+      { href: getStartedHref('projects'), label: 'Start with Projects' },
       { href: ROUTES.demo, label: 'Book a walkthrough' },
     ],
   },
@@ -44,6 +44,7 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: LINKS.portal, label: 'Portal', external: true },
       { href: LINKS.wms, label: 'KitStak WMS', external: true },
       { href: LINKS.crm, label: 'KitStak CRM', external: true },
+      { href: LINKS.projects, label: 'KitStak Projects', external: true },
     ],
   },
 ];
@@ -56,7 +57,7 @@ export function Footer() {
           <Link href={ROUTES.home} aria-label="KitStak home">
             <Logo height={22} />
           </Link>
-          <p className={styles.tag}>CRM and WMS on one stack.</p>
+          <p className={styles.tag}>CRM, WMS and Projects on one stack.</p>
           <Link href={ROUTES.getStarted} className={`btn btn-primary ${styles.cta}`}>
             Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
           </Link>

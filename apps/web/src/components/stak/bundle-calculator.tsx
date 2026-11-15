@@ -2,35 +2,36 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { PRICING, formatUsd, percentLabel, quote } from '@/lib/pricing';
-import type { Billing, ProductId } from '@/lib/pricing';
+import { PRICING, formatUsd, isBundle, percentLabel, quote } from '@/lib/pricing';
+import type { Billing } from '@/lib/pricing';
 import { wizardHref } from '@/lib/stak';
-import { ROUTES } from '../site-links';
-import type { StackChoice } from '../site-links';
+import { FULL_STACK, PRODUCT_IDS, ROUTES, toggleProduct } from '../site-links';
+import type { ProductId, Stack } from '../site-links';
 import { BillingToggle, QuoteSummary, StakVisual, Stepper } from './stak-parts';
 import styles from './bundle-calculator.module.css';
 
-const PRODUCTS: readonly { readonly id: ProductId; readonly blurb: string }[] = [
-  { id: 'crm', blurb: 'Pipelines, boards and automations' },
-  { id: 'wms', blurb: 'Receiving, inventory and shipping' },
-];
+const BLURB: Readonly<Record<ProductId, string>> = {
+  crm: 'Pipelines, boards and automations',
+  wms: 'Receiving, inventory and shipping',
+  projects: 'Tasks, timelines and workload',
+};
 
 /** Price a stack: switch products on, set the size, and carry the result into the wizard. */
 export function BundleCalculator() {
-  const [enabled, setEnabled] = useState<Readonly<Record<ProductId, boolean>>>({ crm: true, wms: true });
+  const [stack, setStack] = useState<Stack>(FULL_STACK);
   const [seats, setSeats] = useState(10);
   const [warehouses, setWarehouses] = useState(1);
   const [billing, setBilling] = useState<Billing>('annual');
 
   const toggle = (product: ProductId) => {
-    const other: ProductId = product === 'crm' ? 'wms' : 'crm';
+    const next = toggleProduct(stack, product);
     // At least one product stays on.
-    if (enabled[product] && !enabled[other]) return;
-    setEnabled({ ...enabled, [product]: !enabled[product] });
+    if (next.length > 0) setStack(next);
   };
 
-  const stack: StackChoice = enabled.crm && enabled.wms ? 'both' : enabled.crm ? 'crm' : 'wms';
   const result = quote({ stack, seats, warehouses, billing });
+  const bundled = isBundle(stack);
+  const perUser = stack.filter((id) => id !== 'wms').map((id) => (id === 'crm' ? 'the CRM' : 'Projects'));
 
   return (
     <div className={styles.calc}>
@@ -38,23 +39,24 @@ export function BundleCalculator() {
         <fieldset className={styles.field}>
           <legend>1. Choose your products</legend>
           <div className={styles.switches}>
-            {PRODUCTS.map((product) => {
-              const price = PRICING[product.id];
+            {PRODUCT_IDS.map((id) => {
+              const price = PRICING[id];
+              const isOn = stack.includes(id);
               return (
                 <button
-                  key={product.id}
+                  key={id}
                   type="button"
                   role="switch"
-                  aria-checked={enabled[product.id]}
-                  aria-disabled={(enabled[product.id] && stack !== 'both') || undefined}
+                  aria-checked={isOn}
+                  aria-disabled={(isOn && stack.length === 1) || undefined}
                   className={styles.switch}
-                  data-product={product.id}
-                  onClick={() => toggle(product.id)}
+                  data-product={id}
+                  onClick={() => toggle(id)}
                 >
                   <span className={styles.slab} aria-hidden />
                   <span>
                     <span className={styles.switchName}>{price.name}</span>
-                    <span className={styles.switchBlurb}>{product.blurb}</span>
+                    <span className={styles.switchBlurb}>{BLURB[id]}</span>
                   </span>
                   <span className={styles.switchPrice}>
                     {formatUsd(price.monthlyCents)}
@@ -64,24 +66,26 @@ export function BundleCalculator() {
               );
             })}
           </div>
-          <p className={styles.hint} data-on={stack === 'both' || undefined}>
-            {stack === 'both'
-              ? `Bundle applied: ${percentLabel(PRICING.bundleDiscount)} off both products.`
-              : `Switch both on to take ${percentLabel(PRICING.bundleDiscount)} off each. One product always stays on.`}
+          <p className={styles.hint} data-on={bundled || undefined}>
+            {bundled
+              ? `Bundle applied: ${percentLabel(PRICING.bundleDiscount)} off all ${stack.length} products.`
+              : `Switch on a second product to take ${percentLabel(PRICING.bundleDiscount)} off each. One product always stays on.`}
           </p>
         </fieldset>
 
         <fieldset className={styles.field}>
           <legend>2. Size it</legend>
           <div className={styles.sizes}>
-            <div className={styles.size} data-off={!enabled.crm || undefined} inert={!enabled.crm}>
+            <div className={styles.size} data-off={perUser.length === 0 || undefined} inert={perUser.length === 0}>
               <span>
-                <span className={styles.sizeName}>CRM users</span>
-                <span className={styles.sizeNote}>People who sign in to the CRM</span>
+                <span className={styles.sizeName}>Users</span>
+                <span className={styles.sizeNote}>
+                  {perUser.length > 0 ? `People who sign in to ${perUser.join(' and ')}` : 'For the CRM and Projects'}
+                </span>
               </span>
-              <Stepper label="CRM users" value={seats} max={PRICING.crm.max} onChange={setSeats} />
+              <Stepper label="Users" value={seats} max={PRICING.crm.max} onChange={setSeats} />
             </div>
-            <div className={styles.size} data-off={!enabled.wms || undefined} inert={!enabled.wms}>
+            <div className={styles.size} data-off={!stack.includes('wms') || undefined} inert={!stack.includes('wms')}>
               <span>
                 <span className={styles.sizeName}>Warehouses</span>
                 <span className={styles.sizeNote}>Buildings you run stock in</span>
@@ -100,7 +104,7 @@ export function BundleCalculator() {
       <div className={styles.result}>
         <StakVisual stack={stack} />
         <div className={styles.quote}>
-          <QuoteSummary quote={result} billing={billing} isBundle={stack === 'both'} />
+          <QuoteSummary quote={result} billing={billing} />
         </div>
         <Link href={wizardHref({ stack, seats, warehouses, billing })} className="btn btn-primary btn-lg btn-block">
           Set up this Stak <span className="btn-arrow" aria-hidden>→</span>

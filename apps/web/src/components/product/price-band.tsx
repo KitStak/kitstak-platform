@@ -20,7 +20,7 @@ export function PriceBand({ product, included }: PriceBandProps) {
             One price. Everything in it.
           </h2>
           <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-            You get the whole product, not a starter tier. And it costs less when you run it alongside the other one.
+            You get the whole product, not a starter tier. And it costs less when you run it alongside the others.
           </p>
           <ul className={styles.included}>
             {included.map((item, i) => (
@@ -45,11 +45,11 @@ export function PriceBand({ product, included }: PriceBandProps) {
             </span>
           </p>
           <p className={styles.bundleLine}>
-            <strong>{percentLabel(PRICING.bundleDiscount)} off</strong> both products when you bundle, and{' '}
+            <strong>{percentLabel(PRICING.bundleDiscount)} off</strong> each product when you stack two or more, and{' '}
             {percentLabel(PRICING.annualDiscount)} off again billed yearly.
           </p>
           <Link href={getStartedHref(product)} className="btn btn-primary btn-lg btn-block">
-            Start with the {product.toUpperCase()} <span className="btn-arrow" aria-hidden>→</span>
+            Start with {product === 'projects' ? 'Projects' : `the ${product.toUpperCase()}`} <span className="btn-arrow" aria-hidden>→</span>
           </Link>
           <Link href={ROUTES.pricing} className={`text-link ${styles.calc}`}>
             Price your stack <span className="btn-arrow" aria-hidden>→</span>

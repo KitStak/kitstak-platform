@@ -25,7 +25,7 @@ interface ProductHeroProps {
   readonly secondary: HeroAction;
   readonly visual: React.ReactNode;
   readonly facts: readonly HeroFact[];
-  /** Short status shown beside the breadcrumb, e.g. "Preview" for a product still in development. */
+  /** Optional short status shown beside the breadcrumb (e.g. "New"). */
   readonly badge?: string;
 }
 

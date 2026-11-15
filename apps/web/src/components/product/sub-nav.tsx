@@ -23,7 +23,7 @@ const SWITCH = [
   { id: 'wms', href: ROUTES.wms, label: 'WMS' },
   { id: 'crm', href: ROUTES.crm, label: 'CRM' },
   { id: 'projects', href: ROUTES.projects, label: 'Projects' },
-  { id: 'products', href: ROUTES.products, label: 'Both' },
+  { id: 'products', href: ROUTES.products, label: 'Stack' },
 ] as const;
 
 /**

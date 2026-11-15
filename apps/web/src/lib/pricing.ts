@@ -1,4 +1,5 @@
-import type { StackChoice } from '@/components/site-links';
+import { PRODUCT_IDS } from '@/components/site-links';
+import type { ProductId, Stack } from '@/components/site-links';
 
 /**
  * PLACEHOLDER PRICING. These numbers are stand-ins so the pages and the setup wizard can show a
@@ -7,7 +8,7 @@ import type { StackChoice } from '@/components/site-links';
  */
 export const PRICING_IS_PLACEHOLDER = true;
 
-export type ProductId = 'crm' | 'wms';
+export type { ProductId };
 export type Billing = 'monthly' | 'annual';
 
 interface ProductPrice {
@@ -19,7 +20,7 @@ interface ProductPrice {
 }
 
 interface PricingTable extends Readonly<Record<ProductId, ProductPrice>> {
-  /** Off both products when they are licensed together. */
+  /** Off every product when two or more are licensed together. */
   readonly bundleDiscount: number;
   /** Off the monthly price when billed yearly. */
   readonly annualDiscount: number;
@@ -28,12 +29,14 @@ interface PricingTable extends Readonly<Record<ProductId, ProductPrice>> {
 export const PRICING: PricingTable = {
   crm: { name: 'KitStak CRM', unit: 'user', unitPlural: 'users', monthlyCents: 2900, max: 500 },
   wms: { name: 'KitStak WMS', unit: 'warehouse', unitPlural: 'warehouses', monthlyCents: 34900, max: 50 },
+  projects: { name: 'KitStak Projects', unit: 'user', unitPlural: 'users', monthlyCents: 1200, max: 500 },
   bundleDiscount: 0.2,
   annualDiscount: 0.15,
 };
 
 export interface QuoteInput {
-  readonly stack: StackChoice;
+  readonly stack: Stack;
+  /** People who sign in. Priced for every per-user product (the CRM and Projects share one sign-in). */
   readonly seats: number;
   readonly warehouses: number;
   readonly billing: Billing;
@@ -76,15 +79,19 @@ function line(product: ProductId, rawQuantity: number): QuoteLine {
   };
 }
 
-/** Monthly estimate for a stack. The CRM is priced per user, the WMS per warehouse. */
+/** True when the stack qualifies for the bundle discount. */
+export function isBundle(stack: Stack): boolean {
+  return stack.length >= 2;
+}
+
+/** Monthly estimate for a stack. The CRM and Projects are priced per user, the WMS per warehouse. */
 export function quote(input: QuoteInput): Quote {
-  const lines = [
-    ...(input.stack !== 'wms' ? [line('crm', input.seats)] : []),
-    ...(input.stack !== 'crm' ? [line('wms', input.warehouses)] : []),
-  ];
+  const lines = PRODUCT_IDS.filter((id) => input.stack.includes(id)).map((id) =>
+    line(id, id === 'wms' ? input.warehouses : input.seats),
+  );
 
   const listMonthlyCents = lines.reduce((sum, l) => sum + l.subtotalCents, 0);
-  const bundleSavingsCents = input.stack === 'both' ? Math.round(listMonthlyCents * PRICING.bundleDiscount) : 0;
+  const bundleSavingsCents = isBundle(input.stack) ? Math.round(listMonthlyCents * PRICING.bundleDiscount) : 0;
   const afterBundle = listMonthlyCents - bundleSavingsCents;
   const annualSavingsCents = input.billing === 'annual' ? Math.round(afterBundle * PRICING.annualDiscount) : 0;
 

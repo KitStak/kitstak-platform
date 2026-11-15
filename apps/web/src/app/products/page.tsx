@@ -8,18 +8,18 @@ import { Faq, FounderBand } from '@/components/product/cta';
 import type { FaqItem } from '@/components/product/cta';
 import { SubNav } from '@/components/product/sub-nav';
 import type { SubNavSection } from '@/components/product/sub-nav';
-import { Compare, Lineup, ProjectsTeaser, StackHero, StartSteps } from '@/components/products/products-sections';
+import { Compare, Lineup, StackHero, StartSteps } from '@/components/products/products-sections';
 import { BundleCalculator } from '@/components/stak/bundle-calculator';
 import styles from './products.module.css';
 
 export const metadata: Metadata = {
-  title: 'KitStak products — CRM, WMS, or both and save',
+  title: 'KitStak products — CRM, WMS and Projects, stacked to save',
   description:
-    'Compare KitStak CRM and KitStak WMS, see what you get when you run them together, and price your stack.',
+    'Compare KitStak CRM, KitStak WMS and KitStak Projects, see what you get when you run them together, and price your stack.',
   alternates: { canonical: '/products' },
   openGraph: {
     title: 'KitStak products',
-    description: 'A CRM, a WMS, or both on one stack.',
+    description: 'A CRM, a WMS and Projects on one stack.',
     url: 'https://kitstak.com/products',
     siteName: 'KitStak',
     type: 'website',
@@ -36,19 +36,19 @@ const SECTIONS: readonly SubNavSection[] = [
 
 const FAQ: readonly FaqItem[] = [
   {
-    question: 'Can I start with one product and add the other later?',
+    question: 'Can I start with one product and add the others later?',
     answer:
-      'Yes. Each product is licensed on its own. When you add the second one, your organization, your team and your customer list are already there, and the bundle price applies to both from then on.',
+      'Yes. Each product is licensed on its own. When you add a second one, your organization, your team and your customer list are already there, and the bundle price applies to every product from then on.',
   },
   {
-    question: 'What do the two products actually share?',
+    question: 'What do the products actually share?',
     answer:
-      'One sign-in, one launcher, one organization with its members, and one customer list. A CRM account can be linked to the customer your warehouse ships for, which puts on-hand stock and open shipment orders on the account page.',
+      'One sign-in, one launcher, one organization with its members, and one customer list. A CRM account can be linked to the customer your warehouse ships for, which puts on-hand stock and open shipment orders on the account page. A Projects task can be linked to a CRM deal or account, a customer, or a WMS order, work order, receipt or count, and shows where that record stands now.',
   },
   {
     question: 'How is each product priced?',
     answer:
-      'The CRM is priced per user and the WMS per warehouse. Running both takes a percentage off each, and paying yearly takes a further percentage off the total. The calculator on this page shows the arithmetic.',
+      'The CRM and Projects are priced per user and the WMS per warehouse. Running two or more takes a percentage off each, and paying yearly takes a further percentage off the total. The calculator on this page shows the arithmetic.',
   },
   {
     question: 'Do I have to talk to someone to get started?',
@@ -58,7 +58,7 @@ const FAQ: readonly FaqItem[] = [
   {
     question: 'Can I get help moving our data in?',
     answer:
-      'Both products import spreadsheets, and the setup plan points you at the right importer. For larger moves, book time with the founder and plan it together.',
+      'The CRM and the WMS import spreadsheets, and the setup plan points you at the right importer. Projects starts from templates that come with their tasks and dates. For larger moves, book time with the founder and plan it together.',
   },
 ];
 
@@ -90,7 +90,6 @@ export default function ProductsPage() {
         </section>
 
         <StartSteps />
-        <ProjectsTeaser />
         <Faq items={FAQ} />
         <FounderBand
           title="Rather be walked through it?"

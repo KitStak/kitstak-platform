@@ -78,10 +78,10 @@ export function ReadyView({ answers, account, estimate, headingRef, onEdit }: Re
 
       <aside className={styles.summary} data-static aria-label="Your Stak">
         <p className={styles.summaryTitle}>Your Stak</p>
-        <StakVisual stack={answers.focus} extras={answers.guided ? ['Guided setup'] : []} />
+        <StakVisual stack={answers.products} extras={answers.guided ? ['Guided setup'] : []} />
         {estimate ? (
           <div className={styles.estimate}>
-            <QuoteSummary quote={estimate} billing={answers.billing} isBundle={answers.focus === 'both'} />
+            <QuoteSummary quote={estimate} billing={answers.billing} />
           </div>
         ) : null}
       </aside>
