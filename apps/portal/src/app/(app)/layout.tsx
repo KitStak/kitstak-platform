@@ -82,7 +82,6 @@ export default async function AppLayout({ children }: { readonly children: React
               current="portal"
               urls={appUrls}
               entitled={entitled}
-              notInPlan={activeOrg && activeOrg.slug !== env.WMS_PLATFORM_ORG_SLUG ? ['wms'] : []}
             />
             <ThemeToggle />
             <UserMenu name={session.user.name} email={session.user.email} />

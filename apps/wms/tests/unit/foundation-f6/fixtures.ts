@@ -24,6 +24,10 @@ export async function sessionUserFor(db: SeededDb['db'], id: string): Promise<Se
     sessionId: 's-test',
     sessionVersion: row.sessionVersion,
     sessionExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    orgId: '00000000-0000-4000-8000-000000000000',
+    orgName: 'KitStak',
+    orgSlug: 'kitstak',
+    tenantSchema: 'wms',
   };
 }
 

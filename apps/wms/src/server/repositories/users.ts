@@ -11,8 +11,12 @@ import type { AppDb } from '@/server/api/db';
 import { AppError, fromZodError } from '@/server/api/errors';
 import type { AuthContext } from '@/server/auth/context';
 import {
+  assertIdentityManagedHere,
   clearLockoutState,
   deleteCredentialAccount,
+  findCoreUserIdByEmail,
+  identityManagedHere,
+  isWarehouseOrgMember,
   setCredentialPassword,
   upsertCoreIdentity,
 } from '@/server/auth/credentials';
@@ -315,6 +319,13 @@ async function assertEmailFree(db: AppDb, email: string, exceptId?: string): Pro
     throw duplicateError('email', `A user with ${email} already exists`);
 }
 
+/** An email change must not collide with ANY other KitStak account (core identities are shared). */
+async function assertCoreEmailFree(db: AppDb, email: string, userId: string): Promise<void> {
+  const holder = await findCoreUserIdByEmail(db, email);
+  if (holder && holder !== userId)
+    throw duplicateError('email', `${email} already belongs to another KitStak account`);
+}
+
 export async function assertPasswordPolicy(
   db: AppDb,
   password: string,
@@ -397,12 +408,22 @@ export async function createUser(
   ) {
     throw fieldError('roleIds', 'Only an administrator can assign the Admin role');
   }
+  // An existing KitStak account (e.g. invited to the org in the portal) is LINKED, keeping
+  // its id, name and credential; one that belongs only to other organizations is refused.
+  const existingId = await findCoreUserIdByEmail(tx, input.email);
+  if (existingId && !(await isWarehouseOrgMember(tx, existingId)))
+    throw fieldError(
+      'email',
+      'This email already has a KitStak account outside your organization. Invite them to your organization first, then add them here.',
+    );
+  const ownCredential = !existingId || (await identityManagedHere(tx, existingId));
   const now = new Date().toISOString();
   const legacyRole = legacyRoleFor(roles.map((r) => r.key));
   const row = (
     await tx
       .insert(u)
       .values({
+        ...(existingId ? { id: existingId } : {}),
         email: input.email.toLowerCase(),
         name: displayName(input.firstName, input.lastName),
         firstName: input.firstName.trim(),
@@ -427,7 +448,7 @@ export async function createUser(
     name: row.name,
     // An inactive user must not hold a live shared credential (CRM has no is_active
     // gate); admin reset issues it on activation, mirroring updateUser/resetUserPassword.
-    password: input.isActive ? input.password : undefined,
+    password: input.isActive && ownCredential ? input.password : undefined,
     legacyRole,
     userType: input.userType,
     isApiUser: false,
@@ -480,6 +501,13 @@ export async function updateUser(
   assertVersion(before.version, input.version);
   await assertEmailFree(tx, input.email, id);
   if (input.password) await assertPasswordPolicy(tx, input.password, input.email);
+  // A KitStak account shared with another org keeps its own password and email.
+  const managed = await identityManagedHere(tx, id);
+  if (!managed && input.password)
+    throw fieldError('password', "This person's KitStak account is shared with another organization; only they can change its password.");
+  if (!managed && input.email.toLowerCase() !== before.email.toLowerCase())
+    throw fieldError('email', "This person's KitStak account is shared with another organization; only they can change its email.");
+  if (input.email.toLowerCase() !== before.email.toLowerCase()) await assertCoreEmailFree(tx, input.email, id);
   const roles = await resolveRoles(tx, input.roleIds);
   await resolveWarehouses(tx, auth, input.warehouseIds);
   if (!input.allClients) await resolveClients(tx, input.clientIds);
@@ -548,15 +576,18 @@ export async function updateUser(
   // transition, so an edit of an ALREADY-inactive user also clears any credential a
   // concurrent writer (or an earlier bug) left behind. Runs AFTER upsertCoreIdentity so
   // a submitted password cannot resurrect the credential of an inactive user.
-  if (!input.isActive) await deleteCredentialAccount(tx, id);
+  // Shared accounts: deactivation is local to this warehouse (the session check rejects an
+  // inactive wms.users row) — their credential and other orgs' sessions are left alone.
+  if (!input.isActive && managed) await deleteCredentialAccount(tx, id);
 
   // Access, status or password changes end every session of the user (BUILD_PLAN F3 note).
   const accessChanged =
     prevAccess !== JSON.stringify([next.roles, next.warehouses, next.clients, input.isActive]) ||
     Boolean(input.password);
-  if (accessChanged && id !== auth.user.id) await bumpSessionVersion(tx, id);
+  const revoke = accessChanged && id !== auth.user.id && managed;
+  if (revoke) await bumpSessionVersion(tx, id);
   const version = (await loadUser(tx, id)).version;
-  return { id, version, sessionsRevoked: accessChanged && id !== auth.user.id };
+  return { id, version, sessionsRevoked: revoke };
 }
 
 /** Activate / deactivate many users; deactivation bumps the session version (logout next click). */
@@ -594,8 +625,11 @@ export async function setUsersActive(
     );
     // Reactivation clears the lockout but does NOT restore the deleted credential:
     // the admin must issue a password reset (auth review H3 — mirror of the delete below).
-    if (isActive) await clearLockoutState(inner, row.email);
-    if (!isActive) {
+    // Shared accounts: reactivation/deactivation stay local to this warehouse (see updateUser) —
+    // their lockout, credential and other orgs' sessions are not this warehouse's to touch.
+    const managed = await identityManagedHere(inner, id);
+    if (isActive && managed) await clearLockoutState(inner, row.email);
+    if (!isActive && managed) {
       // H3: revoking sessions is not enough — the shared credential row must go too,
       // or the deactivated user simply signs in again at crm.kitstak.io.
       await deleteCredentialAccount(inner, id);
@@ -638,6 +672,7 @@ export async function resetUserPassword(
       'INVALID_STATE',
       `${row.name} is inactive. Activate the user first, then reset their password.`,
     );
+  await assertIdentityManagedHere(tx, id, 'reset its password');
   const temporaryPassword = generateTemporaryPassword();
   await setCredentialPassword(tx, id, temporaryPassword, { passwordChangedAt: null });
   await tx
@@ -671,6 +706,8 @@ export async function userSessions(
   id: string,
 ): Promise<readonly UserSession[]> {
   await loadUser(db, id);
+  // A KitStak account shared with another org: its sessions (IPs, devices) are not ours to see.
+  if (!(await identityManagedHere(db, id))) return [];
   return (await listActiveSessions(db, id)).map((sess) => ({
     ...sess,
     isCurrent: sess.id === auth.user.sessionId,
@@ -684,6 +721,7 @@ export async function revokeUserSession(
   sessionId: string,
 ): Promise<{ revoked: boolean }> {
   await loadUser(tx, userId);
+  await assertIdentityManagedHere(tx, userId, 'end its sessions');
   const sess = (
     await tx
       .select({ userId: coreSession.userId })

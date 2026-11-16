@@ -27,6 +27,7 @@ everything from zero, in journal order.
 | `0002_core_onboarding.sql` | idx 2 | `core.onboarding_progress` (guided setup state shared by portal, CRM and WMS). |
 | `0003_core_password_change_required.sql` | idx 3 | `core.password_change_required`: users who must replace an administrator-set password. In force only while the stored hash still matches `core.account.password`. FK to `core."user"` guarded like `0001`. |
 | `0004_core_projects_module.sql` | idx 4 | Widens `core.entitlements_module_check` to `('crm', 'wms', 'projects')` for KitStak Projects. |
+| `0005_core_wms_tenants.sql` | idx 5 | `core.wms_tenants`: organization → the Postgres schema holding its WMS warehouse (`wms` for the platform org, `wms_<org hex>` for every other org). Registers the platform org's existing `wms` schema. Mirrored by `apps/wms/drizzle/0012_core_wms_tenants.sql`. |
 
 ## Conventions (§2.2)
 

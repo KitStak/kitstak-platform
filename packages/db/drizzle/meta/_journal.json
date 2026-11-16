@@ -36,6 +36,13 @@
       "when": 1794787200000,
       "tag": "0004_core_projects_module",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794873600000,
+      "tag": "0005_core_wms_tenants",
+      "breakpoints": true
     }
   ]
 }

@@ -104,6 +104,9 @@ export async function applyMigrations(
     await db.execute(sql.raw(`SET search_path TO ${APP_SEARCH_PATH}`));
   }
   const after = await countAppliedMigrations(db);
+  // Then the tenant stream: `wms` and every org's warehouse schema (src/server/tenancy).
+  const { applyTenantMigrations } = await import('../tenancy/migrations');
+  await applyTenantMigrations(db);
   return { applied: after - before, total };
 }
 

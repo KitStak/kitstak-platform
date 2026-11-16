@@ -24,7 +24,7 @@
 import { and, eq, ne, notInArray } from 'drizzle-orm';
 import { customers as coreCustomers, items as coreItems } from '@kitstak/db/schema';
 import type { AppDb } from '@/server/api/db';
-import { ensurePlatformOrg } from '@/server/auth/credentials';
+import { warehouseOrgId } from '@/server/auth/credentials';
 import * as s from '@/server/db/schema';
 
 /** Blank-padded WMS text fields become NULL in core (core columns are nullable). */
@@ -45,7 +45,7 @@ const asJson = (value: unknown): Record<string, unknown> =>
 export async function syncClientToCore(tx: AppDb, clientId: string, orgIdHint?: string): Promise<void> {
   const row = (await tx.select().from(s.clients).where(eq(s.clients.id, clientId)).limit(1))[0];
   if (!row) return;
-  const orgId = orgIdHint ?? (await ensurePlatformOrg(tx));
+  const orgId = orgIdHint ?? (await warehouseOrgId(tx));
   await tx
     .delete(coreCustomers)
     .where(
@@ -93,7 +93,7 @@ export async function syncProductToCore(
 ): Promise<string | null> {
   const row = (await tx.select().from(s.products).where(eq(s.products.id, productId)).limit(1))[0];
   if (!row) return null;
-  const orgId = orgIdHint ?? (await ensurePlatformOrg(tx));
+  const orgId = orgIdHint ?? (await warehouseOrgId(tx));
   const customer = (
     await tx
       .select({ id: coreCustomers.id })
@@ -148,7 +148,7 @@ export async function removeProductFromCore(tx: AppDb, coreItemId: string | null
  * (this org) whose source client no longer exists; the cascade removes their items.
  */
 export async function syncAllClientsToCore(tx: AppDb): Promise<void> {
-  const orgId = await ensurePlatformOrg(tx);
+  const orgId = await warehouseOrgId(tx);
   const ids = (await tx.select({ id: s.clients.id }).from(s.clients)).map((r) => r.id);
   await tx
     .delete(coreCustomers)
@@ -162,7 +162,7 @@ export async function syncAllClientsToCore(tx: AppDb): Promise<void> {
 
 /** Seed hook: mirrors every wms product into core.items (after syncAllClientsToCore). */
 export async function syncAllProductsToCore(tx: AppDb): Promise<void> {
-  const orgId = await ensurePlatformOrg(tx);
+  const orgId = await warehouseOrgId(tx);
   const ids = (await tx.select({ id: s.products.id }).from(s.products)).map((r) => r.id);
   for (const id of ids) await syncProductToCore(tx, id, orgId);
 }

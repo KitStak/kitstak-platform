@@ -48,7 +48,7 @@ export async function restoreSnapshot(
 
     const tables = await dbAll<{ t: string }>(
       tx,
-      sql`SELECT tablename AS t FROM pg_tables WHERE schemaname = 'wms'`,
+      sql`SELECT tablename AS t FROM pg_tables WHERE schemaname = 'wms' AND tablename <> '__tenant_migrations'`,
     );
     if (tables.length) {
       await tx.execute(

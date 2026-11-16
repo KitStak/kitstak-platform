@@ -4,10 +4,9 @@
  * Drizzle objects from `@kitstak/db`, queried over the app's own executor — both apps share
  * one Postgres, so no cross-service calls are involved.
  */
-import { and, asc, count, eq, ilike, inArray, isNull, notInArray, or, sql, sum, type SQL } from 'drizzle-orm';
-import { integer, pgSchema, text } from 'drizzle-orm/pg-core';
+import { and, asc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { customerLinks, customers as coreCustomers } from '@kitstak/db/schema';
-import { organization } from '@/server/db/schema';
+import { findWmsTenantSchema, wmsTable } from '@kitstak/db/wms-tenants';
 import { NotFoundError, ValidationError } from '@/server/http/errors';
 import { requireItem } from './access';
 import { inTransaction, type ServiceContext } from './context';
@@ -22,31 +21,13 @@ import type {
 const SEARCH_LIMIT = 50;
 
 /**
- * The org that owns the WMS deployment's client registry. The WMS has no org column of its
- * own: `syncClientToCore` mirrors every wms.clients row into core.customers under the
- * platform organization (apps/wms `PLATFORM_ORG_SLUG` — keep in sync).
- */
-const WMS_PLATFORM_ORG_SLUG = 'kitstak';
-
-/**
- * Orgs whose core.customers rows the caller may see and link. Always the caller's own org;
- * when that org carries no registry rows of its own (the bundled deployment, where the one
- * WMS mirrors its clients under the platform org), the shared platform registry as well.
- * Orgs with their own rows (true multi-tenant setups) stay strictly org-scoped.
+ * Orgs whose core.customers rows the caller may see and link: only the caller's own org.
+ * One separate warehouse per organization — each org's WMS mirrors ITS clients into
+ * core.customers under that org (apps/wms `syncClientToCore` → `warehouseOrgId`), so there
+ * is no shared platform registry to fall back to any more.
  */
 async function registryOrgIds(ctx: ServiceContext): Promise<string[]> {
-  const own = await ctx.db
-    .select({ id: coreCustomers.id })
-    .from(coreCustomers)
-    .where(and(eq(coreCustomers.orgId, ctx.orgId), isNull(coreCustomers.deletedAt)))
-    .limit(1);
-  if (own.length > 0) return [ctx.orgId];
-  const [platform] = await ctx.db
-    .select({ id: organization.id })
-    .from(organization)
-    .where(eq(organization.slug, WMS_PLATFORM_ORG_SLUG))
-    .limit(1);
-  return platform && platform.id !== ctx.orgId ? [ctx.orgId, platform.id] : [ctx.orgId];
+  return [ctx.orgId];
 }
 
 const customerColumns = {
@@ -62,51 +43,30 @@ const customerColumns = {
 // this service reads are declared.
 // ---------------------------------------------------------------------------------------------
 
-const wmsOps = pgSchema('wms');
-const wmsShipmentOrders = wmsOps.table('shipment_orders', {
-  clientId: text('client_id').notNull(),
-  status: text('status').notNull(),
-});
-const wmsInventory = wmsOps.table('inventory', {
-  clientId: text('client_id'),
-  onHand: integer('on_hand').notNull(),
-});
-
 /** Terminal shipment-order statuses (apps/wms `SO_STATUSES`); everything else counts as open. */
 const CLOSED_SO_STATUSES = ['Shipped', 'Delivered', 'Cancelled'];
 
-/** True when the WMS operational tables exist in this database (never throws). */
-async function wmsTablesAvailable(ctx: ServiceContext): Promise<boolean> {
-  const result = await ctx.db.execute<{ ok: boolean }>(
-    sql`select to_regclass('wms.shipment_orders') is not null and to_regclass('wms.inventory') is not null as ok`,
-  );
-  return result.rows[0]?.ok === true;
-}
-
 /**
- * Open shipment orders + on-hand units for a linked client. `core.customers.id` equals
- * `wms.clients.id` (write-through sync), so the core customer id is the WMS client id.
- * Fails soft to null so the link card degrades to identity-only when the WMS is absent.
+ * Open shipment orders + on-hand units for a linked client, read from the caller org's OWN
+ * warehouse schema (core.wms_tenants). `core.customers.id` equals the WMS `clients.id`
+ * (write-through sync), so the core customer id is the WMS client id. Fails soft to null so
+ * the link card degrades to identity-only when the org has no warehouse.
  */
 async function loadOpsPeek(ctx: ServiceContext, coreCustomerId: string): Promise<WmsOpsPeekDto | null> {
   try {
-    if (!(await wmsTablesAvailable(ctx))) return null;
-    const [orders] = await ctx.db
-      .select({ openOrders: count() })
-      .from(wmsShipmentOrders)
-      .where(
-        and(
-          eq(wmsShipmentOrders.clientId, coreCustomerId),
-          notInArray(wmsShipmentOrders.status, CLOSED_SO_STATUSES),
-        ),
-      );
-    const [stock] = await ctx.db
-      .select({ onHandUnits: sum(wmsInventory.onHand) })
-      .from(wmsInventory)
-      .where(eq(wmsInventory.clientId, coreCustomerId));
+    const schema = await findWmsTenantSchema(ctx.db, ctx.orgId);
+    if (!schema) return null;
+    const closed = sql.join(CLOSED_SO_STATUSES.map((status) => sql`${status}`), sql`, `);
+    const orders = await ctx.db.execute<{ n: unknown }>(
+      sql`select count(*) as n from ${wmsTable(schema, 'shipment_orders')}
+          where client_id = ${coreCustomerId} and status not in (${closed})`,
+    );
+    const stock = await ctx.db.execute<{ n: unknown }>(
+      sql`select coalesce(sum(on_hand), 0) as n from ${wmsTable(schema, 'inventory')} where client_id = ${coreCustomerId}`,
+    );
     return {
-      openOrders: Number(orders?.openOrders ?? 0),
-      onHandUnits: Number(stock?.onHandUnits ?? 0),
+      openOrders: Number(orders.rows[0]?.n ?? 0),
+      onHandUnits: Number(stock.rows[0]?.n ?? 0),
     };
   } catch {
     // Identity-only beats a broken card: swallow WMS-side read errors.

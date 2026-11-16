@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
 import { ShellSkeleton } from '@/components/layout/shell-skeleton';
+import { getSessionResolution } from '@/server/auth/session';
 import { loadShellProps } from '@/server/shell/shell-props';
 
 /**
@@ -11,7 +12,11 @@ import { loadShellProps } from '@/server/shell/shell-props';
  */
 async function AuthedShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const shell = await loadShellProps();
-  if (!shell) redirect('/login');
+  if (!shell) {
+    // Signed in, but no org of theirs has a warehouse yet: set one up (or explain who can).
+    const resolution = await getSessionResolution();
+    redirect(!resolution.ok && resolution.reason === 'no_warehouse' ? '/setup-warehouse' : '/login');
+  }
   return (
     <>
       {shell.brandCss ? <style data-brand="custom-branding">{shell.brandCss}</style> : null}
@@ -23,6 +28,8 @@ async function AuthedShell({ children }: Readonly<{ children: React.ReactNode }>
         entitledApps={shell.entitledApps}
         passwordChange={shell.passwordChange}
         idleMinutes={shell.idleMinutes}
+        org={shell.org}
+        orgs={shell.orgs}
       >
         {children}
       </AppShell>

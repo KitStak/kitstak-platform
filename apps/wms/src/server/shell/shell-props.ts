@@ -6,11 +6,11 @@
 import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import type { InitialShellContext } from '@/lib/context-label';
-import { getAppDb, type AppDb } from '@/server/api/db';
+import { getAppDb, getPlatformDb, type AppDb } from '@/server/api/db';
 import { getAuthContext } from '@/server/auth/context';
-import { entitlementsAllowAll, wmsModuleEntitled } from '@/server/auth/entitlements';
-import { ensurePlatformOrg } from '@/server/auth/credentials';
+import { entitlementsAllowAll, wmsModuleEntitledForOrg } from '@/server/auth/entitlements';
 import { hasModule, type EntitlementsDb } from '@kitstak/entitlements';
+import { accessibleWmsOrgs } from '@/server/auth/session-store';
 import { getPasswordPolicy, isPasswordExpired } from '@/server/auth/password-policy';
 import { users } from '@/server/db/schema';
 import { getSessionIdleMinutes } from '@/server/repositories/company';
@@ -38,15 +38,17 @@ export interface ShellProps {
   readonly idleMinutes: number | null;
   /** Custom Branding: CSS re-pointing the primary tokens at the brand accent (null = default theme). */
   readonly brandCss?: string | null;
-  /** KitStak module unlock state for the platform org (shared app switcher). */
+  /** KitStak module unlock state for the request's org (shared app switcher). */
   readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  /** The organization whose warehouse is open, and every org warehouse the user can switch to. */
+  readonly org?: { readonly id: string; readonly name: string };
+  readonly orgs?: readonly { readonly id: string; readonly name: string }[];
 }
 
-/** Sibling modules the platform org holds (allow-all outside production, like the WMS gate). */
-async function loadEntitledApps(db: AppDb): Promise<NonNullable<ShellProps['entitledApps']>> {
+/** Sibling modules the org holds (allow-all outside production, like the WMS gate). */
+async function loadEntitledApps(db: AppDb, orgId: string): Promise<NonNullable<ShellProps['entitledApps']>> {
   if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true };
   try {
-    const orgId = await ensurePlatformOrg(db);
     const check = (module: 'crm' | 'projects') => hasModule(db as unknown as EntitlementsDb, orgId, module).catch(() => false);
     const [crm, projects] = await Promise.all([check('crm'), check('projects')]);
     return { crm, wms: true, projects };
@@ -94,9 +96,11 @@ export async function loadShellProps(): Promise<ShellProps | null> {
   if (!auth) return null;
   const user = { id: auth.user.id, name: auth.user.name, email: auth.user.email, role: auth.user.role };
   const db = await getAppDb();
-  // Module entitlement gate (BLUEPRINT.md §3.3): signed-in but unentitled installs land
+  const platformDb = await getPlatformDb();
+  // Module entitlement gate (BLUEPRINT.md §3.3): signed-in users of an unentitled org land
   // on the branded /locked page instead of the shell (dev/test default to allow-all).
-  if (!(await wmsModuleEntitled(db))) redirect('/locked');
+  if (!(await wmsModuleEntitledForOrg(platformDb, auth.user.orgId))) redirect('/locked');
+  const orgs = (await accessibleWmsOrgs(platformDb, auth.user.id)).map((o) => ({ id: o.orgId, name: o.name }));
   const initialContext = await loadInitialShellContext(db, auth);
   return {
     user,
@@ -106,6 +110,8 @@ export async function loadShellProps(): Promise<ShellProps | null> {
     passwordChange: await loadPasswordChange(db, auth.user.id),
     idleMinutes: await getSessionIdleMinutes(db),
     brandCss: await loadBrandCss(db),
-    entitledApps: await loadEntitledApps(db),
+    entitledApps: await loadEntitledApps(platformDb, auth.user.orgId),
+    org: { id: auth.user.orgId, name: auth.user.orgName },
+    orgs,
   };
 }

@@ -26,6 +26,7 @@ import { RouteProgress } from './route-progress';
 import { SetupCallout } from './setup-callout';
 import { ShellProvider, useShell, useShellAllows, type ShellUser } from './shell-context';
 import { TransactionsTray } from './transactions-tray';
+import { OrgSwitcher, type OrgRef } from './org-switcher';
 import { UserMenu } from './user-menu';
 
 /**
@@ -74,7 +75,7 @@ const APP_URLS = {
   projects: process.env.NEXT_PUBLIC_PROJECTS_URL ?? 'http://localhost:3400',
 } as const;
 
-function TopBar() {
+function TopBar({ org, orgs }: { readonly org?: OrgRef; readonly orgs?: readonly OrgRef[] }) {
   const { permissions, activeApps: ssrApps, entitledApps } = useShell();
   const allows = useShellAllows();
   // `/api/me` refreshes the active add-on apps after Settings → Apps changes; SSR value until then.
@@ -99,6 +100,7 @@ function TopBar() {
             handheld screens (360-400 px) never scroll sideways (counts REQ-22). */}
         <div className="ml-auto flex min-w-0 items-center gap-1.5">
           <GlobalSearch menus={menus} extraPages={extraPages} />
+          <OrgSwitcher org={org} orgs={orgs} />
           <ContextSwitcher />
           <div className="flex min-w-0 items-center gap-0.5">
             <span className="hidden sm:contents">
@@ -140,6 +142,8 @@ export function AppShell({
   entitledApps,
   passwordChange = null,
   idleMinutes = null,
+  org,
+  orgs,
   children,
 }: {
   readonly user: ShellUser;
@@ -149,6 +153,9 @@ export function AppShell({
   readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
   readonly passwordChange?: 'reset' | 'expired' | null;
   readonly idleMinutes?: number | null;
+  /** The organization whose warehouse is open, and the others the user can switch to. */
+  readonly org?: OrgRef;
+  readonly orgs?: readonly OrgRef[];
   readonly children: React.ReactNode;
 }) {
   return (
@@ -167,7 +174,7 @@ export function AppShell({
           >
             Skip to content
           </a>
-          <TopBar />
+          <TopBar org={org} orgs={orgs} />
           {/* lg:pr-6 reserves a gutter as wide as the fixed (w-6) "Feedback" side tab so it never covers grid action columns. */}
           <main id="main-content" className="flex min-h-0 flex-1 flex-col lg:pr-6 print:pr-0">
             <SetupCallout />

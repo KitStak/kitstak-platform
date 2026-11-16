@@ -11,7 +11,10 @@ import {
 import { defaultGridPrefs } from '@/components/grid/grid-prefs';
 import { gridPrefsPutBody } from '@/components/grid/use-grid-prefs';
 
-vi.mock('@/server/api/db', () => ({ getAppDb: async () => current().db }));
+vi.mock('@/server/api/db', () => {
+  const get = async () => current().db;
+  return { getAppDb: get, getPlatformDb: get, getTenantDbFor: get };
+});
 
 const prefsRoute = await import('@/app/api/grid-prefs/[gridKey]/route');
 

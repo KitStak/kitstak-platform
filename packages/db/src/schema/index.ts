@@ -19,3 +19,4 @@ export * from './core/onboarding';
 export * from './core/password-change';
 export * from './core/links';
 export * from './core/wms-profiles';
+export * from './core/wms-tenants';

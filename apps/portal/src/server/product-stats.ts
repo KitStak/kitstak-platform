@@ -8,6 +8,7 @@
  */
 import 'server-only';
 import { sql } from 'drizzle-orm';
+import { findWmsTenantSchema, wmsTable } from '@kitstak/db/wms-tenants';
 import { db } from '@/server/db';
 
 export interface TileStat {
@@ -69,9 +70,14 @@ async function crmStats(orgId: string): Promise<readonly TileStat[] | null> {
   }
 }
 
-/** Open (not yet shipped/cancelled) shipment orders + orders shipped today. */
-async function wmsStats(): Promise<readonly TileStat[] | null> {
+/**
+ * Open (not yet shipped/cancelled) shipment orders + orders shipped today, from THIS org's
+ * own warehouse (one separate warehouse per organization); null when it has none.
+ */
+async function wmsStats(orgId: string): Promise<readonly TileStat[] | null> {
   try {
+    const schema = await findWmsTenantSchema(db, orgId);
+    if (!schema) return null;
     const result = await db.execute<{ open_orders: unknown; shipped_today: unknown }>(sql`
       select
         count(*) filter (
@@ -81,7 +87,7 @@ async function wmsStats(): Promise<readonly TileStat[] | null> {
           where shipped_at is not null
             and left(shipped_at, 10) = to_char(now(), 'YYYY-MM-DD')
         ) as shipped_today
-      from wms.shipment_orders
+      from ${wmsTable(schema, 'shipment_orders')}
     `);
     const row = result.rows[0];
     if (!row) return null;
@@ -146,7 +152,7 @@ async function projectsStats(orgId: string): Promise<readonly TileStat[] | null>
 
 /** Every tile's stats in parallel; a failed side degrades to `null`, never throws. */
 export async function getLauncherStats(orgId: string): Promise<LauncherStats> {
-  const [crm, wms, projects] = await Promise.all([crmStats(orgId), wmsStats(), projectsStats(orgId)]);
+  const [crm, wms, projects] = await Promise.all([crmStats(orgId), wmsStats(orgId), projectsStats(orgId)]);
   return { crm, wms, projects };
 }
 

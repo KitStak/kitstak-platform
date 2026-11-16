@@ -71,7 +71,7 @@ const TAGS: readonly (readonly [string, string, NonNullable<(typeof schema.tags.
     ['Return to Vendor', '#B20B1C', 'return_order'],
   ];
 
-async function seedPrintouts(tx: Tx): Promise<number> {
+export async function seedPrintouts(tx: Tx): Promise<number> {
   for (const t of PRINT_TYPES) {
     await tx.insert(schema.printoutTemplates).values({
       typeKey: t.key,

@@ -15,7 +15,6 @@ import {
   listLinkedWork,
   listOrgPeople,
   listWritableProjects,
-  orgIdForSlug,
   pmAvailability,
   removeLink,
   rowsOf,
@@ -32,7 +31,7 @@ import { sql } from 'drizzle-orm';
 import type { AppDb } from '@/server/api/db';
 import { AppError, notFoundError } from '@/server/api/errors';
 import type { AuthContext } from '@/server/auth/context';
-import { PLATFORM_ORG_SLUG } from '@/server/auth/credentials';
+import { warehouseOrgId } from '@/server/auth/credentials';
 import { entitlementsAllowAll } from '@/server/auth/entitlements';
 import { assertInScope } from '@/server/auth/scope';
 import * as schema from '@/server/db/schema';
@@ -64,7 +63,6 @@ export interface CreateRecordTaskInput {
 
 const EMPTY: LinkedWork = { projects: [], tasks: [], openTasks: 0 };
 const ORG_TTL_MS = 5 * 60_000;
-let platformOrg: { readonly id: string | null; readonly at: number } | null = null;
 
 const bridgeDb = (db: AppDb) => db as unknown as BridgeExecutor;
 
@@ -72,11 +70,13 @@ export function projectsUrl(): string {
   return (process.env.NEXT_PUBLIC_PROJECTS_URL || 'http://localhost:3400').replace(/\/+$/, '');
 }
 
+/** The org owning this handle's warehouse (one separate warehouse per organization). */
 async function platformOrgId(db: AppDb): Promise<string | null> {
-  if (platformOrg && Date.now() - platformOrg.at < ORG_TTL_MS) return platformOrg.id;
-  const id = await orgIdForSlug(bridgeDb(db), PLATFORM_ORG_SLUG);
-  platformOrg = { id, at: Date.now() };
-  return id;
+  try {
+    return await warehouseOrgId(db);
+  } catch {
+    return null;
+  }
 }
 
 async function isMember(db: AppDb, orgId: string, userId: string): Promise<boolean> {

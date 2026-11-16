@@ -10,6 +10,7 @@
     "./schema/core/auth-policy": "./src/schema/core/auth-policy.ts",
     "./schema/core/rate-limit": "./src/schema/core/rate-limit.ts",
     "./password-change": "./src/password-change.ts",
+    "./wms-tenants": "./src/wms-tenants.ts",
     "./client-pg": "./src/client-pg.ts",
     "./client-postgres-js": "./src/client-postgres-js.ts"
   },

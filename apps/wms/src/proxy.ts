@@ -55,7 +55,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   if (hasSession && isDocumentRequest(request.method, request.headers)) {
     // Real 403/404 statuses for document loads; the page still renders its in-shell view.
-    const status = await documentStatusFor(pathname);
+    const status = await documentStatusFor(pathname, undefined, request.headers);
     if (status) return NextResponse.next({ status });
   }
   if (isPublicPath(pathname) || hasSession) {

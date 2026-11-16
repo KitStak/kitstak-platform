@@ -255,6 +255,7 @@ export async function seedAccess(tx: Tx, org: OrgRefs, password: string): Promis
     // goes into core.account verbatim — the shared passwordCompat verifier accepts it,
     // which also exercises the WMS-migration verify path on every demo sign-in.
     await upsertCoreIdentity(tx, {
+      replaceEmailClash: true,
       userId: id,
       email: u.email,
       name,

@@ -19,13 +19,14 @@
 import 'server-only';
 import { displayText } from '@kitstak/ui/text';
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import { wmsTable } from '@kitstak/db/wms-tenants';
 import { db } from '@/server/db';
 import { appUrls } from '@/server/env';
 import { integrationLinks } from '@/server/db/schema';
 import type { DomainContext } from '@/server/domain/_shared';
 import { crmItemUrl } from './crm';
 import { getCustomers } from './customers';
-import { integrationAvailability, tableExists } from './detect';
+import { integrationAvailability, tableExists, wmsSchemaFor, wmsTableExists } from './detect';
 
 export interface Customer360Person {
   readonly id: string;
@@ -341,17 +342,21 @@ const OPEN_RECEIPT = ['Pending', 'Started', 'Open', 'In Progress', 'Receiving'];
 /** WMS stores timestamps as ISO text; empty strings read as null. */
 const ts = (column: string) => sql.raw(`nullif(${column}, '')::timestamptz`);
 
-async function wmsPart(customer: { id: string; code: string }): Promise<Customer360['wms']> {
+/** WMS side of the strip, read from the request org's own warehouse schema (null without one). */
+async function wmsPart(ctx: DomainContext, customer: { id: string; code: string }): Promise<Customer360['wms']> {
   try {
+    const schema = await wmsSchemaFor(ctx);
+    if (!schema) return null;
+    const t = (table: string) => wmsTable(schema, table);
     const client = await db.execute<{ id: string }>(
-      sql`select id::text as id from wms.clients where id::text = ${customer.id} or code = ${customer.code} order by (id::text = ${customer.id}) desc limit 1`,
+      sql`select id::text as id from ${t('clients')} where id::text = ${customer.id} or code = ${customer.code} order by (id::text = ${customer.id}) desc limit 1`,
     );
     const clientId = client.rows[0]?.id;
     if (!clientId) return null;
     const [hasShortages, hasAllocExceptions, hasReceipts] = await Promise.all([
-      tableExists('wms.order_line_shortages'),
-      tableExists('wms.allocation_exceptions'),
-      tableExists('wms.receipts'),
+      wmsTableExists(schema, 'order_line_shortages'),
+      wmsTableExists(schema, 'allocation_exceptions'),
+      wmsTableExists(schema, 'receipts'),
     ]);
     const result = await db.execute<{
       open_orders: number;
@@ -366,36 +371,36 @@ async function wmsPart(customer: { id: string; code: string }): Promise<Customer
       skus_30: number;
     }>(sql`
       select
-        (select count(*)::int from wms.shipment_orders where client_id::text = ${clientId} and deleted_at is null
+        (select count(*)::int from ${t('shipment_orders')} where client_id::text = ${clientId} and deleted_at is null
            and status <> all(${sql.param(CLOSED_ORDER)}::text[])) as open_orders,
-        (select count(*)::int from wms.shipment_orders where client_id::text = ${clientId} and deleted_at is null
+        (select count(*)::int from ${t('shipment_orders')} where client_id::text = ${clientId} and deleted_at is null
            and status = any(${sql.param(EXCEPTION_ORDER)}::text[])) as exception_orders,
         ${
           hasShortages
-            ? sql`(select count(*)::int from wms.order_line_shortages s join wms.shipment_orders o on o.id = s.order_id
+            ? sql`(select count(*)::int from ${t('order_line_shortages')} s join ${t('shipment_orders')} o on o.id = s.order_id
                     where o.client_id::text = ${clientId} and o.deleted_at is null and s.resolved_at is null
                       and o.status <> all(${sql.param(CLOSED_ORDER)}::text[]))`
             : sql`0`
         } as shortages,
         ${
           hasAllocExceptions
-            ? sql`(select count(distinct order_id)::int from wms.allocation_exceptions
+            ? sql`(select count(distinct order_id)::int from ${t('allocation_exceptions')}
                     where client_id::text = ${clientId} and is_rolled_back is not true and ${ts('run_at')} >= now() - interval '30 days')`
             : sql`0`
         } as alloc_exceptions,
-        (select count(*)::int from wms.shipment_orders where client_id::text = ${clientId} and deleted_at is null
+        (select count(*)::int from ${t('shipment_orders')} where client_id::text = ${clientId} and deleted_at is null
            and status = any(${sql.param(SHIPPED)}::text[]) and ${ts('shipped_at')} >= now() - interval '7 days') as shipped_7,
-        (select count(*)::int from wms.shipment_orders where client_id::text = ${clientId} and deleted_at is null
+        (select count(*)::int from ${t('shipment_orders')} where client_id::text = ${clientId} and deleted_at is null
            and status = any(${sql.param(SHIPPED)}::text[]) and ${ts('shipped_at')} >= now() - interval '30 days') as shipped_30,
-        (select max(${ts('shipped_at')})::text from wms.shipment_orders where client_id::text = ${clientId} and deleted_at is null) as last_shipped,
-        (select count(*)::int from wms.purchase_orders where client_id::text = ${clientId}
+        (select max(${ts('shipped_at')})::text from ${t('shipment_orders')} where client_id::text = ${clientId} and deleted_at is null) as last_shipped,
+        (select count(*)::int from ${t('purchase_orders')} where client_id::text = ${clientId}
            and status = any(${sql.param(OPEN_RECEIPT)}::text[])) as open_receipts,
-        (select count(*)::int from wms.purchase_orders where client_id::text = ${clientId}
+        (select count(*)::int from ${t('purchase_orders')} where client_id::text = ${clientId}
            and status = any(${sql.param(OPEN_RECEIPT)}::text[]) and received_quantity < total_quantity
            and ${ts('expected_date')} < now()) as late_receipts,
         ${
           hasReceipts
-            ? sql`(select count(distinct product_id)::int from wms.receipts
+            ? sql`(select count(distinct product_id)::int from ${t('receipts')}
                     where client_id::text = ${clientId} and cancelled_at is null and ${ts('received_at')} >= now() - interval '30 days')`
             : sql`0`
         } as skus_30`);
@@ -407,7 +412,7 @@ async function wmsPart(customer: { id: string; code: string }): Promise<Customer
         select id, code, status, ${ts('expected_date')}::text as expected,
                coalesce(${ts('completed_at')}, ${ts('received_at')})::text as received,
                (status = any(${sql.param(OPEN_RECEIPT)}::text[]) and received_quantity < total_quantity and ${ts('expected_date')} < now()) as late
-          from wms.purchase_orders
+          from ${t('purchase_orders')}
          where client_id::text = ${clientId} and status <> 'Cancelled'
          order by (status = any(${sql.param(OPEN_RECEIPT)}::text[]) and received_quantity < total_quantity and ${ts('expected_date')} < now()) desc,
                   case when status = any(${sql.param(OPEN_RECEIPT)}::text[]) and ${ts('expected_date')} < now() then ${ts('expected_date')} end asc nulls last,
@@ -535,7 +540,7 @@ export async function customer360(
   ]);
   customerId = customerId ?? crm.customerFromAccount;
   const customer = customerId ? ((await getCustomers(ctx, [customerId])).get(customerId) ?? null) : null;
-  const wms = customer && availability.wms ? await wmsPart(customer) : null;
+  const wms = customer && availability.wms ? await wmsPart(ctx, customer) : null;
   const risks = await risksFor(project.id, crm.crm, wms, checkedAt.slice(0, 10));
   return {
     available: { crm: availability.crm, wms: availability.wms },

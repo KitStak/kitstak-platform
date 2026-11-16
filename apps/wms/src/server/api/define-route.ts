@@ -29,7 +29,8 @@ import { CONTEXT_CLIENT_COOKIE, CONTEXT_WAREHOUSE_COOKIE } from '@/server/auth/s
 import { getRequestSession, readCookie } from '@/server/auth/session';
 import { log } from '@/server/log';
 import { parseGridQuery, type GridQuery } from '@/server/query/grid-query';
-import { getAppDb, type AppDb } from './db';
+import { getPlatformDb, getTenantDbFor, type AppDb } from './db';
+import { runWithTenant } from '@/server/tenancy/request';
 import { withWriteTx } from '@/server/db/sql';
 import { jsonError, jsonOk, isRouteResult } from './envelope';
 import { AppError, forbiddenError, fromZodError, toAppError, unauthenticatedError } from './errors';
@@ -142,10 +143,14 @@ function toResponse(value: unknown, requestId: string, auth: AuthContext | null)
 
 interface Guarded {
   readonly auth: AuthContext | null;
+  /** The request's warehouse handle (the platform handle for anonymous requests). */
+  readonly db: AppDb;
+  /** The request's warehouse schema, when signed in. */
+  readonly tenantSchema: string | null;
 }
 
 async function guard(
-  db: AppDb,
+  platformDb: AppDb,
   request: NextRequest,
   config: {
     auth?: AuthMode;
@@ -156,14 +161,25 @@ async function guard(
   meta: { ip: string; rateIp: string; userAgent: string | null; route: string },
 ): Promise<Guarded> {
   const mutation = !isSafeMethod(request.method);
-  const session = await getRequestSession(db, request);
+  const session = await getRequestSession(platformDb, request);
   const required = (config.auth ?? 'required') === 'required';
-  if (required && !session.ok) throw unauthenticatedError();
+  if (required && !session.ok) {
+    // Signed in, but no org of theirs has a warehouse: not a sign-in problem.
+    if (session.reason === 'no_warehouse')
+      throw forbiddenError('Your organization does not have a KitStak WMS warehouse yet');
+    throw unauthenticatedError();
+  }
 
-  // Module entitlement gate (BLUEPRINT.md §3.3): the platform org must hold the `wms`
+  // One separate warehouse per organization: everything below runs on the session org's
+  // schema (the platform handle for the platform org and for anonymous requests).
+  const tenantSchema = session.ok ? session.user.tenantSchema : null;
+  const db = tenantSchema && tenantSchema !== 'wms' ? await getTenantDbFor(tenantSchema) : platformDb;
+
+  // Module entitlement gate (BLUEPRINT.md §3.3): the request's org must hold the `wms`
   // module. `auth: 'public'` routes and the exempt paths (health, cron tick, bootstrap)
   // skip; dev/test default to allow-all (see @/server/auth/entitlements).
-  if (required) await requireWmsEntitlement(db, new URL(request.url).pathname);
+  if (required && session.ok)
+    await requireWmsEntitlement(platformDb, session.user.orgId, new URL(request.url).pathname);
 
   const auth = session.ok
     ? await buildAuthContext(db, session.user, {
@@ -210,7 +226,7 @@ async function guard(
       });
     }
   }
-  return { auth };
+  return { auth, db, tenantSchema };
 }
 
 export function defineRoute<
@@ -233,8 +249,13 @@ export function defineRoute<
     let errorForLog: unknown;
 
     try {
-      const db = await getAppDb();
-      const { auth } = await guard(db, request, config, { ip, rateIp, userAgent, route });
+      const platformDb = await getPlatformDb();
+      const { auth, db, tenantSchema } = await guard(platformDb, request, config, {
+        ip,
+        rateIp,
+        userAgent,
+        route,
+      });
       userId = auth?.user.id ?? null;
 
       const rawParams = segment ? await segment.params : {};
@@ -285,11 +306,14 @@ export function defineRoute<
       // The viewer's UTC offset (x-tz-offset) scopes grid date chips to local days for this request.
       const tzOffset = parseTzOffset(request.headers.get(TZ_OFFSET_HEADER));
       // Mutations: one transaction holding the app write lock (withWriteTx = db.transaction + takeWriteLock).
-      const value = await runWithTzOffset(tzOffset, async () =>
-        useTx
-          ? await withWriteTx(db, async (tx) => await config.handler(makeCtx(tx)))
-          : await config.handler(makeCtx(db)),
-      );
+      const run = async () =>
+        await runWithTzOffset(tzOffset, async () =>
+          useTx
+            ? await withWriteTx(db, async (tx) => await config.handler(makeCtx(tx)))
+            : await config.handler(makeCtx(db)),
+        );
+      // Bind the warehouse so getAppDb() anywhere below (incl. after()) resolves the same org.
+      const value = tenantSchema ? await runWithTenant(tenantSchema, run) : await run();
 
       const response = toResponse(value, requestId, auth);
       status = response.status;

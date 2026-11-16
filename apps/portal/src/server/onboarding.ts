@@ -7,6 +7,7 @@
 import 'server-only';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { invitation, member, onboardingProgress } from '@kitstak/db/schema';
+import { findWmsTenantSchema, wmsTable } from '@kitstak/db/wms-tenants';
 import { db } from '@/server/db';
 import { env } from '@/server/env';
 import { getOrgModuleStates } from '@/server/entitlements';
@@ -75,6 +76,12 @@ function wmsStepsEligible(
 }
 
 async function getSetupSignals(orgId: string, orgSlug: string): Promise<SetupSignals> {
+  // One separate warehouse per organization: count THIS org's warehouse (none yet → 0).
+  const wmsSchema = await findWmsTenantSchema(db, orgId).catch(() => null);
+  const wmsCount = (table: string, label: string): Promise<number | null> =>
+    wmsSchema
+      ? countOrNull(sql`select count(*) as n from ${wmsTable(wmsSchema, table)}`, label)
+      : Promise.resolve(0);
   const [team, moduleStates, crmBoards, crmDeals, wmsWarehouses, wmsProducts, wmsOrders, pm] =
     await Promise.all([
       teamSignals(orgId),
@@ -92,11 +99,9 @@ async function getSetupSignals(orgId: string, orgSlug: string): Promise<SetupSig
               and i.deleted_at is null and i.parent_item_id is null`,
         'crm deals',
       ),
-      // WMS installs are single-tenant (platform org); counts are not org-scoped, matching
-      // product-stats.ts.
-      countOrNull(sql`select count(*) as n from wms.warehouses`, 'wms warehouses'),
-      countOrNull(sql`select count(*) as n from wms.products`, 'wms products'),
-      countOrNull(sql`select count(*) as n from wms.shipment_orders`, 'wms orders'),
+      wmsCount('warehouses', 'wms warehouses'),
+      wmsCount('products', 'wms products'),
+      wmsCount('shipment_orders', 'wms orders'),
       projectsSignals(orgId),
     ]);
   const moduleState = (module: 'crm' | 'wms') =>

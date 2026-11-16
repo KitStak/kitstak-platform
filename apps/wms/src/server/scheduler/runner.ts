@@ -6,6 +6,10 @@
  *   and a database lease row, so only one server instance runs tasks at a time.
  * - Each configured task runs when its interval has elapsed since its last start; a
  *   failing task is recorded and logged and never stops the others.
+ * - One separate warehouse per organization: the lease lives in the platform schema; tasks
+ *   then run once per warehouse (`listDbs`: the platform `wms` handle and each org's tenant
+ *   handle), each warehouse with its own task-run ledger, so one org's failure never stops
+ *   another's.
  */
 import type { AppDb } from '@/server/api/db';
 import { withWriteTx } from '@/server/db/sql';
@@ -31,6 +35,8 @@ export interface TickResult {
     readonly key: string;
     readonly status: 'ok' | 'skipped' | 'error';
     readonly message?: string;
+    /** The warehouse schema it ran in (omitted for the platform `wms`). */
+    readonly schema?: string;
   }[];
   readonly error?: string;
 }
@@ -46,7 +52,10 @@ export interface SchedulerHeartbeat {
 }
 
 export interface RunnerOptions {
+  /** The platform handle (lease + platform warehouse). */
   readonly getDb: () => Promise<AppDb> | AppDb;
+  /** Every warehouse to run tasks in, platform first (default: just `getDb()`). */
+  readonly listDbs?: () => Promise<readonly { readonly schema: string; readonly db: AppDb }[]>;
   readonly tasks: readonly SchedulerTask[];
   readonly ownerId: string;
   readonly intervalMs?: number;
@@ -89,7 +98,12 @@ export function createSchedulerRunner(options: RunnerOptions): SchedulerRunner {
   let inFlight: Promise<TickResult> | null = null;
   let startedAt: string | null = null;
   let lastTick: TickResult | null = null;
-  let tablesReady = false;
+  const tablesReady = new WeakSet<object>();
+  const ensureTables = async (db: AppDb): Promise<void> => {
+    if (tablesReady.has(db)) return;
+    await ensureSchedulerTables(db);
+    tablesReady.add(db);
+  };
 
   const runTask = async (db: AppDb, task: SchedulerTask): Promise<TickResult['ran'][number]> => {
     await markTaskStarted(db, task.key, now());
@@ -118,17 +132,25 @@ export function createSchedulerRunner(options: RunnerOptions): SchedulerRunner {
     const at = now().toISOString();
     try {
       const db = await options.getDb();
-      if (!tablesReady) {
-        await ensureSchedulerTables(db);
-        tablesReady = true;
-      }
+      await ensureTables(db);
       if (!(await acquireLease(db, options.ownerId, now(), leaseTtlMs)))
         return { at, status: 'lease-held', ran: [] };
       try {
-        const runs = await readTaskRuns(db);
+        const targets = options.listDbs ? await options.listDbs() : [{ schema: 'wms', db }];
         const ran: TickResult['ran'][number][] = [];
-        for (const task of options.tasks) {
-          if (isTaskDue(task, runs.get(task.key), now())) ran.push(await runTask(db, task));
+        for (const target of targets) {
+          try {
+            await ensureTables(target.db);
+            const runs = await readTaskRuns(target.db);
+            for (const task of options.tasks) {
+              if (!isTaskDue(task, runs.get(task.key), now())) continue;
+              const result = await runTask(target.db, task);
+              ran.push(target.schema === 'wms' ? result : { ...result, schema: target.schema });
+            }
+          } catch (error: unknown) {
+            // One warehouse's broken state never stops the others.
+            logger.error('scheduler warehouse failed', { schema: target.schema, err: error });
+          }
         }
         return { at, status: 'ran', ran };
       } finally {

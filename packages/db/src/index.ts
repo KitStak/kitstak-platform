@@ -5,3 +5,4 @@
  * `@kitstak/db/client-postgres-js` (postgres-js, prepare:false, WMS style).
  */
 export * from './schema/index';
+export * from './wms-tenants';

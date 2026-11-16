@@ -15,7 +15,10 @@ import {
 } from './harness';
 import { mapSeq } from '@/server/db/sql';
 
-vi.mock('@/server/api/db', () => ({ getAppDb: async () => current().db }));
+vi.mock('@/server/api/db', () => {
+  const get = async () => current().db;
+  return { getAppDb: get, getPlatformDb: get, getTenantDbFor: get };
+});
 
 const KEYS = [
   'locations',

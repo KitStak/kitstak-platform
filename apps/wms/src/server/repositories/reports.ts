@@ -1,5 +1,6 @@
 import { eq, gt, isNotNull } from 'drizzle-orm';
-import { getDb, schema } from '@/server/db';
+import { schema } from '@/server/db';
+import { getAppDb } from '@/server/api/db';
 import { listTotalInventory, type InventoryListParams, type TotalInventoryRow } from './inventory';
 import { offsetOf, type ListResult } from './shared';
 
@@ -45,7 +46,7 @@ export interface TransactionHistoryParams {
 export async function getTransactionHistory(
   params: TransactionHistoryParams,
 ): Promise<ListResult<TransactionRow>> {
-  const db = await getDb();
+  const db = await getAppDb();
   const shipments: TransactionRow[] = (
     await db
       .select({

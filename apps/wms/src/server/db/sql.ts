@@ -61,8 +61,8 @@ export async function dbRun(db: AppDb, query: SQL): Promise<{ readonly rowCount:
 }
 
 /**
- * The one app-wide advisory-lock key. Every write transaction takes it first, which
- * reproduces SQLite's single-writer semantics (allocation, ledger, sequences and
+ * The app-wide advisory-lock key (per warehouse schema, see takeWriteLock). Every write
+ * transaction takes it first, which reproduces SQLite's single-writer semantics (allocation, ledger, sequences and
  * "check then insert" logic stay correct without per-site locking).
  */
 export const WRITE_LOCK_KEY = 7_202_611_501;
@@ -87,7 +87,9 @@ export async function takeWriteLock(tx: AppDb, waitMs: number = WRITE_LOCK_WAIT_
   for (;;) {
     const row = await dbGet<{ locked: boolean }>(
       tx,
-      sql`SELECT pg_try_advisory_xact_lock(${sql.raw(String(WRITE_LOCK_KEY))}) AS locked`,
+      // Per warehouse: the platform `wms` schema keeps the bare key; each other org's schema
+      // (the transaction's current_schema(), pinned by the tenant handle) gets its own lock.
+      sql`SELECT pg_try_advisory_xact_lock(${sql.raw(String(WRITE_LOCK_KEY))}::bigint # (CASE WHEN current_schema() = 'wms' THEN 0 ELSE hashtext(current_schema())::bigint << 32 END)) AS locked`,
     );
     if (row?.locked) return;
     if (Date.now() >= deadline) throw busyError();

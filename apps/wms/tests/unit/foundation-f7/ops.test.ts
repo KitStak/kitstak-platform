@@ -15,7 +15,10 @@ import {
   req,
 } from './harness';
 
-vi.mock('@/server/api/db', () => ({ getAppDb: async () => current().db }));
+vi.mock('@/server/api/db', () => {
+  const get = async () => current().db;
+  return { getAppDb: get, getPlatformDb: get, getTenantDbFor: get };
+});
 
 const jobsRoute = await import('@/app/api/ops/jobs/route');
 const eligibilityRoute = await import('@/app/api/ops/jobs/eligibility/route');

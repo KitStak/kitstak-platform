@@ -343,13 +343,35 @@ export async function listWritableProjects(
   }
 }
 
+/** Only `wms` or `wms_<32 hex>` is ever used as an identifier (same rule as core.wms_tenants). */
+const WMS_SCHEMA_RE = /^wms(_[0-9a-f]{32})?$/;
+
+/**
+ * The org's own WMS `users` table (one warehouse schema per org, see core.wms_tenants), or null
+ * when the org has no active warehouse or it has no users table. Guards with to_regclass so it
+ * never errors (and never aborts a caller's transaction) on databases without these tables.
+ */
+async function orgWmsUsersTable(db: BridgeExecutor, orgId: string): Promise<SQL | null> {
+  if (!isUuid(orgId)) return null;
+  const registry = await queryOne<{ ok: boolean }>(db, sql`select to_regclass('core.wms_tenants') is not null as ok`);
+  if (!registry?.ok) return null;
+  const tenant = await queryOne<{ schema_name: string; has_users: boolean }>(
+    db,
+    sql`select schema_name, to_regclass(quote_ident(schema_name) || '.users') is not null as has_users
+          from core.wms_tenants where org_id = ${orgId}::uuid and status = 'active' limit 1`,
+  );
+  if (!tenant?.has_users || !WMS_SCHEMA_RE.test(tenant.schema_name)) return null;
+  return sql`${sql.identifier(tenant.schema_name)}.${sql.identifier('users')}`;
+}
+
 /** Active members of the org (assignee pickers). */
 export async function listOrgPeople(db: BridgeExecutor, orgId: string): Promise<BridgePerson[]> {
   try {
     // System accounts (WMS `is_api_user`, e.g. the shared Integration Service login) are not teammates.
-    const wmsUsers = await queryOne<{ ok: boolean }>(db, sql`select to_regclass('wms.users') is not null as ok`);
-    const notService = wmsUsers?.ok
-      ? sql`and lower(u.email) not in (select lower(w.email) from wms.users w where w.is_api_user = true)`
+    // Read from the org's own warehouse; no warehouse means no exclusions.
+    const wmsUsers = await orgWmsUsersTable(db, orgId);
+    const notService = wmsUsers
+      ? sql`and lower(u.email) not in (select lower(w.email) from ${wmsUsers} w where w.is_api_user = true)`
       : sql``;
     const rows = await query<{ id: string; name: string | null; email: string; image: string | null }>(
       db,
