@@ -27,8 +27,8 @@ export async function buildAuthContext(
   user: SessionUser,
   selection: ContextSelection = {},
 ): Promise<AuthContext> {
-  const grant = await loadPermissions(db, user);
-  const scope = await getScope(db, user);
+  // Independent reads: side by side rather than one after the other.
+  const [grant, scope] = await Promise.all([loadPermissions(db, user), getScope(db, user)]);
   const viewScope = narrowScope(scope, selection.warehouseId, selection.clientId);
   const warehouseId =
     viewScope.warehouseIds.length === 1 && selection.warehouseId === viewScope.warehouseIds[0]

@@ -27,10 +27,19 @@ import type { SchedulerTask, TaskRunState } from './types';
 
 export const TICK_INTERVAL_MS = 30_000;
 export const LEASE_TTL_MS = 5 * 60_000;
+/**
+ * How long one tick keeps STARTING tasks. On Vercel the tick is a request that is killed at
+ * 300 s: a tick that runs into that limit dies mid-task, its transaction rolls back and the
+ * next tick repeats the same work. Stopping early ends the tick cleanly (lease released,
+ * finished tasks recorded); whatever was not reached is still due on the next tick.
+ */
+export const TICK_BUDGET_MS = 4 * 60_000;
 
 export interface TickResult {
   readonly at: string;
   readonly status: 'ran' | 'busy' | 'lease-held' | 'error';
+  /** True when the tick stopped starting tasks because it ran out of time (see TICK_BUDGET_MS). */
+  readonly outOfTime?: boolean;
   readonly ran: readonly {
     readonly key: string;
     readonly status: 'ok' | 'skipped' | 'error';
@@ -60,6 +69,8 @@ export interface RunnerOptions {
   readonly ownerId: string;
   readonly intervalMs?: number;
   readonly leaseTtlMs?: number;
+  /** See TICK_BUDGET_MS. */
+  readonly budgetMs?: number;
   readonly now?: () => Date;
   readonly log?: Logger;
 }
@@ -94,6 +105,7 @@ export function createSchedulerRunner(options: RunnerOptions): SchedulerRunner {
   const logger = (options.log ?? rootLog).child({ component: 'scheduler' });
   const intervalMs = options.intervalMs ?? TICK_INTERVAL_MS;
   const leaseTtlMs = options.leaseTtlMs ?? LEASE_TTL_MS;
+  const budgetMs = options.budgetMs ?? TICK_BUDGET_MS;
   let timer: ReturnType<typeof setInterval> | null = null;
   let inFlight: Promise<TickResult> | null = null;
   let startedAt: string | null = null;
@@ -130,6 +142,9 @@ export function createSchedulerRunner(options: RunnerOptions): SchedulerRunner {
 
   const doTick = async (): Promise<TickResult> => {
     const at = now().toISOString();
+    // Wall clock, not `now()`: the budget guards real elapsed time (tests fake `now`).
+    const startedMs = performance.now();
+    const outOfTime = (): boolean => performance.now() - startedMs >= budgetMs;
     try {
       const db = await options.getDb();
       await ensureTables(db);
@@ -138,12 +153,18 @@ export function createSchedulerRunner(options: RunnerOptions): SchedulerRunner {
       try {
         const targets = options.listDbs ? await options.listDbs() : [{ schema: 'wms', db }];
         const ran: TickResult['ran'][number][] = [];
+        let stoppedEarly = false;
         for (const target of targets) {
+          if (stoppedEarly) break;
           try {
             await ensureTables(target.db);
             const runs = await readTaskRuns(target.db);
             for (const task of options.tasks) {
               if (!isTaskDue(task, runs.get(task.key), now())) continue;
+              if (outOfTime()) {
+                stoppedEarly = true;
+                break;
+              }
               const result = await runTask(target.db, task);
               ran.push(target.schema === 'wms' ? result : { ...result, schema: target.schema });
             }
@@ -151,6 +172,13 @@ export function createSchedulerRunner(options: RunnerOptions): SchedulerRunner {
             // One warehouse's broken state never stops the others.
             logger.error('scheduler warehouse failed', { schema: target.schema, err: error });
           }
+        }
+        if (stoppedEarly) {
+          logger.warn('scheduler tick ran out of time; remaining tasks wait for the next tick', {
+            budgetMs,
+            ran: ran.map((r) => (r.schema ? `${r.schema}:${r.key}` : r.key)),
+          });
+          return { at, status: 'ran', ran, outOfTime: true };
         }
         return { at, status: 'ran', ran };
       } finally {

@@ -86,7 +86,10 @@ export async function openPostgres(
   const { default: postgres } = await import('postgres');
   const { drizzle } = await import('drizzle-orm/postgres-js');
   const client = postgres(url, {
-    // Supabase transaction-mode pooler: no server-side prepared statements.
+    // Supabase transaction-mode pooler: no server-side prepared statements. Stock postgres-js
+    // then spends TWO network round trips on every parameterised query (describe, then
+    // bind); patches/postgres@3.4.9.patch (repo root) removes the first one. Keep the patch
+    // when upgrading the driver: without it every request costs about twice the round trips.
     prepare: false,
     max: options.max ?? poolMax(),
     // Serverless self-healing (postgres-js seconds): a connection poisoned by an instance

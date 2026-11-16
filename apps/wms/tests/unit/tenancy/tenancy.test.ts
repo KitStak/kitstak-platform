@@ -12,7 +12,7 @@ import type { AppDb } from '@/server/api/db';
 import { ensurePlatformOrg, identityManagedHere, warehouseOrgId } from '@/server/auth/credentials';
 import { companySettings, users, warehouses } from '@/server/db/schema';
 import { dbAll, dbGet, withWriteTx } from '@/server/db/sql';
-import { buildTenantDb, currentWmsSchema, rewriteTenantSql } from '@/server/db/tenant';
+import { buildTenantDb, currentWmsSchema, rewriteTenantSql, setPathSql, tenantSchemaOf } from '@/server/db/tenant';
 import { migrateTenantSchema } from '@/server/tenancy/migrations';
 import { provisionWarehouse } from '@/server/tenancy/provision';
 import { listWmsOrgs, pickWmsOrg, rankWmsOrgs, setupCandidates, type WmsOrgChoice } from '@/server/tenancy/registry';
@@ -88,6 +88,109 @@ describe('rewriteTenantSql', () => {
   });
   it('is the identity for the platform schema', () => {
     expect(rewriteTenantSql('select * from "wms"."orders"', 'wms')).toBe('select * from "wms"."orders"');
+  });
+});
+
+describe('setPathSql', () => {
+  it('inlines the validated schema (no bound parameter)', () => {
+    expect(setPathSql('wms_0123456789abcdef0123456789abcdef')).toBe(
+      'SET LOCAL search_path TO wms_0123456789abcdef0123456789abcdef, public',
+    );
+    expect(() => setPathSql('wms; DROP SCHEMA core')).toThrow(/Invalid WMS schema name/);
+    expect(() => setPathSql('public')).toThrow(/Invalid WMS schema name/);
+  });
+});
+
+describe('writer gate (one queue per warehouse)', () => {
+  // Handles over fake drivers: nothing here is serialised by a database, only by the gate.
+  const fakeTx = { execute: async () => ({ rows: [{ locked: true }] }) };
+  const platformHandle = { transaction: async <T>(fn: (tx: unknown) => Promise<T>) => await fn(fakeTx) } as unknown as AppDb;
+  const tenantHandle = async (schema: string): Promise<AppDb> =>
+    await buildTenantDb(
+      {
+        kind: 'pglite',
+        client: {
+          query: async () => ({ rows: [{ locked: true }], fields: [], affectedRows: 0 }),
+          transaction: async <T>(fn: (tx: unknown) => Promise<T>) =>
+            await fn({ query: async () => ({ rows: [{ locked: true }], fields: [], affectedRows: 0 }) }),
+        },
+      },
+      schema,
+    );
+  const A = 'wms_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const B = 'wms_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const C = 'wms_cccccccccccccccccccccccccccccccc';
+  /** A write that stays open until `finish()`. */
+  const hold = (db: AppDb) => {
+    let finish: () => void = () => undefined;
+    const done = withWriteTx(db, async () => await new Promise<void>((resolve) => (finish = resolve)));
+    return { done, finish: () => finish() };
+  };
+  const settled = async (p: Promise<unknown>): Promise<boolean> =>
+    await Promise.race([p.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 30))]);
+  const savedPoolMax = process.env.DATABASE_POOL_MAX;
+  afterEach(() => {
+    if (savedPoolMax === undefined) delete process.env.DATABASE_POOL_MAX;
+    else process.env.DATABASE_POOL_MAX = savedPoolMax;
+  });
+
+  it('knows which warehouse a root tenant handle belongs to', async () => {
+    expect(tenantSchemaOf(await tenantHandle(A))).toBe(A);
+    expect(tenantSchemaOf(platformHandle)).toBeUndefined();
+  });
+
+  it("a long platform write does not hold up another warehouse's writes", async () => {
+    const a = await tenantHandle(A);
+    const long = hold(platformHandle);
+    await expect(withWriteTx(a, async () => 'through')).resolves.toBe('through');
+    // The same warehouse still waits its turn.
+    const queued = withWriteTx(platformHandle, async () => 'after');
+    expect(await settled(queued)).toBe(false);
+    long.finish();
+    await long.done;
+    await expect(queued).resolves.toBe('after');
+  });
+
+  it('serialises writers of one warehouse and lets a different warehouse through', async () => {
+    process.env.DATABASE_POOL_MAX = '3';
+    const a = await tenantHandle(A);
+    const b = await tenantHandle(B);
+    const first = hold(a);
+    const second = withWriteTx(a, async () => 'second');
+    expect(await settled(second)).toBe(false);
+    await expect(withWriteTx(b, async () => 'b')).resolves.toBe('b');
+    first.finish();
+    await first.done;
+    await expect(second).resolves.toBe('second');
+  });
+
+  it('caps concurrent tenant writers one below the shared pool, keeping a connection for reads', async () => {
+    process.env.DATABASE_POOL_MAX = '3';
+    const [a, b, c] = [await tenantHandle(A), await tenantHandle(B), await tenantHandle(C)];
+    const first = hold(a);
+    const second = hold(b);
+    const third = withWriteTx(c, async () => 'third');
+    expect(await settled(third)).toBe(false);
+    second.finish();
+    await second.done;
+    await expect(third).resolves.toBe('third');
+    first.finish();
+    await first.done;
+    // Slots are returned: three more go through one after another.
+    for (const db of [a, b, c]) await expect(withWriteTx(db, async () => 'ok')).resolves.toBe('ok');
+  });
+
+  it('a failed writer passes its turn and its slot on', async () => {
+    process.env.DATABASE_POOL_MAX = '2';
+    const a = await tenantHandle(A);
+    const b = await tenantHandle(B);
+    await expect(
+      withWriteTx(a, async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
+    await expect(withWriteTx(a, async () => 'ok')).resolves.toBe('ok');
+    await expect(withWriteTx(b, async () => 'ok')).resolves.toBe('ok');
   });
 });
 

@@ -185,6 +185,35 @@ describe('runner', () => {
     expect(runner.heartbeat()).toMatchObject({ running: false, lastTickStatus: 'ran', ownerId: 'me' });
   });
 
+  it('stops starting tasks once the tick is out of time, leaving the rest due', async () => {
+    const slow = vi.fn(async () => {
+      await new Promise((r) => setTimeout(r, 40));
+      return { status: 'ok' as const };
+    });
+    const later = vi.fn(() => ({ status: 'ok' as const }));
+    const runner = createSchedulerRunner({
+      getDb: () => testDb.db,
+      tasks: [task('slow', slow), task('later', later)],
+      ownerId: 'me',
+      budgetMs: 20,
+      log: quietLog,
+    });
+    const first = await runner.tick();
+    expect(first).toMatchObject({ status: 'ran', outOfTime: true, ran: [{ key: 'slow', status: 'ok' }] });
+    expect(later).not.toHaveBeenCalled();
+    // Never started, so never marked: it is still due, and the lease was released.
+    expect((await readTaskRuns(testDb.db)).has('later')).toBe(false);
+    const roomy = createSchedulerRunner({
+      getDb: () => testDb.db,
+      tasks: [task('slow', slow), task('later', later)],
+      ownerId: 'me',
+      log: quietLog,
+    });
+    const second = await roomy.tick();
+    expect(second.outOfTime).toBeUndefined();
+    expect(second.ran).toEqual([{ key: 'later', status: 'ok' }]);
+  });
+
   it('never overlaps ticks and yields to another lease holder', async () => {
     let release: () => void = () => undefined;
     const slow = task(

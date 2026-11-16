@@ -1,0 +1,40 @@
+diff --git a/cjs/src/connection.js b/cjs/src/connection.js
+index 07f6716702ac888215c86ad6e0071aaf55ae519c..a4fa1c24ba2c44e8bfabc28db73dddfa53ddedf4 100644
+--- a/cjs/src/connection.js
++++ b/cjs/src/connection.js
+@@ -235,7 +235,14 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     q.onlyDescribe && (delete statements[q.signature])
+     q.parameters = q.parameters || parameters
+     q.prepared = q.prepare && q.signature in statements
+-    q.describeFirst = q.onlyDescribe || (parameters.length && !q.prepared)
++    // KitStak patch (patches/postgres@3.4.9.patch): with `prepare: false` a parameterised
++    // query no longer waits for a describe round trip before it binds, unless a parameter is
++    // an array or object, whose text form depends on the type the server reports.
++    q.describeFirst = q.onlyDescribe || (parameters.length && !q.prepared && (
++      options.prepare || parameters.some(x =>
++        x !== null && typeof x === 'object' && !(x instanceof Date) && !(x instanceof Uint8Array)
++      )
++    ))
+     q.statement = q.prepared
+       ? statements[q.signature]
+       : { string, types, name: q.prepare ? statementId + statementCount++ : '' }
+diff --git a/src/connection.js b/src/connection.js
+index 1b1cccde43b4570d5d071d6ffaab2669b3c2065a..ecd1f904483f289fa3377f675fdd3c67bfac08cd 100644
+--- a/src/connection.js
++++ b/src/connection.js
+@@ -235,7 +235,14 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     q.onlyDescribe && (delete statements[q.signature])
+     q.parameters = q.parameters || parameters
+     q.prepared = q.prepare && q.signature in statements
+-    q.describeFirst = q.onlyDescribe || (parameters.length && !q.prepared)
++    // KitStak patch (patches/postgres@3.4.9.patch): with `prepare: false` a parameterised
++    // query no longer waits for a describe round trip before it binds, unless a parameter is
++    // an array or object, whose text form depends on the type the server reports.
++    q.describeFirst = q.onlyDescribe || (parameters.length && !q.prepared && (
++      options.prepare || parameters.some(x =>
++        x !== null && typeof x === 'object' && !(x instanceof Date) && !(x instanceof Uint8Array)
++      )
++    ))
+     q.statement = q.prepared
+       ? statements[q.signature]
+       : { string, types, name: q.prepare ? statementId + statementCount++ : '' }

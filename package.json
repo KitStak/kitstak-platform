@@ -32,6 +32,9 @@
       "@embedded-postgres/windows-x64",
       "esbuild",
       "sharp"
-    ]
+    ],
+    "patchedDependencies": {
+      "postgres@3.4.9": "patches/postgres@3.4.9.patch"
+    }
   }
 }
