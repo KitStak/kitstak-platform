@@ -54,6 +54,8 @@ export async function ensureTenantLedger(db: AppDb, schemaName: string): Promise
         `"name" text PRIMARY KEY, "applied_at" timestamptz NOT NULL DEFAULT now())`,
     ),
   );
+  // Like every WMS table: no PostgREST access (RLS on, no policies).
+  await dbRun(db, sql.raw(`ALTER TABLE "${schema}"."${TENANT_MIGRATIONS_TABLE}" ENABLE ROW LEVEL SECURITY`));
 }
 
 /** Renders one migration's statements for `schemaName`. */
