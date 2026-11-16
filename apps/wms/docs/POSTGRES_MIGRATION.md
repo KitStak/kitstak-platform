@@ -37,7 +37,16 @@ lock · 5 SQL semantics checklist · 6 Tests · 7 Scripts & seeds · 8 Done chec
 - Scheduler: the in-process scheduler never starts on Vercel (`VERCEL` set). Vercel Cron
   (`vercel.json`, every minute — needs the Pro plan; on Hobby change it to a daily schedule) calls
   `GET /api/cron/tick` with `Authorization: Bearer $CRON_SECRET`. Every task runs inside
-  `withWriteTx`.
+  `withWriteTx`. A tick stops starting tasks after 4 minutes (`TICK_BUDGET_MS`), so it ends
+  cleanly before Vercel's 300 s limit; tasks it did not reach stay due.
+- Network distance: the code issues queries one at a time, so request time is roughly
+  (queries x round trip to the database). `vercel.json` pins the functions to `sfo1`, the same
+  AWS region as the Supabase project (`us-west-1`). If the database moves, move `regions` with
+  it: from `iad1` every query cost about 70 ms and the scheduler could not finish a tick.
+- Driver patch: `patches/postgres@3.4.9.patch` (repo root, applied by pnpm) stops postgres-js
+  from spending a second round trip on every parameterised query when `prepare: false`.
+- Writer gate: one queue per warehouse and server instance (`withWriteTx`), so a long write
+  in one warehouse never answers another warehouse's writes with BUSY.
 - Env (`.env.example`): `DATABASE_URL`, `DIRECT_URL`, `DATABASE_POOL_MAX`, `SUPABASE_URL`,
   `SUPABASE_SERVICE_ROLE_KEY`, `KITSTAK_FILES_DIR`, `SESSION_SECRET`, `CRON_SECRET`, `SCHEDULER_ENABLED`.
 - `next.config.ts`: `serverExternalPackages: ["@electric-sql/pglite", "postgres"]`.

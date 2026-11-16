@@ -42,15 +42,36 @@ async function exec(db: AppDb, statement: string): Promise<void> {
   await dbRun(db, sql.raw(statement));
 }
 
+/** Statements sent together in one batch (well under postgres-js's 100-query pipeline cap). */
+const DDL_BATCH = 50;
+
+/**
+ * Runs DDL statements in order without waiting for each answer before sending the next: a
+ * clone is ~700 statements, and one network round trip apiece made provisioning take over a
+ * minute against a remote database. The transaction's connection executes them in the order
+ * issued; the first failure aborts the transaction and is the error reported.
+ */
+async function execAll(db: AppDb, statements: readonly string[]): Promise<void> {
+  for (let i = 0; i < statements.length; i += DDL_BATCH) {
+    const settled = await Promise.allSettled(statements.slice(i, i + DDL_BATCH).map((st) => exec(db, st)));
+    const failed = settled.find((r) => r.status === 'rejected');
+    if (failed) throw (failed as PromiseRejectedResult).reason;
+  }
+}
+
 async function cloneTables(db: AppDb, target: string): Promise<number> {
   const tables = await dbAll<{ name: string }>(
     db,
     sql`SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = ${SOURCE} AND c.relkind IN ('r', 'p') ORDER BY c.relname`,
   );
-  for (const { name } of tables) {
-    await exec(db, `CREATE TABLE ${ident(target)}.${ident(name)} (LIKE ${ident(SOURCE)}.${ident(name)} INCLUDING ALL EXCLUDING INDEXES)`);
-  }
+  await execAll(
+    db,
+    tables.map(
+      ({ name }) =>
+        `CREATE TABLE ${ident(target)}.${ident(name)} (LIKE ${ident(SOURCE)}.${ident(name)} INCLUDING ALL EXCLUDING INDEXES)`,
+    ),
+  );
   // Serial-style defaults would still draw from the platform's sequence: give each its own.
   const serials = await dbAll<{ tbl: string; col: string; def: string }>(
     db,
@@ -60,15 +81,17 @@ async function cloneTables(db: AppDb, target: string): Promise<number> {
         JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum
         WHERE n.nspname = ${target} AND pg_get_expr(d.adbin, d.adrelid) LIKE 'nextval(%'`,
   );
-  for (const s of serials) {
-    const seq = `${s.tbl}_${s.col}_seq`;
-    await exec(db, `CREATE SEQUENCE IF NOT EXISTS ${ident(target)}.${ident(seq)}`);
-    await exec(
-      db,
-      `ALTER TABLE ${ident(target)}.${ident(s.tbl)} ALTER COLUMN ${ident(s.col)} SET DEFAULT nextval('${target}.${seq.replace(/'/g, "''")}'::regclass)`,
-    );
-    await exec(db, `ALTER SEQUENCE ${ident(target)}.${ident(seq)} OWNED BY ${ident(target)}.${ident(s.tbl)}.${ident(s.col)}`);
-  }
+  await execAll(
+    db,
+    serials.flatMap((s) => {
+      const seq = `${s.tbl}_${s.col}_seq`;
+      return [
+        `CREATE SEQUENCE IF NOT EXISTS ${ident(target)}.${ident(seq)}`,
+        `ALTER TABLE ${ident(target)}.${ident(s.tbl)} ALTER COLUMN ${ident(s.col)} SET DEFAULT nextval('${target}.${seq.replace(/'/g, "''")}'::regclass)`,
+        `ALTER SEQUENCE ${ident(target)}.${ident(seq)} OWNED BY ${ident(target)}.${ident(s.tbl)}.${ident(s.col)}`,
+      ];
+    }),
+  );
   return tables.length;
 }
 
@@ -84,12 +107,13 @@ async function cloneIndexes(db: AppDb, target: string): Promise<number> {
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = ${SOURCE} AND k.contype IN ('p', 'u', 'x') ORDER BY c.relname, k.conname`,
   );
-  for (const k of keys) {
-    await exec(
-      db,
-      `ALTER TABLE ${ident(target)}.${ident(k.tbl)} ADD CONSTRAINT ${ident(k.name)} ${rewriteTenantSql(k.def, target)}`,
-    );
-  }
+  await execAll(
+    db,
+    keys.map(
+      (k) =>
+        `ALTER TABLE ${ident(target)}.${ident(k.tbl)} ADD CONSTRAINT ${ident(k.name)} ${rewriteTenantSql(k.def, target)}`,
+    ),
+  );
   const indexes = await dbAll<{ def: string }>(
     db,
     sql`SELECT pg_get_indexdef(i.indexrelid) AS def FROM pg_index i
@@ -97,7 +121,10 @@ async function cloneIndexes(db: AppDb, target: string): Promise<number> {
         WHERE n.nspname = ${SOURCE}
           AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid AND k.contype IN ('p', 'u', 'x'))`,
   );
-  for (const { def } of indexes) await exec(db, rewriteTenantSql(def, target));
+  await execAll(
+    db,
+    indexes.map(({ def }) => rewriteTenantSql(def, target)),
+  );
   return keys.length + indexes.length;
 }
 
@@ -107,7 +134,10 @@ async function cloneFunctions(db: AppDb, target: string): Promise<number> {
     sql`SELECT pg_get_functiondef(p.oid) AS def FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = ${SOURCE} AND p.prokind = 'f'`,
   );
-  for (const { def } of fns) await exec(db, rewriteTenantSql(def, target));
+  await execAll(
+    db,
+    fns.map(({ def }) => rewriteTenantSql(def, target)),
+  );
   return fns.length;
 }
 
@@ -119,12 +149,13 @@ async function cloneForeignKeys(db: AppDb, target: string): Promise<number> {
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = ${SOURCE} AND k.contype = 'f' ORDER BY c.relname, k.conname`,
   );
-  for (const fk of fks) {
-    await exec(
-      db,
-      `ALTER TABLE ${ident(target)}.${ident(fk.tbl)} ADD CONSTRAINT ${ident(fk.name)} ${rewriteTenantSql(fk.def, target)}`,
-    );
-  }
+  await execAll(
+    db,
+    fks.map(
+      (fk) =>
+        `ALTER TABLE ${ident(target)}.${ident(fk.tbl)} ADD CONSTRAINT ${ident(fk.name)} ${rewriteTenantSql(fk.def, target)}`,
+    ),
+  );
   return fks.length;
 }
 
@@ -135,7 +166,10 @@ async function cloneTriggers(db: AppDb, target: string): Promise<number> {
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = ${SOURCE} AND NOT t.tgisinternal`,
   );
-  for (const { def } of triggers) await exec(db, rewriteTenantSql(def, target));
+  await execAll(
+    db,
+    triggers.map(({ def }) => rewriteTenantSql(def, target)),
+  );
   return triggers.length;
 }
 
@@ -145,9 +179,10 @@ async function cloneViews(db: AppDb, target: string): Promise<number> {
     sql`SELECT c.relname AS name, pg_get_viewdef(c.oid) AS def FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = ${SOURCE} AND c.relkind = 'v'`,
   );
-  for (const v of views) {
-    await exec(db, `CREATE VIEW ${ident(target)}.${ident(v.name)} AS ${rewriteTenantSql(v.def, target)}`);
-  }
+  await execAll(
+    db,
+    views.map((v) => `CREATE VIEW ${ident(target)}.${ident(v.name)} AS ${rewriteTenantSql(v.def, target)}`),
+  );
   return views.length;
 }
 
@@ -158,11 +193,16 @@ async function cloneRowSecurity(db: AppDb, target: string): Promise<number> {
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = ${SOURCE} AND c.relkind IN ('r', 'p') AND (c.relrowsecurity OR c.relforcerowsecurity)`,
   );
-  for (const f of flags) {
-    const table = `${ident(target)}.${ident(f.name)}`;
-    if (f.rls) await exec(db, `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
-    if (f.force) await exec(db, `ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
-  }
+  await execAll(
+    db,
+    flags.flatMap((f) => {
+      const table = `${ident(target)}.${ident(f.name)}`;
+      return [
+        ...(f.rls ? [`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`] : []),
+        ...(f.force ? [`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`] : []),
+      ];
+    }),
+  );
   const policies = await dbAll<{
     tbl: string;
     name: string;

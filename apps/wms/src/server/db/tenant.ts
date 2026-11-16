@@ -7,12 +7,12 @@
  *
  *  1. rewrites schema-qualified references to the tenant schema (`"wms".` and a bare
  *     `wms.` identifier prefix) — `rewriteTenantSql`;
- *  2. pins `search_path = <tenant>, public` with `set_config(..., true)` INSIDE the same
- *     transaction as the statement, so unqualified raw SQL resolves to the tenant schema.
+ *  2. pins `search_path = <tenant>, public` with `SET LOCAL` INSIDE the same transaction as
+ *     the statement, so unqualified raw SQL resolves to the tenant schema.
  *
  * (2) has to be transaction-local: the Supabase pooler runs in transaction mode, so a
  * session-level `SET` could leak to another org's next statement on the same backend.
- * Top-level statements run as a pipelined BEGIN; set_config; <statement>; COMMIT on one
+ * Top-level statements run as a pipelined BEGIN; SET LOCAL; <statement>; COMMIT on one
  * reserved connection (one network round trip); `transaction()` sets the path first.
  *
  * Tenant connections come from their own pool whose startup search_path is `public`, so a
@@ -43,7 +43,16 @@ export function tenantSearchPath(schemaName: string): string {
   return `${assertWmsSchemaName(schemaName)}, public`;
 }
 
-const SET_PATH_SQL = "SELECT set_config('search_path', $1, true)";
+/**
+ * `SET LOCAL search_path` for a tenant, with the schema INLINED rather than bound as `$1`.
+ * postgres-js runs every parameterised statement as two network round trips when
+ * `prepare: false` (describe, then bind) and cannot pipeline behind one, so a bound
+ * `set_config(..., $1, true)` cost each tenant statement an extra round trip. Inlining is
+ * safe: `tenantSearchPath` only accepts names matching `^wms(_[0-9a-f]{32})?$`.
+ */
+export function setPathSql(schemaName: string): string {
+  return `SET LOCAL search_path TO ${tenantSearchPath(schemaName)}`;
+}
 
 /**
  * The WMS schema a handle (database OR open transaction) reads/writes, asked of Postgres:
@@ -110,7 +119,7 @@ function pipelinedQuery(
       try {
         // Started in order on one connection → pipelined in order, one round trip.
         const begin = conn.unsafe('BEGIN').execute();
-        const path = conn.unsafe(SET_PATH_SQL, [tenantSearchPath(schemaName)]).execute();
+        const path = conn.unsafe(setPathSql(schemaName)).execute();
         const main = conn.unsafe(rewriteTenantSql(query, schemaName), params, options);
         const result = (arrayMode ? main.values() : main).execute();
         // COMMIT after a failed statement is answered with ROLLBACK (no error).
@@ -144,8 +153,13 @@ export function tenantPostgresClient(base: PgJsSql, schemaName: string): PgJsLik
     unsafe: (query, params, options) => pipelinedQuery(base, schemaName, query, params, options),
     begin: (fn) =>
       base.begin(async (tx) => {
-        await tx.unsafe(SET_PATH_SQL, [tenantSearchPath(schemaName)]);
-        return await fn(rewritingTx(tx, schemaName));
+        // Not awaited on its own: it travels with the transaction's first statement, which
+        // the connection runs after it (queries on one connection execute in the order sent).
+        const path = tx.unsafe(setPathSql(schemaName)).execute();
+        const [, result] = await Promise.allSettled([path, fn(rewritingTx(tx, schemaName))]);
+        await path;
+        if (result.status === 'rejected') throw result.reason;
+        return result.value;
       }),
   };
 }
@@ -177,7 +191,7 @@ export function tenantPgliteClient(base: PgliteLike, schemaName: string): Pglite
   assertWmsSchemaName(schemaName);
   const inTenantTx = <T>(fn: (tx: PgliteQueryable) => Promise<T>): Promise<T> =>
     base.transaction(async (tx) => {
-      await tx.query(SET_PATH_SQL, [tenantSearchPath(schemaName)]);
+      await tx.query(setPathSql(schemaName));
       return await fn(rewritingPgliteTx(tx, schemaName));
     });
   return {
@@ -193,6 +207,16 @@ export type RawClient =
   | { readonly kind: 'postgres'; readonly client: unknown }
   | { readonly kind: 'pglite'; readonly client: unknown };
 
+const TENANT_SCHEMAS = new WeakMap<object, string>();
+
+/**
+ * The schema a ROOT tenant handle (from `buildTenantDb`) is scoped to, or undefined for the
+ * platform handle and for transactions. Synchronous: the writer gate keys its queues by it.
+ */
+export function tenantSchemaOf(db: AppDb): string | undefined {
+  return TENANT_SCHEMAS.get(db);
+}
+
 /** Builds a Drizzle handle over `raw` scoped to `schemaName` (never the platform schema). */
 export async function buildTenantDb(raw: RawClient, schemaName: string): Promise<AppDb> {
   assertWmsSchemaName(schemaName);
@@ -207,5 +231,6 @@ export async function buildTenantDb(raw: RawClient, schemaName: string): Promise
     const client = tenantPgliteClient(raw.client as PgliteLike, schemaName);
     db = drizzle({ client: client as never, schema }) as unknown as AppDb;
   }
+  TENANT_SCHEMAS.set(db, schemaName);
   return db;
 }

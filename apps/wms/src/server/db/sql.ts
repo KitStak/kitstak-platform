@@ -13,8 +13,11 @@
  * (`AS "billNumber"`), or the row key comes back as `billnumber`.
  */
 import { sql, type SQL } from 'drizzle-orm';
+import { WMS_PLATFORM_SCHEMA } from '@kitstak/db/wms-tenants';
 import type { AppDb } from '@/server/api/db';
 import { AppError } from '@/server/api/errors';
+import { poolMax } from './index';
+import { tenantSchemaOf } from './tenant';
 
 /** Rows of a raw `db.execute()` / query-builder result, whichever driver produced it. */
 export function rowsOf<T>(result: unknown): T[] {
@@ -98,28 +101,50 @@ export async function takeWriteLock(tx: AppDb, waitMs: number = WRITE_LOCK_WAIT_
 }
 
 /**
- * Per-process writer gate. Only one write transaction per server instance may hold (or wait
- * for) a pooled connection at a time. Without it, a few writers queued behind the app lock
- * each pin a connection, the small pool (3 on Vercel) runs dry and every READ stalls too:
- * pages sit on "Still loading" while one long write runs.
+ * Per-process writer gate, one queue PER WAREHOUSE. Only one write transaction per warehouse
+ * and server instance may hold (or wait for) a pooled connection at a time. Without it, a few
+ * writers queued behind the app lock each pin a connection, the small pool (3 on Vercel) runs
+ * dry and every READ stalls too: pages sit on "Still loading" while one long write runs.
+ *
+ * The queue is keyed by warehouse because the app lock is (see takeWriteLock): a single queue
+ * for the whole instance made one warehouse's long job (a scheduler task, a background
+ * import) answer every OTHER warehouse's writes with BUSY, although nothing of theirs was
+ * locked. Tenant warehouses share one connection pool, so their concurrent writers are also
+ * capped at one fewer than the pool, which always leaves a connection for reads.
  */
-const GATE_KEY = Symbol.for('kitstak.writeGate');
-type GateHolder = { tail: Promise<void> };
+const GATE_KEY = Symbol.for('kitstak.writeGates');
+interface GateHolder {
+  /** Per warehouse schema: resolves when its last queued writer has finished. */
+  readonly tails: Map<string, Promise<void>>;
+  /** Tenant write transactions currently holding a slot of the shared tenant pool. */
+  tenantWriters: number;
+  readonly tenantQueue: (() => void)[];
+}
 function gate(): GateHolder {
   const g = globalThis as unknown as Record<symbol, GateHolder | undefined>;
-  return (g[GATE_KEY] ??= { tail: Promise.resolve() });
+  return (g[GATE_KEY] ??= { tails: new Map(), tenantWriters: 0, tenantQueue: [] });
 }
 
-async function enterWriteGate(waitMs: number): Promise<() => void> {
-  const holder = gate();
-  const previous = holder.tail;
-  let release: () => void = () => {};
-  holder.tail = new Promise<void>((resolve) => {
-    release = resolve;
+/** Concurrent tenant write transactions per instance: the tenant pool minus one for reads. */
+export function tenantWriterCap(): number {
+  return Math.max(1, poolMax() - 1);
+}
+
+/** Waits for this warehouse's turn; the returned function passes the turn on. */
+async function enterWarehouseQueue(holder: GateHolder, key: string, deadline: number): Promise<() => void> {
+  const previous = holder.tails.get(key) ?? Promise.resolve();
+  let finish: () => void = () => {};
+  const mine = new Promise<void>((resolve) => {
+    finish = resolve;
   });
+  holder.tails.set(key, mine);
+  const release = (): void => {
+    finish();
+    if (holder.tails.get(key) === mine) holder.tails.delete(key);
+  };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<'timeout'>((resolve) => {
-    timer = setTimeout(() => resolve('timeout'), waitMs);
+    timer = setTimeout(() => resolve('timeout'), Math.max(0, deadline - Date.now()));
   });
   const outcome = await Promise.race([previous.then(() => 'ready' as const), timedOut]);
   clearTimeout(timer);
@@ -129,6 +154,51 @@ async function enterWriteGate(waitMs: number): Promise<() => void> {
     throw busyError();
   }
   return release;
+}
+
+/** Takes one of the tenant pool's writer slots (see tenantWriterCap). */
+async function takeTenantSlot(holder: GateHolder, deadline: number): Promise<() => void> {
+  const release = (): void => {
+    // Hand the slot straight to the next waiter, else free it.
+    const next = holder.tenantQueue.shift();
+    if (next) next();
+    else holder.tenantWriters -= 1;
+  };
+  if (holder.tenantWriters < tenantWriterCap()) {
+    holder.tenantWriters += 1;
+    return release;
+  }
+  return await new Promise<() => void>((resolve, reject) => {
+    const grant = (): void => {
+      clearTimeout(timer);
+      resolve(release);
+    };
+    const timer = setTimeout(() => {
+      const at = holder.tenantQueue.indexOf(grant);
+      if (at >= 0) holder.tenantQueue.splice(at, 1);
+      reject(busyError());
+    }, Math.max(0, deadline - Date.now()));
+    holder.tenantQueue.push(grant);
+  });
+}
+
+async function enterWriteGate(key: string, waitMs: number): Promise<() => void> {
+  const holder = gate();
+  const deadline = Date.now() + waitMs;
+  const leaveQueue = await enterWarehouseQueue(holder, key, deadline);
+  // The platform warehouse has its own pool: its one writer needs no slot.
+  if (key === WMS_PLATFORM_SCHEMA) return leaveQueue;
+  let freeSlot: () => void;
+  try {
+    freeSlot = await takeTenantSlot(holder, deadline);
+  } catch (error: unknown) {
+    leaveQueue();
+    throw error;
+  }
+  return () => {
+    freeSlot();
+    leaveQueue();
+  };
 }
 
 /** True for a drizzle transaction/savepoint handle (as opposed to the root database). */
@@ -150,7 +220,7 @@ export async function withWriteTx<T>(db: AppDb, fn: (tx: AppDb) => Promise<T>): 
       return await fn(tx);
     });
   if (isTransaction(db)) return run();
-  const release = await enterWriteGate(WRITE_LOCK_WAIT_MS);
+  const release = await enterWriteGate(tenantSchemaOf(db) ?? WMS_PLATFORM_SCHEMA, WRITE_LOCK_WAIT_MS);
   try {
     return await run();
   } finally {

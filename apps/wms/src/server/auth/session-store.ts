@@ -176,21 +176,24 @@ export async function loadWarehouseAccess(
   tenantDb: (schemaName: string) => Promise<AppDb> = getTenantDbFor,
 ): Promise<WarehouseAccess> {
   const tdb = schemaName === WMS_PLATFORM_SCHEMA ? platformDb : await tenantDb(schemaName);
-  const [profile] = await tdb
-    .select({
-      legacyRole: userProfiles.legacyRole,
-      userType: userProfiles.userType,
-      isApiUser: userProfiles.isApiUser,
-      allClients: userProfiles.allClients,
-    })
-    .from(userProfiles)
-    .where(eq(userProfiles.userId, userId))
-    .limit(1);
-  const [legacy] = await tdb
-    .select({ isActive: users.isActive, userType: users.userType })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+  // Independent reads: side by side rather than one after the other.
+  const [[profile], [legacy]] = await Promise.all([
+    tdb
+      .select({
+        legacyRole: userProfiles.legacyRole,
+        userType: userProfiles.userType,
+        isApiUser: userProfiles.isApiUser,
+        allClients: userProfiles.allClients,
+      })
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, userId))
+      .limit(1),
+    tdb
+      .select({ isActive: users.isActive, userType: users.userType })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
+  ]);
   if (legacy && !legacy.isActive) return { ok: false, reason: 'user_inactive' };
   // No user_profiles row (e.g. a CRM-only platform user): EXPLICIT DENY (auth review
   // 2026-11-11, C1). A shared-session identity without a WMS profile gets zero WMS access —

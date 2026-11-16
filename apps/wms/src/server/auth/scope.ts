@@ -40,12 +40,13 @@ export async function getScope(
 ): Promise<Scope> {
   const allWarehouseIds = async (): Promise<string[]> =>
     (await db.select({ id: warehouses.id }).from(warehouses)).map((r) => r.id);
-  const linked = (
-    await db
-      .select({ id: userWarehouses.warehouseId })
-      .from(userWarehouses)
-      .where(eq(userWarehouses.userId, user.id))
-  ).map((r) => r.id);
+  const linkedWarehouseIds = async (): Promise<string[]> =>
+    (
+      await db
+        .select({ id: userWarehouses.warehouseId })
+        .from(userWarehouses)
+        .where(eq(userWarehouses.userId, user.id))
+    ).map((r) => r.id);
   const hasProfile = async (): Promise<boolean> =>
     (
       await db
@@ -54,21 +55,23 @@ export async function getScope(
         .where(eq(userProfiles.userId, user.id))
         .limit(1)
     ).length > 0;
-  const warehouseIds =
-    user.role === 'admin'
-      ? await allWarehouseIds()
-      : linked.length > 0
-        ? linked
-        : // C1: the all-warehouses pre-seed fallback never applies to profile-less users.
-          (await hasProfile())
-          ? await allWarehouseIds()
-          : [];
+  const loadWarehouseIds = async (): Promise<string[]> => {
+    // Admins see every warehouse: their links are never consulted, so they are not read.
+    if (user.role === 'admin') return await allWarehouseIds();
+    const linked = await linkedWarehouseIds();
+    if (linked.length > 0) return linked;
+    // C1: the all-warehouses pre-seed fallback never applies to profile-less users.
+    return (await hasProfile()) ? await allWarehouseIds() : [];
+  };
+  const loadClientIds = async (): Promise<ClientScope> =>
+    user.allClients
+      ? 'all'
+      : (
+          await db.select({ id: userClients.clientId }).from(userClients).where(eq(userClients.userId, user.id))
+        ).map((r) => r.id);
 
-  const clientIds: ClientScope = user.allClients
-    ? 'all'
-    : (
-        await db.select({ id: userClients.clientId }).from(userClients).where(eq(userClients.userId, user.id))
-      ).map((r) => r.id);
+  // Independent reads: run them side by side (every request pays for this on the way in).
+  const [warehouseIds, clientIds] = await Promise.all([loadWarehouseIds(), loadClientIds()]);
 
   return { warehouseIds, clientIds };
 }
