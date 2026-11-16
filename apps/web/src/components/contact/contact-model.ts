@@ -12,7 +12,7 @@ export const TOPICS = [
   {
     id: 'demo',
     label: 'Book a walkthrough',
-    note: 'A guided tour of the WMS, the CRM or both, using an operation like yours.',
+    note: 'A guided tour of the WMS, the CRM, Projects or the whole stack, using an operation like yours.',
     prompt: 'Which product do you want to see, and what does your operation look like?',
     action: 'Request a walkthrough',
     subject: 'Walkthrough request',
@@ -20,10 +20,10 @@ export const TOPICS = [
   {
     id: 'projects',
     label: 'KitStak Projects',
-    note: 'Projects is in development. Tell us how you run projects today and ask for early access.',
-    prompt: 'How does your team plan and track projects today?',
-    action: 'Ask for early access',
-    subject: 'KitStak Projects early access',
+    note: 'Add Projects to an organization you already run, or ask how it fits the way your team plans work.',
+    prompt: 'Which organization is it for, and how does your team plan and track projects today?',
+    action: 'Ask about Projects',
+    subject: 'KitStak Projects',
   },
   {
     id: 'sales',

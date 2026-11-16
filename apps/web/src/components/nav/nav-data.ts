@@ -7,7 +7,7 @@ export interface NavLink {
 }
 
 export interface ProductNav {
-  readonly id: 'wms' | 'crm';
+  readonly id: 'wms' | 'crm' | 'projects';
   readonly href: string;
   readonly name: string;
   readonly tag: string;
@@ -43,16 +43,20 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
       { href: `${ROUTES.crm}#work`, label: 'Inbox and My Work' },
     ],
   },
+  {
+    id: 'projects',
+    href: ROUTES.projects,
+    name: 'KitStak Projects',
+    tag: 'Projects',
+    blurb: 'Plans, tasks and timelines tied to the deals and orders they are for.',
+    links: [
+      { href: `${ROUTES.projects}#tasks`, label: 'Tasks and quick add' },
+      { href: `${ROUTES.projects}#views`, label: 'Board, timeline and workload' },
+      { href: `${ROUTES.projects}#automations`, label: 'Automations' },
+      { href: `${ROUTES.projects}#stack`, label: 'Linked to CRM and WMS' },
+    ],
+  },
 ];
-
-/** A product that is announced but not yet available. Listed apart from the ones you can buy. */
-export const PREVIEW_PRODUCT = {
-  id: 'projects',
-  href: ROUTES.projects,
-  name: 'KitStak Projects',
-  badge: 'Preview',
-  blurb: 'Plans, tasks and timelines on the same stack. In development.',
-} as const;
 
 /** Top-level header links (the Products menu is rendered separately, before these). */
 export const PRIMARY_NAV: readonly NavLink[] = [

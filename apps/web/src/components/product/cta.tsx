@@ -44,7 +44,7 @@ export function BundleBand({ from, title, body, points, visual }: BundleBandProp
             ))}
           </ul>
           <div className={styles.actions} data-reveal>
-            <Link href={getStartedHref('both')} className="btn btn-primary btn-lg">
+            <Link href={getStartedHref(['crm', 'wms'])} className="btn btn-primary btn-lg">
               Build the bundle <span className="btn-arrow" aria-hidden>→</span>
             </Link>
             <Link href={other.href} className="btn btn-ghost-inverse btn-lg">

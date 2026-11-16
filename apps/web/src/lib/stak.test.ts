@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { getStartedHref, parseStack, toggleProduct } from '@/components/site-links';
 import {
   DEFAULT_ANSWERS,
   accountErrors,
@@ -6,7 +7,7 @@ import {
   canLeaveStep,
   handoffUrl,
   parseAnswers,
-  parseStack,
+  portalFocus,
   setupPlan,
   wizardHref,
   withTeamSize,
@@ -16,23 +17,55 @@ import type { StakAnswers } from './stak';
 const answers = (patch: Partial<StakAnswers>): StakAnswers => ({ ...DEFAULT_ANSWERS, ...patch });
 
 describe('parseStack', () => {
-  test('accepts the three stack choices', () => {
-    expect(parseStack('crm')).toBe('crm');
-    expect(parseStack('wms')).toBe('wms');
-    expect(parseStack('both')).toBe('both');
+  test('reads single products and comma lists in stack order', () => {
+    expect(parseStack('crm')).toEqual(['crm']);
+    expect(parseStack('projects,crm')).toEqual(['crm', 'projects']);
+    expect(parseStack('crm,wms,projects')).toEqual(['crm', 'wms', 'projects']);
   });
 
-  test('rejects anything else', () => {
-    expect(parseStack('erp')).toBeNull();
-    expect(parseStack(null)).toBeNull();
-    expect(parseStack(undefined)).toBeNull();
+  test('keeps old "both" links working', () => {
+    expect(parseStack('both')).toEqual(['crm', 'wms']);
+  });
+
+  test('drops anything unknown', () => {
+    expect(parseStack('erp')).toEqual([]);
+    expect(parseStack('crm,erp,crm')).toEqual(['crm']);
+    expect(parseStack(null)).toEqual([]);
+    expect(parseStack(undefined)).toEqual([]);
+  });
+});
+
+describe('toggleProduct and getStartedHref', () => {
+  test('switches a product on and off without reordering or mutating', () => {
+    const before = ['crm'] as const;
+
+    const on = toggleProduct(before, 'projects');
+    const off = toggleProduct(on, 'crm');
+
+    expect(on).toEqual(['crm', 'projects']);
+    expect(off).toEqual(['projects']);
+    expect(before).toEqual(['crm']);
+  });
+
+  test('links into the wizard with the stack in canonical order', () => {
+    expect(getStartedHref('projects')).toBe('/get-started?stack=projects');
+    expect(getStartedHref(['projects', 'crm'])).toBe('/get-started?stack=crm,projects');
+    expect(getStartedHref()).toBe('/get-started');
+  });
+});
+
+describe('portalFocus', () => {
+  test('maps the stack onto the portal profile, which only knows the CRM and the WMS', () => {
+    expect(portalFocus(['crm', 'wms', 'projects'])).toBe('both');
+    expect(portalFocus(['wms', 'projects'])).toBe('wms');
+    expect(portalFocus(['projects'])).toBeNull();
   });
 });
 
 describe('canLeaveStep', () => {
-  test('blocks the stack step until a stack is chosen', () => {
-    expect(canLeaveStep('stack', answers({ focus: null }))).toBe(false);
-    expect(canLeaveStep('stack', answers({ focus: 'wms' }))).toBe(true);
+  test('blocks the stack step until a product is chosen', () => {
+    expect(canLeaveStep('stack', answers({ products: [] }))).toBe(false);
+    expect(canLeaveStep('stack', answers({ products: ['projects'] }))).toBe(true);
   });
 
   test('blocks the business step until a business type is chosen', () => {
@@ -60,39 +93,55 @@ describe('withTeamSize', () => {
 
 describe('setupPlan', () => {
   test('marks the business profile as already done', () => {
-    const plan = setupPlan(answers({ focus: 'crm', businessType: 'brand' }));
+    const plan = setupPlan(answers({ products: ['crm'], businessType: 'brand' }));
 
     expect(plan[0]).toMatchObject({ key: 'profile', isDone: true });
   });
 
   test('drops the invite step for a solo team', () => {
-    const plan = setupPlan(answers({ focus: 'both', businessType: 'brand', teamSize: 'solo' }));
+    const plan = setupPlan(answers({ products: ['crm', 'wms'], businessType: 'brand', teamSize: 'solo' }));
 
     expect(plan.map((s) => s.key)).not.toContain('invite_team');
   });
 
   test('puts warehouse steps first for a 3PL', () => {
-    const keys = setupPlan(answers({ focus: 'both', businessType: '3pl' })).map((s) => s.key);
+    const keys = setupPlan(answers({ products: ['crm', 'wms'], businessType: '3pl' })).map((s) => s.key);
 
     expect(keys.indexOf('create_warehouse')).toBeLessThan(keys.indexOf('create_workspace'));
   });
 
   test('puts CRM steps first for a brand', () => {
-    const keys = setupPlan(answers({ focus: 'both', businessType: 'brand' })).map((s) => s.key);
+    const keys = setupPlan(answers({ products: ['crm', 'wms'], businessType: 'brand' })).map((s) => s.key);
 
     expect(keys.indexOf('create_workspace')).toBeLessThan(keys.indexOf('create_warehouse'));
   });
 
-  test('only includes steps for the chosen product', () => {
-    const crmOnly = setupPlan(answers({ focus: 'crm', businessType: 'brand' })).map((s) => s.app);
-    const wmsOnly = setupPlan(answers({ focus: 'wms', businessType: '3pl' })).map((s) => s.app);
+  test('only includes steps for the chosen products', () => {
+    const crmOnly = setupPlan(answers({ products: ['crm'], businessType: 'brand' })).map((s) => s.app);
+    const wmsOnly = setupPlan(answers({ products: ['wms'], businessType: '3pl' })).map((s) => s.app);
 
     expect(crmOnly).not.toContain('WMS');
+    expect(crmOnly).not.toContain('Projects');
     expect(wmsOnly).not.toContain('CRM');
   });
 
+  test('adds the Projects first-run last, named after the chosen template', () => {
+    const plan = setupPlan(
+      answers({ products: ['crm', 'projects'], businessType: 'brand', projectTemplates: ['client-onboarding'] }),
+    );
+
+    expect(plan.at(-1)).toMatchObject({ key: 'first_project', app: 'Projects' });
+    expect(plan.at(-1)?.note).toMatch(/Client onboarding/);
+  });
+
+  test('works for a Projects-only stack', () => {
+    const apps = setupPlan(answers({ products: ['projects'], businessType: 'other' })).map((s) => s.app);
+
+    expect(apps).toEqual(['Portal', 'Portal', 'Projects']);
+  });
+
   test('describes the catalog step as an import when importing data', () => {
-    const plan = setupPlan(answers({ focus: 'wms', businessType: '3pl', startMode: 'import' }));
+    const plan = setupPlan(answers({ products: ['wms'], businessType: '3pl', startMode: 'import' }));
 
     expect(plan.find((s) => s.key === 'build_catalog')?.note).toMatch(/import/i);
   });
@@ -120,28 +169,50 @@ describe('accountErrors', () => {
 
 describe('handoffUrl', () => {
   test('carries the setup answers and no personal details', () => {
-    const url = new URL(handoffUrl(answers({ focus: 'both', businessType: '3pl', teamSize: 'medium' })));
+    const url = new URL(handoffUrl(answers({ products: ['crm', 'wms'], businessType: '3pl', teamSize: 'medium' })));
 
     expect(url.pathname).toBe('/signup');
     expect(url.searchParams.get('focus')).toBe('both');
+    expect(url.searchParams.get('products')).toBe('crm,wms');
     expect(url.searchParams.get('businessType')).toBe('3pl');
     expect(url.searchParams.get('teamSize')).toBe('medium');
     expect(url.searchParams.get('startMode')).toBe('fresh');
-    expect([...url.searchParams.keys()].sort()).toEqual(['businessType', 'focus', 'startMode', 'teamSize']);
+    expect([...url.searchParams.keys()].sort()).toEqual(['businessType', 'focus', 'products', 'startMode', 'teamSize']);
+  });
+
+  test('sends no focus for a Projects-only stack', () => {
+    const url = new URL(handoffUrl(answers({ products: ['projects'], businessType: 'other' })));
+
+    expect(url.searchParams.get('focus')).toBeNull();
+    expect(url.searchParams.get('products')).toBe('projects');
   });
 });
 
 describe('parseAnswers', () => {
   test('round-trips valid answers', () => {
-    const saved = answers({ focus: 'wms', businessType: 'distributor', warehouses: 3, wmsNeeds: ['returns'] });
+    const saved = answers({
+      products: ['wms', 'projects'],
+      businessType: 'distributor',
+      warehouses: 3,
+      wmsNeeds: ['returns'],
+      projectTemplates: ['warehouse-go-live'],
+    });
 
     expect(parseAnswers(JSON.parse(JSON.stringify(saved)))).toEqual(saved);
+  });
+
+  test('upgrades answers saved with the old focus field', () => {
+    expect(parseAnswers({ focus: 'both' }).products).toEqual(['crm', 'wms']);
+  });
+
+  test('keeps only real Projects templates', () => {
+    expect(parseAnswers({ projectTemplates: ['sprint', 'made-up'] }).projectTemplates).toEqual(['sprint']);
   });
 
   test('falls back to defaults for junk', () => {
     expect(parseAnswers(null)).toEqual(DEFAULT_ANSWERS);
     expect(parseAnswers('nope')).toEqual(DEFAULT_ANSWERS);
-    expect(parseAnswers({ focus: 'erp', seats: 'many', wmsNeeds: [1, 'bogus', 'returns'] })).toEqual({
+    expect(parseAnswers({ products: ['erp'], seats: 'many', wmsNeeds: [1, 'bogus', 'returns'] })).toEqual({
       ...DEFAULT_ANSWERS,
       wmsNeeds: ['returns'],
     });
@@ -157,16 +228,16 @@ describe('parseAnswers', () => {
 
 describe('wizardHref and applyPrefill', () => {
   test('round-trips a priced stack through the query string', () => {
-    const href = wizardHref({ stack: 'both', seats: 12, warehouses: 3, billing: 'monthly' });
+    const href = wizardHref({ stack: ['crm', 'wms', 'projects'], seats: 12, warehouses: 3, billing: 'monthly' });
     const params = new URL(href, 'https://kitstak.com').searchParams;
 
     const result = applyPrefill(DEFAULT_ANSWERS, params);
 
-    expect(result).toMatchObject({ focus: 'both', seats: 12, warehouses: 3, billing: 'monthly' });
+    expect(result).toMatchObject({ products: ['crm', 'wms', 'projects'], seats: 12, warehouses: 3, billing: 'monthly' });
   });
 
   test('keeps the base answers when the query is empty', () => {
-    const base = answers({ focus: 'crm', seats: 9 });
+    const base = answers({ products: ['crm'], seats: 9 });
 
     expect(applyPrefill(base, new URLSearchParams())).toEqual(base);
   });
@@ -176,7 +247,7 @@ describe('wizardHref and applyPrefill', () => {
 
     const result = applyPrefill(DEFAULT_ANSWERS, params);
 
-    expect(result.focus).toBeNull();
+    expect(result.products).toEqual([]);
     expect(result.seats).toBe(DEFAULT_ANSWERS.seats);
     expect(result.warehouses).toBe(1);
     expect(result.billing).toBe(DEFAULT_ANSWERS.billing);

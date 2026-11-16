@@ -8,6 +8,8 @@
   },
   "scripts": {
     "dev": "next dev -p 3400",
+    "sync:projects": "tsx --tsconfig scripts/tsconfig.sync.json scripts/sync-projects.ts",
+    "prebuild": "pnpm run sync:projects",
     "build": "next build",
     "start": "next start -p 3400",
     "typecheck": "tsc --noEmit",
@@ -25,6 +27,7 @@
     "@types/react-dom": "^19",
     "sharp": "^0.34.4",
     "typescript": "^5",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "tsx": "^4.23.15"
   }
 }

@@ -1,8 +1,9 @@
-/** Production app origins (from the platform's custom-domain configuration). */
+/** Production app origins (from the platform's custom-domain configuration, docs/DEPLOYMENT.md). */
 export const LINKS = {
   portal: 'https://kitstak.app',
   crm: 'https://crm.kitstak.app',
   wms: 'https://wms.kitstak.app',
+  projects: 'https://projects.kitstak.app',
 } as const;
 
 /** Marketing-site routes. Every internal link goes through here so navigation stays consistent. */
@@ -19,14 +20,49 @@ export const ROUTES = {
   contact: '/contact',
   founder: '/contact?topic=founder',
   demo: '/contact?topic=demo',
-  projectsAccess: '/contact?topic=projects',
 } as const;
 
-export type StackChoice = 'crm' | 'wms' | 'both';
+/** The licensable apps, in the order the stack is drawn (matches @kitstak/entitlements `MODULES`). */
+export const PRODUCT_IDS = ['crm', 'wms', 'projects'] as const;
+export type ProductId = (typeof PRODUCT_IDS)[number];
 
-/** Deep link into the setup wizard with a product already chosen. */
-export function getStartedHref(stack?: StackChoice): string {
-  return stack ? `${ROUTES.getStarted}?stack=${stack}` : ROUTES.getStarted;
+/** A chosen set of products, always in `PRODUCT_IDS` order with no repeats. Empty means none yet. */
+export type Stack = readonly ProductId[];
+
+export const FULL_STACK: Stack = PRODUCT_IDS;
+
+export function isProductId(value: string): value is ProductId {
+  return (PRODUCT_IDS as readonly string[]).includes(value);
+}
+
+/** Puts any list of product ids into canonical stack form. */
+export function toStack(products: readonly string[]): Stack {
+  return PRODUCT_IDS.filter((id) => products.includes(id));
+}
+
+/** The stack with `product` switched on or off. */
+export function toggleProduct(stack: Stack, product: ProductId): Stack {
+  return stack.includes(product) ? stack.filter((id) => id !== product) : toStack([...stack, product]);
+}
+
+/**
+ * Reads `?stack=`: a comma list (`crm,projects`) or one of the older values (`crm`, `wms`, `both`).
+ * Unknown parts are dropped; nothing valid gives an empty stack.
+ */
+export function parseStack(value: string | null | undefined): Stack {
+  if (!value) return [];
+  if (value === 'both') return ['crm', 'wms'];
+  return toStack(value.split(','));
+}
+
+export function stackParam(stack: Stack): string {
+  return stack.join(',');
+}
+
+/** Deep link into the setup wizard with products already chosen. */
+export function getStartedHref(stack?: Stack | ProductId): string {
+  const products = typeof stack === 'string' ? [stack] : (stack ?? []);
+  return products.length > 0 ? `${ROUTES.getStarted}?stack=${stackParam(toStack(products))}` : ROUTES.getStarted;
 }
 
 /**

@@ -39,6 +39,9 @@
 .slab[data-product='wms'][data-on] {
   background: var(--brand-oxblood);
 }
+.slab[data-product='projects'][data-on] {
+  background: var(--stak-projects);
+}
 .extra {
   display: flex;
   align-items: center;

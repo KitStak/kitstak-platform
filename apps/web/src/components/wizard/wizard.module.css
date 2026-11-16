@@ -353,6 +353,13 @@
 .stack[data-checked] .radio {
   border: 7px solid var(--primary);
 }
+/* Products are a multiple choice: a square box instead of a round radio. */
+.radio[data-multi] {
+  border-radius: 6px;
+}
+.stack[data-checked] .radio[data-multi] {
+  border-width: 11px;
+}
 .addon {
   grid-template-columns: minmax(0, 1fr);
   padding-right: 52px;

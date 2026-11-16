@@ -1,10 +1,13 @@
 /**
  * Model for the "Set up your Stak" wizard. The answer names and values match the portal's own
  * welcome wizard profile (`focus`, `businessType`, `teamSize`, `startMode`; see
- * docs/integration/ONBOARDING.md) so the answers can be handed to the portal at sign-up.
+ * docs/integration/ONBOARDING.md) so the answers can be handed to the portal at sign-up. The
+ * portal's `focus` only knows the CRM and the WMS, so the full product set travels separately as
+ * `products`.
  */
-import { LINKS, ROUTES } from '@/components/site-links';
-import type { StackChoice } from '@/components/site-links';
+import { LINKS, ROUTES, parseStack, stackParam, toStack } from '@/components/site-links';
+import type { ProductId, Stack } from '@/components/site-links';
+import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
 import { PRICING } from './pricing';
 import type { Billing } from './pricing';
 
@@ -59,14 +62,24 @@ export const CRM_BOARDS: readonly Option<string>[] = [
   { value: 'renewals', label: 'Renewals', note: 'Know what is coming up.' },
 ];
 
+/** Built-in Projects templates, read from the Projects app (see scripts/sync-projects.ts). */
+export const PROJECT_TEMPLATES: readonly Option<string>[] = PROJECTS_CATALOG.templates.map((t) => ({
+  value: t.slug,
+  label: t.name,
+  note: t.description,
+}));
+
 export interface StakAnswers {
-  readonly focus: StackChoice | null;
+  /** The products chosen, in stack order. Empty until the first step is answered. */
+  readonly products: Stack;
   readonly businessType: BusinessType | null;
   readonly teamSize: TeamSize;
   readonly seats: number;
   readonly warehouses: number;
   readonly wmsNeeds: readonly string[];
   readonly crmBoards: readonly string[];
+  /** Projects templates to start from (built-in slugs). */
+  readonly projectTemplates: readonly string[];
   readonly startMode: StartMode;
   /** Wants the founder-led setup add-on. */
   readonly guided: boolean;
@@ -74,33 +87,37 @@ export interface StakAnswers {
 }
 
 export const DEFAULT_ANSWERS: StakAnswers = {
-  focus: null,
+  products: [],
   businessType: null,
   teamSize: 'small',
   seats: 5,
   warehouses: 1,
   wmsNeeds: [],
   crmBoards: [],
+  projectTemplates: [],
   startMode: 'fresh',
   guided: false,
   billing: 'annual',
 };
 
-export function parseStack(value: string | null | undefined): StackChoice | null {
-  return value === 'crm' || value === 'wms' || value === 'both' ? value : null;
+export function hasProduct(answers: StakAnswers, product: ProductId): boolean {
+  return answers.products.includes(product);
 }
 
-export function hasCrm(answers: StakAnswers): boolean {
-  return answers.focus === 'crm' || answers.focus === 'both';
-}
+export const hasCrm = (answers: StakAnswers): boolean => hasProduct(answers, 'crm');
+export const hasWms = (answers: StakAnswers): boolean => hasProduct(answers, 'wms');
+export const hasProjects = (answers: StakAnswers): boolean => hasProduct(answers, 'projects');
 
-export function hasWms(answers: StakAnswers): boolean {
-  return answers.focus === 'wms' || answers.focus === 'both';
+/** The portal profile's `focus` (CRM and WMS only), or null when neither is in the stack. */
+export function portalFocus(stack: Stack): 'crm' | 'wms' | 'both' | null {
+  const crm = stack.includes('crm');
+  const wms = stack.includes('wms');
+  return crm && wms ? 'both' : crm ? 'crm' : wms ? 'wms' : null;
 }
 
 /** Whether the required answers for a step are in. `shape` and `launch` have sensible defaults. */
 export function canLeaveStep(step: StepId, answers: StakAnswers): boolean {
-  if (step === 'stack') return answers.focus !== null;
+  if (step === 'stack') return answers.products.length > 0;
   if (step === 'business') return answers.businessType !== null;
   return true;
 }
@@ -118,7 +135,7 @@ export function toggleIn(list: readonly string[], value: string): readonly strin
 
 export interface PlanStep {
   readonly key: string;
-  readonly app: 'Portal' | 'CRM' | 'WMS';
+  readonly app: 'Portal' | 'CRM' | 'WMS' | 'Projects';
   readonly title: string;
   readonly note: string;
   readonly isDone: boolean;
@@ -127,7 +144,8 @@ export interface PlanStep {
 /**
  * The checklist a new organization sees after sign-up, in the order the portal uses: solo teams
  * skip the invite, 3PLs and distributors start in the warehouse, everyone else starts in the CRM.
- * Titles are the canonical onboarding step titles.
+ * Titles are the canonical onboarding step titles. Projects runs its own first-run (a starter
+ * project from a built-in template and a guided tour), so its step comes last.
  */
 export function setupPlan(answers: StakAnswers): readonly PlanStep[] {
   const isImport = answers.startMode === 'import';
@@ -155,6 +173,21 @@ export function setupPlan(answers: StakAnswers): readonly PlanStep[] {
     { key: 'first_order', app: 'WMS', title: 'Create your first order', note: 'Take one order from allocation to label.', isDone: false },
   ];
 
+  const chosenTemplate = PROJECT_TEMPLATES.find((t) => answers.projectTemplates.includes(t.value));
+  const projects: readonly PlanStep[] = [
+    {
+      key: 'first_project',
+      app: 'Projects',
+      title: 'Start your first project',
+      note: chosenTemplate
+        ? `From the ${chosenTemplate.label} template, with its tasks, dates and rules in place.`
+        : isSample
+          ? 'Open the sample project and take the short tour.'
+          : 'Pick a template or start from a blank board.',
+      isDone: false,
+    },
+  ];
+
   const isWarehouseFirst = answers.businessType === '3pl' || answers.businessType === 'distributor';
   const crmSteps = hasCrm(answers) ? crm : [];
   const wmsSteps = hasWms(answers) ? wms : [];
@@ -165,6 +198,7 @@ export function setupPlan(answers: StakAnswers): readonly PlanStep[] {
       ? []
       : [{ key: 'invite_team', app: 'Portal' as const, title: 'Invite your team', note: 'One invite covers every app.', isDone: false }]),
     ...(isWarehouseFirst ? [...wmsSteps, ...crmSteps] : [...crmSteps, ...wmsSteps]),
+    ...(hasProjects(answers) ? projects : []),
   ];
 }
 
@@ -210,7 +244,9 @@ export function accountErrors(draft: AccountDraft): AccountErrors {
  */
 export function handoffUrl(answers: StakAnswers): string {
   const params = new URLSearchParams();
-  if (answers.focus) params.set('focus', answers.focus);
+  const focus = portalFocus(answers.products);
+  if (focus) params.set('focus', focus);
+  if (answers.products.length > 0) params.set('products', stackParam(answers.products));
   if (answers.businessType) params.set('businessType', answers.businessType);
   params.set('teamSize', answers.teamSize);
   params.set('startMode', answers.startMode);
@@ -235,14 +271,19 @@ function knownValues(options: readonly Option<string>[], value: unknown): readon
 export function parseAnswers(raw: unknown): StakAnswers {
   if (typeof raw !== 'object' || raw === null) return DEFAULT_ANSWERS;
   const data = raw as Record<string, unknown>;
+  const savedProducts = Array.isArray(data.products)
+    ? toStack(data.products.filter((p): p is string => typeof p === 'string'))
+    : // Answers saved before Projects joined the stack carried `focus` instead.
+      parseStack(typeof data.focus === 'string' ? data.focus : null);
   return {
-    focus: parseStack(typeof data.focus === 'string' ? data.focus : null),
+    products: savedProducts,
     businessType: oneOf(BUSINESS_TYPES, data.businessType),
     teamSize: oneOf(TEAM_SIZES, data.teamSize) ?? DEFAULT_ANSWERS.teamSize,
     seats: clampInt(data.seats, PRICING.crm.max, DEFAULT_ANSWERS.seats),
     warehouses: clampInt(data.warehouses, PRICING.wms.max, DEFAULT_ANSWERS.warehouses),
     wmsNeeds: knownValues(WMS_NEEDS, data.wmsNeeds),
     crmBoards: knownValues(CRM_BOARDS, data.crmBoards),
+    projectTemplates: knownValues(PROJECT_TEMPLATES, data.projectTemplates),
     startMode: oneOf(START_MODES, data.startMode) ?? DEFAULT_ANSWERS.startMode,
     guided: data.guided === true,
     billing: data.billing === 'monthly' ? 'monthly' : DEFAULT_ANSWERS.billing,
@@ -252,7 +293,7 @@ export function parseAnswers(raw: unknown): StakAnswers {
 /* ------------------------------------------------------------------ Deep links into the wizard */
 
 export interface WizardPrefill {
-  readonly stack: StackChoice;
+  readonly stack: Stack;
   readonly seats: number;
   readonly warehouses: number;
   readonly billing: Billing;
@@ -261,7 +302,7 @@ export interface WizardPrefill {
 /** Wizard link that carries a priced stack from the calculator, so nobody re-enters it. */
 export function wizardHref(prefill: WizardPrefill): string {
   const params = new URLSearchParams({
-    stack: prefill.stack,
+    stack: stackParam(prefill.stack),
     seats: String(prefill.seats),
     warehouses: String(prefill.warehouses),
     billing: prefill.billing,
@@ -277,7 +318,7 @@ export function applyPrefill(base: StakAnswers, params: URLSearchParams): StakAn
   const billing = params.get('billing');
   return {
     ...base,
-    focus: stack ?? base.focus,
+    products: stack.length > 0 ? stack : base.products,
     seats: seats === null ? base.seats : clampInt(Number(seats), PRICING.crm.max, base.seats),
     warehouses: warehouses === null ? base.warehouses : clampInt(Number(warehouses), PRICING.wms.max, base.warehouses),
     billing: billing === 'monthly' || billing === 'annual' ? billing : base.billing,
