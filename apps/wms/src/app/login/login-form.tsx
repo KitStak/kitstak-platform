@@ -120,9 +120,6 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
       {isSubmitting ? <HandoffScreen title="Signing you in" detail="Opening your warehouse" /> : null}
       <div className="rounded-xl border border-border bg-surface p-8 shadow-lg">
         <h1 className="text-xl font-bold tracking-tight text-foreground">Log in</h1>
-        <p className="mt-1 text-sm text-secondary">
-          Welcome back. Enter your credentials to access your warehouse.
-        </p>
 
         {error ? (
           <div

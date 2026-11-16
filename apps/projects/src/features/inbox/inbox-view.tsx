@@ -52,30 +52,20 @@ const FILTERS: readonly { value: InboxFilter; label: string }[] = [
   { value: 'archived', label: 'Archive' },
 ];
 
-const EMPTY: Record<InboxFilter, { title: string; description: string }> = {
-  all: {
-    title: 'You’re all caught up',
-    description:
-      'When someone mentions you, assigns you a task or updates something you follow, it shows up here.',
-  },
-  unread: { title: 'Nothing unread', description: 'You’ve seen everything. New updates will appear here.' },
+const EMPTY: Record<InboxFilter, { title: string; description?: string }> = {
+  all: { title: 'You’re all caught up' },
+  unread: { title: 'Nothing unread' },
   mentions: {
     title: 'No mentions yet',
-    description: 'When someone types @ and your name in a comment, you’ll see it here.',
+    description: 'Type @ and a name in a comment to mention someone.',
   },
-  assigned: {
-    title: 'Nothing assigned lately',
-    description: 'When a teammate gives you a task, it shows up here.',
-  },
-  comments: { title: 'No new comments', description: 'Comments on tasks you follow show up here.' },
+  assigned: { title: 'Nothing assigned lately' },
+  comments: { title: 'No new comments' },
   due: {
     title: 'No due-date reminders',
-    description: 'We remind you here when a task of yours is due today, tomorrow, or is late.',
+    description: 'Reminders show here when a task of yours is due today, tomorrow, or is late.',
   },
-  archived: {
-    title: 'Nothing archived',
-    description: 'Archive notifications you’re done with to keep your inbox tidy.',
-  },
+  archived: { title: 'Nothing archived' },
 };
 
 export function InboxView({
@@ -203,7 +193,6 @@ export function InboxView({
   return (
     <Page
       title="Inbox"
-      subtitle="Mentions, assignments and updates on tasks you follow."
       width={split ? 'full' : 'narrow'}
       actions={
         <Button

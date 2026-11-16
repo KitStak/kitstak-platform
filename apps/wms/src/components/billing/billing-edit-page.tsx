@@ -647,7 +647,7 @@ export function BillingEditPage({ id }: { readonly id: string }) {
           {c.fees.length === 0 && !feeEditor ? (
             <EmptyState
               title="No fees yet"
-              description="Add receiving, storage, pick and pack, shipment, VAS or recurring fees. Each fee can have tiers, conditions and a minimum or maximum."
+              description="Add receiving, storage, pick and pack, shipment, VAS or recurring fees."
               action={
                 locked ? undefined : (
                   <Button variant="primary" onClick={() => setFeeEditor({ fee: null })}>

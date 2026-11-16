@@ -334,7 +334,7 @@ export function CustomersCard() {
               ))}
             </ul>
           ) : (
-            <p className="px-4 py-6 text-center text-sm text-fg-muted">Link a customer or a CRM deal to a project, and its deal and warehouse activity show up here.</p>
+            <p className="px-4 py-6 text-center text-sm text-fg-muted">Link a customer or CRM deal to a project to see its activity here.</p>
           )}
         </>
       )}

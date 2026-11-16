@@ -124,7 +124,6 @@ export function AddFolderDialog({ open, onClose, workspaceId, parentFolderId = n
         <DialogContent size="sm" data-testid="add-folder-dialog" onEscapeKeyDown={preventEscape}>
           <DialogHeader
             title="Create folder"
-            description="Group related boards and dashboards."
             icon={<Folder aria-hidden className="size-6" style={{ color: `var(--label-${color}-text)` }} />}
           />
           <form noValidate onSubmit={submit} className="contents">

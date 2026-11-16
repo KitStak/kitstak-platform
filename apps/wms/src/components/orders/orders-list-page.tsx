@@ -72,17 +72,13 @@ import { eligibility } from './bulk/order-eligibility';
 import { CHECKING_PERMISSIONS } from './use-order-permissions';
 import { OrderBulkMenus } from './bulk/order-bulk-menus';
 
-const COPY: Readonly<
-  Record<OrderView, { readonly title: string; readonly helper: string; readonly gridKey: string }>
-> = {
+const COPY: Readonly<Record<OrderView, { readonly title: string; readonly gridKey: string }>> = {
   backlog: {
     title: 'Shipment Orders',
-    helper: 'Every open order across channels. Allocate, pick, pack and ship from one place.',
     gridKey: SHIPMENT_ORDERS_GRID_KEY,
   },
   shipped: {
     title: 'Shipped & Canceled Orders',
-    helper: 'Orders that left the building or were cancelled. Create RMAs and return labels here.',
     gridKey: SHIPPED_ORDERS_GRID_KEY,
   },
 };
@@ -304,7 +300,7 @@ function MobileOverflowMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[240px]">
-        <DropdownMenuItem icon={RefreshCw} description="Reload the list" onSelect={onRefresh}>
+        <DropdownMenuItem icon={RefreshCw} onSelect={onRefresh}>
           Refresh
         </DropdownMenuItem>
         {canImport ? (
@@ -452,8 +448,6 @@ export function OrdersListPage({ view }: { readonly view: OrderView }) {
         title={copy.title}
         mobileTitle={view === 'backlog' ? 'Orders' : 'Shipped'}
         breadcrumbs={orderCrumbs(copy.title)}
-        // The helper sentence is hidden on phones so the grid keeps its rows.
-        helper={<span className="hidden md:inline">{copy.helper}</span>}
         tabs="orders"
         actions={
           <HeaderActions
@@ -519,7 +513,6 @@ export function OrdersListPage({ view }: { readonly view: OrderView }) {
                   },
                   {
                     title: 'Create shipment orders here',
-                    description: 'Start the six-step order wizard.',
                     icon: Plus,
                     href: '/orders/new',
                   },

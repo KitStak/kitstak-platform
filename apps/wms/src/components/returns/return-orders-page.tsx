@@ -60,9 +60,6 @@ import type { ReturnLineRow } from './return-types';
 /** Muted look for a disabled toolbar menu item (the reason shows as its description). */
 const MUTED_ITEM = 'opacity-60 [&_svg]:text-faint';
 
-export const RETURNS_HELPER =
-  'Return orders (RMAs) track what customers send back, from the return label to receiving at the return station.';
-
 function activeStatus(
   filters: readonly { field: string; op: string; values?: readonly string[] }[],
 ): ReturnStatus | null {
@@ -484,7 +481,6 @@ export function ReturnOrdersPage() {
         title="Return Orders"
         breadcrumbs={[{ label: 'Fulfillment' }, { label: 'Outbound' }, { label: 'Return Orders' }]}
         tabs="orders"
-        helper={RETURNS_HELPER}
         actions={actions}
       />
       <StatusPills counts={summary.data?.data} active={status} onPick={pick} />

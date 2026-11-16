@@ -159,7 +159,6 @@ export function PackingDashboard() {
       <PageHeader
         title="Packing Station"
         breadcrumbs={[{ label: 'Fulfillment' }, { label: 'Outbound' }, { label: 'Packing Station' }]}
-        helper="Choose your station, then scan what you are packing from."
         actions={
           <span className="flex items-center gap-4">
             <Link

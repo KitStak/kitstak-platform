@@ -124,7 +124,6 @@ export function WorkspaceContentTab({ tree, view, onViewChange }: WorkspaceConte
       <EmptyState
         illustration="workspace"
         title="Start by adding a board"
-        description="Boards hold your deals, leads, contacts and projects. Dashboards roll them up."
         actions={
           canCreate ? (
             <>

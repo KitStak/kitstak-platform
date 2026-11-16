@@ -342,7 +342,7 @@ export function StepCustomer() {
 
       <FormSection
         title="Shipment address"
-        description="Where the order ships. Verify it before picking to avoid carrier address corrections."
+        description="Verify it before picking to avoid carrier address corrections."
         action={
           <DisabledReason
             reason={

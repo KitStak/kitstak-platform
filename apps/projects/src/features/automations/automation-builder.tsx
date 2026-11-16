@@ -1235,7 +1235,7 @@ export function AutomationBuilder({
             </span>
           }
           title={draft.id ? 'Edit automation' : recipeName ? `Set up “${recipeName}”` : 'New automation'}
-          description="Build it like a sentence. Click any underlined words to change them."
+          description="Click any underlined words to change them."
         />
         <DialogBody className="pb-4">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,240px)]">

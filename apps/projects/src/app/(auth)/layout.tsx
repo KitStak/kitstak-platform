@@ -54,7 +54,6 @@ export default function AuthLayout({ children }: { readonly children: React.Reac
         <footer className="flex flex-wrap items-center justify-between gap-2 text-xs text-fg-muted">
           <span>© {new Date().getFullYear()} KitStak</span>
           <span className="flex items-center gap-4">
-            <span className="hidden sm:inline">One account for every KitStak app</span>
             <a className="hover:text-fg hover:underline" href={`${urls.crm}/privacy`}>
               Privacy
             </a>
@@ -68,7 +67,6 @@ export default function AuthLayout({ children }: { readonly children: React.Reac
         <BoardPreview />
         <div className="relative max-w-md text-center text-white">
           <p className="text-2xl leading-tight font-semibold tracking-[-0.02em]">Plan it. Track it. Ship it.</p>
-          <p className="mt-3 text-md text-white/80">Boards, lists, timelines and goals your whole team understands at a glance.</p>
         </div>
       </aside>
     </div>

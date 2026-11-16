@@ -44,7 +44,7 @@ export function ShortcutsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
-        <DialogHeader title="Keyboard shortcuts" description="Move faster across KitStak." />
+        <DialogHeader title="Keyboard shortcuts" />
         <DialogBody className="grid gap-6 pb-6 sm:grid-cols-2">
           {sections.map((section) => (
             <section key={section.title}>

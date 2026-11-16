@@ -205,11 +205,7 @@ export function CodeGenerationPage() {
   const [log, setLog] = React.useState<SequenceRow | null>(null);
   return (
     <DataSetupShell>
-      <PageHeader
-        title="Auto Code Generation Preferences"
-        crumbLabel="Auto code generation"
-        helper="Automate codes for traceability, or keep entering them by hand."
-      />
+      <PageHeader title="Auto Code Generation Preferences" crumbLabel="Auto code generation" />
       <div className="grid gap-4 px-6 py-5 xl:grid-cols-2">
         {q.isPending ? (
           [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-60 w-full rounded-xl" />)

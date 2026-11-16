@@ -543,8 +543,8 @@ function Tiers({ form, unit }: { readonly form: UseFormReturn<F>; readonly unit:
             </tbody>
           </table>
           <p className="border-t border-border bg-surface-sunken/60 px-3 py-1.5 text-2xs text-faint">
-            Each charge starts where the previous one ends: 0 to 100 then 100 to 500 bills everything above 100
-            (including fractions such as 100.5) at the second rate.
+            Each charge starts where the previous one ends: 0 to 100 then 100 to 500 bills everything above
+            100 (including fractions such as 100.5) at the second rate.
           </p>
         </div>
       )}
@@ -691,9 +691,6 @@ export function FeeForm({
           <h3 className="text-base font-semibold text-foreground">
             {fee ? `Edit fee ${fee.name}` : 'Create fee'}
           </h3>
-          <p className="text-xs text-secondary">
-            Choose what is billed, how it&rsquo;s counted, and the price.
-          </p>
         </div>
         <Button
           size="icon-sm"

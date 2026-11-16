@@ -419,11 +419,7 @@ export function EndOfDayPage() {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader
-        title="End Of The Day"
-        helper="Monitor total packages per carrier account, warehouse and day, then close the manifest for carrier pickup and reconciliation."
-        tabs="shipments"
-      />
+      <PageHeader title="End Of The Day" tabs="shipments" />
       <OverdueBanner
         canClose={canClose}
         onShow={() => {

@@ -93,7 +93,6 @@ export function JobTypesPage() {
     <>
       <ListShell<GridRow>
         title="Job Types"
-        helper="Create and list job types: how orders are batched, allocated, picked, counted or replenished."
         actions={
           // One rule across M03: actions the role can never perform are hidden, not disabled.
           permissions.has(JOB_TYPE_PERMS.create) ? (

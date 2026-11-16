@@ -518,7 +518,7 @@ export function ListView() {
             <EmptyState
               illustration="board"
               title="No tasks yet"
-              description="Add your first task below, or press C anywhere. Group tasks into sections like “To plan” and “This week”."
+              description="Add your first task below, or press C anywhere."
               actions={
                 canCreate ? (
                   <Button leadingIcon={<Plus aria-hidden />} onClick={() => openQuickAdd({ projectId: project.id })}>

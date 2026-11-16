@@ -120,7 +120,6 @@ export function IntegrationHelpCenter({
           { label: 'Integration Management', href: '/integrations/channels' },
           { label: 'Help Center' },
         ]}
-        helper="How to connect each sales channel and carrier, what every channel method does, and how to read the logs and monitoring screens."
       />
       <div className="mt-4 grid gap-6 px-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <nav aria-label="Help topics" className="flex flex-col gap-1 self-start text-sm lg:sticky lg:top-4">

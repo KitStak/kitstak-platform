@@ -216,9 +216,6 @@ function Celebration({
       </span>
       <div>
         <p className="text-base font-semibold text-foreground">Your warehouse is ready</p>
-        <p className="mt-1 text-sm text-secondary">
-          Every setup step is complete. Orders, picking and shipping are good to go.
-        </p>
       </div>
       {canManage ? (
         <Button variant="secondary" size="sm" disabled={busy} onClick={onDismiss}>

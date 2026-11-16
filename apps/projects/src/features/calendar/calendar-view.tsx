@@ -759,7 +759,7 @@ export function CalendarView() {
           <OptionsDivider />
           <OptionSwitch label="Show weekends" checked={prefs.showWeekends} onChange={(showWeekends) => setPrefs({ showWeekends })} />
           <OptionSwitch label="Show subtasks" checked={prefs.showSubtasks} onChange={(showSubtasks) => setPrefs({ showSubtasks })} />
-          <OptionSwitch label="Hide done tasks" description="Finished work stays out of the way. Turn off to see it." checked={!prefs.showCompleted} onChange={(hide) => setPrefs({ showCompleted: !hide })} />
+          <OptionSwitch label="Hide done tasks" checked={!prefs.showCompleted} onChange={(hide) => setPrefs({ showCompleted: !hide })} />
         </OptionsMenu>
         <Button
           variant={prefs.trayOpen ? 'secondary' : 'ghost'}
@@ -792,7 +792,7 @@ export function CalendarView() {
               <EmptyState
                 illustration="board"
                 title="Nothing on the calendar yet"
-                description="Tasks with a due date show up here. Click any day to add one."
+                description="Tasks with a due date show up here."
                 actions={
                   canCreate ? (
                     <Button leadingIcon={<Plus aria-hidden />} onClick={() => openQuickAdd({ projectId: project.id, dueDate: today })}>

@@ -300,7 +300,6 @@ export function LocationsPage() {
       <PageHeader
         title="Locations"
         helpHref="/locations/help#locations"
-        helper="Create, edit, label and lock the bins, shelves and docks in each warehouse."
         actions={
           <>
             {/* Phone: one primary action plus a More menu, so the header stays on one row (judge J1). */}

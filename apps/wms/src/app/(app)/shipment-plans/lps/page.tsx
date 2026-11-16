@@ -12,7 +12,6 @@ export default function Page() {
       fallback={
         <ShipListFallback
           title="Shipment Plan LPs"
-          helper="License plates allocated to or shipped from the orders of each shipment plan."
           tabs="shipment-plans"
         />
       }

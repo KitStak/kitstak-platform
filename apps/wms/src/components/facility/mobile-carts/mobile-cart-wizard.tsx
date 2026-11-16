@@ -697,11 +697,6 @@ export function MobileCartWizardDrawer({
       width={60}
       bodyClassName="pb-0"
       title={editId ? `Edit mobile cart ${detail.data?.data.code ?? ''}`.trim() : 'Create mobile cart'}
-      description={
-        editId
-          ? 'Both steps are editable; Save applies them.'
-          : 'Describe the cart, then review its generated cell barcodes.'
-      }
     >
       {editId && detail.isError ? (
         <EmptyState

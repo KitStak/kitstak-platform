@@ -143,7 +143,6 @@ export function JobsListPage() {
   return (
     <ListShell<JobRow>
       title="Job Management"
-      helper="Manage the jobs that waves and manual allocation create."
       tabs="jobs"
       actions={<JobTypesLink />}
       gridKey={JOBS_GRID.gridKey}

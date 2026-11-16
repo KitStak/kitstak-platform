@@ -32,7 +32,6 @@ import { VendorDetailsDrawer } from './vendor-details-drawer';
 import { VendorDrawer } from './vendor-drawer';
 
 /** One line, like the Clients / Customers / Retailers helpers, so the Organization header and tab strip keep the same height. */
-export const VENDOR_HELPER = "Companies that supply your clients' products, used on purchase orders.";
 export const OPEN_PO_DELETE_REASON =
   'This vendor has open purchase orders. Complete or cancel them before deleting.';
 export const OPEN_PO_DEACTIVATE_REASON =
@@ -278,7 +277,7 @@ export function VendorsPage({ tabs }: { readonly tabs: 'receiving' | 'organizati
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       {/* Always pass an element: permissions resolve on the client, and a null here makes SSR drop the actions slot (hydration mismatch). */}
-      <PageHeader title="Vendors" tabs={tabs} helper={VENDOR_HELPER} actions={<>{createButton}</>} />
+      <PageHeader title="Vendors" tabs={tabs} actions={<>{createButton}</>} />
       <GridToolbar
         {...g.toolbarProps}
         searchPlaceholder="Search by vendor or display name"

@@ -255,11 +255,7 @@ export function GeneralStep({
           defaultOpen={Boolean(form.getValues('priority') !== 'None' || deleteOn)}
         >
           <div className="flex flex-col gap-4">
-            <FormField<F>
-              name="priority"
-              label="Priority"
-              description="Choose a priority tag for all jobs in this wave."
-            >
+            <FormField<F> name="priority" label="Priority">
               {(c) => (
                 <SegmentedControl
                   ariaLabel="Priority"
@@ -270,9 +266,6 @@ export function GeneralStep({
               )}
             </FormField>
             <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface-sunken/40 p-3">
-              <p className="text-xs text-secondary">
-                Automate deletion of pending jobs based on a set frequency.
-              </p>
               <div className="grid gap-4 md:grid-cols-3">
                 <FormField<F> name="deleteIfNotStarted" label="Delete the jobs if not started">
                   {(c) => (
@@ -565,7 +558,6 @@ function SetTimePopover({
         <div className="mt-3 flex flex-col gap-2">
           {tab === 'specific' ? (
             <>
-              <p className="text-xs text-secondary">Enter the specific time at which the job will repeat.</p>
               <TimePicker
                 value={time}
                 onChange={setTime}
@@ -670,10 +662,7 @@ export function ScheduleStep({ form, timezone }: { readonly form: Form; readonly
   const next = now !== null ? nextRunAt(days, times, timezone, new Date(now)) : null;
   return (
     <div className="flex flex-col gap-5">
-      <FormSection
-        title="Days"
-        description="Select the days you would like to schedule for this rule set to run. With no days the rule only runs when you press Run."
-      >
+      <FormSection title="Days" description="With no days selected, the rule only runs when you press Run.">
         <div className="flex flex-wrap gap-2" role="group" aria-label="Days">
           {WEEKDAYS.map((d) => {
             const on = days.includes(d);
@@ -699,7 +688,7 @@ export function ScheduleStep({ form, timezone }: { readonly form: Form; readonly
       </FormSection>
       <FormSection
         title="Time"
-        description={`Select the times you would like this rule set to run on scheduled days (${timezone}).`}
+        description={`Times are in ${timezone}.`}
         action={
           <span className="flex items-center gap-2">
             <span

@@ -23,7 +23,7 @@ export default async function NoWorkspacePage() {
         </div>
         <h1 className="mt-4 text-xl font-semibold text-fg">You’re not in an organization yet</h1>
         <p className="mt-2 text-base text-fg-secondary">
-          Projects live inside an organization. Create one in the Portal, or ask a teammate to invite you.
+          Create one in the Portal, or ask a teammate to invite you.
         </p>
         <a
           href={portal}

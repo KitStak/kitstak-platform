@@ -252,10 +252,7 @@ export function StepPackTypes() {
 
   return (
     <div className="flex flex-col gap-4" data-field="packTypes">
-      <p className="text-xs text-secondary">
-        Add and edit pack types here. Barcodes can be defined for each pack type; scanning any of them
-        identifies the pack.
-      </p>
+      <p className="text-xs text-secondary">Scanning any pack type barcode identifies the pack.</p>
       <SegmentedTabs
         ariaLabel="Pack type groups"
         active={tab}

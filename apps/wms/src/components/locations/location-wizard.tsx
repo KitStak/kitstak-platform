@@ -288,10 +288,7 @@ function InformationStep({
           <LocationCustomFields form={form} canManage={canManageFields} />
         </div>
       </FormSection>
-      <FormSection
-        title="Location rules"
-        description="Select the rules that define how this location can be used."
-      >
+      <FormSection title="Location rules">
         <div className="grid gap-x-4 gap-y-2.5 md:grid-cols-2">
           {LOCATION_RULES.map((r) => (
             <CheckboxField<F> key={r.key} name={`info.${r.key}`} label={r.label} hint={r.hint} />
@@ -562,7 +559,6 @@ function WizardBody({
         label: 'LP capacity',
         icon: Layers,
         isOptional: true,
-        description: 'License plate types this location accepts.',
         render: ({ form }) => {
           formRef.current = form;
           return <LpCapacityStep form={form} />;

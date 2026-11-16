@@ -112,9 +112,6 @@ export default async function OrganizationSettingsPage() {
       <header className="lg:col-span-2">
         <p className="text-sm font-medium text-fg-muted">{activeOrg.name}</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-fg">Organization</h1>
-        <p className="mt-2 text-md text-fg-secondary">
-          Profile, members and invitations, shared by every KitStak app.
-        </p>
       </header>
 
       <div className="flex min-w-0 flex-col gap-8">
@@ -125,9 +122,6 @@ export default async function OrganizationSettingsPage() {
           <h2 id="org-profile-heading" className="text-base font-semibold text-fg">
             Profile
           </h2>
-          <p className="mt-1 text-sm text-fg-muted">
-            The slug identifies this organization across CRM and WMS.
-          </p>
           <div className="mt-5">
             <OrgProfileForm
               orgId={activeOrg.id}

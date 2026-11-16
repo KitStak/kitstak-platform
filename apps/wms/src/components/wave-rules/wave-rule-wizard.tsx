@@ -43,34 +43,31 @@ type Detail = Awaited<ReturnType<typeof getWaveRuleDetail>>;
 const OP_CARDS: readonly {
   readonly value: Op;
   readonly title: string;
-  readonly description: string;
+  readonly description?: string;
   readonly icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { value: 'Picking', title: 'Picking', description: 'Set up rules for picking jobs.', icon: PackageSearch },
+  { value: 'Picking', title: 'Picking', icon: PackageSearch },
   {
     value: 'Cycle Count',
     title: 'Cycle count',
-    description: 'Set up rules for count jobs.',
     icon: ClipboardCheck,
   },
   {
     value: 'Replenishment',
     title: 'Replenishment',
-    description: 'Set up rules for replenishment jobs.',
     icon: RefreshCw,
   },
   {
     value: 'Order Merge',
     title: 'Order merge',
-    description: 'Set up rules for merging orders based on configured criteria.',
+    description: 'Merge orders that match configured criteria.',
     icon: GitMerge,
   },
   // Logiwa's AI Wave copy. Built in: the AI Jobs app (Settings → Apps) only tunes batch size and routing.
   {
     value: 'AI Job',
     title: 'AI job',
-    description:
-      'Create an AI Wave and set up rules for job creation. The jobs created by AI Wave will be optimized by AI.',
+    description: 'Jobs created by an AI Wave are optimized by AI.',
     icon: Sparkles,
   },
 ];
@@ -359,7 +356,6 @@ export function WaveRuleDrawer({
       dirty={dirty}
       width={60}
       title={editId ? `Edit wave rule ${d?.name ?? ''}`.trim() : 'Create a new wave rule'}
-      description={editId || chosen ? undefined : 'Choose the operation type of the jobs this rule creates.'}
       headerExtra={
         chosen ? (
           <span className="inline-flex w-fit rounded-full bg-primary-soft px-2 py-0.5 text-2xs font-semibold text-primary">

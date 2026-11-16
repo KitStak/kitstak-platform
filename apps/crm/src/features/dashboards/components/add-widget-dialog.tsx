@@ -165,7 +165,7 @@ function Gallery({ onPick, onClose }: { readonly onPick: (kind: WidgetKind) => v
       </div>
       <footer className="flex items-center justify-between gap-3 border-t border-border-subtle px-6 py-3">
         <p className="hidden text-sm text-fg-muted sm:block">
-          {results.length} {results.length === 1 ? 'widget' : 'widgets'} · Every widget previews your real data before you add it.
+          {results.length} {results.length === 1 ? 'widget' : 'widgets'}
         </p>
         <Button variant="ghost" onClick={onClose} className="ml-auto">
           Cancel

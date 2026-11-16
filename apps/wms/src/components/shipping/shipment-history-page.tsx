@@ -142,10 +142,7 @@ export function ShipmentHistoryPage() {
   const hasState = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader
-        title="Shipment History"
-        helper="Every unit that left inventory: shipped orders and remove-inventory actions, by SKU, lot and LPN, straight from the ledger."
-      />
+      <PageHeader title="Shipment History" />
       <GridToolbar
         {...g.toolbarProps}
         searchPlaceholder="Order code, SKU, tracking or store order #"

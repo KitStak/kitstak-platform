@@ -102,7 +102,6 @@ export function AlgorithmTypePicker() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         title="Select Algorithm Type"
-        helper="Select an algorithm type to build your own algorithm."
         actions={
           <>
             <Link

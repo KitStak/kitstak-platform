@@ -161,9 +161,6 @@ function Celebration({
           <h2 id="home-setup-guide" className="text-md font-semibold text-fg">
             All set
           </h2>
-          <p className="text-sm text-fg-muted">
-            Your CRM is up and running. Boards, pipeline, team and dashboards are in place.
-          </p>
         </div>
         {canManage ? (
           <Button

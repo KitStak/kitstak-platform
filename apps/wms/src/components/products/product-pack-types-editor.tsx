@@ -301,8 +301,7 @@ function Board({ payload, onSaved }: { readonly payload: FormPayload; readonly o
     <div className="flex flex-col gap-4" data-testid="pack-types-editor">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-secondary">
-          Add, edit or delete pack types and their barcodes. Changes save immediately; scanning any barcode
-          identifies its pack.
+          Changes save immediately. Scanning any barcode identifies its pack.
         </p>
         {saving ? (
           <span role="status" className="flex items-center gap-1.5 text-xs text-secondary">

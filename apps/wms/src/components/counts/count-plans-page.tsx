@@ -83,12 +83,6 @@ import { COUNT_ACTION_INFO, CountBulkBar, type CountBulkAction } from './count-b
 import { InstantCountModal } from './instant-count-modal';
 import { CountAccuracyDrawer } from './count-accuracy-drawer';
 
-export const COUNT_PLAN_HELPER =
-  'Create, edit or cancel count plans by location or SKU, assign count jobs and post counted results to inventory.';
-/** Read-only roles (no create / edit / cancel / update rights) get neutral copy instead of verbs they can't use. */
-export const COUNT_PLAN_HELPER_READONLY =
-  'Review count plans by location or SKU, their count jobs and the counted results posted to inventory.';
-
 type DialogState = { kind: 'cancel' | 'delete' | 'update' | 'job'; rows: readonly CountPlanRow[] } | null;
 
 function HeaderActions({
@@ -458,11 +452,6 @@ export function CountPlansPage() {
       <PageHeader
         title="Count Plan"
         tabs="counts"
-        helper={
-          can.create || can.edit || can.cancel || can.update || can.job
-            ? COUNT_PLAN_HELPER
-            : COUNT_PLAN_HELPER_READONLY
-        }
         actions={
           <HeaderActions
             canCreate={can.create}

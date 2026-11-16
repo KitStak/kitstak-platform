@@ -51,7 +51,7 @@ export function RecordChangeLogDrawer({ open, onOpenChange, path, entityCode }: 
       onOpenChange={onOpenChange}
       width={60}
       title={entityCode ? `Change log · ${entityCode}` : 'Change log'}
-      description="Every change to this record, newest first."
+      description="Newest first."
     >
       {query.isPending ? (
         <SkeletonTable rows={8} columns={4} />

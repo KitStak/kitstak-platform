@@ -109,7 +109,7 @@ export function PipelinePage() {
       description={
         data
           ? `${data.board.name} · ${plural(data.board.itemCount, noun(data.board.itemTerminology))} · forecast weighted by stage probability`
-          : 'Forecast, conversion and pipeline health'
+          : undefined
       }
       breadcrumbs={[{ label: 'Home', href: routes.home(org.slug) }, { label: 'CRM' }, { label: 'Pipeline' }]}
       actions={actions}
@@ -246,7 +246,6 @@ function PipelineBody({
           id="crm-funnel-card"
           className="xl:col-span-7"
           title="Stage funnel"
-          description="Count, value and conversion between stages"
           aside={
             data.canEdit ? (
               <Button variant="ghost" size="sm" onClick={() => onOpenSettings('stages')}>
@@ -306,7 +305,7 @@ function PipelineBody({
         </CrmCard>
       </div>
 
-      <CrmCard id="crm-velocity-card" title="Stage velocity" description="How long deals sit in each stage before moving on">
+      <CrmCard id="crm-velocity-card" title="Stage velocity">
         <VelocityStrip stages={data.velocity} />
       </CrmCard>
       <p className="text-xs text-fg-muted">

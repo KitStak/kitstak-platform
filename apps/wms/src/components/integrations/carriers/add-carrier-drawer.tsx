@@ -136,7 +136,6 @@ export function AddCarrierDrawer({
       dirty={Boolean(setupName || payor || Object.values(creds).some(Boolean))}
       width={35}
       title={provider === 'kitstaks-sandbox' ? 'KitStak Sandbox carrier' : `${providerName} Carrier API Keys`}
-      description={`This is where you set up your ${providerName} integration for shipping.`}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>

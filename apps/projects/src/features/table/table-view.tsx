@@ -1190,7 +1190,7 @@ export function TableView() {
             illustration="board"
             size="sm"
             title="No tasks yet"
-            description="Type a task name in the row above and press Enter. Every field becomes a column you can sort and edit."
+            description="Type a task name in the row above and press Enter."
           />
         ) : null}
       </div>

@@ -44,10 +44,7 @@ async function ResetBody({ searchParams }: { readonly searchParams: SearchParams
 
 export default function ResetPasswordPage({ searchParams }: { readonly searchParams: SearchParams }) {
   return (
-    <AuthFrame
-      title="Choose a new password"
-      description="Pick a strong password you don't use anywhere else."
-    >
+    <AuthFrame title="Choose a new password" description={null}>
       <Suspense fallback={null}>
         <ResetBody searchParams={searchParams} />
       </Suspense>

@@ -84,10 +84,7 @@ export function BillingCreatePage() {
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        title="Create billing form"
-        helper="Start with who is billed and how often; fees are added on the next screen."
-      />
+      <PageHeader title="Create billing form" />
       <Form form={form} onSubmit={submit} guardUnsaved className="px-6 pb-8">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex flex-col gap-5 rounded-xl border border-border bg-surface p-5 shadow-xs">

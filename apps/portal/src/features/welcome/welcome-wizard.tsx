@@ -38,22 +38,20 @@ import { PillGroup, TileGroup } from './option-tile';
 type WizardStep = 'focus' | 'about' | 'start' | 'plan';
 const STEP_ORDER: readonly WizardStep[] = ['focus', 'about', 'start', 'plan'];
 
-const STEP_COPY: Readonly<Record<WizardStep, { title: string; subtitle: string }>> = {
+const STEP_COPY: Readonly<Record<WizardStep, { title: string; subtitle?: string }>> = {
   focus: {
     title: 'What will your team run on KitStak?',
-    subtitle: 'Pick what you need today. You can always turn on more later.',
+    subtitle: 'You can turn on more later.',
   },
   about: {
     title: 'What kind of business are you?',
-    subtitle: 'This shapes your setup plan. Nothing here is locked in.',
+    subtitle: 'Nothing here is locked in.',
   },
   start: {
     title: 'How do you want to start?',
-    subtitle: 'Every option leads to the same place: a working workspace.',
   },
   plan: {
     title: 'Here’s your setup plan',
-    subtitle: 'Steps check themselves off as you work. Nothing to tick manually.',
   },
 };
 
@@ -143,9 +141,11 @@ export function WelcomeWizard({ firstName, orgName, crmEntitled, wmsEntitled }: 
         </div>
         <div>
           <h1 className="text-2xl font-semibold tracking-[-0.02em] text-fg">{copy.title}</h1>
-          <p className="mt-2 max-w-lg text-md text-fg-secondary">
-            {step === 'focus' ? `Good to meet you, ${firstName}. ${copy.subtitle}` : copy.subtitle}
-          </p>
+          {step === 'focus' || copy.subtitle ? (
+            <p className="mt-2 max-w-lg text-md text-fg-secondary">
+              {step === 'focus' ? `Good to meet you, ${firstName}. ${copy.subtitle ?? ''}` : copy.subtitle}
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2" aria-label={`Step ${stepIndex + 1} of ${STEP_ORDER.length}`}>
           {STEP_ORDER.map((name, index) => (
@@ -296,7 +296,7 @@ export function WelcomeWizard({ firstName, orgName, crmEntitled, wmsEntitled }: 
             <div className="flex items-center gap-2 border-t border-border-subtle px-5 py-3">
               <Check aria-hidden className="size-4 text-success-text" />
               <p className="text-xs text-fg-muted">
-                KitStak detects each step as you finish it, and your progress updates by itself.
+                Steps check themselves off as you finish them.
               </p>
             </div>
           </div>

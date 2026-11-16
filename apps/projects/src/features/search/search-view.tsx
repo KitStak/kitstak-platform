@@ -215,7 +215,7 @@ export function SearchView({ initialParams, initial }: { readonly initialParams:
   );
 
   return (
-    <Page title="Search" subtitle="Find any task, comment, project, person or goal." width="narrow">
+    <Page title="Search" width="narrow">
       <div className="flex flex-col gap-4" onKeyDown={onResultsKeyDown} ref={resultsRef}>
         <SearchInput
           ref={inputRef}

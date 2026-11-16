@@ -47,12 +47,7 @@ import { InfoTip } from '@/components/ui/info-tip';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toast } from '@/components/ui/toast';
 import { DisabledReason } from '@/components/ui/tooltip';
-import {
-  USER_FIELDS,
-  USERS_GRID_KEY,
-  USERS_ROLES_HELPER,
-  USERS_ROLES_TITLE,
-} from '@/lib/grid-defs/admin/users';
+import { USER_FIELDS, USERS_GRID_KEY, USERS_ROLES_TITLE } from '@/lib/grid-defs/admin/users';
 import type { UserRow } from '@/server/repositories/users';
 import {
   armDestructive,
@@ -373,7 +368,6 @@ export function UsersPage() {
       <PageHeader
         title={USERS_ROLES_TITLE}
         tabs="users"
-        helper={USERS_ROLES_HELPER}
         actions={
           <>
             <BulkImportMenu allowed={perms.import_file} loading={perms.loading} />

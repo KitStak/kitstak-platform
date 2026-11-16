@@ -110,7 +110,7 @@ function AppCard({
       </div>
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border-subtle px-4 py-3">
         <p className="text-xs text-fg-muted">
-          {state === 'connected' ? 'Works both ways. Nothing to set up.' : lockedHint}
+          {state === 'connected' ? 'Works both ways.' : lockedHint}
         </p>
         <a
           href={href}
@@ -131,16 +131,12 @@ export function IntegrationsSection({ summary }: { readonly summary: Integration
   const n = (type: keyof IntegrationLinkSummary['links']) => summary.links[type] ?? 0;
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-fg-secondary">
-        KitStak apps share one sign-in, one list of people and one list of clients, so they work together
-        without any setup. Projects also works fine on its own.
-      </p>
       <AppCard
         testId="integration-portal"
         icon="/brand/kitstak-icon-portal.svg"
         name="KitStak Portal"
         state="connected"
-        blurb="Your home base: sign-in, people, billing and the app launcher."
+        blurb="Sign-in, people, billing and the app launcher."
         features={[
           'One sign-in for every app',
           'Invite people once, use them everywhere',
@@ -156,7 +152,7 @@ export function IntegrationsSection({ summary }: { readonly summary: Integration
         icon="/brand/kitstak-icon-crm.svg"
         name="KitStak CRM"
         state={crmState}
-        blurb="Turn won deals into projects and keep sales in the loop."
+        blurb="Turn won deals into projects."
         features={[
           'Link tasks and projects to deals and accounts',
           'Start a project from a deal with one click',
@@ -184,7 +180,7 @@ export function IntegrationsSection({ summary }: { readonly summary: Integration
         icon="/brand/kitstak-icon-wms.svg"
         name="KitStak WMS"
         state={wmsState}
-        blurb="Plan warehouse work next to the orders, receipts and counts it’s about."
+        blurb="Link work to warehouse orders, receipts and counts."
         features={[
           'Link tasks to orders, work orders, receipts and counts',
           'See order status on the task',
@@ -213,7 +209,7 @@ export function IntegrationsSection({ summary }: { readonly summary: Integration
           <Link href={routes.templates()} className="font-medium text-fg-link hover:underline">
             Client onboarding
           </Link>{' '}
-          or Warehouse go-live templates, so everyone works from the same client list.
+          or Warehouse go-live templates.
           {n('core_customer')
             ? ` ${n('core_customer')} ${n('core_customer') === 1 ? 'link points' : 'links point'} at a shared client today.`
             : ''}

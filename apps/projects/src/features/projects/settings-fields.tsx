@@ -135,7 +135,7 @@ export function LabelsSettings({ highlight }: { readonly highlight?: boolean }) 
   const nextColor = color ?? (name.trim() ? colorForString(name.trim()) : 'blue');
 
   return (
-    <SettingsSection id="labels" title="Labels" description="Colored tags for sorting and filtering tasks, like “Urgent client” or “Needs design”." highlight={highlight}>
+    <SettingsSection id="labels" title="Labels" highlight={highlight}>
       {labels.length === 0 ? (
         <p className="mb-3 flex items-center gap-2 text-sm text-fg-muted">
           <Tag aria-hidden className="size-4" />
@@ -355,7 +355,7 @@ export function CustomFieldsSettings({ highlight }: { readonly highlight?: boole
     <SettingsSection
       id="fields"
       title="Custom fields"
-      description="Extra details every task in this project can have. They show in the task panel and as Table columns."
+      description="They show in the task panel and as Table columns."
       highlight={highlight}
       action={
         canEdit ? (
@@ -369,7 +369,7 @@ export function CustomFieldsSettings({ highlight }: { readonly highlight?: boole
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border-default px-4 py-6 text-center">
           <ListChecks aria-hidden className="size-6 text-icon" />
           <p className="text-sm font-medium text-fg">No custom fields yet</p>
-          <p className="max-w-sm text-xs text-fg-muted">Add fields like “Region”, “Cost” or “Client PO” to track the details your team cares about.</p>
+          <p className="max-w-sm text-xs text-fg-muted">Add fields like “Region”, “Cost” or “Client PO”.</p>
           {canEdit ? (
             <Button size="sm" className="mt-1" leadingIcon={<Plus aria-hidden />} onClick={() => setCreating(true)}>
               Add your first field

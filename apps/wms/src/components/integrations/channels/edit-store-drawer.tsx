@@ -161,7 +161,6 @@ export function EditStoreDrawer({
       dirty={dirty}
       width={60}
       title={d ? `Edit store connection · ${d.storeName}` : 'Edit store connection'}
-      description="General, warehouse mapping, advanced filters and the configuration that drives the channel methods."
     >
       {detail.isPending ? (
         <div className="flex flex-col gap-3">
@@ -360,9 +359,9 @@ function Body({
           </div>
           {detail.isSandbox ? (
             <Callout variant="info" title="KitStak Sandbox">
-              No credentials needed. Each Download Orders run creates 2 to 6 realistic orders from this client’s
-              SKUs. Scheduled runs never fail on purpose; to practise Missing Orders and Retry Download, use
-              Simulate error (flask icon) on the Download Orders row in Channel Methods.
+              No credentials needed. Each Download Orders run creates 2 to 6 realistic orders from this
+              client’s SKUs. Scheduled runs never fail on purpose; to practise Missing Orders and Retry
+              Download, use Simulate error (flask icon) on the Download Orders row in Channel Methods.
             </Callout>
           ) : (
             <section className="rounded-lg border border-border p-4">

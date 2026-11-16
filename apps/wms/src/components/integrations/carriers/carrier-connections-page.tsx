@@ -100,7 +100,6 @@ export function CarrierConnectionsPage({ provider: slug }: { readonly provider: 
         title={`${entry.name} Integration`}
         crumbLabel={entry.name}
         helpHref={`/integrations/help#carrier-${slug}`}
-        helper={`Connect ${entry.name} to KitStak to get its carriers, services and packages for rating and labels.`}
         actions={
           <div className="flex items-center gap-3">
             <Link

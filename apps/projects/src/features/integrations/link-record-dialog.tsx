@@ -119,7 +119,7 @@ function LinkRecordBody({
           </span>
         }
         title="Link a record"
-        description="Connect a deal, customer or warehouse record. Its live status shows up here and the record shows this work in its own app."
+        description="Connect a deal, customer or warehouse record."
       />
       <DialogBody className="flex flex-col gap-3 pb-4">
         {status.isPending ? (

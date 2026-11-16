@@ -103,7 +103,6 @@ function SpaceDialog({
         <DialogHeader
           icon={<EntityIcon icon={value.icon} color={value.color} size={36} />}
           title={value.id ? 'Edit space' : 'New space'}
-          description="Spaces group projects by team or department, like “Operations” or “Marketing”."
         />
         <DialogBody className="flex flex-col gap-4 pb-4">
           <Field label="Name" required error={error ?? undefined}>
@@ -254,7 +253,7 @@ export function WorkspaceSection({ spaces }: { readonly spaces: readonly SpaceDT
             size="sm"
             visual={<FolderKanban aria-hidden className="size-10 text-icon" />}
             title="No spaces yet"
-            description="Make one per team or department so projects are easy to find in the sidebar."
+            description="Make one per team or department."
             actions={
               canManage ? (
                 <Button

@@ -207,7 +207,6 @@ export function DashboardView({
     <div className="flex min-h-0 flex-1 flex-col pb-10">
       <PageHeader
         title="Dashboard"
-        helper="Live fulfillment picture for the warehouses and clients you pick. Click any number to open those items."
         actions={
           <div className="flex items-center gap-2">
             {data?.businessDay ? (
@@ -313,29 +312,14 @@ export function DashboardView({
                 else if (id === 'unfulfilled') card = <UnfulfilledCard data={data} />;
                 else if (id === 'breakdown') card = <StatusBreakdownCard data={data} />;
                 else if (id === 'channels')
-                  card = (
-                    <RankCard
-                      icon="store"
-                      title="Channels"
-                      description="Order details coming from channels"
-                      rows={data.ranks.channels}
-                    />
-                  );
+                  card = <RankCard icon="store" title="Channels" rows={data.ranks.channels} />;
                 else if (id === 'clients')
-                  card = (
-                    <RankCard
-                      icon="users"
-                      title="Clients"
-                      description="Client order details and rank"
-                      rows={data.ranks.clients}
-                    />
-                  );
+                  card = <RankCard icon="users" title="Clients" rows={data.ranks.clients} />;
                 else if (id === 'carriers') {
                   card = (
                     <RankCard
                       icon="truck"
                       title="Carriers"
-                      description="Ranking of carriers to which orders are shipped"
                       rows={data.ranks.carriers}
                       modes={[
                         {
@@ -356,14 +340,7 @@ export function DashboardView({
                     />
                   );
                 } else if (id === 'countries')
-                  card = (
-                    <RankCard
-                      icon="globe"
-                      title="Order By Country"
-                      description="Rank of the regions where orders are shipped"
-                      rows={data.ranks.countries}
-                    />
-                  );
+                  card = <RankCard icon="globe" title="Order By Country" rows={data.ranks.countries} />;
                 else card = <JobsCard data={data} />;
                 return (
                   <div

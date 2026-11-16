@@ -114,7 +114,9 @@ export interface BulkResponse {
 
 export function errorMessage(error: unknown): string {
   if (!isApiError(error)) return 'Something went wrong. Try again.';
-  return error.code === 'CONFLICT' ? 'This item changed since you opened it. Reload and try again.' : error.message;
+  return error.code === 'CONFLICT'
+    ? 'This item changed since you opened it. Reload and try again.'
+    : error.message;
 }
 
 /** Runs a JSON mutation, toasts failures and invalidates queries. Returns data or null. */
@@ -381,13 +383,7 @@ export function EntityChangeLogDrawer({
   readonly title: string;
 }) {
   return (
-    <Drawer
-      open={open}
-      onOpenChange={onOpenChange}
-      title={title}
-      description="Every create, edit and delete with who made it and when."
-      width={45}
-    >
+    <Drawer open={open} onOpenChange={onOpenChange} title={title} width={45}>
       {/* key resets paging when the record changes */}
       <ChangeLogList key={path ?? ''} path={path} enabled={open} />
     </Drawer>

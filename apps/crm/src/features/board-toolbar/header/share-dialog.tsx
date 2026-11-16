@@ -78,7 +78,6 @@ export function ShareDialog({ open, onOpenChange, board, users }: ShareDialogPro
       <DialogContent size="md" data-testid="share-dialog">
         <DialogHeader
           title={`Share “${board.name}”`}
-          description="Choose who can see and edit this board."
           icon={<Users aria-hidden />}
         />
         <DialogBody className="flex flex-col gap-5">

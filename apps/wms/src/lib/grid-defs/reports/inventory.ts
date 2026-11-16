@@ -6,15 +6,11 @@ import { INVENTORY_STATUSES, PO_TYPES, RECEIVING_TYPES, SERIAL_STATUSES } from '
 import { CLIENT_FIELD, WAREHOUSE_FIELD, bool, col, date, enumOf, num, text, type ReportDef } from './types';
 
 const SERIAL_PERMISSION = 'reports.serial_number_tracking_report.view';
-const SERIAL_HELPER =
-  "The Serial Number Report helps you monitor both primary and secondary serial numbers' statuses in the system.";
-
 export const SERIAL_TRACKING_DEF: ReportDef = {
   gridKey: 'report-serial-numbers',
   title: 'Serial Number Report',
   path: '/api/reports/serial-numbers',
   permission: SERIAL_PERMISSION,
-  helper: SERIAL_HELPER,
   fields: [
     CLIENT_FIELD,
     date('entryAt', 'Entry Date Time'),
@@ -56,7 +52,6 @@ export const SERIAL_SHIPMENTS_DEF: ReportDef = {
   title: 'Serial Number Shipment History',
   path: '/api/reports/serial-numbers/shipment-history',
   permission: SERIAL_PERMISSION,
-  helper: SERIAL_HELPER,
   fields: [
     text('carrier', 'Carrier'),
     CLIENT_FIELD,
@@ -106,7 +101,6 @@ export const SERIAL_RECEIPTS_DEF: ReportDef = {
   title: 'Serial Number Receiving History',
   path: '/api/reports/serial-numbers/receiving-history',
   permission: SERIAL_PERMISSION,
-  helper: SERIAL_HELPER,
   fields: [
     CLIENT_FIELD,
     text('damageReason', 'Damage Reason'),
@@ -166,8 +160,6 @@ export const REPLENISHMENT_DEF: ReportDef = {
   title: 'Dynamic Replenishment Report',
   path: '/api/reports/replenishment',
   permission: 'reports.dynamic_replenishment_report.view',
-  helper:
-    'Shows how much stock each SKU needs moved from reserve storage into its picking locations to cover open orders and reach its max replenishment level.',
   fields: [
     CLIENT_FIELD,
     num('openOrderQty', 'Open Order Quantity'),
@@ -232,8 +224,7 @@ export const SNAPSHOT_DEF: ReportDef = {
   title: 'Inventory Snapshot Report',
   path: '/api/reports/inventory-snapshot',
   permission: 'reports.inventory_snapshot_report.view',
-  helper:
-    'A copy of every non-empty inventory bucket, taken every night at 00:02 warehouse time (a night the server missed is rebuilt from the inventory ledger as of 00:02). Each warehouse counts once per business day, so a point-in-time check or billing reconciliation never double counts. Opens on the latest snapshot; filter on Snapshot Day for history.',
+  helper: 'Taken nightly at 00:02 warehouse time. Filter on Snapshot Day for history.',
   fields: [
     CLIENT_FIELD,
     text('damageReason', 'Damage Reason'),

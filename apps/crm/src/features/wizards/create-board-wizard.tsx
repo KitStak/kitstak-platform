@@ -310,8 +310,8 @@ export function CreateBoardWizard({
                   </DialogPrimitive.Title>
                   <DialogPrimitive.Description className="mt-1 text-base text-fg-secondary">
                     {chosen
-                      ? 'Name it and choose where it lives. You can change everything later.'
-                      : 'Boards organize your work into groups, columns and views.'}
+                      ? 'You can change everything later.'
+                      : 'Start blank or from a template.'}
                   </DialogPrimitive.Description>
                 </div>
               </div>

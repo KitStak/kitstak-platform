@@ -176,9 +176,6 @@ export function WebhooksPanel({
             <Webhook aria-hidden className="size-5" />
           </span>
           <h3 className="text-base font-semibold text-fg">No webhooks on this board</h3>
-          <p className="max-w-md text-sm text-fg-secondary">
-            Add an endpoint to stream item events to your own service or an automation hub.
-          </p>
           <Button
             className="mt-2"
             leadingIcon={<Plus aria-hidden />}
@@ -386,7 +383,7 @@ function CreateWebhookBody({
     <DialogContent size="md" data-testid="webhook-create-dialog">
       <DialogHeader
         title="Add a webhook"
-        description="KitStak will POST a signed JSON payload to this URL whenever a selected event happens on this board."
+        description="KitStak POSTs a signed JSON payload to this URL when a selected event happens."
       />
       <form
         noValidate

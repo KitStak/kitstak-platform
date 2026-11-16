@@ -12,7 +12,6 @@ export default function Page() {
       fallback={
         <ShipListFallback
           title="End Of The Day"
-          helper="Monitor total packages per carrier account, warehouse and day, then close the manifest for carrier pickup and reconciliation."
           tabs="shipments"
         />
       }

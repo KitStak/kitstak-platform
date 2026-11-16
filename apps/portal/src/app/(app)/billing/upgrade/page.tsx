@@ -15,7 +15,6 @@ export const metadata: Metadata = { title: 'Upgrade' };
 interface UpgradeCopy {
   readonly name: string;
   readonly tagline: string;
-  readonly pitch: string;
   readonly features: readonly string[];
 }
 
@@ -23,8 +22,6 @@ const UPGRADE_COPY: Readonly<Record<Module, UpgradeCopy>> = {
   crm: {
     name: 'KitStak CRM',
     tagline: 'Pipelines, boards and automations',
-    pitch:
-      'Every deal, contact and next step on one board your whole revenue team trusts — with automations that keep work moving.',
     features: [
       'Boards, pipelines and dashboards for every team',
       'Automations that run your follow-ups and hand-offs',
@@ -36,8 +33,6 @@ const UPGRADE_COPY: Readonly<Record<Module, UpgradeCopy>> = {
   wms: {
     name: 'KitStak WMS',
     tagline: 'Warehouse operations',
-    pitch:
-      'Receiving, inventory, picking and shipping for high-volume fulfillment — built to run your warehouse end to end.',
     features: [
       'Receiving, putaway and license-plate inventory',
       'Waves, picking, packing and shipping stations',
@@ -49,8 +44,6 @@ const UPGRADE_COPY: Readonly<Record<Module, UpgradeCopy>> = {
   projects: {
     name: 'KitStak Projects',
     tagline: 'Projects, tasks and timelines',
-    pitch:
-      'Plan launches, onboardings and warehouse go-lives in one place, with tasks tied to the deals and orders behind them.',
     features: [
       'List, board, timeline, calendar and workload views',
       'Templates, goals, forms and automations',
@@ -112,7 +105,6 @@ export default async function UpgradePage({
         <h1 className="mt-4 text-2xl font-semibold tracking-[-0.02em] text-fg">
           Add {copy.name} to {activeOrg.name}
         </h1>
-        <p className="mt-2 text-md text-fg-secondary">{copy.pitch}</p>
       </header>
 
       <section

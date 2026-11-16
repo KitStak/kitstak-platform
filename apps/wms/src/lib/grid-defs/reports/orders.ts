@@ -7,8 +7,6 @@ export const CHANNEL_SALES_DEF: ReportDef = {
   title: 'Channel Sales Report',
   path: '/api/reports/channel-sales',
   permission: 'reports.channel_sales_report.view',
-  helper:
-    'The Channel Sales Report lists the products that you sell via e-commerce channels and gives you an overview of the demand and revenue.',
   fields: [
     enumOf('channel', 'Channel', ORDER_CHANNELS, { allowEmpty: true }),
     CLIENT_FIELD,
@@ -67,7 +65,6 @@ export const ORDER_INVENTORY_DEF: ReportDef = {
   title: 'Order Inventory',
   path: '/api/reports/order-inventory',
   permission: 'reports.order_inventory_report.view',
-  helper: 'View the locations of products allocated for shipment orders.',
   fields: [
     CLIENT_FIELD,
     text('damageReason', 'Damage Reason'),

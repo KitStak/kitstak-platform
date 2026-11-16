@@ -54,7 +54,7 @@ function RatesDialog({
       <DialogContent size="lg">
         <DialogHeader
           title="Rates"
-          description="Live quotes from the warehouse's carrier connections, cheapest first. Pick one to use it for this order."
+          description="Live quotes from the warehouse's carrier connections, cheapest first."
         />
         <DialogBody>
           {quotes.length === 0 ? (

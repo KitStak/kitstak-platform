@@ -103,7 +103,7 @@ export function SaveAsTemplateDialog({
             </span>
           }
           title="Save a project as a template"
-          description="Reuse a project that worked well. New projects start with the same steps, sections, labels and automations."
+          description="New projects start with the same steps, sections, labels and automations."
         />
         <DialogBody className="flex flex-col gap-4 pb-4">
           {choices.length === 0 ? (

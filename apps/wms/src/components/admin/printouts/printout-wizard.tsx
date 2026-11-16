@@ -115,10 +115,7 @@ function TemplateStep({ form, typeKey }: { readonly form: UseFormReturn<F>; read
     form.setValue('layout', t.layout(typeKey), { shouldDirty: true });
   };
   return (
-    <FormSection
-      title="Select a template"
-      description="Start from a base layout. You can change every section in the designer next; picking another template resets the design."
-    >
+    <FormSection title="Select a template" description="Picking another template resets the design.">
       <FormField<F> name="baseTemplate">
         {(c) => (
           <div
@@ -187,10 +184,7 @@ function OptionsStep({ typeKey }: { readonly typeKey: string }) {
   const isPacking = typeKey === 'packing-list' || typeKey === 'packing-slip';
   const isPicking = typeKey.includes('picking');
   return (
-    <FormSection
-      title={`${typeTitle(typeKey)} options`}
-      description="Settings that only apply to this printout type."
-    >
+    <FormSection title={`${typeTitle(typeKey)} options`}>
       <FormGrid>
         {isPacking ? (
           <CheckboxField<F>
@@ -463,7 +457,6 @@ export function PrintoutWizardPage({
           { label: title, href: `/settings/printouts/${typeKey}` },
           { label: editId ? 'Edit' : 'Create' },
         ]}
-        helper="Pick a base layout, design it with a live preview, then choose who can use it."
       />
       {editId && q.isError ? (
         <EmptyState

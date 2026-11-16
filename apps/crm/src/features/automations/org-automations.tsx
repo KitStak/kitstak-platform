@@ -202,7 +202,6 @@ export function OrgAutomationsPage() {
   return (
     <PageFrame
       title="Automations"
-      description="Everything running on autopilot across your boards, and how much of this month’s allowance it uses."
       icon={<Zap />}
       iconTone="solid"
       width="wide"

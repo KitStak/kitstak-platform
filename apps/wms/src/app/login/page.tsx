@@ -128,9 +128,6 @@ export default function LoginPage() {
           <p className="text-2xl leading-tight font-semibold tracking-[-0.02em]">
             Every order, pick and pallet, tracked from dock to door.
           </p>
-          <p className="mt-3 text-md text-white/80">
-            Run receiving, inventory and outbound from one platform that keeps pace with the warehouse floor.
-          </p>
         </div>
       </aside>
     </div>

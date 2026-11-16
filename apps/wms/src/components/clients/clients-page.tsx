@@ -270,7 +270,6 @@ export function ClientsPage() {
       <PageHeader
         title="Clients"
         tabs="organization"
-        helper="Define your clients (the brands you fulfill for) and set up their preferences."
         actions={
           <div className="flex items-center gap-2">
             <DropdownMenu>

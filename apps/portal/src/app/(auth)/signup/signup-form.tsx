@@ -114,10 +114,7 @@ export function SignupForm({ next }: { readonly next: string | null }) {
   const pending = stage !== 'idle';
   return (
     <>
-      <AuthHeading
-        title="Create your KitStak account"
-        subtitle="One account for CRM, WMS and everything next."
-      />
+      <AuthHeading title="Create your KitStak account" />
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         {error ? <FormAlert>{error}</FormAlert> : null}
         <Field label="Full name" error={fieldErrors.name}>

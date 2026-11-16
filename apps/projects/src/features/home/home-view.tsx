@@ -225,7 +225,6 @@ export function HomeView({
                   size="sm"
                   illustration="board"
                   title="Nothing assigned to you yet"
-                  description="When someone gives you a task, it shows up here. You can also add one for yourself."
                   actions={
                     <Button
                       size="sm"

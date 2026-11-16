@@ -102,7 +102,7 @@ export function AddWorkspaceDialog({ open, onClose }: AddWorkspaceDialogProps) {
     <GuardedDialog open={open} onOpenChange={(next) => !next && onClose()} dirty={dirty} locked={create.isPending}>
       {(requestClose) => (
         <DialogContent size="md" data-testid="add-workspace-dialog" onEscapeKeyDown={preventEscape}>
-          <DialogHeader title="Create workspace" description="Workspaces group the boards, dashboards and people of one team." />
+          <DialogHeader title="Create workspace" />
           <form noValidate onSubmit={submit} className="contents">
             <DialogBody className="flex flex-col gap-5 pb-4">
               <div className="flex items-start gap-4">

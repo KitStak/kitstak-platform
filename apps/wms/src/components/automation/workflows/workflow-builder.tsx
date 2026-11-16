@@ -621,7 +621,6 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
                     disabled={readOnly}
                     onCheckedChange={(v) => set('isActive', v === true)}
                     label="Active"
-                    description="Inactive workflows never run"
                   />
                   <Checkbox
                     checked={form.stopProcessing}

@@ -121,7 +121,7 @@ function NewFormDialog({
             </span>
           }
           title="New intake form"
-          description="Anyone with the link can send a request. Each response becomes a task."
+          description="Each response becomes a task."
         />
         <DialogBody className="flex flex-col gap-4 pb-4">
           <fieldset>
@@ -464,7 +464,6 @@ export function FormsView({
   return (
     <Page
       title="Forms"
-      subtitle="Collect requests from customers and teammates. Every response becomes a task, so nothing gets lost in email."
       actions={
         editable.length ? (
           <Button leadingIcon={<Plus aria-hidden />} onClick={() => setNewOpen(true)} data-testid="form-new">
@@ -477,7 +476,7 @@ export function FormsView({
         <EmptyState
           illustration="workspace"
           title="Forms need a project to send tasks to"
-          description="Make a project first (or try the sample one). Then build a form, share the link, and watch requests turn into tasks."
+          description="Create a project first, or try the sample one."
           actions={<SampleProjectButton variant="primary" />}
         />
       ) : list.length === 0 ? (
@@ -488,7 +487,7 @@ export function FormsView({
             </span>
           }
           title="No forms yet"
-          description="Make a request form in a minute. Share the link with anyone. When they press Send, a task shows up in your project with all their answers."
+          description="Share the link with anyone. Each response becomes a task in your project."
           actions={
             editable.length ? (
               <Button leadingIcon={<Plus aria-hidden />} onClick={() => setNewOpen(true)}>

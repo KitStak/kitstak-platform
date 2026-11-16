@@ -27,8 +27,6 @@ import {
   useSlowLoad,
 } from './receiving-shared';
 
-export const HISTORY_HELPER =
-  'The Receiving History Report lists all past purchase order receiving actions and inventory adding actions.';
 export function ReceivingHistoryPage() {
   const fields = useFilterFields(RECEIPT_GRID_FIELDS);
   const g = useGrid<ReceiptRow>({ gridKey: RECEIVING_HISTORY_GRID_KEY, path: '/api/receipts', fields });
@@ -76,7 +74,6 @@ export function ReceivingHistoryPage() {
       <PageHeader
         title="Receiving History"
         tabs="receiving"
-        helper={HISTORY_HELPER}
         actions={
           <>
             <Link href={receivingLedgerHref()} className={buttonVariants({ variant: 'secondary' })}>

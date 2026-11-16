@@ -646,7 +646,6 @@ export function EntityChangeLogDrawer({
         onOpenChange(o);
       }}
       title={title}
-      description="Every create, edit and delete with who made it and when."
       width={45}
     >
       {query.isFetching && !query.isPending && !query.isPlaceholderData && !invalidated ? (

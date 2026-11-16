@@ -47,10 +47,7 @@ const DEVICE_ICON ={ desktop: Monitor, mobile: Smartphone, tablet: Tablet, bot: 
 export function SecuritySection() {
   return (
     <>
-      <SectionHeader
-        title="Security"
-        description="Control how people sign in, where they can connect from, and which sessions are active."
-      />
+      <SectionHeader title="Security" />
       <SessionsCard />
       <SignInPolicyCard />
       <EmailDomainsCard />
@@ -81,7 +78,7 @@ function SessionsCard() {
   return (
     <SettingsCard
       title="Active sessions"
-      description="Members of this organization who are signed in. Sessions are account-wide: signing one out ends it in every organization that person belongs to."
+      description="Sessions are account-wide: signing one out ends it in every organization that person belongs to."
       padded={false}
       testId="sessions-card"
       aside={sessions.data ? <Badge>{pluralize(sessions.data.length, 'session')}</Badge> : null}
@@ -173,7 +170,7 @@ function SessionsCard() {
 function SignInPolicyCard() {
   return (
     <SettingsCard title="Sign-in & passwords" description="Applies to every member who signs in with email and password.">
-      <SettingRow label="Password requirements" description="Checked at sign-up, password change and reset.">
+      <SettingRow label="Password requirements">
         <ul className="flex flex-col gap-1 text-base text-fg">
           <li>
             {PASSWORD_POLICY.minLength} to {PASSWORD_POLICY.maxLength} characters

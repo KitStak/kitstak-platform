@@ -99,8 +99,7 @@ export function StepMap({ model, showErrors, onChange }: StepMapProps) {
             Map your columns
           </h2>
           <p className="mt-1 text-base text-fg-secondary">
-            {mappedCount} of {mappings.length} columns will be imported. Pick a board column for each, create
-            a new one, or skip it.
+            {mappedCount} of {mappings.length} columns will be imported.
           </p>
         </div>
         <div className="flex items-center gap-3 text-sm text-fg-secondary">

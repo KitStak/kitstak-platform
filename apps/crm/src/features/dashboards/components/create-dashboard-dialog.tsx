@@ -113,7 +113,7 @@ function CreateFlow({ orgSlug, defaultWorkspaceId, onClose }: { readonly orgSlug
 
   return (
     <>
-      <DialogHeader title="New dashboard" description="Bring numbers from several boards into one live view." />
+      <DialogHeader title="New dashboard" />
       <WizardSteps steps={STEPS} current={step} />
       <DialogBody className="flex h-[min(480px,calc(100dvh-260px))] min-h-[300px] flex-col gap-4 overflow-y-auto pb-5">
         {step === 0 ? (

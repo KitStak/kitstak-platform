@@ -333,7 +333,6 @@ export function LocationGeneratorDrawer({
           Generate locations
         </span>
       }
-      description="Build a range of codes from a pattern instead of typing them one by one."
     >
       <Form
         form={form}

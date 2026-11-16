@@ -12,7 +12,7 @@ export function LockedScreen({ orgName, portalUrl, canManage }: { readonly orgNa
         <h1 className="mt-5 text-xl font-semibold text-fg">KitStak Projects isn’t turned on for {orgName}</h1>
         <p className="mt-2 text-base text-fg-secondary">
           {canManage
-            ? 'Turn it on from the Portal to plan projects, assign tasks and track deadlines with your team.'
+            ? 'Turn it on from the Portal.'
             : 'Ask an owner or admin of your organization to turn it on in the Portal.'}
         </p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2">

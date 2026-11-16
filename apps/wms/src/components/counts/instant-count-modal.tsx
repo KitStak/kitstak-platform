@@ -241,7 +241,7 @@ function Body({
     <>
       <DialogHeader
         title="Quick count"
-        description="Count one location now. KitStaks creates an Instant Count plan (IC + timestamp) and closes it in one step."
+        description="Creates an Instant Count plan (IC + timestamp) and closes it in one step."
       />
       <DialogBody>
         <div className="flex flex-col gap-4">

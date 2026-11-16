@@ -35,10 +35,6 @@ async function SetupContent() {
   return (
     <>
       <h1 className="text-lg font-semibold">Set up your warehouse</h1>
-      <p className="mt-1 text-sm text-fg-secondary">
-        Your organization gets its own, separate warehouse: its own stock, orders, clients and users. You
-        become its first administrator and can add the rest of your team afterwards.
-      </p>
       <SetupWarehouseForm offers={state.offers} />
     </>
   );

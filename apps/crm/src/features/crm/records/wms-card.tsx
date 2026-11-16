@@ -82,7 +82,7 @@ function LinkPicker({ onLink, busy }: { readonly onLink: (coreCustomerId: string
   }));
   return (
     <div className="flex flex-col gap-2.5 px-2 py-2">
-      <p className="text-sm text-fg-muted">Not linked to a WMS client yet. Link one to connect warehouse data.</p>
+      <p className="text-sm text-fg-muted">Not linked to a WMS client yet.</p>
       <div className="flex items-center gap-2">
         <Combobox
           aria-label="WMS client"

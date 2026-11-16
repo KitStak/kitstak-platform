@@ -508,7 +508,7 @@ function GoalPanel({ goal, all, projects, canEdit, onClose, onDialog }: { readon
             {checkIns.isPending ? (
               <Skeleton height={64} rounded="md" />
             ) : (checkIns.data ?? []).length === 0 ? (
-              <p className="text-sm text-fg-muted">No check-ins yet. A quick weekly check-in keeps the numbers honest and the team in the loop.</p>
+              <p className="text-sm text-fg-muted">No check-ins yet.</p>
             ) : (
               <ol className="flex flex-col gap-4" data-testid="checkin-history">
                 {(checkIns.data ?? []).map((checkIn) => (
@@ -610,7 +610,6 @@ export function GoalsView({ initialGoals, initialProjects }: { readonly initialG
   return (
     <Page
       title="Goals"
-      subtitle="What the team is aiming for and how close you are. Progress fills in from key results and linked projects."
       actions={
         canEdit ? (
           <Button leadingIcon={<Plus aria-hidden />} onClick={() => setDialog({ kind: 'goal', goal: null })} data-testid="new-goal">
@@ -671,7 +670,7 @@ export function GoalsView({ initialGoals, initialProjects }: { readonly initialG
         <EmptyState
           visual={<span className="inline-flex size-16 items-center justify-center rounded-2xl bg-primary-subtle text-primary-text"><Target aria-hidden className="size-8" /></span>}
           title="Set your first goal"
-          description="Goals keep everyone pointed the same way. Pick something you want to achieve this quarter, add a few numbers to track, and connect the projects that get you there."
+          description="Add a few numbers to track and link the projects behind it."
           actions={canEdit ? <Button leadingIcon={<Plus aria-hidden />} onClick={() => setDialog({ kind: 'goal', goal: null })}>Create a goal</Button> : null}
         />
       ) : roots.length === 0 ? (

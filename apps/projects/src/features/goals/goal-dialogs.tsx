@@ -294,7 +294,6 @@ export function GoalDialog({
         <DialogHeader
           icon={<span className="inline-flex size-9 items-center justify-center rounded-lg" style={{ background: `var(--label-${toLabelColor(color)}-subtle)`, color: `var(--label-${toLabelColor(color)}-text)` }}><Target aria-hidden className="size-5" /></span>}
           title={goal ? 'Edit goal' : 'New goal'}
-          description="A goal is what you want to achieve. Key results are the numbers that prove you got there."
         />
         <DialogBody className="flex flex-col gap-4 pb-4">
           <Field label="Goal" required>
@@ -480,7 +479,7 @@ export function KeyResultDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
-        <DialogHeader title={keyResult ? 'Edit key result' : 'Add a key result'} description={`For “${goal.name}”. Pick something you can count, so everyone can see the progress.`} />
+        <DialogHeader title={keyResult ? 'Edit key result' : 'Add a key result'} description={`For “${goal.name}”.`} />
         <DialogBody className="pb-4">
           <KrFields draft={draft} projects={projects} onChange={(patch) => setDraft({ ...draft, ...patch })} />
         </DialogBody>
@@ -530,7 +529,7 @@ export function CheckInDialog({ goal, open, onOpenChange, onSaved }: { readonly 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
-        <DialogHeader title="Check in" description={`How is “${goal.name}” going? Update the numbers and add a short note.`} />
+        <DialogHeader title="Check in" description={`How is “${goal.name}” going?`} />
         <DialogBody className="flex flex-col gap-4 pb-4">
           <div role="radiogroup" aria-label="How is it going?" className="flex flex-wrap gap-1.5">
             {GOAL_HEALTHS.map((h) => (

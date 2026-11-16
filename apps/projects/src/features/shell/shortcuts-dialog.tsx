@@ -82,7 +82,7 @@ export function ShortcutsDialog() {
   return (
     <Dialog open={open} onOpenChange={(value) => (value ? undefined : close())}>
       <DialogContent size="xl" data-testid="shortcuts-dialog">
-        <DialogHeader title="Keyboard shortcuts" description="Work faster without the mouse." />
+        <DialogHeader title="Keyboard shortcuts" />
         <DialogBody className="relative pb-0">
           <div className="columns-1 gap-8 sm:columns-2 lg:columns-3">
             {SHORTCUT_GROUPS.map((group) => (

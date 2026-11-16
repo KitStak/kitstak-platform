@@ -61,8 +61,7 @@ interface SuggestResponse {
   }[];
 }
 
-const HELPER =
-  'Received stock still in a receiving location. Scan the destination to put it away; the move is posted to the inventory ledger as a transfer.';
+const HELPER = 'Moves post to the inventory ledger as transfers.';
 const NO_PERMISSION = "You don't have permission to transfer inventory";
 /** Excel export runs through the shared exports pipeline once the grid key is registered; until then the grid offers CSV of the page. */
 const EXPORTABLE = GRID_KEYS.includes(PUTAWAY_GRID_KEY);

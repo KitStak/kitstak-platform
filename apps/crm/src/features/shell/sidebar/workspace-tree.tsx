@@ -441,7 +441,6 @@ export function WorkspaceTree({ workspaceId, query }: WorkspaceTreeProps) {
         size="sm"
         illustration="board"
         title="No boards yet"
-        description="Boards hold your deals, leads and contacts."
         actions={
           canCreateBoard ? (
             <Button size="sm" leadingIcon={<Plus aria-hidden />} onClick={() => requestCreate({ kind: 'board', workspaceId })}>

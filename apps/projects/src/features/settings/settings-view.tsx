@@ -73,7 +73,7 @@ export function SettingsView({
     router.replace(id === 'profile' ? pathname : `${pathname}?section=${id}`, { scroll: false });
 
   return (
-    <Page title="Settings" subtitle="Make KitStak Projects work the way you like.">
+    <Page title="Settings">
       <div className="flex flex-col gap-6 md:flex-row md:items-start">
         <nav aria-label="Settings sections" className="md:sticky md:top-4 md:w-60 md:shrink-0">
           <ul className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 max-md:pr-6 max-md:[mask-image:linear-gradient(to_right,#000_calc(100%-32px),transparent)] md:mx-0 md:flex-col md:overflow-visible md:px-0 md:pb-0">

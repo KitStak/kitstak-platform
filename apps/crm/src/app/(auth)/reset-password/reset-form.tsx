@@ -33,7 +33,7 @@ export function ResetForm({
       <>
         <AuthHeading
           title="This link has expired"
-          subtitle="Reset links work once and expire after an hour. Request a fresh one."
+          subtitle="Reset links work once and expire after an hour."
         />
         <Link
           href="/forgot-password"
@@ -75,7 +75,7 @@ export function ResetForm({
     <>
       <AuthHeading
         title="Choose a new password"
-        subtitle="You’ll be signed out of other devices for your security."
+        subtitle="You’ll be signed out of other devices."
       />
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         {error ? <FormAlert>{error}</FormAlert> : null}

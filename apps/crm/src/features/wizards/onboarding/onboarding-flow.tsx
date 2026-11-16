@@ -68,16 +68,15 @@ const TEAM_SIZE_COPY: Readonly<Record<TeamSize, { title: string; description: st
   '500+': { title: '500+ people', description: 'Enterprise rollout' },
 };
 
-const STEP_COPY: Readonly<Record<string, { title: (name: string) => string; subtitle: string }>> = {
+const STEP_COPY: Readonly<Record<string, { title: (name: string) => string; subtitle?: string }>> = {
   about: {
     title: (name) => (name ? `Welcome, ${name}. Let’s set up KitStak.` : 'Welcome. Let’s set up KitStak.'),
-    subtitle: 'Tell us a little about you so we can tailor your workspace.',
   },
-  team: { title: () => 'How big is your team?', subtitle: 'We’ll suggest the right way to share boards and dashboards.' },
+  team: { title: () => 'How big is your team?' },
   manage: { title: () => 'What do you want to manage?', subtitle: 'Pick everything that applies. You can add more later.' },
-  starter: { title: () => 'Pick your starter CRM', subtitle: 'Every board comes connected, with views and a dashboard ready to go.' },
-  invite: { title: () => 'Invite your teammates', subtitle: 'KitStak works best together. You can skip this and invite people later.' },
-  done: { title: () => 'Your workspace is ready', subtitle: 'Everything is set up. Jump in and add your first deal.' },
+  starter: { title: () => 'Pick your starter CRM' },
+  invite: { title: () => 'Invite your teammates', subtitle: 'You can skip this and invite people later.' },
+  done: { title: () => 'Your workspace is ready' },
 };
 
 function storage(): Storage | null {
@@ -319,7 +318,7 @@ function OnboardingFlowInner({ firstName, retry = false, previews = {} }: Onboar
           })}
         </ol>
         <p className="text-sm text-white/80" data-testid="onboarding-rail-note">
-          You can change everything later in settings. Nothing is shared until you invite people.
+          Nothing is shared until you invite people.
         </p>
       </aside>
 
@@ -393,7 +392,7 @@ function OnboardingFlowInner({ firstName, retry = false, previews = {} }: Onboar
                       {copy.title(firstName)}
                     </h1>
                     </div>
-                    <p className="text-md text-fg-secondary [text-wrap:pretty]">{copy.subtitle}</p>
+                    {copy.subtitle ? <p className="text-md text-fg-secondary [text-wrap:pretty]">{copy.subtitle}</p> : null}
                   </div>
 
                   {submitError && !isDone ? (
@@ -627,7 +626,7 @@ function StepBody({
           checked={draft.withSampleData}
           onCheckedChange={(withSampleData) => update({ withSampleData })}
           label="Include sample data"
-          description="Explore with realistic example deals and accounts. Clear them any time."
+          description="Example deals and accounts. Clear them any time."
         />
         <div className="flex flex-col gap-2">
           <p className="text-sm font-semibold text-fg-secondary" data-testid="onboarding-board-list">

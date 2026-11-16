@@ -26,7 +26,7 @@ export function NotificationsTab({ profile }: { readonly profile: ProfileDto | u
 
   return (
     <div className="flex flex-col gap-6" data-testid="profile-notifications">
-      <SettingsCard title="Notify me when…" description="Choose where each kind of notification reaches you. Changes save automatically." padded={false}>
+      <SettingsCard title="Notify me when…" description="Changes save automatically." padded={false}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[480px] text-base">
             <caption className="sr-only">Notification channels per event</caption>
@@ -81,7 +81,7 @@ export function NotificationsTab({ profile }: { readonly profile: ProfileDto | u
           </table>
         </div>
       </SettingsCard>
-      <SettingsCard title="Delivery" description="Bundle email and pause notifications outside working hours.">
+      <SettingsCard title="Delivery">
         <SettingRow label="Email frequency" description="Instant sends each email as it happens.">
           <Select
             aria-label="Email frequency"

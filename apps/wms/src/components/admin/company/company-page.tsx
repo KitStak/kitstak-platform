@@ -52,35 +52,30 @@ const SECTIONS: readonly {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
-  description: string;
 }[] = [
   {
     key: 'info',
     label: 'Company information',
     icon: Building2,
     title: 'Company information',
-    description: 'Create a profile for your company. The logo appears in the header and on every printout.',
   },
   {
     key: 'defaults',
     label: 'Account defaults',
     icon: SlidersHorizontal,
     title: 'Account defaults',
-    description: 'Defaults for new clients, products and users.',
   },
   {
     key: 'security',
     label: 'Security',
     icon: Lock,
     title: 'Security',
-    description: 'Password rules, account lockout and idle sign-out for every user.',
   },
   {
     key: 'email',
     label: 'Email delivery',
     icon: Mail,
     title: 'Email delivery',
-    description: 'The mail server KitStaks uses for welcome invites and password reset emails.',
   },
 ];
 
@@ -568,7 +563,6 @@ export function CompanyPage() {
       <PageHeader
         breadcrumbs={[{ label: 'Settings' }, { label: 'Company Settings' }]}
         title="Company Settings"
-        helper="Define your company with a display name, full name and logo, plus defaults and security rules."
         actions={
           <Button variant="secondary" onClick={() => setLog(true)}>
             <History className="h-4 w-4" aria-hidden />
@@ -584,7 +578,6 @@ export function CompanyPage() {
           <h2 id="company-section-title" className="text-md font-semibold text-foreground">
             {meta.title}
           </h2>
-          <p className="mt-0.5 text-xs text-secondary">{meta.description}</p>
           <div className="mt-5">
             {section === 'email' ? (
               <MailSection canEdit={perms.update} defaultTo={user?.email ?? ''} />

@@ -140,7 +140,7 @@ function SettingsStep({ form }: { readonly form: UseFormReturn<F> }) {
   const { field, fieldState } = useController({ control: form.control, name: 'method' });
   return (
     <div className="flex flex-col gap-5">
-      <FormSection title="Rate calculation method" description="Select rate calculation method *">
+      <FormSection title="Rate calculation method">
         <RadioCards<NonNullable<F['method']>>
           ariaLabel="Rate calculation method"
           columns={3}
@@ -180,10 +180,7 @@ function SettingsStep({ form }: { readonly form: UseFormReturn<F> }) {
           </div>
         ) : null}
       </FormSection>
-      <FormSection
-        title="Error messages"
-        description="Enable to receive error notifications for failed shipments."
-      >
+      <FormSection title="Error messages">
         <CheckboxField<F>
           name="showErrors"
           label="Show error message if any shipment method returns an error."
@@ -556,11 +553,6 @@ export function PresetDrawer({
         editId
           ? `Edit rate shopping preset ${detail.data?.data.name ?? ''}`.trim()
           : 'Create rate shopping preset'
-      }
-      description={
-        editId
-          ? 'Every step is editable; Save applies all of them.'
-          : 'General, settings, then the shipment methods to compare.'
       }
     >
       {editId && detail.isError ? (

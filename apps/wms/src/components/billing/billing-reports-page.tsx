@@ -413,7 +413,7 @@ export function BillingReportsPage() {
       <PageHeader
         title="Billing Report"
         tabs="billing"
-        helper="Every calculated bill with its period, status and total. Approve bills to lock them for invoicing."
+        helper="Approve bills to lock them for invoicing."
         actions={
           <Button onClick={() => setRuns(true)}>
             <CalendarClock className="h-4 w-4" aria-hidden />

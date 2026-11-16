@@ -684,7 +684,7 @@ export function TimelineView() {
         <EmptyState
           illustration="board"
           title="Plan your work on a timeline"
-          description="Add tasks with start and due dates and they show up here as bars you can drag."
+          description="Tasks with start and due dates show up here as bars."
           actions={
             canCreate ? (
               <Button leadingIcon={<Plus aria-hidden />} onClick={() => openQuickAdd({ projectId: project.id })}>

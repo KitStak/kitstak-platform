@@ -119,7 +119,7 @@ export function Record360Page({ kind, itemId }: { readonly kind: 'contacts' | 'a
                 <CrmCard
                   id="crm-activity-card"
                   title="Activity"
-                  description={`Calls, emails, meetings and updates across this ${kind === 'contacts' ? 'contact' : 'account'} and its deals`}
+                  description={`Includes the ${kind === 'contacts' ? 'contact' : 'account'}’s deals`}
                   aside={
                     composerOpen ? (
                       <Button variant="ghost" size="sm" leadingIcon={<ChevronUp aria-hidden />} onClick={() => setComposerOpen(false)} aria-expanded>

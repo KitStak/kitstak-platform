@@ -38,14 +38,10 @@ async function PreferencesBody() {
 export default function PreferencesPage() {
   return (
     <>
-      <PageHeader
-        title="Preferences"
-        helper="Choose your date, time and number formats. They apply right away across every grid and summary."
-      />
+      <PageHeader title="Preferences" />
       <AccountShell
         active="preferences"
         title="Preferences"
-        description="The time zone comes from your warehouse."
       >
         <Suspense fallback={<SkeletonText lines={5} />}>
           <PreferencesBody />

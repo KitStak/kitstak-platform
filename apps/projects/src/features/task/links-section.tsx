@@ -286,7 +286,7 @@ export function LinksSection() {
         </ul>
       ) : (
         <p className="mt-1 text-sm text-fg-muted">
-          Connect a CRM deal, customer or warehouse order so everyone sees the full picture.
+          Connect a CRM deal, customer or warehouse order.
         </p>
       )}
     </section>

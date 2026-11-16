@@ -67,7 +67,7 @@ export interface ReportDef {
   /** List endpoint. */
   readonly path: string;
   readonly permission: string;
-  readonly helper: string;
+  readonly helper?: string;
   readonly fields: readonly ReportField[];
   readonly columns: readonly ReportColumn[];
   /** Quick search (Equal / Starts With) targets; empty = no quick search. */

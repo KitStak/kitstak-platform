@@ -595,7 +595,9 @@ export function RmaCreatePage() {
         });
         return (
           <WizardRail title="Return summary" percent={p.percent} statusLabel={p.label}>
-            <RailRow label="Order">{order?.code ?? (q.isFetching && v.orderId ? 'Loading…' : 'None')}</RailRow>
+            <RailRow label="Order">
+              {order?.code ?? (q.isFetching && v.orderId ? 'Loading…' : 'None')}
+            </RailRow>
             <RailRow label="Customer">{order?.customerName ?? 'None'}</RailRow>
             <RailRow label="Lines">{(v.lines ?? []).filter((l) => l.selected).length}</RailRow>
             <RailRow label="Units">{selectedUnits({ lines: v.lines ?? [] })}</RailRow>
@@ -624,7 +626,6 @@ export function RmaCreatePage() {
         key: 'order',
         label: 'Order',
         icon: ClipboardList,
-        description: 'Choose the shipped order being returned',
         schema: orderStepSchema(order),
         canProceed: () =>
           !orderId
@@ -658,7 +659,6 @@ export function RmaCreatePage() {
         key: 'items',
         label: 'Items',
         icon: Box,
-        description: 'Pick the lines, quantities and reasons',
         // A customer reason is required per returned line whenever the client has reasons set up (Logiwa captures it per line).
         schema: linesStepSchema(order, reasons.length > 0),
         canProceed: () => (reasonsLoading ? 'Loading return reasons…' : true),
@@ -673,7 +673,6 @@ export function RmaCreatePage() {
         key: 'shipping',
         label: 'Return shipping',
         icon: Truck,
-        description: 'Expected date and return label',
         schema: shippingStepSchema,
         render: ({ form }) => (
           <>
@@ -724,7 +723,6 @@ export function RmaCreatePage() {
           { label: 'Return Orders', href: '/orders/returns' },
           { label: 'Create RMA' },
         ]}
-        helper="Create a return merchandise authorization for a shipped order, with an optional prepaid return label."
       />
       <div
         className={

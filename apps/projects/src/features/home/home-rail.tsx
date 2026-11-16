@@ -87,7 +87,7 @@ export function GoalsSnapshot({ goals }: { readonly goals: readonly GoalDTO[] })
             <Target aria-hidden className="size-4" />
           </span>
           <p className="text-sm text-fg-muted">
-            Goals show how projects add up to the big picture.{' '}
+            No goals yet.{' '}
             <Link href={routes.goals()} className="font-medium text-fg-link hover:underline">
               Set your first goal
             </Link>

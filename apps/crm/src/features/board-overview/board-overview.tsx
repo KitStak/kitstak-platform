@@ -164,7 +164,7 @@ function BoardGrid({ payload }: { readonly payload: BoardPayloadDto }) {
 
   if (visibleGroups.length === 0) {
     return (
-      <EmptyState title="This board has no groups yet" description="Groups organize items into sections." />
+      <EmptyState title="This board has no groups yet" />
     );
   }
   return (

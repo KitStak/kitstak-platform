@@ -65,12 +65,7 @@ function Shell({ children }: { readonly children: React.ReactNode }) {
   const integrationTabs = useStableGroupTabs('integrations');
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        title="Integration Management"
-        tabs={integrationTabs}
-        helpHref="/integrations/help#logs"
-        helper="Every channel method run, call and error, so you can see exactly what came in and what went out."
-      />
+      <PageHeader title="Integration Management" tabs={integrationTabs} helpHref="/integrations/help#logs" />
       <SubNavLayout ariaLabel="Channel logs" items={NAV} asideClassName="w-48">
         {children}
       </SubNavLayout>

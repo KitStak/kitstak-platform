@@ -153,7 +153,7 @@ export function NextStepsCard({
     <CrmCard id="crm-next-steps" testId="crm-next-steps" title="Next steps" bodyClassName="p-2 sm:p-3">
       {steps.length === 0 ? (
         <div className="flex flex-col items-start gap-2.5 px-2 py-3">
-          <p className="text-sm text-fg-muted">No upcoming activities or open next steps. Schedule a follow-up to keep momentum.</p>
+          <p className="text-sm text-fg-muted">No upcoming activities or open next steps.</p>
           {onSchedule ? (
             <Button variant="secondary" size="sm" leadingIcon={<CalendarPlus aria-hidden />} onClick={onSchedule} data-testid="crm-schedule-follow-up">
               Schedule follow-up

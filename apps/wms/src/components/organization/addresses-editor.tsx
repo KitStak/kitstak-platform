@@ -78,7 +78,7 @@ function AddressModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="lg">
-        <DialogHeader title={title} description="Enter and set the address to use on operations." />
+        <DialogHeader title={title} />
         <Form
           form={form}
           onSubmit={(values) => {
@@ -326,9 +326,7 @@ export function AddressesEditor({
           )}
         >
           <MapPin className="h-5 w-5 text-faint" aria-hidden />
-          <p className="text-sm text-secondary">
-            No addresses have been added yet. Click Add address to add one.
-          </p>
+          <p className="text-sm text-secondary">No addresses yet.</p>
         </div>
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">

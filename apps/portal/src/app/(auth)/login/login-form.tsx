@@ -65,7 +65,7 @@ export function LoginForm({
   return (
     <>
       {pending ? <HandoffScreen title="Signing you in" detail="Opening your KitStak apps" /> : null}
-      <AuthHeading title="Welcome back" subtitle="Sign in to launch your KitStak apps." />
+      <AuthHeading title="Welcome back" />
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         {notice ? <FormAlert tone="success">{notice}</FormAlert> : null}
         {error ? <FormAlert>{error}</FormAlert> : null}

@@ -165,7 +165,7 @@ export function WorkflowSettings({ highlight }: { readonly highlight?: boolean }
   const deletingCount = deleting ? (counts.get(deleting.id) ?? 0) : 0;
 
   return (
-    <SettingsSection id="workflow" title="Workflow" description="The steps a task goes through. These are the columns on your board, left to right." highlight={highlight}>
+    <SettingsSection id="workflow" title="Workflow" description="These are the columns on your board, left to right." highlight={highlight}>
       <DndContext id={`workflow-${project.id}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd} modifiers={[restrictToVerticalAxisModifier]}>
         <SortableContext items={statuses.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <ul className="flex flex-col divide-y divide-border-subtle rounded-lg border border-border-subtle" aria-label="Statuses">

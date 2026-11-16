@@ -199,7 +199,7 @@ function VendorForm({
           />
         </FormGrid>
       </FormSection>
-      <FormSection title="Shipment address" description="Where the vendor ships from.">
+      <FormSection title="Shipment address">
         <AddressBlock prefix="shipping" form={form} />
       </FormSection>
       <FormField name="useShipAsBilling" label="Use shipment address as billing" inline>
@@ -299,7 +299,7 @@ export function VendorDrawer({
           {editing ? 'Edit vendor' : 'Create vendor'}
         </span>
       }
-      description={editing ? vendor?.displayName : 'Vendors supply the products on your purchase orders.'}
+      description={editing ? vendor?.displayName : undefined}
       footer={
         <>
           <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>

@@ -197,7 +197,7 @@ export function CycleTimePanel({ report, className }: { readonly report: ReportD
   return (
     <Panel className={className} title="Time to finish">
       <p className="mb-3 text-sm text-fg-secondary">
-        Typical days from starting a task to finishing it. Lower is faster. {report.totals.medianCycleDays !== null ? <>Overall: <strong className="font-semibold text-fg">{days(report.totals.medianCycleDays)}</strong>.</> : null}
+        Typical days from starting a task to finishing it. {report.totals.medianCycleDays !== null ? <>Overall: <strong className="font-semibold text-fg">{days(report.totals.medianCycleDays)}</strong>.</> : null}
       </p>
       <ColumnChart
         title="Cycle time: median days to finish per week"
@@ -297,7 +297,6 @@ export function CompletedPanel({ report, className, taskHref }: { readonly repor
         <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
           <Inbox aria-hidden className="size-6 text-icon" />
           <p className="text-sm font-medium text-fg">Nothing finished yet this week</p>
-          <p className="text-xs text-fg-muted">Tasks show up here as soon as they are marked done.</p>
         </div>
       ) : (
         <ul className="flex flex-col">

@@ -426,7 +426,7 @@ function VasDrawer({
       dirty={dirty}
       width={45}
       title={editId ? 'Edit VAS operation' : 'Create a VAS operation'}
-      description="Log value-added work so the next calculation bills it under the client's VAS fee."
+      description="Billed on the next calculation under the client's VAS fee."
     >
       {editId && detail.isError ? (
         <EmptyState
@@ -629,7 +629,6 @@ export function VasPage() {
       <PageHeader
         title="VAS Operations"
         tabs="billing"
-        helper="Value-added services performed for clients (kitting labor, relabeling, special packing) billed through VAS fees."
         actions={
           <div className="flex items-center gap-2">
             <DisabledReason reason={perms.import_file ? null : NO_PERMISSION}>

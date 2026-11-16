@@ -98,7 +98,6 @@ interface SubGridConfig {
   readonly specs: readonly ColumnSpec<Row>[];
   readonly columns: ReturnType<typeof buildColumns<Row>>;
   readonly title: string;
-  readonly helper: string;
   readonly search: string;
   readonly empty: string;
   readonly emptyHint: string;
@@ -113,7 +112,6 @@ const CONFIG: Readonly<Record<'orders' | 'lps', SubGridConfig>> = {
     specs: PLAN_ORDER_SPECS,
     columns: ORDER_COLUMNS,
     title: 'Shipment Plan Orders',
-    helper: 'Every order on a shipment plan, with its live order status and the plan it rides on.',
     search: 'Plan code or order code',
     empty: 'No orders on shipment plans yet',
     emptyHint: 'Orders appear here once they are added to a shipment plan.',
@@ -126,7 +124,6 @@ const CONFIG: Readonly<Record<'orders' | 'lps', SubGridConfig>> = {
     specs: PLAN_LP_SPECS,
     columns: LP_COLUMNS,
     title: 'Shipment Plan LPs',
-    helper: 'License plates allocated to or shipped from the orders of each shipment plan.',
     search: 'Plan code, LP or order code',
     empty: 'No license plates on shipment plans yet',
     emptyHint: "LPs appear once a plan's orders are allocated or shipped from license plates.",
@@ -137,11 +134,11 @@ export function PlanSubGridPage({ kind }: { readonly kind: 'orders' | 'lps' }) {
   const c = CONFIG[kind];
   const permissions = useHydratedPermissions();
   // Permissions hydrate after mount: only show the no-access state once they are known.
-  if (permissions.size === 0) return <PageHeader title={c.title} helper={c.helper} tabs="shipment-plans" />;
+  if (permissions.size === 0) return <PageHeader title={c.title} tabs="shipment-plans" />;
   if (!permissions.has(c.permission) && !permissions.has('fulfillment.shipment_plan.view')) {
     return (
       <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-        <PageHeader title={c.title} helper={c.helper} tabs="shipment-plans" />
+        <PageHeader title={c.title} tabs="shipment-plans" />
         <EmptyState
           icon={Lock}
           title="You don't have access to this view"
@@ -201,7 +198,7 @@ function PlanSubGrid({ c }: { readonly c: SubGridConfig }) {
   ];
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader title={c.title} helper={c.helper} tabs="shipment-plans" />
+      <PageHeader title={c.title} tabs="shipment-plans" />
       <GridToolbar
         {...g.toolbarProps}
         searchPlaceholder={c.search}

@@ -25,7 +25,7 @@ export function DuplicatesPage() {
       width="wide"
       title="Duplicates"
       icon={<CopyCheck aria-hidden />}
-      description="Compare suspected duplicates side by side, choose which values to keep and merge. Relations and history move to the one you keep."
+      description="Relations and history move to the record you keep."
       breadcrumbs={[{ label: 'Home', href: routes.home(org.slug) }, { label: 'CRM', href: `/${org.slug}/crm/pipeline` }, { label: 'Duplicates' }]}
     >
       <div className="flex flex-col gap-5" data-testid="crm-duplicates">

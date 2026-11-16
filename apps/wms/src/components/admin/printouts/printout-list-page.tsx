@@ -393,7 +393,6 @@ export function PrintoutListPage({ typeKey }: { readonly typeKey: string }) {
           { label: 'Printouts & Labels', href: '/settings/printouts' },
           { label: title },
         ]}
-        helper={`List, design and assign the ${title.toLowerCase()} templates your team prints.`}
         actions={createButton}
       />
       {savedId ? (

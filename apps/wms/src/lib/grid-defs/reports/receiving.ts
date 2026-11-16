@@ -6,8 +6,6 @@ export const PO_RECEIVING_DEF: ReportDef = {
   title: 'PO Receiving Report',
   path: '/api/reports/po-receiving',
   permission: 'reports.po_receiving_report.view',
-  helper:
-    'The PO Receiving Report shows the history of your received purchase orders based on the quantity you have received.',
   fields: [
     CLIENT_FIELD,
     num('damagedQty', 'Damaged Quantity'),
@@ -78,8 +76,6 @@ export const USER_PERFORMANCE_DEF: ReportDef = {
   title: 'User Performance Report',
   path: '/api/reports/user-performance',
   permission: 'reports.user_performance_report.view',
-  helper:
-    'The User Performance Report summarizes user performance according to assigned tasks, so you can monitor your team in a selected period.',
   fields: [
     date('activityDate', 'Activity Date', { dateOnly: true }),
     enumOf('period', 'Period', USER_PERFORMANCE_PERIODS),

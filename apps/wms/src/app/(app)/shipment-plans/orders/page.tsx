@@ -12,7 +12,6 @@ export default function Page() {
       fallback={
         <ShipListFallback
           title="Shipment Plan Orders"
-          helper="Every order on a shipment plan, with its live order status and the plan it rides on."
           tabs="shipment-plans"
         />
       }

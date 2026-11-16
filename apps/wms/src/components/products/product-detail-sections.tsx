@@ -583,7 +583,7 @@ export function OrdersTab({ data }: { readonly data: D }) {
   const fmt = useFormat();
   return (
     <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-      <Section title="Open shipment orders" description="Orders that still need this product.">
+      <Section title="Open shipment orders">
         <MiniTable
           rows={data.openOrders}
           getKey={(r) => r.id}
@@ -611,7 +611,7 @@ export function OrdersTab({ data }: { readonly data: D }) {
           ]}
         />
       </Section>
-      <Section title="Open purchase orders" description="Inbound supply not yet fully received.">
+      <Section title="Open purchase orders">
         <MiniTable
           rows={data.openPos}
           getKey={(r) => r.id}
@@ -652,7 +652,6 @@ export function ListingsTab({ data }: { readonly data: D }) {
   return (
     <Section
       title="Channel listings"
-      description="Store listings linked to this product."
       action={
         <Link
           href="/products/listings?link=linked"
@@ -811,7 +810,7 @@ export function KitTab({ data }: { readonly data: D }) {
           />
         </Section>
       ) : null}
-      <Section title="Used in kits" description="Kits that consume this product as a component.">
+      <Section title="Used in kits">
         <MiniTable
           rows={data.usedInKits}
           getKey={(r) => r.id}
@@ -865,7 +864,7 @@ export function PlanningTab({ data, onEdit }: { readonly data: D; readonly onEdi
           ]}
         />
       </Section>
-      <Section title="Inventory channel allocation" description="Quantities pushed to each sales channel.">
+      <Section title="Inventory channel allocation">
         <MiniTable
           rows={data.allocations}
           getKey={(r) => `${r.storeName}:${r.warehouseCode ?? ''}`}

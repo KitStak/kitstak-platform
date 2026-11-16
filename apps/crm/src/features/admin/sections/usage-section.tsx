@@ -33,7 +33,7 @@ export function UsageSection() {
   const data = usage.data;
   return (
     <>
-      <SectionHeader title="Usage & billing" description="What your organization is using this month, against your plan." />
+      <SectionHeader title="Usage & billing" />
       {usage.isError ? (
         <SettingsCard>
           <ErrorPanel title="Couldn't load usage" onRetry={() => void usage.refetch()} />

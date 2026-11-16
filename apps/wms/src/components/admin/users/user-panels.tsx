@@ -326,7 +326,7 @@ export function UserSessionsDrawer({
       onOpenChange={onOpenChange}
       width={45}
       title={`Sessions · ${user?.name ?? ''}`}
-      description="Devices signed in right now. Revoking a session signs it out on its next request."
+      description="Revoking a session signs it out on its next request."
       footer={
         rows.length > 0 ? (
           <div className="flex justify-end">

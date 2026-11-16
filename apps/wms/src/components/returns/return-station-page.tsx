@@ -239,7 +239,6 @@ export function ReturnStationPage() {
       <PageHeader
         title="Return Station"
         breadcrumbs={[{ label: 'Fulfillment' }, { label: 'Outbound' }, { label: 'Return Station' }]}
-        helper="Receive customer returns against an RMA, or manually when there is none."
         actions={
           <Link href="/orders/returns" className={buttonVariants({ variant: 'secondary' })}>
             <ListChecks className="h-3.5 w-3.5" aria-hidden />

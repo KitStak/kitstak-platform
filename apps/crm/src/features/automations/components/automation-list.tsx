@@ -97,7 +97,6 @@ export function AutomationList({
       <EmptyState
         illustration="board"
         title="No automations yet"
-        description="Automations do the repetitive work for you: notify people, move items, set dates and more."
         actions={
           <>
             <Button onClick={onBrowse}>Browse recipes</Button>

@@ -8,11 +8,7 @@ import type { SettingsHubSection } from './settings-hub-data';
 export function SettingsHub({ sections }: { readonly sections: readonly SettingsHubSection[] }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        breadcrumbs={[{ label: 'Settings' }]}
-        title="Settings"
-        helper="Master data, configuration, client setup and user access in one place."
-      />
+      <PageHeader breadcrumbs={[{ label: 'Settings' }]} title="Settings" />
       <div className="grid gap-6 px-6 pb-8 pt-2">
         {sections.map((section) => {
           const Icon = NAV_ICONS[section.icon] ?? DEFAULT_NAV_ICON;

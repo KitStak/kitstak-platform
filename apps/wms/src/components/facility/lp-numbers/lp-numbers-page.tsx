@@ -212,7 +212,6 @@ function LpDetailDrawer({
       onOpenChange={onOpenChange}
       width={45}
       title={d ? `LP ${d.number}` : 'LP number'}
-      description="License plate details and current contents."
     >
       {q.isPending ? (
         <Skeleton className="h-64 w-full" />
@@ -501,7 +500,6 @@ export function LpNumbersPage() {
         title="LP Numbers"
         helpHref="/locations/help#lp-numbers"
         tabs="lp"
-        helper="Every license plate in the building: where it is, what type it is and whether its label is printed."
         actions={
           <>
             {perms.import_file ? (

@@ -64,7 +64,7 @@ export function LoginForm({
   return (
     <>
       {pending ? <HandoffScreen title="Signing you in" detail="Opening your projects and tasks" /> : null}
-      <AuthHeading title="Welcome back" subtitle="Sign in to see your projects and tasks." />
+      <AuthHeading title="Welcome back" />
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         {notice ? <FormAlert tone="success">{notice}</FormAlert> : null}
         {error ? <FormAlert>{error}</FormAlert> : null}

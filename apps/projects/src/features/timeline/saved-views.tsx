@@ -213,7 +213,7 @@ function SaveViewDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent size="sm" aria-describedby={undefined}>
-        <DialogHeader title={`Save this ${NOUN[kind]} view`} description="It keeps the layout options you picked, like zoom, grouping and colors." />
+        <DialogHeader title={`Save this ${NOUN[kind]} view`} description="Keeps the layout options you picked, like zoom, grouping and colors." />
         <DialogBody className="flex flex-col gap-4">
           <Field label="Name" error={error ?? undefined}>
             {(ids) => (
@@ -239,7 +239,7 @@ function SaveViewDialog({
             )}
           </Field>
           {canShare ? (
-            <Switch size="sm" label="Share with everyone on this project" description="Teammates will see it in their list too." checked={shared} onCheckedChange={setShared} />
+            <Switch size="sm" label="Share with everyone on this project" checked={shared} onCheckedChange={setShared} />
           ) : null}
         </DialogBody>
         <DialogFooter>

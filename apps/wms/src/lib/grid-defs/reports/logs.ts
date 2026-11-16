@@ -74,8 +74,6 @@ export const CHANGE_LOG_DEF: ReportDef = {
   title: 'Change Log',
   path: '/api/reports/change-log',
   permission: 'reports.change_log.view',
-  helper:
-    'Change Log helps you monitor every change made in the system: who changed what, from which value to which, and when.',
   fields: [
     enumOf('module', 'Changed Module', Object.values(CHANGE_LOG_MODULES)),
     text('code', 'Code'),
@@ -126,8 +124,6 @@ export const TRANSACTION_HISTORY_DEF: ReportDef = {
   title: 'Transaction History',
   path: '/api/reports/transaction-history',
   permission: 'reports.transaction_history.view',
-  helper:
-    'Every inventory transaction: what moved, from and to which location, LP, lot and status, the signed quantity (negative for decrements), the on-hand balance before and after, and who did it.',
   fields: [
     CLIENT_FIELD,
     text('countPlanCode', 'Count Plan Code'),
@@ -245,7 +241,6 @@ export const SERIAL_TRANSACTIONS_DEF: ReportDef = {
   title: 'Serial Number Transaction History',
   path: '/api/reports/transaction-history/serial',
   permission: 'reports.serial_number_transaction_history.view',
-  helper: 'Every inventory transaction that moved a serial-tracked unit, one line per serial number.',
   fields: [
     CLIENT_FIELD,
     text('damageReason', 'Damage Reason'),
@@ -303,8 +298,6 @@ export const MISSING_LOG_DEF: ReportDef = {
   title: 'Missing Log',
   path: '/api/reports/missing-log',
   permission: 'reports.inventory_missing_log.view',
-  helper:
-    'The Missing Log Report gives in-depth details about what has been marked missing, when, and where.',
   fields: [
     CLIENT_FIELD,
     date('enteredAt', 'Entry Date'),
@@ -364,8 +357,7 @@ export const EXPORT_HISTORY_DEF: ReportDef = {
   title: 'Excel Export History',
   path: '/api/reports/export-history',
   permission: 'reports.excel_export_history.view',
-  helper:
-    'Every Export As Excel you start lands here, with live progress while it runs. Open an export type to return to its grid with the same filters. Files are kept for 7 days.',
+  helper: 'Files are kept for 7 days.',
   fields: [
     text('title', 'Export Type'),
     date('createdAt', 'Export Date'),

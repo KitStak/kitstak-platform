@@ -216,7 +216,7 @@ function Editor({
       ) : null}
       <Card
         title="RMA code generation preferences"
-        description="Automate RMA codes to simplify return traceability. Every new return order gets the next code."
+        description="Every new return order gets the next code."
         aside={
           <Button size="sm" variant="ghost" onClick={onLog}>
             <History className="h-3.5 w-3.5" aria-hidden />
@@ -277,7 +277,7 @@ function Editor({
       </Card>
       <Card
         title="Return parameters"
-        description="Customize your return procedures. Return receiving enforces these rules on every return order."
+        description="Return receiving enforces these rules on every return order."
         aside={
           <span className="flex items-center gap-2">
             {canEdit && on < RETURN_RULE_KEYS.length ? (
@@ -333,11 +333,7 @@ export function ReturnProcessPage() {
   const failed = seq.isError || rules.isError;
   return (
     <DataSetupShell>
-      <PageHeader
-        title="Return Process"
-        crumbLabel="Return Process"
-        helper="RMA codes, the rules return receiving enforces, and the customer / actual return reasons people choose from."
-      />
+      <PageHeader title="Return Process" crumbLabel="Return Process" />
       <div className="flex flex-col gap-5 px-6 pb-6 pt-4">
         {failed ? (
           <EmptyState

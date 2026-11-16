@@ -535,7 +535,7 @@ function Responses({ form, fields }: { readonly form: FormDTO; readonly fields: 
       <EmptyState
         illustration="inbox"
         title="No responses yet"
-        description="Share the link from the Share tab. Each response shows up here and becomes a task in the project."
+        description="Share the link from the Share tab."
       />
     );
   }

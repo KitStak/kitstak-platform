@@ -84,13 +84,7 @@ function TransactionDrawer({
   const [tab, setTab] = React.useState<'request' | 'response'>('request');
   React.useEffect(() => setTab('request'), [id]);
   return (
-    <Drawer
-      open={id !== null}
-      onOpenChange={onOpenChange}
-      width={60}
-      title="Transaction details"
-      description="Full request, response and error details for this carrier transaction."
-    >
+    <Drawer open={id !== null} onOpenChange={onOpenChange} width={60} title="Transaction details">
       {q.isPending ? (
         <Skeleton className="h-72 w-full" />
       ) : !d ? (
@@ -422,7 +416,6 @@ export function CarrierErrorsPage({ step }: { readonly step: CallStep }) {
           { label: 'Carrier Errors', href: '/integrations/carrier-errors/label-generation' },
           { label: `${STEP_LABEL[step]} Errors` },
         ]}
-        helper="Every failed carrier call with the exact request and response, so you can fix the setup or the order and try again."
       />
       <div className="flex min-h-0 flex-1 flex-col pb-4">
         <GridToolbar

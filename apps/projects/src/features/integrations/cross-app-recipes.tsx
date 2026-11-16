@@ -396,7 +396,7 @@ export function CrossAppRecipes() {
       <EmptyState
         illustration="workspace"
         title="Connect your other KitStak apps"
-        description="With KitStak CRM or WMS in this workspace, a won deal can start its project and a short receipt can open an urgent task, all by itself."
+        description="Add KitStak CRM or WMS to this workspace to use these recipes."
       />
     );
   }
@@ -413,7 +413,7 @@ export function CrossAppRecipes() {
           </div>
         ) : (triggers.data ?? []).length === 0 ? (
           <p className="rounded-xl border border-dashed border-border-default px-4 py-6 text-center text-sm text-fg-secondary">
-            No cross-app recipes yet. Pick one below and KitStak starts the work the moment it happens in CRM or WMS.
+            No cross-app recipes yet. Pick one below.
           </p>
         ) : (
           <ul className="flex flex-col gap-3">
@@ -427,11 +427,10 @@ export function CrossAppRecipes() {
         <h2 id="cross-app-library-title" className="text-base font-semibold text-fg">
           Recipe library
         </h2>
-        <p className="mt-1 mb-3 text-sm text-fg-secondary">
-          KitStak reads your CRM and WMS directly, so these start work without any setup or connectors.
-          {canManage ? null : ' Ask a workspace member with edit access to turn one on.'}
-        </p>
-        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {canManage ? null : (
+          <p className="mt-1 text-sm text-fg-secondary">Ask a workspace member with edit access to turn one on.</p>
+        )}
+        <ul className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {RECORD_TRIGGER_RECIPES.map((recipe) => (
             <RecipeTile
               key={recipe.kind}

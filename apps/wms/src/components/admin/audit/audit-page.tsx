@@ -308,10 +308,7 @@ export function AuditPage() {
   const filtered = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        title="Audit Log"
-        helper="Security events: sign-ins, blocked requests, permission denials, user and role changes, and revoked sessions."
-      />
+      <PageHeader title="Audit Log" />
       <StatTiles onFilter={filterTo} />
       <GridToolbar
         {...g.toolbarProps}

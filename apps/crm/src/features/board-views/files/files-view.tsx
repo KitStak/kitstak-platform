@@ -251,7 +251,7 @@ export function FilesView({ boardId, view, onOpenItem, className }: BoardViewPro
       <div className="flex flex-1 items-center justify-center p-6">
         <EmptyState
           title="No files yet"
-          description={`Drag files here or upload them to a ${noun.toLowerCase()}. Files from file columns and updates collect here.`}
+          description="Files from file columns and updates collect here."
           actions={
             canEdit ? (
               <Button leadingIcon={<Upload aria-hidden />} onClick={() => inputRef.current?.click()} disabled={allItems.length === 0}>

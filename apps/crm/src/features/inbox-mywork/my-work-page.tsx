@@ -414,7 +414,6 @@ export function MyWorkPage() {
   return (
     <PageFrame
       title="My work"
-      description="Everything assigned to you, across every board."
       icon={<CalendarCheck />}
       width="wide"
     >
@@ -469,7 +468,7 @@ export function MyWorkPage() {
           <EmptyState
             illustration="board"
             title="Nothing assigned to you yet"
-            description="When you're added to a People column on any board, the item lands here, grouped by its date."
+            description="Items where you're in a People column land here, grouped by date."
             actions={
               <Link
                 href={routes.home(org.slug)}

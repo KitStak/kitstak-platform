@@ -107,7 +107,7 @@ function FocusBody({
       <div className="flex items-center gap-3 border-b border-border-subtle px-6 py-4 pr-14">
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-fg">Focus mode</h2>
-          <p className="text-sm text-fg-muted">One thing at a time. Today’s and overdue work, most urgent first.</p>
+          <p className="text-sm text-fg-muted">Today’s and overdue work, most urgent first.</p>
         </div>
         <span className="shrink-0 text-sm font-medium text-fg-secondary tabular-nums" aria-live="polite">
           {finished ? `${queue.length} of ${queue.length}` : `${index + 1} of ${queue.length}`}

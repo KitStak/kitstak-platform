@@ -166,7 +166,7 @@ export function SolutionInstall({
               checked={withSampleData}
               onCheckedChange={setWithSampleData}
               label="Include sample data"
-              description="Example deals, leads and accounts so dashboards have something to show. Delete them any time."
+              description="Example deals, leads and accounts. Delete them any time."
             />
             {error ? (
               <InlineError onRetry={error.retryable ? () => submit() : undefined}>{error.message}</InlineError>

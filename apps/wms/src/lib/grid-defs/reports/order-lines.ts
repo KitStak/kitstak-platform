@@ -27,8 +27,7 @@ export const ORDER_LINES_DEF: ReportDef = {
   title: 'Order Line Progress',
   path: '/api/reports/order-lines',
   permission: 'fulfillment.shipment_orders.view',
-  helper:
-    "Every line of the open backlog and of the orders shipped today, with its pick and pack progress. The dashboard's Order Lines numbers open this grid, and its Total always equals the number you clicked.",
+  helper: 'Total always matches the dashboard number you opened it from.',
   fields: [
     enumOf('lineState', 'Line State', LINE_STATES),
     enumOf('progressScope', 'Order Group', LINE_PROGRESS_SCOPES, {

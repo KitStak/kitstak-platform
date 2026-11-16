@@ -98,8 +98,6 @@ export function useStalled(pending: boolean, ms = 10_000): boolean {
   return stalled;
 }
 
-export const WO_HELPER = 'Create and list work orders for kitting process of kit to stock products';
-
 /** Status counts that take longer than this show "—" with Retry instead of loading forever. */
 const STATUS_COUNTS_TIMEOUT_MS = 20_000;
 /** After this long without permissions or rows, the page says so and offers Retry. */
@@ -664,7 +662,6 @@ export function WorkOrdersPage() {
         title="Work Orders"
         crumbLabel="Work Orders"
         tabs="work-orders"
-        helper={WO_HELPER}
         actions={
           <HeaderActions
             loading={permsLoading}

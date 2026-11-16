@@ -347,7 +347,7 @@ function LinkProjectDialog({
       <DialogContent size="sm">
         <DialogHeader
           title="Link a project"
-          description="Connect a project you already have in KitStak Projects. Its progress shows up here."
+          description="Its progress shows up here."
         />
         <DialogBody className="pb-5">
           <Combobox
@@ -519,7 +519,7 @@ export function ProjectsTab({ itemId, recordName, term }: ProjectsTabProps) {
           size="sm"
           illustration="board"
           title={`No projects or tasks for this ${term.toLowerCase()} yet`}
-          description={`Tasks you create here land in KitStak Projects for your team and stay linked to ${recordName}, so everyone sees progress in both places.`}
+          description={`Tasks you create here land in KitStak Projects and stay linked to ${recordName}.`}
           actions={
             <div className="flex flex-wrap justify-center gap-2">
               <Button

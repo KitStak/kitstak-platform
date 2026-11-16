@@ -108,7 +108,6 @@ function Body({
         label: 'Others',
         icon: ClipboardList,
         isOptional: true,
-        description: 'Who receives the load, plus your custom fields.',
         schema: othersStepSchema,
         render: ({ form }) => {
           formRef.current = form;
@@ -119,7 +118,6 @@ function Body({
         key: 'orders',
         label: 'Orders',
         icon: Package,
-        description: 'Orders loaded on this truck.',
         schema: ordersStepSchema,
         render: ({ form }) => {
           formRef.current = form;

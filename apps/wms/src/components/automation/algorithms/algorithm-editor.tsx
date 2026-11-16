@@ -530,7 +530,7 @@ function EditorBody({
       <PageHeader
         title={isEdit ? `Edit ${kind} Algorithm` : `Create ${kind} Algorithm`}
         crumbLabel="Algorithm Details"
-        helper={isEdit ? detail.name : 'Primary information first, then the If / If-else rule chain.'}
+        helper={isEdit ? detail.name : undefined}
         actions={
           <Link
             href={backHref}
@@ -693,9 +693,7 @@ function EditorBody({
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h2 className="text-sm font-semibold text-foreground">Rule List</h2>
-                    <p className="text-2xs text-secondary">
-                      All the rules for this {kind.toLowerCase()} algorithm, evaluated top to bottom.
-                    </p>
+                    <p className="text-2xs text-secondary">Evaluated top to bottom.</p>
                   </div>
                   <DisabledReason reason={readOnly ? NO_PERMISSION : null}>
                     <Button size="sm" variant="secondary" disabled={readOnly} onClick={createNew}>

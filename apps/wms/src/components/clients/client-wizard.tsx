@@ -140,10 +140,7 @@ function InformationStep({
   }, [code]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="flex flex-col gap-5">
-      <FormSection
-        title="Client details"
-        description="How the client appears across KitStaks and on documents."
-      >
+      <FormSection title="Client details">
         <FormGrid>
           <TextInput<F>
             name="name"
@@ -523,9 +520,7 @@ function Body({
         isOptional: true,
         render: ({ form }) => {
           formRef.current = form;
-          return (
-            <AddressesField description="Shipping, billing and return addresses. The default of each type is pre-filled on documents." />
-          );
+          return <AddressesField description="The default of each type is pre-filled on documents." />;
         },
       },
       {
@@ -635,11 +630,7 @@ export function ClientWizardDrawer({
       width={60}
       bodyClassName="pb-0"
       title={editId ? `Edit client ${detail.data?.data.name ?? ''}`.trim() : 'Create client'}
-      description={
-        editId
-          ? 'Every step is editable; Save applies all of them.'
-          : 'Information, settings, addresses, then tax and custom fields.'
-      }
+      description={editId ? 'Save applies every step.' : undefined}
     >
       {editId && detail.isError ? (
         <EmptyState

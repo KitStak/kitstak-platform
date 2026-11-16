@@ -203,7 +203,6 @@ export function AlgorithmsPage({ slug }: { readonly slug: AlgorithmSlug }) {
       <PageHeader
         title="Algorithms"
         tabs="algorithms"
-        helper="You can view a list of your algorithms and create new ones here."
         actions={
           perms.create ? (
             <Button variant="primary" onClick={() => router.push(createHref)}>

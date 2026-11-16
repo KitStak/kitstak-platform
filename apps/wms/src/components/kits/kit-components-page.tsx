@@ -33,17 +33,15 @@ export function kitComponentRowActions(r: KitComponentRow): readonly RowAction[]
       icon: Boxes,
       href: `/products/${r.componentProductId}?tab=kits`,
     },
-    ...r.includedKits
-      .slice(0, 1)
-      .map((sku) => ({
-        key: 'kit-inventory',
-        label: r.includedKits.length > 1 ? 'Kits in Kit Inventory' : `Kit ${sku} in Kit Inventory`,
-        icon: ClipboardList,
-        href:
-          r.includedKits.length > 1
-            ? `/inventory/kits?f.sku=in:${r.includedKits.map(encodeURIComponent).join(',')}`
-            : `/inventory/kits?f.sku=eq:${encodeURIComponent(sku)}`,
-      })),
+    ...r.includedKits.slice(0, 1).map((sku) => ({
+      key: 'kit-inventory',
+      label: r.includedKits.length > 1 ? 'Kits in Kit Inventory' : `Kit ${sku} in Kit Inventory`,
+      icon: ClipboardList,
+      href:
+        r.includedKits.length > 1
+          ? `/inventory/kits?f.sku=in:${r.includedKits.map(encodeURIComponent).join(',')}`
+          : `/inventory/kits?f.sku=eq:${encodeURIComponent(sku)}`,
+    })),
     ...(r.reorderQty > 0
       ? [{ key: 'reorder', label: 'Create Purchase Order', icon: ShoppingCart, href: reorderHref(r) }]
       : []),
@@ -55,9 +53,6 @@ export function kitComponentRowActions(r: KitComponentRow): readonly RowAction[]
     },
   ];
 }
-
-export const KIT_COMPONENTS_HELPER =
-  'Inventory levels and reorder requirements of kit product components can be monitored in this report.';
 
 const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
@@ -212,11 +207,7 @@ export function KitComponentsPage() {
   const columns = React.useMemo(() => buildKitComponentColumns(), []);
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader
-        title="Kit Component Inventory Availability"
-        helper={KIT_COMPONENTS_HELPER}
-        tabs="inventory"
-      />
+      <PageHeader title="Kit Component Inventory Availability" tabs="inventory" />
       <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by SKU" />
       <GridStallNotice loading={g.isLoading} onRetry={g.refetch} noun="kit components" />
       <div className="flex min-h-0 flex-1 flex-col">
