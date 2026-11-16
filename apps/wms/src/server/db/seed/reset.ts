@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm';
 import type { AppDb } from '@/server/api/db';
 import { dbAll, dbRun, withWriteTx } from '@/server/db/sql';
 
-const KEEP_TABLES: ReadonlySet<string> = new Set(['__drizzle_migrations']);
+const KEEP_TABLES: ReadonlySet<string> = new Set(['__drizzle_migrations', '__tenant_migrations']);
 
 const quoteIdent = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 

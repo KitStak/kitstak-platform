@@ -23,7 +23,10 @@ import { auditLog } from '@/server/db/schema';
 import { seededDb, testHash, TEST_PASSWORD, type SeededDb } from './fixtures';
 
 let current: SeededDb;
-vi.mock('@/server/api/db', () => ({ getAppDb: async (): Promise<AppDb> => current.db }));
+vi.mock('@/server/api/db', () => {
+  const get = async (): Promise<AppDb> => current.db;
+  return { getAppDb: get, getPlatformDb: get, getTenantDbFor: get };
+});
 
 const { wmsAuthSchema } = await import('@/server/auth/auth');
 const { resolveSession } = await import('@/server/auth/session-store');
@@ -212,7 +215,9 @@ describe('shared-factory auth invariants', () => {
       createdAt: now,
       updatedAt: now,
     });
-    // The shared session is real — but WMS refuses it with `no_profile`, never viewer defaults.
+    // The shared session is real — but WMS refuses it, never viewer defaults. This identity
+    // belongs to no org with a warehouse, so the refusal reads `no_warehouse` (one separate
+    // warehouse per organization); a member WITHOUT a profile reads `no_profile`.
     const cookie = await signInCookie(current.db, email);
     // NEW-4: that sign-in went through the WMS instance, whose audit sink previously
     // dropped the event on the wms.users FK — the row must exist with user_id NULL and
@@ -225,7 +230,7 @@ describe('shared-factory auth invariants', () => {
     expect(crmOnlyLogin?.userId).toBeNull();
     expect(await resolveSession(current.db, new Headers({ cookie }))).toEqual({
       ok: false,
-      reason: 'no_profile',
+      reason: 'no_warehouse',
     });
     // Defence in depth: even if a grant were computed, it would be empty...
     const grant = await loadPermissions(current.db, { id: crmOnlyId, role: 'viewer' });

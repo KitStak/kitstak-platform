@@ -15,7 +15,10 @@ import {
   req,
 } from './harness';
 
-vi.mock('@/server/api/db', () => ({ getAppDb: async () => current().db }));
+vi.mock('@/server/api/db', () => {
+  const get = async () => current().db;
+  return { getAppDb: get, getPlatformDb: get, getTenantDbFor: get };
+});
 const afterCallbacks: (() => unknown)[] = [];
 vi.mock('next/server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/server')>()),

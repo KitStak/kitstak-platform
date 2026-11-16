@@ -6,18 +6,23 @@ import { db, type Executor } from '@/server/db';
 import { parseOrgRole } from '@/lib/permissions';
 import type { OrgPerson, PersonRef } from '@/lib/types';
 import type { DomainContext } from './_shared';
-import { tableExists } from '@/server/integrations/detect';
+import { wmsTable } from '@kitstak/db/wms-tenants';
+import { wmsTableExists, wmsTenantSchemaFor } from '@/server/integrations/detect';
 
 /**
  * Emails of system accounts (API / integration users) that must never show up as teammates in
- * pickers. Today that is WMS's `is_api_user` flag (the shared Integration Service login). Fails
- * soft: no WMS tables, or any error, means no exclusions.
+ * pickers. Today that is WMS's `is_api_user` flag (the shared Integration Service login), read
+ * from the org's own warehouse schema. Fails soft: no warehouse, no users table, or any error,
+ * means no exclusions.
  */
-async function serviceAccountEmails(): Promise<Set<string>> {
+async function serviceAccountEmails(orgId: string): Promise<Set<string>> {
   try {
-    if (!(await tableExists('wms.users'))) return new Set();
+    const schema = await wmsTenantSchemaFor(orgId);
+    if (!schema || !(await wmsTableExists(schema, 'users'))) return new Set();
     // Always on the pool (never inside a caller's transaction, so a failure can't abort it).
-    const result = await db.execute<{ email: string }>(sql`select lower(email) as email from wms.users where is_api_user = true`);
+    const result = await db.execute<{ email: string }>(
+      sql`select lower(email) as email from ${wmsTable(schema, 'users')} where is_api_user = true`,
+    );
     return new Set(result.rows.map((row) => row.email));
   } catch {
     return new Set();
@@ -40,7 +45,7 @@ export async function listOrgPeople(ctx: DomainContext, executor: Executor = db)
     .innerJoin(user, eq(member.userId, user.id))
     .where(eq(member.organizationId, ctx.orgId))
     .orderBy(asc(user.name)),
-    serviceAccountEmails(),
+    serviceAccountEmails(ctx.orgId),
   ]);
   const out: OrgPerson[] = [];
   for (const row of rows) {

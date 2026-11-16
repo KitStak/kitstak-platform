@@ -20,7 +20,10 @@ import {
   req,
 } from '../foundation-f7/harness';
 
-vi.mock('@/server/api/db', () => ({ getAppDb: async () => current().db }));
+vi.mock('@/server/api/db', () => {
+  const get = async () => current().db;
+  return { getAppDb: get, getPlatformDb: get, getTenantDbFor: get };
+});
 
 type Handler = Parameters<typeof call>[0];
 type RouteModule = Partial<Record<'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', Handler>>;

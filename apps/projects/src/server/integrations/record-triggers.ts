@@ -12,6 +12,7 @@
  */
 import 'server-only';
 import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { wmsTable } from '@kitstak/db/wms-tenants';
 import { db } from '@/server/db';
 import { projects, recordTriggerRuns, recordTriggers } from '@/server/db/schema';
 import type { DomainContext } from '@/server/domain/_shared';
@@ -29,7 +30,7 @@ import {
   type RecordTriggerRunDTO,
   type WmsTaskConfig,
 } from '@/lib/record-trigger-types';
-import { integrationAvailability, tableExists } from './detect';
+import { integrationAvailability, tableExists, wmsSchemaFor } from './detect';
 
 const KINDS: readonly RecordTriggerKind[] = ['crm_deal_won', 'wms_receipt_discrepancy', 'wms_count_variance'];
 const THROTTLE_MS = 5 * 60_000;
@@ -280,14 +281,14 @@ async function wonDeals(ctx: DomainContext, since: Date): Promise<Candidate[]> {
   });
 }
 
-async function discrepantReceipts(since: Date): Promise<Candidate[]> {
+async function discrepantReceipts(schema: string, since: Date): Promise<Candidate[]> {
   const result = await db.execute<{ id: string; code: string; vendor: string | null; short_lines: number; over_lines: number; damaged: number; lines: number }>(sql`
     select po.id, po.code, po.vendor_name as vendor,
            count(*) filter (where l.received_quantity > 0 and l.received_quantity < l.ordered_quantity)::int as short_lines,
            count(*) filter (where l.received_quantity > l.ordered_quantity)::int as over_lines,
            coalesce(sum(l.damaged_quantity), 0)::int as damaged,
            count(*)::int as lines
-    from wms.purchase_orders po join wms.purchase_order_lines l on l.purchase_order_id = po.id
+    from ${wmsTable(schema, 'purchase_orders')} po join ${wmsTable(schema, 'purchase_order_lines')} l on l.purchase_order_id = po.id
     where po.status not in ('Pending', 'Cancelled') and po.updated_at >= ${since.toISOString()}
     group by po.id, po.code, po.vendor_name
     having count(*) filter (where l.damaged_quantity > 0 or (l.received_quantity > 0 and l.received_quantity <> l.ordered_quantity)) > 0
@@ -307,12 +308,12 @@ async function discrepantReceipts(since: Date): Promise<Candidate[]> {
   });
 }
 
-async function varianceCounts(since: Date, thresholdPercent: number): Promise<Candidate[]> {
+async function varianceCounts(schema: string, since: Date, thresholdPercent: number): Promise<Candidate[]> {
   const result = await db.execute<{ id: string; code: string; description: string | null; pct: number; off_lines: number }>(sql`
     select cp.id, cp.code, cp.description,
            (sum(abs(l.counted_qty - l.initial_stock_qty))::float / nullif(sum(l.initial_stock_qty), 0) * 100) as pct,
            count(*) filter (where l.counted_qty <> l.initial_stock_qty)::int as off_lines
-    from wms.count_plans cp join wms.count_plan_lines l on l.plan_id = cp.id
+    from ${wmsTable(schema, 'count_plans')} cp join ${wmsTable(schema, 'count_plan_lines')} l on l.plan_id = cp.id
     where cp.status in ('Count Completed', 'Inventory Updated', 'Completed') and cp.updated_at >= ${since.toISOString()}
       and l.counted_qty is not null and not l.is_recount_line
     group by cp.id, cp.code, cp.description
@@ -413,14 +414,16 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char);
 }
 
+/** WMS recipes read the org's own warehouse schema; an org without an active warehouse has nothing to check. */
+async function wmsCandidates(ctx: DomainContext, kind: RecordTriggerKind, config: WmsTaskConfig, since: Date): Promise<Candidate[]> {
+  const schema = await wmsSchemaFor(ctx);
+  if (!schema) return [];
+  return kind === 'wms_receipt_discrepancy' ? discrepantReceipts(schema, since) : varianceCounts(schema, since, config.thresholdPercent ?? 2);
+}
+
 async function runTrigger(ctx: DomainContext, trigger: TriggerRow): Promise<number> {
   const config = trigger.config as unknown as RecordTriggerConfig;
-  const candidates =
-    trigger.kind === 'crm_deal_won'
-      ? await wonDeals(ctx, trigger.since)
-      : trigger.kind === 'wms_receipt_discrepancy'
-        ? await discrepantReceipts(trigger.since)
-        : await varianceCounts(trigger.since, (config as WmsTaskConfig).thresholdPercent ?? 2);
+  const candidates = trigger.kind === 'crm_deal_won' ? await wonDeals(ctx, trigger.since) : await wmsCandidates(ctx, trigger.kind, config as WmsTaskConfig, trigger.since);
   if (candidates.length === 0) return 0;
   const done = new Set(
     (

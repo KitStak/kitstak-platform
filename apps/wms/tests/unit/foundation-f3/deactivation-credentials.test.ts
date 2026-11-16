@@ -16,7 +16,10 @@ import { users } from '@/server/db/schema';
 import { assignRole, seededDb, type SeededDb } from './fixtures';
 
 let current: SeededDb;
-vi.mock('@/server/api/db', () => ({ getAppDb: async (): Promise<AppDb> => current.db }));
+vi.mock('@/server/api/db', () => {
+  const get = async (): Promise<AppDb> => current.db;
+  return { getAppDb: get, getPlatformDb: get, getTenantDbFor: get };
+});
 
 const { buildAuthContext } = await import('@/server/auth/context');
 const { deleteCredentialAccount } = await import('@/server/auth/credentials');
@@ -39,6 +42,10 @@ async function adminAuth(db: SeededDb['db'], adminId: string) {
     sessionId: 's-test',
     sessionVersion: row.sessionVersion,
     sessionExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    orgId: '00000000-0000-4000-8000-000000000000',
+    orgName: 'KitStak',
+    orgSlug: 'kitstak',
+    tenantSchema: 'wms',
   });
 }
 

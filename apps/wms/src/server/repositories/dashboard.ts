@@ -1,7 +1,7 @@
 import { and, count, eq, inArray, isNotNull, like, sql } from 'drizzle-orm';
 import { desc } from '@/server/db/order';
-import { getDb, schema } from '@/server/db';
-import type { AppDb } from '@/server/api/db';
+import { schema } from '@/server/db';
+import { getAppDb, type AppDb } from '@/server/api/db';
 import { BACKLOG_STATUSES } from './orders';
 
 const { shipmentOrders, orderLines, clients, jobs, users } = schema;
@@ -89,7 +89,7 @@ async function deriveToday(db: AppDb): Promise<string> {
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  const db = await getDb();
+  const db = await getAppDb();
   const today = await deriveToday(db);
   const todayPrefix = `${today}%`;
 

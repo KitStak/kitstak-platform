@@ -12,7 +12,7 @@ import { cache } from 'react';
 import { headers } from 'next/headers';
 import { connection, type NextRequest } from 'next/server';
 import { SESSION_COOKIE_NAMES } from '@kitstak/auth/options';
-import { getAppDb, type AppDb } from '@/server/api/db';
+import { getPlatformDb, type AppDb } from '@/server/api/db';
 import { log } from '@/server/log';
 import { resolveSession, type SessionResolution, type SessionUser } from './session-store';
 
@@ -53,21 +53,31 @@ export function readCookie(request: NextRequest | Request, name: string): string
 }
 
 /**
- * Session user for server components (memoised per request via React `cache`).
- * Returns null when the cookie is missing, invalid, revoked or the user was deactivated.
+ * The request's full session resolution for server components (memoised per request via
+ * React `cache`) — including why it failed (`no_warehouse` + setup offers for the
+ * warehouse-setup page). Never throws for auth failures.
  */
-export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+export const getSessionResolution = cache(async (): Promise<SessionResolution> => {
   // `headers()` stays outside the try: during prerendering Next signals dynamic usage
   // through it, and that signal must propagate.
   const requestHeaders = await headers();
   // Session checks read the clock (expiry): mark the render as request-time.
   await connection();
   try {
-    const db = await getAppDb();
-    const resolution = await resolveSession(db, requestHeaders);
-    return resolution.ok ? resolution.user : null;
+    // Platform handle: the session (core tables) decides which org's warehouse to open.
+    return await resolveSession(await getPlatformDb(), requestHeaders);
   } catch (error: unknown) {
     log.error('getSessionUser failed', { component: 'auth', err: error });
-    return null;
+    return { ok: false, reason: 'unauthenticated' };
   }
+});
+
+/**
+ * Session user for server components (memoised per request).
+ * Returns null when the cookie is missing, invalid, revoked, the user was deactivated or
+ * none of their orgs has a warehouse they can open.
+ */
+export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+  const resolution = await getSessionResolution();
+  return resolution.ok ? resolution.user : null;
 });

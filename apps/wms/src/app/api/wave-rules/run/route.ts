@@ -8,7 +8,7 @@
  */
 import { after } from 'next/server';
 import { z } from 'zod';
-import { getAppDb } from '@/server/api/db';
+import { getTenantDbFor } from '@/server/api/db';
 import { defineRoute } from '@/server/api/define-route';
 import { withM03Actor } from '@/server/repositories/jobs-actor';
 import { bulkIdsSchema, domainCtx } from '@/server/repositories/platform-common';
@@ -46,7 +46,8 @@ export const POST = defineRoute({
       });
       if (deferred.length > 0) {
         after(async () => {
-          const appDb = await getAppDb();
+          // The request's own warehouse, explicitly (never an ambient lookup inside after()).
+          const appDb = await getTenantDbFor(auth.user.tenantSchema);
           for (const waveId of deferred)
             await completeAiWave(appDb, ctx, waveId, { runBy: auth.user.name || auth.user.email });
         });

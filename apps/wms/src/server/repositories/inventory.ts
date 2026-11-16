@@ -5,8 +5,8 @@
  */
 import { and, count, countDistinct, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { asc, desc } from '@/server/db/order';
-import { getDb, schema } from '@/server/db';
-import type { AppDb } from '@/server/api/db';
+import { schema } from '@/server/db';
+import { getAppDb, type AppDb } from '@/server/api/db';
 import { likePattern, offsetOf, type ListResult } from './shared';
 
 const { inventory, products, clients, locations, purchaseOrders, purchaseOrderLines } = schema;
@@ -64,7 +64,7 @@ function invAggregate(db: AppDb) {
 export async function listTotalInventory(
   params: InventoryListParams,
 ): Promise<ListResult<TotalInventoryRow>> {
-  const db = await getDb();
+  const db = await getAppDb();
   const where = productConditions(params);
   const inv = await invAggregate(db);
   const rows = await db
@@ -121,7 +121,7 @@ export interface LocationInventoryRow {
 export async function listInventoryByLocation(
   params: InventoryListParams,
 ): Promise<ListResult<LocationInventoryRow>> {
-  const db = await getDb();
+  const db = await getAppDb();
   const conds: Array<SQL | undefined> = [];
   if (params.clientId) conds.push(eq(products.clientId, params.clientId));
   if (params.zone) conds.push(eq(locations.zone, params.zone));
@@ -184,7 +184,7 @@ export interface AtpRow {
 }
 
 export async function listAtp(params: InventoryListParams): Promise<ListResult<AtpRow>> {
-  const db = await getDb();
+  const db = await getAppDb();
   const where = productConditions(params);
   const inv = await invAggregate(db);
   const incoming = db

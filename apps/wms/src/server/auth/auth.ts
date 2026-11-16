@@ -40,7 +40,7 @@ import {
   userProfiles,
   verification,
 } from '@kitstak/db/schema';
-import { getAppDb, type AppDb } from '@/server/api/db';
+import { getPlatformDb, type AppDb } from '@/server/api/db';
 import { users } from '@/server/db/schema';
 import { log } from '@/server/log';
 import { writeAudit } from './audit';
@@ -268,7 +268,9 @@ export type WmsAuth = KitstakAuth;
 const instances = new WeakMap<object, WmsAuth>();
 
 export async function getWmsAuth(): Promise<WmsAuth> {
-  const db = await getAppDb();
+  // Platform handle: Better Auth reads/writes core tables; its sign-in gate and audit
+  // hooks act on the platform warehouse (per-org access is enforced at session resolution).
+  const db = await getPlatformDb();
   let auth = instances.get(db as object);
   if (!auth) {
     auth = buildAuth(db);

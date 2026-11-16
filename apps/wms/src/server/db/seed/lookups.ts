@@ -9,7 +9,7 @@ import { forEachSeq } from '@/server/db/sql';
 type Meta = Record<string, unknown>;
 type Value = string | readonly [string, Meta];
 
-const GLOBAL_LOOKUPS: Readonly<Partial<Record<LookupType, readonly Value[]>>> = {
+export const GLOBAL_LOOKUPS: Readonly<Partial<Record<LookupType, readonly Value[]>>> = {
   po_type: PO_TYPES,
   so_type: [
     'D2C Order',

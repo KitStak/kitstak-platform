@@ -28,12 +28,13 @@ import { seededDb, type SeededDb } from './fixtures';
 import { createTestDb, type TestDb } from '../../setup/test-db';
 
 let currentForAuth: SeededDb | undefined;
-vi.mock('@/server/api/db', () => ({
-  getAppDb: async (): Promise<AppDb> => {
+vi.mock('@/server/api/db', () => {
+  const get = async (): Promise<AppDb> => {
     if (!currentForAuth) throw new Error('seededDb not open');
     return currentForAuth.db;
-  },
-}));
+  };
+  return { getAppDb: get, getPlatformDb: get, getTenantDbFor: get };
+});
 const { getWmsAuth } = await import('@/server/auth/auth');
 
 const probe = pgTable('zz_probe', { id: text('id').primaryKey(), d: text('d'), cf: jsonb('cf') });

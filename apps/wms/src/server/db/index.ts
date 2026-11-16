@@ -21,6 +21,7 @@ import path from 'node:path';
 import * as schema from './schema';
 import type { AppDb } from '../api/db';
 import { applyMigrations, MIGRATIONS_FOLDER, sanitizeDatabaseUrl } from './migrate';
+import { buildTenantDb, type RawClient } from './tenant';
 
 export const DATA_DIR = path.join(/* turbopackIgnore: true */ process.cwd(), '.data');
 export const PGLITE_DIR = path.join(/* turbopackIgnore: true */ DATA_DIR, 'pglite');
@@ -30,6 +31,8 @@ export type DatabaseKind = 'postgres' | 'pglite';
 export interface OpenDatabase {
   readonly db: AppDb;
   readonly kind: DatabaseKind;
+  /** The driver client underneath `db` (tenant handles wrap it; see ./tenant.ts). */
+  readonly raw: RawClient;
   /** Ends the pool / closes PGlite (flushing it to disk) and releases the directory lock. */
   close(): Promise<void>;
 }
@@ -111,6 +114,7 @@ export async function openPostgres(
   return {
     db: db as unknown as AppDb,
     kind: 'postgres',
+    raw: { kind: 'postgres', client },
     close: () => client.end({ timeout: 5 }),
   };
 }
@@ -187,6 +191,7 @@ export async function openPglite(
     return {
       db,
       kind: 'pglite',
+      raw: { kind: 'pglite', client },
       close: async () => {
         try {
           if (!client.closed) await client.close();
@@ -217,9 +222,15 @@ export async function openDatabase(env: Env = process.env): Promise<OpenDatabase
 
 declare global {
   var __kitstakDb: Promise<OpenDatabase> | undefined;
+  var __kitstakTenantPool: Promise<OpenDatabase> | undefined;
+  var __kitstakTenantDbs: Map<string, Promise<AppDb>> | undefined;
 }
 
-/** The process-wide database (singleton across Next.js hot reloads). */
+/**
+ * The process-wide PLATFORM database (singleton across Next.js hot reloads): core tables and
+ * the platform org's `wms` schema. Request code that reads warehouse data uses the request's
+ * tenant handle instead (`getAppDb()` in `@/server/api/db`).
+ */
 export async function getDb(): Promise<AppDb> {
   if (!globalThis.__kitstakDb) {
     const opening = openDatabase();
@@ -231,10 +242,53 @@ export async function getDb(): Promise<AppDb> {
   return (await globalThis.__kitstakDb).db;
 }
 
-/** Closes the singleton (scripts: call before exit so PGlite flushes and the pool drains). */
+/**
+ * Tenant connections on Postgres come from their own pool whose startup search_path is
+ * `public` (never `wms`): a statement that somehow skipped the tenant search_path fails on a
+ * missing table instead of reading the platform org's data. PGlite (one connection) shares
+ * the platform client.
+ */
+async function tenantRawClient(): Promise<RawClient> {
+  const url = databaseUrl();
+  if (!url) {
+    await getDb();
+    return (await (globalThis.__kitstakDb as Promise<OpenDatabase>)).raw;
+  }
+  if (!globalThis.__kitstakTenantPool) {
+    const opening = openPostgres(url, { searchPath: 'public' });
+    globalThis.__kitstakTenantPool = opening;
+    opening.catch(() => {
+      if (globalThis.__kitstakTenantPool === opening) globalThis.__kitstakTenantPool = undefined;
+    });
+  }
+  return (await globalThis.__kitstakTenantPool).raw;
+}
+
+/**
+ * The handle for one org's WMS schema: the platform handle for `wms`, otherwise a cached
+ * tenant-scoped handle (src/server/db/tenant.ts). `schemaName` must come from
+ * core.wms_tenants (validated there and again here).
+ */
+export async function getTenantDb(schemaName: string): Promise<AppDb> {
+  if (schemaName === 'wms') return await getDb();
+  const cache = (globalThis.__kitstakTenantDbs ??= new Map());
+  let pending = cache.get(schemaName);
+  if (!pending) {
+    pending = tenantRawClient().then((raw) => buildTenantDb(raw, schemaName));
+    cache.set(schemaName, pending);
+    pending.catch(() => cache.delete(schemaName));
+  }
+  return await pending;
+}
+
+/** Closes the singletons (scripts: call before exit so PGlite flushes and the pools drain). */
 export async function closeDb(): Promise<void> {
   const opening = globalThis.__kitstakDb;
+  const tenantPool = globalThis.__kitstakTenantPool;
   globalThis.__kitstakDb = undefined;
+  globalThis.__kitstakTenantPool = undefined;
+  globalThis.__kitstakTenantDbs = undefined;
+  if (tenantPool) await (await tenantPool).close();
   if (opening) await (await opening).close();
 }
 

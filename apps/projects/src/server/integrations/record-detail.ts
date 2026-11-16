@@ -9,13 +9,14 @@
  */
 import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
+import { wmsTable } from '@kitstak/db/wms-tenants';
 import { db } from '@/server/db';
 import { integrationLinks } from '@/server/db/schema';
 import type { DomainContext } from '@/server/domain/_shared';
 import type { IntegrationTargetType } from '@/lib/constants';
 import type { RecordDetail, RecordDetailFact, RecordDetailLine } from '@/lib/types';
 import { crmItemUrl } from './crm';
-import { integrationAvailability, tableExists } from './detect';
+import { integrationAvailability, wmsSchemaFor, wmsTableExists } from './detect';
 import { wmsUrl } from './wms';
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -130,18 +131,20 @@ function lineOf(row: LineRow, parts: (row: LineRow) => { value: string; tone?: R
   return { label: row.label, sku: row.sku, value, ...(tone ? { tone } : {}) };
 }
 
-async function wmsDetail(type: Exclude<IntegrationTargetType, 'crm_item' | 'crm_account' | 'core_customer'>, id: string): Promise<RecordDetail | null> {
+async function wmsDetail(schema: string, type: Exclude<IntegrationTargetType, 'crm_item' | 'crm_account' | 'core_customer'>, id: string): Promise<RecordDetail | null> {
+  /** A table in the request org's own warehouse schema. */
+  const t = (table: string) => wmsTable(schema, table);
   const base = { type, id, app: 'wms' as const, url: wmsUrl(type, id), checkedAt: new Date().toISOString() };
   if (type === 'wms_order') {
     const head = await db.execute<{ code: string; status: string; customer: string | null; carrier: string | null; tracking: string | null; expected: string | null; shipped: string | null; qty: number; updated_at: string | null }>(sql`
       select code, status, coalesce(nullif(customer_name, ''), nullif(company_name, ''), store_name) as customer, carrier,
              tracking_number as tracking, expected_ship_date as expected, shipped_at as shipped, total_quantity as qty, updated_at
-      from wms.shipment_orders where id = ${id} limit 1`);
+      from ${t('shipment_orders')} where id = ${id} limit 1`);
     const row = head.rows[0];
     if (!row) return null;
     const lines = await db.execute<LineRow & { total: number }>(sql`
       select coalesce(p.name, 'Item') as label, p.sku, l.quantity as a, l.picked_quantity as b, l.shipped_quantity as c, count(*) over()::int as total
-      from wms.order_lines l left join wms.products p on p.id = l.product_id
+      from ${t('order_lines')} l left join ${t('products')} p on p.id = l.product_id
       where l.order_id = ${id} order by l.created_at limit ${MAX_LINES}`);
     const total = lines.rows[0]?.total ?? 0;
     return {
@@ -173,14 +176,14 @@ async function wmsDetail(type: Exclude<IntegrationTargetType, 'crm_item' | 'crm_
     const head = await db.execute<{ code: string; status: string; vendor: string | null; expected: string | null; received_at: string | null; total: number; received: number; updated_at: string | null }>(sql`
       select code, status, vendor_name as vendor, coalesce(expected_date, planned_arrival_date) as expected, received_at,
              total_quantity as total, received_quantity as received, updated_at
-      from wms.purchase_orders where id = ${id} limit 1`);
+      from ${t('purchase_orders')} where id = ${id} limit 1`);
     const row = head.rows[0];
     if (!row) return null;
     const lines = await db.execute<LineRow & { total: number; issues: number }>(sql`
       select coalesce(p.name, 'Item') as label, p.sku, l.ordered_quantity as a, l.received_quantity as b, l.damaged_quantity as c,
              count(*) over()::int as total,
              (count(*) filter (where l.damaged_quantity > 0 or (l.received_quantity > 0 and l.received_quantity <> l.ordered_quantity)) over())::int as issues
-      from wms.purchase_order_lines l left join wms.products p on p.id = l.product_id
+      from ${t('purchase_order_lines')} l left join ${t('products')} p on p.id = l.product_id
       where l.purchase_order_id = ${id}
       order by (l.damaged_quantity > 0 or (l.received_quantity > 0 and l.received_quantity <> l.ordered_quantity)) desc, l.created_at
       limit ${MAX_LINES}`);
@@ -217,14 +220,14 @@ async function wmsDetail(type: Exclude<IntegrationTargetType, 'crm_item' | 'crm_
     const head = await db.execute<{ code: string; status: string; kind: string | null; requested: number; processed: number; kit: string | null; start: string | null; finish: string | null; updated_at: string | null }>(sql`
       select w.code, w.status, w.type as kind, w.requested_qty as requested, w.processed_qty as processed, p.name as kit,
              w.planned_start_at as start, w.planned_finish_at as finish, w.updated_at
-      from wms.work_orders w left join wms.products p on p.id = w.kit_product_id where w.id = ${id} limit 1`);
+      from ${t('work_orders')} w left join ${t('products')} p on p.id = w.kit_product_id where w.id = ${id} limit 1`);
     const row = head.rows[0];
     if (!row) return null;
-    const hasComponents = await tableExists('wms.work_order_components');
+    const hasComponents = await wmsTableExists(schema, 'work_order_components');
     const lines = hasComponents
       ? await db.execute<LineRow & { total: number }>(sql`
           select coalesce(p.name, 'Component') as label, p.sku, c.total_qty as a, c.picked_qty as b, c.consumed_qty as c, count(*) over()::int as total
-          from wms.work_order_components c left join wms.products p on p.id = c.component_product_id
+          from ${t('work_order_components')} c left join ${t('products')} p on p.id = c.component_product_id
           where c.work_order_id = ${id} order by c.id limit ${MAX_LINES}`)
       : { rows: [] as (LineRow & { total: number })[] };
     const total = lines.rows[0]?.total ?? 0;
@@ -246,7 +249,7 @@ async function wmsDetail(type: Exclude<IntegrationTargetType, 'crm_item' | 'crm_
   }
   // wms_count
   const head = await db.execute<{ code: string; status: string; description: string | null; scheduled: string | null; kind: string | null; updated_at: string | null }>(sql`
-    select code, status, description, scheduled_at as scheduled, count_type as kind, updated_at from wms.count_plans where id = ${id} limit 1`);
+    select code, status, description, scheduled_at as scheduled, count_type as kind, updated_at from ${t('count_plans')} where id = ${id} limit 1`);
   const row = head.rows[0];
   if (!row) return null;
   const lines = await db.execute<LineRow & { total: number; counted: number; off: number; expected_sum: number; variance_sum: number }>(sql`
@@ -256,9 +259,9 @@ async function wmsDetail(type: Exclude<IntegrationTargetType, 'crm_item' | 'crm_
            (count(*) filter (where l.counted_qty is not null and l.counted_qty <> l.initial_stock_qty) over())::int as off,
            (sum(l.initial_stock_qty) filter (where l.counted_qty is not null) over())::int as expected_sum,
            (sum(abs(coalesce(l.counted_qty, l.initial_stock_qty) - l.initial_stock_qty)) over())::int as variance_sum
-    from wms.count_plan_lines l
-      left join wms.products p on p.id = l.product_id
-      left join wms.locations loc on loc.id = l.location_id
+    from ${t('count_plan_lines')} l
+      left join ${t('products')} p on p.id = l.product_id
+      left join ${t('locations')} loc on loc.id = l.location_id
     where l.plan_id = ${id} and not l.is_recount_line
     order by (l.counted_qty is not null and l.counted_qty <> l.initial_stock_qty) desc, loc.code
     limit ${MAX_LINES}`);
@@ -311,7 +314,9 @@ export async function getRecordDetail(ctx: DomainContext, type: IntegrationTarge
     if (!(await isLinked(ctx, type, id))) return null;
     const availability = await integrationAvailability(ctx);
     if (type === 'crm_item' || type === 'crm_account') return availability.crm ? tidy(await crmDetail(ctx, type, id)) : null;
-    return availability.wms ? tidy(await wmsDetail(type, id)) : null;
+    if (!availability.wms) return null;
+    const schema = await wmsSchemaFor(ctx);
+    return schema ? tidy(await wmsDetail(schema, type, id)) : null;
   } catch (error) {
     console.error('[projects] record detail read failed', error);
     return null;

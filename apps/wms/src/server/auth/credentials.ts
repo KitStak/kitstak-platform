@@ -10,13 +10,17 @@
  * shared `passwordCompat` verifier (`$2a$/$2b$/$2y$` → bcryptjs).
  */
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { isBcryptHash } from '@kitstak/auth';
 import { account, member, organization, passwordPolicyState, user, userProfiles } from '@kitstak/db/schema';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import bcrypt from 'bcryptjs';
+import { WMS_PLATFORM_SCHEMA } from '@kitstak/db/wms-tenants';
 import type { AppDb } from '@/server/api/db';
+import { AppError } from '@/server/api/errors';
 import { companySettings, users } from '@/server/db/schema';
+import { currentWmsSchema } from '@/server/db/tenant';
+import { orgIdForDb, registerPlatformTenant } from '@/server/tenancy/registry';
 
 export const PLATFORM_ORG_SLUG = 'kitstak';
 export const CREDENTIAL_PROVIDER = 'credential';
@@ -34,8 +38,30 @@ export function orgRoleForLegacy(role: WmsLegacyRole): 'member' | 'viewer' {
   return role === 'viewer' ? 'viewer' : 'member';
 }
 
-/** The one platform organization every WMS user belongs to (§2.4); created on demand. */
+/**
+ * The platform organization (slug `kitstak`) — owner of the original `wms` schema; created on
+ * demand and registered in core.wms_tenants. Other orgs have their own warehouse schemas: use
+ * `warehouseOrgId(db)` for "the org this handle's warehouse belongs to".
+ */
 export async function ensurePlatformOrg(db: AppDb, now: Date = new Date()): Promise<string> {
+  const orgId = await findOrCreatePlatformOrg(db, now);
+  await registerPlatformTenant(db, orgId);
+  return orgId;
+}
+
+/**
+ * The organization owning the warehouse `db` reads/writes: the platform org for `wms`, the
+ * registered org for a tenant schema. Throws for an unregistered tenant schema.
+ */
+export async function warehouseOrgId(db: AppDb, now: Date = new Date()): Promise<string> {
+  const schemaName = await currentWmsSchema(db);
+  if (schemaName === WMS_PLATFORM_SCHEMA) return await ensurePlatformOrg(db, now);
+  const orgId = await orgIdForDb(db);
+  if (!orgId) throw new Error(`Warehouse schema ${schemaName} is not registered to an organization`);
+  return orgId;
+}
+
+async function findOrCreatePlatformOrg(db: AppDb, now: Date): Promise<string> {
   const existing = (
     await db
       .select({ id: organization.id })
@@ -69,6 +95,61 @@ export async function ensurePlatformOrg(db: AppDb, now: Date = new Date()): Prom
   return raced.id;
 }
 
+/** Org roles a WMS edit must never overwrite (they are granted in the portal, not here). */
+const PRESERVED_ORG_ROLES: ReadonlySet<string> = new Set(['owner', 'admin']);
+
+/**
+ * True when the core identity belongs to NO organization other than the one owning this
+ * warehouse. Only then may a WMS admin change its password, email or credential, delete it,
+ * or end its sessions everywhere: core identities are shared platform-wide, and one org's
+ * warehouse admin must never be able to take over or lock out a member of another org.
+ */
+export async function identityManagedHere(db: AppDb, userId: string): Promise<boolean> {
+  const orgId = await warehouseOrgId(db);
+  const other = (
+    await db
+      .select({ id: member.id })
+      .from(member)
+      .where(and(eq(member.userId, userId), ne(member.organizationId, orgId)))
+      .limit(1)
+  )[0];
+  return !other;
+}
+
+/** Throws INVALID_STATE unless `identityManagedHere` (see there). */
+export async function assertIdentityManagedHere(db: AppDb, userId: string, action: string): Promise<void> {
+  if (await identityManagedHere(db, userId)) return;
+  throw new AppError(
+    'INVALID_STATE',
+    `This person's KitStak account is shared with another organization, so you cannot ${action} from this warehouse. They manage it themselves.`,
+  );
+}
+
+/** The core user id registered under an email, or null. */
+export async function findCoreUserIdByEmail(db: AppDb, email: string): Promise<string | null> {
+  const row = (
+    await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.email, email.trim().toLowerCase()))
+      .limit(1)
+  )[0];
+  return row?.id ?? null;
+}
+
+/** Whether a core user is a member of the organization owning this warehouse. */
+export async function isWarehouseOrgMember(db: AppDb, userId: string): Promise<boolean> {
+  const orgId = await warehouseOrgId(db);
+  const row = (
+    await db
+      .select({ id: member.id })
+      .from(member)
+      .where(and(eq(member.userId, userId), eq(member.organizationId, orgId)))
+      .limit(1)
+  )[0];
+  return Boolean(row);
+}
+
 export interface CoreIdentityInput {
   /** The wms.users id — MUST be a uuid string (core."user".id is uuid). */
   readonly userId: string;
@@ -85,12 +166,21 @@ export interface CoreIdentityInput {
   readonly preferences?: Record<string, unknown>;
   readonly passwordChangedAt?: Date | null;
   readonly createdAt?: Date;
+  /**
+   * Seed/bootstrap ONLY: delete a different core identity already holding this email (a
+   * previous seed's leftover). Application flows never set it — they refuse the clash.
+   */
+  readonly replaceEmailClash?: boolean;
 }
 
 /**
  * Creates (or refreshes) the full core identity for a WMS user: core."user" +
- * credential core.account + platform-org core.member + wms.user_profiles. Idempotent:
- * re-running (bootstrap, reseeding into a shared database) updates in place.
+ * credential core.account + core.member of the warehouse's org + the warehouse's
+ * user_profiles row. Idempotent: re-running (bootstrap, reseeding) updates in place.
+ *
+ * Multi-org safety: an identity that also belongs to ANOTHER organization keeps its own
+ * name, email and credential (only the warehouse-local profile and membership are written),
+ * and an existing owner/admin membership is never downgraded.
  */
 export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): Promise<void> {
   const createdAt = input.createdAt ?? new Date();
@@ -98,15 +188,25 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
   const hash =
     input.passwordHash ?? (input.password !== undefined ? await hashPassword(input.password) : null);
 
-  // Reseeding: a previous seed left a core identity under the same email with a different
-  // id. Remove it (sessions/accounts/members/profile cascade) so the insert below wins.
+  const orgId = await warehouseOrgId(db, createdAt);
+
+  // An email already held by a DIFFERENT core identity. Application flows refuse it (an
+  // admin must never be able to delete someone's account by typing their email). Reseeding
+  // (`replaceEmailClash`) removes a previous seed's leftover — sessions/accounts/members/
+  // profile cascade — and only when that identity belongs to no other organization.
   const emailClash = (
     await db.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1)
   )[0];
   if (emailClash && emailClash.id !== input.userId) {
+    if (!input.replaceEmailClash || !(await identityManagedHere(db, emailClash.id))) {
+      throw new AppError('VALIDATION', 'This email already belongs to another KitStak account', {
+        fieldErrors: { email: ['This email already belongs to another KitStak account'] },
+      });
+    }
     await db.delete(user).where(eq(user.id, emailClash.id));
   }
 
+  const shared = !(await identityManagedHere(db, input.userId));
   await db
     .insert(user)
     .values({
@@ -119,10 +219,11 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
     })
     .onConflictDoUpdate({
       target: user.id,
-      set: { name: input.name, email, updatedAt: new Date() },
+      // A shared identity's name/email are its owner's to change (no-op update).
+      set: shared ? { updatedAt: new Date() } : { name: input.name, email, updatedAt: new Date() },
     });
 
-  if (hash !== null) {
+  if (hash !== null && !shared) {
     await db
       .delete(account)
       .where(and(eq(account.userId, input.userId), eq(account.providerId, CREDENTIAL_PROVIDER)));
@@ -137,18 +238,15 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
     });
   }
 
-  const orgId = await ensurePlatformOrg(db, createdAt);
   const membership = (
     await db
-      .select({ id: member.id })
+      .select({ id: member.id, role: member.role })
       .from(member)
       .where(and(eq(member.organizationId, orgId), eq(member.userId, input.userId)))
       .limit(1)
   )[0];
   const orgRole = orgRoleForLegacy(input.legacyRole);
-  if (membership) {
-    await db.update(member).set({ role: orgRole }).where(eq(member.id, membership.id));
-  } else {
+  if (!membership) {
     await db.insert(member).values({
       id: randomUUID(),
       organizationId: orgId,
@@ -156,6 +254,9 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
       role: orgRole,
       createdAt,
     });
+  } else if (!membership.role.split(',').some((r) => PRESERVED_ORG_ROLES.has(r.trim()))) {
+    // An owner/admin role granted in the portal is kept as is.
+    await db.update(member).set({ role: orgRole }).where(eq(member.id, membership.id));
   }
 
   await db

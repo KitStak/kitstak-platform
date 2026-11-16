@@ -13,7 +13,10 @@ import { account, passwordPolicyState } from '@kitstak/db/schema';
 import { seededDb, TEST_PASSWORD, type SeededDb } from './fixtures';
 
 let current: SeededDb;
-vi.mock('@/server/api/db', () => ({ getAppDb: async (): Promise<AppDb> => current.db }));
+vi.mock('@/server/api/db', () => {
+  const get = async (): Promise<AppDb> => current.db;
+  return { getAppDb: get, getPlatformDb: get, getTenantDbFor: get };
+});
 
 const { getWmsAuth } = await import('@/server/auth/auth');
 const { verifyCredentialPassword } = await import('@/server/auth/credentials');

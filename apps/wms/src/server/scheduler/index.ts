@@ -11,7 +11,8 @@
  */
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
-import { getAppDb } from '@/server/api/db';
+import { getPlatformDb, getTenantDbFor } from '@/server/api/db';
+import { listTenantSchemas } from '@/server/tenancy/migrations';
 import { SCHEDULER_TASKS } from './registry';
 import {
   createSchedulerRunner,
@@ -35,7 +36,15 @@ declare global {
 
 function createRunner(): SchedulerRunner {
   return createSchedulerRunner({
-    getDb: getAppDb,
+    getDb: getPlatformDb,
+    // One separate warehouse per organization: run every task in each active warehouse.
+    listDbs: async () => {
+      const platform = await getPlatformDb();
+      const schemas = await listTenantSchemas(platform, { activeOnly: true });
+      return await Promise.all(
+        schemas.map(async (schema) => ({ schema, db: schema === 'wms' ? platform : await getTenantDbFor(schema) })),
+      );
+    },
     tasks: SCHEDULER_TASKS,
     ownerId: `${os.hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`,
   });

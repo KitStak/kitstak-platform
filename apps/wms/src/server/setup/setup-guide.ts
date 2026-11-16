@@ -3,7 +3,7 @@
  *
  * Reads: live existence checks on wms masters (one round trip) + the org-level
  * `core.onboarding_progress` rows for scope 'wms' (user_id IS NULL). WMS is
- * single-tenant, so the org is the platform org (`ensurePlatformOrg`). A failed
+ * the org owning the request's warehouse (`warehouseOrgId`). A failed
  * probe degrades: `loadSetupGuide` returns null and the panel renders nothing —
  * the guide never takes the dashboard down with it.
  * Writes: per-step skip/unskip and guide dismiss/restore, upserted against the
@@ -17,7 +17,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { onboardingProgress } from '@kitstak/db/schema';
 import type { AppDb } from '@/server/api/db';
 import { AppError } from '@/server/api/errors';
-import { ensurePlatformOrg } from '@/server/auth/credentials';
+import { warehouseOrgId } from '@/server/auth/credentials';
 import { dbGet, withWriteTx } from '@/server/db/sql';
 import { clients, locations, products, shipmentOrders, warehouses } from '@/server/db/schema';
 import {
@@ -84,7 +84,7 @@ async function deriveFresh(db: AppDb, orgId: string): Promise<SetupGuide> {
  */
 export async function loadSetupGuide(db: AppDb): Promise<SetupGuide | null> {
   try {
-    const orgId = await ensurePlatformOrg(db);
+    const orgId = await warehouseOrgId(db);
     const guide = await deriveFresh(db, orgId);
     if (guide.visible && !guide.allDone && !guide.seen) {
       // Own try: outside a request scope after() throws, which must not be mistaken
@@ -169,7 +169,7 @@ export async function applySetupGuideAction(
   stepKey: string | undefined,
   userId: string | null,
 ): Promise<SetupGuide> {
-  const orgId = await ensurePlatformOrg(db);
+  const orgId = await warehouseOrgId(db);
   if (action === 'skip' || action === 'unskip') {
     if (!isStepKey(stepKey)) throw new AppError('VALIDATION', 'Unknown setup step');
     if (action === 'skip') await upsertOrgRow(db, orgId, stepKey, 'skipped', userId);

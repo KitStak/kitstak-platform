@@ -18,15 +18,16 @@ const RESERVED_SEGMENTS: ReadonlySet<string> = new Set(['new', 'shipped', 'retur
 /** A record detail route and how to check that its record exists. */
 export interface RecordGate {
   readonly pattern: RegExp;
-  readonly exists: (key: string) => Promise<boolean>;
+  /** `headers`: the request's, so the check runs in the session org's warehouse. */
+  readonly exists: (key: string, headers?: Headers) => Promise<boolean>;
 }
 
 /** Shipment order detail: `/orders/<uuid>` or `/orders/<code>` (SO010840). */
 const ORDER_GATE: RecordGate = {
   pattern: /^\/orders\/([^/]+)\/?$/,
-  exists: async (key) => {
+  exists: async (key, headers) => {
     const { orderExists } = await import('./order-exists');
-    return orderExists(key);
+    return orderExists(key, headers);
   },
 };
 
@@ -69,12 +70,13 @@ export function matchRecordGate(
 export async function documentStatusFor(
   pathname: string,
   gates: readonly RecordGate[] = RECORD_GATES,
+  headers?: Headers,
 ): Promise<403 | 404 | null> {
   if (pathname === FORBIDDEN_PATH) return 403;
   const hit = matchRecordGate(pathname, gates);
   if (!hit) return null;
   try {
-    return (await hit.gate.exists(hit.key)) ? null : 404;
+    return (await hit.gate.exists(hit.key, headers)) ? null : 404;
   } catch {
     return null;
   }
