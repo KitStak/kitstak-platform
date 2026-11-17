@@ -32,7 +32,7 @@ import {
 } from '@/components/wms/wms-content';
 
 export const metadata: Metadata = {
-  title: 'KitStak WMS — warehouse management from the dock to the door',
+  title: 'KitStak WMS - warehouse management from the dock to the door',
   description:
     'Receiving, bin-level inventory, wave picking, packing stations, rate shopping, returns, kitting and 3PL client billing in one warehouse management system.',
   alternates: { canonical: '/wms' },

@@ -30,7 +30,7 @@ import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
 const START = getStartedHref('projects');
 
 export const metadata: Metadata = {
-  title: 'KitStak Projects — plans, tasks and timelines on the same stack',
+  title: 'KitStak Projects - plans, tasks and timelines on the same stack',
   description: `Tasks, ${PROJECTS_CATALOG.views.length} project views, cycles, ${PROJECTS_CATALOG.automation.recipes.length} automation recipes, and links to the CRM deals and WMS orders the work is about.`,
   alternates: { canonical: '/projects' },
   openGraph: {

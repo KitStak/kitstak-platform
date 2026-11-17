@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { StakWizard } from '@/components/wizard/stak-wizard';
 
 export const metadata: Metadata = {
-  title: 'Set up your Stak — KitStak',
+  title: 'Set up your Stak - KitStak',
   description:
     'Choose the CRM, the WMS or both, tell us about your operation, and get a setup plan and a price in about five minutes.',
   alternates: { canonical: '/get-started' },

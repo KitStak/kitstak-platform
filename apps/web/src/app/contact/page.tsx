@@ -11,7 +11,7 @@ import { ROUTES } from '@/components/site-links';
 import { StakMark } from '@/components/stak-mark';
 
 export const metadata: Metadata = {
-  title: 'Contact KitStak — talk to the founder',
+  title: 'Contact KitStak - talk to the founder',
   description: 'Talk to the founder, book a walkthrough of the CRM or the WMS, or ask about pricing and bundles.',
   alternates: { canonical: '/contact' },
 };

@@ -30,7 +30,7 @@ import { SubNav } from '@/components/product/sub-nav';
 import { ROUTES, getStartedHref } from '@/components/site-links';
 
 export const metadata: Metadata = {
-  title: 'KitStak CRM — pipelines, boards and automations your team shapes',
+  title: 'KitStak CRM - pipelines, boards and automations your team shapes',
   description:
     'Leads, deals, accounts and follow-ups on flexible boards with eight views, automations, live dashboards, an inbox and a REST API.',
   alternates: { canonical: '/crm' },

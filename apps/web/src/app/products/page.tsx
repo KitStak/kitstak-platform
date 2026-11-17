@@ -13,7 +13,7 @@ import { BundleCalculator } from '@/components/stak/bundle-calculator';
 import styles from './products.module.css';
 
 export const metadata: Metadata = {
-  title: 'KitStak products — CRM, WMS and Projects, stacked to save',
+  title: 'KitStak products - CRM, WMS and Projects, stacked to save',
   description:
     'Compare KitStak CRM, KitStak WMS and KitStak Projects, see what you get when you run them together, and price your stack.',
   alternates: { canonical: '/products' },
