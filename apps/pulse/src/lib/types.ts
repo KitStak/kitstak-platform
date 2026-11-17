@@ -951,3 +951,81 @@ export interface SearchHitDTO {
   readonly subtitle: string | null;
   readonly href: string;
 }
+
+/** One stamped row behind a number (drill down, "See 14 entries"). */
+export interface FactRowDTO {
+  readonly workDate: string;
+  readonly kind: 'revenue_base' | 'revenue_vas' | 'revenue_other' | 'labor' | 'material' | 'other' | 'shared' | 'billed_memo';
+  readonly amountCents: MoneyCents;
+  readonly unitsGood: DecimalString;
+  readonly hours: DecimalString;
+  readonly jobId: string | null;
+  readonly clientId: string;
+  readonly vasServiceId: string | null;
+  /** The table and row the number came from. */
+  readonly sourceTable: string;
+  readonly sourceId: string;
+}
+
+/** "Suggest from history": median pace of the last evidence days, with the spread. */
+export interface PaceSuggestionDTO {
+  readonly median: DecimalString | null;
+  readonly low: DecimalString | null;
+  readonly high: DecimalString | null;
+  readonly days: number;
+  readonly jobs: number;
+}
+
+/** The rate that applies to an entry and where it came from. */
+export interface RateForEntryDTO {
+  readonly found: boolean;
+  readonly source: 'class' | 'default' | 'none' | string;
+  readonly rateCents: MoneyCents;
+  readonly overtimeRateCents: MoneyCents;
+  readonly laborClassId: string | null;
+  readonly rateId: string | null;
+}
+
+/** The crew lines of the most recent earlier day of a job ("Copy yesterday's crew"). */
+export interface PreviousCrewDTO {
+  readonly jobId: string;
+  readonly workDate: string;
+  readonly lines: readonly { readonly laborClassId: string | null; readonly shift: string; readonly headcount: DecimalString | null; readonly hours: DecimalString }[];
+}
+
+export interface JobPlansDTO {
+  readonly quote: JobPlanDTO | null;
+  readonly budget: JobPlanDTO | null;
+}
+
+/** `GET /api/v1/labor/summary`: the Labor page (Time and Cost tabs). */
+export interface LaborSummaryDTO {
+  readonly from: string;
+  readonly to: string;
+  readonly byClass: readonly {
+    readonly laborClassId: string | null;
+    readonly name: string;
+    readonly directHours: DecimalString;
+    readonly indirectHours: DecimalString;
+    readonly overtimeHours: DecimalString;
+    readonly setupHours: DecimalString;
+    readonly laborCents: MoneyCents;
+    readonly indirectCents: MoneyCents;
+    readonly unitsGood: DecimalString;
+    readonly entries: number;
+    readonly needsRate: number;
+  }[];
+  readonly byReason: readonly { readonly reason: string; readonly hours: DecimalString; readonly costCents: MoneyCents; readonly entries: number }[];
+  readonly byDay: readonly {
+    readonly date: string;
+    readonly directHours: DecimalString;
+    readonly indirectHours: DecimalString;
+    readonly paidHours: DecimalString;
+    readonly missingHours: DecimalString;
+    readonly indirectCents: MoneyCents;
+    readonly missingCents: MoneyCents;
+    readonly overLogged: boolean;
+  }[];
+  readonly bridge: CompanyBridgeDTO;
+  readonly moneyHidden: boolean;
+}

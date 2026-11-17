@@ -11,7 +11,7 @@ import { jobPlanLines, jobPlans } from '@/server/db/schema';
 import { conflict, invalid, notFound } from '@/server/errors';
 import type { PlanKind, PlanLineCategory, PlanLineUnit, PlanOrigin } from '@/lib/constants';
 import { planSharedAuto, planTotalsFromLines } from '@/lib/profit';
-import type { JobPlanDTO, JobPlanLineDTO } from '@/lib/types';
+import type { JobPlanDTO, JobPlanLineDTO, JobPlansDTO } from '@/lib/types';
 import { assertVersion, cleanText, hideUnless, inTx, isoRequired, moneyOut, rows, type DomainContext } from './_shared';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
@@ -67,7 +67,7 @@ export function toPlanDTO(row: PlanRow, lines: readonly LineRow[], access: Money
 }
 
 /** Both plans of a job (either may be null). */
-export async function loadPlans(ctx: DomainContext, jobId: string, access: Money, executor: Executor = db): Promise<{ quote: JobPlanDTO | null; budget: JobPlanDTO | null }> {
+export async function loadPlans(ctx: DomainContext, jobId: string, access: Money, executor: Executor = db): Promise<JobPlansDTO> {
   const plans = await executor.select().from(jobPlans).where(and(eq(jobPlans.orgId, ctx.orgId), eq(jobPlans.jobId, jobId)));
   const lines = plans.length > 0 ? await executor.select().from(jobPlanLines).where(and(eq(jobPlanLines.orgId, ctx.orgId), eq(jobPlanLines.jobId, jobId))).orderBy(asc(jobPlanLines.position)) : [];
   const pick = (kind: PlanKind) => {
@@ -77,7 +77,7 @@ export async function loadPlans(ctx: DomainContext, jobId: string, access: Money
   return { quote: pick('quote'), budget: pick('budget') };
 }
 
-export async function getJobPlans(ctx: DomainContext, jobId: string): Promise<{ quote: JobPlanDTO | null; budget: JobPlanDTO | null }> {
+export async function getJobPlans(ctx: DomainContext, jobId: string): Promise<JobPlansDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   return loadPlans(ctx, jobId, access);
 }

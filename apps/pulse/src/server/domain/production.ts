@@ -12,7 +12,7 @@ import { conflict, forbidden, invalid, notFound } from '@/server/errors';
 import { SUPERVISOR_EDIT_DAYS, type JobStatusValue, type StreamSource } from '@/lib/constants';
 import { canPulse } from '@/lib/permissions';
 import { addDays } from '@/lib/profit';
-import type { LogGridDTO, LogGridRowDTO, ProductionEntryDTO, SaveProductionResult } from '@/lib/types';
+import type { LogGridDTO, LogGridRowDTO, PreviousCrewDTO, ProductionEntryDTO, SaveProductionResult } from '@/lib/types';
 import { assertVersion, cleanText, defined, diff, inTx, iso, isoRequired, isUuid, moneyOut, monthStart, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
@@ -452,7 +452,7 @@ export async function getLogGrid(ctx: DomainContext, options: { date?: string | 
 }
 
 /** The crew lines of the most recent earlier day for each job at the site ("Copy yesterday's crew"). */
-export async function getPreviousCrew(ctx: DomainContext, options: { date: string; siteId?: string | null }): Promise<{ jobId: string; workDate: string; lines: { laborClassId: string | null; shift: string; headcount: string | null; hours: string }[] }[]> {
+export async function getPreviousCrew(ctx: DomainContext, options: { date: string; siteId?: string | null }): Promise<PreviousCrewDTO[]> {
   await requirePulse(ctx, 'production:log');
   const site = await resolveSite(ctx, options.siteId);
   const found = await rows<{ job_id: string; work_date: string; labor_class_id: string | null; shift: string; headcount: string | null; hours: string }>(

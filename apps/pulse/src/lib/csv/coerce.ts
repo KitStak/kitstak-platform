@@ -88,6 +88,24 @@ export function normalizeNumber(text: string, decimal: DecimalMark = 'auto'): st
   return negative && /[1-9]/.test(plain) ? `-${plain}` : plain;
 }
 
+/**
+ * Looks at the number cells of a whole file and says which character marks decimals. A cell
+ * like `7,5` or `1.234,50` proves a decimal comma; `7.5` or `1,234.50` proves a decimal point.
+ * Returns `auto` when the file gives no proof, or proof both ways.
+ */
+export function sniffDecimalMark(values: Iterable<string>): DecimalMark {
+  let comma = false;
+  let point = false;
+  for (const raw of values) {
+    const value = raw.replace(/[^\d.,]/g, '');
+    if (value === '') continue;
+    if (/\d,\d{1,2}$/.test(value) || /\d,\d{4,}$/.test(value) || /\.\d{3},\d/.test(value)) comma = true;
+    if (/\d\.\d{1,2}$/.test(value) || /\d\.\d{4,}$/.test(value) || /,\d{3}\.\d/.test(value)) point = true;
+  }
+  if (comma === point) return 'auto';
+  return comma ? ',' : '.';
+}
+
 export interface NumberOptions {
   /** Decimal places kept. Extra places are rounded. */
   readonly scale: number;

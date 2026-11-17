@@ -9,9 +9,9 @@ import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { invalid } from '@/server/errors';
 import { PROFIT_GROUPS, type FactKind, type ProfitGroup, type PulseStatus } from '@/lib/constants';
-import { divRound, marginBp, ratioBp } from '@/lib/money';
-import { addDays, daysBetween } from '@/lib/profit';
-import type { BadgesDTO, CompanyBridgeDTO, ProfitFilters, ProfitResponse, ProfitRowDTO, SummaryDTO, TrendPointDTO } from '@/lib/types';
+import { marginBp } from '@/lib/money';
+import { addDays, companyBridge, daysBetween, payrollGap, profitSummary, sharedGap as sharedGapOf, utilizationBp } from '@/lib/profit';
+import type { BadgesDTO, CompanyBridgeDTO, FactRowDTO, LaborSummaryDTO, ProfitFilters, ProfitResponse, ProfitRowDTO, SummaryDTO, TrendPointDTO } from '@/lib/types';
 import { centsOut, isUuid, moneyOut, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse, type PulseAccess } from './access';
 import { resolveSite } from './catalog';
@@ -81,7 +81,7 @@ function whereOf(orgId: string, filters: ProfitFilters): SQL {
 }
 
 /** The first day of the week that holds `work_date`, for a week that starts on `weekStart` (0 is Sunday). */
-const weekExpr = (weekStart: number): SQL => sql`(f.work_date - ((EXTRACT(DOW FROM f.work_date)::int - ${weekStart} + 7) % 7))`;
+const weekExpr = (weekStart: number): SQL => sql`(f.work_date - ((EXTRACT(DOW FROM f.work_date)::int - ${weekStart}::int + 7) % 7))`;
 
 function groupSql(by: ProfitGroup, weekStart: number): { key: SQL; label: SQL; sublabel: SQL; joins: SQL } {
   switch (by) {
@@ -96,11 +96,11 @@ function groupSql(by: ProfitGroup, weekStart: number): { key: SQL; label: SQL; s
     case 'site':
       return { key: sql`f.site_id::text`, label: sql`max(s.name)`, sublabel: sql`max(s.code)`, joins: sql`LEFT JOIN pulse.sites s ON s.id = f.site_id` };
     case 'month':
-      return { key: sql`to_char(date_trunc('month', f.work_date), 'YYYY-MM-DD')`, label: sql`to_char(date_trunc('month', f.work_date), 'YYYY-MM-DD')`, sublabel: sql`NULL::text`, joins: sql`` };
+      return { key: sql`to_char(date_trunc('month', f.work_date), 'YYYY-MM-DD')`, label: sql`NULL::text`, sublabel: sql`NULL::text`, joins: sql`` };
     case 'week':
-      return { key: sql`to_char(${weekExpr(weekStart)}, 'YYYY-MM-DD')`, label: sql`to_char(${weekExpr(weekStart)}, 'YYYY-MM-DD')`, sublabel: sql`NULL::text`, joins: sql`` };
+      return { key: sql`to_char(${weekExpr(weekStart)}, 'YYYY-MM-DD')`, label: sql`NULL::text`, sublabel: sql`NULL::text`, joins: sql`` };
     case 'day':
-      return { key: sql`to_char(f.work_date, 'YYYY-MM-DD')`, label: sql`to_char(f.work_date, 'YYYY-MM-DD')`, sublabel: sql`NULL::text`, joins: sql`` };
+      return { key: sql`to_char(f.work_date, 'YYYY-MM-DD')`, label: sql`NULL::text`, sublabel: sql`NULL::text`, joins: sql`` };
   }
 }
 
@@ -148,7 +148,8 @@ async function grouped(orgId: string, by: ProfitGroup, filters: ProfitFilters, w
   );
   return found.map((row) => ({
     key: row.key ?? 'none',
-    label: row.label ?? NULL_LABELS[by],
+    // Time buckets are labeled by their first day; the client formats it.
+    label: row.label ?? (NULL_LABELS[by] || row.key || ''),
     sublabel: row.sublabel,
     base: BigInt(row.base),
     vas: BigInt(row.vas),
@@ -189,17 +190,16 @@ function totalOf(buckets: readonly Bucket[], label: string): Bucket {
 const revenueOf = (bucket: Bucket): bigint => bucket.base + bucket.vas + bucket.otherRev;
 const costOf = (bucket: Bucket): bigint => bucket.labor + bucket.material + bucket.other + bucket.shared;
 
-/** Cents per unit, rounded half away from zero; null with no units. */
-function perUnit(cents: bigint, units: number): bigint | null {
-  if (!(units > 0)) return null;
-  return divRound(cents * BigInt(1000), BigInt(Math.round(units * 1000)));
-}
-
 export function toProfitRow(bucket: Bucket, access: Access, extra: { prior?: Bucket | null; trend?: number[] | null } = {}): ProfitRowDTO {
   const money = access.seesMoney;
   const revenue = revenueOf(bucket);
-  const cost = costOf(bucket);
-  const profit = revenue - cost;
+  // One formula for every headline number: the same pure function the job page and the tests use.
+  const summary = profitSummary(
+    { revenueCents: revenue, laborCents: bucket.labor, materialCents: bucket.material, otherCents: bucket.other, sharedCents: bucket.shared },
+    bucket.units > 0 ? bucket.units.toFixed(3) : 0,
+  );
+  const cost = summary.costCents;
+  const profit = summary.profitCents;
   const prior = extra.prior;
   return {
     key: bucket.key,
@@ -215,16 +215,16 @@ export function toProfitRow(bucket: Bucket, access: Access, extra: { prior?: Buc
     sharedCents: moneyOut(money, bucket.shared),
     costCents: moneyOut(money, cost),
     profitCents: moneyOut(money, profit),
-    marginBp: money ? marginBp(profit, revenue) : null,
-    marginBeforeSharedBp: money ? marginBp(profit + bucket.shared, revenue) : null,
-    laborPctBp: money ? ratioBp(bucket.labor, revenue) : null,
+    marginBp: money ? summary.marginBp : null,
+    marginBeforeSharedBp: money ? summary.marginBeforeSharedBp : null,
+    laborPctBp: money ? summary.laborPctOfRevenueBp : null,
     billedCents: moneyOut(money, bucket.billed),
     unitsGood: bucket.units.toFixed(3),
     unitsScrap: bucket.scrap.toFixed(3),
     hours: bucket.hours.toFixed(2),
     uph: bucket.hours > 0 && bucket.units > 0 ? (bucket.units / bucket.hours).toFixed(3) : null,
-    costPerUnitCents: money ? centsOut(perUnit(cost, bucket.units)) : null,
-    profitPerUnitCents: money ? centsOut(perUnit(profit, bucket.units)) : null,
+    costPerUnitCents: money ? centsOut(summary.costPerUnitCents) : null,
+    profitPerUnitCents: money ? centsOut(summary.profitPerUnitCents) : null,
     jobCount: bucket.jobs,
     prior:
       prior === undefined
@@ -324,19 +324,6 @@ export async function getProfitTrend(ctx: DomainContext, filters: ProfitFilters,
   return result.rows.map((row) => ({ bucket: row.key, revenueCents: row.revenueCents, costCents: row.costCents, profitCents: row.profitCents, marginBp: row.marginBp, unitsGood: row.unitsGood, hours: row.hours }));
 }
 
-export interface FactRowDTO {
-  readonly workDate: string;
-  readonly kind: FactKind;
-  readonly amountCents: number | null;
-  readonly unitsGood: string;
-  readonly hours: string;
-  readonly jobId: string | null;
-  readonly clientId: string;
-  readonly vasServiceId: string | null;
-  readonly sourceTable: string;
-  readonly sourceId: string;
-}
-
 /** The stamped rows behind a number (drill down and "See 14 entries"). Reads `v_facts`. */
 export async function listFacts(ctx: DomainContext, filters: ProfitFilters & { kinds?: readonly FactKind[]; limit?: number }): Promise<FactRowDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
@@ -392,6 +379,7 @@ export async function getCompanyBridge(ctx: DomainContext, filters: { from: stri
     company: string;
     overhead: string;
     over_logged: number;
+    base_hours: string;
   }>(
     db,
     sql`SELECT COALESCE(sum(direct_hours), 0)::text AS direct_hours, COALESCE(sum(indirect_hours), 0)::text AS indirect_hours, COALESCE(sum(paid_hours), 0)::text AS paid_hours,
@@ -399,25 +387,29 @@ export async function getCompanyBridge(ctx: DomainContext, filters: { from: stri
                COALESCE(sum(missing_cents), 0)::text AS missing, sum(paid_cents)::text AS paid,
                COALESCE(sum(gross_pay_cents) FILTER (WHERE paid_cents IS NOT NULL), 0)::text AS gross_paid_days,
                COALESCE(sum(company_cost_cents), 0)::text AS company, COALESCE(sum(overhead_absorbed_cents), 0)::text AS overhead,
-               count(*) FILTER (WHERE over_logged)::int AS over_logged
+               count(*) FILTER (WHERE over_logged)::int AS over_logged,
+               COALESCE(sum(CASE WHEN paid_hours > 0 THEN paid_hours ELSE direct_hours + indirect_hours END), 0)::text AS base_hours
           FROM pulse.company_days WHERE org_id = ${ctx.orgId} AND work_date BETWEEN ${filters.from}::date AND ${filters.to}::date ${site}`,
   );
-  const full = settings.sharedCostRule === 'full';
   const workProfit = BigInt(work?.profit ?? 0);
   const indirect = BigInt(day?.indirect ?? 0);
   const applied = BigInt(day?.applied ?? 0);
   const missing = BigInt(day?.missing ?? 0);
   const company = BigInt(day?.company ?? 0);
   const overhead = BigInt(day?.overhead ?? 0);
-  const sharedGap = indirect + (full ? missing : ZERO) - applied;
-  const missingCost = full ? ZERO : missing;
-  const hasCompanyCosts = company > ZERO;
-  const overheadGap = hasCompanyCosts ? company - overhead : ZERO;
-  const companyProfit = workProfit - sharedGap - missingCost - overheadGap;
+  // The walk itself is the pure `companyBridge` of src/lib/profit, so the page, the report and the tests agree.
+  const rule = settings.sharedCostRule as 'by_labor_hours' | 'full' | 'percent_of_labor' | 'none';
+  const sharedGap = sharedGapOf({ rule, indirectCents: indirect, missingCents: missing, sharedAppliedCents: applied });
+  const bridge = companyBridge({ workProfitCents: workProfit, sharedGapCents: sharedGap, missingCents: missing, companyCostCents: company, overheadAbsorbedCents: overhead, rule });
+  const missingCost = bridge.missingCents;
+  const hasCompanyCosts = bridge.showsOverheadGap;
+  const overheadGap = bridge.overheadGapCents;
+  const companyProfit = bridge.companyProfitCents;
   const directHours = Number(day?.direct_hours ?? 0);
   const indirectHours = Number(day?.indirect_hours ?? 0);
   const paidHours = Number(day?.paid_hours ?? 0);
-  const base = paidHours > 0 ? paidHours : directHours + indirectHours;
+  // Share of paid time spent on jobs: per day, paid hours when entered, else the hours logged that day.
+  const base = Number(day?.base_hours ?? 0);
   const money = access.seesMoney;
   const paid = day?.paid === null || day?.paid === undefined ? null : BigInt(day.paid);
   return {
@@ -436,10 +428,10 @@ export async function getCompanyBridge(ctx: DomainContext, filters: { from: stri
     indirectHours: indirectHours.toFixed(2),
     paidHours: paidHours.toFixed(2),
     missingHours: Number(day?.missing_hours ?? 0).toFixed(2),
-    utilizationBp: base > 0 ? Math.round((directHours / base) * 10000) : null,
+    utilizationBp: base > 0 ? Math.min(utilizationBp({ directHours: day?.direct_hours ?? '0', paidHours: day?.base_hours ?? '0' }) ?? 0, 10000) : null,
     paidCents: moneyOut(money, paid),
     grossPayCents: moneyOut(money, day?.gross_paid_days ?? 0),
-    payrollGapCents: paid === null ? null : moneyOut(money, paid - BigInt(day?.gross_paid_days ?? 0)),
+    payrollGapCents: paid === null ? null : moneyOut(money, payrollGap(paid, day?.gross_paid_days ?? 0)),
     overLoggedDays: day?.over_logged ?? 0,
     hasCompanyCosts,
     moneyHidden: !money,
@@ -484,7 +476,7 @@ export async function getSummary(ctx: DomainContext, filters: { from: string; to
             (SELECT count(DISTINCT p.job_id) FROM pulse.production_entries p JOIN pulse.jobs j ON j.id = p.job_id
               WHERE p.org_id = ${ctx.orgId} AND p.work_date = ${today}::date AND p.deleted_at IS NULL AND j.status = 'active' AND j.deleted_at IS NULL ${siteFilter})::int AS logged,
             (SELECT count(*) FROM pulse.day_reviews r WHERE r.org_id = ${ctx.orgId} AND r.status = 'approved'
-              AND r.work_date BETWEEN (${today}::date - ((EXTRACT(DOW FROM ${today}::date)::int - ${settings.weekStart} + 7) % 7)) AND ${today}::date
+              AND r.work_date BETWEEN (${today}::date - ((EXTRACT(DOW FROM ${today}::date)::int - ${settings.weekStart}::int + 7) % 7)) AND ${today}::date
               ${filters.siteId ? sql`AND r.site_id = ${filters.siteId}` : sql``})::int AS reviewed,
             (SELECT COALESCE(sum(st.revenue_cents - st.billed_cents), 0) FROM pulse.job_stats st JOIN pulse.jobs j ON j.id = st.job_id
               WHERE st.org_id = ${ctx.orgId} AND j.deleted_at IS NULL AND j.status <> 'cancelled' ${siteFilter})::text AS unbilled`,
@@ -526,3 +518,61 @@ export async function getSummary(ctx: DomainContext, filters: { from: string; to
   };
 }
 
+
+/**
+ * The Labor page: hours and cost by labor class (on jobs and not on a job, overtime, setup),
+ * time not on a job by reason, the day by day split of paid time, and the bridge numbers
+ * (share of paid time spent on jobs, payroll check).
+ */
+export async function getLaborSummary(ctx: DomainContext, filters: { from: string; to: string; siteId?: string | null }): Promise<LaborSummaryDTO> {
+  const access = await requirePulse(ctx, 'pulse:read');
+  checkRange(filters);
+  const money = access.seesMoney;
+  const range = sql`org_id = ${ctx.orgId} AND deleted_at IS NULL AND work_date BETWEEN ${filters.from}::date AND ${filters.to}::date ${filters.siteId ? sql`AND site_id = ${filters.siteId}` : sql``}`;
+  const byClass = await rows<{ id: string | null; name: string | null; direct: string; indirect: string; overtime: string; setup: string; labor: string; indirect_cents: string; units: string; entries: number; needs_rate: number }>(
+    db,
+    sql`WITH u AS (
+          SELECT labor_class_id, hours AS direct, 0::numeric AS indirect, overtime_hours, setup_hours, labor_cost_cents AS labor, 0::bigint AS indirect_cents, units_good, needs_rate FROM pulse.production_entries WHERE ${range}
+          UNION ALL SELECT labor_class_id, hours, 0, overtime_hours, 0, labor_cost_cents, 0, 0, needs_rate FROM pulse.vas_entries WHERE ${range}
+          UNION ALL SELECT labor_class_id, 0, hours, overtime_hours, 0, 0, cost_cents, 0, needs_rate FROM pulse.indirect_entries WHERE ${range}
+        )
+        SELECT u.labor_class_id AS id, max(lc.name) AS name, sum(u.direct)::text AS direct, sum(u.indirect)::text AS indirect, sum(u.overtime_hours)::text AS overtime,
+               sum(u.setup_hours)::text AS setup, sum(u.labor)::text AS labor, sum(u.indirect_cents)::text AS indirect_cents, sum(u.units_good)::text AS units,
+               count(*)::int AS entries, count(*) FILTER (WHERE u.needs_rate)::int AS needs_rate
+          FROM u LEFT JOIN pulse.labor_classes lc ON lc.id = u.labor_class_id
+         GROUP BY u.labor_class_id ORDER BY sum(u.labor) + sum(u.indirect_cents) DESC`,
+  );
+  const byReason = await rows<{ reason: string; hours: string; cost: string; entries: number }>(
+    db,
+    sql`SELECT reason, sum(hours)::text AS hours, sum(cost_cents)::text AS cost, count(*)::int AS entries FROM pulse.indirect_entries WHERE ${range} GROUP BY reason ORDER BY sum(hours) DESC`,
+  );
+  const byDay = await rows<{ d: string; direct: string; indirect: string; paid: string; missing: string; indirect_cents: string; missing_cents: string; over_logged: boolean }>(
+    db,
+    sql`SELECT to_char(work_date, 'YYYY-MM-DD') AS d, sum(direct_hours)::text AS direct, sum(indirect_hours)::text AS indirect, sum(paid_hours)::text AS paid, sum(missing_hours)::text AS missing,
+               sum(indirect_cents)::text AS indirect_cents, sum(missing_cents)::text AS missing_cents, bool_or(over_logged) AS over_logged
+          FROM pulse.company_days
+         WHERE org_id = ${ctx.orgId} AND work_date BETWEEN ${filters.from}::date AND ${filters.to}::date ${filters.siteId ? sql`AND site_id = ${filters.siteId}` : sql``}
+         GROUP BY work_date ORDER BY work_date`,
+  );
+  return {
+    from: filters.from,
+    to: filters.to,
+    byClass: byClass.map((row) => ({
+      laborClassId: row.id,
+      name: row.name ?? 'No labor class',
+      directHours: row.direct,
+      indirectHours: row.indirect,
+      overtimeHours: row.overtime,
+      setupHours: row.setup,
+      laborCents: moneyOut(money, row.labor),
+      indirectCents: moneyOut(money, row.indirect_cents),
+      unitsGood: row.units,
+      entries: row.entries,
+      needsRate: row.needs_rate,
+    })),
+    byReason: byReason.map((row) => ({ reason: row.reason, hours: row.hours, costCents: moneyOut(money, row.cost), entries: row.entries })),
+    byDay: byDay.map((row) => ({ date: row.d, directHours: row.direct, indirectHours: row.indirect, paidHours: row.paid, missingHours: row.missing, indirectCents: moneyOut(money, row.indirect_cents), missingCents: moneyOut(money, row.missing_cents), overLogged: row.over_logged })),
+    bridge: await getCompanyBridge(ctx, filters),
+    moneyHidden: !money,
+  };
+}

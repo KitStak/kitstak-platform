@@ -24,7 +24,7 @@ import {
 } from '@/lib/constants';
 import { NEXT_STEP_LABELS, riskHeadline, riskSentence, type NextStep, type RiskRule } from '@/lib/profit';
 import type { JobDetailDTO, JobDTO, JobLinkDTO, JobListFilters, JobListItemDTO, JobPriceDTO, JobStatsDTO, RiskReasonDTO } from '@/lib/types';
-import { assertVersion, cleanText, defined, diff, hideUnless, inTx, iso, isoRequired, isUuid, moneyOut, monthName, rows, todayInZone, type DomainContext } from './_shared';
+import { assertVersion, cleanText, defined, diff, hideUnless, inTx, iso, isoRequired, isUuid, moneyOut, monthName, rows, singular, todayInZone, type DomainContext } from './_shared';
 import { restoreRow, softDeleteRow } from './_crud';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
@@ -108,7 +108,7 @@ interface StoredReason {
 /** The cached rollup as a DTO. Reasons become words here, per reader (SPEC section 3). */
 export function toJobStatsDTO(stats: StatsRow | null, access: Access, unitLabel = 'unit'): JobStatsDTO {
   const money = access.seesMoney;
-  const options = { seesMoney: money, unitLabel: unitLabel.replace(/s$/i, '') || 'unit' };
+  const options = { seesMoney: money, unitLabel: singular(unitLabel) };
   const stored = ((stats?.riskReasons as StoredReason[] | undefined) ?? []).filter((reason) => reason && typeof reason.rule === 'string');
   const reasons: RiskReasonDTO[] = stored.map((reason) => ({
     rule: reason.rule,
@@ -288,12 +288,11 @@ function toPriceDTO(row: typeof jobPrices.$inferSelect, access: Access): JobPric
 async function detail(ctx: DomainContext, jobId: string, access: Access, executor: Executor = db): Promise<JobDetailDTO> {
   const [row] = await joined(executor).where(and(eq(jobs.orgId, ctx.orgId), eq(jobs.id, jobId)));
   if (!row) throw notFound('That job');
-  const [prices, plans, links, people] = await Promise.all([
-    executor.select().from(jobPrices).where(and(eq(jobPrices.orgId, ctx.orgId), eq(jobPrices.jobId, jobId))).orderBy(desc(jobPrices.effectiveFrom)),
-    loadPlans(ctx, jobId, access, executor),
-    executor.select().from(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, jobId))).orderBy(asc(jobLinks.createdAt)),
-    getPeople(row.job.ownerId ? [row.job.ownerId] : [], executor),
-  ]);
+  // One at a time: inside a transaction all four share one connection.
+  const prices = await executor.select().from(jobPrices).where(and(eq(jobPrices.orgId, ctx.orgId), eq(jobPrices.jobId, jobId))).orderBy(desc(jobPrices.effectiveFrom));
+  const plans = await loadPlans(ctx, jobId, access, executor);
+  const links = await executor.select().from(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, jobId))).orderBy(asc(jobLinks.createdAt));
+  const people = await getPeople(row.job.ownerId ? [row.job.ownerId] : [], executor);
   const plan = plans.budget ?? plans.quote;
   return {
     ...toJobDTO(row, access),

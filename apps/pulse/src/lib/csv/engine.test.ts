@@ -34,6 +34,7 @@ import {
   rawCell,
   rowsToObjects,
   sniffDateOrder,
+  sniffDecimalMark,
   sniffDelimiter,
   stripBom,
   toCsv,
@@ -186,7 +187,7 @@ describe('toCsv', () => {
       ['Acme, Inc.', 'He said "rush"', 'two\nlines', ' padded ', '- call client', '+1 555 0100'],
       ['', 'x', '', 'y', '', '=1+1'],
     ];
-    for (const delimiter of [',', ';', TAB] as const) {
+    for (const delimiter of [',', ';', '\t'] as const) {
       const parsed = parseCsv(toCsv(['a', 'b', 'c', 'd', 'e', 'f'], rows, { delimiter }), { delimiter });
       expect(parsed.problems).toEqual([]);
       expect(parsed.rows.map((row) => row.map((cell) => unguardFormula(cell)))).toEqual(rows);
@@ -230,6 +231,16 @@ describe('cell readers', () => {
     expect(normalizeNumber('1.234', ',')).toBe('1234');
     expect(normalizeNumber('1,23', '.')).toBeNull();
     for (const bad of ['', 'abc', '9x', '1,2,3', '1.2.3,4.5', '12,34,567', '.', ',', '1e5', '--1']) expect(normalizeNumber(bad)).toBeNull();
+  });
+  it('works out the decimal mark of a file', () => {
+    expect(sniffDecimalMark(['7,5', '1.250', '12'])).toBe(',');
+    expect(sniffDecimalMark(['1.234,50 EUR'])).toBe(',');
+    expect(sniffDecimalMark(['7.5', '1,250'])).toBe('.');
+    expect(sniffDecimalMark(['$1,234.50'])).toBe('.');
+    expect(sniffDecimalMark(['1,250', '1.250', '12', ''])).toBe('auto');
+    expect(sniffDecimalMark(['7,5', '7.5'])).toBe('auto');
+    expect(sniffDecimalMark(['7:30', 'abc'])).toBe('auto');
+    expect(sniffDecimalMark(['0,0350'])).toBe(',');
   });
   it('reads numbers with a scale and bounds', () => {
     expect(value(parseNumber('3,000', { scale: 3 }))).toBe('3000.000');

@@ -17,6 +17,8 @@ export default defineConfig({
     restoreMocks: true,
     passWithNoTests: true,
     environment: 'node',
+    // Loads .env.local so database tests can find DATABASE_URL (they skip when it is not reachable).
+    setupFiles: ['src/test/setup-env.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     exclude: ['node_modules/**', '.next/**', '.next-*/**'],
   },

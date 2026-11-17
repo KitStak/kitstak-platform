@@ -5,7 +5,7 @@ import { db, type Executor } from '@/server/db';
 import { standards, targets } from '@/server/db/schema';
 import { invalid, notFound } from '@/server/errors';
 import type { StandardBasis, StreamSource, TargetMetric, TargetScope } from '@/lib/constants';
-import type { StandardDTO, TargetDTO } from '@/lib/types';
+import type { PaceSuggestionDTO, StandardDTO, TargetDTO } from '@/lib/types';
 import { assertVersion, cleanText, diff, inTx, isUuid, rows, type DomainContext } from './_shared';
 import { softDeleteRow } from './_crud';
 import { requirePulse, type PulseAccess } from './access';
@@ -106,20 +106,11 @@ export async function deleteStandard(ctx: DomainContext, standardId: string): Pr
   });
 }
 
-export interface PaceSuggestion {
-  /** Median units per person per hour of the last evidence days, to 3 places. Null with no history. */
-  readonly median: string | null;
-  readonly low: string | null;
-  readonly high: string | null;
-  readonly days: number;
-  readonly jobs: number;
-}
-
 /**
  * "Suggest from history": the median pace of the last 20 evidence days (days with units and
  * confirmed hours) of a job type, optionally for one client, with the spread.
  */
-export async function suggestStandard(ctx: DomainContext, input: { jobTypeId: string; clientId?: string | null; laborClassId?: string | null }): Promise<PaceSuggestion> {
+export async function suggestStandard(ctx: DomainContext, input: { jobTypeId: string; clientId?: string | null; laborClassId?: string | null }): Promise<PaceSuggestionDTO> {
   await requirePulse(ctx, 'pulse:read');
   const [row] = await rows<{ median: string | null; low: string | null; high: string | null; days: number; jobs: number }>(
     db,

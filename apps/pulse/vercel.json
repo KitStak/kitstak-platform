@@ -1,4 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/v1/cron/tick",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/v1/cron/cleanup",
+      "schedule": "10 7 * * *"
+    }
+  ],
   "ignoreCommand": "bash ../../deploy/vercel-ignore.sh"
 }

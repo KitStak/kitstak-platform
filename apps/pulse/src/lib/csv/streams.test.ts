@@ -260,6 +260,7 @@ describe('reading real world files', () => {
     expect(read.mapping.columns).toEqual(['work_date', 'job_number', 'units_good', 'units_scrap', 'people', 'hours_each', 'overtime_hours', 'note']);
     expect(read.dateOrder).toBe('DMY');
     expect(read.dateOrderSource).toBe('detected');
+    expect(read.decimal).toBe(','); // "7,5" proves a decimal comma, so "1.250" is one thousand two hundred fifty
     expect(read.counts).toEqual({ rows: 2, ok: 2, withErrors: 0, withWarnings: 0 });
     expect(read.rows[0]?.record).toMatchObject({ workDate: '2026-11-03', jobNumber: 'J-1042', unitsGood: '1250.000', unitsScrap: '12.000', people: '12.00', hoursEach: '7.50', laborHours: '90.00', overtimeHours: '4.00', note: 'first day; slow start' });
     expect(read.rows[1]?.record).toMatchObject({ workDate: '2026-11-13', unitsGood: '900.000', laborHours: '80.00', overtimeHours: null });

@@ -623,6 +623,94 @@ describe('projected finish (4.13)', () => {
     expect(planned.mode).toBeNull();
     expect(projectionNote(planned)).toBe('This job is not active, so there is no projection.');
   });
+  it('never throws and always balances, for any mix of numbers', () => {
+    let seed = 4242;
+    const next = (max: number): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % max;
+    };
+    const maybe = <T>(value: T): T | null => (next(4) === 0 ? null : value);
+    for (let round = 0; round < 500; round += 1) {
+      const material = next(900_000);
+      const actual: ActualTotals = {
+        unitsGood: next(5) === 0 ? 0 : next(15000),
+        hours: next(5) === 0 ? 0 : `${next(500)}.${String(next(100)).padStart(2, '0')}`,
+        revenueCents: b(next(3_000_000)),
+        laborCents: b(next(1_000_000)),
+        materialCents: b(material),
+        scrapCents: b(next(material + 1)),
+        otherCents: b(next(200_000)),
+        sharedCents: b(next(80_000)),
+      };
+      const plan: PlanTotals | null = maybe({ units: next(4) === 0 ? 0 : next(12000), revenueCents: b(next(3_000_000)), laborHours: next(4) === 0 ? 0 : next(600), laborCents: b(next(1_200_000)), materialCents: b(next(900_000)), otherCents: b(next(200_000)), sharedCents: b(next(80_000)) });
+      const windowDays = next(6);
+      const input: ProjectionInput = {
+        status: (['active', 'active', 'active', 'completed', 'planned'] as const)[next(5)] ?? 'active',
+        kind: next(5) === 0 ? 'ongoing' : 'one_time',
+        pricingModel: (['per_unit', 'fixed', 'hourly'] as const)[next(3)] ?? 'per_unit',
+        plannedUnits: maybe(next(4) === 0 ? 0 : next(12000)),
+        plan,
+        actual,
+        serviceRevenueCents: b(next(50_000)),
+        serviceCostCents: b(next(30_000)),
+        otherRevenueCents: b(next(20_000)),
+        window: windowDays === 0 ? null : { days: windowDays, unitsGood: next(3) === 0 ? 0 : next(3000), paceHours: next(3) === 0 ? 0 : next(200), laborCostCents: b(next(400_000)) },
+        evidenceDays: windowDays === 0 ? 0 : windowDays + next(10),
+        targetPace: maybe(next(4) === 0 ? 0 : `${next(200)}.${next(10)}`),
+        unitPrice: maybe(`${next(9)}.${String(next(10000)).padStart(4, '0')}`),
+        fixedPriceCents: maybe(b(next(3_000_000))),
+        billRateCents: maybe(b(next(9000))),
+        materialMethod: next(2) === 0 ? 'standard' : 'actual',
+        materialCostPerUnit: maybe('0.4500'),
+        plannedMaterialLeftCents: maybe(b(next(300_000))),
+        fallbackRateCents: maybe(b(2176)),
+        today: '2026-11-17',
+        workingDays: next(6) === 0 ? [] : [1, 2, 3, 4, 5],
+        last30: maybe({ revenueCents: b(next(500_000)), laborCents: b(next(300_000)), materialCents: b(next(100_000)), otherCents: b(next(50_000)), sharedCents: b(next(20_000)) }),
+      };
+      const p = projectJob(input);
+      expect(p.projectedProfitCents).toBe(p.revenueAtFinishCents - p.costAtFinishCents);
+      const at = p.atFinish;
+      expect(at.revenueCents - at.laborCents - at.materialCents - at.otherCents - at.sharedCents).toBe(p.projectedProfitCents);
+      if (p.mode === 'projected' && p.paceKnown) {
+        expect(p.costAtFinishCents).toBe(p.costSoFarCents + p.laborLeftCents + p.sharedLeftCents + p.materialLeftCents + p.otherLeftCents + p.serviceCostLeftCents);
+        expect(p.costAtFinishCents >= p.costSoFarCents).toBe(true);
+      }
+      expect(projectionNote(p)).not.toMatch(NO_LONG_DASH);
+      const risk = assessRisk({
+        status: input.status,
+        projection: p,
+        actual,
+        plan,
+        plannedUnits: input.plannedUnits,
+        targetMarginBp: next(5000),
+        evidenceDays: input.evidenceDays,
+        window: input.window ? { uph: unitsPerHour(input.window.unitsGood, input.window.paceHours), paceHours: input.window.paceHours, unitsGood: input.window.unitsGood } : null,
+        targetPace: input.targetPace,
+        unitPrice: input.unitPrice,
+        dueDate: maybe('2026-11-20'),
+        today: '2026-11-17',
+        daysMissingHours: next(3),
+        noPrice: next(6) === 0,
+        needsRate: next(6) === 0,
+        workDaysSinceLastEntry: maybe(next(6)),
+        entryDays30: next(10),
+        hasMonthlyPlan: next(2) === 0,
+      });
+      for (const reason of risk.reasons) {
+        expect(reason.impactCents <= b(0)).toBe(true);
+        expect(riskSentence(reason)).not.toMatch(NO_LONG_DASH);
+        expect(riskSentence(reason, { seesMoney: false })).not.toMatch(/\$/);
+        expect(() => JSON.stringify(reason.params)).not.toThrow();
+      }
+      if (risk.status !== null && risk.status !== 'on_track') expect(risk.headline?.status).toBe(risk.status);
+      if (risk.reasons.some((reason) => reason.status === 'losing')) expect(risk.status).toBe('losing');
+      if (plan) {
+        const table = planVsActual({ plan, actual, projected: p.atFinish });
+        expect(table.rows).toHaveLength(11);
+      }
+    }
+  });
   it('counts finish days on the site working days', () => {
     const sixDay = projectJob({ ...PROJECTION_INPUT, workingDays: [1, 2, 3, 4, 5, 6] });
     expect(sixDay.projectedFinishDate).toBe('2026-12-09');

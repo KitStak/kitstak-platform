@@ -24,12 +24,10 @@ export interface ResolvedMember {
 
 /** Everyone in the org with their resolved Pulse access (one read per source, no query per person). */
 export async function resolveAllAccess(ctx: DomainContext, executor: Executor = db): Promise<ResolvedMember[]> {
-  const [people, explicit, wms, settings] = await Promise.all([
-    listOrgPeople(ctx, executor),
-    executor.select().from(memberRoles).where(eq(memberRoles.orgId, ctx.orgId)),
-    wmsRolesByEmail(ctx.orgId),
-    loadSettings(ctx.orgId, executor),
-  ]);
+  const settings = await loadSettings(ctx.orgId, executor);
+  const people = await listOrgPeople(ctx, executor);
+  const explicit = await executor.select().from(memberRoles).where(eq(memberRoles.orgId, ctx.orgId));
+  const wms = await wmsRolesByEmail(ctx.orgId);
   const byUser = new Map(explicit.map((row) => [row.userId, row]));
   const fallback = isPulseRole(settings.defaultMemberRole) ? settings.defaultMemberRole : 'none';
   return people.map((person) => {

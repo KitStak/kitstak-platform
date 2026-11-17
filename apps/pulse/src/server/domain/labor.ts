@@ -10,7 +10,7 @@ import { laborClasses, laborRates } from '@/server/db/schema';
 import { conflict, invalid, notFound } from '@/server/errors';
 import type { LaborClassKind, StreamSource } from '@/lib/constants';
 import { loadedRate } from '@/lib/profit';
-import type { LaborClassDTO, LaborRateDTO, RateChangePreviewDTO } from '@/lib/types';
+import type { LaborClassDTO, LaborRateDTO, RateChangePreviewDTO, RateForEntryDTO } from '@/lib/types';
 import { assertVersion, centsOut, cleanText, defined, diff, hideUnless, inTx, iso, isUuid, moneyOut, rows, type DomainContext } from './_shared';
 import { codeFromName, freeCode, softDeleteRow } from './_crud';
 import { requireMoney, requirePulse, type PulseAccess } from './access';
@@ -369,7 +369,7 @@ export async function previewLaborRate(ctx: DomainContext, input: LaborRateInput
  * The rate that applies to an entry today, in words the "How we got this" popover can use.
  * `source` is `class`, `default` or `none`.
  */
-export async function rateForEntry(ctx: DomainContext, input: { laborClassId: string | null; siteId: string; workDate: string }): Promise<{ found: boolean; source: string; rateCents: number | null; overtimeRateCents: number | null; laborClassId: string | null; rateId: string | null }> {
+export async function rateForEntry(ctx: DomainContext, input: { laborClassId: string | null; siteId: string; workDate: string }): Promise<RateForEntryDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const [row] = await rows<{ found: boolean; source: string; rate_cents: number; overtime_rate_cents: number; labor_class_id: string | null; rate_id: string | null }>(
     db,

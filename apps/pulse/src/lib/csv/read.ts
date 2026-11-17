@@ -24,6 +24,7 @@ import {
   parsePrice,
   parseText,
   sniffDateOrder,
+  sniffDecimalMark,
 } from './coerce';
 import { type HeaderMapping, type MapHeadersOptions, mapHeaders } from './headers';
 import { type CsvProblem, type Delimiter, type ParseOptions, parseCsv } from './parse';
@@ -33,7 +34,7 @@ import { type WriteOptions, toCsv } from './write';
 export interface ReadOptions {
   /** How to read `3/4/2026`. Left out, the file is checked for a clear answer, and month first is the fallback. */
   readonly dateOrder?: DateOrder;
-  /** Which character marks decimals. Default `auto`. */
+  /** Which character marks decimals. Left out, the number cells of the file are checked for proof of a decimal comma or point. */
   readonly decimal?: DecimalMark;
 }
 
@@ -80,6 +81,9 @@ export function readCell(column: ColumnDef, text: string, options: ReadOptions =
       return parseChoice(text, column.values ?? [], column.valueAliases ?? {});
   }
 }
+
+/** Column kinds whose cells are plain numbers, checked when the decimal mark is worked out. */
+const NUMBER_TYPES: ReadonlySet<ColumnDef['type']> = new Set(['money', 'price', 'quantity', 'headcount', 'multiplier', 'pace', 'number', 'percent', 'hours']);
 
 /** "Row 14, labor_hours: 9x is not a number." or "Row 31: October is closed." */
 export function formatIssue(rowNumber: number, issue: Pick<RowIssue, 'column' | 'message'>): string {
@@ -146,6 +150,8 @@ export interface StreamRead<S extends StreamId = StreamId> {
   /** The date order used to read dates like `3/4/2026`, and where it came from. */
   readonly dateOrder: DateOrder;
   readonly dateOrderSource: 'option' | 'detected' | 'default';
+  /** The decimal mark used to read numbers: a point, a comma, or `auto` when each cell decides for itself. */
+  readonly decimal: DecimalMark;
   /** False when a needed column is missing or the file could not be read. No rows are read then. */
   readonly ready: boolean;
   /** Problems with the file as a whole. */
@@ -168,7 +174,11 @@ export interface ReadRowsInput {
  * Reads raw rows with a mapping that is already chosen. The server uses this on the rows it
  * stored, so nothing the browser parsed is trusted.
  */
-export function readStreamRows<S extends StreamId>(stream: S, input: ReadRowsInput, options: ReadOptions = {}): { rows: RowResult<StreamRecord<S>>[]; dateOrder: DateOrder; dateOrderSource: StreamRead['dateOrderSource'] } {
+export function readStreamRows<S extends StreamId>(
+  stream: S,
+  input: ReadRowsInput,
+  options: ReadOptions = {},
+): { rows: RowResult<StreamRecord<S>>[]; dateOrder: DateOrder; dateOrderSource: StreamRead['dateOrderSource']; decimal: DecimalMark } {
   const def = anyStreamDef(stream);
   const indexOf = new Map<string, number>();
   input.columns.forEach((column, index) => {
@@ -189,13 +199,21 @@ export function readStreamRows<S extends StreamId>(stream: S, input: ReadRowsInp
     }
   }
 
+  let decimal: DecimalMark = options.decimal ?? 'auto';
+  if (!options.decimal) {
+    const numberIndexes = def.columns.filter((column) => NUMBER_TYPES.has(column.type) && indexOf.has(column.key)).map((column) => indexOf.get(column.key) as number);
+    const values: string[] = [];
+    for (const row of input.rows) for (const index of numberIndexes) values.push(cleanCell(row[index]));
+    decimal = sniffDecimalMark(values);
+  }
+
   const rows = input.rows.map((row, position) => {
     const cells: Record<string, string> = {};
     for (const [column, index] of indexOf) cells[column] = row[index] ?? '';
-    const result = readStreamRow(stream, cells, input.rowNumbers?.[position] ?? position + 2, present, { ...options, dateOrder });
+    const result = readStreamRow(stream, cells, input.rowNumbers?.[position] ?? position + 2, present, { dateOrder, decimal });
     return { ...result, cells: row };
   });
-  return { rows, dateOrder, dateOrderSource };
+  return { rows, dateOrder, dateOrderSource, decimal };
 }
 
 /**
@@ -224,6 +242,7 @@ export function readStreamCsv<S extends StreamId>(stream: S, text: string, optio
     layout,
     dateOrder: read ? read.dateOrder : (options.dateOrder ?? 'MDY'),
     dateOrderSource: read ? read.dateOrderSource : options.dateOrder ? 'option' : 'default',
+    decimal: read ? read.decimal : (options.decimal ?? 'auto'),
     ready,
     problems,
     rows,
@@ -240,7 +259,7 @@ export function readStreamCsv<S extends StreamId>(stream: S, text: string, optio
  * The error report: the rows that did not pass, with the file's own headers and one added
  * `problem` column, ready to fix and upload again.
  */
-export function errorReportCsv(read: Pick<StreamRead, 'headers' | 'rows'>, options: WriteOptions = {}): string {
+export function errorReportCsv(read: { readonly headers: readonly string[]; readonly rows: readonly Pick<RowResult<unknown>, 'ok' | 'issues' | 'cells'>[] }, options: WriteOptions = {}): string {
   const bad = read.rows.filter((row) => !row.ok);
   return toCsv(
     [...read.headers, 'problem'],

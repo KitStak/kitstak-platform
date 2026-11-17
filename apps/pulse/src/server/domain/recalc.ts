@@ -7,7 +7,8 @@
  *   3. refresh `company_days`, `fact_days` and `job_stats` for what moved.
  *
  * All money products are computed by Postgres `numeric` math and `round()`, which rounds half
- * away from zero: the same answer as `divRound` in src/lib/money.ts, to the cent.
+ * away from zero: the same answer as `divRound` in src/lib/money.ts, to the cent. Rates per hour
+ * are cents already; per unit prices and costs are currency units, so those products take x 100.
  * Closed months are never touched: every statement filters them out first.
  */
 import 'server-only';
@@ -81,11 +82,11 @@ export async function restampProduction(executor: Executor, orgId: string, where
         (round((src.hours - src.overtime_hours) * r.wage_cents) + round(src.overtime_hours * r.wage_cents * r.mult))::bigint AS gross,
         (NOT r.found AND src.hours > 0) AS needs_rate,
         CASE j.pricing_model
-          WHEN 'per_unit' THEN round(src.units_good * COALESCE(pr.unit_price, 0))::bigint
+          WHEN 'per_unit' THEN round(src.units_good * COALESCE(pr.unit_price, 0) * 100)::bigint
           WHEN 'hourly' THEN round(src.hours * COALESCE(pr.bill_rate_cents, r.bill_rate_cents, 0))::bigint
           ELSE src.base_revenue_cents END AS base_rev,
-        CASE WHEN j.material_method = 'standard' THEN round((src.units_good + src.units_scrap) * COALESCE(pr.material_cost_per_unit, 0))::bigint ELSE 0 END AS std_mat,
-        CASE WHEN j.material_method = 'standard' THEN round(src.units_scrap * COALESCE(pr.material_cost_per_unit, 0))::bigint ELSE 0 END AS std_scrap
+        CASE WHEN j.material_method = 'standard' THEN round((src.units_good + src.units_scrap) * COALESCE(pr.material_cost_per_unit, 0) * 100)::bigint ELSE 0 END AS std_mat,
+        CASE WHEN j.material_method = 'standard' THEN round(src.units_scrap * COALESCE(pr.material_cost_per_unit, 0) * 100)::bigint ELSE 0 END AS std_scrap
       FROM pulse.production_entries src
       JOIN pulse.jobs j ON j.id = src.job_id
       CROSS JOIN LATERAL pulse.rate_for(src.org_id, src.labor_class_id, src.site_id, src.work_date) r
@@ -142,8 +143,8 @@ export async function restampUsage(executor: Executor, orgId: string, where: SQL
   const result = await executor.execute(sql`
     UPDATE pulse.material_usage p SET
       resolved_supplied_by = c.owner,
-      cost_cents = CASE WHEN c.owner = 'us' THEN round((c.quantity_used + c.quantity_scrapped) * c.unit_cost)::bigint ELSE 0 END,
-      scrap_cents = CASE WHEN c.owner = 'us' THEN round(c.quantity_scrapped * c.unit_cost)::bigint ELSE 0 END
+      cost_cents = CASE WHEN c.owner = 'us' THEN round((c.quantity_used + c.quantity_scrapped) * c.unit_cost * 100)::bigint ELSE 0 END,
+      scrap_cents = CASE WHEN c.owner = 'us' THEN round(c.quantity_scrapped * c.unit_cost * 100)::bigint ELSE 0 END
     FROM (
       SELECT src.id, src.quantity_used, src.quantity_scrapped, src.unit_cost,
         COALESCE(src.supplied_by, i.supplied_by, j.parts_owner, cl.parts_owner, s.default_parts_owner, 'us') AS owner
@@ -382,8 +383,8 @@ export async function refreshFacts(executor: Executor, orgId: string, jobIds: re
 
 /**
  * The tail of every stream write: shared allocation for the touched pools, then `company_days`,
- * `fact_days` and `job_stats` for everything that moved. Logs `shared.moved` on other jobs whose
- * share moved by $1.00 or more.
+ * `fact_days` and `job_stats` for everything that moved. When a save on one job moves another
+ * job's share by $1.00 or more, that other job gets a `shared.moved` activity row.
  */
 export async function finishWrite(executor: Executor, ctx: DomainContext, touched: Touched, options: { settings?: SettingsRow } = {}): Promise<void> {
   const settings = options.settings ?? (await loadSettings(ctx.orgId, executor));
@@ -415,7 +416,7 @@ export async function finishWrite(executor: Executor, ctx: DomainContext, touche
   await refreshFacts(executor, ctx.orgId, jobIds, [...touched.clientIds]);
   if (jobIds.length > 0) await recomputeJobs(executor, ctx, jobIds, { settings });
   const notes = [...movedByJob.entries()]
-    .filter(([jobId, move]) => !direct.has(jobId) && (move.after - move.before >= BigInt(100) || move.before - move.after >= BigInt(100)))
+    .filter(([jobId, move]) => direct.size > 0 && !direct.has(jobId) && (move.after - move.before >= BigInt(100) || move.before - move.after >= BigInt(100)))
     .map(([jobId, move]) => ({ verb: 'shared.moved', entityType: 'job', entityId: jobId, jobId, before: { sharedCents: move.before }, after: { sharedCents: move.after } }));
   if (notes.length > 0) await logActivity(executor, { ...ctx, actorKind: 'system' }, notes);
 }

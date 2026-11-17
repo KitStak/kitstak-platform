@@ -204,7 +204,7 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
       CROSS JOIN LATERAL (
         SELECT COALESCE(sum(m.cost_cents), 0) AS usage_cents, COALESCE(sum(m.scrap_cents), 0) AS usage_scrap_cents,
                count(*) FILTER (WHERE m.quantity_planned IS NOT NULL AND m.resolved_supplied_by = 'us')::int AS usage_planned_rows,
-               COALESCE(sum(round(GREATEST(0, m.quantity_planned - m.quantity_used - m.quantity_scrapped) * m.unit_cost))
+               COALESCE(sum(round(GREATEST(0, m.quantity_planned - m.quantity_used - m.quantity_scrapped) * m.unit_cost * 100))
                         FILTER (WHERE m.quantity_planned IS NOT NULL AND m.resolved_supplied_by = 'us'), 0) AS usage_planned_left_cents
           FROM pulse.material_usage m WHERE m.job_id = j.id AND m.deleted_at IS NULL
       ) mu
@@ -375,7 +375,8 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
       (job.pricing_model === 'fixed' && job.fixed_price_cents === null) ||
       (job.pricing_model === 'hourly' && job.bill_rate_cents === null && entries.some((row) => Number(row.hours) > 0 && B(row.base_revenue_cents) === BigInt(0)));
     const needsRateCount = entries.filter((row) => row.needs_rate).length + job.vas_needs_rate;
-    const missingDays = daysMissingHours(days);
+    // D1: warehouse rows that still need crew hours, plus typed days with units and no hours at all.
+    const missingDays = daysMissingHours(days) + days.filter((day) => !day.missingHours && Number(day.unitsGood) > 0 && Number(day.hours) === 0).length;
     const lastEntry = entries.length > 0 ? entries[entries.length - 1]!.work_date : null;
     const targetMargin = targetMarginBp({ job: job.target_margin_bp, jobType: job.type_margin_bp, client: job.client_margin_bp, orgDefault: settings.defaultTargetMarginBp });
     const risk = assessRisk({
