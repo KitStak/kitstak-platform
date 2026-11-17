@@ -34,7 +34,7 @@ import {
 export const metadata: Metadata = {
   title: 'KitStak WMS - warehouse management from the dock to the door',
   description:
-    'Receiving, bin-level inventory, wave picking, packing stations, rate shopping, returns, kitting and 3PL client billing in one warehouse management system.',
+    'Receiving, bin-level inventory, wave picking, packing stations, rate shopping, returns, kitting and client billing in one warehouse management system.',
   alternates: { canonical: '/wms' },
   openGraph: {
     title: 'KitStak WMS',
@@ -55,7 +55,7 @@ export default function WmsPage() {
           product="KitStak WMS"
           app="wms"
           lines={['Dock.', 'Shelf.', 'Door.']}
-          lead="KitStak WMS runs receiving, inventory, picking, packing, shipping and returns. One warehouse or a 3PL floor full of clients, every unit has a location and every location has a count."
+          lead="KitStak WMS runs receiving, inventory, picking, packing, shipping and returns. Every unit has a location and every location has a count."
           primary={{ href: getStartedHref('wms'), label: 'Start with the WMS' }}
           secondary={{ href: ROUTES.demo, label: 'Book a walkthrough' }}
           visual={<FloorTicker />}
@@ -112,7 +112,7 @@ export default function WmsPage() {
           index="05"
           label="Clients and billing"
           title="Every client. Every charge."
-          lead="Built for 3PLs. Run many clients from one floor, keep their stock and users apart, and bill each one from what the warehouse did for them this month."
+          lead="Do you run a 3PL? Keep each client's stock and users apart on one floor, and bill each one from what the warehouse did for them this month."
           features={CLIENT_FEATURES}
           visual={<BillStatement />}
           tone="brand"

@@ -37,7 +37,7 @@ export const ITEMS: readonly BoardItem[] = [
   { name: 'Northwind restock', owner: 'Dana R.', status: 'Won', value: '$48,200', start: 0, span: 0.34 },
   { name: 'Harbor & Pine kits', owner: 'Marcus T.', status: 'Proposal', value: '$31,750', start: 0.18, span: 0.4 },
   { name: 'Ridgeline returns', owner: 'Priya S.', status: 'Won', value: '$12,400', start: 0.3, span: 0.22 },
-  { name: 'Summit Goods 3PL', owner: 'Dana R.', status: 'Lead', value: '$86,000', start: 0.46, span: 0.38 },
+  { name: 'Summit Goods', owner: 'Dana R.', status: 'Lead', value: '$86,000', start: 0.46, span: 0.38 },
   { name: 'Cobalt Cycle launch', owner: 'Ari K.', status: 'Proposal', value: '$22,900', start: 0.58, span: 0.3 },
   { name: 'Lakeside Pantry', owner: 'Marcus T.', status: 'Lead', value: '$9,600', start: 0.7, span: 0.28 },
 ];

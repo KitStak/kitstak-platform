@@ -25,9 +25,9 @@ export interface Option<T extends string> {
 }
 
 export const BUSINESS_TYPES: readonly Option<BusinessType>[] = [
-  { value: '3pl', label: '3PL warehouse', note: 'You store and ship for other companies.' },
   { value: 'brand', label: 'Brand or e-commerce', note: 'You sell your own products.' },
   { value: 'distributor', label: 'Distributor or wholesale', note: 'You buy, stock and resell.' },
+  { value: '3pl', label: '3PL warehouse', note: 'You store and ship for other companies.' },
   { value: 'other', label: 'Something else', note: 'Tell us more once you are in.' },
 ];
 
