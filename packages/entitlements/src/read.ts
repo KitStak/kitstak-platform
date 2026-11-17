@@ -59,7 +59,7 @@ export async function getEntitlements(db: EntitlementsDb, orgId: string): Promis
     .from(entitlements)
     .where(eq(entitlements.orgId, orgId));
 
-  const draft: Record<Module, ModuleEntitlement | null> = { crm: null, wms: null, projects: null };
+  const draft: Record<Module, ModuleEntitlement | null> = { crm: null, wms: null, projects: null, pulse: null };
   for (const row of rows) {
     draft[row.module] = { status: row.status, source: row.source, periodEnd: row.periodEnd };
   }

@@ -9,12 +9,13 @@
  */
 import * as React from 'react';
 
-export type AppIconId = 'portal' | 'crm' | 'wms' | 'projects';
+export type AppIconId = 'portal' | 'crm' | 'wms' | 'projects' | 'pulse';
 
 const RED = '#C8102E';
 const PINK = '#D65A6E';
 
-type Shape = readonly [x: number, y: number, width: number, height: number, fill: string];
+/** The optional sixth value is the fill opacity (the faded track of the Pulse meter). */
+type Shape = readonly [x: number, y: number, width: number, height: number, fill: string, opacity?: number];
 
 /** `offsetY` reproduces the `translate(0,-8)` group in the warehouse source file. */
 const ICONS: Readonly<Record<AppIconId, { readonly offsetY: number; readonly shapes: readonly Shape[] }>> = {
@@ -57,6 +58,15 @@ const ICONS: Readonly<Record<AppIconId, { readonly offsetY: number; readonly sha
       [98, 122, 64, 26, RED],
     ],
   },
+  // A full bar over a meter: the faded track is the whole job, the solid part is what is left.
+  pulse: {
+    offsetY: 0,
+    shapes: [
+      [40, 62, 120, 30, RED],
+      [40, 108, 120, 30, PINK, 0.35],
+      [40, 108, 84, 30, PINK],
+    ],
+  },
 };
 
 export interface AppIconProps {
@@ -72,8 +82,8 @@ export function AppIcon({ app, size = 24, className }: AppIconProps) {
   return (
     <svg aria-hidden viewBox="0 0 200 200" width={size} height={size} className={className} style={{ flexShrink: 0 }}>
       <g transform={icon.offsetY === 0 ? undefined : `translate(0,${icon.offsetY})`}>
-        {icon.shapes.map(([x, y, width, height, fill]) => (
-          <rect key={`${x}-${y}`} x={x} y={y} width={width} height={height} fill={fill} />
+        {icon.shapes.map(([x, y, width, height, fill, opacity]) => (
+          <rect key={`${x}-${y}-${width}`} x={x} y={y} width={width} height={height} fill={fill} opacity={opacity} />
         ))}
       </g>
     </svg>

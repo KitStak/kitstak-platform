@@ -40,6 +40,16 @@
         "dev"
       ],
       "port": 3400
+    },
+    {
+      "name": "pulse",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--dir",
+        "apps/pulse",
+        "dev"
+      ],
+      "port": 3500
     }
   ]
 }

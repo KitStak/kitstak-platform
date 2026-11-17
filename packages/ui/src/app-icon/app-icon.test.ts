@@ -13,6 +13,7 @@ describe('AppIcon', () => {
     ['crm', 3],
     ['wms', 8],
     ['projects', 3],
+    ['pulse', 3],
   ])('draws the %s icon with the same number of shapes as the brand file', (app, shapes) => {
     expect(rectCount(render(app))).toBe(shapes);
   });

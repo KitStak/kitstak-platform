@@ -2,7 +2,7 @@
   "name": "kitstak",
   "version": "0.1.0",
   "private": true,
-  "description": "KitStak platform monorepo — Portal, CRM, WMS and Projects, deeply integrated, independently licensable.",
+  "description": "KitStak platform monorepo — Portal, CRM, WMS, Projects and Pulse, deeply integrated, independently licensable.",
   "packageManager": "pnpm@10.18.1",
   "engines": {
     "node": ">=22"
@@ -13,6 +13,7 @@
     "dev:wms": "turbo dev --filter=kitstak-wms",
     "dev:portal": "turbo dev --filter=kitstak-portal",
     "dev:projects": "turbo dev --filter=kitstak-projects",
+    "dev:pulse": "turbo dev --filter=kitstak-pulse",
     "dev:web": "turbo dev --filter=kitstak-web",
     "build": "turbo build",
     "lint": "turbo lint",
