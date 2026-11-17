@@ -1,0 +1,141 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`portrait label ZPL is unchanged > 2x1 with every section and block kind 1`] = `
+"^XA
+^CI28
+^PW406
+^LL203
+^LH0,0
+^FO12,12^A0N,17,17^FH\\^FDProduct Label^FS
+^FO12,37^BY1^BCN,71,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO12,118^A0N,23,23^FB382,1,0,C,0^FH\\^FDBMS-M8-BLK^FS
+^FO12,149^A0N,28,28^FB382,3,0,C,0^FH\\^FDHandle with care^FS
+^FO12,213^A0N,28,28^FB382,3,0,R,0^FH\\^FDClient: Apex Threads Co.^FS
+^FO89,277^BY2^BCN,113,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO165,402^BQN,2,4^FH\\^FDQA,BMS-M8-BLK^FS
+^FO89,640^BXN,4,200^FH\\^FDBMS-M8-BLK^FS
+^FO89,878^BY2^B3N,N,113,N,N^FH\\^FDBMS-M8-BLK^FS
+^FX image block bi0001 not sent: images need a ^GF bitmap from the printer driver
+^FO12,1003^GB382,6,6^FS
+^PQ2
+^XZ"
+`;
+
+exports[`portrait label ZPL is unchanged > 3x2 with every section and block kind 1`] = `
+"^XA
+^CI28
+^PW609
+^LL406
+^LH0,0
+^FO24,24^A0N,39,39^FH\\^FDProduct Label^FS
+^FO24,71^BY3^BCN,122,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO24,203^A0N,34,34^FB561,1,0,C,0^FH\\^FDBMS-M8-BLK^FS
+^FO24,245^A0N,28,28^FH\\^FDMLT1 - Main Fulfillment^FS
+^FO24,279^A0N,28,28^FB561,3,0,C,0^FH\\^FDHandle with care^FS
+^FO24,311^A0N,28,28^FB561,3,0,R,0^FH\\^FDClient: Apex Threads Co.^FS
+^FO136,375^BY2^BCN,113,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO248,500^BQN,2,4^FH\\^FDQA,BMS-M8-BLK^FS
+^FO136,738^BXN,4,200^FH\\^FDBMS-M8-BLK^FS
+^FO136,976^BY2^B3N,N,113,N,N^FH\\^FDBMS-M8-BLK^FS
+^FX image block bi0001 not sent: images need a ^GF bitmap from the printer driver
+^FO24,1101^GB561,6,6^FS
+^PQ2
+^XZ"
+`;
+
+exports[`portrait label ZPL is unchanged > 4x2 with every section and block kind 1`] = `
+"^XA
+^CI28
+^PW812
+^LL406
+^LH0,0
+^FO24,24^A0N,39,39^FH\\^FDProduct Label^FS
+^FO24,71^BY3^BCN,122,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO24,203^A0N,34,34^FB764,1,0,C,0^FH\\^FDBMS-M8-BLK^FS
+^FO24,245^A0N,28,28^FH\\^FDMLT1 - Main Fulfillment^FS
+^FO24,279^A0N,28,28^FB764,3,0,C,0^FH\\^FDHandle with care^FS
+^FO24,311^A0N,28,28^FB764,3,0,R,0^FH\\^FDClient: Apex Threads Co.^FS
+^FO177,343^BY2^BCN,113,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO330,468^BQN,2,4^FH\\^FDQA,BMS-M8-BLK^FS
+^FO177,706^BXN,4,200^FH\\^FDBMS-M8-BLK^FS
+^FO177,944^BY2^B3N,N,113,N,N^FH\\^FDBMS-M8-BLK^FS
+^FX image block bi0001 not sent: images need a ^GF bitmap from the printer driver
+^FO24,1069^GB764,6,6^FS
+^PQ2
+^XZ"
+`;
+
+exports[`portrait label ZPL is unchanged > 4x3 with every section and block kind 1`] = `
+"^XA
+^CI28
+^PW812
+^LL609
+^LH0,0
+^FO24,24^A0N,39,39^FH\\^FDProduct Label^FS
+^FO24,71^BY3^BCN,183,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO24,264^A0N,56,56^FB764,1,0,C,0^FH\\^FDBMS-M8-BLK^FS
+^FO24,328^A0N,28,28^FH\\^FDMLT1 - Main Fulfillment^FS
+^FO24,362^A0N,28,28^FH\\^FDApex Threads Co.^FS
+^FO24,396^A0N,28,28^FH\\^FDZone A \\C2\\B7 Level 3^FS
+^FO24,565^A0N,18,18^FH\\^FDPrinted 11/17/2026 \\C2\\B7 KitStaks^FS
+^FO24,430^A0N,28,28^FB764,3,0,C,0^FH\\^FDHandle with care^FS
+^FO24,462^A0N,28,28^FB764,3,0,R,0^FH\\^FDClient: Apex Threads Co.^FS
+^FO177,494^BY2^BCN,113,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO330,619^BQN,2,4^FH\\^FDQA,BMS-M8-BLK^FS
+^FO177,857^BXN,4,200^FH\\^FDBMS-M8-BLK^FS
+^FO177,1095^BY2^B3N,N,113,N,N^FH\\^FDBMS-M8-BLK^FS
+^FX image block bi0001 not sent: images need a ^GF bitmap from the printer driver
+^FO24,1220^GB764,6,6^FS
+^PQ2
+^XZ"
+`;
+
+exports[`portrait label ZPL is unchanged > 4x4 with every section and block kind 1`] = `
+"^XA
+^CI28
+^PW812
+^LL812
+^LH0,0
+^FO24,24^A0N,39,39^FH\\^FDProduct Label^FS
+^FO24,71^BQN,2,5^FH\\^FDQA,BMS-M8-BLK^FS
+^FO24,569^A0N,56,56^FB764,1,0,C,0^FH\\^FDBMS-M8-BLK^FS
+^FO24,633^A0N,28,28^FH\\^FDMLT1 - Main Fulfillment^FS
+^FO24,667^A0N,28,28^FH\\^FDApex Threads Co.^FS
+^FO24,701^A0N,28,28^FH\\^FDZone A \\C2\\B7 Level 3^FS
+^FO24,768^A0N,18,18^FH\\^FDPrinted 11/17/2026 \\C2\\B7 KitStaks^FS
+^FO24,735^A0N,28,28^FB764,3,0,C,0^FH\\^FDHandle with care^FS
+^FO24,767^A0N,28,28^FB764,3,0,R,0^FH\\^FDClient: Apex Threads Co.^FS
+^FO177,799^BY2^BCN,113,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO330,924^BQN,2,4^FH\\^FDQA,BMS-M8-BLK^FS
+^FO177,1162^BXN,4,200^FH\\^FDBMS-M8-BLK^FS
+^FO177,1400^BY2^B3N,N,113,N,N^FH\\^FDBMS-M8-BLK^FS
+^FX image block bi0001 not sent: images need a ^GF bitmap from the printer driver
+^FO24,1525^GB764,6,6^FS
+^PQ2
+^XZ"
+`;
+
+exports[`portrait label ZPL is unchanged > 4x6 with every section and block kind 1`] = `
+"^XA
+^CI28
+^PW812
+^LL1218
+^LH0,0
+^FO24,24^A0N,39,39^FH\\^FDProduct Label^FS
+^FO24,71^BY3^BCN,365,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO24,446^A0N,56,56^FB764,1,0,C,0^FH\\^FDBMS-M8-BLK^FS
+^FO24,510^A0N,28,28^FH\\^FDMLT1 - Main Fulfillment^FS
+^FO24,544^A0N,28,28^FH\\^FDApex Threads Co.^FS
+^FO24,578^A0N,28,28^FH\\^FDZone A \\C2\\B7 Level 3^FS
+^FO24,1174^A0N,18,18^FH\\^FDPrinted 11/17/2026 \\C2\\B7 KitStaks^FS
+^FO24,612^A0N,28,28^FB764,3,0,C,0^FH\\^FDHandle with care^FS
+^FO24,644^A0N,28,28^FB764,3,0,R,0^FH\\^FDClient: Apex Threads Co.^FS
+^FO177,676^BY2^BCN,113,N,N,N^FH\\^FDBMS-M8-BLK^FS
+^FO330,801^BQN,2,4^FH\\^FDQA,BMS-M8-BLK^FS
+^FO177,1039^BXN,4,200^FH\\^FDBMS-M8-BLK^FS
+^FO177,1277^BY2^B3N,N,113,N,N^FH\\^FDBMS-M8-BLK^FS
+^FX image block bi0001 not sent: images need a ^GF bitmap from the printer driver
+^FO24,1402^GB764,6,6^FS
+^PQ2
+^XZ"
+`;

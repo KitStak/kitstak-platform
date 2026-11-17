@@ -7,13 +7,14 @@
  * The PDF tab remains the source of truth for page breaks and exact typography.
  */
 import * as React from 'react';
-import { renderBarcodeSvg, type BarcodeType } from '@/components/ui/barcode';
+import { barcodeAspect, renderBarcodeSvg, type BarcodeType } from '@/components/ui/barcode';
 import { cn } from '@/lib/utils';
 import {
   blockIdOf,
   columnsFor,
   DOCUMENT_COLUMNS,
   isTwoDimensional,
+  PAPER_POINTS,
   printDate,
   printFieldValue,
   type BarcodeSymbology,
@@ -22,18 +23,6 @@ import {
   type PrintRecord,
 } from '@/lib/grid-defs/admin/printouts';
 
-/** Same table as the server renderer (points). */
-const PAPER_POINTS: Readonly<Record<PrintoutLayout['paper'], readonly [number, number]>> = {
-  Letter: [612, 792],
-  A4: [595.28, 841.89],
-  Legal: [612, 1008],
-  '4x6': [288, 432],
-  '4x4': [288, 288],
-  '4x3': [288, 216],
-  '4x2': [288, 144],
-  '3x2': [216, 144],
-  '2x1': [144, 72],
-};
 const FONT_STACK: Readonly<Record<PrintoutLayout['font'], string>> = {
   Helvetica: 'Helvetica, Arial, sans-serif',
   Times: "'Times New Roman', Times, serif",
@@ -171,7 +160,7 @@ export function CanvasPreview({ layout, typeKey, record, companyName, logoUrl, s
           <div
             style={{
               fontSize: px(b.size),
-              lineHeight: 1.25,
+              lineHeight: `${px(b.size + 3)}px`,
               fontWeight: b.bold ? 700 : 400,
               color,
               textAlign: alignText(b.align),
@@ -242,6 +231,7 @@ export function CanvasPreview({ layout, typeKey, record, companyName, logoUrl, s
             <div
               style={{
                 fontSize: px(tiny ? 6 : small ? 9 : fs + 4),
+                lineHeight: 1,
                 fontWeight: 700,
                 color: accent,
                 paddingBottom: px(tiny ? 2 : 6),
@@ -253,13 +243,16 @@ export function CanvasPreview({ layout, typeKey, record, companyName, logoUrl, s
         case 'barcode': {
           const twoD = isTwoDimensional(layout.barcodeType);
           const maxH = tiny ? 26 : small ? 50 : 120;
+          // Same rule as the PDF: the symbol's own proportions at full width, capped at maxH.
+          const aspect = barcodeAspect(layout.barcodeType, rec.code, tiny ? 5 : small ? 8 : 18);
+          const barHeight = aspect === null ? maxH * 0.75 : Math.min(aspect * (pw - margin * 2), maxH);
           return (
             <div style={{ paddingBottom: px(tiny ? 2 : 4) }}>
               <BarcodeImg
                 value={rec.code}
                 symbology={layout.barcodeType}
                 widthPt={pw - margin * 2}
-                heightPt={twoD ? Math.min(maxH * (small ? 1 : 1.2), pw - margin * 2) : maxH * 0.75}
+                heightPt={twoD ? Math.min(maxH * (small ? 1 : 1.2), pw - margin * 2) : barHeight}
                 z={z}
                 align="center"
               />
@@ -271,6 +264,7 @@ export function CanvasPreview({ layout, typeKey, record, companyName, logoUrl, s
             <div
               style={{
                 fontSize: px(tiny ? 8 : small ? 12 : 20),
+                lineHeight: 1,
                 fontWeight: 700,
                 textAlign: 'center',
                 paddingBottom: px(tiny ? 2 : 6),
@@ -283,7 +277,7 @@ export function CanvasPreview({ layout, typeKey, record, companyName, logoUrl, s
           return (
             <div>
               {(rec.details ?? []).slice(0, tiny ? 0 : small ? 1 : 5).map((d) => (
-                <div key={d} style={{ fontSize: px(fs), paddingBottom: px(3) }}>
+                <div key={d} style={{ fontSize: px(fs), lineHeight: 1, paddingBottom: px(3) }}>
                   {d}
                 </div>
               ))}

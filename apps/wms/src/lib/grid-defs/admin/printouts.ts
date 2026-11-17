@@ -32,19 +32,62 @@ export function categoryCounts(types: readonly PrintTypeDef[] = PRINT_TYPES): Re
 
 /* ---------------- layout model ---------------- */
 
-/** Document stock first, then thermal label stock (inches, width x height). */
+/**
+ * Document stock first, then thermal label stock (inches, width x height of the design as it
+ * is read). A stock wider than a label printer's 4 in head (6x4) is a landscape stock: the
+ * label is fed short edge first and the ZPL renderer rotates every field a quarter turn.
+ */
 export const DOCUMENT_PAPERS = ['Letter', 'A4', 'Legal'] as const;
-export const LABEL_STOCKS = ['4x6', '4x4', '4x3', '4x2', '3x2', '2x1'] as const;
+export const LANDSCAPE_LABEL_STOCKS = ['6x4'] as const;
+export const LABEL_STOCKS = ['4x6', ...LANDSCAPE_LABEL_STOCKS, '4x4', '4x3', '4x2', '3x2', '2x1'] as const;
 export const PAPER_SIZES = [...DOCUMENT_PAPERS, ...LABEL_STOCKS] as const;
 export type PaperSize = (typeof PAPER_SIZES)[number];
+export type LabelStock = (typeof LABEL_STOCKS)[number];
 export const isLabelStock = (paper: string): boolean => (LABEL_STOCKS as readonly string[]).includes(paper);
+export const isLandscapeStock = (paper: string): boolean =>
+  (LANDSCAPE_LABEL_STOCKS as readonly string[]).includes(paper);
 export function paperLabel(paper: string): string {
-  if (isLabelStock(paper)) return `${paper.replace('x', ' × ')} in`;
+  if (isLabelStock(paper))
+    return `${paper.replace('x', ' × ')} in${isLandscapeStock(paper) ? ' (landscape)' : ''}`;
   return paper === 'Legal'
     ? 'Legal (8.5 × 14 in)'
     : paper === 'Letter'
       ? 'Letter (8.5 × 11 in)'
       : 'A4 (210 × 297 mm)';
+}
+
+/** Page size in points (1/72 in), width x height. Shared by the PDF, ZPL and canvas renderers. */
+export const PAPER_POINTS: Readonly<Record<PaperSize, readonly [number, number]>> = {
+  Letter: [612, 792],
+  A4: [595.28, 841.89],
+  Legal: [612, 1008],
+  '4x6': [288, 432],
+  '6x4': [432, 288],
+  '4x4': [288, 288],
+  '4x3': [288, 216],
+  '4x2': [288, 144],
+  '3x2': [216, 144],
+  '2x1': [144, 72],
+};
+
+export interface LabelFeed {
+  /** Size across the print head, in inches. */
+  readonly widthIn: number;
+  /** Size along the feed direction, in inches. */
+  readonly lengthIn: number;
+  /** True when the design is turned a quarter turn to fit the head (landscape stock). */
+  readonly rotated: boolean;
+}
+
+/** How a label stock travels through a thermal printer. PURE. */
+export function labelFeed(paper: LabelStock): LabelFeed {
+  const [width, height] = PAPER_POINTS[paper];
+  const rotated = isLandscapeStock(paper);
+  return {
+    widthIn: (rotated ? height : width) / 72,
+    lengthIn: (rotated ? width : height) / 72,
+    rotated,
+  };
 }
 
 /** Barcode symbologies the renderer can draw (bwip-js ids). */
@@ -410,7 +453,7 @@ const docLayout = (
   ...over,
 });
 
-const labelLayout = (title: string, paper: (typeof LABEL_STOCKS)[number]): PrintoutLayout => ({
+const labelLayout = (title: string, paper: LabelStock): PrintoutLayout => ({
   family: 'label',
   paper,
   font: 'Helvetica',
@@ -459,6 +502,12 @@ export const LABEL_TEMPLATES: readonly BaseTemplate[] = [
     name: '4 × 6 label',
     description: 'Large barcode with details, thermal 4 × 6.',
     layout: (t) => labelLayout(typeTitle(t), '4x6'),
+  },
+  {
+    key: 'label-6x4',
+    name: '6 × 4 landscape label',
+    description: 'Wide retail label (6 in across, 4 in tall), printed on 4 × 6 stock.',
+    layout: (t) => labelLayout(typeTitle(t), '6x4'),
   },
   {
     key: 'label-4x2',
