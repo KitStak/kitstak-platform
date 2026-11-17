@@ -71,6 +71,24 @@ async function api(
   );
 }
 
+/**
+ * Shopify's numeric order id. The runtime hands over the store order number ("#1001") for orders
+ * that were downloaded normally, so anything that is not already an id is looked up by name.
+ * Stores with a blank order prefix have all-digit names ("1001"); real ids are far longer, so
+ * short digit strings are treated as names.
+ */
+const ORDER_ID_PATTERN = /^(?:gid:\/\/shopify\/Order\/)?(\d{10,})$/;
+
+async function resolveOrderId(domain: string, token: string, ref: string): Promise<string | null> {
+  const id = ORDER_ID_PATTERN.exec(ref)?.[1];
+  if (id) return id;
+  const q = new URLSearchParams({ name: ref, status: 'any', fields: 'id,name' });
+  const match = arr((await api(domain, token, `orders.json?${q.toString()}`)).orders)
+    .map(rec)
+    .find((o) => String(o.name) === ref);
+  return match ? String(match.id) : null;
+}
+
 function toOrder(o: Record<string, unknown>): ChannelOrder {
   const ship = rec(o.shipping_address);
   const lines = arr(o.line_items)
@@ -222,10 +240,9 @@ export const shopifyAdapter: ChannelAdapter = {
   async pushShipment(ctx, s) {
     const domain = shopDomain(ctx.connection.storeName);
     const token = await accessToken(domain, ctx.credentials);
-    const fos = arr(
-      (await api(domain, token, `orders/${s.channelOrderId.split('/').pop()}/fulfillment_orders.json`))
-        .fulfillment_orders,
-    )
+    const orderId = await resolveOrderId(domain, token, s.channelOrderId);
+    if (!orderId) return { ok: false, error: `Order ${s.channelOrderId} was not found on the store` };
+    const fos = arr((await api(domain, token, `orders/${orderId}/fulfillment_orders.json`)).fulfillment_orders)
       .map(rec)
       .filter((f) => f.status === 'open' || f.status === 'in_progress');
     if (fos.length === 0) return { ok: false, error: 'Order lines are already fulfilled on the store' };
