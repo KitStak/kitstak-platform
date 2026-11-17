@@ -24,3 +24,6 @@ export * from './settings';
 export * from './standards';
 export * from './time';
 export * from './views';
+export * from './devices';
+export * from './floor';
+export * from './punches';

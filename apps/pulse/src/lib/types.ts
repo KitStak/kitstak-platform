@@ -1029,3 +1029,150 @@ export interface LaborSummaryDTO {
   readonly bridge: CompanyBridgeDTO;
   readonly moneyHidden: boolean;
 }
+
+/* ---------------------------------------------------------------- production team: device links, kiosk, punches, review, pace */
+
+/** A link for a shared screen (floor tablet or wall TV). The secret part is shown once, when it is made. */
+export interface DeviceLinkDTO {
+  readonly id: string;
+  readonly kind: 'wall' | 'kiosk';
+  readonly name: string;
+  readonly siteId: string;
+  readonly siteName: string;
+  /** First characters of the secret, so a person can tell links apart. */
+  readonly tokenPrefix: string;
+  readonly config: Readonly<Record<string, unknown>>;
+  readonly expiresAt: string;
+  readonly lastSeenAt: string | null;
+  readonly revokedAt: string | null;
+  readonly createdBy: string | null;
+  readonly createdAt: string;
+  readonly status: 'active' | 'expired' | 'revoked';
+}
+
+export interface CreatedDeviceLinkDTO {
+  readonly link: DeviceLinkDTO;
+  /** The secret. Only returned by create and renew with a new secret. */
+  readonly token: string;
+  /** Path to open on the device, for example `/kiosk/t/<token>`. */
+  readonly path: string;
+}
+
+export interface KioskPersonDTO {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** What a floor tablet may know before anyone unlocks it. Never money. */
+export interface KioskStateDTO {
+  readonly linkName: string;
+  readonly siteName: string;
+  readonly today: string;
+  readonly idleSeconds: number;
+  readonly shiftHours: DecimalString;
+  readonly people: readonly KioskPersonDTO[];
+}
+
+/** A job card on the floor tablet. Never money. */
+export interface KioskJobDTO {
+  readonly jobId: string;
+  readonly jobNumber: string;
+  readonly jobName: string;
+  readonly clientName: string;
+  readonly unitLabel: string;
+  readonly targetUph: DecimalString | null;
+  readonly plannedUnits: DecimalString;
+  readonly unitsDone: DecimalString;
+  readonly todayUnits: DecimalString;
+  readonly todayHours: DecimalString;
+  readonly usualPeople: number | null;
+}
+
+export interface KioskSessionDTO {
+  readonly session: string;
+  readonly expiresAt: string;
+  readonly person: KioskPersonDTO;
+  readonly jobs: readonly KioskJobDTO[];
+}
+
+export interface KioskSaveDTO {
+  /** True when this entry was already saved earlier (a retry). Nothing was logged twice. */
+  readonly duplicate: boolean;
+  readonly jobId: string;
+  readonly workDate: string;
+  readonly todayUnits: DecimalString;
+  readonly todayHours: DecimalString;
+  readonly uph: DecimalString | null;
+  readonly targetUph: DecimalString | null;
+}
+
+/** One time punch: a person, a day, and a job or a reason. */
+export interface PunchDTO extends StreamRowBase {
+  readonly siteId: string;
+  readonly workDate: string;
+  readonly employeeCode: string;
+  /** Null for readers who may not see names (below manager). */
+  readonly employeeName: string | null;
+  readonly jobId: string | null;
+  readonly jobNumber: string | null;
+  readonly jobName: string | null;
+  readonly reason: string | null;
+  readonly laborClassId: string | null;
+  readonly hours: DecimalString;
+  readonly overtimeHours: DecimalString;
+  readonly payCents: MoneyCents;
+}
+
+export interface PunchRollupDTO {
+  readonly punches: number;
+  readonly productionRows: number;
+  readonly indirectRows: number;
+  readonly paidRows: number;
+}
+
+/** One day in the review queue of a site. */
+export interface DayQueueDTO {
+  readonly siteId: string;
+  readonly siteName: string;
+  readonly date: string;
+  readonly status: 'not_marked' | 'complete' | 'approved' | 'sent_back';
+  readonly review: DayReviewDTO | null;
+  /** Odd rows, computed fresh. Numbers and ids only. */
+  readonly flags: readonly Readonly<Record<string, unknown>>[];
+  /** Active jobs that were logged on the work day before but have nothing on this day. */
+  readonly missingJobs: readonly { readonly jobId: string; readonly jobNumber: string; readonly jobName: string }[];
+  readonly entries: number;
+  readonly jobs: number;
+  readonly unitsGood: DecimalString;
+  readonly hours: DecimalString;
+  readonly locked: boolean;
+}
+
+export interface PaceBoardRowDTO {
+  readonly key: string;
+  readonly label: string;
+  readonly sublabel: string | null;
+  readonly unitsGood: DecimalString;
+  readonly paceHours: DecimalString;
+  readonly uph: DecimalString | null;
+  /** Target pace. For a labor class or a day it is the pace the same units needed at each job's target. */
+  readonly targetUph: DecimalString | null;
+  readonly productivityBp: number | null;
+  readonly days: number;
+}
+
+export interface PaceBoardDTO {
+  readonly from: string;
+  readonly to: string;
+  readonly byJob: readonly (PaceBoardRowDTO & { readonly jobId: string; readonly jobTypeId: string; readonly clientId: string; readonly jobTargetUph: DecimalString | null; readonly jobVersion: number; readonly unitLabel: string })[];
+  readonly byClass: readonly PaceBoardRowDTO[];
+  readonly byDay: readonly PaceBoardRowDTO[];
+}
+
+export interface PaceSuggestionRowDTO extends PaceSuggestionDTO {
+  readonly jobTypeId: string;
+  readonly jobTypeName: string;
+  readonly unitLabel: string;
+  /** The all clients, all classes target in force today, if any. */
+  readonly current: DecimalString | null;
+}
