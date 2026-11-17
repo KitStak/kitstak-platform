@@ -1,49 +1,98 @@
 import { PackageSearch } from 'lucide-react';
 import { Page, Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
-import { RouteTabs } from '@/components/pulse/route-tabs';
 import { Teach } from '@/components/pulse/teach';
 import { PageBlocked } from '@/features/access/page-blocked';
-import { JOB_TABS, JOB_TAB_LABELS, routes, type JobTab } from '@/lib/routes';
+import { JOB_TAB_LABELS, routes, type JobTab } from '@/lib/routes';
+import type { JobDetailDTO } from '@/lib/types';
+import {
+  getJob,
+  getSettings,
+  listJobTypes,
+  listLaborClasses,
+  listSites,
+  listVasServices,
+  todayInZone,
+} from '@/server/domain';
 import { pulsePage } from '@/server/page';
+import { JobFrame } from './job-frame';
 
-/** Tabs a supervisor does not get: they show money. */
+/** Tabs a reader who may not see money does not get: they show money. */
 const MONEY_TABS: readonly JobTab[] = ['plan', 'money-in'];
+
+async function soft<T>(read: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await read;
+  } catch {
+    return fallback;
+  }
+}
 
 /**
  * One job and its tabs: Overview, Plan vs actual, Work log, Materials, Money in, Activity.
- * An unknown number or id lands on a helpful page with the way back, never a blank screen.
+ * The signed in layout answers a real 404 for a job that does not exist; the message below is
+ * the safety net for a job that vanished between the two reads.
  */
-export async function JobPage({ params, tab }: { readonly params: Promise<{ ref: string }>; readonly tab: JobTab }) {
+export async function JobPage({
+  params,
+  tab,
+}: {
+  readonly params: Promise<{ ref: string }>;
+  readonly tab: JobTab;
+}) {
   const ref = decodeURIComponent((await params).ref);
   const page = await pulsePage(routes.jobTab(ref, tab), 'jobs');
   if (page.blocked) return <PageBlocked title="Job" role={page.access.role} />;
-  const tabs = JOB_TABS.filter((id) => page.access.seesMoney || !MONEY_TABS.includes(id));
-  if (!tabs.includes(tab)) return <PageBlocked title={JOB_TAB_LABELS[tab]} role={page.access.role} />;
+  if (!page.access.seesMoney && MONEY_TABS.includes(tab))
+    return <PageBlocked title={JOB_TAB_LABELS[tab]} role={page.access.role} />;
+  let job: JobDetailDTO | null = null;
+  try {
+    job = await getJob(page.ctx, ref);
+  } catch {
+    job = null;
+  }
+  if (!job) {
+    return (
+      <Page title="Job not found" breadcrumbs={[{ label: 'Jobs', href: routes.jobs() }, { label: ref }]}>
+        <Panel>
+          <Teach
+            testId="job-not-found"
+            icon={PackageSearch}
+            title="We could not find that job"
+            why={`There is no job with the number or id ${ref} in ${page.context.org.name}. It may have been deleted, or the link may belong to another workspace.`}
+            actions={
+              <>
+                <ButtonLink href={routes.jobs({ tab: 'all' })}>See all jobs</ButtonLink>
+                {page.can('job:manage') ? (
+                  <ButtonLink href={routes.newJob()} variant="secondary">
+                    Add a job
+                  </ButtonLink>
+                ) : null}
+              </>
+            }
+          />
+        </Panel>
+      </Page>
+    );
+  }
+  const { ctx } = page;
+  const [settings, laborClasses, services, jobTypes, sites] = await Promise.all([
+    getSettings(ctx),
+    soft(listLaborClasses(ctx), []),
+    soft(listVasServices(ctx), []),
+    soft(listJobTypes(ctx), []),
+    soft(listSites(ctx), []),
+  ]);
+  const site = sites.find((item) => item.id === job.siteId);
   return (
-    <Page
-      title={`Job ${ref}`}
-      breadcrumbs={[{ label: 'Jobs', href: routes.jobs() }, { label: ref }]}
-      tabs={<RouteTabs label="Job sections" active={tab} tabs={tabs.map((id) => ({ id, label: JOB_TAB_LABELS[id], href: routes.jobTab(ref, id) }))} />}
-    >
-      <Panel>
-        <Teach
-          testId="job-not-found"
-          icon={PackageSearch}
-          title="We could not find that job"
-          why={`There is no job with the number or id ${ref} in ${page.context.org.name}. It may have been deleted, or the link may belong to another workspace.`}
-          actions={
-            <>
-              <ButtonLink href={routes.jobs({ tab: 'all' })}>See all jobs</ButtonLink>
-              {page.can('job:manage') ? (
-                <ButtonLink href={routes.newJob()} variant="secondary">
-                  Add a job
-                </ButtonLink>
-              ) : null}
-            </>
-          }
-        />
-      </Panel>
-    </Page>
+    <JobFrame
+      initialJob={job}
+      tab={tab}
+      today={site?.today ?? todayInZone(settings.timezone)}
+      settings={settings}
+      laborClasses={laborClasses}
+      services={services}
+      jobTypes={jobTypes}
+    />
   );
 }

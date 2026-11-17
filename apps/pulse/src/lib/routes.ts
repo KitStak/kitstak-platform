@@ -52,6 +52,8 @@ export const routes = {
   log: (opts?: { date?: string; job?: string; site?: string }) => withQuery('/log', { date: opts?.date, job: opts?.job, site: opts?.site }),
   logReview: () => '/log/review',
   logEntries: () => '/log/entries',
+  /** Many days at once (the bulk grid). */
+  logBulk: () => '/log/bulk',
   profit: (opts?: { by?: ProfitView; client?: string; from?: string; to?: string }) =>
     withQuery('/profit', { by: opts?.by, client: opts?.client, from: opts?.from, to: opts?.to }),
   client: (id: string) => `/clients/${encodeURIComponent(id)}`,

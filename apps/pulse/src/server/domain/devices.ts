@@ -52,7 +52,8 @@ function linkStatus(row: Pick<LinkRow, 'revokedAt' | 'expiresAt'>, now = new Dat
 
 /** Lock counters are private to the server: they never leave in a DTO. */
 function publicConfig(config: Record<string, unknown> | null): Record<string, unknown> {
-  const { pinFails: _pinFails, ...rest } = config ?? {};
+  const rest = { ...(config ?? {}) };
+  delete rest.pinFails;
   return rest;
 }
 
@@ -108,7 +109,7 @@ export async function createDeviceLink(ctx: DomainContext, input: DeviceLinkInpu
   const name = cleanText(input.name);
   if (!name) throw invalid('Give the link a name, like "Line 2 tablet".', { name: 'This cannot be empty.' });
   if (input.kind !== 'kiosk' && input.kind !== 'wall') throw invalid('Pick a floor tablet or a wall display.');
-  const { pinFails: _ignored, ...config } = input.config ?? {};
+  const config = publicConfig(input.config ?? null);
   return inTx(async (tx) => {
     const site = await resolveSite(ctx, input.siteId, tx);
     const token = randomBytes(24).toString('base64url');
@@ -160,7 +161,7 @@ export async function updateDeviceLink(ctx: DomainContext, linkId: string, patch
     const site = await getSiteRow(ctx, row.siteId, tx);
     const name = patch.name === undefined ? row.name : cleanText(patch.name);
     if (!name) throw invalid('Give the link a name.', { name: 'This cannot be empty.' });
-    const { pinFails: _ignored, ...wanted } = patch.config ?? {};
+    const wanted = publicConfig(patch.config ?? null);
     const config = patch.config === undefined ? row.config : { ...wanted, ...(row.config?.pinFails ? { pinFails: row.config.pinFails } : {}) };
     const [after] = await tx.update(deviceLinks).set({ name, config, updatedAt: new Date() }).where(eq(deviceLinks.id, row.id)).returning();
     return toLinkDTO(after!, site.name);

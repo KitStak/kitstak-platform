@@ -11,10 +11,24 @@ import { formatHours, formatMoney, formatMoneyPlain, formatPercentBp } from '@/l
 import { shortDate } from '@/lib/profit/calendar';
 import type { JobListItemDTO } from '@/lib/types';
 import { cn } from '@/components/ui/cn';
-import { riskRank, singularUnit } from './job-math';
+import { riskRank } from './job-math';
 import { Hidden, JobStatusBadge, RiskPill, UnitsProgress, toneClass } from './job-ui';
 
-export type ColumnId = 'client' | 'type' | 'site' | 'owner' | 'status' | 'risk' | 'done' | 'hours' | 'margin' | 'projMargin' | 'projProfit' | 'trend' | 'due' | 'last';
+export type ColumnId =
+  | 'client'
+  | 'type'
+  | 'site'
+  | 'owner'
+  | 'status'
+  | 'risk'
+  | 'done'
+  | 'hours'
+  | 'margin'
+  | 'projMargin'
+  | 'projProfit'
+  | 'trend'
+  | 'due'
+  | 'last';
 
 export interface ColumnContext {
   readonly trends: ReadonlyMap<string, readonly number[]>;
@@ -38,7 +52,8 @@ export interface JobColumn {
   readonly className?: string;
 }
 
-const money = (cents: number | null): ReactNode => (cents === null ? <Hidden /> : formatMoney(cents, { cents: false }));
+const money = (cents: number | null): ReactNode =>
+  cents === null ? <Hidden /> : formatMoney(cents, { cents: false });
 
 function marginTone(marginBp: number | null, targetBp: number | null): 'good' | 'bad' | 'neutral' {
   if (marginBp === null) return 'neutral';
@@ -99,7 +114,9 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     cell: (job) => (
       <div className="flex min-w-0 flex-col gap-0.5 py-0.5">
         <RiskPill job={job} size="sm" />
-        {job.stats.headline ? <span className="line-clamp-2 text-xs text-fg-secondary">{job.stats.headline}</span> : null}
+        {job.stats.headline ? (
+          <span className="line-clamp-2 text-xs text-fg-secondary">{job.stats.headline}</span>
+        ) : null}
       </div>
     ),
     csv: (job) => [job.stats.riskStatus ? PULSE_STATUS_LABELS[job.stats.riskStatus] : '', job.stats.headline],
@@ -111,7 +128,15 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     longLabel: 'Units done of planned',
     defaultOn: true,
     sort: (job) => job.stats.pctCompleteBp ?? -1,
-    cell: (job) => <UnitsProgress compact done={job.stats.unitsGood} planned={job.plannedUnits} pctBp={job.stats.pctCompleteBp} unit={singularUnit(job.unitLabel)} />,
+    cell: (job) => (
+      <UnitsProgress
+        compact
+        done={job.stats.unitsGood}
+        planned={job.plannedUnits}
+        pctBp={job.stats.pctCompleteBp}
+        unit={job.unitLabel}
+      />
+    ),
     csv: (job) => [job.stats.unitsGood, job.plannedUnits],
     csvHeaders: ['Units done', 'Units planned'],
   },
@@ -125,7 +150,9 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     cell: (job) => (
       <span className="whitespace-nowrap">
         {formatHours(job.stats.hours, { maxDigits: 0 })}
-        {job.planLaborHours ? <span className="text-fg-muted"> of {formatHours(job.planLaborHours, { maxDigits: 0 })}</span> : null}
+        {job.planLaborHours ? (
+          <span className="text-fg-muted"> of {formatHours(job.planLaborHours, { maxDigits: 0 })}</span>
+        ) : null}
       </span>
     ),
     csv: (job) => [job.stats.hours, job.planLaborHours],
@@ -144,11 +171,22 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
         <Hidden />
       ) : (
         <span className="flex flex-col items-end leading-tight whitespace-nowrap">
-          <span className={cn('font-medium', toneClass(marginTone(job.stats.marginBp, job.stats.targetMarginBp)))}>{formatPercentBp(job.stats.marginBp, { empty: 'None yet' })}</span>
-          {job.stats.targetMarginBp !== null ? <span className="text-2xs text-fg-muted">target {formatPercentBp(job.stats.targetMarginBp, { digits: 0 })}</span> : null}
+          <span
+            className={cn('font-medium', toneClass(marginTone(job.stats.marginBp, job.stats.targetMarginBp)))}
+          >
+            {formatPercentBp(job.stats.marginBp, { empty: 'None yet' })}
+          </span>
+          {job.stats.targetMarginBp !== null ? (
+            <span className="text-2xs text-fg-muted">
+              target {formatPercentBp(job.stats.targetMarginBp, { digits: 0 })}
+            </span>
+          ) : null}
         </span>
       ),
-    csv: (job) => [job.stats.marginBp === null ? null : job.stats.marginBp / 100, job.stats.targetMarginBp === null ? null : job.stats.targetMarginBp / 100],
+    csv: (job) => [
+      job.stats.marginBp === null ? null : job.stats.marginBp / 100,
+      job.stats.targetMarginBp === null ? null : job.stats.targetMarginBp / 100,
+    ],
     csvHeaders: ['Margin now %', 'Target margin %'],
   },
   {
@@ -159,7 +197,14 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     money: true,
     defaultOn: false,
     sort: (job) => job.stats.projectedMarginBp,
-    cell: (job) => (job.stats.moneyHidden ? <Hidden /> : <span className={toneClass(marginTone(job.stats.projectedMarginBp, job.stats.targetMarginBp))}>{formatPercentBp(job.stats.projectedMarginBp, { empty: 'No projection' })}</span>),
+    cell: (job) =>
+      job.stats.moneyHidden ? (
+        <Hidden />
+      ) : (
+        <span className={toneClass(marginTone(job.stats.projectedMarginBp, job.stats.targetMarginBp))}>
+          {formatPercentBp(job.stats.projectedMarginBp, { empty: 'No projection' })}
+        </span>
+      ),
     csv: (job) => [job.stats.projectedMarginBp === null ? null : job.stats.projectedMarginBp / 100],
     csvHeaders: ['Projected margin %'],
   },
@@ -177,9 +222,16 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
       ) : job.stats.projectedProfitCents === null ? (
         <span className="text-fg-muted">No projection</span>
       ) : (
-        <span className={cn('font-medium', job.stats.projectedProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{money(job.stats.projectedProfitCents)}</span>
+        <span
+          className={cn('font-medium', job.stats.projectedProfitCents < 0 ? 'text-danger-text' : 'text-fg')}
+        >
+          {money(job.stats.projectedProfitCents)}
+        </span>
       ),
-    csv: (job) => [job.stats.projectedProfitCents === null ? null : formatMoneyPlain(job.stats.projectedProfitCents), job.stats.profitCents === null ? null : formatMoneyPlain(job.stats.profitCents)],
+    csv: (job) => [
+      job.stats.projectedProfitCents === null ? null : formatMoneyPlain(job.stats.projectedProfitCents),
+      job.stats.profitCents === null ? null : formatMoneyPlain(job.stats.profitCents),
+    ],
     csvHeaders: ['Projected profit', 'Profit so far'],
   },
   {
@@ -189,9 +241,19 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     defaultOn: true,
     cell: (job, ctx) => {
       const values = ctx.trends.get(job.id);
-      if (!values || values.every((value) => value === 0)) return <span className="text-xs text-fg-muted">No entries</span>;
+      if (!values || values.every((value) => value === 0))
+        return <span className="text-xs text-fg-muted">No entries</span>;
       const last = values[values.length - 1] ?? 0;
-      return <Sparkline values={[...values]} label={ctx.seesMoney ? `Profit by week for ${job.number}` : `Units by week for ${job.number}`} format={ctx.seesMoney ? 'money' : 'number'} tone={ctx.seesMoney && last < 0 ? 'bad' : 'accent'} width={84} height={24} />;
+      return (
+        <Sparkline
+          values={[...values]}
+          label={ctx.seesMoney ? `Profit by week for ${job.number}` : `Units by week for ${job.number}`}
+          format={ctx.seesMoney ? 'money' : 'number'}
+          tone={ctx.seesMoney && last < 0 ? 'bad' : 'accent'}
+          width={84}
+          height={24}
+        />
+      );
     },
     csv: () => [],
     csvHeaders: [],
@@ -203,11 +265,18 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     sort: (job) => job.dueDate ?? '9999',
     cell: (job) => {
       if (!job.dueDate) return <span className="text-fg-muted">No date</span>;
-      const late = job.stats.projectedFinishDate !== null && job.stats.projectedFinishDate > job.dueDate && job.status !== 'completed';
+      const late =
+        job.stats.projectedFinishDate !== null &&
+        job.stats.projectedFinishDate > job.dueDate &&
+        job.status !== 'completed';
       return (
         <span className="flex flex-col leading-tight whitespace-nowrap">
           <span>{shortDate(job.dueDate)}</span>
-          {late ? <span className="text-2xs text-danger-text">heading for {shortDate(job.stats.projectedFinishDate as string)}</span> : null}
+          {late ? (
+            <span className="text-2xs text-danger-text">
+              heading for {shortDate(job.stats.projectedFinishDate as string)}
+            </span>
+          ) : null}
         </span>
       );
     },
@@ -219,12 +288,19 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     label: 'Last entry',
     defaultOn: false,
     sort: (job) => job.stats.lastEntryDate ?? '0000',
-    cell: (job) => (job.stats.lastEntryDate ? <span className="whitespace-nowrap text-fg-secondary">{shortDate(job.stats.lastEntryDate)}</span> : <span className="text-fg-muted">None yet</span>),
+    cell: (job) =>
+      job.stats.lastEntryDate ? (
+        <span className="whitespace-nowrap text-fg-secondary">{shortDate(job.stats.lastEntryDate)}</span>
+      ) : (
+        <span className="text-fg-muted">None yet</span>
+      ),
     csv: (job) => [job.stats.lastEntryDate],
   },
 ];
 
-export const DEFAULT_COLUMNS: readonly ColumnId[] = JOB_COLUMNS.filter((column) => column.defaultOn).map((column) => column.id);
+export const DEFAULT_COLUMNS: readonly ColumnId[] = JOB_COLUMNS.filter((column) => column.defaultOn).map(
+  (column) => column.id,
+);
 
 export type SortKey = 'worst' | 'number' | 'name' | ColumnId;
 
@@ -249,13 +325,29 @@ function compare(a: number | string | null, b: number | string | null): number {
 }
 
 /** Sorts a copy. "Worst first" is status, then the lowest projected profit, then the due date. */
-export function sortJobs(jobs: readonly JobListItemDTO[], key: SortKey, dir: 'asc' | 'desc'): JobListItemDTO[] {
+export function sortJobs(
+  jobs: readonly JobListItemDTO[],
+  key: SortKey,
+  dir: 'asc' | 'desc',
+): JobListItemDTO[] {
   const list = [...jobs];
   const sign = dir === 'asc' ? 1 : -1;
   if (key === 'worst') {
-    return list.sort((a, b) => sign * (riskRank(a) - riskRank(b) || compare(a.stats.projectedProfitCents, b.stats.projectedProfitCents) || compare(a.dueDate, b.dueDate) || compare(a.number, b.number)));
+    return list.sort(
+      (a, b) =>
+        sign *
+        (riskRank(a) - riskRank(b) ||
+          compare(a.stats.projectedProfitCents, b.stats.projectedProfitCents) ||
+          compare(a.dueDate, b.dueDate) ||
+          compare(a.number, b.number)),
+    );
   }
-  const pick = key === 'number' ? (job: JobListItemDTO) => job.number : key === 'name' ? (job: JobListItemDTO) => job.name.toLowerCase() : (JOB_COLUMNS.find((column) => column.id === key)?.sort ?? ((job: JobListItemDTO) => job.number));
+  const pick =
+    key === 'number'
+      ? (job: JobListItemDTO) => job.number
+      : key === 'name'
+        ? (job: JobListItemDTO) => job.name.toLowerCase()
+        : (JOB_COLUMNS.find((column) => column.id === key)?.sort ?? ((job: JobListItemDTO) => job.number));
   return list.sort((a, b) => {
     const left = pick(a);
     const right = pick(b);
@@ -266,9 +358,23 @@ export function sortJobs(jobs: readonly JobListItemDTO[], key: SortKey, dir: 'as
 }
 
 /** The header row and the rows of the CSV export for the columns on screen. */
-export function jobsCsv(jobs: readonly JobListItemDTO[], columns: readonly ColumnId[], ctx: ColumnContext): { headers: string[]; rows: (string | number | null)[][] } {
-  const shown = JOB_COLUMNS.filter((column) => columns.includes(column.id) && (ctx.seesMoney || !column.money));
-  const headers = ['Job number', 'Job name', ...shown.flatMap((column) => column.csvHeaders ?? [column.label])];
-  const rows = jobs.map((job) => [job.number, job.name, ...shown.flatMap((column) => [...column.csv(job, ctx)])]);
+export function jobsCsv(
+  jobs: readonly JobListItemDTO[],
+  columns: readonly ColumnId[],
+  ctx: ColumnContext,
+): { headers: string[]; rows: (string | number | null)[][] } {
+  const shown = JOB_COLUMNS.filter(
+    (column) => columns.includes(column.id) && (ctx.seesMoney || !column.money),
+  );
+  const headers = [
+    'Job number',
+    'Job name',
+    ...shown.flatMap((column) => column.csvHeaders ?? [column.label]),
+  ];
+  const rows = jobs.map((job) => [
+    job.number,
+    job.name,
+    ...shown.flatMap((column) => [...column.csv(job, ctx)]),
+  ]);
   return { headers, rows };
 }

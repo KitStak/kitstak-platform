@@ -1,1 +1,1 @@
-export { LogEntriesPage, LogPage, LogReviewPage } from './log-page';
+export { LogBulkPage, LogEntriesPage, LogPage, LogReviewPage } from './log-page';

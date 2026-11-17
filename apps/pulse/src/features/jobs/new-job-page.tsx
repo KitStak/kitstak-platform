@@ -1,13 +1,49 @@
 import { FileSpreadsheet, PackagePlus } from 'lucide-react';
 import { Page, Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
-import { StepList, Teach } from '@/components/pulse/teach';
+import { Teach } from '@/components/pulse/teach';
 import { PageBlocked } from '@/features/access/page-blocked';
+import { shiftDate } from '@/features/jobs/job-math';
 import { routes } from '@/lib/routes';
+import {
+  findClientByRef,
+  getProfit,
+  getSettings,
+  listClients,
+  listJobTypes,
+  listJobs,
+  listLaborClasses,
+  listOrgPeople,
+  listSites,
+  listVasServices,
+  todayInZone,
+} from '@/server/domain';
 import { pulsePage } from '@/server/page';
+import { NewJobWizard } from './new-job-wizard';
+import { readCents } from './new-job-math';
+import { listJobSources } from './server/job-sources';
 
-/** New job: three steps (basics, price and plan, links). Prefills from a CRM deal, a WMS work order or a project. */
-export async function NewJobPage() {
+type Query = Record<string, string | string[] | undefined>;
+
+function first(query: Query, key: string, max = 200): string {
+  const value = query[key];
+  return ((Array.isArray(value) ? value[0] : value) ?? '').trim().slice(0, max);
+}
+
+async function soft<T>(read: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await read;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * New job: basics, price and plan, review. Prefills from `?crmDeal=`, `?wmsWorkOrder=`,
+ * `?project=`, `?client=`, `?coreCustomerId=`, `?crmAccountItemId=`, `?name=` and `?value=`.
+ */
+export async function NewJobPage({ searchParams }: { readonly searchParams?: Promise<Query> }) {
+  const query = (await searchParams) ?? {};
   const page = await pulsePage(routes.newJob(), 'jobs');
   if (page.blocked) return <PageBlocked title="New job" role={page.access.role} />;
   const breadcrumbs = [{ label: 'Jobs', href: routes.jobs() }, { label: 'New job' }];
@@ -25,42 +61,89 @@ export async function NewJobPage() {
       </Page>
     );
   }
-  const integrations = await page.integrations();
-  const linkable = [integrations.crm ? 'a CRM deal' : null, integrations.wms ? 'a warehouse work order' : null, integrations.projects ? 'a project' : null].filter((value): value is string => value !== null);
+  const { ctx } = page;
+  const [settings, clients, jobTypes, sites, laborClasses, services, people, recent, sources] =
+    await Promise.all([
+      getSettings(ctx),
+      soft(listClients(ctx, {}), []),
+      soft(listJobTypes(ctx), []),
+      soft(listSites(ctx), []),
+      soft(listLaborClasses(ctx), []),
+      soft(listVasServices(ctx), []),
+      soft(listOrgPeople(ctx), []),
+      soft(listJobs(ctx, { tab: 'all', limit: 40 }), []),
+      listJobSources(ctx),
+    ]);
+  const site = sites.find((item) => item.isDefault) ?? sites[0];
+  const today = site?.today ?? todayInZone(settings.timezone);
+  // The same 90 day window the server uses to fill a plan's time not on a job.
+  const recentProfit = page.access.seesMoney
+    ? await soft(getProfit(ctx, 'month', { from: shiftDate(today, -89), to: today }), null)
+    : null;
+
+  const clientRef = {
+    pulseClientId: first(query, 'client') || null,
+    coreCustomerId: first(query, 'coreCustomerId') || null,
+    crmAccountItemId: first(query, 'crmAccountItemId') || null,
+  };
+  const prefillClient =
+    clientRef.pulseClientId || clientRef.coreCustomerId || clientRef.crmAccountItemId
+      ? await soft(findClientByRef(ctx, clientRef), null)
+      : null;
+  const valueCents = readCents(first(query, 'value', 20));
+
   return (
-    <Page title="New job" subtitle="A job is one piece of work for one client, with one kind of unit and one price." breadcrumbs={breadcrumbs} width="narrow">
-      <div className="flex flex-col gap-5">
-        <Panel title="What a job needs">
-          <StepList
-            steps={[
-              { title: 'Basics', detail: 'The client, the kind of work, a name, how many units, and the dates. One time or ongoing.' },
-              { title: 'Price and plan', detail: 'How you charge, the price, who buys the parts, and a quick plan: hours or units per person per hour, the usual crew, material cost per unit. You see the margin before you save.' },
-              {
-                title: 'Links',
-                detail: linkable.length ? `Tie the job to ${linkable.join(', ')} so the numbers flow in on their own. Always optional.` : 'Nothing to link. Pulse works on its own, and you can connect other KitStak apps later.',
-              },
-            ]}
-          />
-        </Panel>
-        <Panel>
-          <Teach
-            size="sm"
-            icon={FileSpreadsheet}
-            title="Have your jobs in a spreadsheet?"
-            why="Download the jobs template, paste your rows in, and bring them all in at once. Pulse checks every row before anything is saved."
-            actions={
-              <>
-                <ButtonLink href={routes.newImport('jobs')} icon={<FileSpreadsheet aria-hidden />}>
-                  Import jobs
-                </ButtonLink>
-                <ButtonLink href={routes.jobs()} variant="secondary">
-                  Back to Jobs
-                </ButtonLink>
-              </>
-            }
-          />
-        </Panel>
-      </div>
+    <Page
+      title="New job"
+      subtitle="A job is one piece of work for one client, with one kind of unit and one price."
+      breadcrumbs={breadcrumbs}
+      actions={
+        <ButtonLink
+          href={routes.newImport('jobs')}
+          variant="secondary"
+          icon={<FileSpreadsheet aria-hidden />}
+          className="hidden sm:inline-flex"
+        >
+          Import many at once
+        </ButtonLink>
+      }
+    >
+      <NewJobWizard
+        clients={clients}
+        jobTypes={jobTypes}
+        sites={sites}
+        laborClasses={laborClasses}
+        services={services}
+        people={people}
+        recentJobs={recent.map((job) => ({
+          id: job.id,
+          number: job.number,
+          name: job.name,
+          clientName: job.clientName,
+        }))}
+        deals={sources.deals}
+        workOrders={sources.workOrders}
+        seesMoney={page.access.seesMoney}
+        defaults={{
+          targetMarginBp: settings.defaultTargetMarginBp,
+          loadedRateCents: settings.defaultLoadedRateCents,
+          partsOwner: settings.defaultPartsOwner,
+          sharedRule: settings.sharedCostRule,
+          sharedPctBp: settings.sharedPctBp,
+          shared90Cents: recentProfit?.total.sharedCents ?? null,
+          labor90Cents: recentProfit?.total.laborCents ?? null,
+          today,
+          meId: ctx.userId,
+        }}
+        prefill={{
+          clientName: prefillClient?.name,
+          name: first(query, 'name') || undefined,
+          valueCents,
+          dealId: first(query, 'crmDeal', 64) || undefined,
+          workOrderId: first(query, 'wmsWorkOrder', 64) || undefined,
+          projectId: first(query, 'project', 64) || undefined,
+        }}
+      />
     </Page>
   );
 }

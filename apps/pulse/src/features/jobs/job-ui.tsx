@@ -6,7 +6,18 @@
  */
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ArrowRight, CircleAlert, CircleCheck, CirclePause, CircleSlash, Clock3, Info, PlayCircle, RotateCw, type LucideIcon } from 'lucide-react';
+import {
+  ArrowRight,
+  CircleAlert,
+  CircleCheck,
+  CirclePause,
+  CircleSlash,
+  Clock3,
+  Info,
+  PlayCircle,
+  RotateCw,
+  type LucideIcon,
+} from 'lucide-react';
 import { Button, Popover, PopoverContent, PopoverTrigger } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { MarginPill } from '@/components/charts/stats';
@@ -18,16 +29,31 @@ import { nextStepHref } from './job-math';
 const STATUS_STYLE: Readonly<Record<JobStatusValue, { icon: LucideIcon; className: string }>> = {
   planned: { icon: Clock3, className: 'bg-[var(--label-blue-subtle)] text-[var(--label-blue-text)]' },
   active: { icon: PlayCircle, className: 'bg-success-subtle text-success-text' },
-  on_hold: { icon: CirclePause, className: 'bg-[var(--label-yellow-subtle)] text-[var(--label-yellow-text)]' },
+  on_hold: {
+    icon: CirclePause,
+    className: 'bg-[var(--label-yellow-subtle)] text-[var(--label-yellow-text)]',
+  },
   completed: { icon: CircleCheck, className: 'bg-muted text-fg-secondary' },
   cancelled: { icon: CircleSlash, className: 'bg-muted text-fg-muted' },
 };
 
 /** Where the job is in its life: icon and word, never color alone. */
-export function JobStatusBadge({ status, className }: { readonly status: JobStatusValue; readonly className?: string }) {
+export function JobStatusBadge({
+  status,
+  className,
+}: {
+  readonly status: JobStatusValue;
+  readonly className?: string;
+}) {
   const { icon: Icon, className: tone } = STATUS_STYLE[status];
   return (
-    <span className={cn('inline-flex h-5 items-center gap-1 rounded-sm px-2 text-xs font-medium whitespace-nowrap', tone, className)}>
+    <span
+      className={cn(
+        'inline-flex h-5 items-center gap-1 rounded-sm px-2 text-xs font-medium whitespace-nowrap',
+        tone,
+        className,
+      )}
+    >
       <Icon aria-hidden className="size-3 shrink-0" strokeWidth={2.25} />
       {JOB_STATUS_LABELS[status]}
     </span>
@@ -38,9 +64,20 @@ export function JobStatusBadge({ status, className }: { readonly status: JobStat
  * The risk pill. Click or focus opens the top three reasons in plain words, what each one costs
  * and the next step, so nobody has to open the job to learn why it is flagged.
  */
-export function RiskPill({ job, size = 'md', withReasons = true }: { readonly job: JobListItemDTO; readonly size?: 'sm' | 'md'; readonly withReasons?: boolean }) {
+export function RiskPill({
+  job,
+  size = 'md',
+  withReasons = true,
+}: {
+  readonly job: JobListItemDTO;
+  readonly size?: 'sm' | 'md';
+  readonly withReasons?: boolean;
+}) {
   const status = job.stats.riskStatus;
-  if (!status) return <span className="text-xs text-fg-muted">{job.status === 'planned' ? 'Not started' : 'No status'}</span>;
+  if (!status)
+    return (
+      <span className="text-xs text-fg-muted">{job.status === 'planned' ? 'Not started' : 'No status'}</span>
+    );
   const reasons = job.stats.riskReasons.slice(0, 3);
   if (!withReasons || reasons.length === 0) return <MarginPill status={status} size={size} />;
   const step = reasons.find((reason) => reason.nextStep);
@@ -57,7 +94,11 @@ export function RiskPill({ job, size = 'md', withReasons = true }: { readonly jo
           <MarginPill status={status} size={size} />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[340px] max-w-[calc(100vw-32px)]" onClick={(event) => event.stopPropagation()}>
+      <PopoverContent
+        align="start"
+        className="w-[340px] max-w-[calc(100vw-32px)]"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex flex-col gap-3 p-1">
           <div>
             <p className="text-xs font-medium text-fg-muted">Why {job.number} is flagged</p>
@@ -67,7 +108,11 @@ export function RiskPill({ job, size = 'md', withReasons = true }: { readonly jo
                   <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-muted" />
                   <span>
                     {reason.text}
-                    {reason.impactCents !== null && reason.impactCents < 0 ? <span className="ml-1 text-xs whitespace-nowrap text-danger-text tabular-nums">{formatMoney(reason.impactCents, { cents: false })} of profit</span> : null}
+                    {reason.impactCents !== null && reason.impactCents < 0 ? (
+                      <span className="ml-1 text-xs whitespace-nowrap text-danger-text tabular-nums">
+                        {formatMoney(reason.impactCents, { cents: false })} of profit
+                      </span>
+                    ) : null}
                   </span>
                 </li>
               ))}
@@ -99,7 +144,19 @@ export interface ExplainRow {
  * "How we got this": the inputs behind one number, with the rule in one plain sentence. Built
  * from the same DTO fields the number itself comes from.
  */
-export function Explain({ title, rule, rows, footnote, label }: { readonly title: string; readonly rule: string; readonly rows: readonly ExplainRow[]; readonly footnote?: ReactNode; readonly label?: string }) {
+export function Explain({
+  title,
+  rule,
+  rows,
+  footnote,
+  label,
+}: {
+  readonly title: string;
+  readonly rule: string;
+  readonly rows: readonly ExplainRow[];
+  readonly footnote?: ReactNode;
+  readonly label?: string;
+}) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -122,7 +179,14 @@ export function Explain({ title, rule, rows, footnote, label }: { readonly title
           {rows.length > 0 ? (
             <dl className="flex flex-col rounded-lg border border-border-subtle bg-sunken text-sm tabular-nums">
               {rows.map((row) => (
-                <div key={row.label} className={cn('flex items-baseline justify-between gap-3 px-3 py-1.5', row.kind === 'total' && 'border-t border-border-default font-semibold text-fg', row.kind === 'note' && 'text-fg-muted')}>
+                <div
+                  key={row.label}
+                  className={cn(
+                    'flex items-baseline justify-between gap-3 px-3 py-1.5',
+                    row.kind === 'total' && 'border-t border-border-default font-semibold text-fg',
+                    row.kind === 'note' && 'text-fg-muted',
+                  )}
+                >
                   <dt className="min-w-0 text-fg-secondary">
                     {row.kind === 'minus' ? <span aria-hidden>less </span> : null}
                     {row.label}
@@ -140,7 +204,19 @@ export function Explain({ title, rule, rows, footnote, label }: { readonly title
 }
 
 /** Units done of units planned, as a bar with the words next to it. */
-export function UnitsProgress({ done, planned, pctBp, unit, compact = false }: { readonly done: string; readonly planned: string; readonly pctBp: number | null; readonly unit: string; readonly compact?: boolean }) {
+export function UnitsProgress({
+  done,
+  planned,
+  pctBp,
+  unit,
+  compact = false,
+}: {
+  readonly done: string;
+  readonly planned: string;
+  readonly pctBp: number | null;
+  readonly unit: string;
+  readonly compact?: boolean;
+}) {
   const hasPlan = Number(planned) > 0;
   const pct = pctBp === null ? null : Math.max(0, Math.min(100, pctBp / 100));
   const doneText = formatNumber(done, { maxDigits: 0 });
@@ -153,7 +229,14 @@ export function UnitsProgress({ done, planned, pctBp, unit, compact = false }: {
         {compact ? null : <span className="text-fg-muted"> {unit}</span>}
       </span>
       {hasPlan && pct !== null ? (
-        <span role="progressbar" aria-label={`${doneText} of ${plannedText} ${unit} done`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="block h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <span
+          role="progressbar"
+          aria-label={`${doneText} of ${plannedText} ${unit} done`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(pct)}
+          className="block h-1.5 w-full overflow-hidden rounded-full bg-muted"
+        >
           <span className="block h-full rounded-full bg-info" style={{ width: `${pct}%` }} />
         </span>
       ) : null}
@@ -162,10 +245,25 @@ export function UnitsProgress({ done, planned, pctBp, unit, compact = false }: {
 }
 
 /** A read failed: say so in plain words and offer the retry. */
-export function LoadError({ what, message, onRetry }: { readonly what: string; readonly message?: string; readonly onRetry?: () => void }) {
+export function LoadError({
+  what,
+  message,
+  onRetry,
+}: {
+  readonly what: string;
+  readonly message?: string;
+  readonly onRetry?: () => void;
+}) {
   return (
-    <div role="alert" data-testid="load-error" className="flex flex-col items-center gap-3 rounded-xl border border-border-subtle bg-panel px-6 py-10 text-center">
-      <span aria-hidden className="flex size-12 items-center justify-center rounded-2xl bg-danger-subtle text-danger-text">
+    <div
+      role="alert"
+      data-testid="load-error"
+      className="flex flex-col items-center gap-3 rounded-xl border border-border-subtle bg-panel px-6 py-10 text-center"
+    >
+      <span
+        aria-hidden
+        className="flex size-12 items-center justify-center rounded-2xl bg-danger-subtle text-danger-text"
+      >
         <CircleAlert className="size-6" />
       </span>
       <div>

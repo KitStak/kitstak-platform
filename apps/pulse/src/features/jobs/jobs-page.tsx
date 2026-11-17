@@ -10,7 +10,12 @@ import { listClients, listJobTypes, listJobs, listSites, todayInZone } from '@/s
 import { pulsePage } from '@/server/page';
 import { JobsView } from './jobs-view';
 
-const TAB_LABELS: Readonly<Record<JobTab, string>> = { open: 'Open', all: 'All', completed: 'Completed', planned: 'Planned' };
+const TAB_LABELS: Readonly<Record<JobTab, string>> = {
+  open: 'Open',
+  all: 'All',
+  completed: 'Completed',
+  planned: 'Planned',
+};
 
 function first(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? '';
@@ -31,7 +36,11 @@ async function soft<T>(read: Promise<T>): Promise<T | undefined> {
 }
 
 /** Jobs: the open jobs list (at risk and losing money first) and the All, Completed and Planned tabs. */
-export async function JobsPage({ searchParams }: { readonly searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+export async function JobsPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const query = await searchParams;
   const tab = parseTab(query.tab);
   const page = await pulsePage(routes.jobs({ tab: tab === 'open' ? undefined : tab }), 'jobs');
@@ -55,7 +64,12 @@ export async function JobsPage({ searchParams }: { readonly searchParams: Promis
       actions={
         canManage ? (
           <>
-            <ButtonLink href={routes.newImport('jobs')} variant="secondary" icon={<FileSpreadsheet aria-hidden />} className="hidden sm:inline-flex">
+            <ButtonLink
+              href={routes.newImport('jobs')}
+              variant="secondary"
+              icon={<FileSpreadsheet aria-hidden />}
+              className="hidden sm:inline-flex"
+            >
               Import jobs
             </ButtonLink>
             <ButtonLink href={routes.newJob()} icon={<PackagePlus aria-hidden />} testId="jobs-new">
@@ -64,9 +78,30 @@ export async function JobsPage({ searchParams }: { readonly searchParams: Promis
           </>
         ) : null
       }
-      tabs={<RouteTabs label="Job lists" active={tab} tabs={JOB_TABS.map((id) => ({ id, label: TAB_LABELS[id], href: routes.jobs({ tab: id === 'open' ? undefined : id }) }))} />}
+      tabs={
+        <RouteTabs
+          label="Job lists"
+          active={tab}
+          tabs={JOB_TABS.map((id) => ({
+            id,
+            label: TAB_LABELS[id],
+            href: routes.jobs({ tab: id === 'open' ? undefined : id }),
+          }))}
+        />
+      }
     >
-      <JobsView key={tab} tab={tab} initialJobs={jobs} initialRisk={risk} initialQuery={first(query.q).slice(0, 80)} clients={clients ?? []} jobTypes={jobTypes ?? []} sites={sites ?? []} today={site?.today ?? todayInZone('UTC')} initialViewId={first(query.view) || null} />
+      <JobsView
+        key={tab}
+        tab={tab}
+        initialJobs={jobs}
+        initialRisk={risk}
+        initialQuery={first(query.q).slice(0, 80)}
+        clients={clients ?? []}
+        jobTypes={jobTypes ?? []}
+        sites={sites ?? []}
+        today={site?.today ?? todayInZone('UTC')}
+        initialViewId={first(query.view) || null}
+      />
     </Page>
   );
 }

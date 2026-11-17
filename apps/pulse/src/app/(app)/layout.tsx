@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { AppShell, LockedScreen, NoAccessScreen } from '@/features/shell';
+import { jobRouteMissing } from '@/features/jobs/server/job-exists';
 import { loadShell } from '@/features/shell/shell-frame';
 import { listOrgPeople } from '@/server/domain';
 import { requirePageContext } from '@/server/session';
@@ -46,6 +47,7 @@ export default async function AppLayout({ children }: { readonly children: React
   // existence check here the same way.
   const report = /^\/reports\/([^/?#]+)/.exec(path);
   if (report && !reportInfo(decodeURIComponent(report[1] ?? ''))) notFound();
+  if (await jobRouteMissing(shell.ctx, path)) notFound();
   // Org people ride along with the first HTML so names (job owners, who logged a row) render on
   // the server instead of a placeholder that swaps in on the client.
   const people = await loadPeople(shell.ctx);

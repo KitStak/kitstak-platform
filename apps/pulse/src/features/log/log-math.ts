@@ -127,11 +127,18 @@ export function toPayload(values: LineValues): { unitsGood: string; unitsScrap: 
   };
 }
 
-/** The "Is that right?" question of SPEC 4.4, or null. */
+/**
+ * The "Is that right?" question of SPEC 4.4, or null. The rule fires when labor hours are far
+ * from people times a full shift. A short run with an honest hours each (3 people for 2 hours) is
+ * normal, so the question is only asked when the hours each that comes out is under 1 or over 16:
+ * the mark of labor hours typed where hours each was meant, or the other way around.
+ */
 export function crewQuestion(values: LineValues, shiftHours: string): string | null {
   const hours = parseTyped(values.hours);
   const people = parseTyped(values.people);
   if (hours === null || people === null || hours === 0 || people === 0) return null;
+  const each = hours / people;
+  if (each >= 1 && each <= 16) return null;
   return crewHoursCheck({ hours, people, shiftHours })?.message ?? null;
 }
 
@@ -261,8 +268,7 @@ export const DEFAULT_PACE_THRESHOLDS: PaceThresholds = { watchBp: 9000, riskBp: 
 
 export function paceTone(bp: number | null, thresholds: PaceThresholds = DEFAULT_PACE_THRESHOLDS): PaceTone {
   if (bp === null) return 'none';
-  if (bp >= 10000) return 'good';
-  if (bp >= Math.min(thresholds.watchBp, 9999)) return 'good';
+  if (bp >= thresholds.watchBp) return 'good';
   return bp >= thresholds.riskBp ? 'watch' : 'bad';
 }
 

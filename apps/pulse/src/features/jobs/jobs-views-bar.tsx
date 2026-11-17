@@ -8,7 +8,22 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { BookmarkPlus, Check, MoreHorizontal, Trash2, Users } from 'lucide-react';
-import { Button, Checkbox, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Field, Input, toast } from '@/components/ui';
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Field,
+  Input,
+  toast,
+} from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { useSavedViews } from '@/lib/hooks/use-data';
 import { qk } from '@/lib/query-keys';
@@ -30,7 +45,15 @@ export interface JobsViewsBarProps {
   readonly initialViewId?: string | null;
 }
 
-export function JobsViewsBar({ tab, current, activeId, onApply, canShare, clients, initialViewId }: JobsViewsBarProps) {
+export function JobsViewsBar({
+  tab,
+  current,
+  activeId,
+  onApply,
+  canShare,
+  clients,
+  initialViewId,
+}: JobsViewsBarProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const views = useSavedViews('jobs');
@@ -58,7 +81,10 @@ export function JobsViewsBar({ tab, current, activeId, onApply, canShare, client
     const view = views.data.find((item) => item.id === initialViewId);
     if (view) onApply(toViewConfig(view.config, { clients }), view.id);
   }, [initialViewId, views.data, clients, onApply]);
-  const isDefault = activeId === null && JSON.stringify({ ...current, columns: [], layout: '', group: '' }) === JSON.stringify({ ...DEFAULT_VIEW, columns: [], layout: '', group: '' });
+  const isDefault =
+    activeId === null &&
+    JSON.stringify({ ...current, columns: [], layout: '', group: '' }) ===
+      JSON.stringify({ ...DEFAULT_VIEW, columns: [], layout: '', group: '' });
 
   const save = async () => {
     const trimmed = name.trim();
@@ -91,14 +117,26 @@ export function JobsViewsBar({ tab, current, activeId, onApply, canShare, client
     if (activeId === view.id) onApply(DEFAULT_VIEW, null);
     toast.undo(`Deleted the view "${view.name}"`, {
       onUndo: async () => {
-        const back = await callAction(saveViewAction({ page: 'jobs', name: view.name, config: { ...view.config }, shared: view.shared }), "Couldn't bring the view back");
+        const back = await callAction(
+          saveViewAction({ page: 'jobs', name: view.name, config: { ...view.config }, shared: view.shared }),
+          "Couldn't bring the view back",
+        );
         if (back) await queryClient.invalidateQueries({ queryKey: qk.views('jobs') });
       },
     });
   };
 
   const update = async (view: SavedViewDTO) => {
-    const saved = await callAction(saveViewAction({ id: view.id, page: 'jobs', name: view.name, config: { ...current, tab }, shared: view.shared }), "Couldn't update the view");
+    const saved = await callAction(
+      saveViewAction({
+        id: view.id,
+        page: 'jobs',
+        name: view.name,
+        config: { ...current, tab },
+        shared: view.shared,
+      }),
+      "Couldn't update the view",
+    );
     if (!saved) return;
     await queryClient.invalidateQueries({ queryKey: qk.views('jobs') });
     onApply(current, view.id);
@@ -108,10 +146,25 @@ export function JobsViewsBar({ tab, current, activeId, onApply, canShare, client
   return (
     <div className="flex flex-wrap items-center gap-1.5" data-testid="jobs-views-bar">
       <span className="mr-1 text-xs font-medium text-fg-muted">Views</span>
-      <ViewChip label="Everything" active={isDefault} onClick={() => onApply({ ...DEFAULT_VIEW, columns: current.columns, layout: current.layout, group: current.group }, null)} />
+      <ViewChip
+        label="Everything"
+        active={isDefault}
+        onClick={() =>
+          onApply(
+            { ...DEFAULT_VIEW, columns: current.columns, layout: current.layout, group: current.group },
+            null,
+          )
+        }
+      />
       {list.map((view) => (
         <span key={view.id} className="inline-flex items-center">
-          <ViewChip label={view.name} shared={view.shared} active={activeId === view.id} onClick={() => open_(view)} grouped={view.mine} />
+          <ViewChip
+            label={view.name}
+            shared={view.shared}
+            active={activeId === view.id}
+            onClick={() => open_(view)}
+            grouped={view.mine}
+          />
           {view.mine ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -120,7 +173,9 @@ export function JobsViewsBar({ tab, current, activeId, onApply, canShare, client
                   aria-label={`Options for the view ${view.name}`}
                   className={cn(
                     'inline-flex h-7 w-6 items-center justify-center rounded-r-full border border-l-0 text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-                    activeId === view.id ? 'border-primary bg-primary-subtle' : 'border-border-subtle bg-panel',
+                    activeId === view.id
+                      ? 'border-primary bg-primary-subtle'
+                      : 'border-border-subtle bg-panel',
                   )}
                 >
                   <MoreHorizontal aria-hidden className="size-3.5" />
@@ -130,7 +185,11 @@ export function JobsViewsBar({ tab, current, activeId, onApply, canShare, client
                 <DropdownMenuItem icon={<Check aria-hidden />} onSelect={() => void update(view)}>
                   Save what is on screen to this view
                 </DropdownMenuItem>
-                <DropdownMenuItem variant="danger" icon={<Trash2 aria-hidden />} onSelect={() => void remove(view)}>
+                <DropdownMenuItem
+                  variant="danger"
+                  icon={<Trash2 aria-hidden />}
+                  onSelect={() => void remove(view)}
+                >
                   Delete this view
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -138,12 +197,21 @@ export function JobsViewsBar({ tab, current, activeId, onApply, canShare, client
           ) : null}
         </span>
       ))}
-      <Button variant="ghost" size="sm" leadingIcon={<BookmarkPlus aria-hidden />} onClick={() => setOpen(true)} data-testid="jobs-save-view">
+      <Button
+        variant="ghost"
+        size="sm"
+        leadingIcon={<BookmarkPlus aria-hidden />}
+        onClick={() => setOpen(true)}
+        data-testid="jobs-save-view"
+      >
         Save view
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="sm">
-          <DialogHeader title="Save this view" description="Keeps the search, filters, sort, grouping, columns and layout that are on screen now." />
+          <DialogHeader
+            title="Save this view"
+            description="Keeps the search, filters, sort, grouping, columns and layout that are on screen now."
+          />
           <DialogBody>
             <form
               id="save-view-form"
@@ -171,7 +239,13 @@ export function JobsViewsBar({ tab, current, activeId, onApply, canShare, client
                   />
                 )}
               </Field>
-              {canShare ? <Checkbox checked={shared} onCheckedChange={(value) => setShared(value === true)} label="Share with everyone in this workspace" /> : null}
+              {canShare ? (
+                <Checkbox
+                  checked={shared}
+                  onCheckedChange={(value) => setShared(value === true)}
+                  label="Share with everyone in this workspace"
+                />
+              ) : null}
             </form>
           </DialogBody>
           <DialogFooter>
@@ -188,7 +262,19 @@ export function JobsViewsBar({ tab, current, activeId, onApply, canShare, client
   );
 }
 
-function ViewChip({ label, active, onClick, shared, grouped }: { readonly label: string; readonly active: boolean; readonly onClick: () => void; readonly shared?: boolean; readonly grouped?: boolean }) {
+function ViewChip({
+  label,
+  active,
+  onClick,
+  shared,
+  grouped,
+}: {
+  readonly label: string;
+  readonly active: boolean;
+  readonly onClick: () => void;
+  readonly shared?: boolean;
+  readonly grouped?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -197,7 +283,9 @@ function ViewChip({ label, active, onClick, shared, grouped }: { readonly label:
       className={cn(
         'inline-flex h-7 max-w-[220px] items-center gap-1.5 border px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         grouped ? 'rounded-l-full' : 'rounded-full',
-        active ? 'border-primary bg-primary-subtle text-fg' : 'border-border-subtle bg-panel text-fg-secondary hover:bg-hover hover:text-fg',
+        active
+          ? 'border-primary bg-primary-subtle text-fg'
+          : 'border-border-subtle bg-panel text-fg-secondary hover:bg-hover hover:text-fg',
       )}
     >
       {shared ? <Users aria-hidden className="size-3 shrink-0" /> : null}

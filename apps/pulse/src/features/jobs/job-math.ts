@@ -3,7 +3,7 @@
  * DTO fields (cents as numbers, decimals as strings) into the library's inputs and calls it.
  * Safe in client components and tests.
  */
-import { toCents, type Cents } from '@/lib/money';
+import { hoursToScaled, scaledToNumber, toCents, type Cents } from '@/lib/money';
 import {
   evidenceDayCount,
   lastEvidenceWindow,
@@ -14,8 +14,18 @@ import {
   type PlanTotals,
   type Projection,
   type ProjectionInput,
+  unitsPerHour,
 } from '@/lib/profit';
-import type { JobDetailDTO, JobListItemDTO, JobPlanDTO, JobStatsDTO, MaterialUsageDTO, ProductionEntryDTO, ProfitRowDTO, VasEntryDTO } from '@/lib/types';
+import type {
+  JobDetailDTO,
+  JobListItemDTO,
+  JobPlanDTO,
+  JobStatsDTO,
+  MaterialUsageDTO,
+  ProductionEntryDTO,
+  ProfitRowDTO,
+  VasEntryDTO,
+} from '@/lib/types';
 import type { NextStep } from '@/lib/profit/risk';
 import { routes } from '@/lib/routes';
 
@@ -107,18 +117,26 @@ export function buildProjectionInput(sources: ProjectionSources): ProjectionInpu
   const window = lastEvidenceWindow(days);
   const live = sources.services.filter((row) => row.deletedAt === null);
   const serviceMaterial = live.reduce((sum, row) => sum + c(row.materialCents), ZERO);
-  const serviceCost = live.reduce((sum, row) => sum + c(row.laborCostCents) + c(row.sharedCents), ZERO) + serviceMaterial;
+  const serviceCost =
+    live.reduce((sum, row) => sum + c(row.laborCostCents) + c(row.sharedCents), ZERO) + serviceMaterial;
   const plannedLeft =
     job.materialMethod === 'actual'
       ? materialLeftFromUsage(
           sources.usage
             .filter((row) => row.deletedAt === null)
-            .map((row) => ({ quantityPlanned: row.quantityPlanned, quantityUsed: row.quantityUsed, quantityScrapped: row.quantityScrapped, unitCost: row.unitCost ?? '0', suppliedBy: row.resolvedSuppliedBy })),
+            .map((row) => ({
+              quantityPlanned: row.quantityPlanned,
+              quantityUsed: row.quantityUsed,
+              quantityScrapped: row.quantityScrapped,
+              unitCost: row.unitCost ?? '0',
+              suppliedBy: row.resolvedSuppliedBy,
+            })),
         )
       : null;
   const cutoff = shiftDate(sources.today, -30);
   const last = sources.days.filter((row) => row.key > cutoff);
-  const sum = (pick: (row: ProfitRowDTO) => number | null): Cents => last.reduce((total, row) => total + c(pick(row)), ZERO);
+  const sum = (pick: (row: ProfitRowDTO) => number | null): Cents =>
+    last.reduce((total, row) => total + c(pick(row)), ZERO);
   return {
     status: job.status,
     kind: job.kind,
@@ -130,7 +148,16 @@ export function buildProjectionInput(sources: ProjectionSources): ProjectionInpu
     otherRevenueCents: c(job.stats.otherRevenueCents),
     serviceCostCents: serviceCost,
     serviceMaterialCents: serviceMaterial,
-    window: window.days > 0 ? { days: window.days, unitsGood: window.unitsGood, paceHours: window.paceHours, hours: window.hours, laborCostCents: window.laborCostCents } : null,
+    window:
+      window.days > 0
+        ? {
+            days: window.days,
+            unitsGood: window.unitsGood,
+            paceHours: window.paceHours,
+            hours: window.hours,
+            laborCostCents: window.laborCostCents,
+          }
+        : null,
     evidenceDays: evidenceDayCount(days),
     targetPace: job.stats.standardUph,
     unitPrice: job.unitPrice,
@@ -172,19 +199,30 @@ export interface WhatIfChange {
  */
 export function projectWhatIf(base: ProjectionInput, change: WhatIfChange, baseline: Projection): Projection {
   let input: ProjectionInput = base;
-  if (change.unitPrice !== undefined && change.unitPrice !== null) input = { ...input, unitPrice: change.unitPrice };
-  if (change.plannedUnits !== undefined && change.plannedUnits !== null) input = { ...input, plannedUnits: change.plannedUnits };
+  if (change.unitPrice !== undefined && change.unitPrice !== null)
+    input = { ...input, unitPrice: change.unitPrice };
+  if (change.plannedUnits !== undefined && change.plannedUnits !== null)
+    input = { ...input, plannedUnits: change.plannedUnits };
   const paceChanged = change.pace !== undefined && change.pace !== null;
   const rateChanged = change.rateCents !== undefined && change.rateCents !== null;
   if (paceChanged || rateChanged) {
     const pace = paceChanged ? (change.pace as number) : (baseline.paceUph ?? 0);
     const rate = rateChanged ? (change.rateCents as number) : Number(baseline.rateLeftCents ?? ZERO);
     if (pace > 0) {
-      // 100 pace hours a day for 5 days: any size works, the library only reads the ratios.
-      const paceHours = 500;
+      // Keep the crew hours a day of the real window, so the finish date still follows the crew size.
+      const real = base.window;
+      const days = real?.days ?? 5;
+      const paceHours = real ? Number(real.paceHours) : 200;
+      const hours = real && real.hours !== null && real.hours !== undefined ? Number(real.hours) : paceHours;
       input = {
         ...input,
-        window: { days: 5, unitsGood: Math.round(pace * paceHours * 1000) / 1000, paceHours, hours: paceHours, laborCostCents: toCents(Math.round(rate) * paceHours) },
+        window: {
+          days,
+          unitsGood: Math.round(pace * paceHours * 1000) / 1000,
+          paceHours,
+          hours,
+          laborCostCents: toCents(Math.round(Math.round(rate) * hours)),
+        },
         evidenceDays: Math.max(3, input.evidenceDays),
         targetPace: pace,
       };
@@ -227,8 +265,24 @@ export function nextStepHref(step: string | null, job: Pick<JobListItemDTO, 'num
 }
 
 /** Worst first: the order the open jobs list uses. */
-export const RISK_ORDER: Readonly<Record<string, number>> = { losing: 0, at_risk: 1, no_data: 2, heads_up: 3, on_track: 4, none: 5 };
+export const RISK_ORDER: Readonly<Record<string, number>> = {
+  losing: 0,
+  at_risk: 1,
+  no_data: 2,
+  heads_up: 3,
+  on_track: 4,
+  none: 5,
+};
 
 export function riskRank(job: JobListItemDTO): number {
   return RISK_ORDER[job.stats.riskStatus ?? 'none'] ?? 5;
+}
+
+/** Pace of one work entry: good units over its hours that are not setup. Null with no such hours. */
+export function rowPace(
+  row: Pick<ProductionEntryDTO, 'unitsGood' | 'hours' | 'setupHours' | 'hoursConfirmed'>,
+): number | null {
+  if (!row.hoursConfirmed || Number(row.unitsGood) <= 0) return null;
+  const paceHours = hoursToScaled(row.hours) - hoursToScaled(row.setupHours);
+  return paceHours > ZERO ? unitsPerHour(row.unitsGood, scaledToNumber(paceHours, 2)) : null;
 }
