@@ -6,5 +6,6 @@
       "path": "/api/cron/tick",
       "schedule": "* * * * *"
     }
-  ]
+  ],
+  "ignoreCommand": "bash ../../deploy/vercel-ignore.sh"
 }
