@@ -2,7 +2,7 @@
 
 Foundation is in place: a runnable app (`apps/pulse`, port 3500), the `pulse` schema migrated (46 tables), the full
 domain layer for jobs, production, time, materials, costs, revenue, extra services, plans, rates, periods, alerts and
-profit, server actions, 70 `/api/v1` routes, React Query hooks, the pure money / profit / CSV libraries, the design
+profit, server actions, 58 `/api/v1` route files, React Query hooks, the pure money / profit / CSV libraries, the design
 system, the shell, and a page for every route in the spec. Most pages are still **teaching frames**: they render the
 right header, tabs and empty state but do not read data yet. Each team now makes its pages real.
 
@@ -67,10 +67,10 @@ Routes and their feature folder:
 | `/` | `features/home` | profit | teaching frame, checklist |
 | `/jobs?tab=open\|all\|completed\|planned` | `features/jobs` (`jobs-page.tsx`) | jobs | teaching frame |
 | `/jobs/new` | `features/jobs` (`new-job-page.tsx`) | jobs | teaching frame, no form |
-| `/jobs/[ref]`, `/plan`, `/work`, `/materials`, `/money-in`, `/activity` | `features/jobs` (`job-page.tsx`) | jobs | tab frame |
+| `/jobs/[ref]`, `/plan`, `/work`, `/materials`, `/money-in`, `/activity` | `features/jobs` (`job-page.tsx`) | jobs | tab frame; shows "We could not find that job" for every ref until it reads `getJob` |
 | `/jobs/by-link` | page file only | jobs | redirects to a prefilled new job |
 | `/log?date=`, `/log/review`, `/log/entries` | `features/log` | production | teaching frame |
-| `/labor?tab=classes\|rates\|time` | `features/labor` | production | teaching frame |
+| `/labor?tab=rates\|time\|cost` | `features/labor` | production | teaching frame |
 | `/target-pace` | `features/target-pace` | production | teaching frame |
 | `/kiosk/t/[token]` (public, no shell) | `features/kiosk` | production | "link is not active" |
 | `/profit?by=` | `features/profit` | profit | teaching frame |
@@ -323,7 +323,7 @@ Each hook takes its filters and an optional React Query options object, so a ser
 - **Control**: `usePeriods`, `useCloseChecklist`, `useAlerts`, `useAlertsUnread`, `useAlertRules`, `useNotifications`,
   `useSavedViews`, `useUserPrefs`, `useActivity`, `useSearch`.
 - Others in `src/lib/hooks`: `useServerAction` and `unwrap` (`use-action.ts`), `useDebouncedValue`, `useHotkey`
-  (`use-hotkeys.ts`), `usePeople` map (`use-people.ts`).
+  (`use-hotkeys.ts`), `usePeopleMap` (`use-people.ts`).
 
 DTOs are all in `src/lib/types.ts`. Cents are JS numbers (checked safe integers); quantities, hours, prices and paces
 are decimal strings; a hidden money field is `null` and the DTO carries `moneyHidden: true`. Stored enums and their on
@@ -399,11 +399,12 @@ numeric strings are exact) and come out as rounded numbers. `bigint` does not JS
 
 - `@/components/ui` (the CRM and Projects design system, verbatim): Button, IconButton, Input, Textarea, SearchInput,
   Field, Select, Combobox, Checkbox, Switch, Tooltip, Popover, DropdownMenu (use `onSelect`, not `asChild`, for links),
-  ContextMenu, Dialog (plus ConfirmDialog), Drawer, Tabs, ToggleGroup, Avatar, Badge, Chip, StatusPill, `toast`
+  ContextMenu, Dialog (plus ConfirmDialog, WizardSteps), Drawer, SidePanel, Tabs, ToggleGroup, SplitButton, Avatar, AvatarGroup,
+  Badge, CountBadge, Chip, StatusPill, `toast`
   (`toast.undo(msg, { onUndo })`), EmptyState plus Illustration, Skeleton, ProgressBar, Kbd, ScrollArea, ColorPicker,
-  DatePicker, **IsoDatePicker** (YYYY-MM-DD), **UserPicker**, Breadcrumbs, Card, Table, PageHeader, Spinner.
+  DatePicker, **IsoDatePicker** (YYYY-MM-DD), **UserPicker**, Breadcrumbs, Card, Table (plus TablePagination), PageHeader, Spinner.
 - `@/components/pulse`: `Teach` and `StepList` (the teaching empty state: what this is, why it matters, next step),
-  `ButtonLink`, `RouteTabs` (tabs that are URLs), `BrandLoader`, `PersonAvatar` (by user id).
+  `ButtonLink`, `RouteTabs` (tabs that are URLs), `BrandLoader`; `PersonAvatar` (by user id) from `@/components/pulse/person`.
 - `@/components/layout/page`: `Page` (header plus body; `width="default|narrow|full"`), `Panel`.
 - `src/components/charts` does not exist yet. The **profit** team creates it first (bar, line, stacked bar, waterfall,
   sparkline, donut, progress ring; SVG, token colors, light and dark, keyboard reachable, a screen reader table for
