@@ -200,7 +200,7 @@ function Rows(props: RowsProps) {
               </text>
               {marks}
               {showValues && labelValue !== null ? (
-                <text x={(labelValue ?? 0) < 0 ? tip - 6 : tip + 6} y={mid} dy="0.34em" textAnchor={(labelValue ?? 0) < 0 ? 'end' : 'start'} fontSize={FONT} fontWeight={500} fill="var(--text-primary)">
+                <text x={(labelValue ?? 0) < 0 ? tip - 6 : tip + 6} y={mid} dy="0.34em" textAnchor={(labelValue ?? 0) < 0 ? 'end' : 'start'} fontSize={FONT} fontWeight={500} fill="var(--text-primary)" stroke="var(--surface-panel)" strokeWidth={3} paintOrder="stroke">
                   {valueTexts[index]}
                 </text>
               ) : null}

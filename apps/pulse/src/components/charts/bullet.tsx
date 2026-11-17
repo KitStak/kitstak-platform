@@ -25,12 +25,12 @@ export interface BulletChartProps {
   readonly className?: string;
 }
 
-export function bulletReading(value: number | null, target: number, goodWhen: 'up' | 'down' = 'up'): { met: boolean; text: string } {
+export function bulletReading(value: number | null, target: number, goodWhen: 'up' | 'down' = 'up', targetLabel = 'Target'): { met: boolean; text: string } {
   if (value === null) return { met: false, text: 'No data yet' };
   if (target === 0) return { met: goodWhen === 'up' ? value >= 0 : value <= 0, text: 'No target set' };
   const percent = Math.round((value / target) * 100);
   const met = goodWhen === 'up' ? value >= target : value <= target;
-  return { met, text: `${percent}% of target` };
+  return { met, text: `${percent}% of ${targetLabel.toLowerCase()}` };
 }
 
 export function BulletChart({ label, value, target, max, format, goodWhen = 'up', targetLabel = 'Target', size = 'md', loading, className }: BulletChartProps) {
@@ -38,7 +38,7 @@ export function BulletChart({ label, value, target, max, format, goodWhen = 'up'
   const top = max ?? Math.max(target, value ?? 0, 1) * 1.15;
   const ratio = value === null ? 0 : clamp(value / top, 0, 1);
   const targetRatio = clamp(target / top, 0, 1);
-  const reading = bulletReading(value, target, goodWhen);
+  const reading = bulletReading(value, target, goodWhen, targetLabel);
   const color = value === null ? CHART_COLORS.neutral : reading.met ? CHART_COLORS.up : goodWhen === 'down' ? CHART_COLORS.down : seriesColor(0);
   const spoken = value === null ? `${label}: no data yet. ${targetLabel} ${fmt.value(target)}.` : `${label}: ${fmt.value(value)}, ${reading.text}. ${targetLabel} ${fmt.value(target)}.`;
   if (loading) {

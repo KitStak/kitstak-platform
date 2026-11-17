@@ -13,7 +13,6 @@ import { db } from '@/server/db';
 import { centsToNumber } from '@/lib/money';
 import { addDays, addWorkDays, endOfMonth, isWorkDay, loadedRate, startOfMonth, weekday } from '@/lib/profit';
 import {
-  addJobLink,
   addNote,
   closePeriod,
   createAlertRule,
@@ -174,7 +173,8 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
   const today = (await listSites(ctx))[0]!.today;
   for (const role of plan.roles) {
     const id = userId(role.email);
-    if (id && id !== ctx.userId) await setMemberRole(ctx, id, { role: role.role, seesMoney: role.seesMoney });
+    // People the role list does not show (client portal and API users) are skipped.
+    if (id && id !== ctx.userId) await setMemberRole(ctx, id, { role: role.role, seesMoney: role.seesMoney }).catch(() => log(`role for ${role.email} skipped`));
   }
 
   // Calendar: every work day of the last 90 days, oldest first.
@@ -185,7 +185,7 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
   const dayAt = (i: number): string => (i <= 0 ? days[Math.max(0, i - firstIndex)]!.date : (addWorkDays(today, i) ?? today));
   const closed = new Set(plan.closed);
   const months = [...new Set(days.map((day) => startOfMonth(day.date)))];
-  const monthFactor = (date: string): number => [1, 0.93, 1.005, 1.03, 1.03][months.indexOf(startOfMonth(date))] ?? 1;
+  const monthFactor = (date: string): number => [1, 0.96, 1.0, 1.02, 1.02][months.indexOf(startOfMonth(date))] ?? 1;
   const rateStart = addDays(today, -400);
   const raiseDay = addDays(today, -45);
   /** History is saved in two parts, so alerts raised by the first part can clear after the second. */
@@ -193,6 +193,7 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
 
   const classIds = new Map<string, string>();
   const oldRate = new Map<string, number>();
+  const newRate = new Map<string, number>();
   const rateInput = (spec: ClassSpec, wage: number) => ({ wageCents: wage, payrollTaxBp: spec.taxBp, benefitsBp: spec.benBp, otherBurdenBp: 0, overheadPerHourCents: spec.overhead, overtimeMultiplier: '1.50' });
   for (const spec of plan.classes) {
     const row = await createLaborClass(ctx, { code: spec.code, name: spec.name, kind: spec.kind, isDefault: spec.isDefault, color: spec.color });
@@ -201,6 +202,7 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
     await createLaborRate(ctx, { laborClassId: row.id, effectiveFrom: rateStart, ...rateInput(spec, spec.wage), note: 'Starting rate' });
     await createLaborRate(ctx, { laborClassId: row.id, effectiveFrom: raiseDay, ...rateInput(spec, raised), note: spec.kind === 'temp_agency' ? 'The agency raised its bill rate' : 'Yearly raise' });
     oldRate.set(spec.code, centsToNumber(loadedRate(rateInput(spec, spec.wage)).loadedRateCents) / 100);
+    newRate.set(spec.code, centsToNumber(loadedRate(rateInput(spec, raised)).loadedRateCents) / 100);
   }
   const leadClass = plan.classes.find((spec) => spec.isLead);
   const defaultClass = plan.classes.find((spec) => spec.isDefault) ?? plan.classes[0]!;
@@ -293,7 +295,7 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
       const overtime = saturday ? people * each : spec.overtime && r() < spec.overtime ? Math.round(people * 1.5) : 0;
       const hours = saturday ? people * each : people * each + overtime;
       const dow = weekday(day.date) === 1 ? 0.97 : weekday(day.date) === 5 ? 0.98 : 1;
-      const pace = spec.pace * (spec.paceFn?.(j, n) ?? 1) * monthFactor(day.date) * dow * between(r, 0.94, 1.06);
+      const pace = spec.pace * (spec.paceFn?.(j, n) ?? 1) * monthFactor(day.date) * dow * between(r, 0.945, 1.065);
       const units = Math.max(1, Math.round((hours - setup + leadHours) * pace));
       const scrap = Math.round(units * (spec.scrap ?? 0.008) * between(r, 0.5, 1.6));
       const missing = !saturday && (spec.noHours ?? []).includes(j);
@@ -323,16 +325,19 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
       const friday = days.find((day) => day.date === addDays(date, -1));
       if (friday && friday.i >= first && friday.i <= last) push({ i: friday.i, date, saturday: true }, friday.i - first, true);
     }
+    simDays.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     let units = simDays.reduce((sum, day) => sum + day.units, 0);
     const hours = simDays.reduce((sum, day) => sum + day.hours, 0);
     let planned = spec.planned ?? 0;
     if (units > 0) {
-      if (spec.ongoing) planned = spec.planned ?? nice((units / Math.max(1, n)) * 21);
+      if (spec.ongoing) planned = spec.planned ?? nice((units / Math.max(1, simDays.length)) * 23);
       else if (spec.status === 'active') planned = spec.planned ?? nice(units / (spec.pct ?? 0.5));
       else {
         // A finished job made exactly what was ordered: trim the last day to a round number.
-        const wanted = spec.planned ?? nice(units, true);
         const lastDay = simDays[simDays.length - 1]!;
+        // Round down by a step that is small next to one day of work, so the last day still looks like a day.
+        const step = [1000, 500, 100, 50, 10, 5].find((size) => size <= lastDay.units * 0.2) ?? 1;
+        const wanted = spec.planned ?? Math.floor(units / step) * step;
         const extra = units - wanted;
         if (extra > 0 && extra < lastDay.units) {
           lastDay.units -= extra;
@@ -344,7 +349,9 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
       }
     }
     // Price from the margin the quote aimed for.
-    const rate = oldRate.get(cls) ?? 24;
+    // A job quoted after the raise was quoted on the new rate.
+    const quotedOn = (code: string): number => ((spec.start > 0 ? today : dayAt(first)) >= raiseDay ? newRate : oldRate).get(code) ?? 24;
+    const rate = quotedOn(cls);
     const quotePace = spec.quotePace ?? spec.pacePlan ?? type.pace;
     const pricing = spec.pricing ?? 'per_unit';
     const ownMaterial = spec.items ? spec.items.reduce((sum, line) => sum + (itemSpec.get(line.sku)?.by === 'client' ? 0 : line.per * Number(itemSpec.get(line.sku)?.cost ?? 0)), 0) : (spec.matPlan ?? spec.mat ?? 0);
@@ -352,17 +359,33 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
     const laborHours = base / quotePace;
     const setupHours = spec.setup ?? 0;
     const otherPlan = spec.otherPlan ?? (spec.other ?? []).reduce((sum, cost) => sum + cost.cents, 0) / 100;
-    const costPerUnit = ((laborHours + setupHours) * rate * 1.09 + otherPlan) / base + ownMaterial;
-    const price = pricing === 'hourly' ? (spec.price ?? nicePrice((rate * 1.09) / (1 - (spec.qm ?? 0.3)))) : (spec.price ?? nicePrice(costPerUnit / (1 - (spec.qm ?? 0.3))));
+    // 5% on top for the small things a quote never lists.
+    const costPerUnit = (((laborHours + setupHours) * rate * 1.09 + otherPlan) / base + ownMaterial) * 1.05;
+    const price = pricing === 'hourly' ? (spec.price ?? nicePrice((rate * 1.09 * 1.05) / (1 - (spec.qm ?? 0.3)))) : (spec.price ?? nicePrice(costPerUnit / (1 - (spec.qm ?? 0.3))));
     const revenueCents = pricing === 'hourly' ? Math.round((laborHours + setupHours) * price * 100) : pricing === 'fixed' ? Math.round((price * base) / 100) * 10000 : Math.round(price * base * 100);
+    // Extra services planned on the job are part of its plan: their hours, supplies and revenue.
+    let serviceHours = 0;
+    let serviceLabor = 0;
+    let serviceSupplies = 0;
+    let serviceRevenue = 0;
+    for (const line of spec.vas ?? []) {
+      const service = plan.services.find((item) => item.code === line.svc)!;
+      // Same share of days as the entries will have, with a little room for supplies.
+      const every = line.every ?? 3;
+      const quantity = base * line.share * (simDays.length > 0 ? simDays.filter((day) => day.j % every === 0).length / simDays.length : 1 / every);
+      serviceHours += quantity / service.uph;
+      serviceLabor += (quantity / service.uph) * quotedOn(service.cls ?? defaultClass.code);
+      serviceSupplies += quantity * Number(service.cost ?? 0) * 1.06;
+      serviceRevenue += quantity * Number(line.price ?? service.price);
+    }
     const quote: PlanInput = {
       units: q(planned),
-      revenueCents,
-      laborHours: h2(laborHours + setupHours),
-      laborCents: Math.round((laborHours + setupHours) * rate * 100),
+      revenueCents: revenueCents + Math.round(serviceRevenue * 100),
+      laborHours: (laborHours + setupHours + serviceHours).toFixed(2),
+      laborCents: Math.round(((laborHours + setupHours) * rate + serviceLabor) * 100),
       setupHours: h2(setupHours),
       setupCents: Math.round(setupHours * rate * 100),
-      materialCents: Math.round(ownMaterial * base * 100),
+      materialCents: Math.round((ownMaterial * base + serviceSupplies) * 100),
       otherCents: Math.round(otherPlan * 100),
       origin: spec.deal ? 'crm_deal' : 'typed',
       note: spec.deal ? 'Kit build share of the won deal' : null,
@@ -402,7 +425,8 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
       kind: spec.ongoing ? 'ongoing' : 'one_time',
       status: spec.status === 'planned' ? 'planned' : 'active',
       pricingModel: pricing,
-      plannedUnits: q(sim.planned),
+      // An ongoing program has no end count: its plan is read as one month of work.
+      plannedUnits: spec.ongoing ? '0' : q(sim.planned),
       unitPrice: pricing === 'per_unit' && !spec.noPrice ? sim.price.toFixed(4) : null,
       fixedPriceCents: pricing === 'fixed' ? sim.revenueCents : null,
       billRateCents: pricing === 'hourly' ? Math.round(sim.price * 100) : null,
@@ -421,8 +445,8 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
       pinnedNote: spec.pinned ?? null,
       quote: spec.noPrice ? null : sim.quote,
       links,
-      source: order ? 'wms' : deal ? 'crm' : 'manual',
-      sourceRef: order?.id ?? deal?.id ?? null,
+      source: order ? 'wms' : 'manual',
+      sourceRef: order?.id ?? null,
     });
     if (spec.budget) {
       await savePlan(ctx, created.id, 'budget', { ...sim.quote, laborHours: h2(Number(sim.quote.laborHours) * 1.04), laborCents: Math.round((sim.quote.laborCents ?? 0) * 1.06), origin: 'copied_from_quote', originRef: null, note: 'Budget after the kickoff walk through' });
@@ -439,7 +463,8 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
   /* 3. Production, in two parts */
   const allRows = sims.flatMap((sim) => sim.rows);
   const strip = (row: ProductionInput & { i: number }): ProductionInput => {
-    const { i: _i, ...rest } = row;
+    const rest: ProductionInput & { i?: number } = { ...row };
+    delete rest.i;
     return rest;
   };
   const finishJobs = async (when: (sim: Sim) => boolean): Promise<void> => {
@@ -448,37 +473,11 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
       else if (sim.spec.status === 'on_hold' || sim.spec.status === 'cancelled') await setJobStatus(ctx, sim.jobId, sim.spec.status);
     }
   };
-  await saveProductionBulk(ctx, allRows.filter((row) => row.i <= cut).map(strip));
-  await finishJobs((sim) => sim.last <= cut);
-  const firstPass = await evaluateAlerts(ctx);
-  await saveProductionBulk(ctx, allRows.filter((row) => row.i > cut).map(strip));
-  await finishJobs((sim) => sim.last > cut);
-  log(`${allRows.length} production entries saved (${firstPass.created} alerts raised along the way)`);
-
-  // Corrections: missing hours added later, a few recounts, and one row deleted by mistake and put back.
-  let corrections = 0;
-  for (const sim of sims.filter((item) => item.spec.fixNoHours)) {
-    const found = await listProduction(ctx, { jobId: sim.jobId, needsHours: true, limit: 50 });
-    for (const entry of found) {
-      await saveProductionEntry(ctx, { id: entry.id, jobId: sim.jobId, workDate: entry.workDate, headcount: String(sim.spec.crew), hours: h2(sim.spec.crew * (sim.spec.hrs ?? 7.5)), hoursConfirmed: true, note: 'Hours added from the paper sign in sheet', version: entry.version });
-      corrections += 1;
-    }
-  }
-  const recountNotes = ['Recount: two cartons were logged twice', 'Fixed a typo in the unit count', 'Counted again after the pallet audit', 'Moved 1 hour to the right job'];
-  for (const [index, sim] of sims.filter((item) => item.days.length >= 6 && item.spec.status !== 'cancelled').entries()) {
-    if (index % 5 !== 2) continue;
-    const day = sim.days[Math.floor(sim.days.length / 2)]!;
-    if (startOfMonth(day.date) < startOfMonth(addDays(startOfMonth(today), -1))) continue;
-    const [entry] = (await listProduction(ctx, { jobId: sim.jobId, from: day.date, to: day.date, limit: 5 })).filter((row) => Number(row.unitsGood) > 0);
-    if (!entry) continue;
-    const change = Math.max(2, Math.round(Number(entry.unitsGood) * 0.03));
-    await saveProductionEntry(ctx, { id: entry.id, jobId: sim.jobId, workDate: entry.workDate, unitsGood: q(Number(entry.unitsGood) - change), note: recountNotes[corrections % recountNotes.length]!, version: entry.version });
-    corrections += 1;
-    if (corrections === 3) {
-      await deleteProductionEntries(ctx, [entry.id]);
-      await restoreProductionEntries(ctx, [entry.id]);
-    }
-  }
+  const held = new Set(sims.filter((sim) => sim.spec.holdBack).map((sim) => sim.jobId));
+  const late = (row: ProductionInput & { i: number }): boolean => held.has(row.jobId) && row.i > cut;
+  await saveProductionBulk(ctx, allRows.filter((row) => !late(row)).map(strip));
+  await finishJobs(() => true);
+  log(`${allRows.length} production entries worked out, ${allRows.filter((row) => !late(row)).length} saved in the first part`);
 
   /* 4. The other streams */
   let usageRows = 0;
@@ -488,6 +487,8 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
   for (const sim of sims) {
     const { spec } = sim;
     const r = rng(`${plan.seed}:${spec.n}:streams`);
+    /** Extra service revenue by day, so invoices bill it with the units. */
+    const serviceCents = new Map<string, number>();
     const n = Math.max(1, sim.last - sim.first + 1);
     // Parts used (jobs that track real parts).
     for (const day of spec.items ? sim.days : []) {
@@ -521,7 +522,8 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
         if (day.j % (line.every ?? 3) !== 0) continue;
         const quantity = Math.max(1, Math.round(day.units * line.share));
         const hours = Math.max(0.25, (quantity / service.uph) * between(r, 0.92, 1.1));
-        await saveVasEntry(ctx, { vasServiceId: serviceIds.get(line.svc)!, jobId: sim.jobId, workDate: day.date, quantity: q(quantity), unitPrice: line.price ?? null, laborClassId: classIds.get(service.cls ?? defaultClass.code), headcount: String(Math.max(1, Math.ceil(hours / 7.5))), hours: h2(hours) });
+        serviceCents.set(day.date, (serviceCents.get(day.date) ?? 0) + Math.round(quantity * Number(line.price ?? service.price) * 100));
+        await saveVasEntry(ctx, { vasServiceId: serviceIds.get(line.svc)!, jobId: sim.jobId, workDate: day.date, quantity: q(quantity), unitPrice: line.price, laborClassId: classIds.get(service.cls ?? defaultClass.code), headcount: String(Math.max(1, Math.ceil(hours / 7.5))), hours: h2(hours) });
         serviceRows += 1;
       }
     }
@@ -546,11 +548,13 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
       if (spec.status === 'completed' && !spec.unbilled) cuts.push(sim.days.length - 1);
       let billedUnits = 0;
       let billedHours = 0;
+      let billedTo = '';
       for (const [index, at] of cuts.entries()) {
         const slice = sim.days.slice(0, at + 1);
         const units = slice.reduce((sum, day) => sum + day.units, 0);
         const hours = slice.reduce((sum, day) => sum + day.hours, 0);
-        const amount = earned(units, hours) - earned(billedUnits, billedHours);
+        const services = slice.filter((day) => day.date > billedTo).reduce((sum, day) => sum + (serviceCents.get(day.date) ?? 0), 0);
+        const amount = earned(units, hours) - earned(billedUnits, billedHours) + services;
         const date = addDays(sim.days[at]!.date, 2) > today ? today : addDays(sim.days[at]!.date, 2);
         if (amount > 0) {
           await saveRevenue(ctx, { jobId: sim.jobId, revenueDate: date, kind: 'invoice', description: `${spec.name}, ${(units - billedUnits).toLocaleString('en-US')} ${typeSpec.get(spec.type)!.unit}`, amountCents: amount, invoiceNumber: `INV-${(hash(`${plan.seed}${spec.n}`) % 800) + 2100 + index}` });
@@ -558,6 +562,7 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
         }
         billedUnits = units;
         billedHours = hours;
+        billedTo = sim.days[at]!.date;
       }
       for (const fee of spec.fees ?? []) {
         const day = sim.days[Math.min(sim.days.length - 1, Math.floor(fee.at * sim.days.length))]!;
@@ -578,7 +583,7 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
       if ((day.i - firstIndex) % line.every !== 1 || closed.has(day.i)) continue;
       const quantity = Math.round(line.qty * between(r, 0.7, 1.3));
       const hours = Math.max(0.25, (quantity / service.uph) * between(r, 0.92, 1.1));
-      await saveVasEntry(ctx, { vasServiceId: serviceIds.get(line.svc)!, clientId: clientIds.get(line.client)!, siteId: mainSiteId, workDate: day.date, quantity: q(quantity), unitPrice: line.price ?? null, laborClassId: classIds.get(service.cls ?? defaultClass.code), headcount: '1', hours: h2(hours) });
+      await saveVasEntry(ctx, { vasServiceId: serviceIds.get(line.svc)!, clientId: clientIds.get(line.client)!, siteId: mainSiteId, workDate: day.date, quantity: q(quantity), unitPrice: line.price, laborClassId: classIds.get(service.cls ?? defaultClass.code), headcount: '1', hours: h2(hours) });
       serviceRows += 1;
     }
   }
@@ -601,6 +606,37 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
     }
   }
   log(`${usageRows} parts rows, ${serviceRows} service entries, ${costRows} costs, ${revenueRows} revenue rows`);
+
+  /* The first look at alerts sees the slow start of the held back jobs and the days with no hours. */
+  await recomputeJobs(db, ctx, sims.map((sim) => sim.jobId));
+  const firstPass = await evaluateAlerts(ctx);
+  await saveProductionBulk(ctx, allRows.filter(late).map(strip));
+  log(`${firstPass.created} alerts raised by the first part, then the held back days went in`);
+
+  // Corrections: missing hours added later, a few recounts, and one row deleted by mistake and put back.
+  let corrections = 0;
+  for (const sim of sims.filter((item) => item.spec.fixNoHours)) {
+    const found = await listProduction(ctx, { jobId: sim.jobId, needsHours: true, limit: 50 });
+    for (const entry of found) {
+      await saveProductionEntry(ctx, { id: entry.id, jobId: sim.jobId, workDate: entry.workDate, headcount: String(sim.spec.crew), hours: h2(sim.spec.crew * (sim.spec.hrs ?? 7.5)), hoursConfirmed: true, note: 'Hours added from the paper sign in sheet', version: entry.version });
+      corrections += 1;
+    }
+  }
+  const recountNotes = ['Recount: two cartons were logged twice', 'Fixed a typo in the unit count', 'Counted again after the pallet audit', 'Moved 1 hour to the right job'];
+  for (const [index, sim] of sims.filter((item) => item.days.length >= 6 && item.spec.status !== 'cancelled').entries()) {
+    if (index % 5 !== 2) continue;
+    const day = sim.days[Math.floor(sim.days.length / 2)]!;
+    if (startOfMonth(day.date) < startOfMonth(addDays(startOfMonth(today), -1))) continue;
+    const [entry] = (await listProduction(ctx, { jobId: sim.jobId, from: day.date, to: day.date, limit: 5 })).filter((row) => Number(row.unitsGood) > 0);
+    if (!entry) continue;
+    const change = Math.max(2, Math.round(Number(entry.unitsGood) * 0.03));
+    await saveProductionEntry(ctx, { id: entry.id, jobId: sim.jobId, workDate: entry.workDate, unitsGood: q(Number(entry.unitsGood) - change), note: recountNotes[corrections % recountNotes.length]!, version: entry.version });
+    corrections += 1;
+    if (corrections === 3) {
+      await deleteProductionEntries(ctx, [entry.id]);
+      await restoreProductionEntries(ctx, [entry.id]);
+    }
+  }
 
   // Time not on a job, then paid hours a little above what was logged.
   const directByDay = new Map<string, number>();
@@ -633,7 +669,6 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
   }
   await createAlertRule(ctx, { name: 'Tell me when a client earns under 10% in the last 30 days', kind: 'client_margin_below', threshold: '10', severity: 'warning', notifyRoles: ['owner', 'admin'] });
   await createAlertRule(ctx, { name: 'Tell me when an extra service earns under 15%', kind: 'vas_margin_below', threshold: '15', severity: 'warning', notifyRoles: ['owner', 'admin', 'manager'] });
-  await createAlertRule(ctx, { name: 'Tell me when a job heads under 5% margin', kind: 'margin_below', threshold: '5', severity: 'critical', notifyRoles: ['owner'] });
   for (const [index, view] of plan.views.entries()) await saveView(ctx, { page: view.page, name: view.name, config: view.config, shared: view.shared ?? true, isDefault: view.isDefault ?? false, position: index });
   let notes = 0;
   for (const sim of sims) {
@@ -675,6 +710,7 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
   log(`${reviews} days approved, ${closedMonths.length} months closed`);
 
   /* 7. Alerts and the inbox */
+  await recomputeJobs(db, ctx, sims.map((sim) => sim.jobId));
   const secondPass = await evaluateAlerts(ctx);
   const open = await listAlerts(ctx, { status: 'open', limit: 200 });
   const manager = plan.roles.find((role) => role.role === 'manager');
@@ -737,11 +773,11 @@ async function backdate(orgId: string, today: string, cutDay: string, actorId: s
     await tx.execute(sql`
       INSERT INTO pulse.activity (id, org_id, actor_id, actor_kind, verb, entity_type, entity_id, job_id, client_id, field, before, after, meta, body, created_at)
       SELECT a.id, a.org_id,
-             CASE WHEN a.actor_kind = 'user' AND a.actor_id = ${actorId} AND cardinality(${pool}) > 0 AND a.entity_type IN ('production_entry', 'indirect_entry', 'material_usage', 'vas_entry', 'day', 'paid_hours')
+             CASE WHEN a.actor_kind = 'user' AND a.actor_id = ${actorId} AND cardinality(${pool}) > 0 AND a.entity_type IN ('production', 'indirect', 'material', 'service_entry', 'day', 'paid_hours')
                   THEN (${pool})[1 + abs(hashtext(COALESCE(a.meta->>'workDate', a.job_id::text, a.id::text))) % cardinality(${pool})] ELSE a.actor_id END,
              a.actor_kind, a.verb, a.entity_type, a.entity_id, a.job_id, a.client_id, a.field, a.before, a.after, a.meta, a.body,
              LEAST(a.created_at, COALESCE(
-               (SELECT p.created_at + CASE WHEN a.verb LIKE '%created' THEN interval '0' ELSE interval '1 day' END FROM pulse.production_entries p WHERE p.id = a.entity_id),
+               (SELECT p.created_at + CASE WHEN a.verb = 'production.logged' THEN interval '0' ELSE interval '1 day' END FROM pulse.production_entries p WHERE p.id = a.entity_id),
                (SELECT p.created_at FROM pulse.indirect_entries p WHERE p.id = a.entity_id),
                (SELECT p.created_at FROM pulse.material_usage p WHERE p.id = a.entity_id),
                (SELECT p.created_at FROM pulse.cost_entries p WHERE p.id = a.entity_id),
@@ -755,7 +791,7 @@ async function backdate(orgId: string, today: string, cutDay: string, actorId: s
                             WHEN a.verb LIKE 'note%' THEN GREATEST(j.created_at, now() - ((abs(hashtext(a.id::text)) % 12) + 1) * interval '26 hours')
                             ELSE GREATEST(j.created_at + interval '1 day', now() - ((abs(hashtext(a.id::text)) % 20) + 1) * interval '23 hours') END
                   FROM pulse.jobs j WHERE j.id = a.job_id),
-               CASE WHEN a.entity_type IN ('alert', 'alert_rule', 'saved_view', 'target') OR a.verb LIKE 'note%' OR a.verb LIKE 'alert%' THEN now() - ((abs(hashtext(a.id::text)) % 6) + 1) * interval '7 hours' END,
+               CASE WHEN a.entity_type = 'alert' OR a.verb LIKE 'note%' OR a.verb LIKE 'alert.%' THEN now() - ((abs(hashtext(a.id::text)) % 6) + 1) * interval '7 hours' END,
                ${today}::timestamp - interval '96 days' + (abs(hashtext(a.id::text)) % 600) * interval '1 minute'))
         FROM seed_activity a`);
   });

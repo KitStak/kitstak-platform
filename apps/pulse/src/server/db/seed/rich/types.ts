@@ -142,6 +142,8 @@ export interface JobSpec {
   skip?: number[];
   /** A second labor class that helps a few hours each day (hours only, no units). */
   help?: string;
+  /** Days after the cut are saved late, so alerts raised by the slow start clear by themselves. */
+  holdBack?: boolean;
   /** The job has no price yet. */
   noPrice?: boolean;
   /** Share of days with a little overtime. */

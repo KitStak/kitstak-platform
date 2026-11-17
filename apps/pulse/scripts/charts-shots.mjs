@@ -82,6 +82,10 @@ async function main() {
         await page.waitForTimeout(700);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         if (overflow > 1) problems.push(`${theme} ${width}: the page scrolls sideways by ${overflow}px`);
+        // The app shell scrolls inside its own box, so make the window tall enough to hold the tallest section.
+        const tallest = await page.$$eval('[data-gallery]', (nodes) => Math.max(...nodes.map((node) => node.getBoundingClientRect().height)));
+        await page.setViewportSize({ width, height: Math.ceil(tallest) + 240 });
+        await page.waitForTimeout(300);
         const ids = await page.$$eval('[data-gallery]', (nodes) => nodes.map((node) => node.getAttribute('data-gallery')));
         for (const id of ids) {
           if (options.sections && !options.sections.includes(id)) continue;

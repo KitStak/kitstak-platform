@@ -160,7 +160,7 @@ const RING_TONE = { accent: seriesColor(0), good: 'var(--pulse-chart-up)', watch
 
 export function ProgressRing({ value, max = 100, label, size = 56, strokeWidth, tone = 'auto', children, hideValue, className }: ProgressRingProps) {
   const ratio = max > 0 && Number.isFinite(value) ? clamp(value / max, 0, 1) : 0;
-  const percent = Math.round(ratio * 100);
+  const percent = max > 0 && Number.isFinite(value) ? Math.max(0, Math.round((value / max) * 100)) : 0;
   const stroke = strokeWidth ?? Math.max(4, Math.round(size / 11));
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -247,11 +247,11 @@ export function Gauge({ title, value, target, floor = 0, min = 0, max, format = 
           </text>
         </svg>
         <div className="pointer-events-none absolute inset-x-0 flex flex-col items-center" style={{ top: 24 + size / 2 - 44 }}>
-          <span className="text-2xl leading-none font-semibold text-fg">{value === null ? 'No data' : fmt.value(value)}</span>
+          <span className={cn('leading-none font-semibold', value === null ? 'mt-2 text-md text-fg-muted' : 'text-2xl text-fg')}>{value === null ? 'No data yet' : fmt.value(value)}</span>
           <span className="mt-1.5 max-w-[80%] truncate text-xs text-fg-muted">{title}</span>
         </div>
       </div>
-      {footer ? <div className="mt-1 flex justify-center">{footer}</div> : null}
+      {footer ? <div className="mt-2 flex justify-center">{footer}</div> : null}
     </div>
   );
 }

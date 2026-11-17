@@ -430,7 +430,7 @@ numeric strings are exact) and come out as rounded numbers. `bigint` does not JS
 cd apps/pulse
 pnpm typecheck && pnpm lint && pnpm test          # 17 files, 355 tests; DB tests skip when Postgres is down
 pnpm db:migrate                                    # applies drizzle/*.sql (table drizzle.__kitstak_pulse_migrations)
-pnpm db:seed [--org=kitstak] [--email=] [--seed=minimal] [--keep]
+pnpm db:seed [--org=<slug>] [--email=] [--seed=rich|minimal] [--keep]   # no flags: the rich demo for kitstak and northwind-robotics (about 50 s)
 NEXT_DIST_DIR=.next/<name> pnpm exec next dev -p 35xx        # personal servers 3501 to 3520, dist dir inside .next/
 node scripts/shot.mjs --base http://localhost:35xx --out <dir> [--theme dark] [--width 390] [--full] / /jobs /profit
 E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome pnpm exec playwright test
@@ -441,8 +441,8 @@ E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium-1243/c
 - Do not run `pnpm build` while dev servers are up (it rewrites `next-env.d.ts`). If your dev server rewrites
   `next-env.d.ts` to point at your dist dir, restore the committed content before you finish.
 - Logins: `admin@kitstak.io` / `KitStak-Demo-2026!` (org `kitstak`, seeded, an explicit Pulse owner after the seed) and
-  `maya@northwind-robotics.example` / `Northwind-Demo-2026!` (org `northwind-robotics`, owner through the org role, **no
-  Pulse rows yet**, so it shows every first run state).
+  `maya@northwind-robotics.example` / `Northwind-Demo-2026!` (org `northwind-robotics`, seeded with the rich demo, an
+  explicit Pulse owner after the seed; to see first run states, use a throwaway org).
 - Seeds write through the domain layer (`tsx --conditions=react-server`), after wiping the org's rows under
   `pulse.allow_purge`. Helpers: `src/server/db/seed/context.ts` (`seedContext(orgSlug, email?)`, `orgMembers`,
   `ensurePulseOwner`, `wipeOrg`). Register a seed in `SEEDS` in `index.ts`.
@@ -506,9 +506,62 @@ E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium-1243/c
   - Sibling sync (`sync_state`, `sync_runs`), bridge events, WMS work orders and shipments into production, CRM deals
     into quotes and jobs, Projects links, the Portal tile and setup steps, `apps/web` product page, deploy docs
     (`NEXT_PUBLIC_PULSE_URL`, a fifth Vercel project, `CRON_SECRET` for the two crons in `apps/pulse/vercel.json`).
-- **seed**: only org `kitstak` has Pulse rows (minimal seed: 3 labor classes, 3 clients, 5 jobs, 10 work days, 4 open
-  alerts). `northwind-robotics` needs a rich seed tied to its CRM and Projects data.
+- **seed**: the rich demo is in `src/server/db/seed/rich` (`engine.ts` plus one plan file per org; a plan is plain
+  data). Both demo orgs are seeded: `kitstak` (44 jobs, 8 on WMS work orders) and `northwind-robotics` (28 jobs on CRM
+  deals and Projects, no WMS). Story jobs are listed at the end of the seed output with the status each must show.
+  Not seeded, because no domain exists yet: time punches, device links, kiosk PINs, quote scenarios, report schedules,
+  the WMS, CRM and Projects sync runs, `core.entitlements` rows and the `pulse-only` org.
 - **foundation leftovers** (whoever touches it first): big restamps run inline, not in `after()` with
   `settings.recalc_started_at`; no test of the whole migration chain on an empty database; no plain role RLS test; no
   CSP header; `default_member_role` and the "Run Pulse for this workspace" claim are in the domain (`whoRunsPulse`,
   `claimPulseOwnership`) but have no screen.
+
+## 14. Charts (`@/components/charts`, owner: profit)
+
+The one chart library for Pulse. Hand built SVG and React, no chart dependency. Every export is a client component or a
+pure helper; client files import by path (`@/components/charts/cartesian`), server pages may use the index. Ask profit
+for a missing chart instead of drawing one in a feature folder.
+
+**Rules every chart follows**
+- Values are plain numbers used only for geometry. Money is whole cents, percents are basis points. Text always comes
+  from a `format`: `'money' | 'percent' | 'number' | 'hours'` or `{ axis(v), value(v) }` built on `@/lib/format`.
+  `chartNumber(dtoValue)` turns a DTO field into `number | null`. `null` is a gap ("No data"), never zero.
+- Colors: series take `seriesColor(0..7)` in order (`--pulse-series-1..8` in `charts.css`, checked for color blind
+  separation on both panels; a ninth series folds into "Other"). Pass `color` only to keep one entity the same color
+  across charts. Up, down and neutral are `CHART_COLORS`. Text never wears a series color.
+- Common props (`ChartBaseProps`): `title` (required, read by screen readers), `description`, `showTitle`, `height`,
+  `loading` (skeleton), `refreshing` (dims, keeps its place), `error` + `onRetry`, `emptyTitle`, `emptyHint`,
+  `emptyAction`, `hideLegend`, `tableToggle` ("Show table" button), `width` (fixed width for tests and print).
+- Accessibility is built in: SVG `<title>` and `<desc>`, one tab stop per chart, arrow keys / Home / End / Escape move
+  between points, the focused point is read through a live region, hover and focus show the same tooltip, and every
+  chart renders a screen reader data table. Transitions stop under reduced motion.
+- Charts fill their parent's width. Give the parent `min-w-0` inside grids and flex rows.
+
+| Component (file) | Use it for | Main props |
+|---|---|---|
+| `LineChart`, `AreaChart` (`cartesian`) | trends, one or many series | `series: { id, label, values, color? }[]`, x axis as `labels` or `dates` + `bucket: 'day' \| 'week' \| 'month'` (evenly spaced bucket starts), `format`, `target: { value, label }`, `zeroBased` |
+| `BarChart` (`cartesian`) | compare categories or periods | same series and x props, `mode: 'grouped' \| 'stacked'`, `orientation: 'vertical' \| 'horizontal'` (horizontal for rankings and long names), `showValues`, `signColors` (losses in the down color), `target` |
+| `ComboChart` (`cartesian`) | bars and a line in another unit (revenue bars, margin line) | `bars`, `lines`, `barFormat`, `lineFormat`, `lineTarget`, `layout: 'split'` (default: two panels on one x axis) or `'overlay'` (right axis) |
+| `WaterfallChart` (`cartesian`) | bridge from plan to actual | `start: { label, value }`, `steps: { id, label, value }[]`, `endLabel`, `format`, `upIsGood`. From `varianceWaterfall`: `start.value = startCents`, steps from `bars` (`amountCents`) |
+| `ParetoChart` (`cartesian`) | biggest causes first with running share | `items: { id, label, value }[]`, `maxItems` (default 8, rest fold into "Other"), `valueLabel`, `format` |
+| `DonutChart` (`radial`) | share of a whole, at a glance | `slices: { id, label, value, color? }[]`, `format`, `centerLabel`, `maxSlices` (default 6). Values at or under zero are left out and counted in a note |
+| `HeatmapCalendar` (`heatmap`) | one cell per day | `days: { date, value }[]`, `format`, `valueLabel`, `weekStart`, `scale: 'auto' \| 'sequential' \| 'diverging'`, `lowLabel`, `highLabel`. Weeks become rows on narrow cards |
+| `Gauge` (`radial`) | a number against its target (margin vs target) | `title`, `value`, `target`, `floor`, `min`, `max`, `format` (default percent), `footer` (put a `MarginPill` here), `loading` |
+| `BulletChart` (`bullet`) | progress against a target in a row or table cell | `label`, `value`, `target`, `max`, `format`, `goodWhen: 'up' \| 'down'`, `targetLabel`, `size: 'sm' \| 'md'`, `loading` |
+| `ProgressRing` (`radial`) | how far along | `value`, `max`, `label`, `size`, `tone`, `children` (center text), `hideValue` |
+| `Sparkline` (`sparkline`) | tiny trend in a tile or table cell | `values`, `label`, `format`, `width`, `height`, `fluid`, `tone`, `area` |
+| `KpiTile` (`stats`) | one headline number | `label`, `value` (formatted text or `null`), `delta` (DeltaBadge props), `sparkline`, `explain` (the "how we got this" trigger), `footer`, `emptyText`, `loading`, `error` |
+| `DeltaBadge` (`stats`) | a change with arrow and tone | `delta` (raw number, sign only), `text` (from `formatMoneyDelta` and friends), `goodWhen`, `label`, `size` |
+| `MarginPill` (`stats`) | margin or job health as icon plus words | `health: 'healthy' \| 'watch' \| 'at_risk' \| 'losing' \| 'none'` or `status: PulseStatus` (uses `PULSE_STATUS_LABELS`), `marginBp`, `label`, `size` |
+
+Helpers: `marginHealth(marginBp, targetBp, thresholds?)` (health of a margin with no job status, same lines as rules R1
+and R2 from `DEFAULT_RISK_THRESHOLDS`), `healthFromStatus`, `bulletReading`, `sparklineSummary`, `niceScale`,
+`formatDateTick`, `formatDateLong`, `ChartLegend`, `ChartSkeleton`, `ChartMessage`.
+
+Dev tools: `/dev/charts` is a gallery of every chart with sample data (404 in production, not in the nav).
+`node scripts/charts-shots.mjs --out <dir>` shoots each gallery section in light and dark at 1440 and 390;
+`node scripts/charts-check.mjs --out <dir>` drives hover, keyboard, table toggle, retry and layout checks in a browser.
+Unit tests: `src/components/charts/{scale.test.ts,charts.test.tsx}`.
+
+Known limits: time axes assume evenly spaced buckets; no brush or zoom; no stacked area; no scatter; ComboChart
+`overlay` is a dual axis chart, so prefer `split`; the Waterfall always starts its value axis at zero.

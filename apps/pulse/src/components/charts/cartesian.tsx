@@ -228,8 +228,7 @@ export function ParetoChart({ items, format, maxItems = 8, valueLabel = 'Amount'
   const tail = sorted.slice(head.length);
   const rows = tail.length ? [...head, { id: 'other', label: `Other (${tail.length})`, value: tail.reduce((sum, item) => sum + item.value, 0) }] : head;
   const total = rows.reduce((sum, item) => sum + item.value, 0);
-  let running = 0;
-  const cumulative = rows.map((item) => (running += item.value));
+  const cumulative = rows.map((_, index) => rows.slice(0, index + 1).reduce((sum, item) => sum + item.value, 0));
   const share = (value: number): string => `${Math.round((value / (total || 1)) * 100)}%`;
   return (
     <XYChart
@@ -240,8 +239,7 @@ export function ParetoChart({ items, format, maxItems = 8, valueLabel = 'Amount'
       format={{ axis: fmt.axis, value: fmt.value }}
       lineFormat={{ axis: share, value: (value) => `${share(value)} (${fmt.value(value)})` }}
       domain={total > 0 ? [0, total] : undefined}
-      ticks={total > 0 ? [0, 0.2, 0.4, 0.6, 0.8, 1].map((part) => total * part) : undefined}
-      rightTicks={total > 0 ? [0, 0.2, 0.4, 0.6, 0.8, 1].map((part) => ({ value: total * part, label: `${Math.round(part * 100)}%` })) : undefined}
+      rightTicks={total > 0 ? [0, 0.5, 1].map((part) => ({ value: total * part, label: `${Math.round(part * 100)}%` })) : undefined}
       referenceLines={total > 0 && rows.length > 1 ? [{ value: total * 0.8, label: '80% of the total' }] : undefined}
       tableColumns={['Cause', valueLabel, 'Share', 'Running share']}
       tableRow={(index) => [rows[index]?.label ?? '', fmt.value(rows[index]?.value ?? 0), share(rows[index]?.value ?? 0), share(cumulative[index] ?? 0)]}

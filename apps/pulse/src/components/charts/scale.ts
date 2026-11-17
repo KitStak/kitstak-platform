@@ -196,6 +196,29 @@ export function fitLabel(text: string, maxWidth: number, fontSize = 11): string 
   return `${chars.slice(0, low).join('').trimEnd()}...`;
 }
 
+/** Breaks a label into at most `maxLines` lines at spaces. The last line is cut with three dots if it must be. */
+export function wrapLabel(text: string, maxWidth: number, fontSize = 11, maxLines = 2): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index]!;
+    const candidate = current ? `${current} ${word}` : word;
+    if (estimateTextWidth(candidate, fontSize) <= maxWidth || !current) {
+      current = candidate;
+      continue;
+    }
+    if (lines.length === maxLines - 1) {
+      current = `${current} ${words.slice(index).join(' ')}`;
+      break;
+    }
+    lines.push(current);
+    current = word;
+  }
+  if (current) lines.push(current);
+  return lines.slice(0, maxLines).map((line) => fitLabel(line, maxWidth, fontSize)).filter(Boolean);
+}
+
 /**
  * Which x labels to draw so no two touch: every `stride`th one, anchored so the last label
  * (the newest date) always shows.

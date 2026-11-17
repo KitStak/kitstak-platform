@@ -8,7 +8,7 @@
 import type { PointerEvent } from 'react';
 import { CHART_COLORS, type ChartFormatter } from './chart-format';
 import { ChartFrame, ChartLive, ChartTooltip, KEY_HINT, SvgLabels, tooltipText, useRoving, type ChartBaseProps, type ChartTableModel, type LegendItem, type TooltipModel, type TooltipRow } from './frame';
-import { areaPath, bandLayout, barPath, clamp, estimateTextWidth, fitLabel, labelStride, linePath, linearScale, niceScale, pointPositions, visibleLabelIndexes, type NiceScale } from './scale';
+import { areaPath, bandLayout, barPath, clamp, estimateTextWidth, fitLabel, labelStride, wrapLabel, linePath, linearScale, niceScale, pointPositions, visibleLabelIndexes, type NiceScale } from './scale';
 
 export interface XYCategory {
   readonly key: string;
@@ -186,17 +186,19 @@ function Plot(props: PlotProps) {
   const left0 = 44;
   const roughSlot = Math.max(1, (width - left0 - 12) / Math.max(1, count));
   const widest = labels.length ? Math.max(...labels.map((label) => estimateTextWidth(label, FONT))) : 0;
-  const slant = !props.timeAxis && hasBars && count > 1 && widest + 8 > roughSlot && roughSlot < 84;
+  const crowded = !props.timeAxis && hasBars && count > 1 && widest + 8 > roughSlot;
+  const wrap = crowded && roughSlot >= 54;
+  const slant = crowded && !wrap;
   const slantMax = 92;
-  const bottomPad = slant ? Math.min(slantMax, widest) * 0.58 + 22 : 24;
+  const bottomPad = slant ? Math.min(slantMax, widest) * 0.58 + 22 : wrap ? 38 : 24;
   const topPad = 8 + valueLabelRoom;
   const plotTop = topPad;
   const plotBottom = Math.max(plotTop + 40, height - bottomPad);
 
   // --- regions ---
   const lineShare = split ? Math.round((plotBottom - plotTop) * 0.34) : 0;
-  const mainTop = split ? plotTop + lineShare + 18 : plotTop;
-  const mainTicks = Math.max(2, Math.min(6, Math.floor((plotBottom - mainTop) / 46)));
+  const mainTop = split ? plotTop + lineShare + 28 : plotTop;
+  const mainTicks = Math.max(2, Math.min(6, Math.floor((plotBottom - mainTop) / 40)));
   const includeZeroMain = hasBars || props.area || (props.zeroBased ?? false);
   const mainScale: NiceScale = props.domain
     ? { min: props.domain[0], max: props.domain[1], step: (props.domain[1] - props.domain[0]) / mainTicks, ticks: props.ticks ?? niceScale([props.domain[0], props.domain[1]], { tickCount: mainTicks }).ticks.filter((tick) => tick <= props.domain![1]) }
@@ -218,7 +220,7 @@ function Plot(props: PlotProps) {
   const xs = hasBars ? categories.map((_, index) => band.center(index)) : pointPositions(count, left + 6, right - 6);
   const slot = hasBars ? band.step : count > 1 ? (right - left - 12) / (count - 1) : right - left;
 
-  const stride = slant ? Math.max(1, Math.ceil(16 / Math.max(1, slot))) : labelStride(labels, slot, props.timeAxis ? {} : { maxLabelWidth: Math.max(36, slot - 12) });
+  const stride = wrap ? 1 : slant ? Math.max(1, Math.ceil(16 / Math.max(1, slot))) : labelStride(labels, slot, props.timeAxis ? {} : { maxLabelWidth: Math.max(36, slot - 12) });
   const shown = visibleLabelIndexes(count, stride);
   const labelMax = slant ? slantMax : props.timeAxis ? Number.POSITIVE_INFINITY : Math.max(36, slot * stride - 10);
 
@@ -227,6 +229,13 @@ function Plot(props: PlotProps) {
   const barWidth = clamp((band.step * 0.72 - (groupCount - 1) * 2) / groupCount, 2, 24);
   const groupWidth = groupCount * barWidth + (groupCount - 1) * 2;
   const zeroY = main.y(clamp(0, main.scale.min, main.scale.max));
+
+  // Value labels are all or nothing: a chart with a label on some bars and not on others reads as broken.
+  const fitsAll = (texts: readonly string[]): boolean => texts.every((text) => estimateTextWidth(text, FONT) + 6 <= band.step);
+  const stackTotals = stacked ? categories.map((_, index) => bars.reduce((sum, series) => sum + (series.values[index] ?? 0), 0)) : [];
+  const showStackValues = Boolean(props.showValues) && stacked && fitsAll(stackTotals.map((value) => format.axis(value)));
+  const showBarValues = Boolean(props.showValues) && !stacked && bars.length === 1 && fitsAll((bars[0]?.values ?? []).map((value) => (value === null || value === undefined ? '' : format.axis(value))));
+  const showFloatValues = floats ? fitsAll(floats.map((item) => item.text)) : false;
 
   const active = roving.active;
   const onMove = (event: PointerEvent<SVGRectElement>) => {
@@ -358,8 +367,6 @@ function Plot(props: PlotProps) {
               let to = main.y(item.to);
               if (item.from !== item.to && Math.abs(to - from) < 2) to = from + (to < from ? -2 : 2);
               const next = floats[index + 1];
-              const labelWidth = estimateTextWidth(item.text, FONT);
-              const fits = labelWidth <= band.step - 2;
               const labelY = Math.min(from, to) - 5;
               return (
                 <g key={categories[index]?.key ?? index}>
@@ -369,8 +376,8 @@ function Plot(props: PlotProps) {
                   ) : (
                     <path className="pc-mark" d={barPath(x, barWidth, from, to, 4)} fill={item.color} />
                   )}
-                  {fits ? (
-                    <text x={xs[index]} y={labelY} textAnchor="middle" fontSize={FONT} fontWeight={item.kind === 'total' ? 600 : 500} fill="var(--text-primary)">
+                  {showFloatValues ? (
+                    <text x={xs[index]} y={labelY} textAnchor="middle" fontSize={FONT} fontWeight={item.kind === 'total' ? 600 : 500} fill="var(--text-primary)" stroke="var(--surface-panel)" strokeWidth={3} paintOrder="stroke">
                       {item.text}
                     </text>
                   ) : null}
@@ -401,8 +408,8 @@ function Plot(props: PlotProps) {
                     const outer = value > 0 ? i === lastUp : i === lastDown;
                     return <path key={series.id} className="pc-mark" d={barPath(x, barWidth, from, to, outer ? 4 : 0)} fill={series.color} />;
                   })}
-                  {props.showValues && estimateTextWidth(format.axis(up + down), FONT) <= band.step - 2 ? (
-                    <text x={xs[index]} y={main.y(up) - 5} textAnchor="middle" fontSize={FONT} fontWeight={500} fill="var(--text-primary)">
+                  {showStackValues ? (
+                    <text x={xs[index]} y={main.y(up) - 5} textAnchor="middle" fontSize={FONT} fontWeight={500} fill="var(--text-primary)" stroke="var(--surface-panel)" strokeWidth={3} paintOrder="stroke">
                       {format.axis(up + down)}
                     </text>
                   ) : null}
@@ -419,12 +426,11 @@ function Plot(props: PlotProps) {
                 let to = main.y(value);
                 if (value !== 0 && Math.abs(to - zeroY) < 2) to = zeroY + (value > 0 ? -2 : 2);
                 const text = format.axis(value);
-                const showValue = props.showValues && bars.length === 1 && estimateTextWidth(text, FONT) <= band.step - 2;
                 return (
                   <g key={`${series.id}-${index}`}>
                     {value === 0 ? <line x1={x} x2={x + barWidth} y1={zeroY} y2={zeroY} stroke={color} strokeWidth={2} /> : <path className="pc-mark" d={barPath(x, barWidth, zeroY, to, 4)} fill={color} />}
-                    {showValue ? (
-                      <text x={x + barWidth / 2} y={value < 0 ? to + 13 : to - 5} textAnchor="middle" fontSize={FONT} fontWeight={500} fill="var(--text-primary)">
+                    {showBarValues ? (
+                      <text x={x + barWidth / 2} y={value < 0 ? to + 13 : to - 5} textAnchor="middle" fontSize={FONT} fontWeight={500} fill="var(--text-primary)" stroke="var(--surface-panel)" strokeWidth={3} paintOrder="stroke">
                         {text}
                       </text>
                     ) : null}
@@ -480,13 +486,28 @@ function Plot(props: PlotProps) {
         {/* x labels */}
         {categories.map((category, index) => {
           if (!shown.has(index)) return null;
+          const x = xs[index] ?? 0;
+          if (wrap) {
+            const lines = wrapLabel(category.label, slot - 8, FONT);
+            return (
+              <text key={category.key} textAnchor="middle" fontSize={FONT} fill={active === index ? 'var(--text-primary)' : AXIS_TEXT}>
+                {lines.map((line, lineIndex) => (
+                  <tspan key={lineIndex} x={x} y={plotBottom + 16 + lineIndex * 13}>
+                    {line}
+                  </tspan>
+                ))}
+              </text>
+            );
+          }
           const text = fitLabel(category.label, labelMax, FONT);
           if (!text) return null;
-          const x = xs[index] ?? 0;
           if (slant) {
+            // A slanted label runs down and to the left: keep it inside the chart's left edge.
+            const slanted = fitLabel(category.label, Math.min(slantMax, (x + 10) / 0.82), FONT);
+            if (!slanted) return null;
             return (
               <text key={category.key} transform={`translate(${x + 3} ${plotBottom + 12}) rotate(-35)`} textAnchor="end" fontSize={FONT} fill={AXIS_TEXT}>
-                {text}
+                {slanted}
               </text>
             );
           }
