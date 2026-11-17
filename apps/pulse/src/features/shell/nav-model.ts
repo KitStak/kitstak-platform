@@ -9,7 +9,6 @@ import { useShell, type ShellBadges } from './shell-context';
 
 const BADGE_WORDS: Readonly<Record<NonNullable<NavEntry['badge']>, (count: number) => string>> = {
   jobsAtRisk: (count) => (count === 1 ? '1 job needs you' : `${count} jobs need you`),
-  openAlerts: (count) => (count === 1 ? '1 open alert' : `${count} open alerts`),
 };
 
 export function badgeFor(entry: NavEntry, badges: ShellBadges | undefined): number {

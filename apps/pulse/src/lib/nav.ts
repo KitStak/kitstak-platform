@@ -38,7 +38,7 @@ export interface NavEntry {
   /** Roles that do not see this entry. Supervisors log work and never see money pages. */
   readonly hiddenFor?: readonly PulseRole[];
   /** Which live count shows as a badge on this entry. */
-  readonly badge?: 'jobsAtRisk' | 'openAlerts';
+  readonly badge?: 'jobsAtRisk';
 }
 
 export const NAV: readonly NavEntry[] = [
@@ -103,7 +103,6 @@ export const NAV: readonly NavEntry[] = [
     prefixes: ['/alerts'],
     keywords: ['notifications', 'warnings', 'rules', 'things to fix'],
     chord: 'A',
-    badge: 'openAlerts',
   },
   {
     id: 'reports',
