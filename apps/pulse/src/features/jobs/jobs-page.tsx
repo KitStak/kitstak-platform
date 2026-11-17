@@ -66,7 +66,7 @@ export async function JobsPage({ searchParams }: { readonly searchParams: Promis
       }
       tabs={<RouteTabs label="Job lists" active={tab} tabs={JOB_TABS.map((id) => ({ id, label: TAB_LABELS[id], href: routes.jobs({ tab: id === 'open' ? undefined : id }) }))} />}
     >
-      <JobsView key={tab} tab={tab} initialJobs={jobs} initialRisk={risk} initialQuery={first(query.q).slice(0, 80)} clients={clients ?? []} jobTypes={jobTypes ?? []} sites={sites ?? []} today={site?.today ?? todayInZone('UTC')} />
+      <JobsView key={tab} tab={tab} initialJobs={jobs} initialRisk={risk} initialQuery={first(query.q).slice(0, 80)} clients={clients ?? []} jobTypes={jobTypes ?? []} sites={sites ?? []} today={site?.today ?? todayInZone('UTC')} initialViewId={first(query.view) || null} />
     </Page>
   );
 }

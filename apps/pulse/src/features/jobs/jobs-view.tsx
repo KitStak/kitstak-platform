@@ -114,9 +114,10 @@ export interface JobsViewProps {
   readonly jobTypes: readonly JobTypeDTO[];
   readonly sites: readonly SiteDTO[];
   readonly today: string;
+  readonly initialViewId?: string | null;
 }
 
-export function JobsView({ tab, initialJobs, initialRisk, initialQuery, clients, jobTypes, sites, today }: JobsViewProps) {
+export function JobsView({ tab, initialJobs, initialRisk, initialQuery, clients, jobTypes, sites, today, initialViewId }: JobsViewProps) {
   const shell = useShell();
   const router = useRouter();
   const canManage = shell.can('job:manage');
@@ -323,7 +324,7 @@ export function JobsView({ tab, initialJobs, initialRisk, initialQuery, clients,
 
   return (
     <div className="flex flex-col gap-3" data-testid="jobs-view">
-      <JobsViewsBar current={view} activeId={activeViewId} onApply={applyView} canShare={canManage} />
+      <JobsViewsBar tab={tab} current={view} activeId={activeViewId} onApply={applyView} canShare={canManage} clients={clients} initialViewId={initialViewId} />
 
       <div role="group" aria-label="Filter by status" className="flex flex-wrap items-center gap-2">
         {(['losing', 'at_risk', 'no_data', 'heads_up', 'on_track'] as const).map((status) => {

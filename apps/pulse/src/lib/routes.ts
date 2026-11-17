@@ -45,7 +45,7 @@ export interface NewJobPrefill {
 export const routes = {
   home: () => '/',
   welcome: () => '/welcome',
-  jobs: (opts?: { tab?: 'open' | 'all' | 'completed' | 'planned'; risk?: string }) => withQuery('/jobs', { tab: opts?.tab, risk: opts?.risk }),
+  jobs: (opts?: { tab?: 'open' | 'all' | 'completed' | 'planned'; risk?: string; view?: string }) => withQuery('/jobs', { tab: opts?.tab, risk: opts?.risk, view: opts?.view }),
   newJob: (prefill: NewJobPrefill = {}) => withQuery('/jobs/new', { ...prefill }),
   job: (ref: string) => `/jobs/${encodeURIComponent(ref)}`,
   jobTab: (ref: string, tab: JobTab) => (tab === 'overview' ? `/jobs/${encodeURIComponent(ref)}` : `/jobs/${encodeURIComponent(ref)}/${tab}`),

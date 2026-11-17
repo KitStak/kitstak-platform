@@ -4,7 +4,8 @@
  * looking at, and come back to them in one click. Stored through the shared saved views domain
  * (`saveViewAction`), so the data team's views bar can replace this file without a migration.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { BookmarkPlus, Check, MoreHorizontal, Trash2, Users } from 'lucide-react';
 import { Button, Checkbox, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Field, Input, toast } from '@/components/ui';
@@ -13,11 +14,25 @@ import { useSavedViews } from '@/lib/hooks/use-data';
 import { qk } from '@/lib/query-keys';
 import type { SavedViewDTO } from '@/lib/types';
 import { deleteViewAction, saveViewAction } from '@/server/actions/views';
-import { DEFAULT_VIEW, toViewConfig, type JobsViewConfig } from './jobs-config';
+import type { JobTab } from '@/lib/constants';
+import { routes } from '@/lib/routes';
+import { DEFAULT_VIEW, toViewConfig, viewTab, type JobsViewConfig } from './jobs-config';
 import { callAction } from './use-job-actions';
 
-export function JobsViewsBar({ current, activeId, onApply, canShare }: { readonly current: JobsViewConfig; readonly activeId: string | null; readonly onApply: (config: JobsViewConfig, id: string | null) => void; readonly canShare: boolean }) {
+export interface JobsViewsBarProps {
+  readonly tab: JobTab;
+  readonly current: JobsViewConfig;
+  readonly activeId: string | null;
+  readonly onApply: (config: JobsViewConfig, id: string | null) => void;
+  readonly canShare: boolean;
+  readonly clients: readonly { readonly id: string; readonly code: string }[];
+  /** A view to open on arrival (`?view=`), used when a view lives on another tab. */
+  readonly initialViewId?: string | null;
+}
+
+export function JobsViewsBar({ tab, current, activeId, onApply, canShare, clients, initialViewId }: JobsViewsBarProps) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const views = useSavedViews('jobs');
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -25,6 +40,24 @@ export function JobsViewsBar({ current, activeId, onApply, canShare }: { readonl
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const list = views.data ?? [];
+  const opened = useRef(false);
+
+  const open_ = (view: SavedViewDTO) => {
+    const home = viewTab(view.config);
+    if (home && home !== tab) {
+      router.push(routes.jobs({ tab: home === 'open' ? undefined : home, view: view.id }));
+      return;
+    }
+    onApply(toViewConfig(view.config, { clients }), view.id);
+  };
+
+  // Arriving with `?view=`: open that view once the list of views is here.
+  useEffect(() => {
+    if (opened.current || !initialViewId || !views.data) return;
+    opened.current = true;
+    const view = views.data.find((item) => item.id === initialViewId);
+    if (view) onApply(toViewConfig(view.config, { clients }), view.id);
+  }, [initialViewId, views.data, clients, onApply]);
   const isDefault = activeId === null && JSON.stringify({ ...current, columns: [], layout: '', group: '' }) === JSON.stringify({ ...DEFAULT_VIEW, columns: [], layout: '', group: '' });
 
   const save = async () => {
@@ -34,7 +67,7 @@ export function JobsViewsBar({ current, activeId, onApply, canShare }: { readonl
       return;
     }
     setSaving(true);
-    const result = await saveViewAction({ page: 'jobs', name: trimmed, config: { ...current }, shared });
+    const result = await saveViewAction({ page: 'jobs', name: trimmed, config: { ...current, tab }, shared });
     setSaving(false);
     if (!result.ok) {
       setError(result.error.message);
@@ -65,7 +98,7 @@ export function JobsViewsBar({ current, activeId, onApply, canShare }: { readonl
   };
 
   const update = async (view: SavedViewDTO) => {
-    const saved = await callAction(saveViewAction({ id: view.id, page: 'jobs', name: view.name, config: { ...current }, shared: view.shared }), "Couldn't update the view");
+    const saved = await callAction(saveViewAction({ id: view.id, page: 'jobs', name: view.name, config: { ...current, tab }, shared: view.shared }), "Couldn't update the view");
     if (!saved) return;
     await queryClient.invalidateQueries({ queryKey: qk.views('jobs') });
     onApply(current, view.id);
@@ -78,7 +111,7 @@ export function JobsViewsBar({ current, activeId, onApply, canShare }: { readonl
       <ViewChip label="Everything" active={isDefault} onClick={() => onApply({ ...DEFAULT_VIEW, columns: current.columns, layout: current.layout, group: current.group }, null)} />
       {list.map((view) => (
         <span key={view.id} className="inline-flex items-center">
-          <ViewChip label={view.name} shared={view.shared} active={activeId === view.id} onClick={() => onApply(toViewConfig(view.config), view.id)} grouped />
+          <ViewChip label={view.name} shared={view.shared} active={activeId === view.id} onClick={() => open_(view)} grouped={view.mine} />
           {view.mine ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
