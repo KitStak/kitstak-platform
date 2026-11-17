@@ -13,7 +13,7 @@ interface ClosingSectionProps {
 }
 
 export function ClosingSection({
-  title = 'Put the whole operation on one stack.',
+  title = 'Sell it. Stock it. Ship it.',
   startHref = ROUTES.getStarted,
   startLabel = 'Set up your Stak',
   note = 'About five minutes. No card needed to set up.',

@@ -27,7 +27,7 @@ const RECIPES: readonly Recipe[] = [
     trigger: 'the close date is 1 day away',
     condition: 'the status is not Won',
     action: 'notify the owner and post an update',
-    log: ['Trigger matched: Summit Goods 3PL closes tomorrow', 'Condition passed: status is Proposal', 'Notified Dana R.', 'Posted an update on the deal'],
+    log: ['Trigger matched: Summit Goods closes tomorrow', 'Condition passed: status is Proposal', 'Notified Dana R.', 'Posted an update on the deal'],
   },
   {
     name: 'New lead',

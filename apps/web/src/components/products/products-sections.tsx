@@ -94,7 +94,7 @@ const CARDS: readonly ProductCard[] = [
       'Wave rules, pick jobs and packing stations',
       'Rate shopping across your carrier accounts',
       'Returns, kitting and work orders',
-      '3PL clients and billing',
+      'Client billing, if you run a 3PL',
     ],
     href: ROUTES.wms,
   },

@@ -9,7 +9,7 @@ const CAPABILITIES = [
   { name: 'Orders and packing', note: 'Pick, pack and label from a dedicated packing station.' },
   { name: 'Returns', note: 'A return station that inspects, restocks or writes off.' },
   { name: 'Work orders and kitting', note: 'Build kits from components and track the output.' },
-  { name: 'Clients and billing', note: 'Run multiple clients from one floor and bill each one.' },
+  { name: 'Clients and billing', note: 'Do you run a 3PL? Keep clients apart on one floor and bill each one.' },
   { name: 'Carriers and channels', note: 'Connect stores and carriers in one place.' },
 ] as const;
 

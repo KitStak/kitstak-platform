@@ -133,7 +133,7 @@ export const PRICE_INCLUDED: readonly string[] = [
   'Every warehouse feature on this page',
   'Your whole floor team',
   'All channel and carrier connections',
-  '3PL clients and billing',
+  'Client billing, if you run a 3PL',
   'Reports, analytics and exports',
   'The KitStak portal and one sign-in',
 ];
@@ -160,9 +160,9 @@ export const FAQ: readonly FaqItem[] = [
       'Yes. You connect your own carrier accounts, and rates and labels come from them. Until you connect one, the system runs against a built-in simulation so you can train the team first.',
   },
   {
-    question: 'Does it work for a single brand, not a 3PL?',
+    question: 'We run a 3PL. Does it handle our clients?',
     answer:
-      'Yes. Run it with one client and ignore the billing side. Everything from receiving to returns works the same way.',
+      'Yes. Each client has its own products, stock and orders on a shared floor, and you bill each one from the work done. If you ship only your own goods, run it with one client and ignore the billing side.',
   },
   {
     question: 'Can I use the WMS without the CRM?',
