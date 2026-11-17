@@ -2,7 +2,7 @@
 
 /**
  * Printout designer (wizard step 3). A block designer with a live preview:
- *   - Page setup: paper or label stock (Letter / A4 / Legal, 4×6 … 2×1), font, size, accent
+ *   - Page setup: paper or label stock (Letter / A4 / Legal, 4×6, landscape 6×4 … 2×1), font, size, accent
  *     color, logo position, barcode symbology and, for labels, the printer language (PDF / ZPL).
  *   - Layout: one ordered list of built-in sections and free blocks. Drag a row (or use the
  *     arrows / Alt+↑↓) to reorder, switch rows on or off, click a block to edit it.
@@ -46,6 +46,7 @@ import {
   columnsFor,
   DOCUMENT_PAPERS,
   FONTS,
+  isLandscapeStock,
   isTwoDimensional,
   LABEL_LANGUAGES,
   LABEL_STOCKS,
@@ -988,6 +989,13 @@ export function DesignerStep({
                   options={FONTS.map((f) => ({ value: f, label: f }))}
                 />
               </Labeled>
+            ) : null}
+            {isLabel && isLandscapeStock(layout.paper) ? (
+              <p className="col-span-2 text-2xs text-faint">
+                Landscape: {paperLabel(layout.paper).replace(' (landscape)', '')}, read with the long edge
+                across. Load 4 × 6 in stock as usual
+                {zpl ? '; the ZPL turns every field a quarter turn to fit the 4 in print head.' : '.'}
+              </p>
             ) : null}
             <Labeled label="Font size (pt)" htmlFor="pd-size">
               <NumberInput

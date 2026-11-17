@@ -38,6 +38,28 @@ export function withIntrinsicSize(svg: string): string {
   return svg.replace(/<svg/, `<svg width="${match[1]}" height="${match[2]}"`);
 }
 
+/**
+ * Height / width of a symbol as bwip-js draws it with no padding or text (the proportions the
+ * PDF renderer's barcode image has). Null when the value cannot be encoded. PURE.
+ */
+export function barcodeAspect(type: BarcodeType, value: string, heightMm: number): number | null {
+  if (!value.trim()) return null;
+  try {
+    const svg = toSVG({
+      bcid: type,
+      text: value.trim(),
+      scale: 3,
+      ...(TWO_D.has(type) ? {} : { height: Math.max(4, heightMm) }),
+      includetext: false,
+    });
+    const match = VIEWBOX_RE.exec(svg);
+    const [width, height] = [Number(match?.[1]), Number(match?.[2])];
+    return width > 0 && height > 0 ? height / width : null;
+  } catch {
+    return null;
+  }
+}
+
 export function renderBarcodeSvg({
   value,
   type = 'code128',

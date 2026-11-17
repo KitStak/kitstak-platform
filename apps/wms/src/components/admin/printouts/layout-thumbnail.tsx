@@ -126,7 +126,9 @@ export function LayoutThumbnail({
         label
           ? layout.paper === '4x2'
             ? 'aspect-[2/1] w-full'
-            : 'aspect-[2/3] w-24'
+            : layout.paper === '6x4'
+              ? 'aspect-[3/2] w-40'
+              : 'aspect-[2/3] w-24'
           : 'aspect-[17/22] w-28',
         className,
       )}

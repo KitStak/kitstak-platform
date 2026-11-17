@@ -22,7 +22,6 @@ import type { AuthContext } from '@/server/auth/context';
 import { scopedWhere } from '@/server/auth/scope';
 import * as s from '@/server/db/schema';
 import { pdfSafe, wrapText } from '@/server/print/pdf';
-import { dots, zplBox, zplField, zplLabel, zplText } from '@/server/print/zpl';
 import {
   blockIdOf,
   columnsFor,
@@ -30,6 +29,7 @@ import {
   DOCUMENT_COLUMNS,
   familyOf,
   isTwoDimensional,
+  PAPER_POINTS,
   printFieldValue,
   type BarcodeSymbology,
   type PrintBlock,
@@ -48,18 +48,7 @@ export interface RenderOptions {
   readonly now?: Date;
 }
 
-/** Points (1/72 in). Label stock is width x height in inches. */
-export const PAPER_POINTS: Readonly<Record<PrintoutLayout['paper'], readonly [number, number]>> = {
-  Letter: [612, 792],
-  A4: [595.28, 841.89],
-  Legal: [612, 1008],
-  '4x6': [288, 432],
-  '4x4': [288, 288],
-  '4x3': [288, 216],
-  '4x2': [288, 144],
-  '3x2': [216, 144],
-  '2x1': [144, 72],
-};
+export { PAPER_POINTS };
 
 const FONT_MAP = {
   Helvetica: [StandardFonts.Helvetica, StandardFonts.HelveticaBold],
@@ -538,138 +527,8 @@ export async function renderLayoutPdf(
   return doc.save();
 }
 
-/* ---------------- ZPL II (label printers) ---------------- */
-
-/** Native ZPL barcode command for a symbology (Code 128 fallback for GS1 data without FNC1). */
-function zplBarcode(
-  sym: BarcodeSymbology,
-  x: number,
-  y: number,
-  value: string,
-  height: number,
-  moduleWidth: number,
-): string {
-  const data = `^FH\\^FD${zplField(value)}^FS`;
-  const by = `^BY${moduleWidth}`;
-  switch (sym) {
-    case 'qrcode':
-      return `^FO${x},${y}^BQN,2,${Math.max(2, moduleWidth + 2)}^FH\\^FDQA,${zplField(value)}^FS`;
-    case 'datamatrix':
-      return `^FO${x},${y}^BXN,${Math.max(3, moduleWidth * 2)},200${data}`;
-    case 'pdf417':
-      return `^FO${x},${y}${by}^B7N,${Math.max(4, Math.round(height / 12))},3,,,N${data}`;
-    case 'code39':
-      return `^FO${x},${y}${by}^B3N,N,${height},N,N${data}`;
-    case 'ean13':
-      return `^FO${x},${y}${by}^BEN,${height},N,N${data}`;
-    case 'upca':
-      return `^FO${x},${y}${by}^BUN,${height},N,N,N${data}`;
-    case 'gs1-128':
-    case 'code128':
-    default:
-      return `^FO${x},${y}${by}^BCN,${height},N,N,N${data}`;
-  }
-}
-
-/**
- * ZPL II for label layouts (203 dpi), one `^XA…^XZ` per record. Sections and blocks print top
- * to bottom like the PDF; images are skipped (ZPL needs ^GF bitmaps) and noted in a comment.
- */
-export function renderLayoutZpl(
-  layout: PrintoutLayout,
-  records: readonly DocRecord[],
-  opts: RenderOptions,
-  copies = 1,
-): string {
-  const [pw, ph] = PAPER_POINTS[layout.paper];
-  const widthDots = dots(pw / 72);
-  const lengthDots = dots(ph / 72);
-  const margin = dots(ph <= 72 ? 0.06 : 0.12);
-  const inner = widthDots - margin * 2;
-  const pt = (points: number) => Math.round((points / 72) * 203);
-  const alignOf = (a: 'left' | 'center' | 'right') => (a === 'right' ? 'R' : a === 'center' ? 'C' : 'L');
-  return records
-    .map((record) => {
-      const cmds: string[] = [];
-      let y = margin;
-      for (const key of layout.sections.filter((sec) => sec.enabled).map((sec) => sec.key)) {
-        const b = blockFor(layout, key);
-        if (b) {
-          if (b.kind === 'spacer') y += pt(b.height);
-          else if (b.kind === 'divider') {
-            cmds.push(
-              zplBox(
-                margin,
-                y,
-                inner,
-                Math.max(2, pt(Math.min(b.height, 6))),
-                Math.max(2, pt(Math.min(b.height, 6))),
-              ),
-            );
-            y += pt(Math.min(b.height, 6)) + 8;
-          } else if (b.kind === 'text' || b.kind === 'field') {
-            const h = pt(b.size);
-            const value = b.kind === 'text' ? b.text : `${b.text}${fieldValue(record, b.field, opts)}`;
-            cmds.push(
-              zplText({
-                x: margin,
-                y,
-                text: value,
-                height: h,
-                blockWidth: inner,
-                maxLines: 3,
-                align: alignOf(b.align),
-              }),
-            );
-            y += Math.ceil((value.length * h * 0.55) / inner + 0.5) * (h + 4);
-          } else if (b.kind === 'barcode') {
-            const h = pt(b.height);
-            const width = Math.round((inner * b.widthPct) / 100);
-            const x =
-              b.align === 'center'
-                ? margin + Math.round((inner - width) / 2)
-                : b.align === 'right'
-                  ? margin + inner - width
-                  : margin;
-            cmds.push(zplBarcode(b.symbology, x, y, fieldValue(record, b.field, opts), h, 2));
-            y += (isTwoDimensional(b.symbology) ? Math.min(h * 2, inner) : h) + 12;
-          } else {
-            cmds.push(`^FX image block ${b.id} not sent: images need a ^GF bitmap from the printer driver`);
-          }
-          continue;
-        }
-        if (key === 'title' && layout.title) {
-          const h = pt(Math.min(layout.fontSize + 4, ph <= 72 ? 6 : 18));
-          cmds.push(zplText({ x: margin, y, text: layout.title, height: h }));
-          y += h + 8;
-        } else if (key === 'barcode') {
-          const h = Math.round(lengthDots * (ph <= 72 ? 0.35 : 0.3));
-          cmds.push(zplBarcode(layout.barcodeType, margin, y, record.code, h, ph <= 72 ? 1 : 3));
-          y += (isTwoDimensional(layout.barcodeType) ? Math.min(h * 2, inner) : h) + 10;
-        } else if (key === 'code') {
-          const h = pt(ph <= 72 ? 8 : ph <= 144 ? 12 : 20);
-          cmds.push(zplText({ x: margin, y, text: record.code, height: h, blockWidth: inner, align: 'C' }));
-          y += h + 8;
-        } else if (key === 'details') {
-          for (const d of (record.details ?? []).slice(0, ph <= 72 ? 0 : ph <= 144 ? 1 : 5)) {
-            const h = pt(layout.fontSize);
-            cmds.push(zplText({ x: margin, y, text: d, height: h }));
-            y += h + 6;
-          }
-        } else if (key === 'footer' && ph > 144)
-          cmds.push(
-            zplText({
-              x: margin,
-              y: lengthDots - margin - 20,
-              text: `Printed ${dateText(undefined, opts.now ?? new Date())} · ${opts.companyName}`,
-              height: 18,
-            }),
-          );
-      }
-      return zplLabel(widthDots, lengthDots, cmds, copies);
-    })
-    .join('\n');
-}
+/* ZPL II output for label printers lives in printouts-render-zpl.ts. */
+export { renderLayoutZpl } from './printouts-render-zpl';
 
 /* ---------------- sample records ---------------- */
 
