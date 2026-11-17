@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { ROUTES } from '../site-links';
+import { HeroLoop } from './hero-loop';
 import styles from './hero.module.css';
 
-/** Static hero. The animated order stack (./order-stack) is unmounted for now, not deleted. */
 export function Hero() {
   return (
     <section id="top" className={styles.hero} aria-labelledby="hero-heading">
@@ -25,6 +25,7 @@ export function Hero() {
           </div>
         </div>
       </div>
+      <HeroLoop />
     </section>
   );
 }
