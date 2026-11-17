@@ -71,7 +71,7 @@ React 19.3, Tailwind 4 via `@tailwindcss/turbopack`, `@kitstak/ui` tokens + them
 `@kitstak/db/client-pg`, zod 4, lucide-react, radix, cmdk, sonner, zustand, `@tanstack/react-query`, `@tanstack/react-virtual`,
 date-fns, vitest, Playwright. Charts are the house hand-rolled SVG kit copied from `apps/projects/src/features/dashboards/charts.tsx`
 into `src/features/charts/` and extended (ranking bars, waterfall, bullet bar, sparkline, stacked cost bar, gauge). No chart library.
-CSV parsing and writing is our own small tested module (`src/lib/csv.ts`), no dependency. Shell, sidebar, top bar, org switcher,
+CSV parsing and writing is our own small tested module (`src/lib/csv.ts`), no dependency. Shell, top bar and its navigation, org switcher,
 user menu, theme toggle and command palette are copied from Projects so Pulse looks and behaves like its siblings.
 
 Layering is the house pattern: pages are thin, `src/features/<area>` holds server page + client view, all data access goes through
@@ -943,9 +943,13 @@ index `(org_id, created_at) WHERE processed_at IS NULL`.
 
 ## 6. Product surface (every route is real, working and persisted)
 
-Shell: house sidebar and top bar. Top bar primary button **Log work**. The sidebar has seven items and one group, no more:
+Shell: one top bar, no sidebar (the same pattern as the WMS), and the page uses the full width under it. The bar holds the logo,
+the navigation, search, the org switcher, the primary button **Log work**, alerts, help, the app switcher, the theme toggle and the
+account menu. The navigation has seven links and one menu, no more:
 Home · Jobs (badge: at risk + losing count) · Log work · Profit · Labor · Alerts (badge: open) · Reports · **More** (Target pace, Calculator, Goals,
-Import and export, Settings). Clients, job types, extra services, sites and months are tabs inside Profit, not sidebar items.
+Import and export, Settings). If the bar is too narrow for all seven links, the last ones move into More. Below 1024px the links fold
+into a menu button that opens a sheet from the left. Clients, job types, extra services, sites and months are tabs inside Profit, not
+navigation items.
 Supervisors land on Log work, not Home, and see: Log work, Jobs, Labor (Time tab only), Alerts, and More with Target pace and Import and export.
 A global filter bar (date range presets: this week, last week, this month, last month, last 90 days, this year, custom; site; client; job type; status)
 lives in the URL query string on every list, chart and report, so any view can be bookmarked, shared and exported as seen.
@@ -1269,7 +1273,7 @@ Assets in `apps/pulse/public/brand/` (copy `BRAND-README.txt`, sibling icons, `k
   [36, 124, 108, 26, RED] [144, 124, 20, 26, PINK]
   ```
 
-  Use it as the favicon (`src/app/icon.svg`, `icon.png`, `apple-icon.png`), the sidebar and top bar mark, `ICONS.pulse` in `@kitstak/ui` (`offsetY: 0`, 6 shapes), the Portal tile and `MARKS.pulse`,
+  Use it as the favicon (`src/app/icon.svg`, `icon.png`, `apple-icon.png`), the top bar mark, `ICONS.pulse` in `@kitstak/ui` (`offsetY: 0`, 6 shapes), the Portal tile and `MARKS.pulse`,
   the CRM, WMS and Projects inline `PulseMark`, and `apps/web/public/brand/apps/kitstak-icon-pulse.svg`. Copy it into `apps/portal/public/brand/` too.
 - **`kitstak-loader-pulse.svg`**: animated loader using the classes already in the brand loader stylesheet (`/* 7 Pulse: cost eats into revenue, live */`): per row a full width pink bar with class `ghost`
   (opacity .35) and a red bar on top with class `meter` (scaleX from the left, staggered delays per row). Stops for `prefers-reduced-motion`. Use it in every `loading.tsx`, full page loads and long actions
@@ -1345,7 +1349,7 @@ green before a row can be claimed.
 | 5 | Risk and alerts | 4 | 9 | Every open job is on track, heads up, at risk, losing money or not enough data, with the reason in a sentence, the dollar impact and a next step, before the job ends, and without crying wolf on day one. Rules a manager can tune, an inbox, a daily digest, tasks in Projects. Easy Metrics shows what happened; it does not predict a job's finish. See `/jobs`, `/alerts`. | `calc/risk`, e2e 1 |
 | 6 | Data in and out | 4 | 9 | A template, column matching, preview, cell level errors, look alike and same file checks, undo and a round trip safe export for all 17 streams, self serve. Easy Metrics needs about two weeks of vendor mapping. See `/import`, `/export`. | round trip and import DB tests, e2e 6 |
 | 7 | Integration depth | 6 | 9 | Live two way links with CRM (job from a won deal, quote value, Profit tab on the deal and account), WMS (work orders, finished kits, component use, services, bills as earned vs billed; Job profit card on the work order), Projects (linked project, time as labor, tasks from alerts) and Portal, each with a one click link to the source record. And it works with none of them. Easy Metrics has no CRM, quote or project link and cannot run alone. | sync and bridge DB tests, e2e 11, 12, 13 |
-| 8 | Ease of use | 5 | 9 | 8th grade words (one word list for the whole suite), seven sidebar items, a one line quick add, "How we got this" with a data quality line on every number, a 5 step start, sample data, empty states that teach, first profit number in minutes. Easy Metrics needs training and weeks of setup. | `copy-rules`, e2e 4, 12, time to first number |
+| 8 | Ease of use | 5 | 9 | 8th grade words (one word list for the whole suite), seven navigation links, a one line quick add, "How we got this" with a data quality line on every number, a 5 step start, sample data, empty states that teach, first profit number in minutes. Easy Metrics needs training and weeks of setup. | `copy-rules`, e2e 4, 12, time to first number |
 | 9 | Visual and interaction quality | 6 | 9 | The KitStak look across five apps, purpose built charts, light and dark, phone to wall TV, keyboard first, loaders and error states everywhere. | e2e at both widths and themes, e2e 14, 16 |
 | 10 | Enterprise readiness | 7 | 8 | Five roles with opt in money and server side hiding down to stored sentences, wages apart from margins, org isolation by composite keys, append only audit log including exports, month close and lock with a written restamp rule, multi site, saved views, scheduled report builds, device links with expiry, reconciliation tests. Easy Metrics has more years in market; Pulse answers with provable numbers. | money hiding, isolation, month close, concurrency and RLS tests, e2e 9, 10 |
 | | **Total** | **52** | **88** | | |

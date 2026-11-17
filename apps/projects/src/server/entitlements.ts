@@ -26,11 +26,12 @@ export type ModuleFlags = Readonly<Record<Module, boolean>>;
 
 /** Every module's entitlement for the org (app switcher + integration UI gating). */
 export async function orgModuleFlags(orgId: string): Promise<ModuleFlags> {
-  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true };
+  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true, pulse: true };
   const snapshot = await getEntitlements(entitlementsDb(), orgId);
   return {
     crm: isEntitled(snapshot.crm),
     wms: isEntitled(snapshot.wms),
     projects: isEntitled(snapshot.projects),
+    pulse: isEntitled(snapshot.pulse),
   };
 }

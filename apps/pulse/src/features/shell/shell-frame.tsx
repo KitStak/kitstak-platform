@@ -1,7 +1,7 @@
 import 'server-only';
 import { AppShell } from './app-shell';
 import type { ShellContextValue } from './shell-context';
-import { pulseAccessFor, toDomainContext } from '@/server/domain';
+import { getBadges, pulseAccessFor, toDomainContext } from '@/server/domain';
 import { orgHasPulseModule, orgModuleFlags } from '@/server/entitlements';
 import { appUrls } from '@/server/env';
 import { integrationAvailability } from '@/server/integrations';
@@ -21,6 +21,8 @@ export async function loadShell(context: PulseContext) {
     pulseAccessFor(ctx),
   ]);
   const urls = appUrls();
+  // Counts for the Jobs entry and the bell. Never blocks the shell: a failed read shows no badge.
+  const counts = entitled && access.role !== 'none' ? await getBadges(ctx).catch(() => null) : null;
   const shellContext: ShellContextValue = {
     user: context.user,
     org: context.org,
@@ -35,6 +37,7 @@ export async function loadShell(context: PulseContext) {
     // One separate warehouse per organization: any org may hold WMS; the entitlement flags
     // drive the switcher, so nothing is "not in plan".
     notInPlan: [],
+    badges: counts ? { jobsAtRisk: counts.jobsAtRisk, openAlerts: counts.openAlerts } : undefined,
   };
   return { ctx, entitled, access, urls, shellContext };
 }

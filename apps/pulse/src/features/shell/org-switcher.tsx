@@ -53,7 +53,7 @@ export function OrgSwitcher({ className }: { readonly className?: string }) {
       <DropdownMenuTrigger
         data-testid="org-switcher"
         className={cn(
-          'inline-flex h-8 min-w-0 shrink items-center gap-1.5 rounded-md border border-border-input bg-panel px-1.5 text-sm font-medium text-fg sm:max-w-[240px] sm:px-2',
+          'inline-flex h-8 min-w-0 shrink items-center gap-1.5 rounded-md border border-border-input bg-panel px-1.5 text-sm font-medium text-fg sm:max-w-[200px] sm:px-2',
           'hover:border-border-input-hover hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-[state=open]:bg-selected',
           className,
         )}
@@ -61,11 +61,11 @@ export function OrgSwitcher({ className }: { readonly className?: string }) {
         <span aria-hidden className="flex size-5 shrink-0 items-center justify-center rounded-sm bg-sunken text-2xs font-bold text-fg-secondary">
           {orgInitials(org.name)}
         </span>
-        <span className="sr-only sm:hidden">{org.name}</span>
-        <span className="hidden truncate sm:block">{org.name}</span>
+        {/* Initials only on phones and where the top nav needs the room (lg to xl); the name stays for screen readers. */}
+        <span className="sr-only sm:not-sr-only sm:truncate lg:sr-only xl:not-sr-only xl:truncate">{org.name}</span>
         <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-icon" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
+      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel>Organizations</DropdownMenuLabel>
         {orgs.map((entry) => (
           <DropdownMenuItem

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Smoke suite for the app frame: sign in, the navigation, every sidebar page renders, the command
+ * Smoke suite for the app frame: sign in, the navigation, every navigation page renders, the command
  * palette, search, device link pages and the health check. Runs against a dev or prod server:
  * `E2E_BASE_URL=http://localhost:3511 npx playwright test e2e/smoke.spec.ts`.
  * It reads only; nothing is created.
@@ -32,6 +32,9 @@ async function signIn(page: Page) {
   await page.context().addCookies(session);
 }
 
+/** Pages that live in the More menu: it has to be opened before the link can be clicked. */
+const MORE_PAGES = new Set(['nav-target-pace', 'nav-calculator', 'nav-goals', 'nav-import', 'nav-settings']);
+
 const NAV_PAGES: readonly (readonly [testId: string, path: string, heading: string])[] = [
   ['nav-jobs', '/jobs', 'Jobs'],
   ['nav-log', '/log', 'Log work'],
@@ -54,7 +57,7 @@ test.describe('smoke', () => {
     await page.locator('button[type="submit"]').click();
     await page.waitForURL((url) => !url.pathname.startsWith('/login'));
     await expect(page.getByTestId('topbar-search')).toBeVisible();
-    await expect(page.getByTestId('sidebar')).toBeVisible();
+    await expect(page.getByTestId('top-nav')).toBeVisible();
   });
 
   test('signed out visitors are sent to sign in and come back to the page they wanted', async ({ page }) => {
@@ -78,14 +81,18 @@ test.describe('smoke', () => {
   test.describe('signed in', () => {
     test.beforeEach(async ({ page }) => signIn(page));
 
-    test('the sidebar has seven items and the More group, and every page opens', async ({ page }) => {
+    test('the top navigation has seven items and the More menu, and every page opens', async ({ page }) => {
       await page.goto('/');
       await expect(page.getByTestId('nav-home')).toHaveAttribute('aria-current', 'page');
       for (const [testId, path, heading] of NAV_PAGES) {
+        const inMore = MORE_PAGES.has(testId);
+        if (inMore) await page.getByTestId('nav-more').click();
         await page.getByTestId(testId).click();
         await page.waitForURL((url) => url.pathname === path);
         await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+        if (inMore) await page.getByTestId('nav-more').click();
         await expect(page.getByTestId(testId)).toHaveAttribute('aria-current', 'page');
+        if (inMore) await page.keyboard.press('Escape');
       }
     });
 
@@ -135,7 +142,8 @@ test.describe('smoke', () => {
       const response = await page.request.get('/api/v1/me');
       expect(response.status()).toBe(200);
       const body = (await response.json()) as { data: { pulseRole: string; seesMoney: boolean; modules: { pulse: boolean } } };
-      expect(body.data.pulseRole).toBe('admin');
+      // Admin through the WMS role before the seed runs; the seed makes the seed actor an explicit Pulse owner.
+      expect(['owner', 'admin']).toContain(body.data.pulseRole);
       expect(body.data.seesMoney).toBe(true);
       expect(body.data.modules.pulse).toBe(true);
     });

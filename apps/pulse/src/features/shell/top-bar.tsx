@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { withThemeParam } from '@kitstak/ui/theme-handoff';
-import { Bell, BookOpen, CircleHelp, ClipboardPen, Keyboard, LayoutGrid, LifeBuoy, Menu, Rocket, Search } from 'lucide-react';
+import { Bell, BookOpen, CircleHelp, ClipboardPen, Keyboard, LayoutGrid, LifeBuoy, Rocket, Search } from 'lucide-react';
 import { AppSwitcher } from '@kitstak/ui/app-switcher';
 import {
   CountBadge,
@@ -18,10 +18,12 @@ import {
 } from '@/components/ui';
 import { routes } from '@/lib/routes';
 import { Logo, PulseMark } from './logo';
+import { MobileNav } from './mobile-nav';
 import { OrgSwitcher } from './org-switcher';
 import { useShell } from './shell-context';
 import { useShellStore } from './store';
 import { ThemeToggle } from './theme-toggle';
+import { TopNav } from './top-nav';
 import { UserMenu } from './user-menu';
 
 function HelpMenu() {
@@ -55,12 +57,14 @@ function HelpMenu() {
   );
 }
 
-/** 56px top bar (house anatomy): menu (mobile), logo, org switcher, search, Log work, alerts, help, apps, theme, account. */
+/**
+ * 56px top bar, laid out like the WMS: menu button (below lg), logo, primary navigation, then on
+ * the right search, org switcher, Log work, alerts, help, apps, theme and account.
+ */
 export function TopBar() {
   const { appUrls, modules, notInPlan, badges, pulseRole, can } = useShell();
   const mod = useModKey();
   const openPalette = useShellStore((state) => state.openPalette);
-  const setMobileNavOpen = useShellStore((state) => state.setMobileNavOpen);
   const alerts = badges?.openAlerts ?? 0;
   const hasAccess = pulseRole !== 'none';
 
@@ -70,10 +74,10 @@ export function TopBar() {
       data-testid="top-bar"
       className="relative z-[var(--z-header)] flex h-[var(--topbar-height)] shrink-0 items-center gap-1.5 border-b border-border-subtle bg-panel px-3 lg:px-4"
     >
-      <IconButton label="Open navigation" icon={<Menu aria-hidden />} className="md:hidden" onClick={() => setMobileNavOpen(true)} />
+      <MobileNav />
       <Link
         href={routes.home()}
-        className="mr-1 flex h-9 shrink-0 items-center rounded-md px-1.5 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus"
+        className="flex h-9 shrink-0 items-center rounded-md px-1.5 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus lg:mr-1"
       >
         <span className="hidden sm:inline-flex">
           <Logo size={22} />
@@ -81,10 +85,9 @@ export function TopBar() {
         <PulseMark size={26} className="sm:hidden" />
         <span className="sr-only">KitStak Pulse home</span>
       </Link>
-      <span aria-hidden className="hidden h-5 w-px bg-border-default sm:block" />
-      <OrgSwitcher />
+      <TopNav />
 
-      <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-1.5">
+      <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-1.5 lg:shrink-0">
         <Tooltip
           content={
             <span className="flex items-center gap-1.5">
@@ -100,18 +103,19 @@ export function TopBar() {
             data-testid="topbar-search"
             aria-label="Search and commands"
             aria-keyshortcuts="Control+K Meta+K"
-            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border-subtle bg-sunken text-xs text-fg-secondary transition-colors hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus lg:w-56 lg:justify-start lg:px-3"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border-subtle bg-sunken text-xs text-fg-secondary transition-colors hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus 2xl:w-52 2xl:justify-start 2xl:px-3"
           >
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <Search aria-hidden className="size-3.5 shrink-0" />
-              <span className="hidden min-w-0 flex-1 truncate text-left lg:inline">Search</span>
-              <span className="hidden items-center gap-0.5 lg:inline-flex">
+              <span className="hidden min-w-0 flex-1 truncate text-left 2xl:inline">Search</span>
+              <span className="hidden items-center gap-0.5 2xl:inline-flex">
                 <Kbd>{mod}</Kbd>
                 <Kbd>K</Kbd>
               </span>
             </span>
           </button>
         </Tooltip>
+        <OrgSwitcher />
         {can('production:log') ? (
           <Tooltip
             content={
@@ -127,8 +131,8 @@ export function TopBar() {
               className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-sm font-medium text-primary-fg transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:px-3"
             >
               <ClipboardPen aria-hidden className="size-4" />
-              <span className="hidden sm:inline">Log work</span>
-              <span className="sr-only sm:hidden">Log work</span>
+              {/* Icon only on phones and where the top nav needs the room (lg to xl). */}
+              <span className="sr-only sm:not-sr-only lg:sr-only xl:not-sr-only">Log work</span>
             </Link>
           </Tooltip>
         ) : null}
