@@ -179,7 +179,7 @@ export function ColumnCenter({ open, onOpenChange, existingTypes, onAdd, returnF
           target.focus({ preventScroll: true });
         }}
       >
-        <DialogHeader title="Column Center" description="Pick a column type to add it to the board." />
+        <DialogHeader title="Column Center" />
         <div className="flex min-h-0 flex-1 gap-0 border-t border-border-subtle max-md:flex-col">
           <nav
             aria-label="Column categories"

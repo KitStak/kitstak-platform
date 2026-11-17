@@ -91,14 +91,14 @@ export const SETUP_GUIDE_STEPS: readonly StepDefinition[] = [
   {
     key: 'crm_workspace',
     title: 'Create your CRM workspace',
-    description: 'Start from a template: leads, deals, contacts and accounts, wired together.',
+    description: 'Start from a template with leads, deals, contacts and accounts.',
     action: 'templates',
     minutes: 2,
   },
   {
     key: 'crm_first_deal',
     title: 'Add your first deal',
-    description: 'Add a deal to your pipeline and watch stages, totals and forecasts come alive.',
+    description: 'Add a deal to your pipeline.',
     action: 'pipeline',
     minutes: 1,
     requires: 'crm_workspace',
@@ -106,14 +106,14 @@ export const SETUP_GUIDE_STEPS: readonly StepDefinition[] = [
   {
     key: 'invite_team',
     title: 'Invite your team',
-    description: 'Bring colleagues in so deals, activities and accounts have owners.',
+    description: 'Give deals, activities and accounts owners.',
     action: 'invite',
     minutes: 2,
   },
   {
     key: 'crm_dashboard',
     title: 'Create a dashboard',
-    description: 'See pipeline value, win rate and team performance at a glance.',
+    description: 'Pipeline value, win rate and team performance.',
     action: 'dashboards',
     minutes: 1,
     requires: 'crm_workspace',

@@ -66,10 +66,7 @@ const TOPICS: ReadonlyArray<{ id: string; title: string; href: string; body: rea
 export default function Page() {
   return (
     <div className="pb-10">
-      <PageHeader
-        title="Facility help"
-        helper="How locations, warehouses, license plates, carts and packages are set up."
-      />
+      <PageHeader title="Facility help" />
       <nav aria-label="Topics" className="mt-4 flex flex-wrap gap-2 px-6">
         {TOPICS.map((t) => (
           <a

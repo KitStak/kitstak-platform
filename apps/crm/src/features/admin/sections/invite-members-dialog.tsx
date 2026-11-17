@@ -80,7 +80,7 @@ export function InviteMembersDialog({
       <DialogContent size="md" data-testid="invite-dialog">
         <DialogHeader
           title="Invite people"
-          description="They’ll get a link to join this organization. Invitations expire after 7 days."
+          description="Invitations expire after 7 days."
           icon={
             <span className="flex size-9 items-center justify-center rounded-lg bg-primary-subtle text-primary-text">
               <MailPlus aria-hidden className="size-5" />

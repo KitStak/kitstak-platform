@@ -522,7 +522,6 @@ export function AutomationsView({
   return (
     <Page
       title="Automations"
-      subtitle="Let KitStak do the busywork. Each rule reads like a sentence: when this happens, do that."
       actions={
         <>
           {hasScheduled ? (
@@ -573,7 +572,7 @@ export function AutomationsView({
           <EmptyState
             illustration="workspace"
             title="Automations need a project to work in"
-            description="Make a project first (or try our sample one), then come back to set up rules like “When a task is done, tell the owner”."
+            description="Create a project first, or try the sample one."
             actions={<SampleProjectButton variant="primary" />}
           />
         ) : list.length === 0 ? (
@@ -585,7 +584,7 @@ export function AutomationsView({
                 </span>
               }
               title="No automations yet"
-              description="Automations handle the repeat work for you: reminders, hand-offs and tidy-ups. Start with a recipe below or build your own."
+              description="Start with a recipe below or build your own."
               actions={
                 canAdd ? (
                   <Button leadingIcon={<Plus aria-hidden />} onClick={openNew}>
@@ -727,7 +726,6 @@ export function AutomationsView({
             {canAdd ? (
               <li className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong p-6 text-center">
                 <p className="font-semibold text-fg">Something else in mind?</p>
-                <p className="text-xs text-fg-muted">Pick any trigger and any steps.</p>
                 <Button size="sm" leadingIcon={<Plus aria-hidden />} onClick={openNew}>
                   Build my own
                 </Button>

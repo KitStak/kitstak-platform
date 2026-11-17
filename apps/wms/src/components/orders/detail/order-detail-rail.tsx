@@ -746,7 +746,6 @@ export function DocumentsCards({ detail, onChanged }: OrderDetailRailProps) {
             Download billing charges
           </Button>
         </DisabledReason>
-        <p className="text-xs text-secondary">Click to download the latest billing charges.</p>
       </RailCard>
 
       <RailCard title="Printouts">

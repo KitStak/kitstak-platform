@@ -323,10 +323,7 @@ function MobileScreens({ form, only }: { readonly form: Form; readonly only?: 'p
     { key: 'pickToLocation' as const, label: 'Pick to location' },
   ].filter((r) => !only || r.key === only);
   return (
-    <FormSection
-      title="Select mobile screen type"
-      description="Select the mobile screen(s) that will use this job type. The screens are mutually exclusive."
-    >
+    <FormSection title="Select mobile screen type" description="The screens are mutually exclusive.">
       <div className="flex flex-col gap-2">
         {rows.map((r) => (
           <div
@@ -371,7 +368,7 @@ function PickingSettings({ form }: { readonly form: Form }) {
   };
   return (
     <div className="flex flex-col gap-5">
-      <FormSection title="Order scope" description="Which orders this job type accepts.">
+      <FormSection title="Order scope">
         <RadioCards
           ariaLabel="Order scope"
           columns={3}

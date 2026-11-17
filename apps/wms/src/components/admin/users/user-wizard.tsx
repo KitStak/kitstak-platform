@@ -648,11 +648,7 @@ export function UserWizardDrawer({
       dirty={dirty}
       width={45}
       title={editId ? `Edit user${d ? ` · ${d.name}` : ''}` : 'Add user'}
-      description={
-        editId
-          ? 'Change details, roles, warehouse and client access.'
-          : 'Create a sign-in, then choose roles, warehouses and clients.'
-      }
+      description={editId ? undefined : 'Create a sign-in, then choose roles, warehouses and clients.'}
     >
       {editId && detail.isError ? (
         <EmptyState

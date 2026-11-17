@@ -34,20 +34,19 @@ export const CATEGORY_CARDS = [
   {
     value: 'Product' as const,
     title: 'Product',
-    description: 'Select this category to create standard products.',
+    description: 'Standard products.',
     icon: Box,
   },
   {
     value: 'Kit' as const,
     title: 'Kit',
-    description: 'Select this category to proceed with creating kit-to-order or kit-to-stock products.',
+    description: 'Kit-to-order or kit-to-stock products.',
     icon: Boxes,
   },
   {
     value: 'Packaging Material' as const,
     title: 'Packaging material',
-    description:
-      'Select this category to create packaging materials to match with your shipment packages for inventory tracking.',
+    description: 'Matched to shipment packages for inventory tracking.',
     icon: Package,
   },
 ];
@@ -59,9 +58,7 @@ export function CategoryChooser({ onPick }: { readonly onPick: (c: ProductCatego
         <p className="text-sm font-semibold text-foreground">
           Please select the type of product category to proceed.
         </p>
-        <p className="text-xs text-secondary">
-          Each category opens its own wizard. You can&apos;t change the category later.
-        </p>
+        <p className="text-xs text-secondary">You can&apos;t change the category later.</p>
       </div>
       <RadioCards<ProductCategory>
         ariaLabel="Product category"

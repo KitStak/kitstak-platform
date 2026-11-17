@@ -170,11 +170,7 @@ export function AtpPage() {
   const hasState = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader
-        title="Available To Promise (ATP)"
-        helper="Available to promise (ATP) calculates the available quantity of a product to sell it. ATP helps you to manage demands and match them to purchasing plans."
-        tabs="inventory"
-      />
+      <PageHeader title="Available To Promise (ATP)" tabs="inventory" />
       <div className="px-6 pt-3">
         {/* Neutral info note (the shared Callout "info" uses the red brand primary and reads as an error). */}
         <div

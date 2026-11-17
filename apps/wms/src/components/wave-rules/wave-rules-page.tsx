@@ -301,7 +301,6 @@ export function WaveRulesPage() {
     <NowProvider>
       <ListShell<GridRow>
         title="Job wave rules"
-        helper="Rules turn open orders into jobs, on a schedule or when you press Run."
         tabs="jobs"
         actions={
           canCreate ? (

@@ -40,26 +40,23 @@ export type SimpleCreateKind = 'dashboard' | 'folder' | 'workspace';
 const COPY: Readonly<
   Record<
     SimpleCreateKind,
-    { title: string; description: string; label: string; placeholder: string; cta: string }
+    { title: string; label: string; placeholder: string; cta: string }
   >
 > = {
   dashboard: {
     title: 'Create dashboard',
-    description: 'Combine charts, numbers and tables from your boards.',
     label: 'Dashboard name',
     placeholder: 'e.g. Revenue overview',
     cta: 'Create dashboard',
   },
   folder: {
     title: 'Create folder',
-    description: 'Group related boards and dashboards together.',
     label: 'Folder name',
     placeholder: 'e.g. Enterprise accounts',
     cta: 'Create folder',
   },
   workspace: {
     title: 'Create workspace',
-    description: 'Workspaces separate teams, regions or business lines.',
     label: 'Workspace name',
     placeholder: 'e.g. EMEA Sales',
     cta: 'Create workspace',
@@ -162,7 +159,6 @@ export function CreateSimpleDialog({
       <DialogContent size="sm">
         <DialogHeader
           title={copy.title}
-          description={copy.description}
           icon={
             <span className="inline-flex size-9 items-center justify-center rounded-lg bg-primary-subtle text-primary-text">
               <Icon aria-hidden className="size-[18px]" />

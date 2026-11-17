@@ -26,10 +26,7 @@ export function AnalyticsLanding({ section }: { readonly section?: 'labor' | 'op
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-10">
-      <PageHeader
-        title={heading ?? 'Analytics'}
-        helper="Pick a dashboard. Each chart opens the matching filtered report."
-      />
+      <PageHeader title={heading ?? 'Analytics'} />
       <div className="mx-6 mt-4 space-y-5">
         {isLoading ? (
           <div className="grid gap-3 md:grid-cols-2">

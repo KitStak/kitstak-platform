@@ -279,7 +279,6 @@ function PendingInvitations({
           <Mail aria-hidden className="size-5" />
         </span>
         <p className="font-semibold text-fg">No pending invitations</p>
-        <p className="max-w-[320px] text-sm text-fg-secondary">Everyone you invited has joined, or you haven’t invited anyone yet.</p>
         <Button variant="secondary" className="mt-2" onClick={onInviteMore}>
           Invite people
         </Button>

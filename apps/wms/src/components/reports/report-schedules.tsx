@@ -262,7 +262,7 @@ export function ScheduleReportButton({
         <DialogContent size="lg" aria-label="Schedule this report">
           <DialogHeader
             title={`Schedule ${title}`}
-            description="Deliver this view by email on a schedule. The file also appears in Excel Export History."
+            description="The file also appears in Excel Export History."
           />
           <DialogBody className="space-y-4">
             <div

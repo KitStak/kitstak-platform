@@ -210,7 +210,6 @@ function EditTemplateDialog({
       <DialogContent size="md">
         <DialogHeader
           title="Template details"
-          description="Change how this template shows up for your team."
         />
         <DialogBody className="flex flex-col gap-4 pb-4">
           <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_200px]">
@@ -371,7 +370,6 @@ export function TemplatesView({
   return (
     <Page
       title="Templates"
-      subtitle="Ready-made plans with steps, dates and automations. Pick one and adjust it to fit."
       actions={
         canManage ? (
           <Button
@@ -413,7 +411,7 @@ export function TemplatesView({
           title={category === TEAM ? 'Your team hasn’t saved a template yet' : 'No templates match'}
           description={
             category === TEAM
-              ? 'Turn a project that went well into a template so the next one starts ahead.'
+              ? 'Save any project as a template.'
               : 'Try another word or pick “All”.'
           }
           actions={
@@ -455,7 +453,7 @@ export function TemplatesView({
               </span>
               <p className="font-semibold text-fg">Make your own</p>
               <p className="max-w-60 text-xs text-fg-muted">
-                Save any project as a template. Its steps, tasks and automations come along.
+                Save any project as a template.
               </p>
               <Button
                 size="sm"

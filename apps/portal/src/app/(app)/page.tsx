@@ -21,24 +21,20 @@ export const metadata: Metadata = { title: 'Apps' };
 interface ProductCopy {
   readonly name: string;
   readonly tagline: string;
-  readonly description: string;
 }
 
 const PRODUCTS: Readonly<Record<Module, ProductCopy>> = {
   crm: {
     name: 'KitStak CRM',
     tagline: 'Pipelines, boards and automations',
-    description: 'Every deal, contact and next step on one board your whole revenue team trusts.',
   },
   wms: {
     name: 'KitStak WMS',
     tagline: 'Warehouse operations',
-    description: 'Receiving, inventory, picking and shipping for high-volume fulfillment.',
   },
   projects: {
     name: 'KitStak Projects',
     tagline: 'Projects, tasks and timelines',
-    description: 'Plan work, assign tasks and see every deadline on boards, lists and timelines.',
   },
 };
 
@@ -139,8 +135,7 @@ export default async function LauncherPage({
         <LogoMark size={40} />
         <h1 className="mt-8 text-2xl font-semibold tracking-[-0.02em] text-fg">Create your organization</h1>
         <p className="mt-2 max-w-md text-md text-fg-secondary">
-          You’re signed in, but you don’t belong to an organization yet. Create one to start using KitStak,
-          or ask a teammate for an invitation.
+          You’re not in an organization yet. Create one, or ask a teammate for an invitation.
         </p>
         <div className="mt-8 flex w-full justify-center">
           <CreateOrgForm />
@@ -200,9 +195,6 @@ export default async function LauncherPage({
         <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-fg">
           Good to see you, {firstName(session.user.name)}
         </h1>
-        <p className="mt-2 max-w-xl text-md text-fg-secondary">
-          Pick an app to open. Your session carries over: no second sign-in.
-        </p>
       </section>
 
       {showSetupGuide ? (
@@ -221,7 +213,6 @@ export default async function LauncherPage({
               module={state.module}
               name={copy.name}
               tagline={copy.tagline}
-              description={copy.description}
               href={productUrl(state.module)}
               entitled={state.entitled}
               access={state.access}

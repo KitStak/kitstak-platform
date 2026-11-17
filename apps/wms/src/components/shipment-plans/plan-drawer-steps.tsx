@@ -503,8 +503,8 @@ export function OrdersStep({
           <PackagePlus className="h-6 w-6 text-faint" aria-hidden />
           <p className="text-sm font-semibold">No order added yet.</p>
           <p className="max-w-sm text-xs text-secondary">
-            Add the orders that ride on this truck. Only orders of the plan&apos;s warehouse that are not
-            shipped, cancelled, on hold or in another active plan can be added.
+            Only orders of the plan&apos;s warehouse that are not shipped, cancelled, on hold or in another
+            active plan can be added.
           </p>
           <DisabledReason reason={addReason}>
             <Button size="sm" disabled={Boolean(addReason)} onClick={() => setPicking(true)}>

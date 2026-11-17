@@ -53,7 +53,7 @@ export function DuplicateBoardDialog({ open, onOpenChange, board, commands }: Ba
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="sm" data-testid="duplicate-board-dialog">
-        <DialogHeader title="Duplicate board" description="Make a copy in the same workspace." icon={<CopyPlus aria-hidden />} />
+        <DialogHeader title="Duplicate board" description="The copy goes in the same workspace." icon={<CopyPlus aria-hidden />} />
         <DialogBody className="flex flex-col gap-4">
           <Field label="New board name" required>
             {({ inputId }) => (
@@ -133,7 +133,7 @@ export function MoveBoardDialog({ open, onOpenChange, board, commands }: BasePro
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="sm" data-testid="move-board-dialog">
-        <DialogHeader title="Move board" description="Pick a workspace and, optionally, a folder." icon={<FolderInput aria-hidden />} />
+        <DialogHeader title="Move board" icon={<FolderInput aria-hidden />} />
         <DialogBody className="flex flex-col gap-4">
           <Field label="Workspace">
             {({ inputId }) => (

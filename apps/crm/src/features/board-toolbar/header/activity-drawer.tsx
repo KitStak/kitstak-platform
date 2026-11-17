@@ -40,7 +40,6 @@ export function ActivityDrawer({ open, onOpenChange, boardId, columns, items, us
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent
         title="Activity log"
-        description="Every change on this board, newest first."
         width={520}
         data-testid="board-activity"
         onOpenAutoFocus={(event) => {

@@ -34,7 +34,8 @@ export interface ChangeLogMessageOptions {
 }
 
 function side(value: string | null | undefined, isStatus: boolean): string {
-  if (value === null || value === undefined || value.trim() === '' || /^[—–-]$/.test(value.trim())) return EMPTY_VALUE;
+  if (value === null || value === undefined || value.trim() === '' || /^[—–-]$/.test(value.trim()))
+    return EMPTY_VALUE;
   return isStatus ? statusLabel(value) : value;
 }
 
@@ -143,7 +144,7 @@ export function ChangeLogDrawer({
       onOpenChange={onOpenChange}
       width={60}
       title={entityCode ? `Change log · ${entityCode}` : 'Change log'}
-      description="Every change to this record, newest first."
+      description="Newest first."
     >
       {query.isPending ? (
         <div className="flex flex-col gap-3">

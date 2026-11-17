@@ -89,9 +89,6 @@ function ProductNewInner() {
             : 'Create product'
         }
         breadcrumbs={[...CATALOG_CRUMBS, { label: 'Create product' }]}
-        helper={
-          category ? 'Complete each step. Required fields are marked *.' : 'Choose what you are creating.'
-        }
         actions={
           category ? (
             <span className="flex items-center gap-2">

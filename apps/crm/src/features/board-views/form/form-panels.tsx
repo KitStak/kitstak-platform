@@ -199,7 +199,7 @@ export function SettingsPanel({
         <Field label="Close after N responses">
           <Input size="sm" type="number" min={1} value={settings.maxResponses ?? ''} placeholder="No limit" onChange={(event) => onChange({ maxResponses: event.target.value ? Math.max(1, Number(event.target.value)) : null })} />
         </Field>
-        <p className="text-xs text-fg-muted">Spam protection is always on: a hidden honeypot field, a human-speed check and per-network rate limits.</p>
+        <p className="text-xs text-fg-muted">Spam protection is always on.</p>
       </section>
     </div>
   );

@@ -941,14 +941,7 @@ export function DesignerStep({
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(380px,460px)_1fr]">
       <div className="flex flex-col gap-5">
-        <Panel
-          title="Page setup"
-          description={
-            isLabel
-              ? 'Label stock and printer language for thermal printers.'
-              : 'Paper, typography and branding.'
-          }
-        >
+        <Panel title="Page setup">
           <div className="grid grid-cols-2 gap-3">
             <Labeled label={isLabel ? 'Label stock' : 'Paper size'} htmlFor="pd-paper">
               <Select
@@ -1057,10 +1050,7 @@ export function DesignerStep({
             {errorText}
           </Callout>
         ) : null}
-        <Panel
-          title="Add block"
-          description="Place your own content anywhere in the layout. New blocks go to the end; drag them into place."
-        >
+        <Panel title="Add block" description="New blocks go to the end; drag them into place.">
           <div className="grid grid-cols-3 gap-2" role="group" aria-label="Add block">
             {(Object.keys(BLOCK_KIND_LABELS) as BlockKind[]).map((kind) => {
               const Icon = KIND_ICON[kind];
@@ -1101,7 +1091,7 @@ export function DesignerStep({
           />
         </Panel>
         {columnDefs.length ? (
-          <Panel title="Lines table columns" description="Choose and order the columns of the lines table.">
+          <Panel title="Lines table columns">
             <ColumnsList
               items={layout.columns}
               labelOf={(k) => columnDefs.find((c) => c.key === k)?.label ?? k}

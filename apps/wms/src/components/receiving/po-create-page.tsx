@@ -41,9 +41,7 @@ export function PoCreatePage() {
       <PageHeader
         title={created ? 'Purchase order created' : 'Create purchase order'}
         helper={
-          created
-            ? 'The order is Pending. Receive it from its detail page when the goods arrive.'
-            : "Order products from a vendor. You'll receive them against this purchase order."
+          created ? 'The order is Pending. Receive it from its detail page when the goods arrive.' : undefined
         }
         actions={
           <>

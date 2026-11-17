@@ -561,9 +561,7 @@ export function ProjectsDirectory({
     <Page
       title="Projects"
       subtitle={
-        counts.total === 0 && !counts.completed ? (
-          'Every project your team is working on, with health and progress at a glance.'
-        ) : (
+        counts.total === 0 && !counts.completed ? undefined : (
           <span>
             {counts.total} active {counts.total === 1 ? 'project' : 'projects'}
             {counts.offTrack ? <span className="text-danger-text"> · {counts.offTrack} off track</span> : null}
@@ -721,12 +719,12 @@ export function ProjectsDirectory({
           title={archived ? (filtersOn ? 'No archived projects match' : 'No archived projects') : show === 'completed' ? (filtersOn ? 'No completed projects match' : 'No completed projects yet') : filtersOn ? 'No projects match these filters' : counts.completed ? 'No active projects' : 'No projects yet'}
           description={
             archived
-              ? 'When a project wraps up, archive it from its menu. It shows up here and you can restore it any time.'
+              ? 'Archive a project from its menu. You can restore it any time.'
               : show === 'completed' && !filtersOn
-                ? 'When you set a project to Completed, it moves here so the Active list stays focused.'
+                ? 'Projects set to Completed move here.'
               : filtersOn
-                ? 'Try a different search or clear the filters to see everything.'
-                : 'Start from a template to get a ready-made plan in seconds, or begin with a blank project.'
+                ? 'Try a different search or clear the filters.'
+                : 'Start from a template or a blank project.'
           }
           actions={
             filtersOn ? (

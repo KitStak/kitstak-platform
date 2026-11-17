@@ -194,7 +194,6 @@ export function RateShoppingPage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         title="Rate Shopping Presets"
-        helper="Rate shopping presets can be created, viewed and edited on this screen."
         actions={
           perms.create ? (
             <Button variant="primary" onClick={create}>

@@ -84,7 +84,7 @@ function GeneralSettings({ highlight }: { readonly highlight?: boolean }) {
   const save = (patch: Parameters<typeof updateProjectAction>[0]['patch'], message = 'Saved') => run(updateProjectAction({ projectId: project.id, patch }), message);
 
   return (
-    <SettingsSection id="general" title="General" description="Name, look, dates and who can see this project." highlight={highlight}>
+    <SettingsSection id="general" title="General" highlight={highlight}>
       <form
         className="flex flex-col gap-5"
         onSubmit={(event) => {

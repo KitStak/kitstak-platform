@@ -90,7 +90,6 @@ export function InboxPage() {
   return (
     <PageFrame
       title="Inbox"
-      description="Mentions, assignments and updates on the items you follow."
       icon={<InboxIcon />}
       actions={
         <Button
@@ -136,7 +135,7 @@ export function InboxPage() {
           <EmptyState
             illustration="inbox"
             title={filter === 'all' ? "You're all caught up" : 'Nothing here'}
-            description="When teammates mention you, assign you or reply to your updates, it shows up here."
+            description="Mentions, assignments and replies show up here."
           />
         ) : (
           <ul aria-label="Notifications">

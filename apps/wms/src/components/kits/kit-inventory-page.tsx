@@ -37,7 +37,7 @@ import { KitBuildPreviewDrawer } from './kit-build-preview-drawer';
 import type { GridFilter } from '@/server/query/grid-query';
 
 export const KIT_INVENTORY_HELPER =
-  'Kit stock, kitting capacity and how many kits to build. Kit to Stock kits are built ahead by work orders; Kit to Order kits are assembled when an order is fulfilled.';
+  'Kit to Stock kits are built ahead by work orders; Kit to Order kits are assembled when an order is fulfilled.';
 
 export const KIT_TYPE_OPTIONS = [
   { key: 'all', label: 'All kits', tip: 'Kit to Stock and Kit to Order' },

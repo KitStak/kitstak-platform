@@ -44,10 +44,7 @@ const LIST = '/settings/screen-configuration/receiving';
 
 function GeneralTab({ options }: { readonly options: ScreenConfigOptions }) {
   return (
-    <FormSection
-      title="Configuration details"
-      description="Where this configuration applies and what it is called."
-    >
+    <FormSection title="Configuration details">
       <FormGrid columns={1}>
         <SelectField<F>
           name="warehouseId"
@@ -424,7 +421,6 @@ export function ScreenConfigEditorPage({ editId }: { readonly editId: string | n
           { label: 'List', href: LIST },
           { label: editId ? 'Edit' : 'Create' },
         ]}
-        helper="Choose the warehouse, the purchase orders and the receiving steps."
       />
       {editId && q.isError ? (
         <EmptyState

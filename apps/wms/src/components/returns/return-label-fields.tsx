@@ -228,10 +228,7 @@ export function ReturnLabelDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
-        <DialogHeader
-          title="Create return label"
-          description={`A prepaid label the customer uses to send ${rmaCode} back.`}
-        />
+        <DialogHeader title="Create return label" description={`Prepaid label for ${rmaCode}.`} />
         <DialogBody className="space-y-3">
           <ReturnLabelFields
             warehouseId={warehouseId}

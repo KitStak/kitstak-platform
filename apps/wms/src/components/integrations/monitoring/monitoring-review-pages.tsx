@@ -89,14 +89,7 @@ const NAV = [
 
 export function MonitoringHeader() {
   const tabs = useStableGroupTabs('monitoring');
-  return (
-    <PageHeader
-      title="Channel Monitoring"
-      tabs={tabs}
-      helpHref="/integrations/help#monitoring"
-      helper="Review integration issues between your stores and KitStak."
-    />
-  );
+  return <PageHeader title="Channel Monitoring" tabs={tabs} helpHref="/integrations/help#monitoring" />;
 }
 
 function ReviewShell({ children }: { readonly children: React.ReactNode }) {
@@ -165,7 +158,6 @@ export function MissingOrderDrawer({
       onOpenChange={onOpenChange}
       width={60}
       title="Order details"
-      description="The error KitStak hit while downloading this store order, what it means and how to fix it."
       footer={
         d ? (
           <div className="flex justify-end gap-2">

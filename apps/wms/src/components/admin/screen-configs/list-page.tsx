@@ -245,7 +245,6 @@ export function ScreenConfigListPage() {
           { label: 'Screen Configuration', href: '/settings/screen-configuration' },
           { label: 'List' },
         ]}
-        helper="You can list your screen configuration setups and create new ones."
         actions={
           <DisabledReason reason={perms.create ? null : NO_PERMISSION}>
             <Button variant="primary" disabled={!perms.create} onClick={create}>

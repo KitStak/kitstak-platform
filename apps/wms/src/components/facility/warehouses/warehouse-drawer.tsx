@@ -514,11 +514,6 @@ export function WarehouseDrawer({
       width={60}
       bodyClassName="pb-0"
       title={editId ? `Edit warehouse ${detail.data?.data.code ?? ''}`.trim() : 'Create warehouse'}
-      description={
-        editId
-          ? 'Both steps are editable; Save applies them together.'
-          : 'Information first, then the operating settings.'
-      }
     >
       {editId && detail.isError ? (
         <EmptyState

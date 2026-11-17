@@ -77,7 +77,6 @@ export function WaveLogPage() {
   return (
     <ListShell<GridRow>
       title="Wave log report"
-      helper="Every wave run: orders met, allocated, short, eliminated or merged, and jobs created."
       tabs="jobs"
       gridKey={WAVE_LOG_GRID.gridKey}
       path="/api/waves"
@@ -186,7 +185,6 @@ export function AllocationExceptionsPage() {
   return (
     <ListShell<GridRow>
       title="Allocation exceptions"
-      helper="Why orders were not allocated or put into a job during a wave or a manual allocation."
       tabs="jobs"
       gridKey={ALLOCATION_EXCEPTIONS_GRID.gridKey}
       path="/api/allocation-exceptions"
@@ -330,7 +328,6 @@ export function ShortagePage() {
   return (
     <ListShell<GridRow>
       title="Shortage report"
-      helper="Order lines that could not be allocated, with stock at the last allocation trial."
       tabs="jobs"
       gridKey={SHORTAGES_GRID.gridKey}
       path="/api/shortages"

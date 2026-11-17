@@ -180,14 +180,10 @@ export function DashboardsView({ initialReport, initialProjects, initialFilters 
   );
 
   const data = report.data;
-  const subtitle = selected
-    ? `Reports for ${selected.name}: progress, pace and who is working on what.`
-    : `How every project is doing, in one place${filters.space && spaceById.get(filters.space) ? ` (${spaceById.get(filters.space)?.name})` : ''}.`;
 
   return (
     <Page
       title={selected ? `${selected.name} reports` : 'Dashboards'}
-      subtitle={subtitle}
       breadcrumbs={selected ? [{ label: 'Dashboards', href: routes.dashboards() }, { label: selected.name }] : undefined}
       actions={
         <>
@@ -251,7 +247,7 @@ export function DashboardsView({ initialReport, initialProjects, initialFilters 
         <EmptyState
           illustration="workspace"
           title="Reports fill in as you work"
-          description="Create a project and add a few tasks. Charts update the moment work moves."
+          description="Create a project and add a few tasks."
           actions={can('project:create') ? <Link href={routes.newProject()}><Button>Create a project</Button></Link> : null}
         />
       ) : (

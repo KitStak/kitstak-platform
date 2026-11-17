@@ -165,7 +165,7 @@ function Body({
     <>
       <DialogHeader
         title="Picking/Job operations"
-        description="Allocate the components of work orders with picking and create Work Order Picking jobs that bring them to the kitting area."
+        description="Allocates components and creates Work Order Picking jobs to the kitting area."
       />
       <DialogBody>
         {previewError ? (

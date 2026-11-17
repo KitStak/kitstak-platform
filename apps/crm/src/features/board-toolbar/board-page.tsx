@@ -256,7 +256,6 @@ function BoardWorkspace({
     return (
       <EmptyState
         title="Dashboards open on their own page"
-        description="Combine this board with others on a dashboard, with charts, numbers and battery widgets."
         actions={
           <Link href={`/${org.slug}/dashboards`} className={buttonVariants({ variant: 'primary' })}>
             Open dashboards

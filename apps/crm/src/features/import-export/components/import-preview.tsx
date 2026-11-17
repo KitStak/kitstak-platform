@@ -165,7 +165,7 @@ export function ImportPreview({ plan, rows, terminology, nameTitle, users }: Imp
       </ScrollFade>
       {columns.length > 1 ? (
         <p className="border-t border-border-subtle bg-sunken px-3 py-1.5 text-xs text-fg-muted">
-          {columns.length} columns · the first stays in place while you scroll sideways
+          {columns.length} columns
         </p>
       ) : null}
     </div>

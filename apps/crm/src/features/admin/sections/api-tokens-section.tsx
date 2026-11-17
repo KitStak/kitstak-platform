@@ -39,10 +39,7 @@ const STATUS_TONE = { active: 'success', expired: 'warning', revoked: 'neutral' 
 export function ApiSection() {
   return (
     <>
-      <SectionHeader
-        title="API"
-        description="Personal tokens let scripts and integrations call the KitStak REST API as you. Treat them like passwords."
-      />
+      <SectionHeader title="API" description="Tokens act as you. Treat them like passwords." />
       <ApiTokensPanel allowOrgScope />
     </>
   );
@@ -71,7 +68,7 @@ export function ApiTokensPanel({ allowOrgScope = false }: { readonly allowOrgSco
   return (
     <SettingsCard
       title="Personal API tokens"
-      description="Tokens are hashed at rest. You can only see a token right after creating it."
+      description="You can only see a token right after creating it."
       padded={false}
       testId="api-tokens-card"
       aside={
@@ -298,7 +295,7 @@ function CreateTokenDialog({
           </>
         ) : (
           <>
-            <DialogHeader title="New API token" description="Give it a name you’ll recognize and only the access it needs." />
+            <DialogHeader title="New API token" />
             <DialogBody className="flex flex-col gap-4 pb-4">
               <Field label="Name" required error={error}>
                 {({ inputId, describedBy, invalid }) => (

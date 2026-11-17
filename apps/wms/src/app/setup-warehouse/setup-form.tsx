@@ -154,8 +154,7 @@ export function SetupWarehouseForm({ offers }: { readonly offers: readonly Offer
         </Callout>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3 border-t pt-5">
-        <p className="text-xs text-fg-muted">This takes a few seconds.</p>
+      <div className="flex items-center justify-end gap-3 border-t pt-5">
         <Button type="submit" variant="primary" disabled={busy || !orgId}>
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
           {busy ? 'Setting up…' : 'Create warehouse'}

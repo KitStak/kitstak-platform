@@ -116,9 +116,6 @@ function Home({ go, onShortcuts }: { readonly go: (v: HelpView) => void; readonl
     <div className="flex flex-col gap-5">
       <section className="rounded-lg border border-border-subtle bg-sunken px-4 py-5 text-fg">
         <p className="text-lg font-semibold">Help Center</p>
-        <p className="mt-0.5 text-xs text-fg-muted">
-          Guides, release notes and support for every KitStak screen.
-        </p>
         <label className="relative mt-3 flex items-center">
           <span className="sr-only">Search help articles</span>
           <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-faint" aria-hidden />

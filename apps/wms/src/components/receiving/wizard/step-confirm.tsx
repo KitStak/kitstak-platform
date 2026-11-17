@@ -31,10 +31,7 @@ export function StepOther({
   const canManage = useCan('inventory.purchase_orders.custom_field_management').allowed;
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-secondary">
-        You can optionally add or edit custom fields under “Other info”. They become filters on the purchase
-        order list.
-      </p>
+      <p className="text-xs text-secondary">Custom fields become filters on the purchase order list.</p>
       <CustomFieldsSection
         entityType="purchase_order"
         values={values ?? {}}

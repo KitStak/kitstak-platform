@@ -197,7 +197,6 @@ export function UsersSection() {
     <>
       <SectionHeader
         title="Users"
-        description="Manage who can access this organization, what role they have, and pending invitations."
         actions={
           <>
             {permissions.includes('data:export') ? (
@@ -591,7 +590,7 @@ function InvitationsTable({ invitations }: { readonly invitations: readonly Admi
   const [confirm, setConfirm] = useState<AdminInvitationDto | null>(null);
   if (invitations.length === 0) {
     return (
-      <EmptyState size="sm" illustration="inbox" title="No pending invitations" description="Everyone you invited has joined, or no one has been invited yet." />
+      <EmptyState size="sm" illustration="inbox" title="No pending invitations" />
     );
   }
   return (

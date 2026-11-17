@@ -226,7 +226,6 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
   return (
     <Page
       title="My work"
-      subtitle="Everything on your plate across all projects, sorted by when it’s due."
       actions={
         <>
           <Tooltip content={queue.length ? `Work through ${queue.length} task${queue.length === 1 ? '' : 's'} due today or overdue (F)` : 'Nothing due today or overdue'}>

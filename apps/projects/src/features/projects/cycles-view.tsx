@@ -81,7 +81,7 @@ function ScopeChangeChart({ days, title }: { readonly days: readonly ScopeDay[];
   };
   const current = days[active];
   if (!peakUp && !peakDown) {
-    return <p className="rounded-md bg-sunken px-4 py-8 text-center text-sm text-fg-muted">No tasks added or taken out since the cycle started. Steady scope.</p>;
+    return <p className="rounded-md bg-sunken px-4 py-8 text-center text-sm text-fg-muted">No tasks added or taken out since the cycle started.</p>;
   }
   return (
     <div>
@@ -240,7 +240,7 @@ function CycleDialog({
         <DialogHeader
           icon={<Repeat aria-hidden className="size-5 text-primary-text" />}
           title={cycle ? `Edit ${cycleName(cycle)}` : 'Plan a cycle'}
-          description="A cycle is a short round of work, usually one or two weeks. Pick what the team will finish by the end date."
+          description="A short round of work, usually one or two weeks."
         />
         <DialogBody className="flex flex-col gap-4 pb-4">
           <Field label="Name" hint={`Optional. Leave empty to call it ${cycle ? `Cycle ${cycle.number}` : 'by its number'}.`}>
@@ -324,7 +324,7 @@ function CloseCycleDialog({ open, onOpenChange, cycle, onClosed }: { readonly op
               />
             </>
           ) : (
-            <p className="text-sm text-fg-secondary">Nice work. Everything in this cycle is finished.</p>
+            <p className="text-sm text-fg-secondary">Everything in this cycle is finished.</p>
           )}
         </DialogBody>
         <DialogFooter>
@@ -388,7 +388,7 @@ function BacklogPicker({ cycle, backlog, onAdded }: { readonly cycle: CycleDTO; 
         </Button>
       }
     >
-      <p className="mb-2 text-sm text-fg-secondary">Open tasks that are not in a cycle yet. Pick the ones the team will finish this round.</p>
+      <p className="mb-2 text-sm text-fg-secondary">Open tasks that are not in a cycle yet.</p>
       <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a task" aria-label="Find a backlog task" leadingIcon={<Search aria-hidden />} size="sm" containerClassName="mb-2" />
       {shown.length ? (
         <ul className="flex max-h-[360px] flex-col overflow-y-auto" aria-label="Backlog tasks">
@@ -528,11 +528,11 @@ function CycleDetail({ cycleId, backlog, onDeleted, onSelect }: { readonly cycle
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Panel title="Burndown">
-          <p className="mb-3 text-sm text-fg-secondary">Work left should reach zero on the last day. Staying under the dashed line means the cycle is on pace.</p>
+          <p className="mb-3 text-sm text-fg-secondary">Staying under the dashed line means the cycle is on pace.</p>
           <LineChart title={`${cycleName(cycle)} burndown`} series={burnSeries} labels={report.days.map((d) => d.date)} formatLabel={shortDate} markerIndex={todayIndex >= 0 && todayIndex < report.days.length - 1 ? todayIndex : null} valueSuffix=" tasks" />
         </Panel>
         <Panel title="Scope changes">
-          <p className="mb-3 text-sm text-fg-secondary">Tasks added (up) or taken out (down) after the cycle started. Lots of change mid-cycle makes the goal harder to hit.</p>
+          <p className="mb-3 text-sm text-fg-secondary">Tasks added (up) or taken out (down) after the cycle started.</p>
           <ScopeChangeChart
             title={`${cycleName(cycle)} scope changes`}
             days={report.days.map((d) => ({
@@ -627,7 +627,7 @@ export function CyclesView() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-[min(100%,320px)] flex-1">
           <h2 className="text-base font-semibold text-fg">Cycles</h2>
-          <p className="text-sm text-fg-muted">Short rounds of work with a clear end date. Unfinished work rolls into the next cycle by itself.</p>
+          <p className="text-sm text-fg-muted">Unfinished work rolls into the next cycle by itself.</p>
         </div>
         {canEdit ? (
           <Button leadingIcon={<Plus aria-hidden />} onClick={() => setPlanning(true)} data-testid="cycle-new">
@@ -646,7 +646,7 @@ export function CyclesView() {
           <EmptyState
             illustration="board"
             title="Plan your first cycle"
-            description={`Pick a week or two, pull in the tasks the team will finish, and watch the burndown. ${cycles.data?.backlogCount ?? 0} open tasks are waiting in the backlog.`}
+            description={`${cycles.data?.backlogCount ?? 0} open tasks are waiting in the backlog.`}
             actions={canEdit ? <Button leadingIcon={<Plus aria-hidden />} onClick={() => setPlanning(true)}>Plan a cycle</Button> : null}
           />
         </div>

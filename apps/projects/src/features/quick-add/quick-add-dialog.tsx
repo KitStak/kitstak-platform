@@ -313,7 +313,7 @@ function QuickAddForm() {
         if (titleRef.current?.dismissSuggestions()) event.preventDefault();
       }}
     >
-      <DialogHeader title="New task" description="Write it the way you’d say it. We’ll pick out the date, priority, people and labels." />
+      <DialogHeader title="New task" description="Dates, priority, people and labels are picked out as you type." />
       <DialogBody className="flex flex-col gap-3 [&>*]:shrink-0">
         <SmartTitleInput
           ref={titleRef}

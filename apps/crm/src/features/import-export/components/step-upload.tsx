@@ -53,10 +53,10 @@ export function StepUpload(props: StepUploadProps) {
         </h2>
         <p className="mt-1 text-base text-fg-secondary">
           {file
-            ? 'Confirm the sheet and header row. You map columns and review every row before anything is saved.'
+            ? 'Confirm the sheet and header row.'
             : source === 'paste'
               ? 'Copy cells from Excel, Google Sheets or Numbers (including the header row) and paste them below.'
-              : 'Drop a spreadsheet to start. Nothing is saved to a board until you confirm the import.'}
+              : 'Nothing is saved to a board until you confirm the import.'}
         </p>
       </div>
       {file ? (

@@ -29,10 +29,6 @@ export default async function WelcomePage() {
         <h1 className="mt-8 text-2xl font-semibold tracking-[-0.02em] text-fg">
           First, create your organization
         </h1>
-        <p className="mt-2 max-w-md text-md text-fg-secondary">
-          Your organization is the home for your team, apps and data. Name it and we’ll take
-          it from there.
-        </p>
         <div className="mt-8 flex w-full justify-center">
           <CreateOrgForm />
         </div>

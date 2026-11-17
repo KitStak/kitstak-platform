@@ -65,7 +65,7 @@ export function AdminPage() {
     { href: routes.profile(org.slug), icon: <UserRound />, title: 'My profile', detail: 'Your name, email and role' },
   ];
   return (
-    <PageFrame title="Administration" description={`Settings for ${org.name}`} icon={<Shield />}>
+    <PageFrame title="Administration" icon={<Shield />}>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
           <Link
@@ -116,7 +116,7 @@ export function MembersPage() {
   const canManage = useCan('member:read');
   if (!canManage) return <NoAccess />;
   return (
-    <PageFrame title="Members" description="Everyone in this organization and their role." icon={<Users />}>
+    <PageFrame title="Members" icon={<Users />}>
       <PageSection>
         {members.isPending ? (
           <div className="flex flex-col gap-3 p-5" data-skeleton>
@@ -167,7 +167,7 @@ export function ProfilePage() {
     { label: 'Role', value: ROLE_LABEL[role] },
   ];
   return (
-    <PageFrame title="My profile" description="How you appear to your teammates." icon={<UserRound />}>
+    <PageFrame title="My profile" icon={<UserRound />}>
       <PageSection>
         <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-start">
           <Avatar name={user.name} src={user.image} size="xl" />

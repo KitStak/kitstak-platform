@@ -151,7 +151,6 @@ export function NotificationsPage() {
     <div className="flex flex-1 flex-col">
       <PageHeader
         title="Notifications"
-        helper="Wave completions, failed imports, shortages, feedback and other alerts for your account."
         actions={
           <>
             <Button variant="secondary" disabled={del.isPending} onClick={() => setConfirmClear(true)}>

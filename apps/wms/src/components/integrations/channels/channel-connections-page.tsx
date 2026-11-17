@@ -265,7 +265,6 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
         title={`${name} Connection List`}
         crumbLabel={`${name} Connections`}
         helpHref={`/integrations/help#${provider}`}
-        helper={`Your connected ${name} stores. Create another connection or configure an existing one.`}
         actions={
           <div className="flex items-center gap-3">
             <Link

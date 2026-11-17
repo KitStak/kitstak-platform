@@ -234,7 +234,7 @@ export function CustomFieldsPage() {
       <PageHeader
         title="Custom Fields"
         crumbLabel="Custom Fields"
-        helper='Extra "Other Info" fields on records: up to 3 text, 2 dropdown, 3 date and 2 toggle fields per entity. Active fields show on the entity&apos;s create and edit forms, grids and printouts.'
+        helper="Up to 3 text, 2 dropdown, 3 date and 2 toggle fields per entity."
         actions={addButton}
       />
       <div className="flex min-h-0 flex-1 gap-5 px-6 pb-6 pt-4 max-lg:flex-col">
@@ -296,7 +296,7 @@ export function CustomFieldsPage() {
           ) : rows.length === 0 ? (
             <EmptyState
               title={`No custom fields on ${entity.label.toLowerCase()} yet`}
-              description="Add a field to capture information KitStak doesn't track out of the box."
+              description="Add a field to capture extra information on records."
               action={
                 canManage ? (
                   <Button variant="primary" onClick={() => setAdding(true)}>

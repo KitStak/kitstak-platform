@@ -267,10 +267,7 @@ export function ReportsHub({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-10">
-      <PageHeader
-        title="Report Hub"
-        helper="Every report you can open, grouped like the Reports menu. Star the ones you use most."
-      />
+      <PageHeader title="Report Hub" />
       <div className="mx-6 mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-5">
           <div className="flex flex-wrap items-center gap-3">
@@ -382,9 +379,7 @@ export function ReportsHub({
               Favorites
             </h2>
             {favoriteItems.length === 0 ? (
-              <p className="text-xs text-secondary">
-                Star any report and it shows up here, ready in one click.
-              </p>
+              <p className="text-xs text-secondary">Star a report to pin it here.</p>
             ) : (
               <ul className="space-y-1">
                 {favoriteItems.map((i) => (

@@ -183,7 +183,7 @@ export function LineDrawer({ line, warehouseId, readOnly, onOpenChange, onApply 
           </FormGrid>
         </FormSection>
 
-        <FormSection title="Order details" description="Fulfilment progress for this line (read-only).">
+        <FormSection title="Order details">
           <FormGrid columns={3}>
             <ReadValue label="Allocated UOM qty">{fmt.quantity(line.allocatedQuantity)}</ReadValue>
             <ReadValue label="Cancelled UOM qty">{fmt.quantity(line.cancelledQuantity)}</ReadValue>

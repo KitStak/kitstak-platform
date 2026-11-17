@@ -83,9 +83,6 @@ import {
 } from './receiving-shared';
 
 const P = 'inventory.purchase_orders.';
-export const PO_HELPER =
-  'A purchase order is a document issued by a buyer (you), specifying the products to be delivered by a vendor in the future.';
-
 /** `skipped`: selected rows the action can't run on (Cancel / Receive PO act on the eligible ones). */
 type Dialog = {
   kind: 'cancel' | 'receive' | 'delete' | 'remove-serials';
@@ -515,7 +512,6 @@ export function PoListPage() {
       <PageHeader
         title="Purchase Orders"
         tabs="receiving"
-        helper={PO_HELPER}
         actions={
           <>
             <ReceivingReportLinks />

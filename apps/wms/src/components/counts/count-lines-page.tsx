@@ -58,8 +58,6 @@ const META = {
     gridKey: COUNT_LOCATIONS_GRID_KEY,
     path: '/api/counts/locations',
     fields: COUNT_LOCATION_FIELDS,
-    helper:
-      'Review every location line across count plans, then update inventory, create recounts or cancel lines.',
     search: 'Search by location or count code',
     perms: {
       view: P.locView,
@@ -74,8 +72,6 @@ const META = {
     gridKey: COUNT_SKUS_GRID_KEY,
     path: '/api/counts/skus',
     fields: COUNT_SKU_FIELDS,
-    helper:
-      'Review counted and expected quantities per SKU across count plans, then update inventory, recount or cancel.',
     search: 'Search by SKU or count code',
     perms: {
       view: P.skuView,
@@ -285,11 +281,6 @@ export function CountLinesPage({ kind }: { readonly kind: Kind }) {
     create: useCountCan(P.create).allowed,
   };
   const readOnly = !can.cancel && !can.recount && !can.update && !can.del;
-  const helper = readOnly
-    ? kind === 'locations'
-      ? 'Review every location line across count plans: status, expected and counted quantities, and differences.'
-      : 'Review expected and counted quantities per SKU across count plans, with their status and differences.'
-    : meta.helper;
 
   const seen = React.useRef(new Map<string, CountLineRow>());
   React.useEffect(() => {
@@ -432,7 +423,6 @@ export function CountLinesPage({ kind }: { readonly kind: Kind }) {
       <PageHeader
         title={kind === 'locations' ? 'Count Location Details' : 'Count SKU Details'}
         tabs="counts"
-        helper={helper}
         actions={
           <MoreDetailsButton
             gridKey={meta.gridKey}

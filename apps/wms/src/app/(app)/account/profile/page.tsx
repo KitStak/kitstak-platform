@@ -44,14 +44,11 @@ async function ProfileBody() {
 export default function ProfilePage() {
   return (
     <>
-      <PageHeader
-        title="My Profile"
-        helper="Edit your account details. Your roles and access are managed by an administrator."
-      />
+      <PageHeader title="My Profile" />
       <AccountShell
         active="profile"
         title="My profile"
-        description="Your name and sign-in email in this workspace."
+        description="Your roles and access are managed by an administrator."
       >
         <Suspense fallback={<SkeletonText lines={6} />}>
           <ProfileBody />

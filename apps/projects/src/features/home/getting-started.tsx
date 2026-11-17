@@ -105,9 +105,7 @@ export function GettingStartedCard({
           <h2 id="getting-started-title" className="text-base font-semibold text-fg">
             {doneCount === steps.length ? 'You’re all set!' : 'Get started with KitStak Projects'}
           </h2>
-          <p className="text-sm text-fg-muted">
-            {doneCount === steps.length ? 'You’ve tried everything that matters. Hide this whenever you like.' : 'Six quick steps to feel at home. Each one takes under a minute.'}
-          </p>
+          {doneCount === steps.length ? null : <p className="text-sm text-fg-muted">Each step takes under a minute.</p>}
         </div>
         <IconButton label="Hide checklist" icon={<X aria-hidden />} onClick={() => void hide()} data-testid="getting-started-hide" />
       </header>

@@ -43,7 +43,7 @@ export function SecurityTab() {
     <div className="flex flex-col gap-6" data-testid="profile-security">
       <ChangePasswordCard />
       <MySessionsCard />
-      <SettingsCard title="Two-factor authentication" description="An extra code from an authenticator app when you sign in.">
+      <SettingsCard title="Two-factor authentication">
         <SettingRow
           label={
             <span className="inline-flex items-center gap-2">
@@ -246,7 +246,6 @@ function MySessionsCard() {
   return (
     <SettingsCard
       title="Where you’re signed in"
-      description="Sign out of devices you don’t recognize."
       padded={false}
       testId="my-sessions"
       aside={

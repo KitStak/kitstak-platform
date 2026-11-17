@@ -163,7 +163,7 @@ export function UpdatesTab({
         <EmptyState
           visual={<UpdatesArt />}
           title="No updates yet"
-          description={`Share progress, ask a question or @mention a teammate to loop them in on this ${term.toLowerCase()}.`}
+          description="@mention a teammate to loop them in."
           actions={
             canWrite ? (
               <Button variant="secondary" size="sm" onClick={() => setFocusSignal((value) => value + 1)}>

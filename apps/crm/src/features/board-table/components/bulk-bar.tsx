@@ -328,7 +328,6 @@ function SetValueButton({
                 }}
               />
             </div>
-            <p className="text-xs text-fg-muted">The value you pick is applied to every selected item.</p>
           </div>
         ) : null}
       </PopoverContent>

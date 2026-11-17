@@ -125,44 +125,34 @@ export type LaborPage = (typeof LABOR_PAGES)[number];
 export type OperationalPage = (typeof OPERATIONAL_PAGES)[number];
 
 export const ANALYTICS_TITLES: Readonly<
-  Record<LaborPage | OperationalPage, { title: string; helper: string }>
+  Record<LaborPage | OperationalPage, { title: string }>
 > = {
   'average-task': {
     title: 'Average Task Analysis',
-    helper: 'Average minutes per task by task type and day, with the trend across the period.',
   },
   'associate-task': {
     title: 'Associate Task Analysis',
-    helper: 'How many tasks each associate completed, split by task type.',
   },
   'performance-quadrant': {
     title: 'Performance Quadrant Analysis',
-    helper:
-      'Speed (tasks per hour) against volume (tasks completed) for every associate, split at the team medians.',
   },
   associate: {
     title: 'Associate Analysis',
-    helper: 'A scorecard per associate: volume, speed, average task time, daily trend and rank.',
   },
   'receiving-performance': {
     title: 'Receiving Performance Analysis',
-    helper: 'Units and lines received per associate, per hour on the dock.',
   },
   'inbound-inventory': {
     title: 'Inbound & Inventory Dashboard',
-    helper: 'Receipts trend, dock-to-stock time, inventory value, aging and your top SKUs.',
   },
   fulfillment: {
     title: 'Fulfillment Dashboard',
-    helper: 'Orders created against orders shipped, on-time shipping, backlog and shortages.',
   },
   management: {
     title: 'Management Dashboard',
-    helper: 'Volume, revenue proxies and billing totals per client.',
   },
   productivity: {
     title: 'Productivity Dashboard',
-    helper: 'Units per hour by work area and shift, and when the floor is busiest.',
   },
 };
 

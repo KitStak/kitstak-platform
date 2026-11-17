@@ -149,7 +149,7 @@ function AcceptDialog({ item, open, onOpenChange, onDone }: { readonly item: Tri
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
-        <DialogHeader icon={<Check aria-hidden className="size-5 text-success-text" />} title="Accept into the project" description="It becomes a task. Change anything before it lands on the board." />
+        <DialogHeader icon={<Check aria-hidden className="size-5 text-success-text" />} title="Accept into the project" description="It becomes a task." />
         <DialogBody className="flex flex-col gap-4 pb-4">
           <Field label="Task title" required>
             {({ inputId }) => <Input id={inputId} value={title} maxLength={500} onChange={(e) => setTitle(e.target.value)} />}
@@ -477,7 +477,6 @@ export function TriageView() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-[min(100%,320px)] flex-1">
           <h2 className="text-base font-semibold text-fg">Triage</h2>
-          <p className="text-sm text-fg-muted">New requests wait here before they join the project. Accept the good ones, merge duplicates, snooze or decline the rest.</p>
         </div>
         <ToggleGroup
           label="Show"

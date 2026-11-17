@@ -169,7 +169,6 @@ export function TasksListPage({ kind }: { readonly kind: TaskKind }) {
   return (
     <ListShell<TaskRow>
       title="Task details"
-      helper="Monitor tasks, users and orders in real time."
       tabs="tasks"
       banner={<Banner />}
       gridKey={spec.gridKey}

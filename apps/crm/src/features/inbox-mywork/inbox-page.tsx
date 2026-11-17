@@ -26,16 +26,16 @@ const FILTER_LABEL: Readonly<Record<InboxFilter, string>> = {
   unread: 'Unread',
 };
 
-const EMPTY: Readonly<Record<InboxFilter, { title: string; description: string }>> = {
+const EMPTY: Readonly<Record<InboxFilter, { title: string; description?: string }>> = {
   all: {
     title: 'Inbox zero',
-    description: 'Updates on items you own, follow or were mentioned in will land here.',
+    description: 'Updates on items you own, follow or are mentioned in land here.',
   },
   mentions: {
     title: 'No mentions',
     description: 'When someone @mentions you in an update, it shows up here.',
   },
-  unread: { title: "You're all caught up", description: 'Every update in your inbox has been read.' },
+  unread: { title: "You're all caught up" },
 };
 
 function isFilter(value: string | null): value is InboxFilter {
@@ -141,7 +141,6 @@ export function InboxPage() {
   return (
     <PageFrame
       title="Inbox"
-      description="Updates on the items you own, follow or were mentioned in."
       icon={<InboxIcon />}
     >
       <div className="-mt-3 flex w-full max-w-[800px] flex-col gap-6">

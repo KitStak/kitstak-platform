@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Lock } from 'lucide-react';
-import { BRAND_NAME } from '@/config/brand';
 import { BrandLogo } from '@/components/layout/brand-logo';
 
 export const metadata: Metadata = {
@@ -27,7 +26,6 @@ export default function LockedPage() {
         </div>
         <h1 className="text-lg font-semibold">WMS is not enabled for this organization</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Your organization does not currently have an active {BRAND_NAME} WMS subscription.
           Contact your administrator to restore access.
         </p>
         {portalUrl ? (

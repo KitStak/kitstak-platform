@@ -188,12 +188,7 @@ export function TotalInventoryPage() {
   const hasState = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader
-        title="Total Inventory"
-        helper="On-hand, available and open-order quantities per SKU."
-        actions={<HeaderActions />}
-        tabs="inventory"
-      />
+      <PageHeader title="Total Inventory" actions={<HeaderActions />} tabs="inventory" />
       <GridToolbar
         {...g.toolbarProps}
         searchPlaceholder="Search by SKU"

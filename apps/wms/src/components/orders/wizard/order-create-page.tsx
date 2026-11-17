@@ -95,7 +95,6 @@ export function OrderCreatePage() {
       <PageHeader
         title="Create shipment order"
         breadcrumbs={orderCrumbs({ label: 'Shipment Orders', href: '/orders' }, 'Create shipment order')}
-        helper="Follow the steps to create an order manually. It lands in the backlog as Open."
         actions={
           created ? null : (
             <Button
@@ -151,17 +150,15 @@ export function OrderCreatePage() {
                     // Three next-step cards in three equal columns (the shared grid defaults to two).
                     className="sm:[&_.grid]:max-w-[920px] sm:[&_.grid]:grid-cols-3"
                     entity={`a new shipment order: ${created.code}`}
-                    description="The order is Open in the backlog. Create a picking job from it when you're ready."
+                    description="The order is Open in the backlog."
                     options={[
                       {
                         title: 'Go back to shipment order list',
-                        description: 'Turn to the shipment order screen to see the full list of orders.',
                         icon: List,
                         href: '/orders',
                       },
                       {
                         title: 'Create another order',
-                        description: 'Turn to the create order form and continue your operation nonstop.',
                         icon: PlusCircle,
                         onClick: () => {
                           setCreated(null);

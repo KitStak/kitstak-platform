@@ -219,7 +219,6 @@ function EditablePoWizard({
       icon: ClipboardList,
       schema: detailsStepSchema,
       canProceed: (v) => detailsCanProceed(v),
-      description: 'Warehouse, client, number, type and dates.',
       render: ({ form, goTo }) => {
         bind(form);
         return (
@@ -236,9 +235,7 @@ function EditablePoWizard({
       icon: Package,
       schema: productsStepSchema,
       canProceed: (v) => (closed ? true : firstIssue(productsStepSchema, v)),
-      description: closed
-        ? "Lines of a closed purchase order can't change."
-        : "Search the client's products and set quantity and price.",
+      description: closed ? "Lines of a closed purchase order can't change." : undefined,
       render: ({ form }) => {
         bind(form);
         return (
@@ -255,7 +252,6 @@ function EditablePoWizard({
       icon: Building2,
       schema: vendorStepSchema,
       canProceed: (v) => firstIssue(vendorStepSchema, v),
-      description: 'Select the vendor that ships this order.',
       render: ({ form }) => {
         bind(form);
         return (
@@ -286,9 +282,7 @@ function EditablePoWizard({
       label: 'Confirm',
       icon: FileCheck2,
       schema: confirmStepSchema,
-      description: editing
-        ? 'Review the order. Click any step to change it.'
-        : 'Review and confirm the purchase order.',
+      description: editing ? 'Click any step to change it.' : undefined,
       render: ({ form, goTo }) => {
         bind(form);
         return (
@@ -407,19 +401,16 @@ function EditablePoWizard({
         cards={[
           {
             title: 'Go to the purchase order list',
-            description: 'See all purchase orders, filter them and receive them in bulk.',
             icon: ListChecks,
             href: '/receiving',
           },
           {
             title: 'Create another purchase order',
-            description: 'Start a new purchase order for the same or another client.',
             icon: Plus,
             onClick: onCreateAnother,
           },
           {
             title: 'View receiving history',
-            description: 'See every receipt with its quantities, locations and who received it.',
             icon: History,
             href: '/receiving/history',
           },

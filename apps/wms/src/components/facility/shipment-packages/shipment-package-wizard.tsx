@@ -240,7 +240,7 @@ function AccessStep({ form }: { readonly form: UseFormReturn<F> }) {
           {
             value: 'all',
             title: 'All clients',
-            description: 'Give access to this shipment package to all existing and future clients.',
+            description: 'Includes future clients.',
             icon: Users,
           },
           {
@@ -727,11 +727,6 @@ export function ShipmentPackageWizardDrawer({
       bodyClassName="pb-0"
       title={
         editId ? `Edit shipment package ${detail.data?.data.code ?? ''}`.trim() : 'Create shipment package'
-      }
-      description={
-        editId
-          ? 'Every step is editable; Save applies all of them.'
-          : 'General, client access, inventory tracking, then other info.'
       }
     >
       {editId && detail.isError ? (

@@ -427,10 +427,7 @@ export function KitStep({
   return (
     <section aria-label="Kit" className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Select kit</h3>
-          <p className="text-xs text-secondary">The kit-to-stock product selection for this work order</p>
-        </div>
+        <h3 className="text-sm font-semibold text-foreground">Select kit</h3>
         <Field id="kitProductId" label="Kit SKU" required error={errors.kitProductId}>
           <Combobox
             id="kitProductId"
@@ -568,10 +565,7 @@ export function KitStep({
       {kit ? (
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Components</h3>
-              <p className="text-xs text-secondary">Components of the selected kit-to-stock product</p>
-            </div>
+            <h3 className="text-sm font-semibold text-foreground">Components</h3>
             <div className="flex items-center gap-2 text-xs">
               <span className="rounded-md bg-surface-sunken px-2 py-1">
                 <strong className="tabular-nums text-foreground">{kit.components.length}</strong> Component
@@ -803,10 +797,7 @@ export function AdvancedStep({
         })}
       </div>
       <div className="flex flex-col gap-2">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Document</h3>
-          <p className="text-xs text-secondary">Upload documents for the kitting process</p>
-        </div>
+        <h3 className="text-sm font-semibold text-foreground">Document</h3>
         <input
           ref={inputRef}
           type="file"
@@ -883,9 +874,6 @@ export function OtherStep({
 }) {
   return (
     <section aria-label="Other info" className="flex flex-col gap-3">
-      <p className="text-xs text-secondary">
-        You can optionally add or edit custom fields under &lsquo;Other Info&rsquo; tab.
-      </p>
       <CustomFieldsSection
         entityType="work_order"
         values={form.customFields}

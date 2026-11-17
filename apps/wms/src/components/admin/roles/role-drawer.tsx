@@ -297,7 +297,7 @@ export function RoleDrawer({
       description={
         d
           ? `${d.userCount} ${d.userCount === 1 ? 'user' : 'users'} · ${d.permissions.length} of ${d.totalPermissions} permissions`
-          : 'Name the role, then choose what it can see and do.'
+          : undefined
       }
       headerExtra={
         d && !d.isSystem && roleId ? (

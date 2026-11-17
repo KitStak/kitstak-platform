@@ -120,7 +120,12 @@ function TaskItem({ task, onUnlink }: { readonly task: BridgeTask; readonly onUn
     <li className="group flex items-start gap-2.5 py-2" data-testid="wms-project-task">
       {/* Same glyph as KitStak Projects, tinted with the task's status color. */}
       <span className="mt-0.5 inline-flex">
-        <StatusIcon category={task.status.category} color={task.status.color} size={16} label={task.status.name} />
+        <StatusIcon
+          category={task.status.category}
+          color={task.status.color}
+          size={16}
+          label={task.status.name}
+        />
       </span>
       <div className="min-w-0 flex-1">
         <a
@@ -137,7 +142,12 @@ function TaskItem({ task, onUnlink }: { readonly task: BridgeTask; readonly onUn
         </a>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-secondary">
           {/* Task keys use the UI face with tabular figures: mono stacks draw "OPS" like "0PS". */}
-          <span className="shrink-0 font-sans font-medium tabular-nums tracking-[0.01em]" data-testid="project-task-key">{task.key}</span>
+          <span
+            className="shrink-0 font-sans font-medium tabular-nums tracking-[0.01em]"
+            data-testid="project-task-key"
+          >
+            {task.key}
+          </span>
           <span aria-hidden>·</span>
           <span className="shrink-0">{task.status.name}</span>
           {task.dueDate ? (
@@ -264,7 +274,11 @@ function CreateTaskForm({
           },
         },
       );
-      toast.success(`${task.key} created in ${task.projectName}`, `It’s linked to ${recordLabel}.`, PROJECT_TOAST);
+      toast.success(
+        `${task.key} created in ${task.projectName}`,
+        `It’s linked to ${recordLabel}.`,
+        PROJECT_TOAST,
+      );
       onOpenChange(false);
       onCreated(task);
     } catch (error) {
@@ -273,7 +287,11 @@ function CreateTaskForm({
         Object.entries(fieldErrors).map(([field, messages]) => [field, messages[0] ?? '']),
       );
       if (Object.keys(first).length) setErrors(first);
-      toast.error('Couldn’t create the task', error instanceof Error ? error.message : 'Please try again.', PROJECT_TOAST);
+      toast.error(
+        'Couldn’t create the task',
+        error instanceof Error ? error.message : 'Please try again.',
+        PROJECT_TOAST,
+      );
     } finally {
       setSaving(false);
     }
@@ -425,7 +443,10 @@ function CardShell({
     );
   if (variant === 'divided')
     return (
-      <section className="flex min-w-0 flex-col gap-2 border-t border-border pt-3" data-testid="wms-project-tasks">
+      <section
+        className="flex min-w-0 flex-col gap-2 border-t border-border pt-3"
+        data-testid="wms-project-tasks"
+      >
         <header className="flex items-center justify-between gap-2">
           <h2 className="text-xs font-semibold text-foreground">{title}</h2>
           {action}
@@ -487,7 +508,11 @@ export function ProjectTasksCard({
       toast.success(`${name} unlinked`, 'It’s still in KitStak Projects.', PROJECT_TOAST);
       refresh();
     } catch (error) {
-      toast.error('Couldn’t unlink it', error instanceof Error ? error.message : 'Please try again.', PROJECT_TOAST);
+      toast.error(
+        'Couldn’t unlink it',
+        error instanceof Error ? error.message : 'Please try again.',
+        PROJECT_TOAST,
+      );
     }
   };
 
@@ -553,10 +578,7 @@ export function ProjectTasksCard({
       ) : null}
       {tasks.length === 0 ? (
         <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-secondary">
-            No tasks linked yet. Plan follow-up work for this {NOUN[kind]} and your team will see it in
-            KitStak Projects.
-          </p>
+          <p className="text-sm text-secondary">No tasks linked yet.</p>
           <Button size="sm" variant="secondary" onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" aria-hidden />
             Create task

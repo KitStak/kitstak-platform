@@ -78,10 +78,7 @@ export function buildOrderSteps(mode: 'create' | 'edit'): WizardStep<OrderFormVa
       label: 'Order details',
       icon: ClipboardList,
       schema: detailsStepSchema,
-      description:
-        mode === 'create'
-          ? 'Enter the order details along with mandatory fields to proceed to Customer.'
-          : 'Warehouse, client and order code are fixed after save.',
+      description: mode === 'create' ? undefined : 'Warehouse, client and order code are fixed after save.',
       render: () => <StepDetails />,
     },
     {
@@ -89,7 +86,6 @@ export function buildOrderSteps(mode: 'create' | 'edit'): WizardStep<OrderFormVa
       label: 'Customer & address',
       icon: MapPin,
       schema: customerStepSchema,
-      description: "Enter the customer's information and the corresponding shipment address.",
       render: () => <StepCustomer />,
     },
     {
@@ -97,7 +93,6 @@ export function buildOrderSteps(mode: 'create' | 'edit'): WizardStep<OrderFormVa
       label: 'Products',
       icon: Package,
       schema: productsStepSchema,
-      description: 'Search by SKU and add the products and quantities to ship.',
       render: () => <StepProducts />,
     },
     {
@@ -105,7 +100,6 @@ export function buildOrderSteps(mode: 'create' | 'edit'): WizardStep<OrderFormVa
       label: 'Shipping',
       icon: Truck,
       schema: shippingStepSchema,
-      description: 'Select the carrier and shipping service if available.',
       render: () => <StepShipping />,
       isOptional: true,
     },
@@ -114,7 +108,6 @@ export function buildOrderSteps(mode: 'create' | 'edit'): WizardStep<OrderFormVa
       label: 'Other info',
       icon: FileText,
       schema: otherStepSchema,
-      description: 'Notes, gift, retailer details and custom fields.',
       render: () => <StepOther />,
       isOptional: true,
     },
@@ -122,7 +115,6 @@ export function buildOrderSteps(mode: 'create' | 'edit'): WizardStep<OrderFormVa
       key: 'confirm',
       label: 'Confirm',
       icon: CheckCircle2,
-      description: 'Do your final check and complete the order.',
       render: (ctx) => <StepConfirm goTo={ctx.goTo} />,
     },
   ];

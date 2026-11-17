@@ -505,7 +505,7 @@ export function WorkloadView() {
 
       {openTasks.length === 0 && personIds.length === 0 ? (
         <div className="flex flex-1 items-center justify-center bg-sunken p-6">
-          <EmptyState illustration="board" title="No open work to balance" description="When tasks are assigned and dated, you’ll see how the work is spread across the team, week by week." />
+          <EmptyState illustration="board" title="No open work to balance" description="Assign tasks and add dates to see how work is spread across the team." />
         </div>
       ) : narrow ? (
         <PhoneWeek

@@ -153,7 +153,7 @@ function SettingsForm({
 
   return (
     <>
-      <DialogHeader title="Pipeline settings" description="Tune how the forecast is weighted and what counts as at risk." />
+      <DialogHeader title="Pipeline settings" />
       <DialogBody className="pb-4">
         <Tabs value={tab} onValueChange={(value) => setTab(value as SettingsTab)}>
           <TabsList className="mb-4">

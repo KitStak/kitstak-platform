@@ -10,7 +10,6 @@ export interface ProductTileProps {
   readonly module: Module;
   readonly name: string;
   readonly tagline: string;
-  readonly description: string;
   readonly href: string;
   readonly entitled: boolean;
   readonly access: ModuleAccess;
@@ -94,7 +93,6 @@ export function ProductTile({
   module,
   name,
   tagline,
-  description,
   href,
   entitled,
   access,
@@ -120,7 +118,6 @@ export function ProductTile({
       <div className="mt-5 grow">
         <h2 className="text-lg font-semibold text-fg">{name}</h2>
         <p className="mt-0.5 text-sm font-medium text-fg-secondary">{tagline}</p>
-        <p className="mt-2 text-sm text-fg-muted">{description}</p>
       </div>
       {entitled && stats && stats.length > 0 ? (
         stats.every((stat) => stat.value === 0) ? (

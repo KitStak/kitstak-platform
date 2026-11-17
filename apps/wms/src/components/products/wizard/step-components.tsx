@@ -72,8 +72,7 @@ export function StepComponents() {
       <div>
         <h3 className="text-base font-semibold text-foreground">Search and add component</h3>
         <p className="text-xs text-secondary">
-          Find the products that make up the kit. Only this client&apos;s active products and kit-to-stock
-          kits are listed.
+          Only this client&apos;s active products and kit-to-stock kits are listed.
         </p>
       </div>
       <div className="relative">

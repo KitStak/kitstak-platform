@@ -33,7 +33,7 @@ export function PreferencesTab({ profile }: { readonly profile: ProfileDto | und
 
   return (
     <div className="flex flex-col gap-6" data-testid="profile-preferences">
-      <SettingsCard title="Appearance" description="Applies right away on this device and follows you to new ones.">
+      <SettingsCard title="Appearance">
         <SettingRow label="Theme" description="System follows your operating system’s light or dark setting.">
           <ToggleGroup<ThemePreference>
             label="Theme"
@@ -50,8 +50,8 @@ export function PreferencesTab({ profile }: { readonly profile: ProfileDto | und
           />
         </SettingRow>
       </SettingsCard>
-      <SettingsCard title="Language & region" description="How dates, times and numbers are shown to you.">
-        <SettingRow label="Language" description="Interface language and number formatting.">
+      <SettingsCard title="Language & region">
+        <SettingRow label="Language">
           <Select
             aria-label="Language"
             value={prefs.locale}
@@ -78,7 +78,7 @@ export function PreferencesTab({ profile }: { readonly profile: ProfileDto | und
             ]}
           />
         </SettingRow>
-        <SettingRow label="Week starts on" description="Used by calendars, timelines and date pickers.">
+        <SettingRow label="Week starts on">
           <ToggleGroup<'sunday' | 'monday'>
             label="Week starts on"
             value={prefs.weekStart}

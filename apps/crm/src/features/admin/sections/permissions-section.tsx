@@ -18,12 +18,11 @@ export function PermissionsSection() {
     <>
       <SectionHeader
         title="Permissions"
-        description="What each role can do across the organization. Board privacy and board-level permissions apply on top."
+        description="Board privacy and board-level permissions apply on top."
       />
       <CreationRulesCard />
       <SettingsCard
         title="Role permissions"
-        description="Built-in roles. Every request is checked on the server against this matrix."
         padded={false}
         testId="permissions-matrix"
         aside={
@@ -184,7 +183,7 @@ function CreationRulesCard() {
   return (
     <SettingsCard
       title="Who can create"
-      description="Restrict creating new workspaces and boards. Changes apply immediately and are enforced on the server."
+      description="Changes apply immediately."
       testId="creation-rules"
     >
       {org.isError ? (
@@ -193,7 +192,7 @@ function CreationRulesCard() {
         <SettingsSkeleton rows={2} />
       ) : (
         <>
-          <SettingRow label="Workspaces" description="Top-level spaces that hold folders and boards.">
+          <SettingRow label="Workspaces">
             <PolicyCards
               name="Who can create workspaces"
               noun="workspaces"

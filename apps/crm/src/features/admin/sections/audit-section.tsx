@@ -151,7 +151,7 @@ export function AuditSection() {
     <>
       <SectionHeader
         title="Audit log"
-        description="An append-only record of sign-ins, permission changes, exports and deletions. Entries can’t be edited or removed."
+        description="Entries can’t be edited or removed."
         actions={
           <Button variant="secondary" leadingIcon={<Download aria-hidden />} loading={exporting} onClick={() => void exportCsv()} data-testid="audit-export">
             Export CSV

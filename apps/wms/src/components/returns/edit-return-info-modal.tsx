@@ -100,10 +100,7 @@ export function EditReturnInfoModal({
       }}
     >
       <DialogContent size="lg">
-        <DialogHeader
-          title={`Edit return info · ${detail.rmaCode}`}
-          description="Carrier, shipping option, cost and the tracking numbers the customer or marketplace gave you."
-        />
+        <DialogHeader title={`Edit return info · ${detail.rmaCode}`} />
         <DialogBody className="space-y-3">
           {detail.label && detail.label.labelStatus !== 'Voided' ? (
             <Callout variant="info" title="A return label is active">

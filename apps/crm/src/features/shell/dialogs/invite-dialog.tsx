@@ -146,7 +146,7 @@ export function InviteDialog({ open, onOpenChange }: InviteDialogProps) {
       <DialogContent size="md">
         <DialogHeader
           title={`Invite to ${org.name}`}
-          description="Teammates get an email invitation that expires in 7 days."
+          description="Invitations expire in 7 days."
           icon={
             <span className="inline-flex size-9 items-center justify-center rounded-lg bg-primary-subtle text-primary-text">
               <UserPlus aria-hidden className="size-[18px]" />

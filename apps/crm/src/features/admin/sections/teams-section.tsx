@@ -63,10 +63,7 @@ export function TeamsSection() {
 
   return (
     <>
-      <SectionHeader
-        title="Teams"
-        description="Group people by function so you can assign, mention and share boards with everyone at once."
-      />
+      <SectionHeader title="Teams" />
       <SettingsCard padded={false} testId="teams-card">
         <form
           className="flex flex-wrap items-start gap-2 border-b border-border-subtle px-4 py-3 sm:px-5"
@@ -108,7 +105,7 @@ export function TeamsSection() {
             size="sm"
             illustration="workspace"
             title="No teams yet"
-            description="Create your first team above, for example Sales, Customer Success or RevOps."
+            description="Create your first team above."
           />
         ) : (
           <div className="grid lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
@@ -297,7 +294,7 @@ function TeamDetail({
         </Button>
       </div>
       {inTeam.length === 0 ? (
-        <EmptyState size="sm" illustration="workspace" title="No members yet" description="Add people above to start using this team." />
+        <EmptyState size="sm" illustration="workspace" title="No members yet" description="Add people above." />
       ) : (
         <ul aria-label={`Members of ${team.name}`} className="divide-y divide-border-subtle">
           {inTeam.map((entry) => {

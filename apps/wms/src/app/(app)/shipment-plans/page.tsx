@@ -12,7 +12,6 @@ export default function Page() {
       fallback={
         <ShipListFallback
           title="Shipment Plan"
-          helper="Plan trucks and loads: group orders, assign a gate and carrier, track loading and ship the whole load at once."
           tabs="shipment-plans"
         />
       }

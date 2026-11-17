@@ -12,7 +12,6 @@ export default function Page() {
       fallback={
         <ShipListFallback
           title="Carrier Shipment Details"
-          helper="Every label and package your carriers created. Track, reprint or void them in one place."
           tabs="shipments"
           chips={[{ label: 'Label create date', value: 'Last 30 days' }]}
         />

@@ -34,7 +34,7 @@ import {
   ROLES_GRID_KEY,
 } from '@/lib/grid-defs/admin/roles';
 import { Callout } from '@/components/ui/callout';
-import { USERS_ROLES_HELPER, USERS_ROLES_TITLE } from '@/lib/grid-defs/admin/users';
+import { USERS_ROLES_TITLE } from '@/lib/grid-defs/admin/users';
 import type { RoleRow } from '@/server/repositories/roles';
 import {
   armDestructive,
@@ -341,7 +341,6 @@ export function RolesPage() {
       <PageHeader
         title={USERS_ROLES_TITLE}
         tabs="users"
-        helper={USERS_ROLES_HELPER}
         actions={
           <>
             {perms.loading ? (

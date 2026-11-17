@@ -152,7 +152,6 @@ export function PlansPage() {
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
         title="Shipment Plan"
-        helper="Plan trucks and loads: group orders, assign a gate and carrier, track loading and ship the whole load at once."
         tabs="shipment-plans"
         actions={
           a.can.create ? (

@@ -131,7 +131,7 @@ function PairList({
 }: {
   readonly name: 'services' | 'packages';
   readonly title: string;
-  readonly description: string;
+  readonly description?: string;
   readonly codeLabel: string;
   readonly nameLabel: string;
 }) {
@@ -312,7 +312,7 @@ function TextList({
 }: {
   readonly name: 'confirmationTypes' | 'insuranceTypes' | 'billingTypes';
   readonly title: string;
-  readonly description: string;
+  readonly description?: string;
   readonly placeholder: string;
 }) {
   const { setValue, control } = useFormContext<F>();
@@ -474,32 +474,15 @@ export function CustomCarrierStep({ step }: { readonly step: number }) {
     );
   if (step === 2)
     return (
-      <PairList
-        name="packages"
-        title="Carrier packages"
-        description="Package types this carrier accepts."
-        codeLabel="Package code"
-        nameLabel="Package name"
-      />
+      <PairList name="packages" title="Carrier packages" codeLabel="Package code" nameLabel="Package name" />
     );
   return (
     <>
-      <TextList
-        name="confirmationTypes"
-        title="Confirmation types"
-        description="Delivery confirmation options offered with this carrier."
-        placeholder="e.g. Signature required"
-      />
-      <TextList
-        name="insuranceTypes"
-        title="Insurance types"
-        description="Insurance options for shipments with this carrier."
-        placeholder="e.g. Declared value"
-      />
+      <TextList name="confirmationTypes" title="Confirmation types" placeholder="e.g. Signature required" />
+      <TextList name="insuranceTypes" title="Insurance types" placeholder="e.g. Declared value" />
       <TextList
         name="billingTypes"
         title="Billing types"
-        description="Who pays for the shipment."
         placeholder="e.g. Sender, Recipient, Third-Party, Collect"
       />
     </>

@@ -18,18 +18,18 @@ export interface FallbackChip {
 
 export function ShipListFallback({
   title,
-  helper,
   tabs,
   chips = [],
 }: {
   readonly title: string;
+  /** Accepted for caller compatibility; the real pages no longer render a helper. */
   readonly helper?: string;
   readonly tabs?: PageTabGroupKey;
   readonly chips?: readonly FallbackChip[];
 }) {
   return (
     <div className="flex flex-col" aria-busy="true">
-      <PageHeader title={title} helper={helper} tabs={tabs} />
+      <PageHeader title={title} tabs={tabs} />
       <div className="space-y-3 px-6 pt-4" aria-label={`Loading ${title}`}>
         <div className="flex items-center gap-2">
           <Skeleton className="h-8 w-72" />

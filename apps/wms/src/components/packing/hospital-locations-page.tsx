@@ -271,7 +271,7 @@ export function HospitalLocationsPage() {
           { label: 'Packing Station', href: '/packing-station' },
           { label: 'Hospital locations' },
         ]}
-        helper="Where Report Issue puts picked stock. Resolve pack shorts in Orders, or move free stock back to storage."
+        helper="Where Report Issue puts picked stock."
         actions={
           <div className="w-[260px]">
             <Select

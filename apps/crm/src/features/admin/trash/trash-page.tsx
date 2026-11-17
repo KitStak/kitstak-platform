@@ -122,7 +122,6 @@ export function TrashPage() {
         <PageTitle
           title="Trash"
           icon={<RotateCcw />}
-          description="Restore deleted boards, groups and items, or delete them for good."
         />
 
         <p className="flex items-start gap-2 rounded-lg border border-info-subtle bg-info-subtle px-4 py-3 text-sm text-info-text" data-testid="trash-retention">
@@ -200,7 +199,7 @@ export function TrashPage() {
             <EmptyState
               illustration="board"
               title="Trash is empty"
-              description="When you delete a board, group or item it waits here for 30 days in case you change your mind."
+              description="Deleted boards, groups and items show up here."
               actions={
                 <Link href={`/${org.slug}`} className="text-sm font-medium text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-focus">
                   Back to home

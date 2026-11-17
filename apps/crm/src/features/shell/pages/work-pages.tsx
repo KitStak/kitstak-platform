@@ -48,7 +48,7 @@ export function MyWorkPage() {
   const assigned = useNotifications('assigned');
   const entries = assigned.data?.pages.flatMap((page) => page.items) ?? [];
   return (
-    <PageFrame title="My work" description="Items you've been assigned across every board." icon={<CalendarCheck />}>
+    <PageFrame title="My work" icon={<CalendarCheck />}>
       <PageSection title="Assigned to me" aside={<Badge>{entries.length}</Badge>}>
         {assigned.isPending ? (
           <ListSkeleton />
@@ -58,7 +58,7 @@ export function MyWorkPage() {
           <EmptyState
             illustration="board"
             title="Nothing assigned to you"
-            description="When someone assigns you to an item, it appears here so you can plan your day."
+            description="Items assigned to you appear here."
           />
         ) : (
           <ul>
@@ -155,7 +155,7 @@ export function DashboardPage({ dashboardId }: { readonly dashboardId: string })
 export function ImportPage() {
   const { org } = useOrg();
   return (
-    <PageFrame title="Import data" description="Bring contacts, leads and deals in from a spreadsheet." icon={<Upload />}>
+    <PageFrame title="Import data" icon={<Upload />}>
       <PageSection>
         <EmptyState
           visual={
@@ -186,7 +186,7 @@ export function TrashPage() {
   return (
     <PageFrame
       title="Trash"
-      description="Deleted boards stay here for 30 days before they are removed permanently."
+      description="Deleted boards are removed permanently after 30 days."
       icon={<Trash2 />}
     >
       <PageSection title="Deleted boards" aside={<Badge>{boards.length}</Badge>}>

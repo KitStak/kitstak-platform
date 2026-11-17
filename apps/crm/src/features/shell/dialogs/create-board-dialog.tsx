@@ -143,10 +143,7 @@ export function CreateBoardDialog({
       }}
     >
       <DialogContent size="md">
-        <DialogHeader
-          title="Create board"
-          description="Boards organize your work into groups, columns and views."
-        />
+        <DialogHeader title="Create board" />
         <WizardSteps steps={STEPS} current={step} />
         <form onSubmit={next} className="contents">
           <DialogBody className="flex min-h-[300px] flex-col gap-5">

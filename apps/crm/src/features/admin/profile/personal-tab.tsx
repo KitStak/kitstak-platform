@@ -65,7 +65,6 @@ export function PersonalTab({ profile }: { readonly profile: ProfileDto | undefi
     <div className="flex flex-col gap-6">
       <SettingsCard
         title="Personal info"
-        description="Shown on your profile card, in people pickers and in mentions. Change your photo from the picture above."
         testId="profile-personal"
       >
         <div className="grid gap-1 border-b border-border-subtle pb-3 sm:grid-cols-[180px_minmax(0,1fr)] sm:items-center sm:gap-6" data-testid="profile-photo-row">

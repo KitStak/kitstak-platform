@@ -414,7 +414,6 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
   return (
     <Page
       title="New project"
-      subtitle="Pick a starting point, give it a name, and you’re ready to go."
       width="default"
       breadcrumbs={[{ label: 'Projects', href: routes.projects() }, { label: 'New project' }]}
     >
@@ -599,7 +598,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-base font-semibold text-fg">Who’s working on it?</h2>
-                <p className="text-sm text-fg-muted">Add teammates now or later. They get a note in their inbox.</p>
+                <p className="text-sm text-fg-muted">Teammates you add get a note in their inbox.</p>
               </div>
               <UserPicker
                 multiple
@@ -740,7 +739,6 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
               {template ? `Create from “${template.name}”` : 'Create project'}
             </Button>
           </div>
-          <p className="-mt-2 text-right text-xs text-fg-muted">You can change any of this later in the project’s Settings.</p>
         </div>
       )}
     </Page>

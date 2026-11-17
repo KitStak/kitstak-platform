@@ -31,15 +31,13 @@ import { initials, noun, plural, relativeDay } from '../lib/format';
 
 export type RecordsKind = 'contacts' | 'accounts';
 
-const COPY: Record<RecordsKind, { title: string; description: string; empty: string }> = {
+const COPY: Record<RecordsKind, { title: string; empty: string }> = {
   accounts: {
     title: 'Accounts',
-    description: 'Every account with its owner and industry. Open one for the full 360 view',
     empty: 'Create an Accounts board from the CRM template to track the companies you sell to.',
   },
   contacts: {
     title: 'Contacts',
-    description: 'Every contact with their account and owner. Open one for the full 360 view',
     empty: 'Create a Contacts board from the CRM template to track the people you work with.',
   },
 };
@@ -67,7 +65,7 @@ export function RecordsIndexPage({ kind }: { readonly kind: RecordsKind }) {
       width="wide"
       title={copy.title}
       icon={kind === 'contacts' ? <UserRound aria-hidden /> : <Building2 aria-hidden />}
-      description={data?.board ? `${data.board.name} · ${plural(data.board.itemCount, noun(term))}` : copy.description}
+      description={data?.board ? `${data.board.name} · ${plural(data.board.itemCount, noun(term))}` : undefined}
       breadcrumbs={[
         { label: 'Home', href: routes.home(org.slug) },
         { label: 'CRM', href: `/${org.slug}/crm/pipeline` },

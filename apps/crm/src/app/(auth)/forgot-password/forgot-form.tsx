@@ -80,10 +80,7 @@ export function ForgotForm() {
 
   return (
     <>
-      <AuthHeading
-        title="Reset your password"
-        subtitle="Enter the email you use for KitStak and we’ll send you a reset link."
-      />
+      <AuthHeading title="Reset your password" />
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         {error ? <FormAlert>{error}</FormAlert> : null}
         <Field label="Work email" error={fieldError}>

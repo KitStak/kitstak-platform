@@ -283,11 +283,7 @@ export function AppsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        breadcrumbs={[{ label: 'Settings', href: '/settings' }, { label: 'Apps' }]}
-        title="Apps"
-        helper="Turn on add-ons for your account. Each app unlocks screens and actions as soon as it is activated."
-      />
+      <PageHeader breadcrumbs={[{ label: 'Settings', href: '/settings' }, { label: 'Apps' }]} title="Apps" />
       {!perms.loading && !perms.update ? (
         <div className="mx-6 mt-2">
           <Callout variant="info" title="Read-only access">
@@ -299,11 +295,7 @@ export function AppsPage() {
       <div className="mx-6 mt-2 overflow-hidden rounded-2xl border border-border bg-[radial-gradient(120%_140%_at_0%_0%,#EFE7FB_0%,#E2E5FB_45%,#F5F7FA_100%)] px-6 py-6">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div className="max-w-xl">
-            <p className="text-2xs font-bold text-[var(--label-purple-text)]">App directory</p>
-            <h2 className="mt-1 text-xl font-semibold tracking-[-0.01em] text-foreground">
-              Discover apps for KitStaks
-            </h2>
-            <p className="mt-1 text-sm text-secondary">
+            <p className="text-sm text-secondary">
               {q.isLoading ? (
                 'Loading the app catalog…'
               ) : q.isError ? (
@@ -312,8 +304,7 @@ export function AppsPage() {
                 'No apps are installed on this account yet.'
               ) : (
                 <>
-                  {counts.active} of {counts.all} apps active. Activate one to unlock it for every user with
-                  access.
+                  {counts.active} of {counts.all} apps active.
                 </>
               )}
             </p>

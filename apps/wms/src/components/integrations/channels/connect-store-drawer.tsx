@@ -197,7 +197,6 @@ export function ConnectStoreDrawer({
       dirty={dirty}
       width={45}
       title={`Connect ${providerName} store`}
-      description="Select app distribution type, then connect the store to a client."
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>

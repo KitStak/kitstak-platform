@@ -183,7 +183,7 @@ function ParametersStep() {
   return (
     <FormSection
       title="Mixing rules"
-      description="Rules applied whenever stock is put on an LP of this type. A rule breach blocks the scan with a clear message."
+      description="Applied whenever stock is put on an LP of this type. A breach blocks the scan."
     >
       <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
         {LP_TYPE_PARAMETERS.map((p) => (
@@ -425,11 +425,6 @@ export function LpTypeWizardDrawer({
       width={60}
       bodyClassName="pb-0"
       title={editId ? `Edit LP type ${detail.data?.data.code ?? ''}`.trim() : 'Create LP type'}
-      description={
-        editId
-          ? 'Every step is editable; Save applies all of them.'
-          : 'General, then parameters and other info.'
-      }
     >
       {editId && detail.isError ? (
         <EmptyState

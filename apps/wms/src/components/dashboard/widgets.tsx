@@ -788,7 +788,7 @@ export function RankCard({
   modes,
 }: {
   readonly title: string;
-  readonly description: string;
+  readonly description?: string;
   readonly icon: keyof typeof RANK_ICONS;
   readonly rows: readonly RankRow[];
   readonly modes?: readonly RankMode[];
@@ -914,7 +914,6 @@ export function JobsCard({ data }: { readonly data: LiveDashboard }) {
   return (
     <Panel
       title="Jobs"
-      description="You can manage and review the details of the jobs with the tabs on the right."
       action={
         <SegmentedControl<JobTab>
           size="sm"

@@ -46,10 +46,7 @@ async function PasswordBody() {
 export default function ChangePasswordPage() {
   return (
     <>
-      <PageHeader
-        title="Change Password"
-        helper="Make your password unique and strong. Changing it signs you out on every other device."
-      />
+      <PageHeader title="Change Password" helper="Changing it signs you out on every other device." />
       <AccountShell
         active="password"
         title="Change password"

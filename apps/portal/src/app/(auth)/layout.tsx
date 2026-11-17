@@ -58,7 +58,6 @@ export default function AuthLayout({ children }: { readonly children: React.Reac
         </main>
         <footer className="flex flex-wrap items-center justify-between gap-2 text-xs text-fg-muted">
           <span>© {new Date().getFullYear()} KitStak</span>
-          <span className="text-fg-muted">One account for CRM and WMS</span>
         </footer>
       </div>
 
@@ -70,9 +69,6 @@ export default function AuthLayout({ children }: { readonly children: React.Reac
         <div className="relative max-w-md text-center text-white">
           <p className="text-2xl leading-tight font-semibold tracking-[-0.02em]">
             One login. Every KitStak app your team runs on.
-          </p>
-          <p className="mt-3 text-md text-white/80">
-            Launch CRM and WMS, switch organizations and manage your team from a single front door.
           </p>
         </div>
       </aside>

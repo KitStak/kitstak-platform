@@ -86,7 +86,6 @@ export function ProjectActivity() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="mr-auto">
           <h2 className="text-md font-semibold text-fg">Activity</h2>
-          <p className="text-xs text-fg-muted">Every change to this project and its tasks, in order. Nothing here can be edited.</p>
         </div>
         <Select aria-label="Show" value={filter} onValueChange={(value) => setFilter(value as FilterKey)} options={(Object.keys(FILTERS) as FilterKey[]).map((key) => ({ value: key, label: FILTERS[key].label }))} className="w-44" />
       </div>

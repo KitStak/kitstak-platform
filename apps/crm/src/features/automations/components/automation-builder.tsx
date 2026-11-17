@@ -329,7 +329,7 @@ function BuilderBody({
         description={
           mode === 'sentence'
             ? 'Click each underlined part to choose what it should be.'
-            : 'Pick a trigger, add optional conditions, then chain one or more actions.'
+            : 'Pick a trigger, optional conditions, then one or more actions.'
         }
         icon={
           <span className="flex size-9 items-center justify-center rounded-lg bg-primary-subtle text-primary-text">

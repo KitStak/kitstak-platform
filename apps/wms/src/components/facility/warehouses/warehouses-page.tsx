@@ -190,7 +190,6 @@ function WarehouseDetailDrawer({
       onOpenChange={onOpenChange}
       width={45}
       title={d ? `${d.code} · ${d.name}` : 'Warehouse'}
-      description="Read-only summary. Use Edit to change it."
       footer={
         d && canEdit ? (
           <div className="flex justify-end">
@@ -424,7 +423,6 @@ export function WarehousesPage() {
       <PageHeader
         title="Warehouse"
         helpHref="/locations/help#warehouses"
-        helper="Addresses, shifts, units and default locations for every building you operate."
         actions={
           perms.create ? (
             <Button variant="primary" onClick={() => setDrawer({ open: true, editId: null })}>
@@ -518,7 +516,7 @@ export function WarehousesPage() {
         variant="info"
         icon={CheckCircle2}
         title={`Activate ${activate?.length === 1 ? `warehouse ${activate[0]?.code}` : `${activate?.length ?? 0} warehouses`}?`}
-        description="Active warehouses appear in the warehouse switcher and in every warehouse picker, and can receive orders, receipts and jobs. Their locations become available for putaway and picking again."
+        description="They can receive orders, receipts and jobs again, and their locations reopen for putaway and picking."
         confirmLabel="Yes, activate"
         cancelLabel="No"
         records={{

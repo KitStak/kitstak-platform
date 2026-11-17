@@ -192,7 +192,7 @@ function CartDetailDrawer({
       onOpenChange={onOpenChange}
       width={60}
       title={d ? `Mobile cart ${d.code}` : 'Mobile cart'}
-      description={d?.description ?? 'Cart layout, cells and the job using it'}
+      description={d?.description ?? undefined}
       footer={
         d && canEdit ? (
           <div className="flex justify-end">
@@ -749,7 +749,6 @@ export function MobileCartsPage() {
       <PageHeader
         title="Mobile Carts"
         helpHref="/locations/help#mobile-carts"
-        helper="Pick carts and their cells: layout, barcodes, and which job is using each cart right now."
         actions={
           perms.create ? (
             <Button variant="primary" onClick={create}>

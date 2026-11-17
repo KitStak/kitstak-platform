@@ -74,7 +74,6 @@ import {
 } from './product-create-drawer';
 
 const P = 'settings.products.';
-export const PRODUCTS_HELPER = 'You can create, edit, or delete your products here.';
 const IMPORT_TIP =
   'Import new records from an Excel template, or update existing products and kit components in bulk. Every upload is validated row by row and kept in import history.';
 
@@ -446,7 +445,6 @@ function ProductsGrid() {
         title="Products"
         breadcrumbs={[CATALOG_CRUMBS[0], { label: 'Products' }]}
         tabs="products"
-        helper={PRODUCTS_HELPER}
         actions={
           <>
             {can.imp ? <BulkImportMenu /> : null}

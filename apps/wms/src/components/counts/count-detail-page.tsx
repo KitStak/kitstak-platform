@@ -354,18 +354,10 @@ function Loaded({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-[240px]">
-          <DropdownMenuItem
-            icon={Eye}
-            onSelect={() => setDialog({ kind: 'view' })}
-            description="Read-only view of the plan settings"
-          >
+          <DropdownMenuItem icon={Eye} onSelect={() => setDialog({ kind: 'view' })}>
             Show Details
           </DropdownMenuItem>
-          <DropdownMenuItem
-            icon={History}
-            onSelect={() => setLog(true)}
-            description="Every change to this plan, field by field"
-          >
+          <DropdownMenuItem icon={History} onSelect={() => setLog(true)}>
             Change log
           </DropdownMenuItem>
           {can.del && !finished ? (

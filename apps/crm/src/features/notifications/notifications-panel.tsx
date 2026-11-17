@@ -96,12 +96,12 @@ const TABS: readonly { value: PanelTab; label: string; short: string }[] = [
   { value: 'assigned', label: 'Assigned to me', short: 'Assigned' },
 ];
 
-const EMPTY_COPY: Readonly<Record<PanelTab, { title: string; description: string }>> = {
+const EMPTY_COPY: Readonly<Record<PanelTab, { title: string; description?: string }>> = {
   all: {
     title: "You're all caught up",
     description: 'Mentions, assignments and updates on items you follow will show up here.',
   },
-  unread: { title: 'No unread notifications', description: 'Nice work. Everything here has been read.' },
+  unread: { title: 'No unread notifications' },
   mentions: {
     title: 'No mentions yet',
     description: 'When a teammate @mentions you in an update, you will see it here.',

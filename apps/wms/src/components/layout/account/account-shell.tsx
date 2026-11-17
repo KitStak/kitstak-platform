@@ -19,7 +19,7 @@ const SECTIONS: readonly {
 interface AccountShellProps {
   readonly active: AccountSection;
   readonly title: string;
-  readonly description: string;
+  readonly description?: string;
   readonly children: React.ReactNode;
 }
 
@@ -57,7 +57,7 @@ export function AccountShell({ active, title, description, children }: AccountSh
         <h2 id="account-section-title" className="text-md font-semibold text-foreground">
           {title}
         </h2>
-        <p className="mt-0.5 text-xs text-secondary">{description}</p>
+        {description ? <p className="mt-0.5 text-xs text-secondary">{description}</p> : null}
         <div className="mt-4">{children}</div>
       </section>
     </div>

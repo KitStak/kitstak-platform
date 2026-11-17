@@ -238,12 +238,7 @@ export function ByLocationPage() {
   const hasState = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader
-        title="Inventory by Location"
-        helper="Every stock line by location, lot, LP and status. Add, adjust, remove or transfer from here."
-        actions={headerActions}
-        tabs="inventory"
-      />
+      <PageHeader title="Inventory by Location" actions={headerActions} tabs="inventory" />
       <GridToolbar
         {...g.toolbarProps}
         searchPlaceholder="Search SKU, location, LP or barcode"

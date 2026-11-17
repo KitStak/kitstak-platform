@@ -72,9 +72,6 @@ import {
   type ListingCellActions,
 } from './listing-product-cell';
 
-export const LISTINGS_HELPER =
-  "Product listings act as a record of the products you're selling across your sales channels. You'll be able to see all listings of a product here.";
-
 type Col = ColumnDef<ListingRow, unknown>;
 const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
@@ -716,7 +713,6 @@ function ListingsGrid() {
         title="Product Listings"
         breadcrumbs={[...CATALOG_CRUMBS, { label: 'Product Listings' }]}
         tabs="products"
-        helper={LISTINGS_HELPER}
         actions={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

@@ -209,7 +209,7 @@ function PackageDetailDrawer({
       onOpenChange={onOpenChange}
       width={45}
       title={d ? `Shipment package ${d.code}` : 'Shipment package'}
-      description={d?.description ?? 'Package dimensions, client access and inventory tracking'}
+      description={d?.description ?? undefined}
       footer={
         d && canEdit ? (
           <div className="flex justify-end">
@@ -375,7 +375,6 @@ export function ShipmentPackagesPage() {
       <PageHeader
         title="Shipment Packages"
         helpHref="/locations/help#shipment-packages"
-        helper="Create and list the boxes, mailers and envelopes you pack orders into."
         actions={
           <>
             <CustomFieldsLink entity="shipment_package" />

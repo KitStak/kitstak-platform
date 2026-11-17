@@ -57,31 +57,27 @@ type Detail = Awaited<ReturnType<typeof getJobTypeDetail>>;
 const OP_CARDS: readonly {
   readonly value: Op;
   readonly title: string;
-  readonly description: string;
+  readonly description?: string;
   readonly icon: React.ComponentType<{ className?: string }>;
 }[] = [
   {
     value: 'Picking',
     title: 'Picking',
-    description: 'Assign settings for your picking jobs.',
     icon: PackageSearch,
   },
   {
     value: 'Count',
     title: 'Count',
-    description: 'Assign settings for your count jobs.',
     icon: ClipboardCheck,
   },
   {
     value: 'Replenishment',
     title: 'Replenishment',
-    description: 'Assign settings for your replenishment jobs.',
     icon: RefreshCw,
   },
   {
     value: 'Work Order',
     title: 'Work orders',
-    description: 'Assign settings for your work orders.',
     icon: Wrench,
   },
 ];
@@ -351,7 +347,6 @@ export function JobTypeDrawer({
       dirty={dirty}
       width={60}
       title={editId ? `Edit job type ${d?.code ?? ''}`.trim() : 'Create new job type'}
-      description={chosen ? undefined : 'Choose the operation type this job type is for.'}
       headerExtra={
         chosen ? (
           <span className="inline-flex w-fit rounded-full bg-primary-soft px-2 py-0.5 text-2xs font-semibold text-primary">

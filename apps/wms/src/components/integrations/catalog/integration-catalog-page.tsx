@@ -205,11 +205,7 @@ export function IntegrationCatalogPage({ kind }: { readonly kind: 'channel' | 'c
         title="Integration Management"
         tabs="integrations"
         helpHref="/integrations/help"
-        helper={
-          kind === 'carrier' && !all
-            ? 'Connect carrier accounts to rate shop and buy or void labels.'
-            : 'Connect stores and carriers. Every channel also offers a KitStak Sandbox store.'
-        }
+        helper={kind === 'carrier' && !all ? undefined : 'Every channel also offers a KitStak Sandbox store.'}
       />
       <div className="flex flex-1 gap-6 px-6 pb-6">
         <aside className="w-56 shrink-0">

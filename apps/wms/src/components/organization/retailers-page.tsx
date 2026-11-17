@@ -420,10 +420,7 @@ function AdvancedStep({ docs }: { readonly docs: readonly RetailerDocument[] }) 
           <NumberField<F> name="lpLabelPrintQty" label="LP label print quantity" required min={1} max={99} />
         </FormGrid>
       </FormSection>
-      <FormSection
-        title="Documents"
-        description="You can upload and download documents for the retailer as needed."
-      >
+      <FormSection title="Documents">
         <DocumentsField initial={docs} />
       </FormSection>
     </div>
@@ -600,7 +597,6 @@ function RetailerDrawer({
       width={60}
       bodyClassName="pb-0"
       title={editId ? `Edit retailer ${detail.data?.data.name ?? ''}`.trim() : 'Create retailer'}
-      description="General and address, label settings and documents, then custom fields."
     >
       {editId && detail.isError ? (
         <EmptyState
@@ -794,7 +790,6 @@ export function RetailersPage() {
       <PageHeader
         title="Retailers"
         tabs="organization"
-        helper="Big-box retailers you ship B2B for: logos, case-label rules and routing documents."
         actions={
           <>
             {perms.create ? (

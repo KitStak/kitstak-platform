@@ -76,7 +76,6 @@ export function ProfilePage() {
         <header className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h1 className="text-xl font-semibold tracking-[-0.01em] text-fg">My profile</h1>
-            <p className="mt-0.5 text-base text-fg-secondary">How you appear to teammates, and how KitStak works for you.</p>
           </div>
         </header>
         <section className="overflow-hidden rounded-lg border border-border-subtle bg-panel">

@@ -401,7 +401,7 @@ function MilestonesPanel({ project, canEdit }: { readonly project: ProjectDetail
         </form>
       ) : null}
       {sorted.length === 0 && !adding ? (
-        <p className="text-sm text-fg-muted">No milestones yet. Milestones mark the big moments, like “Go live” or “Launch day”.</p>
+        <p className="text-sm text-fg-muted">No milestones yet.</p>
       ) : (
         <ul className="flex flex-col divide-y divide-border-subtle">
           {sorted.map((milestone) => {
@@ -626,7 +626,7 @@ function GoalsPanel({ project }: { readonly project: ProjectDetail }) {
       {goals.isPending ? (
         <Skeleton height={40} rounded="md" />
       ) : list.length === 0 ? (
-        <p className="text-sm text-fg-muted">This project isn’t connected to a goal yet. Link it from the Goals page so its progress counts.</p>
+        <p className="text-sm text-fg-muted">Not linked to a goal yet. Link it from the Goals page.</p>
       ) : (
         <ul className="flex flex-col gap-3">
           {list.map((goal) => (
@@ -686,7 +686,7 @@ function LinksPanel({ project, canEdit }: { readonly project: ProjectDetail; rea
       {links.isPending ? (
         <Skeleton height={40} rounded="md" />
       ) : list.length === 0 ? (
-        <p className="mb-3 text-sm text-fg-muted">Connect the customer, CRM deal or warehouse orders this project is for. Their status shows here live.</p>
+        <p className="mb-3 text-sm text-fg-muted">Connect the customer, CRM deal or warehouse orders this project is for.</p>
       ) : (
         <ul className="mb-3 flex flex-col gap-1" data-testid="project-links">
           {list.map((link) => (

@@ -65,8 +65,7 @@ export function ActivationCard({ gate }: { readonly gate: AnalyticsGate }) {
       </div>
       <h2 className="mt-4 text-lg font-semibold">Turn on {gate.appName}</h2>
       <p className="mt-2 text-sm leading-5 text-secondary">
-        {gate.appName} is switched off for your company. Activate it in Apps and these dashboards fill in
-        straight away from the work your team already records. No setup, no extra data.
+        {gate.appName} is switched off for your company. Activate it in Apps to fill these dashboards.
       </p>
       <div className="mt-5 flex justify-center gap-2">
         <Link
@@ -369,7 +368,7 @@ export function AnalyticsPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-10">
-      <PageHeader title={meta.title} helper={meta.helper} />
+      <PageHeader title={meta.title} />
       {data?.gate || q.error?.status === 403 ? null : filters}
       {body}
     </div>

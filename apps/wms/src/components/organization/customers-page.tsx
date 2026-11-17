@@ -292,7 +292,6 @@ function CustomerDrawer({
       title={
         editId ? `Edit customer ${detail.data ? detail.data.data.fullName : ''}`.trim() : 'Create customer'
       }
-      description="Contact details, client and the addresses used on orders."
     >
       {editId && detail.isError ? (
         <EmptyState
@@ -567,7 +566,6 @@ export function CustomersPage() {
       <PageHeader
         title="Customers"
         tabs="organization"
-        helper="Ship-to customers of your clients, with their shipping, billing and return addresses."
         actions={
           <>
             {perms.create ? (

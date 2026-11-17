@@ -977,7 +977,9 @@ export function LookupPage({
             <h2 id={`lookup-section-${def.type}`} className="text-base font-semibold text-foreground">
               {sectionTitle ?? def.title}
             </h2>
-            <p className="mt-0.5 text-xs text-secondary">{sectionDescription ?? def.description}</p>
+            {sectionDescription ? (
+              <p className="mt-0.5 text-xs text-secondary">{sectionDescription}</p>
+            ) : null}
           </div>
           {createButton('Add new', 'secondary')}
         </header>
@@ -989,7 +991,6 @@ export function LookupPage({
     <DataSetupShell>
       <PageHeader
         title={def.title}
-        helper={def.description}
         crumbLabel={def.title}
         actions={
           def.type === 'location_zone' ? (

@@ -40,14 +40,6 @@ export default function AuthLayout({ children }: { readonly children: React.Reac
         <div className="relative w-full max-w-[460px]">
           <AuthIllustration />
         </div>
-        <div className="relative max-w-md text-center text-white">
-          <p className="text-2xl leading-tight font-semibold tracking-[-0.02em]">
-            Every deal, contact and next step, on one board your whole team trusts.
-          </p>
-          <p className="mt-3 text-md text-white/80">
-            Pipelines, automations and dashboards that keep revenue moving.
-          </p>
-        </div>
       </aside>
     </div>
   );

@@ -114,14 +114,7 @@ export function SignupForm({ next }: { readonly next: string | null }) {
   const pending = stage !== 'idle';
   return (
     <>
-      <AuthHeading
-        title={invite ? 'Join your team on KitStak' : 'Create your KitStak account'}
-        subtitle={
-          invite
-            ? 'Create an account to accept your invitation.'
-            : 'Free to start. Your CRM workspace is ready in seconds.'
-        }
-      />
+      <AuthHeading title={invite ? 'Join your team on KitStak' : 'Create your KitStak account'} />
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         {error ? <FormAlert>{error}</FormAlert> : null}
         <Field label="Full name" error={fieldErrors.name}>

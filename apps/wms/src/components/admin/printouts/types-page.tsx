@@ -128,10 +128,7 @@ export function PrintoutTypesPage() {
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        title="Printouts & Labels"
-        helper="Choose a printout type to list, design and assign its templates."
-      />
+      <PageHeader title="Printouts & Labels" />
       <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-6 pt-4 lg:flex-row lg:gap-6 lg:px-6">
         <aside className="shrink-0 lg:w-[220px]">
           <p className="mb-3 flex h-9 items-center px-3 text-2xs font-bold text-faint">Categories</p>

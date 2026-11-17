@@ -203,7 +203,7 @@ function LpTypeDetailDrawer({
       onOpenChange={onOpenChange}
       width={45}
       title={d ? `LP type ${d.code}` : 'LP type'}
-      description={d?.description ?? 'License plate type details'}
+      description={d?.description ?? undefined}
       footer={
         d && canEdit ? (
           <div className="flex justify-end">
@@ -324,7 +324,6 @@ export function LpTypesPage() {
         title="LP Types"
         helpHref="/locations/help#lp-types"
         tabs="lp"
-        helper="Pallets, totes and carts: numbering, dimensions and the mixing rules for each license plate type."
         actions={
           <>
             <CustomFieldsLink entity="lp_type" />

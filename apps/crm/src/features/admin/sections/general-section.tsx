@@ -109,10 +109,7 @@ export function GeneralSection() {
 
   return (
     <>
-      <SectionHeader
-        title="General"
-        description="How your organization appears across KitStak, and where people land when they sign in."
-      />
+      <SectionHeader title="General" />
       {query.isError ? (
         <SettingsCard>
           <ErrorPanel title="Couldn't load organization settings" onRetry={() => void query.refetch()} />
@@ -121,7 +118,6 @@ export function GeneralSection() {
         <>
           <SettingsCard
             title="Organization profile"
-            description="Visible to everyone in the organization."
             testId="admin-general-card"
             footer={
               <>
@@ -155,7 +151,7 @@ export function GeneralSection() {
                   if (dirty && !hasErrors) submit();
                 }}
               >
-                <SettingRow label="Logo" description="Shown in the sidebar, admin center and emails.">
+                <SettingRow label="Logo">
                   <ImageUpload
                     name={draft.name || query.data.name}
                     src={query.data.logo}
@@ -225,7 +221,7 @@ export function GeneralSection() {
           </SettingsCard>
 
           {guard}
-          <SettingsCard title="Data & region" description="Where your organization's data is stored.">
+          <SettingsCard title="Data & region">
             {!query.data ? (
               <SettingsSkeleton rows={2} />
             ) : (

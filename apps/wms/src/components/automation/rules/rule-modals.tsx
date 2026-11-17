@@ -427,10 +427,7 @@ export function ConditionModal({
           }
         }}
       >
-        <DialogHeader
-          title={state?.title ?? 'Add condition'}
-          description="Conditions decide when this rule applies."
-        />
+        <DialogHeader title={state?.title ?? 'Add condition'} />
         <DialogBody className="flex flex-col gap-4">
           {state?.allowApplyAll ? (
             <SegmentedControl
@@ -594,7 +591,7 @@ export function ActionModal({
       <DialogContent size="md">
         <DialogHeader
           title={initial ? 'Edit action' : 'Add action'}
-          description="Actions narrow and choose the candidate locations. Every action must hold (AND)."
+          description="Every action must hold (AND)."
         />
         <DialogBody className="flex flex-col gap-4">
           <Field id="act-key" label="Action" required error={touched && !def ? 'Choose an action' : null}>

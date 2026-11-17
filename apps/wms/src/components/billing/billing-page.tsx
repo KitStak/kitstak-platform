@@ -305,7 +305,6 @@ export function BillingPage() {
       <PageHeader
         title="3PL Billing"
         tabs="billing"
-        helper="Billing forms define what each client pays for receiving, storage, pick and pack, shipping and value-added services."
         actions={
           <>
             {perms.create ? (

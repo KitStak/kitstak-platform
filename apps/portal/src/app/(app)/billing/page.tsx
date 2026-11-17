@@ -91,7 +91,6 @@ export default async function BillingPage({
             </Badge>
           ) : null}
         </h1>
-        <p className="mt-2 text-md text-fg-secondary">The modules your organization can run today.</p>
       </header>
 
       {requested ? (
@@ -166,8 +165,7 @@ export default async function BillingPage({
         <div>
           <h2 className="text-base font-semibold text-fg">Online billing coming soon</h2>
           <p className="mt-1 text-sm text-fg-secondary">
-            Self-serve checkout and plan management aren’t available yet. To enable or change modules for{' '}
-            {activeOrg.name}, contact your administrator.
+            To enable or change modules for {activeOrg.name}, contact your administrator.
           </p>
         </div>
       </section>

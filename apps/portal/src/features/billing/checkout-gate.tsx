@@ -50,8 +50,7 @@ export function CheckoutGate({ moduleName, orgName, isOwner, owner }: CheckoutGa
           <div>
             <h3 className="text-base font-semibold text-fg">Ask your organization owner</h3>
             <p className="mt-1 text-sm text-fg-secondary">
-              Purchases for {orgName} are handled by its owner. Send {owner.name.split(' ')[0]} a note and
-              they can add {moduleName} for the whole team.
+              Only the owner can add {moduleName} to {orgName}.
             </p>
           </div>
         </div>
@@ -82,8 +81,8 @@ export function CheckoutGate({ moduleName, orgName, isOwner, owner }: CheckoutGa
       </h3>
       <p className="mt-1 text-sm text-fg-secondary">
         {isOwner
-          ? `Self-serve billing for ${orgName} is almost ready. Until it ships, KitStak enables modules manually — we'll confirm as soon as ${moduleName} is live for your team.`
-          : `Self-serve billing isn't available yet. Contact your organization's administrator to add ${moduleName}.`}
+          ? `Until self-serve billing ships, KitStak enables modules manually. We'll confirm when ${moduleName} is live for ${orgName}.`
+          : `Contact your organization's administrator to add ${moduleName}.`}
       </p>
     </div>
   );

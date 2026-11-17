@@ -40,8 +40,6 @@ export const AGING_DEF: ReportDef = {
   title: 'Inventory Aging Report',
   path: '/api/reports/inventory-aging',
   permission: 'inventory.total_inventory.view',
-  helper:
-    'How long on-hand stock has been sitting, per inventory bucket. Use it to find slow movers, expiring lots and storage that is costing money.',
   fields: [
     CLIENT_FIELD,
     enumOf('agingBucket', 'Aging Bucket', AGING_BUCKET_LABELS),
@@ -157,8 +155,6 @@ export const UTILIZATION_DEF: ReportDef = {
   title: 'Location Utilization Report',
   path: '/api/reports/location-utilization',
   permission: 'settings.locations.view',
-  helper:
-    'How full every active location is: units and SKUs stored against its capacity. Find over-filled bins, empty pick faces and space to consolidate.',
   fields: [
     enumOf('band', 'Utilization', UTILIZATION_BANDS),
     num('utilizationPct', 'Utilization %'),
