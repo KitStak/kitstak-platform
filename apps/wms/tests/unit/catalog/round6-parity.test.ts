@@ -2,7 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
-import { buildableFromComponent, kitBuildability } from '@/lib/grid-defs/products/kit-buildability';
+import {
+  MAX_NAMED_LIMITING,
+  buildableFromComponent,
+  kitBuildability,
+  kitLimitSummary,
+} from '@/lib/grid-defs/products/kit-buildability';
 import { ownDimsGaps } from '@/lib/grid-defs/products/pack-derivation';
 import {
   DEMO_IMAGE_KINDS,
@@ -57,6 +62,32 @@ describe('kitBuildability', () => {
     expect(kitBuildability([{ id: 'x', sku: 'X', quantity: 1, available: -4 }]).buildable).toBe(0);
     expect(kitBuildability([])).toEqual({ buildable: 0, limiting: [], shortForNext: 0 });
     expect(buildableFromComponent({ quantity: 0, available: 7 })).toBe(7);
+  });
+});
+
+describe('kitLimitSummary', () => {
+  const stock = (id: string, available: number, quantity = 1) => ({ id, sku: id, quantity, available });
+  it('names a single limiting component with the units short for one more kit', () => {
+    const r = kitLimitSummary([stock('a', 10, 3), stock('b', 50)]);
+    expect(r).toMatchObject({ kind: 'single', component: { id: 'a' }, shortForNext: 2 });
+  });
+  it('names a handful of tied limiting components', () => {
+    const r = kitLimitSummary([stock('a', 0), stock('b', 0), stock('c', 9)]);
+    expect(r.kind).toBe('named');
+    expect(r.kind === 'named' ? r.components.map((c) => c.id) : []).toEqual(['a', 'b']);
+  });
+  it('counts the limiting components instead of listing a long run of them', () => {
+    const short = Array.from({ length: MAX_NAMED_LIMITING + 1 }, (_, i) => stock(`s${i}`, 0));
+    expect(kitLimitSummary([...short, stock('ok', 9)])).toEqual({
+      kind: 'counted',
+      count: MAX_NAMED_LIMITING + 1,
+      total: MAX_NAMED_LIMITING + 2,
+    });
+  });
+  it('reports when every component ties, and nothing for an empty kit', () => {
+    expect(kitLimitSummary([stock('a', 5), stock('b', 5)])).toEqual({ kind: 'all', total: 2 });
+    expect(kitLimitSummary([])).toEqual({ kind: 'none' });
+    expect(kitLimitSummary([stock('a', 0)]).kind).toBe('single');
   });
 });
 
