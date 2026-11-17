@@ -8,7 +8,7 @@ const bebas = Bebas_Neue({ subsets: ['latin'], weight: '400', variable: '--font-
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://kitstak.com'),
-  title: 'KitStak — CRM, WMS and Projects on one stack',
+  title: 'KitStak - CRM, WMS and Projects on one stack',
   description:
     'KitStak runs your customers, your warehouse and your projects on one database and one sign-in. Use the CRM, the WMS, Projects, or any mix.',
   openGraph: {
