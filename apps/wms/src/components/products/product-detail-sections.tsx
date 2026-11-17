@@ -24,7 +24,11 @@ import {
   hasIncompleteDimensions,
   hasMissingWeight,
 } from '@/lib/grid-defs/products/catalog-options';
-import { buildableFromComponent, kitBuildability } from '@/lib/grid-defs/products/kit-buildability';
+import {
+  buildableFromComponent,
+  kitBuildability,
+  kitLimitSummary,
+} from '@/lib/grid-defs/products/kit-buildability';
 import { ProductThumb, type ProductDetailData } from './catalog-shared';
 import { PackHierarchy, PackTypesEditor, hierarchyFromView } from './product-pack-types-editor';
 
@@ -698,9 +702,7 @@ export function ListingsTab({ data }: { readonly data: D }) {
 export function KitBuildabilitySummary({ components }: { readonly components: D['components'] }) {
   const fmt = useFormat();
   if (components.length === 0) return null;
-  const { buildable, limiting, shortForNext } = kitBuildability(components);
-  const allTie = limiting.length === components.length && components.length > 1;
-  const first = limiting[0];
+  const { buildable } = kitBuildability(components);
   const zero = buildable === 0;
   return (
     <div
@@ -723,33 +725,75 @@ export function KitBuildabilitySummary({ components }: { readonly components: D[
           {fmt.quantity(buildable)}
         </span>
       </div>
-      {first ? (
-        <p className="min-w-0 text-xs text-secondary">
-          {allTie ? (
-            <>Every component caps the kit at the same quantity.</>
-          ) : (
-            <>
-              Limited by{' '}
-              {limiting.map((c, i) => (
-                <React.Fragment key={c.id}>
-                  {i > 0 ? ', ' : null}
-                  <Link
-                    href={`/products/${c.id}`}
-                    className="font-mono font-semibold text-primary hover:underline"
-                  >
-                    {c.sku}
-                  </Link>
-                </React.Fragment>
-              ))}{' '}
-              ({fmt.quantity(Math.max(0, first.available))} available, {fmt.quantity(first.quantity)} per
-              kit).
-            </>
-          )}{' '}
-          {fmt.quantity(shortForNext)} more {shortForNext === 1 ? 'unit' : 'units'} of{' '}
-          {allTie ? 'each component' : first.sku} {shortForNext === 1 ? 'builds' : 'build'} one more kit.
-        </p>
-      ) : null}
+      <KitLimitMessage components={components} zero={zero} />
     </div>
+  );
+}
+
+function ComponentLink({ component }: { readonly component: D['components'][number] }) {
+  return (
+    <Link
+      href={`/products/${component.id}`}
+      title={component.sku}
+      className="font-semibold text-primary hover:underline"
+    >
+      {component.name || component.sku}
+    </Link>
+  );
+}
+
+/** Plain-language reason for the buildable figure; long runs of components are counted, not listed. */
+function KitLimitMessage({
+  components,
+  zero,
+}: {
+  readonly components: D['components'];
+  readonly zero: boolean;
+}) {
+  const fmt = useFormat();
+  const summary = kitLimitSummary(components);
+  if (summary.kind === 'none') return null;
+  const className = 'min-w-0 text-xs text-secondary';
+  if (summary.kind === 'all') {
+    return (
+      <p className={className}>
+        {zero
+          ? 'No component has enough stock for one kit.'
+          : 'Every component runs out at the same number of kits.'}
+      </p>
+    );
+  }
+  if (summary.kind === 'single') {
+    const { component, shortForNext } = summary;
+    return (
+      <p className={className}>
+        Limited by <ComponentLink component={component} />:{' '}
+        {fmt.quantity(Math.max(0, component.available))} available, {fmt.quantity(component.quantity)} needed
+        per kit. {fmt.quantity(shortForNext)} more {shortForNext === 1 ? 'unit builds' : 'units build'} one
+        more kit.
+      </p>
+    );
+  }
+  if (summary.kind === 'named') {
+    const last = summary.components.length - 1;
+    return (
+      <p className={className}>
+        Limited by{' '}
+        {summary.components.map((c, i) => (
+          <React.Fragment key={c.id}>
+            {i === 0 ? null : i === last ? ' and ' : ', '}
+            <ComponentLink component={c} />
+          </React.Fragment>
+        ))}
+        . {zero ? 'Restock them to build this kit.' : 'Restock them to build more.'}
+      </p>
+    );
+  }
+  return (
+    <p className={className}>
+      {fmt.quantity(summary.count)} of {fmt.quantity(summary.total)} components{' '}
+      {zero ? 'do not have enough stock for one kit' : 'run out first'}. They are marked Limiting below.
+    </p>
   );
 }
 
