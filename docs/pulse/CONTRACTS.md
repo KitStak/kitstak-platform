@@ -12,6 +12,12 @@ backwards compatible way and say so in your report.
 
 ## 1. Folder ownership
 
+> **Owner instruction (overrides any task brief): `apps/web` (the marketing site) is OFF LIMITS to every Pulse team,
+> integrator, QA agent and critic. A separate session on its own branch owns it. Do not edit, add or delete anything
+> under `apps/web`, and skip any step in your brief that says to (for example "apps/web marketing site lists Pulse").
+> Do not report its absence as a defect.**
+
+
 All paths are inside `apps/pulse` unless they start with `apps/` or `packages/`.
 
 | Team | Owns | Routes |
@@ -22,7 +28,7 @@ All paths are inside `apps/pulse` unless they start with `apps/` or `packages/`.
 | **profit** | `src/features/home`, `src/features/profit` (explorer by job, client, job type, extra service, site, month, week, day), `src/features/clients`, `src/features/services`, `src/features/reports`, `src/components/charts` (new: the one chart library every team uses), new domain files `src/server/domain/{explain,reports}.ts` | `/`, `/profit`, `/clients/[id]`, `/clients/by-link`, `/services`, `/services/[id]`, `/reports`, `/reports/[slug]` |
 | **money-ops** | `src/features/calculator` (quote calculator and what if), `src/features/alerts`, `src/features/goals` (targets), `src/features/wall`, new `src/features/{materials,costs,revenue,periods}` (entry forms and tables that the job tabs and the client page mount by path), `src/app/wall/**`, new domain file `src/server/domain/quotes.ts` | `/calculator`, `/alerts`, `/alerts/rules`, `/goals`, `/settings/close` (page file imports from `src/features/periods`), `/wall`, `/wall/t/[token]` |
 | **data** | `src/features/imports`, `src/features/export`, `src/features/settings` (all sections, roles, sites, catalogs, connected apps page shell, audit log), `src/features/welcome` (onboarding and sample data), new `src/features/views` (saved views bar any list can mount), new domain files `src/server/domain/{imports,exports,sample}.ts`, routes `src/app/api/v1/{import,export,templates}/**` | `/import`, `/import/new`, `/import/[batchId]`, `/export`, `/settings`, `/settings/audit`, `/welcome` |
-| **integrations** | `apps/crm`, `apps/wms`, `apps/portal`, `apps/projects`, `apps/web`, `packages/*` (new `packages/pulse-bridge`), `apps/pulse/src/server/integrations`, new `src/features/integrations` (record chips, link dialogs, the body of `/settings/apps`), `docs/DEPLOYMENT.md`, `deploy/*`, new domain file `src/server/domain/sync.ts` | `/settings/apps` body, deep links from sibling apps |
+| **integrations** | `apps/crm`, `apps/wms`, `apps/portal`, `apps/projects`, `packages/*` (new `packages/pulse-bridge`), `apps/pulse/src/server/integrations`, new `src/features/integrations` (record chips, link dialogs, the body of `/settings/apps`), `docs/DEPLOYMENT.md`, `deploy/*`, new domain file `src/server/domain/sync.ts` | `/settings/apps` body, deep links from sibling apps |
 | **seed** | `src/server/db/seed` (keep `context.ts` helpers and the `SEEDS` registry in `index.ts`; `minimal.ts` stays, because `reconcile.db.test.ts` runs it) | none |
 
 Shared files anyone may extend **additively** (add, never rename or change a signature): `src/lib/types.ts`,

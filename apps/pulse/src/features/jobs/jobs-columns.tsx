@@ -143,8 +143,8 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
       job.stats.moneyHidden ? (
         <Hidden />
       ) : (
-        <span className="flex flex-col items-end leading-tight">
-          <span className={cn('font-medium', toneClass(marginTone(job.stats.marginBp, job.stats.targetMarginBp)))}>{formatPercentBp(job.stats.marginBp, { empty: 'No revenue yet' })}</span>
+        <span className="flex flex-col items-end leading-tight whitespace-nowrap">
+          <span className={cn('font-medium', toneClass(marginTone(job.stats.marginBp, job.stats.targetMarginBp)))}>{formatPercentBp(job.stats.marginBp, { empty: 'None yet' })}</span>
           {job.stats.targetMarginBp !== null ? <span className="text-2xs text-fg-muted">target {formatPercentBp(job.stats.targetMarginBp, { digits: 0 })}</span> : null}
         </span>
       ),

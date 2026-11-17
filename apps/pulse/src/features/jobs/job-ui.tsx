@@ -11,7 +11,7 @@ import { Button, Popover, PopoverContent, PopoverTrigger } from '@/components/ui
 import { cn } from '@/components/ui/cn';
 import { MarginPill } from '@/components/charts/stats';
 import { JOB_STATUS_LABELS, type JobStatusValue } from '@/lib/constants';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, formatNumber } from '@/lib/format';
 import type { JobListItemDTO } from '@/lib/types';
 import { nextStepHref } from './job-math';
 
@@ -143,8 +143,8 @@ export function Explain({ title, rule, rows, footnote, label }: { readonly title
 export function UnitsProgress({ done, planned, pctBp, unit, compact = false }: { readonly done: string; readonly planned: string; readonly pctBp: number | null; readonly unit: string; readonly compact?: boolean }) {
   const hasPlan = Number(planned) > 0;
   const pct = pctBp === null ? null : Math.max(0, Math.min(100, pctBp / 100));
-  const doneText = Number(done).toLocaleString('en-US', { maximumFractionDigits: 0 });
-  const plannedText = Number(planned).toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const doneText = formatNumber(done, { maxDigits: 0 });
+  const plannedText = formatNumber(planned, { maxDigits: 0 });
   return (
     <div className={cn('flex min-w-0 flex-col gap-1', compact ? 'w-[124px]' : 'w-full')}>
       <span className="truncate text-xs text-fg tabular-nums">
@@ -154,7 +154,7 @@ export function UnitsProgress({ done, planned, pctBp, unit, compact = false }: {
       </span>
       {hasPlan && pct !== null ? (
         <span role="progressbar" aria-label={`${doneText} of ${plannedText} ${unit} done`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="block h-1.5 w-full overflow-hidden rounded-full bg-muted">
-          <span className="block h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+          <span className="block h-full rounded-full bg-info" style={{ width: `${pct}%` }} />
         </span>
       ) : null}
     </div>
