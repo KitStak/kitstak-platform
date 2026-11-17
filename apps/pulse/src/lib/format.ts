@@ -86,6 +86,7 @@ export function formatMoneyCompact(cents: CentsLike | Missing, options: MoneyFor
     style: 'currency',
     currency: options.currency ?? DEFAULT_CURRENCY,
     notation: 'compact',
+    minimumFractionDigits: 0,
     maximumFractionDigits: 1,
   });
   return formatExact(formatter, centsToDecimal(cents));

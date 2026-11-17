@@ -5,3 +5,7 @@
  * Add one `export * from './<area>'` line per schema file, mirroring the SQL.
  */
 export { pulseSchema } from './_shared';
+export * from './setup';
+export * from './jobs';
+export * from './streams';
+export * from './control';

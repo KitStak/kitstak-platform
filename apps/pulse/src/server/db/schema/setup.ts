@@ -1,0 +1,188 @@
+/** 5.1 Setup tables: settings, roles, sites, clients, labor, items, services, target pace, goals. */
+import { boolean, date, integer, jsonb, numeric, smallint, text, uuid } from 'drizzle-orm/pg-core';
+import { base, cents, createdAt, deletedAt, pace, price, pulseSchema, stream, tstz, updatedAt } from './_shared';
+
+export const settings = pulseSchema.table('settings', {
+  orgId: uuid('org_id').primaryKey(),
+  currency: text('currency').notNull().default('USD'),
+  timezone: text('timezone').notNull().default('America/Chicago'),
+  weekStart: smallint('week_start').notNull().default(1),
+  fiscalYearStartMonth: smallint('fiscal_year_start_month').notNull().default(1),
+  workingDays: smallint('working_days').array().notNull().default([1, 2, 3, 4, 5]),
+  defaultShiftHours: numeric('default_shift_hours', { precision: 4, scale: 2 }).notNull().default('8'),
+  defaultPayrollTaxBp: integer('default_payroll_tax_bp').notNull().default(900),
+  defaultBenefitsBp: integer('default_benefits_bp').notNull().default(1200),
+  defaultOtherBurdenBp: integer('default_other_burden_bp').notNull().default(0),
+  defaultOverheadPerHourCents: integer('default_overhead_per_hour_cents').notNull().default(0),
+  defaultOvertimeMultiplier: numeric('default_overtime_multiplier', { precision: 3, scale: 2 }).notNull().default('1.50'),
+  defaultLoadedRateCents: integer('default_loaded_rate_cents'),
+  defaultTargetMarginBp: integer('default_target_margin_bp').notNull().default(3000),
+  marginFloorBp: integer('margin_floor_bp').notNull().default(1000),
+  atRiskGapBp: integer('at_risk_gap_bp').notNull().default(1000),
+  laborWatchOverBp: integer('labor_watch_over_bp').notNull().default(500),
+  laborRiskOverBp: integer('labor_risk_over_bp').notNull().default(1500),
+  productivityWatchBp: integer('productivity_watch_bp').notNull().default(9500),
+  productivityRiskBp: integer('productivity_risk_bp').notNull().default(8000),
+  materialWatchOverBp: integer('material_watch_over_bp').notNull().default(500),
+  noEntryDays: smallint('no_entry_days').notNull().default(3),
+  unbilledAlertCents: cents('unbilled_alert_cents').notNull().default(BigInt(500000)),
+  unbilledAlertDays: smallint('unbilled_alert_days').notNull().default(14),
+  sharedCostRule: text('shared_cost_rule').notNull().default('by_labor_hours'),
+  sharedPctBp: integer('shared_pct_bp').notNull().default(0),
+  sharedSpread: text('shared_spread').notNull().default('week'),
+  defaultPartsOwner: text('default_parts_owner').notNull().default('us'),
+  defaultMemberRole: text('default_member_role').notNull().default('none'),
+  jobNumberPrefix: text('job_number_prefix').notNull().default('J-'),
+  jobSeq: integer('job_seq').notNull().default(1000),
+  dateOrder: text('date_order').notNull().default('MDY'),
+  wmsAutoCreateJobs: boolean('wms_auto_create_jobs').notNull().default(true),
+  wmsSyncMaterials: boolean('wms_sync_materials').notNull().default(true),
+  wmsSyncVas: boolean('wms_sync_vas').notNull().default(true),
+  wmsSyncBilling: boolean('wms_sync_billing').notNull().default(true),
+  wmsBillingOpsInProfit: text('wms_billing_ops_in_profit').array().notNull().default([]),
+  crmSuggestJobs: boolean('crm_suggest_jobs').notNull().default(true),
+  projectsTimeImport: boolean('projects_time_import').notNull().default(true),
+  recalcStartedAt: tstz('recalc_started_at'),
+  onboarding: jsonb('onboarding').$type<Record<string, unknown>>().notNull().default({}),
+  sampleLoadedAt: tstz('sample_loaded_at'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const memberRoles = pulseSchema.table('member_roles', {
+  ...base(),
+  userId: uuid('user_id').notNull(),
+  role: text('role').notNull(),
+  seesMoney: boolean('sees_money').notNull().default(false),
+  kioskPinHash: text('kiosk_pin_hash'),
+  updatedBy: uuid('updated_by'),
+});
+
+export const sites = pulseSchema.table('sites', {
+  ...base(),
+  code: text('code').notNull(),
+  name: text('name').notNull(),
+  timezone: text('timezone').notNull(),
+  isDefault: boolean('is_default').notNull().default(false),
+  wmsWarehouseId: text('wms_warehouse_id'),
+  lastRolloverDate: date('last_rollover_date'),
+  archivedAt: tstz('archived_at'),
+  deletedAt: deletedAt(),
+});
+
+export const clients = pulseSchema.table('clients', {
+  ...base(),
+  code: text('code').notNull(),
+  name: text('name').notNull(),
+  status: text('status').notNull().default('active'),
+  contactName: text('contact_name'),
+  contactEmail: text('contact_email'),
+  phone: text('phone'),
+  targetMarginBp: integer('target_margin_bp'),
+  paymentTermsDays: integer('payment_terms_days'),
+  partsOwner: text('parts_owner'),
+  notes: text('notes'),
+  color: text('color'),
+  coreCustomerId: uuid('core_customer_id'),
+  crmAccountItemId: uuid('crm_account_item_id'),
+  ...stream(),
+});
+
+export const laborClasses = pulseSchema.table('labor_classes', {
+  ...base(),
+  code: text('code').notNull(),
+  name: text('name').notNull(),
+  kind: text('kind').notNull().default('employee'),
+  isDefault: boolean('is_default').notNull().default(false),
+  color: text('color'),
+  archivedAt: tstz('archived_at'),
+  deletedAt: deletedAt(),
+});
+
+export const jobTypes = pulseSchema.table('job_types', {
+  ...base(),
+  code: text('code').notNull(),
+  name: text('name').notNull(),
+  unitLabel: text('unit_label').notNull().default('units'),
+  defaultPricingModel: text('default_pricing_model').notNull().default('per_unit'),
+  defaultLaborClassId: uuid('default_labor_class_id'),
+  defaultStandardUph: pace('default_standard_uph'),
+  targetMarginBp: integer('target_margin_bp'),
+  color: text('color'),
+  icon: text('icon'),
+  position: integer('position').notNull().default(0),
+  isBuiltin: boolean('is_builtin').notNull().default(false),
+  archivedAt: tstz('archived_at'),
+  deletedAt: deletedAt(),
+});
+
+export const laborRates = pulseSchema.table('labor_rates', {
+  ...base(),
+  laborClassId: uuid('labor_class_id').notNull(),
+  siteId: uuid('site_id'),
+  effectiveFrom: date('effective_from').notNull(),
+  wageCents: integer('wage_cents').notNull(),
+  payrollTaxBp: integer('payroll_tax_bp').notNull(),
+  benefitsBp: integer('benefits_bp').notNull(),
+  otherBurdenBp: integer('other_burden_bp').notNull(),
+  overheadPerHourCents: integer('overhead_per_hour_cents').notNull(),
+  overtimeMultiplier: numeric('overtime_multiplier', { precision: 3, scale: 2 }).notNull(),
+  loadedRateCents: integer('loaded_rate_cents').notNull(),
+  overtimeRateCents: integer('overtime_rate_cents').notNull(),
+  billRateCents: integer('bill_rate_cents'),
+  note: text('note'),
+  ...stream(),
+});
+
+export const items = pulseSchema.table('items', {
+  ...base(),
+  sku: text('sku').notNull(),
+  name: text('name').notNull(),
+  uom: text('uom').notNull().default('each'),
+  unitCost: price('unit_cost').notNull().default('0'),
+  costUpdatedAt: tstz('cost_updated_at'),
+  suppliedBy: text('supplied_by'),
+  clientId: uuid('client_id'),
+  coreItemId: uuid('core_item_id'),
+  wmsProductId: text('wms_product_id'),
+  ...stream(),
+});
+
+export const vasServices = pulseSchema.table('vas_services', {
+  ...base(),
+  code: text('code').notNull(),
+  name: text('name').notNull(),
+  unitLabel: text('unit_label').notNull().default('units'),
+  billing: text('billing').notNull().default('per_unit'),
+  defaultPrice: price('default_price'),
+  defaultCostPerUnit: price('default_cost_per_unit'),
+  standardUph: pace('standard_uph'),
+  defaultLaborClassId: uuid('default_labor_class_id'),
+  wmsVasTypeId: text('wms_vas_type_id'),
+  color: text('color'),
+  active: boolean('active').notNull().default(true),
+  ...stream(),
+});
+
+export const standards = pulseSchema.table('standards', {
+  ...base(),
+  jobTypeId: uuid('job_type_id'),
+  clientId: uuid('client_id'),
+  vasServiceId: uuid('vas_service_id'),
+  laborClassId: uuid('labor_class_id'),
+  unitsPerLaborHour: pace('units_per_labor_hour').notNull(),
+  effectiveFrom: date('effective_from').notNull(),
+  basis: text('basis').notNull().default('typed'),
+  note: text('note'),
+  ...stream(),
+});
+
+export const targets = pulseSchema.table('targets', {
+  ...base(),
+  scope: text('scope').notNull(),
+  scopeId: uuid('scope_id'),
+  metric: text('metric').notNull(),
+  periodMonth: date('period_month'),
+  value: numeric('value', { precision: 16, scale: 4 }).notNull(),
+  ...stream(),
+});
