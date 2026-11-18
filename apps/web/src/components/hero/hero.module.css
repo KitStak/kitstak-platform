@@ -5,6 +5,20 @@
   color: var(--brand-cream);
   padding: calc(72px + clamp(64px, 9vw, 136px)) 0 clamp(88px, 10vw, 152px);
   overflow: hidden;
+  isolation: isolate;
+}
+/*
+ * Wave texture. The image is near black, so `screen` lets only its lighter wave lines show and the
+ * brand surface keeps its own colour in both themes.
+ */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: url('/hero/hero-texture.webp') right bottom / cover no-repeat;
+  mix-blend-mode: screen;
+  pointer-events: none;
 }
 .inner {
   display: grid;
