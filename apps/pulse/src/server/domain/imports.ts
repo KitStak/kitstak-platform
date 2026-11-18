@@ -798,6 +798,16 @@ interface RawRow {
   readonly n: number;
   readonly cells: readonly string[];
   readonly skip: boolean;
+  /** Problems the last check found on this row. A row that is left out keeps them for the report. */
+  readonly was?: readonly ImportMessage[];
+}
+
+/** True when a matched date column holds a date written with numbers only, like 3/4/2026. */
+function hasShortDates(columns: readonly { key: string; type: string }[], mapping: readonly (string | null)[], raw: readonly RawRow[]): boolean {
+  const dateKeys = new Set(columns.filter((column) => column.type === 'date').map((column) => column.key));
+  const indexes = mapping.flatMap((key, index) => (key !== null && dateKeys.has(key) ? [index] : []));
+  if (indexes.length === 0) return false;
+  return raw.some((row) => !row.skip && indexes.some((index) => /^\s*\d{1,2}[-/.]\d{1,2}[-/.](\d{2}|\d{4})\b/.test(row.cells[index] ?? '')));
 }
 
 function toMessages(issues: readonly RowIssue[]): ImportMessage[] {
@@ -845,7 +855,9 @@ async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAc
       ? null
       : read.dateOrderSource === 'detected'
         ? `Dates like 3/4/2026 were read ${read.dateOrder === 'MDY' ? 'month first' : 'day first'}, because that is the only way every date in this file works.`
-        : null;
+        : hasShortDates(def.columns, mapping, raw)
+          ? `Dates like 3/4/2026 can be read two ways. They were read ${read.dateOrder === 'MDY' ? 'month first, so 3/4/2026 is March 4' : 'day first, so 3/4/2026 is April 3'}. If that is wrong, go back and pick the other way under "Dates like 3/4/2026".`
+          : null;
 
   const plans: RowPlan[] = [];
   const moneyHidden = !access.seesMoney;
@@ -858,8 +870,11 @@ async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAc
     plans.push(plan);
     if (source.skip) {
       plan.action = 'skip';
+      // Keep what was wrong with the row, so the report of rows left out still says why.
+      const fresh = plan.messages.filter((message) => message.level === 'error');
+      const problems = fresh.length > 0 ? fresh : (source.was ?? []);
       plan.messages.length = 0;
-      plan.messages.push({ level: 'info', column: null, text: 'You chose to leave this row out.' });
+      plan.messages.push({ level: 'info', column: null, text: 'You chose to leave this row out.' }, ...problems);
       return;
     }
     if (!row.ok || row.record === null) {
@@ -925,6 +940,12 @@ async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAc
     if (look !== null) byLook.add(look);
   }
 
+  // Production rows whose hours come from time punches: punches own the hours, overtime and people there.
+  const punchOwned = new Set<string>();
+  if (stream === 'production' && existing.size > 0) {
+    for (const row of await rows<{ id: string }>(executor, sql`SELECT id FROM pulse.production_entries WHERE org_id = ${ctx.orgId} AND deleted_at IS NULL AND meta ? 'punch_fields'`)) punchOwned.add(row.id);
+  }
+
   if (layout === 'lines') {
     await planPlanLines(executor, ctx, plans, columns, existing);
   } else {
@@ -983,6 +1004,20 @@ async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAc
       } else {
         plan.existing = match;
         plan.entityId = match.id;
+        if (punchOwned.has(match.id)) {
+          const typed = (['laborHours', 'overtimeHours', 'people', 'hoursEach'] as const).some((field) => rec[field] !== null && rec[field] !== undefined);
+          const differs =
+            (rec.laborHours !== null && rec.laborHours !== undefined && Number(rec.laborHours) !== Number(match.record.laborHours ?? 0)) ||
+            (rec.overtimeHours !== null && rec.overtimeHours !== undefined && Number(rec.overtimeHours) !== Number(match.record.overtimeHours ?? 0)) ||
+            (rec.people !== null && rec.people !== undefined && Number(rec.people) !== Number(match.record.people ?? 0));
+          if (typed) {
+            rec.laborHours = null;
+            rec.overtimeHours = null;
+            rec.people = null;
+            rec.hoursEach = null;
+          }
+          if (differs) plan.messages.push({ level: 'warning', column: 'labor_hours', text: 'The hours on this row come from your time punches, so the hours, overtime and people in the file were left out. Change the punches to change them.' });
+        }
         const changes: ImportChange[] = [];
         for (const column of comparable) {
           const field = recordKey(column.key);
@@ -1025,7 +1060,14 @@ async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAc
       if (reason) {
         plan.action = 'error';
         plan.messages.push({ level: 'error', column: null, text: reason });
+        continue;
       }
+    }
+    // Work that was done cannot be dated after today. Managers may still save it, so it is a note, not a stop.
+    if (handler.floor && dateField && typeof rec[dateField] === 'string') {
+      const site = (plan.planned as Planned).refs.site ?? env.defaultSite;
+      const today = todayInZone(String(site.data.timezone ?? env.settings.timezone));
+      if (String(rec[dateField]) > today) plan.messages.push({ level: 'warning', column: dateField.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), text: 'This day is in the future. Check the date.' });
     }
   }
 
@@ -1299,8 +1341,13 @@ export async function appendImportRows(ctx: DomainContext, batchId: string, chun
 }
 
 async function loadRaw(executor: Executor, batchId: string): Promise<RawRow[]> {
-  const found = await rows<{ n: number; raw: { c?: unknown; s?: unknown } | null }>(executor, sql`SELECT row_number AS n, raw FROM pulse.import_rows WHERE batch_id = ${batchId} ORDER BY row_number`);
-  return found.map((row) => ({ n: row.n, cells: Array.isArray(row.raw?.c) ? (row.raw.c as string[]) : [], skip: row.raw?.s === true }));
+  const found = await rows<{ n: number; raw: { c?: unknown; s?: unknown } | null; messages: unknown }>(executor, sql`SELECT row_number AS n, raw, messages FROM pulse.import_rows WHERE batch_id = ${batchId} ORDER BY row_number`);
+  return found.map((row) => ({
+    n: row.n,
+    cells: Array.isArray(row.raw?.c) ? (row.raw.c as string[]) : [],
+    skip: row.raw?.s === true,
+    was: Array.isArray(row.messages) ? (row.messages as ImportMessage[]).filter((message) => message.level === 'error') : [],
+  }));
 }
 
 async function writePlan(executor: Executor, batchId: string, plan: Plan): Promise<void> {
@@ -1882,13 +1929,13 @@ export async function importErrorReport(ctx: DomainContext, batchId: string): Pr
   const headers = batch.header ?? [];
   const found = await rows<{ n: number; raw: { c?: unknown } | null; messages: unknown; action: string | null }>(
     db,
-    sql`SELECT row_number AS n, raw, messages, action FROM pulse.import_rows WHERE batch_id = ${batch.id} AND action IN ('error', 'lookalike') ORDER BY row_number`,
+    sql`SELECT row_number AS n, raw, messages, action FROM pulse.import_rows WHERE batch_id = ${batch.id} AND action IN ('error', 'lookalike', 'skip') ORDER BY row_number`,
   );
   const body = toCsv(
     [...headers, 'problem'],
     found.map((row) => {
       const cells = Array.isArray(row.raw?.c) ? (row.raw.c as string[]) : [];
-      const messages = (Array.isArray(row.messages) ? (row.messages as ImportMessage[]) : []).filter((message) => message.level === 'error' || row.action === 'lookalike');
+      const messages = (Array.isArray(row.messages) ? (row.messages as ImportMessage[]) : []).filter((message) => message.level === 'error' || row.action === 'lookalike' || row.action === 'skip');
       return [...headers.map((_, index) => cleanCell(cells[index])), messages.map((message) => (message.column ? `${message.column}: ${message.text}` : message.text)).join(' ')];
     }),
   );

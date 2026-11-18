@@ -652,7 +652,7 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
             <p className="p-4 text-sm text-fg-secondary">
               {production.isPending || serviceRows.isPending || costRows.isPending
                 ? 'Loading the entries.'
-                : 'This quote was saved as totals, with no lines. Jobs made in the new job wizard or the calculator keep their lines, so each one can be compared here.'}
+                : 'This quote was saved as totals, with no lines, so the table above is the whole comparison. Jobs made in the new job wizard keep their lines, and each line is compared here.'}
             </p>
           ) : (
             <div className="overflow-x-auto">

@@ -156,7 +156,7 @@ export async function previewWmsUsage(ctx: DomainContext, jobRef: string): Promi
 /**
  * Adds the parts the linked work order used since the last pull as material usage rows dated
  * today (source "wms"), with the warehouse's cost for one part kept on the row. Safe to run
- * again: it only ever adds the difference, so nothing is counted twice.
+ * again, the same day too: it only ever adds the difference, so nothing is counted twice.
  */
 export async function pullWmsUsage(ctx: DomainContext, jobRef: string): Promise<{ added: MaterialUsageDTO[]; preview: WmsUsagePreviewDTO }> {
   const access = await requirePulse(ctx, 'material:log');
@@ -181,7 +181,9 @@ export async function pullWmsUsage(ctx: DomainContext, jobRef: string): Promise<
       suppliedBy: null,
       note: `Pulled from work order ${preview.workOrderCode ?? ''}`.trim(),
       source: 'wms' as const,
-      sourceRef: `woc:${line.componentId}:${today}`,
+      // The warehouse count after this pull is part of the ref: a second build on the same day gets
+      // its own row instead of colliding with the first, and a repeat of the same pull adds nothing.
+      sourceRef: `woc:${line.componentId}:${today}:${line.consumed}`,
     })),
   );
   const added = access.seesMoney ? saved : saved.map((row) => ({ ...row, unitCost: null, costCents: null, scrapCents: null, moneyHidden: true }));

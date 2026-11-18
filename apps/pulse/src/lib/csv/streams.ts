@@ -354,6 +354,7 @@ const production = defineStream({
       if (people !== null && each !== null) record.laborHours = laborHoursFromCrew(String(record.people), String(record.hoursEach)).toFixed(2);
     }
     issues.push(...overtimeCheck(record, 'laborHours'));
+    if ((asNumber(record.hoursEach) ?? 0) > 24) issues.push({ level: 'warning', column: 'hours_each', message: 'One person cannot work more than 24 hours in a day. Check the hours each.' });
     const setup = asNumber(record.setupHours);
     if (setup !== null && setup > (asNumber(record.laborHours) ?? 0)) issues.push({ level: 'error', column: 'setup_hours', message: 'Setup hours cannot be more than the labor hours.' });
     if (asNumber(record.unitsGood) !== null && (asNumber(record.unitsGood) ?? 0) > 0 && record.laborHours === null) {

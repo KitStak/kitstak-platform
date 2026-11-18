@@ -138,7 +138,7 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
       return;
     }
     setBusy('rate');
-    const made = await createLaborClassAction({ name: 'Packer' });
+    const made = await createLaborClassAction({ name: 'Packer', code: 'PACK' });
     if (!made.ok) {
       setBusy(null);
       setErrors({ wage: made.error.message });

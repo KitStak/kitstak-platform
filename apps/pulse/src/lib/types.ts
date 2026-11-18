@@ -503,6 +503,11 @@ export interface JobDetailDTO extends JobListItemDTO {
   readonly budget: JobPlanDTO | null;
   readonly links: readonly JobLinkDTO[];
   readonly owner: PersonRef | null;
+  /**
+   * Who buys the parts when the job itself does not say (`partsOwner` is null): the client's own
+   * setting, then the workspace default. The same order the cost stamp uses.
+   */
+  readonly inheritedPartsOwner?: PartsOwnerValue;
 }
 
 interface StreamRowBase {

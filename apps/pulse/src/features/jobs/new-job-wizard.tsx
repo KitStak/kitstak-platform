@@ -270,6 +270,9 @@ export function NewJobWizard(props: NewJobWizardProps) {
     units: String(order.requestedQty || ''),
     unitLabel: 'kits',
     dueDate: order.plannedFinish ?? base.dueDate,
+    // A work order that is already late keeps its real due date; the start moves back to it so the
+    // filled in form is valid the moment it opens.
+    startDate: order.plannedFinish && base.startDate && order.plannedFinish < base.startDate ? order.plannedFinish : base.startDate,
     siteId: sites.find((site) => site.wmsWarehouseId === order.warehouseId)?.id ?? base.siteId,
     partsOwner: 'client',
     kitSku: order.kitSku ?? '',

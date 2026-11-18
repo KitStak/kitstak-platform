@@ -692,7 +692,7 @@ What the data team added on top of sections 5 to 10. Everything here is additive
   the id the row had in the file it came from, kept in `source_ref` with `source = 'csv'`), then by the stream's key
   columns, then the look alike check; clients, job types, labor classes and items can be created on the fly (managers
   only); closed months and supervisor day locks are row errors; labor rates need `rate:manage`.
-  Limits: 10 MB, 50,000 rows, 200 columns, 2,000 characters a cell, 5 unfinished batches per org, 20 uploads per person
+  Limits: 10 MB, 50,000 rows, 200 columns, 2,000 characters a cell, 5 unfinished batches per org, 60 uploads per person
   per hour (`PULSE_IMPORT_UPLOADS_PER_HOUR` overrides it for tests).
 - **`sample`**: `loadSampleData`, `clearSampleData` (every sample row carries `is_sample`; real work is never touched),
   `getSampleState`, `purgeAllData(ctx, confirmSlug)` (owner only; keeps settings, sites, people, alert rules and the audit

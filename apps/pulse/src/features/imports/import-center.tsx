@@ -253,7 +253,7 @@ export function ImportCenter({ initial, allowed }: { readonly initial: ImportCen
         title="Undo this import?"
         description={
           undoing
-            ? `The ${undoing.counts.create} rows it added will be removed and the ${undoing.counts.update} rows it changed will go back to what they were. Rows that someone changed after the import are left alone.`
+            ? `The ${formatNumber(undoing.counts.create, { maxDigits: 0 })} rows it added will be removed and the ${formatNumber(undoing.counts.update, { maxDigits: 0 })} rows it changed will go back to what they were. Rows that someone changed after the import are left alone.`
             : ''
         }
         confirmLabel="Undo the import"

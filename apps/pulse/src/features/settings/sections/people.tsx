@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Crown, Eye, EyeOff, KeyRound, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Crown, ExternalLink, Eye, EyeOff, KeyRound, RotateCcw, ShieldCheck, UserPlus } from 'lucide-react';
 import { Badge, Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Field, Input, Select, Skeleton, Switch, toast } from '@/components/ui';
 import { Panel } from '@/components/layout/page';
 import { PersonAvatar } from '@/components/pulse/person';
@@ -254,6 +254,25 @@ export function PeopleSection({ settings, canEdit }: { readonly settings: Settin
             })}
           </ul>
         )}
+      </Panel>
+
+      <Panel title="Add a person">
+        <div className="flex flex-wrap items-center gap-3" data-testid="add-person-help">
+          <UserPlus aria-hidden className="size-5 shrink-0 text-icon-strong" />
+          <p className="min-w-0 flex-1 basis-64 text-sm text-fg-secondary">
+            People join your workspace from the KitStak Portal. Invite them there by email. Once they accept, they show up in the list above and you pick what they can do in Pulse and whether they see money.
+          </p>
+          {canEdit ? (
+            <a
+              href={`${shell.appUrls.portal}/settings/organization`}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border-input bg-panel px-3 text-sm font-medium text-fg hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              data-testid="invite-in-portal"
+            >
+              Invite in the Portal
+              <ExternalLink aria-hidden className="size-3.5" />
+            </a>
+          ) : null}
+        </div>
       </Panel>
 
       <Panel title="New members">

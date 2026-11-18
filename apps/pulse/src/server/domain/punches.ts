@@ -371,6 +371,25 @@ export async function rollupPunches(
           .where(eq(indirectEntries.id, existing.id));
         indirectIds.push(existing.id);
       } else {
+        // A file exported from Pulse holds this very row already (same day, class, reason and hours).
+        // Take that row over, so importing the export and then the punches does not count the time twice.
+        const [copy] = await rows<{ id: string }>(
+          tx,
+          sql`SELECT id FROM pulse.indirect_entries
+               WHERE org_id = ${ctx.orgId} AND site_id = ${day.siteId} AND work_date = ${day.date} AND deleted_at IS NULL AND source = 'csv'
+                 AND labor_class_id IS NOT DISTINCT FROM ${group.labor_class_id} AND reason = ${group.reason}
+                 AND hours = ${group.hours}::numeric AND overtime_hours = ${group.overtime}::numeric
+               ORDER BY created_at LIMIT 1`,
+        );
+        if (copy) {
+          await tx
+            .update(indirectEntries)
+            .set({ source: 'punch', sourceRef: ref, headcount: String(group.people), version: sql`version + 1`, updatedBy: ctx.userId, updatedAt: new Date() })
+            .where(eq(indirectEntries.id, copy.id));
+          indirectIds.push(copy.id);
+          out.indirectRows += 1;
+          continue;
+        }
         const [row] = await tx
           .insert(indirectEntries)
           .values({

@@ -167,6 +167,7 @@ export const IMPORT_LIMITS = {
   maxCellChars: 2000,
   chunkRows: 500,
   unfinishedPerOrg: 5,
-  uploadsPerHour: 20,
+  // A new workspace brings in all 17 kinds of data on day one, often with a second try each.
+  uploadsPerHour: 60,
   undoDays: 7,
 } as const;

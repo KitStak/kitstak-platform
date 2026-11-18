@@ -37,7 +37,9 @@ export async function emitBridgeEvent(db: BridgeExecutor, org: { readonly orgId:
       }
       return { queued: true };
     });
-  } catch {
+  } catch (error) {
+    // Still never throws, but a note that could not be left is worth one line in the host's log.
+    console.warn('[pulse-bridge] change note skipped', event.kind, error instanceof Error ? error.message : error);
     return { queued: false };
   }
 }

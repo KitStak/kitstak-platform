@@ -29,6 +29,7 @@ import { restoreRow, softDeleteRow } from './_crud';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
 import { ensureClientByName, getClientRow, getJobTypeRow, resolveSite } from './catalog';
+import { getDeals } from '@/server/integrations/crm';
 import { recomputeJobs } from './job-stats';
 import { filterOrgMembers, getPeople } from './people';
 import { loadPlans, upsertPlan, type PlanInput } from './plans';
@@ -294,8 +295,15 @@ async function detail(ctx: DomainContext, jobId: string, access: Access, executo
   const links = await executor.select().from(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, jobId))).orderBy(asc(jobLinks.createdAt));
   const people = await getPeople(row.job.ownerId ? [row.job.ownerId] : [], executor);
   const plan = plans.budget ?? plans.quote;
+  const [inherited] = await rows<{ owner: string }>(
+    executor,
+    sql`SELECT COALESCE(cl.parts_owner, s.default_parts_owner, 'us') AS owner
+          FROM pulse.clients cl LEFT JOIN pulse.settings s ON s.org_id = cl.org_id
+         WHERE cl.org_id = ${ctx.orgId} AND cl.id = ${row.job.clientId}`,
+  );
   return {
     ...toJobDTO(row, access),
+    inheritedPartsOwner: inherited?.owner === 'client' ? 'client' : 'us',
     stats: toJobStatsDTO(row.stats, access, row.job.unitLabel),
     planLaborHours: plan?.laborHours ?? null,
     prices: prices.map((price) => toPriceDTO(price, access)),
@@ -384,6 +392,18 @@ async function insertLinks(tx: Executor, ctx: DomainContext, jobId: string, link
   for (const link of links) {
     const targetId = cleanText(link.targetId);
     if (!targetId) continue;
+    // A deleted job must not keep a work order (or a project's time) to itself: the record is
+    // freed first, so it can be tied to a live job. Otherwise the link fails with "another job
+    // is already linked" and the other job is one nobody can open.
+    if (link.targetType === 'wms_work_order') {
+      await tx.execute(sql`DELETE FROM pulse.job_links l USING pulse.jobs j
+                            WHERE l.org_id = ${ctx.orgId} AND l.target_type = 'wms_work_order' AND l.target_id = ${targetId}
+                              AND j.id = l.job_id AND j.deleted_at IS NOT NULL AND l.job_id <> ${jobId}`);
+    } else if (link.targetType === 'pm_project' && link.importsTime) {
+      await tx.execute(sql`UPDATE pulse.job_links l SET imports_time = false, updated_at = now() FROM pulse.jobs j
+                            WHERE l.org_id = ${ctx.orgId} AND l.target_type = 'pm_project' AND l.target_id = ${targetId} AND l.imports_time
+                              AND j.id = l.job_id AND j.deleted_at IS NOT NULL AND l.job_id <> ${jobId}`);
+    }
     const [row] = await tx
       .insert(jobLinks)
       .values({ orgId: ctx.orgId, jobId, targetType: link.targetType, targetId, importsTime: Boolean(link.importsTime), cachedTitle: cleanText(link.title), cachedStatus: cleanText(link.status), cachedUrl: safePath(link.url), cachedAt: new Date(), createdBy: ctx.userId })
@@ -467,11 +487,47 @@ export async function insertJob(tx: Executor, ctx: DomainContext, input: JobInpu
 
 export async function createJob(ctx: DomainContext, input: JobInput): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'job:manage');
+  const account = await dealAccountFor(ctx, input);
   return inTx(async (tx) => {
     const job = await insertJob(tx, ctx, input);
+    if (account) await adoptCrmAccount(tx, ctx, job.clientId, account);
     await recomputeJobs(tx, ctx, [job.id]);
     return detail(ctx, job.id, access, tx);
   });
+}
+
+/**
+ * A job made from a won deal: when the job's client carries the same name as the deal's CRM account
+ * and is not tied to an account yet, the client is tied to it, so the account in CRM finds its
+ * profit. Fail soft, never throws.
+ */
+interface DealAccount {
+  readonly accountItemId: string;
+  readonly accountName: string;
+  readonly coreCustomerId: string | null;
+}
+
+async function dealAccountFor(ctx: DomainContext, input: JobInput): Promise<DealAccount | null> {
+  const dealId = input.links?.find((link) => link.targetType === 'crm_deal')?.targetId;
+  if (!dealId) return null;
+  const [deal] = await getDeals(ctx, [dealId]).catch(() => []);
+  const accountName = deal?.accountName?.trim().toLowerCase();
+  if (!deal?.accountItemId || !accountName) return null;
+  return { accountItemId: deal.accountItemId, accountName, coreCustomerId: deal.coreCustomerId };
+}
+
+async function adoptCrmAccount(tx: Executor, ctx: DomainContext, clientId: string, account: DealAccount): Promise<void> {
+  const mine = and(eq(clients.orgId, ctx.orgId), eq(clients.id, clientId));
+  const [client] = await tx.select({ name: clients.name, crmAccountItemId: clients.crmAccountItemId, coreCustomerId: clients.coreCustomerId }).from(clients).where(mine).limit(1);
+  if (!client || client.name.trim().toLowerCase() !== account.accountName) return;
+  if (!client.crmAccountItemId) {
+    const [taken] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.orgId, ctx.orgId), eq(clients.crmAccountItemId, account.accountItemId))).limit(1);
+    if (!taken) await tx.update(clients).set({ crmAccountItemId: account.accountItemId }).where(mine);
+  }
+  if (!client.coreCustomerId && account.coreCustomerId) {
+    const [held] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.orgId, ctx.orgId), eq(clients.coreCustomerId, account.coreCustomerId))).limit(1);
+    if (!held) await tx.update(clients).set({ coreCustomerId: account.coreCustomerId }).where(mine);
+  }
 }
 
 /**

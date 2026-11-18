@@ -102,7 +102,7 @@ function JobCard({ job, moneyHidden, canLog, dealValueCents }: { readonly job: I
           />
         )}
         <p className="mt-1 text-xs text-fg-secondary tabular-nums">
-          {formatQuantity(job.unitsGood)} of {formatQuantity(job.plannedUnits)} {job.unitLabel} done
+          {formatQuantity(job.unitsGood)}{Number(job.plannedUnits) > 0 ? ` of ${formatQuantity(job.plannedUnits)}` : ''} {job.unitLabel} done
           {done !== null ? ` (${done}%)` : ''} · {formatQuantity(job.hours)} hours logged
         </p>
       </div>
@@ -121,7 +121,7 @@ function JobCard({ job, moneyHidden, canLog, dealValueCents }: { readonly job: I
       )}
       {!moneyHidden && job.projectedProfitCents !== null && job.status !== 'completed' ? (
         <p className="mt-2 text-xs text-fg-secondary">
-          At this pace the job finishes with a profit of{' '}
+          {Number(job.unitsGood) > 0 ? 'At this pace the job finishes' : 'By the plan the job finishes'} with a profit of{' '}
           <span className={cn('font-semibold tabular-nums', job.projectedProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatCents(job.projectedProfitCents)}</span>
           {job.projectedMarginBp !== null ? ` (${formatMarginBp(job.projectedMarginBp)} margin)` : ''}.
         </p>
@@ -431,12 +431,15 @@ export function PulseHealthLine({ data, onOpen }: { readonly data: ItemPulseDto;
   const job = data.jobs[0];
   if (!job && !(data.deal?.won && data.createJobUrl)) return null;
   const tone = statusTone(job?.risk);
+  // Several jobs: the line names them all, so it shows their combined margin, the same one the tab totals show.
+  const several = data.jobs.length > 1;
+  const marginBp = data.moneyHidden || !job ? null : several ? (data.totals?.marginBp ?? null) : job.marginBp;
   const dot: Readonly<Record<PulseTone, string>> = { good: 'var(--success)', watch: 'var(--warning)', warn: 'var(--warning)', bad: 'var(--danger)', quiet: 'var(--border-strong)' };
   const parts = job
     ? [
         data.jobs.length > 1 ? `${data.jobs.length} Pulse jobs` : `Job ${job.number}`,
         job.riskLabel ?? job.statusLabel,
-        ...(data.moneyHidden || job.marginBp === null ? [] : [`${formatMarginBp(job.marginBp)} margin`]),
+        ...(marginBp === null ? [] : [`${formatMarginBp(marginBp)} margin`]),
       ]
     : ['Won, no Pulse job yet', 'Create one'];
   return (

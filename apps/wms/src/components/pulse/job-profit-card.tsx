@@ -69,7 +69,7 @@ function JobBlock({ job, data }: { readonly job: WorkOrderPulseJob; readonly dat
           />
         )}
         <p className="mt-1 text-xs tabular-nums text-secondary">
-          {formatQuantity(job.unitsGood)} of {formatQuantity(job.plannedUnits)} {job.unitLabel} logged in Pulse
+          {formatQuantity(job.unitsGood)}{Number(job.plannedUnits) > 0 ? ` of ${formatQuantity(job.plannedUnits)}` : ''} {job.unitLabel} logged in Pulse
           {done !== null ? ` (${done}%)` : ''} · {formatQuantity(job.hours)} hours
         </p>
       </div>
@@ -90,7 +90,7 @@ function JobBlock({ job, data }: { readonly job: WorkOrderPulseJob; readonly dat
           <PlanBar label="Materials" planCents={job.planMaterialCents} actualCents={job.materialCents} />
           {open && job.projectedProfitCents !== null ? (
             <p className="text-xs text-secondary">
-              At this pace the job finishes with a profit of{' '}
+              {Number(job.unitsGood) > 0 ? 'At this pace the job finishes' : 'By the plan the job finishes'} with a profit of{' '}
               <span className={cn('font-semibold tabular-nums', job.projectedProfitCents < 0 ? 'text-danger' : 'text-foreground')}>{formatCents(job.projectedProfitCents)}</span>.
             </p>
           ) : null}

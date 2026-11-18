@@ -37,7 +37,9 @@ export function JobMaterials({ job, today }: JobTabProps) {
 
   const usageRows = useMemo(() => (usage.data ?? []).filter((row) => row.deletedAt === null), [usage.data]);
   const costRows = useMemo(() => (costs.data ?? []).filter((row) => row.deletedAt === null), [costs.data]);
-  const partsOwner = job.partsOwner ?? 'us';
+  // A job that does not say who buys the parts follows its client, then the workspace default.
+  const partsOwner = job.partsOwner ?? job.inheritedPartsOwner ?? 'us';
+  const ownerInherited = job.partsOwner === null;
   const scrapBp = scrapUnitsBp(job.stats.unitsGood, job.stats.unitsScrap);
   const materialPrices = job.prices.filter(
     (price: JobPriceDTO, index, all) =>
@@ -174,6 +176,7 @@ export function JobMaterials({ job, today }: JobTabProps) {
               {partsOwner === 'client'
                 ? 'Parts the client supplies cost you nothing. Pulse still tracks how many were used and scrapped.'
                 : 'Parts you buy are a cost of the job, scrap included.'}
+              {ownerInherited ? ' This job follows the setting of its client or your workspace. Pick one here to set it for this job only.' : ''}
             </p>
           </div>
           <div className="flex flex-col gap-2">

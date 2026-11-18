@@ -1102,7 +1102,7 @@ function DoneStep({ batch, onBatch }: { readonly batch: ImportBatchDTO; readonly
               <ButtonLink href={routes.importCenter()} variant="ghost">
                 All imports
               </ButtonLink>
-              {leftOut > 0 && counts.error + counts.lookalike > 0 ? (
+              {leftOut > 0 ? (
                 <a href={fileLinks.errorReport(batch.id)} download data-testid="error-report" className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                   <Download aria-hidden className="size-4" />
                   Download rows left out

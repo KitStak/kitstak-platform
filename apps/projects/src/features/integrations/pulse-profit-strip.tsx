@@ -92,7 +92,7 @@ function JobRow({ job, data }: { readonly job: PulseProfitJob; readonly data: Pu
         </div>
         {done === null ? null : <ProgressBar value={done} size="sm" tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'primary'} label={`${job.number} is ${done} percent done`} />}
         <p className="text-xs text-fg-muted tabular-nums">
-          {formatQuantity(job.unitsGood)} of {formatQuantity(job.plannedUnits)} {job.unitLabel} done
+          {formatQuantity(job.unitsGood)}{Number(job.plannedUnits) > 0 ? ` of ${formatQuantity(job.plannedUnits)}` : ''} {job.unitLabel} done
           {done !== null ? ` (${done}%)` : ''} · {formatQuantity(job.hours)} hours logged in Pulse
         </p>
       </div>
