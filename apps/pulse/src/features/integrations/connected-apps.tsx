@@ -379,14 +379,14 @@ function AppCard({
               >
                 warehouse<span className="sr-only"> (opens in a new tab)</span>
               </a>{' '}
-              and sync again, or type a price on the entry under{' '}
+              and sync again. Or type a price on the entry in Pulse: on the job, under Money in, or in{' '}
               <Link
-                href={routes.services()}
+                href={routes.settingsClose()}
                 className="rounded-sm text-fg-link underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
               >
-                Extra services
+                Close a month
               </Link>
-              .
+              , under Extra services.
             </p>
           ) : null}
           {app.app === 'wms' && (app.counts.vasNoClient ?? 0) > 0 ? (
