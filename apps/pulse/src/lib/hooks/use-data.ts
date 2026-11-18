@@ -5,7 +5,8 @@
  * (refetch on focus). Query keys live in `@/lib/query-keys`; invalidate by prefix after a write.
  */
 import { keepPreviousData, useQuery, type UseQueryOptions } from '@tanstack/react-query';
-import { apiGet, apiPath } from '@/lib/api-client';
+import { apiGet, apiGetPage, apiPath } from '@/lib/api-client';
+import { collectPages, type AllRows, type PageMeta } from '@/lib/paging';
 import type { AlertEntityType, AlertStatus, CostScope, DayReviewStatus, FactKind, JobStatusValue, JobTab, ProfitGroup, PulseStatus, SavedViewPage, StoredRevenueKind, StreamSource, TargetScope } from '@/lib/constants';
 import { qk } from '@/lib/query-keys';
 import type {
