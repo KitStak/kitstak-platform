@@ -35,14 +35,14 @@ import {
   type OpenJob,
   type PlanLine,
 } from './pulse-visual-data';
-import { JobName, PulseLoader, PulseWordmark, SplitBar, StatusPill } from './pulse-visual-parts';
+import { JobName, PulseWordmark, SplitBar, StatusPill } from './pulse-visual-parts';
 import { ProfitExplorer } from './pulse-visual-profit';
 import styles from './pulse-visuals.module.css';
 
 /*
- * The eight visuals of the Pulse page. Each one is a small coded piece of the real screen with sample
- * data, wrapped in a PulseShot slot. When a slot is marked ready in pulse-shots.ts the real product
- * screenshot takes its place.
+ * The eight screenshot slots of the Pulse page. Each one is a PulseShot: it shows the real product
+ * screenshot when the slot is marked ready in pulse-shots.ts. The coded visual inside it, a small
+ * drawing of the same screen with sample data, shows only when a slot is switched back to not ready.
  */
 
 /* ===== Hero: Home ===== */
@@ -59,7 +59,7 @@ const HOME_TILES = [
 /** Home: the answer in words, the month in four numbers and the jobs that need you. */
 export function PulseHeroVisual() {
   return (
-    <PulseShot slot="hero">
+    <PulseShot slot="hero" onBrand>
       <div className={`${mock.panel} ${styles.frame}`} data-lifted>
         <div className={`${mock.head} ${styles.head}`}>
           <PulseWordmark height={36} />
@@ -421,7 +421,7 @@ const AXIS_TARGET = onAxis(TARGET_MARGIN);
  */
 export function RiskVisual() {
   return (
-    <PulseShot slot="risk">
+    <PulseShot slot="risk" onBrand>
       <div className={`${mock.panel} ${styles.frame}`} data-lifted>
         <div className={`${mock.head} ${styles.head}`}>
           <div>
@@ -557,14 +557,11 @@ const LINKS_BY_APP = [
 /** What comes into Pulse from each KitStak app, and what Pulse shows back inside it. */
 export function PulseStackVisual() {
   return (
-    <PulseShot slot="stack">
+    <PulseShot slot="stack" onBrand>
       <div className={`${mock.panel} ${styles.frame}`} data-lifted>
         <div className={`${mock.head} ${styles.head}`}>
           <PulseWordmark height={28} />
-          <div className={styles.sync}>
-            <PulseLoader size={34} />
-            <span>Keeps in step within minutes</span>
-          </div>
+        </div>
         </div>
 
         <ul className={styles.links}>

@@ -1,6 +1,8 @@
+import { existsSync, statSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import * as data from './pulse-visual-data';
-import { PULSE_SHOTS, PULSE_SHOT_IDS } from './pulse-shots';
+import { PULSE_SHOTS, PULSE_SHOT_IDS, PULSE_SHOT_THEMES, shotFile } from './pulse-shots';
 
 /** The sample data on the Pulse page must add up, the way the product's own numbers do. */
 describe('pulse visual data', () => {
@@ -107,15 +109,40 @@ describe('pulse visual data', () => {
 });
 
 describe('pulse screenshot slots', () => {
-  it('has one slot per visual, each with a light and a dark file under /pulse/shots/', () => {
+  it('has one slot per visual, each with alt text, a caption label and a desktop view', () => {
     expect(PULSE_SHOT_IDS).toHaveLength(8);
     for (const id of PULSE_SHOT_IDS) {
       const shot = PULSE_SHOTS[id];
-      expect(shot.light).toMatch(/^\/pulse\/shots\/[a-z-]+-light\.png$/);
-      expect(shot.dark).toMatch(/^\/pulse\/shots\/[a-z-]+-dark\.png$/);
-      expect(shot.alt.length).toBeGreaterThan(20);
-      expect(shot.width).toBeGreaterThan(0);
-      expect(shot.height).toBeGreaterThan(0);
+      expect(shot.alt.length, id).toBeGreaterThan(20);
+      expect(shot.label.length, id).toBeGreaterThan(0);
+      expect(shot.views.at(-1)?.upTo, id).toBeUndefined();
+      for (const view of shot.views) {
+        expect(view.width, id).toBeGreaterThan(0);
+        expect(view.height, id).toBeGreaterThan(0);
+        // The largest file is sharp on a screen with two device pixels per CSS pixel.
+        expect(view.widths.at(-1), id).toBeGreaterThanOrEqual(view.width * 1.6);
+      }
+    }
+  });
+
+  it('has every file of a ready slot on disk, light and dark, and none over 200 KB', () => {
+    for (const id of PULSE_SHOT_IDS) {
+      const shot = PULSE_SHOTS[id];
+      if (!shot.ready) continue;
+      for (const view of shot.views) {
+        for (const theme of PULSE_SHOT_THEMES) {
+          const files = [
+            ...view.widths.map((width) => shotFile(shot, view, theme, width, 'avif')),
+            shotFile(shot, view, theme, view.widths[0] ?? 0, 'webp'),
+          ];
+          for (const file of files) {
+            expect(file).toMatch(/^\/pulse\/shots\/[a-z-]+-(desktop|tablet|phone)-(light|dark)-\d+\.(avif|webp)$/);
+            const onDisk = path.join(process.cwd(), 'public', file);
+            expect(existsSync(onDisk), file).toBe(true);
+            expect(statSync(onDisk).size, file).toBeLessThan(200 * 1024);
+          }
+        }
+      }
     }
   });
 });
