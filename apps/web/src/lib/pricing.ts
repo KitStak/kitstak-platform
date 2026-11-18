@@ -30,13 +30,15 @@ export const PRICING: PricingTable = {
   crm: { name: 'KitStak CRM', unit: 'user', unitPlural: 'users', monthlyCents: 2900, max: 500 },
   wms: { name: 'KitStak WMS', unit: 'warehouse', unitPlural: 'warehouses', monthlyCents: 34900, max: 50 },
   projects: { name: 'KitStak Projects', unit: 'user', unitPlural: 'users', monthlyCents: 1200, max: 500 },
+  // Stand-in like the rest. The Pulse spec states no price and no unit; per user is this site's choice.
+  pulse: { name: 'KitStak Pulse', unit: 'user', unitPlural: 'users', monthlyCents: 1900, max: 500 },
   bundleDiscount: 0.2,
   annualDiscount: 0.15,
 };
 
 export interface QuoteInput {
   readonly stack: Stack;
-  /** People who sign in. Priced for every per-user product (the CRM and Projects share one sign-in). */
+  /** People who sign in. Priced for every per-user product (the CRM, Projects and Pulse share one sign-in). */
   readonly seats: number;
   readonly warehouses: number;
   readonly billing: Billing;
@@ -84,7 +86,7 @@ export function isBundle(stack: Stack): boolean {
   return stack.length >= 2;
 }
 
-/** Monthly estimate for a stack. The CRM and Projects are priced per user, the WMS per warehouse. */
+/** Monthly estimate for a stack. The CRM, Projects and Pulse are priced per user, the WMS per warehouse. */
 export function quote(input: QuoteInput): Quote {
   const lines = PRODUCT_IDS.filter((id) => input.stack.includes(id)).map((id) =>
     line(id, id === 'wms' ? input.warehouses : input.seats),

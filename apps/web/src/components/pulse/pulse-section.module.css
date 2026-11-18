@@ -1,0 +1,98 @@
+/* Page level pieces of /pulse that the shared product blocks do not cover: the worked sums.
+   Tokens only, so both themes come for free. */
+
+/* Worked sum (a ledger on a mock panel) */
+.ledger {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: var(--type-base);
+}
+.ledger th,
+.ledger td {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+  text-align: left;
+  font-weight: var(--weight-regular);
+}
+.ledger td {
+  padding-left: 16px;
+  text-align: right;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--type-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+}
+.lineName {
+  display: block;
+  font-weight: var(--weight-semibold);
+}
+.lineDetail {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+}
+.lineIn td {
+  font-weight: var(--weight-semibold);
+}
+.lineSum th,
+.lineSum td {
+  border-bottom: 2px solid var(--border-strong);
+}
+.lineSum td {
+  font-weight: var(--weight-semibold);
+}
+.lineTotal th,
+.lineTotal td {
+  padding-top: 16px;
+  border-bottom: 0;
+  vertical-align: middle;
+}
+.lineTotal .lineName {
+  font-size: var(--type-md);
+  font-weight: var(--weight-bold);
+}
+.lineTotal td {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 3.4vw, 44px);
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  font-size: var(--type-base);
+  line-height: 1.5;
+}
+.verdict p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.verdict strong {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+.pillIcon {
+  flex: none;
+  margin-right: 5px;
+}
+
+@media (max-width: 420px) {
+  .verdict {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .lineTotal td {
+    font-size: 28px;
+  }
+}

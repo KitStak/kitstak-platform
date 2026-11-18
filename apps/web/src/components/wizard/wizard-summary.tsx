@@ -12,7 +12,7 @@ interface WizardSummaryProps {
   readonly estimate: Quote | null;
 }
 
-const SHORT_NAME = { crm: 'CRM', wms: 'WMS', projects: 'Projects' } as const;
+const SHORT_NAME = { crm: 'CRM', wms: 'WMS', projects: 'Projects', pulse: 'Pulse' } as const;
 
 function stackName(products: StakAnswers['products']): string {
   if (products.length === 0) return 'Nothing yet';

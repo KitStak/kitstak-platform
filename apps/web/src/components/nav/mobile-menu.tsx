@@ -107,7 +107,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
               </Link>
             </li>
           ))}
-          <li style={{ '--i': PRIMARY_NAV.length + 4 } as React.CSSProperties}>
+          <li style={{ '--i': PRIMARY_NAV.length + PRODUCT_NAV.length + 1 } as React.CSSProperties}>
             <Link href={ROUTES.founder} onClick={onClose}>
               Talk to the founder
             </Link>

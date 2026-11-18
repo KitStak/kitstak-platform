@@ -1,0 +1,12 @@
+/* A real product screenshot, framed like the illustration panels it replaces. */
+.shot {
+  display: block;
+}
+.shot img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  background: var(--surface-panel);
+  box-shadow: var(--elevation-modal);
+}

@@ -14,7 +14,19 @@ const BLURB: Readonly<Record<ProductId, string>> = {
   crm: 'Pipelines, boards and automations',
   wms: 'Receiving, inventory and shipping',
   projects: 'Tasks, timelines and workload',
+  pulse: 'Profit by job, client and service',
 };
+
+/** How each per-user product reads in a sentence. The WMS is priced per warehouse. */
+const PER_USER_NAME: Readonly<Record<Exclude<ProductId, 'wms'>, string>> = {
+  crm: 'the CRM',
+  projects: 'Projects',
+  pulse: 'Pulse',
+};
+
+function joinNames(names: readonly string[]): string {
+  return names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
 
 /** Price a stack: switch products on, set the size, and carry the result into the wizard. */
 export function BundleCalculator() {
@@ -31,7 +43,7 @@ export function BundleCalculator() {
 
   const result = quote({ stack, seats, warehouses, billing });
   const bundled = isBundle(stack);
-  const perUser = stack.filter((id) => id !== 'wms').map((id) => (id === 'crm' ? 'the CRM' : 'Projects'));
+  const perUser = stack.filter((id) => id !== 'wms').map((id) => PER_USER_NAME[id]);
 
   return (
     <div className={styles.calc}>
@@ -80,7 +92,7 @@ export function BundleCalculator() {
               <span>
                 <span className={styles.sizeName}>Users</span>
                 <span className={styles.sizeNote}>
-                  {perUser.length > 0 ? `People who sign in to ${perUser.join(' and ')}` : 'For the CRM and Projects'}
+                  {perUser.length > 0 ? `People who sign in to ${joinNames(perUser)}` : 'For the CRM, Projects and Pulse'}
                 </span>
               </span>
               <Stepper label="Users" value={seats} max={PRICING.crm.max} onChange={setSeats} />

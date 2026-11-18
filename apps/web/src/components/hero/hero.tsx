@@ -13,7 +13,8 @@ export function Hero() {
           </h1>
           <p className={styles.lead}>
             KitStak runs your customers, your warehouse and your projects on one database and one sign-in. The deal your
-            team closes is the order your floor picks, and the project that delivers it.
+            team closes is the order your floor picks and the project that delivers it. Pulse shows which jobs made
+            money.
           </p>
           <div className={styles.actions}>
             <Link href={ROUTES.getStarted} className="btn btn-primary">

@@ -72,6 +72,9 @@
 .switch[data-product='projects'][aria-checked='true'] .slab {
   background: var(--stak-projects);
 }
+.switch[data-product='pulse'][aria-checked='true'] .slab {
+  background: var(--stak-pulse);
+}
 .switchName {
   display: block;
   font-weight: var(--weight-semibold);

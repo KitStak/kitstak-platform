@@ -49,7 +49,8 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
           <StakMark lit="both" size={36} />
           <p className={styles.bundleTitle}>Run more. Pay less.</p>
           <p className={styles.bundleBody}>
-            The CRM, the WMS and Projects share customers, items and one sign-in. License two or more and save.
+            The CRM, the WMS, Projects and Pulse run on one sign-in and work from the same customers. License two or more
+            and save.
           </p>
           <Link href={getStartedHref(FULL_STACK)} className={`btn btn-primary ${styles.bundleCta}`} onClick={onNavigate}>
             Build the bundle <span className="btn-arrow" aria-hidden>→</span>

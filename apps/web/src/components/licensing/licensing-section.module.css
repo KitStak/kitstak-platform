@@ -57,6 +57,9 @@
 .switch[data-product='projects'][aria-checked='true'] .slab {
   background: var(--stak-projects);
 }
+.switch[data-product='pulse'][aria-checked='true'] .slab {
+  background: var(--stak-pulse);
+}
 .switchLabel {
   font-weight: var(--weight-semibold);
 }
@@ -73,16 +76,16 @@
   border-radius: var(--radius-xl);
   padding: clamp(28px, 4vw, 48px);
   box-shadow: var(--elevation-modal);
-  min-height: 440px;
+  min-height: 480px;
 }
 .stack {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   width: 160px;
   margin-bottom: 40px;
 }
 .stack span {
-  height: 32px;
+  height: 26px;
   transform-origin: left;
   transform: scaleX(0.08);
   opacity: 0.25;
@@ -100,6 +103,9 @@
 }
 .stack span[data-product='projects'][data-on] {
   background: var(--stak-projects);
+}
+.stack span[data-product='pulse'][data-on] {
+  background: var(--stak-pulse);
 }
 .stack span[data-on] {
   transform: none;

@@ -7,7 +7,7 @@ export interface NavLink {
 }
 
 export interface ProductNav {
-  readonly id: 'wms' | 'crm' | 'projects';
+  readonly id: 'wms' | 'crm' | 'projects' | 'pulse';
   readonly href: string;
   readonly name: string;
   readonly tag: string;
@@ -56,6 +56,19 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
       { href: `${ROUTES.projects}#stack`, label: 'Linked to CRM and WMS' },
     ],
   },
+  {
+    id: 'pulse',
+    href: ROUTES.pulse,
+    name: 'KitStak Pulse',
+    tag: 'Pulse',
+    blurb: 'Profit by job, client and service, so you know which jobs make money.',
+    links: [
+      { href: `${ROUTES.pulse}#profit`, label: 'Profit by job and client' },
+      { href: `${ROUTES.pulse}#log`, label: 'Daily production entry' },
+      { href: `${ROUTES.pulse}#plan`, label: 'Budget and quote vs actual' },
+      { href: `${ROUTES.pulse}#risk`, label: 'Jobs at risk' },
+    ],
+  },
 ];
 
 /** Top-level header links (the Products menu is rendered separately, before these). */
@@ -66,7 +79,13 @@ export const PRIMARY_NAV: readonly NavLink[] = [
 ];
 
 /** Routes that light up the Products menu trigger. */
-export const PRODUCT_PATHS: readonly string[] = [ROUTES.products, ROUTES.wms, ROUTES.crm, ROUTES.projects];
+export const PRODUCT_PATHS: readonly string[] = [
+  ROUTES.products,
+  ROUTES.wms,
+  ROUTES.crm,
+  ROUTES.projects,
+  ROUTES.pulse,
+];
 
 /** True when `href` is the page at `pathname`. Links to a section (`#...`) are never "the page". */
 export function isCurrentPath(pathname: string, href: string): boolean {

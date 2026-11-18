@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { PRICING, PRICING_IS_PLACEHOLDER, formatUsd, percentLabel } from '@/lib/pricing';
 import type { ProductId } from '@/lib/pricing';
-import { ROUTES, getStartedHref } from '../site-links';
+import { ROUTES, START_NAME, getStartedHref } from '../site-links';
 import styles from './price-band.module.css';
 
 interface PriceBandProps {
@@ -49,7 +49,7 @@ export function PriceBand({ product, included }: PriceBandProps) {
             {percentLabel(PRICING.annualDiscount)} off again billed yearly.
           </p>
           <Link href={getStartedHref(product)} className="btn btn-primary btn-lg btn-block">
-            Start with {product === 'projects' ? 'Projects' : `the ${product.toUpperCase()}`} <span className="btn-arrow" aria-hidden>→</span>
+            Start with {START_NAME[product]} <span className="btn-arrow" aria-hidden>→</span>
           </Link>
           <Link href={ROUTES.pricing} className={`text-link ${styles.calc}`}>
             Price your stack <span className="btn-arrow" aria-hidden>→</span>

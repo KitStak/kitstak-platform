@@ -1,12 +1,12 @@
 /* ------------------------------------------------------------ Stack diagram */
 .visual {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 .slab {
   display: flex;
   align-items: center;
-  height: 56px;
+  height: 48px;
   padding: 0 18px;
   background: var(--brand-cream);
   opacity: 0.16;
@@ -41,6 +41,12 @@
 }
 .slab[data-product='projects'][data-on] {
   background: var(--stak-projects);
+}
+.slab[data-product='pulse'][data-on] {
+  background: var(--stak-pulse);
+}
+.slab[data-product='pulse'] span {
+  color: var(--stak-pulse-ink);
 }
 .extra {
   display: flex;
@@ -129,6 +135,8 @@
   border-radius: var(--radius-md);
   background: var(--surface-panel);
   overflow: hidden;
+  /* Never give up width to a long label beside it: a squeezed stepper loses its plus button. */
+  flex: none;
 }
 .stepper button {
   height: 44px;

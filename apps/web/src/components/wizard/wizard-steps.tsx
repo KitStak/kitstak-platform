@@ -5,11 +5,13 @@ import {
   BUSINESS_TYPES,
   CRM_BOARDS,
   PROJECT_TEMPLATES,
+  PULSE_NEEDS,
   START_MODES,
   TEAM_SIZES,
   WMS_NEEDS,
   hasCrm,
   hasProjects,
+  hasPulse,
   hasWms,
   toggleIn,
   withTeamSize,
@@ -108,6 +110,7 @@ const PRODUCTS: readonly { readonly value: ProductId; readonly label: string; re
   { value: 'wms', label: 'KitStak WMS', note: 'Receiving, inventory, picking, packing and shipping.' },
   { value: 'crm', label: 'KitStak CRM', note: 'Leads, deals, accounts and follow-ups on boards.' },
   { value: 'projects', label: 'KitStak Projects', note: 'Tasks, timelines and workload, linked to deals and orders.' },
+  { value: 'pulse', label: 'KitStak Pulse', note: 'Profit by job, client and service, from what you log each day.' },
 ];
 
 export function StackStep({ answers, update }: StepProps) {
@@ -135,7 +138,7 @@ export function StackStep({ answers, update }: StepProps) {
               The whole stack
               <span className={styles.badge}>Save {percentLabel(PRICING.bundleDiscount)}</span>
             </span>
-            <span className={styles.tileNote}>Sales, the warehouse and the work between them, with one sign-in.</span>
+            <span className={styles.tileNote}>Sales, the warehouse, the work between them and the profit on every job, with one sign-in.</span>
           </span>
           <span className={styles.radio} data-multi aria-hidden />
         </label>
@@ -191,14 +194,19 @@ export function BusinessStep({ answers, update }: StepProps) {
 
 /* ------------------------------------------------------------------ 3. Shape */
 
-/** One seat count for every per-user app: the CRM and Projects share a sign-in. */
+/** One seat count for every per-user app: the CRM, Projects and Pulse share a sign-in. */
 function SeatsQuantity({ answers, update }: StepProps) {
-  const apps = [hasCrm(answers) ? 'the CRM' : null, hasProjects(answers) ? 'Projects' : null].filter(Boolean);
+  const apps = [
+    hasCrm(answers) ? 'the CRM' : null,
+    hasProjects(answers) ? 'Projects' : null,
+    hasPulse(answers) ? 'Pulse' : null,
+  ].filter((app): app is string => app !== null);
+  const list = apps.length <= 2 ? apps.join(' or ') : `${apps.slice(0, -1).join(', ')} or ${apps.at(-1)}`;
   return (
     <div className={styles.quantity}>
       <span>
         <span className={styles.quantityName}>How many people will use it?</span>
-        <span className={styles.tileNote}>Anyone who signs in to {apps.join(' or ')}.</span>
+        <span className={styles.tileNote}>Anyone who signs in to {list}.</span>
       </span>
       <Stepper label="Users" value={answers.seats} max={PRICING.crm.max} onChange={(seats) => update({ seats })} />
     </div>
@@ -263,6 +271,22 @@ export function ShapeStep({ answers, update }: StepProps) {
             options={PROJECT_TEMPLATES}
             values={answers.projectTemplates}
             onToggle={(value) => update({ projectTemplates: toggleIn(answers.projectTemplates, value) })}
+          />
+        </section>
+      ) : null}
+
+      {hasPulse(answers) ? (
+        <section className={styles.product} aria-label="Pulse">
+          <h3 className={styles.productHead}>
+            <AppIcon app="pulse" size={38} /> Your jobs
+          </h3>
+          {hasCrm(answers) || hasProjects(answers) ? null : <SeatsQuantity answers={answers} update={update} />}
+          <ChipGroup
+            legend="What do you want to see first?"
+            hint="Pick any. It all comes included."
+            options={PULSE_NEEDS}
+            values={answers.pulseNeeds}
+            onToggle={(value) => update({ pulseNeeds: toggleIn(answers.pulseNeeds, value) })}
           />
         </section>
       ) : null}

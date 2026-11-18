@@ -16,6 +16,13 @@ describe('parseTopic', () => {
     expect(parseTopic('demo')).toBe('demo');
   });
 
+  test('accepts the Pulse topic and names it in the subject', () => {
+    expect(parseTopic('pulse')).toBe('pulse');
+    expect(new URL(buildMailto(draft({ topic: 'pulse' }))).searchParams.get('subject')).toBe(
+      'KitStak Pulse: Northwind & Co',
+    );
+  });
+
   test('falls back to "other" for anything else', () => {
     expect(parseTopic('refund')).toBe('other');
     expect(parseTopic(null)).toBe('other');

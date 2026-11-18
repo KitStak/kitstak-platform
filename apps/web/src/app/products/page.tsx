@@ -13,13 +13,13 @@ import { BundleCalculator } from '@/components/stak/bundle-calculator';
 import styles from './products.module.css';
 
 export const metadata: Metadata = {
-  title: 'KitStak products - CRM, WMS and Projects, stacked to save',
+  title: 'KitStak products - CRM, WMS, Projects and Pulse, stacked to save',
   description:
-    'Compare KitStak CRM, KitStak WMS and KitStak Projects, see what you get when you run them together, and price your stack.',
+    'Compare KitStak CRM, KitStak WMS, KitStak Projects and KitStak Pulse, see what you get when you run them together, and price your stack.',
   alternates: { canonical: '/products' },
   openGraph: {
     title: 'KitStak products',
-    description: 'A CRM, a WMS and Projects on one stack.',
+    description: 'A CRM, a WMS, Projects and Pulse on one stack.',
     url: 'https://kitstak.com/products',
     siteName: 'KitStak',
     type: 'website',
@@ -43,12 +43,12 @@ const FAQ: readonly FaqItem[] = [
   {
     question: 'What do the products actually share?',
     answer:
-      'One sign-in, one launcher, one organization with its members, and one customer list. A CRM account can be linked to the customer your warehouse ships for, which puts on-hand stock and open shipment orders on the account page. A Projects task can be linked to a CRM deal or account, a customer, or a WMS order, work order, receipt or count, and shows where that record stands now.',
+      'One sign-in, one launcher, one organization with its members, and one customer list. A CRM account can be linked to the customer your warehouse ships for, which puts on-hand stock and open shipment orders on the account page. A Projects task can be linked to a CRM deal or account, a customer, or a WMS order, work order, receipt or count, and shows where that record stands now. Pulse uses the same sign-in. It pulls in won deals from the CRM, work orders and finished kits from the WMS and logged time from Projects, and keeps a link back to each one.',
   },
   {
     question: 'How is each product priced?',
     answer:
-      'The CRM and Projects are priced per user and the WMS per warehouse. Running two or more takes a percentage off each, and paying yearly takes a further percentage off the total. The calculator on this page shows the arithmetic.',
+      'The CRM, Projects and Pulse are priced per user and the WMS per warehouse. Running two or more takes a percentage off each, and paying yearly takes a further percentage off the total. The calculator on this page shows the arithmetic.',
   },
   {
     question: 'Do I have to talk to someone to get started?',
@@ -58,7 +58,7 @@ const FAQ: readonly FaqItem[] = [
   {
     question: 'Can I get help moving our data in?',
     answer:
-      'The CRM and the WMS import spreadsheets, and the setup plan points you at the right importer. Projects starts from templates that come with their tasks and dates. For larger moves, book time with the founder and plan it together.',
+      'The CRM and the WMS import spreadsheets, and the setup plan points you at the right importer. Projects starts from templates that come with their tasks and dates. Pulse takes CSV files for every kind of data it holds, and checks each file before anything is saved. For larger moves, book time with the founder and plan it together.',
   },
 ];
 

@@ -3,7 +3,7 @@
  * welcome wizard profile (`focus`, `businessType`, `teamSize`, `startMode`; see
  * docs/integration/ONBOARDING.md) so the answers can be handed to the portal at sign-up. The
  * portal's `focus` only knows the CRM and the WMS, so the full product set travels separately as
- * `products`.
+ * `products`. Pulse answers follow docs/pulse/SPEC.md (its first run and its feature list).
  */
 import { LINKS, ROUTES, parseStack, stackParam, toStack } from '@/components/site-links';
 import type { ProductId, Stack } from '@/components/site-links';
@@ -69,6 +69,16 @@ export const PROJECT_TEMPLATES: readonly Option<string>[] = PROJECTS_CATALOG.tem
   note: t.description,
 }));
 
+/** What a new Pulse workspace can look at first. Each one is a screen in the Pulse spec. */
+export const PULSE_NEEDS: readonly Option<string>[] = [
+  { value: 'job_profit', label: 'Profit by job', note: 'What each job earned and what it really cost.' },
+  { value: 'client_profit', label: 'Profit by client and service', note: 'Which clients and extra services pay.' },
+  { value: 'daily_log', label: 'Daily production entry', note: 'Units, people and hours for each day.' },
+  { value: 'plan_actual', label: 'Budget and quote vs actual', note: 'The plan next to what really happened.' },
+  { value: 'at_risk', label: 'Jobs at risk', note: 'Open jobs that are off pace or losing money.' },
+  { value: 'csv', label: 'CSV import and export', note: 'Bring spreadsheets in and take reports out.' },
+];
+
 export interface StakAnswers {
   /** The products chosen, in stack order. Empty until the first step is answered. */
   readonly products: Stack;
@@ -80,6 +90,8 @@ export interface StakAnswers {
   readonly crmBoards: readonly string[];
   /** Projects templates to start from (built-in slugs). */
   readonly projectTemplates: readonly string[];
+  /** What to see first in Pulse (`PULSE_NEEDS` values). */
+  readonly pulseNeeds: readonly string[];
   readonly startMode: StartMode;
   /** Wants the founder-led setup add-on. */
   readonly guided: boolean;
@@ -95,6 +107,7 @@ export const DEFAULT_ANSWERS: StakAnswers = {
   wmsNeeds: [],
   crmBoards: [],
   projectTemplates: [],
+  pulseNeeds: [],
   startMode: 'fresh',
   guided: false,
   billing: 'annual',
@@ -107,6 +120,7 @@ export function hasProduct(answers: StakAnswers, product: ProductId): boolean {
 export const hasCrm = (answers: StakAnswers): boolean => hasProduct(answers, 'crm');
 export const hasWms = (answers: StakAnswers): boolean => hasProduct(answers, 'wms');
 export const hasProjects = (answers: StakAnswers): boolean => hasProduct(answers, 'projects');
+export const hasPulse = (answers: StakAnswers): boolean => hasProduct(answers, 'pulse');
 
 /** The portal profile's `focus` (CRM and WMS only), or null when neither is in the stack. */
 export function portalFocus(stack: Stack): 'crm' | 'wms' | 'both' | null {
@@ -135,7 +149,7 @@ export function toggleIn(list: readonly string[], value: string): readonly strin
 
 export interface PlanStep {
   readonly key: string;
-  readonly app: 'Portal' | 'CRM' | 'WMS' | 'Projects';
+  readonly app: 'Portal' | 'CRM' | 'WMS' | 'Projects' | 'Pulse';
   readonly title: string;
   readonly note: string;
   readonly isDone: boolean;
@@ -145,7 +159,8 @@ export interface PlanStep {
  * The checklist a new organization sees after sign-up, in the order the portal uses: solo teams
  * skip the invite, 3PLs and distributors start in the warehouse, everyone else starts in the CRM.
  * Titles are the canonical onboarding step titles. Projects runs its own first-run (a starter
- * project from a built-in template and a guided tour), so its step comes last.
+ * project from a built-in template and a guided tour), so its step follows the CRM and the WMS.
+ * Pulse comes last: its own welcome screen offers sample data, an import or a first job.
  */
 export function setupPlan(answers: StakAnswers): readonly PlanStep[] {
   const isImport = answers.startMode === 'import';
@@ -188,6 +203,20 @@ export function setupPlan(answers: StakAnswers): readonly PlanStep[] {
     },
   ];
 
+  const pulse: readonly PlanStep[] = [
+    {
+      key: 'first_job',
+      app: 'Pulse',
+      title: 'See the profit on your first job',
+      note: isSample
+        ? 'Load the sample data and open a job to see its profit.'
+        : isImport
+          ? 'Import your spreadsheets, then open a job to check its numbers.'
+          : 'Set a labor rate, add a client and a job, then log a day.',
+      isDone: false,
+    },
+  ];
+
   const isWarehouseFirst = answers.businessType === '3pl' || answers.businessType === 'distributor';
   const crmSteps = hasCrm(answers) ? crm : [];
   const wmsSteps = hasWms(answers) ? wms : [];
@@ -199,6 +228,7 @@ export function setupPlan(answers: StakAnswers): readonly PlanStep[] {
       : [{ key: 'invite_team', app: 'Portal' as const, title: 'Invite your team', note: 'One invite covers every app.', isDone: false }]),
     ...(isWarehouseFirst ? [...wmsSteps, ...crmSteps] : [...crmSteps, ...wmsSteps]),
     ...(hasProjects(answers) ? projects : []),
+    ...(hasPulse(answers) ? pulse : []),
   ];
 }
 
@@ -284,6 +314,7 @@ export function parseAnswers(raw: unknown): StakAnswers {
     wmsNeeds: knownValues(WMS_NEEDS, data.wmsNeeds),
     crmBoards: knownValues(CRM_BOARDS, data.crmBoards),
     projectTemplates: knownValues(PROJECT_TEMPLATES, data.projectTemplates),
+    pulseNeeds: knownValues(PULSE_NEEDS, data.pulseNeeds),
     startMode: oneOf(START_MODES, data.startMode) ?? DEFAULT_ANSWERS.startMode,
     guided: data.guided === true,
     billing: data.billing === 'monthly' ? 'monthly' : DEFAULT_ANSWERS.billing,

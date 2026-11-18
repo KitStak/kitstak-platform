@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
 import { PRICING, formatUsd, percentLabel } from '@/lib/pricing';
-import { ROUTES, getStartedHref } from '../site-links';
+import { ROUTES, START_NAME, getStartedHref } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import styles from './products-sections.module.css';
@@ -27,6 +27,12 @@ const SLABS = [
     name: 'KitStak Projects',
     line: 'Tasks, timelines and workload, linked to the deals and orders they are for.',
   },
+  {
+    id: 'pulse',
+    href: ROUTES.pulse,
+    name: 'KitStak Pulse',
+    line: 'Profit by job, client and service, from what you log each day.',
+  },
 ] as const;
 
 /** The mark as navigation: each bar of the stack is a product you can open. */
@@ -36,13 +42,13 @@ export function StackHero() {
       <div className={`container ${styles.heroInner}`}>
         <div>
           <h1 id="hero-heading" className={styles.heroTitle}>
-            <span>Three products.</span>
+            <span>Four products.</span>
             <span>One stack.</span>
           </h1>
           <p className={styles.heroLead}>
-            A CRM for the people who sell, a WMS for the people who ship, and Projects for the work in between. Each one
-            stands on its own. Stack any two and they share customers, one sign-in and one bill, and cost{' '}
-            {percentLabel(PRICING.bundleDiscount)} less.
+            A CRM for the people who sell, a WMS for the people who ship, Projects for the work in between, and Pulse
+            to show which jobs make money. Each one stands on its own. Stack two or more and they share one sign-in
+            and one bill, and cost {percentLabel(PRICING.bundleDiscount)} less.
           </p>
           <div className={styles.heroActions}>
             <Link href={ROUTES.getStarted} className="btn btn-primary btn-lg">
@@ -74,7 +80,7 @@ export function StackHero() {
 /* ------------------------------------------------------------------ Line-up */
 
 interface ProductCard {
-  readonly id: 'wms' | 'crm' | 'projects';
+  readonly id: 'wms' | 'crm' | 'projects' | 'pulse';
   readonly name: string;
   readonly title: string;
   readonly body: string;
@@ -129,6 +135,22 @@ const CARDS: readonly ProductCard[] = [
     ],
     href: ROUTES.projects,
   },
+  {
+    id: 'pulse',
+    name: 'KitStak Pulse',
+    title: 'For the bottom line.',
+    body: 'What each job earned and what it really cost, so you know which jobs make money and which do not.',
+    // Every point is a screen or rule in docs/pulse/SPEC.md.
+    points: [
+      'Profit by job, job type, client and extra service',
+      'Daily production entry: units, people and hours',
+      'Budget and quote next to actual',
+      'The real cost of an hour, and material cost',
+      'Jobs at risk or losing money, with the reason',
+      'CSV import and export',
+    ],
+    href: ROUTES.pulse,
+  },
 ];
 
 export function Lineup() {
@@ -143,7 +165,7 @@ export function Lineup() {
         </p>
         <div className={styles.cards}>
           {CARDS.map((card, i) => (
-            <article key={card.id} className={styles.card} data-reveal style={{ '--reveal-delay': 100 * i } as React.CSSProperties}>
+            <article key={card.id} className={styles.card} data-reveal style={{ '--reveal-delay': 100 * (i % 2) } as React.CSSProperties}>
               <header className={styles.cardHead}>
                 <AppIcon app={card.id} size={56} />
                 <span className={styles.cardName}>{card.name}</span>
@@ -163,7 +185,7 @@ export function Lineup() {
                   Explore {card.name} <span className="btn-arrow" aria-hidden>→</span>
                 </Link>
                 <Link href={getStartedHref(card.id)} className="text-link">
-                  Start with {card.id === 'projects' ? 'Projects' : `the ${card.id.toUpperCase()}`}
+                  Start with {START_NAME[card.id]}
                 </Link>
               </div>
             </article>
@@ -183,31 +205,116 @@ interface Row {
   readonly crm: Cell;
   readonly wms: Cell;
   readonly projects: Cell;
+  readonly pulse: Cell;
   /** Two or more products together. */
   readonly stacked: Cell;
 }
 
 const ROWS: readonly Row[] = [
-  { label: 'One sign-in and one launcher', crm: true, wms: true, projects: true, stacked: true },
-  { label: 'Shared customer list', crm: true, wms: true, projects: true, stacked: true },
-  { label: 'Team invites that cover every app', crm: true, wms: true, projects: true, stacked: true },
-  { label: 'Boards, pipeline, automations, dashboards', crm: true, wms: false, projects: false, stacked: true },
-  { label: 'Receiving, inventory, picking, packing, shipping', crm: false, wms: true, projects: false, stacked: true },
-  { label: 'Tasks, timelines, workload and cycles', crm: false, wms: false, projects: true, stacked: true },
-  { label: 'Stock and open orders on the account page', crm: false, wms: false, projects: false, stacked: 'CRM + WMS' },
-  { label: 'Tasks linked to deals, orders and receipts', crm: false, wms: false, projects: false, stacked: 'With Projects' },
-  { label: 'A won deal starts its delivery project', crm: false, wms: false, projects: false, stacked: 'CRM + Projects' },
+  { label: 'One sign-in and one launcher', crm: true, wms: true, projects: true, pulse: true, stacked: true },
+  // Pulse keeps its own client list and links it to the shared one when another app is licensed.
+  { label: 'Shared customer list', crm: true, wms: true, projects: true, pulse: 'Own list', stacked: true },
+  { label: 'Team invites that cover every app', crm: true, wms: true, projects: true, pulse: true, stacked: true },
+  {
+    label: 'Boards, pipeline, automations, dashboards',
+    crm: true,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: true,
+  },
+  {
+    label: 'Receiving, inventory, picking, packing, shipping',
+    crm: false,
+    wms: true,
+    projects: false,
+    pulse: false,
+    stacked: true,
+  },
+  {
+    label: 'Tasks, timelines, workload and cycles',
+    crm: false,
+    wms: false,
+    projects: true,
+    pulse: false,
+    stacked: true,
+  },
+  {
+    label: 'Profit by job, job type, client and extra service',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: true,
+    stacked: true,
+  },
+  {
+    label: 'CSV in and out for every kind of Pulse data',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: true,
+    stacked: true,
+  },
+  {
+    label: 'Stock and open orders on the account page',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'CRM + WMS',
+  },
+  {
+    label: 'Tasks linked to deals, orders and receipts',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'With Projects',
+  },
+  {
+    label: 'A won deal starts its delivery project',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'CRM + Projects',
+  },
+  {
+    label: 'A won deal becomes a job with the quote filled in',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'CRM + Pulse',
+  },
+  {
+    label: 'Work orders and finished kits feed job profit',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'WMS + Pulse',
+  },
+  {
+    label: 'Project time counts as labor hours on the job',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'Projects + Pulse',
+  },
   {
     label: 'Bundle price',
     crm: 'List',
     wms: 'List',
     projects: 'List',
+    pulse: 'List',
     stacked: `${percentLabel(PRICING.bundleDiscount)} off each`,
   },
 ];
 
-const COLUMNS = ['crm', 'wms', 'projects'] as const;
-const COLUMN_LABEL = { crm: 'CRM', wms: 'WMS', projects: 'Projects' } as const;
+const COLUMNS = ['crm', 'wms', 'projects', 'pulse'] as const;
+const COLUMN_LABEL = { crm: 'CRM', wms: 'WMS', projects: 'Projects', pulse: 'Pulse' } as const;
 
 function CellMark({ value }: { readonly value: Cell }) {
   if (typeof value === 'string') return <span className={styles.cellText}>{value}</span>;
@@ -232,7 +339,7 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
             <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
               Every app reads the same customer record. Link a CRM account to the customer your warehouse ships for, and
               sales can see what is on the shelf. Add Projects, and the work for that customer points at the deal and the
-              order it is about.
+              order it is about. Add Pulse, and won deals and work orders become jobs with a profit number.
             </p>
           </div>
           <div data-reveal>{visual}</div>
@@ -291,7 +398,7 @@ const STEPS = [
   },
   {
     title: 'Follow your setup plan',
-    body: 'A checklist built from your answers walks you through the first warehouse, the first board, the first order and the first project.',
+    body: 'A checklist built from your answers walks you through the first warehouse, the first board, the first order, the first project and the first job.',
   },
 ] as const;
 

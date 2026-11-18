@@ -27,6 +27,7 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: getStartedHref('wms'), label: 'Start with the WMS' },
       { href: getStartedHref('crm'), label: 'Start with the CRM' },
       { href: getStartedHref('projects'), label: 'Start with Projects' },
+      { href: getStartedHref('pulse'), label: 'Start with Pulse' },
       { href: ROUTES.demo, label: 'Book a walkthrough' },
     ],
   },
@@ -45,6 +46,7 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: LINKS.wms, label: 'KitStak WMS', external: true },
       { href: LINKS.crm, label: 'KitStak CRM', external: true },
       { href: LINKS.projects, label: 'KitStak Projects', external: true },
+      { href: LINKS.pulse, label: 'KitStak Pulse', external: true },
     ],
   },
 ];
@@ -57,7 +59,7 @@ export function Footer() {
           <Link href={ROUTES.home} aria-label="KitStak home">
             <Logo height={22} />
           </Link>
-          <p className={styles.tag}>CRM, WMS and Projects on one stack.</p>
+          <p className={styles.tag}>CRM, WMS, Projects and Pulse on one stack.</p>
           <Link href={ROUTES.getStarted} className={`btn btn-primary ${styles.cta}`}>
             Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
           </Link>

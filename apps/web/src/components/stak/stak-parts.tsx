@@ -12,7 +12,12 @@ interface StakVisualProps {
   readonly extras?: readonly string[];
 }
 
-const SLAB_LABEL: Readonly<Record<ProductId, string>> = { crm: 'CRM', wms: 'WMS', projects: 'Projects' };
+const SLAB_LABEL: Readonly<Record<ProductId, string>> = {
+  crm: 'CRM',
+  wms: 'WMS',
+  projects: 'Projects',
+  pulse: 'Pulse',
+};
 
 /** The stack as a live diagram: one bar per product, lit when it is in the stack. */
 export function StakVisual({ stack, extras = [] }: StakVisualProps) {

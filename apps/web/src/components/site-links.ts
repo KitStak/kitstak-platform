@@ -4,6 +4,7 @@ export const LINKS = {
   crm: 'https://crm.kitstak.app',
   wms: 'https://wms.kitstak.app',
   projects: 'https://projects.kitstak.app',
+  pulse: 'https://pulse.kitstak.app',
 } as const;
 
 /** Marketing-site routes. Every internal link goes through here so navigation stays consistent. */
@@ -14,6 +15,7 @@ export const ROUTES = {
   wms: '/wms',
   crm: '/crm',
   projects: '/projects',
+  pulse: '/pulse',
   pricing: '/products#pricing',
   bundle: '/products#bundle',
   getStarted: '/get-started',
@@ -23,7 +25,7 @@ export const ROUTES = {
 } as const;
 
 /** The licensable apps, in the order the stack is drawn (matches @kitstak/entitlements `MODULES`). */
-export const PRODUCT_IDS = ['crm', 'wms', 'projects'] as const;
+export const PRODUCT_IDS = ['crm', 'wms', 'projects', 'pulse'] as const;
 export type ProductId = (typeof PRODUCT_IDS)[number];
 
 /** A chosen set of products, always in `PRODUCT_IDS` order with no repeats. Empty means none yet. */
@@ -58,6 +60,14 @@ export function parseStack(value: string | null | undefined): Stack {
 export function stackParam(stack: Stack): string {
   return stack.join(',');
 }
+
+/** How each product reads after "Start with": "Start with the CRM", "Start with Pulse". */
+export const START_NAME: Readonly<Record<ProductId, string>> = {
+  crm: 'the CRM',
+  wms: 'the WMS',
+  projects: 'Projects',
+  pulse: 'Pulse',
+};
 
 /** Deep link into the setup wizard with products already chosen. */
 export function getStartedHref(stack?: Stack | ProductId): string {

@@ -133,7 +133,8 @@
 }
 @media (max-width: 960px) {
   .inner {
-    grid-template-columns: 1fr;
+    /* minmax(0, ...) so a nowrap line inside a visual cannot push the hero past the viewport. */
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 640px) {
