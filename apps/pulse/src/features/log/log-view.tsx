@@ -18,7 +18,6 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Button,
-  Combobox,
   Dialog,
   DialogBody,
   DialogContent,
@@ -53,6 +52,7 @@ import { routes } from '@/lib/routes';
 import type { LaborClassDTO, LogGridDTO, SiteDTO } from '@/lib/types';
 import { quickAddJobAction } from '@/server/actions/jobs';
 import { markDayCompleteAction, reviewDayAction } from '@/server/actions/log';
+import { ClientCombo, NO_CLIENT, type ClientChoice } from '@/features/jobs/client-combo';
 import { JobFocusBanner } from './job-focus-banner';
 import type { FocusJob } from './job-focus';
 import { LogGrid, type GridTotals, type LogGridHandle } from './log-grid';
@@ -628,8 +628,8 @@ function QuickAddJob({
   readonly onAdded: (jobId: string) => void | Promise<void>;
 }) {
   const clients = useClients({ activeOnly: true }, { enabled: open });
-  const [clientId, setClientId] = useState<string | null>(null);
-  const [clientName, setClientName] = useState('');
+  const [client, setClient] = useState<ClientChoice>(NO_CLIENT);
+  const [clientOpen, setClientOpen] = useState(false);
   const [name, setName] = useState('');
   const [units, setUnits] = useState('');
   const [price, setPrice] = useState('');
@@ -637,12 +637,17 @@ function QuickAddJob({
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (!clientId && !clientName.trim()) return setError('Pick a client, or type a new client name.');
+    if (!client.text.trim()) return setError('Pick a client, or type a new client name.');
+    if (!client.clientId && !client.createNew) {
+      setClientOpen(true);
+      return setError('Pick a client from the list, or choose Create to add a new one.');
+    }
     if (!name.trim()) return setError('Give the job a name.');
     setError(null);
     const job = await add.run({
-      clientId,
-      clientName: clientId ? null : clientName.trim(),
+      clientId: client.clientId,
+      clientName: client.clientId ? null : client.text.trim(),
+      createClient: client.createNew,
       name: name.trim(),
       plannedUnits: units.trim() ? units.replace(/,/g, '') : null,
       unitPrice: price.trim() ? price.replace(/[$,]/g, '') : null,
@@ -658,7 +663,12 @@ function QuickAddJob({
       );
       return;
     }
-    toast.success(`Added ${job.number}`, `It is on the grid for ${formatLongDate(date)}.`);
+    toast.success(
+      `Added ${job.number}`,
+      client.createNew
+        ? `Also made the new client ${job.clientName}. The job is on the grid for ${formatLongDate(date)}.`
+        : `It is on the grid for ${formatLongDate(date)}.`,
+    );
     onOpenChange(false);
     await onAdded(job.id);
   }
@@ -678,36 +688,21 @@ function QuickAddJob({
           }}
         >
           <DialogBody className="flex flex-col gap-3">
-            <Field
-              label="Client"
-              required
-              hint={clientId ? undefined : 'Pick one, or type a new name below.'}
-            >
-              {({ inputId }) => (
-                <Combobox
-                  id={inputId}
-                  value={clientId}
-                  onValueChange={setClientId}
-                  options={(clients.data ?? []).map((client) => ({ value: client.id, label: client.name }))}
-                  placeholder={clients.isLoading ? 'Loading clients' : 'Pick a client'}
-                  searchPlaceholder="Search clients"
-                  emptyMessage="No client by that name. Type it as a new client below."
+            <Field label="Client" required hint="Pick one from the list. To add a new client, type the name and choose Create.">
+              {() => (
+                <ClientCombo
+                  clients={clients.data ?? []}
+                  value={client}
+                  onChange={(next) => {
+                    setClient(next);
+                    setError(null);
+                  }}
+                  open={clientOpen}
+                  onOpenChange={setClientOpen}
+                  testId="log-add-job-client"
                 />
               )}
             </Field>
-            {!clientId ? (
-              <Field label="Or a new client">
-                {({ inputId }) => (
-                  <Input
-                    id={inputId}
-                    value={clientName}
-                    onChange={(event) => setClientName(event.target.value)}
-                    placeholder="Client name"
-                    maxLength={200}
-                  />
-                )}
-              </Field>
-            ) : null}
             <Field label="Job name" required>
               {({ inputId }) => (
                 <Input

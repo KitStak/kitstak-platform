@@ -65,6 +65,8 @@ import type {
   VasServiceDTO,
 } from '@/lib/types';
 import { createJobAction, type CreateJobActionInput } from '@/server/actions/jobs';
+import { matchClientName } from '@/lib/client-names';
+import { ClientCombo } from './client-combo';
 import { singularUnit } from './job-math';
 import { Explain } from './job-ui';
 import {
@@ -185,7 +187,8 @@ export function NewJobWizard(props: NewJobWizardProps) {
   } = props;
   const router = useRouter();
   const formId = useId();
-  const clientListId = useId();
+  const [clientNew, setClientNew] = useState(false);
+  const [clientOpen, setClientOpen] = useState(false);
   const general = jobTypes.find((type) => type.code === 'GENERAL') ?? jobTypes[0];
   const defaultSite = sites.find((site) => site.isDefault) ?? sites[0];
   const classFor = (type: JobTypeDTO | undefined) =>
@@ -433,6 +436,12 @@ export function NewJobWizard(props: NewJobWizardProps) {
   const validate = (upTo: number): Record<string, string> => {
     const next: Record<string, string> = {};
     if (!form.client.trim()) next.client = 'Pick a client or type a new name.';
+    else if (!matchedClient && !clientNew) {
+      // Two clients for one company split its profit in two. A close name needs a clear yes.
+      const close = matchClientName(form.client.trim(), clients).lookAlikes;
+      if (close[0])
+        next.client = `Did you mean ${close[0].name}? Pick it from the list, or choose Create "${form.client.trim()}".`;
+    }
     if (!form.name.trim()) next.name = 'Give the job a name.';
     if (form.units.trim() && readDecimal(form.units, 3) === null) next.units = 'Type a number, like 5000.';
     if (form.kind === 'one_time' && form.pricingModel === 'per_unit' && !form.units.trim())
@@ -823,31 +832,24 @@ export function NewJobWizard(props: NewJobWizardProps) {
                   required
                   error={errors.client || errors.clientId}
                   hint={
-                    form.client.trim() && !matchedClient
+                    form.client.trim() && !matchedClient && clientNew
                       ? `"${form.client.trim()}" is new. Pulse adds it as a client when you save.`
                       : 'Who the work is for.'
                   }
                 >
-                  {({ inputId, describedBy, invalid }) => (
-                    <>
-                      <Input
-                        id={inputId}
-                        aria-describedby={describedBy}
-                        invalid={invalid}
-                        list={clientListId}
-                        value={form.client}
-                        onChange={(event) => set('client', event.target.value)}
-                        placeholder="Pick or type a client"
-                        autoComplete="off"
-                        size="lg"
-                        data-testid="wizard-client"
-                      />
-                      <datalist id={clientListId}>
-                        {clients.map((item) => (
-                          <option key={item.id} value={item.name} />
-                        ))}
-                      </datalist>
-                    </>
+                  {({ invalid }) => (
+                    <ClientCombo
+                      clients={clients}
+                      value={{ text: form.client, clientId: matchedClient?.id ?? null, createNew: clientNew && !matchedClient }}
+                      onChange={(next) => {
+                        set('client', next.text);
+                        setClientNew(next.createNew);
+                      }}
+                      open={clientOpen}
+                      onOpenChange={setClientOpen}
+                      invalid={invalid}
+                      testId="wizard-client"
+                    />
                   )}
                 </Field>
                 <Field
