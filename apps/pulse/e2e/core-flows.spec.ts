@@ -203,6 +203,7 @@ test('7. the command palette and the go to keys reach every screen', async ({ pa
       await expect(page.getByTestId('palette-input')).toBeVisible({ timeout: 2000 });
     }).toPass();
     await page.getByTestId('palette-input').fill(text);
+    await expect(page.locator('[cmdk-item][aria-selected="true"]').first()).toBeVisible();
   };
   for (const [typed, path] of [
     ['audit log', '/settings/audit'],
@@ -216,7 +217,7 @@ test('7. the command palette and the go to keys reach every screen', async ({ pa
     ['people and roles', '/settings'],
     ['wall display', '/wall'],
   ] as const) {
-    if (new URL(page.url()).pathname === '/wall') await open(page, '/');
+    await page.waitForLoadState('networkidle').catch(() => undefined);
     await palette(typed);
     await page.keyboard.press('Enter');
     await page.waitForURL((url) => url.pathname === path, { timeout: 30_000 });

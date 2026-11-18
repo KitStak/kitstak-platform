@@ -179,6 +179,8 @@ export function CommandPalette() {
   const hasAccess = pulseRole !== 'none';
   // Pages that already have a row under "Do something" are not listed twice.
   const subPages = subPagesFor(pulseRole, seesMoney).filter((page) => !ACTION_PAGES.has(page.id));
+  // A page with its own row wins over the section it sits under, so the section drops that keyword.
+  const subLabels = new Set(subPages.map((page) => page.label.toLowerCase()));
   const seesReports = pages.some((entry) => entry.id === 'reports');
   const reports = seesReports ? REPORTS.filter((report) => seesMoney || !report.needsMoney) : [];
 
@@ -262,7 +264,7 @@ export function CommandPalette() {
                 <Item
                   key={entry.id}
                   value={`go-${entry.id}`}
-                  keywords={[entry.label, ...entry.keywords]}
+                  keywords={[entry.label, ...entry.keywords.filter((keyword) => !subLabels.has(keyword.toLowerCase()))]}
                   onSelect={() => go(entry.href)}
                   icon={<Icon aria-hidden className="size-4" />}
                   meta={typing ? entry.description : undefined}
