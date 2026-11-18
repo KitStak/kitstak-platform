@@ -1,0 +1,30 @@
+{
+  "name": "@kitstak/mcp",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Read-only MCP server for one KitStak organization: WMS, CRM, Projects and org data. Lives outside the pnpm workspace on purpose: its own npm lockfile, no effect on app builds.",
+  "type": "module",
+  "bin": {
+    "kitstak-mcp": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "postgres": "3.4.9",
+    "zod": "4.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
+  }
+}
