@@ -8,6 +8,8 @@ import { InviteMemberForm } from './invite-member-form';
 import { InvitationRow, MemberRow } from './member-rows';
 import { LeaveOrgButton } from './leave-org-card';
 import { OrgProfileForm } from './org-profile-form';
+import { SetupGuide } from '@/features/setup/setup-guide';
+import { getSetupState } from '@/server/onboarding';
 
 export const metadata: Metadata = { title: 'Organization' };
 
@@ -100,6 +102,8 @@ export default async function OrganizationSettingsPage() {
       (row) => row.userId !== session.user.id && MANAGER_ROLES.has(row.role.split(',')[0]?.trim() ?? ''),
     )?.name ?? null;
 
+  const setup = await getSetupState(activeOrg);
+
   const [orgRow] = await db
     .select({ createdAt: organization.createdAt })
     .from(organization)
@@ -131,6 +135,10 @@ export default async function OrganizationSettingsPage() {
             />
           </div>
         </section>
+
+        <div id="setup" className="scroll-mt-24">
+          <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManage} placement="settings" />
+        </div>
 
         <section
           aria-labelledby="org-members-heading"

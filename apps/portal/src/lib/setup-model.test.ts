@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSetupSteps,
   parseSetupProfile,
+  readProgressRows,
   summarizeSetup,
   type SetupProfile,
   type SetupSignals,
@@ -267,5 +268,31 @@ describe('KitStak Pulse steps', () => {
   it('a failed Pulse read leaves the steps to do, never done', () => {
     const steps = buildSetupSteps({ ...withPulse, pulseLaborRates: null, pulseJobs: null, pulseEntries: null, pulseLinks: null }, null, {});
     expect(steps.filter((step) => step.scope === 'pulse').every((step) => step.status === 'todo')).toBe(true);
+  });
+});
+
+describe('readProgressRows', () => {
+  it('ignores the guide rows that CRM and WMS keep for their own guides', () => {
+    const rows = [
+      { scope: 'portal', stepKey: 'guide', status: 'dismissed', payload: {} },
+      { scope: 'wms', stepKey: 'guide', status: 'completed', payload: {} },
+    ];
+    expect(readProgressRows(rows)).toMatchObject({ dismissed: true, seen: true });
+    expect(readProgressRows([...rows].reverse())).toMatchObject({ dismissed: true, seen: true });
+  });
+
+  it('is not seen or dismissed when only another app has a guide row', () => {
+    const rows = [{ scope: 'crm', stepKey: 'guide', status: 'dismissed', payload: {} }];
+    expect(readProgressRows(rows)).toMatchObject({ dismissed: false, seen: false });
+  });
+
+  it('reads the profile and step overrides', () => {
+    const rows = [
+      { scope: 'portal', stepKey: 'profile', status: 'completed', payload: bothProfile },
+      { scope: 'portal', stepKey: 'invite_team', status: 'skipped', payload: {} },
+    ];
+    const result = readProgressRows(rows);
+    expect(result.profile).toEqual(bothProfile);
+    expect(result.overrides).toMatchObject({ profile: 'completed', invite_team: 'skipped' });
   });
 });

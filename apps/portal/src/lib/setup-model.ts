@@ -344,6 +344,53 @@ function scopeOrder(profile: SetupProfile | null): readonly SetupScope[] {
 /** Explicit per-step override rows from core.onboarding_progress. */
 export type SetupOverrides = Readonly<Partial<Record<SetupStepKey, 'completed' | 'skipped'>>>;
 
+/** The org-level row that records the Portal guide itself being seen or dismissed. */
+export const GUIDE_STEP_KEY = 'guide';
+
+export interface ProgressRow {
+  readonly scope: string;
+  readonly stepKey: string;
+  readonly status: string;
+  readonly payload: unknown;
+}
+
+export interface ProgressState {
+  readonly profile: SetupProfile | null;
+  readonly overrides: SetupOverrides;
+  readonly dismissed: boolean;
+  readonly seen: boolean;
+}
+
+/**
+ * Folds the org-level core.onboarding_progress rows into the guide's saved state.
+ * CRM and WMS keep their own 'guide' rows under their own scope, so only the Portal's
+ * row decides whether the Portal guide was seen or dismissed.
+ */
+export function readProgressRows(rows: readonly ProgressRow[]): ProgressState {
+  let profile: SetupProfile | null = null;
+  let dismissed = false;
+  let seen = false;
+  const overrides: Partial<Record<SetupStepKey, 'completed' | 'skipped'>> = {};
+  for (const row of rows) {
+    if (row.stepKey === GUIDE_STEP_KEY) {
+      if (row.scope !== 'portal') continue;
+      seen = true;
+      dismissed = row.status === 'dismissed';
+      continue;
+    }
+    if (row.stepKey === 'profile' && row.status === 'completed') {
+      profile = parseSetupProfile(row.payload);
+      overrides.profile = 'completed';
+      continue;
+    }
+    if (isSetupStepKey(row.stepKey) && (row.status === 'completed' || row.status === 'skipped')) {
+      overrides[row.stepKey] = row.status;
+    }
+  }
+  return { profile, overrides, dismissed, seen };
+}
+
+
 export function buildSetupSteps(
   signals: SetupSignals,
   profile: SetupProfile | null,

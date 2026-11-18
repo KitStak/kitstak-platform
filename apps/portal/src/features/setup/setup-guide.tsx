@@ -59,6 +59,8 @@ export interface SetupGuideProps {
   readonly orgName: string;
   readonly state: SetupState;
   readonly canManage: boolean;
+  /** 'home' is the launcher card; 'settings' is the always-on copy in Organization settings. */
+  readonly placement?: 'home' | 'settings';
 }
 
 interface StepRowProps {
@@ -204,10 +206,11 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
   );
 }
 
-export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
+export function SetupGuide({ orgName, state, canManage, placement = 'home' }: SetupGuideProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [collapsed, setCollapsed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [justDoneKeys, setJustDoneKeys] = useState<readonly string[]>([]);
   const prevStatuses = useRef<ReadonlyMap<string, string> | null>(null);
   const lastRefresh = useRef(0);
@@ -259,12 +262,43 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
     });
   };
 
-  const run = (action: () => Promise<{ ok: boolean }>) => {
+  const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
+    setError(null);
     startTransition(async () => {
-      await action();
+      try {
+        const result = await action();
+        if (!result.ok) setError(result.error ?? 'That did not save. Try again.');
+      } catch {
+        setError('We could not reach KitStak. Try again.');
+      }
       router.refresh();
     });
   };
+
+  const inSettings = placement === 'settings';
+  // In settings the guide always shows; the button only decides whether it is also on the home page.
+  const homeToggle = canManage ? (
+    inSettings ? (
+      state.dismissed ? (
+        <Button variant="secondary" size="sm" loading={pending} onClick={() => run(restoreSetupGuide)}>
+          Show on home
+        </Button>
+      ) : (
+        <Button variant="ghost" size="sm" loading={pending} onClick={() => run(dismissSetupGuide)}>
+          Hide from home
+        </Button>
+      )
+    ) : (
+      <Button variant="secondary" size="sm" loading={pending} onClick={() => run(dismissSetupGuide)}>
+        Dismiss guide
+      </Button>
+    )
+  ) : null;
+  const errorLine = error ? (
+    <p role="alert" className="mt-3 text-sm text-danger-text">
+      {error}
+    </p>
+  ) : null;
 
   // Celebration only when everything is genuinely DONE — skips never earn confetti.
   if (summary.allDone) {
@@ -273,7 +307,7 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
         aria-label="Setup complete"
         className="relative overflow-hidden rounded-2xl border border-border-default bg-panel p-6 shadow-xs animate-fade-in"
       >
-        <ConfettiBurst />
+        {inSettings ? null : <ConfettiBurst />}
         <div className="relative flex flex-wrap items-center gap-4">
           <span className="flex size-11 items-center justify-center rounded-full bg-success-subtle text-success-text">
             <PartyPopper aria-hidden className="size-5" />
@@ -286,12 +320,9 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
               Every setup step is done.
             </p>
           </div>
-          {canManage ? (
-            <Button variant="secondary" loading={pending} onClick={() => run(dismissSetupGuide)}>
-              Dismiss guide
-            </Button>
-          ) : null}
+          {homeToggle}
         </div>
+        {errorLine}
       </section>
     );
   }
@@ -328,12 +359,11 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
                   Undo skip
                 </Button>
               ))}
-              <Button variant="secondary" size="sm" loading={pending} onClick={() => run(dismissSetupGuide)}>
-                Dismiss guide
-              </Button>
+              {homeToggle}
             </div>
           ) : null}
         </div>
+        {errorLine}
       </section>
     );
   }
@@ -343,10 +373,10 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
       aria-label="Setup guide"
       className="overflow-hidden rounded-2xl border border-border-default bg-panel shadow-xs animate-fade-in"
     >
-      {state.dismissed ? (
+      {state.dismissed && !inSettings ? (
         <div className="flex items-center justify-between gap-3 border-b border-border-subtle bg-sunken px-5 py-2.5">
           <p className="text-xs text-fg-muted">
-            This guide is hidden from your launcher.
+            This guide is hidden from your home page. It stays in Organization settings.
           </p>
           {canManage ? (
             <Button variant="secondary" size="sm" loading={pending} onClick={() => run(restoreSetupGuide)}>
@@ -367,7 +397,7 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
             ) : null}
           </p>
         </div>
-        {canManage ? (
+        {inSettings ? homeToggle : canManage ? (
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label="Setup guide options"
@@ -377,7 +407,10 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => run(dismissSetupGuide)}>
-                Dismiss setup guide
+                <span className="flex flex-col">
+                  <span>Dismiss setup guide</span>
+                  <span className="text-xs text-fg-muted">It moves to Organization settings and keeps checking off steps.</span>
+                </span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -398,6 +431,7 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
           />
         </button>
       </header>
+      {error ? <div className="px-5 pb-3">{errorLine}</div> : null}
       {collapsed ? null : (
         <ol className="divide-y divide-border-subtle border-t border-border-subtle">
           {steps.map((step, index) => (
