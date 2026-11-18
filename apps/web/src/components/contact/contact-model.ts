@@ -1,4 +1,4 @@
-import { CONTACT } from '../site-links';
+import { CONTACT, isAppLive } from '../site-links';
 
 export const TOPICS = [
   {
@@ -28,7 +28,10 @@ export const TOPICS = [
   {
     id: 'pulse',
     label: 'KitStak Pulse',
-    note: 'Add Pulse to an organization you already run, or ask how it fits the way you track job profit today.',
+    // Nobody can add Pulse to an account until its app is open.
+    note: isAppLive('pulse')
+      ? 'Add Pulse to an organization you already run, or ask how it fits the way you track job profit today.'
+      : 'Pulse is coming soon. Ask how it fits the way you track job profit today, or book a walkthrough.',
     prompt: 'What kind of jobs do you run, and how do you work out what each one made today?',
     action: 'Ask about Pulse',
     subject: 'KitStak Pulse',

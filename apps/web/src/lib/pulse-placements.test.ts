@@ -36,10 +36,17 @@ describe('Pulse in the shared site data', () => {
     expect(START_NAME.pulse).toBe('Pulse');
   });
 
-  test('carries a price under the same placeholder flag as the other products', () => {
+  test('carries its confirmed price beside the placeholder prices of the other products', () => {
     expect(PRICING_IS_PLACEHOLDER).toBe(true);
-    expect(PRICING.pulse).toMatchObject({ name: 'KitStak Pulse', unit: 'user', unitPlural: 'users' });
-    expect(PRICING.pulse.monthlyCents).toBeGreaterThan(0);
+    // Pulse is the one confirmed price: $29 flat per organization, covering up to 5 seats.
+    expect(PRICING.pulse).toMatchObject({
+      name: 'KitStak Pulse',
+      basis: 'flat_per_org',
+      unit: 'organization',
+      monthlyCents: 2900,
+      includedSeats: 5,
+      isConfirmed: true,
+    });
   });
 });
 

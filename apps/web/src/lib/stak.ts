@@ -5,7 +5,7 @@
  * portal's `focus` only knows the CRM and the WMS, so the full product set travels separately as
  * `products`. Pulse answers follow docs/pulse/SPEC.md (its first run and its feature list).
  */
-import { LINKS, ROUTES, parseStack, stackParam, toStack } from '@/components/site-links';
+import { LINKS, ROUTES, parseStack, stackParam, startableStack, toStack } from '@/components/site-links';
 import type { ProductId, Stack } from '@/components/site-links';
 import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
 import { PRICING } from './pricing';
@@ -40,12 +40,20 @@ export const TEAM_SIZES: readonly (Option<TeamSize> & { readonly seats: number }
 
 export const START_MODES: readonly Option<StartMode>[] = [
   { value: 'fresh', label: 'Start fresh', note: 'An empty workspace and a short checklist to fill it.' },
-  { value: 'sample', label: 'Explore sample data', note: 'Look around a working setup before adding your own.' },
+  {
+    value: 'sample',
+    label: 'Explore sample data',
+    note: 'Look around a working setup before adding your own.',
+  },
   { value: 'import', label: 'Import my data', note: 'Bring spreadsheets in and map the columns.' },
 ];
 
 export const WMS_NEEDS: readonly Option<string>[] = [
-  { value: 'receiving', label: 'Receiving and putaway', note: 'Check in POs and direct stock to a location.' },
+  {
+    value: 'receiving',
+    label: 'Receiving and putaway',
+    note: 'Check in POs and direct stock to a location.',
+  },
   { value: 'pick_pack', label: 'Pick, pack and ship', note: 'Waves, jobs, packing stations and labels.' },
   { value: 'counts', label: 'Cycle counts', note: 'Cycle, blind, instant and SKU counts.' },
   { value: 'returns', label: 'Returns', note: 'A return station with RMAs and dispositions.' },
@@ -72,9 +80,17 @@ export const PROJECT_TEMPLATES: readonly Option<string>[] = PROJECTS_CATALOG.tem
 /** What a new Pulse workspace can look at first. Each one is a screen in the Pulse spec. */
 export const PULSE_NEEDS: readonly Option<string>[] = [
   { value: 'job_profit', label: 'Profit by job', note: 'What each job earned and what it really cost.' },
-  { value: 'client_profit', label: 'Profit by client and service', note: 'Which clients and extra services pay.' },
+  {
+    value: 'client_profit',
+    label: 'Profit by client and service',
+    note: 'Which clients and extra services pay.',
+  },
   { value: 'daily_log', label: 'Daily production entry', note: 'Units, people and hours for each day.' },
-  { value: 'plan_actual', label: 'Budget and quote vs actual', note: 'The plan next to what really happened.' },
+  {
+    value: 'plan_actual',
+    label: 'Budget and quote vs actual',
+    note: 'The plan next to what really happened.',
+  },
   { value: 'at_risk', label: 'Jobs at risk', note: 'Open jobs that are off pace or losing money.' },
   { value: 'csv', label: 'CSV import and export', note: 'Bring spreadsheets in and take reports out.' },
 ];
@@ -171,13 +187,27 @@ export function setupPlan(answers: StakAnswers): readonly PlanStep[] {
       key: 'create_workspace',
       app: 'CRM',
       title: 'Create your CRM workspace',
-      note: isSample ? 'Start from a template with sample records.' : 'Pick the boards your team will work from.',
+      note: isSample
+        ? 'Start from a template with sample records.'
+        : 'Pick the boards your team will work from.',
       isDone: false,
     },
-    { key: 'first_deal', app: 'CRM', title: 'Add your first deal', note: 'One real deal makes the pipeline click.', isDone: false },
+    {
+      key: 'first_deal',
+      app: 'CRM',
+      title: 'Add your first deal',
+      note: 'One real deal makes the pipeline click.',
+      isDone: false,
+    },
   ];
   const wms: readonly PlanStep[] = [
-    { key: 'create_warehouse', app: 'WMS', title: 'Create your warehouse', note: 'Name it and generate its locations.', isDone: false },
+    {
+      key: 'create_warehouse',
+      app: 'WMS',
+      title: 'Create your warehouse',
+      note: 'Name it and generate its locations.',
+      isDone: false,
+    },
     {
       key: 'build_catalog',
       app: 'WMS',
@@ -185,7 +215,13 @@ export function setupPlan(answers: StakAnswers): readonly PlanStep[] {
       note: isImport ? 'Import your SKUs from a spreadsheet.' : 'Add the products you stock.',
       isDone: false,
     },
-    { key: 'first_order', app: 'WMS', title: 'Create your first order', note: 'Take one order from allocation to label.', isDone: false },
+    {
+      key: 'first_order',
+      app: 'WMS',
+      title: 'Create your first order',
+      note: 'Take one order from allocation to label.',
+      isDone: false,
+    },
   ];
 
   const chosenTemplate = PROJECT_TEMPLATES.find((t) => answers.projectTemplates.includes(t.value));
@@ -225,7 +261,15 @@ export function setupPlan(answers: StakAnswers): readonly PlanStep[] {
     { key: 'profile', app: 'Portal', title: 'Tell us about your business', note: 'Done here.', isDone: true },
     ...(answers.teamSize === 'solo'
       ? []
-      : [{ key: 'invite_team', app: 'Portal' as const, title: 'Invite your team', note: 'One invite covers every app.', isDone: false }]),
+      : [
+          {
+            key: 'invite_team',
+            app: 'Portal' as const,
+            title: 'Invite your team',
+            note: 'One invite covers every app.',
+            isDone: false,
+          },
+        ]),
     ...(isWarehouseFirst ? [...wmsSteps, ...crmSteps] : [...crmSteps, ...wmsSteps]),
     ...(hasProjects(answers) ? projects : []),
     ...(hasPulse(answers) ? pulse : []),
@@ -252,7 +296,11 @@ export function accountErrors(draft: AccountDraft): AccountErrors {
   const email = draft.email.trim();
   const company = draft.company.trim();
   return {
-    ...(name === '' ? { name: 'Enter your name.' } : name.length > MAX_FIELD ? { name: 'That name is too long.' } : {}),
+    ...(name === ''
+      ? { name: 'Enter your name.' }
+      : name.length > MAX_FIELD
+        ? { name: 'That name is too long.' }
+        : {}),
     ...(email === ''
       ? { email: 'Enter your work email.' }
       : !EMAIL.test(email) || email.length > MAX_FIELD
@@ -270,13 +318,15 @@ export function accountErrors(draft: AccountDraft): AccountErrors {
 
 /**
  * Portal sign-up link carrying the setup answers. Only the non-personal profile answers travel in
- * the URL; name, email and company never do.
+ * the URL; name, email and company never do. A product whose app is not open yet is never handed
+ * to sign-up.
  */
 export function handoffUrl(answers: StakAnswers): string {
   const params = new URLSearchParams();
-  const focus = portalFocus(answers.products);
+  const products = startableStack(answers.products);
+  const focus = portalFocus(products);
   if (focus) params.set('focus', focus);
-  if (answers.products.length > 0) params.set('products', stackParam(answers.products));
+  if (products.length > 0) params.set('products', stackParam(products));
   if (answers.businessType) params.set('businessType', answers.businessType);
   params.set('teamSize', answers.teamSize);
   params.set('startMode', answers.startMode);
@@ -297,7 +347,10 @@ function knownValues(options: readonly Option<string>[], value: unknown): readon
   return options.map((o) => o.value).filter((v) => value.includes(v));
 }
 
-/** Rebuilds answers from untrusted storage, keeping only values the wizard itself could produce. */
+/**
+ * Rebuilds answers from untrusted storage, keeping only values the wizard itself could produce. A
+ * product whose app is not open yet is dropped, so an old saved answer cannot carry it to sign-up.
+ */
 export function parseAnswers(raw: unknown): StakAnswers {
   if (typeof raw !== 'object' || raw === null) return DEFAULT_ANSWERS;
   const data = raw as Record<string, unknown>;
@@ -306,7 +359,7 @@ export function parseAnswers(raw: unknown): StakAnswers {
     : // Answers saved before Projects joined the stack carried `focus` instead.
       parseStack(typeof data.focus === 'string' ? data.focus : null);
   return {
-    products: savedProducts,
+    products: startableStack(savedProducts),
     businessType: oneOf(BUSINESS_TYPES, data.businessType),
     teamSize: oneOf(TEAM_SIZES, data.teamSize) ?? DEFAULT_ANSWERS.teamSize,
     seats: clampInt(data.seats, PRICING.crm.max, DEFAULT_ANSWERS.seats),
@@ -330,10 +383,16 @@ export interface WizardPrefill {
   readonly billing: Billing;
 }
 
-/** Wizard link that carries a priced stack from the calculator, so nobody re-enters it. */
+/**
+ * Wizard link that carries a priced stack from the calculator, so nobody re-enters it. A product
+ * whose app is not open yet is left out. If nothing in the stack is open, the link goes to the
+ * walkthrough form.
+ */
 export function wizardHref(prefill: WizardPrefill): string {
+  const stack = startableStack(prefill.stack);
+  if (stack.length === 0) return ROUTES.demo;
   const params = new URLSearchParams({
-    stack: stackParam(prefill.stack),
+    stack: stackParam(stack),
     seats: String(prefill.seats),
     warehouses: String(prefill.warehouses),
     billing: prefill.billing,
@@ -341,9 +400,12 @@ export function wizardHref(prefill: WizardPrefill): string {
   return `${ROUTES.getStarted}?${params.toString()}`;
 }
 
-/** Applies whatever valid prefill values the query string holds on top of `base`. */
+/**
+ * Applies whatever valid prefill values the query string holds on top of `base`. A product whose
+ * app is not open yet is ignored, so a typed or old link cannot put it in the stack.
+ */
 export function applyPrefill(base: StakAnswers, params: URLSearchParams): StakAnswers {
-  const stack = parseStack(params.get('stack'));
+  const stack = startableStack(parseStack(params.get('stack')));
   const seats = params.get('seats');
   const warehouses = params.get('warehouses');
   const billing = params.get('billing');
@@ -351,7 +413,8 @@ export function applyPrefill(base: StakAnswers, params: URLSearchParams): StakAn
     ...base,
     products: stack.length > 0 ? stack : base.products,
     seats: seats === null ? base.seats : clampInt(Number(seats), PRICING.crm.max, base.seats),
-    warehouses: warehouses === null ? base.warehouses : clampInt(Number(warehouses), PRICING.wms.max, base.warehouses),
+    warehouses:
+      warehouses === null ? base.warehouses : clampInt(Number(warehouses), PRICING.wms.max, base.warehouses),
     billing: billing === 'monthly' || billing === 'annual' ? billing : base.billing,
   };
 }

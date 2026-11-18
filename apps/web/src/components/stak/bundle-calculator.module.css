@@ -80,6 +80,18 @@
   font-weight: var(--weight-semibold);
   font-size: var(--type-md);
 }
+.soon {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .switchBlurb {
   display: block;
   font-size: var(--type-sm);
@@ -142,6 +154,12 @@
 }
 .quote {
   margin: 28px 0 24px;
+}
+.waiting {
+  margin-top: 12px;
+  text-align: center;
+  font-size: var(--type-sm);
+  color: var(--on-brand-muted);
 }
 .talk {
   display: block;

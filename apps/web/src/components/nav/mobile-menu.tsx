@@ -53,13 +53,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
   }, [isOpen, onClose, id]);
 
   return (
-    <div
-      id={id}
-      ref={panelRef}
-      className={styles.panel}
-      data-open={isOpen || undefined}
-      inert={!isOpen}
-    >
+    <div id={id} ref={panelRef} className={styles.panel} data-open={isOpen || undefined} inert={!isOpen}>
       <nav aria-label="Menu" className={`container ${styles.inner}`}>
         <p className={styles.heading}>Products</p>
         <ul className={styles.products}>
@@ -73,7 +67,10 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
               >
                 <AppIcon app={product.id} size={40} />
                 <span>
-                  <span className={styles.productName}>{product.name}</span>
+                  <span className={styles.productName}>
+                    {product.name}
+                    {product.status ? <span className={styles.status}>{product.status}</span> : null}
+                  </span>
                   <span className={styles.blurb}>{product.blurb}</span>
                 </span>
               </Link>
@@ -116,7 +113,10 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
 
         <div className={styles.actions}>
           <Link href={ROUTES.getStarted} className="btn btn-primary" onClick={onClose}>
-            Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
+            Set up your Stak{' '}
+            <span className="btn-arrow" aria-hidden>
+              →
+            </span>
           </Link>
           <a href={LINKS.portal} className="btn btn-ghost">
             Sign in

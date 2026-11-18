@@ -170,6 +170,15 @@
 .cardName {
   font-weight: var(--weight-semibold);
 }
+.cardSoon {
+  padding: 2px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
 .cardPrice {
   margin-left: auto;
   font-size: var(--type-sm);

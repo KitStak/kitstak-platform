@@ -70,6 +70,19 @@
   opacity: 1;
   transform: none;
 }
+.status {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  color: var(--text-secondary);
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .blurb {
   display: block;
   margin-top: 4px;

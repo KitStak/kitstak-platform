@@ -1,4 +1,4 @@
-import { ROUTES } from '../site-links';
+import { ROUTES, availabilityLabel } from '../site-links';
 
 export interface NavLink {
   readonly href: string;
@@ -12,6 +12,8 @@ export interface ProductNav {
   readonly name: string;
   readonly tag: string;
   readonly blurb: string;
+  /** "Coming soon" while the product's app is not open yet. Null once it is. */
+  readonly status: string | null;
   readonly links: readonly NavLink[];
 }
 
@@ -23,6 +25,7 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
     name: 'KitStak WMS',
     tag: 'WMS',
     blurb: 'Receiving, inventory and shipping, from the dock to the door.',
+    status: availabilityLabel('wms'),
     links: [
       { href: `${ROUTES.wms}#inbound`, label: 'Receiving and putaway' },
       { href: `${ROUTES.wms}#inventory`, label: 'Locations and counts' },
@@ -36,6 +39,7 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
     name: 'KitStak CRM',
     tag: 'CRM',
     blurb: 'Accounts, pipelines and follow-ups on boards your team shapes.',
+    status: availabilityLabel('crm'),
     links: [
       { href: `${ROUTES.crm}#boards`, label: 'Boards and views' },
       { href: `${ROUTES.crm}#automations`, label: 'Automations' },
@@ -49,6 +53,7 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
     name: 'KitStak Projects',
     tag: 'Projects',
     blurb: 'Plans, tasks and timelines tied to the deals and orders they are for.',
+    status: availabilityLabel('projects'),
     links: [
       { href: `${ROUTES.projects}#tasks`, label: 'Tasks and quick add' },
       { href: `${ROUTES.projects}#views`, label: 'Board, timeline and workload' },
@@ -62,6 +67,7 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
     name: 'KitStak Pulse',
     tag: 'Pulse',
     blurb: 'Profit by job, client and service, so you know which jobs make money.',
+    status: availabilityLabel('pulse'),
     links: [
       { href: `${ROUTES.pulse}#profit`, label: 'Profit by job and client' },
       { href: `${ROUTES.pulse}#log`, label: 'Daily production entry' },

@@ -10,6 +10,7 @@ import { SubNav } from '@/components/product/sub-nav';
 import type { SubNavSection } from '@/components/product/sub-nav';
 import { Compare, Lineup, StackHero, StartSteps } from '@/components/products/products-sections';
 import { BundleCalculator } from '@/components/stak/bundle-calculator';
+import { PRICING, formatUsd } from '@/lib/pricing';
 import styles from './products.module.css';
 
 export const metadata: Metadata = {
@@ -47,8 +48,7 @@ const FAQ: readonly FaqItem[] = [
   },
   {
     question: 'How is each product priced?',
-    answer:
-      'The CRM and Projects are priced per user and the WMS per warehouse. Pulse pricing is being set, so the calculator uses a stand-in price per user for it. Running two or more takes a percentage off each, and paying yearly takes a further percentage off the total. The calculator on this page shows the arithmetic.',
+    answer: `The CRM and Projects are priced per user and the WMS per warehouse. Pulse is ${formatUsd(PRICING.pulse.monthlyCents)} per organization per month, and that covers up to ${PRICING.pulse.includedSeats} seats. It is one flat price, not a price per user. Need more than ${PRICING.pulse.includedSeats} seats? Talk to us. Running two or more products takes a percentage off each, and paying yearly takes a further percentage off the total. The calculator on this page shows the arithmetic.`,
   },
   {
     question: 'Do I have to talk to someone to get started?',

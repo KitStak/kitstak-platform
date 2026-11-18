@@ -28,7 +28,11 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
               <AppIcon app={product.id} size={44} />
               <span>
                 <span className={styles.productName}>
-                  {product.name} <span className={styles.arrow} aria-hidden>→</span>
+                  {product.name}{' '}
+                  <span className={styles.arrow} aria-hidden>
+                    →
+                  </span>
+                  {product.status ? <span className={styles.status}>{product.status}</span> : null}
                 </span>
                 <span className={styles.blurb}>{product.blurb}</span>
               </span>
@@ -49,11 +53,18 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
           <StakMark lit="both" size={36} />
           <p className={styles.bundleTitle}>Run more. Pay less.</p>
           <p className={styles.bundleBody}>
-            The CRM, the WMS, Projects and Pulse run on one sign-in. Pulse links its clients to the customers the other
-            apps already know. License two or more and save.
+            The CRM, the WMS, Projects and Pulse run on one sign-in. Pulse links its clients to the customers
+            the other apps already know. License two or more and save.
           </p>
-          <Link href={getStartedHref(FULL_STACK)} className={`btn btn-primary ${styles.bundleCta}`} onClick={onNavigate}>
-            Build the bundle <span className="btn-arrow" aria-hidden>→</span>
+          <Link
+            href={getStartedHref(FULL_STACK)}
+            className={`btn btn-primary ${styles.bundleCta}`}
+            onClick={onNavigate}
+          >
+            Build the bundle{' '}
+            <span className="btn-arrow" aria-hidden>
+              →
+            </span>
           </Link>
           <Link href={ROUTES.products} className={styles.all} onClick={onNavigate}>
             Compare all products

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
-import { PRICING, formatUsd, percentLabel } from '@/lib/pricing';
-import { ROUTES, START_NAME, getStartedHref } from '../site-links';
+import { PRICING, formatUsd, includedSeatsLabel, percentLabel, priceOf } from '@/lib/pricing';
+import type { ProductId } from '@/lib/pricing';
+import { ROUTES, availabilityLabel, isAppLive, startLink } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import styles from './products-sections.module.css';
@@ -46,13 +47,16 @@ export function StackHero() {
             <span>One stack.</span>
           </h1>
           <p className={styles.heroLead}>
-            A CRM for the people who sell, a WMS for the people who ship, Projects for the work in between, and Pulse
-            to show which jobs make money. Each one stands on its own. Stack two or more and they share one sign-in
-            and one bill, and cost {percentLabel(PRICING.bundleDiscount)} less.
+            A CRM for the people who sell, a WMS for the people who ship, Projects for the work in between,
+            and Pulse to show which jobs make money. Each one stands on its own. Stack two or more and they
+            share one sign-in and one bill, and cost {percentLabel(PRICING.bundleDiscount)} less.
           </p>
           <div className={styles.heroActions}>
             <Link href={ROUTES.getStarted} className="btn btn-primary btn-lg">
-              Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
+              Set up your Stak{' '}
+              <span className="btn-arrow" aria-hidden>
+                →
+              </span>
             </Link>
             <Link href={ROUTES.pricing} className="btn btn-ghost-inverse btn-lg">
               Price your stack
@@ -153,6 +157,14 @@ const CARDS: readonly ProductCard[] = [
   },
 ];
 
+/** "from $29 / user" for a per unit product. A flat product has one price, so no "from". */
+function cardPrice(product: ProductId): string {
+  const price = priceOf(product);
+  const figure = `${formatUsd(price.monthlyCents)} / ${price.unit}`;
+  const seats = includedSeatsLabel(product);
+  return seats ? `${figure}, ${seats.toLowerCase()}` : `from ${figure}`;
+}
+
 export function Lineup() {
   return (
     <section id="lineup" className="section" aria-labelledby="lineup-heading">
@@ -164,32 +176,44 @@ export function Lineup() {
           Most teams start with the one that hurts most today, and add the others when they are ready.
         </p>
         <div className={styles.cards}>
-          {CARDS.map((card, i) => (
-            <article key={card.id} className={styles.card} data-reveal style={{ '--reveal-delay': 100 * (i % 2) } as React.CSSProperties}>
-              <header className={styles.cardHead}>
-                <AppIcon app={card.id} size={56} />
-                <span className={styles.cardName}>{card.name}</span>
-                <span className={styles.cardPrice}>
-                  from {formatUsd(PRICING[card.id].monthlyCents)} / {PRICING[card.id].unit}
-                </span>
-              </header>
-              <h3 className={styles.cardTitle}>{card.title}</h3>
-              <p className={styles.cardBody}>{card.body}</p>
-              <ul className={styles.cardPoints}>
-                {card.points.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
-              </ul>
-              <div className={styles.cardActions}>
-                <Link href={card.href} className="btn btn-ghost">
-                  Explore {card.name} <span className="btn-arrow" aria-hidden>→</span>
-                </Link>
-                <Link href={getStartedHref(card.id)} className="text-link">
-                  Start with {START_NAME[card.id]}
-                </Link>
-              </div>
-            </article>
-          ))}
+          {CARDS.map((card, i) => {
+            const start = startLink(card.id);
+            const availability = availabilityLabel(card.id);
+            return (
+              <article
+                key={card.id}
+                className={styles.card}
+                data-reveal
+                style={{ '--reveal-delay': 100 * (i % 2) } as React.CSSProperties}
+              >
+                <header className={styles.cardHead}>
+                  <AppIcon app={card.id} size={56} />
+                  <span className={styles.cardName}>{card.name}</span>
+                  {availability ? <span className={styles.cardSoon}>{availability}</span> : null}
+                  <span className={styles.cardPrice}>{cardPrice(card.id)}</span>
+                </header>
+                <h3 className={styles.cardTitle}>{card.title}</h3>
+                <p className={styles.cardBody}>{card.body}</p>
+                <ul className={styles.cardPoints}>
+                  {card.points.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+                <div className={styles.cardActions}>
+                  <Link href={card.href} className="btn btn-ghost">
+                    Explore {card.name}{' '}
+                    <span className="btn-arrow" aria-hidden>
+                      →
+                    </span>
+                  </Link>
+                  {/* A product whose app is not open yet gets a walkthrough, not a start link. */}
+                  <Link href={start.href} className="text-link">
+                    {start.label}
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -214,7 +238,14 @@ const ROWS: readonly Row[] = [
   { label: 'One sign-in and one launcher', crm: true, wms: true, projects: true, pulse: true, stacked: true },
   // Pulse keeps its own client list and links it to the shared one when another app is licensed.
   { label: 'Shared customer list', crm: true, wms: true, projects: true, pulse: 'Own list', stacked: true },
-  { label: 'Team invites that cover every app', crm: true, wms: true, projects: true, pulse: true, stacked: true },
+  {
+    label: 'Team invites that cover every app',
+    crm: true,
+    wms: true,
+    projects: true,
+    pulse: true,
+    stacked: true,
+  },
   {
     label: 'Boards, pipeline, automations, dashboards',
     crm: true,
@@ -337,17 +368,26 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
               Better stacked.
             </h2>
             <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-              Every app reads the same customer record. Link a CRM account to the customer your warehouse ships for, and
-              sales can see what is on the shelf. Add Projects, and the work for that customer points at the deal and the
-              order it is about. Add Pulse, and you can turn a won deal or a work order into a job, then see its profit as the work is logged.
+              Every app reads the same customer record. Link a CRM account to the customer your warehouse
+              ships for, and sales can see what is on the shelf. Add Projects, and the work for that customer
+              points at the deal and the order it is about. Add Pulse, and you can turn a won deal or a work
+              order into a job, then see its profit as the work is logged.
             </p>
           </div>
           <div data-reveal>{visual}</div>
         </div>
 
-        <div className={styles.tableWrap} data-reveal tabIndex={0} role="region" aria-label="Product comparison">
+        <div
+          className={styles.tableWrap}
+          data-reveal
+          tabIndex={0}
+          role="region"
+          aria-label="Product comparison"
+        >
           <table className={styles.table}>
-            <caption className="visually-hidden">What you get with each product and with two or more stacked</caption>
+            <caption className="visually-hidden">
+              What you get with each product and with two or more stacked
+            </caption>
             <thead>
               <tr>
                 <th scope="col">
@@ -398,7 +438,10 @@ const STEPS = [
   },
   {
     title: 'Follow your setup plan',
-    body: 'A checklist built from your answers walks you through the first warehouse, the first board, the first order, the first project and the first job.',
+    // The first job is a Pulse step, so it is named only once the Pulse app is open.
+    body: isAppLive('pulse')
+      ? 'A checklist built from your answers walks you through the first warehouse, the first board, the first order, the first project and the first job.'
+      : 'A checklist built from your answers walks you through the first warehouse, the first board, the first order and the first project.',
   },
 ] as const;
 
@@ -411,11 +454,15 @@ export function StartSteps() {
             Set it up yourself.
           </h2>
           <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-            No sales call required and no implementation project. Answer a few questions and KitStak builds the plan.
+            No sales call required and no implementation project. Answer a few questions and KitStak builds
+            the plan.
           </p>
           <div className={styles.startActions} data-reveal>
             <Link href={ROUTES.getStarted} className="btn btn-primary btn-lg">
-              Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
+              Set up your Stak{' '}
+              <span className="btn-arrow" aria-hidden>
+                →
+              </span>
             </Link>
           </div>
         </div>

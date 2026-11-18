@@ -334,6 +334,36 @@
   letter-spacing: -0.02em;
   line-height: 1.15;
 }
+/* A product that is not open yet: same row, no hover lift, no tick box. */
+.stack[data-soon] {
+  cursor: default;
+  background: var(--surface-sunken, transparent);
+}
+.stack[data-soon]:hover {
+  border-color: var(--border-default);
+  box-shadow: none;
+}
+.stack[data-soon]:active {
+  transform: none;
+}
+.soon {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.soonLink {
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
 .badge {
   padding: 3px 10px;
   border-radius: var(--radius-pill);

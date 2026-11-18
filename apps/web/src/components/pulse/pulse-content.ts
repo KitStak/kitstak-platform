@@ -7,6 +7,7 @@
  * Every dollar figure is a sample number taken from a worked example in the spec, and the test
  * proves the sums add up.
  */
+import { PULSE_IS_LIVE } from '../site-links';
 import type { Feature } from '../product/chapter';
 import type { FaqItem } from '../product/cta';
 import type { HeroFact } from '../product/product-hero';
@@ -487,7 +488,9 @@ export const FAQ: readonly FaqItem[] = [
   },
   {
     question: 'How do I start?',
-    answer: `You can load sample data and see a job's profit right away, import your spreadsheets, or type your first job. Then a short checklist walks you through it: ${list(FIRST_STEPS)}. Pulse is a web app that fits a phone screen, with no app to install.`,
+    answer: PULSE_IS_LIVE
+      ? `You can load sample data and see a job's profit right away, import your spreadsheets, or type your first job. Then a short checklist walks you through it: ${list(FIRST_STEPS)}. Pulse is a web app that fits a phone screen, with no app to install.`
+      : `Pulse is coming soon. Book a walkthrough and we will show it to you on sample data. When it opens, you can load sample data, import your spreadsheets or type your first job. Then a short checklist walks you through it: ${list(FIRST_STEPS)}. Pulse is a web app that fits a phone screen, with no app to install.`,
   },
   {
     question: 'What does Pulse not do?',
@@ -498,5 +501,7 @@ export const FAQ: readonly FaqItem[] = [
 
 export const CLOSING = {
   title: 'Know which jobs pay.',
-  note: 'Runs on its own, or alongside the CRM, the WMS and Projects with one sign-in.',
+  note: PULSE_IS_LIVE
+    ? 'Runs on its own, or alongside the CRM, the WMS and Projects with one sign-in.'
+    : 'Coming soon. Book a walkthrough and we will show you Pulse on sample data.',
 } as const;

@@ -1,12 +1,44 @@
-/* A real product screenshot, framed like the illustration panels it replaces. */
+/* A real product screenshot, framed like the illustration panels it sits beside. */
 .shot {
+  margin: 0 auto;
+}
+.shot picture {
   display: block;
 }
 .shot img {
+  display: block;
   width: 100%;
   height: auto;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
   background: var(--surface-panel);
   box-shadow: var(--elevation-modal);
+}
+.shot figcaption {
+  margin-top: 14px;
+  font-size: var(--type-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+  text-align: center;
+}
+.shot figcaption strong {
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+/* On the navy band: a light caption and a rule that shows against navy. */
+.shot[data-on-brand] img {
+  border-color: var(--on-brand-rule);
+}
+.shot[data-on-brand] figcaption {
+  color: var(--on-brand-muted);
+}
+.shot[data-on-brand] figcaption strong {
+  color: var(--brand-cream);
+}
+
+@media (max-width: 640px) {
+  .shot img {
+    border-radius: var(--radius-lg);
+  }
 }

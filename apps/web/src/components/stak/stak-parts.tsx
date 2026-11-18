@@ -1,13 +1,15 @@
+import Link from 'next/link';
 import {
+  MORE_SEATS_ACTION,
   PRICING,
-  PRICING_IS_PLACEHOLDER,
   formatUsd,
   isBundle,
+  moreSeatsPrompt,
   percentLabel,
-  unconfirmedPriceNote,
+  preliminaryPriceNote,
 } from '@/lib/pricing';
 import type { Billing, Quote } from '@/lib/pricing';
-import { PRODUCT_IDS } from '../site-links';
+import { PRODUCT_IDS, ROUTES } from '../site-links';
 import type { ProductId, Stack } from '../site-links';
 import styles from './stak-parts.module.css';
 
@@ -55,7 +57,9 @@ interface QuoteSummaryProps {
 export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
   const products = quote.lines.map((line) => line.product);
   const hasBundle = isBundle(products);
-  const notFinal = unconfirmedPriceNote(products);
+  const preliminary = preliminaryPriceNote(products);
+  // A flat product covers a set number of seats. Above that there is no listed price.
+  const moreSeats = products.map(moreSeatsPrompt).find((prompt) => prompt !== null) ?? null;
   return (
     <div aria-live="polite">
       <ul className={styles.lines}>
@@ -63,9 +67,7 @@ export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
           <li key={line.product}>
             <span>
               {line.name}
-              <span className={styles.lineBasis}>
-                {line.quantity} {line.unitLabel} × {formatUsd(line.unitCents)}
-              </span>
+              <span className={styles.lineBasis}>{line.basisLabel}</span>
             </span>
             <span className={styles.lineAmount}>{formatUsd(line.subtotalCents)}</span>
           </li>
@@ -100,9 +102,12 @@ export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
           Add another product and take {percentLabel(PRICING.bundleDiscount)} off every one.
         </p>
       )}
-      {PRICING_IS_PLACEHOLDER ? (
-        <p className={styles.fine}>Preliminary pricing, shown for planning.{notFinal ? ` ${notFinal}` : ''}</p>
+      {moreSeats ? (
+        <p className={styles.fine}>
+          {moreSeats} <Link href={ROUTES.contact}>{MORE_SEATS_ACTION}</Link>
+        </p>
       ) : null}
+      {preliminary ? <p className={styles.fine}>{preliminary}</p> : null}
     </div>
   );
 }
@@ -118,10 +123,16 @@ interface StepperProps {
 }
 
 export function Stepper({ label, value, min = 1, max, onChange }: StepperProps) {
-  const set = (next: number) => onChange(Math.min(Math.max(Number.isFinite(next) ? Math.round(next) : min, min), max));
+  const set = (next: number) =>
+    onChange(Math.min(Math.max(Number.isFinite(next) ? Math.round(next) : min, min), max));
   return (
     <div className={styles.stepper}>
-      <button type="button" aria-label={`Fewer ${label}`} onClick={() => set(value - 1)} disabled={value <= min}>
+      <button
+        type="button"
+        aria-label={`Fewer ${label}`}
+        onClick={() => set(value - 1)}
+        disabled={value <= min}
+      >
         −
       </button>
       <input
@@ -133,7 +144,12 @@ export function Stepper({ label, value, min = 1, max, onChange }: StepperProps) 
         value={value}
         onChange={(event) => set(event.target.valueAsNumber)}
       />
-      <button type="button" aria-label={`More ${label}`} onClick={() => set(value + 1)} disabled={value >= max}>
+      <button
+        type="button"
+        aria-label={`More ${label}`}
+        onClick={() => set(value + 1)}
+        disabled={value >= max}
+      >
         +
       </button>
     </div>
