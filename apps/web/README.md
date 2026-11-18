@@ -42,15 +42,20 @@ mobile drawer and the footer all read `src/components/nav/nav-data.ts`.
   `products` carries the full set, including `projects`, and `pulse` only once `PULSE_IS_LIVE` is true. The
   portal does not read them yet.
 
-- **Pulse screenshots**. Real product screenshots are pending until the Pulse app is finished. Until
-  then the `/pulse` visuals are coded illustrations with sample data, like the other product pages. The
-  slots are the visual components exported from `src/components/pulse/pulse-visuals.tsx`
-  (`PulseHeroVisual`, `ProfitByJobVisual`, `DailyEntryVisual`, `PlanVsActualVisual`, `CostRatesVisual`,
-  `RiskVisual`, `CsvVisual`, `PulseStackVisual`, `PulseBundleVisual`), each placed by
-  `src/app/pulse/page.tsx`. When the captures exist, put them at the paths in
-  `src/components/pulse/pulse-shots.ts` and set `ready: true` on that slot. `PulseShot` then shows the
-  screenshot in place of the coded visual. The sample numbers in the coded visuals are illustrations, so
-  check each screenshot against the copy beside it.
+- **Pulse screenshots**. The `/pulse` page shows real product screenshots: Home in the hero, then Profit
+  by job, Jobs, Log work, Plan vs actual, the rate builder, the import Check step and Connected apps.
+  They come straight from the running Pulse app with its demo data. They are cropped, scaled and
+  compressed, and never retouched. Each one exists in a light and a dark theme and in up to three window
+  sizes (desktop, tablet, phone). `PulseShot` (`src/components/pulse/pulse-shot.tsx`) picks the file by
+  screen width and system theme. The slots, alt text and retake steps are in
+  `src/components/pulse/pulse-shots.ts`. To retake, run `node scripts/capture-pulse-shots.mjs <rawDir>
+  <importBatchId>` against a running Pulse app (it needs Playwright), then `node
+  scripts/prepare-pulse-shots.mjs <rawDir>`, which writes `public/pulse/shots`. Retake every slot
+  together so the numbers agree, then check the alt text and the page copy against the new screens. The
+  demo data is built from the day it is seeded, so the numbers move. A slot set to `ready: false` falls
+  back to its coded illustration in `src/components/pulse/pulse-visuals.tsx`. The worked job, the "How we
+  got this" panel and the home page card have no screenshot and stay coded illustrations with sample
+  numbers.
 - **Pulse sign-in link**. The footer links to `LINKS.pulse` (`https://pulse.kitstak.app`) only when
   `PULSE_IS_LIVE` is true. Check that origin answers before you flip the flag.
 
