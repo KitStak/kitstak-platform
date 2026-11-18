@@ -92,6 +92,39 @@ export function PulseWordmark({ height = 40 }: { readonly height?: number }) {
   );
 }
 
+/* ===== Money out and profit ===== */
+
+interface SplitBarProps {
+  /** Whole percents of money in. They add up to 100. */
+  readonly out: number;
+  readonly profit: number;
+  /** What the profit is, for the text alternative: "profit on jobs", "profit so far". */
+  readonly what: string;
+}
+
+/**
+ * The picture the page keeps coming back to: one bar for every dollar that came in, split into
+ * money out and profit. The same two colors and the same key every time it appears.
+ */
+export function SplitBar({ out, profit, what }: SplitBarProps) {
+  return (
+    <>
+      <div
+        className={styles.splitBar}
+        role="img"
+        aria-label={`Of every dollar that came in, ${out} cents went out and ${profit} cents stayed as ${what}.`}
+      >
+        <span style={{ flexGrow: out }} data-part="out" />
+        <span style={{ flexGrow: profit }} data-part="profit" />
+      </div>
+      <div className={styles.splitKey} aria-hidden>
+        <span data-part="out">Money out {out}%</span>
+        <span data-part="profit">Profit {profit}%</span>
+      </div>
+    </>
+  );
+}
+
 /* ===== Status ===== */
 
 const STATUS_GLYPH: Readonly<Record<RiskStatus, React.ReactNode>> = {

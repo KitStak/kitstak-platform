@@ -12,11 +12,15 @@ import type { FaqItem } from '../product/cta';
 import type { IntegrationGroup } from '../product/integrations';
 import type { HeroFact } from '../product/product-hero';
 import type { SubNavSection } from '../product/sub-nav';
+import { BRIDGE_LABELS } from './pulse-visual-data';
 
 /* Lists the counts come from */
 
 /** The four money out buckets (SPEC 4.1). */
 export const MONEY_OUT: readonly string[] = ['Labor', 'Materials', 'Other costs', 'Time not on a job'];
+
+/** The four cuts of profit the page leads with (SPEC 6, /profit). The product also cuts by site and time. */
+export const PROFIT_CUTS: readonly string[] = ['job', 'job type', 'client', 'extra service'];
 
 /** The five status words, the same in every KitStak app (SPEC 4.14). */
 export const STATUSES: readonly string[] = [
@@ -109,30 +113,34 @@ export const META = {
 export const HERO = {
   product: 'KitStak Pulse',
   lines: ['Know which', 'jobs make', 'money.'],
-  lead: 'KitStak Pulse shows the profit on every job, job type, client and extra service. Log what got done each day. Pulse works out what the work earned and what it really cost. Then it tells you which open jobs are at risk or losing money, and why. Built for kitting, 3PL (warehouses that ship for other companies) and contract packaging shops.',
+  lead: 'For kitting, 3PL and contract packaging shops. Log units and hours each day. Pulse shows the profit on every job, job type, client and extra service. It tells you which open jobs are losing money, and why.',
   primaryLabel: 'Start with Pulse',
   secondaryLabel: 'Book a walkthrough',
 } as const;
 
+/** Four facts a buyer cares about. The counts of CSV files and reports stay on the CSV chapter. */
 export const HERO_FACTS: readonly HeroFact[] = [
-  { value: String(MONEY_OUT.length), label: 'kinds of cost in every profit number' },
+  {
+    value: String(PROFIT_CUTS.length),
+    label: `ways to see profit: ${PROFIT_CUTS.slice(0, -1).join(', ')}, ${PROFIT_CUTS.at(-1)}`,
+  },
+  { value: '1', label: 'grid to log the whole day' },
   { value: String(STATUSES.length), label: 'plain statuses for every open job' },
-  { value: String(CSV_STREAMS.length), label: 'kinds of data in and out by CSV' },
-  { value: String(REPORTS.length), label: 'ready made reports' },
+  { value: '0', label: 'other apps needed to run it' },
 ];
 
+/**
+ * The sticky sub navigation: the nine stops a buyer jumps to. Every chapter still has its own id.
+ * "Connects" is the bundle band, which carries the links to the other KitStak apps.
+ */
 export const SECTIONS: readonly SubNavSection[] = [
   { id: 'problem', label: 'The problem' },
-  { id: 'answer', label: 'The answer' },
+  { id: 'answer', label: 'The math' },
   { id: 'profit', label: 'Profit' },
   { id: 'log', label: 'Log work' },
   { id: 'plan', label: 'Quote vs actual' },
-  { id: 'costs', label: 'Real costs' },
   { id: 'risk', label: 'At risk' },
-  { id: 'csv', label: 'CSV' },
-  { id: 'proof', label: 'Show the math' },
-  { id: 'stack', label: 'Connects' },
-  { id: 'together', label: 'Bundle' },
+  { id: 'together', label: 'Connects' },
   { id: 'pricing', label: 'Pricing' },
   { id: 'faq', label: 'FAQ' },
 ];
@@ -147,6 +155,10 @@ interface ChapterCopy {
   readonly lead: string;
 }
 
+/**
+ * In page order. The proof ("Every number shows its work") comes early, right after the first
+ * profit screens. The plumbing (CSV) comes last, and the other apps follow in the bundle band.
+ */
 export const CHAPTERS = {
   problem: {
     id: 'problem',
@@ -158,9 +170,9 @@ export const CHAPTERS = {
   answer: {
     id: 'answer',
     index: '02',
-    label: 'The answer',
+    label: 'The math',
     title: 'Money in. Money out. Profit.',
-    lead: 'Pulse answers one question for every job, client and service: are we making money, and if not, why? You log units, people and hours each day. Pulse does the sums and shows them to you.',
+    lead: 'Pulse answers one question for every job, client and service: are we making money, and if not, why? You log units, people and hours. Pulse does the sums and shows them.',
   },
   profit: {
     id: 'profit',
@@ -169,188 +181,166 @@ export const CHAPTERS = {
     title: 'Profit, cut four ways.',
     lead: 'See profit and margin by job, job type, client and extra service (value added services). Rank them best to worst. Then click down to the days behind any number.',
   },
+  proof: {
+    id: 'proof',
+    index: '04',
+    label: 'Show the math',
+    title: 'Every number shows its work.',
+    lead: 'Open any money figure, margin or status. Pulse shows the formula in words, the same formula with your figures, and a link to the rows behind it.',
+  },
   log: {
     id: 'log',
-    index: '04',
+    index: '05',
     label: 'Daily production entry',
     title: 'The whole day in one grid.',
-    lead: 'Profit starts with what happened on the floor. Log work is one row for each active job: units, people and hours. A floor lead can type the whole day at the end of a shift.',
+    lead: 'Log work is one row for each active job: units, people and hours. A floor lead can type the whole day at the end of a shift.',
   },
   plan: {
     id: 'plan',
-    index: '05',
+    index: '06',
     label: 'Quote vs actual',
     title: 'Quote. Budget. Actual.',
-    lead: 'The quote is what you told the client. The budget is what you think it will cost you. Actual is what happened. Pulse puts them side by side and shows where the gap came from.',
+    lead: 'The quote is what you told the client. The budget is what you think it will cost you. Actual is what happened. Pulse shows where the gap came from.',
   },
   costs: {
     id: 'costs',
-    index: '06',
+    index: '07',
     label: 'Labor rate and material cost',
     title: 'What an hour really costs.',
-    lead: 'The wage is only part of it. The real cost of an hour is the wage, plus payroll taxes and benefits, plus overhead per hour. Pulse builds that rate with you. It also costs the materials you pay for.',
+    lead: 'The real cost of an hour is the wage, plus payroll taxes and benefits, plus overhead per hour. Pulse builds that rate with you. It also costs the materials you pay for.',
   },
   risk: {
     id: 'risk',
-    index: '07',
+    index: '08',
     label: 'At risk and losing money',
     title: 'Catch it before it ends.',
-    lead: 'Pulse watches every open job and gives it one of five statuses. Each status comes with the reason in a sentence, the dollar impact and a next step.',
+    lead: 'Pulse gives every open job one of five statuses, with the reason in a sentence and a next step. When money is at stake, it says how much.',
   },
   csv: {
     id: 'csv',
-    index: '08',
+    index: '09',
     label: 'CSV import and export',
     title: 'Your data in. Your data out.',
-    lead: `Pulse reads and writes CSV for ${CSV_STREAMS.length} kinds of data, from clients and jobs to production, rates and costs. You do it yourself, and you see a full check before anything is saved.`,
-  },
-  proof: {
-    id: 'proof',
-    index: '09',
-    label: 'Show the math',
-    title: 'Every number shows its work.',
-    lead: 'Open any money figure, margin or status in Pulse. It tells you how it was worked out: the formula in words, the same formula with your figures, and a link to the rows behind it.',
-  },
-  stack: {
-    id: 'stack',
-    index: '10',
-    label: 'With the other KitStak apps',
-    title: 'It knows the rest of the stack.',
-    lead: 'Run Pulse beside KitStak CRM, WMS and Projects and it pulls in what they know. Won deals become jobs in one step. Units come from the warehouse. Project time can count as labor hours. Those apps show Pulse numbers on their own screens too. Pulse never changes your CRM or WMS data.',
+    lead: `Pulse reads and writes CSV for ${CSV_STREAMS.length} kinds of data, from clients and jobs to rates and costs. You do it yourself, and you see a full check before anything is saved.`,
   },
 } as const satisfies Readonly<Record<string, ChapterCopy>>;
+
+/* Feature lists. Four rows at most in each one: the page is a pitch, not a manual. */
 
 export const PROBLEM_TILES: readonly Feature[] = [
   {
     name: 'The busy month that made no money',
-    note: 'The floor ran flat out and the bank balance did not move. With no profit by job, you cannot tell which work to blame.',
-  },
-  {
-    name: 'The job quoted from memory',
-    note: 'You priced this job from how the last one felt. Nobody checked what the last one really cost.',
+    note: 'The floor ran flat out and the bank balance did not move. Without profit by job, you cannot tell which work to blame.',
   },
   {
     name: 'The wage is not the cost',
-    note: 'An hour costs more than the wage. Payroll taxes, benefits and overhead ride on top. A sheet with only the wage leaves them out.',
-  },
-  {
-    name: 'The good client with a bad job',
-    note: 'A client can look fine in total while one of their jobs loses money every day it runs.',
-  },
-  {
-    name: 'Paid time that is on no job',
-    note: 'Meetings, cleanup and waiting are paid too. If no job carries that time, every job looks better than it is.',
+    note: 'An hour costs more than the wage. Payroll taxes, benefits and overhead ride on top.',
   },
   {
     name: 'The surprise at the end',
-    note: 'A job can look fine until the last unit ships. Then the numbers come in, and it is too late to change the crew or the price.',
+    note: 'A job can look fine until the last unit ships. By then it is too late to change the crew or the price.',
   },
 ];
 
 export const ANSWER_FEATURES: readonly Feature[] = [
   {
     name: 'Money in',
-    note: 'What the client pays: the price per unit times the units finished, plus any extra services and other fees.',
+    note: 'What the client pays: price per unit times units finished, plus extra services and other fees.',
   },
-  { name: 'Labor', note: 'Hours times what an hour really costs you, not just the wage.' },
-  { name: 'Materials', note: 'The parts and supplies you pay for. Parts the client owns cost you nothing.' },
-  { name: 'Other costs', note: 'Freight, packaging and outside help.' },
   {
-    name: 'Time not on a job',
-    note: 'Meetings, cleanup and waiting, spread across the jobs that ran that week.',
+    name: 'Money out',
+    note: 'Labor at what an hour really costs. Materials you pay for. Other costs like freight. And time not on a job.',
   },
   {
     name: 'Profit and margin',
     note: 'Profit is money in minus money out. Margin is profit as a share of money in.',
   },
+  {
+    name: 'Same day numbers',
+    note: 'Save an entry and the profit updates. There is no nightly run to wait for.',
+  },
 ];
 
 export const PROFIT_FEATURES: readonly Feature[] = [
   {
-    name: 'By job',
-    note: 'Money in, money out, profit and margin for each job. You also see units done against units planned, and cost per unit against what it should cost.',
+    name: 'By job and job type',
+    note: 'Money in, money out, profit and margin for each job. Roll jobs up by type to see which work pays best.',
   },
-  { name: 'By job type', note: 'See which kinds of work pay best, and which ones cost you.' },
   {
     name: 'By client',
-    note: 'The profit trend, what it costs you to serve the client per unit and per job, and what is earned, billed and not billed yet.',
+    note: 'The profit trend, the cost to serve, and what is earned, billed and not billed yet.',
   },
   {
     name: 'By extra service',
-    note: 'Each service in your catalog gets money in per unit, cost per unit, margin and the clients who use it.',
+    note: 'Money in per unit, cost per unit and margin for each service in your catalog.',
   },
   {
     name: 'Drill down that adds up',
-    note: 'Click a client to see its jobs. Click a job to see its daily entries. Totals always match the level above.',
+    note: 'Click a client to see its jobs. Click a job to see its days. Totals always match the level above.',
+  },
+];
+
+export const PROOF_FEATURES: readonly Feature[] = [
+  {
+    name: 'How we got this',
+    note: 'For example: "Labor cost $4,212.00 = 162.0 labor hours x $26.00 an hour. See 14 entries."',
   },
   {
-    name: 'By site and by time',
-    note: 'Compare sites, months, weeks or days, against the period before or against the plan.',
+    name: 'Honest about gaps',
+    note: 'A number that is not complete says so, with a line like "2 days have no hours" or "Early guess".',
+  },
+  {
+    name: 'Job profit and company profit',
+    note: 'Two numbers. The company also pays for rent, salaried staff and paid hours nobody logged. Pulse shows the walk between them.',
+  },
+  {
+    name: 'Month close',
+    note: 'Close a month and its rows lock. Opening it again needs a reason, and that is logged.',
   },
 ];
 
 export const LOG_FEATURES: readonly Feature[] = [
   {
     name: 'Units, people, hours',
-    note: 'Type good units, scrap and rework, then the number of people and the hours each. Pulse works out the labor hours.',
-  },
-  {
-    name: 'Crew lines',
-    note: "Open a row to split the crew by labor class, like packers, temps and a lead. Copy yesterday's crew in one step.",
-  },
-  {
-    name: 'Keyboard first',
-    note: 'Tab and Enter move through the grid. Paste rows from a spreadsheet. Each row saves itself, and you can undo.',
+    note: 'Type good units, scrap and rework, then people and hours each. Pulse works out the labor hours.',
   },
   {
     name: 'A check, not a block',
-    note: 'If the hours look wrong, Pulse asks. For example: "12 people for 8 hours is 96 labor hours. You typed 9.6. Is that right?"',
+    note: 'If the hours look wrong, Pulse asks: "12 people for 8 hours is 96 labor hours. You typed 9.6. Is that right?"',
   },
   {
     name: 'Review the day',
-    note: 'Mark the day complete. A manager sees the odd rows flagged, then approves the day or sends it back with a note.',
+    note: 'Mark the day complete. A manager approves it or sends it back with a note.',
   },
   {
     name: 'Floor tablet',
-    note: 'A shared tablet with a 4 digit PIN and a number pad. It never shows money. If the wifi drops, entries wait and send later.',
-  },
-  {
-    name: 'Hours from a file',
-    note: 'Bring in hours from a time clock or payroll file, by person, day and job.',
+    note: 'A shared tablet with a 4 digit PIN. It never shows money. If the wifi drops, entries wait and send later.',
   },
 ];
 
 export const PLAN_FEATURES: readonly Feature[] = [
   {
     name: 'Plan vs actual',
-    note: 'Units, labor hours, pace, each cost, money in, profit and margin. You see the plan, the actual, the difference and where the job is heading.',
-  },
-  {
-    name: 'Fair to a half done job',
-    note: 'For an open job, the plan is scaled to the units finished so far. Switch to the whole job any time.',
+    note: 'Hours, costs, money in, profit and margin. For an open job, the plan is scaled to the units finished so far.',
   },
   {
     name: 'Why profit changed',
-    note: 'One chart splits the gap into price, labor rate, labor efficiency, scrap, material, time not on a job and other. The bars always add up.',
-  },
-  {
-    name: 'A plain reading on every bar',
-    note: 'For example: "Labor efficiency: the crew needed 25 more hours than planned for this many units. That cost $550."',
+    note: 'One chart splits the gap into price, labor rate, labor efficiency, scrap, material and more. The bars always add up.',
   },
   {
     name: 'Projected finish',
-    note: 'For an open job with planned units, Pulse projects profit, margin, labor hours and a finish date from your recent pace. It says what it assumed.',
+    note: 'For an open job with planned units, Pulse projects profit, margin and a finish date from your recent pace.',
   },
   {
     name: 'Quote calculator',
-    note: 'Price the next job from your real costs. See the cost per unit, the price for your target margin and the lowest price worth taking.',
+    note: 'Price the next job from your real costs. See the price for your target margin and the lowest price worth taking.',
   },
 ];
 
 export const COST_FEATURES: readonly Feature[] = [
   {
     name: 'Rate builder',
-    note: 'Set the wage, payroll taxes, benefits and overhead for each labor class. In the sample, a packer on a $16.00 wage really costs $21.76 an hour.',
+    note: 'Set the wage, payroll taxes, benefits and overhead for each labor class. In the sample, a $16.00 wage really costs $21.76 an hour.',
   },
   {
     name: 'Rates with start dates',
@@ -361,20 +351,8 @@ export const COST_FEATURES: readonly Feature[] = [
     note: 'Overtime has its own rate. Temp agency classes use the agency bill rate.',
   },
   {
-    name: 'See it before you save',
-    note: 'Any rate change shows how many entries and jobs it touches, and what it does to profit.',
-  },
-  {
     name: 'Who buys the parts',
     note: 'When the client owns the parts, they cost you nothing. Pulse still counts what was used and scrapped.',
-  },
-  {
-    name: 'Material and scrap',
-    note: 'Use one material cost per unit, or log what each job really used. Scrap of your own parts is costed apart.',
-  },
-  {
-    name: 'Wages stay private',
-    note: 'Managers see the real cost of an hour, never the wage.',
   },
 ];
 
@@ -389,23 +367,11 @@ export const RISK_FEATURES: readonly Feature[] = [
   },
   {
     name: 'Worst first',
-    note: 'The open jobs list starts with the job that needs you most, with margin so far and projected margin on each row.',
+    note: 'The list starts with the job that needs you most, with margin so far and projected margin on each row.',
   },
   {
-    name: 'No false alarm on day one',
-    note: 'A job is only called Losing money after 2 days of data, or once it is 20% done.',
-  },
-  {
-    name: 'Alerts inbox',
-    note: 'Each alert says what happened, the money impact and the next step. Snooze it, assign it or dismiss it. It closes itself when the problem clears.',
-  },
-  {
-    name: 'Rules you can tune',
-    note: 'Twelve alert rules come ready. Tune them or turn them off. Change a risk limit in Settings and see how many jobs it would flag before you save.',
-  },
-  {
-    name: 'Things to fix',
-    note: 'A list of gaps that make a number incomplete, like hours with no rate or days with units and no hours.',
+    name: 'Alerts you can tune',
+    note: 'Each alert says what happened, the money impact and the next step. Twelve rules come ready to tune or turn off.',
   },
 ];
 
@@ -415,20 +381,12 @@ export const CSV_FEATURES: readonly Feature[] = [
     note: 'Every template has a header row, two example rows and a note on how to fill it in.',
   },
   {
-    name: 'Match your columns',
-    note: 'Pulse matches columns by their header names and remembers the match for next time.',
-  },
-  {
     name: 'Check before import',
-    note: 'See what is new, changed, the same or wrong before you save. Each problem is named on its cell, like "Row 14, labor_hours: 9x is not a number."',
+    note: 'See what is new, changed or wrong before you save. Each problem is named on its cell.',
   },
   {
     name: 'No double counting',
-    note: 'A row that looks the same as one already there is skipped unless you say to add it. Pulse warns you if you import the same file twice.',
-  },
-  {
-    name: 'Undo for 7 days',
-    note: 'Take an import back, unless a later edit touched those rows.',
+    note: 'A row that looks the same as one already there is a possible repeat. Pulse skips it unless you say to add it.',
   },
   {
     name: 'Export you can import again',
@@ -436,66 +394,12 @@ export const CSV_FEATURES: readonly Feature[] = [
   },
 ];
 
+/** One chip wall only: the reports. The kinds of data are counted in the chapter lead. */
 export const CSV_WALL: readonly IntegrationGroup[] = [
-  {
-    title: 'Kinds of data, in and out',
-    note: 'Each one has a template, an import with a check step, and an export in the same columns.',
-    names: CSV_STREAMS,
-  },
   {
     title: 'Ready made reports',
     note: 'Each one has filters, a chart, a table, a print view and a CSV export.',
     names: REPORTS,
-  },
-];
-
-export const PROOF_FEATURES: readonly Feature[] = [
-  {
-    name: 'How we got this',
-    note: 'For example: "Labor cost $4,212.00 = 162.0 labor hours x $26.00 an hour. See 14 entries."',
-  },
-  {
-    name: 'Honest about gaps',
-    note: 'When a number is not complete, Pulse says so, with a line like "2 days have no hours" or "Early guess".',
-  },
-  {
-    name: 'Job profit and company profit',
-    note: 'They are two numbers. Jobs carry the costs you put on them. The company also pays for rent, salaried staff and paid time nobody logged. Pulse shows the walk from one to the other.',
-  },
-  {
-    name: 'Right to the cent',
-    note: 'Every total equals the sum of the rows under it.',
-  },
-  {
-    name: 'Month close',
-    note: 'Close a month and its rows lock. Opening it again needs a reason, and that is logged.',
-  },
-  {
-    name: 'Audit log',
-    note: 'A record of who changed what, with the before and the after.',
-  },
-];
-
-export const STACK_FEATURES: readonly Feature[] = [
-  {
-    name: 'Two way',
-    note: 'Pulse pulls data in from the other apps. They show Pulse numbers on their own screens.',
-  },
-  {
-    name: 'Kept in step',
-    note: 'Linked data syncs when you ask, when a linked record changes, and every 15 minutes.',
-  },
-  {
-    name: 'No copies of copies',
-    note: 'Syncing twice never makes a second row. If you edit a pulled value in Pulse, your edit wins.',
-  },
-  {
-    name: 'Money stays private',
-    note: 'The other apps show Pulse money only to people who may see money in Pulse.',
-  },
-  {
-    name: 'Only the apps you run',
-    note: 'If an app is not there, Pulse hides that link and keeps working.',
   },
 ];
 
@@ -543,13 +447,13 @@ export const MATH_BRIDGE = {
   start: { label: 'Profit on jobs', detail: 'What your jobs made', cents: 4_821_000 },
   steps: [
     {
-      label: 'Time not on a job that no job carried',
-      detail: 'Meetings, cleanup and waiting',
+      label: BRIDGE_LABELS[0],
+      detail: 'The part of time not on a job that was not spread across jobs',
       cents: -115_000,
     },
-    { label: 'Paid time not on any job', detail: 'Hours you paid for that nobody logged', cents: -236_000 },
+    { label: BRIDGE_LABELS[1], detail: 'Pulse calls this paid time not on any job', cents: -236_000 },
     {
-      label: 'Overhead your hourly rate did not cover',
+      label: BRIDGE_LABELS[2],
       detail: 'Company costs of $21,000 less the $16,200 your rates covered',
       cents: -480_000,
     },
@@ -567,7 +471,7 @@ export const MATH_BRIDGE = {
 
 export const BUNDLE = {
   title: 'On its own. Or on the stack.',
-  body: 'Pulse does not need any other KitStak app. Buy it alone and bring your data in by typing or by CSV. Add the other apps later and Pulse pulls in what they already know.',
+  body: 'Pulse does not need any other KitStak app. Buy it alone and bring your data in by typing or by CSV. Add the CRM, the WMS or Projects and Pulse pulls in what they know. They show Pulse numbers on their own screens. Pulse never changes your CRM or WMS data.',
   primaryLabel: 'Build the bundle',
   secondaryLabel: 'Start with Pulse alone',
 } as const;
@@ -587,7 +491,7 @@ export const FAQ: readonly FaqItem[] = [
   {
     question: 'What is KitStak Pulse, and who is it for?',
     answer:
-      'Pulse is profit management for shops that work by the job: kitting, 3PL and contract packaging. It shows what each job earned, what it really cost, and the profit by job, job type, client and extra service. Owners and finance or operations leads read the profit. Managers watch their jobs. Floor leads log the day.',
+      'Pulse is profit management for shops that work by the job: kitting, 3PL and contract packaging. A 3PL is a warehouse that ships for other companies. Pulse shows what each job earned, what it really cost, and the profit by job, job type, client and extra service. Owners and finance or operations leads read the profit. Managers watch their jobs. Floor leads log the day.',
   },
   {
     question: 'What do I have to enter each day?',
@@ -602,12 +506,12 @@ export const FAQ: readonly FaqItem[] = [
   {
     question: 'How does Pulse decide a job is at risk or losing money?',
     answer:
-      'It works out where the job will finish, from your recent pace and the plan. It is plain math on your own numbers. A job is At risk when it is heading well under your target margin. It is also At risk when labor is heading well over the plan. It is Losing money when it is heading for a loss. You can change the limits.',
+      'It works out where the job will finish, from your recent pace and the plan. It is plain math on your own numbers. A job is At risk when it is heading well under your target margin. It is also At risk when labor is heading well over the plan. It is Losing money when it is heading for a loss, and only after 2 days of data or once the job is 20% done. You can change the limits.',
   },
   {
     question: 'Why is job profit different from company profit?',
     answer:
-      'They are two numbers. Jobs carry the costs you put on them. The company also pays for rent, salaried staff and paid time nobody logged. Pulse shows both, and the walk from one to the other, line by line.',
+      'They are two numbers. Jobs carry the costs you put on them. The company also pays for rent, salaried staff and paid hours nobody logged. Pulse shows both, and the walk from one to the other, line by line.',
   },
   {
     question: 'Do I need the other KitStak apps?',
@@ -625,12 +529,12 @@ export const FAQ: readonly FaqItem[] = [
   },
   {
     question: 'How do I start?',
-    answer: `You can load sample data and see a job's profit right away, import your spreadsheets, or type your first job. Then a short checklist walks you through it: ${list(FIRST_STEPS)}. The sample data can be cleared when you are done.`,
+    answer: `You can load sample data and see a job's profit right away, import your spreadsheets, or type your first job. Then a short checklist walks you through it: ${list(FIRST_STEPS)}. Pulse is a web app that fits a phone screen, with no app to install.`,
   },
   {
     question: 'What does Pulse not do?',
     answer:
-      'Pulse is not payroll, invoicing or accounting software. It does not pay people, send bills or send email. Alerts and reports stay inside Pulse. It has no time clock of its own and no scorecard for each worker. It is a web app that fits a phone screen, with no app to install. Each job has one kind of unit and one price. It links to the other KitStak apps, and everything else comes in and goes out by CSV.',
+      'Pulse has no time clock of its own. Hours are typed in or come from a file. It does not send bills, and it is not payroll or accounting software. Each job has one kind of unit and one price. It has no scorecard for each worker. It does not send email, so alerts and reports stay inside Pulse. It links to the other KitStak apps only, and everything else comes in and goes out by CSV.',
   },
 ];
 

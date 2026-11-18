@@ -20,17 +20,7 @@
  * Keep screenshots honest: sample data only, straight from the running app, no retouching.
  */
 
-export const PULSE_SHOT_IDS = [
-  'hero',
-  'profit',
-  'log',
-  'plan',
-  'rates',
-  'risk',
-  'csv',
-  'stack',
-  'bundle',
-] as const;
+export const PULSE_SHOT_IDS = ['hero', 'profit', 'log', 'plan', 'rates', 'risk', 'csv', 'stack'] as const;
 
 export type PulseShotId = (typeof PULSE_SHOT_IDS)[number];
 
@@ -127,15 +117,6 @@ export const PULSE_SHOTS: Readonly<Record<PulseShotId, PulseShotSlot>> = {
     capture: 'Settings, Connected apps, with CRM, WMS and Projects connected and a recent sync.',
     alt: 'Connected apps in KitStak Pulse. It shows what comes in from KitStak CRM, WMS and Projects and when each was last synced. Sample data.',
     ...files('connected-apps'),
-    width: 1440,
-    height: 900,
-    ready: false,
-  },
-  bundle: {
-    route: '/welcome',
-    capture: 'The welcome step "How do you want to start?" in a workspace that has the other apps.',
-    alt: 'The first run screen in KitStak Pulse. It offers four ways to start: load sample data, import spreadsheets, connect KitStak apps or type the first job.',
-    ...files('welcome'),
     width: 1440,
     height: 900,
     ready: false,

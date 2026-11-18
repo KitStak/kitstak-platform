@@ -71,7 +71,11 @@ export default function ProductsPage() {
         <StackHero />
         <SubNav current="products" sections={SECTIONS} />
         <Lineup />
-        <Compare visual={<AccountLink />} />
+        <Compare
+          visual={
+            <AccountLink caption="One customer record, shown here in the CRM and the WMS. Projects and Pulse link to it too. Sample data." />
+          }
+        />
 
         <section id="pricing" className="section" aria-labelledby="pricing-heading">
           <span id="bundle" className={styles.anchor} />
@@ -80,8 +84,8 @@ export default function ProductsPage() {
               Bundle and save.
             </h2>
             <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-              Switch the products on, set the size of your operation, and see the price. Then carry it straight into
-              setup.
+              Switch the products on, set the size of your operation, and see the price. Then carry it
+              straight into setup.
             </p>
             <div className={styles.calc} data-reveal>
               <BundleCalculator />

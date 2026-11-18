@@ -29,17 +29,16 @@ import {
   PROOF_FEATURES,
   RISK_FEATURES,
   SECTIONS,
-  STACK_FEATURES,
 } from '@/components/pulse/pulse-content';
 import { PulseBundleSection } from '@/components/pulse/pulse-section-bundle';
 import { BridgeMathVisual, JobMathVisual } from '@/components/pulse/pulse-section-math';
+import section from '@/components/pulse/pulse-section.module.css';
 import {
   CostRatesVisual,
   CsvVisual,
   DailyEntryVisual,
   PlanVsActualVisual,
   ProfitByJobVisual,
-  PulseBundleVisual,
   PulseHeroVisual,
   PulseStackVisual,
   RiskVisual,
@@ -125,11 +124,28 @@ export default function PulsePage() {
 
         <Chapter {...CHAPTERS.profit} features={PROFIT_FEATURES} visual={<ProfitByJobVisual />} isFlipped />
 
-        <Chapter {...CHAPTERS.log} features={LOG_FEATURES} visual={<DailyEntryVisual />} tone="sunken" />
+        {/* The proof sits high on the page, and it is the one full width chapter: heading on top,
+            the worked walk and its four points side by side under it. */}
+        <Chapter {...CHAPTERS.proof} tone="sunken">
+          <div className={section.solo}>
+            <div data-reveal>
+              <BridgeMathVisual />
+            </div>
+            <TileGrid tiles={PROOF_FEATURES} columns={2} />
+          </div>
+        </Chapter>
 
-        <Chapter {...CHAPTERS.plan} features={PLAN_FEATURES} visual={<PlanVsActualVisual />} isFlipped />
+        <Chapter {...CHAPTERS.log} features={LOG_FEATURES} visual={<DailyEntryVisual />} />
 
-        <Chapter {...CHAPTERS.costs} features={COST_FEATURES} visual={<CostRatesVisual />} tone="sunken" />
+        <Chapter
+          {...CHAPTERS.plan}
+          features={PLAN_FEATURES}
+          visual={<PlanVsActualVisual />}
+          tone="sunken"
+          isFlipped
+        />
+
+        <Chapter {...CHAPTERS.costs} features={COST_FEATURES} visual={<CostRatesVisual />} />
 
         <Chapter {...CHAPTERS.risk} features={RISK_FEATURES} visual={<RiskVisual />} tone="brand" isFlipped />
 
@@ -137,17 +153,8 @@ export default function PulsePage() {
           <IntegrationWall groups={CSV_WALL} />
         </Chapter>
 
-        <Chapter
-          {...CHAPTERS.proof}
-          features={PROOF_FEATURES}
-          visual={<BridgeMathVisual />}
-          tone="sunken"
-          isFlipped
-        />
-
-        <Chapter {...CHAPTERS.stack} features={STACK_FEATURES} visual={<PulseStackVisual />} />
-
-        <PulseBundleSection visual={<PulseBundleVisual />} />
+        {/* The links to the other apps live in the bundle band, the way the sibling pages sell the stack. */}
+        <PulseBundleSection visual={<PulseStackVisual />} />
 
         <PriceBand product="pulse" included={PRICE_INCLUDED} />
         <Faq items={FAQ} title={FAQ_TITLE} />

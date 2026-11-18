@@ -12,7 +12,7 @@ interface PulseBundleSectionProps {
 /**
  * "Works on its own or as a bundle". The same navy band as `BundleBand` (it reuses that band's
  * styles), but it sells two paths instead of one cross-sell, because Pulse stands alone and
- * also links to every other app. The two paths are spelled out in the visual beside the copy.
+ * also links to every other app. The visual beside the copy shows what each link carries.
  */
 export function PulseBundleSection({ visual }: PulseBundleSectionProps) {
   return (

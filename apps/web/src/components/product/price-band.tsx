@@ -1,5 +1,11 @@
 import Link from 'next/link';
-import { PRICING, PRICING_IS_PLACEHOLDER, formatUsd, percentLabel, unconfirmedPriceNote } from '@/lib/pricing';
+import {
+  PRICING,
+  PRICING_IS_PLACEHOLDER,
+  formatUsd,
+  percentLabel,
+  unconfirmedPriceNote,
+} from '@/lib/pricing';
 import type { ProductId } from '@/lib/pricing';
 import { ROUTES, START_NAME, getStartedHref } from '../site-links';
 import styles from './price-band.module.css';
@@ -13,15 +19,18 @@ interface PriceBandProps {
 export function PriceBand({ product, included }: PriceBandProps) {
   const price = PRICING[product];
   const notFinal = unconfirmedPriceNote([product]);
+  // An unconfirmed price carries one note, beside the figure, and a heading that does not lean on it.
+  const title = notFinal ? 'The whole product. One plan.' : 'One price. Everything in it.';
   return (
     <section id="pricing" className={`section ${styles.band}`} aria-labelledby="pricing-heading">
       <div className={`container ${styles.grid}`}>
         <div>
           <h2 id="pricing-heading" className="h2" data-reveal>
-            One price. Everything in it.
+            {title}
           </h2>
           <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-            You get the whole product, not a starter tier. And it costs less when you run it alongside the others.
+            You get the whole product, not a starter tier. And it costs less when you run it alongside the
+            others.
           </p>
           <ul className={styles.included}>
             {included.map((item, i) => (
@@ -47,16 +56,24 @@ export function PriceBand({ product, included }: PriceBandProps) {
           </p>
           {notFinal ? <p className={styles.notFinal}>{notFinal}</p> : null}
           <p className={styles.bundleLine}>
-            <strong>{percentLabel(PRICING.bundleDiscount)} off</strong> each product when you stack two or more, and{' '}
-            {percentLabel(PRICING.annualDiscount)} off again billed yearly.
+            <strong>{percentLabel(PRICING.bundleDiscount)} off</strong> each product when you stack two or
+            more, and {percentLabel(PRICING.annualDiscount)} off again billed yearly.
           </p>
           <Link href={getStartedHref(product)} className="btn btn-primary btn-lg btn-block">
-            Start with {START_NAME[product]} <span className="btn-arrow" aria-hidden>→</span>
+            Start with {START_NAME[product]}{' '}
+            <span className="btn-arrow" aria-hidden>
+              →
+            </span>
           </Link>
           <Link href={ROUTES.pricing} className={`text-link ${styles.calc}`}>
-            Price your stack <span className="btn-arrow" aria-hidden>→</span>
+            Price your stack{' '}
+            <span className="btn-arrow" aria-hidden>
+              →
+            </span>
           </Link>
-          {PRICING_IS_PLACEHOLDER ? <p className={styles.fine}>Preliminary pricing, shown for planning.</p> : null}
+          {PRICING_IS_PLACEHOLDER && !notFinal ? (
+            <p className={styles.fine}>Preliminary pricing, shown for planning.</p>
+          ) : null}
         </div>
       </div>
     </section>

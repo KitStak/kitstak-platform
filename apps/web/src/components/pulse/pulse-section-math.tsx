@@ -1,6 +1,8 @@
 import mock from '../mock/mock.module.css';
 import { MATH_BRIDGE, MATH_JOB, usd } from './pulse-content';
 import styles from './pulse-section.module.css';
+import { splitOf } from './pulse-visual-data';
+import { SplitBar } from './pulse-visual-parts';
 
 const AT_RISK_TONE = {
   '--tone-subtle': 'var(--label-orange-subtle)',
@@ -20,6 +22,7 @@ export function JobMathVisual() {
   const totalOut = sum(MATH_JOB.moneyOut);
   const profit = MATH_JOB.moneyIn.cents - totalOut;
   const margin = ((profit / MATH_JOB.moneyIn.cents) * 100).toFixed(1);
+  const split = splitOf(MATH_JOB.moneyIn.cents, totalOut);
 
   return (
     <div className={mock.panel} data-lifted>
@@ -77,6 +80,7 @@ export function JobMathVisual() {
           </tr>
         </tfoot>
       </table>
+      <SplitBar out={split.out} profit={split.profit} what="profit so far" />
 
       <div className={styles.verdict}>
         <span className={mock.pill} style={AT_RISK_TONE}>
@@ -93,8 +97,9 @@ export function JobMathVisual() {
           {MATH_JOB.status}
         </span>
         <p>
-          <strong>{MATH_JOB.reason}</strong> At this pace the job ends with{' '}
-          {usd(MATH_JOB.projectedProfitCents)} of profit. The budget was {usd(MATH_JOB.budgetProfitCents)}.
+          <strong>{MATH_JOB.reason}</strong> At this pace the whole job ends with{' '}
+          {usd(MATH_JOB.projectedProfitCents)} of profit. The budget for the whole job was{' '}
+          {usd(MATH_JOB.budgetProfitCents)}.
         </p>
       </div>
 

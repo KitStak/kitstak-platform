@@ -36,22 +36,23 @@ import {
   paceOf,
   percent,
   signedMoney,
+  splitOf,
+  type OpenJob,
   type PlanLine,
 } from './pulse-visual-data';
-import { JobName, PortalIcon, PulseIcon, PulseLoader, PulseWordmark, StatusPill } from './pulse-visual-parts';
+import { JobName, PortalIcon, PulseLoader, PulseWordmark, SplitBar, StatusPill } from './pulse-visual-parts';
 import { ProfitExplorer } from './pulse-visual-profit';
 import styles from './pulse-visuals.module.css';
 
 /*
- * The nine visuals of the Pulse page. Each one is a small coded piece of the real screen with sample
+ * The eight visuals of the Pulse page. Each one is a small coded piece of the real screen with sample
  * data, wrapped in a PulseShot slot. When a slot is marked ready in pulse-shots.ts the real product
  * screenshot takes its place.
  */
 
 /* ===== Hero: Home ===== */
 
-const OUT_SHARE = Math.round((MONTH.moneyOut / MONTH.moneyIn) * 100);
-const PROFIT_SHARE = 100 - OUT_SHARE;
+const MONTH_SPLIT = splitOf(MONTH.moneyIn, MONTH.moneyOut);
 
 const HOME_TILES = [
   { label: 'Money in', value: money(MONTH.moneyIn) },
@@ -85,18 +86,7 @@ export function PulseHeroVisual() {
           ))}
         </dl>
 
-        <div
-          className={styles.splitBar}
-          role="img"
-          aria-label={`Of every dollar that came in, ${OUT_SHARE} cents went out and ${PROFIT_SHARE} cents stayed as profit on jobs.`}
-        >
-          <span style={{ flexGrow: OUT_SHARE }} data-part="out" />
-          <span style={{ flexGrow: PROFIT_SHARE }} data-part="profit" />
-        </div>
-        <div className={styles.splitKey} aria-hidden>
-          <span data-part="out">Money out {OUT_SHARE}%</span>
-          <span data-part="profit">Profit {PROFIT_SHARE}%</span>
-        </div>
+        <SplitBar out={MONTH_SPLIT.out} profit={MONTH_SPLIT.profit} what="profit on jobs" />
 
         <div className={styles.groupLabel} aria-hidden>
           Jobs that need you · worst {NEEDS_YOU.length} of {NEEDS_YOU_COUNT}
@@ -321,6 +311,9 @@ export function PlanVsActualVisual() {
             </tr>
           </tfoot>
         </table>
+        <p className={styles.tableNote}>
+          Other costs are planned in full from the start, so they are not scaled to the units done.
+        </p>
 
         <div className={styles.groupLabel} aria-hidden>
           Why profit changed
@@ -444,7 +437,9 @@ export function CostRatesVisual() {
               <tr>
                 <th scope="row">
                   You buy them
-                  <span className={styles.partDetail}>{moneyCents(MATERIAL.unitCost)} a unit</span>
+                  <span className={styles.partDetail}>
+                    {count(usedUnits)} units used × {moneyCents(MATERIAL.unitCost)}
+                  </span>
                 </th>
                 <td className={styles.wideOnly}>{count(usedUnits)}</td>
                 <td>
@@ -480,7 +475,7 @@ export function RiskVisual() {
         <div className={`${mock.head} ${styles.head}`}>
           <div>
             <div className={mock.title}>Open jobs</div>
-            <div className={mock.sub}>Worst first · sample data</div>
+            <div className={mock.sub}>One job of each status · sample data</div>
           </div>
         </div>
 
@@ -492,7 +487,7 @@ export function RiskVisual() {
           ))}
         </ul>
 
-        <ol className={styles.jobList} aria-label="Open jobs, worst first">
+        <ol className={styles.jobList} aria-label="One open job of each status, worst first">
           {OPEN_JOBS.map((job) => (
             <li key={job.code}>
               <div className={styles.jobLine}>
@@ -500,16 +495,41 @@ export function RiskVisual() {
                 <StatusPill status={job.status} />
               </div>
               <p className={styles.reason}>{job.reason}</p>
-              {job.nextStep ? (
-                <p className={styles.nextStep}>
-                  <span>Next step</span> {job.nextStep}
-                </p>
-              ) : null}
+              <JobFacts job={job} />
             </li>
           ))}
         </ol>
       </div>
     </PulseShot>
+  );
+}
+
+/** Margin so far, projected margin and the money at stake for one open job, then its next step. */
+function JobFacts({ job }: { readonly job: OpenJob }) {
+  return (
+    <>
+      <dl className={styles.jobFacts}>
+        <div>
+          <dt>Margin so far</dt>
+          <dd>{job.margin ? percent(job.margin.soFar) : 'Not complete yet'}</dd>
+        </div>
+        <div>
+          <dt>Projected margin</dt>
+          <dd>{job.margin ? percent(job.margin.projected) : 'Not complete yet'}</dd>
+        </div>
+        {job.impact ? (
+          <div data-tone="bad">
+            <dt>Impact</dt>
+            <dd>{job.impact}</dd>
+          </div>
+        ) : null}
+      </dl>
+      {job.nextStep ? (
+        <p className={styles.nextStep}>
+          <span>Next step</span> {job.nextStep}
+        </p>
+      ) : null}
+    </>
   );
 }
 
@@ -535,7 +555,7 @@ const LINKS_BY_APP = [
   {
     id: 'wms',
     name: 'KitStak WMS',
-    into: 'Work orders become jobs. Finished kits and parts used come in. A person adds the hours.',
+    into: 'Work orders become jobs. Finished kits come in as units. A person adds the hours.',
     back: 'A Job profit card on the work order.',
   },
   {
@@ -547,7 +567,8 @@ const LINKS_BY_APP = [
   {
     id: 'portal',
     name: 'KitStak Portal',
-    into: 'Billing and setup steps for Pulse live in Portal.',
+    intoLabel: 'Lives in Portal',
+    into: 'Billing and the setup steps for Pulse.',
     back: 'A Pulse tile with open jobs, jobs at risk and jobs losing money.',
   },
 ] as const;
@@ -575,7 +596,13 @@ export function PulseStackVisual() {
               <dl className={styles.linkFlow}>
                 <div>
                   <dt>
-                    <Arrow direction="in" /> Into Pulse
+                    {'intoLabel' in link ? (
+                      link.intoLabel
+                    ) : (
+                      <>
+                        <Arrow direction="in" /> Into Pulse
+                      </>
+                    )}
                   </dt>
                   <dd>{link.into}</dd>
                 </div>
@@ -590,69 +617,8 @@ export function PulseStackVisual() {
           ))}
         </ul>
         <p className={mock.caption}>
-          One sign-in and one app switcher cover every app. Pulse copies what it needs and never changes your
-          CRM or WMS data. Take any app away and Pulse keeps working.
+          One sign-in covers every app. Take any app away and Pulse keeps working.
         </p>
-      </div>
-    </PulseShot>
-  );
-}
-
-/* ===== On its own or in the bundle ===== */
-
-const ALONE_POINTS = [
-  'Type the work in, or import a CSV file',
-  'Every screen works with no other app',
-  'Export everything any time',
-] as const;
-
-const BUNDLE_POINTS = [
-  'Jobs start from won deals in the CRM',
-  'Units and parts used come from the WMS',
-  'Project time counts as labor hours',
-  'Job profit shows inside the other apps',
-] as const;
-
-/** Two ways to run Pulse: by itself with CSV in and out, or linked to the other KitStak apps. */
-export function PulseBundleVisual() {
-  return (
-    <PulseShot slot="bundle">
-      <div className={styles.modes}>
-        <div className={`${mock.panel} ${styles.frame}`}>
-          <div className={styles.modeHead}>
-            <span className={styles.modeIcons}>
-              <PulseIcon size={36} />
-            </span>
-            <span className={mock.title}>Pulse on its own</span>
-          </div>
-          <ul className={styles.points}>
-            {ALONE_POINTS.map((point) => (
-              <li key={point}>
-                <Tick /> {point}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className={`${mock.panel} ${styles.frame}`} data-lifted>
-          <div className={styles.modeHead}>
-            <span className={styles.modeIcons}>
-              <PulseIcon size={36} />
-              <PortalIcon size={36} />
-              <AppIcon app="crm" size={36} />
-              <AppIcon app="wms" size={36} />
-              <AppIcon app="projects" size={36} />
-            </span>
-            <span className={mock.title}>Pulse in the bundle</span>
-          </div>
-          <ul className={styles.points}>
-            {BUNDLE_POINTS.map((point) => (
-              <li key={point}>
-                <Tick /> {point}
-              </li>
-            ))}
-          </ul>
-        </div>
       </div>
     </PulseShot>
   );

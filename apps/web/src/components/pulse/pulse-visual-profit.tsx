@@ -11,10 +11,11 @@ import {
   marginOf,
   money,
   percent,
+  splitOf,
   totalOf,
   type ProfitViewId,
 } from './pulse-visual-data';
-import { JobName } from './pulse-visual-parts';
+import { JobName, SplitBar } from './pulse-visual-parts';
 import styles from './pulse-visuals.module.css';
 
 /**
@@ -22,6 +23,8 @@ import styles from './pulse-visuals.module.css';
  * the same total. As in the product, the Company row under the table opens the walk from profit on jobs
  * to company profit (SPEC 6, /profit). The product also has tabs for site, month, week and day.
  */
+const MONTH_SPLIT = splitOf(MONTH.moneyIn, MONTH.moneyOut);
+
 export function ProfitExplorer() {
   const [tab, setTab] = useState<ProfitViewId>('job');
   const [hasSwitched, setHasSwitched] = useState(false);
@@ -41,6 +44,8 @@ export function ProfitExplorer() {
           <span className={`numeral ${styles.headValue}`}>{money(MONTH.profit)}</span>
         </div>
       </div>
+
+      <SplitBar out={MONTH_SPLIT.out} profit={MONTH_SPLIT.profit} what="profit on jobs" />
 
       <div className={`${mock.tabs} ${styles.profitTabs}`} role="group" aria-label="Show profit by">
         {PROFIT_VIEWS.map((item) => (
@@ -63,6 +68,10 @@ export function ProfitExplorer() {
       <div id={panelId} className={hasSwitched ? styles.profitPanel : undefined} key={tab}>
         <ProfitTable viewId={tab} />
       </div>
+      <p className={styles.rankKey}>
+        <span data-part="profit">Bar length is profit, against the best row</span>
+        <span data-part="loss">A striped red bar is a loss</span>
+      </p>
 
       <div className={styles.companyRow}>
         <button

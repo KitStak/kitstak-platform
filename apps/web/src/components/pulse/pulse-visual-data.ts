@@ -155,11 +155,34 @@ export function totalOf(rows: readonly ProfitRow[]): ProfitTotal {
 /** The month on jobs: money in $155,516, money out $107,306, profit $48,210, a 31% margin. */
 export const MONTH: ProfitTotal = totalOf(PROFIT_VIEWS[0]!.rows);
 
+/**
+ * The page's signature picture: of every dollar that came in, how many cents went out and how many
+ * stayed as profit. Whole percents that always add up to 100.
+ */
+export function splitOf(
+  moneyIn: number,
+  moneyOut: number,
+): { readonly out: number; readonly profit: number } {
+  const out = Math.round((moneyOut / moneyIn) * 100);
+  return { out, profit: 100 - out };
+}
+
+/**
+ * The three steps between job profit and company profit, in plain words. In the product they read
+ * "Time not on a job that no job carried", "Paid time not on any job" and "Overhead your hourly rate
+ * did not cover" (SPEC 4.9). The first two sound alike out of context, so the page says what each is.
+ */
+export const BRIDGE_LABELS = [
+  'Meetings, cleanup and waiting that no job carried',
+  'Paid hours nobody logged',
+  'Overhead your hourly rate did not cover',
+] as const;
+
 /** The walk from profit on jobs to what the company made (SPEC 4.9). */
 export const BRIDGE_STEPS: readonly { readonly label: string; readonly amount: number }[] = [
-  { label: 'Time not on a job that no job carried', amount: -1150 },
-  { label: 'Paid time not on any job', amount: -2360 },
-  { label: 'Overhead your hourly rate did not cover', amount: -4800 },
+  { label: BRIDGE_LABELS[0], amount: -1150 },
+  { label: BRIDGE_LABELS[1], amount: -2360 },
+  { label: BRIDGE_LABELS[2], amount: -4800 },
 ];
 export const COMPANY_PROFIT = BRIDGE_STEPS.reduce((sum, step) => sum + step.amount, MONTH.profit);
 
@@ -172,7 +195,20 @@ export interface OpenJob {
   /** The reason in a sentence, in the product's own wording. */
   readonly reason: string;
   readonly nextStep?: string;
+  /** Margin so far and projected margin, in percent. Left out while the job's profit is not complete. */
+  readonly margin?: { readonly soFar: number; readonly projected: number };
+  /** The dollar impact, when money is at stake (SPEC 4.14). */
+  readonly impact?: string;
 }
+
+/*
+ * The margins and impacts below follow the spec's rules (SPEC 4.14).
+ * J-1012: the month in the Profit table is the job so far, $6,600 in and a $1,320 loss, so -20.0%. At
+ *   this pace it ends $1,840 in the red on $9,200, the same -20.0%.
+ * J-1023: heading for 14% on $16,000 at finish. A 30% target would be $4,800 and the job is heading
+ *   for $2,240, so the impact is $2,560.
+ * J-1005: $18,600 in and $7,626 of profit so far, 41.0%.
+ */
 
 /** One open job for each status, worst first, the way the Jobs list sorts them. */
 export const OPEN_JOBS: readonly OpenJob[] = [
@@ -180,9 +216,10 @@ export const OPEN_JOBS: readonly OpenJob[] = [
     code: 'J-1012',
     name: 'Harbor Roast holiday gift set',
     status: 'losing-money',
-    reason:
-      'At this pace the job ends about $1,840 in the red. The crew is making 31 units per person per hour. The target pace is 46.',
+    reason: 'The crew is making 31 units per person per hour. The target pace is 46.',
     nextStep: 'Check the crew size',
+    margin: { soFar: -20, projected: -20 },
+    impact: '$1,840 loss at finish',
   },
   {
     code: 'J-1023',
@@ -190,6 +227,8 @@ export const OPEN_JOBS: readonly OpenJob[] = [
     status: 'at-risk',
     reason: 'Margin is heading for 14%. Your target is 30%.',
     nextStep: 'Review the price with the client',
+    margin: { soFar: 16.5, projected: 14 },
+    impact: '$2,560 under your target profit',
   },
   {
     code: 'J-1031',
@@ -197,6 +236,7 @@ export const OPEN_JOBS: readonly OpenJob[] = [
     status: 'heads-up',
     reason: 'Nothing has been logged for 4 work days.',
     nextStep: 'Log the missing days',
+    margin: { soFar: 31.5, projected: 31 },
   },
   {
     code: 'J-1036',
@@ -210,6 +250,7 @@ export const OPEN_JOBS: readonly OpenJob[] = [
     name: 'Lumen Skincare launch kit',
     status: 'on-track',
     reason: 'On track. Margin is heading for 41% against a 30% target.',
+    margin: { soFar: 41, projected: 41 },
   },
 ];
 
@@ -451,10 +492,10 @@ export const CSV_CHECK: readonly {
   readonly rows: number;
   readonly isProblem?: true;
 }[] = [
-  { label: 'New', rows: 196 },
+  { label: 'New', rows: 193 },
   { label: 'Changed', rows: 9 },
-  { label: 'Unchanged', rows: 4 },
-  { label: 'Look the same', rows: 4 },
+  { label: 'Unchanged', rows: 7 },
+  { label: 'Possible repeats', rows: 4 },
   { label: 'Skipped', rows: 0 },
   { label: 'Errors', rows: 1, isProblem: true },
 ];

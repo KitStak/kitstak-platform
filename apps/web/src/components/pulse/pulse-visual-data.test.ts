@@ -33,6 +33,30 @@ describe('pulse visual data', () => {
     expect(new Set(data.OPEN_JOBS.map((job) => job.status)).size).toBe(5);
   });
 
+  it('keeps the margins on the open jobs list in step with the Profit table and the reasons', () => {
+    const jobs = data.PROFIT_VIEWS[0]!.rows;
+    for (const code of ['J-1012', 'J-1005']) {
+      const row = jobs.find((job) => job.code === code)!;
+      const open = data.OPEN_JOBS.find((job) => job.code === code)!;
+      expect(open.margin?.soFar, code).toBe(data.marginOf(row.profit, row.moneyIn));
+    }
+    // J-1012 ends $1,840 in the red on $9,200 at finish, the same margin as so far.
+    expect(data.marginOf(-1840, 9200)).toBe(data.OPEN_JOBS[0]!.margin?.projected);
+    expect(data.OPEN_JOBS[0]!.impact).toContain('$1,840');
+    // J-1023 is heading for 14% on $16,000. A 30% target is $4,800, so it is $2,560 under.
+    const atRisk = data.OPEN_JOBS.find((job) => job.status === 'at-risk')!;
+    expect(atRisk.margin?.projected).toBe(14);
+    expect(data.money(16000 * 0.3 - 16000 * 0.14)).toBe('$2,560');
+    expect(atRisk.impact).toContain('$2,560');
+    // A job with profit that is not complete shows no margin.
+    expect(data.OPEN_JOBS.find((job) => job.status === 'not-enough-data')!.margin).toBeUndefined();
+  });
+
+  it('splits every dollar into money out and profit that add up to 100', () => {
+    expect(data.splitOf(data.MONTH.moneyIn, data.MONTH.moneyOut)).toEqual({ out: 69, profit: 31 });
+    expect(data.splitOf(700_000, 543_500)).toEqual({ out: 78, profit: 22 });
+  });
+
   it('adds crew lines up to the people on the row', () => {
     for (const row of data.LOG_ROWS) {
       if (row.crew) expect(row.crew.reduce((sum, line) => sum + line.people, 0)).toBe(row.people);
@@ -81,7 +105,7 @@ describe('pulse visual data', () => {
 
 describe('pulse screenshot slots', () => {
   it('has one slot per visual, each with a light and a dark file under /pulse/shots/', () => {
-    expect(PULSE_SHOT_IDS).toHaveLength(9);
+    expect(PULSE_SHOT_IDS).toHaveLength(8);
     for (const id of PULSE_SHOT_IDS) {
       const shot = PULSE_SHOTS[id];
       expect(shot.light).toMatch(/^\/pulse\/shots\/[a-z-]+-light\.png$/);

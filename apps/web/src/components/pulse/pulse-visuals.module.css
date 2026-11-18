@@ -237,14 +237,44 @@
   line-height: 1.5;
   color: var(--text-secondary);
 }
+/* The facts under a job's reason: margins, the money at stake and the next step. */
+.jobFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 8px 0 0;
+  font-size: var(--type-sm);
+  font-variant-numeric: tabular-nums;
+}
+.jobFacts > div {
+  display: grid;
+  gap: 1px;
+}
+.jobFacts dt {
+  font-size: var(--type-xs);
+  color: var(--text-muted);
+}
+.jobFacts dd {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+}
+.jobFacts [data-tone='bad'] dd {
+  color: var(--danger-text);
+}
 .nextStep {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: var(--type-sm);
   font-weight: var(--weight-semibold);
 }
 .nextStep span {
   margin-right: 6px;
   font-weight: var(--weight-regular);
+  color: var(--text-muted);
+}
+.tableNote {
+  margin-top: 8px;
+  font-size: var(--type-xs);
+  line-height: 1.5;
   color: var(--text-muted);
 }
 
@@ -290,6 +320,30 @@
 }
 .table tr[data-loss] td {
   color: var(--danger-text);
+}
+/* What the bars under each name mean. Drawn with the same fills as the bars themselves. */
+.rankKey {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 10px;
+  font-size: var(--type-xs);
+  color: var(--text-secondary);
+}
+.rankKey span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rankKey span::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 6px;
+  background: var(--chart-2);
+}
+.rankKey [data-part='loss']::before {
+  background: repeating-linear-gradient(135deg, var(--danger) 0 4px, transparent 4px 7px);
 }
 /* The Company row under the table. It opens the walk from profit on jobs to company profit. */
 .companyRow {
@@ -727,41 +781,6 @@
   margin: 4px 0 0;
   font-size: var(--type-sm);
   line-height: 1.5;
-}
-
-/* ===== On its own or in the bundle ===== */
-.modes {
-  display: grid;
-  gap: 14px;
-}
-.modeHead {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-}
-.modeIcons {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
-}
-.points {
-  list-style: none;
-  margin: 14px 0 0;
-  padding: 0;
-  display: grid;
-  gap: 9px;
-  font-size: var(--type-base);
-}
-.points li {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-.points svg {
-  flex: none;
-  margin-top: 4px;
-  color: var(--success);
 }
 
 @keyframes fade {

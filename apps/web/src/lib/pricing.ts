@@ -54,7 +54,7 @@ export function unconfirmedPriceNote(products: readonly ProductId[]): string | n
   const open = products.filter((id) => PRICING[id].isUnconfirmed);
   if (open.length === 0) return null;
   const names = open.map((id) => PRICING[id].name.replace('KitStak ', ''));
-  return `${names.join(' and ')} pricing is not final. The price and the unit may change.`;
+  return `${names.join(' and ')} pricing is not final. The price, and whether it is charged per user, may change.`;
 }
 
 export interface QuoteInput {
@@ -114,9 +114,12 @@ export function quote(input: QuoteInput): Quote {
   );
 
   const listMonthlyCents = lines.reduce((sum, l) => sum + l.subtotalCents, 0);
-  const bundleSavingsCents = isBundle(input.stack) ? Math.round(listMonthlyCents * PRICING.bundleDiscount) : 0;
+  const bundleSavingsCents = isBundle(input.stack)
+    ? Math.round(listMonthlyCents * PRICING.bundleDiscount)
+    : 0;
   const afterBundle = listMonthlyCents - bundleSavingsCents;
-  const annualSavingsCents = input.billing === 'annual' ? Math.round(afterBundle * PRICING.annualDiscount) : 0;
+  const annualSavingsCents =
+    input.billing === 'annual' ? Math.round(afterBundle * PRICING.annualDiscount) : 0;
 
   return {
     lines,

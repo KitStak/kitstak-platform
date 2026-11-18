@@ -27,6 +27,7 @@ import {
   MATH_BRIDGE,
   MATH_JOB,
   MONEY_OUT,
+  PROFIT_CUTS,
   REPORTS,
   SECTIONS,
   STATUSES,
@@ -170,7 +171,7 @@ describe('/pulse structure', () => {
       (value): value is readonly { name: string }[] =>
         Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && 'name' in value[0],
     );
-    expect(lists.length).toBeGreaterThanOrEqual(10);
+    expect(lists.length).toBeGreaterThanOrEqual(9);
     for (const items of lists) expect(new Set(items.map((item) => item.name)).size).toBe(items.length);
     expect(new Set(HERO_FACTS.map((fact) => fact.label)).size).toBe(HERO_FACTS.length);
     expect(new Set(HERO.lines).size).toBe(HERO.lines.length);
@@ -186,7 +187,8 @@ describe('/pulse numbers', () => {
     expect(FIRST_STEPS).toHaveLength(5);
     for (const items of [MONEY_OUT, STATUSES, CSV_STREAMS, REPORTS])
       expect(new Set(items).size).toBe(items.length);
-    expect(HERO_FACTS.map((fact) => fact.value)).toEqual(['4', '5', '17', '19']);
+    expect(HERO_FACTS.map((fact) => fact.value)).toEqual(['4', '1', '5', '0']);
+    expect(PROFIT_CUTS).toHaveLength(Number(HERO_FACTS[0]!.value));
     // A count written out by hand in a sentence would drift; none may appear that the lists do not back.
     for (const text of COPY) {
       for (const match of text.matchAll(/\b(\d+) (kinds of data|reports|CSV templates)\b/g)) {

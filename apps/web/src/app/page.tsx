@@ -7,6 +7,7 @@ import { Header } from '@/components/header';
 import { Hero } from '@/components/hero/hero';
 import { LicensingSection } from '@/components/licensing/licensing-section';
 import { PageEffects } from '@/components/page-effects';
+import { PulseHomeSection } from '@/components/pulse/pulse-section-home';
 import { WmsSection } from '@/components/wms/wms-section';
 
 /** Title, description and social tags come from the root layout. The home page adds its canonical. */
@@ -22,6 +23,7 @@ export default function HomePage() {
         <FlowSection />
         <WmsSection />
         <CrmSection />
+        <PulseHomeSection />
         <LicensingSection />
         <ClosingSection />
       </main>
