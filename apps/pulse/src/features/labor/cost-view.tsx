@@ -1,7 +1,7 @@
 'use client';
 /** Labor, Cost: what labor adds up to by labor class, job type and client, and the overtime share. */
 import { useMemo } from 'react';
-import { Info, RefreshCw, Users } from 'lucide-react';
+import { Download, Info, RefreshCw, Users } from 'lucide-react';
 import {
   Button,
   IconButton,
@@ -15,13 +15,18 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
+  toast,
 } from '@/components/ui';
 import { BarChart } from '@/components/charts/cartesian';
 import { KpiTile } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
+import { ExplainStatic } from '@/components/pulse/explain';
 import { Teach } from '@/components/pulse/teach';
-import { formatHours, formatMoney, formatMoneyPerHour, formatPercentBp } from '@/lib/format';
+import { downloadCsv } from '@/features/profit/csv-download';
+import { SavedViewsBar } from '@/features/views/saved-views-bar';
+import { rawCell } from '@/lib/csv/write';
+import { formatHours, formatMoney, formatMoneyPerHour, formatMoneyPlain, formatPercentBp } from '@/lib/format';
 import { useLaborSummary, useProfit } from '@/lib/hooks/use-data';
 import { centsToNumber, perHourCents, ratioBp, sumCents } from '@/lib/money';
 import { routes } from '@/lib/routes';
@@ -70,9 +75,33 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
       </div>
     );
 
+  /** The labor class table on screen as a CSV file, in the order shown. */
+  const exportCsv = () => {
+    const rows = (data?.byClass ?? []).map((row) => {
+      const hours = Number(row.directHours) + Number(row.indirectHours);
+      return [
+        row.name,
+        rawCell(row.directHours),
+        rawCell(formatMoneyPlain(row.laborCents)),
+        rawCell(formatMoneyPlain(perHour(row.laborCents, row.directHours))),
+        hours > 0 ? formatPercentBp(hoursShareBp(Number(row.overtimeHours), hours)) : '',
+        rawCell(row.indirectHours),
+        rawCell(formatMoneyPlain(row.indirectCents)),
+      ];
+    });
+    downloadCsv(`labor-cost-${state.from}-to-${state.to}.csv`, ['Labor class', 'Labor hours on jobs', 'Labor cost on jobs', 'Cost of an hour', 'Overtime share', 'Hours not on a job', 'Cost of time not on a job'], rows);
+    toast.success(`Saved ${rows.length} ${rows.length === 1 ? 'row' : 'rows'} as a CSV file`);
+  };
+
   return (
     <div className="flex flex-col gap-4" data-testid="cost-view">
-      <RangeBar state={state} onChange={setState} sites={sites} today={today} />
+      <SavedViewsBar page="labor" />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <RangeBar state={state} onChange={setState} sites={sites} today={today} />
+        <Button variant="secondary" leadingIcon={<Download aria-hidden />} onClick={exportCsv} disabled={!data || data.byClass.length === 0} data-testid="labor-cost-export">
+          Export CSV
+        </Button>
+      </div>
       {summary.isError ? (
         <Panel>
           <div role="alert" className="flex flex-col items-center gap-3 py-8 text-center">
@@ -113,6 +142,16 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiTile
               label="Labor cost on jobs"
+              explain={
+                <ExplainStatic
+                  title="Labor cost on jobs"
+                  rule="Every hour logged on a job, times the real cost of an hour for that labor class on that day. Overtime hours cost more."
+                  rows={[
+                    { label: 'Labor hours on jobs', value: formatHours(totals.direct) },
+                    { label: 'Labor cost on jobs', value: formatMoney(totals.labor), kind: 'total' },
+                  ]}
+                />
+              }
               value={formatMoney(totals.labor, { cents: false })}
               footer={
                 <span className="text-xs text-fg-muted">
@@ -155,6 +194,17 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
             />
             <KpiTile
               label="Labor as a share of revenue"
+              explain={
+                <ExplainStatic
+                  title="Labor as a share of revenue"
+                  rule="Labor cost on jobs divided by the revenue the work earned in the same days."
+                  rows={[
+                    { label: 'Labor cost on jobs', value: formatMoney(totals.labor) },
+                    { label: 'Revenue earned', value: revenue === null ? 'Hidden' : formatMoney(revenue) },
+                    { label: 'Labor share', value: revenue !== null && revenue > 0 ? formatPercentBp(ratioBp(totals.labor, revenue)) : 'No revenue yet', kind: 'total' },
+                  ]}
+                />
+              }
               value={revenue !== null && revenue > 0 ? formatPercentBp(ratioBp(totals.labor, revenue)) : null}
               emptyText="No revenue yet"
               footer={
@@ -167,6 +217,17 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
             />
             <KpiTile
               label="Overtime share"
+              explain={
+                <ExplainStatic
+                  title="Overtime share"
+                  rule="Overtime hours divided by all labor hours, on jobs and not on a job."
+                  rows={[
+                    { label: 'Overtime hours', value: formatHours(totals.overtime) },
+                    { label: 'All labor hours', value: formatHours(totals.hours) },
+                    { label: 'Overtime share', value: totals.hours > 0 ? formatPercentBp(hoursShareBp(totals.overtime, totals.hours)) : 'No hours yet', kind: 'total' },
+                  ]}
+                />
+              }
               value={totals.hours > 0 ? formatPercentBp(hoursShareBp(totals.overtime, totals.hours)) : null}
               footer={
                 <span className="text-xs text-fg-muted">

@@ -13,6 +13,7 @@ import { DonutChart, ProgressRing } from '@/components/charts/radial';
 import { KpiTile, MarginPill } from '@/components/charts/stats';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { ExplainNumber } from '@/components/pulse/explain';
+import { ExplainStatic } from '@/components/pulse/explain';
 import { StepList, Teach } from '@/components/pulse/teach';
 import { ProgressBar } from '@/components/ui/feedback';
 import { cn } from '@/components/ui/cn';
@@ -238,7 +239,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
           <KpiTile label="Units finished" loading={loadingTiles} value={total ? formatNumber(total.unitsGood, { maxDigits: 0 }) : null} delta={total ? numberDelta(num(total.unitsGood), previous ? num(previous.unitsGood) : undefined, 'up', vs) : undefined} sparkline={spark((row) => num(row.unitsGood))} explain={<ExplainNumber metric="units" scope={scope} />} />
           <KpiTile label="Labor hours" loading={loadingTiles} value={total ? formatHours(total.hours, { maxDigits: 0 }) : null} sparkline={spark((row) => num(row.hours))} explain={<ExplainNumber metric="hours" scope={scope} />} />
           <KpiTile label="Units per person per hour" loading={loadingTiles} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
-          <KpiTile label="Share of paid time spent on jobs" loading={!data} value={data ? formatPercentBp(bridge?.utilizationBp ?? null, { empty: 'No hours yet' }) : null} footer={bridge ? <span className="text-xs text-fg-muted">{formatHours(bridge.indirectHours, { maxDigits: 0 })} hours not on a job</span> : undefined} />
+          <KpiTile label="Share of paid time spent on jobs" explain={<ExplainStatic title="Share of paid time spent on jobs" rule="Hours on jobs divided by paid hours. When no paid hours are typed for these days, it is hours on jobs divided by hours on jobs plus time not on a job." rows={bridge ? [{ label: 'Hours on jobs', value: formatHours(bridge.directHours) }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours) }, { label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Share on jobs', value: formatPercentBp(bridge.utilizationBp, { empty: 'No hours yet' }), kind: 'total' }] : []} />} loading={!data} value={data ? formatPercentBp(bridge?.utilizationBp ?? null, { empty: 'No hours yet' }) : null} footer={bridge ? <span className="text-xs text-fg-muted">{formatHours(bridge.indirectHours, { maxDigits: 0 })} hours not on a job</span> : undefined} />
         </div>
       )}
 
@@ -463,9 +464,9 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
       {/* Money waiting and things to fix */}
       <div className="grid gap-4 lg:grid-cols-3">
         {seesMoney ? (
-          <KpiTile label="Not billed yet" loading={!data} value={data ? formatMoneyWhole(data.notBilledYetCents) : null} footer={<SeeAll href={routes.report('ready-to-bill')}>Ready to bill</SeeAll>} emptyText="Nothing waiting" />
+          <KpiTile label="Not billed yet" explain={<ExplainNumber metric="not_billed" scope={scope} />} loading={!data} value={data ? formatMoneyWhole(data.notBilledYetCents) : null} footer={<SeeAll href={routes.report('ready-to-bill')}>Ready to bill</SeeAll>} emptyText="Nothing waiting" />
         ) : null}
-        <KpiTile label="Paid time not on any job" loading={!bridge} value={bridge ? formatHours(bridge.missingHours, { style: 'unit', maxDigits: 0 }) : null} footer={<span className="flex flex-wrap items-center gap-x-2 text-xs text-fg-muted">{seesMoney && bridge?.missingCostCents ? <span className="tabular-nums">{formatMoney(bridge.missingCostCents, { cents: false })} of pay nobody logged</span> : <span>Hours paid that nobody logged</span>}<SeeAll href={routes.report('paid-time-not-on-any-job')}>See the days</SeeAll></span>} />
+        <KpiTile label="Paid time not on any job" explain={<ExplainStatic title="Paid time not on any job" rule="For each site and day: paid hours, less hours on jobs, less time not on a job. It is never below zero." rows={bridge ? [{ label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Hours on jobs', value: formatHours(bridge.directHours), kind: 'minus' }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours), kind: 'minus' }, { label: 'Paid, on no job', value: formatHours(bridge.missingHours), kind: 'total' }] : []} footnote="Worked out day by day, so the lines above may not subtract to the total." />} loading={!bridge} value={bridge ? formatHours(bridge.missingHours, { style: 'unit', maxDigits: 0 }) : null} footer={<span className="flex flex-wrap items-center gap-x-2 text-xs text-fg-muted">{seesMoney && bridge?.missingCostCents ? <span className="tabular-nums">{formatMoney(bridge.missingCostCents, { cents: false })} of pay nobody logged</span> : <span>Hours paid that nobody logged</span>}<SeeAll href={routes.report('paid-time-not-on-any-job')}>See the days</SeeAll></span>} />
         <Section title="Things to fix" className={cn(!seesMoney && 'lg:col-span-2')} testId="home-fix">
           {!fix ? (
             <span role="status" aria-busy="true" className="ks-skeleton block h-10 rounded-md">

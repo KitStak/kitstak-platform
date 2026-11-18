@@ -731,3 +731,79 @@ What the data team added on top of sections 5 to 10. Everything here is additive
 Dev note: on the shared Turbopack dev server a new export added to an already loaded domain file is sometimes not seen
 through the `@/server/domain` barrel until the file gets a real code edit. Importing by file path
 (`@/server/domain/sample`) always works.
+
+## 17. Integrations: sibling readers, sync, the bridge and Connected apps (owner: integrations)
+
+Everything here is additive. Pulse still works with nothing else installed.
+
+**`@kitstak/pulse-bridge`** (`packages/pulse-bridge`, see its README): how Portal, CRM, WMS and Projects read Pulse on
+their own servers. `getOrgSummary`, `getJobsForRecord`, `getJobSummaries`, `getClientProfit`,
+`listJobsNeedingAttention`, `getAttentionCount`, `getSetupSignals`, `resolvePulseAccess`, `emitBridgeEvent`,
+`pulseUrls(base)`, `formatCents`, `formatMarginBp`, `PULSE_STATUS_LABELS`. It has its own copy of the access rule
+(`resolveAccess`), and `src/server/integrations/bridge-parity.test.ts` walks every input through both resolvers, so
+`src/server/domain/access.ts` was **not** moved. Change the rule in both places or that test fails.
+
+**Readers (`@/server/integrations`, server only, fail soft: an empty list, never a throw)**
+- `crm`: `crmReady`, `listWonDeals(ctx, { limit?, sinceDays? })`, `getDeals(ctx, ids)`, `searchDeals(ctx, q)`,
+  `getAccounts(ctx, ids)`. Won is the board's own `isDone` stage label. `CrmDeal.valueCents` is whole cents.
+- `wms`: `wmsReady` (the org's own tenant schema or null), `listWorkOrders(ctx, { ids?, query?, openOnly? })` (finished
+  quantity plus planned and consumed component cost in cents), `workOrderBuildsByDay(ctx, ids, timezone)`,
+  `listBilledRevenue(ctx)` (summary lines only, so a bill is never counted twice), `listVasRevenue(ctx)`.
+- `projects`: `projectsReady`, `getProjects`, `searchProjects` (only projects the reader may see in Projects),
+  `projectTimeByDay(ctx, projectIds, timezone)`.
+- `records`: `resolveRecords(ctx, targets)` (a linked record as it is right now: `live`, `gone` or `offline`) and
+  `searchRecords(ctx, 'crm_deal' | 'wms_work_order' | 'pm_project', q)`.
+- The jobs team's `features/jobs/server/job-sources.ts` can now call `listWonDeals` and `listWorkOrders` instead of its
+  own two queries.
+
+**Domain (`@/server/domain`, file `sync.ts`)**
+- `runSync(ctx, 'crm' | 'wms' | 'projects' | 'all')` ("Sync now", needs `job:manage`), `syncIfStale(ctx, 'page' | 'cron')`
+  (answers `bridge_events`, then pulls any connected app whose last sync is older than 10 minutes; call it from
+  `after()`), `getConnectedApps(ctx)`, `listLinkedJobs(ctx)`, `setLinkImportsTime(ctx, linkId, on)`.
+- What a sync writes: fresh `cached_title`, `cached_status`, `cached_url` and `meta` on `job_links` (a CRM deal link
+  carries `meta.dealValueCents`, `meta.won`, `meta.closeDate`; a work order link `meta.requestedQty`, `meta.finishedQty`;
+  a project link `meta.key`, `meta.percentDone`, `meta.dueDate`); `jobs.wms_shortage`; a job the warehouse finished is
+  set to completed; kits built per day as production rows (`source_ref = wms:built:<workOrderId>:<date>`); parts used
+  through money-ops' `pullWmsUsage`; warehouse bills as `invoice` revenue rows per client, bill and kind of work
+  (`source = 'wms'`, `source_ref = wms:bill:<reportId>:<operation>`, billed memo, never profit); project time as
+  production rows with shift `projects` (`source = 'projects'`, `source_ref = pm:<projectId>:<date>`, units 0).
+- Never double counts: a ref is looked up before anything is added; a day a person already typed is adopted (it gets
+  the `source_ref` and `meta.adopted_from`, its `source` stays `manual`); `meta.locked_fields` are left alone; a
+  project's time feeds one job only (the oldest link with `imports_time`); closed months are counted as
+  `skipped_closed`. One run per org and app at a time (`sync_state.locked_until`, five minutes).
+- `tickOrg` in `cron.ts` now calls `syncIfStale(ctx, 'cron')` first (the one edit outside our folders in the domain).
+
+**API**: `GET integrations/status` (`ConnectedAppsDTO`, also starts a background refresh), `integrations/links`
+(`LinkedJobDTO[]`), `integrations/records?targets=type:id,type:id` (`LiveRecordDTO[]`),
+`integrations/search?type=&q=` (`RecordOptionDTO[]`, needs `job:manage`). Same origin only, like every Pulse route: the
+brief asked for CORS for sibling origins, the spec (8.7) and `AGENTS.md` say none, and no sibling needs it because
+they all read through the bridge. **Actions** (`@/server/actions/integrations`): `syncNowAction({ source })`,
+`setLinkImportsTimeAction({ linkId, importsTime })`.
+
+**UI any team can mount by path (client components)**
+- `@/features/integrations/record-chip`: `<RecordChip type id title status url live? loading? size? />` plus
+  `findLive(records, link)`; `@/features/integrations/api`: `useLiveRecords(refs)` (one batched read for all chips on
+  a page), `useRecordSearch`, `useConnectedApps`, `useLinkedJobs`, `integrationKeys`.
+- `@/features/integrations/link-record-dialog`: `<LinkRecordDialog open onOpenChange job? connected initialType?
+  linkedKeys? onLinked? />` (search, keyboard list, link with Undo; leave `job` out to pick the job in the dialog).
+  The job page's "Linked records" panel can swap its plain rows for `RecordChip` and add this dialog.
+- `@/features/integrations/connected-apps-body`: the body of `/settings/apps` (server component).
+- Types and words: `@/features/integrations/types` (`LiveRecordDTO`, `AppConnectionDTO`, `TARGET_WORDS`,
+  `SIBLING_APP_NAMES`, `appOfTarget`).
+
+**Sibling apps**
+- Portal: tile (Open jobs, At risk, Margin this month, or Losing money for a person who may not see money), "Jobs that
+  need you" panel, quick links, palette entries, billing and upgrade copy, four setup steps
+  (`docs/integration/ONBOARDING.md`).
+- CRM: item panel **Profit** tab on deals and accounts (`?item=<id>&itemTab=pulse`), a health line under a deal's name,
+  route `GET /api/v1/crm/items/[itemId]/pulse`, stage change events.
+- WMS: **Job profit** card on a work order (`GET /api/work-orders/[id]/pulse`), **Client profit** strip on a client
+  (`GET /api/clients/[id]/pulse`), work order change events.
+- Projects: **Job profit** strip on the project overview (`GET /api/v1/projects/[key]/pulse-profit`), time logged
+  events. The `pulse_job` link target type was **not** added to Projects: Pulse keeps the link on its own side
+  (`pulse.job_links` with `pm_project`), which needs no Projects migration.
+- Every app's shell passes `urls.pulse` and `entitled.pulse` to the shared app switcher.
+
+Not built (see the integration report): VAS records into `vas_entries`, contract rates into job prices, the work
+orders list margin column, the bill detail margin tile, tasks from alerts through `@kitstak/pm-bridge`, the app
+switcher attention badge, and removing pulled project time when the time entry is deleted in Projects.

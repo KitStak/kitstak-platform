@@ -19,6 +19,7 @@ packages/
   entitlements/   Which org is licensed for which module (crm, wms, projects, pulse)
   ui/             Shared design system: tokens, logo, app icons, app switcher, handoff
   pm-bridge/      Shared-database bridge into Projects for the sibling apps
+  pulse-bridge/   Shared-database bridge into Pulse: job and client profit for the sibling apps
   config/         Shared tsconfig / eslint / tailwind presets
 ```
 

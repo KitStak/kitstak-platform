@@ -195,6 +195,16 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiTile
           label={`Good ${job.unitLabel}`}
+          explain={
+            <Explain
+              title={`Good ${job.unitLabel}`}
+              rule="Good units from every row on the work log, added up. Scrap and rework are counted on their own and never earn revenue."
+              rows={[
+                { label: 'Good units', value: formatNumber(job.stats.unitsGood, { maxDigits: 0 }), kind: 'total' },
+                { label: 'Scrapped units', value: formatNumber(job.stats.unitsScrap, { maxDigits: 0 }), kind: 'note' },
+              ]}
+            />
+          }
           value={formatNumber(job.stats.unitsGood, { maxDigits: 0 })}
           footer={
             <span className="text-xs text-fg-muted">
@@ -204,6 +214,16 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
         />
         <KpiTile
           label="Labor hours"
+          explain={
+            <Explain
+              title="Labor hours"
+              rule="People times hours each, added up over every row on the work log. Overtime hours are part of the total."
+              rows={[
+                { label: 'Hours logged', value: formatHours(job.stats.hours), kind: 'total' },
+                { label: 'of that, overtime', value: formatHours(job.stats.overtimeHours), kind: 'note' },
+              ]}
+            />
+          }
           value={formatHours(job.stats.hours, { maxDigits: 0 })}
           footer={
             <span className="text-xs text-fg-muted">
@@ -218,6 +238,16 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
         />
         <KpiTile
           label="Pace"
+          explain={
+            <Explain
+              title="Pace"
+              rule="Good units over labor hours: how many units one person finishes in an hour. Only days with both units and hours count, so a day with missing hours cannot make the pace look fast."
+              rows={[
+                { label: 'Pace on counted days', value: job.stats.uph === null ? 'No counted day yet' : formatPace(job.stats.uph), kind: 'total' },
+                { label: 'Target pace', value: job.stats.standardUph === null ? 'Not set' : formatPace(job.stats.standardUph), kind: 'note' },
+              ]}
+            />
+          }
           value={job.stats.uph === null ? null : formatPace(job.stats.uph)}
           emptyText="No counted day yet"
           footer={
@@ -257,6 +287,13 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
         ) : (
           <KpiTile
             label="Days logged"
+            explain={
+              <Explain
+                title="Days logged"
+                rule="A count of the days that have at least one row on the work log for this job."
+                rows={[{ label: 'Days with work logged', value: formatNumber(chart.labels.length), kind: 'total' }]}
+              />
+            }
             value={formatNumber(chart.labels.length)}
             footer={
               <span className="text-xs text-fg-muted">

@@ -21,6 +21,7 @@ import { parsePeriod, periodQuery } from '@/features/profit/period';
 import { PeriodPicker, type PeriodChange } from '@/features/profit/period-picker';
 import { LoadError, Section, TableSkeleton } from '@/features/profit/profit-ui';
 import { useQueryState } from '@/features/profit/use-query-state';
+import { SavedViewsBar } from '@/features/views/saved-views-bar';
 import { ReportChart } from './report-chart';
 import { reportCellText } from './report-format';
 import { ReportTable } from './report-table';
@@ -45,6 +46,7 @@ export function ReportView({ slug, name, today, weekStart, sites, clients, jobTy
   return (
     <div className="flex flex-col gap-4" data-testid="report-view">
       <div className="flex flex-col gap-2 print:hidden">
+        <SavedViewsBar page="reports" />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <PeriodPicker period={period} onChange={setPeriod} showCompare={false} />
           <div className="flex flex-wrap items-center gap-2">

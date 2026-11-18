@@ -77,8 +77,7 @@ function Metric({ label, value, tone }: { readonly label: string; readonly value
 }
 
 function JobRow({ job, data }: { readonly job: PulseProfitJob; readonly data: PulseProfit }) {
-  // A finished job reads as full even when Pulse stopped tracking its percent.
-  const done = job.pctCompleteBp === null ? (job.status === 'completed' ? 100 : null) : Math.round(job.pctCompleteBp / 100);
+  const done = job.pctCompleteBp === null ? null : Math.round(job.pctCompleteBp / 100);
   const tone = statusTone(job.risk);
   const open = job.status !== 'completed' && job.status !== 'cancelled';
   return (
@@ -91,7 +90,7 @@ function JobRow({ job, data }: { readonly job: PulseProfitJob; readonly data: Pu
           </a>
           <StatusPill job={job} />
         </div>
-        <ProgressBar value={done ?? 0} size="sm" tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'primary'} label={`${job.number} is ${done ?? 0} percent done`} />
+        {done === null ? null : <ProgressBar value={done} size="sm" tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'primary'} label={`${job.number} is ${done} percent done`} />}
         <p className="text-xs text-fg-muted tabular-nums">
           {formatQuantity(job.unitsGood)} of {formatQuantity(job.plannedUnits)} {job.unitLabel} done
           {done !== null ? ` (${done}%)` : ''} · {formatQuantity(job.hours)} hours logged in Pulse

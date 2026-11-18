@@ -4,7 +4,7 @@
  * on any job, day by day, with the share of paid time spent on jobs and the payroll check.
  */
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Clock, Info, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Clock, Download, Info, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import {
   Button,
   IconButton,
@@ -27,13 +27,17 @@ import { BarChart } from '@/components/charts/cartesian';
 import { KpiTile } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
+import { ExplainStatic } from '@/components/pulse/explain';
 import { Teach } from '@/components/pulse/teach';
 import { usePunches } from '@/features/log/floor-hooks';
 import { parseTyped } from '@/features/log/log-math';
 import { OtherTimeStrip } from '@/features/log/other-time';
 import { useShell } from '@/features/shell/shell-context';
 import { INDIRECT_REASONS, INDIRECT_REASON_LABELS, type IndirectReason } from '@/lib/constants';
-import { formatHours, formatMoney, formatPercentBp } from '@/lib/format';
+import { downloadCsv } from '@/features/profit/csv-download';
+import { SavedViewsBar } from '@/features/views/saved-views-bar';
+import { rawCell } from '@/lib/csv/write';
+import { formatHours, formatMoney, formatMoneyPlain, formatPercentBp } from '@/lib/format';
 import { useServerAction } from '@/lib/hooks/use-action';
 import { useJobs, useLaborSummary, useLogGrid } from '@/lib/hooks/use-data';
 import { shortDate } from '@/lib/profit';
@@ -80,9 +84,31 @@ export function TimeView({
   const indirect = Number(bridge?.indirectHours ?? 0);
   const empty = data ? direct + indirect + Number(bridge?.paidHours ?? 0) === 0 : false;
 
+  /** One row per day, as on the chart: where the paid hours went. */
+  const exportCsv = () => {
+    const seesMoney = shell.seesMoney && !data?.moneyHidden;
+    const rows = (data?.byDay ?? []).map((row) => [
+      row.date,
+      rawCell(row.directHours),
+      rawCell(row.indirectHours),
+      rawCell(row.paidHours),
+      rawCell(row.missingHours),
+      ...(seesMoney ? [rawCell(formatMoneyPlain(row.indirectCents)), rawCell(formatMoneyPlain(row.missingCents))] : []),
+      row.overLogged ? 'More hours logged than paid' : '',
+    ]);
+    downloadCsv(`paid-time-${state.from}-to-${state.to}.csv`, ['Day', 'Hours on jobs', 'Time not on a job', 'Paid hours', 'Paid time not on any job', ...(seesMoney ? ['Cost of time not on a job', 'Cost of paid time not on any job'] : []), 'Check'], rows);
+    toast.success(`Saved ${rows.length} ${rows.length === 1 ? 'day' : 'days'} as a CSV file`);
+  };
+
   return (
     <div className="flex flex-col gap-4" data-testid="time-view">
-      <RangeBar state={state} onChange={setState} sites={sites} today={today} />
+      <SavedViewsBar page="labor" />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <RangeBar state={state} onChange={setState} sites={sites} today={today} />
+        <Button variant="secondary" leadingIcon={<Download aria-hidden />} onClick={exportCsv} disabled={!data || data.byDay.length === 0} data-testid="labor-time-export">
+          Export CSV
+        </Button>
+      </div>
       {summary.isLoading ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-busy="true">
           {Array.from({ length: 4 }, (_, index) => (
@@ -131,11 +157,25 @@ export function TimeView({
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiTile
               label="Hours on jobs"
+              explain={
+                <ExplainStatic
+                  title="Hours on jobs"
+                  rule="People times hours each on every work log row, plus the labor hours typed on extra service entries."
+                  rows={[{ label: 'Hours on jobs', value: formatHours(bridge.directHours, { style: 'unit' }), kind: 'total' }]}
+                />
+              }
               value={formatHours(bridge.directHours, { maxDigits: 0, style: 'unit' })}
               footer={<span className="text-xs text-fg-muted">Production and extra services</span>}
             />
             <KpiTile
               label="Time not on a job"
+              explain={
+                <ExplainStatic
+                  title="Time not on a job"
+                  rule="Hours typed as time not on a job, like cleaning, meetings, training and waiting on parts. These hours are paid, so their cost is spread over the jobs of the same day."
+                  rows={[{ label: 'Time not on a job', value: formatHours(bridge.indirectHours, { style: 'unit' }), kind: 'total' }]}
+                />
+              }
               value={formatHours(bridge.indirectHours, { maxDigits: 0, style: 'unit' })}
               footer={
                 <span className="text-xs text-fg-muted">

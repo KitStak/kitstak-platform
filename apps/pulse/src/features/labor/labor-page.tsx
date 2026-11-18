@@ -1,6 +1,7 @@
 import { FileSpreadsheet } from 'lucide-react';
 import { Page } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
+import { ExportStreamLink } from '@/components/pulse/export-link';
 import { RouteTabs } from '@/components/pulse/route-tabs';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { LABOR_TABS, routes, type LaborTab } from '@/lib/routes';
@@ -48,15 +49,18 @@ export async function LaborPage({
       title="Labor"
       subtitle="What an hour really costs, where paid time goes, and what labor adds up to."
       actions={
-        canImport && tab !== 'cost' ? (
-          <ButtonLink
-            href={routes.newImport(importStream)}
-            variant="secondary"
-            icon={<FileSpreadsheet aria-hidden />}
-          >
-            {tab === 'rates' ? 'Import labor rates' : 'Import paid hours'}
-          </ButtonLink>
-        ) : null
+        <>
+          {tab === 'rates' ? <ExportStreamLink stream="labor_rates" /> : null}
+          {canImport && tab !== 'cost' ? (
+            <ButtonLink
+              href={routes.newImport(importStream)}
+              variant="secondary"
+              icon={<FileSpreadsheet aria-hidden />}
+            >
+              {tab === 'rates' ? 'Import labor rates' : 'Import paid hours'}
+            </ButtonLink>
+          ) : null}
+        </>
       }
       tabs={
         <RouteTabs

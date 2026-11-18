@@ -1,5 +1,5 @@
 /**
- * Runtime Better Auth instance for KitStak Pulse — thin wrapper over the shared
+ * Runtime Better Auth instance for KitStak Pulse: thin wrapper over the shared
  * `@kitstak/auth` factory (BLUEPRINT.md §1.1/§6). Cookie names, session TTLs,
  * rate-limit rules and the organization plugin are package behaviour shared with
  * CRM and WMS, so the session cookie minted here works on every origin.

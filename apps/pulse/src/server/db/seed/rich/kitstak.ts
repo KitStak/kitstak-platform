@@ -268,7 +268,7 @@ export const kitstakPlan: OrgPlan = {
     { page: 'jobs', name: 'Apex Threads, all jobs', config: { tab: 'all', clientCode: 'APEX', sort: 'startDate', direction: 'desc' } },
     { page: 'profit', name: 'Clients this quarter, worst first', config: { by: 'client', range: 'this_quarter', sort: 'profit', direction: 'asc', compare: true } },
     { page: 'profit', name: 'Extra services, last 30 days', config: { by: 'service', range: 'last_30_days', sort: 'margin', direction: 'asc' } },
-    { page: 'alerts', name: 'Mine, still open', config: { status: 'open', assignedTo: 'me' }, shared: false },
+    { page: 'alerts', name: 'Mine, still open', config: { query: 'tab=mine' }, shared: false },
   ],
   clientNotes: [
     { client: 'APEX', body: 'Quarterly review: revenue is our largest, yet chargebacks, rush freight, free storage and a full time coordinator eat all of it. Bring the cost to serve page to the renewal talk.' },

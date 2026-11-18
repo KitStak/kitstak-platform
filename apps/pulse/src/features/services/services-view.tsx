@@ -13,6 +13,7 @@ import { Sparkline } from '@/components/charts/sparkline';
 import { KpiTile } from '@/components/charts/stats';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { ExplainNumber } from '@/components/pulse/explain';
+import { ExplainStatic } from '@/components/pulse/explain';
 import { Teach } from '@/components/pulse/teach';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -177,11 +178,21 @@ export function ServicesView({ initialServices, today, weekStart, targetMarginBp
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="services-tiles">
-        <KpiTile label="Revenue from extra services" loading={!profit.data} value={profit.data ? formatMoneyWhole(extras.revenue) : null} footer={core ? <span className="text-xs text-fg-muted tabular-nums">{formatMoneyWhole(core.revenueCents)} from core job work</span> : undefined} />
-        <KpiTile label="Profit from extra services" loading={!profit.data} value={profit.data ? formatMoneyWhole(extras.profit) : null} />
-        <KpiTile label="Services in use" loading={!services.data} value={services.data ? formatNumber(lines.filter((line) => line.volume > 0).length) : null} footer={<span className="text-xs text-fg-muted">of {lines.filter((line) => line.service.active).length} active</span>} />
+        <KpiTile label="Revenue from extra services" explain={<ExplainStatic title="Revenue from extra services" rule="What every extra service entry in this period earned: how many times its price. Core job work is counted apart." rows={[{ label: 'Extra services', value: formatMoney(extras.revenue, { empty: 'Hidden' }), kind: 'total' }, { label: 'Core job work', value: core ? formatMoney(core.revenueCents, { empty: 'Hidden' }) : 'None', kind: 'note' }]} />} loading={!profit.data} value={profit.data ? formatMoneyWhole(extras.revenue) : null} footer={core ? <span className="text-xs text-fg-muted tabular-nums">{formatMoneyWhole(core.revenueCents)} from core job work</span> : undefined} />
+        <KpiTile label="Profit from extra services" explain={<ExplainStatic title="Profit from extra services" rule="Revenue from extra services, less their labor, their parts and their share of time not on a job." rows={[{ label: 'Revenue from extra services', value: formatMoney(extras.revenue, { empty: 'Hidden' }) }, { label: 'Profit from extra services', value: formatMoney(extras.profit, { empty: 'Hidden' }), kind: 'total' }]} />} loading={!profit.data} value={profit.data ? formatMoneyWhole(extras.profit) : null} />
+        <KpiTile label="Services in use" explain={<ExplainStatic title="Services in use" rule="Active services with at least one entry in this period." rows={[{ label: 'With entries in this period', value: formatNumber(lines.filter((line) => line.volume > 0).length), kind: 'total' }, { label: 'Active services', value: formatNumber(lines.filter((line) => line.service.active).length), kind: 'note' }]} />} loading={!services.data} value={services.data ? formatNumber(lines.filter((line) => line.volume > 0).length) : null} footer={<span className="text-xs text-fg-muted">of {lines.filter((line) => line.service.active).length} active</span>} />
         <KpiTile
           label="Underpriced"
+          explain={
+            <ExplainStatic
+              title="Underpriced"
+              rule="An active service is underpriced when its margin at the list price, or its real margin in this period, is under your target margin."
+              rows={[
+                { label: 'Target margin', value: formatPercentBp(targetMarginBp) },
+                { label: 'Services under it', value: formatNumber(underpriced.length), kind: 'total' },
+              ]}
+            />
+          }
           loading={!services.data || !profit.data}
           value={formatNumber(underpriced.length)}
           footer={

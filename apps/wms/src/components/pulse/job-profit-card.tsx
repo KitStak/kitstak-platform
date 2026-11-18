@@ -48,8 +48,7 @@ function PlanBar({ label, planCents, actualCents }: { readonly label: string; re
 }
 
 function JobBlock({ job, data }: { readonly job: WorkOrderPulseJob; readonly data: WorkOrderPulseDto }) {
-  // A finished job reads as full even when Pulse stopped tracking its percent.
-  const done = job.pctCompleteBp === null ? (job.status === 'completed' ? 100 : null) : Math.round(job.pctCompleteBp / 100);
+  const done = job.pctCompleteBp === null ? null : Math.round(job.pctCompleteBp / 100);
   const tone = statusTone(job.risk);
   const open = job.status !== 'completed' && job.status !== 'cancelled';
   return (
@@ -61,12 +60,14 @@ function JobBlock({ job, data }: { readonly job: WorkOrderPulseJob; readonly dat
         <PulseStatusPill risk={job.risk} fallback={job.statusLabel} />
       </div>
       <div>
-        <ProgressBar
-          value={done ?? 0}
-          size="sm"
-          tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'primary'}
-          label={`${job.number} is ${done ?? 0} percent done`}
-        />
+        {done === null ? null : (
+          <ProgressBar
+            value={done}
+            size="sm"
+            tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'primary'}
+            label={`${job.number} is ${done} percent done`}
+          />
+        )}
         <p className="mt-1 text-xs tabular-nums text-secondary">
           {formatQuantity(job.unitsGood)} of {formatQuantity(job.plannedUnits)} {job.unitLabel} logged in Pulse
           {done !== null ? ` (${done}%)` : ''} · {formatQuantity(job.hours)} hours

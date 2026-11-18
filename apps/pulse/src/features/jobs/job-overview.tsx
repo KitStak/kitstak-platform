@@ -5,7 +5,7 @@
  * with what if sliders, linked records and the last entries.
  */
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   ArrowRight,
   CircleAlert,
@@ -53,7 +53,6 @@ import { shortDate } from '@/lib/profit/calendar';
 import { routes } from '@/lib/routes';
 import type { JobDetailDTO, JobLinkDTO, LaborClassDTO, SettingsDTO, VasServiceDTO } from '@/lib/types';
 import { addJobLinkAction, removeJobLinkAction } from '@/server/actions/jobs';
-import { CostDialog, RevenueDialog, ServiceDialog } from './forms/entry-forms';
 import { useJobDaily, useJobProduction, useRefreshJob } from './job-data';
 import { nextStepHref, planInUse, planToTotals, rowPace, singularUnit, statsToActual } from './job-math';
 import { Explain, UnitsProgress } from './job-ui';
@@ -133,7 +132,6 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
   const stats = job.stats;
   const unit = singularUnit(job.unitLabel);
   const seesMoney = shell.seesMoney && !stats.moneyHidden;
-  const [dialog, setDialog] = useState<'cost' | 'revenue' | 'service' | null>(null);
   const production = useJobProduction(job.id);
   const daily = useJobDaily(job.number, seesMoney);
 
@@ -623,6 +621,16 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
           <>
             <KpiTile
               label="Labor hours"
+              explain={
+                <Explain
+                  title="Labor hours"
+                  rule="People times hours each, added up over every row on the work log. Overtime hours are part of the total."
+                  rows={[
+                    { label: 'Hours logged', value: formatHours(stats.hours), kind: 'total' },
+                    { label: 'of that, overtime', value: formatHours(stats.overtimeHours), kind: 'note' },
+                  ]}
+                />
+              }
               value={formatHours(stats.hours, { maxDigits: 0 })}
               footer={
                 job.planLaborHours ? (
@@ -634,6 +642,13 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
             />
             <KpiTile
               label="Last entry"
+              explain={
+                <Explain
+                  title="Last entry"
+                  rule="The latest day with a row on the work log for this job. A job with no entry for a few work days gets a heads up."
+                  rows={[{ label: 'Rows on the work log', value: formatNumber(stats.entryCount), kind: 'total' }]}
+                />
+              }
               value={stats.lastEntryDate ? shortDate(stats.lastEntryDate) : null}
               emptyText="None yet"
               footer={<span className="text-xs text-fg-muted">{stats.entryCount} entries</span>}
@@ -788,37 +803,37 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                 </ButtonLink>
               ) : null}
               {shell.can('cost:manage') ? (
-                <Button
+                <ButtonLink
+                  href={`${routes.jobTab(job.number, 'materials')}#other-costs`}
                   variant="secondary"
-                  leadingIcon={<Plus aria-hidden />}
+                  icon={<Plus aria-hidden />}
                   className="justify-start"
-                  onClick={() => setDialog('cost')}
-                  data-testid="quick-add-cost"
+                  testId="quick-add-cost"
                 >
                   Add a cost
-                </Button>
+                </ButtonLink>
               ) : null}
               {shell.can('revenue:manage') ? (
-                <Button
+                <ButtonLink
+                  href={`${routes.jobTab(job.number, 'money-in')}#invoices`}
                   variant="secondary"
-                  leadingIcon={<Plus aria-hidden />}
+                  icon={<Plus aria-hidden />}
                   className="justify-start"
-                  onClick={() => setDialog('revenue')}
-                  data-testid="quick-add-revenue"
+                  testId="quick-add-revenue"
                 >
                   Add an invoice or a fee
-                </Button>
+                </ButtonLink>
               ) : null}
               {shell.can('vas:manage') && services.length > 0 ? (
-                <Button
+                <ButtonLink
+                  href={`${routes.jobTab(job.number, 'money-in')}#extra-services`}
                   variant="secondary"
-                  leadingIcon={<Plus aria-hidden />}
+                  icon={<Plus aria-hidden />}
                   className="justify-start"
-                  onClick={() => setDialog('service')}
-                  data-testid="quick-add-service"
+                  testId="quick-add-service"
                 >
                   Add an extra service
-                </Button>
+                </ButtonLink>
               ) : null}
               {shell.can('job:manage') ? (
                 <Button
@@ -838,35 +853,6 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
         </div>
       </div>
 
-      {dialog === 'cost' ? (
-        <CostDialog
-          job={job}
-          today={today}
-          open
-          onOpenChange={(open) => (open ? undefined : setDialog(null))}
-          onSaved={refresh}
-        />
-      ) : null}
-      {dialog === 'revenue' ? (
-        <RevenueDialog
-          job={job}
-          today={today}
-          open
-          onOpenChange={(open) => (open ? undefined : setDialog(null))}
-          onSaved={refresh}
-        />
-      ) : null}
-      {dialog === 'service' ? (
-        <ServiceDialog
-          job={job}
-          today={today}
-          open
-          onOpenChange={(open) => (open ? undefined : setDialog(null))}
-          onSaved={refresh}
-          services={services}
-          laborClasses={laborClasses}
-        />
-      ) : null}
     </div>
   );
 }

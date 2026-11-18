@@ -133,3 +133,57 @@ export function ExplainNumber({ metric, scope, label, className, align = 'end' }
     </Popover>
   );
 }
+
+export interface ExplainStaticRow {
+  readonly label: string;
+  readonly value: string;
+  /** `minus` rows are taken away, `total` rows are the answer, `note` rows are side facts. */
+  readonly kind?: 'plus' | 'minus' | 'total' | 'note';
+}
+
+/**
+ * "How we got this" for a number the screen already holds every input for: the rule in one plain
+ * sentence and the figures behind it. Same button and popover as `ExplainNumber`, no request.
+ *
+ *   <ExplainStatic title="Overtime share" rule="Overtime hours over all labor hours." rows={[...]} />
+ */
+export function ExplainStatic({ title, rule, rows = [], footnote, label, align = 'end' }: { readonly title: string; readonly rule: string; readonly rows?: readonly ExplainStaticRow[]; readonly footnote?: string; readonly label?: string; readonly align?: 'start' | 'end' }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={label ?? `How we got ${title}`}
+          data-testid="explain-static"
+          onClick={(event) => event.stopPropagation()}
+          className="inline-flex size-6 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+        >
+          <Info aria-hidden className="size-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align={align} className="w-[320px] max-w-[calc(100vw-32px)]">
+        <div className="flex flex-col gap-2.5 p-1" data-testid="explain-static-body">
+          <div>
+            <p className="text-xs font-medium text-fg-muted">How we got this</p>
+            <p className="mt-0.5 text-sm font-semibold text-fg">{title}</p>
+          </div>
+          <p className="text-sm text-fg-secondary">{rule}</p>
+          {rows.length > 0 ? (
+            <dl className="flex flex-col rounded-lg border border-border-subtle bg-sunken text-sm tabular-nums">
+              {rows.map((row) => (
+                <div key={row.label} className={cn('flex items-baseline justify-between gap-3 px-3 py-1.5', row.kind === 'total' && 'border-t border-border-default font-semibold text-fg', row.kind === 'note' && 'text-fg-muted')}>
+                  <dt className="min-w-0 text-fg-secondary">
+                    {row.kind === 'minus' ? <span aria-hidden>less </span> : null}
+                    {row.label}
+                  </dt>
+                  <dd className="shrink-0 text-fg">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          {footnote ? <p className="text-xs text-fg-muted">{footnote}</p> : null}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}

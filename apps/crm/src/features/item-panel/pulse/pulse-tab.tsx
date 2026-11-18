@@ -66,9 +66,7 @@ function Stat({ label, value, hint, tone, raised }: { readonly label: string; re
 }
 
 function percentDone(job: ItemPulseJob): number | null {
-  // A finished job reads as full even when Pulse stopped tracking its percent.
-  if (job.pctCompleteBp === null) return job.status === 'completed' ? 100 : null;
-  return Math.round(job.pctCompleteBp / 100);
+  return job.pctCompleteBp === null ? null : Math.round(job.pctCompleteBp / 100);
 }
 
 function JobCard({ job, moneyHidden, canLog, dealValueCents }: { readonly job: ItemPulseJob; readonly moneyHidden: boolean; readonly canLog: boolean; readonly dealValueCents: number | null }) {
@@ -95,12 +93,14 @@ function JobCard({ job, moneyHidden, canLog, dealValueCents }: { readonly job: I
         {job.dueDate ? ` · due ${job.dueDate}` : ''}
       </p>
       <div className="mt-3">
-        <ProgressBar
-          value={done ?? 0}
-          size="sm"
-          tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'primary'}
-          label={`${job.number} is ${done ?? 0} percent done`}
-        />
+        {done === null ? null : (
+          <ProgressBar
+            value={done}
+            size="sm"
+            tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'primary'}
+            label={`${job.number} is ${done} percent done`}
+          />
+        )}
         <p className="mt-1 text-xs text-fg-secondary tabular-nums">
           {formatQuantity(job.unitsGood)} of {formatQuantity(job.plannedUnits)} {job.unitLabel} done
           {done !== null ? ` (${done}%)` : ''} · {formatQuantity(job.hours)} hours logged

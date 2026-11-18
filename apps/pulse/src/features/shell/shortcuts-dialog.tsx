@@ -23,6 +23,13 @@ export const SHORTCUT_GROUPS: readonly { title: string; items: readonly { keys: 
       { keys: ['G', 'L'], label: 'Log work' },
       { keys: ['G', 'P'], label: 'Profit' },
       { keys: ['G', 'A'], label: 'Alerts' },
+      { keys: ['G', 'B'], label: 'Labor' },
+      { keys: ['G', 'R'], label: 'Reports' },
+      { keys: ['G', 'T'], label: 'Target pace' },
+      { keys: ['G', 'C'], label: 'Calculator' },
+      { keys: ['G', 'O'], label: 'Goals' },
+      { keys: ['G', 'I'], label: 'Import and export' },
+      { keys: ['G', 'S'], label: 'Settings' },
     ],
   },
   {

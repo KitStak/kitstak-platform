@@ -118,12 +118,7 @@ export async function LogReviewPage() {
 }
 
 /** Every production entry across days, with filters, bulk edit and export. */
-export async function LogEntriesPage({
-  searchParams,
-}: {
-  readonly searchParams?: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const query = (await searchParams) ?? {};
+export async function LogEntriesPage() {
   const page = await pulsePage(routes.logEntries(), 'log');
   if (page.blocked) return <PageBlocked title="All entries" role={page.access.role} />;
   const [sites, laborClasses] = await Promise.all([
@@ -131,10 +126,9 @@ export async function LogEntriesPage({
     listLaborClasses(page.ctx, { includeArchived: true }),
   ]);
   const today = sites.find((site) => site.isDefault)?.today ?? sites[0]?.today ?? todayIso();
-  const job = Array.isArray(query.job) ? query.job[0] : query.job;
   return (
     <Frame page={page} view="entries" subtitle="Every production entry, across all days and jobs.">
-      <EntriesView sites={sites} laborClasses={laborClasses} today={today} initialJob={job ?? null} />
+      <EntriesView sites={sites} laborClasses={laborClasses} today={today} />
     </Frame>
   );
 }

@@ -1,7 +1,8 @@
 'use client';
 /** Date range and site picker shared by the Labor and Target pace screens. */
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { IsoDatePicker, Select, ToggleGroup } from '@/components/ui';
+import { useUrlState } from '@/features/views/use-url-state';
 import { addDays, addMonths, endOfMonth, startOfMonth } from '@/lib/profit';
 import type { SiteDTO } from '@/lib/types';
 
@@ -26,13 +27,40 @@ export function presetRange(
   return { from: addDays(today, preset === 'last_30' ? -29 : -89), to: today };
 }
 
+const PRESET_VALUES: readonly RangePreset[] = ['this_month', 'last_month', 'last_30', 'last_90', 'custom'];
+const isDay = (value: string | null): value is string => value !== null && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/**
+ * The picked days and site. They live in the address bar (`range`, `from`, `to`, `site`), so a
+ * screen can be shared, bookmarked and kept as a saved view.
+ */
 export function useRange(today: string, initial: Exclude<RangePreset, 'custom'> = 'last_30') {
-  const [state, setState] = useState<RangeState>(() => ({
-    preset: initial,
-    ...presetRange(initial, today),
-    siteId: null,
-  }));
-  return useMemo(() => ({ state, setState }), [state]);
+  const url = useUrlState();
+  const rangeParam = url.get('range');
+  const fromParam = url.get('from');
+  const toParam = url.get('to');
+  const siteId = url.get('site');
+  const state = useMemo<RangeState>(() => {
+    const preset = PRESET_VALUES.includes(rangeParam as RangePreset) ? (rangeParam as RangePreset) : initial;
+    if (preset === 'custom') {
+      const fallback = presetRange(initial, today);
+      const from = isDay(fromParam) ? fromParam : fallback.from;
+      const to = isDay(toParam) && toParam >= from ? toParam : from > fallback.to ? from : fallback.to;
+      return { preset, from, to, siteId };
+    }
+    return { preset, ...presetRange(preset, today), siteId };
+  }, [rangeParam, fromParam, toParam, siteId, initial, today]);
+  const setState = useCallback(
+    (next: RangeState) =>
+      url.set({
+        range: next.preset === initial ? null : next.preset,
+        from: next.preset === 'custom' ? next.from : null,
+        to: next.preset === 'custom' ? next.to : null,
+        site: next.siteId,
+      }),
+    [url, initial],
+  );
+  return useMemo(() => ({ state, setState }), [state, setState]);
 }
 
 const PRESETS: readonly { value: RangePreset; label: string }[] = [

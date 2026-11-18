@@ -233,7 +233,24 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
 }
 
 /** Stamps the written rows, restamps fixed price jobs, then runs the shared tail of every write. */
+/**
+ * Work has started: a planned job becomes active with its first logged entry, so it shows on the
+ * day sheet from then on and gets a risk status. Logged in the activity feed like any stage change.
+ */
+async function startPlannedJobs(tx: Executor, ctx: DomainContext, jobIds: ReadonlySet<string>): Promise<void> {
+  if (jobIds.size === 0) return;
+  const started = await tx
+    .update(jobs)
+    .set({ status: 'active', activatedAt: sql`COALESCE(${jobs.activatedAt}, now())`, version: sql`version + 1`, updatedBy: ctx.userId, updatedAt: new Date() })
+    .where(and(eq(jobs.orgId, ctx.orgId), inArray(jobs.id, [...jobIds]), eq(jobs.status, 'planned'), isNull(jobs.deletedAt), sql`EXISTS (SELECT 1 FROM pulse.production_entries e WHERE e.job_id = ${jobs.id} AND e.deleted_at IS NULL)`))
+    .returning({ id: jobs.id, clientId: jobs.clientId });
+  for (const job of started) {
+    await logActivity(tx, ctx, { verb: 'job.status_changed', entityType: 'job', entityId: job.id, jobId: job.id, clientId: job.clientId, field: 'status', before: { status: 'planned' }, after: { status: 'active', reason: 'first work logged' } });
+  }
+}
+
 async function finishProduction(tx: Executor, ctx: DomainContext, ids: readonly string[], fixedJobs: ReadonlySet<string>, touched: Touched): Promise<void> {
+  if (ids.length > 0) await startPlannedJobs(tx, ctx, touched.jobIds);
   if (ids.length > 0) await restampProduction(tx, ctx.orgId, sql`src.id = ANY(${sql`ARRAY[${sql.join(ids.map((id) => sql`${id}`), sql`, `)}]::uuid[]`})`);
   for (const jobId of fixedJobs) await restampFixedJob(tx, ctx, jobId);
   await finishWrite(tx, ctx, touched);

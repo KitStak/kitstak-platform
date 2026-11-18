@@ -5,11 +5,10 @@
  * services with their own revenue, cost and margin.
  */
 import { useMemo, useState } from 'react';
-import { BadgeDollarSign, Lock, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import {
   Button,
   IconButton,
-  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -22,68 +21,27 @@ import { cn } from '@/components/ui/cn';
 import { BarChart } from '@/components/charts/cartesian';
 import { KpiTile } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
-import { ButtonLink } from '@/components/pulse/button-link';
-import { Teach } from '@/components/pulse/teach';
+import { RevenueLedger } from '@/features/revenue/revenue-ledger';
+import { ServiceLedger } from '@/features/revenue/service-ledger';
 import { useShell } from '@/features/shell/shell-context';
-import { PRICING_MODEL_LABELS, REVENUE_KIND_LABELS } from '@/lib/constants';
-import {
-  formatHours,
-  formatMoney,
-  formatMoneyPerHour,
-  formatNumber,
-  formatPercentBp,
-  formatUnitPrice,
-} from '@/lib/format';
-import { addCents, marginBp, subCents, toCents } from '@/lib/money';
+import { PRICING_MODEL_LABELS } from '@/lib/constants';
+import { formatMoney, formatMoneyPerHour, formatUnitPrice } from '@/lib/format';
 import { shortDate } from '@/lib/profit/calendar';
-import { routes } from '@/lib/routes';
-import type { RevenueEntryDTO, VasEntryDTO } from '@/lib/types';
-import {
-  deleteRevenueAction,
-  deleteVasEntryAction,
-  restoreRevenueAction,
-  restoreVasEntryAction,
-} from '@/server/actions/entries';
 import { deleteJobPriceAction } from '@/server/actions/jobs';
-import { RevenueDialog, ServiceDialog } from './forms/entry-forms';
 import { PriceDialog } from './forms/job-dialogs';
-import { useDeleteWithUndo, useJobDaily, useJobRevenue, useJobServices, useRefreshJob } from './job-data';
+import { useJobDaily, useRefreshJob } from './job-data';
 import { singularUnit } from './job-math';
 import type { JobTabProps } from './job-overview';
 import { Explain, LoadError } from './job-ui';
 
-export function JobMoneyIn({ job, today, services, laborClasses }: JobTabProps) {
+export function JobMoneyIn({ job, today }: JobTabProps) {
   const shell = useShell();
   const refresh = useRefreshJob();
-  const removeWithUndo = useDeleteWithUndo(refresh);
   const canRevenue = shell.can('revenue:manage');
-  const canVas = shell.can('vas:manage');
   const unit = singularUnit(job.unitLabel);
   const stats = job.stats;
-  const revenue = useJobRevenue(job.id);
-  const serviceRows = useJobServices(job.id);
   const daily = useJobDaily(job.number);
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
-  const [revenueDialog, setRevenueDialog] = useState<RevenueEntryDTO | 'new' | null>(null);
-  const [serviceDialog, setServiceDialog] = useState<VasEntryDTO | 'new' | null>(null);
   const [priceOpen, setPriceOpen] = useState(false);
-  const hide = (id: string) => setHidden((current) => new Set(current).add(id));
-  const show = (id: string) =>
-    setHidden((current) => {
-      const next = new Set(current);
-      next.delete(id);
-      return next;
-    });
-
-  const revenueRows = useMemo(
-    () => (revenue.data ?? []).filter((row) => row.deletedAt === null && !hidden.has(row.id)),
-    [revenue.data, hidden],
-  );
-  const vasRows = useMemo(
-    () => (serviceRows.data ?? []).filter((row) => row.deletedAt === null && !hidden.has(row.id)),
-    [serviceRows.data, hidden],
-  );
-  const serviceName = useMemo(() => new Map(services.map((item) => [item.id, item.name])), [services]);
   const earned = useMemo(() => {
     const rows = [...(daily.data?.rows ?? [])]
       .sort((a, b) => a.key.localeCompare(b.key))
@@ -142,6 +100,16 @@ export function JobMoneyIn({ job, today, services, laborClasses }: JobTabProps) 
         />
         <KpiTile
           label="Billed"
+          explain={
+            <Explain
+              title="Billed"
+              rule="Every approved invoice on this job, added up. Billing is a record only. Profit comes from what the work earned, not from what was billed."
+              rows={[
+                { label: 'Approved invoices', value: formatMoney(stats.billedCents), kind: 'total' },
+                { label: 'Earned so far', value: formatMoney(stats.revenueCents), kind: 'note' },
+              ]}
+            />
+          }
           value={formatMoney(stats.billedCents, { cents: false })}
           footer={<span className="text-xs text-fg-muted">Approved invoices. Never counted as profit.</span>}
         />
@@ -266,290 +234,13 @@ export function JobMoneyIn({ job, today, services, laborClasses }: JobTabProps) 
         />
       </Panel>
 
-      <Panel
-        title="Invoices, fees and credits"
-        action={
-          canRevenue ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              leadingIcon={<Plus aria-hidden />}
-              onClick={() => setRevenueDialog('new')}
-              data-testid="revenue-add"
-            >
-              Add a row
-            </Button>
-          ) : undefined
-        }
-        bodyClassName="p-0"
-      >
-        {revenue.isError ? (
-          <div className="p-4">
-            <LoadError what="the invoices" onRetry={() => void revenue.refetch()} />
-          </div>
-        ) : revenue.isPending ? (
-          <div className="flex flex-col gap-2 p-4" role="status" aria-busy="true">
-            <span className="sr-only">Loading invoices</span>
-            <Skeleton height={28} />
-            <Skeleton height={28} />
-          </div>
-        ) : revenueRows.length === 0 ? (
-          <Teach
-            testId="revenue-empty"
-            size="sm"
-            icon={BadgeDollarSign}
-            title="No invoices or fees yet"
-            why="Log each invoice to see what is still not billed. Add fees and credits here too: they change what the job earned."
-            actions={
-              canRevenue ? (
-                <Button leadingIcon={<Plus aria-hidden />} onClick={() => setRevenueDialog('new')}>
-                  Add an invoice or a fee
-                </Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <Table aria-label="Invoices, fees and credits" data-testid="revenue-table">
-              <TableHead>
-                <TableRow className="hover:bg-transparent">
-                  <TableHeaderCell>Day</TableHeaderCell>
-                  <TableHeaderCell>What</TableHeaderCell>
-                  <TableHeaderCell>For</TableHeaderCell>
-                  <TableHeaderCell numeric>Amount</TableHeaderCell>
-                  <TableHeaderCell>Counts as</TableHeaderCell>
-                  <TableHeaderCell className="w-20">
-                    <span className="sr-only">Actions</span>
-                  </TableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {revenueRows.map((row) => (
-                  <TableRow key={row.id} data-testid="revenue-row">
-                    <TableCell className="whitespace-nowrap">{shortDate(row.revenueDate)}</TableCell>
-                    <TableCell>
-                      {REVENUE_KIND_LABELS[row.kind]}
-                      {row.invoiceNumber ? (
-                        <span className="ml-1.5 text-xs text-fg-muted">{row.invoiceNumber}</span>
-                      ) : null}
-                      {row.kind === 'invoice' && !row.approved ? (
-                        <span className="ml-1.5 rounded-sm bg-[var(--label-yellow-subtle)] px-1 text-2xs font-medium text-[var(--label-yellow-text)]">
-                          Not approved yet
-                        </span>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="max-w-[280px] truncate text-fg-secondary">
-                      {row.description ?? row.serviceLabel ?? ''}
-                    </TableCell>
-                    <TableCell
-                      numeric
-                      className={cn('font-medium', (row.amountCents ?? 0) < 0 && 'text-danger-text')}
-                    >
-                      {formatMoney(row.amountCents)}
-                    </TableCell>
-                    <TableCell className="text-xs text-fg-muted">
-                      {row.kind === 'invoice' ? 'Billed' : 'Earned'}
-                    </TableCell>
-                    <TableCell className="pl-0 text-right whitespace-nowrap">
-                      {row.locked ? (
-                        <Lock aria-label="This month is closed" className="inline size-3.5 text-fg-muted" />
-                      ) : row.kind === 'fixed_true_up' ? (
-                        <span
-                          className="text-2xs text-fg-muted"
-                          title="Pulse writes this row by itself when a fixed price job finishes."
-                        >
-                          By Pulse
-                        </span>
-                      ) : canRevenue ? (
-                        <>
-                          <IconButton
-                            label={`Edit the ${REVENUE_KIND_LABELS[row.kind].toLowerCase()} of ${shortDate(row.revenueDate)}`}
-                            icon={<Pencil aria-hidden />}
-                            size="sm"
-                            onClick={() => setRevenueDialog(row)}
-                            data-testid="revenue-edit"
-                          />
-                          <IconButton
-                            label={`Delete the ${REVENUE_KIND_LABELS[row.kind].toLowerCase()} of ${shortDate(row.revenueDate)}`}
-                            icon={<Trash2 aria-hidden />}
-                            size="sm"
-                            data-testid="revenue-delete"
-                            onClick={() =>
-                              void removeWithUndo({
-                                label: `the ${REVENUE_KIND_LABELS[row.kind].toLowerCase()}`,
-                                hide: () => hide(row.id),
-                                show: () => show(row.id),
-                                remove: () => deleteRevenueAction({ id: row.id }),
-                                restore: () => restoreRevenueAction({ id: row.id }),
-                              })
-                            }
-                          />
-                        </>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </Panel>
+      <div id="invoices" className="scroll-mt-24">
+        <RevenueLedger jobId={job.id} today={today} />
+      </div>
+      <div id="extra-services" className="scroll-mt-24">
+        <ServiceLedger jobId={job.id} today={today} title="Extra services" />
+      </div>
 
-      <Panel
-        title="Extra services"
-        action={
-          canVas && services.length > 0 ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              leadingIcon={<Plus aria-hidden />}
-              onClick={() => setServiceDialog('new')}
-              data-testid="service-add"
-            >
-              Add a service
-            </Button>
-          ) : undefined
-        }
-        bodyClassName="p-0"
-      >
-        {serviceRows.isError ? (
-          <div className="p-4">
-            <LoadError what="the extra services" onRetry={() => void serviceRows.refetch()} />
-          </div>
-        ) : serviceRows.isPending ? (
-          <div className="flex flex-col gap-2 p-4" role="status" aria-busy="true">
-            <span className="sr-only">Loading extra services</span>
-            <Skeleton height={28} />
-          </div>
-        ) : vasRows.length === 0 ? (
-          <Teach
-            testId="services-empty"
-            size="sm"
-            icon={Sparkles}
-            title="No extra services on this job"
-            why="Labeling, gift wrap, rework, special packing: work sold on top of the job. Each entry carries its own revenue and its own cost, so you can see which services pay."
-            actions={
-              services.length === 0 ? (
-                <ButtonLink href={routes.services()} variant="secondary">
-                  Set up your services
-                </ButtonLink>
-              ) : canVas ? (
-                <Button leadingIcon={<Plus aria-hidden />} onClick={() => setServiceDialog('new')}>
-                  Add a service
-                </Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <Table aria-label="Extra service entries" data-testid="services-table">
-              <TableHead>
-                <TableRow className="hover:bg-transparent">
-                  <TableHeaderCell>Day</TableHeaderCell>
-                  <TableHeaderCell>Service</TableHeaderCell>
-                  <TableHeaderCell numeric>How many</TableHeaderCell>
-                  <TableHeaderCell numeric>Revenue</TableHeaderCell>
-                  <TableHeaderCell numeric>Labor hours</TableHeaderCell>
-                  <TableHeaderCell numeric>Cost</TableHeaderCell>
-                  <TableHeaderCell numeric>Margin</TableHeaderCell>
-                  <TableHeaderCell className="w-20">
-                    <span className="sr-only">Actions</span>
-                  </TableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {vasRows.map((row) => {
-                  const cost = addCents(
-                    row.laborCostCents ?? 0,
-                    row.materialCents ?? 0,
-                    row.sharedCents ?? 0,
-                  );
-                  const margin =
-                    row.amountCents === null
-                      ? null
-                      : marginBp(subCents(toCents(row.amountCents), cost), toCents(row.amountCents));
-                  const name = serviceName.get(row.vasServiceId) ?? 'Service';
-                  return (
-                    <TableRow key={row.id} data-testid="service-row">
-                      <TableCell className="whitespace-nowrap">{shortDate(row.workDate)}</TableCell>
-                      <TableCell>{name}</TableCell>
-                      <TableCell numeric>{formatNumber(row.quantity)}</TableCell>
-                      <TableCell numeric>
-                        {row.noPrice ? (
-                          <span className="rounded-sm bg-[var(--label-yellow-subtle)] px-1.5 py-0.5 text-xs font-medium text-[var(--label-yellow-text)]">
-                            No price set yet
-                          </span>
-                        ) : (
-                          formatMoney(row.amountCents)
-                        )}
-                      </TableCell>
-                      <TableCell numeric>{Number(row.hours) > 0 ? formatHours(row.hours) : ''}</TableCell>
-                      <TableCell numeric>{formatMoney(cost)}</TableCell>
-                      <TableCell numeric className={cn(margin !== null && margin < 0 && 'text-danger-text')}>
-                        {formatPercentBp(margin, { empty: '' })}
-                      </TableCell>
-                      <TableCell className="pl-0 text-right whitespace-nowrap">
-                        {row.locked ? (
-                          <Lock aria-label="This month is closed" className="inline size-3.5 text-fg-muted" />
-                        ) : canVas ? (
-                          <>
-                            <IconButton
-                              label={`Edit ${name} of ${shortDate(row.workDate)}`}
-                              icon={<Pencil aria-hidden />}
-                              size="sm"
-                              onClick={() => setServiceDialog(row)}
-                            />
-                            <IconButton
-                              label={`Delete ${name} of ${shortDate(row.workDate)}`}
-                              icon={<Trash2 aria-hidden />}
-                              size="sm"
-                              data-testid="service-delete"
-                              onClick={() =>
-                                void removeWithUndo({
-                                  label: `the ${name} entry`,
-                                  hide: () => hide(row.id),
-                                  show: () => show(row.id),
-                                  remove: () => deleteVasEntryAction({ id: row.id }),
-                                  restore: () => restoreVasEntryAction({ id: row.id }),
-                                })
-                              }
-                            />
-                          </>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </Panel>
-
-      {revenueDialog ? (
-        <RevenueDialog
-          key={revenueDialog === 'new' ? 'new' : revenueDialog.id}
-          job={job}
-          row={revenueDialog === 'new' ? null : revenueDialog}
-          today={today}
-          open
-          onOpenChange={(open) => (open ? undefined : setRevenueDialog(null))}
-          onSaved={refresh}
-        />
-      ) : null}
-      {serviceDialog ? (
-        <ServiceDialog
-          key={serviceDialog === 'new' ? 'new' : serviceDialog.id}
-          job={job}
-          row={serviceDialog === 'new' ? null : serviceDialog}
-          today={today}
-          open
-          onOpenChange={(open) => (open ? undefined : setServiceDialog(null))}
-          onSaved={refresh}
-          services={services}
-          laborClasses={laborClasses}
-        />
-      ) : null}
       {priceOpen ? (
         <PriceDialog
           job={job}

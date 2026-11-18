@@ -1,4 +1,5 @@
 import { Page } from '@/components/layout/page';
+import { ExportStreamLink } from '@/components/pulse/export-link';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { routes } from '@/lib/routes';
 import { getGoalsBoard } from '@/server/domain';
@@ -15,7 +16,7 @@ export async function GoalsPage({ searchParams }: { readonly searchParams?: Sear
   if (page.blocked) return <PageBlocked title="Goals" role={page.access.role} />;
   const board = await getGoalsBoard(page.ctx, { month: wanted });
   return (
-    <Page title="Goals" subtitle="What you are aiming for, and how you are doing against it.">
+    <Page title="Goals" subtitle="What you are aiming for, and how you are doing against it." actions={<ExportStreamLink stream="goals" />}>
       <GoalsView initial={board} />
     </Page>
   );

@@ -44,6 +44,8 @@ import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { Teach } from '@/components/pulse/teach';
 import { useShell } from '@/features/shell/shell-context';
+import { SavedViewsBar } from '@/features/views/saved-views-bar';
+import { useUrlState, useUrlText } from '@/features/views/use-url-state';
 import { STREAM_SOURCES, type StreamSource } from '@/lib/constants';
 import { exportFileName, streamToCsv } from '@/lib/csv';
 import { formatHours, formatMoney, formatNumber, formatPace } from '@/lib/format';
@@ -97,23 +99,31 @@ export function EntriesView({
   sites,
   laborClasses,
   today,
-  initialJob,
 }: {
   readonly sites: readonly SiteDTO[];
   readonly laborClasses: readonly LaborClassDTO[];
   readonly today: string;
-  readonly initialJob?: string | null;
 }) {
   const shell = useShell();
   const canLog = shell.can('production:log');
-  const [from, setFrom] = useState(addDays(today, -13));
-  const [to, setTo] = useState(today);
-  const [siteId, setSiteId] = useState('all');
-  const [classId, setClassId] = useState('all');
-  const [source, setSource] = useState('all');
-  const [needsHours, setNeedsHours] = useState(false);
-  const [removed, setRemoved] = useState(false);
-  const [search, setSearch] = useState(initialJob ?? '');
+  // Every filter lives in the address bar, so a list can be shared and kept as a saved view.
+  const url = useUrlState();
+  const day = (value: string | null, fallback: string) => (value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback);
+  const from = day(url.get('from'), addDays(today, -13));
+  const to = day(url.get('to'), today);
+  const siteId = url.get('site') ?? 'all';
+  const classId = url.get('class') ?? 'all';
+  const source = url.get('source') ?? 'all';
+  const needsHours = url.get('needsHours') === '1';
+  const removed = url.get('removed') === '1';
+  const setFrom = (value: string) => url.set({ from: value });
+  const setTo = (value: string) => url.set({ to: value });
+  const setSiteId = (value: string) => url.set({ site: value === 'all' ? null : value });
+  const setClassId = (value: string) => url.set({ class: value === 'all' ? null : value });
+  const setSource = (value: string) => url.set({ source: value === 'all' ? null : value });
+  const setNeedsHours = (value: boolean) => url.set({ needsHours: value ? '1' : null });
+  const setRemoved = (value: boolean) => url.set({ removed: value ? '1' : null });
+  const [search, setSearch] = useUrlText('job');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<ProductionEntryDTO | null>(null);
@@ -264,6 +274,7 @@ export function EntriesView({
 
   return (
     <div className="flex flex-col gap-4" data-testid="entries-view">
+      <SavedViewsBar page="log" />
       <Panel bodyClassName="p-0">
         <div className="flex flex-wrap items-end gap-2 border-b border-border-subtle px-3 py-2.5">
           <label className="flex flex-col gap-1 text-xs text-fg-muted">

@@ -12,6 +12,7 @@ import { ComboChart } from '@/components/charts/cartesian';
 import { formatDateLong } from '@/components/charts/scale';
 import { KpiTile, MarginPill, marginHealth } from '@/components/charts/stats';
 import { ExplainNumber } from '@/components/pulse/explain';
+import { ExplainStatic } from '@/components/pulse/explain';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '@/components/ui/table';
 import { ToggleGroup } from '@/components/ui/toggle-group';
@@ -134,8 +135,8 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
           <KpiTile label="Cost" loading={!total} value={total ? formatMoneyWhole(total.costCents) : null} sparkline={points.length > 1 ? { values: points.map((row) => row.costCents) } : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
           <KpiTile label="Profit" loading={!total} value={total ? formatMoneyWhole(total.profitCents) : null} explain={<ExplainNumber metric="profit" scope={scope} />} />
           <KpiTile label="Margin" loading={!total} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null} explain={<ExplainNumber metric="margin" scope={scope} />} footer={total && total.marginBp !== null ? <MarginPill health={marginHealth(total.marginBp, targetMarginBp)} size="sm" /> : undefined} />
-          <KpiTile label={`Volume, ${service.unitLabel}`} loading={!entries.data} value={entries.data ? formatNumber(volume, { maxDigits: 0 }) : null} footer={entries.data ? <span className="text-xs text-fg-muted">{entries.data.length} {entries.data.length === 1 ? 'entry' : 'entries'}</span> : undefined} />
-          <KpiTile label={`Earned for one ${unit}`} loading={!total || !entries.data} value={line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : null} emptyText="No volume yet" footer={line.costPerUnit ? <span className="text-xs text-fg-muted tabular-nums">{formatUnitPrice(line.costPerUnit)} to do one</span> : undefined} />
+          <KpiTile label={`Volume, ${service.unitLabel}`} explain={<ExplainStatic title={`Volume, ${service.unitLabel}`} rule="How many, added up over every entry of this service in the period." rows={[{ label: 'Entries', value: formatNumber(entries.data?.length ?? 0) }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 0 }), kind: 'total' }]} />} loading={!entries.data} value={entries.data ? formatNumber(volume, { maxDigits: 0 }) : null} footer={entries.data ? <span className="text-xs text-fg-muted">{entries.data.length} {entries.data.length === 1 ? 'entry' : 'entries'}</span> : undefined} />
+          <KpiTile label={`Earned for one ${unit}`} explain={<ExplainStatic title={`Earned for one ${unit}`} rule="Revenue from this service in the period divided by its volume. The cost to do one is its cost divided the same way." rows={[{ label: 'Revenue', value: total ? formatMoney(total.revenueCents, { empty: 'Hidden' }) : 'None' }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 0 }) }, { label: 'Earned for one', value: line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : 'No volume yet', kind: 'total' }]} />} loading={!total || !entries.data} value={line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : null} emptyText="No volume yet" footer={line.costPerUnit ? <span className="text-xs text-fg-muted tabular-nums">{formatUnitPrice(line.costPerUnit)} to do one</span> : undefined} />
         </div>
       )}
 

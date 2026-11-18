@@ -45,7 +45,7 @@ export function SkeletonRows({ rows = 4, className }: { readonly rows?: number; 
 }
 
 export interface ProgressBarProps {
-  /** 0–100. Omit for indeterminate. */
+  /** 0 to 100. Omit for indeterminate. */
   readonly value?: number;
   readonly label: string;
   readonly showValue?: boolean;

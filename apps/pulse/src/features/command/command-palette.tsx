@@ -14,6 +14,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowUpRight,
   CalendarCheck2,
+  CalendarRange,
+  ClipboardCheck,
   ClipboardPen,
   CornerDownLeft,
   Download,
@@ -33,7 +35,7 @@ import { withThemeParam } from '@kitstak/ui/theme-handoff';
 import { DARK_QUERY, persistTheme } from '@kitstak/ui/theme';
 import { Kbd, cn } from '@/components/ui';
 import { organization, signOut } from '@/lib/auth-client';
-import { navFor } from '@/lib/nav';
+import { navFor, subPagesFor } from '@/lib/nav';
 import { REPORTS } from '@/lib/reports';
 import { routes } from '@/lib/routes';
 import { NAV_ICONS } from '@/features/shell/nav-icons';
@@ -43,6 +45,9 @@ import { useShellStore } from '@/features/shell/store';
 
 const groupClass =
   '[&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-fg-muted';
+
+/** Sub pages that have their own action row. */
+const ACTION_PAGES: ReadonlySet<string> = new Set(['welcome', 'log-bulk', 'log-review', 'import-new', 'export', 'wall', 'settings-close']);
 
 /** Rows that must always show while typing (they act on the typed text itself). */
 const ALWAYS = 'always:';
@@ -172,6 +177,8 @@ export function CommandPalette() {
   const typing = typed.length > 0;
   const pages = navFor(pulseRole);
   const hasAccess = pulseRole !== 'none';
+  // Pages that already have a row under "Do something" are not listed twice.
+  const subPages = subPagesFor(pulseRole, seesMoney).filter((page) => !ACTION_PAGES.has(page.id));
   const seesReports = pages.some((entry) => entry.id === 'reports');
   const reports = seesReports ? REPORTS.filter((report) => seesMoney || !report.needsMoney) : [];
 
@@ -213,6 +220,16 @@ export function CommandPalette() {
             {can('job:manage') ? (
               <Item value="action-new-job" keywords={['new job', 'create', 'add', 'quote']} onSelect={() => go(routes.newJob())} icon={<PackagePlus aria-hidden className="size-4" />} hint={<Kbd>N</Kbd>} testId="palette-new-job">
                 New job
+              </Item>
+            ) : null}
+            {can('production:log') ? (
+              <Item value="action-log-bulk" keywords={['log many days', 'bulk', 'catch up', 'paste days']} onSelect={() => go(routes.logBulk())} icon={<CalendarRange aria-hidden className="size-4" />} meta="One sheet for a run of days">
+                Log many days
+              </Item>
+            ) : null}
+            {can('day:review') ? (
+              <Item value="action-review-day" keywords={['review the day', 'approve', 'send back', 'check entries']} onSelect={() => go(routes.logReview())} icon={<ClipboardCheck aria-hidden className="size-4" />} meta="Check the day, then approve it">
+                Review the day
               </Item>
             ) : null}
             {can('production:log') ? (
@@ -259,6 +276,19 @@ export function CommandPalette() {
                   }
                 >
                   {entry.label}
+                </Item>
+              );
+            })}
+          </Command.Group>
+        ) : null}
+
+        {typing && subPages.length > 0 ? (
+          <Command.Group heading="More pages" className={groupClass}>
+            {subPages.map((page) => {
+              const Icon = NAV_ICONS[page.parent];
+              return (
+                <Item key={page.id} value={`${page.label} (${page.id})`} keywords={[page.label, ...page.keywords]} onSelect={() => go(page.href)} icon={<Icon aria-hidden className="size-4" />} meta={page.description} testId="palette-sub-page">
+                  {page.label}
                 </Item>
               );
             })}

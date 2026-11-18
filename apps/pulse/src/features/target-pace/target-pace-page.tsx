@@ -1,6 +1,7 @@
 import { FileSpreadsheet } from 'lucide-react';
 import { Page } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
+import { ExportStreamLink } from '@/components/pulse/export-link';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { todayIso } from '@/lib/dates';
 import { routes } from '@/lib/routes';
@@ -26,15 +27,18 @@ export async function TargetPacePage() {
       title="Target pace"
       subtitle="How many units one person should finish in an hour, and how the floor is doing against it."
       actions={
-        canManage ? (
-          <ButtonLink
-            href={routes.newImport('target_pace')}
-            variant="secondary"
-            icon={<FileSpreadsheet aria-hidden />}
-          >
-            Import target pace
-          </ButtonLink>
-        ) : null
+        <>
+          <ExportStreamLink stream="target_pace" />
+          {canManage ? (
+            <ButtonLink
+              href={routes.newImport('target_pace')}
+              variant="secondary"
+              icon={<FileSpreadsheet aria-hidden />}
+            >
+              Import target pace
+            </ButtonLink>
+          ) : null}
+        </>
       }
     >
       <TargetPaceView

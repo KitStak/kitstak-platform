@@ -5,84 +5,38 @@
  * help). Every row can be added, edited and deleted with undo.
  */
 import { useMemo, useState } from 'react';
-import { Boxes, Lock, Pencil, Plus, Receipt, Trash2 } from 'lucide-react';
-import {
-  Button,
-  IconButton,
-  Skeleton,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeaderCell,
-  TableRow,
-  ToggleGroup,
-  toast,
-} from '@/components/ui';
+import { Pencil } from 'lucide-react';
+import { Button, ToggleGroup, toast } from '@/components/ui';
 import { KpiTile } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
-import { Teach } from '@/components/pulse/teach';
+import { CostLedger } from '@/features/costs/cost-ledger';
+import { MaterialLedger } from '@/features/materials/material-ledger';
 import { useShell } from '@/features/shell/shell-context';
-import { COST_CATEGORY_LABELS } from '@/lib/constants';
 import { formatMoney, formatNumber, formatPercentBp, formatUnitPrice } from '@/lib/format';
 import { scrapUnitsBp } from '@/lib/profit';
 import { shortDate } from '@/lib/profit/calendar';
-import type { CostEntryDTO, JobPriceDTO, MaterialUsageDTO } from '@/lib/types';
-import {
-  deleteCostAction,
-  deleteMaterialUsageAction,
-  restoreCostAction,
-  restoreMaterialUsageAction,
-} from '@/server/actions/entries';
+import type { JobPriceDTO } from '@/lib/types';
 import { updateJobAction } from '@/server/actions/jobs';
-import { CostDialog, UsageDialog } from './forms/entry-forms';
 import { PriceDialog } from './forms/job-dialogs';
-import { useDeleteWithUndo, useJobCosts, useJobUsage, useRefreshJob } from './job-data';
+import { useJobCosts, useJobUsage, useRefreshJob } from './job-data';
 import { singularUnit } from './job-math';
 import type { JobTabProps } from './job-overview';
-import { Explain, LoadError } from './job-ui';
+import { Explain } from './job-ui';
 import { callAction } from './use-job-actions';
-
-function useHidden() {
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
-  return {
-    hidden,
-    hide: (id: string) => setHidden((current) => new Set(current).add(id)),
-    show: (id: string) =>
-      setHidden((current) => {
-        const next = new Set(current);
-        next.delete(id);
-        return next;
-      }),
-  };
-}
 
 export function JobMaterials({ job, today }: JobTabProps) {
   const shell = useShell();
   const refresh = useRefreshJob();
-  const removeWithUndo = useDeleteWithUndo(refresh);
   const seesMoney = shell.seesMoney && !job.stats.moneyHidden;
   const canManage = shell.can('job:manage');
-  const canLogMaterial = shell.can('material:log');
-  const canCost = shell.can('cost:manage');
   const unit = singularUnit(job.unitLabel);
   const usage = useJobUsage(job.id);
   const costs = useJobCosts(job.id, seesMoney);
-  const usageHidden = useHidden();
-  const costHidden = useHidden();
-  const [usageDialog, setUsageDialog] = useState<MaterialUsageDTO | 'new' | null>(null);
-  const [costDialog, setCostDialog] = useState<CostEntryDTO | 'new' | null>(null);
   const [priceOpen, setPriceOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const usageRows = useMemo(
-    () => (usage.data ?? []).filter((row) => row.deletedAt === null && !usageHidden.hidden.has(row.id)),
-    [usage.data, usageHidden.hidden],
-  );
-  const costRows = useMemo(
-    () => (costs.data ?? []).filter((row) => row.deletedAt === null && !costHidden.hidden.has(row.id)),
-    [costs.data, costHidden.hidden],
-  );
+  const usageRows = useMemo(() => (usage.data ?? []).filter((row) => row.deletedAt === null), [usage.data]);
+  const costRows = useMemo(() => (costs.data ?? []).filter((row) => row.deletedAt === null), [costs.data]);
   const partsOwner = job.partsOwner ?? 'us';
   const scrapBp = scrapUnitsBp(job.stats.unitsGood, job.stats.unitsScrap);
   const materialPrices = job.prices.filter(
@@ -136,6 +90,17 @@ export function JobMaterials({ job, today }: JobTabProps) {
         ) : null}
         <KpiTile
           label="Scrapped"
+          explain={
+            <Explain
+              title="Scrapped"
+              rule="Units logged as scrap on the work log. The share is scrapped units over everything made, good and scrapped."
+              rows={[
+                { label: 'Good units', value: formatNumber(job.stats.unitsGood, { maxDigits: 0 }) },
+                { label: 'Scrapped units', value: formatNumber(job.stats.unitsScrap, { maxDigits: 0 }) },
+                { label: 'Share scrapped', value: scrapBp === null ? 'No units yet' : formatPercentBp(scrapBp), kind: 'total' },
+              ]}
+            />
+          }
           value={formatNumber(job.stats.unitsScrap, { maxDigits: 0 })}
           footer={
             <span className="text-xs text-fg-muted">
@@ -146,6 +111,15 @@ export function JobMaterials({ job, today }: JobTabProps) {
         {seesMoney ? (
           <KpiTile
             label="Other costs so far"
+            explain={
+              <Explain
+                title="Other costs so far"
+                rule="Every row in the list of other costs on this job, added up. A credit, typed with a minus sign, takes away from the total."
+                rows={[
+                  { label: `${costRows.length} ${costRows.length === 1 ? 'row' : 'rows'}`, value: formatMoney(job.stats.otherCents), kind: 'total' },
+                ]}
+              />
+            }
             value={formatMoney(job.stats.otherCents, { cents: false })}
             footer={
               <span className="text-xs text-fg-muted">
@@ -156,6 +130,17 @@ export function JobMaterials({ job, today }: JobTabProps) {
         ) : null}
         <KpiTile
           label="Usage rows"
+          explain={
+            <Explain
+              title="Usage rows"
+              rule={
+                job.materialMethod === 'actual'
+                  ? 'A count of the rows under Material used. This job costs material from these rows, so each one moves the material cost.'
+                  : 'A count of the rows under Material used. This job costs material by a cost for each unit, so these rows are for your records and for scrap.'
+              }
+              rows={[{ label: 'Rows under Material used', value: formatNumber(usageRows.length), kind: 'total' }]}
+            />
+          }
           value={formatNumber(usageRows.length)}
           footer={
             <span className="text-xs text-fg-muted">
@@ -259,279 +244,15 @@ export function JobMaterials({ job, today }: JobTabProps) {
         ) : null}
       </Panel>
 
-      <Panel
-        title="Material used"
-        action={
-          canLogMaterial ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              leadingIcon={<Plus aria-hidden />}
-              onClick={() => setUsageDialog('new')}
-              data-testid="usage-add"
-            >
-              Add usage
-            </Button>
-          ) : undefined
-        }
-        bodyClassName="p-0"
-      >
-        {usage.isError ? (
-          <div className="p-4">
-            <LoadError what="the usage rows" onRetry={() => void usage.refetch()} />
-          </div>
-        ) : usage.isPending ? (
-          <div className="flex flex-col gap-2 p-4" role="status" aria-busy="true">
-            <span className="sr-only">Loading material used</span>
-            <Skeleton height={28} />
-            <Skeleton height={28} />
-          </div>
-        ) : usageRows.length === 0 ? (
-          <Teach
-            testId="usage-empty"
-            size="sm"
-            icon={Boxes}
-            title="No material usage logged"
-            why={
-              job.materialMethod === 'actual'
-                ? 'This job costs material from the parts really used, so add a row for each part. Until then material cost is zero.'
-                : 'This job uses a cost per unit, so usage rows are optional. Add them when you want to see scrap and planned against used for each part.'
-            }
-            actions={
-              canLogMaterial ? (
-                <Button leadingIcon={<Plus aria-hidden />} onClick={() => setUsageDialog('new')}>
-                  Add usage
-                </Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <Table aria-label="Material used" data-testid="usage-table">
-              <TableHead>
-                <TableRow className="hover:bg-transparent">
-                  <TableHeaderCell>Part</TableHeaderCell>
-                  <TableHeaderCell>Day</TableHeaderCell>
-                  <TableHeaderCell numeric>Planned</TableHeaderCell>
-                  <TableHeaderCell numeric>Used</TableHeaderCell>
-                  <TableHeaderCell numeric>Scrapped</TableHeaderCell>
-                  {seesMoney ? <TableHeaderCell numeric>Cost for one</TableHeaderCell> : null}
-                  {seesMoney ? <TableHeaderCell numeric>Cost</TableHeaderCell> : null}
-                  <TableHeaderCell>Bought by</TableHeaderCell>
-                  <TableHeaderCell className="w-20">
-                    <span className="sr-only">Actions</span>
-                  </TableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {usageRows.map((row) => (
-                  <TableRow key={row.id} data-testid="usage-row">
-                    <TableCell>
-                      <span className="font-medium">{row.itemName ?? row.itemSku ?? 'Part'}</span>
-                      {row.itemSku && row.itemName ? (
-                        <span className="block text-xs text-fg-muted">{row.itemSku}</span>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-fg-secondary">
-                      {shortDate(row.usageDate)}
-                    </TableCell>
-                    <TableCell numeric>{formatNumber(row.quantityPlanned, { empty: '' })}</TableCell>
-                    <TableCell numeric>{formatNumber(row.quantityUsed)}</TableCell>
-                    <TableCell numeric>
-                      {Number(row.quantityScrapped) > 0 ? formatNumber(row.quantityScrapped) : ''}
-                    </TableCell>
-                    {seesMoney ? (
-                      <TableCell numeric>{formatUnitPrice(row.unitCost, { empty: '' })}</TableCell>
-                    ) : null}
-                    {seesMoney ? (
-                      <TableCell numeric>
-                        {row.resolvedSuppliedBy === 'client' ? (
-                          <span className="text-fg-muted">No cost</span>
-                        ) : (
-                          formatMoney(row.costCents, { empty: '' })
-                        )}
-                        {(row.scrapCents ?? 0) > 0 ? (
-                          <span className="block text-2xs text-fg-muted">
-                            {formatMoney(row.scrapCents)} scrap
-                          </span>
-                        ) : null}
-                      </TableCell>
-                    ) : null}
-                    <TableCell className="text-fg-secondary">
-                      {row.resolvedSuppliedBy === 'client' ? 'Client' : 'Us'}
-                    </TableCell>
-                    <TableCell className="pl-0 text-right whitespace-nowrap">
-                      {row.locked ? (
-                        <Lock aria-label="This month is closed" className="inline size-3.5 text-fg-muted" />
-                      ) : canLogMaterial ? (
-                        <>
-                          <IconButton
-                            label={`Edit ${row.itemName ?? 'this usage'}`}
-                            icon={<Pencil aria-hidden />}
-                            size="sm"
-                            onClick={() => setUsageDialog(row)}
-                          />
-                          <IconButton
-                            label={`Delete ${row.itemName ?? 'this usage'}`}
-                            icon={<Trash2 aria-hidden />}
-                            size="sm"
-                            data-testid="usage-delete"
-                            onClick={() =>
-                              void removeWithUndo({
-                                label: row.itemName ?? row.itemSku ?? 'the usage row',
-                                hide: () => usageHidden.hide(row.id),
-                                show: () => usageHidden.show(row.id),
-                                remove: () => deleteMaterialUsageAction({ id: row.id }),
-                                restore: () => restoreMaterialUsageAction({ id: row.id }),
-                              })
-                            }
-                          />
-                        </>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </Panel>
-
+      <div id="parts-used" className="scroll-mt-24">
+        <MaterialLedger jobId={job.id} jobRef={job.number} today={today} title="Material used" />
+      </div>
       {seesMoney ? (
-        <Panel
-          title="Other costs on this job"
-          action={
-            canCost ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                leadingIcon={<Plus aria-hidden />}
-                onClick={() => setCostDialog('new')}
-                data-testid="cost-add"
-              >
-                Add a cost
-              </Button>
-            ) : undefined
-          }
-          bodyClassName="p-0"
-        >
-          {costs.isError ? (
-            <div className="p-4">
-              <LoadError what="the other costs" onRetry={() => void costs.refetch()} />
-            </div>
-          ) : costs.isPending ? (
-            <div className="flex flex-col gap-2 p-4" role="status" aria-busy="true">
-              <span className="sr-only">Loading other costs</span>
-              <Skeleton height={28} />
-            </div>
-          ) : costRows.length === 0 ? (
-            <Teach
-              testId="costs-empty"
-              size="sm"
-              icon={Receipt}
-              title="No other costs yet"
-              why="Freight, pallets, a rented machine, outside help: anything this job cost that is not labor or parts. Leave them out and the job looks more profitable than it is."
-              actions={
-                canCost ? (
-                  <Button leadingIcon={<Plus aria-hidden />} onClick={() => setCostDialog('new')}>
-                    Add a cost
-                  </Button>
-                ) : undefined
-              }
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <Table aria-label="Other costs" data-testid="costs-table">
-                <TableHead>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHeaderCell>Day</TableHeaderCell>
-                    <TableHeaderCell>Kind</TableHeaderCell>
-                    <TableHeaderCell>Paid to</TableHeaderCell>
-                    <TableHeaderCell>Note</TableHeaderCell>
-                    <TableHeaderCell numeric>Amount</TableHeaderCell>
-                    <TableHeaderCell className="w-20">
-                      <span className="sr-only">Actions</span>
-                    </TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {costRows.map((row) => (
-                    <TableRow key={row.id} data-testid="cost-row">
-                      <TableCell className="whitespace-nowrap">{shortDate(row.costDate)}</TableCell>
-                      <TableCell>{COST_CATEGORY_LABELS[row.category]}</TableCell>
-                      <TableCell className="text-fg-secondary">
-                        {row.vendor ?? ''}
-                        {row.reference ? (
-                          <span className="block text-xs text-fg-muted">{row.reference}</span>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="max-w-[260px] truncate text-fg-secondary">
-                        {row.note ?? ''}
-                      </TableCell>
-                      <TableCell numeric className="font-medium">
-                        {formatMoney(row.amountCents)}
-                      </TableCell>
-                      <TableCell className="pl-0 text-right whitespace-nowrap">
-                        {row.locked ? (
-                          <Lock aria-label="This month is closed" className="inline size-3.5 text-fg-muted" />
-                        ) : canCost ? (
-                          <>
-                            <IconButton
-                              label={`Edit the ${COST_CATEGORY_LABELS[row.category].toLowerCase()} cost of ${shortDate(row.costDate)}`}
-                              icon={<Pencil aria-hidden />}
-                              size="sm"
-                              onClick={() => setCostDialog(row)}
-                              data-testid="cost-edit"
-                            />
-                            <IconButton
-                              label={`Delete the ${COST_CATEGORY_LABELS[row.category].toLowerCase()} cost of ${shortDate(row.costDate)}`}
-                              icon={<Trash2 aria-hidden />}
-                              size="sm"
-                              data-testid="cost-delete"
-                              onClick={() =>
-                                void removeWithUndo({
-                                  label: `the ${COST_CATEGORY_LABELS[row.category].toLowerCase()} cost`,
-                                  hide: () => costHidden.hide(row.id),
-                                  show: () => costHidden.show(row.id),
-                                  remove: () => deleteCostAction({ id: row.id }),
-                                  restore: () => restoreCostAction({ id: row.id }),
-                                })
-                              }
-                            />
-                          </>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </Panel>
+        <div id="other-costs" className="scroll-mt-24">
+          <CostLedger scope="job" jobId={job.id} today={today} title="Other costs on this job" />
+        </div>
       ) : null}
 
-      {usageDialog ? (
-        <UsageDialog
-          key={usageDialog === 'new' ? 'new' : usageDialog.id}
-          job={job}
-          row={usageDialog === 'new' ? null : usageDialog}
-          today={today}
-          open
-          onOpenChange={(open) => (open ? undefined : setUsageDialog(null))}
-          onSaved={refresh}
-        />
-      ) : null}
-      {costDialog ? (
-        <CostDialog
-          key={costDialog === 'new' ? 'new' : costDialog.id}
-          job={job}
-          row={costDialog === 'new' ? null : costDialog}
-          today={today}
-          open
-          onOpenChange={(open) => (open ? undefined : setCostDialog(null))}
-          onSaved={refresh}
-        />
-      ) : null}
       {priceOpen ? (
         <PriceDialog
           job={job}

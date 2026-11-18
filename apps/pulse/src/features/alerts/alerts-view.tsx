@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlarmClock, ArrowRight, BellOff, BellRing, CalendarClock, Check, CircleAlert, Info, ListChecks, MoreHorizontal, RefreshCw, RotateCcw, TriangleAlert, UserRound, X } from 'lucide-react';
+import { AlarmClock, ArrowRight, Download, BellOff, BellRing, CalendarClock, Check, CircleAlert, Info, ListChecks, MoreHorizontal, RefreshCw, RotateCcw, TriangleAlert, UserRound, X } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -38,10 +38,13 @@ import { ButtonLink } from '@/components/pulse/button-link';
 import { PersonAvatar } from '@/components/pulse/person';
 import { Teach } from '@/components/pulse/teach';
 import { How } from '@/features/calculator/how';
+import { downloadCsv } from '@/features/profit/csv-download';
 import { useShell } from '@/features/shell/shell-context';
+import { SavedViewsBar } from '@/features/views/saved-views-bar';
+import { useUrlState, useUrlText } from '@/features/views/use-url-state';
 import { apiGet, apiPath } from '@/lib/api-client';
 import { formatRelative } from '@/lib/dates';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, formatMoneyPlain } from '@/lib/format';
 import { usePeople } from '@/lib/hooks/use-data';
 import { shortDate } from '@/lib/profit/calendar';
 import { qk } from '@/lib/query-keys';
@@ -81,8 +84,12 @@ export function AlertsView({ initialOpen, initialSnoozed, today, canManageRules 
   const meId = shell.user.id;
   const canAct = shell.can('production:log');
   const canAssign = shell.can('alert:manage');
-  const [tab, setTab] = useState<InboxTab>('open');
-  const [search, setSearch] = useState('');
+  // The tab and the search live in the address bar, so a list can be shared and kept as a saved view.
+  const url = useUrlState();
+  const tabParam = url.get('tab');
+  const tab: InboxTab = INBOX_TABS.some((item) => item.id === tabParam) ? (tabParam as InboxTab) : 'open';
+  const setTab = (value: InboxTab) => url.set({ tab: value === 'open' ? null : value });
+  const [search, setSearch] = useUrlText('q');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [pickDay, setPickDay] = useState<readonly AlertDTO[] | null>(null);
   const [checking, setChecking] = useState(false);
@@ -197,6 +204,28 @@ export function AlertsView({ initialOpen, initialSnoozed, today, canManageRules 
     }
   };
 
+  /** The alerts on screen, in the order shown. Money stays out for people who may not see it. */
+  const exportCsv = () => {
+    const seesMoney = shell.seesMoney;
+    const headers = ['Alert', 'What happened', 'Next step', 'How urgent', 'About', ...(seesMoney ? ['Money at stake'] : []), 'Status', 'Assigned to', 'Snoozed until', 'First seen', 'Last seen', 'Done on'];
+    const rows = visible.map((alert) => [
+      alert.title,
+      alert.body,
+      alert.nextStep ?? '',
+      SEVERITY[alert.severity].label,
+      alert.entityLabel ?? '',
+      ...(seesMoney ? [alert.impactCents === null ? '' : formatMoneyPlain(alert.impactCents)] : []),
+      alert.status === 'open' ? 'Needs you' : alert.status === 'snoozed' ? 'Snoozed' : alert.status === 'dismissed' ? 'Dismissed' : 'Done',
+      alert.assignedTo ? (peopleById.get(alert.assignedTo)?.name ?? (alert.assignedTo === meId ? shell.user.name : '')) : '',
+      alert.snoozedUntil ?? '',
+      alert.firstSeenAt.slice(0, 10),
+      alert.lastSeenAt.slice(0, 10),
+      alert.resolvedAt ? alert.resolvedAt.slice(0, 10) : '',
+    ]);
+    downloadCsv(`alerts-${tab}-${today}.csv`, headers, rows);
+    toast.success(`Saved ${rows.length} ${rows.length === 1 ? 'alert' : 'alerts'} as a CSV file`);
+  };
+
   const allPicked = visible.length > 0 && picked.length === visible.length;
   const choices = snoozeChoices(today);
 
@@ -214,6 +243,9 @@ export function AlertsView({ initialOpen, initialSnoozed, today, canManageRules 
         </Tabs>
         <div className="flex flex-1 items-center justify-end gap-2 sm:flex-none">
           <SearchInput value={search} onValueChange={setSearch} placeholder="Search alerts" aria-label="Search alerts" className="min-w-0 flex-1 sm:w-56 sm:flex-none" />
+          <Button variant="secondary" leadingIcon={<Download aria-hidden />} onClick={exportCsv} disabled={visible.length === 0} data-testid="alerts-export">
+            Export CSV
+          </Button>
           {canAct ? (
             <Button variant="secondary" leadingIcon={<RefreshCw aria-hidden />} loading={checking} onClick={() => void checkNow()} data-testid="alerts-check">
               Check now
@@ -221,6 +253,7 @@ export function AlertsView({ initialOpen, initialSnoozed, today, canManageRules 
           ) : null}
         </div>
       </div>
+      <SavedViewsBar page="alerts" />
 
       {active.isError && active.data ? <p role="alert" className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-text">We could not refresh the alerts. You are looking at the last list we loaded.</p> : null}
 
