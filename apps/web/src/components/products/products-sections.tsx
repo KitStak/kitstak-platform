@@ -339,7 +339,7 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
             <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
               Every app reads the same customer record. Link a CRM account to the customer your warehouse ships for, and
               sales can see what is on the shelf. Add Projects, and the work for that customer points at the deal and the
-              order it is about. Add Pulse, and won deals and work orders become jobs with a profit number.
+              order it is about. Add Pulse, and you can turn a won deal or a work order into a job, then see its profit as the work is logged.
             </p>
           </div>
           <div data-reveal>{visual}</div>

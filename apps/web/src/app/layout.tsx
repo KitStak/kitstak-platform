@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://kitstak.com'),
   title: 'KitStak - CRM, WMS, Projects and Pulse on one stack',
   description:
-    'KitStak runs your customers, your warehouse and your projects on one database and one sign-in, and shows the profit on every job. Use the CRM, the WMS, Projects, Pulse, or any mix.',
+    'KitStak runs your customers, your warehouse and your projects on one database and one sign-in. Pulse shows the profit on every job. Use the CRM, the WMS, Projects, Pulse, or any mix.',
   openGraph: {
     title: 'KitStak',
     description: 'CRM, WMS, Projects and Pulse on one stack.',

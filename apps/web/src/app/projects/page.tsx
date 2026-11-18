@@ -144,7 +144,7 @@ export default function ProjectsPage() {
           title="Put the third bar on your stack."
           startHref={START}
           startLabel="Start with Projects"
-          note="Runs on its own, or alongside the CRM and the WMS with one sign-in."
+          note="Runs on its own, or alongside the CRM, the WMS and Pulse with one sign-in."
         />
       </main>
       <Footer />

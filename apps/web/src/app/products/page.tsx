@@ -43,12 +43,12 @@ const FAQ: readonly FaqItem[] = [
   {
     question: 'What do the products actually share?',
     answer:
-      'One sign-in, one launcher, one organization with its members, and one customer list. A CRM account can be linked to the customer your warehouse ships for, which puts on-hand stock and open shipment orders on the account page. A Projects task can be linked to a CRM deal or account, a customer, or a WMS order, work order, receipt or count, and shows where that record stands now. Pulse uses the same sign-in. It pulls in won deals from the CRM, work orders and finished kits from the WMS and logged time from Projects, and keeps a link back to each one.',
+      'One sign-in, one launcher, one organization with its members, and one customer list. A CRM account can be linked to the customer your warehouse ships for, which puts on-hand stock and open shipment orders on the account page. A Projects task can be linked to a CRM deal or account, a customer, or a WMS order, work order, receipt or count, and shows where that record stands now. Pulse uses the same sign-in. It pulls in won deals from the CRM, work orders and finished kits from the WMS, and logged time from Projects. Each one keeps a link back to its source.',
   },
   {
     question: 'How is each product priced?',
     answer:
-      'The CRM, Projects and Pulse are priced per user and the WMS per warehouse. Running two or more takes a percentage off each, and paying yearly takes a further percentage off the total. The calculator on this page shows the arithmetic.',
+      'The CRM and Projects are priced per user and the WMS per warehouse. Pulse pricing is being set, so the calculator uses a stand-in price per user for it. Running two or more takes a percentage off each, and paying yearly takes a further percentage off the total. The calculator on this page shows the arithmetic.',
   },
   {
     question: 'Do I have to talk to someone to get started?',

@@ -91,7 +91,7 @@ const PULSE_WITH: Readonly<Record<Sibling, { readonly body: string; readonly pul
     line: 'Work orders become jobs',
   },
   projects: {
-    body: 'Link a job to a project and the time logged there can count as labor hours on the job. An alert in Pulse can become a task with an owner.',
+    body: 'Link a job to a project and the time logged there can count as labor hours on the job. An alert in Pulse can become a task in Projects.',
     pulls: 'project time',
     line: 'Project time counts as labor hours',
   },
