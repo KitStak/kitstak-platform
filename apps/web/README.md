@@ -48,9 +48,10 @@ mobile drawer and the footer all read `src/components/nav/nav-data.ts`.
   compressed, and never retouched. Each one exists in a light and a dark theme and in up to three window
   sizes (desktop, tablet, phone). `PulseShot` (`src/components/pulse/pulse-shot.tsx`) picks the file by
   screen width and system theme. The slots, alt text and retake steps are in
-  `src/components/pulse/pulse-shots.ts`. To retake, run `node scripts/capture-pulse-shots.mjs <rawDir>
-  <importBatchId>` against a running Pulse app (it needs Playwright), then `node
-  scripts/prepare-pulse-shots.mjs <rawDir>`, which writes `public/pulse/shots`. Retake every slot
+  `src/components/pulse/pulse-shots.ts`. To retake, run
+  `node scripts/capture-pulse-shots.mjs <rawDir> <importBatchId>` against a running Pulse app (it needs
+  Playwright), then `node scripts/prepare-pulse-shots.mjs <rawDir>`, which writes `public/pulse/shots`.
+  Retake every slot
   together so the numbers agree, then check the alt text and the page copy against the new screens. The
   demo data is built from the day it is seeded, so the numbers move. A slot set to `ready: false` falls
   back to its coded illustration in `src/components/pulse/pulse-visuals.tsx`. The worked job, the "How we

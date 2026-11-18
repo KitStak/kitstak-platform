@@ -136,7 +136,9 @@ describe('pulse screenshot slots', () => {
             shotFile(shot, view, theme, view.widths[0] ?? 0, 'webp'),
           ];
           for (const file of files) {
-            expect(file).toMatch(/^\/pulse\/shots\/[a-z-]+-(desktop|tablet|phone)-(light|dark)-\d+\.(avif|webp)$/);
+            expect(file).toMatch(
+              /^\/pulse\/shots\/[a-z-]+-(desktop|tablet|phone)-(light|dark)-\d+\.(avif|webp)$/,
+            );
             const onDisk = path.join(process.cwd(), 'public', file);
             expect(existsSync(onDisk), file).toBe(true);
             expect(statSync(onDisk).size, file).toBeLessThan(200 * 1024);

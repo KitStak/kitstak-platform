@@ -136,13 +136,7 @@ export default function PulsePage() {
         <Chapter {...CHAPTERS.profit} features={PROFIT_FEATURES} visual={<ProfitByJobVisual />} isStacked />
 
         {/* The one thing a spreadsheet cannot do comes straight after the first profit screens. */}
-        <Chapter
-          {...CHAPTERS.risk}
-          features={RISK_FEATURES}
-          visual={<RiskVisual />}
-          tone="brand"
-          isStacked
-        />
+        <Chapter {...CHAPTERS.risk} features={RISK_FEATURES} visual={<RiskVisual />} tone="brand" isStacked />
 
         <Chapter
           {...CHAPTERS.proof}

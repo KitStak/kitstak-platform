@@ -76,7 +76,19 @@ const SLOTS = [
       await page.evaluate(() => document.activeElement?.blur());
     },
   },
-  { name: 'import', route: `/import/${batchId}` },
+  {
+    name: 'import',
+    route: `/import/${batchId}`,
+    // On a narrow window the bad cell starts off screen. Scroll it into view.
+    prepare: async (page, viewName) => {
+      if (viewName === 'desktop') return;
+      await page
+        .locator('text=/is not a number of hours/ >> visible=true')
+        .first()
+        .evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));
+      await page.waitForTimeout(700);
+    },
+  },
   { name: 'connected-apps', route: '/settings/apps' },
 ];
 
@@ -103,7 +115,9 @@ async function openContext(browser, session, theme, view) {
     isMobile: Boolean(view.isMobile),
     hasTouch: Boolean(view.isMobile),
   });
-  await context.addCookies([{ name: 'kitstak-theme', value: theme, domain: new URL(BASE).hostname, path: '/' }]);
+  await context.addCookies([
+    { name: 'kitstak-theme', value: theme, domain: new URL(BASE).hostname, path: '/' },
+  ]);
   return context;
 }
 
@@ -132,7 +146,7 @@ for (const theme of ['light', 'dark']) {
       const page = await context.newPage();
       await page.goto(BASE + slot.route, { waitUntil: 'networkidle', timeout: 180_000 });
       await settle(page);
-      if (slot.prepare) await slot.prepare(page);
+      if (slot.prepare) await slot.prepare(page, viewName);
       await page.mouse.move(0, 0);
       await page.waitForTimeout(400);
       const file = path.join(rawDir, `${slot.name}-${viewName}-${theme}.png`);

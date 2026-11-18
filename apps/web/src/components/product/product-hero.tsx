@@ -34,7 +34,14 @@ interface ProductHeroProps {
   readonly layout?: 'split' | 'stacked';
 }
 
-export function ProductHero({ product, app, lines, lead, primary, secondary, visual,
+export function ProductHero({
+  product,
+  app,
+  lines,
+  lead,
+  primary,
+  secondary,
+  visual,
   facts,
   badge,
   layout = 'split',
@@ -63,7 +70,10 @@ export function ProductHero({ product, app, lines, lead, primary, secondary, vis
             <p className={styles.lead}>{lead}</p>
             <div className={styles.actions}>
               <Link href={primary.href} className="btn btn-primary btn-lg">
-                {primary.label} <span className="btn-arrow" aria-hidden>→</span>
+                {primary.label}{' '}
+                <span className="btn-arrow" aria-hidden>
+                  →
+                </span>
               </Link>
               <Link href={secondary.href} className="btn btn-ghost-inverse btn-lg">
                 {secondary.label}

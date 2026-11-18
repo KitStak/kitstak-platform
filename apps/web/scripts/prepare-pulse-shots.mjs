@@ -1,6 +1,8 @@
 // Turns the raw Pulse screenshots into the web images under public/pulse/shots.
 //
-//   node scripts/prepare-pulse-shots.mjs <rawDir>
+//   node scripts/prepare-pulse-shots.mjs <rawDir> [slot ...]
+//
+// With no slot names it rebuilds the whole folder. With names it redoes only those slots.
 //
 // <rawDir> holds the PNG files written by capture-pulse-shots.mjs, named <slot>-<view>-<theme>.png.
 // This script only crops, scales and compresses. It never changes what a screenshot shows.
@@ -9,7 +11,7 @@ import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 
-const RAW = process.argv[2];
+const [RAW, ...only] = process.argv.slice(2);
 const OUT = 'public/pulse/shots';
 if (!RAW) {
   console.error('usage: node scripts/prepare-pulse-shots.mjs <rawDir>');
@@ -58,10 +60,11 @@ const SHOTS = [
   { name: 'connected-apps', view: 'phone', widths: PHONE },
 ];
 
-rmSync(OUT, { recursive: true, force: true });
+if (only.length === 0) rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
 
 for (const shot of SHOTS) {
+  if (only.length > 0 && !only.includes(shot.name)) continue;
   for (const theme of ['light', 'dark']) {
     const source = path.join(RAW, `${shot.name}-${shot.view}-${theme}.png`);
     const base = shot.crop ? sharp(source).extract(shot.crop) : sharp(source);
@@ -72,8 +75,12 @@ for (const shot of SHOTS) {
       const stem = path.join(OUT, `${shot.name}-${shot.view}-${theme}-${width}`);
       const resized = sharp(buffer).resize({ width, kernel: 'lanczos3' });
       // 4:4:4 keeps small red and green text sharp.
-      await resized.clone().avif({ quality: 52, effort: 6, chromaSubsampling: '4:4:4' }).toFile(`${stem}.avif`);
-      if (width === shot.widths[0]) await resized.clone().webp({ quality: 80, effort: 6 }).toFile(`${stem}.webp`);
+      await resized
+        .clone()
+        .avif({ quality: 52, effort: 6, chromaSubsampling: '4:4:4' })
+        .toFile(`${stem}.avif`);
+      if (width === shot.widths[0])
+        await resized.clone().webp({ quality: 80, effort: 6 }).toFile(`${stem}.webp`);
     }
     console.log(`${shot.name}-${shot.view}-${theme}: ${rawWidth / 2} by ${rawHeight / 2} CSS pixels`);
   }
