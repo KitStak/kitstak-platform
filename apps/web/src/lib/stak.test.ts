@@ -2,11 +2,11 @@ import { describe, expect, test } from 'vitest';
 import {
   FULL_STACK,
   PULSE_IS_LIVE,
-  ROUTES,
   getStartedHref,
   parseStack,
   startableStack,
   toggleProduct,
+  walkthroughHref,
 } from '@/components/site-links';
 import {
   DEFAULT_ANSWERS,
@@ -70,7 +70,7 @@ describe('toggleProduct and getStartedHref', () => {
 
   test('links into the wizard with Pulse only once the Pulse app is open', () => {
     // While Pulse is coming soon it never rides into the wizard, and alone it goes to the walkthrough.
-    expect(getStartedHref('pulse')).toBe(PULSE_IS_LIVE ? '/get-started?stack=pulse' : ROUTES.demo);
+    expect(getStartedHref('pulse')).toBe(PULSE_IS_LIVE ? '/get-started?stack=pulse' : walkthroughHref('pulse'));
     expect(getStartedHref(['pulse', 'wms'])).toBe(
       PULSE_IS_LIVE ? '/get-started?stack=wms,pulse' : '/get-started?stack=wms',
     );

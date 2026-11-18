@@ -103,6 +103,15 @@ export const STARTABLE_STACK: Stack = startableStack(PRODUCT_IDS);
 export const WALKTHROUGH_LABEL = 'Book a walkthrough';
 
 /**
+ * The walkthrough form. A link from exactly one product names it (`&product=pulse`), so the form can
+ * start the message for the visitor. Any other link is the plain walkthrough form.
+ */
+export function walkthroughHref(stack?: Stack | ProductId): string {
+  const products = toStack(typeof stack === 'string' ? [stack] : (stack ?? []));
+  return products.length === 1 ? `${ROUTES.demo}&product=${products[0]}` : ROUTES.demo;
+}
+
+/**
  * Deep link into the setup wizard with products already chosen. A product whose app is not open yet
  * never rides along. If none of the chosen products is open, the link goes to the walkthrough form.
  */
@@ -110,7 +119,7 @@ export function getStartedHref(stack?: Stack | ProductId): string {
   const products = toStack(typeof stack === 'string' ? [stack] : (stack ?? []));
   if (products.length === 0) return ROUTES.getStarted;
   const open = startableStack(products);
-  return open.length > 0 ? `${ROUTES.getStarted}?stack=${stackParam(open)}` : ROUTES.demo;
+  return open.length > 0 ? `${ROUTES.getStarted}?stack=${stackParam(open)}` : walkthroughHref(products);
 }
 
 export interface StartLink {
@@ -122,7 +131,7 @@ export interface StartLink {
 export function startLink(product: ProductId): StartLink {
   return isAppLive(product)
     ? { href: getStartedHref(product), label: `Start with ${START_NAME[product]}` }
-    : { href: ROUTES.demo, label: WALKTHROUGH_LABEL };
+    : { href: walkthroughHref(product), label: WALKTHROUGH_LABEL };
 }
 
 /**

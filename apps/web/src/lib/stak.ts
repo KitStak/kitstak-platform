@@ -5,7 +5,7 @@
  * portal's `focus` only knows the CRM and the WMS, so the full product set travels separately as
  * `products`. Pulse answers follow docs/pulse/SPEC.md (its first run and its feature list).
  */
-import { LINKS, ROUTES, parseStack, stackParam, startableStack, toStack } from '@/components/site-links';
+import { LINKS, ROUTES, parseStack, stackParam, startableStack, toStack, walkthroughHref } from '@/components/site-links';
 import type { ProductId, Stack } from '@/components/site-links';
 import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
 import { PRICING } from './pricing';
@@ -390,7 +390,7 @@ export interface WizardPrefill {
  */
 export function wizardHref(prefill: WizardPrefill): string {
   const stack = startableStack(prefill.stack);
-  if (stack.length === 0) return ROUTES.demo;
+  if (stack.length === 0) return walkthroughHref(prefill.stack);
   const params = new URLSearchParams({
     stack: stackParam(stack),
     seats: String(prefill.seats),

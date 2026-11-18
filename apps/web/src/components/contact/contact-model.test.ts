@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { MAX_MAILTO_LENGTH, buildMailto, parseTopic } from './contact-model';
+import { walkthroughHref } from '../site-links';
+import { MAX_MAILTO_LENGTH, buildMailto, parseProduct, parseTopic, starterMessage } from './contact-model';
 import type { ContactDraft } from './contact-model';
 
 const draft = (patch: Partial<ContactDraft> = {}): ContactDraft => ({
@@ -9,6 +10,34 @@ const draft = (patch: Partial<ContactDraft> = {}): ContactDraft => ({
   company: 'Northwind & Co',
   message: 'Two warehouses, 12 people.\nTuesday works.',
   ...patch,
+});
+
+describe('walkthrough prefill', () => {
+  test('a walkthrough link from one product names that product', () => {
+    expect(walkthroughHref('pulse')).toBe('/contact?topic=demo&product=pulse');
+    expect(walkthroughHref(['crm'])).toBe('/contact?topic=demo&product=crm');
+  });
+
+  test('a walkthrough link from no product or several names none', () => {
+    expect(walkthroughHref()).toBe('/contact?topic=demo');
+    expect(walkthroughHref(['crm', 'pulse'])).toBe('/contact?topic=demo');
+  });
+
+  test('reads the product from the link and drops anything else', () => {
+    expect(parseProduct('pulse')).toBe('pulse');
+    expect(parseProduct('refund')).toBeNull();
+    expect(parseProduct(null)).toBeNull();
+  });
+
+  test('starts the walkthrough message with the product the visitor came from', () => {
+    expect(starterMessage('demo', 'pulse')).toBe('I would like a walkthrough of KitStak Pulse.');
+    expect(starterMessage('demo', 'wms')).toBe('I would like a walkthrough of KitStak WMS.');
+  });
+
+  test('leaves the message empty without a product or on another topic', () => {
+    expect(starterMessage('demo', null)).toBe('');
+    expect(starterMessage('sales', 'pulse')).toBe('');
+  });
 });
 
 describe('parseTopic', () => {

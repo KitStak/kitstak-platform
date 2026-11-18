@@ -23,7 +23,7 @@ Marketing site for the KitStak platform, served at **https://kitstak.com**
 | `/projects`    | KitStak Projects. Copy in `src/components/projects/projects-content.ts`; lists and counts come from the app (below)    |
 | `/pulse`       | KitStak Pulse. Copy in `src/components/pulse/pulse-content.ts`, visuals in `src/components/pulse/` (see "Pulse" below) |
 | `/get-started` | The "Set up your Stak" wizard (`src/components/wizard`, model in `src/lib/stak.ts`)                                    |
-| `/contact`     | Contact and "talk to the founder" (`?topic=founder\|demo\|projects\|pulse\|sales`)                                     |
+| `/contact`     | Contact and "talk to the founder" (`?topic=founder\|demo\|projects\|pulse\|sales`). `&product=pulse` on a walkthrough link starts the message with that product (`walkthroughHref`)                                     |
 
 Every internal link goes through `ROUTES` in `src/components/site-links.ts`; the header menu, the
 mobile drawer and the footer all read `src/components/nav/nav-data.ts`.

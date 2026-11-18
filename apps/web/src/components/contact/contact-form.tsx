@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { accountErrors } from '@/lib/stak';
 import type { AccountErrors } from '@/lib/stak';
 import { CONTACT } from '../site-links';
-import { TOPICS, buildMailto, parseTopic } from './contact-model';
+import { TOPICS, buildMailto, parseProduct, parseTopic, starterMessage } from './contact-model';
 import type { ContactDraft } from './contact-model';
 import styles from './contact.module.css';
 
@@ -17,12 +17,15 @@ const MAX_MESSAGE = 1200;
  */
 export function ContactForm() {
   const searchParams = useSearchParams();
-  const [draft, setDraft] = useState<ContactDraft>({
-    topic: parseTopic(searchParams.get('topic')),
-    name: '',
-    email: '',
-    company: '',
-    message: '',
+  const [draft, setDraft] = useState<ContactDraft>(() => {
+    const topic = parseTopic(searchParams.get('topic'));
+    return {
+      topic,
+      name: '',
+      email: '',
+      company: '',
+      message: starterMessage(topic, parseProduct(searchParams.get('product'))),
+    };
   });
   const [errors, setErrors] = useState<AccountErrors>({});
   const [isOpened, setIsOpened] = useState(false);
