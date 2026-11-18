@@ -164,13 +164,13 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
           return (
             <li key={row.key} className="flex flex-col gap-2 px-4 py-3">
               <RowName by={by} row={row} onDrill={onDrill} range={range} />
-              <dl className="grid grid-cols-3 gap-2 text-sm tabular-nums">
+              <dl className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm tabular-nums">
                 {(seesMoney ? ['revenue', 'profit', 'margin'] : ['units', 'hours', 'uph']).map((id) => {
                   const column = columns.find((item) => item.id === id);
                   if (!column) return null;
                   const value = column.get(row);
                   return (
-                    <div key={id}>
+                    <div key={id} className="min-w-[4.5rem]">
                       <dt className="text-xs text-fg-muted">{column.label}</dt>
                       <dd className={cn('font-medium text-fg', toneFor(column, value))}>{formatValue(value, column.kind) || 'None'}</dd>
                     </div>

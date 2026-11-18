@@ -9,7 +9,7 @@ import type { DomainContext } from './_shared';
 import { listActivity } from './activity';
 import { deleteJob, getJob } from './jobs';
 import { deleteProductionEntries, getLogGrid, listProduction } from './production';
-import { createClient, createJob, saveProductionEntry } from './test-exports';
+import { addJobLink, createClient, createJob, saveProductionEntry } from './test-exports';
 
 const ready = await databaseReady();
 
@@ -64,5 +64,20 @@ describe.skipIf(!ready)('seams between jobs, the day sheet and the entry lists',
     expect((await listProduction(owner, { from: today, to: today })).some((entry) => entry.jobId === job.id)).toBe(false);
     expect(await listProduction(owner, { jobId: job.id })).toHaveLength(1);
     expect((await listProduction(owner, { from: today, to: today, includeDeleted: true })).some((entry) => entry.jobId === job.id)).toBe(true);
+  });
+
+  it('a deleted job gives its work order and its project time back to a live job', async () => {
+    const workOrder = 'wo-seams-1';
+    const project = '00000000-0000-4000-8000-00000000a001';
+    const first = await createJob(owner, { name: 'First try', clientId, plannedUnits: '10', links: [{ targetType: 'wms_work_order', targetId: workOrder }, { targetType: 'pm_project', targetId: project, importsTime: true }] });
+    // While the first job is live, the work order belongs to it alone.
+    const second = await createJob(owner, { name: 'Second try', clientId, plannedUnits: '10' });
+    await expect(addJobLink(owner, second.id, { targetType: 'wms_work_order', targetId: workOrder })).rejects.toThrow(/already linked/);
+    await deleteJob(owner, first.id);
+    await addJobLink(owner, second.id, { targetType: 'wms_work_order', targetId: workOrder });
+    await addJobLink(owner, second.id, { targetType: 'pm_project', targetId: project, importsTime: true });
+    const links = (await getJob(owner, second.id)).links;
+    expect(links.map((link) => link.targetType).sort()).toEqual(['pm_project', 'wms_work_order']);
+    expect(links.find((link) => link.targetType === 'pm_project')?.importsTime).toBe(true);
   });
 });

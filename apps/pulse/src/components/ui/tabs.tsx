@@ -3,7 +3,10 @@ import { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type ReactN
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { cn } from './cn';
 
-export const Tabs = TabsPrimitive.Root;
+/** The tabs root may shrink inside a flex row, so a long tab list scrolls sideways instead of pushing the page wide. */
+export const Tabs = forwardRef<ElementRef<typeof TabsPrimitive.Root>, ComponentPropsWithoutRef<typeof TabsPrimitive.Root>>(function Tabs({ className, ...props }, ref) {
+  return <TabsPrimitive.Root ref={ref} className={cn('max-w-full min-w-0', className)} {...props} />;
+});
 
 export type TabsVariant = 'underline' | 'view' | 'pill';
 

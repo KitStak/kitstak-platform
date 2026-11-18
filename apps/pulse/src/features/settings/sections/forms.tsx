@@ -35,7 +35,7 @@ export function timeZoneOptions(current?: string | null): { value: string; label
   let zones: string[] = FALLBACK_ZONES;
   try {
     const supported = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.('timeZone');
-    if (supported && supported.length > 0) zones = supported;
+    if (supported && supported.length > 0) zones = supported.includes('UTC') ? supported : [...supported, 'UTC'];
   } catch {
     zones = FALLBACK_ZONES;
   }

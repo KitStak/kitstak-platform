@@ -15,6 +15,7 @@
  */
 import 'server-only';
 import { and, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm';
+import { verbLabel } from '@/features/settings/audit-format';
 import { db, type Executor } from '@/server/db';
 import { activity } from '@/server/db/schema';
 import { invalid } from '@/server/errors';
@@ -124,10 +125,17 @@ export async function listActivity(ctx: DomainContext, filters: ActivityFilters 
   if (filters.verbPrefix) where.push(sql`${activity.verb} like ${`${filters.verbPrefix.replace(/[%_]/g, '')}%`}`);
   if (filters.q && filters.q.trim() !== '') {
     const like = `%${filters.q.trim().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    // People search for the words on the screen ("Undid an import", "Changed a role") and for a name,
+    // so the stored action codes are matched through their on screen words too.
+    const needle = filters.q.trim().toLowerCase();
+    const known = await db.selectDistinct({ verb: activity.verb }).from(activity).where(eq(activity.orgId, ctx.orgId));
+    const worded = known.map((row) => row.verb).filter((verb) => verbLabel(verb).toLowerCase().includes(needle));
+    const byWords = worded.length > 0 ? sql` or ${inArray(activity.verb, worded)}` : sql``;
+    const byName = sql` or ${activity.actorId} in (select m.user_id from core.member m join core."user" u on u.id = m.user_id where m.organization_id = ${ctx.orgId} and u.name ilike ${like})`;
     where.push(
       access.seesMoney
-        ? sql`(${activity.verb} ilike ${like} or ${activity.entityType} ilike ${like} or ${activity.body} ilike ${like} or ${activity.before}::text ilike ${like} or ${activity.after}::text ilike ${like} or ${activity.meta}::text ilike ${like})`
-        : sql`(${activity.verb} ilike ${like} or ${activity.entityType} ilike ${like} or ${activity.body} ilike ${like})`,
+        ? sql`(${activity.verb} ilike ${like} or ${activity.entityType} ilike ${like} or ${activity.body} ilike ${like} or ${activity.before}::text ilike ${like} or ${activity.after}::text ilike ${like} or ${activity.meta}::text ilike ${like}${byWords}${byName})`
+        : sql`(${activity.verb} ilike ${like} or ${activity.entityType} ilike ${like} or ${activity.body} ilike ${like}${byWords}${byName})`,
     );
   }
   if (filters.from) where.push(gte(activity.createdAt, new Date(`${filters.from}T00:00:00Z`)));

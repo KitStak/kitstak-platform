@@ -121,7 +121,7 @@ export function DonutChart({ slices, format, centerLabel = 'total', maxSlices = 
             <ChartTooltip model={tooltip} boxWidth={size} />
             <ChartLive text={roving.byKeyboard ? tooltipText(tooltip) : ''} />
           </div>
-          <ul className="flex min-w-[9rem] flex-1 flex-col gap-1.5 text-xs">
+          <ul className="flex max-w-md min-w-[9rem] flex-1 flex-col gap-1.5 text-xs">
             {rows.map((slice, index) => (
               <li key={slice.id} className={cn('pc-mark flex items-center gap-2', active !== null && active !== index && 'opacity-60')} onPointerEnter={() => roving.hover(index)} onPointerLeave={() => roving.hover(null)}>
                 <LegendSwatch color={slice.color} />

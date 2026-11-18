@@ -103,7 +103,35 @@ function Rows(props: RowsProps) {
   const left = labelColumn + 12 + (hasNegative && showValues ? valueRoom : 0);
   const right = Math.max(left + 40, width - valueRoom - 2);
   const scale = niceScale(extents, { tickCount: clamp(Math.floor((right - left) / 72), 2, 6) });
-  const x = linearScale(scale.min, scale.max, left, right);
+  // Bars use the room the data needs, not the rounded ends of the scale: on a phone a scale of
+  // "-$50K to $100K" for values from -$7K to $51K would squeeze every bar into a third of the plot.
+  const finite = extents.filter((value) => Number.isFinite(value));
+  const domainMin = Math.min(0, ...finite);
+  const domainMax = Math.max(0, ...finite);
+  const tight = domainMax > domainMin;
+  const x = tight ? linearScale(domainMin, domainMax, left, right) : linearScale(scale.min, scale.max, left, right);
+  // Ticks inside the plot only, and never two labels on top of each other (zero always stays).
+  const tickMarks = (() => {
+    const inside = scale.ticks.filter((tick) => !tight || (tick >= domainMin - 1e-9 && tick <= domainMax + 1e-9));
+    const marks = inside.map((tick) => {
+      const text = format.axis(tick);
+      const half = estimateTextWidth(text, FONT) / 2;
+      const center = clamp(x(tick), half, width - half);
+      return { tick, text, center, from: center - half, to: center + half, label: true };
+    });
+    const zero = marks.find((mark) => mark.tick === 0);
+    let lastEnd = -Infinity;
+    for (const mark of marks) {
+      if (mark === zero) {
+        lastEnd = mark.to;
+        continue;
+      }
+      const hitsZero = zero ? mark.from < zero.to + 6 && mark.to > zero.from - 6 : false;
+      if (mark.from < lastEnd + 6 || hitsZero) mark.label = false;
+      else lastEnd = mark.to;
+    }
+    return marks;
+  })();
   const zeroX = x(0);
   const plotBottom = height - axisBand;
   const rowTop = (index: number): number => topPad + index * rowHeight;
@@ -146,16 +174,16 @@ function Rows(props: RowsProps) {
       >
         <SvgLabels titleId={props.titleId} descId={props.descId} title={props.title} description={props.description} hint={KEY_HINT} />
         {active !== null ? <rect x={0} y={rowTop(active)} width={width} height={rowHeight} fill="var(--surface-hover)" rx={4} /> : null}
-        {scale.ticks.map((tick) => {
+        {tickMarks.map(({ tick, text, center, label }) => {
           const tx = x(tick);
-          const text = format.axis(tick);
-          const half = estimateTextWidth(text, FONT) / 2;
           return (
             <g key={tick}>
               <line x1={tx} x2={tx} y1={topPad} y2={plotBottom} stroke={tick === 0 ? CHART_COLORS.axis : CHART_COLORS.grid} strokeWidth={1} shapeRendering="crispEdges" />
-              <text x={clamp(tx, half, width - half)} y={plotBottom + 16} textAnchor="middle" fontSize={FONT} fill="var(--text-muted)">
-                {text}
-              </text>
+              {label ? (
+                <text x={center} y={plotBottom + 16} textAnchor="middle" fontSize={FONT} fill="var(--text-muted)">
+                  {text}
+                </text>
+              ) : null}
             </g>
           );
         })}

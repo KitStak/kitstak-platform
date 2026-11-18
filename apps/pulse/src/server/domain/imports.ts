@@ -1673,6 +1673,25 @@ export async function commitImportBatch(ctx: DomainContext, batchId: string): Pr
       await writePlan(tx, batch.id, plan);
       await snapshotBefore(tx, batch.id, stream, handler);
       const made = await ensurePending(tx, plan.env);
+      // A labor class made on the fly by an earlier file (a job type or a job named it) only has its
+      // code. The labor rates file is where its real name and kind are, so fill them in now.
+      if (stream === 'labor_rates') {
+        const named = new Map<string, { name: string | null; kind: string | null }>();
+        for (const row of plan.rows) {
+          if (row.action !== 'create' && row.action !== 'update' && row.action !== 'unchanged') continue;
+          const rec = row.planned?.rec;
+          if (!rec || typeof rec.laborClassCode !== 'string') continue;
+          named.set(rec.laborClassCode, { name: typeof rec.laborClassName === 'string' ? rec.laborClassName : null, kind: rec.kind === 'employee' || rec.kind === 'temp_agency' ? rec.kind : null });
+        }
+        for (const [code, { name, kind }] of named) {
+          if (name === null && kind === null) continue;
+          await tx.execute(
+            sql`UPDATE pulse.labor_classes SET name = COALESCE(${name}, name), kind = COALESCE(${kind}, kind), updated_at = now()
+                 WHERE org_id = ${ctx.orgId} AND deleted_at IS NULL AND lower(code) = lower(${code}) AND lower(name) = lower(code)
+                   AND (name IS DISTINCT FROM COALESCE(${name}, name) OR kind IS DISTINCT FROM COALESCE(${kind}, kind))`,
+          );
+        }
+      }
       const env = plan.env;
       const writes = plan.rows.filter((row) => row.action === 'create' || row.action === 'update');
       const def = anyStreamDef(stream);

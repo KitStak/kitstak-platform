@@ -316,6 +316,46 @@ function Plot(props: PlotProps) {
   const targetRegion = target ? (ownLines && target.on === 'lines' ? lineRegion : main) : null;
   const targetY = target && targetRegion ? targetRegion.y(target.value) : 0;
   const targetText = target && targetRegion ? `${target.label} ${targetRegion.format.axis(target.value)}` : '';
+  // Where the target label sits: the corner near the dashed line where no data line passes, so the
+  // words never cover the marks (right above, right below, left above, left below, in that order).
+  const targetLabel = (() => {
+    const fallback = { x: right - 4, y: targetRegion && targetY - targetRegion.top < 18 ? targetY + 14 : targetY - 6, anchor: 'end' as const };
+    if (!target || !targetRegion || targetRegion !== lineRegion || lines.length === 0) return fallback;
+    const labelWidth = targetText.length * 6.4 + 8;
+    const count = categories.length;
+    const hits = (fromX: number, toX: number, fromY: number, toY: number): number => {
+      let total = 0;
+      for (const series of lines) {
+        for (let index = 0; index < count; index += 1) {
+          const value = series.values[index];
+          if (value === null || value === undefined) continue;
+          const x = xs[index] ?? 0;
+          const y = lineRegion.y(value);
+          const next = series.values[index + 1];
+          // The point itself, plus the middle of the stroke to the next point.
+          const samples: [number, number][] = [[x, y]];
+          if (next !== null && next !== undefined && index + 1 < count) {
+            const nx = xs[index + 1] ?? 0;
+            const ny = lineRegion.y(next);
+            for (const t of [0.25, 0.5, 0.75]) samples.push([x + (nx - x) * t, y + (ny - y) * t]);
+          }
+          for (const [sx, sy] of samples) if (sx >= fromX && sx <= toX && sy >= fromY && sy <= toY) total += 1;
+        }
+      }
+      return total;
+    };
+    const roomAbove = targetY - targetRegion.top >= 18;
+    const roomBelow = targetRegion.bottom - targetY >= 18;
+    const candidates = [
+      ...(roomAbove ? [{ x: right - 4, y: targetY - 6, anchor: 'end' as const, score: hits(right - labelWidth - 6, right + 6, targetY - 20, targetY - 1) }] : []),
+      ...(roomBelow ? [{ x: right - 4, y: targetY + 14, anchor: 'end' as const, score: hits(right - labelWidth - 6, right + 6, targetY + 1, targetY + 20) }] : []),
+      ...(roomAbove ? [{ x: left + 4, y: targetY - 6, anchor: 'start' as const, score: hits(left - 6, left + labelWidth + 6, targetY - 20, targetY - 1) }] : []),
+      ...(roomBelow ? [{ x: left + 4, y: targetY + 14, anchor: 'start' as const, score: hits(left - 6, left + labelWidth + 6, targetY + 1, targetY + 20) }] : []),
+    ];
+    let best: (typeof candidates)[number] | null = null;
+    for (const candidate of candidates) if (!best || candidate.score < best.score) best = candidate;
+    return best ?? fallback;
+  })();
 
   return (
     <>
@@ -468,9 +508,9 @@ function Plot(props: PlotProps) {
           <g>
             <line x1={left} x2={right} y1={targetY} y2={targetY} stroke="var(--text-secondary)" strokeWidth={1.5} strokeDasharray="5 4" />
             <text
-              x={right - 4}
-              y={targetY - targetRegion.top < 18 ? targetY + 14 : targetY - 6}
-              textAnchor="end"
+              x={targetLabel.x}
+              y={targetLabel.y}
+              textAnchor={targetLabel.anchor}
               fontSize={FONT}
               fontWeight={500}
               fill="var(--text-secondary)"

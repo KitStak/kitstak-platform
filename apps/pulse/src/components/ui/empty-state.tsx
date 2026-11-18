@@ -11,6 +11,8 @@ export interface EmptyStateProps {
   /** Primary + secondary actions. */
   readonly actions?: ReactNode;
   readonly size?: 'sm' | 'md' | 'lg';
+  /** Heading tag for the title. Use `h1` when the empty state is the whole page (a 404). */
+  readonly titleAs?: 'h1' | 'h2' | 'h3';
   readonly className?: string;
 }
 
@@ -22,6 +24,7 @@ export function EmptyState({
   visual,
   actions,
   size = 'md',
+  titleAs: Title = 'h3',
   className,
 }: EmptyStateProps) {
   const art = size === 'sm' ? 96 : size === 'lg' ? 200 : 152;
@@ -35,7 +38,7 @@ export function EmptyState({
     >
       {visual ?? <Illustration name={illustration} size={art} className="animate-fade-in" />}
       <div className="flex max-w-sm flex-col gap-1">
-        <h3 className={cn('font-semibold text-fg', size === 'sm' ? 'text-base' : 'text-md')}>{title}</h3>
+        <Title className={cn('font-semibold text-fg', size === 'sm' ? 'text-base' : 'text-md')}>{title}</Title>
         {description ? (
           <p className={cn('text-fg-muted', 'text-sm')}>{description}</p>
         ) : null}

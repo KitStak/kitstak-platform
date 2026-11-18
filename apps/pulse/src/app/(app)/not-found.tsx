@@ -12,6 +12,7 @@ export default function NotFound() {
       <EmptyState
         illustration="search"
         title="We could not find that"
+        titleAs="h1"
         description="It may have been moved or deleted, or you may not have access to it."
         actions={
           <Link href="/" className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-fg hover:bg-primary-hover">

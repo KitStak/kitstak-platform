@@ -443,7 +443,7 @@ function DayEntry({
     <Panel
       title="Add time for a day"
       action={
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           {sites.length > 1 ? (
             <Select
               aria-label="Site for the day"

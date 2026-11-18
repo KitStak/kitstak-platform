@@ -136,7 +136,7 @@ export default async function UpgradePage({
           ))}
         </ul>
         <p className="mt-5 border-t border-border-subtle pt-4 text-xs text-fg-muted">
-          Per-organization licensing. Pricing is confirmed at checkout — no charge happens on this page.
+          Per-organization licensing. Pricing is confirmed at checkout. No charge happens on this page.
         </p>
       </section>
 

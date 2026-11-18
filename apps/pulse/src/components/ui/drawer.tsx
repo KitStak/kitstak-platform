@@ -1,9 +1,10 @@
 'use client';
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react';
+import { forwardRef, useRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { cn } from './cn';
 import { IconButton } from './icon-button';
+import { useReturnFocus } from './dialog';
 
 export const Drawer = DialogPrimitive.Root;
 export const DrawerTrigger = DialogPrimitive.Trigger;
@@ -22,7 +23,22 @@ export interface DrawerContentProps extends Omit<ComponentPropsWithoutRef<typeof
 
 /** Right-side panel (item card, notifications, activity). */
 export const DrawerContent = forwardRef<ElementRef<typeof DialogPrimitive.Content>, DrawerContentProps>(
-  function DrawerContent({ className, width = 560, modal = true, title, description, actions, children, style, ...props }, ref) {
+  function DrawerContent({ className, width = 560, modal = true, title, description, actions, children, style, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) {
+    const body = useRef<HTMLDivElement>(null);
+    const focus = useReturnFocus({
+      onOpenAutoFocus: (event) => {
+        onOpenAutoFocus?.(event);
+        if (event.defaultPrevented) return;
+        // Start in the panel itself, not on the Close button: there its tooltip opened and took the
+        // first press of Escape. A panel with a form starts in its first field.
+        const field = body.current?.querySelector<HTMLElement>('input:not([type="hidden"]):not(:disabled), select:not(:disabled), textarea:not(:disabled)');
+        const target = field ?? body.current;
+        if (!target) return;
+        event.preventDefault();
+        target.focus();
+      },
+      onCloseAutoFocus,
+    });
     return (
       <DialogPrimitive.Portal>
         {modal ? (
@@ -37,6 +53,7 @@ export const DrawerContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
             className,
           )}
           {...props}
+          {...focus}
         >
           <header className="flex items-start gap-3 border-b border-border-subtle px-6 py-4">
             <div className="min-w-0 flex-1">
@@ -54,7 +71,9 @@ export const DrawerContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
               </DialogPrimitive.Close>
             </div>
           </header>
-          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <div ref={body} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
+            {children}
+          </div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     );

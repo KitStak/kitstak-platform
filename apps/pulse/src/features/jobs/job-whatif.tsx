@@ -85,7 +85,7 @@ function Slider({
         onChange={(event) => onChange(Number(event.target.value))}
         aria-valuetext={format(value)}
         data-testid={testId}
-        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-muted accent-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-border-strong accent-[var(--primary)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
       />
       <span className="flex justify-between text-2xs text-fg-muted">
         <span>{format(min)}</span>

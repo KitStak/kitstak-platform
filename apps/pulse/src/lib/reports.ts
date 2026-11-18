@@ -149,6 +149,8 @@ export function rangeLabel(range: { from: string; to: string }): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const part = (date: string, withYear: boolean): string => `${months[Number(date.slice(5, 7)) - 1]} ${Number(date.slice(8, 10))}${withYear ? `, ${date.slice(0, 4)}` : ''}`;
   if (range.from === range.to) return part(range.from, true);
+  // A range this wide is how a screen asks for "everything", so it reads that way.
+  if (range.from <= '2000-01-01' && range.to >= '2100-01-01') return 'all dates';
   return `${part(range.from, range.from.slice(0, 4) !== range.to.slice(0, 4))} to ${part(range.to, true)}`;
 }
 

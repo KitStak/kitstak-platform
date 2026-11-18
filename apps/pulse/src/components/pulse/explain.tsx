@@ -108,7 +108,7 @@ export function ExplainNumber({ metric, scope, label, className, align = 'end' }
               {data.quality.length > 0 ? (
                 <ul className="flex flex-col gap-1.5" aria-label="Things that make this number partial">
                   {data.quality.map((text) => (
-                    <li key={text} className="flex items-start gap-2 text-xs text-[var(--label-orange-text)]">
+                    <li key={text} className="flex items-start gap-2 text-xs text-warning-text">
                       <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
                       <span>{text}</span>
                     </li>

@@ -21,6 +21,7 @@ import { STREAMS, STREAM_IDS, isStreamId, streamInfo, type StreamId } from '@/li
 import { rows, type DomainContext } from './_shared';
 import { requirePulse } from './access';
 import { logActivity } from './activity';
+import { MONEY_METRICS } from './standards';
 
 /** Which rows of a stream to read. Filters that do not apply to a stream are ignored. */
 export interface StreamScope {
@@ -325,7 +326,9 @@ async function buildExport(ctx: DomainContext, stream: StreamId, filters: Export
   const canSeeMoney = access.seesMoney && !filters.hideMoney;
   const canSeeWages = access.seesWages && !filters.hideMoney;
   if (stream === 'labor_rates' && !canSeeMoney) throw forbidden('Labor rates are money. Ask an admin to let you see money, then export again.');
-  const found = await loadStreamRows(db, ctx.orgId, stream, { ...filters, limit: EXPORT_ROW_CAP });
+  const loaded = await loadStreamRows(db, ctx.orgId, stream, { ...filters, limit: EXPORT_ROW_CAP });
+  // A goal for revenue, profit or margin is money in its one value column, so the whole row is left out.
+  const found = stream === 'goals' && !canSeeMoney ? loaded.filter((row) => !(MONEY_METRICS as readonly string[]).includes(String(row.record.metric))) : loaded;
   const layout = stream === 'job_plans' ? (filters.layout ?? 'totals') : undefined;
   const csv = streamToCsv(
     stream,

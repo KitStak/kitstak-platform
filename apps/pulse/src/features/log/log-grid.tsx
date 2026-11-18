@@ -1214,7 +1214,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                     <div
                       className={cn(
                         'min-w-0 xl:col-span-1',
-                        first ? 'col-span-full sm:col-span-3 md:col-span-4 md:self-end' : 'hidden xl:block',
+                        first ? 'col-span-full sm:col-span-3 md:col-span-4 md:self-end xl:self-center xl:pl-1' : 'hidden xl:block',
                       )}
                     >
                       {first ? (

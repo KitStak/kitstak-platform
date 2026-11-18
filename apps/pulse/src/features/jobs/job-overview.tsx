@@ -758,7 +758,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
         <JobWhatIf job={job} today={today} settings={settings} laborClasses={laborClasses} />
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Panel
           title="Latest work"
           action={

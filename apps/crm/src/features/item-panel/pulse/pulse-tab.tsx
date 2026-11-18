@@ -20,6 +20,16 @@ import type { ItemPulseClient, ItemPulseDto, ItemPulseJob } from '@/server/servi
 import { useItemPulse } from './api';
 import { PulseMark } from './pulse-mark';
 
+
+/** "Dec 11" (with the year when it is not this year), the way Pulse writes days. `YYYY-MM-DD` in, no time zone. */
+function shortDay(iso: string): string {
+  const [year, month, day] = iso.split('-').map(Number);
+  if (!year || !month || !day) return iso;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const sameYear = year === new Date().getFullYear();
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: sameYear ? undefined : 'numeric', timeZone: 'UTC' });
+}
+
 const EXTERNAL = { target: '_blank', rel: 'noopener noreferrer' } as const;
 
 const TONE_COLOR: Readonly<Record<PulseTone, 'green' | 'yellow' | 'orange' | 'red' | 'gray'>> = {
@@ -90,7 +100,7 @@ function JobCard({ job, moneyHidden, canLog, dealValueCents }: { readonly job: I
       <p className="mt-1 text-xs text-fg-muted">
         {job.statusLabel}
         {job.clientName ? ` · ${displayText(job.clientName)}` : ''}
-        {job.dueDate ? ` · due ${job.dueDate}` : ''}
+        {job.dueDate ? ` · due ${shortDay(job.dueDate)}` : ''}
       </p>
       <div className="mt-3">
         {done === null ? null : (

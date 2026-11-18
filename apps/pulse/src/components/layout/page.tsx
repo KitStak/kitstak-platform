@@ -50,7 +50,7 @@ export function Panel({
   return (
     <section className={cn('rounded-xl border border-border-subtle bg-panel shadow-xs', className)}>
       {title ? (
-        <header className="flex items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border-subtle px-4 py-3">
           <h2 className="text-base font-semibold text-fg">{title}</h2>
           {action}
         </header>

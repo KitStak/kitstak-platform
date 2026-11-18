@@ -83,7 +83,7 @@ export function Section({ title, hint, action, children, className, bodyClassNam
           <h2 className="text-base font-semibold text-fg">{title}</h2>
           {hint ? <p className="mt-0.5 text-xs text-fg-muted">{hint}</p> : null}
         </div>
-        {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
+        {action ? <div className="flex max-w-full min-w-0 items-center gap-2">{action}</div> : null}
       </header>
       <div className={cn('min-w-0 flex-1 p-4', bodyClassName)}>{children}</div>
     </section>

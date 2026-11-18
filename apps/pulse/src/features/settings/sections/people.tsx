@@ -260,7 +260,7 @@ export function PeopleSection({ settings, canEdit }: { readonly settings: Settin
         <div className="flex flex-wrap items-center gap-3" data-testid="add-person-help">
           <UserPlus aria-hidden className="size-5 shrink-0 text-icon-strong" />
           <p className="min-w-0 flex-1 basis-64 text-sm text-fg-secondary">
-            People join your workspace from the KitStak Portal. Invite them there by email. Once they accept, they show up in the list above and you pick what they can do in Pulse and whether they see money.
+            People join your workspace from the KitStak Portal. Invite them there by email. When they sign in to Pulse with that email, they see the invitation and join. Then they show up in the list above, and you pick what they can do in Pulse and whether they see money.
           </p>
           {canEdit ? (
             <a

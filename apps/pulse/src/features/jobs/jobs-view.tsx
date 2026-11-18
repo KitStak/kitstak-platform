@@ -502,11 +502,12 @@ export function JobsView({
                 on
                   ? 'border-primary bg-primary-subtle text-fg'
                   : 'border-border-subtle bg-panel text-fg-secondary hover:bg-hover',
-                riskCounts[status] === 0 && !on && 'opacity-60',
+                // An empty status stays readable (no dimming): a dashed outline and a quiet count say "none".
+                riskCounts[status] === 0 && !on && 'border-dashed bg-transparent',
               )}
             >
               <MarginPill status={status} size="sm" />
-              <span className="font-semibold text-fg tabular-nums">{riskCounts[status]}</span>
+              <span className={cn('tabular-nums', riskCounts[status] === 0 ? 'text-fg-muted' : 'font-semibold text-fg')}>{riskCounts[status]}</span>
             </button>
           );
         })}

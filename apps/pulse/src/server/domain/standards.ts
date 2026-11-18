@@ -134,7 +134,8 @@ export async function suggestStandard(ctx: DomainContext, input: { jobTypeId: st
 
 /* ---------------------------------------------------------------- goals */
 
-const MONEY_METRICS: readonly TargetMetric[] = ['margin_pct', 'profit', 'revenue', 'labor_pct_of_revenue', 'cost_per_unit'];
+/** Goals a reader without money may not see the value of. */
+export const MONEY_METRICS: readonly TargetMetric[] = ['margin_pct', 'profit', 'revenue', 'labor_pct_of_revenue', 'cost_per_unit'];
 
 function toTargetDTO(row: TargetRow, access: Pick<PulseAccess, 'seesMoney'>): TargetDTO {
   const metric = row.metric as TargetMetric;

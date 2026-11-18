@@ -1,5 +1,5 @@
 'use client';
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react';
+import { forwardRef, useRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Check, X } from 'lucide-react';
 import { cn } from './cn';
@@ -36,6 +36,30 @@ export const DialogOverlay = forwardRef<
   );
 });
 
+/**
+ * Keyboard focus goes back to the control that opened a dialog or panel when it closes. Radix only
+ * does this for a `DialogTrigger`; most dialogs here open from state, and focus fell to the top of
+ * the page. Spread `onOpenAutoFocus` and `onCloseAutoFocus` onto the Radix content.
+ */
+export function useReturnFocus(handlers: { onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void } = {}) {
+  const opener = useRef<HTMLElement | null>(null);
+  return {
+    onOpenAutoFocus: (event: Event) => {
+      const active = document.activeElement;
+      opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+      handlers.onOpenAutoFocus?.(event);
+    },
+    onCloseAutoFocus: (event: Event) => {
+      handlers.onCloseAutoFocus?.(event);
+      const target = opener.current;
+      opener.current = null;
+      if (event.defaultPrevented || !target || !target.isConnected) return;
+      event.preventDefault();
+      target.focus();
+    },
+  };
+}
+
 export interface DialogContentProps extends ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
   readonly size?: DialogSize;
   /** Hide the top-right close button (e.g. a blocking confirmation). */
@@ -43,7 +67,8 @@ export interface DialogContentProps extends ComponentPropsWithoutRef<typeof Dial
 }
 
 export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Content>, DialogContentProps>(
-  function DialogContent({ className, size = 'md', hideClose, children, ...props }, ref) {
+  function DialogContent({ className, size = 'md', hideClose, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) {
+    const focus = useReturnFocus({ onOpenAutoFocus, onCloseAutoFocus });
     return (
       <DialogPrimitive.Portal>
         <DialogOverlay />
@@ -57,6 +82,7 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
             className,
           )}
           {...props}
+          {...focus}
         >
           {children}
           {hideClose ? null : (

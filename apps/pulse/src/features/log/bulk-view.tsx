@@ -63,7 +63,7 @@ const newRow = (date: string, jobId = '', values: Partial<LineValues> = {}): Bul
 const cell =
   'h-10 w-full min-w-0 rounded-md border border-border-input bg-panel px-2 text-sm tabular-nums text-fg placeholder:text-fg-placeholder hover:border-border-input-hover focus-visible:border-focus focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus lg:h-8';
 
-const COLS = 'lg:grid-cols-[150px_minmax(180px,1fr)_84px_64px_64px_76px_84px_minmax(90px,150px)_150px_64px]';
+const COLS = 'lg:grid-cols-[138px_minmax(150px,1fr)_84px_64px_64px_76px_84px_minmax(90px,150px)_minmax(72px,150px)_64px]';
 
 export function BulkView({
   today,

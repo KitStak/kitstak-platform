@@ -636,7 +636,7 @@ function CheckStep({ batch, onBatch, onRemap, onDiscard }: { readonly batch: Imp
               {batch.problems.length > 0
                 ? 'Fix the columns first.'
                 : blocked
-                  ? `Nothing can be saved while ${rowsWord(counts.error)} ${counts.error === 1 ? 'has a problem' : 'have problems'}. Fix them, leave them out, or pick "Skip bad rows".`
+                  ? `Nothing can be saved while ${rowsWord(counts.error)} ${counts.error === 1 ? 'has a problem. Fix it, leave it out' : 'have problems. Fix them, leave them out'}, or pick "Skip bad rows".`
                   : toSave === 0
                     ? 'Every row is already in Pulse, so saving changes nothing.'
                     : `Ready. ${rowsWord(toSave)} will be saved together: ${count(counts.create)} new and ${count(counts.update)} changed.${counts.error > 0 ? ` The ${rowsWord(counts.error)} with problems ${counts.error === 1 ? 'is' : 'are'} left out.` : ''} You can undo for 7 days.`}

@@ -14,6 +14,7 @@ import { assertVersion, cleanText, defined, diff, hideUnless, inTx, iso, isoRequ
 import { codeFromName, freeCode, restoreRow, softDeleteRow } from './_crud';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
+import { recomputeJobs } from './job-stats';
 import { finishWrite, newTouched, restampUsage } from './recalc';
 import { loadSettings } from './settings';
 
@@ -89,6 +90,11 @@ export async function updateSite(ctx: DomainContext, siteId: string, patch: Part
     const [row] = await tx.update(sites).set({ ...values, updatedAt: new Date() }).where(eq(sites.id, before.id)).returning();
     const change = diff(before as unknown as Record<string, unknown>, values as Record<string, unknown>);
     if (change) await logActivity(tx, ctx, { verb: 'site.updated', entityType: 'site', entityId: before.id, ...change });
+    // "Today" at the site moved, so the last 30 days and the days left of its open jobs moved with it.
+    if (patch.timezone !== undefined && patch.timezone !== before.timezone) {
+      const open = await rows<{ id: string }>(tx, sql`SELECT id FROM pulse.jobs WHERE org_id = ${ctx.orgId} AND site_id = ${before.id} AND deleted_at IS NULL AND status IN ('planned', 'active', 'on_hold')`);
+      if (open.length > 0) await recomputeJobs(tx, ctx, open.map((job) => job.id));
+    }
     return toSiteDTO(row!);
   });
 }
@@ -249,7 +255,15 @@ export async function insertClient(tx: Executor, ctx: DomainContext, input: Clie
 
 export async function createClient(ctx: DomainContext, input: ClientInput): Promise<ClientDTO> {
   const access = await requirePulse(ctx, 'job:manage');
-  return inTx(async (tx) => toClientDTO(await insertClient(tx, ctx, input), access));
+  return inTx(async (tx) => {
+    // Two clients with one name split the profit of that client in two, and a file could not tell them apart.
+    const name = cleanText(input.name);
+    if (name) {
+      const [same] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.orgId, ctx.orgId), isNull(clients.deletedAt), sql`lower(${clients.name}) = ${name.toLowerCase()}`));
+      if (same) throw invalid(`You already have a client called ${name}. Use that one, or give this one another name.`, { name: `You already have a client called ${name}.` });
+    }
+    return toClientDTO(await insertClient(tx, ctx, input), access);
+  });
 }
 
 /** Finds a live client by exact name (no case), or makes one. Used by quick add and imports. */

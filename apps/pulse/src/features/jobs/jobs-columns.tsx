@@ -112,7 +112,7 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     sort: (job) => riskRank(job),
     className: 'min-w-[260px] max-w-[420px]',
     cell: (job) => (
-      <div className="flex min-w-0 flex-col gap-0.5 py-0.5">
+      <div className="flex min-w-0 flex-col items-start gap-0.5 py-0.5">
         <RiskPill job={job} size="sm" />
         {job.stats.headline ? (
           <span className="line-clamp-2 text-xs text-fg-secondary">{job.stats.headline}</span>

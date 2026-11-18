@@ -33,15 +33,17 @@ const TONE_WORD = { good: 'better', bad: 'worse', neutral: '' } as const;
 
 export function DeltaBadge({ delta, text, goodWhen = 'up', label, size = 'md', className }: DeltaBadgeProps) {
   const missing = delta === null || delta === undefined;
-  const direction = deltaDirection(delta);
-  const tone = deltaTone(delta, goodWhen);
+  // A change too small to show ("0 points", "$0") reads as no change: no arrow and no good or bad color.
+  const rounded = missing || /[1-9]/.test(text) ? delta : 0;
+  const direction = deltaDirection(rounded);
+  const tone = deltaTone(rounded, goodWhen);
   const Icon = direction === 'up' ? ArrowUpRight : direction === 'down' ? ArrowDownRight : Minus;
   return (
-    <span className={cn('inline-flex max-w-full items-center gap-1.5 whitespace-nowrap', size === 'sm' ? 'text-2xs' : 'text-xs', className)}>
+    <span className={cn('inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5', size === 'sm' ? 'text-2xs' : 'text-xs', className)}>
       <span
         className={cn(
-          'inline-flex items-center gap-0.5 rounded-sm font-semibold tabular-nums',
-          size === 'sm' ? 'h-[18px] px-1' : 'h-5 px-1.5',
+          'inline-flex max-w-full items-center gap-0.5 rounded-sm font-semibold tabular-nums',
+          size === 'sm' ? 'min-h-[18px] px-1' : 'min-h-5 px-1.5',
           tone === 'good' && 'bg-success-subtle text-success-text',
           tone === 'bad' && 'bg-danger-subtle text-danger-text',
           tone === 'neutral' && 'bg-muted text-fg-secondary',
@@ -51,7 +53,7 @@ export function DeltaBadge({ delta, text, goodWhen = 'up', label, size = 'md', c
         <span className="sr-only">{missing ? 'Nothing to compare yet' : `${DELTA_WORD[direction]}${TONE_WORD[tone] ? `, ${TONE_WORD[tone]}` : ''}:`}</span>
         {missing ? 'No change yet' : text}
       </span>
-      {label ? <span className="truncate text-fg-muted">{label}</span> : null}
+      {label ? <span className="whitespace-nowrap text-fg-muted">{label}</span> : null}
     </span>
   );
 }
@@ -71,7 +73,7 @@ export const MARGIN_HEALTH_LABELS: Readonly<Record<MarginHealth, string>> = {
 const HEALTH_STYLE: Readonly<Record<MarginHealth, { icon: LucideIcon; className: string }>> = {
   healthy: { icon: CircleCheck, className: 'bg-success-subtle text-success-text' },
   watch: { icon: Eye, className: 'bg-[var(--label-yellow-subtle)] text-[var(--label-yellow-text)]' },
-  at_risk: { icon: TriangleAlert, className: 'bg-[var(--label-orange-subtle)] text-[var(--label-orange-text)]' },
+  at_risk: { icon: TriangleAlert, className: 'bg-warning-subtle text-warning-text' },
   losing: { icon: TrendingDown, className: 'bg-danger-subtle text-danger-text' },
   none: { icon: CircleHelp, className: 'bg-muted text-fg-secondary' },
 };
@@ -177,7 +179,16 @@ export function KpiTile({ label, value, delta, sparkline, explain, footer, empty
       ) : (
         <>
           <div className="mt-1.5 flex items-end justify-between gap-3">
-            <p className={cn('min-w-0 truncate font-semibold tracking-tight', value === null ? 'text-md text-fg-muted' : 'text-xl text-fg')}>{value ?? emptyText}</p>
+            {/* A long number ("$12,345,679") steps down in size in a narrow tile so it is never cut off. */}
+            <p
+              title={typeof value === 'string' ? value : undefined}
+              className={cn(
+                'min-w-0 truncate font-semibold tracking-tight',
+                value === null ? 'text-md text-fg-muted' : typeof value === 'string' && value.length > 9 ? 'text-md text-fg @[11.5rem]:text-lg @[14rem]:text-xl' : typeof value === 'string' && value.length > 7 ? 'text-lg text-fg @[11rem]:text-xl' : 'text-xl text-fg',
+              )}
+            >
+              {value ?? emptyText}
+            </p>
             {sparkline && value !== null ? <Sparkline values={sparkline.values} label={sparkline.label ?? `${label} trend`} format={sparkline.format} tone={sparkline.tone} width={88} height={30} className="mb-0.5 hidden shrink-0 @[15.5rem]:block" /> : null}
           </div>
           {(delta && value !== null) || footer ? (

@@ -87,7 +87,8 @@ async function scopeWords(ctx: DomainContext, filters: ProfitFilters): Promise<s
                (SELECT name FROM pulse.sites WHERE org_id = ${ctx.orgId} AND id = ${filters.siteId ?? null}::uuid) AS site`,
   );
   const who = [found?.job, found?.job ? null : found?.client, found?.type, found?.service, found?.site].filter(Boolean) as string[];
-  return `${who.length > 0 ? who.join(', ') : 'All jobs'}, ${rangeLabel(filters)}`;
+  const range = rangeLabel(filters);
+  return `${who.length > 0 ? who.join(', ') : 'All jobs'}, ${range}`;
 }
 
 /** Data quality lines for the jobs behind a number. A number with no line is complete. */

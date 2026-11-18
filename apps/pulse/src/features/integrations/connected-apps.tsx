@@ -293,7 +293,7 @@ function AppCard({
         </p>
       ) : null}
 
-      <div className={cn('grid gap-4 md:grid-cols-2', !connected && 'opacity-70')}>
+      <div className={cn('grid gap-4 md:grid-cols-2', !connected && 'opacity-[0.88]')}>
         <div>
           <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.04em] text-fg-secondary uppercase">
             <ArrowDownToLine aria-hidden className="size-3.5" />

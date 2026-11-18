@@ -4,7 +4,7 @@
  * Each step is judged from real data (a rate exists, a job has a logged day), so the checklist
  * is always true, and each one links to the full screen for later.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -79,6 +79,13 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
   const steps = state.steps;
   const current = ORDER.find((id) => !steps[id]) ?? null;
 
+  // When a step is done, the cursor moves into the next one, so the five steps can be typed straight through.
+  const lastStep = useRef(current);
+  useEffect(() => {
+    if (lastStep.current !== current && current) document.querySelector<HTMLInputElement>(`[data-testid="step-${current}"] input`)?.focus();
+    lastStep.current = current;
+  }, [current]);
+
   // The first site follows the browser's time zone, once, while the workspace is still empty.
   useEffect(() => {
     if (!shell.can('settings:manage') || settings.onboarding.browserTimezone || !state.site || state.job) return;
@@ -112,7 +119,8 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
         return null;
       }
       await queryClient.invalidateQueries();
-      toast.success(done);
+      // The last step answers with the profit number itself, and a toast would sit on top of it on a phone.
+      if (done !== '') toast.success(done);
       return result.data;
     } catch {
       toast.error('That did not save', 'Check your connection and try again.');
@@ -174,7 +182,7 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
     setErrors(problems);
     if (Object.keys(problems).length > 0 || !state.job || !state.site) return;
     const hours = (Number(day.people) * Number(day.hours)).toFixed(2);
-    const saved = await finish('day', () => saveProductionEntryAction({ jobId: state.job?.id ?? '', workDate: state.site?.today ?? '', unitsGood: day.units.trim(), headcount: day.people.trim(), hours }), 'Day logged');
+    const saved = await finish('day', () => saveProductionEntryAction({ jobId: state.job?.id ?? '', workDate: state.site?.today ?? '', unitsGood: day.units.trim(), headcount: day.people.trim(), hours }), '');
     if (saved) router.refresh();
   };
 
@@ -373,7 +381,7 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
         </ol>
 
         {profit && steps.profit ? (
-          <div className="mt-3 rounded-xl border border-success/40 bg-success-subtle p-5" data-testid="first-profit">
+          <div role="status" className="mt-3 rounded-xl border border-success/40 bg-success-subtle p-5" data-testid="first-profit">
             <p className="flex items-center gap-2 text-sm font-semibold text-success-text">
               <Sparkles aria-hidden className="size-4" />
               Your first profit number

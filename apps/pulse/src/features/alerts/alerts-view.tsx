@@ -242,7 +242,7 @@ export function AlertsView({ initialOpen, initialSnoozed, today, canManageRules 
           </TabsList>
         </Tabs>
         <div className="flex flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none">
-          <SearchInput value={search} onValueChange={setSearch} placeholder="Search alerts" aria-label="Search alerts" className="min-w-0 flex-1 sm:w-56 sm:flex-none" />
+          <SearchInput value={search} onValueChange={setSearch} placeholder="Search alerts" aria-label="Search alerts" containerClassName="min-w-0 flex-1 sm:w-56 sm:flex-none" />
           <Button variant="secondary" leadingIcon={<Download aria-hidden />} onClick={exportCsv} disabled={visible.length === 0} data-testid="alerts-export">
             Export CSV
           </Button>

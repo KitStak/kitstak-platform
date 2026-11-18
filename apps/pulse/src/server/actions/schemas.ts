@@ -50,7 +50,7 @@ export const hours = decimal(2, 100_000_000, 'Type hours of 0 or more with up to
 /** People: 0 or more, up to 2 decimal places, under 10,000. */
 export const headcount = decimal(2, 10_000, 'Type the number of people.');
 /** A per unit price or cost in currency units: up to 4 decimal places, under 1,000,000. */
-export const unitPrice = decimal(4, 1_000_000, 'Type a price of 0 or more with up to 4 decimal places.');
+export const unitPrice = decimal(4, 1_000_000, 'Type a price from 0 to 999,999.99, with up to 4 decimal places.');
 /** Units per person per hour: above 0, up to 3 decimal places. */
 export const pace = decimal(3, 1_000_000_000, 'Type a pace above zero.').refine((value) => Number(value) > 0, 'Type a pace above zero.');
 /** Whole cents. May be negative where the field allows it. */

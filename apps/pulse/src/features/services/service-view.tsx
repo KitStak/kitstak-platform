@@ -119,7 +119,7 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
       ) : null}
 
       {line.flag && sentence ? (
-        <div role="status" className={cn('flex items-start gap-3 rounded-lg border px-4 py-3 text-sm', line.flag === 'under_target' || line.flag === 'standard_under_target' ? 'border-[var(--label-orange-text)]/30 bg-[var(--label-orange-subtle)] text-[var(--label-orange-text)]' : 'border-danger/30 bg-danger-subtle text-danger-text')} data-testid="service-flag-banner">
+        <div role="status" className={cn('flex items-start gap-3 rounded-lg border px-4 py-3 text-sm', line.flag === 'under_target' || line.flag === 'standard_under_target' ? 'border-warning/30 bg-warning-subtle text-warning-text' : 'border-danger/30 bg-danger-subtle text-danger-text')} data-testid="service-flag-banner">
           <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
           <p>
             <strong className="font-semibold">{SERVICE_FLAG_WORDS[line.flag]}.</strong> {sentence}

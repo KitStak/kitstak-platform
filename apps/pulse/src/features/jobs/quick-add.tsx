@@ -102,7 +102,7 @@ export function QuickAddJob({
       }}
       noValidate
     >
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(140px,1.1fr)_minmax(160px,1.6fr)_110px_120px_auto_auto] md:items-center">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(100px,1.1fr)_minmax(110px,1.6fr)_84px_104px_auto_auto] lg:grid-cols-[minmax(140px,1.1fr)_minmax(160px,1.6fr)_110px_120px_auto_auto] md:items-center">
         <div className="col-span-2 md:col-span-1">
           <Input
             ref={clientRef}

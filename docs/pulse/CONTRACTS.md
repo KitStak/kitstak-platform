@@ -907,3 +907,47 @@ Product gaps the teams reported, none of them a broken screen:
   land on Log work and the floor version of Home (`/?floor=1`) has no link; the 404 for a missing job only fires on a
   full page load.
 - **Foundation leftovers**: big restamps run inline; no plain role RLS test; no CSP header.
+
+### 19.5 Bundle QA fixes (integrations lens)
+
+- **WMS work order changes now reach Pulse.** Work orders write their change log in
+  `apps/wms/src/server/repositories/work-orders.ts` `recordWorkOrderChanges`, not through `recordUpdate`, so the
+  Pulse note was never left. The note (`wms_work_order_changed`) is now left there on a status or finished quantity change.
+- **A second warehouse pull on the same day adds its parts.** The material ref is now
+  `woc:<componentId>:<date>:<warehouse count after the pull>` (`ledger.ts` `pullWmsUsage`). Before, the second pull of a
+  day hit the unique ref of the first and was skipped, so parts stayed behind the units.
+- **A deleted job frees its work order and its project time** (`jobs.ts` `insertLinks`), so the record can be tied to a
+  live job. Covered by `seams.db.test.ts`.
+- **A job made from a won deal ties its client to the deal's CRM account** when the names match and the client has no
+  account yet (`jobs.ts` `createJob`, `adoptCrmAccount`), so the account's Profit tab in CRM finds the client.
+- **`JobDetailDTO.inheritedPartsOwner`**: who buys the parts when the job does not say (client, then workspace default).
+  The Materials tab shows that instead of always "We do".
+- A late work order fills the new job form with a start date that is not after its due date.
+- Sibling panels: the CRM health line shows the combined margin when it names several jobs; "0 of 0 units" reads
+  "0 units"; the projection sentence says "By the plan" until units are logged; `emitBridgeEvent` logs one line when a
+  note cannot be left.
+
+### 19.6 Standalone QA fixes (a workspace that licenses only Pulse)
+
+Covered by `src/server/domain/standalone.db.test.ts` unless noted.
+
+- **Export, then import into another workspace, gives the same numbers to the cent.** Three things made it drift:
+  a production file could overwrite hours that time punches own (now left alone with a row note, `imports.ts`); the
+  punch rollup added a second "time not on a job" row next to the copy that came in with the export (now it takes that
+  row over when day, class, reason and hours match, `punches.ts`); and odd cents of shared cost went to the smaller row
+  id (now job number, shift and labor class decide before the id, `recalc.ts` `allocatePool`).
+- **Workspace settings are not in any CSV**: the default labor class, the site time zone and the cost rules have to be
+  set by hand in the second workspace. With those set, every `job_stats` column matched for 61 jobs.
+- **A row left out of an import keeps its reason**, and "Download rows left out" lists every left out row after the save.
+- **Import notes**: a work day in the future, more than 24 hours each, and dates like 3/4/2026 read with the usual
+  order all say so on the check step.
+- **A labor class made on the fly** (a job type or job named it first) gets its name and kind from the labor rates file.
+- **Getting started makes the Packer class with code `PACK`**, the code every template uses, and moves the cursor into
+  the next step.
+- **Goals export**: money goals are left out for a reader without money (and with "Leave money out").
+- **Audit search** matches the words on screen ("Undid an import") and people's names, not only the stored codes.
+- **Changing a site's time zone** recomputes its open jobs (`catalog.ts` `updateSite`).
+- **People and roles** says how a person is added and links to the Portal. `/no-workspace` lists the invitations sent
+  to the signed in email with a Join button, because a Pulse only workspace has no other place to accept one.
+- **Two clients cannot share a name** when added by hand (`catalog.ts` `createClient`). Imports and sync are unchanged.
+- Upload limit is 60 files a person an hour (17 kinds of data on day one). `UTC` is always in the time zone list.

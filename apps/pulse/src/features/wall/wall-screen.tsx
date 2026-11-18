@@ -266,7 +266,7 @@ function JobTiles({ jobs, mode, showMoney }: { readonly jobs: readonly WallJobDT
             <StatusBand status={job.status} word={word} />
             <div className="flex flex-1 flex-col justify-between gap-[clamp(0.4rem,0.6vw,1rem)] px-[clamp(0.75rem,1.2vw,1.5rem)] py-[clamp(0.6rem,0.9vw,1.2rem)]">
               <div className="min-w-0">
-                <p className="truncate text-[clamp(1.1rem,1.7vw,2.25rem)] leading-tight font-semibold">
+                <p className="line-clamp-2 text-[clamp(1.1rem,1.7vw,2.25rem)] leading-tight font-semibold">
                   <span className="text-fg-muted">{job.number}</span> {job.name}
                 </p>
                 {job.clientName && jobs.length <= 4 ? <p className="truncate text-[clamp(0.85rem,1.1vw,1.4rem)] text-fg-secondary">{job.clientName}</p> : null}

@@ -329,11 +329,18 @@ async function allocatePool(executor: Executor, orgId: string, siteId: string, s
     sql`
     WITH takers AS (
       SELECT 'p'::text AS t, id, job_id, NULL::uuid AS client_id, work_date, (hours * 100)::numeric AS w, shared_cents AS old,
-             (deleted_at IS NULL AND hours > 0) AS takes
-        FROM pulse.production_entries WHERE ${range}
+             (deleted_at IS NULL AND hours > 0) AS takes,
+             -- What the row is, in words that are the same in every workspace: a file exported from one
+             -- workspace and imported into another then spreads the odd cents the same way.
+             (COALESCE((SELECT j.number FROM pulse.jobs j WHERE j.id = e.job_id), '') || '|' || e.shift || '|' ||
+              COALESCE((SELECT c.code FROM pulse.labor_classes c WHERE c.id = e.labor_class_id), '')) COLLATE "C" AS skey
+        FROM pulse.production_entries e WHERE ${range}
       UNION ALL
-      SELECT 'v', id, job_id, client_id, work_date, (hours * 100)::numeric, shared_cents, (deleted_at IS NULL AND hours > 0)
-        FROM pulse.vas_entries WHERE ${range}
+      SELECT 'v', id, job_id, client_id, work_date, (hours * 100)::numeric, shared_cents, (deleted_at IS NULL AND hours > 0),
+             (COALESCE((SELECT c.code FROM pulse.clients c WHERE c.id = e.client_id), '') || '|' ||
+              COALESCE((SELECT s.code FROM pulse.vas_services s WHERE s.id = e.vas_service_id), '') || '|' ||
+              COALESCE((SELECT j.number FROM pulse.jobs j WHERE j.id = e.job_id), '') || '|' || e.quantity::text) COLLATE "C"
+        FROM pulse.vas_entries e WHERE ${range}
     ), tot AS (
       SELECT COALESCE(sum(w) FILTER (WHERE takes), 0) AS w FROM takers
     ), calc AS (
@@ -342,7 +349,7 @@ async function allocatePool(executor: Executor, orgId: string, siteId: string, s
              tot.w AS total_w
         FROM takers k CROSS JOIN tot
     ), ranked AS (
-      SELECT c.*, row_number() OVER (ORDER BY c.rem DESC, c.work_date, c.id) AS rn,
+      SELECT c.*, row_number() OVER (ORDER BY c.rem DESC, c.work_date, c.t, c.skey, c.id) AS rn,
              CASE WHEN c.total_w > 0 THEN ${amount}::numeric - sum(c.base) OVER () ELSE 0 END AS leftover
         FROM calc c
     ), final AS (

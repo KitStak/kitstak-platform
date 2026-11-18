@@ -371,6 +371,64 @@
   --ks-pop-offset: -4px;
 }
 
+/*
+ * Keyboard focus must always show. In Tailwind 4 `outline-none` also switches the outline style
+ * variable off, so a control written as `outline-none focus-visible:outline-2` (the top nav links,
+ * for one) drew no ring at all. Turning the variable back on while a key moved the focus makes the
+ * `focus-visible:outline-*` classes work as written. Controls with no such class are not touched.
+ */
+:focus-visible {
+  --tw-outline-style: solid;
+}
+
+/*
+ * A grid item is as wide as its widest word or field by default, so one long row could push a
+ * whole card past the edge of a phone. Let grid items shrink; a `min-w-*` class still wins.
+ */
+@layer base {
+  :where(.grid) > :where(*) {
+    min-width: 0;
+  }
+}
+
+/*
+ * Touch targets. The house controls are compact (24 to 36px tall), which is right for a mouse and
+ * too small for a thumb. On touch screens every button, tab, checkbox and button-like link gets an
+ * invisible hit area of at least 44 by 44px, centered on the control, so nothing moves on screen.
+ * Menu rows and list options are left alone: they already fill their row.
+ */
+@layer base {
+  @media (pointer: coarse) {
+    :where(button, [role='button'], [role='tab'], [role='checkbox'], [role='switch'], [role='radio'], summary, a[class*='inline-flex'], a[class*='size-']):where(:not([role='menuitem'], [role='option'], [data-touch='off'])) {
+      position: relative;
+    }
+    :where(button, [role='button'], [role='tab'], [role='checkbox'], [role='switch'], [role='radio'], summary, a[class*='inline-flex'], a[class*='size-']):where(:not([role='menuitem'], [role='option'], [data-touch='off']))::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+    /* A sideways scroller (tab rows, pill rows) must not start scrolling up and down by the few
+       pixels the hit areas reach past it. */
+    [class*='overflow-x-auto']:where(:not([class*='overflow-y-'])) {
+      overflow-y: hidden;
+    }
+  }
+}
+
+/* Phones zoom the whole page when a field with text under 16px gets focus. Keep fields at 16px there. */
+@media (pointer: coarse) and (max-width: 767px) {
+  input:not([type='checkbox'], [type='radio'], [type='range']),
+  select,
+  textarea,
+  button[role='combobox'] {
+    font-size: 16px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
