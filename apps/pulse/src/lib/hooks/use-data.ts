@@ -242,10 +242,20 @@ export const useProfitTrend = (params: ProfitParams & { bucket?: 'day' | 'week' 
   const query = { ...profitQuery(params), bucket: params.bucket };
   return useQuery({ queryKey: qk.profitTrend(query), queryFn: get<TrendPointDTO[]>('profit/trend', query), staleTime: SHORT, placeholderData: keepPreviousData, ...opts });
 };
-/** The stamped rows behind a number (drill down). */
-export const useProfitFacts = (params: ProfitParams & { kinds?: readonly FactKind[]; limit?: number } = {}, opts?: Opts<FactRowDTO[]>) => {
-  const query = { ...profitQuery(params), kinds: list(params.kinds), limit: params.limit };
-  return useQuery({ queryKey: qk.profitFacts(query), queryFn: get<FactRowDTO[]>('profit/facts', query), staleTime: SHORT, ...opts });
+/**
+ * The stamped rows behind a number (drill down): all of them. The route answers one page at a
+ * time, so this reads every page before it hands the rows over, and a total over `rows` is the
+ * whole total. `truncated` is true only when it stopped at `maxRows`: then say the list is cut.
+ * `limit` is the page size, not a cap on the rows.
+ */
+export const useProfitFacts = (params: ProfitParams & { kinds?: readonly FactKind[]; limit?: number; maxRows?: number } = {}, opts?: Opts<AllRows<FactRowDTO>>) => {
+  const query = { ...profitQuery(params), kinds: list(params.kinds), limit: params.limit ?? 5000 };
+  return useQuery({
+    queryKey: qk.profitFacts({ ...query, maxRows: params.maxRows }),
+    queryFn: () => collectPages<FactRowDTO>((offset) => apiGetPage<FactRowDTO[], PageMeta>(apiPath('profit/facts', { ...query, offset })), { maxRows: params.maxRows }),
+    staleTime: SHORT,
+    ...opts,
+  });
 };
 export const useCompanyBridge = (params: { from?: string | null; to?: string | null; siteId?: string | null } = {}, opts?: Opts<CompanyBridgeDTO>) => {
   const query = { from: params.from, to: params.to, site: params.siteId };
