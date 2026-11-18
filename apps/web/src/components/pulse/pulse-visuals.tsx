@@ -6,6 +6,7 @@ import {
   COMPANY_PROFIT,
   LOG_DAY,
   LOG_ROWS,
+  LOG_SITE,
   LOG_TOTAL,
   MONTH,
   NEEDS_YOU,
@@ -40,7 +41,7 @@ import { ProfitExplorer } from './pulse-visual-profit';
 import styles from './pulse-visuals.module.css';
 
 /*
- * The eight screenshot slots of the Pulse page. Each one is a PulseShot: it shows the real product
+ * Eight of the nine screenshot slots of the Pulse page (the ninth is in pulse-section-math.tsx). Each one is a PulseShot: it shows the real product
  * screenshot when the slot is marked ready in pulse-shots.ts. The coded visual inside it, a small
  * drawing of the same screen with sample data, shows only when a slot is switched back to not ready.
  */
@@ -50,8 +51,8 @@ import styles from './pulse-visuals.module.css';
 const MONTH_SPLIT = splitOf(MONTH.moneyIn, MONTH.moneyOut);
 
 const HOME_TILES = [
-  { label: 'Money in', value: money(MONTH.moneyIn) },
-  { label: 'Money out', value: money(MONTH.moneyOut) },
+  { label: 'Revenue', value: money(MONTH.moneyIn) },
+  { label: 'Cost', value: money(MONTH.moneyOut) },
   { label: 'Profit on jobs', value: money(MONTH.profit) },
   { label: 'Company profit', value: money(COMPANY_PROFIT) },
 ] as const;
@@ -68,9 +69,8 @@ export function PulseHeroVisual() {
 
         <p className={styles.answer}>
           Your jobs made <strong>{money(MONTH.profit)}</strong> this month at a{' '}
-          <strong>{percent(MONTH.margin, 0)} margin</strong>. After paid time that was not on a job, and
-          overhead, the company made <strong>{money(COMPANY_PROFIT)}</strong>. {NEEDS_YOU_COUNT} jobs need
-          you.
+          <strong>{percent(MONTH.margin, 0)} margin</strong>. After time not on a job and overhead, the
+          company made <strong>{money(COMPANY_PROFIT)}</strong>. {NEEDS_YOU_COUNT} jobs need you.
         </p>
 
         <dl className={styles.tiles}>
@@ -127,7 +127,9 @@ export function DailyEntryVisual() {
         <div className={`${mock.head} ${styles.head}`}>
           <div>
             <div className={mock.title}>Log work</div>
-            <div className={mock.sub}>{LOG_DAY} · Main Fulfillment · sample data</div>
+            <div className={mock.sub}>
+              {LOG_DAY} · {LOG_SITE} · sample data
+            </div>
           </div>
           <span className={styles.saved}>
             <Tick /> All rows saved
@@ -175,7 +177,7 @@ export function DailyEntryVisual() {
                         <span className="visually-hidden">Crew: </span>
                         {row.crew.map((line) => (
                           <span key={line.laborClass}>
-                            {line.people} {line.laborClass.toLowerCase()}
+                            {line.laborClass}, {line.people}
                           </span>
                         ))}
                       </span>
@@ -199,7 +201,7 @@ export function DailyEntryVisual() {
                       <span>
                         {row.note
                           ? `${row.note}. Target ${row.targetPace}`
-                          : `${isOnPace ? 'Above' : 'Below'} target ${row.targetPace}`}
+                          : `of ${row.targetPace} an hour · ${isOnPace ? 'On pace' : 'Too slow'}`}
                       </span>
                     </span>
                   </td>
@@ -258,7 +260,7 @@ export function PlanVsActualVisual() {
       <div className={`${mock.panel} ${styles.frame}`} data-lifted>
         <div className={`${mock.head} ${styles.head}`}>
           <div>
-            <div className={mock.title}>Plan vs actual</div>
+            <div className={mock.title}>Quote vs actual</div>
             <div className={mock.sub}>
               For the work done so far · {count(PLAN_PROGRESS.done)} of {count(PLAN_PROGRESS.planned)} units ·
               sample data
@@ -269,20 +271,25 @@ export function PlanVsActualVisual() {
 
         <table className={`${styles.table} ${styles.planTable}`}>
           <caption className="visually-hidden">
-            The plan for the work done so far against what happened. Labor took {PLAN_HOURS.actual} hours. The
-            plan was {PLAN_HOURS.plan}. Sample data.
+            The quote for the work done so far against what happened. Sample data.
           </caption>
           <thead>
             <tr>
               <th scope="col">
                 <span className="visually-hidden">Line</span>
               </th>
-              <th scope="col">Plan</th>
+              <th scope="col">Quote, for the work done</th>
               <th scope="col">Actual</th>
               <th scope="col">Difference</th>
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <th scope="row">Labor hours</th>
+              <td>{count(PLAN_HOURS.plan)}</td>
+              <td>{count(PLAN_HOURS.actual)}</td>
+              <td data-tone="bad">{count(PLAN_HOURS.actual - PLAN_HOURS.plan)} over</td>
+            </tr>
             {PLAN_LINES.map((line) => {
               const difference = differenceOf(line);
               return (
@@ -305,7 +312,7 @@ export function PlanVsActualVisual() {
           </tfoot>
         </table>
         <p className={styles.tableNote}>
-          Other costs are planned in full from the start, so they are not scaled to the units done.
+          Other cost is planned in full from the start, so it is not scaled to the units done.
         </p>
 
         <div className={styles.groupLabel} aria-hidden>
@@ -313,7 +320,7 @@ export function PlanVsActualVisual() {
         </div>
         <ol className={styles.why} aria-label="Why profit changed">
           <li data-kind="total">
-            <span className={styles.whyLabel}>Planned profit</span>
+            <span className={styles.whyLabel}>Plan so far</span>
             <span className={styles.whyTrack} aria-hidden>
               <span style={{ '--from': 0, '--size': PLAN_PROFIT.plan / scale } as React.CSSProperties} />
             </span>
@@ -329,7 +336,7 @@ export function PlanVsActualVisual() {
             </li>
           ))}
           <li data-kind="total">
-            <span className={styles.whyLabel}>Actual profit</span>
+            <span className={styles.whyLabel}>Actual</span>
             <span className={styles.whyTrack} aria-hidden>
               <span style={{ '--from': 0, '--size': PLAN_PROFIT.actual / scale } as React.CSSProperties} />
             </span>
@@ -344,7 +351,7 @@ export function PlanVsActualVisual() {
 
 /* ===== Real cost of an hour ===== */
 
-const RATE_TOKENS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4'] as const;
+const RATE_TOKENS = ['--chart-1', '--chart-2', '--chart-3'] as const;
 
 /** The rate builder for one labor class: the wage and what rides on top of it. */
 export function CostRatesVisual() {
@@ -353,23 +360,23 @@ export function CostRatesVisual() {
       <div className={`${mock.panel} ${styles.frame}`} data-lifted>
         <div className={`${mock.head} ${styles.head}`}>
           <div>
-            <div className={mock.title}>Real cost of an hour</div>
-            <div className={mock.sub}>{RATE.laborClass} · rate builder · sample data</div>
+            <div className={mock.title}>New rate for {RATE.laborClass}</div>
+            <div className={mock.sub}>Sample data</div>
           </div>
         </div>
 
         <div className={styles.rateLayout}>
           <div className={styles.rateTotal}>
-            <span className={mock.sub}>One hour really costs</span>
+            <span className={mock.sub}>One hour of a packer really costs</span>
             <span className={`numeral ${styles.rateValue}`}>{moneyCents(REAL_HOUR)}</span>
-            <span className={styles.rateAside}>Overtime hour {moneyCents(OVERTIME_HOUR)}</span>
+            <span className={styles.rateAside}>An overtime hour costs {moneyCents(OVERTIME_HOUR)}</span>
           </div>
 
           <div>
             <div
               className={styles.rateBar}
               role="img"
-              aria-label={`The real cost of an hour, ${moneyCents(REAL_HOUR)}, is the wage plus payroll taxes, benefits and overhead.`}
+              aria-label={`The real cost of an hour, ${moneyCents(REAL_HOUR)}, is the wage, plus taxes, benefits and other, plus overhead.`}
             >
               {RATE_PARTS.map((part, i) => (
                 <span
@@ -415,13 +422,20 @@ function onAxis(margin: number): number {
 const AXIS_ZERO = onAxis(0);
 const AXIS_TARGET = onAxis(TARGET_MARGIN);
 
+interface RiskVisualProps {
+  /** Set on the navy band of the Pulse page, so the caption is light. */
+  readonly onBrand?: boolean;
+  /** Set on the home page, where the picture sits beside the copy. */
+  readonly inSideColumn?: boolean;
+}
+
 /**
  * The Jobs list, worst first, drawn as one chart: where each open job's margin is heading against
- * the target. Under each bar sit the reason in a sentence, the money at stake and the next step.
+ * the target. Under each bar sit the reason in a sentence and the money at stake.
  */
-export function RiskVisual() {
+export function RiskVisual({ onBrand = false, inSideColumn = false }: RiskVisualProps) {
   return (
-    <PulseShot slot="risk" onBrand>
+    <PulseShot slot="risk" onBrand={onBrand} inSideColumn={inSideColumn}>
       <div className={`${mock.panel} ${styles.frame}`} data-lifted>
         <div className={`${mock.head} ${styles.head}`}>
           <div>
@@ -440,7 +454,7 @@ export function RiskVisual() {
 
         <p className={styles.marginKey} aria-hidden>
           <span data-part="bar">Projected margin</span>
-          <span data-part="dot">Margin so far</span>
+          <span data-part="dot">Margin now</span>
           <span data-part="target">Your target, {TARGET_MARGIN}%</span>
         </p>
 
@@ -484,14 +498,14 @@ function MarginTrack({ job }: { readonly job: OpenJob }) {
   );
 }
 
-/** Margin so far, projected margin and the money at stake for one open job, then its next step. */
+/** Margin now, the margin the job is heading for and the money at stake for one open job. */
 function JobFacts({ job }: { readonly job: OpenJob }) {
   return (
     <dl className={styles.jobFacts}>
       {job.margin ? (
         <>
           <div>
-            <dt>So far</dt>
+            <dt>Margin now</dt>
             <dd>{percent(job.margin.soFar)}</dd>
           </div>
           <div>
@@ -509,12 +523,6 @@ function JobFacts({ job }: { readonly job: OpenJob }) {
         <div data-tone="bad">
           <dt>Impact</dt>
           <dd>{job.impact}</dd>
-        </div>
-      ) : null}
-      {job.nextStep ? (
-        <div>
-          <dt>Next step</dt>
-          <dd>{job.nextStep}</dd>
         </div>
       ) : null}
     </dl>
@@ -537,14 +545,14 @@ const LINKS_BY_APP = [
   {
     id: 'crm',
     name: 'KitStak CRM',
-    into: 'A won deal becomes a job, with the client, quote and start date filled in.',
+    into: 'A won deal can become a job. Its name, account and value fill in the new job.',
     back: 'A Profit tab on deals and accounts.',
   },
   {
     id: 'wms',
     name: 'KitStak WMS',
-    into: 'Work orders become jobs. Finished kits come in as units. A person adds the hours.',
-    back: 'A Job profit card on the work order.',
+    into: 'Kits built on a linked work order come in as units. You add the people and the hours.',
+    back: 'A Job profit card on work orders, and a Client profit line on clients.',
   },
   {
     id: 'projects',
@@ -573,13 +581,13 @@ export function PulseStackVisual() {
               <dl className={styles.linkFlow}>
                 <div>
                   <dt>
-                    <Arrow direction="in" /> Into Pulse
+                    <Arrow direction="in" /> Comes into Pulse
                   </dt>
                   <dd>{link.into}</dd>
                 </div>
                 <div>
                   <dt>
-                    <Arrow direction="out" /> Shows up there
+                    <Arrow direction="out" /> Shows in the app
                   </dt>
                   <dd>{link.back}</dd>
                 </div>

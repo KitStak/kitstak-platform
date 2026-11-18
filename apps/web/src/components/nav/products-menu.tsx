@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { FULL_STACK, ROUTES, getStartedHref } from '../site-links';
+import { FULL_STACK, ROUTES, getStartedHref, isAppLive } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import { PRODUCT_NAV, isCurrentPath } from './nav-data';
@@ -55,6 +55,7 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
           <p className={styles.bundleBody}>
             The CRM, the WMS, Projects and Pulse run on one sign-in. Pulse links its clients to the customers
             the other apps already know. License two or more and save.
+            {isAppLive('pulse') ? null : ' Pulse is coming soon, so the button sets up the other three.'}
           </p>
           <Link
             href={getStartedHref(FULL_STACK)}

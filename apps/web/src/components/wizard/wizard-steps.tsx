@@ -135,7 +135,7 @@ const PRODUCTS: readonly { readonly value: ProductId; readonly label: string; re
   {
     value: 'pulse',
     label: 'KitStak Pulse',
-    note: 'Profit by job, client and service, from what you log each day.',
+    note: 'Profit by job, client and extra service, from what you log each day.',
   },
 ];
 

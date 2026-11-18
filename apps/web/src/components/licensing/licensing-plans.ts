@@ -61,8 +61,8 @@ const PLANS: Readonly<Record<string, Plan>> = {
 
 /*
  * Pulse lines follow docs/pulse/SPEC.md section 8 (what Pulse pulls in from each app and what it
- * shows back). Pulse copies rows and never changes CRM or WMS data, so the wording stays at
- * "pulls in" and "keeps in step".
+ * shows back) and the wording of the Connected apps screen in Pulse settings. Pulse copies rows and
+ * never changes CRM or WMS data, so the wording stays at "pulls in" and "comes in".
  */
 type Sibling = Exclude<Stack[number], 'pulse'>;
 
@@ -74,21 +74,21 @@ const PULSE_ALONE: Plan = {
   included: [
     'One sign-in across apps',
     'One admin portal and billing',
-    'Profit by job, client and service',
+    'Profit by job, client and extra service',
     'CSV in and out for every kind of data',
   ],
 };
 
 const PULSE_WITH: Readonly<Record<Sibling, { readonly body: string; readonly pulls: string; readonly line: string }>> = {
   crm: {
-    body: 'A won deal becomes a job with the client, the quote and the start date filled in. The deal shows the profit on the jobs made from it.',
+    body: 'A won deal can become a job. Its name, account and value fill in the new job, and the value becomes the quote. The deal shows the profit on its jobs.',
     pulls: 'won deals',
     line: 'Create a job from a won deal',
   },
   wms: {
-    body: 'Work orders become jobs and finished kits come in as units done. You add the people and hours, and the work order shows the job profit.',
+    body: 'Link a work order to a job and the kits built on it come in as units for that day. You add the people and the hours, and the work order shows the job profit.',
     pulls: 'work orders',
-    line: 'Work orders become jobs',
+    line: 'Work orders linked to jobs',
   },
   projects: {
     body: 'Link a job to a project and the time logged there can count as labor hours on the job. An alert in Pulse can become a task in Projects.',

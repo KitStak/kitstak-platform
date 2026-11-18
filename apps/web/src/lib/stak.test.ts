@@ -12,6 +12,7 @@ import {
   DEFAULT_ANSWERS,
   accountErrors,
   applyPrefill,
+  asksOnlyForUnopenedProducts,
   canLeaveStep,
   handoffUrl,
   parseAnswers,
@@ -321,6 +322,22 @@ describe('parseAnswers', () => {
 
     expect(parsed.seats).toBe(500);
     expect(parsed.warehouses).toBe(1);
+  });
+});
+
+describe('asksOnlyForUnopenedProducts', () => {
+  const ask = (query: string) => asksOnlyForUnopenedProducts(new URLSearchParams(query));
+
+  test('is true only for a link whose every product is coming soon', () => {
+    expect(ask('stack=pulse')).toBe(!PULSE_IS_LIVE);
+    expect(ask('stack=wms,pulse')).toBe(false);
+    expect(ask('stack=crm')).toBe(false);
+  });
+
+  test('is false for a link with no stack, or one that names no product', () => {
+    expect(ask('')).toBe(false);
+    expect(ask('seats=4')).toBe(false);
+    expect(ask('stack=nothing')).toBe(false);
   });
 });
 

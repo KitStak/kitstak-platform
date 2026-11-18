@@ -32,7 +32,7 @@ const SLABS = [
     id: 'pulse',
     href: ROUTES.pulse,
     name: 'KitStak Pulse',
-    line: 'Profit by job, client and service, from what you log each day.',
+    line: 'Profit by job, client and extra service, from what you log each day.',
   },
 ] as const;
 
@@ -50,6 +50,7 @@ export function StackHero() {
             A CRM for the people who sell, a WMS for the people who ship, Projects for the work in between,
             and Pulse to show which jobs make money. Each one stands on its own. Stack two or more and they
             share one sign-in and one bill, and cost {percentLabel(PRICING.bundleDiscount)} less.
+            {isAppLive('pulse') ? null : ' Pulse is coming soon.'}
           </p>
           <div className={styles.heroActions}>
             <Link href={ROUTES.getStarted} className="btn btn-primary btn-lg">
@@ -147,8 +148,8 @@ const CARDS: readonly ProductCard[] = [
     // Every point is a screen or rule in docs/pulse/SPEC.md.
     points: [
       'Profit by job, job type, client and extra service',
-      'Daily production entry: units, people and hours',
-      'Budget and quote next to actual',
+      'Log work: units, people and hours for each job',
+      'Quote vs actual, and why profit changed',
       'The real cost of an hour, and material cost',
       'Jobs at risk or losing money, with the reason',
       'CSV import and export',
@@ -238,8 +239,10 @@ const ROWS: readonly Row[] = [
   { label: 'One sign-in and one launcher', crm: true, wms: true, projects: true, pulse: true, stacked: true },
   // Pulse keeps its own client list and links it to the shared one when another app is licensed.
   { label: 'Shared customer list', crm: true, wms: true, projects: true, pulse: 'Own list', stacked: true },
+  // A new member gets no Pulse access until an admin grants it (SPEC 3), so the row promises the
+  // shared team list, not that one invite opens every app.
   {
-    label: 'Team invites that cover every app',
+    label: 'One team list for every app',
     crm: true,
     wms: true,
     projects: true,

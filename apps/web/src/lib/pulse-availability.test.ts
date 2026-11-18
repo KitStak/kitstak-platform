@@ -9,6 +9,7 @@ import path from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test } from 'vitest';
+import { metadata as getStartedMetadata } from '@/app/get-started/page';
 import { Footer } from '@/components/footer';
 import { MobileMenu } from '@/components/nav/mobile-menu';
 import { PRODUCT_NAV } from '@/components/nav/nav-data';
@@ -159,6 +160,19 @@ describe.skipIf(PULSE_IS_LIVE)('while Pulse is coming soon', () => {
     );
     expect(start).not.toMatch(/right away/);
     expect(CLOSING.note.startsWith('Coming soon.')).toBe(true);
+    // The closing note also says what the walkthrough gives you.
+    expect(CLOSING.note).toMatch(/Book a walkthrough and we will show you Pulse on sample data\./);
+  });
+
+  test('the Pulse page says "Coming soon" at the top, beside the product name', () => {
+    const page = readFileSync(path.resolve(__dirname, '../app/pulse/page.tsx'), 'utf8');
+
+    expect(page).toContain("badge={availabilityLabel('pulse') ?? undefined}");
+  });
+
+  test('the wizard page does not offer Pulse as a choice in its description', () => {
+    expect(String(getStartedMetadata.description)).not.toMatch(/Pulse/);
+    expect(String(getStartedMetadata.description)).toMatch(/the CRM, the WMS, Projects or any mix/);
   });
 });
 

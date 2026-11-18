@@ -30,6 +30,7 @@ import {
 } from '@/components/pulse/pulse-content';
 import { PulseBundleSection } from '@/components/pulse/pulse-section-bundle';
 import { ExplainVisual, JobMathVisual } from '@/components/pulse/pulse-section-math';
+import { PulseWordmark } from '@/components/pulse/pulse-visual-parts';
 import {
   CostRatesVisual,
   CsvVisual,
@@ -40,7 +41,7 @@ import {
   PulseStackVisual,
   RiskVisual,
 } from '@/components/pulse/pulse-visuals';
-import { PULSE_IS_LIVE, ROUTES, getStartedHref } from '@/components/site-links';
+import { PULSE_IS_LIVE, ROUTES, availabilityLabel, getStartedHref } from '@/components/site-links';
 
 /**
  * The main action. "Start with Pulse" only once the app is open to customers. Until then the page
@@ -72,8 +73,9 @@ export const metadata: Metadata = {
 };
 
 /**
- * Structured data that only repeats what is on the page. No price, rating or review fields:
- * pricing is preliminary and there are no reviews to cite.
+ * Structured data that only repeats what is on the page. No offer is listed while Pulse is
+ * "Coming soon", because nobody can buy it yet. No rating or review fields: there are no reviews
+ * to cite.
  */
 const STRUCTURED_DATA = {
   '@context': 'https://schema.org',
@@ -106,6 +108,7 @@ const STRUCTURED_DATA_JSON = JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u0
 /*
  * The screenshot chapters are stacked: copy on top, then the real screen across the page, so it can be
  * read. The rate builder is a narrow dialog, so that chapter keeps the picture beside the copy.
+ * The closing band carries the Pulse lockup, so the page ends on its own mark.
  */
 export default function PulsePage() {
   return (
@@ -122,8 +125,10 @@ export default function PulsePage() {
           primary={PRIMARY}
           secondary={SECONDARY}
           visual={<PulseHeroVisual />}
+          badge={availabilityLabel('pulse') ?? undefined}
           layout="stacked"
           facts={HERO_FACTS}
+          phoneFacts={2}
         />
         <SubNav current="pulse" sections={SECTIONS} cta={PRIMARY} />
 
@@ -136,7 +141,13 @@ export default function PulsePage() {
         <Chapter {...CHAPTERS.profit} features={PROFIT_FEATURES} visual={<ProfitByJobVisual />} isStacked />
 
         {/* The one thing a spreadsheet cannot do comes straight after the first profit screens. */}
-        <Chapter {...CHAPTERS.risk} features={RISK_FEATURES} visual={<RiskVisual />} tone="brand" isStacked />
+        <Chapter
+          {...CHAPTERS.risk}
+          features={RISK_FEATURES}
+          visual={<RiskVisual onBrand />}
+          tone="brand"
+          isStacked
+        />
 
         <Chapter
           {...CHAPTERS.proof}
@@ -170,6 +181,7 @@ export default function PulsePage() {
           startHref={PRIMARY.href}
           startLabel={PRIMARY.label}
           note={CLOSING.note}
+          logo={<PulseWordmark height={40} tone="inverse" />}
         />
       </main>
       <Footer />

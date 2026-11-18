@@ -82,14 +82,14 @@ export const PULSE_NEEDS: readonly Option<string>[] = [
   { value: 'job_profit', label: 'Profit by job', note: 'What each job earned and what it really cost.' },
   {
     value: 'client_profit',
-    label: 'Profit by client and service',
+    label: 'Profit by client and extra service',
     note: 'Which clients and extra services pay.',
   },
-  { value: 'daily_log', label: 'Daily production entry', note: 'Units, people and hours for each day.' },
+  { value: 'daily_log', label: 'Log work', note: 'Units, people and hours for each job, each day.' },
   {
     value: 'plan_actual',
-    label: 'Budget and quote vs actual',
-    note: 'The plan next to what really happened.',
+    label: 'Quote vs actual',
+    note: 'The quote next to what really happened.',
   },
   { value: 'at_risk', label: 'Jobs at risk', note: 'Open jobs that are off pace or losing money.' },
   { value: 'csv', label: 'CSV import and export', note: 'Bring spreadsheets in and take reports out.' },
@@ -398,6 +398,16 @@ export function wizardHref(prefill: WizardPrefill): string {
     billing: prefill.billing,
   });
   return `${ROUTES.getStarted}?${params.toString()}`;
+}
+
+/**
+ * True when a link asks only for products nobody can set up yet, such as a link for Pulse alone while
+ * Pulse is coming soon. The wizard has nothing to set up for that visitor. It sends them to the walkthrough
+ * form, where they would land from any button on the site, and does not open on some other product.
+ */
+export function asksOnlyForUnopenedProducts(params: URLSearchParams): boolean {
+  const asked = parseStack(params.get('stack'));
+  return asked.length > 0 && startableStack(asked).length === 0;
 }
 
 /**

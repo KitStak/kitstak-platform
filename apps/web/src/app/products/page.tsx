@@ -10,6 +10,7 @@ import { SubNav } from '@/components/product/sub-nav';
 import type { SubNavSection } from '@/components/product/sub-nav';
 import { Compare, Lineup, StackHero, StartSteps } from '@/components/products/products-sections';
 import { BundleCalculator } from '@/components/stak/bundle-calculator';
+import { isAppLive } from '@/components/site-links';
 import { PRICING, formatUsd } from '@/lib/pricing';
 import styles from './products.module.css';
 
@@ -35,11 +36,15 @@ const SECTIONS: readonly SubNavSection[] = [
   { id: 'faq', label: 'FAQ' },
 ];
 
+/** Added to the answers about starting while nobody can open Pulse yet. */
+const PULSE_SOON = isAppLive('pulse')
+  ? ''
+  : ' Pulse is coming soon. For Pulse, book a walkthrough and we will show it to you.';
+
 const FAQ: readonly FaqItem[] = [
   {
     question: 'Can I start with one product and add the others later?',
-    answer:
-      'Yes. Each product is licensed on its own. When you add a second one, your organization, your team and your customer list are already there, and the bundle price applies to every product from then on.',
+    answer: `Yes. Each product is licensed on its own. When you add a second one, your organization, your team and your customer list are already there, and the bundle price applies to every product from then on.${PULSE_SOON}`,
   },
   {
     question: 'What do the products actually share?',
@@ -52,8 +57,7 @@ const FAQ: readonly FaqItem[] = [
   },
   {
     question: 'Do I have to talk to someone to get started?',
-    answer:
-      'No. The setup wizard asks a few questions and builds a plan, and you create your own account at the end. If you would rather be walked through it, the founder will do that with you.',
+    answer: `No. The setup wizard asks a few questions and builds a plan, and you create your own account at the end. If you would rather be walked through it, the founder will do that with you.${PULSE_SOON}`,
   },
   {
     question: 'Can I get help moving our data in?',

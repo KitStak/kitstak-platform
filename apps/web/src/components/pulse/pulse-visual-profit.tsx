@@ -19,9 +19,9 @@ import { JobName, SplitBar } from './pulse-visual-parts';
 import styles from './pulse-visuals.module.css';
 
 /**
- * The Profit page: the same month cut by job, client, job type and extra service. Every tab adds up to
- * the same total. As in the product, the Company row under the table opens the walk from profit on jobs
- * to company profit (SPEC 6, /profit). The product also has tabs for site, month, week and day.
+ * The Profit page: the same month on four of its eight tabs, Jobs, Clients, Job types and Extra services.
+ * Every tab adds up to the same total. The Company row under the table opens the walk from profit on jobs
+ * to company profit (SPEC 6, /profit). The product also has tabs for sites, months, weeks and days.
  */
 const MONTH_SPLIT = splitOf(MONTH.moneyIn, MONTH.moneyOut);
 
@@ -94,7 +94,7 @@ export function ProfitExplorer() {
 
       <p className={mock.caption}>
         {isBridgeOpen
-          ? 'Job profit and company profit are two numbers. Pulse shows the walk from one to the other.'
+          ? 'Job profit and company profit are two numbers. Pulse shows each step from one to the other.'
           : 'Every tab adds up to the same total. Open the Company row to see what the company made.'}
       </p>
     </div>
@@ -115,10 +115,10 @@ function ProfitTable({ viewId }: { readonly viewId: ProfitViewId }) {
         <tr>
           <th scope="col">{view.heading}</th>
           <th scope="col" className={styles.wideOnly}>
-            Money in
+            Revenue
           </th>
           <th scope="col" className={styles.wideOnly}>
-            Money out
+            Cost
           </th>
           <th scope="col">Profit</th>
           <th scope="col">Margin</th>

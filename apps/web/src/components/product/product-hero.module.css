@@ -169,6 +169,10 @@
     border-left: 0;
     border-bottom: 1px solid var(--on-brand-rule);
   }
+  /* A page can keep the strip to its first two facts on a phone, where four take half a screen. */
+  .facts[data-phone-facts='2'] > div:nth-child(n + 3) {
+    display: none;
+  }
   .actions :global(.btn) {
     width: 100%;
     justify-content: center;

@@ -52,9 +52,22 @@ export function PulseLoader({ size = 40, className }: SizeProps) {
   );
 }
 
+interface PulseWordmarkProps {
+  readonly height?: number;
+  /** `auto` follows the theme. `inverse` is always the cream file, for a band that is navy in both. */
+  readonly tone?: 'auto' | 'inverse';
+}
+
 /** The lettered Pulse logo: navy letters on light surfaces, cream letters on dark ones. */
-export function PulseWordmark({ height = 40 }: { readonly height?: number }) {
+export function PulseWordmark({ height = 40, tone = 'auto' }: PulseWordmarkProps) {
   const width = Math.round(height * LOGO_RATIO);
+  if (tone === 'inverse') {
+    return (
+      <span className={styles.wordmark} style={{ width, height }}>
+        <img src={PULSE_LOGO_ON_DARK} alt="KitStak Pulse" width={width} height={height} />
+      </span>
+    );
+  }
   return (
     <span className={styles.wordmark} style={{ width, height }}>
       <img
@@ -76,10 +89,10 @@ export function PulseWordmark({ height = 40 }: { readonly height?: number }) {
   );
 }
 
-/* ===== Money out and profit ===== */
+/* ===== Cost and profit ===== */
 
 interface SplitBarProps {
-  /** Whole percents of money in. They add up to 100. */
+  /** Whole percents of revenue. They add up to 100. */
   readonly out: number;
   readonly profit: number;
   /** What the profit is, for the text alternative: "profit on jobs", "profit so far". */
@@ -87,8 +100,8 @@ interface SplitBarProps {
 }
 
 /**
- * The picture the page keeps coming back to: one bar for every dollar that came in, split into
- * money out and profit. The same two colors and the same key every time it appears.
+ * The picture the page keeps coming back to: one bar for every dollar of revenue, split into
+ * cost and profit. The same two colors and the same key every time it appears.
  */
 export function SplitBar({ out, profit, what }: SplitBarProps) {
   return (
@@ -96,13 +109,13 @@ export function SplitBar({ out, profit, what }: SplitBarProps) {
       <div
         className={styles.splitBar}
         role="img"
-        aria-label={`Of every dollar that came in, ${out} cents went out and ${profit} cents stayed as ${what}.`}
+        aria-label={`Of every dollar of revenue, ${out} cents went to cost and ${profit} cents stayed as ${what}.`}
       >
         <span style={{ flexGrow: out }} data-part="out" />
         <span style={{ flexGrow: profit }} data-part="profit" />
       </div>
       <div className={styles.splitKey} aria-hidden>
-        <span data-part="out">Money out {out}%</span>
+        <span data-part="out">Cost {out}%</span>
         <span data-part="profit">Profit {profit}%</span>
       </div>
     </>

@@ -6,9 +6,12 @@ import {
   isBundle,
   isPerSeat,
   moreSeatsPrompt,
+  overSeatsNote,
   preliminaryPriceNote,
   quote,
+  todayPriceNote,
 } from './pricing';
+import { startableStack } from '@/components/site-links';
 
 const CRM = PRICING.crm.monthlyCents;
 const WMS = PRICING.wms.monthlyCents;
@@ -192,15 +195,58 @@ describe('billing basis', () => {
       ['basis', 'includedSeats', 'isConfirmed', 'monthlyCents', 'name', 'unit', 'unitPlural'].sort(),
     );
   });
+
+  test('warns when the team is bigger than the flat price covers, and only then', () => {
+    expect(overSeatsNote('pulse', 5)).toBeNull();
+    expect(overSeatsNote('pulse', 6)).toBe('The Pulse price covers up to 5 seats.');
+    for (const id of ['crm', 'wms', 'projects'] as const) expect(overSeatsNote(id, 60)).toBeNull();
+  });
 });
 
 describe('preliminaryPriceNote', () => {
   test('never calls the confirmed Pulse price preliminary or not final', () => {
     expect(preliminaryPriceNote(['pulse'])).toBeNull();
     expect(preliminaryPriceNote(['crm'])).toBe('Preliminary pricing, shown for planning.');
-    expect(preliminaryPriceNote(['crm', 'pulse'])).toBe(
-      'Preliminary pricing, shown for planning. The Pulse price is final.',
+    expect(preliminaryPriceNote(['crm', 'pulse'])).toBe('Preliminary pricing for CRM, shown for planning.');
+    expect(preliminaryPriceNote(['crm', 'wms', 'projects', 'pulse'])).toBe(
+      'Preliminary pricing for CRM, WMS and Projects, shown for planning.',
     );
+  });
+});
+
+describe('todayPriceNote', () => {
+  const base = { seats: 5, warehouses: 1, billing: 'annual' } as const;
+
+  // Pulse is coming soon in this build. Once it opens every case below returns null.
+  const pulseIsOpen = startableStack(['pulse']).length === 1;
+
+  test('prices the stack without the product that is coming soon, the way the wizard does', () => {
+    const note = todayPriceNote({ ...base, stack: ['crm', 'pulse'] });
+    if (pulseIsOpen) {
+      expect(note).toBeNull();
+      return;
+    }
+    const crmAlone = quote({ ...base, stack: ['crm'] });
+    const withPulse = quote({ ...base, stack: ['crm', 'pulse'] });
+    // The case the note exists for: two products quoted for less than one costs today.
+    expect(withPulse.monthlyCents).toBeLessThan(crmAlone.monthlyCents);
+    expect(note).toBe(
+      `Today, without Pulse: ${formatUsd(crmAlone.monthlyCents)} per month, billed yearly. The bundle saving starts when Pulse opens.`,
+    );
+  });
+
+  test('says Pulse joins the bundle when the rest is already one', () => {
+    const note = todayPriceNote({ ...base, billing: 'monthly', stack: ['crm', 'wms', 'pulse'] });
+    if (pulseIsOpen) return;
+    const today = quote({ ...base, billing: 'monthly', stack: ['crm', 'wms'] });
+    expect(note).toBe(
+      `Today, without Pulse: ${formatUsd(today.monthlyCents)} per month, billed monthly. Pulse joins the bundle when it opens.`,
+    );
+  });
+
+  test('is silent when nothing is waiting, or nothing can be set up', () => {
+    expect(todayPriceNote({ ...base, stack: ['crm', 'wms'] })).toBeNull();
+    if (!pulseIsOpen) expect(todayPriceNote({ ...base, stack: ['pulse'] })).toBeNull();
   });
 });
 

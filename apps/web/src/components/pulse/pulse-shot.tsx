@@ -1,5 +1,9 @@
 import {
   PULSE_SHOTS,
+  PULSE_SHOT_THEMES,
+  SIDE_COLUMN_SIZES,
+  SIDE_COLUMN_VIEWS,
+  fullSizeFile,
   shotFile,
   type PulseShotId,
   type PulseShotSlot,
@@ -12,6 +16,8 @@ interface PulseShotProps {
   readonly slot: PulseShotId;
   /** Set when the picture sits on the navy brand band, so the caption is light. */
   readonly onBrand?: boolean;
+  /** Set when the picture sits in a side column, about half the page wide, instead of across it. */
+  readonly inSideColumn?: boolean;
   /** The coded visual shown when the slot has no real screenshot. */
   readonly children: React.ReactNode;
 }
@@ -36,26 +42,33 @@ function webpFile(slot: PulseShotSlot, view: PulseShotView, theme: PulseShotThem
 /**
  * One visual slot on the Pulse page. When the slot is marked ready in pulse-shots.ts it renders the
  * real product screenshot: the phone, tablet or desktop capture to fit the screen, light or dark to
- * match the visitor's system theme. Otherwise it renders the coded visual passed in.
+ * match the visitor's system theme. Otherwise it renders the coded visual passed in. In a side column
+ * the slot must be the Jobs screen, the one screen with a picture made for a narrow column.
+ *
+ * The caption ends with a link that opens the screen at full size, and the link covers the picture
+ * too, so a click or a tap on the picture opens it. There is one link for each theme and the style
+ * sheet shows the one that matches the picture.
  */
-export function PulseShot({ slot, onBrand = false, children }: PulseShotProps) {
+export function PulseShot({ slot, onBrand = false, inSideColumn = false, children }: PulseShotProps) {
   const shot = PULSE_SHOTS[slot];
-  const desktop = shot.views.at(-1);
+  const views = inSideColumn ? SIDE_COLUMN_VIEWS : shot.views;
+  const sizes = inSideColumn ? SIDE_COLUMN_SIZES : shot.sizes;
+  const desktop = views.at(-1);
   if (!shot.ready || !desktop) return <>{children}</>;
 
-  const sources = shot.views.flatMap((view) =>
+  const sources = views.flatMap((view, index) =>
     (['dark', 'light'] as const).flatMap((theme) => [
       <source
-        key={`${view.view}-${theme}-avif`}
+        key={`${index}-${theme}-avif`}
         type="image/avif"
         media={mediaFor(view, theme)}
         srcSet={avifSet(shot, view, theme)}
-        sizes={shot.sizes}
+        sizes={sizes}
         width={view.width}
         height={view.height}
       />,
       <source
-        key={`${view.view}-${theme}-webp`}
+        key={`${index}-${theme}-webp`}
         type="image/webp"
         media={mediaFor(view, theme)}
         srcSet={webpFile(shot, view, theme)}
@@ -69,7 +82,9 @@ export function PulseShot({ slot, onBrand = false, children }: PulseShotProps) {
     <figure
       className={styles.shot}
       data-on-brand={onBrand || undefined}
-      style={shot.maxWidth ? { maxWidth: shot.maxWidth } : undefined}
+      data-phone-on-tablet={(!inSideColumn && shot.phoneOnTablet) || undefined}
+      data-phone-in-column={inSideColumn ? 'side-column' : shot.phoneInColumn}
+      style={shot.maxWidth ? ({ '--shot-max': `${shot.maxWidth}px` } as React.CSSProperties) : undefined}
     >
       <picture>
         {sources}
@@ -84,7 +99,14 @@ export function PulseShot({ slot, onBrand = false, children }: PulseShotProps) {
         />
       </picture>
       <figcaption>
-        <strong>{shot.label}.</strong> A real KitStak Pulse screen with sample data.
+        <strong>{shot.label}.</strong> A real KitStak Pulse screen with sample data. The clients and jobs are
+        made up.{' '}
+        {PULSE_SHOT_THEMES.map((theme) => (
+          <a key={theme} className={styles.full} data-theme={theme} href={fullSizeFile(shot, theme)}>
+            Open it full size
+            <span className="visually-hidden">: {shot.label}</span>
+          </a>
+        ))}
       </figcaption>
     </figure>
   );

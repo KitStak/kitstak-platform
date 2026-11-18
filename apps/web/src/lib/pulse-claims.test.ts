@@ -20,21 +20,28 @@ import * as content from '@/components/pulse/pulse-content';
 import {
   ALERT_RULES,
   CHAPTERS,
+  COSTS,
+  COST_FEATURES,
+  CSV_FEATURES,
   CSV_STREAMS,
   FAQ,
   FIRST_STEPS,
   HERO,
   HERO_FACTS,
+  IMPORT_COUNTERS,
   MATH_EXPLAIN,
   MATH_JOB,
-  MONEY_OUT,
+  PLAN_FEATURES,
   PROFIT_CUTS,
+  PROFIT_TABS,
   REPORTS,
+  RISK_FEATURES,
   ROLES,
   SECTIONS,
   STATUSES,
   usd,
 } from '@/components/pulse/pulse-content';
+import { PULSE_SHOTS } from '@/components/pulse/pulse-shots';
 
 const webRoot = path.resolve(__dirname, '../..');
 const pulseComponents = path.join(webRoot, 'src/components/pulse');
@@ -183,17 +190,25 @@ describe('/pulse structure', () => {
 
 describe('/pulse numbers', () => {
   it('derives each count from the list it counts, at the size the spec states', () => {
-    expect(MONEY_OUT).toHaveLength(4);
+    expect(COSTS).toHaveLength(4);
     expect(STATUSES).toHaveLength(5);
+    expect(PROFIT_TABS).toHaveLength(8);
+    expect(IMPORT_COUNTERS).toHaveLength(6);
     expect(CSV_STREAMS).toHaveLength(17);
     expect(REPORTS).toHaveLength(19);
     expect(FIRST_STEPS).toHaveLength(5);
-    for (const items of [MONEY_OUT, STATUSES, CSV_STREAMS, REPORTS])
+    for (const items of [COSTS, STATUSES, CSV_STREAMS, REPORTS, PROFIT_TABS, IMPORT_COUNTERS])
       expect(new Set(items).size).toBe(items.length);
     expect(ROLES).toHaveLength(5);
-    // Every hero fact is a count of something real: profit cuts, statuses, money out costs, alert rules.
-    expect(HERO_FACTS.map((fact) => fact.value)).toEqual(['4', '5', '4', '12']);
-    expect(PROFIT_CUTS).toHaveLength(Number(HERO_FACTS[0]!.value));
+    // Every hero fact is a count of something real: Profit tabs, statuses, CSV kinds of data, reports.
+    expect(HERO_FACTS.map((fact) => fact.value)).toEqual(['8', '5', '17', '19']);
+    expect(HERO_FACTS.map((fact) => Number(fact.value))).toEqual([
+      PROFIT_TABS.length,
+      STATUSES.length,
+      CSV_STREAMS.length,
+      REPORTS.length,
+    ]);
+    expect(PROFIT_CUTS).toHaveLength(4);
     expect(ALERT_RULES).toBe(12);
     expect(COPY.some((text) => text.includes('Twelve rules'))).toBe(true);
     // A count written out by hand in a sentence would drift; none may appear that the lists do not back.
@@ -212,7 +227,7 @@ describe('/pulse numbers', () => {
 
   it('works the sample job out exactly (SPEC 4.11, 4.13, 4.14)', () => {
     const out = MATH_JOB.moneyOut.reduce((total, line) => total + line.cents, 0);
-    expect(MATH_JOB.moneyOut.map((line) => line.label)).toEqual(MONEY_OUT);
+    expect(MATH_JOB.moneyOut.map((line) => line.label)).toEqual(COSTS);
     expect(MATH_JOB.moneyIn.cents).toBe(4_000 * 175);
     expect(MATH_JOB.moneyOut[0].cents).toBe(125 * 2_300);
     expect(out).toBe(543_500);
@@ -225,6 +240,19 @@ describe('/pulse numbers', () => {
     // Projected labor hours 312.5 against a plan of 250 is 25% over.
     expect((312.5 / 250 - 1) * 100).toBe(25);
     expect(MATH_JOB.status).toBe('At risk');
+    expect(STATUSES).toContain(MATH_JOB.status);
+  });
+
+  it('shows where "25% over the plan" comes from: labor hours, not labor dollars', () => {
+    const { actual, plan } = MATH_JOB.laborHours;
+    expect(MATH_JOB.reason).toBe('Labor is heading 25% over the plan.');
+    // 125 hours used where the plan for 4,000 of 10,000 units was 100: the same 25% as at finish.
+    expect((actual / plan - 1) * 100).toBe(25);
+    expect(plan).toBe((250 * 4_000) / 10_000);
+    expect(actual / plan).toBe(312.5 / 250);
+    // The labor line of the worked job states the same hours the reason is explained with.
+    expect(MATH_JOB.moneyOut[0].detail).toContain(`${actual} hours`);
+    expect(actual).toBe(MATH_EXPLAIN.labor.hours);
   });
 
   it('explains figures of the same worked job, in the spec wording (SPEC 4.15)', () => {
@@ -238,12 +266,79 @@ describe('/pulse numbers', () => {
     for (const text of COPY) expect(text).not.toMatch(/\$26\.00|\$4,212/);
   });
 
-  it('works the sample labor rate out exactly (SPEC 4.3)', () => {
-    // Wage $16.00, payroll taxes 9%, benefits 12%, overhead $2.40 an hour.
-    expect(Math.round(1_600 * 1.21) + 240).toBe(2_176);
-    expect(COPY.filter((text) => text.includes('$16.00')).every((text) => text.includes('$21.76'))).toBe(
-      true,
+  it('quotes sample dollar figures only in the worked job, never beside a real screenshot', () => {
+    // The demo data moves with every retake, so copy next to a screenshot describes it and quotes no
+    // figure. The worked job and its "How we got this" panel are coded examples and say so.
+    const worked = new Set([...strings(MATH_JOB), ...strings(MATH_EXPLAIN)]);
+    for (const text of COPY) if (!worked.has(text)) expect(text, text).not.toMatch(/\$\s?\d/);
+    for (const shot of Object.values(PULSE_SHOTS)) expect(shot.alt, shot.name).not.toMatch(/\$\s?\d/);
+    // The old stand-in rate ($16.00 wage, $21.76 an hour) and the old sample month are gone.
+    for (const text of COPY) expect(text).not.toMatch(/\$16\.00|\$21\.76|\$48,210|6 jobs need/);
+    expect(MATH_JOB.sub).toMatch(/worked example/);
+    expect(MATH_JOB.caption).toMatch(/not a screenshot/);
+    expect(MATH_EXPLAIN.sub).toMatch(/worked example/);
+  });
+
+  it('uses one multiply sign', () => {
+    for (const text of COPY) expect(text).not.toMatch(/\d x \$|hours x /);
+    expect(MATH_EXPLAIN.labor.words).toContain('×');
+  });
+});
+
+describe('/pulse copy uses the words on the real screens', () => {
+  const all = COPY.join('\n');
+
+  it('says Revenue and Cost, the labels on the Home and Profit tiles', () => {
+    expect(all).not.toMatch(/money in\b|money out\b/i);
+    expect(MATH_JOB.moneyIn.label).toBe('Revenue');
+    expect(MATH_JOB.totalOutLabel).toBe('Total cost');
+    expect(COSTS).toEqual(['Labor cost', 'Material cost', 'Other cost', 'Time not on a job']);
+  });
+
+  it('lists the five statuses in the order of the chips on the Jobs page', () => {
+    expect(STATUSES).toEqual(['Losing money', 'At risk', 'Not enough data', 'Heads up', 'On track']);
+    expect(RISK_FEATURES[0]!.note).toContain('Losing money, At risk, Not enough data, Heads up and On track');
+  });
+
+  it('does not promise a next step on the Jobs list, which shows a status and a reason', () => {
+    expect(CHAPTERS.risk.lead).not.toMatch(/next step/i);
+    expect(CHAPTERS.risk.lead).toMatch(/reason in a sentence/);
+  });
+
+  it('names the Profit tabs as the Profit page does, with the four lead cuts first', () => {
+    expect(PROFIT_TABS).toEqual([
+      'Jobs',
+      'Clients',
+      'Job types',
+      'Extra services',
+      'Sites',
+      'Months',
+      'Weeks',
+      'Days',
+    ]);
+    expect(all).not.toMatch(/cut four ways|4 ways to see profit/i);
+  });
+
+  it('names the plan table and the bars of "Why profit changed" as the screen does', () => {
+    expect(PLAN_FEATURES[0]!.name).toBe('Quote vs actual');
+    expect(PLAN_FEATURES[1]!.note).toContain(
+      'price, labor rate, labor efficiency, scrap, material, time not on a job and other',
     );
+  });
+
+  it('names the six import counters as step 3 does', () => {
+    expect(IMPORT_COUNTERS).toEqual(['New', 'Changed', 'No change', 'Look the same', 'Left out', 'Problems']);
+    expect(CSV_FEATURES[0]!.note).toContain('New, Changed, No change, Look the same, Left out and Problems');
+    expect(all).not.toMatch(/Unchanged|Possible repeats|Skipped/);
+  });
+
+  it('makes no promise about how often the apps sync', () => {
+    expect(all).not.toMatch(/within minutes|every \d+ minutes|keeps in step/i);
+  });
+
+  it('keeps the rate chapter to two rows that describe the dialog', () => {
+    expect(COST_FEATURES).toHaveLength(2);
+    expect(CHAPTERS.costs.lead).toMatch(/labor class, such as packer or line lead/);
   });
 });
 

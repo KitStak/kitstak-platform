@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { PRICING, formatUsd, isBundle, isPerSeat, percentLabel, quote } from '@/lib/pricing';
+import { PRICING, formatUsd, isBundle, isPerSeat, percentLabel, quote, todayPrice } from '@/lib/pricing';
 import type { Billing } from '@/lib/pricing';
 import { wizardHref } from '@/lib/stak';
 import {
@@ -23,7 +23,7 @@ const BLURB: Readonly<Record<ProductId, string>> = {
   crm: 'Pipelines, boards and automations',
   wms: 'Receiving, inventory and shipping',
   projects: 'Tasks, timelines and workload',
-  pulse: 'Profit by job, client and service',
+  pulse: 'Profit by job, client and extra service',
 };
 
 function joinNames(names: readonly string[]): string {
@@ -33,7 +33,8 @@ function joinNames(names: readonly string[]): string {
 /** Price a stack: switch products on, set the size, and carry the result into the wizard. */
 export function BundleCalculator() {
   const [stack, setStack] = useState<Stack>(FULL_STACK);
-  const [seats, setSeats] = useState(10);
+  // Starts inside the seats the flat Pulse price covers, so the first total is a real price.
+  const [seats, setSeats] = useState<number>(PRICING.pulse.includedSeats);
   const [warehouses, setWarehouses] = useState(1);
   const [billing, setBilling] = useState<Billing>('annual');
 
@@ -50,6 +51,9 @@ export function BundleCalculator() {
   // Products priced here that cannot be set up yet. They are left out of the wizard link.
   const startable = startableStack(stack);
   const waiting = stack.filter((id) => !startable.includes(id)).map((id) => START_NAME[id]);
+  // What the products open today cost on their own. It is the figure the wizard behind the button
+  // shows, and it can be more than the stack total while a bundled product is still coming soon.
+  const today = todayPrice({ stack, seats, warehouses, billing });
 
   return (
     <div className={styles.calc}>
@@ -137,7 +141,16 @@ export function BundleCalculator() {
       <div className={styles.result}>
         <StakVisual stack={stack} />
         <div className={styles.quote}>
-          <QuoteSummary quote={result} billing={billing} />
+          <QuoteSummary quote={result} billing={billing} seats={perUser.length > 0 ? seats : 0} />
+          {today ? (
+            <p className={styles.today} aria-live="polite">
+              <span className={styles.todayLabel}>{today.label}</span>
+              <span className={styles.todayPrice}>
+                <strong className="numeral">{today.amount}</strong> {today.terms}
+              </span>
+              {today.bundle ? <span className={styles.todayNote}>{today.bundle}</span> : null}
+            </p>
+          ) : null}
         </div>
         <Link
           href={wizardHref({ stack, seats, warehouses, billing })}

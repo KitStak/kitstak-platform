@@ -1,3 +1,4 @@
+import { PulseShot } from './pulse-shot';
 import mock from '../mock/mock.module.css';
 import { MATH_EXPLAIN, MATH_JOB, usd } from './pulse-content';
 import styles from './pulse-section.module.css';
@@ -14,9 +15,9 @@ function sum(lines: readonly { readonly cents: number }[]): number {
 }
 
 /**
- * The "show the math" moment: one open job as a sum the reader can check by hand. Money in, the
- * four money out buckets, profit, then the status that job would get. Sample numbers from the
- * worked example in the Pulse spec; the totals are computed here, not typed.
+ * The "show the math" moment: one open job as a sum the reader can check by hand. Revenue, the
+ * four costs, profit, then the status that job would get. It is a coded worked example, labeled as
+ * one, with the sample numbers from the Pulse spec; the totals are computed here, not typed.
  */
 export function JobMathVisual() {
   const totalOut = sum(MATH_JOB.moneyOut);
@@ -35,7 +36,7 @@ export function JobMathVisual() {
 
       <table className={styles.ledger}>
         <caption className="visually-hidden">
-          {MATH_JOB.title}: money in, money out and profit. Sample numbers.
+          {MATH_JOB.title}: revenue, cost and profit. A worked example with sample numbers.
         </caption>
         <thead className="visually-hidden">
           <tr>
@@ -97,7 +98,8 @@ export function JobMathVisual() {
           {MATH_JOB.status}
         </span>
         <p>
-          <strong>{MATH_JOB.reason}</strong> At this pace the whole job ends with{' '}
+          <strong>{MATH_JOB.reason}</strong> That is labor hours: {MATH_JOB.laborHours.actual} used where the
+          plan for these units was {MATH_JOB.laborHours.plan}. At this pace the whole job ends with{' '}
           {usd(MATH_JOB.projectedProfitCents)} of profit. The budget for the whole job was{' '}
           {usd(MATH_JOB.budgetProfitCents)}.
         </p>
@@ -109,14 +111,24 @@ export function JobMathVisual() {
 }
 
 /**
- * "How we got this" for two figures of the worked job above: the formula in words, the same formula
- * with the figures, and the way to the rows behind it. Then the lines Pulse adds when a number is not
- * complete. The figures are computed from MATH_JOB, so this panel cannot drift from the worked sum.
+ * "How we got this". The slot shows the real panel from the Profit page: company profit worked out
+ * step by step from profit on jobs, with the lines Pulse adds when a number is not complete.
  */
 export function ExplainVisual() {
-  const totalOut = sum(MATH_JOB.moneyOut);
-  const profit = MATH_JOB.moneyIn.cents - totalOut;
-  const margin = `${((profit / MATH_JOB.moneyIn.cents) * 100).toFixed(1)}%`;
+  return (
+    <PulseShot slot="proof">
+      <ExplainMock />
+    </PulseShot>
+  );
+}
+
+/**
+ * The coded stand in, shown only if the slot is switched back to not ready. "How we got this" for the
+ * labor cost of the worked job above: the formula in words, the same formula with the figures, and a
+ * note that the rows behind it are one step away. Then the lines Pulse adds when a number is not
+ * complete. The figures are computed from MATH_JOB, so this panel cannot drift from the worked sum.
+ */
+function ExplainMock() {
   const { labor } = MATH_EXPLAIN;
   const laborCents = labor.hours * labor.rateCents;
 
@@ -125,13 +137,7 @@ export function ExplainVisual() {
       label: labor.label,
       value: usd(laborCents),
       words: labor.words,
-      figures: `${usd(laborCents)} = ${labor.hours.toFixed(1)} labor hours x ${usd(labor.rateCents)} an hour`,
-    },
-    {
-      label: MATH_EXPLAIN.margin.label,
-      value: margin,
-      words: MATH_EXPLAIN.margin.words,
-      figures: `${margin} = ${usd(profit)} profit ÷ ${usd(MATH_JOB.moneyIn.cents)} money in`,
+      figures: `${usd(laborCents)} = ${labor.hours.toFixed(1)} labor hours × ${usd(labor.rateCents)} an hour`,
     },
   ];
 
@@ -161,19 +167,7 @@ export function ExplainVisual() {
                 <dd className={styles.explainFigures}>{item.figures}</dd>
               </div>
             </dl>
-            <p className={styles.explainRows}>
-              {MATH_EXPLAIN.rowsLabel}
-              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
-                <path
-                  d="M3 8h10M9 4l4 4-4 4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </p>
+            <p className={styles.explainRows}>{MATH_EXPLAIN.rowsLabel}</p>
           </li>
         ))}
       </ul>

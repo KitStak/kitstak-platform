@@ -29,7 +29,14 @@
   padding-bottom: 28px;
   row-gap: 24px;
 }
+/* Each product shares the two rows of the panel (head, then links), so the link lists start on one
+   line even when a head runs a line longer, as it does with a status badge. */
 .product {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  row-gap: 0;
+  align-items: start;
   padding-right: 24px;
 }
 .product + .product {

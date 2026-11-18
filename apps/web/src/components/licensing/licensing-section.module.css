@@ -63,6 +63,19 @@
 .switchLabel {
   font-weight: var(--weight-semibold);
 }
+/* "Coming soon" beside a product whose app is not open yet. The same pill as the calculator switch. */
+.soon {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .state {
   font-size: var(--type-sm);
   color: var(--text-muted);

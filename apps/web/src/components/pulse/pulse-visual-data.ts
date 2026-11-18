@@ -1,11 +1,13 @@
 /**
- * Sample data behind the Pulse page illustrations.
+ * Sample data behind the coded Pulse illustrations. Each one is the fallback for a screenshot slot that
+ * is switched to not ready in pulse-shots.ts. While every slot is ready, none of them is on the page.
  *
- * Every figure here comes from the Pulse demo workspace and the worked examples in docs/pulse/SPEC.md
- * (the real cost of an hour in 4.3, plan vs actual and "Why profit changed" in 4.10 and 4.11, the company
- * profit bridge in 4.9 and the story jobs in section 9), so the coded
- * visuals agree with the product screenshots that replace them later. Totals are never typed twice: they
- * are added up from the rows, and pulse-visual-data.test.ts checks that every view agrees.
+ * The labels, the status names and their order, the import counters and the packer rate are the ones on
+ * the real Pulse screens. The other figures are worked examples from docs/pulse/SPEC.md (plan vs actual
+ * and "Why profit changed" in 4.10 and 4.11, the company profit bridge in 4.9 and the story jobs in
+ * section 9). They are sample numbers and do not repeat the demo workspace, whose numbers move with
+ * every retake. Totals are never typed twice: they are added up from the rows, and
+ * pulse-visual-data.test.ts checks that every view agrees.
  */
 
 /* ===== Formatting ===== */
@@ -33,7 +35,7 @@ export function count(value: number): string {
   return COUNT.format(value);
 }
 
-/** Margin is profit as a share of money in, to one decimal place. */
+/** Margin is profit as a share of revenue, to one decimal place. */
 export function marginOf(profit: number, moneyIn: number): number {
   return moneyIn === 0 ? 0 : Math.round((profit / moneyIn) * 1000) / 10;
 }
@@ -44,14 +46,14 @@ export function percent(value: number, digits = 1): string {
 
 /* ===== Job status ===== */
 
-export type RiskStatus = 'losing-money' | 'at-risk' | 'heads-up' | 'not-enough-data' | 'on-track';
+export type RiskStatus = 'losing-money' | 'at-risk' | 'not-enough-data' | 'heads-up' | 'on-track';
 
-/** The five status words, the same in every KitStak app, with the label token each one uses. */
+/** The five status words in the order the Jobs page lists them, with the label token each one uses. */
 export const STATUS: Readonly<Record<RiskStatus, { readonly label: string; readonly token: string }>> = {
   'losing-money': { label: 'Losing money', token: 'red' },
   'at-risk': { label: 'At risk', token: 'orange' },
-  'heads-up': { label: 'Heads up', token: 'yellow' },
   'not-enough-data': { label: 'Not enough data', token: 'gray' },
+  'heads-up': { label: 'Heads up', token: 'yellow' },
   'on-track': { label: 'On track', token: 'green' },
 };
 
@@ -79,11 +81,14 @@ export interface ProfitView {
   readonly rows: readonly ProfitRow[];
 }
 
-/** The Profit page, cut four ways. Every view adds up to the same total, as it does in the product. */
+/**
+ * Four of the eight tabs of the Profit page, named as the page names them. Every view adds up to the
+ * same total, as it does in the product. `moneyIn` is the row's revenue.
+ */
 export const PROFIT_VIEWS: readonly ProfitView[] = [
   {
     id: 'job',
-    tab: 'Job',
+    tab: 'Jobs',
     heading: 'Job',
     rows: [
       { code: 'J-1005', name: 'Lumen Skincare launch kit', moneyIn: 18600, profit: 7626 },
@@ -97,15 +102,15 @@ export const PROFIT_VIEWS: readonly ProfitView[] = [
   },
   {
     id: 'client',
-    tab: 'Client',
+    tab: 'Clients',
     heading: 'Client',
     rows: [
       { name: 'Lumen Skincare', moneyIn: 31200, profit: 13104 },
-      { name: 'Apex Threads', moneyIn: 27450, profit: 10431 },
+      { name: 'Apex Threads Co.', moneyIn: 27450, profit: 10431 },
       { name: 'NovaForge Electronics', moneyIn: 24800, profit: 8928 },
       { name: 'Voltbyte Labs', moneyIn: 19600, profit: 6860 },
       { name: 'Bluebird & Main', moneyIn: 18900, profit: 4536 },
-      { name: 'Copperline Coffee', moneyIn: 11400, profit: 2958 },
+      { name: 'Copperline Coffee Co.', moneyIn: 11400, profit: 2958 },
       { name: 'Summit Trail Gear', moneyIn: 7300, profit: 1473 },
       { name: 'Orchard Pet Supply', moneyIn: 8266, profit: 1240 },
       { name: 'Harbor Roast Collective', moneyIn: 6600, profit: -1320 },
@@ -113,7 +118,7 @@ export const PROFIT_VIEWS: readonly ProfitView[] = [
   },
   {
     id: 'type',
-    tab: 'Job type',
+    tab: 'Job types',
     heading: 'Job type',
     rows: [
       { name: 'Kit assembly', moneyIn: 52300, profit: 19351 },
@@ -126,7 +131,7 @@ export const PROFIT_VIEWS: readonly ProfitView[] = [
   },
   {
     id: 'service',
-    tab: 'Service',
+    tab: 'Extra services',
     heading: 'Extra service',
     rows: [
       { name: 'Core job work', moneyIn: 121400, profit: 36420 },
@@ -152,11 +157,11 @@ export function totalOf(rows: readonly ProfitRow[]): ProfitTotal {
   return { moneyIn, moneyOut: moneyIn - profit, profit, margin: marginOf(profit, moneyIn) };
 }
 
-/** The month on jobs: money in $155,516, money out $107,306, profit $48,210, a 31% margin. */
+/** The sample month on jobs: revenue $155,516, cost $107,306, profit $48,210, a 31% margin. */
 export const MONTH: ProfitTotal = totalOf(PROFIT_VIEWS[0]!.rows);
 
 /**
- * The page's signature picture: of every dollar that came in, how many cents went out and how many
+ * The page's signature picture: of every dollar of revenue, how many cents went to cost and how many
  * stayed as profit. Whole percents that always add up to 100.
  */
 export function splitOf(
@@ -197,7 +202,6 @@ export interface OpenJob {
   readonly status: RiskStatus;
   /** The reason in a sentence, in the product's own wording. */
   readonly reason: string;
-  readonly nextStep?: string;
   /** Margin so far and projected margin, in percent. Left out while the job's profit is not complete. */
   readonly margin?: { readonly soFar: number; readonly projected: number };
   /** The dollar impact, when money is at stake (SPEC 4.14). */
@@ -220,7 +224,6 @@ export const OPEN_JOBS: readonly OpenJob[] = [
     name: 'Harbor Roast holiday gift set',
     status: 'losing-money',
     reason: 'The crew is making 31 units per person per hour. The target pace is 46.',
-    nextStep: 'Check the crew size',
     margin: { soFar: -20, projected: -20 },
     impact: '$1,840 loss at finish',
   },
@@ -229,24 +232,21 @@ export const OPEN_JOBS: readonly OpenJob[] = [
     name: 'Bluebird & Main November subscription box',
     status: 'at-risk',
     reason: 'Margin is heading for 14%. Your target is 30%.',
-    nextStep: 'Review the price with the client',
     margin: { soFar: 16.5, projected: 14 },
     impact: '$2,560 under your target profit',
-  },
-  {
-    code: 'J-1031',
-    name: 'NovaForge accessory bundle',
-    status: 'heads-up',
-    reason: 'Nothing has been logged for 4 work days.',
-    nextStep: 'Log the missing days',
-    margin: { soFar: 31.5, projected: 31 },
   },
   {
     code: 'J-1036',
     name: 'Voltbyte cable kit',
     status: 'not-enough-data',
     reason: '3 days have units and no hours. Profit is not complete yet.',
-    nextStep: 'Add the hours',
+  },
+  {
+    code: 'J-1031',
+    name: 'NovaForge accessory bundle',
+    status: 'heads-up',
+    reason: 'Nothing has been logged for 4 work days.',
+    margin: { soFar: 31.5, projected: 31 },
   },
   {
     code: 'J-1005',
@@ -257,16 +257,16 @@ export const OPEN_JOBS: readonly OpenJob[] = [
   },
 ];
 
-/** The status filter chips above the Jobs list: every open job in the demo workspace. */
+/** The status chips above the Jobs list, in screen order, with a sample count of open jobs for each. */
 export const STATUS_COUNTS: readonly { readonly status: RiskStatus; readonly jobs: number }[] = [
   { status: 'losing-money', jobs: 3 },
-  { status: 'at-risk', jobs: 3 },
-  { status: 'heads-up', jobs: 4 },
+  { status: 'at-risk', jobs: 4 },
   { status: 'not-enough-data', jobs: 2 },
-  { status: 'on-track', jobs: 10 },
+  { status: 'heads-up', jobs: 6 },
+  { status: 'on-track', jobs: 8 },
 ];
 
-/** Jobs that need you are the losing and at risk ones (SPEC 8.1, listJobsNeedingAttention): 6 here. */
+/** Jobs that need you are the losing and at risk ones (SPEC 8.1, listJobsNeedingAttention): 7 here. */
 export const NEEDS_YOU_COUNT = STATUS_COUNTS.filter(
   (item) => item.status === 'losing-money' || item.status === 'at-risk',
 ).reduce((sum, item) => sum + item.jobs, 0);
@@ -302,15 +302,16 @@ export interface LogRow {
   readonly people: number;
   readonly hoursEach: number;
   readonly targetPace: number;
-  /** Crew lines, one per labor class. They add up to `people`. */
+  /** Crew lines, one per labor class, named in the singular as the grid names them. They add up to `people`. */
   readonly crew?: readonly { readonly laborClass: string; readonly people: number }[];
   readonly note?: string;
 }
 
-export const LOG_DAY = 'Tuesday, Nov 17';
+export const LOG_DAY = 'Tue, Nov 17';
+export const LOG_SITE = 'MLT1 Main Fulfillment';
 
 /*
- * J-1012 sells at $2.75 a unit (SPEC 9), so its $6,600 of money in this month is 2,400 units. The
+ * J-1012 sells at $2.75 a unit (SPEC 9), so its $6,600 of revenue this month is 2,400 units. The
  * day below and the day in the CSV preview are 744 and 720 of them, so the days fit inside the month.
  */
 
@@ -323,8 +324,8 @@ export const LOG_ROWS: readonly LogRow[] = [
     hoursEach: 8,
     targetPace: 40,
     crew: [
-      { laborClass: 'Packers', people: 8 },
-      { laborClass: 'Temp packers', people: 3 },
+      { laborClass: 'Packer', people: 8 },
+      { laborClass: 'Temp packer', people: 3 },
       { laborClass: 'Line lead', people: 1 },
     ],
   },
@@ -371,6 +372,7 @@ export const LOG_TOTAL = {
 
 /* ===== Plan vs actual ===== */
 
+/** One money row of the "Quote vs actual" table. `plan` is the quote for the work done. */
 export interface PlanLine {
   readonly label: string;
   readonly plan: number;
@@ -382,13 +384,17 @@ export interface PlanLine {
 export const PLAN_PROGRESS = { done: 4000, planned: 10000 };
 
 export const PLAN_LINES: readonly PlanLine[] = [
-  { label: 'Money in', plan: 7000, actual: 7000, kind: 'in' },
-  { label: 'Labor', plan: 2200, actual: 2875, kind: 'cost' },
-  { label: 'Materials', plan: 1800, actual: 1900, kind: 'cost' },
+  { label: 'Labor cost', plan: 2200, actual: 2875, kind: 'cost' },
+  { label: 'Material cost', plan: 1800, actual: 1900, kind: 'cost' },
+  { label: 'Other cost', plan: 1000, actual: 400, kind: 'cost' },
   { label: 'Time not on a job', plan: 200, actual: 260, kind: 'cost' },
-  { label: 'Other costs', plan: 1000, actual: 400, kind: 'cost' },
+  { label: 'Revenue', plan: 7000, actual: 7000, kind: 'in' },
 ];
 
+/**
+ * The "Labor hours" row above the money rows. 125 against 100 is the 25% in "Labor is heading 25% over
+ * the plan". The labor cost row is 31% over, because the hour also cost more than planned.
+ */
 export const PLAN_HOURS = { plan: 100, actual: 125 };
 
 function profitOf(pick: (line: PlanLine) => number): number {
@@ -413,15 +419,23 @@ export const WHY_READING =
 
 /* ===== Real cost of an hour ===== */
 
-/** Packer: wage $16.00, payroll taxes 9%, benefits 12%, overhead $2.40 an hour (SPEC 4.3). */
+/**
+ * Packer, as the "New rate for Packer" dialog in the demo workspace has it: wage $17.15, payroll taxes
+ * and workers comp 9%, benefits and paid time off 12%, other 0%, overhead $5.50 for each hour. The
+ * formula is SPEC 4.3.
+ */
 export const RATE = {
   laborClass: 'Packer',
-  wage: 16,
+  wage: 17.15,
   taxPercent: 9,
   benefitPercent: 12,
-  overhead: 2.4,
+  otherPercent: 0,
+  overhead: 5.5,
   overtimeMultiplier: 1.5,
 } as const;
+
+/** What rides on top of the wage, as a percent of it: 21. */
+export const ON_TOP_PERCENT = RATE.taxPercent + RATE.benefitPercent + RATE.otherPercent;
 
 const cents = (dollars: number) => Math.round(dollars * 100) / 100;
 
@@ -432,22 +446,17 @@ export const RATE_PARTS: readonly {
 }[] = [
   { label: 'Wage', detail: 'What the paycheck says', amount: RATE.wage },
   {
-    label: 'Payroll taxes',
-    detail: `${RATE.taxPercent}% of the wage`,
-    amount: cents((RATE.wage * RATE.taxPercent) / 100),
+    label: 'Taxes, benefits and other',
+    detail: `${ON_TOP_PERCENT}% of the wage`,
+    amount: cents((RATE.wage * ON_TOP_PERCENT) / 100),
   },
-  {
-    label: 'Benefits',
-    detail: `${RATE.benefitPercent}% of the wage`,
-    amount: cents((RATE.wage * RATE.benefitPercent) / 100),
-  },
-  { label: 'Overhead', detail: 'Rent, power and the rest, per hour', amount: RATE.overhead },
+  { label: 'Overhead', detail: 'Rent, power and the rest, for each hour', amount: RATE.overhead },
 ];
 
-/** $21.76. */
+/** $26.25: $17.15 + $3.60 + $5.50. */
 export const REAL_HOUR = cents(RATE_PARTS.reduce((sum, part) => sum + part.amount, 0));
 
-/** $30.48. Payroll taxes grow with overtime pay. Benefits and overhead do not. */
+/** $35.60. Payroll taxes grow with overtime pay. Benefits and overhead do not. */
 export const OVERTIME_HOUR = cents(
   RATE.wage * RATE.overtimeMultiplier * (1 + RATE.taxPercent / 100) +
     (RATE.wage * RATE.benefitPercent) / 100 +
@@ -477,18 +486,18 @@ export const CSV_STREAMS: readonly string[] = [
   'Goals',
 ];
 
-/** The Check step of an import: what the file would do before anything is saved. */
+/** The six counters on step 3, Check, with the counts of the sample file in the screenshot. */
 export const CSV_CHECK: readonly {
   readonly label: string;
   readonly rows: number;
   readonly isProblem?: true;
 }[] = [
-  { label: 'New', rows: 193 },
-  { label: 'Changed', rows: 9 },
-  { label: 'Unchanged', rows: 7 },
-  { label: 'Possible repeats', rows: 4 },
-  { label: 'Skipped', rows: 0 },
-  { label: 'Errors', rows: 1, isProblem: true },
+  { label: 'New', rows: 8 },
+  { label: 'Changed', rows: 2 },
+  { label: 'No change', rows: 7 },
+  { label: 'Look the same', rows: 0 },
+  { label: 'Left out', rows: 0 },
+  { label: 'Problems', rows: 1, isProblem: true },
 ];
 export const CSV_ROWS = CSV_CHECK.reduce((sum, item) => sum + item.rows, 0);
 
@@ -497,7 +506,7 @@ export const CSV_PROBLEM = {
   row: 14,
   column: 'labor_hours',
   value: '9x',
-  message: '9x is not a number.',
+  message: '9x is not a number of hours. Use 7.5 or 7:30.',
 } as const;
 
 /** Three rows of the file as the preview shows them. Row 14 holds the problem cell. */
@@ -508,7 +517,7 @@ export const CSV_PREVIEW: readonly {
   readonly units: string;
   readonly hours: string;
 }[] = [
-  { row: 13, workDate: '2026-11-16', job: 'J-1005', units: '4,180', hours: '96' },
-  { row: 14, workDate: '2026-11-16', job: 'J-1012', units: '720', hours: CSV_PROBLEM.value },
-  { row: 15, workDate: '2026-11-16', job: 'J-1023', units: '1,480', hours: '40' },
+  { row: 13, workDate: '2026-11-15', job: 'J-1005', units: '4,180', hours: '96' },
+  { row: 14, workDate: '2026-11-15', job: 'J-1012', units: '720', hours: CSV_PROBLEM.value },
+  { row: 15, workDate: '2026-11-15', job: 'J-1023', units: '1,480', hours: '40' },
 ];

@@ -32,7 +32,8 @@ mobile drawer and the footer all read `src/components/nav/nav-data.ts`.
 
 - **Pricing**. `src/lib/pricing.ts` (`PRICING`, `PRICING_IS_PLACEHOLDER`). Every page and the wizard read
   from here. The CRM, WMS and Projects numbers are stand-ins and print "Preliminary pricing, shown for
-  planning." The Pulse price is confirmed by the owner and carries `isConfirmed: true`, so it is never
+  planning." Beside the Pulse price the line names them ("Preliminary pricing for CRM, shown for
+  planning.") and says nothing about Pulse. The Pulse price is confirmed by the owner and carries `isConfirmed: true`, so it is never
   called preliminary (see "Pulse price" below).
 - **Contact details**. `CONTACT` in `src/components/site-links.ts`. The contact form has no backend:
   it opens the visitor's email app (`buildMailto`).
@@ -43,7 +44,8 @@ mobile drawer and the footer all read `src/components/nav/nav-data.ts`.
   portal does not read them yet.
 
 - **Pulse screenshots**. The `/pulse` page shows real product screenshots: Home in the hero, then Profit
-  by job, Jobs, Log work, Plan vs actual, the rate builder, the import Check step and Connected apps.
+  by job, Jobs, a "How we got this" panel, Log work, Plan vs actual, the rate builder, the import Check
+  step and Connected apps.
   They come straight from the running Pulse app with its demo data. They are cropped, scaled and
   compressed, and never retouched. Each one exists in a light and a dark theme and in up to three window
   sizes (desktop, tablet, phone). `PulseShot` (`src/components/pulse/pulse-shot.tsx`) picks the file by
@@ -52,11 +54,37 @@ mobile drawer and the footer all read `src/components/nav/nav-data.ts`.
   `node scripts/capture-pulse-shots.mjs <rawDir> <importBatchId>` against a running Pulse app (it needs
   Playwright), then `node scripts/prepare-pulse-shots.mjs <rawDir>`, which writes `public/pulse/shots`.
   Retake every slot
-  together so the numbers agree, then check the alt text and the page copy against the new screens. The
+  together so the numbers agree, then check the alt text and the page copy against the new screens. One
+  picture has one alt text for every size, so each alt first says what all sizes show and then names what
+  only a wide screen adds. Check it against the phone picture too. A picture never ends in the middle of a
+  line of text: a view with a `clip` in the capture script opens a tall window and saves it down to the
+  edge of a table row or a card. So heights come from the screens. The prepare script prints them, and
+  they go into `pulse-shots.ts`. Jobs is scrolled so the status chips sit under the top bar and the list
+  starts high. Plan vs actual on a wide screen is the whole page in one tall picture: the job, the Quote
+  vs actual table with its column headings, and "Why profit changed". On a phone it leaves out the job
+  header and runs from the Quote vs actual card, with every row, to the three cards under the chart. On
+  the desktop Profit picture the Units per hour column is hidden with the app's own Columns button, so
+  the table ends on a whole column. The "How we got this" panel is the panel alone, taken at three device
+  pixels to one because it is small. The phone capture is used up to 760 pixels and held to 440 pixels
+  wide. Every picture links to its widest desktop file, so a visitor can open it at full size. The rate
+  builder is a dialog on a wide screen. On a phone the picture is the Rates tab behind
+  it, scrolled to the Packer card. Connected apps is scrolled to the WMS card, which has linked jobs. Home
+  is taken on a 430 pixel phone, because at 390 the change chip on the Cost tile runs past its tile (a
+  product glitch the Pulse team needs to fix). The home page column shows `jobs-close`, the Jobs table
+  cut at the right edge of its Units done column, because a tablet window cuts that table through a
+  column. The demo data calls the day it was seeded "today". To retake one slot on a later day, run the
+  Pulse app with its clock set back and pass the same shift as `PULSE_CLOCK_SHIFT_MINUTES`. The caption
+  under every
+  picture says the clients and jobs are made up. The
   demo data is built from the day it is seeded, so the numbers move. A slot set to `ready: false` falls
-  back to its coded illustration in `src/components/pulse/pulse-visuals.tsx`. The worked job, the "How we
-  got this" panel and the home page card have no screenshot and stay coded illustrations with sample
-  numbers.
+  back to its coded illustration in `src/components/pulse/pulse-visuals.tsx`. The home page Pulse section
+  shows the Jobs screenshot. The worked job has no screenshot. It is a coded example from the spec and is
+  labeled "a worked example".
+- **Pulse copy next to a screenshot**. Words for a screen are the words on that screen: Revenue and Cost,
+  Quote vs actual, Extra services, the six import counters, and the five statuses in the order of the
+  Jobs page (Losing money, At risk, Not enough data, Heads up, On track). Copy beside a screenshot
+  describes it and quotes no sample figure, because the demo numbers move with every retake. The only
+  dollar figures on `/pulse` are in the worked job. `src/lib/pulse-claims.test.ts` checks all of this.
 - **Pulse sign-in link**. The footer links to `LINKS.pulse` (`https://pulse.kitstak.app`) only when
   `PULSE_IS_LIVE` is true. Check that origin answers before you flip the flag.
 
@@ -82,14 +110,29 @@ organization, not a price per user. The owner confirmed it and it is final.
 it is false:
 
 - The site says exactly "Coming soon" (`COMING_SOON`) on the `/products` Pulse card, in the Products menu
-  and the mobile drawer, on the calculator switch, on the `/pulse` price card, in the wizard's Pulse row,
-  and in the `/pulse` FAQ "How do I start?" answer and closing note.
+  and the mobile drawer, on the calculator switch, over the Pulse heading and on the Pulse switch of the
+  home page, beside the product name at the top of `/pulse`, on the `/pulse` price card, in the wizard's
+  Pulse row, and in the `/pulse` FAQ "How do I start?" answer and closing note. The `/products` hero, two
+  of its FAQ answers, the Products menu and the site description say "Pulse is coming soon" in a
+  sentence. The `/get-started` page description leaves Pulse out of the choices.
+- On `/pulse` the main button of the "On its own. Or on the stack." band is "Book a walkthrough". The
+  second one, "Set up the other apps today", opens the wizard, which leaves Pulse out.
+- The `/products` calculator still prices Pulse into a stack, with the bundle discount. While Pulse is
+  coming soon and switched on there, a second total sits under the main one: "Today, without Pulse: $123
+  per month, billed yearly. The bundle saving starts when Pulse opens." (`todayPriceNote` in
+  `src/lib/pricing.ts`). It is the same `quote` with Pulse left out, so it matches the wizard the button
+  opens.
 - No link leads toward an account for Pulse. `startLink('pulse')` gives "Book a walkthrough" to
   `ROUTES.demo`. `getStartedHref` and `wizardHref` leave Pulse out of the stack they carry, and send a
   Pulse only stack to the walkthrough form. The wizard shows Pulse as a labeled row with no box to tick,
   drops it from links and saved answers, and never hands it to sign-up.
 - The calculator on `/products` still prices Pulse. When Pulse is switched on, a line under the button
   says it is coming soon and that the button sets up the rest of the stack.
+
+The calculator opens at 5 users, the seats the Pulse price covers. With Pulse on and more users than
+that, the quote says "The Pulse price covers up to 5 seats. For more, talk to us." (`overSeatsNote` in
+`src/lib/pricing.ts`), so the total never reads as a Pulse price for a bigger team. The wizard summary
+does the same.
 
 Set `PULSE_IS_LIVE` to true and all of this goes back to the normal start flow with no other change.
 `src/lib/pulse-availability.test.ts` fails if a Pulse start link is live while the flag is false.

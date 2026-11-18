@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import {
   MORE_SEATS_ACTION,
+  OVER_SEATS_ACTION,
   PRICING,
   formatUsd,
   isBundle,
   moreSeatsPrompt,
+  overSeatsNote,
   percentLabel,
   preliminaryPriceNote,
 } from '@/lib/pricing';
@@ -51,15 +53,19 @@ export function StakVisual({ stack, extras = [] }: StakVisualProps) {
 interface QuoteSummaryProps {
   readonly quote: Quote;
   readonly billing: Billing;
+  /** The team size the visitor chose. Over a flat product's seat limit, the summary says so plainly. */
+  readonly seats?: number;
 }
 
 /** Line items, savings and the monthly figure. Sits on the navy brand surface. */
-export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
+export function QuoteSummary({ quote, billing, seats = 0 }: QuoteSummaryProps) {
   const products = quote.lines.map((line) => line.product);
   const hasBundle = isBundle(products);
   const preliminary = preliminaryPriceNote(products);
   // A flat product covers a set number of seats. Above that there is no listed price.
   const moreSeats = products.map(moreSeatsPrompt).find((prompt) => prompt !== null) ?? null;
+  // The team is bigger than the flat price covers. The total must not read as a quote for that team.
+  const overSeats = products.map((id) => overSeatsNote(id, seats)).find((note) => note !== null) ?? null;
   return (
     <div aria-live="polite">
       <ul className={styles.lines}>
@@ -102,7 +108,11 @@ export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
           Add another product and take {percentLabel(PRICING.bundleDiscount)} off every one.
         </p>
       )}
-      {moreSeats ? (
+      {overSeats ? (
+        <p className={styles.overSeats}>
+          {overSeats} For more, <Link href={ROUTES.contact}>{OVER_SEATS_ACTION}</Link>.
+        </p>
+      ) : moreSeats ? (
         <p className={styles.fine}>
           {moreSeats} <Link href={ROUTES.contact}>{MORE_SEATS_ACTION}</Link>
         </p>

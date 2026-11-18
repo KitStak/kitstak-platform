@@ -1,4 +1,4 @@
-import { PRODUCT_IDS } from '@/components/site-links';
+import { PRODUCT_IDS, START_NAME, startableStack } from '@/components/site-links';
 import type { ProductId, Stack } from '@/components/site-links';
 
 /**
@@ -115,20 +115,36 @@ export function moreSeatsPrompt(product: ProductId): string | null {
   return price.basis === 'flat_per_org' ? `Need more than ${price.includedSeats} seats?` : null;
 }
 
+/**
+ * The warning for a team bigger than a flat price covers: "The Pulse price covers up to 5 seats."
+ * Null for a per unit product and for a team that fits. The site has no price above the limit.
+ */
+export function overSeatsNote(product: ProductId, seats: number): string | null {
+  const price = priceOf(product);
+  if (price.basis !== 'flat_per_org' || seats <= price.includedSeats) return null;
+  return `The ${price.name.replace('KitStak ', '')} price covers up to ${price.includedSeats} seats.`;
+}
+
+/** The link text that follows `overSeatsNote`, after "For more,". */
+export const OVER_SEATS_ACTION = 'talk to us';
+
 /** The link text that follows `moreSeatsPrompt`. */
 export const MORE_SEATS_ACTION = 'Talk to us.';
 
 /**
  * The line under a figure while some of the prices shown are stand-ins. Null when every price shown
- * is confirmed. A confirmed price beside stand-ins is named, so nobody reads it as preliminary.
+ * is confirmed. Beside a confirmed price the line names the stand-ins, so it says nothing about the
+ * confirmed one.
  */
 export function preliminaryPriceNote(products: readonly ProductId[]): string | null {
   if (!PRICING_IS_PLACEHOLDER) return null;
-  const confirmed = products.filter((id) => priceOf(id).isConfirmed);
-  if (confirmed.length === products.length) return null;
-  const names = confirmed.map((id) => priceOf(id).name.replace('KitStak ', ''));
-  const final = names.length > 0 ? ` The ${names.join(' and ')} price is final.` : '';
-  return `Preliminary pricing, shown for planning.${final}`;
+  const standIns = products.filter((id) => !priceOf(id).isConfirmed);
+  if (standIns.length === 0) return null;
+  if (standIns.length === products.length) return 'Preliminary pricing, shown for planning.';
+  const names = standIns.map((id) => priceOf(id).name.replace('KitStak ', ''));
+  const listed =
+    names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+  return `Preliminary pricing for ${listed}, shown for planning.`;
 }
 
 export interface QuoteInput {
@@ -222,6 +238,51 @@ export function quote(input: QuoteInput): Quote {
     annualSavingsCents,
     totalSavingsCents: bundleSavingsCents + annualSavingsCents,
     monthlyCents: afterBundle - annualSavingsCents,
+  };
+}
+
+/**
+ * The second total for a stack that holds a product nobody can set up yet. It prices only the products
+ * open today, with the same `quote`, so it always matches what the setup wizard charges. The stack
+ * total above it can be lower, because the bundle discount counts the product that is coming soon.
+ * Null when every product in the stack is open, or none is.
+ */
+export function todayPriceNote(input: QuoteInput): string | null {
+  const today = todayPrice(input);
+  if (!today) return null;
+  const bundle = today.bundle ? ` ${today.bundle}` : '';
+  return `${today.label}: ${today.amount} ${today.terms}.${bundle}`;
+}
+
+/** The parts of `todayPriceNote`, for a screen that sets the amount in large type. */
+export interface TodayPrice {
+  /** "Today, without Pulse". */
+  readonly label: string;
+  /** The price a visitor can pay today, such as "$123". */
+  readonly amount: string;
+  /** "per month, billed yearly". */
+  readonly terms: string;
+  /** One sentence on when the bundle discount starts, or an empty string. */
+  readonly bundle: string;
+}
+
+export function todayPrice(input: QuoteInput): TodayPrice | null {
+  const open = startableStack(input.stack);
+  if (open.length === 0 || open.length === input.stack.length) return null;
+  const waiting = input.stack.filter((id) => !open.includes(id)).map((id) => START_NAME[id]);
+  const names = waiting.join(' and ');
+  const today = quote({ ...input, stack: open });
+  const billed = input.billing === 'annual' ? 'billed yearly' : 'billed monthly';
+  const bundle = !isBundle(input.stack)
+    ? ''
+    : isBundle(open)
+      ? `${names} joins the bundle when it opens.`
+      : `The bundle saving starts when ${names} opens.`;
+  return {
+    label: `Today, without ${names}`,
+    amount: formatUsd(today.monthlyCents),
+    terms: `per month, ${billed}`,
+    bundle,
   };
 }
 

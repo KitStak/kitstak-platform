@@ -32,7 +32,16 @@ interface ProductHeroProps {
    * as a product screenshot, that would be too small to read in half the width.
    */
   readonly layout?: 'split' | 'stacked';
+  /** How many facts a phone shows, when the full strip would take too much of a small screen. */
+  readonly phoneFacts?: 2;
 }
+
+/**
+ * The size of the app icon beside the product name. The Pulse mark is short and wide inside its
+ * square, so it is drawn a little larger to carry the same weight as the others.
+ */
+const CRUMB_ICON_SIZE = 30;
+const CRUMB_ICON_SIZE_WIDE_MARK = 36;
 
 export function ProductHero({
   product,
@@ -45,6 +54,7 @@ export function ProductHero({
   facts,
   badge,
   layout = 'split',
+  phoneFacts,
 }: ProductHeroProps) {
   return (
     <section id="top" className={styles.hero} aria-labelledby="hero-heading">
@@ -54,7 +64,7 @@ export function ProductHero({
             <Link href={ROUTES.products}>Products</Link>
             <span aria-hidden>/</span>
             <span className={styles.crumbHere} aria-current="page">
-              <AppIcon app={app} size={30} />
+              <AppIcon app={app} size={app === 'pulse' ? CRUMB_ICON_SIZE_WIDE_MARK : CRUMB_ICON_SIZE} />
               {product}
             </span>
             {badge ? <span className={styles.badge}>{badge}</span> : null}
@@ -85,7 +95,7 @@ export function ProductHero({
       </div>
 
       <div className={`container ${styles.factsWrap}`}>
-        <dl className={styles.facts}>
+        <dl className={styles.facts} data-phone-facts={phoneFacts}>
           {facts.map((fact, i) => (
             <div key={fact.label} style={{ '--i': i } as React.CSSProperties}>
               <dt className={`numeral ${styles.factValue}`}>{fact.value}</dt>

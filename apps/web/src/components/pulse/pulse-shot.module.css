@@ -1,5 +1,7 @@
 /* A real product screenshot, framed like the illustration panels it sits beside. */
 .shot {
+  position: relative;
+  max-width: var(--shot-max, none);
   margin: 0 auto;
 }
 .shot picture {
@@ -26,6 +28,43 @@
   color: var(--text-secondary);
 }
 
+/* The link that opens the screen at full size. It covers the picture as well, so the picture itself
+   can be clicked. One link for each theme: only the one that matches the picture shows. */
+.full {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.full::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-xl);
+  cursor: zoom-in;
+}
+.full:hover {
+  color: var(--text-primary);
+}
+.full:focus-visible {
+  outline: none;
+}
+.full:focus-visible::after {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+.full[data-theme='dark'] {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  .full[data-theme='light'] {
+    display: none;
+  }
+  .full[data-theme='dark'] {
+    display: inline;
+  }
+}
+
 /* On the navy band: a light caption and a rule that shows against navy. */
 .shot[data-on-brand] img {
   border-color: var(--on-brand-rule);
@@ -33,10 +72,39 @@
 .shot[data-on-brand] figcaption {
   color: var(--on-brand-muted);
 }
-.shot[data-on-brand] figcaption strong {
+.shot[data-on-brand] figcaption strong,
+.shot[data-on-brand] .full,
+.shot[data-on-brand] .full:hover {
   color: var(--brand-cream);
 }
 
+/* Beside the copy on a screen under 1280 pixels wide, the phone capture is shown at its own size.
+   The widths match SIDE_COLUMN_STACKS_AT, BUNDLE_BAND_STACKS_AT and SIDE_COLUMN_WIDE_FROM in
+   pulse-shots.ts. */
+@media (min-width: 961px) and (max-width: 1279px) {
+  .shot[data-phone-in-column='side-column'] {
+    max-width: 390px;
+  }
+}
+@media (min-width: 901px) and (max-width: 1279px) {
+  .shot[data-phone-in-column='bundle-band'] {
+    max-width: 390px;
+  }
+}
+
+/* Up to PHONE_UP_TO in pulse-shots.ts the picture is a phone capture, 390 pixels wide. On a small
+   tablet it is held to 440 pixels, so it stays sharp and its text stays close to its real size. */
+@media (max-width: 760px) {
+  .shot {
+    max-width: min(var(--shot-max, 440px), 440px);
+  }
+}
+/* Profit and Jobs keep the phone capture on a tablet. The width matches PHONE_ON_TABLET_UP_TO. */
+@media (max-width: 900px) {
+  .shot[data-phone-on-tablet] {
+    max-width: 440px;
+  }
+}
 @media (max-width: 640px) {
   .shot img {
     border-radius: var(--radius-lg);

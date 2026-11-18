@@ -52,7 +52,7 @@ function SummaryBody({ answers, estimate }: WizardSummaryProps) {
       ) : null}
       {estimate ? (
         <div className={styles.estimate}>
-          <QuoteSummary quote={estimate} billing={answers.billing} />
+          <QuoteSummary quote={estimate} billing={answers.billing} seats={answers.seats} />
         </div>
       ) : (
         <p className={styles.empty}>Choose a product and your stack builds here.</p>

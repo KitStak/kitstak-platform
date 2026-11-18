@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FULL_STACK, PRODUCT_IDS, toggleProduct } from '../site-links';
+import { FULL_STACK, PRODUCT_IDS, availabilityLabel, toggleProduct } from '../site-links';
 import type { ProductId, Stack } from '../site-links';
 import { planFor } from './licensing-plans';
 import styles from './licensing-section.module.css';
@@ -48,7 +48,10 @@ export function LicensingSection() {
                 onClick={() => toggle(p)}
               >
                 <span className={styles.slab} aria-hidden />
-                <span className={styles.switchLabel}>{NAME[p]}</span>
+                <span className={styles.switchLabel}>
+                  {NAME[p]}
+                  {availabilityLabel(p) ? <span className={styles.soon}>{availabilityLabel(p)}</span> : null}
+                </span>
                 <span className={styles.state}>{stack.includes(p) ? 'On' : 'Off'}</span>
               </button>
             ))}

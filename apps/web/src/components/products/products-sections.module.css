@@ -214,6 +214,22 @@
   padding-top: 32px;
 }
 
+/* The two cards of a row share their rows: icon line, title, body, points and buttons. A title that
+   wraps in one card then moves the body and the points of both, so no card is left with a blank band
+   above its buttons. Browsers without subgrid keep the flex column above. */
+@supports (grid-template-rows: subgrid) {
+  .card {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 5;
+    /* The spacing inside a card stays the margins of its parts, not the gap between cards. */
+    row-gap: 0;
+  }
+  .cardActions {
+    align-self: end;
+  }
+}
+
 /* ------------------------------------------------------------ Compare */
 .compare {
   background: var(--surface-sunken);
