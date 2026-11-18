@@ -44,6 +44,7 @@ const EMPTY_STATS_COPY: Readonly<Record<Module, EmptyStateCopy>> = {
   crm: { message: 'No deals yet', cta: 'Create your first deal' },
   wms: { message: 'No open orders', cta: 'Create your first order' },
   projects: { message: 'No projects yet', cta: 'Start your first project' },
+  pulse: { message: 'No jobs yet', cta: 'Add your first job' },
 };
 
 /** Matches the stat-cell geometry (text-lg value line + text-xs label line) so both tiles stay equal height. */
@@ -120,13 +121,20 @@ export function ProductTile({
         <p className="mt-0.5 text-sm font-medium text-fg-secondary">{tagline}</p>
       </div>
       {entitled && stats && stats.length > 0 ? (
-        stats.every((stat) => stat.value === 0) ? (
+        stats.every((stat) => stat.value === 0 && stat.display === undefined) ? (
           <EmptyStats module={module} ctaHref={emptyStateHref} />
         ) : (
           <dl className={cn('mt-5 grid gap-2', stats.length >= 3 ? 'grid-cols-3' : 'grid-cols-2')}>
             {stats.map((stat) => (
               <div key={stat.label} className="flex flex-col rounded-lg bg-sunken px-3 py-2">
-                <dd className="order-1 text-lg font-semibold text-fg tabular-nums">{stat.value}</dd>
+                <dd
+                  className={cn(
+                    'order-1 text-lg font-semibold tabular-nums',
+                    stat.tone === 'danger' ? 'text-danger-text' : stat.tone === 'warning' ? 'text-warning-text' : 'text-fg',
+                  )}
+                >
+                  {stat.display ?? stat.value}
+                </dd>
                 <dt className="order-2 text-xs text-fg-muted">{stat.label}</dt>
               </div>
             ))}

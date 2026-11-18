@@ -20,8 +20,8 @@ export interface ShellContextValue {
   readonly org: ShellOrg;
   readonly orgRole: OrgRole;
   readonly orgs: readonly ShellOrg[];
-  readonly appUrls: { readonly portal: string; readonly crm: string; readonly wms: string; readonly projects: string };
-  readonly modules: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  readonly appUrls: { readonly portal: string; readonly crm: string; readonly wms: string; readonly projects: string; readonly pulse?: string };
+  readonly modules: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean; readonly pulse?: boolean };
   readonly integrations: { readonly crm: boolean; readonly wms: boolean };
   /** Sibling apps this org cannot use on any plan (app switcher shows them as "Not in your plan"). */
   readonly notInPlan?: readonly ('crm' | 'wms')[];

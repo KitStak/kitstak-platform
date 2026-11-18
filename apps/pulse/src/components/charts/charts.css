@@ -1,0 +1,93 @@
+/*
+ * Pulse chart palette. Chrome (text, grid, surfaces, status) comes from @kitstak/ui tokens; the
+ * eight series hues live here because a chart needs hues that stay apart for color blind readers.
+ * Order matters: neighbors were checked for deutan, protan and tritan separation on both panels
+ * (#ffffff and #141518). Use them in order and never make a ninth: fold the tail into "Other".
+ */
+:root {
+  --pulse-series-1: #2a78d6;
+  --pulse-series-2: #eb6834;
+  --pulse-series-3: #1baf7a;
+  --pulse-series-4: #eda100;
+  --pulse-series-5: #e87ba4;
+  --pulse-series-6: #008300;
+  --pulse-series-7: #6250d6;
+  --pulse-series-8: #e34948;
+  --pulse-chart-neutral: #8a93a3;
+  --pulse-chart-up: #0e8a52;
+  --pulse-chart-down: #c8233d;
+  --pulse-chart-warm: #e34948;
+  --pulse-chart-grid: var(--border-subtle);
+  --pulse-chart-axis: var(--border-strong);
+  --pulse-chart-track: color-mix(in srgb, var(--text-primary) 8%, var(--surface-panel));
+}
+[data-theme='dark'] {
+  --pulse-series-1: #3987e5;
+  --pulse-series-2: #d95926;
+  --pulse-series-3: #199e70;
+  --pulse-series-4: #c98500;
+  --pulse-series-5: #d55181;
+  --pulse-series-6: #0ca30c;
+  --pulse-series-7: #9085e9;
+  --pulse-series-8: #e66767;
+  --pulse-chart-neutral: #7d8591;
+  --pulse-chart-up: #1fa368;
+  --pulse-chart-down: #e5566c;
+  --pulse-chart-warm: #e66767;
+  --pulse-chart-track: color-mix(in srgb, var(--text-primary) 12%, var(--surface-panel));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --pulse-series-1: #3987e5;
+    --pulse-series-2: #d95926;
+    --pulse-series-3: #199e70;
+    --pulse-series-4: #c98500;
+    --pulse-series-5: #d55181;
+    --pulse-series-6: #0ca30c;
+    --pulse-series-7: #9085e9;
+    --pulse-series-8: #e66767;
+    --pulse-chart-neutral: #7d8591;
+    --pulse-chart-up: #1fa368;
+    --pulse-chart-down: #e5566c;
+    --pulse-chart-warm: #e66767;
+    --pulse-chart-track: color-mix(in srgb, var(--text-primary) 12%, var(--surface-panel));
+  }
+}
+
+.pulse-chart text {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.pulse-chart svg:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.pulse-chart .pc-mark {
+  transition:
+    opacity 120ms ease-out,
+    fill-opacity 120ms ease-out;
+}
+.pulse-chart .pc-grow {
+  transition:
+    stroke-dashoffset 400ms ease-out,
+    width 250ms ease-out,
+    opacity 120ms ease-out;
+}
+.pulse-chart .pc-tip {
+  transition:
+    transform 90ms ease-out,
+    opacity 90ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-chart .pc-mark,
+  .pulse-chart .pc-grow,
+  .pulse-chart .pc-tip {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .pulse-chart svg {
+    forced-color-adjust: none;
+  }
+}

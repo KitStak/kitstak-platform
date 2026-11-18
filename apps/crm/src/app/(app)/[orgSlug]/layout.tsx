@@ -57,6 +57,7 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
         crm: env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3100',
         wms: process.env.NEXT_PUBLIC_WMS_URL || 'http://localhost:3000',
         projects: env.NEXT_PUBLIC_PROJECTS_URL,
+        pulse: env.NEXT_PUBLIC_PULSE_URL,
       },
       entitled,
       // WMS is single-tenant: only the platform org can use it (apps/wms PLATFORM_ORG_SLUG).

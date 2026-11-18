@@ -5,7 +5,7 @@ import { cn } from '@/components/ui';
  * Product marks from the brand pack (public/brand/kitstak-icon-<app>.svg), inlined with the
  * exact rects so they render crisply at any size and dim cleanly when the app is locked.
  */
-const MARKS: Readonly<Record<Module, readonly { x: number; y: number; w: number; h: number; pink?: boolean }[]>> = {
+const MARKS: Readonly<Record<Module, readonly { x: number; y: number; w: number; h: number; pink?: boolean; opacity?: number }[]>> = {
   crm: [
     { x: 36, y: 50, w: 128, h: 26 },
     { x: 56, y: 87, w: 88, h: 26, pink: true },
@@ -26,6 +26,12 @@ const MARKS: Readonly<Record<Module, readonly { x: number; y: number; w: number;
     { x: 68, y: 87, w: 80, h: 26, pink: true },
     { x: 98, y: 122, w: 64, h: 26 },
   ],
+  // The official Pulse mark: a full bar over a meter (faded track, solid fill).
+  pulse: [
+    { x: 40, y: 62, w: 120, h: 30 },
+    { x: 40, y: 108, w: 120, h: 30, pink: true, opacity: 0.35 },
+    { x: 40, y: 108, w: 84, h: 30, pink: true },
+  ],
 };
 
 export function AppMark({ module, locked, className }: { readonly module: Module; readonly locked?: boolean; readonly className?: string }) {
@@ -40,7 +46,7 @@ export function AppMark({ module, locked, className }: { readonly module: Module
     >
       <svg viewBox="28 40 144 120" width="30" height="25">
         {MARKS[module].map((rect) => (
-          <rect key={`${rect.x}-${rect.y}`} x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill={rect.pink ? '#D65A6E' : '#C8102E'} />
+          <rect key={`${rect.x}-${rect.y}-${rect.w}`} x={rect.x} y={rect.y} width={rect.w} height={rect.h} fill={rect.pink ? '#D65A6E' : '#C8102E'} opacity={rect.opacity} />
         ))}
       </svg>
     </span>

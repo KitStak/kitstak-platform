@@ -1,7 +1,7 @@
 'use client';
 /**
  * Shared cross-app launcher menu (BLUEPRINT.md §6): a module-grid trigger in each app's top bar
- * opening a popover that lists Portal / CRM / WMS / Projects. Purely presentational: origins and
+ * opening a popover that lists Portal / CRM / WMS / Projects / Pulse. Purely presentational: origins and
  * entitlement flags arrive as props (no data fetching here), and styling uses tokens.css custom
  * properties exclusively so the menu inherits the host app's light/dark theme. Keyboard and
  * focus behavior (aria-haspopup/expanded, Escape, focus return) come from the Radix popover.
@@ -15,7 +15,7 @@ import './app-switcher.css';
 /** Icon box in a row. The supplied artwork carries its own padding, so it fills the tile. */
 const MARK_SIZE = 32;
 
-export type AppSwitcherAppId = 'portal' | 'crm' | 'wms' | 'projects';
+export type AppSwitcherAppId = 'portal' | 'crm' | 'wms' | 'projects' | 'pulse';
 
 export interface AppSwitcherUrls {
   readonly portal: string;
@@ -23,16 +23,19 @@ export interface AppSwitcherUrls {
   readonly wms: string;
   /** KitStak Projects origin. Omitted → the Projects row is hidden (app not deployed for this host). */
   readonly projects?: string;
+  /** KitStak Pulse origin. Omitted → the Pulse row is hidden (app not deployed for this host). */
+  readonly pulse?: string;
 }
 
 /**
  * Per-module unlock state. Omit the prop entirely to show every product app unlocked; an
- * omitted `projects` flag counts as unlocked so hosts that predate Projects keep working.
+ * omitted `projects` or `pulse` flag counts as unlocked so hosts that predate those apps keep working.
  */
 export interface AppSwitcherEntitled {
   readonly crm: boolean;
   readonly wms: boolean;
   readonly projects?: boolean;
+  readonly pulse?: boolean;
 }
 
 export interface AppSwitcherProps {
@@ -57,6 +60,7 @@ const APPS: readonly AppMeta[] = [
   { id: 'crm', name: 'KitStak CRM', descriptor: 'Pipelines, boards and automations' },
   { id: 'wms', name: 'KitStak WMS', descriptor: 'Receiving, inventory and shipping' },
   { id: 'projects', name: 'KitStak Projects', descriptor: 'Projects, tasks and timelines' },
+  { id: 'pulse', name: 'KitStak Pulse', descriptor: 'Profit by job, client and service' },
 ];
 
 function GridIcon() {
@@ -165,7 +169,7 @@ function AppRow({
   );
 }
 
-/** Module-grid button + popover listing Portal / CRM / WMS / Projects with entitlement-aware rows. */
+/** Module-grid button + popover listing Portal / CRM / WMS / Projects / Pulse with entitlement-aware rows. */
 export function AppSwitcher({ current, urls, entitled, notInPlan }: AppSwitcherProps) {
   const [open, setOpen] = React.useState(false);
   const [handoff, startHandoff] = useHandoff();

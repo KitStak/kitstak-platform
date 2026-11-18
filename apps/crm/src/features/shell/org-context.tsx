@@ -18,10 +18,10 @@ export interface ShellOrg {
 
 /** Sibling KitStak apps: origins and per-module unlock state (app switcher, cross-app panels). */
 export interface ShellApps {
-  readonly urls: { readonly portal: string; readonly crm: string; readonly wms: string; readonly projects: string };
-  readonly entitled: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  readonly urls: { readonly portal: string; readonly crm: string; readonly wms: string; readonly projects: string; readonly pulse?: string };
+  readonly entitled: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean; readonly pulse?: boolean };
   /** Apps this org cannot use on any plan (WMS outside the platform org). */
-  readonly notInPlan?: readonly ('crm' | 'wms' | 'projects')[];
+  readonly notInPlan?: readonly ('crm' | 'wms' | 'projects' | 'pulse')[];
 }
 
 export interface OrgContextValue {

@@ -32,6 +32,7 @@
     "@kitstak/db": "workspace:*",
     "@kitstak/entitlements": "workspace:*",
     "@kitstak/pm-bridge": "workspace:*",
+    "@kitstak/pulse-bridge": "workspace:*",
     "@kitstak/ui": "workspace:*",
     "@supabase/supabase-js": "2.118.0",
     "@tanstack/react-query": "5.106.1",

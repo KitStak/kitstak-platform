@@ -28,6 +28,7 @@ everything from zero, in journal order.
 | `0003_core_password_change_required.sql` | idx 3 | `core.password_change_required`: users who must replace an administrator-set password. In force only while the stored hash still matches `core.account.password`. FK to `core."user"` guarded like `0001`. |
 | `0004_core_projects_module.sql` | idx 4 | Widens `core.entitlements_module_check` to `('crm', 'wms', 'projects')` for KitStak Projects. |
 | `0005_core_wms_tenants.sql` | idx 5 | `core.wms_tenants`: organization → the Postgres schema holding its WMS warehouse (`wms` for the platform org, `wms_<org hex>` for every other org). Registers the platform org's existing `wms` schema. Mirrored by `apps/wms/drizzle/0012_core_wms_tenants.sql`. |
+| `0006_core_pulse_module.sql` | idx 6 | Widens `core.entitlements_module_check` to `('crm', 'wms', 'projects', 'pulse')` for KitStak Pulse. `apps/pulse/drizzle/0000_pulse_init.sql` re-asserts the same four values, because `apps/projects/drizzle/0000_pm_init.sql` narrows the CHECK to three on a fresh database (Pulse migrates last). |
 
 ## Conventions (§2.2)
 

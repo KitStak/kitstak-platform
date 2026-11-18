@@ -52,6 +52,17 @@ const UPGRADE_COPY: Readonly<Record<Module, UpgradeCopy>> = {
       'Members, teams and role-based permissions',
     ],
   },
+  pulse: {
+    name: 'KitStak Pulse',
+    tagline: 'Know which jobs make money',
+    features: [
+      'Profit for every job, client and service, updated the same day',
+      'A daily log for units, people and hours that takes a minute',
+      'Plan and quote against what really happened',
+      'A list of jobs at risk before they lose money',
+      'CSV in and out for everything, with or without the other apps',
+    ],
+  },
 };
 
 /**
@@ -125,7 +136,7 @@ export default async function UpgradePage({
           ))}
         </ul>
         <p className="mt-5 border-t border-border-subtle pt-4 text-xs text-fg-muted">
-          Per-organization licensing. Pricing is confirmed at checkout — no charge happens on this page.
+          Per-organization licensing. Pricing is confirmed at checkout. No charge happens on this page.
         </p>
       </section>
 

@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm';
 import { check, integer, jsonb, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { coreSchema, createdAt, id, orgId, updatedAt } from '../_shared';
 
-export const ENTITLEMENT_MODULES = ['crm', 'wms', 'projects'] as const;
+export const ENTITLEMENT_MODULES = ['crm', 'wms', 'projects', 'pulse'] as const;
 export type EntitlementModule = (typeof ENTITLEMENT_MODULES)[number];
 
 export const ENTITLEMENT_STATUSES = ['active', 'trialing', 'past_due', 'canceled'] as const;

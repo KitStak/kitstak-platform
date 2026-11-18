@@ -1,0 +1,571 @@
+[
+ {
+  "lens": "VP of Operations at a mid-size 3PL and kitting company with three years on Easy Metrics Profit Management. Tested hands on at http://localhost:3500 with Playwright and /api/v1 calls as admin@kitstak.io and j.okafor@kitstak.io (supervisor, money off), plus Portal 3300 and the WMS work order link. Easy Metrics scores are the public-evidence estimates from competitors.md section 5, not hands on. Other critics were writing to the same org at the same time, so I compared totals within one snapshot rather than before and after. I did not create an empty org, so the time to a first number for a new org was not timed. Scripts and screenshots are in C:\\Users\\MIKELU~1\\AppData\\Local\\Temp\\claude\\3195932b080cc2fc\\56ebca0b-af3f-4a03-9079-299a7342f7d5\\scratchpad\\vp. Cleanup: test jobs J-1041 and J-1042 were deleted; J-1042's line was cleared; the one live entry on J-1041 was soft-deleted (it was already left out of every rollup); four draft imports were discarded. No repo files were edited.",
+  "overall_score_0_100": 85,
+  "easy_metrics_baseline_0_100": 52,
+  "pulse_is_better_product": true,
+  "wowed": false,
+  "category_scores": [
+   {
+    "category": "Profit visibility",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 7,
+    "note": "For 2026-01-01 to 2026-11-18, the job, client, type, service, site and month rows each sum to the total to the cent (profit 45,283,487 cents everywhere). For this month, the summary, company bridge, job rows and client rows all equal 13,928,982 cents. The client page shows that Apex makes money on jobs but loses $23,890 once $91,286 of costs put on the client (chargebacks, freight) are counted."
+   },
+   {
+    "category": "Job costing and budget vs actual",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 3,
+    "note": "On J-1026, Plan vs actual compares the quote for the work done with actuals line by line and projects each line to the finish. The waterfall steps (rate -473.30, efficiency -6,007.07, scrap -13.35, time not on a job -425.97) add up exactly to the -$6,919.69 gap. Both tabs now explain why the quote's 68 an hour differs from the 44 target."
+   },
+   {
+    "category": "Daily production entry",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 3,
+    "note": "There is a whole-day grid with keyboard entry, autosave, copy yesterday's crew and a focus link (/log?job=). It has an inline check ('4 people for 8 hours is 32 labor hours. You typed 3.2.'), fits a 768px tablet with no horizontal scroll, and has a day review that flags units with no hours. Weak spot: the grey placeholder 8 in Hours each looks like a typed value."
+   },
+   {
+    "category": "Cost model depth",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 7,
+    "note": "The labor rate builder works with effective dates and overtime ($17.15 wage + 21% on top + $5.50 overhead = $26.25; overtime $35.60). It covers time not on a job, paid time not on any job, overhead absorbed against the overhead gap, materials and scrap, and costs put on a client. Two figures for 'not on any job' sit side by side and differ by a few dollars."
+   },
+   {
+    "category": "Risk and alerts",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 4,
+    "note": "The open jobs list goes worst first with plain reasons and a projected profit at finish. The alerts inbox shows dollars at stake, a next step, an owner and snooze. A job made with quick-add now correctly reads 'Not enough data'. Nothing leaves the app by email."
+   },
+   {
+    "category": "Data in and out",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 4,
+    "note": "Templates and imports exist for 15 streams, with column matching and a cell-level check (a bad job number, 'abc is not a number', an unknown labor class all show as Problem rows). Export then re-import of 28 production rows and 10 labor rates gives 'No change' on every row, and still does with entry ids blanked. Supervisor export drops the money columns."
+   },
+   {
+    "category": "Integration depth",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 6,
+    "note": "WMS work order WO000092 shows as a Pulse job with a one-click link back to localhost:3000/work-orders/…, and a WMS parts shortage drives its At risk status. Client pages link to the WMS client, and Portal setup tracks the Pulse labor rate. I did not click through CRM deal or quote links this round."
+   },
+   {
+    "category": "Ease of use",
+    "pulse_0_10": 8.5,
+    "easy_metrics_0_10": 5,
+    "note": "Copy is plain everywhere, the info icons explain each number, and global search now finds jobs and clients ('harbor' returns the client and 5 jobs; Enter opens the client). Getting started has 5 steps plus a sample shop. A few copy slips remain."
+   },
+   {
+    "category": "Visual and interaction quality",
+    "pulse_0_10": 8.5,
+    "easy_metrics_0_10": 6,
+    "note": "Matches the KitStak theme and Portal. Charts are readable: the client trend axis is now clamped to -100% to 50% and the outlier week is skipped. Tables, tiles and states are clean, and no page errors appeared on any page I loaded."
+   },
+   {
+    "category": "Enterprise readiness",
+    "pulse_0_10": 7.5,
+    "easy_metrics_0_10": 7,
+    "note": "Money is hidden on the server for the supervisor (labor-rates returns 403; the job detail has no money fields). Every change is audited, and month close has a 6-item checklist and locks rows. Held back by one-click job delete with no bin, no email delivery, and a month close tile that calls job cost 'All cost'."
+   }
+  ],
+  "round_one_issues_rechecked": [
+   {
+    "title": "Deleting a job hides its revenue and cost but its hours still soak up shared cost and overhead, so company profit moves and stops reconciling",
+    "fixed": true,
+    "evidence": "I created J-1041, logged 400 units and 32 hours, and deleted it. In the database every entry on a deleted job (J-1028, J-1030, J-1035, J-1041) now has shared_cents 0. For this month, bridge sharedAppliedCents 1,647,847 equals the sum of sharedCents across job rows. directHours 9,408.75 equals the job-row hours, which is the value from before the test job, so the 32 deleted hours dropped out. workProfit equals the summary, the job rows and the client rows at 13,928,982 cents."
+   },
+   {
+    "title": "A job with a price and no plan shows green 'On track' at a 100% margin",
+    "fixed": true,
+    "evidence": "Quick-add J-1041 (Apex, 1000 units, $2) opens with 'Not enough data. No plan yet, so Pulse cannot tell if this job will make money', 'No projection yet' and an 'Add a quote or a budget' button (shots/qa-job-new.png)."
+   },
+   {
+    "title": "Global search cannot find a job or a client",
+    "fixed": true,
+    "evidence": "/api/v1/search?q=J-1026 returns the job, q=Harbor returns the Harbor Roast Collective client and its jobs, and q=chew toy returns J-1026. Ctrl+K then 'harbor' shows a Client row first, and Enter goes to /clients/<id> (shots/qa-search-harbor.png). /clients now redirects to /profit?by=client."
+   },
+   {
+    "title": "Same job, two pace targets, opposite verdicts",
+    "fixed": true,
+    "evidence": "Both the J-1026 Overview and the Plan vs actual tab now say 'The quote assumed 68 an hour. Your target pace is 44. The crew beats the target but not the quote.' The pinned note reads 'beats the target pace but not the faster pace the quote assumed'."
+   },
+   {
+    "title": "'Margin after all costs' is not after all costs",
+    "fixed": true,
+    "evidence": "On Home and Profit the tile is now 'Margin on jobs 25.9%' with 'Company margin, after overhead: 21.6%' under it. The same naming problem still appears on the Month close screen; see the new blocking issue."
+   },
+   {
+    "title": "Scheduled reports and alerts never leave the app",
+    "fixed": false,
+    "evidence": "/reports/job-profit, 'Build on a schedule' still says 'Pulse builds the report for you and tells the people you pick, inside Pulse. No email is sent.' The text is also in schedule-dialog.tsx line 112."
+   },
+   {
+    "title": "A typo in labor class on import silently creates a new class at a default rate",
+    "fixed": true,
+    "evidence": "A production CSV with labor_class NOPE now gives a Problem row: 'There is no labor class NOPE. Add it first in Labor, or turn on Add new labor classes.' The 'Add new labor classes' switch is off by default, and 'Save nothing' is the default mode (shots/imp-3.png). Re-importing exported rows with blank entry_id gave 28 'No change' and 0 'New'."
+   },
+   {
+    "title": "Client trend chart is unreadable when one week has almost no revenue",
+    "fixed": true,
+    "evidence": "On Apex Threads Co., last 90 days, the margin axis now runs from -100% to 50% with the 18% target line visible. The near-zero Oct 26 week is left as a gap, not a -3,900% spike (shots/client-apex.png)."
+   },
+   {
+    "title": "Small copy and precision slips",
+    "fixed": false,
+    "evidence": "Partly fixed. /clients now goes somewhere, and the audit rows read 'File: production, 28 rows'. Still wrong: /profit?by=service says 'Click a extra service to go one level down'. /labor?tab=time shows 'Paid time not on any job $9,855' next to the payroll check sentence '$9,849 is not on any job or reason', so the gap grew from $1 in round one to $6."
+   }
+  ],
+  "blocking_issues": [
+   {
+    "title": "Month close, the screen finance locks, calls job cost 'All cost' and shows job profit as the month's profit",
+    "where": "/settings/close, October 2026 card and the period list",
+    "repro": "As admin open Settings, Month close, October 2026. It shows Revenue $662,762, 'All cost' $496,971, Profit $165,791, Margin 25%, and the list shows 'Profit $165,791 · 25%'. GET /api/v1/company-bridge?from=2026-10-01&to=2026-10-31 gives workProfitCents 16,579,074 but companyProfitCents 15,205,684, because $5,075.80 of overhead the rates did not cover and $8,658.10 of paid time not on any job are left out. The checklist on the same page lists $70,500 of company costs.",
+    "why_it_matters": "This is the screen my controller signs off and locks. It overstates the month by $13,733.90 (9%) and the label says 'All cost'. Round one fixed this naming on Home and Profit, but the month-end screen, where it matters most, still has it.",
+    "severity": "major",
+    "verified_in_browser": true
+   },
+   {
+    "title": "A job can be deleted with one click, with no confirmation and no way to get it back once the toast is gone",
+    "where": "Job page, More actions, Delete (use-job-actions.ts remove); jobs list row menu",
+    "repro": "Open any job, click the three dots, then Delete. The job is soft deleted at once and only an undo toast appears. I did this on J-1041, which had $800 revenue and 32 logged hours; no dialog appeared. GET /api/v1/jobs/deleted lists it, but no screen in the app uses that list (useDeletedJobs is defined and never used), and there is no deleted filter on Jobs. After the toast closes, the only way back is a developer.",
+    "why_it_matters": "A supervisor who misclicks on J-1005 removes $80K of revenue from every rollup and report. Nobody can restore it without engineering, and the audit log only says it happened. For a product sold on numbers you can trust, delete needs a confirmation that states what will disappear, plus a place to restore deleted jobs.",
+    "severity": "major",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Two different dollar figures for 'paid time not on any job' on the same screen, and again at month close",
+    "where": "/labor?tab=time and /settings/close Payroll check",
+    "repro": "Labor, Time, This month: the tile reads 'Paid time not on any job 547 hours, $9,855', and the payroll check under it reads '$9,849 is not on any job or reason'. For October, the month close Payroll check says the gap is $8,652.19 while the company bridge missingCostCents is 865,810 ($8,658.10), with payrollGapCents 865,219.",
+    "why_it_matters": "These are two different calculations (hours times the loaded rate against gross pay minus pay in Pulse) shown with the same words. Finance will ask which one is right. Name them differently, or reconcile them and show the difference.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Scheduled reports and loss alerts still never leave the app",
+    "where": "/reports/job-profit, Build on a schedule; alerts inbox",
+    "repro": "Open the schedule dialog: 'No email is sent.' Alert rules only create inbox items.",
+    "why_it_matters": "The owner and the CFO do not log in every day. The Monday job profit report and an urgent 'J-1026 is losing $4,662' alert need to reach an inbox. This is still the one thing I would have to keep a spreadsheet and email habit for.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "In Log work, the grey placeholder 8 in 'Hours each' looks like a typed value, and the warning asks for people that were already entered",
+    "where": "/log grid, the Hours each column",
+    "repro": "On a new job row type Units good 400 and People 4, and leave Hours each showing the grey 8. The row saves with hours 0.00 and labor $0, and shows 'Add people and hours' and 'margin 100%'. People is already 4 and the box appears to say 8.",
+    "why_it_matters": "Supervisors will think 8 hours is filled in. The day review does catch it ('J-1042 has 400 units but no labor hours'), so the data is not lost, but the warning wording sends them to the wrong field. Either make 8 a real default or make the placeholder clearly empty and say 'Add the hours each'.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Copy and precision slips",
+    "where": "/profit?by=service, /welcome",
+    "repro": "1. /profit?by=service still says 'Click a extra service to go one level down'. 2. The /welcome checklist says 'Packer: one hour really costs $25.47', which is the Oct 2025 rate; the current rate on Labor is $26.25. 3. Its 'Log a day' step reads '148,000 units in 3,726.3 labor hours on J-1001', which is the whole job, not a day.",
+    "why_it_matters": "These are small, but a product that sells to-the-cent trust gets judged on a wrong labor rate shown on its welcome page.",
+    "severity": "minor",
+    "verified_in_browser": true
+   }
+  ],
+  "best_things": [
+   "The numbers reconcile to the cent. For the year and for this month, the summary, company bridge, and rows by job, client, type, extra service, site and month all give the same profit, shared cost and hours. Deleting a job no longer moves company profit.",
+   "Quote vs actual on J-1026 is better than anything I had in Easy Metrics: the quote is scaled to the work done, every line is projected to the finish, and the waterfall adds up exactly to the -$6,919.69 gap with a plain 'biggest drag' sentence.",
+   "CSV in and out is the best I have seen in this category. Every stream has a template, column matching and cell-level problem messages, 'Save nothing' is the default on a problem, and an export re-imported comes back as all 'No change', even without entry ids.",
+   "The open jobs risk list and alerts say what to do in dollars: 'At this pace the job ends about $4,662 in the red. Each kit costs $0.68 to make and sells for $0.60.' Each comes with a next step, an owner and the amount at stake.",
+   "Client profit includes costs put on the client. Apex looks fine job by job but is -$23,890 once $91,286 of chargebacks and freight are counted. Easy Metrics cannot show this.",
+   "Month close has a real checklist (every hour has a rate, units have hours, days reviewed, payroll check, company costs entered) and locks 661 rows.",
+   "The daily grid is built for a supervisor: keyboard entry, autosave, the inline 'you typed 3.2, did you mean 32' check, a day review that flags units with no hours and pace typos, and it works on a tablet.",
+   "Money hiding for the supervisor is done on the server: labor-rates returns 403, job DTOs carry no price, rate or margin fields, and exports drop the money columns."
+  ],
+  "what_would_wow_me": "I would sign today with no caveats if these were fixed. (1) Month close shows company profit after overhead and paid time not on any job, beside job profit, and stops calling job cost 'All cost'. The number I lock has to be the company number. (2) Job delete has a confirmation that says what will leave the reports ('J-1005 has $80,375 of revenue and 565 hours'), plus a Deleted jobs view with Restore for at least 30 days. (3) Scheduled reports and urgent alerts can go out by email, with the report attached or linked. (4) One defined 'paid time not on any job' dollar figure, or two clearly named ones with the difference explained in the info popover. (5) Hours each defaults to a real 8, or the placeholder is plainly empty and the warning names the missing field. (6) The three copy slips fixed. Optionally, time a brand new empty org from first login to a first job profit number to prove the 10-minute claim. Everything else (reconciliation, quote vs actual, import and export, risk list, daily entry) already beats what I run today.",
+  "verdict_paragraph": "Pulse is clearly the better product for a kitting and 3PL shop. Eight of the nine round one issues are fixed or mostly fixed, and the most important one, deleted jobs still pulling shared cost, is fixed and proven: every rollup agrees to the cent, within the same snapshot, while other testers were writing to the same org. Quote vs actual per job with an exact waterfall, cell-level CSV import with safe round trips, a supervisor grid with sanity checks, dollar-based risk alerts, and client profit that includes chargebacks are all things Easy Metrics does not do. I score it 85 against Easy Metrics' estimated 52, with every category at 7.5 or higher, so it clears the rubric's pass bar. I am not wowed yet, for three reasons. The month close screen overstates October by $13,734 because it shows job profit as if it were all costs. A misclick can delete a job with $80K of revenue and leave no way back once the undo toast closes. Nothing reaches my inbox. None of these are big builds, but the first two touch the trust that is the whole point of this product, so I want them fixed before the PO."
+ },
+ {
+  "lens": "Staff engineer and solutions architect, technical due diligence: integration depth with Portal, CRM, WMS and Projects in both directions, standalone mode, math correctness against raw rows, data integrity under concurrency, money hiding for roles without money on every route, security and operational maturity. Tested against the running servers (Pulse 3500, WMS 3000, Portal 3300) with Node API scripts, direct SQL on the local database and Playwright screenshots. I also ran my own short-lived Pulse server on port 3511 with ENTITLEMENTS_DEV_ALLOW_ALL=0 to test plan gating. Scripts and screenshots are in C:\\Users\\MIKELU~1\\AppData\\Local\\Temp\\claude\\3195932b080cc2fc\\56ebca0b-af3f-4a03-9079-299a7342f7d5\\scratchpad\\se2. Cleanup: the production row I wrote to was set back to 2201 units (now version 3). The fake change note and the temporary kitstak pulse entitlement row were deleted. The 3511 server was stopped and apps/pulse/next-env.d.ts was restored. git status is clean. Easy Metrics scores are the section 5 public-evidence estimates, not hands on.",
+  "overall_score_0_100": 80,
+  "easy_metrics_baseline_0_100": 52,
+  "pulse_is_better_product": true,
+  "wowed": false,
+  "category_scores": [
+   {
+    "category": "1 Profit visibility",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 7,
+    "note": "For all 72 live jobs (44 kitstak, 28 northwind), revenue, labor, material, other, shared, cost, profit and margin match my own SQL over the raw entry tables to the cent. Profit by client, job, site and service for Sep 1 to Nov 18 all total 165,910,558 revenue and 42,079,589 profit, the same as /summary."
+   },
+   {
+    "category": "2 Job costing and budget vs actual",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 3,
+    "note": "Plan, quote and price endpoints return per-job plans, and projected profit at finish is the same in Pulse, Portal and WMS (J-1026 shows -$4,662 everywhere). I did not go through the variance breakdown by hand."
+   },
+   {
+    "category": "3 Daily production entry",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 3,
+    "note": "6 parallel PUTs on one row with the same version gave one 200 and five 409s, each 409 carrying the fresh row. A missing or null version also gives 409. A write to another org's row is 404, and a cross-site origin is 403."
+   },
+   {
+    "category": "4 Cost model depth",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 7,
+    "note": "Labor cost on all 1,568 production rows equals hours times the stamped rate plus overtime, with exact cents. Shared cost and service material flow into job cost exactly as the facts view defines."
+   },
+   {
+    "category": "5 Risk and alerts",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 4,
+    "note": "Losing and at-risk counts (3 plus 4) and the profit-at-finish figures match across Pulse /summary, the Portal card and the WMS job panel. The scheduler tick ran for real (2 orgs, 39 jobs) and wrote cron sync runs."
+   },
+   {
+    "category": "6 Data in and out",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 4,
+    "note": "CSV exports work for every stream, the labor rates export is refused for no-money roles, and the export guards text cells against spreadsheet formulas (unit tested). I did not run a full import round trip myself."
+   },
+   {
+    "category": "7 Integration depth",
+    "pulse_0_10": 7,
+    "easy_metrics_0_10": 6,
+    "note": "WMS works both ways live: the work order page shows Pulse job profit, hidden for no-money roles. A change note was taken by a Pulse page load within seconds, and parts are dated on the build day. CRM deal search works. Still missing: warehouse extra services are not written into Pulse, contract rates do not set prices, and Projects could not be exercised because pm.* is empty here."
+   },
+   {
+    "category": "8 Ease of use",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 5,
+    "note": "Plain errors on every refusal I hit, for example 'Labor rates are money. Ask an admin to let you see money, then export again.' The job page headline reads like a sentence."
+   },
+   {
+    "category": "9 Visual and interaction quality",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 6,
+    "note": "The job page, Connected apps, the Portal card and the WMS panel share one visual language and the figures agree. No console errors on the pages I loaded. Not my main lens."
+   },
+   {
+    "category": "10 Enterprise readiness",
+    "pulse_0_10": 7,
+    "easy_metrics_0_10": 7,
+    "note": "Strong: money hiding, entitlement 402, login rate limiting (429), origin checks, security headers and 675 tests. Weak: no CSP, no CI workflow, RLS turned on with zero policies, and one flaky kiosk test."
+   }
+  ],
+  "round_one_issues_rechecked": [
+   {
+    "title": "CRM deal search always returns nothing (SQL error swallowed)",
+    "fixed": true,
+    "evidence": "As maya: /api/v1/integrations/search?type=crm_deal returns 7 rows for q=Cobalt, 8 for q=Frontier and 12 for q=a and for an empty q, all won deals with CRM paths."
+   },
+   {
+    "title": "Two people saving the same work log row at once: both win, one edit is lost",
+    "fixed": true,
+    "evidence": "6 parallel PUT /api/v1/log/rows with version 1: one 200 (2202), five 409 CONFLICT. No version and version null both give 409 with error.fresh. The update is now WHERE id AND version, after SELECT FOR UPDATE. The server action path's forms send the version."
+   },
+   {
+    "title": "Warehouse parts are dated the day of the sync, not the day they were used",
+    "fixed": true,
+    "evidence": "pulse.material_usage for WO000088, WO000090 and WO000091 is dated 2026-10-14, 10-22 and 10-27, the build days, though the rows were created 2026-11-18. The refs are the stable woc:<component>:<date> form."
+   },
+   {
+    "title": "Claimed WMS and Projects integration is thinner than the spec says",
+    "fixed": false,
+    "evidence": "Partly fixed. Still open: pulse.vas_entries has 399 manual rows and 0 from wms, while Connected apps counts 12 warehouse extra service records, 8 with no price. Contract rates still do not set job prices (CONTRACTS 19.4). The gone-Projects-time removal is in code, but pm.projects has 0 rows in this environment, so I could not exercise it."
+   },
+   {
+    "title": "Change notes from sibling apps are marked done before the sync runs, and the event path is unproven",
+    "fixed": true,
+    "evidence": "I inserted a wms_work_order_changed note for WO000088 and loaded a Pulse page. attempts went to 1, processed_at was set about 0.4 s after claimed_at, and sync_runs shows trigger event, status ok. GET /api/v1/cron/tick with the secret returned {orgs:2, jobs:39, failed:0}, and sync_runs now has trigger cron rows. Without the secret the answer is 401."
+   },
+   {
+    "title": "A no money role can read the payroll gap in dollars and the burden percents",
+    "fixed": true,
+    "evidence": "I walked about 95 GET /api/v1 routes as j.okafor (supervisor) and cs.team (viewer), flagging any money-named key with a value. None returned payrollGapCents, default burden Bp, or any *Cents value. I also scanned 48 page HTML payloads for *Cents, wage and burden keys and found none."
+   },
+   {
+    "title": "Standalone and plan gating cannot be proven on this build",
+    "fixed": true,
+    "evidence": "On my 3511 server with allow-all off, kitstak without a pulse row gets 402 NOT_ENTITLED on /api/v1/jobs and /me. With only a pulse row: modules crm, wms and projects are false, Connected apps shows not_on_plan with Portal upgrade links, and the integrations search returns []."
+   },
+   {
+    "title": "Explain with an unknown job id answers for the whole workspace",
+    "fixed": true,
+    "evidence": "As maya, /api/v1/explain?metric=profit&job=<kitstak job id> returns 404 NOT_FOUND."
+   },
+   {
+    "title": "Production list API stops at 1,000 rows with no flag",
+    "fixed": true,
+    "evidence": "/api/v1/production?limit=2 returns meta {truncated:true, limit:2, offset:0, nextOffset:2}. The same class of problem remains on /profit/facts (see the new issue)."
+   },
+   {
+    "title": "Isolation between workspaces rests on application code only",
+    "fixed": false,
+    "evidence": "pg_policies for schema pulse is still 0, with RLS turned on for 46 tables and forced on none. /login sends nosniff, X-Frame-Options DENY, Referrer-Policy and Permissions-Policy, but no Content-Security-Policy. The repo has no .github/workflows. App-level isolation held in every probe: kitstak job, client and service ids answer 404 to maya, and org header spoofing is ignored."
+   }
+  ],
+  "blocking_issues": [
+   {
+    "title": "Warehouse extra services and contract rates still do not flow into Pulse money",
+    "where": "apps/pulse/src/server/domain/sync.ts (WMS pass); Connected apps WMS card; CONTRACTS 19.4 Integrations",
+    "repro": "As admin@kitstak.io: GET /api/v1/integrations/status shows wms counts vasRecords 12 and vasNoPrice 8. SQL: select source, count(*) from pulse.vas_entries gives only manual 399, with 0 rows from wms. wms.billing_fees rates never set a job price.",
+    "why_it_matters": "For a kitting 3PL, the warehouse's extra service records and contract rates are the main source of revenue truth. Someone still has to retype or import them, which is exactly the double entry a bundled suite should remove, and it is the one integration gap Easy Metrics' feed model does not have.",
+    "severity": "major",
+    "verified_in_browser": false
+   },
+   {
+    "title": "No CI, no CSP, and RLS turned on with zero policies",
+    "where": "repo root (no .github/workflows); response headers on http://localhost:3500; pulse schema policies",
+    "repro": "ls .github/workflows: not found. curl -sI http://localhost:3500/login: no Content-Security-Policy header. select count(*) from pg_policies where schemaname='pulse' returns 0, while 46 tables have relrowsecurity on and relforcerowsecurity off. The app connects as the owner, so RLS never applies.",
+    "why_it_matters": "675 tests exist, but nothing runs them on a change, and one of them is flaky. Tenant isolation is correct today only because every query in application code is correct. Procurement security reviews ask for all three of these.",
+    "severity": "minor",
+    "verified_in_browser": false
+   },
+   {
+    "title": "Projects integration could not be exercised: no Projects data in this environment",
+    "where": "pm schema in the local database; /api/v1/integrations/search?type=pm_project",
+    "repro": "select count(*) from pm.projects returns 0, and no pm table has live rows. As maya, the pm_project search returns []. Connected apps shows Projects linkedProjects 0 and projectsWithTime 0.",
+    "why_it_matters": "I cannot sign off on time import from Projects, or on the round two fix that removes deleted Projects time, without a seeded project with logged time to watch flow into labor cost.",
+    "severity": "minor",
+    "verified_in_browser": false
+   },
+   {
+    "title": "A job keeps an outbound link to a sibling app the plan no longer includes",
+    "where": "Job header link chip, /jobs/WO000088; JobDetailDTO.links[].url",
+    "repro": "On my 3511 server (allow-all off) with kitstak granted only pulse, /api/v1/me shows wms false. /jobs/WO000088 still renders the 'WO000088 Back-to-school de...' chip linking to http://localhost:3000/work-orders/879c6728... Screenshot: shots/admin-3511-jobs-WO000088.png.",
+    "why_it_matters": "After a downgrade or a lapsed WMS subscription, the link leads to an app the customer cannot open. The spec promises no broken links when siblings are absent.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "/api/v1/profit/facts silently caps at 500 rows",
+    "where": "apps/pulse/src/app/api/v1/profit/facts/route.ts (limit default 500, max 5000)",
+    "repro": "As admin: GET /api/v1/profit/facts?from=2026-09-01&to=2026-11-18 returns exactly 500 rows, with no truncated flag and no meta. /profit/entries has truncated:true, and /production now has meta.",
+    "why_it_matters": "This is the same class of bug fixed on /production in round two: any script or screen that totals the drill-down rows undercounts without knowing.",
+    "severity": "minor",
+    "verified_in_browser": false
+   },
+   {
+    "title": "Flaky kiosk test",
+    "where": "apps/pulse kiosk database test (the getKioskState('short') assertion near line 398)",
+    "repro": "pnpm exec vitest run, run 3 times in apps/pulse: the first run failed 1 of 675; the next two passed 675 of 675.",
+    "why_it_matters": "A flaky test in a suite with no CI teaches people to ignore red builds.",
+    "severity": "minor",
+    "verified_in_browser": false
+   },
+   {
+    "title": "Alert rule sentences show dollar thresholds to no-money roles",
+    "where": "/alerts/rules",
+    "repro": "Signed in as j.okafor@kitstak.io or cs.team@kitstak.io, the /alerts/rules HTML contains 'Tell me when more than $2,000'.",
+    "why_it_matters": "A known gap (CONTRACTS 19.4). It is a setting, not a result, but it breaks the clean promise that no money reaches a no-money role on any route.",
+    "severity": "minor",
+    "verified_in_browser": false
+   }
+  ],
+  "best_things": [
+   "The math is airtight: all 72 jobs in two orgs match my independent SQL over raw production, material, cost, revenue and service rows to the cent, all 1,568 labor rows match hours times rate, and five profit groupings total identically.",
+   "Money hiding held on every one of about 95 API routes and 48 page payloads for both no-money roles, and the WMS panel and Portal card honor it too: moneyHidden true with null cents.",
+   "Real optimistic concurrency: a row lock plus a version predicate, with a 409 that returns the fresh row. It held under 6 parallel writes.",
+   "The sibling event path and the scheduler work live: a change note is taken and settled on the next page load, and the cron tick syncs every org.",
+   "Plan gating works: 402 NOT_ENTITLED without a grant, sibling modules turn off, and Connected apps sends people to Portal upgrade.",
+   "The same numbers everywhere: projected profit and losing or at-risk counts are identical in Pulse, the Portal card and the WMS work order panel.",
+   "Security basics are present: login rate limiting (429), origin and cross-site checks on writes, a scheduler secret, security headers, and a CSV formula guard."
+  ],
+  "what_would_wow_me": "Four things would get me to sign. (1) The WMS sync writes warehouse extra service records into vas_entries, and contract or billing rates set job prices, with a source link and with no duplicates when the sync runs twice. (2) A seeded Projects workspace where logged time shows up as Pulse labor, and deleting it in Projects removes it from Pulse, shown live. (3) A CI workflow that runs typecheck, lint, the 675 tests (with the kiosk flake fixed) and the Playwright suite on every push, plus a CSP header and either real RLS policies keyed on a session org setting or a written decision with a test proving a plain role sees nothing. (4) Small cleanups: a truncated flag on /profit/facts, links to siblings that are off the plan shown as plain text, and alert rule thresholds hidden from no-money roles. With (1) to (3) done, this beats Easy Metrics on every axis I care about.",
+  "verdict_paragraph": "Round two fixed the hard engineering problems I raised in round one, and I proved each fix against the running system rather than reading the changelog. Lost edits are gone under real parallel load. Warehouse parts are dated on the build day. Change notes and the scheduler work end to end. Payroll and burden figures no longer reach no-money roles on any route or page payload. Plan gating returns 402 and hides sibling modules when I turned the dev bypass off. Most importantly for a profit system, every job total and every rollup matches the raw rows to the cent across 72 jobs in two orgs. That is a better-engineered and more transparent product than Easy Metrics for a kitting shop, which I put at 80 against 52. I still would not sign today. The warehouse integration stops short of money: 12 extra service records and the contract rates still never reach Pulse revenue. I could not verify Projects at all because there is no Projects data in this environment. And there is no CI, no CSP and no database-level tenant guard behind the application code. None of these is far away, and the critics are not asking for anything unreasonable here, but they stand between a strong product and one I would put my name on."
+ },
+ {
+  "lens": "Principal product designer, enterprise UX: visual quality, consistency with the sibling KitStak apps, hierarchy, navigation, daily entry flow, responsive at 1440 / 768 / 390, dark mode, accessibility (axe-core), 8th grade usability. I tested the running app at localhost:3500 with Playwright 1.55 and @axe-core/playwright 4.14 (wcag2a, wcag2aa, wcag21aa). I swept 20 routes at 1440 and 390 in light and dark, and at 768 in light, which is 100 page loads with axe on each. I also checked roles as admin@kitstak.io and as the supervisor j.okafor@kitstak.io at 768, and screenshotted CRM, Projects, Portal and WMS for comparison. Easy Metrics scores are the public evidence estimates from competitors.md section 5. I did not test Easy Metrics hands on. Scripts and screenshots are in C:\\Users\\MIKELU~1\\AppData\\Local\\Temp\\claude\\3195932b080cc2fc\\56ebca0b-af3f-4a03-9079-299a7342f7d5\\scratchpad\\ux. CLEANUP NOTE: I created test jobs J-1043, J-1044 and J-1045 through quick add and deleted them in the UI, so they are soft deleted. The same flow made a near-duplicate client \"Harbor\" (code HARBOR, id 7a83c309-1f06-409f-9d77-95eb7f26ec50), which is still active. My attempt to delete it from Settings was blocked by the permission classifier, so it needs manual removal. A test log line on J-1040 was cleared with \"Clear this line\", and the API confirms no entries are left for it today.",
+  "overall_score_0_100": 85,
+  "easy_metrics_baseline_0_100": 52,
+  "pulse_is_better_product": true,
+  "wowed": false,
+  "category_scores": [
+   {
+    "category": "1. Profit visibility",
+    "pulse_0_10": 8.5,
+    "easy_metrics_0_10": 7,
+    "note": "The Profit explorer has Jobs, Clients, Job types, Extra services, Sites, Months, Weeks and Days tabs, with filters, Table, Chart, Contribution, Pareto and Pivot views, and CSV export. The KPIs match across Home, Profit and the Job profit report ($518,830 / $379,540 / $139,290). The report chart shows an unexplained 'Client level, no job, -$21,268' bar, which is the biggest loser on the chart."
+   },
+   {
+    "category": "2. Job costing and budget vs actual",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 3,
+    "note": "/jobs/J-1012/plan shows Plan vs actual and Quote vs actual, For the work done so far and Whole job, a Projected at finish column, and 'There is no budget yet, so your plan is the quote.' This is clearly better than anything at the customer level only."
+   },
+   {
+    "category": "3. Daily production entry",
+    "pulse_0_10": 8.5,
+    "easy_metrics_0_10": 3,
+    "note": "One grid for all jobs for the day, with crew lines, copy yesterday's crew, the F shortcut to find a job, live pace chips, a sticky day summary and 'All changes saved'. The inline check fired ('4 people for 8 hours is 32 labor hours. You typed 3.2'), but the grid had already rewritten Hours each to 0.8, so the message contradicts the screen. Labor class and job pickers are still native selects."
+   },
+   {
+    "category": "4. Cost model depth",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 7,
+    "note": "Seen: time not on a job, overhead (company margin after overhead), material, other cost, cost to serve on the client page, and target pace. I did not test the rate builder in depth under this lens."
+   },
+   {
+    "category": "5. Risk and alerts",
+    "pulse_0_10": 8.5,
+    "easy_metrics_0_10": 4,
+    "note": "Jobs are sorted worst first with a plain reason. Status chips with counts read Losing 3, At risk 4, Not enough data 2. The Alerts inbox has Why, Next step, $ at stake, owner, Snooze, Reassign and Done. Loss figures now match between Home, Alerts and Jobs ($4,662, $2,896)."
+   },
+   {
+    "category": "6. Data in and out",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 4,
+    "note": "Import production, Import jobs, Export CSV on every list, Download CSV on reports, and paste rows from a spreadsheet in Many days. I did not run a full import round trip under this lens."
+   },
+   {
+    "category": "7. Integration depth",
+    "pulse_0_10": 7.5,
+    "easy_metrics_0_10": 6,
+    "note": "The app switcher lists Portal, CRM, WMS, Projects and Pulse. WMS work orders (WO000092, WO000094) show up as jobs, clients carry source 'wms', and job pages have a Linked records panel. The header and wordmark match CRM exactly."
+   },
+   {
+    "category": "8. Ease of use (8th grade)",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 5,
+    "note": "Copy is plain and every number has an info popover. But the Profit page has four margin names on one screen and across pages ('Margin on jobs', 'Margin before shared costs', 'Margin after all costs', 'Company margin, after overhead'), which an 8th grader cannot tell apart."
+   },
+   {
+    "category": "9. Visual and interaction quality",
+    "pulse_0_10": 8.5,
+    "easy_metrics_0_10": 6,
+    "note": "axe found 0 violations on 99 of 100 page loads (light and dark at 1440 and 390, light at 768). The one left is scrollable-region-focusable on Plan vs actual at 768. No horizontal page overflow anywhere. Every page title sits at x=24 now. Dark mode is clean. Hydration mismatch console errors on /jobs and /alerts at 390."
+   },
+   {
+    "category": "10. Enterprise readiness",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 7,
+    "note": "The supervisor sees no $ on any page, gets 'This page is not part of your role' on /profit, and Home redirects to /log. Undo toasts on delete. Two flow defects remain: deleting a job lands on a not-found page, and quick add makes duplicate clients silently."
+   }
+  ],
+  "round_one_issues_rechecked": [
+   {
+    "title": "The same job shows different loss figures on the same screen and across screens",
+    "fixed": true,
+    "evidence": "Home 'Jobs that need you' and the Alerts card both say J-1026 -$4,662 and J-1012 -$2,896, and /jobs and /alerts agree. On /jobs/J-1012 the Pace card now says '27.5' with 'In the last 5 work days: 27.6', and cost reads '$1.41 a set' so far against '$1.42 to make' by the finish, so both pairs are labeled. Small leftovers: the reason line says 'Margin is heading for -5%' while the card beside it says -4.5%, and Labor hours shows 801 while Plan vs actual shows 800.5."
+   },
+   {
+    "title": "A brand new job with no work logged is called 'On track' with a 100% margin",
+    "fixed": true,
+    "evidence": "Quick add J-1043 (1,000 units at $1.25) showed 'Not enough data. No plan yet, so Pulse cannot tell if this job will make money.' with 'None yet' and 'No projection'."
+   },
+   {
+    "title": "Command palette does not find jobs or clients",
+    "fixed": true,
+    "evidence": "Ctrl+K 'harbor' lists the client Harbor Roast Collective plus 5 jobs under Best matches. Enter opens /clients/ea3beb65..., and ArrowDown then Enter opens /jobs/J-1012. '1026' finds J-1026. Only nit: pressing Enter before results finish loading falls through to /search?q=."
+   },
+   {
+    "title": "No alerts bell and no alert count on a phone",
+    "fixed": true,
+    "evidence": "At 390x844 the header shows the bell with a 23 badge, and the drawer reads 'Jobs 7 ... Alerts 23'."
+   },
+   {
+    "title": "Jobs table at tablet width hides every number",
+    "fixed": true,
+    "evidence": "/jobs at 768x1024 now shows two columns of cards with status, reason, units, Margin now and At finish (screenshot light-768-jobs.png)."
+   },
+   {
+    "title": "Page width changes from route to route",
+    "fixed": true,
+    "evidence": "At 1440 the h1 left edge is x=24 on all 20 routes measured, including /labor, /alerts, /calculator, /reports and /reports/job-profit."
+   },
+   {
+    "title": "'Plan vs actual' is selected but the card says 'Quote vs actual'",
+    "fixed": true,
+    "evidence": "The card is titled 'Plan vs actual' and the first line reads 'There is no budget yet, so your plan is the quote.'"
+   },
+   {
+    "title": "Mixed date and select controls",
+    "fixed": false,
+    "evidence": "Half fixed. The dates are done: 0 input[type=date] on /jobs Filters and /log/bulk, and the Day cell uses the KitStak picker ('Nov 18, 2026'). The selects are not: /log still has 29 native <select> elements (labor class), the /log/bulk 'Pick a job' is a native select, and the quick add Client box on /jobs is a native datalist with the browser's triangle."
+   },
+   {
+    "title": "Report chart labels jobs by number only and prints half dollars",
+    "fixed": true,
+    "evidence": "The axis reads 'J-1005 Lumen Skincare launch kit' and similar. Bars read '-$503' and '-$591'. The table under the chart still mixes '-$502.65' with '$42,925'."
+   },
+   {
+    "title": "Latest work table lists crew lines as if they were separate days",
+    "fixed": true,
+    "evidence": "Latest work on J-1012 shows one row per day: Nov 18 1,719 / 64 h / 26.9, Nov 17 1,836 / 64 h, and so on."
+   },
+   {
+    "title": "Leftover ARIA errors on three pages",
+    "fixed": true,
+    "evidence": "axe reports 0 violations on /profit, /reports/job-profit, /alerts and /jobs/J-1012 at 1440 and 390 in both themes. There is one new one: scrollable-region-focusable (serious) on /jobs/J-1012/plan at 768."
+   },
+   {
+    "title": "'How we got this' popover is cut off at the bottom of the log grid",
+    "fixed": true,
+    "evidence": "On /log at 1440x900 the first row's info popover spans y=12 to y=675, and the sticky day footer starts at y=837. Nothing is clipped."
+   }
+  ],
+  "blocking_issues": [
+   {
+    "title": "Deleting a job from its page lands on 'We could not find that'",
+    "where": "/jobs/<number> > More (...) > Delete",
+    "repro": "Sign in as admin@kitstak.io and add a throwaway job with the quick add strip on /jobs. Open it from the list, then click the More button (aria-label 'More ...') and choose Delete. About 3 s later the URL is /jobs, but the page body is the 404 state 'We could not find that. It may have been moved or deleted...' with a 'See all jobs' button. It reproduced 3 out of 3 times (J-1043, J-1044, J-1045). A browser reload shows the jobs list. Screenshot: i-del-after.png.",
+    "why_it_matters": "Delete is a common admin action. Landing on a not-found screen at the jobs URL looks like the app broke or the jobs list is gone. Enterprise tools route back to the list with an Undo toast and nothing else.",
+    "severity": "major",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Quick add silently creates a near-duplicate client from a partial name",
+    "where": "/jobs quick add strip, Client box",
+    "repro": "On /jobs, type 'Harbor' in the Client box and press Enter. Don't pick the suggestion. Fill the job name, units and price, then press Enter. The toast says only 'Added J-1043: UXCRIT temp job'. GET /api/v1/clients?q=harbor now returns a new client 'Harbor' (code HARBOR, source manual) next to 'Harbor Roast Collective' (HRB, source wms). Nothing warned that a new client was being made, and the existing look-alike check is not applied here.",
+    "why_it_matters": "Duplicate clients split profit by client, which is the main rollup a buyer pays for. A floor lead typing fast will make them every week. The box is also a native datalist, which looks different from every other KitStak picker.",
+    "severity": "major",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Plan vs actual hides 'Projected at finish' at tablet width with no scroll cue",
+    "where": "/jobs/J-1012/plan at 768x1024",
+    "repro": "Open the Plan vs actual tab at 768. The table cuts off at 'Projected a' and the values ($47,..., -$2,8...) are clipped at the right edge. There is no fade or arrow to show it scrolls, and axe reports scrollable-region-focusable (serious) on the .md:block wrapper, so keyboard users cannot reach it.",
+    "why_it_matters": "The projected loss at finish is the whole point of this tab, and tablet is the floor manager's device. It is the same class of issue as round one's 768 jobs table.",
+    "severity": "major",
+    "verified_in_browser": true
+   },
+   {
+    "title": "The labor hours check contradicts the numbers on screen",
+    "where": "/log day grid, any row",
+    "repro": "On the J-1040 row type People 4, Tab, Hours each 8, Tab, Labor hours 3.2, Tab. The grid rewrites Hours each to 0.8, so the row reads 4 x 0.8 = 3.2. Under it, the warning says '4 people for 8 hours is 32 labor hours. You typed 3.2. Is that right?' The right column also reads '3.2 logged' with no 'hours'. Screenshot: i-log-check.png.",
+    "why_it_matters": "The inline check is a key differentiator. When it argues with the visible numbers, the supervisor does not know which one Pulse saved. It should either keep the typed 8 and flag the conflict, or not rewrite the field.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Four different 'margin' names across the money screens",
+    "where": "/profit KPI row, job page, /reports/job-profit",
+    "repro": "/profit shows 'Margin on jobs 26.9%', 'Margin before shared costs 30%' and 'Company margin, after overhead: 22.5%' on one screen. /reports/job-profit calls 26.9% 'Margin after all costs'. The job page uses 'Margin after all costs' and 'Before time not on a job'.",
+    "why_it_matters": "An 8th grader cannot tell which margin is the real one. Pick two names (job margin, company margin), use them everywhere, and put the rest in the info popover.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "'Client level, no job' is the biggest bar in 'Profit by job' and is never explained",
+    "where": "/reports/job-profit, Profit by job chart and table",
+    "repro": "The chart subtitle says 'The 6 best and the 6 worst by profit', but the worst bar is 'Client level, no job -$21,268', which is ten times any real job. Nothing on the page says what it is or links to the rows behind it.",
+    "why_it_matters": "A buyer seeing a $21K loss with no job will lose trust in the report. It needs a one line explanation and a drill-down, or it belongs in its own row outside the job ranking.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Hydration mismatch errors and late loading KPIs",
+    "where": "/jobs and /alerts at 390; Home at any width",
+    "repro": "At 390 in dark, the console logs 'A tree hydrated but some attributes of the server rendered HTML didn't match the client properties' on /jobs and /alerts. On Home, 'Jobs that need you' and the KPI 'vs before' chips appear about 3.1 s after navigation. The cards render first without the chips and then get taller.",
+    "why_it_matters": "It shows as polish debt: layout shift on the first screen people see, and console errors a technical buyer will notice.",
+    "severity": "minor",
+    "verified_in_browser": true
+   }
+  ],
+  "best_things": [
+   "Visual consistency with the suite is real. The header, KITSTAK wordmark with app label, top nav with red underline, red primary buttons, help, apps grid, theme toggle and avatar match CRM pixel for pixel, and the app switcher lists all five apps.",
+   "Accessibility is close to clean: axe found 0 violations on 99 of 100 page loads, at 1440 and 390 in light and dark, and at 768 in light.",
+   "No horizontal page overflow on any route at 390, 768 or 1440, and the 768 jobs view now switches to readable cards.",
+   "The job page is clear about where things stand. A red 'Losing money' banner gives a plain reason ('At this pace the job ends about $2,896 in the red'), three numbered causes and two next-step buttons, and the headline numbers are labeled 'so far' or 'at finish'.",
+   "The day grid is built for a supervisor: all jobs on one sheet, crew lines, copy yesterday's crew, F to find, live pace chips ('26.9 of 46 an hour, Too slow'), and a sticky summary of units, hours, labor cost, earned and margin today.",
+   "Role handling is clean. The supervisor sees no dollar signs anywhere, Home goes straight to Log work, and /profit explains in plain words why it is closed.",
+   "The command palette is now a real record finder: clients and jobs with status in Best matches, and Enter goes straight to the record.",
+   "Round one fixes landed: 11 of 12 round one issues are fixed, and the twelfth is half fixed."
+  ],
+  "what_would_wow_me": "These would get a signed PO from me today: (1) Deleting a job routes to /jobs with the Undo toast, never to the not-found state. (2) Quick add Client becomes the KitStak combobox: an exact match picks it, a partial match shows 'Did you mean Harbor Roast Collective?', and a new client needs an explicit 'Create Harbor' row, with the toast saying a client was made. (3) The labor class and job pickers in /log and /log/bulk become the KitStak select, styled like everything else. (4) Plan vs actual at 768 either collapses to label-and-value cards like /jobs does, or pins the Projected at finish column, and the scroll wrapper gets tabindex and a fade cue. (5) The hours check keeps what the user typed and flags the conflict instead of rewriting Hours each. (6) Two margin names across the whole product, and the 'Client level, no job' bar explained with a drill-down. (7) No hydration errors, and the Home KPI chips reserve their space so the first screen doesn't jump. None of these is a redesign. The base is already well past Easy Metrics on every category I could see.",
+  "verdict_paragraph": "Pulse is now a strong enterprise product and clearly better than the Easy Metrics baseline on what I can judge. It looks and moves like CRM, it holds up at 1440, 768 and 390 in both themes, axe is clean on 99 of 100 page loads, and 11 of 12 round one issues are fixed. The twelfth is half fixed: the dates are done, but the log grid still uses native selects. The money story finally agrees with itself across Home, Jobs, Alerts and the job page, and new jobs say 'Not enough data' instead of claiming a 100% margin. I am not signing without caveats because of two flow defects a buyer would hit in week one. Deleting a job drops you on a 'We could not find that' screen. Quick add quietly creates near-duplicate clients, and duplicate clients corrupt the client profit rollup. There is also a short list of polish items: projected values cut off at tablet width on Plan vs actual, an inline hours check that contradicts the screen, four names for 'margin', and an unexplained $21K 'Client level, no job' bar. These critiques are specific and fixable in a short round, not a sign of impossible standards. Score 85 out of 100 against an Easy Metrics estimate of 52."
+ }
+]

@@ -9,17 +9,22 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
 import { findWmsTenantSchema, wmsTable } from '@kitstak/db/wms-tenants';
+import { formatMarginBp, getOrgSummary, listJobsNeedingAttention, type BridgeExecutor, type PulseJobSummary } from '@kitstak/pulse-bridge';
 import { db } from '@/server/db';
 
 export interface TileStat {
   readonly label: string;
   readonly value: number;
+  /** Text shown in place of the bare number (a percent, for example). */
+  readonly display?: string;
+  readonly tone?: 'default' | 'warning' | 'danger';
 }
 
 export interface LauncherStats {
   readonly crm: readonly TileStat[] | null;
   readonly wms: readonly TileStat[] | null;
   readonly projects: readonly TileStat[] | null;
+  readonly pulse: readonly TileStat[] | null;
 }
 
 /**
@@ -150,10 +155,74 @@ async function projectsStats(orgId: string): Promise<readonly TileStat[] | null>
   }
 }
 
+/**
+ * KitStak Pulse: open jobs, jobs at risk (at risk plus losing money) and the margin this month
+ * so far. Read through @kitstak/pulse-bridge, which checks `to_regclass('pulse.jobs')`, answers
+ * for this person's Pulse role and hides the margin from people who may not see money (they get
+ * the count of jobs losing money in its place). Not installed, no role or any failure: null.
+ */
+async function pulseStats(orgId: string, userId: string | undefined): Promise<readonly TileStat[] | null> {
+  if (!userId) return null;
+  try {
+    const summary = await getOrgSummary(db as unknown as BridgeExecutor, { orgId, userId });
+    if (!summary.available) return null;
+    // No jobs at all: all zero with no display text, so the tile shows its teaching empty state.
+    if (summary.totalJobs === 0) {
+      return [
+        { label: 'Open jobs', value: 0 },
+        { label: 'Losing or at risk', value: 0 },
+      ];
+    }
+    const risky = summary.atRisk + summary.losing;
+    const third: TileStat = summary.moneyHidden
+      ? { label: 'Losing money', value: summary.losing, display: String(summary.losing), tone: summary.losing > 0 ? 'danger' : 'default' }
+      : {
+          label: 'Margin this month',
+          value: summary.marginBp ?? 0,
+          display: formatMarginBp(summary.marginBp, { empty: 'None yet' }),
+          tone: summary.marginBp !== null && summary.marginBp < 0 ? 'danger' : 'default',
+        };
+    return [
+      { label: 'Open jobs', value: summary.openJobs, display: String(summary.openJobs) },
+      // Same words as the link to Pulse (losing money plus at risk), so the number matches what opens.
+      { label: 'Losing or at risk', value: risky, display: String(risky), tone: summary.losing > 0 ? 'danger' : risky > 0 ? 'warning' : 'default' },
+      third,
+    ];
+  } catch (error: unknown) {
+    console.error('[portal] Pulse launcher stats query failed', error);
+    return null;
+  }
+}
+
 /** Every tile's stats in parallel; a failed side degrades to `null`, never throws. */
-export async function getLauncherStats(orgId: string): Promise<LauncherStats> {
-  const [crm, wms, projects] = await Promise.all([crmStats(orgId), wmsStats(orgId), projectsStats(orgId)]);
-  return { crm, wms, projects };
+export async function getLauncherStats(orgId: string, userId?: string): Promise<LauncherStats> {
+  const [crm, wms, projects, pulse] = await Promise.all([
+    crmStats(orgId),
+    wmsStats(orgId),
+    projectsStats(orgId),
+    pulseStats(orgId, userId),
+  ]);
+  return { crm, wms, projects, pulse };
+}
+
+export interface PulseAttention {
+  /** Jobs that are losing money or at risk, worst first. */
+  readonly jobs: readonly PulseJobSummary[];
+  /** All such jobs, not only the ones listed. */
+  readonly total: number;
+  readonly moneyHidden: boolean;
+}
+
+/** "Jobs that need you" on the launcher. Null when Pulse is absent or the person has no role. */
+export async function getPulseAttention(orgId: string, userId: string, limit = 5): Promise<PulseAttention | null> {
+  try {
+    const result = await listJobsNeedingAttention(db as unknown as BridgeExecutor, { orgId, userId }, { limit });
+    if (!result.available) return null;
+    return { jobs: result.jobs, total: result.totals.jobs, moneyHidden: result.moneyHidden };
+  } catch (error: unknown) {
+    console.error('[portal] Pulse attention query failed', error);
+    return null;
+  }
 }
 
 export interface CustomerWork {

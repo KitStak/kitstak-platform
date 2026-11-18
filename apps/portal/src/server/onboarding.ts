@@ -8,6 +8,7 @@ import 'server-only';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { invitation, member, onboardingProgress } from '@kitstak/db/schema';
 import { findWmsTenantSchema, wmsTable } from '@kitstak/db/wms-tenants';
+import { getSetupSignals as getPulseSetupSignals, type BridgeExecutor } from '@kitstak/pulse-bridge';
 import { db } from '@/server/db';
 import { env } from '@/server/env';
 import { getOrgModuleStates } from '@/server/entitlements';
@@ -82,7 +83,7 @@ async function getSetupSignals(orgId: string, orgSlug: string): Promise<SetupSig
     wmsSchema
       ? countOrNull(sql`select count(*) as n from ${wmsTable(wmsSchema, table)}`, label)
       : Promise.resolve(0);
-  const [team, moduleStates, crmBoards, crmDeals, wmsWarehouses, wmsProducts, wmsOrders, pm] =
+  const [team, moduleStates, crmBoards, crmDeals, wmsWarehouses, wmsProducts, wmsOrders, pm, pulse] =
     await Promise.all([
       teamSignals(orgId),
       getOrgModuleStates(orgId),
@@ -103,6 +104,8 @@ async function getSetupSignals(orgId: string, orgSlug: string): Promise<SetupSig
       wmsCount('products', 'wms products'),
       wmsCount('shipment_orders', 'wms orders'),
       projectsSignals(orgId),
+      // to_regclass guarded inside the bridge: null when Pulse is not installed here.
+      getPulseSetupSignals(db as unknown as BridgeExecutor, orgId),
     ]);
   const moduleState = (module: 'crm' | 'wms') =>
     moduleStates.modules.find((state) => state.module === module);
@@ -125,6 +128,11 @@ async function getSetupSignals(orgId: string, orgSlug: string): Promise<SetupSig
     pmProjects: pm?.projects ?? null,
     pmAssignedTasks: pm?.assigned ?? null,
     pmLinks: pm?.links ?? null,
+    pulseEntitled: moduleStates.modules.find((state) => state.module === 'pulse')?.entitled ?? false,
+    pulseLaborRates: pulse?.laborRates ?? null,
+    pulseJobs: pulse?.jobs ?? null,
+    pulseEntries: pulse?.entries ?? null,
+    pulseLinks: pulse?.links ?? null,
   };
 }
 
@@ -190,6 +198,7 @@ function stepHref(key: SetupStepKey, orgSlug: string, profile: SetupProfile | nu
   const crm = (path: string): string => `${env.NEXT_PUBLIC_CRM_URL}/${orgSlug}${path}`;
   const wms = (path: string): string => `${env.NEXT_PUBLIC_WMS_URL}${path}`;
   const projects = (path: string): string => `${env.NEXT_PUBLIC_PROJECTS_URL}${path}`;
+  const pulse = (path: string): string => `${env.NEXT_PUBLIC_PULSE_URL}${path}`;
   switch (key) {
     case 'profile':
       return { href: '/welcome', external: false };
@@ -215,6 +224,14 @@ function stepHref(key: SetupStepKey, orgSlug: string, profile: SetupProfile | nu
       return { href: projects('/my-work?setup=projects_assign_task'), external: true };
     case 'projects_connect':
       return { href: projects('/projects?setup=projects_connect'), external: true };
+    case 'pulse_labor_rate':
+      return { href: pulse('/labor?tab=rates&setup=pulse_labor_rate'), external: true };
+    case 'pulse_first_job':
+      return { href: pulse('/jobs/new?setup=pulse_first_job'), external: true };
+    case 'pulse_first_entry':
+      return { href: pulse('/log?setup=pulse_first_entry'), external: true };
+    case 'pulse_connect':
+      return { href: pulse('/jobs?setup=pulse_connect'), external: true };
   }
 }
 

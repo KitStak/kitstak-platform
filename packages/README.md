@@ -16,6 +16,11 @@ All packages ship TypeScript source (exports point at `./src/*.ts(x)`) — there
 | Package           | Purpose                                                        |
 | ----------------- | -------------------------------------------------------------- |
 | `@kitstak/config` | Shared tsconfig base and vitest defaults (thresholds, mocks).  |
-| `@kitstak/ui`     | Canonical `tokens.css`, unified theme constants + init script. |
+| `@kitstak/ui`     | Canonical `tokens.css`, unified theme constants + init script, app icons and the app switcher (Portal, CRM, WMS, Projects, Pulse). |
+| `@kitstak/auth`   | Shared Better Auth setup: one session across every app. |
+| `@kitstak/db`     | Shared `core` schema, migrations and the WMS tenant schema lookup. |
+| `@kitstak/entitlements` | Which org is licensed for which module (`crm`, `wms`, `projects`, `pulse`). |
+| `@kitstak/pm-bridge` | Shared-database bridge into KitStak Projects (the `pm` schema) for CRM and WMS. |
+| `@kitstak/pulse-bridge` | Shared-database bridge into KitStak Pulse (the `pulse` schema) for Portal, CRM, WMS and Projects: job profit for a linked record, client profit, workspace totals, a person's Pulse role, deep links and change events. See its README. |
 
 Dependency direction: `config ← ui ← apps`. No package imports from an app.

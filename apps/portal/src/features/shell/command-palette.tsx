@@ -39,7 +39,9 @@ export interface CommandPaletteProps {
   readonly wmsUrl: string;
   /** KitStak Projects origin (omitted: the Projects entry is hidden). */
   readonly projectsUrl?: string;
-  readonly entitled: { readonly crm: boolean; readonly wms: boolean; readonly projects?: boolean };
+  /** KitStak Pulse origin (omitted: the Pulse entries are hidden). */
+  readonly pulseUrl?: string;
+  readonly entitled: { readonly crm: boolean; readonly wms: boolean; readonly projects?: boolean; readonly pulse?: boolean };
 }
 
 const groupClass =
@@ -108,7 +110,7 @@ function PaletteItem({
   );
 }
 
-export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl, entitled }: CommandPaletteProps) {
+export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl, pulseUrl, entitled }: CommandPaletteProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -293,6 +295,58 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl,
               >
                 My work
               </PaletteItem>
+            ) : null}
+            {pulseUrl ? (
+              <PaletteItem
+                value="open-pulse"
+                keywords={['pulse', 'profit', 'margin', 'jobs', 'kitting', 'cost', 'labor']}
+                onSelect={() => (entitled.pulse ? openApp(pulseUrl) : go('/billing?module=pulse'))}
+                icon={
+                  entitled.pulse ? (
+                    <AppIcon app="pulse" size={20} className="-m-0.5" />
+                  ) : (
+                    <Lock aria-hidden className="size-4" />
+                  )
+                }
+                meta={entitled.pulse ? 'Know which jobs make money' : 'Locked. View billing'}
+                external={entitled.pulse}
+              >
+                Open Pulse
+              </PaletteItem>
+            ) : null}
+            {pulseUrl && entitled.pulse ? (
+              <>
+                <PaletteItem
+                  value="pulse-new-job"
+                  keywords={['new job', 'add job', 'create job', 'pulse', 'quote']}
+                  onSelect={() => openApp(`${pulseUrl.replace(/\/+$/, '')}/jobs/new`)}
+                  icon={<ArrowUpRight aria-hidden className="size-4" />}
+                  meta="Start tracking profit on a job in Pulse"
+                  external
+                >
+                  New job
+                </PaletteItem>
+                <PaletteItem
+                  value="pulse-log-work"
+                  keywords={['log work', 'log production', 'daily log', 'units', 'hours', 'pulse']}
+                  onSelect={() => openApp(`${pulseUrl.replace(/\/+$/, '')}/log`)}
+                  icon={<ArrowUpRight aria-hidden className="size-4" />}
+                  meta="Type today's units, people and hours in Pulse"
+                  external
+                >
+                  Log work
+                </PaletteItem>
+                <PaletteItem
+                  value="pulse-jobs-at-risk"
+                  keywords={['at risk', 'losing money', 'jobs', 'pulse', 'attention']}
+                  onSelect={() => openApp(`${pulseUrl.replace(/\/+$/, '')}/jobs?tab=open&risk=losing,at_risk`)}
+                  icon={<ArrowUpRight aria-hidden className="size-4" />}
+                  meta="Jobs that may lose money, worst first"
+                  external
+                >
+                  Jobs at risk
+                </PaletteItem>
+              </>
             ) : null}
           </Command.Group>
           <Command.Group heading="Portal" className={groupClass}>
