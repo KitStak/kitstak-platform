@@ -562,7 +562,6 @@ export function PulseStackVisual() {
         <div className={`${mock.head} ${styles.head}`}>
           <PulseWordmark height={28} />
         </div>
-        </div>
 
         <ul className={styles.links}>
           {LINKS_BY_APP.map((link) => (
