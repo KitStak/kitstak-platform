@@ -86,13 +86,13 @@ function list(words: readonly string[]): string {
     : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
 }
 
-/** US dollars from whole cents. Negative amounts use the minus sign the rest of the site uses. */
+/** US dollars from whole cents. A loss takes the plain hyphen Pulse itself uses: "-$125.00" (SPEC 4.11). */
 export function usd(cents: number, withCents = true): string {
   const amount = (Math.abs(cents) / 100).toLocaleString('en-US', {
     minimumFractionDigits: withCents ? 2 : 0,
     maximumFractionDigits: withCents ? 2 : 0,
   });
-  return `${cents < 0 ? '−' : ''}$${amount}`;
+  return `${cents < 0 ? '-' : ''}$${amount}`;
 }
 
 /* Metadata and hero */
@@ -109,7 +109,7 @@ export const META = {
 export const HERO = {
   product: 'KitStak Pulse',
   lines: ['Know which', 'jobs make', 'money.'],
-  lead: 'KitStak Pulse shows the profit on every job, job type, client and extra service. Log what got done each day. Pulse works out what the work earned and what it really cost, then tells you which open jobs are at risk or losing money, and why. Built for kitting, 3PL and contract packaging shops.',
+  lead: 'KitStak Pulse shows the profit on every job, job type, client and extra service. Log what got done each day. Pulse works out what the work earned and what it really cost. Then it tells you which open jobs are at risk or losing money, and why. Built for kitting, 3PL (warehouses that ship for other companies) and contract packaging shops.',
   primaryLabel: 'Start with Pulse',
   secondaryLabel: 'Book a walkthrough',
 } as const;
@@ -123,13 +123,14 @@ export const HERO_FACTS: readonly HeroFact[] = [
 
 export const SECTIONS: readonly SubNavSection[] = [
   { id: 'problem', label: 'The problem' },
-  { id: 'answer', label: 'The math' },
+  { id: 'answer', label: 'The answer' },
   { id: 'profit', label: 'Profit' },
   { id: 'log', label: 'Log work' },
-  { id: 'plan', label: 'Plan vs actual' },
+  { id: 'plan', label: 'Quote vs actual' },
   { id: 'costs', label: 'Real costs' },
   { id: 'risk', label: 'At risk' },
   { id: 'csv', label: 'CSV' },
+  { id: 'proof', label: 'Show the math' },
   { id: 'stack', label: 'Connects' },
   { id: 'together', label: 'Bundle' },
   { id: 'pricing', label: 'Pricing' },
@@ -173,12 +174,12 @@ export const CHAPTERS = {
     index: '04',
     label: 'Daily production entry',
     title: 'The whole day in one grid.',
-    lead: 'Profit starts with what happened on the floor. Log work is one row for each active job: units, people and hours. A supervisor can type the whole day at the end of a shift.',
+    lead: 'Profit starts with what happened on the floor. Log work is one row for each active job: units, people and hours. A floor lead can type the whole day at the end of a shift.',
   },
   plan: {
     id: 'plan',
     index: '05',
-    label: 'Budget and quote vs actual',
+    label: 'Quote vs actual',
     title: 'Quote. Budget. Actual.',
     lead: 'The quote is what you told the client. The budget is what you think it will cost you. Actual is what happened. Pulse puts them side by side and shows where the gap came from.',
   },
@@ -187,7 +188,7 @@ export const CHAPTERS = {
     index: '06',
     label: 'Labor rate and material cost',
     title: 'What an hour really costs.',
-    lead: 'The wage is only part of it. The real cost of an hour is the wage, plus payroll taxes and benefits, plus overhead per hour. Pulse builds that rate with you, then costs your materials with the same care.',
+    lead: 'The wage is only part of it. The real cost of an hour is the wage, plus payroll taxes and benefits, plus overhead per hour. Pulse builds that rate with you. It also costs the materials you pay for.',
   },
   risk: {
     id: 'risk',
@@ -215,7 +216,7 @@ export const CHAPTERS = {
     index: '10',
     label: 'With the other KitStak apps',
     title: 'It knows the rest of the stack.',
-    lead: 'Run Pulse beside KitStak CRM, WMS and Projects and the data comes to it: jobs from won deals, units from the warehouse, hours from project time. Those apps show Pulse numbers on their own screens too. Pulse never changes your CRM or WMS data.',
+    lead: 'Run Pulse beside KitStak CRM, WMS and Projects and it pulls in what they know. Won deals become jobs in one step. Units come from the warehouse. Project time can count as labor hours. Those apps show Pulse numbers on their own screens too. Pulse never changes your CRM or WMS data.',
   },
 } as const satisfies Readonly<Record<string, ChapterCopy>>;
 
@@ -267,16 +268,16 @@ export const ANSWER_FEATURES: readonly Feature[] = [
 export const PROFIT_FEATURES: readonly Feature[] = [
   {
     name: 'By job',
-    note: 'Revenue, cost, profit and margin for each job, with units done of planned and cost per unit against what it should cost.',
+    note: 'Money in, money out, profit and margin for each job. You also see units done against units planned, and cost per unit against what it should cost.',
   },
   { name: 'By job type', note: 'See which kinds of work pay best, and which ones cost you.' },
   {
     name: 'By client',
-    note: 'The profit trend, the cost to serve per unit and per job, and what is earned, billed and not billed yet.',
+    note: 'The profit trend, what it costs you to serve the client per unit and per job, and what is earned, billed and not billed yet.',
   },
   {
     name: 'By extra service',
-    note: 'Each service in your catalog gets revenue per unit, cost per unit, margin and the clients who use it.',
+    note: 'Each service in your catalog gets money in per unit, cost per unit, margin and the clients who use it.',
   },
   {
     name: 'Drill down that adds up',
@@ -322,7 +323,7 @@ export const LOG_FEATURES: readonly Feature[] = [
 export const PLAN_FEATURES: readonly Feature[] = [
   {
     name: 'Plan vs actual',
-    note: 'Units, labor hours, pace, each cost, revenue, profit and margin. You see the plan, the actual, the difference and where the job is heading.',
+    note: 'Units, labor hours, pace, each cost, money in, profit and margin. You see the plan, the actual, the difference and where the job is heading.',
   },
   {
     name: 'Fair to a half done job',
@@ -400,7 +401,7 @@ export const RISK_FEATURES: readonly Feature[] = [
   },
   {
     name: 'Rules you can tune',
-    note: 'Twelve rules come ready. Change a threshold and see how many jobs it would flag before you save.',
+    note: 'Twelve alert rules come ready. Tune them or turn them off. Change a risk limit in Settings and see how many jobs it would flag before you save.',
   },
   {
     name: 'Things to fix',
@@ -493,7 +494,7 @@ export const STACK_FEATURES: readonly Feature[] = [
     note: 'The other apps show Pulse money only to people who may see money in Pulse.',
   },
   {
-    name: 'Only what you license',
+    name: 'Only the apps you run',
     note: 'If an app is not there, Pulse hides that link and keeps working.',
   },
 ];
@@ -555,7 +556,7 @@ export const MATH_BRIDGE = {
   ],
   endLabel: 'Company profit',
   endCents: 3_990_000,
-  caption: 'Sample numbers. Pulse never shows job profit as if it were company profit.',
+  caption: 'Sample numbers. Pulse Home always shows job profit and company profit as two numbers.',
 } as const satisfies {
   readonly start: MathLine;
   readonly steps: readonly MathLine[];
@@ -566,7 +567,7 @@ export const MATH_BRIDGE = {
 
 export const BUNDLE = {
   title: 'On its own. Or on the stack.',
-  body: 'Pulse does not need any other KitStak app. License it alone and bring your data in by typing or by CSV. Add the other apps later and Pulse pulls in what they already know.',
+  body: 'Pulse does not need any other KitStak app. Buy it alone and bring your data in by typing or by CSV. Add the other apps later and Pulse pulls in what they already know.',
   primaryLabel: 'Build the bundle',
   secondaryLabel: 'Start with Pulse alone',
 } as const;
@@ -601,7 +602,7 @@ export const FAQ: readonly FaqItem[] = [
   {
     question: 'How does Pulse decide a job is at risk or losing money?',
     answer:
-      'It works out where the job will finish, from your recent pace and the plan. It is plain math on your own numbers. A job is At risk when, for example, margin is heading well under your target or labor is heading well over the plan. It is Losing money when it is heading for a loss. You can change the thresholds.',
+      'It works out where the job will finish, from your recent pace and the plan. It is plain math on your own numbers. A job is At risk when it is heading well under your target margin. It is also At risk when labor is heading well over the plan. It is Losing money when it is heading for a loss. You can change the limits.',
   },
   {
     question: 'Why is job profit different from company profit?',
@@ -620,7 +621,7 @@ export const FAQ: readonly FaqItem[] = [
   {
     question: 'Who can see money and wages?',
     answer:
-      'Seeing money is opt in. Pulse has five roles: owner, admin, manager, supervisor and viewer. Supervisors and viewers see units, hours and pace by default, not dollars. Managers see the real cost of an hour but never the wage. Only the owner and admins see wage detail.',
+      'Owners, admins and managers see money. Nobody else does unless you turn it on for them. Pulse has five roles: owner, admin, manager, supervisor and viewer. Supervisors (your floor leads) and viewers see units, hours and pace by default, not dollars. Managers see the real cost of an hour but never the wage. Only the owner and admins see wage detail.',
   },
   {
     question: 'How do I start?',

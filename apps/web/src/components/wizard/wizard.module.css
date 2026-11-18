@@ -3,6 +3,8 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  /* Steps slide in from the right. Clip keeps that from adding a sideways scroll on phones. */
+  overflow-x: clip;
 }
 
 /* ------------------------------------------------------------ Top bar and progress */

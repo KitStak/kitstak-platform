@@ -1,4 +1,11 @@
-import { PRICING, PRICING_IS_PLACEHOLDER, formatUsd, isBundle, percentLabel } from '@/lib/pricing';
+import {
+  PRICING,
+  PRICING_IS_PLACEHOLDER,
+  formatUsd,
+  isBundle,
+  percentLabel,
+  unconfirmedPriceNote,
+} from '@/lib/pricing';
 import type { Billing, Quote } from '@/lib/pricing';
 import { PRODUCT_IDS } from '../site-links';
 import type { ProductId, Stack } from '../site-links';
@@ -46,7 +53,9 @@ interface QuoteSummaryProps {
 
 /** Line items, savings and the monthly figure. Sits on the navy brand surface. */
 export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
-  const hasBundle = isBundle(quote.lines.map((line) => line.product));
+  const products = quote.lines.map((line) => line.product);
+  const hasBundle = isBundle(products);
+  const notFinal = unconfirmedPriceNote(products);
   return (
     <div aria-live="polite">
       <ul className={styles.lines}>
@@ -91,7 +100,9 @@ export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
           Add another product and take {percentLabel(PRICING.bundleDiscount)} off every one.
         </p>
       )}
-      {PRICING_IS_PLACEHOLDER ? <p className={styles.fine}>Preliminary pricing, shown for planning.</p> : null}
+      {PRICING_IS_PLACEHOLDER ? (
+        <p className={styles.fine}>Preliminary pricing, shown for planning.{notFinal ? ` ${notFinal}` : ''}</p>
+      ) : null}
     </div>
   );
 }

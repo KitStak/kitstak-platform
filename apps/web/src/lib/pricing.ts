@@ -17,6 +17,11 @@ interface ProductPrice {
   readonly unitPlural: string;
   readonly monthlyCents: number;
   readonly max: number;
+  /**
+   * True while the owner has not confirmed this product's price and unit. Every place that prints the
+   * figure then says so beside it.
+   */
+  readonly isUnconfirmed?: true;
 }
 
 interface PricingTable extends Readonly<Record<ProductId, ProductPrice>> {
@@ -31,10 +36,26 @@ export const PRICING: PricingTable = {
   wms: { name: 'KitStak WMS', unit: 'warehouse', unitPlural: 'warehouses', monthlyCents: 34900, max: 50 },
   projects: { name: 'KitStak Projects', unit: 'user', unitPlural: 'users', monthlyCents: 1200, max: 500 },
   // Stand-in like the rest. The Pulse spec states no price and no unit; per user is this site's choice.
-  pulse: { name: 'KitStak Pulse', unit: 'user', unitPlural: 'users', monthlyCents: 1900, max: 500 },
+  // The owner has to confirm both before launch. Until then the pages print UNCONFIRMED_PRICE_NOTE.
+  pulse: {
+    name: 'KitStak Pulse',
+    unit: 'user',
+    unitPlural: 'users',
+    monthlyCents: 1900,
+    max: 500,
+    isUnconfirmed: true,
+  },
   bundleDiscount: 0.2,
   annualDiscount: 0.15,
 };
+
+/** Shown beside the figure of any product whose price is not confirmed, such as "Pulse pricing is not final." */
+export function unconfirmedPriceNote(products: readonly ProductId[]): string | null {
+  const open = products.filter((id) => PRICING[id].isUnconfirmed);
+  if (open.length === 0) return null;
+  const names = open.map((id) => PRICING[id].name.replace('KitStak ', ''));
+  return `${names.join(' and ')} pricing is not final. The price and the unit may change.`;
+}
 
 export interface QuoteInput {
   readonly stack: Stack;

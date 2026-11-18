@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { PRICING, PRICING_IS_PLACEHOLDER, formatUsd, percentLabel } from '@/lib/pricing';
+import { PRICING, PRICING_IS_PLACEHOLDER, formatUsd, percentLabel, unconfirmedPriceNote } from '@/lib/pricing';
 import type { ProductId } from '@/lib/pricing';
 import { ROUTES, START_NAME, getStartedHref } from '../site-links';
 import styles from './price-band.module.css';
@@ -12,6 +12,7 @@ interface PriceBandProps {
 /** Starting price for one product, with the bundle saving beside it. */
 export function PriceBand({ product, included }: PriceBandProps) {
   const price = PRICING[product];
+  const notFinal = unconfirmedPriceNote([product]);
   return (
     <section id="pricing" className={`section ${styles.band}`} aria-labelledby="pricing-heading">
       <div className={`container ${styles.grid}`}>
@@ -44,6 +45,7 @@ export function PriceBand({ product, included }: PriceBandProps) {
               per month
             </span>
           </p>
+          {notFinal ? <p className={styles.notFinal}>{notFinal}</p> : null}
           <p className={styles.bundleLine}>
             <strong>{percentLabel(PRICING.bundleDiscount)} off</strong> each product when you stack two or more, and{' '}
             {percentLabel(PRICING.annualDiscount)} off again billed yearly.
