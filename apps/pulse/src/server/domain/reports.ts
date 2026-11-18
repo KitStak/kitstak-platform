@@ -57,6 +57,7 @@ import type {
   ProfitRowDTO,
   ReportCell,
   ReportCellKind,
+  ReportAsideDTO,
   ReportChartDTO,
   ReportColumnDTO,
   ReportDTO,
@@ -133,7 +134,11 @@ const PIVOT_JOINS = sql`
   LEFT JOIN pulse.vas_services vs ON vs.id = f.vas_service_id
   LEFT JOIN pulse.sites s ON s.id = f.site_id`;
 
-const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = { job: 'Client level, no job', client: 'No client', type: 'No job type', service: 'Core job work', site: 'No site', month: '', week: '', day: '' };
+/** The row for revenue and costs typed in against a client with no job. It is not a job, so rankings leave it out. */
+export const CLIENT_LEVEL_LABEL = 'Put on a client, not on a job';
+const CLIENT_LEVEL_TEXT = 'Chargebacks, freight, fees, credits and extra services typed in against a client with no job. They count in the total, but they are not a job, so the ranking leaves them out.';
+
+const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = { job: CLIENT_LEVEL_LABEL, client: 'No client', type: 'No job type', service: 'Core job work', site: 'No site', month: '', week: '', day: '' };
 
 function factWhere(orgId: string, filters: ProfitFilters): SQL {
   const parts: SQL[] = [sql`f.org_id = ${orgId}`, sql`f.work_date BETWEEN ${filters.from}::date AND ${filters.to}::date`];
@@ -141,6 +146,7 @@ function factWhere(orgId: string, filters: ProfitFilters): SQL {
   if (filters.clientId) parts.push(sql`f.client_id = ${filters.clientId}`);
   if (filters.jobTypeId) parts.push(sql`f.job_type_id = ${filters.jobTypeId}`);
   if (filters.jobId) parts.push(sql`f.job_id = ${filters.jobId}`);
+  if (filters.noJob) parts.push(sql`f.job_id IS NULL`);
   if (filters.vasServiceId) parts.push(sql`f.vas_service_id = ${filters.vasServiceId}`);
   if (filters.status) parts.push(sql`j.status = ${filters.status}`);
   return sql.join(parts, sql` AND `);
@@ -325,8 +331,8 @@ const PROFIT_COLUMNS: readonly ReportColumnDTO[] = [
   col('shared', 'Time not on a job', 'money'),
   col('cost', 'Cost', 'money'),
   col('profit', 'Profit', 'money'),
-  col('margin', 'Margin after all costs', 'percent', { money: true }),
-  col('margin_before', 'Margin before shared costs', 'percent', { money: true }),
+  col('margin', 'Job margin', 'percent', { money: true }),
+  col('margin_before', 'Contribution %', 'percent', { money: true }),
   col('units', 'Units', 'number'),
   col('hours', 'Labor hours', 'hours'),
   col('uph', 'Units per person per hour', 'pace'),
@@ -355,6 +361,7 @@ interface Built {
   readonly total?: Cells | null;
   readonly summary?: ReportDTO['summary'];
   readonly chart?: ReportChartDTO | null;
+  readonly aside?: ReportAsideDTO | null;
   readonly notes?: string[];
   /** False for reports about right now, which ignore the date range. */
   readonly usesDates?: boolean;
@@ -366,7 +373,7 @@ const headline = (total: ProfitRowDTO): ReportDTO['summary'] => [
   { label: 'Revenue', value: total.revenueCents, kind: 'money' },
   { label: 'Cost', value: total.costCents, kind: 'money' },
   { label: 'Profit', value: total.profitCents, kind: 'money' },
-  { label: 'Margin after all costs', value: total.marginBp, kind: 'percent' },
+  { label: 'Job margin', value: total.marginBp, kind: 'percent' },
 ];
 
 /** Best and worst by profit, at most `limit` bars, for a ranking chart. */
@@ -424,18 +431,37 @@ function jobScope(filters: ReportFilters): SQL {
 async function jobProfit(ctx: DomainContext, filters: ReportFilters): Promise<Built> {
   const profit = await getProfit(ctx, 'job', profitFilters(filters));
   const meta = await jobMeta(ctx.orgId, profit.rows.map((row) => row.key));
-  const sorted = [...profit.rows].sort((a, b) => (b.profitCents ?? 0) - (a.profitCents ?? 0));
+  // Costs and fees put on a client with no job are in the total, but they are not a job: they
+  // get their own row under the jobs and stay out of the best and worst ranking.
+  const clientLevel = profit.rows.find((row) => row.key === 'none') ?? null;
+  const sorted = profit.rows.filter((row) => row.key !== 'none').sort((a, b) => (b.profitCents ?? 0) - (a.profitCents ?? 0));
+  const entryCount = clientLevel ? await countNoJobEntries(ctx.orgId, profitFilters(filters)) : 0;
   return {
     columns: [col('job', 'Job', 'text'), col('name', 'Name', 'text'), col('client', 'Client', 'text'), col('type', 'Job type', 'text'), col('status', 'Job status', 'job_status'), col('risk', 'Health', 'status'), ...PROFIT_COLUMNS],
-    rows: sorted.map((row) => {
-      const job = meta.get(row.key);
-      return { id: row.key, href: job ? routes.job(job.number) : null, cells: { job: job?.number ?? row.label, name: job?.name ?? row.sublabel, client: job?.client ?? null, type: job?.type ?? null, status: job?.status ?? null, risk: job?.risk ?? null, ...profitCells(row) } };
-    }),
+    rows: [
+      ...sorted.map((row) => {
+        const job = meta.get(row.key);
+        return { id: row.key, href: job ? routes.job(job.number) : null, cells: { job: job?.number ?? row.label, name: job?.name ?? row.sublabel, client: job?.client ?? null, type: job?.type ?? null, status: job?.status ?? null, risk: job?.risk ?? null, ...profitCells(row) } };
+      }),
+      ...(clientLevel ? [{ id: 'none', href: null, cells: { job: CLIENT_LEVEL_LABEL, name: 'Not a job', client: null, type: null, status: null, risk: null, ...profitCells(clientLevel) } }] : []),
+    ],
+    aside: clientLevel ? { key: 'client_level' as const, label: CLIENT_LEVEL_LABEL, valueCents: clientLevel.profitCents, text: CLIENT_LEVEL_TEXT, entryCount } : null,
     total: { job: 'Total', ...profitCells(profit.total) },
     summary: headline(profit.total),
     chart: rankingChart('Profit by job', sorted.map((row) => ({ label: ((job) => (job ? jobChartLabel(job.number, job.name) : row.label))(meta.get(row.key)), profit: row.profitCents }))),
-    notes: ['Each job counts only the work and costs dated inside these days.'],
+    notes: ['Each job counts only the work and costs dated inside these days.', ...(clientLevel ? [`${CLIENT_LEVEL_LABEL}: ${CLIENT_LEVEL_TEXT}`] : [])],
   };
+}
+
+/** How many stamped rows sit on a client with no job, for the same filters as the report. */
+async function countNoJobEntries(orgId: string, filters: ProfitFilters): Promise<number> {
+  const [found] = await rows<{ n: number }>(
+    db,
+    sql`SELECT count(DISTINCT (f.source_table, f.source_id))::int AS n
+          FROM pulse.v_facts f LEFT JOIN pulse.jobs j ON j.id = f.job_id
+         WHERE ${factWhere(orgId, { ...filters, noJob: true })} AND f.kind <> 'billed_memo'`,
+  );
+  return found?.n ?? 0;
 }
 
 async function profitBy(ctx: DomainContext, filters: ReportFilters, by: 'client' | 'type' | 'service', first: string): Promise<Built> {
@@ -463,7 +489,7 @@ async function profitBySite(ctx: DomainContext, filters: ReportFilters): Promise
     }),
     total: { name: 'Total', jobs: profit.total.jobCount, ...profitCells(profit.total) },
     summary: headline(profit.total),
-    chart: profit.rows.length > 0 ? { type: 'bar', title: 'Margin by site', description: 'Margin after all costs for each site.', labels: profit.rows.map((row) => row.label), series: [{ id: 'margin', label: 'Margin after all costs', values: profit.rows.map((row) => row.marginBp) }], format: 'percent', signColors: true } : null,
+    chart: profit.rows.length > 0 ? { type: 'bar', title: 'Margin by site', description: 'Job margin for each site: profit on jobs as a share of revenue.', labels: profit.rows.map((row) => row.label), series: [{ id: 'margin', label: 'Job margin', values: profit.rows.map((row) => row.marginBp) }], format: 'percent', signColors: true } : null,
   };
 }
 
@@ -490,7 +516,7 @@ async function monthlyProfitAndLoss(ctx: DomainContext, filters: ReportFilters):
       col('other', 'Other costs', 'money'),
       col('shared', 'Time not on a job', 'money'),
       col('profit', 'Profit on jobs', 'money'),
-      col('margin', 'Margin after all costs', 'percent', { money: true }),
+      col('margin', 'Job margin', 'percent', { money: true }),
       ...(narrowed ? [] : [col('shared_gap', 'Time not on a job that no job carried', 'money'), col('missing', 'Paid time not on any job', 'money'), col('overhead_gap', 'Overhead your hourly rate did not cover', 'money'), col('company_profit', 'Company profit', 'money')]),
     ],
     rows: months.map(({ row, bridge }) => ({ id: row.key, cells: { month: monthWords(row.key), ...profitCells(row), ...(narrowed ? {} : bridgeCells(bridge)) } })),
@@ -574,7 +600,7 @@ async function costToServeReport(ctx: DomainContext, filters: ReportFilters): Pr
       col('per_job', 'Cost to serve per job', 'money'),
       col('pct', 'Cost to serve as % of revenue', 'percent', { money: true }),
       col('profit', 'Profit', 'money'),
-      col('margin', 'Margin after all costs', 'percent', { money: true }),
+      col('margin', 'Job margin', 'percent', { money: true }),
     ],
     rows: list.map((item) => ({ id: item.id, href: routes.client(item.id), cells: { client: item.name, ...cells(item.serve) } })),
     total: { client: 'Total', ...cells(all) },
@@ -1120,6 +1146,7 @@ export async function buildReport(ctx: DomainContext, slug: string, filters: Rep
     total: built.total ? strip(built.total) : null,
     summary: (built.summary ?? []).map((item) => (hide && item.kind === 'money' ? { ...item, value: null } : item)),
     chart: hide && built.chart?.format === 'money' ? null : (built.chart ?? null),
+    aside: built.aside ? (hide ? { ...built.aside, valueCents: null } : built.aside) : null,
     notes: built.notes ?? [],
     truncated: built.rows.length >= ROW_CAP,
     moneyHidden: hide,

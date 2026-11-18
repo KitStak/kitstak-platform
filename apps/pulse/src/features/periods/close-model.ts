@@ -7,17 +7,35 @@ export function pickMonth(months: readonly { readonly periodMonth: string; reado
   return waiting[waiting.length - 1]?.periodMonth ?? months[0]?.periodMonth ?? null;
 }
 
-const DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-const DAY_TIME = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-/** "Oct 3, 2026" from a timestamp. */
-export const dayText = (iso: string | null): string => (iso ? DAY.format(new Date(iso)) : '');
-/** "Oct 3, 2026, 4:12 PM" from a timestamp. */
-export const dayTimeText = (iso: string | null): string => (iso ? DAY_TIME.format(new Date(iso)) : '');
-
 /** The first day a month can be closed: the day after it ends. `2026-11-01` gives "December 1". */
 export function closableFrom(periodMonth: string): string {
   const date = new Date(`${periodMonth.slice(0, 7)}-01T00:00:00Z`);
   date.setUTCMonth(date.getUTCMonth() + 1);
   return new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(date);
+}
+
+/** One step between job profit and company profit. `adds` is true when the step raises profit. */
+export interface BridgeStep {
+  readonly key: 'shared_gap' | 'missing_time' | 'overhead_gap';
+  readonly label: string;
+  /** The size of the step as stored: above zero takes away from profit. */
+  readonly cents: number;
+  readonly adds: boolean;
+}
+
+/**
+ * The steps from job profit to company profit, in the words of SPEC 4.9. The overhead step is
+ * left out when no company costs were typed in. Empty when money is hidden.
+ */
+export function bridgeSteps(bridge: { readonly sharedGapCents: number | null; readonly missingCostCents: number | null; readonly overheadGapCents: number | null; readonly hasCompanyCosts: boolean }): BridgeStep[] {
+  if (bridge.sharedGapCents === null || bridge.missingCostCents === null) return [];
+  const steps: BridgeStep[] = [
+    { key: 'shared_gap', label: 'Time not on a job that no job carried', cents: bridge.sharedGapCents, adds: bridge.sharedGapCents < 0 },
+    { key: 'missing_time', label: 'Paid time not on any job', cents: bridge.missingCostCents, adds: bridge.missingCostCents < 0 },
+  ];
+  if (bridge.hasCompanyCosts && bridge.overheadGapCents !== null) {
+    const over = bridge.overheadGapCents < 0;
+    steps.push({ key: 'overhead_gap', label: over ? 'Your hourly rate covered more overhead than you spent' : 'Overhead your hourly rate did not cover', cents: bridge.overheadGapCents, adds: over });
+  }
+  return steps;
 }

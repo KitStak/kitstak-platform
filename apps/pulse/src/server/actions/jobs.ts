@@ -86,7 +86,7 @@ export async function createJobAction(input: CreateJobActionInput) {
 }
 
 const quickAddSchema = z
-  .object({ clientId: uuid.nullable().optional(), clientName: z.string().trim().max(200).nullable().optional(), name: name(200), plannedUnits: quantity.nullable().optional(), unitPrice: unitPrice.nullable().optional(), siteId: uuid.nullable().optional() })
+  .object({ clientId: uuid.nullable().optional(), clientName: z.string().trim().max(200).nullable().optional(), createClient: z.boolean().optional(), name: name(200), plannedUnits: quantity.nullable().optional(), unitPrice: unitPrice.nullable().optional(), siteId: uuid.nullable().optional() })
   .refine((data) => Boolean(data.clientId) || Boolean(data.clientName), { message: 'Pick a client or type a new client name.', path: ['clientId'] });
 export type QuickAddJobActionInput = z.input<typeof quickAddSchema>;
 /** The quick add row: client, job name, units, price per unit. Active at once, General job type, quote from the price. */
@@ -126,8 +126,14 @@ export async function archiveJobAction(input: z.input<typeof archiveSchema>) {
 }
 
 const jobIdSchema = z.object({ jobId: uuid });
-export async function deleteJobAction(input: z.input<typeof jobIdSchema>) {
-  return runAction(jobIdSchema, input, (data, ctx) => deleteJob(ctx, data.jobId));
+const deleteJobSchema = z.object({ jobId: uuid, revalidate: z.boolean().optional() });
+/**
+ * Deletes a job. Pass `revalidate: false` when the person may be looking at that job's own page:
+ * a revalidate would render that page again in the same answer, and it no longer exists, so the
+ * screen would turn into "not found" before the client can move to the jobs list.
+ */
+export async function deleteJobAction(input: z.input<typeof deleteJobSchema>) {
+  return runAction(deleteJobSchema, input, (data, ctx) => deleteJob(ctx, data.jobId), { revalidate: input?.revalidate !== false });
 }
 export async function restoreJobAction(input: z.input<typeof jobIdSchema>) {
   return runAction(jobIdSchema, input, (data, ctx) => restoreJob(ctx, data.jobId));

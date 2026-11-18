@@ -57,6 +57,7 @@ import { routes } from '@/lib/routes';
 import type { JobPlanDTO } from '@/lib/types';
 import { deletePlanAction, makeBudgetFromQuoteAction, savePlanAction } from '@/server/actions/jobs';
 import { PlanDialog } from './forms/job-dialogs';
+import { ScrollX } from './scroll-x';
 import { useJobCosts, useJobProduction, useJobProjection, useJobServices, useRefreshJob } from './job-data';
 import { paceYardsticks, planPace } from './job-figures';
 import { planToTotals, statsToActual } from './job-math';
@@ -463,11 +464,13 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
           <p className="p-4 text-sm text-fg-secondary">There is no {planWord} to compare with yet.</p>
         ) : (
           <>
-            <div className="hidden overflow-x-auto md:block">
+            <ScrollX label={`${planWord === 'budget' ? 'Budget' : 'Quote'} against actual`} className="hidden lg:block" testId="plan-table-scroll">
               <Table aria-label={`${planWord} against actual`} data-testid="plan-table">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
-                    <TableHeaderCell> </TableHeaderCell>
+                    <TableHeaderCell>
+                      <span className="sr-only">Measure</span>
+                    </TableHeaderCell>
                     <TableHeaderCell numeric>
                       {table.planLabel === 'Whole job'
                         ? `${planWord === 'budget' ? 'Budget' : 'Quote'}, whole job`
@@ -514,8 +517,8 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
                   ))}
                 </TableBody>
               </Table>
-            </div>
-            <ul className="flex flex-col divide-y divide-border-subtle md:hidden" data-testid="plan-cards">
+            </ScrollX>
+            <ul className="flex flex-col divide-y divide-border-subtle lg:hidden" data-testid="plan-cards">
               {rows.map((row) => (
                 <li key={row.key} className="flex flex-col gap-1 px-4 py-3">
                   <div className="flex items-baseline justify-between gap-3">
@@ -527,9 +530,9 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
                         : ''}
                     </span>
                   </div>
-                  <dl className="grid grid-cols-3 gap-2 text-xs tabular-nums">
+                  <dl className="grid grid-cols-3 gap-2 text-xs tabular-nums md:text-sm">
                     <div>
-                      <dt className="text-fg-muted">Plan</dt>
+                      <dt className="text-fg-muted">{planWord === 'budget' ? 'Budget' : 'Quote'}</dt>
                       <dd className="text-fg">{cell(row, row.plan)}</dd>
                     </div>
                     <div>
@@ -538,7 +541,10 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
                     </div>
                     {showProjected ? (
                       <div>
-                        <dt className="text-fg-muted">At finish</dt>
+                        <dt className="text-fg-muted">
+                          <span className="md:hidden">At finish</span>
+                          <span className="hidden md:inline">Projected at finish</span>
+                        </dt>
                         <dd className="text-fg">{cell(row, row.projected)}</dd>
                       </div>
                     ) : null}
@@ -673,7 +679,8 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
                 : 'This quote was saved as totals, with no lines, so the table above is the whole comparison. Jobs made in the new job wizard keep their lines, and each line is compared here.'}
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <ScrollX label="Quote lines against actual" testId="quote-lines-scroll">
               <Table aria-label="Quote lines against actual" data-testid="quote-lines">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
@@ -711,24 +718,27 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
                   ))}
                 </TableBody>
               </Table>
+            </ScrollX>
               <p className="border-t border-border-subtle px-4 py-2.5 text-xs text-fg-muted">
                 {completed
                   ? 'The job is complete, so each line is judged against the whole quote.'
                   : 'The job is still running, so actual is less than the whole quote. The colors come on when the job is complete.'}{' '}
                 Time not on a job has no quote line, so it is not in this table.
               </p>
-            </div>
+            </>
           )}
         </Panel>
       ) : null}
 
       {bridge ? (
         <Panel title="From the quote to your budget" bodyClassName="p-0">
-          <div className="overflow-x-auto">
+          <ScrollX label="Quote against budget" testId="quote-to-budget-scroll">
             <Table aria-label="Quote against budget" data-testid="quote-to-budget">
               <TableHead>
                 <TableRow className="hover:bg-transparent">
-                  <TableHeaderCell> </TableHeaderCell>
+                  <TableHeaderCell>
+                      <span className="sr-only">Measure</span>
+                    </TableHeaderCell>
                   <TableHeaderCell numeric>Quote</TableHeaderCell>
                   <TableHeaderCell numeric>Budget</TableHeaderCell>
                   <TableHeaderCell numeric>Gap</TableHeaderCell>
@@ -762,7 +772,7 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
                 </TableRow>
               </TableBody>
             </Table>
-          </div>
+          </ScrollX>
           <p className="border-t border-border-subtle px-4 py-2.5 text-xs text-fg-muted">
             The quote is what you sold. The budget is what you now plan to spend. The gap is the profit you
             gave up or found before the work started.

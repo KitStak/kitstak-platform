@@ -394,7 +394,14 @@ describe.skipIf(!ready)('production team domain (database)', () => {
     it('opens only for the right kind, and never for a wrong secret', async () => {
       expect(await resolveDeviceLink(token, 'kiosk')).not.toBeNull();
       expect(await resolveDeviceLink(token, 'wall')).toBeNull();
-      expect(await resolveDeviceLink(`${token.slice(0, -1)}x`, 'kiosk')).toBeNull();
+      // A wrong secret: the real one with its last character swapped. The swap must really change
+      // it. A secret is random, so about 1 in 64 ends in "x", and putting "x" there again gave
+      // the real secret back (this test then failed now and then).
+      const wrongSecret = `${token.slice(0, -1)}${token.endsWith('x') ? 'y' : 'x'}`;
+      expect(wrongSecret).not.toBe(token);
+      expect(wrongSecret).toHaveLength(token.length);
+      expect(await resolveDeviceLink(wrongSecret, 'kiosk')).toBeNull();
+      expect(await getKioskState(wrongSecret)).toBeNull();
       expect(await getKioskState('short')).toBeNull();
     });
 

@@ -16,7 +16,7 @@ import { db, type Executor } from '@/server/db';
 import { settings } from '@/server/db/schema';
 import { conflict, invalid } from '@/server/errors';
 import { addDays, isWorkDay } from '@/lib/profit/calendar';
-import { inTx, iso, rows, uuidArray, type DomainContext } from './_shared';
+import { inTx, iso, rows, todayInZone, uuidArray, type DomainContext } from './_shared';
 import { requirePulse } from './access';
 import { logActivity } from './activity';
 import { evaluateAlerts } from './alerts';
@@ -393,12 +393,12 @@ export interface OnboardingStateDTO {
   /** The five steps to a first profit number, each true once real data shows it is done. */
   readonly steps: { readonly rate: boolean; readonly client: boolean; readonly job: boolean; readonly day: boolean; readonly profit: boolean };
   readonly done: number;
-  /** The first labor class and its real cost of an hour (null when hidden or not set). */
+  /** The first labor class and its real cost of an hour in effect today (null when hidden or not set). */
   readonly rate: { readonly name: string; readonly loadedRateCents: number | null } | null;
   readonly client: { readonly id: string; readonly name: string } | null;
   /** The job the guided steps use: the newest job that is not sample data. */
   readonly job: { readonly id: string; readonly number: string; readonly name: string; readonly unitLabel: string } | null;
-  /** The first profit number: null money when the reader may not see it. */
+  /** The first profit number, for the whole job so far: null money when the reader may not see it. */
   readonly profit: { readonly jobId: string; readonly jobNumber: string; readonly revenueCents: number | null; readonly costCents: number | null; readonly profitCents: number | null; readonly marginBp: number | null; readonly unitsGood: string; readonly hours: string } | null;
   readonly site: { readonly id: string; readonly name: string; readonly timezone: string; readonly today: string } | null;
   readonly sample: SampleStateDTO;
@@ -411,10 +411,18 @@ export async function getOnboardingState(ctx: DomainContext): Promise<Onboarding
   const row = await loadSettings(ctx.orgId);
   const org = ctx.orgId;
   const [site] = await listSites(ctx);
+  // The first labor class that got a rate, with the rate in effect today: an old rate that a newer
+  // one replaced is never quoted. A class whose only rates start later shows the first of those.
+  const today = site?.today ?? todayInZone(row.timezone);
   const [rate] = await rows<{ name: string; loaded: number }>(
     db,
     sql`SELECT lc.name, r.loaded_rate_cents AS loaded FROM pulse.labor_rates r JOIN pulse.labor_classes lc ON lc.id = r.labor_class_id
-         WHERE r.org_id = ${org} AND r.deleted_at IS NULL AND NOT r.is_sample ORDER BY r.created_at LIMIT 1`,
+         WHERE r.org_id = ${org} AND r.deleted_at IS NULL AND NOT r.is_sample
+           AND r.labor_class_id = (SELECT f.labor_class_id FROM pulse.labor_rates f
+                                    WHERE f.org_id = ${org} AND f.deleted_at IS NULL AND NOT f.is_sample ORDER BY f.created_at, f.effective_from, f.id LIMIT 1)
+         ORDER BY (r.effective_from <= ${today}::date) DESC, (r.site_id IS NULL) DESC,
+                  CASE WHEN r.effective_from <= ${today}::date THEN r.effective_from END DESC NULLS LAST, r.effective_from
+         LIMIT 1`,
   );
   const [client] = await rows<{ id: string; name: string }>(db, sql`SELECT id, name FROM pulse.clients WHERE org_id = ${org} AND deleted_at IS NULL AND NOT is_sample ORDER BY created_at LIMIT 1`);
   const [job] = await rows<{ id: string; number: string; name: string; unit_label: string }>(

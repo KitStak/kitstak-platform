@@ -22,6 +22,7 @@ import type {
   IndirectEntryDTO,
   ItemDTO,
   JobDetailDTO,
+  DeletedJobDTO,
   JobListItemDTO,
   JobPlansDTO,
   JobPriceDTO,
@@ -149,7 +150,7 @@ export const useJobCounts = (params: { clientId?: string | null; jobTypeId?: str
   useQuery({ queryKey: qk.jobCounts(params), queryFn: get<JobRiskCounts>('jobs/counts', { client: params.clientId, jobType: params.jobTypeId, site: params.siteId }), staleTime: SHORT, ...opts });
 export const useJobsByLink = (type: string | null | undefined, id: string | null | undefined, opts?: Opts<JobListItemDTO[]>) =>
   useQuery({ queryKey: qk.jobsByLink(type ?? '', id ?? ''), queryFn: get<JobListItemDTO[]>('jobs/by-link', { type, id }), enabled: Boolean(type && id), staleTime: SHORT, ...opts });
-export const useDeletedJobs = (opts?: Opts<JobListItemDTO[]>) => useQuery({ queryKey: qk.deletedJobs(), queryFn: get<JobListItemDTO[]>('jobs/deleted'), staleTime: SHORT, ...opts });
+export const useDeletedJobs = (opts?: Opts<DeletedJobDTO[]>) => useQuery({ queryKey: qk.deletedJobs(), queryFn: get<DeletedJobDTO[]>('jobs/deleted'), staleTime: SHORT, ...opts });
 /** One job by id or job number. */
 export const useJob = (ref: string | null | undefined, opts?: Opts<JobDetailDTO>) =>
   useQuery({ queryKey: qk.job(ref ?? ''), queryFn: get<JobDetailDTO>(`jobs/${encodeURIComponent(ref ?? '')}`), enabled: Boolean(ref), staleTime: SHORT, ...opts });
@@ -223,8 +224,10 @@ export interface ProfitParams {
   jobId?: string | null;
   serviceId?: string | null;
   status?: JobStatusValue | null;
+  /** Only rows put on a client with no job. Read by the entries drill down. */
+  noJob?: boolean;
 }
-const profitQuery = (params: ProfitParams): Query => ({ from: params.from, to: params.to, site: params.siteId, client: params.clientId, jobType: params.jobTypeId, job: params.jobId, service: params.serviceId, status: params.status });
+const profitQuery = (params: ProfitParams): Query => ({ from: params.from, to: params.to, site: params.siteId, client: params.clientId, jobType: params.jobTypeId, job: params.noJob ? 'none' : params.jobId, service: params.serviceId, status: params.status });
 
 export const useSummary = (params: { from?: string | null; to?: string | null; siteId?: string | null } = {}, opts?: Opts<SummaryDTO>) => {
   const query = { from: params.from, to: params.to, site: params.siteId };

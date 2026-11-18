@@ -36,6 +36,7 @@ import {
   PROFIT_COLUMNS,
   VIEW_LABELS,
   VIEW_NOUN,
+  withArticle,
   compareOne,
   compareRows,
   contribution,
@@ -128,6 +129,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
   const rows = useMemo(() => sortRows(by, data?.rows ?? [], { column: sortColumn, direction: sortDirection }, compared), [by, data, sortColumn, sortDirection, compared]);
   const total = data?.total ?? null;
   const prior = comparing ? comparable(before.data) : null;
+  const companyMargin = total && bridge.data ? companyMarginBp(bridge.data.companyProfitCents, total.revenueCents) : null;
 
   const setPeriod = useCallback(
     (change: PeriodChange) => {
@@ -182,7 +184,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
         const parts = contribution(row);
         return [name, csvValue(row.revenueCents, 'money'), csvValue(parts?.directCents, 'money'), csvValue(parts?.contributionCents, 'money'), csvValue(row.marginBeforeSharedBp, 'percent'), csvValue(row.sharedCents, 'money'), csvValue(row.profitCents, 'money'), csvValue(row.marginBp, 'percent')];
       };
-      downloadCsv(`${orgSlug}-profit-contribution-${by}-${stamp}.csv`, [nameHeader, 'Revenue', 'Direct costs', 'Contribution', 'Margin before shared costs (%)', 'Time not on a job', 'Profit', 'Margin after all costs (%)'], [...rows.map((row) => line(rowLabel(by, row), row)), line('Total', total)]);
+      downloadCsv(`${orgSlug}-profit-contribution-${by}-${stamp}.csv`, [nameHeader, 'Revenue', 'Direct costs', 'Contribution', 'Contribution (%)', 'Time not on a job', 'Profit', 'Job margin (%)'], [...rows.map((row) => line(rowLabel(by, row), row)), line('Total', total)]);
       return;
     }
     const withName = by === 'job';
@@ -289,8 +291,20 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
                 <KpiTile label="Revenue" loading={!total} value={total ? formatMoneyWhole(total.revenueCents) : null} delta={total ? moneyDelta(total.revenueCents, prior?.revenueCents, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="revenue" scope={scope} />} />
                 <KpiTile label="Cost" loading={!total} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, prior?.costCents, 'down', compareLabel) : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
                 <KpiTile label="Profit" loading={!total} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, prior?.profitCents, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />
-                <KpiTile label="Margin on jobs" loading={!total} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue' }) : null} delta={total ? pointsDelta(total.marginBp, prior?.marginBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin" scope={scope} />} footer={!comparing && total?.marginBp !== null && total ? <span className="text-xs text-fg-muted">Target {formatPercentWhole(targetMarginBp)}{wholeCompany && bridge.data && companyMarginBp(bridge.data.companyProfitCents, total.revenueCents) !== null ? <>. Company margin, after overhead: <span className="font-medium text-fg tabular-nums" data-testid="profit-company-margin">{formatPercentBp(companyMarginBp(bridge.data.companyProfitCents, total.revenueCents))}</span></> : null}</span> : undefined} />
-                <KpiTile label="Margin before shared costs" loading={!total} value={total ? formatPercentBp(total.marginBeforeSharedBp, { empty: 'No revenue' }) : null} delta={total ? pointsDelta(total.marginBeforeSharedBp, prior?.marginBeforeSharedBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin_before_shared" scope={scope} />} />
+                <KpiTile label="Job margin" loading={!total} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue' }) : null} delta={total ? pointsDelta(total.marginBp, prior?.marginBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin" scope={scope} />} footer={!comparing && total?.marginBp !== null && total ? <span className="text-xs text-fg-muted">Target {formatPercentWhole(targetMarginBp)}</span> : undefined} />
+                {/* The company margin only exists for the whole company: a client or a job type has no overhead of its own. */}
+                {wholeCompany ? (
+                  <div className="contents" data-testid="profit-company-margin">
+                    <KpiTile
+                      label="Company margin"
+                      loading={!total || bridge.isLoading}
+                      value={total && bridge.data ? (companyMargin === null ? null : formatPercentBp(companyMargin)) : null}
+                      emptyText={bridge.isError ? 'Could not load' : 'No revenue'}
+                      explain={<ExplainNumber metric="company_profit" scope={{ from: period.from, to: period.to, siteId: filters.siteId }} label="How we got company profit" />}
+                      footer={companyMargin !== null ? <span className="text-xs text-fg-muted">After overhead and paid time not on any job</span> : undefined}
+                    />
+                  </div>
+                ) : null}
               </>
             ) : null}
             <KpiTile label="Units per person per hour" loading={!total} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(total.uph === null ? null : Number(total.uph), prior ? (prior.uph === null ? null : Number(prior.uph)) : undefined, 'up', compareLabel, 1) : undefined} explain={<ExplainNumber metric="uph" scope={scope} />} />
@@ -373,7 +387,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
           {comparing && before.isError ? <p className="text-sm text-danger-text">We could not load the period to compare with. The change columns are blank.</p> : null}
           {data && mode === 'table' ? (
             <p className="text-xs text-fg-muted">
-              Click a {VIEW_NOUN[by]} to go one level down. The total of each level matches the row you clicked. {seesMoney ? `Profit on this page is ${formatMoney(total?.profitCents ?? null)}.` : ''}
+              Click {withArticle(VIEW_NOUN[by])} to go one level down. The total of each level matches the row you clicked. {seesMoney ? `Profit on this page is ${formatMoney(total?.profitCents ?? null)}.` : ''}
             </p>
           ) : null}
         </>

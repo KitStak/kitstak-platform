@@ -480,30 +480,26 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
               }
             />
             <KpiTile
-              label="Margin after all costs"
+              label="Job margin"
               value={stats.marginBp === null ? null : formatPercentBp(stats.marginBp)}
               emptyText="No revenue yet"
               footer={
                 <>
                   {health ? <MarginPill health={health} size="sm" /> : null}
-                  <span className="text-xs text-fg-muted">
-                    {stats.targetMarginBp !== null
-                      ? `Target ${formatPercentBp(stats.targetMarginBp, { digits: 0 })}. `
-                      : ''}
-                    Before time not on a job:{' '}
-                    {formatPercentBp(stats.marginBeforeSharedBp, { empty: 'none yet' })}
-                  </span>
+                  {stats.targetMarginBp !== null ? (
+                    <span className="text-xs text-fg-muted">Target {formatPercentBp(stats.targetMarginBp, { digits: 0 })}</span>
+                  ) : null}
                 </>
               }
               explain={
                 <Explain
-                  title="Margin after all costs"
-                  rule="Margin is profit as a share of revenue. The second number leaves out time not on a job, to show what the job earns on its own."
+                  title="Job margin"
+                  rule="Job margin is profit as a share of revenue, after labor, material, other costs and this job's share of time not on a job. The last line leaves out time not on a job, to show what the job earns on its own."
                   rows={[
                     { label: 'Profit so far', value: formatMoney(stats.profitCents) },
                     { label: 'Revenue earned', value: formatMoney(stats.revenueCents) },
                     {
-                      label: 'Margin',
+                      label: 'Job margin',
                       value: formatPercentBp(stats.marginBp, { empty: 'No revenue yet' }),
                       kind: 'total',
                     },

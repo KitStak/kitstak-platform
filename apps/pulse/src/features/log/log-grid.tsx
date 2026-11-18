@@ -77,6 +77,7 @@ import {
   LINE_FIELDS,
   applyField,
   crewQuestion,
+  missingLaborWords,
   isBlank,
   isBlockPaste,
   lineProblem,
@@ -1203,7 +1204,8 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                       </select>
                     </label>
                     {input('people')}
-                    {input('hoursEach', { placeholder: tidy(grid.shiftHours) })}
+                    {/* No grey number here: a placeholder that looks like 8 reads as 8 hours typed in. */}
+                    {input('hoursEach')}
                     {input('hours', { className: 'font-medium' })}
                     {input('overtime')}
                     <div
@@ -1432,11 +1434,11 @@ function Readout({
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {missingHours ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-warning-subtle px-2 py-0.5 text-xs font-medium text-warning-text">
-              <AlertTriangle aria-hidden className="size-3" /> Add people and hours
+              <AlertTriangle aria-hidden className="size-3" /> {missingLaborWords(lines.map((line) => line.values))}
             </span>
           ) : readout.uph === null ? (
             <span className="text-xs text-fg-muted">
-              {formatHours(readout.hours, { empty: '' })} logged, no units yet
+              {formatHours(readout.hours, { empty: '', style: 'unit' })} logged, no units yet
             </span>
           ) : (
             <span

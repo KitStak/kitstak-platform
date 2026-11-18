@@ -5,18 +5,20 @@
  * with the same filters, so the three can never disagree.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { CalendarClock, Download, FileText, Printer } from 'lucide-react';
+import { CalendarClock, Download, FileText, ListTree, Printer } from 'lucide-react';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { Teach } from '@/components/pulse/teach';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/components/ui/cn';
 import { apiPath } from '@/lib/api-client';
-import { formatMoneyWhole } from '@/lib/format';
+import { formatMoneyWhole, formatNumber } from '@/lib/format';
 import { reportQuery, useReport } from '@/lib/hooks/use-data';
 import { rangeLabel } from '@/lib/reports';
 import { routes } from '@/lib/routes';
 import type { ClientDTO, JobTypeDTO, SiteDTO } from '@/lib/types';
+import { EntriesDrawer } from '@/features/profit/entries-drawer';
 import { FilterBar, parseFilters } from '@/features/profit/filter-bar';
+import type { EntryFilter } from '@/features/profit/profit-model';
 import { parsePeriod, periodQuery } from '@/features/profit/period';
 import { PeriodPicker, type PeriodChange } from '@/features/profit/period-picker';
 import { LoadError, Section, TableSkeleton } from '@/features/profit/profit-ui';
@@ -35,6 +37,9 @@ export function ReportView({ slug, name, today, weekStart, sites, clients, jobTy
   const query = useReport(slug, params);
   const report = query.data;
   const [scheduling, setScheduling] = useState(false);
+  // The entries behind the report's aside (rows put on a client with no job), and which kinds to show.
+  const [asideEntries, setAsideEntries] = useState<EntryFilter | null>(null);
+  const asideScope = useMemo(() => ({ from: period.from, to: period.to, siteId: filters.siteId, clientId: filters.clientId, noJob: true }), [period.from, period.to, filters.siteId, filters.clientId]);
 
   const setPeriod = useCallback((change: PeriodChange) => set(periodQuery({ preset: change.preset ?? period.preset, from: change.from ?? period.from, to: change.to ?? period.to, compare: 'none' })), [period, set]);
   const fileQuery = reportQuery(params);
@@ -89,9 +94,12 @@ export function ReportView({ slug, name, today, weekStart, sites, clients, jobTy
           ) : null}
           {report.notes.length > 0 || report.truncated ? (
             <ul className="flex flex-col gap-1 text-sm text-fg-secondary" data-testid="report-notes">
-              {report.notes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
+              {/* The aside is said in full under the chart, so its note is only for the print view and the file. */}
+              {report.notes
+                .filter((note) => !(report.aside && note.startsWith(report.aside.label)))
+                .map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
               {report.truncated ? <li>This report is long. Only the first 5,000 rows are shown. Narrow the dates to see the rest.</li> : null}
             </ul>
           ) : null}
@@ -128,6 +136,22 @@ export function ReportView({ slug, name, today, weekStart, sites, clients, jobTy
                   <ReportChart chart={report.chart} refreshing={query.isFetching} />
                 </Section>
               ) : null}
+              {report.aside ? (
+                <aside aria-label={report.aside.label} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-border-subtle bg-panel px-4 py-3 shadow-xs" data-testid="report-aside">
+                  <div className="min-w-0 max-w-3xl">
+                    <p className="text-sm text-fg">
+                      <span className="font-medium">{report.aside.label}:</span>{' '}
+                      <strong className={cn('font-semibold tabular-nums', (report.aside.valueCents ?? 0) < 0 ? 'text-danger-text' : 'text-fg')} data-testid="report-aside-value">
+                        {report.aside.valueCents === null ? 'Hidden' : formatMoneyWhole(report.aside.valueCents)}
+                      </strong>
+                    </p>
+                    <p className="mt-0.5 text-sm text-fg-secondary">{report.aside.text}</p>
+                  </div>
+                  <Button variant="secondary" size="sm" leadingIcon={<ListTree aria-hidden />} onClick={() => setAsideEntries('all')} data-testid="report-aside-drill">
+                    See the {formatNumber(report.aside.entryCount)} {report.aside.entryCount === 1 ? 'entry' : 'entries'} behind this
+                  </Button>
+                </aside>
+              ) : null}
               <Section title={`${report.rows.length} ${report.rows.length === 1 ? 'row' : 'rows'}`} hint="Click a column name to sort. The download keeps the order the report was built in." bodyClassName="p-0" testId="report-rows">
                 <ReportTable report={report} />
               </Section>
@@ -135,6 +159,17 @@ export function ReportView({ slug, name, today, weekStart, sites, clients, jobTy
           )}
         </div>
       )}
+      {report?.aside ? (
+        <EntriesDrawer
+          open={asideEntries !== null}
+          onClose={() => setAsideEntries(null)}
+          filter={asideEntries ?? 'all'}
+          onFilter={setAsideEntries}
+          scope={asideScope}
+          title={[report.aside.label, rangeLabel(period)].join(', ')}
+          fileName={`${slug}-not-on-a-job-${period.from}-to-${period.to}.csv`}
+        />
+      ) : null}
       <ScheduleDialog open={scheduling} onOpenChange={setScheduling} reportSlug={slug} filters={{ siteId: filters.siteId, clientId: filters.clientId, jobTypeId: filters.jobTypeId, words: report?.filtersLabel.split(', ').slice(1).join(', ') }} />
     </div>
   );

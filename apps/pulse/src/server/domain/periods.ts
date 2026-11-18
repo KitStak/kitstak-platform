@@ -8,6 +8,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { periods } from '@/server/db/schema';
 import { conflict, invalid } from '@/server/errors';
+import { marginBp } from '@/lib/money';
 import { endOfMonth } from '@/lib/profit';
 import type { CloseChecklistDTO, PeriodDTO } from '@/lib/types';
 import { cleanText, inTx, iso, jsonSafe, moneyOut, monthName, rows, type DomainContext } from './_shared';
@@ -112,7 +113,14 @@ export async function closePeriod(ctx: DomainContext, month: string): Promise<Pe
     getProfit(system, 'service', { from: start, to: end }),
     getCompanyBridge(system, { from: start, to: end }),
   ]);
-  const snapshot = jsonSafe({ total: byClient.total, byClient: byClient.rows, byJobType: byType.rows, byService: byService.rows, bridge }) as Record<string, unknown>;
+  // The company figures are saved with the job figures, so a closed month always shows what the company kept.
+  const company = {
+    jobProfitCents: bridge.workProfitCents,
+    jobMarginBp: byClient.total.marginBp,
+    companyProfitCents: bridge.companyProfitCents,
+    companyMarginBp: bridge.companyProfitCents === null || byClient.total.revenueCents === null ? null : marginBp(bridge.companyProfitCents, byClient.total.revenueCents),
+  };
+  const snapshot = jsonSafe({ total: byClient.total, byClient: byClient.rows, byJobType: byType.rows, byService: byService.rows, bridge, company }) as Record<string, unknown>;
   return inTx(async (tx) => {
     const values = { status: 'closed', closedAt: new Date(), closedBy: ctx.userId, snapshot, checklist: jsonSafe(checklist) as Record<string, unknown>, updatedAt: new Date() };
     const [row] = await tx
@@ -120,7 +128,7 @@ export async function closePeriod(ctx: DomainContext, month: string): Promise<Pe
       .values({ orgId: ctx.orgId, periodMonth: start, ...values })
       .onConflictDoUpdate({ target: [periods.orgId, periods.periodMonth], set: values })
       .returning();
-    await logActivity(tx, ctx, { verb: 'period.closed', entityType: 'period', entityId: row!.id, before: { status: 'open' }, after: { status: 'closed' }, meta: { periodMonth: start, profitCents: byClient.total.profitCents } });
+    await logActivity(tx, ctx, { verb: 'period.closed', entityType: 'period', entityId: row!.id, before: { status: 'open' }, after: { status: 'closed' }, meta: { periodMonth: start, profitCents: byClient.total.profitCents, companyProfitCents: bridge.companyProfitCents } });
     return toDTO(row!, access.seesMoney);
   });
 }

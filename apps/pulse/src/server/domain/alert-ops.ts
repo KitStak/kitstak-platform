@@ -13,15 +13,16 @@ import 'server-only';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { alertRules } from '@/server/db/schema';
-import { invalid, notFound } from '@/server/errors';
+import { forbidden, invalid, notFound } from '@/server/errors';
 import { ALERT_KINDS, type AlertKind, type AlertSeverity, type AlertStatus } from '@/lib/constants';
 import { formatMoneyWhole } from '@/lib/format';
 import { addDays, isWorkDay, startOfMonth, workDaysBetween } from '@/lib/profit';
 import { isClockTime, type QuietHours } from '@/features/alerts/quiet-hours';
+import { ruleHasLine } from '@/features/alerts/rule-kinds';
 import type { AlertDTO, AlertRuleDTO } from '@/lib/types';
 import { isUuid, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse } from './access';
-import { createAlertRule, updateAlert, updateAlertRule, type AlertChange, type AlertRuleInput } from './alerts';
+import { createAlertRule, toRuleDTO, updateAlert, updateAlertRule, type AlertChange, type AlertRuleInput } from './alerts';
 import { loadSettings } from './settings';
 
 /* ---------------------------------------------------------------- rules with quiet hours */
@@ -39,7 +40,7 @@ function cleanQuiet(quiet: QuietHours | null | undefined): QuietHours | null {
 }
 
 /** Writes the whole scope (filters plus quiet hours) of a rule. The stock update only knows the three filters. */
-async function writeScope(ctx: DomainContext, ruleId: string, scope: AlertRuleInput['scope'], quiet: QuietHours | null): Promise<AlertRuleDTO> {
+async function writeScope(ctx: DomainContext, ruleId: string, scope: AlertRuleInput['scope'], quiet: QuietHours | null, canSeeMoney: boolean): Promise<AlertRuleDTO> {
   const next: Record<string, unknown> = {};
   for (const key of ['clientId', 'jobTypeId', 'siteId'] as const) {
     const value = scope?.[key];
@@ -48,17 +49,17 @@ async function writeScope(ctx: DomainContext, ruleId: string, scope: AlertRuleIn
   if (quiet) next.quiet = quiet;
   const [row] = await db.update(alertRules).set({ scope: next, updatedAt: new Date() }).where(and(eq(alertRules.orgId, ctx.orgId), eq(alertRules.id, ruleId), isNull(alertRules.deletedAt))).returning();
   if (!row) throw notFound('That rule');
-  return { id: row.id, name: row.name, kind: row.kind as AlertKind, threshold: row.threshold, scope: row.scope ?? {}, severity: row.severity as AlertSeverity, notifyRoles: row.notifyRoles, notifyUserIds: row.notifyUserIds, enabled: row.enabled, isSystem: row.isSystem };
+  return toRuleDTO(row, canSeeMoney);
 }
 
 /** Creates or changes a rule, quiet hours included. One call for the rule editor. */
 export async function saveAlertRuleFull(ctx: DomainContext, input: AlertRuleFullInput & { id?: string | null }): Promise<AlertRuleDTO> {
-  await requirePulse(ctx, 'alert:manage');
+  const access = await requirePulse(ctx, 'alert:manage');
   const quiet = cleanQuiet(input.quiet);
   const { id, quiet: _quiet, ...rule } = input;
   void _quiet;
   const saved = id ? await updateAlertRule(ctx, id, rule) : await createAlertRule(ctx, rule);
-  return writeScope(ctx, saved.id, input.scope ?? (saved.scope as AlertRuleInput['scope']), quiet);
+  return writeScope(ctx, saved.id, input.scope ?? (saved.scope as AlertRuleInput['scope']), quiet, access.seesMoney);
 }
 
 /* ---------------------------------------------------------------- inbox */
@@ -182,9 +183,18 @@ export async function previewAlertRule(ctx: DomainContext, input: RulePreviewInp
   const from = addDays(today, -29);
   const days: string[] = Array.from({ length: 30 }, (_, index) => addDays(from, index));
   const dayIndex = new Map(days.map((day, index) => [day, index]));
-  const threshold = input.threshold === null || input.threshold === undefined || input.threshold === '' ? null : Number(input.threshold);
-  const scope = input.scope ?? {};
   const money = access.seesMoney;
+  let typedLine = input.threshold === null || input.threshold === undefined || input.threshold === '' ? null : input.threshold;
+  if (!money && ruleHasLine(input.kind)) {
+    // A reader without money cannot try out a line. For a saved rule the preview uses the stored
+    // line, which stays on the server; the answer below never names it.
+    if (typedLine !== null) throw forbidden('Your Pulse role does not include money, so you cannot set the line of this rule. Ask an admin of your workspace.');
+    const ruleId = input.ruleId && isUuid(input.ruleId) ? input.ruleId : null;
+    const [saved] = ruleId ? await db.select({ threshold: alertRules.threshold, kind: alertRules.kind }).from(alertRules).where(and(eq(alertRules.orgId, ctx.orgId), eq(alertRules.id, ruleId), isNull(alertRules.deletedAt))) : [];
+    typedLine = saved && saved.kind === input.kind ? saved.threshold : null;
+  }
+  const threshold = typedLine === null ? null : Number(typedLine);
+  const scope = input.scope ?? {};
   const hits: RulePreviewHit[] = [];
   const perDay = days.map(() => 0);
   let activeToday = 0;

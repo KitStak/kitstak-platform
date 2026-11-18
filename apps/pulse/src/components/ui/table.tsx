@@ -71,7 +71,7 @@ export function TablePagination({ page, pageCount, total, onPageChange, children
       <div className="flex min-w-0 items-center gap-3">
         {children}
         <span className="whitespace-nowrap">
-          Total: <span className="font-medium text-fg tabular-nums">{total.toLocaleString()}</span>
+          Total: <span className="font-medium text-fg tabular-nums">{total.toLocaleString('en-US')}</span>
         </span>
       </div>
       <nav aria-label="Pagination" className="flex shrink-0 items-center gap-1">
@@ -79,7 +79,7 @@ export function TablePagination({ page, pageCount, total, onPageChange, children
           <ChevronLeft aria-hidden className="size-4" />
         </button>
         <span className="px-1 tabular-nums">
-          <span className="font-medium text-fg">{page.toLocaleString()}</span> / {pages.toLocaleString()}
+          <span className="font-medium text-fg">{page.toLocaleString('en-US')}</span> / {pages.toLocaleString('en-US')}
         </span>
         <button type="button" aria-label="Next page" className={pagerButton} disabled={page >= pages} onClick={() => onPageChange(page + 1)}>
           <ChevronRight aria-hidden className="size-4" />

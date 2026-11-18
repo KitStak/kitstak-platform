@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '@/components/ui/table';
 import { toast } from '@/components/ui/toast';
 import { cn } from '@/components/ui/cn';
-import { formatRelative } from '@/lib/dates';
+import { RelativeTime } from '@/components/pulse/local-time';
 import { formatHours, formatMoney, formatMoneyWhole, formatNumber, formatPercentBp, formatPercentWhole } from '@/lib/format';
 import { useServerAction } from '@/lib/hooks/use-action';
 import { centsToNumber, subCents } from '@/lib/money';
@@ -181,7 +181,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
         <KpiTile label="Cost to serve" loading={!total} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, previous?.costCents, 'down', vs) : undefined} sparkline={points.length > 1 ? { values: points.map((row) => row.costCents) } : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
         <KpiTile label="Profit" loading={!total} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, previous?.profitCents, 'up', vs) : undefined} sparkline={points.length > 1 ? { values: points.map((row) => row.profitCents), tone: (total?.profitCents ?? 0) < 0 ? 'bad' : 'accent' } : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />
         <KpiTile
-          label="Margin after all costs"
+          label="Job margin"
           loading={!total}
           value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null}
           delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined}
@@ -196,7 +196,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
         <Section title="Trend" hint={`${rangeLabel(period)}, by ${bucket}`} testId="client-trend">
           <ComboChart
             title={`Revenue, cost and margin for ${client.name}`}
-            description={`Bars show revenue and cost. The line on top is the margin after all costs, next to this client’s target margin.${marginLine.skipped > 0 ? ` ${marginLine.skipped === 1 ? `One ${bucket}` : `${marginLine.skipped} ${bucket}s`} with very little revenue ${marginLine.skipped === 1 ? 'is' : 'are'} left off the margin line so the rest stay readable.` : ''}`}
+            description={`Bars show revenue and cost. The line on top is the job margin, next to this client’s target margin.${marginLine.skipped > 0 ? ` ${marginLine.skipped === 1 ? `One ${bucket}` : `${marginLine.skipped} ${bucket}s`} with very little revenue ${marginLine.skipped === 1 ? 'is' : 'are'} left off the margin line so the rest stay readable.` : ''}`}
             loading={!trend.data}
             refreshing={trend.isFetching && Boolean(trend.data)}
             dates={points.map((row) => row.key)}
@@ -205,7 +205,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
               { id: 'revenue', label: 'Revenue', values: points.map((row) => row.revenueCents) },
               { id: 'cost', label: 'Cost', values: points.map((row) => row.costCents) },
             ]}
-            lines={[{ id: 'margin', label: 'Margin after all costs', values: marginLine.values }]}
+            lines={[{ id: 'margin', label: 'Job margin', values: marginLine.values }]}
             barFormat="money"
             lineFormat="percent"
             lineTarget={{ value: targetBp, label: 'Target margin' }}
@@ -445,7 +445,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
                 <span className="min-w-0 text-fg">
                   <span className="font-medium">{item.actor?.name ?? 'KitStak'}</span> <span className="text-fg-secondary">{activityWords(item.verb, item.field)}</span>
                 </span>
-                <span className="shrink-0 text-xs text-fg-muted">{formatRelative(item.createdAt)}</span>
+                <RelativeTime iso={item.createdAt} className="shrink-0 text-xs text-fg-muted" />
               </li>
             ))}
           </ul>

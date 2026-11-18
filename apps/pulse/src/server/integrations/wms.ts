@@ -1,6 +1,7 @@
 /**
  * WMS reader: work orders with finished quantity and the cost of the parts they used, kits
- * built per day, billed revenue and extra service (VAS) revenue. For this organization's own
+ * built per day, billed revenue, extra service (VAS) records with their price, and the contract
+ * rates that price a work order. For this organization's own
  * warehouse only.
  *
  * One separate warehouse per organization: the schema comes from `core.wms_tenants` through
@@ -63,15 +64,44 @@ export interface WmsBilledLine {
   readonly approved: boolean;
 }
 
-export interface WmsVasLine {
+/** One warehouse extra service (VAS) record, with the price the warehouse has for it. */
+export interface WmsVasRecord {
   readonly id: string;
-  readonly clientId: string | null;
+  /** Equal to the shared `core.customers` id. */
+  readonly clientId: string;
+  readonly warehouseId: string | null;
+  readonly vasTypeId: string;
   readonly vasType: string;
+  /** The day the work was done, in the warehouse time zone. */
   readonly workDate: string;
-  readonly quantity: number | null;
-  /** Null when the service is billed by quantity and the contract has no rate for it. */
-  readonly revenueCents: number | null;
+  /**
+   * Where the price comes from. `record`: the record carries its own total ("Total Price").
+   * `contract`: quantity times the rate on the client's approved contract. Null: no price yet.
+   */
+  readonly priceFrom: 'record' | 'contract' | null;
+  /** How many, three places. A record with its own total counts as 1. */
+  readonly quantity: string;
+  /** Price of one, four places: the record's own total, or the contract rate. */
+  readonly unitPrice: string | null;
+  /** Whole cents for a record with its own total. A contract price is worked out in `src/lib/money.ts`. */
+  readonly ownCents: number | null;
+  readonly contractName: string | null;
   readonly workOrderId: string | null;
+  readonly note: string | null;
+  /** Path inside the WMS app. */
+  readonly path: string;
+}
+
+/** What the client's warehouse contract says a work order earns. */
+export interface WmsContractPrice {
+  readonly workOrderId: string;
+  readonly contractName: string;
+  /** "Per Kit" rate plus the "Per Component" rate times the parts in one kit, four places. Null when the contract has neither. */
+  readonly unitPrice: string | null;
+  /** The "Per WorkOrder" fee in whole cents. Null when the contract has none. */
+  readonly perOrderCents: number | null;
+  /** Changes when any rate behind the price changes. */
+  readonly signature: string;
 }
 
 const num = (value: unknown): number => {
@@ -251,48 +281,156 @@ export async function listBilledRevenue(ctx: DomainContext, options: { from?: st
   }
 }
 
+/** The WMS screen that lists extra service records. */
+export const WMS_VAS_PATH = '/billing/vas';
+
 /**
- * Extra service (VAS) records with their revenue: the typed total for "Total Price" services,
- * quantity times the approved contract's rate for quantity services, and null when the contract
- * has no rate. Tied to a work order when the record names one.
+ * Extra service (VAS) records with the price the warehouse has for each one.
+ *
+ *  - A "Total Price" record carries its own price: that total is used as it is.
+ *  - A "Vas Quantity" record is priced by the client's contract: the VAS fee for that service on
+ *    the newest approved contract of the same client and warehouse that had started by the day
+ *    of the work. The rate is the fee's first tier when it has tiers, else its standard rate.
+ *  - No such fee means no price yet.
+ *
+ * Tied to a work order when the record names one. The day is the record's time in the warehouse
+ * time zone. Answers null when this workspace has no warehouse to read (so a caller never
+ * mistakes "cannot read" for "no records"), and throws only when `throwOnError` is set.
  */
-export async function listVasRevenue(ctx: DomainContext, options: { from?: string } = {}): Promise<WmsVasLine[]> {
-  const schema = await wmsReady(ctx);
-  if (!schema || !(await wmsTableExists(schema, 'vas_operations')) || !(await wmsTableExists(schema, 'lookup_values'))) return [];
+export async function listVasRecords(ctx: DomainContext, options: { throwOnError?: boolean } = {}): Promise<WmsVasRecord[] | null> {
   try {
+    const schema = await wmsReady(ctx);
+    if (!schema || !(await wmsTableExists(schema, 'vas_operations')) || !(await wmsTableExists(schema, 'lookup_values'))) return null;
     const t = (name: string) => wmsTable(schema, name);
     const hasFees = (await wmsTableExists(schema, 'billing_fees')) && (await wmsTableExists(schema, 'billing_contracts'));
+    const hasTiers = hasFees && (await wmsTableExists(schema, 'billing_fee_tiers'));
+    const hasWarehouses = await wmsTableExists(schema, 'warehouses');
+    const feeRate = hasTiers ? sql`coalesce((select ft.rate from ${t('billing_fee_tiers')} ft where ft.fee_id = f.id order by ft.from_qty nulls first limit 1), f.standard_rate)` : sql`f.standard_rate`;
     const rate = hasFees
-      ? sql`(select f.standard_rate from ${t('billing_fees')} f join ${t('billing_contracts')} bc on bc.id = f.contract_id
-              where bc.client_id = v.client_id and bc.approval_status = 'Approved' and f.operation_type = 'VAS' and f.vas_type_id = v.vas_type_id
-              order by bc.calc_start_date desc nulls last limit 1)`
-      : sql`null::double precision`;
-    const from = options.from ? sql`and v.operation_at >= ${options.from}` : sql``;
-    const found = await rows<{ id: string; client_id: string | null; vas_type: string; work_date: string; calculation_type: string; value: number | null; revenue_cents: string | null; work_order_id: string | null }>(
+      ? sql`left join lateral (
+              select round(${feeRate}::numeric, 4) as rate, bc.name as contract_name
+                from ${t('billing_fees')} f
+                join ${t('billing_contracts')} bc on bc.id = f.contract_id
+               where bc.client_id = v.client_id and bc.warehouse_id = v.warehouse_id and bc.approval_status = 'Approved'
+                 and f.operation_type = 'VAS' and f.vas_type_id = v.vas_type_id
+                 and ${feeRate} >= 0 and ${feeRate} < 1000000
+                 and left(bc.calc_start_date, 10) <= left(v.operation_at, 10)
+               order by bc.calc_start_date desc, f.updated_at desc, f.id
+               limit 1
+            ) r on true`
+      : sql`left join lateral (select null::numeric as rate, null::text as contract_name) r on true`;
+    const zone = hasWarehouses ? sql`coalesce((select nullif(wh.timezone, '') from ${t('warehouses')} wh where wh.id = v.warehouse_id), 'UTC')` : sql`'UTC'`;
+    const found = await rows<{
+      id: string;
+      client_id: string;
+      warehouse_id: string | null;
+      vas_type_id: string;
+      vas_type: string;
+      work_date: string;
+      calculation_type: string;
+      quantity: string;
+      own_price: string;
+      own_cents: string;
+      rate: string | null;
+      contract_name: string | null;
+      work_order_id: string | null;
+      note: string | null;
+    }>(
       db,
-      sql`select x.id, x.client_id, x.vas_type, x.work_date, x.calculation_type, x.value, x.work_order_id,
-                 case when x.calculation_type = 'Total Price' then round(x.value::numeric * 100)::bigint::text
-                      when x.rate is not null then round(x.value::numeric * x.rate::numeric * 100)::bigint::text end as revenue_cents
-            from (
-              select v.id, v.client_id, lv.name as vas_type, left(v.operation_at, 10) as work_date, v.calculation_type, v.value, ${rate} as rate,
-                     (select wo.id from ${t('work_orders')} wo where v.reference_order_type = 'Work Order' and wo.code = v.reference_number limit 1) as work_order_id
-                from ${t('vas_operations')} v
-                join ${t('lookup_values')} lv on lv.id = v.vas_type_id
-               where v.operation_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' ${from}
-            ) x
-           order by x.work_date`,
+      sql`select v.id, v.client_id, v.warehouse_id, v.vas_type_id, lv.name as vas_type, v.calculation_type, v.note,
+                 case when v.operation_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' then ((v.operation_at::timestamptz at time zone ${zone})::date)::text else left(v.operation_at, 10) end as work_date,
+                 round(v.value::numeric, 3)::text as quantity,
+                 round(v.value::numeric, 4)::text as own_price,
+                 round(v.value::numeric * 100)::bigint::text as own_cents,
+                 r.rate::text as rate, r.contract_name,
+                 (select wo.id from ${t('work_orders')} wo where v.reference_order_type = 'Work Order' and wo.code = v.reference_number limit 1) as work_order_id
+            from ${t('vas_operations')} v
+            join ${t('lookup_values')} lv on lv.id = v.vas_type_id
+            ${rate}
+           where v.operation_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' and v.client_id is not null and v.value >= 0 and v.value < 100000000
+           order by v.operation_at, v.id
+           limit 20000`,
     );
-    return found.map((row) => ({
-      id: row.id,
-      clientId: row.client_id,
-      vasType: row.vas_type,
-      workDate: row.work_date,
-      quantity: row.calculation_type === 'Total Price' ? null : num(row.value),
-      revenueCents: row.revenue_cents === null ? null : cents(row.revenue_cents),
-      workOrderId: row.work_order_id,
-    }));
+    return found.map((row): WmsVasRecord => {
+      const own = row.calculation_type === 'Total Price';
+      const priceFrom = own ? 'record' : row.rate !== null ? 'contract' : null;
+      return {
+        id: row.id,
+        clientId: row.client_id,
+        warehouseId: row.warehouse_id,
+        vasTypeId: row.vas_type_id,
+        vasType: row.vas_type,
+        workDate: row.work_date,
+        priceFrom,
+        quantity: own ? '1.000' : row.quantity,
+        // A price of one has to fit the column: a very large own total keeps its cents and shows no price of one.
+        unitPrice: own ? (Number(row.own_price) < 1_000_000 ? row.own_price : null) : row.rate,
+        ownCents: own ? cents(row.own_cents) : null,
+        contractName: priceFrom === 'contract' ? row.contract_name : null,
+        workOrderId: row.work_order_id,
+        note: row.note,
+        path: WMS_VAS_PATH,
+      };
+    });
   } catch (error) {
-    logSoftFail(ctx.orgId, 'wms.listVasRevenue', error);
+    logSoftFail(ctx.orgId, 'wms.listVasRecords', error);
+    if (options.throwOnError) throw error;
+    return null;
+  }
+}
+
+/**
+ * What the warehouse contract says each of these work orders earns: the "Work Order" fees on the
+ * newest approved contract of the work order's client and warehouse. Only fees with no
+ * conditions are read (a fee that applies to some products only is left to the warehouse bill).
+ * A work order whose client has no such fee is left out. Fail soft: an empty list.
+ */
+export async function listContractPrices(ctx: DomainContext, workOrderIds: readonly string[]): Promise<WmsContractPrice[]> {
+  const ids = cleanIds(workOrderIds);
+  if (ids.length === 0) return [];
+  try {
+    const schema = await wmsReady(ctx);
+    if (!schema || !(await wmsTableExists(schema, 'billing_fees')) || !(await wmsTableExists(schema, 'billing_contracts'))) return [];
+    const t = (name: string) => wmsTable(schema, name);
+    const found = await rows<{ work_order_id: string; contract_id: string; contract_name: string; unit_price: string | null; per_order_cents: string | null; signature: string }>(
+      db,
+      sql`select w.id as work_order_id, c.contract_id, c.contract_name,
+                 case when c.per_kit is null and c.per_component is null then null
+                      else round(coalesce(c.per_kit, 0) + coalesce(c.per_component, 0) * p.parts, 4)::text end as unit_price,
+                 round(c.per_order * 100)::bigint::text as per_order_cents,
+                 concat_ws('|', c.contract_id, coalesce(c.per_kit::text, ''), coalesce(c.per_component::text, ''), coalesce(c.per_order::text, ''), p.parts::text) as signature
+            from ${t('work_orders')} w
+            cross join lateral (
+              select coalesce(sum(wc.component_qty), 0)::numeric as parts from ${t('work_order_components')} wc where wc.work_order_id = w.id
+            ) p
+            join lateral (
+              select bc.id as contract_id, bc.name as contract_name,
+                     sum(f.standard_rate::numeric) filter (where f.fee_by = 'Per Kit') as per_kit,
+                     sum(f.standard_rate::numeric) filter (where f.fee_by = 'Per Component') as per_component,
+                     sum(f.standard_rate::numeric) filter (where f.fee_by = 'Per WorkOrder') as per_order
+                from ${t('billing_contracts')} bc
+                join ${t('billing_fees')} f on f.contract_id = bc.id
+               where bc.client_id = w.client_id and bc.warehouse_id = w.warehouse_id and bc.approval_status = 'Approved'
+                 and f.operation_type = 'Work Order' and f.fee_by in ('Per Kit', 'Per Component', 'Per WorkOrder')
+                 and f.standard_rate >= 0 and f.standard_rate < 1000000
+                 and (f.conditions is null or f.conditions = '[]'::jsonb)
+               group by bc.id, bc.name, bc.calc_start_date
+               order by bc.calc_start_date desc, bc.id
+               limit 1
+            ) c on true
+           where w.id in ${textList(ids)}`,
+    );
+    return found
+      .filter((row) => row.unit_price === null || Number(row.unit_price) < 1_000_000)
+      .map((row) => ({
+        workOrderId: row.work_order_id,
+        contractName: row.contract_name,
+        unitPrice: row.unit_price,
+        perOrderCents: row.per_order_cents === null ? null : cents(row.per_order_cents),
+        signature: row.signature,
+      }));
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'wms.listContractPrices', error);
     return [];
   }
 }

@@ -9,7 +9,7 @@ import 'server-only';
 import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
 import { alertRules, alerts } from '@/server/db/schema';
-import { conflict, invalid, notFound } from '@/server/errors';
+import { conflict, forbidden, invalid, notFound } from '@/server/errors';
 import { ALERT_KINDS, type AlertEntityType, type AlertKind, type AlertSeverity, type AlertStatus } from '@/lib/constants';
 import { addDays, endOfMonth, startOfMonth } from '@/lib/profit';
 import type { AlertDTO, AlertRuleDTO } from '@/lib/types';
@@ -19,6 +19,7 @@ import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
 import { liveJobAlert, renderAlertWords, type LiveReason } from './alert-words';
 import { isQuietNow, quietOf } from '@/features/alerts/quiet-hours';
+import { ruleHasLine, ruleNameWithoutMoney } from '@/features/alerts/rule-kinds';
 import { filterOrgMembers } from './people';
 import { notify } from './notifications';
 import { userIdsWithRoles } from './roles';
@@ -27,15 +28,37 @@ import { loadSettings } from './settings';
 type RuleRow = typeof alertRules.$inferSelect;
 type AlertRow = typeof alerts.$inferSelect;
 
-function toRuleDTO(row: RuleRow): AlertRuleDTO {
-  return { id: row.id, name: row.name, kind: row.kind as AlertKind, threshold: row.threshold, scope: row.scope ?? {}, severity: row.severity as AlertSeverity, notifyRoles: row.notifyRoles, notifyUserIds: row.notifyUserIds, enabled: row.enabled, isSystem: row.isSystem };
+/**
+ * A rule as one reader may see it. The line of a rule (dollars, or a margin percent) is money:
+ * a reader without money gets `threshold: null`, `moneyHidden: true` and a name with no numbers.
+ */
+export function toRuleDTO(row: RuleRow, canSeeMoney: boolean): AlertRuleDTO {
+  return {
+    id: row.id,
+    name: canSeeMoney ? row.name : ruleNameWithoutMoney(row.kind, row.name),
+    kind: row.kind as AlertKind,
+    threshold: canSeeMoney ? row.threshold : null,
+    moneyHidden: !canSeeMoney,
+    scope: row.scope ?? {},
+    severity: row.severity as AlertSeverity,
+    notifyRoles: row.notifyRoles,
+    notifyUserIds: row.notifyUserIds,
+    enabled: row.enabled,
+    isSystem: row.isSystem,
+  };
+}
+
+/** A reader without money may not set or change the line of a rule. */
+function refuseLineWithoutMoney(access: PulseAccess, kind: string, threshold: string | null | undefined): void {
+  if (access.seesMoney || !ruleHasLine(kind)) return;
+  if (threshold !== null && threshold !== undefined && threshold !== '') throw forbidden('Your Pulse role does not include money, so you cannot set the line of this rule. Ask an admin of your workspace.');
 }
 
 export async function listAlertRules(ctx: DomainContext): Promise<AlertRuleDTO[]> {
-  await requirePulse(ctx, 'pulse:read');
+  const access = await requirePulse(ctx, 'pulse:read');
   await loadSettings(ctx.orgId);
   const found = await db.select().from(alertRules).where(and(eq(alertRules.orgId, ctx.orgId), isNull(alertRules.deletedAt))).orderBy(desc(alertRules.isSystem), asc(alertRules.createdAt));
-  return found.map(toRuleDTO);
+  return found.map((row) => toRuleDTO(row, access.seesMoney));
 }
 
 export interface AlertRuleInput {
@@ -51,10 +74,11 @@ export interface AlertRuleInput {
 }
 
 export async function createAlertRule(ctx: DomainContext, input: AlertRuleInput): Promise<AlertRuleDTO> {
-  await requirePulse(ctx, 'alert:manage');
+  const access = await requirePulse(ctx, 'alert:manage');
   const name = cleanText(input.name);
   if (!name) throw invalid('Give the rule a name.', { name: 'Give the rule a name.' });
   if (!(ALERT_KINDS as readonly string[]).includes(input.kind)) throw invalid('Pick what the rule watches.');
+  refuseLineWithoutMoney(access, input.kind, input.threshold);
   return inTx(async (tx) => {
     const [row] = await tx
       .insert(alertRules)
@@ -72,19 +96,26 @@ export async function createAlertRule(ctx: DomainContext, input: AlertRuleInput)
       })
       .returning();
     await logActivity(tx, ctx, { verb: 'alert_rule.created', entityType: 'alert_rule', entityId: row!.id, after: { name, kind: input.kind, severity: row!.severity, enabled: row!.enabled } });
-    return toRuleDTO(row!);
+    return toRuleDTO(row!, access.seesMoney);
   });
 }
 
 export async function updateAlertRule(ctx: DomainContext, ruleId: string, patch: Partial<AlertRuleInput>): Promise<AlertRuleDTO> {
-  await requirePulse(ctx, 'alert:manage');
+  const access = await requirePulse(ctx, 'alert:manage');
   return inTx(async (tx) => {
     const [before] = isUuid(ruleId) ? await tx.select().from(alertRules).where(and(eq(alertRules.orgId, ctx.orgId), eq(alertRules.id, ruleId), isNull(alertRules.deletedAt))) : [];
     if (!before) throw notFound('That rule');
+    // A reader without money gets the rule with no line, so an empty line from them means
+    // "leave it as it is", and a typed line is refused. The kind stays too: it picks the line.
+    const lineLocked = !access.seesMoney && (ruleHasLine(before.kind) || ruleHasLine(patch.kind ?? before.kind));
+    if (lineLocked) {
+      refuseLineWithoutMoney(access, ruleHasLine(before.kind) ? before.kind : (patch.kind ?? before.kind), patch.threshold);
+      if (patch.kind !== undefined && patch.kind !== before.kind) throw forbidden('Your Pulse role does not include money, so you cannot change what this rule watches. Ask an admin of your workspace.');
+    }
     const values = defined({
-      name: patch.name === undefined ? undefined : (cleanText(patch.name) ?? before.name),
+      name: patch.name === undefined || lineLocked ? undefined : (cleanText(patch.name) ?? before.name),
       kind: before.isSystem ? undefined : patch.kind,
-      threshold: patch.threshold,
+      threshold: lineLocked ? undefined : patch.threshold,
       scope: patch.scope === undefined ? undefined : defined(patch.scope),
       severity: patch.severity,
       notifyRoles: patch.notifyRoles,
@@ -92,10 +123,10 @@ export async function updateAlertRule(ctx: DomainContext, ruleId: string, patch:
       enabled: patch.enabled,
     });
     const change = diff(before as unknown as Record<string, unknown>, values as Record<string, unknown>);
-    if (!change) return toRuleDTO(before);
+    if (!change) return toRuleDTO(before, access.seesMoney);
     const [row] = await tx.update(alertRules).set({ ...values, updatedAt: new Date() }).where(eq(alertRules.id, before.id)).returning();
     await logActivity(tx, ctx, { verb: 'alert_rule.updated', entityType: 'alert_rule', entityId: before.id, ...change });
-    return toRuleDTO(row!);
+    return toRuleDTO(row!, access.seesMoney);
   });
 }
 

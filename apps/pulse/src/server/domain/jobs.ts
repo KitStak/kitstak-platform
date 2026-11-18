@@ -6,8 +6,9 @@
 import 'server-only';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
-import { clients, jobLinks, jobPlanLines, jobPlans, jobPrices, jobStats, jobTypes, jobs, sites, type UsualCrewLine } from '@/server/db/schema';
+import { activity, clients, jobLinks, jobPlanLines, jobPlans, jobPrices, jobStats, jobTypes, jobs, sites, type UsualCrewLine } from '@/server/db/schema';
 import { appUrls } from '@/server/env';
+import { orgModuleFlags, type ModuleFlags } from '@/server/entitlements';
 import { conflict, invalid, notFound } from '@/server/errors';
 import {
   PULSE_STATUSES,
@@ -23,12 +24,13 @@ import {
   type StreamSource,
 } from '@/lib/constants';
 import { NEXT_STEP_LABELS, riskHeadline, riskSentence, type NextStep, type RiskRule } from '@/lib/profit';
-import type { JobDetailDTO, JobDTO, JobLinkDTO, JobListFilters, JobListItemDTO, JobPriceDTO, JobStatsDTO, RiskReasonDTO } from '@/lib/types';
+import type { DeletedJobDTO, JobDetailDTO, JobDTO, JobLinkDTO, JobListFilters, JobListItemDTO, JobPriceDTO, JobStatsDTO, RiskReasonDTO } from '@/lib/types';
 import { assertVersion, cleanText, defined, diff, hideUnless, inTx, iso, isoRequired, isUuid, moneyOut, monthName, rows, singular, todayInZone, type DomainContext } from './_shared';
 import { restoreRow, softDeleteRow } from './_crud';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
-import { ensureClientByName, getClientRow, getJobTypeRow, resolveSite } from './catalog';
+import { nameList } from '@/lib/client-names';
+import { ensureClientByName, findClientLookAlikes, getClientRow, getJobTypeRow, resolveSite } from './catalog';
 import { getDeals } from '@/server/integrations/crm';
 import { recomputeJobs } from './job-stats';
 import { filterOrgMembers, getPeople } from './people';
@@ -270,15 +272,29 @@ export async function getJobRow(ctx: DomainContext, ref: string, executor: Execu
   return row;
 }
 
-function linkUrl(type: LinkTargetType, path: string | null): string | null {
+/**
+ * Full URL of a linked record in its own app, or null. Null when no path is stored, and null when
+ * the workspace's plan no longer includes that app: the link then shows as plain words, never as
+ * a link to an app the person cannot open.
+ */
+export function siblingLinkUrl(type: LinkTargetType, path: string | null, modules: Pick<ModuleFlags, 'crm' | 'wms' | 'projects'>, hosts: { crm: string; wms: string; projects: string } = appUrls()): string | null {
   if (!path || !path.startsWith('/') || path.startsWith('//')) return null;
-  const urls = appUrls();
-  const host = type.startsWith('crm_') ? urls.crm : type.startsWith('wms_') ? urls.wms : urls.projects;
-  return `${host.replace(/\/+$/, '')}${path}`;
+  const app = type.startsWith('crm_') ? 'crm' : type.startsWith('wms_') ? 'wms' : 'projects';
+  if (!modules[app]) return null;
+  return `${hosts[app].replace(/\/+$/, '')}${path}`;
 }
 
-function toLinkDTO(row: typeof jobLinks.$inferSelect): JobLinkDTO {
-  return { id: row.id, jobId: row.jobId, targetType: row.targetType as LinkTargetType, targetId: row.targetId, importsTime: row.importsTime, title: row.cachedTitle, status: row.cachedStatus, url: linkUrl(row.targetType as LinkTargetType, row.cachedUrl) };
+/** Which sibling apps the workspace may open. On any error: none, so no link is ever dead. */
+async function linkModules(ctx: DomainContext): Promise<Pick<ModuleFlags, 'crm' | 'wms' | 'projects'>> {
+  try {
+    return await orgModuleFlags(ctx.orgId);
+  } catch {
+    return { crm: false, wms: false, projects: false };
+  }
+}
+
+function toLinkDTO(row: typeof jobLinks.$inferSelect, modules: Pick<ModuleFlags, 'crm' | 'wms' | 'projects'>): JobLinkDTO {
+  return { id: row.id, jobId: row.jobId, targetType: row.targetType as LinkTargetType, targetId: row.targetId, importsTime: row.importsTime, title: row.cachedTitle, status: row.cachedStatus, url: siblingLinkUrl(row.targetType as LinkTargetType, row.cachedUrl, modules) };
 }
 
 function toPriceDTO(row: typeof jobPrices.$inferSelect, access: Access): JobPriceDTO {
@@ -293,6 +309,7 @@ async function detail(ctx: DomainContext, jobId: string, access: Access, executo
   const prices = await executor.select().from(jobPrices).where(and(eq(jobPrices.orgId, ctx.orgId), eq(jobPrices.jobId, jobId))).orderBy(desc(jobPrices.effectiveFrom));
   const plans = await loadPlans(ctx, jobId, access, executor);
   const links = await executor.select().from(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, jobId))).orderBy(asc(jobLinks.createdAt));
+  const modules = links.length > 0 ? await linkModules(ctx) : { crm: false, wms: false, projects: false };
   const people = await getPeople(row.job.ownerId ? [row.job.ownerId] : [], executor);
   const plan = plans.budget ?? plans.quote;
   const [inherited] = await rows<{ owner: string }>(
@@ -309,7 +326,7 @@ async function detail(ctx: DomainContext, jobId: string, access: Access, executo
     prices: prices.map((price) => toPriceDTO(price, access)),
     quote: plans.quote,
     budget: plans.budget,
-    links: links.map(toLinkDTO),
+    links: links.map((link) => toLinkDTO(link, modules)),
     owner: row.job.ownerId ? (people.get(row.job.ownerId) ?? null) : null,
   };
 }
@@ -534,9 +551,30 @@ async function adoptCrmAccount(tx: Executor, ctx: DomainContext, clientId: strin
  * The quick add row on the Jobs page and the log grid: client, job name, units, price per unit.
  * Uses the General job type, starts today, is active at once and makes the quote from the price.
  */
-export async function quickAddJob(ctx: DomainContext, input: { clientId?: string | null; clientName?: string | null; name: string; plannedUnits?: string | null; unitPrice?: string | null; siteId?: string | null }): Promise<JobDetailDTO> {
+export async function quickAddJob(
+  ctx: DomainContext,
+  input: {
+    clientId?: string | null;
+    clientName?: string | null;
+    /** Say yes to a new client whose name is close to one you have. Without it such a name is refused, never made quietly. */
+    createClient?: boolean;
+    name: string;
+    plannedUnits?: string | null;
+    unitPrice?: string | null;
+    siteId?: string | null;
+  },
+): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
+    if (!input.clientId && !input.createClient) {
+      // Two clients for one company split its profit in two. A close name needs a clear yes.
+      const typed = cleanText(input.clientName) ?? '';
+      const close = await findClientLookAlikes(tx, ctx, typed);
+      if (close.length > 0) {
+        const message = `${typed} looks like ${nameList(close.map((client) => client.name))}, a client you already have. Pick that client, or say that you want a new one.`;
+        throw invalid(message, { clientId: message, clientName: message });
+      }
+    }
     const site = await resolveSite(ctx, input.siteId, tx);
     const units = input.plannedUnits ?? '0';
     const [revenue] = await rows<{ cents: string }>(tx, sql`SELECT round(${units}::numeric * ${input.unitPrice ?? '0'}::numeric * 100)::bigint::text AS cents`);
@@ -936,7 +974,8 @@ export async function addJobLink(ctx: DomainContext, jobId: string, link: JobLin
     const job = await getJobRow(ctx, jobId, tx);
     await insertLinks(tx, ctx, job.id, [link]);
     const found = await tx.select().from(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, job.id))).orderBy(asc(jobLinks.createdAt));
-    return found.map(toLinkDTO);
+    const modules = await linkModules(ctx);
+    return found.map((link) => toLinkDTO(link, modules));
   });
 }
 
@@ -971,8 +1010,19 @@ export async function findJobsByLink(ctx: DomainContext, type: LinkTargetType | 
 }
 
 /** Deleted jobs, newest first, for the "Recently deleted" list. */
-export async function listDeletedJobs(ctx: DomainContext): Promise<JobListItemDTO[]> {
+export async function listDeletedJobs(ctx: DomainContext): Promise<DeletedJobDTO[]> {
   const access = await requirePulse(ctx, 'job:manage');
   const found = await joined(db).where(and(eq(jobs.orgId, ctx.orgId), isNotNull(jobs.deletedAt))).orderBy(desc(jobs.deletedAt)).limit(200);
-  return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: null }));
+  // Who deleted each one comes from the activity log: the newest "job.deleted" line of the job.
+  const ids = found.map((row) => row.job.id);
+  const who = new Map<string, string | null>();
+  if (ids.length > 0) {
+    const lines = await db
+      .select({ jobId: activity.entityId, actorId: activity.actorId })
+      .from(activity)
+      .where(and(eq(activity.orgId, ctx.orgId), eq(activity.verb, 'job.deleted'), inArray(activity.entityId, ids)))
+      .orderBy(desc(activity.createdAt));
+    for (const line of lines) if (line.jobId && !who.has(line.jobId)) who.set(line.jobId, line.actorId);
+  }
+  return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: null, deletedById: who.get(row.job.id) ?? null }));
 }

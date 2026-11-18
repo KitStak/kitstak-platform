@@ -8,6 +8,8 @@ import 'server-only';
 import { and, asc, desc, eq, gte, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
 import { costEntries, items, materialUsage, revenueEntries, vasEntries } from '@/server/db/schema';
+import { appUrls } from '@/server/env';
+import { orgModuleFlags } from '@/server/entitlements';
 import { conflict, invalid, notFound } from '@/server/errors';
 import type { CostCategory, CostScope, PartsOwnerValue, RevenueKind, StoredRevenueKind, StreamSource } from '@/lib/constants';
 import { mulQuantityPrice } from '@/lib/money';
@@ -489,10 +491,34 @@ export const restoreRevenue = (ctx: DomainContext, id: string): Promise<RevenueE
 
 /* ---------------------------------------------------------------- extra service entries */
 
-function toVasEntryDTO(row: VasRow, access: Access, closed: ReadonlySet<string>): VasEntryDTO {
+/** The WMS app's address when the workspace still has the warehouse on its plan, else null (so a link is never dead). */
+async function warehouseBase(ctx: DomainContext): Promise<string | null> {
+  try {
+    return (await orgModuleFlags(ctx.orgId)).wms ? appUrls().wms : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Link back to the warehouse record a pulled entry came from. Only a path is stored on the row. */
+function warehouseUrl(row: VasRow, wmsBase: string | null): string | null {
+  if (!wmsBase || row.source !== 'wms') return null;
+  const path = (row.meta as { wms?: { path?: unknown } } | null)?.wms?.path;
+  return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') ? `${wmsBase}${path}` : null;
+}
+
+/** Fields a person changed on an entry pulled from another app. The next sync leaves them alone. */
+function lockedMeta(row: VasRow, changed: readonly string[]): Record<string, unknown> {
+  const meta = (row.meta ?? {}) as Record<string, unknown>;
+  const prior = Array.isArray(meta.locked_fields) ? (meta.locked_fields as string[]) : [];
+  return { ...meta, locked_fields: [...new Set([...prior, ...changed])] };
+}
+
+function toVasEntryDTO(row: VasRow, access: Access, closed: ReadonlySet<string>, wmsBase: string | null): VasEntryDTO {
   const money = access.seesMoney;
   return {
     ...base(row, access, closed, row.workDate),
+    sourceUrl: warehouseUrl(row, wmsBase),
     siteId: row.siteId,
     note: row.note,
     vasServiceId: row.vasServiceId,
@@ -529,7 +555,8 @@ export async function listVasEntries(ctx: DomainContext, filters: EntryFilters &
     filters.noPrice ? isNull(vasEntries.amountCents) : undefined,
   ];
   const found = await db.select().from(vasEntries).where(and(...where)).orderBy(desc(vasEntries.workDate), asc(vasEntries.createdAt)).limit(cap(filters.limit));
-  return found.map((row) => toVasEntryDTO(row, access, closed));
+  const wmsBase = found.some((row) => row.source === 'wms') ? await warehouseBase(ctx) : null;
+  return found.map((row) => toVasEntryDTO(row, access, closed, wmsBase));
 }
 
 export interface VasEntryInput {
@@ -556,10 +583,13 @@ export interface VasEntryInput {
   source?: StreamSource;
   sourceRef?: string | null;
   isSample?: boolean;
+  /** Extra facts kept on the row (a sync stores the path back to its record here). Merged over what is there. */
+  meta?: Record<string, unknown>;
 }
 
 export async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Promise<VasEntryDTO> {
   const access = await requirePulse(ctx, 'vas:manage');
+  const wmsBase = await warehouseBase(ctx);
   const hours = input.hours ?? '0';
   if (Number(input.overtimeHours ?? 0) > Number(hours)) throw invalid('Overtime hours cannot be more than the labor hours.', { overtimeHours: 'More than the labor hours.' });
   return inTx(async (tx) => {
@@ -602,15 +632,19 @@ export async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Pr
     let row: VasRow;
     if (existing) {
       const change = diff(existing as unknown as Record<string, unknown>, values as Record<string, unknown>);
-      if (!change) return toVasEntryDTO(existing, access, await closedMonths(tx, ctx.orgId));
-      [row] = (await tx.update(vasEntries).set({ ...values, version: sql`version + 1`, updatedBy: ctx.userId, updatedAt: new Date() }).where(eq(vasEntries.id, existing.id)).returning()) as [VasRow];
+      if (!change) return toVasEntryDTO(existing, access, await closedMonths(tx, ctx.orgId), wmsBase);
+      // A person's change to a pulled entry is remembered, so the next sync does not undo it.
+      const pulled = existing.source !== 'manual' && existing.source !== 'csv' && existing.source !== 'sample';
+      const kept = pulled && ctx.actorKind !== 'integration' ? lockedMeta(existing, Object.keys(change.after)) : ((existing.meta ?? {}) as Record<string, unknown>);
+      const meta = { ...kept, ...(input.meta ?? {}) };
+      [row] = (await tx.update(vasEntries).set({ ...values, meta, version: sql`version + 1`, updatedBy: ctx.userId, updatedAt: new Date() }).where(eq(vasEntries.id, existing.id)).returning()) as [VasRow];
       await logActivity(tx, ctx, { verb: 'service_entry.edited', entityType: 'service_entry', entityId: row.id, jobId: row.jobId, clientId: row.clientId, ...change });
       touchJob(touched, existing.jobId, existing.clientId);
       touchDay(touched, existing.siteId, existing.workDate);
     } else {
       [row] = (await tx
         .insert(vasEntries)
-        .values({ orgId: ctx.orgId, ...values, source: input.source ?? 'manual', sourceRef: input.sourceRef ?? null, isSample: Boolean(input.isSample), createdBy: ctx.userId, updatedBy: ctx.userId })
+        .values({ orgId: ctx.orgId, ...values, source: input.source ?? 'manual', sourceRef: input.sourceRef ?? null, isSample: Boolean(input.isSample), meta: input.meta ?? {}, createdBy: ctx.userId, updatedBy: ctx.userId })
         .returning()) as [VasRow];
       await logActivity(tx, ctx, { verb: 'service_entry.logged', entityType: 'service_entry', entityId: row.id, jobId: row.jobId, clientId: row.clientId, after: { vasServiceId: row.vasServiceId, workDate: row.workDate, quantity: row.quantity, hours: row.hours } });
     }
@@ -619,7 +653,7 @@ export async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Pr
     touchDay(touched, row.siteId, row.workDate);
     await finishWrite(tx, ctx, touched);
     const [fresh] = await tx.select().from(vasEntries).where(eq(vasEntries.id, row.id));
-    return toVasEntryDTO(fresh!, access, await closedMonths(tx, ctx.orgId));
+    return toVasEntryDTO(fresh!, access, await closedMonths(tx, ctx.orgId), wmsBase);
   });
 }
 
@@ -636,7 +670,7 @@ async function toggleVasEntry(ctx: DomainContext, id: string, restore: boolean):
     touchJob(touched, row.jobId, row.clientId);
     touchDay(touched, row.siteId, row.workDate);
     await finishWrite(tx, ctx, touched);
-    return toVasEntryDTO(after!, access, await closedMonths(tx, ctx.orgId));
+    return toVasEntryDTO(after!, access, await closedMonths(tx, ctx.orgId), await warehouseBase(ctx));
   });
 }
 

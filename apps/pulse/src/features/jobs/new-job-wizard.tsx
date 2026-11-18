@@ -623,7 +623,7 @@ export function NewJobWizard(props: NewJobWizardProps) {
         <div className="flex flex-col gap-3 p-4">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <p className="text-xs text-fg-muted">Margin after all costs</p>
+              <p className="text-xs text-fg-muted">Job margin</p>
               <p
                 className={cn(
                   'text-xl font-semibold tracking-tight tabular-nums',

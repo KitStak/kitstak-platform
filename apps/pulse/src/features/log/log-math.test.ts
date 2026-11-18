@@ -4,6 +4,7 @@ import {
   EMPTY_VALUES,
   applyField,
   crewQuestion,
+  missingLaborWords,
   dailyGoal,
   hoursEachFrom,
   isBlank,
@@ -165,11 +166,33 @@ describe('line checks', () => {
   it('asks "Is that right?" for labor hours typed as hours each (SPEC 4.4)', () => {
     const typo = { ...EMPTY_VALUES, people: '12', hours: '9.6' };
     expect(crewQuestion(typo, '8.00')).toBe(
-      '12 people for 8 hours is 96 labor hours. You typed 9.6. Is that right?',
+      '9.6 labor hours for 12 people is 0.8 hours each. A full shift of 8 hours each would be 96 labor hours. Is that right?',
     );
     expect(crewQuestion({ ...EMPTY_VALUES, people: '12', hours: '96' }, '8.00')).toBeNull();
     // A short run with an honest hours each is normal and is not questioned.
     expect(crewQuestion({ ...EMPTY_VALUES, people: '3', hours: '6' }, '8.00')).toBeNull();
+  });
+
+  it('asks with the numbers that are on screen after labor hours is typed over', () => {
+    // People 4, hours each 8, then labor hours 3.2: the grid works hours each back out to 0.8.
+    let values = applyField(applyField(EMPTY_VALUES, 'people', '4'), 'hoursEach', '8');
+    expect(values.hours).toBe('32');
+    values = applyField(values, 'hours', '3.2');
+    expect(values.hoursEach).toBe('0.8');
+    const question = crewQuestion(values, '8.00');
+    expect(question).toBe('3.2 labor hours for 4 people is 0.8 hours each. A full shift of 8 hours each would be 32 labor hours. Is that right?');
+    // Every number of the row is in the question, and the hours each that was replaced is not called typed.
+    expect(question).toContain(`${values.hoursEach} hours each`);
+    expect(question).not.toContain('You typed');
+    expect(crewQuestion({ ...EMPTY_VALUES, people: '1', hours: '20' }, '8.00')).toBe('20 labor hours for 1 person is 20 hours each. A full shift of 8 hours each would be 8 labor hours. Is that right?');
+  });
+
+  it('names the empty field on a job with units and no labor hours', () => {
+    expect(missingLaborWords([{ people: '4', hoursEach: '' }])).toBe('Add the hours each');
+    expect(missingLaborWords([{ people: '', hoursEach: '8' }])).toBe('Add people');
+    expect(missingLaborWords([{ people: '', hoursEach: '' }])).toBe('Add people and the hours each');
+    expect(missingLaborWords([{ people: '0', hoursEach: '' }, { people: '', hoursEach: '' }])).toBe('Add people and the hours each');
+    expect(missingLaborWords([])).toBe('Add people and the hours each');
   });
 });
 

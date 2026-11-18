@@ -313,6 +313,15 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
                           ) : (
                             <span className="text-xs text-fg-muted">No job, billed to the client</span>
                           )}
+                          {entry.source === 'wms' ? (
+                            entry.sourceUrl ? (
+                              <a href={entry.sourceUrl} target="_blank" rel="noreferrer" className="block rounded-sm text-xs text-fg-muted underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                                From the warehouse<span className="sr-only"> (opens in a new tab)</span>
+                              </a>
+                            ) : (
+                              <span className="block text-xs text-fg-muted">From the warehouse</span>
+                            )
+                          ) : null}
                         </TableCell>
                         <TableCell numeric>{formatNumber(entry.quantity, { maxDigits: 2 })}</TableCell>
                         <TableCell numeric>{entry.noPrice ? <span className="font-medium text-danger-text">No price</span> : formatUnitPrice(entry.unitPrice, { empty: 'List price' })}</TableCell>

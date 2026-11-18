@@ -98,6 +98,7 @@ import {
 import { JobsBoard } from './jobs-board';
 import { DEFAULT_VIEW, GROUP_OPTIONS, type GroupKey, type JobsViewConfig } from './jobs-config';
 import { JobsViewsBar } from './jobs-views-bar';
+import { DeleteJobDialog } from './delete-job-dialog';
 import { QuickAddJob } from './quick-add';
 import { STATUS_MOVES, statusMoveLabel, useJobActions } from './use-job-actions';
 
@@ -1100,6 +1101,7 @@ export function JobsView({
           : `${sorted.length} of ${all.length} jobs`}
         {trendQuery.isError ? '. Trends could not load.' : ''}
       </p>
+      <DeleteJobDialog actions={actions} />
     </div>
   );
 }
@@ -1234,7 +1236,7 @@ function RowMenu({
             <DropdownMenuItem
               variant="danger"
               icon={<Trash2 aria-hidden />}
-              onSelect={() => void actions.remove(job)}
+              onSelect={() => actions.askRemove(job)}
             >
               Delete
             </DropdownMenuItem>

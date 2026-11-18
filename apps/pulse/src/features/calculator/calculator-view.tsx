@@ -686,20 +686,21 @@ function Answer({ run, form, unit, showErrors, onShowErrors }: { readonly run: C
         />
         <Tile
           testId="calc-tile-margin"
-          label="Margin"
+          label="Job margin"
           tone={chosen.profitCents < 0 ? 'bad' : undefined}
           value={formatPercentBp(chosen.marginBp, { empty: 'Unknown' })}
-          sub={`Before time not on a job: ${formatPercentBp(chosen.marginBeforeSharedBp, { empty: 'unknown' })}`}
+          sub={`Target ${formatPercentBp(summary.targetMarginBp)}`}
           how={
             <How
-              title="Margin after all costs"
-              formula="Profit divided by revenue. Profit is revenue less every cost, time not on a job included."
+              title="Job margin"
+              formula="Profit divided by revenue. Profit is revenue less every cost of the job, time not on a job included. The last line leaves that time out, to show what the work earns on its own."
               lines={[
                 { label: 'Revenue', value: formatMoney(chosen.revenueCents), op: 'start' },
                 { label: 'All cost', value: formatMoney(summary.costCents), op: 'minus' },
                 { label: 'Profit', value: formatMoney(chosen.profitCents), op: 'total' },
                 { label: 'Revenue', value: formatMoney(chosen.revenueCents), op: 'divide' },
-                { label: 'Margin', value: formatPercentBp(chosen.marginBp, { empty: 'Unknown' }), op: 'total' },
+                { label: 'Job margin', value: formatPercentBp(chosen.marginBp, { empty: 'Unknown' }), op: 'total' },
+                { label: 'Before time not on a job', value: formatPercentBp(chosen.marginBeforeSharedBp, { empty: 'Unknown' }), op: 'note' },
               ]}
             />
           }

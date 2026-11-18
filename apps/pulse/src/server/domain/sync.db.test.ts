@@ -7,7 +7,7 @@ import { createTestOrg, databaseReady, type TestOrg } from '@/test/db';
 import { getAccounts, getDeals, listWonDeals, searchDeals } from '@/server/integrations/crm';
 import { getProjects, projectTimeByDay, searchProjects } from '@/server/integrations/projects';
 import { resolveRecords, searchRecords } from '@/server/integrations/records';
-import { listBilledRevenue, listVasRevenue, listWorkOrders, wmsReady, workOrderBuildsByDay } from '@/server/integrations/wms';
+import { listBilledRevenue, listContractPrices, listVasRecords, listWorkOrders, wmsReady, workOrderBuildsByDay } from '@/server/integrations/wms';
 import type { DomainContext } from './_shared';
 import { getConnectedApps, listLinkedJobs, runSync, syncIfStale } from './sync';
 import { addJobLink, createClient, createJob, saveProductionEntry } from './test-exports';
@@ -42,7 +42,8 @@ describe.skipIf(!ready)('sibling sync with nothing to read', () => {
     expect(await listWorkOrders(owner, { ids: ['x'], query: "'; drop table" })).toEqual([]);
     expect(await workOrderBuildsByDay(owner, ['x'], 'America/New_York')).toEqual([]);
     expect(await listBilledRevenue(owner)).toEqual([]);
-    expect(await listVasRevenue(owner)).toEqual([]);
+    expect(await listVasRecords(owner)).toBeNull();
+    expect(await listContractPrices(owner, ['x'])).toEqual([]);
     expect(await listWonDeals(owner)).toEqual([]);
     expect(await searchDeals(owner, 'anything')).toEqual([]);
     expect(await getDeals(owner, [NOBODY, 'not-a-uuid'])).toEqual([]);

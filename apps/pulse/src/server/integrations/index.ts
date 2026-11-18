@@ -8,6 +8,6 @@ export {
   type IntegrationAvailability,
 } from './detect';
 export { crmReady, getAccounts, getDeals, listWonDeals, searchDeals, type CrmAccount, type CrmDeal } from './crm';
-export { listBilledRevenue, listVasRevenue, listWorkOrders, wmsReady, workOrderBuildsByDay, type WmsBilledLine, type WmsBuildDay, type WmsVasLine, type WmsWorkOrder } from './wms';
+export { listBilledRevenue, listContractPrices, listVasRecords, listWorkOrders, wmsReady, workOrderBuildsByDay, type WmsBilledLine, type WmsBuildDay, type WmsContractPrice, type WmsVasRecord, type WmsWorkOrder } from './wms';
 export { getProjects, projectTimeByDay, projectsReady, searchProjects, type PmProject, type PmTimeDay } from './projects';
 export { resolveRecords, searchRecords, type RecordTarget } from './records';

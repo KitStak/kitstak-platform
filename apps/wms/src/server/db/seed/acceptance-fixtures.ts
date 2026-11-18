@@ -16,7 +16,9 @@
  *   - MLT-LP-01 stock on a carton LP nested in a pallet LP, order KS-FIXTURE-PLAN-LP allocated
  *     from it and an In Progress shipment plan holding that order (shipping.md REQ-5);
  *   - lookups adjustment_reason "Import" and damage_reason "Damaged";
- *   - missing Settings → Apps catalog rows (analytics apps active, as in the demo seed).
+ *   - missing Settings → Apps catalog rows (analytics apps active, as in the demo seed);
+ *   - contract rates for extra services (VAS fees) and kitting (Work Order fees) on the approved
+ *     demo contracts (seed/billing.ts `ensureContractRates`).
  */
 import { and, eq, gt, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { AppDb } from '@/server/api/db';
@@ -29,6 +31,7 @@ import type { DomainCtx } from '@/server/domain/types';
 import { syncAllClientsToCore, syncAllProductsToCore } from '@/server/repositories/core-sync';
 import { seedStationFixtures } from '@/server/repositories/packing-fixtures';
 import { ensureDemoSuggestedListings } from '@/server/repositories/listings-demo';
+import { ensureContractRates } from './billing';
 import { SEED_APPS } from './platform';
 import { dbGet } from '@/server/db/sql';
 
@@ -594,6 +597,10 @@ export async function seedAcceptanceFixtures(tx: AppDb, ctx: DomainCtx): Promise
   const listings = await ensureDemoSuggestedListings(tx, ctx);
   created.push(...listings.created.map((sku) => `listing ${sku}`));
   skipped.push(...listings.skipped.map((sku) => `listing ${sku}`));
+  // Contract rates for extra services and kitting (what KitStak Pulse prices from).
+  const rates = await ensureContractRates(tx);
+  created.push(...rates.created);
+  skipped.push(...rates.skipped);
   // Fixture products are inserted directly (not via the wizard commands), so mirror the
   // final state into the shared core registry (§2.4) the same way db:seed does.
   await syncAllClientsToCore(tx);

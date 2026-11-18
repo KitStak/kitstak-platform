@@ -27,6 +27,9 @@ export const VIEW_LABELS: Readonly<Record<ProfitGroup, string>> = {
   day: 'Days',
 };
 
+/** "a job", "an extra service": the view noun with the right article for a sentence. */
+export const withArticle = (noun: string): string => `${/^[aeiou]/i.test(noun) ? 'an' : 'a'} ${noun}`;
+
 /** One of something, for sentences and headers: "job", "client". */
 export const VIEW_NOUN: Readonly<Record<ProfitGroup, string>> = {
   job: 'job',
@@ -90,8 +93,8 @@ export const PROFIT_COLUMNS: readonly ProfitColumn[] = [
   { id: 'shared', label: 'Time not on a job', help: 'Paid time for meetings, cleanup and waiting, spread over the jobs.', kind: 'money', get: (row) => row.sharedCents, metric: 'shared', goodWhen: 'down', byDefault: true, money: true },
   { id: 'cost', label: 'Cost', help: 'Labor, material, other costs and time not on a job, added up.', kind: 'money', get: (row) => row.costCents, metric: 'cost', goodWhen: 'down', byDefault: false, money: true },
   { id: 'profit', label: 'Profit', help: 'Revenue less cost.', kind: 'money', get: (row) => row.profitCents, metric: 'profit', goodWhen: 'up', byDefault: true, money: true },
-  { id: 'margin', label: 'Margin', help: 'Margin after all costs: profit as a share of revenue.', kind: 'percent', get: (row) => row.marginBp, metric: 'margin', goodWhen: 'up', byDefault: true, money: true },
-  { id: 'margin_before', label: 'Margin before shared', help: 'Margin before shared costs: what the work itself made, with time not on a job left out.', kind: 'percent', get: (row) => row.marginBeforeSharedBp, metric: 'margin_before_shared', goodWhen: 'up', byDefault: false, money: true },
+  { id: 'margin', label: 'Job margin', help: 'Profit as a share of revenue, after labor, material, other costs and time not on a job.', kind: 'percent', get: (row) => row.marginBp, metric: 'margin', goodWhen: 'up', byDefault: true, money: true },
+  { id: 'margin_before', label: 'Contribution %', help: 'What the work itself made as a share of revenue, with time not on a job left out.', kind: 'percent', get: (row) => row.marginBeforeSharedBp, metric: 'margin_before_shared', goodWhen: 'up', byDefault: false, money: true },
   { id: 'labor_pct', label: 'Labor % of revenue', help: 'Labor cost as a share of revenue. Lower is better.', kind: 'percent', get: (row) => row.laborPctBp, metric: 'labor_pct', goodWhen: 'down', byDefault: false, money: true },
   { id: 'units', label: 'Units', help: 'Good units logged. Scrap is left out.', kind: 'number', get: (row) => dec(row.unitsGood), metric: 'units', byDefault: true, money: false },
   { id: 'hours', label: 'Labor hours', help: 'Labor hours: people times hours each.', kind: 'hours', get: (row) => dec(row.hours), metric: 'hours', byDefault: true, money: false },

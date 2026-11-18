@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui';
 import { JOB_STATUS_LABELS, type JobStatusValue } from '@/lib/constants';
 import { qk } from '@/lib/query-keys';
+import { routes } from '@/lib/routes';
 import type { JobDetailDTO, JobListItemDTO } from '@/lib/types';
 import type { ActionResult } from '@/server/actions/_action';
 import {
@@ -21,6 +22,16 @@ import {
 } from '@/server/actions/jobs';
 
 type JobLike = Pick<JobListItemDTO, 'id' | 'number' | 'name' | 'status' | 'archivedAt' | 'ownerId'>;
+/** A job about to be deleted: the dialog reads its revenue and hours to say what leaves the reports. */
+export type DeletableJob = JobLike & { readonly stats?: Pick<JobListItemDTO['stats'], 'revenueCents' | 'hours'> };
+
+/** True when the browser is on that job's own page (any tab of it). */
+function onJobPage(number: string): boolean {
+  if (typeof window === 'undefined') return false;
+  const base = routes.job(number);
+  const path = window.location.pathname;
+  return path === base || path.startsWith(`${base}/`);
+}
 
 /** Runs a server action; on failure shows the server's plain message and returns undefined. */
 export async function callAction<T>(
@@ -55,7 +66,10 @@ export function useJobActions(hooks: JobActionHooks = {}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const [deleting, setDeleting] = useState<DeletableJob | null>(null);
+
+  /** Marks every number that depends on the jobs as old, so the screens load them again. */
+  const invalidate = useCallback(async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: qk.jobsRoot() }),
       queryClient.invalidateQueries({ queryKey: qk.profitRoot() }),
@@ -63,8 +77,25 @@ export function useJobActions(hooks: JobActionHooks = {}) {
       queryClient.invalidateQueries({ queryKey: qk.badges() }),
       queryClient.invalidateQueries({ queryKey: qk.activity() }),
     ]);
+  }, [queryClient]);
+
+  const refresh = useCallback(async () => {
+    await invalidate();
     router.refresh();
-  }, [queryClient, router]);
+  }, [invalidate, router]);
+
+  /**
+   * Leaves the page of a job that is gone, then refreshes the numbers. The page of a deleted job
+   * must never be rendered again (the server answers "not found" for it), so there is no
+   * `router.refresh()` here: the move to `target` loads fresh data on its own.
+   */
+  const leaveFor = useCallback(
+    async (target: string) => {
+      router.push(target);
+      await invalidate();
+    },
+    [invalidate, router],
+  );
 
   const setStatus = useCallback(
     async (job: JobLike, status: JobStatusValue) => {
@@ -105,21 +136,33 @@ export function useJobActions(hooks: JobActionHooks = {}) {
     [hooks, refresh],
   );
 
+  /**
+   * Deletes the job (call `askRemove` from a menu so the person confirms first). From the job's
+   * own page this lands on the jobs list; the Undo toast shows either way.
+   */
   const remove = useCallback(
     async (job: JobLike) => {
+      const leaving = onJobPage(job.number);
       hooks.onHide?.(job.id);
       setBusy(true);
-      const result = await deleteJobAction({ jobId: job.id });
+      let result: Awaited<ReturnType<typeof deleteJobAction>>;
+      try {
+        result = await deleteJobAction({ jobId: job.id, revalidate: false });
+      } catch {
+        result = { ok: false, error: { code: 'INTERNAL', message: 'Check your connection and try again.' } };
+      }
       setBusy(false);
       if (!result.ok) {
         hooks.onShow?.(job.id);
         toast.error("Couldn't delete the job", result.error.message);
         return false;
       }
-      await refresh();
+      setDeleting(null);
+      if (leaving) await leaveFor(routes.jobs());
+      else await refresh();
       toast.undo(`Deleted ${job.number}`, {
         id: `job-delete:${job.id}`,
-        description: 'Its entries stay safe and come back with it.',
+        description: 'Its entries stay safe. You can restore it under Jobs, Deleted.',
         onUndo: async () => {
           const restored = await callAction(
             restoreJobAction({ jobId: job.id }),
@@ -134,8 +177,18 @@ export function useJobActions(hooks: JobActionHooks = {}) {
       });
       return true;
     },
-    [hooks, refresh],
+    [hooks, leaveFor, refresh],
   );
+
+  /** Opens the "Delete this job?" dialog. Nothing is deleted until `confirmRemove` runs. */
+  const askRemove = useCallback((job: DeletableJob) => setDeleting(job), []);
+  const cancelRemove = useCallback(() => setDeleting(null), []);
+  const confirmRemove = useCallback(async () => {
+    if (!deleting) return false;
+    const gone = await remove(deleting);
+    if (!gone) setDeleting(null);
+    return gone;
+  }, [deleting, remove]);
 
   const archive = useCallback(
     async (job: JobLike, archived = true) => {
@@ -185,14 +238,20 @@ export function useJobActions(hooks: JobActionHooks = {}) {
         id: `job-copy:${copy.id}`,
         description: 'The copy starts as planned, with the same price and plan and no entries.',
         onUndo: async () => {
-          const gone = await deleteJobAction({ jobId: copy.id });
-          if (!gone.ok) toast.error("Couldn't undo the copy", gone.error.message);
-          await refresh();
+          // The person may be on the copy's page by now: leave it for the job it was copied from.
+          const leaving = onJobPage(copy.number);
+          const gone = await deleteJobAction({ jobId: copy.id, revalidate: false });
+          if (!gone.ok) {
+            toast.error("Couldn't undo the copy", gone.error.message);
+            return;
+          }
+          if (leaving) await leaveFor(routes.job(job.number));
+          else await refresh();
         },
       });
       return copy;
     },
-    [hooks, refresh],
+    [hooks, leaveFor, refresh],
   );
 
   /** Bulk change with one undo that puts every job back the way it was. */
@@ -248,7 +307,7 @@ export function useJobActions(hooks: JobActionHooks = {}) {
     [refresh],
   );
 
-  return { setStatus, remove, archive, duplicate, bulk, busy, refresh } as const;
+  return { setStatus, remove, askRemove, cancelRemove, confirmRemove, deleting, archive, duplicate, bulk, busy, refresh } as const;
 }
 
 /** The statuses a job may move to from where it is (the server enforces the same list). */

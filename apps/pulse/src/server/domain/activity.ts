@@ -21,6 +21,7 @@ import { activity } from '@/server/db/schema';
 import { invalid } from '@/server/errors';
 import type { ActivityDTO, Page } from '@/lib/types';
 import { cleanText, inTx, isoRequired, jsonSafe, type DomainContext } from './_shared';
+import { hideLinesInText } from '@/features/alerts/rule-kinds';
 import { requirePulse } from './access';
 import { getPeople } from './people';
 
@@ -91,6 +92,8 @@ function redact(entityType: string, value: unknown): unknown {
   if (!allowed) return null;
   const out: Record<string, unknown> = {};
   for (const key of allowed) if (key in (value as Record<string, unknown>)) out[key] = (value as Record<string, unknown>)[key];
+  // Older rule names can hold the line of the rule ("under $2,000"). The line is money, so it is taken out.
+  if (entityType === 'alert_rule' && typeof out.name === 'string') out.name = hideLinesInText(out.name);
   return Object.keys(out).length > 0 ? out : null;
 }
 

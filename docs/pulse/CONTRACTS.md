@@ -75,6 +75,7 @@ Routes and their feature folder:
 | `/jobs/new` | `features/jobs` (`new-job-page.tsx`) | jobs | real (three step wizard) |
 | `/jobs/[ref]`, `/plan`, `/work`, `/materials`, `/money-in`, `/activity` | `features/jobs` (`job-page.tsx`) | jobs | real; unknown or deleted job answers 404 |
 | `/jobs/by-link` | page file only | jobs | opens the linked job, else a prefilled new job |
+| `/jobs/deleted` | `features/jobs` (`deleted-jobs-page.tsx`) | jobs | real; the Deleted tab of Jobs: who deleted each job and when, with Restore. Needs `job:manage` |
 | `/log?date=`, `/log/bulk`, `/log/review`, `/log/entries` | `features/log` | production | real |
 | `/labor?tab=rates\|time\|cost` | `features/labor` | production | real |
 | `/target-pace` | `features/target-pace` | production | real |
@@ -194,7 +195,9 @@ lowercase `tx` or `executor` are for use inside a transaction.
   `rateForEntry(ctx, { laborClassId, siteId, workDate })`.
 - **`jobs`**: read `listJobs(ctx, JobListFilters)`, `listJobsNeedingAttention(ctx, limit)`, `countJobsByRisk`,
   `getJob(ctx, ref)`, `listDeletedJobs`, `findJobsByLink(ctx, type, id)`; create `createJob(ctx, JobInput)`,
-  `quickAddJob(ctx, { clientId?|clientName?, name, plannedUnits?, unitPrice?, siteId? })`; change `updateJob(ctx, jobId,
+  `quickAddJob(ctx, { clientId?|clientName?, createClient?, name, plannedUnits?, unitPrice?, siteId? })` (a `clientName`
+  that looks like a client you have, see `src/lib/client-names.ts`, is refused with `VALIDATION` unless `createClient`
+  is true; the exact name or code uses that client); change `updateJob(ctx, jobId,
   patch, version?)`, `setJobStatus(ctx, jobId, status, { completedDate?, version? })`, `bulkUpdateJobs(ctx, ids, {
   status?, ownerId?, archived? })`, `duplicateJob`, `archiveJob`, `deleteJob`, `restoreJob`; prices `listJobPrices`,
   `setJobPrice(ctx, jobId, { effectiveFrom?, unitPrice?, billRateCents?, materialCostPerUnit?, note? })`,
@@ -289,7 +292,7 @@ send files with `csvResponse(fileName, body)`.
 | `GET services`, `services/[id]` | `inactive` | `VasServiceDTO[]`, `VasServiceDTO` |
 | `GET standards`, `standards/suggest`, `targets` | `jobType,service,client` / `jobType,client,laborClass` / `scope,scopeId,month` | `StandardDTO[]`, `PaceSuggestionDTO`, `TargetDTO[]` |
 | `GET jobs` | `tab (open\|all\|completed\|planned),q,client,jobType,site,owner,status,risk,archived,deleted,limit` | `JobListItemDTO[]`, worst risk first |
-| `GET jobs/attention`, `jobs/counts`, `jobs/deleted` | `limit` / `client,jobType,site` / | `JobListItemDTO[]`, `{ losing, at_risk, heads_up, on_track, no_data, none }`, `JobListItemDTO[]` |
+| `GET jobs/attention`, `jobs/counts`, `jobs/deleted` | `limit` / `client,jobType,site` / | `JobListItemDTO[]`, `{ losing, at_risk, heads_up, on_track, no_data, none }`, `DeletedJobDTO[]` (a job list item plus `deletedById`, from the activity log) |
 | `GET jobs/by-link` | `type (crm_deal\|crm_account\|wms_work_order\|wms_shipment_order\|wms_client\|pm_project\|pm_task\|core_customer),id` | `JobListItemDTO[]` |
 | `GET jobs/[ref]`, `/plans`, `/prices`, `/days` | id or number; `by=day\|week\|month` | `JobDetailDTO`, `JobPlansDTO`, `JobPriceDTO[]`, `ProfitResponse` for the job's whole life |
 | `GET log`, `log/previous-crew` | `date,site` | `LogGridDTO`, `PreviousCrewDTO[]` |

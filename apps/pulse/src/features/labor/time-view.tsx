@@ -193,7 +193,7 @@ export function TimeView({
                 <span className="text-xs text-fg-muted">
                   {hasPaid
                     ? bridge.missingCostCents !== null
-                      ? `${formatMoney(bridge.missingCostCents, { cents: false })} paid with no job or reason`
+                      ? `${formatMoney(bridge.missingCostCents, { cents: false })} is the cost of those hours`
                       : 'Paid, with no job or reason'
                     : 'Paid hours minus all logged hours'}
                 </span>
@@ -212,6 +212,20 @@ export function TimeView({
                     <p className="mt-1">
                       On {bridge.overLoggedDays} {bridge.overLoggedDays === 1 ? 'day' : 'days'} more hours
                       were logged than paid. Those days count as zero here.
+                    </p>
+                  ) : null}
+                  {bridge.missingCostCents !== null ? (
+                    <p className="mt-1" data-testid="missing-cost-how">
+                      The cost prices each day&apos;s missing hours at that day&apos;s average pay per hour.
+                      {bridge.payrollGapCents !== null && bridge.payrollGapCents !== bridge.missingCostCents ? (
+                        <>
+                          {' '}
+                          The payroll gap under the tiles is a different check: all payroll paid, less the pay
+                          of the hours in Pulse at each person&apos;s own pay. That is why the cost here is{' '}
+                          <span className="tabular-nums">{formatMoney(bridge.missingCostCents)}</span> and the payroll gap is{' '}
+                          <span className="tabular-nums">{formatMoney(bridge.payrollGapCents)}</span>. Company profit uses the cost here.
+                        </>
+                      ) : null}
                     </p>
                   ) : null}
                 </Explain>
@@ -376,8 +390,8 @@ function PayrollCheck({
         {formatMoney(bridge.paidCents, { cents: false })}. The hours in Pulse add up to{' '}
         {formatMoney(bridge.grossPayCents, { cents: false })} of pay.{' '}
         {gap > 0 ? (
-          <span className="font-medium text-warning-text">
-            {formatMoney(gap, { cents: false })} is not on any job or reason.
+          <span className="font-medium text-warning-text" data-testid="payroll-gap">
+            The payroll gap is {formatMoney(gap, { cents: false })}: pay that no logged hour explains.
           </span>
         ) : gap < 0 ? (
           <span className="font-medium text-warning-text">

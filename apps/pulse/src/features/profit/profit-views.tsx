@@ -278,14 +278,14 @@ export function ChartView({ by, rows, measure, order, onMeasure, onOrder, target
     return (
       <ComboChart
         title={`Revenue, cost and margin by ${VIEW_NOUN[by]}`}
-        description="Bars show revenue and cost. The line on top is the margin after all costs, with your target margin."
+        description="Bars show revenue and cost. The line on top is the job margin, with your target margin."
         dates={dates}
         bucket={by as 'day' | 'week' | 'month'}
         bars={[
           { id: 'revenue', label: 'Revenue', values: timeRows.map((row) => row.revenueCents) },
           { id: 'cost', label: 'Cost', values: timeRows.map((row) => row.costCents) },
         ]}
-        lines={[{ id: 'margin', label: 'Margin after all costs', values: timeRows.map((row) => row.marginBp) }]}
+        lines={[{ id: 'margin', label: 'Job margin', values: timeRows.map((row) => row.marginBp) }]}
         barFormat="money"
         lineFormat="percent"
         lineTarget={{ value: targetMarginBp, label: 'Target margin' }}
@@ -327,7 +327,7 @@ export function ChartView({ by, rows, measure, order, onMeasure, onOrder, target
       </div>
       <BarChart
         title={`${label} by ${VIEW_NOUN[by]}, ${order === 'best' ? 'best' : 'worst'} first`}
-        description={measure === 'margin' && seesMoney ? 'Margin after all costs. Bars to the left lost money.' : 'Longer bars are bigger. Bars to the left are below zero.'}
+        description={measure === 'margin' && seesMoney ? 'Job margin: profit as a share of revenue. Bars to the left lost money.' : 'Longer bars are bigger. Bars to the left are below zero.'}
         orientation="horizontal"
         labels={shown.map((row) => rowLabel(by, row))}
         series={[{ id: measure, label, values: shown.map((row) => pick(row)) }]}
@@ -383,10 +383,12 @@ export function ContributionView({ by, rows, total, onDrill, range, refreshing }
                 Direct costs
               </TableHeaderCell>
               <TableHeaderCell numeric>Contribution</TableHeaderCell>
-              <TableHeaderCell numeric>Margin before shared costs</TableHeaderCell>
+              <TableHeaderCell numeric title="Contribution as a share of revenue.">
+                Contribution %
+              </TableHeaderCell>
               <TableHeaderCell numeric>Time not on a job</TableHeaderCell>
               <TableHeaderCell numeric>Profit</TableHeaderCell>
-              <TableHeaderCell numeric>Margin after all costs</TableHeaderCell>
+              <TableHeaderCell numeric>Job margin</TableHeaderCell>
             </tr>
           </TableHead>
           <TableBody>

@@ -39,3 +39,4 @@ export * from './exports';
 export * from './imports';
 export * from './sample';
 export * from './sync';
+export * from './wms-services';

@@ -46,6 +46,7 @@ import { JOB_TABS, JOB_TAB_LABELS, routes, type JobTab } from '@/lib/routes';
 import type { JobDetailDTO, JobTypeDTO, LaborClassDTO, SettingsDTO, VasServiceDTO } from '@/lib/types';
 import { updateJobAction } from '@/server/actions/jobs';
 import { recordRecentJobAction } from '@/server/actions/views';
+import { DeleteJobDialog } from './delete-job-dialog';
 import { EditJobDialog } from './forms/job-dialogs';
 import { JobActivity } from './job-activity';
 import { useRefreshJob } from './job-data';
@@ -119,11 +120,6 @@ export function JobFrame({
     });
   };
 
-  const remove = async () => {
-    const gone = await actions.remove(job);
-    if (gone) router.push(routes.jobs());
-  };
-
   const tabs = JOB_TABS.filter((id) => shell.seesMoney || !MONEY_TABS.includes(id));
   const tabProps = { job, today, settings, laborClasses, services };
   const ownerName = people.data?.find((person) => person.id === job.ownerId)?.name;
@@ -189,7 +185,7 @@ export function JobFrame({
                 <DropdownMenuItem
                   variant="danger"
                   icon={<Trash2 aria-hidden />}
-                  onSelect={() => void remove()}
+                  onSelect={() => actions.askRemove(job)}
                   data-testid="job-delete"
                 >
                   Delete
@@ -359,21 +355,33 @@ export function JobFrame({
               {job.clientName}
             </Link>
             {job.links
-              .filter((link) => link.url)
+              .filter((link) => link.url || link.title)
               .slice(0, 3)
-              .map((link) => (
-                <a
-                  key={link.id}
-                  href={link.url ?? '#'}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-7 max-w-[220px] items-center gap-1 rounded-md border border-border-subtle bg-panel px-2 text-xs text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                >
-                  <span className="truncate">{link.title ?? 'Linked record'}</span>
-                  <ExternalLink aria-hidden className="size-3 shrink-0" />
-                  <span className="sr-only">(opens in a new tab)</span>
-                </a>
-              ))}
+              .map((link) =>
+                link.url ? (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="job-link-chip"
+                    className="inline-flex h-7 max-w-[220px] items-center gap-1 rounded-md border border-border-subtle bg-panel px-2 text-xs text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                  >
+                    <span className="truncate">{link.title ?? 'Linked record'}</span>
+                    <ExternalLink aria-hidden className="size-3 shrink-0" />
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </a>
+                ) : (
+                  // No address: the app is not on the plan, or no path was saved. Plain words, never a dead link.
+                  <span
+                    key={link.id}
+                    data-testid="job-link-chip"
+                    className="inline-flex h-7 max-w-[220px] items-center rounded-md border border-border-subtle bg-panel px-2 text-xs text-fg-muted"
+                  >
+                    <span className="truncate">{link.title}</span>
+                  </span>
+                ),
+              )}
           </div>
           <RouteTabs
             label="Job sections"
@@ -399,6 +407,7 @@ export function JobFrame({
           onSaved={refresh}
         />
       ) : null}
+      <DeleteJobDialog actions={actions} />
     </Page>
   );
 }

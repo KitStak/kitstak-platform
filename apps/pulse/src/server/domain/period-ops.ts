@@ -9,7 +9,8 @@ import { db } from '@/server/db';
 import { invalid } from '@/server/errors';
 import { canPulse } from '@/lib/permissions';
 import { endOfMonth, startOfMonth } from '@/lib/profit';
-import type { ProfitRowDTO } from '@/lib/types';
+import { marginBp } from '@/lib/money';
+import type { CompanyBridgeDTO, ProfitRowDTO } from '@/lib/types';
 import { monthName, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse } from './access';
 import { listActivity } from './activity';
@@ -30,10 +31,50 @@ export interface CloseMonthDTO {
   readonly reopenedByName: string | null;
   readonly reopenReason: string | null;
   readonly revenueCents: number | null;
+  /** Job cost: labor, material, other costs and the time not on a job the jobs carried. */
   readonly costCents: number | null;
+  /** Profit on jobs, before overhead and paid time not on any job. */
   readonly profitCents: number | null;
+  /** Job margin. */
   readonly marginBp: number | null;
+  /** What the company kept: profit on jobs after the costs no job carried (SPEC 4.9). */
+  readonly companyProfitCents: number | null;
+  readonly companyMarginBp: number | null;
 }
+
+/** The walk from job profit to company profit, as the close screen shows it. Every money field is null when hidden. */
+export interface CloseBridgeDTO {
+  readonly jobProfitCents: number | null;
+  readonly sharedGapCents: number | null;
+  readonly missingCostCents: number | null;
+  /** Null when no company costs were typed in: Pulse then trusts the overhead inside the hourly rates. */
+  readonly overheadGapCents: number | null;
+  readonly companyCostCents: number | null;
+  readonly overheadAbsorbedCents: number | null;
+  readonly hasCompanyCosts: boolean;
+  readonly companyProfitCents: number | null;
+}
+
+type Snapshot = { readonly total?: ProfitRowDTO; readonly bridge?: CompanyBridgeDTO };
+
+/** The saved totals of a closed month. Null for an open month, or when the reader may not see money. */
+const snapshotOf = (period: { readonly status: 'open' | 'closed'; readonly snapshot: Readonly<Record<string, unknown>> | null }): Snapshot | null =>
+  period.status === 'closed' && period.snapshot && typeof period.snapshot === 'object' ? (period.snapshot as Snapshot) : null;
+
+/** Company profit as a share of revenue. Null when either is hidden or there is no revenue. */
+const companyMargin = (companyProfitCents: number | null | undefined, revenueCents: number | null | undefined): number | null =>
+  companyProfitCents === null || companyProfitCents === undefined || revenueCents === null || revenueCents === undefined ? null : marginBp(companyProfitCents, revenueCents);
+
+const bridgeOut = (bridge: CompanyBridgeDTO): CloseBridgeDTO => ({
+  jobProfitCents: bridge.workProfitCents,
+  sharedGapCents: bridge.sharedGapCents,
+  missingCostCents: bridge.missingCostCents,
+  overheadGapCents: bridge.overheadGapCents,
+  companyCostCents: bridge.companyCostCents,
+  overheadAbsorbedCents: bridge.overheadAbsorbedCents,
+  hasCompanyCosts: bridge.hasCompanyCosts,
+  companyProfitCents: bridge.companyProfitCents,
+});
 
 export interface CloseBoardDTO {
   readonly months: readonly CloseMonthDTO[];
@@ -52,11 +93,15 @@ export async function getCloseBoard(ctx: DomainContext): Promise<CloseBoardDTO> 
   const first = periods[periods.length - 1]?.periodMonth;
   const live = first ? await getProfit(ctx, 'month', { from: first, to: endOfMonth(periods[0]!.periodMonth) }) : null;
   const liveByMonth = new Map((live?.rows ?? []).map((row) => [row.key, row]));
+  // An open month shows live company profit. A closed one shows what was saved with the close.
+  const openMonths = access.seesMoney ? periods.filter((period) => !snapshotOf(period)?.bridge).map((period) => period.periodMonth) : [];
+  const liveBridges = new Map(await Promise.all(openMonths.map(async (month) => [month, await getCompanyBridge(ctx, { from: month, to: endOfMonth(month) })] as const)));
   const people = await getPeople(periods.flatMap((period) => [period.closedBy, period.reopenedBy]).filter((id): id is string => Boolean(id)));
   return {
     months: periods.map((period) => {
-      const snapshot = period.status === 'closed' && period.snapshot && typeof period.snapshot === 'object' ? ((period.snapshot as { total?: ProfitRowDTO }).total ?? null) : null;
-      const numbers = snapshot ?? liveByMonth.get(period.periodMonth) ?? null;
+      const saved = snapshotOf(period);
+      const numbers = saved?.total ?? liveByMonth.get(period.periodMonth) ?? null;
+      const companyProfit = (saved?.bridge ?? liveBridges.get(period.periodMonth))?.companyProfitCents ?? null;
       return {
         periodMonth: period.periodMonth,
         label: `${monthName(period.periodMonth)} ${period.periodMonth.slice(0, 4)}`,
@@ -71,6 +116,8 @@ export async function getCloseBoard(ctx: DomainContext): Promise<CloseBoardDTO> 
         costCents: access.seesMoney ? (numbers?.costCents ?? null) : null,
         profitCents: access.seesMoney ? (numbers?.profitCents ?? null) : null,
         marginBp: access.seesMoney ? (numbers?.marginBp ?? null) : null,
+        companyProfitCents: access.seesMoney && numbers ? companyProfit : null,
+        companyMarginBp: access.seesMoney ? companyMargin(companyProfit, numbers?.revenueCents) : null,
       };
     }),
     today,
@@ -106,8 +153,14 @@ export interface CloseDetailDTO {
   readonly revenueCents: number | null;
   readonly costCents: number | null;
   readonly profitCents: number | null;
+  /** Job margin. */
   readonly marginBp: number | null;
   readonly companyProfitCents: number | null;
+  readonly companyMarginBp: number | null;
+  /** The steps from job profit to company profit. */
+  readonly bridge: CloseBridgeDTO;
+  /** True when these are the numbers saved at the close, not live ones. */
+  readonly saved: boolean;
   readonly moneyHidden: boolean;
 }
 
@@ -120,7 +173,8 @@ export async function getCloseDetail(ctx: DomainContext, month: string): Promise
   const start = startOfMonth(`${month.slice(0, 7)}-01`);
   const end = endOfMonth(start);
   const name = `${monthName(start)} ${start.slice(0, 4)}`;
-  const [checklist, profit, bridge, counts] = await Promise.all([
+  const [periods, checklist, profit, liveBridge, counts] = await Promise.all([
+    listPeriods(ctx),
     getCloseChecklist(ctx, start),
     getProfit(ctx, 'month', { from: start, to: end }),
     getCompanyBridge(ctx, { from: start, to: end }),
@@ -191,8 +245,8 @@ export async function getCloseDetail(ctx: DomainContext, month: string): Promise
           : !gapBig
             ? 'Pay worked out from logged hours matches the pay for paid hours.'
             : gap > 0
-              ? 'Paid hours cost more than the hours logged on jobs and reasons. Some paid time is not logged.'
-              : 'Logged hours cost more than the paid hours you typed. Check the paid hours for the month.',
+              ? 'Payroll paid more than the pay Pulse worked out from the hours logged on jobs and reasons. Some paid time is not logged. This check compares pay totals, so it can differ a little from the cost of paid time not on any job in the numbers above.'
+              : 'The pay Pulse worked out from logged hours is more than payroll paid. Check the paid hours for the month.',
       state: gap === null || !gapBig ? 'ok' : 'check',
       count: gapBig ? 1 : 0,
       href: gapBig ? '/labor?tab=time' : null,
@@ -220,7 +274,11 @@ export async function getCloseDetail(ctx: DomainContext, month: string): Promise
     { label: 'Invoices and fees', count: count.revenue },
     { label: 'Extra service entries', count: count.services },
   ];
-  const total = profit.rows.find((row) => row.key === start) ?? profit.total;
+  // A closed month keeps the numbers it was closed with, the company figures included.
+  const period = periods.find((item) => item.periodMonth === start);
+  const saved = period ? snapshotOf(period) : null;
+  const total = saved?.total ?? profit.rows.find((row) => row.key === start) ?? profit.total;
+  const bridge = saved?.total && saved.bridge ? saved.bridge : liveBridge;
   return {
     periodMonth: start,
     label: name,
@@ -234,6 +292,9 @@ export async function getCloseDetail(ctx: DomainContext, month: string): Promise
     profitCents: total.profitCents,
     marginBp: total.marginBp,
     companyProfitCents: bridge.companyProfitCents,
+    companyMarginBp: companyMargin(bridge.companyProfitCents, total.revenueCents),
+    bridge: bridgeOut(bridge),
+    saved: Boolean(saved?.total),
     moneyHidden: !access.seesMoney,
   };
 }

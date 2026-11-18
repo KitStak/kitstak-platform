@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import { headers } from 'next/headers';
+import { NONCE_HEADER } from '@/server/http/csp';
 import { Providers } from './providers';
 import { ThemeScript } from './theme-script';
 import '@/styles/globals.css';
@@ -29,12 +31,18 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+/**
+ * Reading the nonce from the request headers keeps every route rendered per request, which the
+ * nonce in the Content-Security-Policy needs (`src/proxy.ts`): a page built ahead of time would
+ * carry scripts with no nonce and the browser would block them.
+ */
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const nonce = (await headers()).get(NONCE_HEADER) ?? undefined;
   return (
     // data-theme is set by THEME_INIT_SCRIPT before hydration, so the attribute differs from SSR on purpose.
     <html lang="en" className={`${inter.variable} h-full`} suppressHydrationWarning>
       <head>
-        <ThemeScript />
+        <ThemeScript nonce={nonce} />
       </head>
       <body className="min-h-full">
         <Providers siblingUrls={SIBLING_APP_URLS}>{children}</Providers>

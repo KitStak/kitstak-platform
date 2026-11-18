@@ -48,6 +48,7 @@ import {
   updateSettings,
 } from './test-exports';
 import * as domain from './test-exports';
+import { ruleSentence } from '@/features/alerts/rule-kinds';
 
 const ready = await databaseReady();
 
@@ -420,6 +421,60 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
       }
       expect(opened.length).toBeGreaterThan(40);
       expect(leaks).toEqual([]);
+    });
+
+    it('alert rules keep their line (dollars or a margin percent) from readers without money', async () => {
+      // A dollar rule, a margin rule, and an old style row whose stored name holds the amount.
+      const dollars = await domain.createAlertRule(manager, { name: 'Tell me when finished work worth more than a set amount is not billed', kind: 'unbilled_above', threshold: '5000' });
+      const margin = await domain.createAlertRule(manager, { name: "Tell me when a job's margin is heading under a set line", kind: 'margin_below', threshold: '17' });
+      const old = await domain.createAlertRule(manager, { name: 'Tell me when more than $2,000 of paid time this month is not on any job', kind: 'missing_time_above', threshold: '2000' });
+      const oldPlain = await domain.createAlertRule(manager, { name: 'Tell me when a job is losing more than $750 or 12% of its price', kind: 'job_losing' });
+      // A money reader gets the line.
+      const full = await domain.listAlertRules(manager);
+      expect(full.find((rule) => rule.id === dollars.id)).toMatchObject({ threshold: '5000.0000', moneyHidden: false });
+      expect(full.find((rule) => rule.id === old.id)?.name).toContain('$2,000');
+      expect(ruleSentence('unbilled_above', '5000.0000')).toBe('Tell me when finished work worth more than $5,000 is not billed.');
+
+      for (const [who, label] of [[viewer, 'viewer'], [supervisor, 'supervisor']] as const) {
+        const rules = await domain.listAlertRules(who);
+        expect(rules.length, label).toBe(full.length);
+        const leaks: string[] = [];
+        for (const rule of rules) {
+          expect(rule.moneyHidden, `${label} ${rule.kind}`).toBe(true);
+          if (rule.threshold !== null) leaks.push(`${label}.${rule.kind}.threshold = ${rule.threshold}`);
+          // What the page prints for this reader: the name and the sentence built from the DTO.
+          for (const text of [rule.name, ruleSentence(rule.kind, rule.threshold, { moneyHidden: rule.moneyHidden })]) {
+            if (/[$€£]\s?\d/.test(text) || /\d\s?%/.test(text) || /\b\d{3,}\b/.test(text)) leaks.push(`${label}.${rule.kind}: "${text}"`);
+          }
+        }
+        moneyLeaks(rules, `${label}.alertRules`, leaks);
+        // The whole payload as the browser gets it holds none of the lines.
+        const payload = JSON.stringify(rules);
+        for (const line of ['5000.0000', '2000.0000', '1000.0000', '17.0000', '2,000', '$750', '12%']) if (payload.includes(line)) leaks.push(`${label} payload holds ${line}`);
+        expect(leaks, label).toEqual([]);
+        // The rules are still listed, with the amount left out.
+        expect(ruleSentence('unbilled_above', null, { moneyHidden: true })).toBe('Tell me when finished work worth more than a set amount is not billed.');
+        expect(rules.find((rule) => rule.id === old.id)?.name).toBe('Tell me when more than a set amount of paid time this month is not on any job');
+        expect(rules.find((rule) => rule.id === margin.id)?.name).toBe("Tell me when a job's margin is heading under a set line");
+        expect(rules.find((rule) => rule.id === oldPlain.id)?.name).toBe('Tell me when a job is losing more than a set amount or a set line of its price');
+        // The activity log names the rules with no amount either.
+        const log = (await listActivity(who, { entityType: 'alert_rule', limit: 200 })).items;
+        expect(log.length, label).toBeGreaterThanOrEqual(4);
+        expect(moneyLeaks(log, `${label}.ruleActivity`), label).toEqual([]);
+        expect(JSON.stringify(log), label).not.toMatch(/\$\s?\d|\d\s?%|threshold/);
+        // No money, no way to set or change a line, try one out, or remove a rule.
+        await expectError(() => domain.updateAlertRule(who, dollars.id, { threshold: '1' }), 'FORBIDDEN');
+        await expectError(() => domain.saveAlertRuleFull(who, { id: old.id, name: 'x', kind: 'missing_time_above', threshold: '1' }), 'FORBIDDEN');
+        await expectError(() => domain.createAlertRule(who, { name: 'x', kind: 'unbilled_above', threshold: '1' }), 'FORBIDDEN');
+        await expectError(() => domain.previewAlertRule(who, { kind: 'unbilled_above', threshold: '1' }), 'FORBIDDEN');
+        await expectError(() => domain.deleteAlertRule(who, dollars.id), 'FORBIDDEN');
+      }
+      // Nothing changed on the way.
+      const after = await org.query<{ id: string; threshold: string | null; name: string }>('select id, threshold, name from pulse.alert_rules where id = any($1::uuid[])', [[dollars.id, margin.id, old.id]]);
+      expect(after.find((row) => row.id === dollars.id)?.threshold).toBe('5000.0000');
+      expect(after.find((row) => row.id === margin.id)?.threshold).toBe('17.0000');
+      expect(after.find((row) => row.id === old.id)?.threshold).toBe('2000.0000');
+      for (const rule of [dollars, margin, old, oldPlain]) await domain.deleteAlertRule(manager, rule.id);
     });
 
     it('the sees money switch shows money but never the wage, and a manager never receives the wage either', async () => {

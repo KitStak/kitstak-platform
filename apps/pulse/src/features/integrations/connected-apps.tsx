@@ -121,8 +121,12 @@ function seenLines(app: AppConnectionDTO): string[] {
     if (has('billLines')) lines.push(`${plural(c.billLines ?? 0, 'bill line', 'bill lines')} read`);
     if (has('vasRecords') && (c.vasRecords ?? 0) > 0)
       lines.push(
-        `${plural(c.vasRecords ?? 0, 'extra service record', 'extra service records')}, ${c.vasNoPrice ?? 0} with no price set in the warehouse`,
+        has('vasInPulse')
+          ? `${plural(c.vasRecords ?? 0, 'extra service record', 'extra service records')} in the warehouse, ${c.vasInPulse ?? 0} in Pulse as extra service entries, ${c.vasContractPriced ?? 0} priced by a contract rate`
+          : `${plural(c.vasRecords ?? 0, 'extra service record', 'extra service records')} in the warehouse`,
       );
+    if (has('contractJobs') && (c.contractJobs ?? 0) > 0)
+      lines.push(`${plural(c.contractJobs ?? 0, 'linked job follows', 'linked jobs follow')} a warehouse contract rate for work orders`);
   }
   if (app.app === 'projects' && has('linkedProjects')) {
     lines.push(
@@ -361,6 +365,36 @@ function AppCard({
             </ul>
           ) : null}
           {last ? <p className={cn('text-fg-muted', seen.length > 0 && 'mt-1')}>{last}</p> : null}
+          {app.app === 'wms' && (app.counts.vasNoPrice ?? 0) > 0 ? (
+            <p className="mt-2 border-t border-border-subtle pt-2 text-fg" data-testid="vas-no-price">
+              <strong className="font-semibold">
+                {plural(app.counts.vasNoPrice ?? 0, 'extra service entry has', 'extra service entries have')} no price yet
+              </strong>
+              , so that work earns nothing on paper. Add a rate for the service to the client&apos;s contract in the{' '}
+              <a
+                href={`${app.url}/billing`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-sm text-fg-link underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              >
+                warehouse<span className="sr-only"> (opens in a new tab)</span>
+              </a>{' '}
+              and sync again, or type a price on the entry under{' '}
+              <Link
+                href={routes.services()}
+                className="rounded-sm text-fg-link underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              >
+                Extra services
+              </Link>
+              .
+            </p>
+          ) : null}
+          {app.app === 'wms' && (app.counts.vasNoClient ?? 0) > 0 ? (
+            <p className="mt-1 text-fg-muted" data-testid="vas-no-client">
+              {plural(app.counts.vasNoClient ?? 0, 'record was', 'records were')} left out because the client is not in Pulse yet. Add the
+              client, then sync again.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </li>

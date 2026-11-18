@@ -241,7 +241,7 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
             done={steps.rate}
             active={current === 'rate'}
             link={{ href: routes.labor('rates'), label: 'Labor rates' }}
-            summary={steps.rate ? (state.rate ? `${state.rate.name}: one hour really costs ${state.rate.loadedRateCents !== null ? formatMoney(state.rate.loadedRateCents) : 'an amount your role cannot see'}.` : 'Done.') : 'What an hour of work really costs you: the wage plus taxes, benefits and overhead.'}
+            summary={steps.rate ? (state.rate ? `${state.rate.name}: one hour really costs ${state.rate.loadedRateCents !== null ? formatMoney(state.rate.loadedRateCents) : 'an amount your role cannot see'} today.` : 'Done.') : 'What an hour of work really costs you: the wage plus taxes, benefits and overhead.'}
           >
             {canRate ? (
               <form
@@ -339,7 +339,7 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
             done={steps.day}
             active={current === 'day'}
             link={{ href: routes.log(), label: 'Log work' }}
-            summary={steps.day && profit ? `${formatNumber(profit.unitsGood, { maxDigits: 0 })} units in ${formatNumber(profit.hours, { maxDigits: 1 })} labor hours on ${profit.jobNumber}.` : 'Units finished, how many people, and the hours each.'}
+            summary={steps.day && profit ? `Logged so far on ${profit.jobNumber}, over all its days: ${formatNumber(profit.unitsGood, { maxDigits: 0 })} units in ${formatNumber(profit.hours, { maxDigits: 1 })} labor hours.` : 'Units finished, how many people, and the hours each.'}
           >
             {canLog ? (
               <form

@@ -141,6 +141,8 @@ export interface KpiTileProps {
   readonly value: string | null;
   /** Change against the previous period. */
   readonly delta?: DeltaBadgeProps;
+  /** True while the number to compare with is still loading: the tile keeps room for the change so it does not grow later. */
+  readonly deltaPending?: boolean;
   /** A trend under the number. */
   readonly sparkline?: { readonly values: readonly (number | null)[]; readonly label?: string; readonly format?: ChartFormat; readonly tone?: 'accent' | 'good' | 'bad' | 'neutral' };
   /** The "how we got this" control: a popover or drawer trigger built from the same inputs. */
@@ -155,7 +157,7 @@ export interface KpiTileProps {
   readonly className?: string;
 }
 
-export function KpiTile({ label, value, delta, sparkline, explain, footer, emptyText = 'No data yet', loading, error, className }: KpiTileProps) {
+export function KpiTile({ label, value, delta, deltaPending, sparkline, explain, footer, emptyText = 'No data yet', loading, error, className }: KpiTileProps) {
   if (loading) {
     return (
       <div role="status" aria-busy="true" className={cn('flex min-h-[124px] flex-col gap-3 rounded-lg border border-border-subtle bg-panel p-4', className)}>
@@ -191,9 +193,9 @@ export function KpiTile({ label, value, delta, sparkline, explain, footer, empty
             </p>
             {sparkline && value !== null ? <Sparkline values={sparkline.values} label={sparkline.label ?? `${label} trend`} format={sparkline.format} tone={sparkline.tone} width={88} height={30} className="mb-0.5 hidden shrink-0 @[15.5rem]:block" /> : null}
           </div>
-          {(delta && value !== null) || footer ? (
+          {(delta && value !== null) || (deltaPending && value !== null) || footer ? (
             <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2.5">
-              {delta && value !== null ? <DeltaBadge {...delta} /> : null}
+              {delta && value !== null ? <DeltaBadge {...delta} /> : deltaPending && value !== null ? <span aria-hidden data-testid="kpi-delta-pending" className="ks-skeleton block h-5 w-32 max-w-full rounded-sm" /> : null}
               {footer}
             </div>
           ) : null}

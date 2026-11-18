@@ -33,8 +33,8 @@ const TITLES: Readonly<Record<ExplainMetric, string>> = {
   shared: 'Time not on a job',
   cost: 'Cost',
   profit: 'Profit',
-  margin: 'Margin on jobs',
-  margin_before_shared: 'Margin before shared costs',
+  margin: 'Job margin',
+  margin_before_shared: 'Job margin before time not on a job',
   labor_pct: 'Labor as % of revenue',
   uph: 'Units per person per hour',
   cost_per_unit: 'Cost per unit',
@@ -52,8 +52,8 @@ const FORMULAS: Readonly<Record<ExplainMetric, string>> = {
   shared: 'Time not on a job is paid time for meetings, cleanup and waiting. Pulse spreads it over the jobs that ran in the same period.',
   cost: 'Cost is labor, plus material, plus other costs, plus the time not on a job these jobs carry.',
   profit: 'Profit is revenue less cost.',
-  margin: 'Margin on jobs is profit on jobs as a share of revenue. Overhead and paid time on no job are not in it. The company margin takes those out too.',
-  margin_before_shared: 'Margin before shared costs leaves out time not on a job. It shows what the work itself made.',
+  margin: 'Job margin is profit on jobs as a share of revenue. Overhead and paid time on no job are not in it. The company margin takes those out too.',
+  margin_before_shared: 'This is the job margin with time not on a job left out. It shows what the work itself made.',
   labor_pct: 'Labor as % of revenue is labor cost as a share of revenue. Lower is better.',
   uph: 'Units per person per hour is good units over all labor hours.',
   cost_per_unit: 'Cost per unit is all cost over good units.',
@@ -175,11 +175,11 @@ function moneyLines(metric: ExplainMetric, total: ProfitRowDTO): Line[] {
     case 'profit':
       return [line('Revenue', t.revenueCents, 'money', 'start'), line('Labor', t.laborCents, 'money', 'minus'), line('Material', t.materialCents, 'money', 'minus'), line('Other costs', t.otherCents, 'money', 'minus'), line('Time not on a job', t.sharedCents, 'money', 'minus'), line('Profit', t.profitCents, 'money', 'total')];
     case 'margin':
-      return [line('Profit', t.profitCents, 'money', 'start'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Margin on jobs', t.marginBp, 'percent', 'total')];
+      return [line('Profit', t.profitCents, 'money', 'start'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Job margin', t.marginBp, 'percent', 'total'), line('Before time not on a job', t.marginBeforeSharedBp, 'percent', 'note')];
     case 'margin_before_shared': {
       // The same pure summary the profit rows use, so "before shared costs" is one rule everywhere.
       const before = t.revenueCents === null ? null : centsOut(profitSummary({ revenueCents: BigInt(t.revenueCents), laborCents: BigInt(t.laborCents ?? 0), materialCents: BigInt(t.materialCents ?? 0), otherCents: BigInt(t.otherCents ?? 0), sharedCents: BigInt(t.sharedCents ?? 0) }).profitBeforeSharedCents);
-      return [line('Revenue', t.revenueCents, 'money', 'start'), line('Labor', t.laborCents, 'money', 'minus'), line('Material', t.materialCents, 'money', 'minus'), line('Other costs', t.otherCents, 'money', 'minus'), line('Profit before shared costs', before, 'money', 'total'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Margin before shared costs', t.marginBeforeSharedBp, 'percent', 'total')];
+      return [line('Revenue', t.revenueCents, 'money', 'start'), line('Labor', t.laborCents, 'money', 'minus'), line('Material', t.materialCents, 'money', 'minus'), line('Other costs', t.otherCents, 'money', 'minus'), line('Profit before time not on a job', before, 'money', 'total'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Job margin before time not on a job', t.marginBeforeSharedBp, 'percent', 'total')];
     }
     case 'labor_pct':
       return [line('Labor', t.laborCents, 'money', 'start'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Labor as % of revenue', t.laborPctBp, 'percent', 'total')];

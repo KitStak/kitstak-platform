@@ -112,11 +112,44 @@ export function thresholdText(unit: ThresholdUnit, stored: string | null | undef
   return `$${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
-/** The whole rule as one sentence: "Tell me when a job's margin is heading under 15%." */
-export function ruleSentence(kind: AlertKind, threshold: string | null | undefined): string {
+/** What stands in for the line when the reader may not see money: "a set amount", "a set line". */
+export const HIDDEN_LINE: Readonly<Record<ThresholdUnit, string>> = { dollars: 'a set amount', percent: 'a set line' };
+
+/** True when the rule has a line (dollars or a margin percent). Lines are money: hidden from readers without money. */
+export function ruleHasLine(kind: string): boolean {
+  return Boolean((RULE_KINDS as Readonly<Record<string, RuleKindInfo | undefined>>)[kind]?.threshold);
+}
+
+/**
+ * The whole rule as one sentence: "Tell me when a job's margin is heading under 15%."
+ * With `moneyHidden` the line is left out: "Tell me when more than a set amount of paid time this
+ * month is not on any job."
+ */
+export function ruleSentence(kind: AlertKind, threshold: string | null | undefined, options: { readonly moneyHidden?: boolean } = {}): string {
   const info = RULE_KINDS[kind];
+  if (info.threshold && options.moneyHidden) return `Tell me when ${info.sentence(HIDDEN_LINE[info.threshold.unit])}.`;
   const number = info.threshold ? thresholdText(info.threshold.unit, threshold) : null;
   return `Tell me when ${info.sentence(number)}.`;
+}
+
+/**
+ * The name kept in the database for a rule. It never holds the line itself (no dollars, no
+ * percent), so the stored words are safe for every reader. Screens build the full sentence from
+ * the kind and the line, for readers who may see money.
+ */
+export function storedRuleName(kind: AlertKind): string {
+  return ruleSentence(kind, null, { moneyHidden: true }).replace(/\.$/, '');
+}
+
+/** Takes dollar amounts and percents out of free text ("under $2,000" reads "under a set amount"). */
+export function hideLinesInText(text: string): string {
+  return text.replace(/-?\$\s?\d[\d,]*(?:\.\d+)?[kKmM]?/g, HIDDEN_LINE.dollars).replace(/-?\d+(?:\.\d+)?\s?%/g, HIDDEN_LINE.percent);
+}
+
+/** A rule's name for a reader without money: the sentence with no line, or the stored name with its numbers taken out. */
+export function ruleNameWithoutMoney(kind: string, name: string): string {
+  if (ruleHasLine(kind)) return storedRuleName(kind as AlertKind);
+  return hideLinesInText(name);
 }
 
 /** A stored line as a person would type it: "15" not "15.0000". */

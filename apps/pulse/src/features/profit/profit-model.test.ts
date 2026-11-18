@@ -81,7 +81,7 @@ describe('drilling down', () => {
   });
 
   it('has nothing below a row with no key', () => {
-    expect(drillTarget('job', row('none', 'Client level, no job'), RANGE)).toBeNull();
+    expect(drillTarget('job', row('none', 'Put on a client, not on a job'), RANGE)).toBeNull();
     expect(rowScope('service', 'none', RANGE)).toBeNull();
   });
 

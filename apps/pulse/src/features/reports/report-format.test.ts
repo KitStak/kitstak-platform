@@ -28,6 +28,7 @@ const report: ReportDTO = {
   total: { job: 'Total', profit: 118956, margin: 2100, units: 1200.5 },
   summary: [{ label: 'Profit', value: 118956, kind: 'money' }],
   chart: null,
+  aside: null,
   notes: ['Each job counts only the work dated inside these days.'],
   truncated: false,
   moneyHidden: false,

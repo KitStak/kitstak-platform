@@ -8,6 +8,7 @@ import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
 import { clients, items, jobTypes, sites, vasServices } from '@/server/db/schema';
 import { conflict, invalid, notFound } from '@/server/errors';
+import { matchClientName } from '@/lib/client-names';
 import type { PartsOwnerValue, PricingModelValue, StreamSource, VasBilling } from '@/lib/constants';
 import type { ClientDTO, ItemDTO, JobTypeDTO, SiteDTO, VasServiceDTO } from '@/lib/types';
 import { assertVersion, cleanText, defined, diff, hideUnless, inTx, iso, isoRequired, isUuid, isValidTimezone, rows, todayInZone, type DomainContext } from './_shared';
@@ -272,6 +273,17 @@ export async function ensureClientByName(tx: Executor, ctx: DomainContext, name:
   if (!clean) throw invalid('Pick a client or type a new client name.', { clientName: 'Pick a client or type a new client name.' });
   const [found] = await tx.select().from(clients).where(and(eq(clients.orgId, ctx.orgId), isNull(clients.deletedAt), sql`(lower(${clients.name}) = ${clean.toLowerCase()} or lower(${clients.code}) = ${clean.toLowerCase()})`)).limit(1);
   return found ?? insertClient(tx, ctx, { name: clean });
+}
+
+/**
+ * Live clients whose name is close to `name` without being it ("Harbor" next to "Harbor Roast
+ * Collective"). Empty when `name` is the exact name or code of a client, since that one is used.
+ */
+export async function findClientLookAlikes(tx: Executor, ctx: DomainContext, name: string): Promise<{ id: string; name: string; code: string }[]> {
+  const clean = cleanText(name);
+  if (!clean) return [];
+  const live = await tx.select({ id: clients.id, name: clients.name, code: clients.code }).from(clients).where(and(eq(clients.orgId, ctx.orgId), isNull(clients.deletedAt)));
+  return [...matchClientName(clean, live).lookAlikes];
 }
 
 export async function updateClient(ctx: DomainContext, clientId: string, patch: Partial<ClientInput>, version?: number | null): Promise<ClientDTO> {

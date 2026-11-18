@@ -27,7 +27,7 @@ import { deleteAlertRuleAction } from '@/server/actions/alerts';
 import { saveAlertRuleFullAction, type SaveAlertRuleFullActionInput } from '@/server/actions/money-ops';
 import type { RulePreviewDTO } from '@/server/domain/alert-ops';
 import { clockLabel, quietOf, quietSentence, type QuietHours } from './quiet-hours';
-import { RULE_GROUPS, RULE_KINDS, readThreshold, ruleSentence, tellSentence, thresholdText, tidyThreshold } from './rule-kinds';
+import { RULE_GROUPS, RULE_KINDS, readThreshold, ruleSentence, storedRuleName, tellSentence, thresholdText, tidyThreshold } from './rule-kinds';
 
 interface Named {
   readonly id: string;
@@ -120,7 +120,8 @@ function toInput(draft: Draft, stored: string | null): SaveAlertRuleFullActionIn
   const scope = info.scoped && draft.scopeKind !== 'all' && draft.scopeId ? { [SCOPE_KEY[draft.scopeKind]]: draft.scopeId } : {};
   return {
     id: draft.id,
-    name: ruleSentence(draft.kind, stored).replace(/\.$/, ''),
+    // The stored name never holds the line (no dollars, no percent): readers without money see it too.
+    name: storedRuleName(draft.kind),
     kind: draft.kind,
     threshold: stored,
     scope,
@@ -131,6 +132,9 @@ function toInput(draft: Draft, stored: string | null): SaveAlertRuleFullActionIn
     quiet: draftQuiet(draft),
   };
 }
+
+/** The rule as this reader may see it: the full sentence, or the one with the line left out. */
+const sentenceOf = (rule: AlertRuleDTO): string => ((ALERT_KINDS as readonly string[]).includes(rule.kind) ? ruleSentence(rule.kind, rule.threshold, { moneyHidden: rule.moneyHidden }) : rule.name);
 
 export function RulesView({ initialRules, canManage, options }: { readonly initialRules: readonly AlertRuleDTO[]; readonly canManage: boolean; readonly options: RuleOptions }) {
   const queryClient = useQueryClient();
@@ -159,7 +163,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
       return;
     }
     await refresh();
-    if (!quiet) toast.undo(enabled ? 'Rule turned on' : 'Rule turned off', { description: ruleSentence(rule.kind, rule.threshold), onUndo: () => setEnabled(rule, !enabled, true) });
+    if (!quiet) toast.undo(enabled ? 'Rule turned on' : 'Rule turned off', { description: sentenceOf(rule), onUndo: () => setEnabled(rule, !enabled, true) });
   };
 
   const remove = async (rule: AlertRuleDTO) => {
@@ -172,7 +176,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
       return;
     }
     toast.undo('Rule deleted', {
-      description: ruleSentence(rule.kind, rule.threshold),
+      description: sentenceOf(rule),
       onUndo: async () => {
         const back = await saveAlertRuleFullAction({ ...toInput(toDraft(rule), rule.threshold === null ? null : tidyThreshold(rule.threshold)), id: null, name: rule.name });
         if (!back.ok) throw new Error(back.error.message);
@@ -192,10 +196,10 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
     const known = (ALERT_KINDS as readonly string[]).includes(rule.kind);
     return (
       <li key={rule.id} className="flex flex-wrap items-start gap-3 px-4 py-3.5" data-testid="rule-row" data-kind={rule.kind} data-enabled={rule.enabled}>
-        {canManage ? <Switch size="sm" className="mt-0.5" checked={rule.enabled} onCheckedChange={(value) => void setEnabled(rule, value)} aria-label={`${rule.enabled ? 'Turn off' : 'Turn on'}: ${rule.name}`} data-testid="rule-toggle" /> : null}
+        {canManage ? <Switch size="sm" className="mt-0.5" checked={rule.enabled} onCheckedChange={(value) => void setEnabled(rule, value)} aria-label={`${rule.enabled ? 'Turn off' : 'Turn on'}: ${sentenceOf(rule)}`} data-testid="rule-toggle" /> : null}
         <div className={cn('min-w-0 flex-1 basis-[240px]', !rule.enabled && 'opacity-60')}>
           <p className="text-sm font-semibold text-fg" data-testid="rule-sentence">
-            {known ? ruleSentence(rule.kind, rule.threshold) : rule.name}
+            {sentenceOf(rule)}
           </p>
           <p className="mt-0.5 text-sm text-fg-secondary">
             {[scope, tellSentence(rule.notifyRoles, names)].filter(Boolean).join(' · ')}
@@ -221,7 +225,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
             <Button size="sm" variant="secondary" leadingIcon={<Pencil aria-hidden />} onClick={() => setDraft(toDraft(rule))} data-testid="rule-edit">
               Change
             </Button>
-            {!rule.isSystem ? <IconButton label={`Delete the rule: ${rule.name}`} icon={<Trash2 aria-hidden />} variant="ghost" size="sm" onClick={() => void remove(rule)} data-testid="rule-delete" /> : null}
+            {!rule.isSystem ? <IconButton label={`Delete the rule: ${sentenceOf(rule)}`} icon={<Trash2 aria-hidden />} variant="ghost" size="sm" onClick={() => void remove(rule)} data-testid="rule-delete" /> : null}
           </div>
         ) : null}
       </li>
@@ -301,7 +305,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
             await refresh();
             if (!before) {
               toast.undo('Rule added', {
-                description: ruleSentence(saved.kind, saved.threshold),
+                description: sentenceOf(saved),
                 onUndo: async () => {
                   const undone = await deleteAlertRuleAction({ ruleId: saved.id });
                   if (!undone.ok) throw new Error(undone.error.message);
@@ -312,7 +316,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
             }
             const old = rules.find((rule) => rule.id === before.id);
             toast.undo('Rule changed', {
-              description: ruleSentence(saved.kind, saved.threshold),
+              description: sentenceOf(saved),
               onUndo: async () => {
                 if (!old) return;
                 const undone = await saveAlertRuleFullAction({ ...toInput(toDraft(old), old.threshold === null ? null : tidyThreshold(old.threshold)), name: old.name });

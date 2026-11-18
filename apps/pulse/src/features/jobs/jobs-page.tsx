@@ -1,7 +1,7 @@
 import { FileSpreadsheet, PackagePlus } from 'lucide-react';
 import { Page } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
-import { RouteTabs } from '@/components/pulse/route-tabs';
+import { RouteTabs, type RouteTab } from '@/components/pulse/route-tabs';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { JOB_TABS, PULSE_STATUSES, type JobTab, type PulseStatus } from '@/lib/constants';
 import { routes } from '@/lib/routes';
@@ -24,6 +24,17 @@ function first(value: string | string[] | undefined): string {
 function parseTab(value: string | string[] | undefined): JobTab {
   const raw = first(value);
   return (JOB_TABS as readonly string[]).includes(raw) ? (raw as JobTab) : 'open';
+}
+
+/** The tabs of the Jobs page. People who may delete a job also get Deleted, where it can be restored. */
+export function jobListTabs(canManage: boolean): RouteTab[] {
+  const tabs: RouteTab[] = JOB_TABS.map((id) => ({
+    id,
+    label: TAB_LABELS[id],
+    href: routes.jobs({ tab: id === 'open' ? undefined : id }),
+  }));
+  if (canManage) tabs.push({ id: 'deleted', label: 'Deleted', href: routes.deletedJobs() });
+  return tabs;
 }
 
 /** A read that failed leaves the client to load it again (and show the retry state if that fails too). */
@@ -79,15 +90,7 @@ export async function JobsPage({
         ) : null
       }
       tabs={
-        <RouteTabs
-          label="Job lists"
-          active={tab}
-          tabs={JOB_TABS.map((id) => ({
-            id,
-            label: TAB_LABELS[id],
-            href: routes.jobs({ tab: id === 'open' ? undefined : id }),
-          }))}
-        />
+        <RouteTabs label="Job lists" active={tab} tabs={jobListTabs(canManage)} />
       }
     >
       <JobsView

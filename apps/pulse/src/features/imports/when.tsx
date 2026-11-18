@@ -1,5 +1,5 @@
 'use client';
-import { cn } from '@/components/ui/cn';
+import { LocalTime } from '@/components/pulse/local-time';
 
 const FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 const DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -12,12 +12,10 @@ export function formatWhen(iso: string | null | undefined, dayOnly = false): str
   return (dayOnly ? DAY : FORMAT).format(date);
 }
 
-/** A moment in time. The server and the browser may sit in different time zones, so the text may differ on first paint. */
+/**
+ * A moment in time, in the reader's own time zone. The server does not know that zone, so the
+ * first paint is in UTC and the text switches to local time as soon as the page is live.
+ */
 export function When({ iso, dayOnly, className }: { readonly iso: string | null | undefined; readonly dayOnly?: boolean; readonly className?: string }) {
-  if (!iso) return null;
-  return (
-    <time dateTime={iso} suppressHydrationWarning className={cn('whitespace-nowrap tabular-nums', className)}>
-      {formatWhen(iso, dayOnly)}
-    </time>
-  );
+  return <LocalTime iso={iso} style={dayOnly ? 'day' : 'dayTime'} className={className} />;
 }

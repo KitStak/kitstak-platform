@@ -58,7 +58,7 @@ describe('Home', () => {
     expect(html).toContain('$11,435');
     expect(html).toContain('3 jobs need you.');
     expect(html).toContain('data-testid="home-tiles"');
-    for (const label of ['Revenue', 'Cost', 'Profit on jobs', 'Margin on jobs', 'Labor as % of revenue', 'Units per person per hour', 'Not billed yet']) expect(html, label).toContain(label);
+    for (const label of ['Revenue', 'Cost', 'Profit on jobs', 'Job margin', 'Labor as % of revenue', 'Units per person per hour', 'Not billed yet']) expect(html, label).toContain(label);
     expect(html).toContain('7 of 9 active jobs logged today');
     expect(html).toContain('J-1026');
     expect(html).toContain('-$4,632');
@@ -91,7 +91,8 @@ describe('Home', () => {
     const html = render();
     // "Margin after all costs" was the margin on jobs only, before overhead and paid time on no job.
     expect(html).not.toContain('Margin after all costs');
-    expect(html).toContain('Margin on jobs');
+    expect(html).not.toContain('Margin on jobs');
+    expect(html).toContain('Job margin');
     // Company profit $11,435 on revenue $48,210 is 23.7%.
     expect(html).toContain('Company margin');
     expect(html).toContain('23.7%');

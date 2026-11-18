@@ -108,7 +108,7 @@ function groupSql(by: ProfitGroup, weekStart: number): { key: SQL; label: SQL; s
 }
 
 const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = {
-  job: 'Client level, no job',
+  job: 'Put on a client, not on a job',
   client: 'No client',
   type: 'No job type',
   service: 'Core job work',

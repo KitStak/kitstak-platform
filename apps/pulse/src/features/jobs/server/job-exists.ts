@@ -6,7 +6,7 @@ import 'server-only';
 import { getJobRow, type DomainContext } from '@/server/domain';
 import { isDomainError } from '@/server/errors';
 
-const RESERVED = new Set(['new', 'by-link']);
+const RESERVED = new Set(['new', 'by-link', 'deleted']);
 
 /** True when `path` is a job page (`/jobs/<ref>...`) whose job is not in this workspace. */
 export async function jobRouteMissing(ctx: DomainContext, path: string): Promise<boolean> {

@@ -1,6 +1,6 @@
 /**
  * Company margin: what the company kept after time not on a job and overhead, as a share of
- * revenue. "Margin on jobs" leaves those costs out, so the two are shown side by side.
+ * revenue. "Job margin" leaves those costs out, so the two are shown side by side.
  */
 import { marginBp } from '@/lib/money';
 

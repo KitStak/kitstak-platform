@@ -9,11 +9,13 @@
  *   <ServiceLedger serviceId={service.id} today={today} />
  *
  * Cells edit in place, rows can be added many at a time (paste works), and every change has Undo.
+ * An entry pulled from the warehouse says so and links back to its record. Its date, service and
+ * count belong to the warehouse and cannot be typed over here. The price and the labor hours can.
  */
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Plus, Sparkles } from 'lucide-react';
+import { ExternalLink, Plus, Sparkles } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
@@ -47,6 +49,29 @@ export interface ServiceLedgerProps {
 type RowInput = SaveVasEntryActionInput;
 type BulkRow = SaveVasEntriesBulkActionInput['rows'][number];
 const qty = (value: string | null): string => formatNumber(value ?? '0', { maxDigits: 3 });
+/** The warehouse owns these facts of a pulled entry. */
+const fromWarehouse = (row: VasEntryDTO): boolean => row.source === 'wms';
+
+/** Where a row came from, when it was not typed in: a link back to the warehouse record when there is one. */
+function SourceMark({ row }: { readonly row: VasEntryDTO }) {
+  if (row.source === 'manual') return null;
+  if (row.source !== 'wms') return <Badge size="sm" tone="neutral">{row.source === 'csv' ? 'Imported' : 'Synced'}</Badge>;
+  if (!row.sourceUrl) return <Badge size="sm" tone="neutral">From the warehouse</Badge>;
+  return (
+    <a
+      href={row.sourceUrl}
+      target="_blank"
+      rel="noreferrer"
+      title="The warehouse keeps the date, the service and the count of this entry. Opens the warehouse in a new tab."
+      className="inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-muted px-2 text-xs font-medium whitespace-nowrap text-fg-secondary hover:text-fg hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      data-testid={`service-source-${row.id}`}
+    >
+      From the warehouse
+      <ExternalLink aria-hidden className="size-3" />
+      <span className="sr-only">(opens in a new tab)</span>
+    </a>
+  );
+}
 
 export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, title = 'Extra services done', className }: ServiceLedgerProps) {
   const shell = useShell();
@@ -68,7 +93,7 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
 
   const columns = useMemo<LedgerColumn<VasEntryDTO>[]>(
     () => [
-      { id: 'workDate', header: 'Date', render: (row) => shortDate(row.workDate), editor: (row) => ({ kind: 'date', value: row.workDate }) },
+      { id: 'workDate', header: 'Date', render: (row) => shortDate(row.workDate), editor: (row) => (fromWarehouse(row) ? null : { kind: 'date', value: row.workDate }) },
       ...(showFor
         ? [
             {
@@ -85,8 +110,8 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
             } satisfies LedgerColumn<VasEntryDTO>,
           ]
         : []),
-      ...(serviceId ? [] : [{ id: 'service', header: 'Service', primary: true, render: (row: VasEntryDTO) => serviceById.get(row.vasServiceId)?.name ?? 'A service', editor: (row: VasEntryDTO) => ({ kind: 'select' as const, value: row.vasServiceId, options: (services.data ?? []).filter((service) => service.active || service.id === row.vasServiceId).map((service) => ({ value: service.id, label: service.name })) }) } satisfies LedgerColumn<VasEntryDTO>]),
-      { id: 'quantity', header: 'How many', numeric: true, primary: Boolean(serviceId), render: (row) => `${qty(row.quantity)} ${serviceById.get(row.vasServiceId)?.unitLabel ?? ''}`.trim(), editor: (row) => ({ kind: 'number', value: String(Number(row.quantity)) }) },
+      ...(serviceId ? [] : [{ id: 'service', header: 'Service', primary: true, render: (row: VasEntryDTO) => serviceById.get(row.vasServiceId)?.name ?? 'A service', editor: (row: VasEntryDTO) => (fromWarehouse(row) ? null : { kind: 'select' as const, value: row.vasServiceId, options: (services.data ?? []).filter((service) => service.active || service.id === row.vasServiceId).map((service) => ({ value: service.id, label: service.name })) }) } satisfies LedgerColumn<VasEntryDTO>]),
+      { id: 'quantity', header: 'How many', numeric: true, primary: Boolean(serviceId), render: (row) => `${qty(row.quantity)} ${serviceById.get(row.vasServiceId)?.unitLabel ?? ''}`.trim(), editor: (row) => (fromWarehouse(row) ? null : { kind: 'number', value: String(Number(row.quantity)) }) },
       { id: 'hours', header: 'Labor hours', numeric: true, render: (row) => (Number(row.hours) > 0 ? formatHours(row.hours) : <span className="text-fg-muted" data-empty-cell>None</span>), editor: (row) => ({ kind: 'number', value: String(Number(row.hours)) }) },
       ...(shell.seesMoney
         ? ([
@@ -253,7 +278,7 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
         rowName={(row) => `${serviceById.get(row.vasServiceId)?.name ?? 'the service'} on ${shortDate(row.workDate)}`}
         onCommit={onCommit}
         onDelete={(picked) => void actions.removeRows(picked)}
-        rowBadges={(row) => (row.source !== 'manual' ? <Badge size="sm" tone="neutral">{row.source === 'csv' ? 'Imported' : row.source === 'wms' ? 'Warehouse' : 'Synced'}</Badge> : null)}
+        rowBadges={(row) => <SourceMark row={row} />}
       />
       <BulkAddDialog<BulkRow>
         open={bulk}

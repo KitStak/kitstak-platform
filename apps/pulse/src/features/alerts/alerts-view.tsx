@@ -43,6 +43,7 @@ import { useShell } from '@/features/shell/shell-context';
 import { SavedViewsBar } from '@/features/views/saved-views-bar';
 import { useUrlState, useUrlText } from '@/features/views/use-url-state';
 import { apiGet, apiPath } from '@/lib/api-client';
+import { RelativeTime } from '@/components/pulse/local-time';
 import { formatRelative } from '@/lib/dates';
 import { formatMoney, formatMoneyPlain } from '@/lib/format';
 import { usePeople } from '@/lib/hooks/use-data';
@@ -501,7 +502,9 @@ function AlertRow({
                 />
               </span>
             ) : null}
-            <span>First seen {formatRelative(alert.firstSeenAt)}</span>
+            <span>
+              First seen <RelativeTime iso={alert.firstSeenAt} />
+            </span>
             {alert.assignedTo ? (
               <span className="inline-flex items-center gap-1" data-testid="alert-assignee">
                 <PersonAvatar userId={alert.assignedTo} size="xs" showName />

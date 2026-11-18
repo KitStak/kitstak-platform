@@ -440,6 +440,12 @@ export interface JobListItemDTO extends JobDTO {
   readonly planLaborHours: DecimalString | null;
 }
 
+/** A job in the Deleted list: the job as it was, and who deleted it (`deletedAt` says when). */
+export interface DeletedJobDTO extends JobListItemDTO {
+  /** The person who deleted it, from the activity log. Null when the log has no name for it. */
+  readonly deletedById: string | null;
+}
+
 export interface JobPriceDTO {
   readonly id: string;
   readonly jobId: string;
@@ -627,6 +633,11 @@ export interface RevenueEntryDTO extends StreamRowBase {
 }
 
 export interface VasEntryDTO extends StreamRowBase {
+  /**
+   * Where a pulled entry came from: the warehouse record's page. Null for a typed entry, and null
+   * when the workspace no longer has that app on its plan (show plain words, never a dead link).
+   */
+  readonly sourceUrl: string | null;
   readonly siteId: string;
   readonly vasServiceId: string;
   readonly clientId: string;
@@ -753,6 +764,8 @@ export interface ProfitFilters {
   readonly jobId?: string | null;
   readonly vasServiceId?: string | null;
   readonly status?: JobStatusValue | null;
+  /** Only rows put on a client with no job (the drill down behind "Put on a client, not on a job"). */
+  readonly noJob?: boolean;
 }
 
 /** The walk from profit on jobs to company profit (SPEC 4.9). */
@@ -839,7 +852,10 @@ export interface AlertRuleDTO {
   readonly id: string;
   readonly name: string;
   readonly kind: AlertKind;
+  /** The line of the rule (dollars or a margin percent). Null when the rule has none, and for a reader without money. */
   readonly threshold: DecimalString | null;
+  /** True when the reader may not see money: `threshold` is null and `name` holds no numbers. */
+  readonly moneyHidden: boolean;
   readonly scope: Readonly<Record<string, unknown>>;
   readonly severity: AlertSeverity;
   readonly notifyRoles: readonly string[];
@@ -1321,6 +1337,18 @@ export interface ReportChartDTO {
 }
 
 /** `GET /api/v1/reports/<slug>`: one built report. The page, the CSV and the print view all read this. */
+/** Money in a report's total that belongs to no row of the ranking: costs and fees put on a client with no job. */
+export interface ReportAsideDTO {
+  readonly key: 'client_level';
+  readonly label: string;
+  /** Profit of these rows in cents: under zero when they cost more than they earned. Null when hidden. */
+  readonly valueCents: number | null;
+  /** One plain sentence on what the number is. */
+  readonly text: string;
+  /** How many entries are behind it. */
+  readonly entryCount: number;
+}
+
 export interface ReportDTO {
   readonly slug: string;
   readonly name: string;
@@ -1337,6 +1365,8 @@ export interface ReportDTO {
   readonly total: Readonly<Record<string, ReportCell>> | null;
   readonly summary: readonly { readonly label: string; readonly value: ReportCell; readonly kind: ReportCellKind }[];
   readonly chart: ReportChartDTO | null;
+  /** A number that is in the total but is not one of the ranked rows, said in words under the chart. */
+  readonly aside: ReportAsideDTO | null;
   /** Plain sentences on how to read the report or what is missing. */
   readonly notes: readonly string[];
   readonly truncated: boolean;

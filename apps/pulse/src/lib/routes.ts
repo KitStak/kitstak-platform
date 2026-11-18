@@ -56,6 +56,8 @@ export const routes = {
   home: () => '/',
   welcome: () => '/welcome',
   jobs: (opts?: { tab?: 'open' | 'all' | 'completed' | 'planned'; risk?: string; view?: string; q?: string }) => withQuery('/jobs', { tab: opts?.tab, risk: opts?.risk, view: opts?.view, q: opts?.q }),
+  /** Jobs that were deleted, with Restore. Managers and up. */
+  deletedJobs: () => '/jobs/deleted',
   newJob: (prefill: NewJobPrefill = {}) => withQuery('/jobs/new', { ...prefill }),
   job: (ref: string) => `/jobs/${encodeURIComponent(ref)}`,
   jobTab: (ref: string, tab: JobTab) => (tab === 'overview' ? `/jobs/${encodeURIComponent(ref)}` : `/jobs/${encodeURIComponent(ref)}/${tab}`),

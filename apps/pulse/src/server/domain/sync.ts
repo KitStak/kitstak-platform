@@ -5,7 +5,9 @@
  *
  *  - Each pulled stream row carries a `source_ref` that names the thing it came from
  *    (`wms:built:<workOrderId>:<date>`, `wms:bill:<reportId>:<operation>`,
- *    `pm:<projectId>:<date>`). A run looks the ref up first and only adds what is missing.
+ *    `wms:vas:<recordId>`, `pm:<projectId>:<date>`). A run looks the ref up first and only adds
+ *    what is missing.
+ *  - Warehouse extra services and contract rates are in `wms-services.ts`.
  *  - A day a person already typed is adopted (it gets the ref), not added a second time.
  *  - A field a person changed on a pulled row is listed in `meta.locked_fields` and is left alone.
  *  - A project's time feeds one job only, even when two jobs link the same project.
@@ -23,7 +25,8 @@ import { orgModuleFlags } from '@/server/entitlements';
 import { integrationAvailability } from '@/server/integrations/detect';
 import { getAccounts, getDeals, listWonDeals } from '@/server/integrations/crm';
 import { getProjects, projectTimeByDay } from '@/server/integrations/projects';
-import { listBilledRevenue, listVasRevenue, listWorkOrders, workOrderBuildsByDay } from '@/server/integrations/wms';
+import { listBilledRevenue, listWorkOrders, workOrderBuildsByDay } from '@/server/integrations/wms';
+import { logSoftFail } from '@/server/integrations/log';
 import { isDomainError } from '@/server/errors';
 import type { LinkTargetType } from '@/lib/constants';
 import type { AppConnectionDTO, ConnectedAppsDTO, LinkedJobDTO, SiblingApp, SyncResultDTO, SyncRunDTO } from '@/features/integrations/types';
@@ -37,6 +40,7 @@ import { pullWmsUsage } from './ledger';
 import { deleteProductionEntries, saveProductionEntry } from './production';
 import { assertOpen, closedMonths, finishWrite, newTouched, restampFixedJob, restampProduction, touchDay, touchJob } from './recalc';
 import { loadSettings } from './settings';
+import { applyWmsContractPrices, pullWmsServices } from './wms-services';
 
 const SOURCES: readonly SiblingApp[] = ['crm', 'wms', 'projects'];
 type Trigger = 'manual' | 'page' | 'event' | 'cron';
@@ -338,10 +342,37 @@ async function syncWms(ctx: DomainContext, tally: Tally): Promise<void> {
     }
   }
 
-  // 5. Extra services in the warehouse: counted here so "No price set yet" can be fixed at the source.
-  const vas = await listVasRevenue(ctx);
-  tally.counts.vasRecords = vas.length;
-  tally.counts.vasNoPrice = vas.filter((line) => line.revenueCents === null).length;
+  // 5. The warehouse contract's work order rates set the price of each linked job.
+  try {
+    const priced = await applyWmsContractPrices(ctx, links.filter((link) => orderById.has(link.target_id)));
+    tally.updated += priced.updated;
+    tally.skipped += priced.skipped;
+    tally.skippedClosed += priced.skippedClosed;
+    tally.counts.contractJobs = priced.jobs;
+    tally.counts.contractNotApplied = priced.notApplied;
+  } catch (error) {
+    tally.skipped += 1;
+    logSoftFail(ctx.orgId, 'sync.contractPrices', error);
+  }
+
+  // 6. Extra services done in the warehouse become extra service entries, on the job or the client.
+  try {
+    const services = await pullWmsServices(ctx);
+    if (services.read) {
+      tally.created += services.created;
+      tally.updated += services.updated + services.removed;
+      tally.skipped += services.skipped;
+      tally.skippedClosed += services.skippedClosed;
+      tally.counts.vasRecords = services.records;
+      tally.counts.vasInPulse = services.inPulse;
+      tally.counts.vasNoPrice = services.noPrice;
+      tally.counts.vasContractPriced = services.contractPriced;
+      tally.counts.vasNoClient = services.noClient;
+    }
+  } catch (error) {
+    tally.skipped += 1;
+    logSoftFail(ctx.orgId, 'sync.wmsServices', error);
+  }
 }
 
 /* -------------------------------------------------------------------- CRM */

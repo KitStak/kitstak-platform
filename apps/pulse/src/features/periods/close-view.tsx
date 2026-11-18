@@ -6,12 +6,13 @@
  */
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarCheck2, CircleAlert, CircleCheck, History, Lock, LockOpen, TriangleAlert } from 'lucide-react';
 import { Badge, Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Field, Skeleton, Tabs, TabsList, TabsTrigger, Textarea, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { ButtonLink } from '@/components/pulse/button-link';
+import { formatMoment, useHydrated } from '@/components/pulse/local-time';
 import { Teach } from '@/components/pulse/teach';
 import { How } from '@/features/calculator/how';
 import { CostLedger } from '@/features/costs/cost-ledger';
@@ -26,7 +27,7 @@ import { qk } from '@/lib/query-keys';
 import { routes } from '@/lib/routes';
 import { closePeriodAction, reopenPeriodAction } from '@/server/actions/planning';
 import type { CloseBoardDTO, CloseDetailDTO, CloseEventDTO, CloseItemDTO, CloseMonthDTO } from '@/server/domain/period-ops';
-import { closableFrom, dayText, dayTimeText } from './close-model';
+import { bridgeSteps, closableFrom } from './close-model';
 
 const keys = {
   board: () => ['periods', 'board'] as const,
@@ -56,6 +57,8 @@ export function CloseView({
   const queryClient = useQueryClient();
   const [month, setMonth] = useState(initialMonth);
   const [dialog, setDialog] = useState<'close' | 'reopen' | null>(null);
+  // Close and reopen times are shown in the reader's time zone, once the page is live (UTC before, to match the server).
+  const local = useHydrated();
 
   const boardQuery = useQuery({ queryKey: keys.board(), queryFn: () => apiGet<CloseBoardDTO>(apiPath('periods/board')), initialData: initialBoard, staleTime: 30_000 });
   const detailQuery = useQuery({
@@ -155,7 +158,7 @@ export function CloseView({
                       <MonthBadge month={item} />
                     </span>
                     <span className="text-xs text-fg-muted tabular-nums">
-                      {board.moneyHidden ? (item.status === 'closed' ? `Closed ${dayText(item.closedAt)}` : 'Open') : item.profitCents === null ? 'No numbers yet' : `Profit ${formatMoneyWhole(item.profitCents)} · ${formatPercentBp(item.marginBp, { empty: 'no margin' })}`}
+                      {board.moneyHidden ? (item.status === 'closed' ? `Closed ${formatMoment(item.closedAt, 'day', local)}` : 'Open') : item.companyProfitCents === null ? 'No numbers yet' : `Company profit ${formatMoneyWhole(item.companyProfitCents)} · ${formatPercentBp(item.companyMarginBp, { empty: 'no margin' })}`}
                     </span>
                   </button>
                 </li>
@@ -236,7 +239,7 @@ export function CloseView({
                     <span className="font-medium">{event.actorName ?? 'Someone'}</span> {event.action === 'closed' ? 'closed' : 'reopened'} <span className="font-medium">{event.monthLabel}</span>
                   </p>
                   {event.reason ? <p className="mt-0.5 text-fg-secondary">Reason: {event.reason}</p> : null}
-                  <p className="mt-0.5 text-xs text-fg-muted">{dayTimeText(event.at)}</p>
+                  <p className="mt-0.5 text-xs text-fg-muted">{formatMoment(event.at, 'dayTime', local)}</p>
                 </div>
               </li>
             ))}
@@ -322,14 +325,11 @@ function MonthBadge({ month }: { readonly month: CloseMonthDTO }) {
 function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly month: CloseMonthDTO; readonly detail: CloseDetailDTO; readonly board: CloseBoardDTO; readonly onClose: () => void; readonly onReopen: () => void }) {
   const closed = month.status === 'closed';
   // A closed month shows the numbers it was closed with. An open one shows live numbers.
-  const numbers = closed ? month : detail;
+  const local = useHydrated();
   const hidden = board.moneyHidden;
-  const tiles = [
-    { label: 'Revenue', value: money(numbers.revenueCents, hidden) },
-    { label: 'All cost', value: money(numbers.costCents, hidden) },
-    { label: 'Profit', value: money(numbers.profitCents, hidden) },
-    { label: 'Margin', value: numbers.marginBp === null ? (hidden ? 'Hidden' : 'No numbers yet') : formatPercentBp(numbers.marginBp) },
-  ];
+  const percent = (bp: number | null): string => (bp === null ? (hidden ? 'Hidden' : 'No revenue yet') : formatPercentBp(bp));
+  const steps = bridgeSteps(detail.bridge);
+  const hasNumbers = !hidden && detail.profitCents !== null && detail.companyProfitCents !== null;
   return (
     <section aria-labelledby="close-month-title" className="rounded-xl border border-border-subtle bg-panel shadow-xs" data-testid="close-detail" data-status={month.status}>
       <header className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4">
@@ -340,7 +340,7 @@ function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly mon
           </h2>
           <p className="mt-1 text-sm text-fg-secondary" data-testid="close-status-line">
             {closed
-              ? `Closed${month.closedByName ? ` by ${month.closedByName}` : ''} on ${dayText(month.closedAt)}. Entries dated in ${month.label} cannot change.`
+              ? `Closed${month.closedByName ? ` by ${month.closedByName}` : ''} on ${formatMoment(month.closedAt, 'day', local)}. Entries dated in ${month.label} cannot change.`
               : month.inProgress
                 ? `${month.label} is not over yet. You can close it from ${closableFrom(month.periodMonth)}.`
                 : detail.ready
@@ -349,7 +349,7 @@ function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly mon
           </p>
           {!closed && month.reopenedAt ? (
             <p className="mt-1 text-sm text-fg-secondary">
-              Reopened{month.reopenedByName ? ` by ${month.reopenedByName}` : ''} on {dayText(month.reopenedAt)}
+              Reopened{month.reopenedByName ? ` by ${month.reopenedByName}` : ''} on {formatMoment(month.reopenedAt, 'day', local)}
               {month.reopenReason ? `: ${month.reopenReason}` : '.'}
             </p>
           ) : null}
@@ -372,31 +372,116 @@ function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly mon
           )}
         </div>
       </header>
-      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-b-xl border-t border-border-subtle bg-[color:var(--border-subtle)] mt-4 sm:grid-cols-4">
-        {tiles.map((tile, index) => (
-          <div key={tile.label} className="bg-panel px-4 py-3">
-            <dt className="flex h-6 items-center gap-1 text-xs text-fg-muted">
-              {tile.label}
-              {index === 2 && !hidden && numbers.profitCents !== null ? (
+
+      {/* Job profit on the left, company profit on the right, and the costs no job carried in between. */}
+      <div className="mt-4 grid gap-px overflow-hidden rounded-b-xl border-t border-border-subtle bg-[color:var(--border-subtle)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)]" data-testid="close-numbers">
+        <dl className="flex flex-col gap-3 bg-panel px-4 py-3" data-testid="close-job-side">
+          <div className="grid grid-cols-2 gap-3">
+            <Figure label="Revenue" value={money(detail.revenueCents, hidden)} />
+            <Figure label="Job cost" value={money(detail.costCents, hidden)} testId="close-job-cost" />
+          </div>
+          <Figure
+            label="Job profit"
+            value={money(detail.profitCents, hidden)}
+            sub={<>Job margin <span className="font-medium text-fg tabular-nums" data-testid="close-job-margin">{percent(detail.marginBp)}</span></>}
+            testId="close-job-profit"
+            strong
+            how={
+              hasNumbers ? (
                 <How
-                  title={`Profit in ${month.label}`}
-                  formula={closed ? 'These are the numbers saved at the moment the month was closed.' : 'Revenue earned in the month, less every cost dated in it: labor, material, other costs and shared cost.'}
+                  title={`Job profit in ${month.label}`}
+                  formula={`${detail.saved ? 'These are the numbers saved at the moment the month was closed. ' : ''}Revenue earned in the month, less the cost of its jobs: labor, material, other costs and the time not on a job that jobs carried. Job margin is job profit as a share of revenue. Overhead and paid time not on any job are not in it.`}
                   lines={[
-                    { label: 'Revenue', value: money(numbers.revenueCents, hidden), op: 'start' },
-                    { label: 'all cost', value: money(numbers.costCents, hidden), op: 'minus' },
-                    { label: 'profit', value: money(numbers.profitCents, hidden), op: 'total' },
-                    ...(detail.companyProfitCents !== null && !closed ? [{ label: 'Company profit, after time not on a job and company costs', value: money(detail.companyProfitCents, hidden), op: 'note' as const }] : []),
+                    { label: 'Revenue', value: money(detail.revenueCents, hidden), op: 'start' },
+                    { label: 'Job cost', value: money(detail.costCents, hidden), op: 'minus' },
+                    { label: 'Job profit', value: money(detail.profitCents, hidden), op: 'total' },
+                    { label: 'Job margin', value: percent(detail.marginBp), op: 'note' },
                   ]}
                   warnings={!closed && !detail.ready ? detail.items.filter((item) => item.state === 'fix').map((item) => item.detail) : []}
                   align="start"
                 />
-              ) : null}
-            </dt>
-            <dd className="mt-0.5 text-lg font-semibold text-fg tabular-nums">{tile.value}</dd>
-          </div>
-        ))}
-      </dl>
+              ) : null
+            }
+          />
+        </dl>
+
+        <div className="bg-panel px-4 py-3" data-testid="close-bridge">
+          <p className="flex h-6 items-center text-xs text-fg-muted">From job profit to company profit</p>
+          {hidden ? (
+            <p className="mt-1 text-sm text-fg-secondary">Money is hidden for your role.</p>
+          ) : !hasNumbers ? (
+            <p className="mt-1 text-sm text-fg-secondary">No numbers yet.</p>
+          ) : (
+            <>
+              <ul className="mt-1 flex flex-col text-sm">
+                {steps.map((step) => (
+                  <li key={step.key} className="flex items-baseline justify-between gap-3 border-b border-border-subtle py-1.5" data-testid={`close-bridge-${step.key}`}>
+                    <span className="min-w-0 text-fg-secondary">{step.label}</span>
+                    <span className={cn('shrink-0 font-medium tabular-nums', step.adds ? 'text-success-text' : 'text-fg')}>
+                      <span className="font-normal text-fg-muted">{step.adds ? 'plus ' : 'less '}</span>
+                      {formatMoney(Math.abs(step.cents))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-fg-muted">
+                {detail.bridge.hasCompanyCosts
+                  ? 'No job carried these costs, so they come off after job profit.'
+                  : `No company costs are typed in for ${month.label}, so Pulse trusts the overhead inside your hourly rates.`}
+              </p>
+            </>
+          )}
+        </div>
+
+        <dl className="flex flex-col justify-end gap-3 bg-panel px-4 py-3" data-testid="close-company-side">
+          <Figure
+            label="Company profit"
+            value={money(detail.companyProfitCents, hidden)}
+            sub={<>Company margin <span className="font-medium text-fg tabular-nums" data-testid="close-company-margin">{percent(detail.companyMarginBp)}</span></>}
+            testId="close-company-profit"
+            strong
+            tone={(detail.companyProfitCents ?? 0) < 0 ? 'bad' : undefined}
+            how={
+              hasNumbers ? (
+                <How
+                  title={`Company profit in ${month.label}`}
+                  formula={`${detail.saved ? 'These are the numbers saved at the moment the month was closed. ' : ''}Company profit starts from job profit and takes away the costs no job carried. Company margin is company profit as a share of revenue. This is the number to report for the month.`}
+                  lines={[
+                    { label: 'Job profit', value: money(detail.profitCents, hidden), op: 'start' },
+                    ...steps.map((step) => ({ label: step.label, value: formatMoney(Math.abs(step.cents)), op: step.adds ? ('plus' as const) : ('minus' as const) })),
+                    { label: 'Company profit', value: money(detail.companyProfitCents, hidden), op: 'total' },
+                    { label: 'Company margin', value: percent(detail.companyMarginBp), op: 'note' },
+                    ...(detail.bridge.hasCompanyCosts && detail.bridge.companyCostCents !== null && detail.bridge.overheadAbsorbedCents !== null
+                      ? [
+                          { label: 'Company costs typed in', value: formatMoney(detail.bridge.companyCostCents), op: 'note' as const },
+                          { label: 'Overhead your hourly rates covered', value: formatMoney(detail.bridge.overheadAbsorbedCents), op: 'note' as const },
+                        ]
+                      : []),
+                  ]}
+                  align="end"
+                />
+              ) : null
+            }
+          />
+        </dl>
+      </div>
     </section>
+  );
+}
+
+/** One labeled number of the month header. */
+function Figure({ label, value, sub, how, strong, tone, testId }: { readonly label: string; readonly value: string; readonly sub?: ReactNode; readonly how?: ReactNode; readonly strong?: boolean; readonly tone?: 'bad'; readonly testId?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="flex h-6 items-center gap-1 text-xs text-fg-muted">
+        {label}
+        {how}
+      </dt>
+      <dd className={cn('mt-0.5 font-semibold tabular-nums', strong ? 'text-xl tracking-tight' : 'text-lg', tone === 'bad' ? 'text-danger-text' : 'text-fg')} data-testid={testId}>
+        {value}
+      </dd>
+      {sub ? <dd className="mt-0.5 text-xs text-fg-muted">{sub}</dd> : null}
+    </div>
   );
 }
 
@@ -433,7 +518,7 @@ function ChecklistItem({ item, closed }: { readonly item: CloseItemDTO; readonly
         </p>
         <p className="mt-0.5 text-sm text-fg-secondary">
           {item.detail}
-          {item.amountCents !== null && item.amountCents !== 0 ? <span className="tabular-nums"> {item.key === 'payroll' ? `The gap is ${formatMoney(Math.abs(item.amountCents))}.` : `They add up to ${formatMoney(item.amountCents)}.`}</span> : null}
+          {item.amountCents !== null && item.amountCents !== 0 ? <span className="tabular-nums"> {item.key === 'payroll' ? `The payroll gap is ${formatMoney(Math.abs(item.amountCents))}.` : `They add up to ${formatMoney(item.amountCents)}.`}</span> : null}
         </p>
       </div>
       {item.state !== 'ok' ? (
