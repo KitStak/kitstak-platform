@@ -208,3 +208,7 @@ pnpm --filter kitstak-web sync:projects   # refresh src/generated/projects from 
 ```
 
 Vercel project: `kitstak-website`, Root Directory `apps/web`.
+
+## Deploys
+
+Vercel skips the build for any commit whose message contains the skip deploy tag in square brackets, anywhere in the title or body. Leave the tag out of a merge commit that should go live.
