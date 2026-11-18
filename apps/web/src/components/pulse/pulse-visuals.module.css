@@ -291,6 +291,41 @@
 .table tr[data-loss] td {
   color: var(--danger-text);
 }
+/* The Company row under the table. It opens the walk from profit on jobs to company profit. */
+.companyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--type-sm);
+  font-variant-numeric: tabular-nums;
+}
+.companyToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+.companyToggle:hover {
+  text-decoration: underline;
+}
+.companyToggle svg {
+  flex: none;
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+.companyToggle[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
 .bridge tbody th.bridgeStep {
   padding-left: 16px;
   color: var(--text-secondary);
@@ -742,6 +777,9 @@
 @media (prefers-reduced-motion: reduce) {
   .profitPanel {
     animation: none;
+  }
+  .companyToggle svg {
+    transition: none;
   }
 }
 

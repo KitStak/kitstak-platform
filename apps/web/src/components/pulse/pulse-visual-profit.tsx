@@ -17,22 +17,17 @@ import {
 import { JobName } from './pulse-visual-parts';
 import styles from './pulse-visuals.module.css';
 
-type TabId = ProfitViewId | 'company';
-
-const TABS: readonly { readonly id: TabId; readonly label: string }[] = [
-  ...PROFIT_VIEWS.map((view) => ({ id: view.id, label: view.tab })),
-  { id: 'company', label: 'Company' },
-];
-
 /**
- * The Profit page: the same month cut by job, client, job type and extra service, then the walk from
- * profit on jobs to company profit. Every tab adds up to the same total.
+ * The Profit page: the same month cut by job, client, job type and extra service. Every tab adds up to
+ * the same total. As in the product, the Company row under the table opens the walk from profit on jobs
+ * to company profit (SPEC 6, /profit). The product also has tabs for site, month, week and day.
  */
 export function ProfitExplorer() {
-  const [tab, setTab] = useState<TabId>('job');
+  const [tab, setTab] = useState<ProfitViewId>('job');
   const [hasSwitched, setHasSwitched] = useState(false);
+  const [isBridgeOpen, setIsBridgeOpen] = useState(false);
   const panelId = useId();
-  const view = PROFIT_VIEWS.find((candidate) => candidate.id === tab);
+  const bridgeId = useId();
 
   return (
     <div className={`${mock.panel} ${styles.frame}`} data-lifted>
@@ -48,7 +43,7 @@ export function ProfitExplorer() {
       </div>
 
       <div className={`${mock.tabs} ${styles.profitTabs}`} role="group" aria-label="Show profit by">
-        {TABS.map((item) => (
+        {PROFIT_VIEWS.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -60,18 +55,38 @@ export function ProfitExplorer() {
               setHasSwitched(true);
             }}
           >
-            {item.label}
+            {item.tab}
           </button>
         ))}
       </div>
 
       <div id={panelId} className={hasSwitched ? styles.profitPanel : undefined} key={tab}>
-        {view ? <ProfitTable viewId={view.id} /> : <CompanyBridge />}
+        <ProfitTable viewId={tab} />
       </div>
+
+      <div className={styles.companyRow}>
+        <button
+          type="button"
+          className={styles.companyToggle}
+          aria-expanded={isBridgeOpen}
+          aria-controls={bridgeId}
+          onClick={() => setIsBridgeOpen((open) => !open)}
+        >
+          <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden>
+            <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+          Company
+        </button>
+        <span className={styles.strong}>{money(COMPANY_PROFIT)}</span>
+      </div>
+      <div id={bridgeId} className={styles.profitPanel} hidden={!isBridgeOpen}>
+        <CompanyBridge />
+      </div>
+
       <p className={mock.caption}>
-        {view
-          ? 'Every tab adds up to the same total.'
-          : 'Job profit and company profit are two numbers. Pulse shows the walk from one to the other.'}
+        {isBridgeOpen
+          ? 'Job profit and company profit are two numbers. Pulse shows the walk from one to the other.'
+          : 'Every tab adds up to the same total. Open the Company row to see what the company made.'}
       </p>
     </div>
   );
