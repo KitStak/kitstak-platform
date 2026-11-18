@@ -4,7 +4,7 @@ import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
 import { PageEffects } from '@/components/page-effects';
 import { Chapter, TileGrid } from '@/components/product/chapter';
-import { Faq, FounderBand } from '@/components/product/cta';
+import { Faq } from '@/components/product/cta';
 import { PriceBand } from '@/components/product/price-band';
 import { ProductHero } from '@/components/product/product-hero';
 import { SubNav } from '@/components/product/sub-nav';
@@ -160,7 +160,6 @@ export default function PulsePage() {
 
         <PriceBand product="pulse" included={PRICE_INCLUDED} />
         <Faq items={FAQ} title={FAQ_TITLE} />
-        <FounderBand />
         <ClosingSection
           title={CLOSING.title}
           startHref={PRIMARY.href}

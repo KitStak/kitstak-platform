@@ -7,7 +7,7 @@ import {
   unconfirmedPriceNote,
 } from '@/lib/pricing';
 import type { ProductId } from '@/lib/pricing';
-import { ROUTES, START_NAME, getStartedHref } from '../site-links';
+import { ROUTES, START_NAME, getStartedHref, isAppLive } from '../site-links';
 import styles from './price-band.module.css';
 
 interface PriceBandProps {
@@ -59,8 +59,12 @@ export function PriceBand({ product, included }: PriceBandProps) {
             <strong>{percentLabel(PRICING.bundleDiscount)} off</strong> each product when you stack two or
             more, and {percentLabel(PRICING.annualDiscount)} off again billed yearly.
           </p>
-          <Link href={getStartedHref(product)} className="btn btn-primary btn-lg btn-block">
-            Start with {START_NAME[product]}{' '}
+          {/* A product whose app is not open yet gets a walkthrough, not a start button. */}
+          <Link
+            href={isAppLive(product) ? getStartedHref(product) : ROUTES.demo}
+            className="btn btn-primary btn-lg btn-block"
+          >
+            {isAppLive(product) ? `Start with ${START_NAME[product]}` : 'Book a walkthrough'}{' '}
             <span className="btn-arrow" aria-hidden>
               →
             </span>

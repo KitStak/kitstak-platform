@@ -4,9 +4,6 @@ import { PulseShot } from './pulse-shot';
 import { CsvCheck } from './pulse-visual-csv';
 import {
   COMPANY_PROFIT,
-  CREW_DAY,
-  CREW_DAY_COST,
-  CREW_DAY_HOURS,
   LOG_DAY,
   LOG_ROWS,
   LOG_TOTAL,
@@ -38,7 +35,7 @@ import {
   type OpenJob,
   type PlanLine,
 } from './pulse-visual-data';
-import { JobName, PortalIcon, PulseLoader, PulseWordmark, SplitBar, StatusPill } from './pulse-visual-parts';
+import { JobName, PulseLoader, PulseWordmark, SplitBar, StatusPill } from './pulse-visual-parts';
 import { ProfitExplorer } from './pulse-visual-profit';
 import styles from './pulse-visuals.module.css';
 
@@ -226,9 +223,6 @@ export function DailyEntryVisual() {
             <dd className="numeral">{dayPace}</dd>
           </div>
         </dl>
-        <p className={mock.caption}>
-          Floor leads see units, hours and pace. Money shows only for people you choose.
-        </p>
       </div>
     </PulseShot>
   );
@@ -404,11 +398,6 @@ export function CostRatesVisual() {
             </dl>
           </div>
         </div>
-
-        <p className={mock.caption}>
-          {CREW_DAY.people} packers for {CREW_DAY.hoursEach} hours each, {CREW_DAY.overtimeHours} of the hours
-          overtime: {CREW_DAY_HOURS} labor hours cost {moneyCents(CREW_DAY_COST)}.
-        </p>
       </div>
     </PulseShot>
   );
@@ -499,14 +488,23 @@ function MarginTrack({ job }: { readonly job: OpenJob }) {
 function JobFacts({ job }: { readonly job: OpenJob }) {
   return (
     <dl className={styles.jobFacts}>
-      <div>
-        <dt>So far</dt>
-        <dd>{job.margin ? percent(job.margin.soFar) : 'Not complete yet'}</dd>
-      </div>
-      <div>
-        <dt>Heading for</dt>
-        <dd>{job.margin ? percent(job.margin.projected) : 'Not complete yet'}</dd>
-      </div>
+      {job.margin ? (
+        <>
+          <div>
+            <dt>So far</dt>
+            <dd>{percent(job.margin.soFar)}</dd>
+          </div>
+          <div>
+            <dt>Heading for</dt>
+            <dd>{percent(job.margin.projected)}</dd>
+          </div>
+        </>
+      ) : (
+        <div>
+          <dt>Margin</dt>
+          <dd>Not complete yet</dd>
+        </div>
+      )}
       {job.impact ? (
         <div data-tone="bad">
           <dt>Impact</dt>
@@ -554,13 +552,6 @@ const LINKS_BY_APP = [
     into: 'Time logged on a linked project counts as labor hours on the job.',
     back: 'A Job profit strip on the project. Tasks you create from an alert.',
   },
-  {
-    id: 'portal',
-    name: 'KitStak Portal',
-    intoLabel: 'Lives in Portal',
-    into: 'Billing and the setup steps for Pulse.',
-    back: 'A Pulse tile with open jobs, jobs at risk and jobs losing money.',
-  },
 ] as const;
 
 /** What comes into Pulse from each KitStak app, and what Pulse shows back inside it. */
@@ -580,19 +571,13 @@ export function PulseStackVisual() {
           {LINKS_BY_APP.map((link) => (
             <li key={link.id}>
               <div className={styles.linkApp}>
-                {link.id === 'portal' ? <PortalIcon size={32} /> : <AppIcon app={link.id} size={32} />}
+                <AppIcon app={link.id} size={32} />
                 <span>{link.name}</span>
               </div>
               <dl className={styles.linkFlow}>
                 <div>
                   <dt>
-                    {'intoLabel' in link ? (
-                      link.intoLabel
-                    ) : (
-                      <>
-                        <Arrow direction="in" /> Into Pulse
-                      </>
-                    )}
+                    <Arrow direction="in" /> Into Pulse
                   </dt>
                   <dd>{link.into}</dd>
                 </div>

@@ -131,8 +131,8 @@ export const HERO_FACTS: readonly HeroFact[] = [
     label: `ways to see profit: ${PROFIT_CUTS.slice(0, -1).join(', ')}, ${PROFIT_CUTS.at(-1)}`,
   },
   { value: String(STATUSES.length), label: 'plain statuses for every open job' },
-  { value: String(MONEY_OUT.length), label: 'costs in money out, from labor to time not on a job' },
-  { value: String(ALERT_RULES), label: 'alert rules, ready to tune or turn off' },
+  { value: String(MONEY_OUT.length), label: 'costs counted in money out' },
+  { value: String(ALERT_RULES), label: 'alert rules ready to tune' },
 ];
 
 /**
@@ -187,7 +187,7 @@ export const CHAPTERS = {
     index: '03',
     label: 'Profit',
     title: 'Profit, cut four ways.',
-    lead: 'See profit and margin by job, job type, client and extra service (value added services). Rank them best to worst. Then click down to the days behind any number.',
+    lead: 'See profit and margin by job, job type, client and extra service (value added services). Rank them best to worst.',
   },
   risk: {
     id: 'risk',
@@ -229,7 +229,7 @@ export const CHAPTERS = {
     index: '09',
     label: 'CSV import and export',
     title: 'Your data in. Your data out.',
-    lead: `Pulse reads and writes CSV for ${CSV_STREAMS.length} kinds of data, from clients and jobs to rates and costs. You do it yourself, with a template for each one.`,
+    lead: `Pulse reads and writes CSV for ${CSV_STREAMS.length} kinds of data, each with its own template. You do it yourself.`,
   },
 } as const satisfies Readonly<Record<string, ChapterCopy>>;
 
@@ -265,11 +265,11 @@ export const ANSWER_FEATURES: readonly Feature[] = [
 export const PROFIT_FEATURES: readonly Feature[] = [
   {
     name: 'By job and job type',
-    note: 'Money in, money out, profit and margin for each job. Roll jobs up by type to see which work pays best.',
+    note: 'Profit and margin for each job. Roll jobs up by type to see which work pays best.',
   },
   {
     name: 'By client and extra service',
-    note: 'The cost to serve each client, and what is not billed yet. Money in, cost and margin per unit for each service.',
+    note: 'Cost to serve and what is not billed yet, for each client. Margin per unit for each service.',
   },
   {
     name: 'Drill down that adds up',
@@ -311,11 +311,11 @@ export const LOG_FEATURES: readonly Feature[] = [
 export const PLAN_FEATURES: readonly Feature[] = [
   {
     name: 'Plan vs actual',
-    note: 'Hours, costs, money in, profit and margin. For an open job, the plan is scaled to the units finished so far.',
+    note: 'For an open job, the plan is scaled to the units finished so far. A half done job is judged fairly.',
   },
   {
     name: 'Why profit changed',
-    note: 'One chart splits the gap into price, labor rate, labor efficiency, scrap, material and more. The bars always add up.',
+    note: 'One chart splits the gap by cause, from price to scrap. The bars always add up.',
   },
   {
     name: 'Quote calculator',
@@ -326,7 +326,7 @@ export const PLAN_FEATURES: readonly Feature[] = [
 export const COST_FEATURES: readonly Feature[] = [
   {
     name: 'Rate builder',
-    note: 'Set the wage, payroll taxes, benefits and overhead for each labor class. In the sample, a $16.00 wage really costs $21.76 an hour.',
+    note: 'Type the wage and what rides on top. In the sample, a $16.00 wage really costs $21.76 an hour.',
   },
   {
     name: 'Raises and overtime',
@@ -341,7 +341,7 @@ export const COST_FEATURES: readonly Feature[] = [
 export const RISK_FEATURES: readonly Feature[] = [
   {
     name: 'Five plain statuses',
-    note: `${list(STATUSES)}. Always an icon and a word, never color alone.`,
+    note: 'The same five words in every KitStak app. Always an icon and a word, never color alone.',
   },
   {
     name: 'The money at stake',
@@ -430,7 +430,7 @@ export const MATH_EXPLAIN = {
 
 export const BUNDLE = {
   title: 'On its own. Or on the stack.',
-  body: 'Pulse does not need any other KitStak app. Buy it alone and bring your data in by typing or by CSV. Add the CRM, the WMS or Projects and Pulse pulls in what they know. They show Pulse numbers on their own screens. Pulse never changes your CRM or WMS data.',
+  body: 'Pulse does not need any other KitStak app. Add the CRM, the WMS or Projects and Pulse pulls in what they know. They show Pulse numbers on their own screens. Pulse never changes your CRM or WMS data.',
   primaryLabel: 'Build the bundle',
   startLabel: 'Start with Pulse alone',
 } as const;
@@ -458,9 +458,19 @@ export const FAQ: readonly FaqItem[] = [
       'Units finished, the number of people and the hours, for each job that ran. That is the daily habit Pulse needs. You can type it, paste it from a spreadsheet, enter it on a floor tablet or import a time clock or payroll file. Prices and labor rates are set once, then changed when they change.',
   },
   {
+    question: 'How does Pulse work out the real cost of an hour?',
+    answer:
+      'It adds the wage, payroll taxes, benefits and overhead per hour for each labor class. In the sample on this page, a packer on a $16.00 wage costs $21.76 an hour. Rates have start dates, so a raise only changes costs from that day on.',
+  },
+  {
     question: 'How does Pulse decide a job is at risk or losing money?',
     answer:
       'It works out where the job will finish, from your recent pace and the plan. It is plain math on your own numbers. A job is At risk when it is heading well under your target margin. It is also At risk when labor is heading well over the plan. It is Losing money when it is heading for a loss, and only after 2 days of data or once the job is 20% done. You can change the limits.',
+  },
+  {
+    question: 'Why is job profit different from company profit?',
+    answer:
+      'They are two numbers. Jobs carry the costs you put on them. The company also pays for rent, salaried staff and paid hours nobody logged. Pulse shows both, and the walk from one to the other, line by line.',
   },
   {
     question: 'Do I need the other KitStak apps?',

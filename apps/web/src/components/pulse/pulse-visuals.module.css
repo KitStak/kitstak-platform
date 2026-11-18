@@ -232,7 +232,7 @@
 }
 .reason {
   margin-top: 4px;
-  max-width: 52ch;
+  max-width: 60ch;
   font-size: var(--type-sm);
   line-height: 1.5;
   color: var(--text-secondary);

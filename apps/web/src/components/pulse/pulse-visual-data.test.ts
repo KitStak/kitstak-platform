@@ -83,8 +83,6 @@ describe('pulse visual data', () => {
   it('builds the real cost of an hour from its parts', () => {
     expect(data.REAL_HOUR).toBe(21.76);
     expect(data.OVERTIME_HOUR).toBe(30.48);
-    expect(data.CREW_DAY_HOURS).toBe(96);
-    expect(data.CREW_DAY_COST).toBe(2123.84);
   });
 
   it('keeps the days logged on J-1012 inside its month of money in at $2.75 a unit', () => {

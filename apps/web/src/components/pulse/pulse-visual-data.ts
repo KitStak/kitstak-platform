@@ -454,13 +454,6 @@ export const OVERTIME_HOUR = cents(
     RATE.overhead,
 );
 
-/** 12 packers, 8 hours each, 4 of the hours overtime: 96 labor hours, $2,123.84. */
-export const CREW_DAY = { people: 12, hoursEach: 8, overtimeHours: 4 } as const;
-export const CREW_DAY_HOURS = CREW_DAY.people * CREW_DAY.hoursEach;
-export const CREW_DAY_COST = cents(
-  (CREW_DAY_HOURS - CREW_DAY.overtimeHours) * REAL_HOUR + CREW_DAY.overtimeHours * OVERTIME_HOUR,
-);
-
 /* ===== CSV ===== */
 
 /** The 17 kinds of data that come in and go out as CSV, each with its own template. */

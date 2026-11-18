@@ -10,7 +10,6 @@ const PULSE_ICON = '/brand/apps/kitstak-icon-pulse.svg';
 const PULSE_LOADER = '/brand/loaders/kitstak-loader-pulse.svg';
 const PULSE_LOGO_ON_LIGHT = '/brand/logos/kitstak-logo-pulse-on-light.svg';
 const PULSE_LOGO_ON_DARK = '/brand/logos/kitstak-logo-pulse-on-dark.svg';
-const PORTAL_ICON = '/brand/apps/kitstak-icon-portal.svg';
 
 /** The lettered logo artboard is 1045 by 200: the Pulse icon, KITSTAK, a divider, then PULSE. */
 const LOGO_RATIO = 1045 / 200;
@@ -25,21 +24,6 @@ export function PulseIcon({ size = 32, className }: SizeProps) {
   return (
     <img
       src={PULSE_ICON}
-      alt=""
-      aria-hidden
-      width={size}
-      height={size}
-      className={className}
-      style={{ flex: 'none' }}
-    />
-  );
-}
-
-/** The Portal app icon, from the same brand export. Decorative. */
-export function PortalIcon({ size = 32, className }: SizeProps) {
-  return (
-    <img
-      src={PORTAL_ICON}
       alt=""
       aria-hidden
       width={size}

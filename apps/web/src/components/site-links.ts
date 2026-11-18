@@ -15,6 +15,11 @@ export const LINKS = {
  */
 export const PULSE_IS_LIVE: boolean = false;
 
+/** False for a product whose app customers cannot open yet. Such a product gets no start button. */
+export function isAppLive(product: 'crm' | 'wms' | 'projects' | 'pulse'): boolean {
+  return product !== 'pulse' || PULSE_IS_LIVE;
+}
+
 /** Marketing-site routes. Every internal link goes through here so navigation stays consistent. */
 export const ROUTES = {
   home: '/',
@@ -80,7 +85,9 @@ export const START_NAME: Readonly<Record<ProductId, string>> = {
 /** Deep link into the setup wizard with products already chosen. */
 export function getStartedHref(stack?: Stack | ProductId): string {
   const products = typeof stack === 'string' ? [stack] : (stack ?? []);
-  return products.length > 0 ? `${ROUTES.getStarted}?stack=${stackParam(toStack(products))}` : ROUTES.getStarted;
+  return products.length > 0
+    ? `${ROUTES.getStarted}?stack=${stackParam(toStack(products))}`
+    : ROUTES.getStarted;
 }
 
 /**
