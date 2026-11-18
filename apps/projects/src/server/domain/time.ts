@@ -67,13 +67,21 @@ export async function startTimer(ctx: DomainContext, taskId: string, note?: stri
   return toTimeEntryDTO(row);
 }
 
+/** Tell KitStak Pulse (when installed) that this project's logged time changed. Never throws. */
+async function timeChanged(ctx: DomainContext, projectId: string): Promise<void> {
+  const { notifyPulseOfTime } = await import('@/server/integrations/pulse-profit');
+  await notifyPulseOfTime(db, ctx.orgId, projectId);
+}
+
 export async function stopTimer(ctx: DomainContext): Promise<TimeEntryDTO | null> {
   const [running] = await db
     .select()
     .from(timeEntries)
     .where(and(eq(timeEntries.orgId, ctx.orgId), eq(timeEntries.userId, ctx.userId), isNull(timeEntries.endedAt), isNull(timeEntries.deletedAt)));
   if (!running) return null;
-  return toTimeEntryDTO(await stopRow(ctx, running));
+  const stopped = await stopRow(ctx, running);
+  await timeChanged(ctx, stopped.projectId);
+  return toTimeEntryDTO(stopped);
 }
 
 export async function addManualTime(
@@ -113,6 +121,7 @@ export async function addManualTime(
     });
     return inserted;
   });
+  await timeChanged(ctx, task.projectId);
   return toTimeEntryDTO(row);
 }
 
@@ -141,12 +150,14 @@ export async function updateTimeEntry(
   if (patch.note !== undefined) set.note = cleanText(patch.note);
   if (patch.billable !== undefined) set.billable = patch.billable;
   const [row] = await db.update(timeEntries).set(set).where(eq(timeEntries.id, entryId)).returning();
+  await timeChanged(ctx, current.projectId);
   return toTimeEntryDTO(row);
 }
 
 export async function deleteTimeEntry(ctx: DomainContext, entryId: string): Promise<void> {
-  await ownEntry(ctx, entryId);
+  const current = await ownEntry(ctx, entryId);
   await db.update(timeEntries).set({ deletedAt: new Date() }).where(eq(timeEntries.id, entryId));
+  await timeChanged(ctx, current.projectId);
 }
 
 export async function listTaskTime(ctx: DomainContext, taskId: string): Promise<TimeEntryDTO[]> {

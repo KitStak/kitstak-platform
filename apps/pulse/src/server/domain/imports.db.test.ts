@@ -208,8 +208,95 @@ describe.skipIf(!ready)('imports and exports', () => {
     expect(history.some((batch) => batch.status === 'undone')).toBe(true);
   });
 
-  it('keeps people without the right role out', async () => {
-    const viewer = await org.member('viewer', 'Viewer');
-    await expect(upload(viewer, 'clients', templateCsv('clients'))).rejects.toThrow(/cannot import/);
+  it('keeps people without the right role out, and hides money from people who may not see it', async () => {
+    const outsider = await org.member('viewer', 'Outsider');
+    await expect(upload(outsider, 'clients', templateCsv('clients'))).rejects.toThrow(/cannot import/);
+
+    // A supervisor may bring in floor files only, and only for the last few days.
+    const supervisor = await org.member('member', 'Floor Lead');
+    await org.query("insert into pulse.member_roles (org_id, user_id, role, sees_money) values ($1, $2, 'supervisor', false)", [org.orgId, supervisor.userId]);
+    await expect(upload(supervisor, 'jobs', templateCsv('jobs'))).rejects.toThrow(/cannot import/);
+    await expect(upload(supervisor, 'labor_rates', templateCsv('labor_rates'))).rejects.toThrow(/cannot import/);
+    // Yesterday in UTC is today or yesterday at the site, wherever its time zone is.
+    const today = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const floor = await upload(supervisor, 'production', ['work_date,job_number,shift,units_good,people,hours_each', `2026-01-05,J-1042,sup,10,1,1`, `${today},J-1042,sup,10,1,1`, `${today},J-1042,sup2,10,1,1,`, `${today},NEW-CLASS-JOB,sup3,10,1,1`].join('\n'));
+    const rowsNow = await listImportRows(supervisor, floor.id, { action: 'all' });
+    expect(rowsNow.rows[0]?.action).toBe('error');
+    expect(rowsNow.rows[0]?.messages[0]?.text).toMatch(/last 7 days/);
+    expect(rowsNow.rows[1]?.action).toBe('create');
+    expect(rowsNow.rows[3]?.action).toBe('error');
+    await discardImportBatch(supervisor, floor.id);
+
+    // A viewer who may not see money exports files with the money columns left out, and no labor rates at all.
+    const viewer = await org.member('member', 'Read Only');
+    await org.query("insert into pulse.member_roles (org_id, user_id, role, sees_money) values ($1, $2, 'viewer', false)", [org.orgId, viewer.userId]);
+    const jobsFile = await exportStream(viewer, 'jobs');
+    const header = jobsFile.csv.split('\r\n')[0] ?? '';
+    expect(header).toContain('job_number');
+    expect(header).not.toContain('unit_price');
+    expect(header).not.toContain('quote_revenue');
+    expect(jobsFile.withMoney).toBe(false);
+    await expect(exportStream(viewer, 'labor_rates')).rejects.toThrow(/money/);
+    const paid = await exportStream(owner, 'paid_hours', { hideMoney: true });
+    expect(paid.csv.split('\r\n')[0]).not.toContain('paid_amount');
+    await expect(exportStream(owner, 'nonsense')).rejects.toThrow(/no kind of data/);
+    await expect(exportStream(owner, 'costs', { from: '2026-12-01', to: '2026-11-01' })).rejects.toThrow(/before the start date/);
   });
+
+  it('writes an audit row for every import, undo and export', async () => {
+    const found = await org.query<{ verb: string; n: string }>("select verb, count(*) as n from pulse.activity where org_id = $1 and verb in ('import.committed', 'import.undone', 'export.run') group by verb", [org.orgId]);
+    const byVerb = Object.fromEntries(found.map((row) => [row.verb, Number(row.n)]));
+    expect(byVerb['import.committed']).toBeGreaterThan(30);
+    expect(byVerb['import.undone']).toBeGreaterThanOrEqual(3);
+    expect(byVerb['export.run']).toBeGreaterThan(17);
+  });
+});
+
+describe.skipIf(!ready)('a large import', () => {
+  let org: TestOrg;
+  let owner: DomainContext;
+
+  beforeAll(async () => {
+    org = await createTestOrg('pulse-import-big');
+    owner = await org.member('owner', 'Big Import Owner');
+  });
+  afterAll(async () => {
+    await org?.destroy();
+  });
+
+  it('saves 5,000 production rows in one transaction, in time, and undoes them', async () => {
+    for (const stream of ['clients', 'labor_rates', 'job_types', 'jobs'] as const) await commitImportBatch(owner, (await upload(owner, stream, templateCsv(stream))).id);
+    const lines = ['work_date,job_number,shift,labor_class,units_good,people,hours_each'];
+    // 200 days by 25 shifts: every row has its own key.
+    for (let dayIndex = 0; dayIndex < 200; dayIndex += 1) {
+      const date = new Date(Date.UTC(2026, 0, 1 + dayIndex)).toISOString().slice(0, 10);
+      for (let shift = 0; shift < 25; shift += 1) lines.push(`${date},J-1042,s${shift},PACK,${100 + shift},2,${shift % 2 === 0 ? 8 : 7.5}`);
+    }
+    const started = Date.now();
+    const checked = await upload(owner, 'production', lines.join('\n'));
+    const checkMs = Date.now() - started;
+    expect(checked.counts).toMatchObject({ create: 5000, error: 0 });
+    const saveStart = Date.now();
+    const saved = await commitImportBatch(owner, checked.id);
+    const saveMs = Date.now() - saveStart;
+    expect(saved.status).toBe('committed');
+    const [job] = await org.query<{ id: string }>("select id from pulse.jobs where org_id = $1 and number = 'J-1042'", [org.orgId]);
+    const profit = await getJobProfit(owner, job?.id ?? '');
+    // 200 days x the sum of 100..124 units.
+    expect(profit.unitsGood).toBe(`${200 * 2800}.000`);
+    expect(profit.baseRevenueCents).toBe(200 * 2800 * 275);
+    // The same file again: every row is already here.
+    const again = await upload(owner, 'production', lines.join('\n'));
+    expect(again.counts).toMatchObject({ create: 0, update: 0, unchanged: 5000 });
+    await discardImportBatch(owner, again.id);
+    const undoStart = Date.now();
+    await undoImportBatch(owner, checked.id);
+    const undoMs = Date.now() - undoStart;
+    expect((await getJobProfit(owner, job?.id ?? '')).unitsGood).toBe('0.000');
+    // Room to spare against the 300 second route limit for the 50,000 row ceiling.
+    expect(checkMs).toBeLessThan(30_000);
+    expect(saveMs).toBeLessThan(30_000);
+    expect(undoMs).toBeLessThan(30_000);
+    console.info(`5,000 rows: check ${checkMs} ms, save ${saveMs} ms, undo ${undoMs} ms`);
+  }, 180_000);
 });

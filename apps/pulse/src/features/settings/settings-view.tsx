@@ -56,8 +56,8 @@ export function SettingsView({ initialSettings, initialSample }: { readonly init
   const canSample = shell.can('sample:manage');
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start" data-testid="settings" data-section={active}>
-      <nav aria-label="Settings sections" className="lg:sticky lg:top-4">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start" data-testid="settings" data-section={active}>
+      <nav aria-label="Settings sections" className="min-w-0 lg:sticky lg:top-4">
         <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
           {SETTINGS_SECTIONS.map((section) => {
             const current = section.id === active;

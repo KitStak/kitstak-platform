@@ -603,6 +603,7 @@ function CheckStep({ batch, onBatch, onRemap, onDiscard }: { readonly batch: Imp
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium text-fg">When a row has a problem</span>
                 <ToggleGroup
+                  className="self-start"
                   label="When a row has a problem"
                   value={options.mode}
                   onValueChange={(mode) => void recheck({ mode })}
@@ -751,7 +752,24 @@ function RowsTable({ batch, filter, onFilter, onBatch, readOnly = false }: { rea
           {rows.data?.cleared ? 'The row details of this import were cleared after its 7 day undo window. The counts above are still right.' : 'No rows of this kind.'}
         </p>
       ) : (
-        <div className={cn('overflow-x-auto', rows.isPlaceholderData && 'opacity-60')}>
+        <>
+        <ul className={cn('divide-y divide-border-subtle md:hidden', rows.isPlaceholderData && 'opacity-60')} data-testid="rows-cards">
+          {(rows.data?.rows ?? []).map((row) => (
+            <PreviewCard
+              key={row.rowNumber}
+              row={row}
+              batch={batch}
+              labelOf={labelOf}
+              readOnly={readOnly}
+              busy={busyRow === row.rowNumber}
+              editing={editing?.rowNumber === row.rowNumber ? editing.cells : null}
+              onEdit={(cells) => setEditing(cells ? { rowNumber: row.rowNumber, cells } : null)}
+              onSave={() => editing && void apply({ rowNumber: row.rowNumber, cells: editing.cells }, `Row ${row.rowNumber} was checked again`)}
+              onSkip={(skip) => void apply({ rowNumber: row.rowNumber, skip }, skip ? `Row ${row.rowNumber} is left out` : `Row ${row.rowNumber} is back in`)}
+            />
+          ))}
+        </ul>
+        <div className={cn('hidden overflow-x-auto md:block', rows.isPlaceholderData && 'opacity-60')}>
           <table className="w-full min-w-max border-collapse text-left text-sm">
             <thead>
               <tr className="bg-sunken text-xs text-fg-muted">
@@ -787,23 +805,14 @@ function RowsTable({ batch, filter, onFilter, onBatch, readOnly = false }: { rea
             </tbody>
           </table>
         </div>
+        </>
       )}
       {total > PAGE_SIZE ? <TablePagination page={page} pageCount={Math.ceil(total / PAGE_SIZE)} total={total} onPageChange={setPage} /> : null}
     </div>
   );
 }
 
-function PreviewRow({
-  row,
-  batch,
-  labelOf,
-  readOnly,
-  busy,
-  editing,
-  onEdit,
-  onSave,
-  onSkip,
-}: {
+interface PreviewProps {
   readonly row: ImportRowDTO;
   readonly batch: ImportBatchDTO;
   readonly labelOf: (key: string) => string;
@@ -813,16 +822,109 @@ function PreviewRow({
   readonly onEdit: (cells: string[] | null) => void;
   readonly onSave: () => void;
   readonly onSkip: (skip: boolean) => void;
-}) {
-  const action = row.action ?? 'unchanged';
-  const byColumn = new Map<number, ImportRowDTO['messages'][number][]>();
-  const general: ImportRowDTO['messages'][number][] = [];
+}
+
+type RowMessage = ImportRowDTO['messages'][number];
+
+/** Messages of a row, split into the ones that sit on a file column and the ones about the whole row. */
+function splitMessages(row: ImportRowDTO, mapping: readonly (string | null)[]): { byColumn: Map<number, RowMessage[]>; general: RowMessage[] } {
+  const byColumn = new Map<number, RowMessage[]>();
+  const general: RowMessage[] = [];
   for (const message of row.messages) {
-    const index = message.column ? batch.mapping.indexOf(message.column) : -1;
+    const index = message.column ? mapping.indexOf(message.column) : -1;
     if (index >= 0) byColumn.set(index, [...(byColumn.get(index) ?? []), message]);
     else general.push(message);
   }
-  const canFix = !readOnly && (action === 'error' || row.skippedByUser || action === 'lookalike' || action === 'create' || action === 'update');
+  return { byColumn, general };
+}
+
+const messageTone = (level: RowMessage['level']): string => (level === 'error' ? 'text-danger-text' : level === 'warning' ? 'text-warning-text' : 'text-fg-muted');
+
+/** One preview row as a card, for narrow screens: only the columns that hold something, problems on their own field. */
+function PreviewCard({ row, batch, labelOf, readOnly, busy, editing, onEdit, onSave, onSkip }: PreviewProps) {
+  const action = row.action ?? 'unchanged';
+  const { byColumn, general } = splitMessages(row, batch.mapping);
+  const canFix = !readOnly && action !== 'unchanged';
+  const shown = batch.headers.map((header, index) => ({ header, index })).filter(({ index }) => editing !== null || byColumn.has(index) || (batch.mapping[index] !== null && (row.cells[index] ?? '').trim() !== ''));
+  return (
+    <li className={cn('flex flex-col gap-2 px-4 py-3', action === 'error' && 'bg-danger-subtle/40')} data-testid={`card-row-${row.rowNumber}`} data-action={action}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-fg-muted tabular-nums">Row {row.rowNumber}</span>
+        <Badge tone={ACTION_TONE[action]}>{IMPORT_ACTION_LABELS[action]}</Badge>
+      </div>
+      {row.changes.length > 0 ? (
+        <ul className="flex flex-col gap-0.5 text-xs text-fg-secondary">
+          {row.changes.slice(0, 6).map((change) => (
+            <li key={change.column}>
+              <span className="font-medium text-fg">{labelOf(change.column)}:</span> {change.from || 'empty'} to <span className="font-medium text-fg">{change.to || 'empty'}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {general.map((message, index) => (
+        <p key={index} className={cn('text-xs', messageTone(message.level))}>
+          {message.column ? `${labelOf(message.column)}: ` : ''}
+          {message.text}
+        </p>
+      ))}
+      <dl className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1.5 text-sm">
+        {shown.map(({ header, index }) => {
+          const messages = byColumn.get(index) ?? [];
+          const worst = messages.some((message) => message.level === 'error');
+          return (
+            <div key={index} className="contents">
+              <dt className="truncate pt-1 text-xs text-fg-muted">{batch.mapping[index] ? labelOf(batch.mapping[index] as string) : header || `Column ${index + 1}`}</dt>
+              <dd className={cn('min-w-0 rounded-sm', worst && 'bg-danger-subtle px-1.5 py-1')}>
+                {editing ? (
+                  <Input size="sm" aria-label={`Row ${row.rowNumber}, ${header || `column ${index + 1}`}`} value={editing[index] ?? ''} invalid={worst} onChange={(event) => onEdit(editing.map((cell, position) => (position === index ? event.target.value : cell)))} data-testid={`card-cell-${row.rowNumber}-${index}`} />
+                ) : (
+                  <span className="block break-words text-fg">{row.cells[index] || <span className="text-fg-muted">empty</span>}</span>
+                )}
+                {messages.map((message, position) => (
+                  <span key={position} className={cn('mt-0.5 block text-xs', messageTone(message.level))}>
+                    {message.text}
+                  </span>
+                ))}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+      {canFix ? (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {editing ? (
+            <>
+              <Button size="sm" loading={busy} onClick={onSave} data-testid={`card-row-save-${row.rowNumber}`}>
+                Check this row again
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => onEdit(null)} disabled={busy}>
+                Cancel
+              </Button>
+            </>
+          ) : row.skippedByUser ? (
+            <Button size="sm" variant="secondary" loading={busy} leadingIcon={<Undo2 aria-hidden className="size-3.5" />} onClick={() => onSkip(false)}>
+              Put back
+            </Button>
+          ) : (
+            <>
+              <Button size="sm" variant="secondary" leadingIcon={<Pencil aria-hidden className="size-3.5" />} onClick={() => onEdit([...row.cells])} disabled={busy} data-testid={`card-row-fix-${row.rowNumber}`}>
+                Fix
+              </Button>
+              <Button size="sm" variant="ghost" loading={busy} onClick={() => onSkip(true)} data-testid={`card-row-skip-${row.rowNumber}`}>
+                Leave out
+              </Button>
+            </>
+          )}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function PreviewRow({ row, batch, labelOf, readOnly, busy, editing, onEdit, onSave, onSkip }: PreviewProps) {
+  const action = row.action ?? 'unchanged';
+  const { byColumn, general } = splitMessages(row, batch.mapping);
+  const canFix = !readOnly && action !== 'unchanged';
   return (
     <tr className={cn('border-b border-border-subtle align-top last:border-0', action === 'error' && 'bg-danger-subtle/40')} data-testid={`row-${row.rowNumber}`} data-action={action}>
       <th scope="row" className={cn('sticky left-0 z-[1] px-3 py-2 text-xs font-medium text-fg-muted tabular-nums', action === 'error' ? 'bg-[color-mix(in_oklab,var(--danger-subtle)_40%,var(--panel))]' : 'bg-panel')}>

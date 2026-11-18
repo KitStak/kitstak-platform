@@ -44,6 +44,7 @@ import {
 import { DueDate, EntityIcon, PersonAvatar } from '@/components/pm';
 import { Panel } from '@/components/layout/page';
 import { Customer360Strip } from '@/features/integrations/customer-360-strip';
+import { PulseProfitStrip } from '@/features/integrations/pulse-profit-strip';
 import {
   GOAL_HEALTH_LABELS,
   INTEGRATION_TARGET_LABELS,
@@ -796,6 +797,7 @@ export function ProjectOverview({ initial }: { readonly initial?: OverviewInitia
         </div>
       ) : null}
       <Customer360Strip projectKey={project.key} projectId={project.id} canEdit={canEdit} />
+      <PulseProfitStrip projectKey={project.key} canEdit={canEdit} />
       <div className="flex min-w-0 flex-col gap-5">
         <StatusUpdatesPanel key={`${project.health}-${project.status}`} project={project} canEdit={canEdit} />
         <ProgressPanel project={project} />
