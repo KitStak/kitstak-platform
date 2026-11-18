@@ -11,6 +11,28 @@
   gap: clamp(40px, 5vw, 80px);
   align-items: center;
 }
+/* Stacked: headline on the left, lead and buttons on the right, then the picture across the page. */
+.inner[data-layout='stacked'] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(36px, 5vw, 64px);
+}
+@media (min-width: 961px) {
+  .inner[data-layout='stacked'] .copy {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    column-gap: clamp(40px, 5vw, 80px);
+  }
+  .inner[data-layout='stacked'] .crumbs {
+    grid-column: 1 / -1;
+  }
+  .inner[data-layout='stacked'] .pitch {
+    align-self: end;
+    padding-bottom: 8px;
+  }
+  .inner[data-layout='stacked'] .lead {
+    margin-top: 0;
+  }
+}
 .crumbs {
   display: flex;
   align-items: center;
@@ -133,7 +155,8 @@
 }
 @media (max-width: 960px) {
   .inner {
-    grid-template-columns: 1fr;
+    /* minmax(0, ...) so a nowrap line inside a visual cannot push the hero past the viewport. */
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 640px) {
@@ -145,6 +168,10 @@
     padding: 20px 12px 20px 0;
     border-left: 0;
     border-bottom: 1px solid var(--on-brand-rule);
+  }
+  /* A page can keep the strip to its first two facts on a phone, where four take half a screen. */
+  .facts[data-phone-facts='2'] > div:nth-child(n + 3) {
+    display: none;
   }
   .actions :global(.btn) {
     width: 100%;

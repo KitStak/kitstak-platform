@@ -1,21 +1,32 @@
 'use client';
 
-import { PRICING, percentLabel } from '@/lib/pricing';
+import Link from 'next/link';
+import { MORE_SEATS_ACTION, PRICING, includedSeatsLabel, moreSeatsPrompt, percentLabel } from '@/lib/pricing';
 import {
   BUSINESS_TYPES,
   CRM_BOARDS,
   PROJECT_TEMPLATES,
+  PULSE_NEEDS,
   START_MODES,
   TEAM_SIZES,
   WMS_NEEDS,
   hasCrm,
   hasProjects,
+  hasPulse,
   hasWms,
   toggleIn,
   withTeamSize,
 } from '@/lib/stak';
 import type { Option, StakAnswers } from '@/lib/stak';
-import { FULL_STACK, toggleProduct } from '../site-links';
+import {
+  FULL_STACK,
+  ROUTES,
+  STARTABLE_STACK,
+  WALKTHROUGH_LABEL,
+  availabilityLabel,
+  isAppLive,
+  toggleProduct,
+} from '../site-links';
 import type { ProductId } from '../site-links';
 import { BillingToggle, Stepper } from '../stak/stak-parts';
 import { AppIcon } from '../app-icon';
@@ -44,7 +55,11 @@ function TileGroup<T extends string>({ legend, options, value, onChange, columns
       <legend>{legend}</legend>
       <div className={styles.tiles} data-columns={columns}>
         {options.map((option) => (
-          <label key={option.value} className={styles.tile} data-checked={option.value === value || undefined}>
+          <label
+            key={option.value}
+            className={styles.tile}
+            data-checked={option.value === value || undefined}
+          >
             <input
               type="radio"
               name={legend}
@@ -80,7 +95,12 @@ function ChipGroup({ legend, hint, options, values, onToggle }: ChipGroupProps) 
         {options.map((option) => {
           const isChecked = values.includes(option.value);
           return (
-            <label key={option.value} className={styles.tile} data-checked={isChecked || undefined} data-multi>
+            <label
+              key={option.value}
+              className={styles.tile}
+              data-checked={isChecked || undefined}
+              data-multi
+            >
               <input
                 type="checkbox"
                 className="visually-hidden"
@@ -107,11 +127,41 @@ function ChipGroup({ legend, hint, options, values, onToggle }: ChipGroupProps) 
 const PRODUCTS: readonly { readonly value: ProductId; readonly label: string; readonly note: string }[] = [
   { value: 'wms', label: 'KitStak WMS', note: 'Receiving, inventory, picking, packing and shipping.' },
   { value: 'crm', label: 'KitStak CRM', note: 'Leads, deals, accounts and follow-ups on boards.' },
-  { value: 'projects', label: 'KitStak Projects', note: 'Tasks, timelines and workload, linked to deals and orders.' },
+  {
+    value: 'projects',
+    label: 'KitStak Projects',
+    note: 'Tasks, timelines and workload, linked to deals and orders.',
+  },
+  {
+    value: 'pulse',
+    label: 'KitStak Pulse',
+    note: 'Profit by job, client and extra service, from what you log each day.',
+  },
 ];
 
+/** A product whose app is not open yet: shown in its place, labeled, with no box to tick. */
+function ComingSoonRow({ product }: { readonly product: (typeof PRODUCTS)[number] }) {
+  return (
+    <div className={styles.stack} data-soon>
+      <AppIcon app={product.value} size={64} className={styles.stackGlyph} />
+      <span className={styles.stackText}>
+        <span className={styles.stackLabel}>
+          {product.label}
+          <span className={styles.soon}>{availabilityLabel(product.value)}</span>
+        </span>
+        <span className={styles.tileNote}>{product.note}</span>
+      </span>
+      <Link href={ROUTES.demo} className={styles.soonLink}>
+        {WALKTHROUGH_LABEL}
+      </Link>
+    </div>
+  );
+}
+
 export function StackStep({ answers, update }: StepProps) {
-  const isEverything = answers.products.length === FULL_STACK.length;
+  // "The whole stack" is every product that can be set up today.
+  const hasAllApps = STARTABLE_STACK.length === FULL_STACK.length;
+  const isEverything = answers.products.length === STARTABLE_STACK.length;
   const isPartial = answers.products.length > 0 && !isEverything;
   return (
     <fieldset className={styles.group}>
@@ -125,21 +175,26 @@ export function StackStep({ answers, update }: StepProps) {
             ref={(input) => {
               if (input) input.indeterminate = isPartial;
             }}
-            onChange={() => update({ products: isEverything ? [] : FULL_STACK })}
+            onChange={() => update({ products: isEverything ? [] : STARTABLE_STACK })}
           />
           <span className={styles.stackGlyph}>
             <StakMark lit="both" size={44} />
           </span>
           <span className={styles.stackText}>
             <span className={styles.stackLabel}>
-              The whole stack
+              {hasAllApps ? 'The whole stack' : 'Everything open today'}
               <span className={styles.badge}>Save {percentLabel(PRICING.bundleDiscount)}</span>
             </span>
-            <span className={styles.tileNote}>Sales, the warehouse and the work between them, with one sign-in.</span>
+            <span className={styles.tileNote}>
+              {hasAllApps
+                ? 'Sales, the warehouse, the work between them and the profit on every job, with one sign-in.'
+                : 'Sales, the warehouse and the work between them, with one sign-in.'}
+            </span>
           </span>
           <span className={styles.radio} data-multi aria-hidden />
         </label>
         {PRODUCTS.map((product) => {
+          if (!isAppLive(product.value)) return <ComingSoonRow key={product.value} product={product} />;
           const isChecked = answers.products.includes(product.value);
           return (
             <label key={product.value} className={styles.stack} data-checked={isChecked || undefined}>
@@ -160,8 +215,8 @@ export function StackStep({ answers, update }: StepProps) {
         })}
       </div>
       <p className={styles.reassure}>
-        Pick one or more. Two or more take {percentLabel(PRICING.bundleDiscount)} off each, and you can add the rest
-        later: your team and customers carry over.
+        Pick one or more. Two or more take {percentLabel(PRICING.bundleDiscount)} off each, and you can add
+        the rest later: your team and customers carry over.
       </p>
     </fieldset>
   );
@@ -191,16 +246,24 @@ export function BusinessStep({ answers, update }: StepProps) {
 
 /* ------------------------------------------------------------------ 3. Shape */
 
-/** One seat count for every per-user app: the CRM and Projects share a sign-in. */
+/** One seat count for the apps priced per user: the CRM and Projects share a sign-in. */
 function SeatsQuantity({ answers, update }: StepProps) {
-  const apps = [hasCrm(answers) ? 'the CRM' : null, hasProjects(answers) ? 'Projects' : null].filter(Boolean);
+  const apps = [hasCrm(answers) ? 'the CRM' : null, hasProjects(answers) ? 'Projects' : null].filter(
+    (app): app is string => app !== null,
+  );
+  const list = apps.join(' or ');
   return (
     <div className={styles.quantity}>
       <span>
         <span className={styles.quantityName}>How many people will use it?</span>
-        <span className={styles.tileNote}>Anyone who signs in to {apps.join(' or ')}.</span>
+        <span className={styles.tileNote}>Anyone who signs in to {list}.</span>
       </span>
-      <Stepper label="Users" value={answers.seats} max={PRICING.crm.max} onChange={(seats) => update({ seats })} />
+      <Stepper
+        label="Users"
+        value={answers.seats}
+        max={PRICING.crm.max}
+        onChange={(seats) => update({ seats })}
+      />
     </div>
   );
 }
@@ -266,6 +329,25 @@ export function ShapeStep({ answers, update }: StepProps) {
           />
         </section>
       ) : null}
+
+      {hasPulse(answers) ? (
+        <section className={styles.product} aria-label="Pulse">
+          <h3 className={styles.productHead}>
+            <AppIcon app="pulse" size={38} /> Your jobs
+          </h3>
+          <p className={styles.reassure}>
+            One flat price for your organization. {includedSeatsLabel('pulse')}. {moreSeatsPrompt('pulse')}{' '}
+            <Link href={ROUTES.contact}>{MORE_SEATS_ACTION}</Link>
+          </p>
+          <ChipGroup
+            legend="What do you want to see first?"
+            hint="Pick any. It all comes included."
+            options={PULSE_NEEDS}
+            values={answers.pulseNeeds}
+            onToggle={(value) => update({ pulseNeeds: toggleIn(answers.pulseNeeds, value) })}
+          />
+        </section>
+      ) : null}
     </>
   );
 }
@@ -302,8 +384,8 @@ export function LaunchStep({ answers, update }: StepProps) {
           <span>
             <span className={styles.tileLabel}>Guided setup with the founder</span>
             <span className={styles.tileNote}>
-              A working session to map your floor or your pipeline and load your first data together. You pick the time
-              after you sign up.
+              A working session to map your floor or your pipeline and load your first data together. You pick
+              the time after you sign up.
             </span>
           </span>
         </label>

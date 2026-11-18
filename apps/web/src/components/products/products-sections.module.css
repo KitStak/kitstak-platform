@@ -43,7 +43,7 @@
 
 .slabs {
   display: grid;
-  gap: clamp(16px, 2.4vw, 28px);
+  gap: clamp(12px, 1.6vw, 20px);
 }
 .slab {
   position: relative;
@@ -51,8 +51,8 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 6px 24px;
-  min-height: clamp(120px, 14vw, 168px);
-  padding: clamp(20px, 2.4vw, 32px);
+  min-height: clamp(104px, 10.5vw, 132px);
+  padding: clamp(18px, 2vw, 26px);
   color: #fff;
   transform-origin: left;
   animation: slabIn 1100ms var(--ease-site) both;
@@ -72,6 +72,11 @@
   background: var(--stak-projects);
   animation-delay: 480ms;
 }
+.slab[data-product='pulse'] {
+  background: var(--stak-pulse);
+  color: var(--stak-pulse-ink);
+  animation-delay: 620ms;
+}
 .slab:hover {
   transform: translateX(12px);
   filter: brightness(1.08);
@@ -83,7 +88,7 @@
   grid-column: 1 / -1;
   align-self: start;
   font-family: var(--font-display);
-  font-size: clamp(32px, 3.6vw, 52px);
+  font-size: clamp(30px, 3.2vw, 44px);
   letter-spacing: 0.04em;
   line-height: 1;
 }
@@ -107,7 +112,7 @@
 .slabNote {
   font-size: var(--type-sm);
   color: var(--on-brand-muted);
-  animation: rise 900ms 700ms var(--ease-site) both;
+  animation: rise 900ms 840ms var(--ease-site) both;
 }
 @keyframes slabIn {
   from {
@@ -133,7 +138,8 @@
 /* ------------------------------------------------------------ Line-up cards */
 .cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Four cards with six points each read best two by two. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
   margin-top: clamp(40px, 5vw, 64px);
 }
@@ -163,6 +169,15 @@
 }
 .cardName {
   font-weight: var(--weight-semibold);
+}
+.cardSoon {
+  padding: 2px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 .cardPrice {
   margin-left: auto;
@@ -199,6 +214,22 @@
   padding-top: 32px;
 }
 
+/* The two cards of a row share their rows: icon line, title, body, points and buttons. A title that
+   wraps in one card then moves the body and the points of both, so no card is left with a blank band
+   above its buttons. Browsers without subgrid keep the flex column above. */
+@supports (grid-template-rows: subgrid) {
+  .card {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 5;
+    /* The spacing inside a card stays the margins of its parts, not the gap between cards. */
+    row-gap: 0;
+  }
+  .cardActions {
+    align-self: end;
+  }
+}
+
 /* ------------------------------------------------------------ Compare */
 .compare {
   background: var(--surface-sunken);
@@ -217,7 +248,7 @@
 }
 .table {
   width: 100%;
-  min-width: 560px;
+  min-width: 680px;
   border-collapse: collapse;
 }
 .table th,
@@ -227,7 +258,7 @@
   text-align: center;
 }
 .table thead th {
-  width: 16%;
+  width: 13%;
   font-size: var(--type-base);
   font-weight: var(--weight-bold);
 }

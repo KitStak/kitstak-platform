@@ -2,10 +2,19 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { PRICING, formatUsd, isBundle, percentLabel, quote } from '@/lib/pricing';
+import { PRICING, formatUsd, isBundle, isPerSeat, percentLabel, quote, todayPrice } from '@/lib/pricing';
 import type { Billing } from '@/lib/pricing';
 import { wizardHref } from '@/lib/stak';
-import { FULL_STACK, PRODUCT_IDS, ROUTES, toggleProduct } from '../site-links';
+import {
+  FULL_STACK,
+  PRODUCT_IDS,
+  ROUTES,
+  START_NAME,
+  WALKTHROUGH_LABEL,
+  availabilityLabel,
+  startableStack,
+  toggleProduct,
+} from '../site-links';
 import type { ProductId, Stack } from '../site-links';
 import { BillingToggle, QuoteSummary, StakVisual, Stepper } from './stak-parts';
 import styles from './bundle-calculator.module.css';
@@ -14,12 +23,18 @@ const BLURB: Readonly<Record<ProductId, string>> = {
   crm: 'Pipelines, boards and automations',
   wms: 'Receiving, inventory and shipping',
   projects: 'Tasks, timelines and workload',
+  pulse: 'Profit by job, client and extra service',
 };
+
+function joinNames(names: readonly string[]): string {
+  return names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
 
 /** Price a stack: switch products on, set the size, and carry the result into the wizard. */
 export function BundleCalculator() {
   const [stack, setStack] = useState<Stack>(FULL_STACK);
-  const [seats, setSeats] = useState(10);
+  // Starts inside the seats the flat Pulse price covers, so the first total is a real price.
+  const [seats, setSeats] = useState<number>(PRICING.pulse.includedSeats);
   const [warehouses, setWarehouses] = useState(1);
   const [billing, setBilling] = useState<Billing>('annual');
 
@@ -31,7 +46,14 @@ export function BundleCalculator() {
 
   const result = quote({ stack, seats, warehouses, billing });
   const bundled = isBundle(stack);
-  const perUser = stack.filter((id) => id !== 'wms').map((id) => (id === 'crm' ? 'the CRM' : 'Projects'));
+  // Only products charged per user. The WMS is per warehouse and Pulse is one flat price.
+  const perUser = stack.filter(isPerSeat).map((id) => START_NAME[id]);
+  // Products priced here that cannot be set up yet. They are left out of the wizard link.
+  const startable = startableStack(stack);
+  const waiting = stack.filter((id) => !startable.includes(id)).map((id) => START_NAME[id]);
+  // What the products open today cost on their own. It is the figure the wizard behind the button
+  // shows, and it can be more than the stack total while a bundled product is still coming soon.
+  const today = todayPrice({ stack, seats, warehouses, billing });
 
   return (
     <div className={styles.calc}>
@@ -55,7 +77,12 @@ export function BundleCalculator() {
                 >
                   <span className={styles.slab} aria-hidden />
                   <span>
-                    <span className={styles.switchName}>{price.name}</span>
+                    <span className={styles.switchName}>
+                      {price.name}
+                      {availabilityLabel(id) ? (
+                        <span className={styles.soon}>{availabilityLabel(id)}</span>
+                      ) : null}
+                    </span>
                     <span className={styles.switchBlurb}>{BLURB[id]}</span>
                   </span>
                   <span className={styles.switchPrice}>
@@ -76,16 +103,26 @@ export function BundleCalculator() {
         <fieldset className={styles.field}>
           <legend>2. Size it</legend>
           <div className={styles.sizes}>
-            <div className={styles.size} data-off={perUser.length === 0 || undefined} inert={perUser.length === 0}>
+            <div
+              className={styles.size}
+              data-off={perUser.length === 0 || undefined}
+              inert={perUser.length === 0}
+            >
               <span>
                 <span className={styles.sizeName}>Users</span>
                 <span className={styles.sizeNote}>
-                  {perUser.length > 0 ? `People who sign in to ${perUser.join(' and ')}` : 'For the CRM and Projects'}
+                  {perUser.length > 0
+                    ? `People who sign in to ${joinNames(perUser)}`
+                    : 'For the CRM and Projects'}
                 </span>
               </span>
               <Stepper label="Users" value={seats} max={PRICING.crm.max} onChange={setSeats} />
             </div>
-            <div className={styles.size} data-off={!stack.includes('wms') || undefined} inert={!stack.includes('wms')}>
+            <div
+              className={styles.size}
+              data-off={!stack.includes('wms') || undefined}
+              inert={!stack.includes('wms')}
+            >
               <span>
                 <span className={styles.sizeName}>Warehouses</span>
                 <span className={styles.sizeNote}>Buildings you run stock in</span>
@@ -104,11 +141,33 @@ export function BundleCalculator() {
       <div className={styles.result}>
         <StakVisual stack={stack} />
         <div className={styles.quote}>
-          <QuoteSummary quote={result} billing={billing} />
+          <QuoteSummary quote={result} billing={billing} seats={perUser.length > 0 ? seats : 0} />
+          {today ? (
+            <p className={styles.today} aria-live="polite">
+              <span className={styles.todayLabel}>{today.label}</span>
+              <span className={styles.todayPrice}>
+                <strong className="numeral">{today.amount}</strong> {today.terms}
+              </span>
+              {today.bundle ? <span className={styles.todayNote}>{today.bundle}</span> : null}
+            </p>
+          ) : null}
         </div>
-        <Link href={wizardHref({ stack, seats, warehouses, billing })} className="btn btn-primary btn-lg btn-block">
-          Set up this Stak <span className="btn-arrow" aria-hidden>→</span>
+        <Link
+          href={wizardHref({ stack, seats, warehouses, billing })}
+          className="btn btn-primary btn-lg btn-block"
+        >
+          {startable.length > 0 ? 'Set up this Stak' : WALKTHROUGH_LABEL}{' '}
+          <span className="btn-arrow" aria-hidden>
+            →
+          </span>
         </Link>
+        {waiting.length > 0 ? (
+          <p className={styles.waiting}>
+            {startable.length > 0
+              ? `${joinNames(waiting)} is coming soon. This button sets up the rest of your stack today.`
+              : `${joinNames(waiting)} is coming soon. Book a walkthrough and we will show it to you.`}
+          </p>
+        ) : null}
         <Link href={ROUTES.founder} className={styles.talk}>
           More than a few warehouses? Talk to the founder
         </Link>

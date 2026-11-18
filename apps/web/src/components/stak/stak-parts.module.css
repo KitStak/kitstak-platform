@@ -1,12 +1,12 @@
 /* ------------------------------------------------------------ Stack diagram */
 .visual {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 .slab {
   display: flex;
   align-items: center;
-  height: 56px;
+  height: 48px;
   padding: 0 18px;
   background: var(--brand-cream);
   opacity: 0.16;
@@ -41,6 +41,12 @@
 }
 .slab[data-product='projects'][data-on] {
   background: var(--stak-projects);
+}
+.slab[data-product='pulse'][data-on] {
+  background: var(--stak-pulse);
+}
+.slab[data-product='pulse'] span {
+  color: var(--stak-pulse-ink);
 }
 .extra {
   display: flex;
@@ -120,6 +126,25 @@
   font-size: var(--type-xs);
   color: var(--on-brand-muted);
 }
+/* The team is over a flat price's seat limit. Louder than the fine print, with a rule beside it. */
+.overSeats {
+  margin-top: 14px;
+  padding-left: 12px;
+  border-left: 3px solid var(--brand-cream);
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--brand-cream);
+}
+.overSeats a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.fine a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
 /* ------------------------------------------------------------ Stepper */
 .stepper {
@@ -129,6 +154,8 @@
   border-radius: var(--radius-md);
   background: var(--surface-panel);
   overflow: hidden;
+  /* Never give up width to a long label beside it: a squeezed stepper loses its plus button. */
+  flex: none;
 }
 .stepper button {
   height: 44px;
@@ -194,7 +221,9 @@
 .billing label[data-checked] {
   background: var(--surface-panel);
   color: var(--text-primary);
-  box-shadow: var(--elevation-xs), 0 0 0 1px var(--text-primary);
+  box-shadow:
+    var(--elevation-xs),
+    0 0 0 1px var(--text-primary);
 }
 .billing label:has(:focus-visible) {
   outline: 2px solid var(--focus-ring);

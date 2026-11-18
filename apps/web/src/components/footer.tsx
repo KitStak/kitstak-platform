@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Logo } from './logo';
 import { PRODUCT_NAV } from './nav/nav-data';
-import { LINKS, ROUTES, getStartedHref } from './site-links';
+import { LINKS, PULSE_IS_LIVE, ROUTES, getStartedHref } from './site-links';
 import styles from './footer.module.css';
 
 interface FooterLink {
@@ -27,6 +27,7 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: getStartedHref('wms'), label: 'Start with the WMS' },
       { href: getStartedHref('crm'), label: 'Start with the CRM' },
       { href: getStartedHref('projects'), label: 'Start with Projects' },
+      ...(PULSE_IS_LIVE ? [{ href: getStartedHref('pulse'), label: 'Start with Pulse' }] : []),
       { href: ROUTES.demo, label: 'Book a walkthrough' },
     ],
   },
@@ -45,6 +46,7 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: LINKS.wms, label: 'KitStak WMS', external: true },
       { href: LINKS.crm, label: 'KitStak CRM', external: true },
       { href: LINKS.projects, label: 'KitStak Projects', external: true },
+      ...(PULSE_IS_LIVE ? [{ href: LINKS.pulse, label: 'KitStak Pulse', external: true }] : []),
     ],
   },
 ];
@@ -57,7 +59,7 @@ export function Footer() {
           <Link href={ROUTES.home} aria-label="KitStak home">
             <Logo height={22} />
           </Link>
-          <p className={styles.tag}>CRM, WMS and Projects on one stack.</p>
+          <p className={styles.tag}>CRM, WMS, Projects and Pulse on one stack.</p>
           <Link href={ROUTES.getStarted} className={`btn btn-primary ${styles.cta}`}>
             Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
           </Link>
@@ -65,7 +67,7 @@ export function Footer() {
         <nav aria-label="Footer" className={styles.cols}>
           {COLUMNS.map((col) => (
           <div key={col.title} className={styles.col}>
-            <h3 className={styles.colTitle}>{col.title}</h3>
+            <h2 className={styles.colTitle}>{col.title}</h2>
             <ul>
               {col.links.map((link) => (
                 <li key={link.label}>

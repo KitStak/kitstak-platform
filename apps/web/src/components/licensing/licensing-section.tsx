@@ -1,12 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { FULL_STACK, PRODUCT_IDS, toggleProduct } from '../site-links';
+import { FULL_STACK, PRODUCT_IDS, availabilityLabel, toggleProduct } from '../site-links';
 import type { ProductId, Stack } from '../site-links';
 import { planFor } from './licensing-plans';
 import styles from './licensing-section.module.css';
 
-const NAME: Readonly<Record<ProductId, string>> = { crm: 'KitStak CRM', wms: 'KitStak WMS', projects: 'KitStak Projects' };
+const NAME: Readonly<Record<ProductId, string>> = {
+  crm: 'KitStak CRM',
+  wms: 'KitStak WMS',
+  projects: 'KitStak Projects',
+  pulse: 'KitStak Pulse',
+};
 
 export function LicensingSection() {
   const [stack, setStack] = useState<Stack>(FULL_STACK);
@@ -25,7 +30,7 @@ export function LicensingSection() {
       <div className={`container ${styles.grid}`}>
         <div>
           <h2 id="licensing-heading" className="h2" data-reveal>
-            Run all three. Or one.
+            Run all four. Or one.
           </h2>
           <p className="lead" data-reveal style={{ '--reveal-delay': 120 } as React.CSSProperties}>
             Each app is licensed on its own and built to work with the others. Turn them on to see what you get.
@@ -43,7 +48,10 @@ export function LicensingSection() {
                 onClick={() => toggle(p)}
               >
                 <span className={styles.slab} aria-hidden />
-                <span className={styles.switchLabel}>{NAME[p]}</span>
+                <span className={styles.switchLabel}>
+                  {NAME[p]}
+                  {availabilityLabel(p) ? <span className={styles.soon}>{availabilityLabel(p)}</span> : null}
+                </span>
                 <span className={styles.state}>{stack.includes(p) ? 'On' : 'Off'}</span>
               </button>
             ))}

@@ -147,6 +147,7 @@ export default function WmsPage() {
             'On-hand units and open shipment orders on the CRM account page',
             'One customer list shared by both apps, never re-keyed',
             'One sign-in, one launcher, one bill',
+            'With Pulse, a work order shows its job profit',
           ]}
           visual={<AccountLink />}
         />

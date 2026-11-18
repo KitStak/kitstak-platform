@@ -12,7 +12,7 @@ interface WizardSummaryProps {
   readonly estimate: Quote | null;
 }
 
-const SHORT_NAME = { crm: 'CRM', wms: 'WMS', projects: 'Projects' } as const;
+const SHORT_NAME = { crm: 'CRM', wms: 'WMS', projects: 'Projects', pulse: 'Pulse' } as const;
 
 function stackName(products: StakAnswers['products']): string {
   if (products.length === 0) return 'Nothing yet';
@@ -52,7 +52,7 @@ function SummaryBody({ answers, estimate }: WizardSummaryProps) {
       ) : null}
       {estimate ? (
         <div className={styles.estimate}>
-          <QuoteSummary quote={estimate} billing={answers.billing} />
+          <QuoteSummary quote={estimate} billing={answers.billing} seats={answers.seats} />
         </div>
       ) : (
         <p className={styles.empty}>Choose a product and your stack builds here.</p>

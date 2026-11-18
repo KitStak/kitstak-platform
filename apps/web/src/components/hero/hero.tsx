@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { ROUTES } from '../site-links';
-import { HeroLoop } from './hero-loop';
+import { OrderStack } from './order-stack';
 import styles from './hero.module.css';
 
+/** The chip loop (./hero-loop) is unmounted, not deleted. The hero uses the original animated order stack. */
 export function Hero() {
   return (
     <section id="top" className={styles.hero} aria-labelledby="hero-heading">
@@ -12,8 +13,9 @@ export function Hero() {
             Put the whole operation on <span className={styles.accent}>one stack.</span>
           </h1>
           <p className={styles.lead}>
-            KitStak runs your customers, your warehouse and your projects on one database and one sign-in. The deal your
-            team closes is the order your floor picks, and the project that delivers it.
+            KitStak runs your customers, your warehouse, your projects and your job profit on one database and one
+            sign-in. The deal your team closes is the order your floor picks, the project that delivers it and the job
+            you see the profit on.
           </p>
           <div className={styles.actions}>
             <Link href={ROUTES.getStarted} className="btn btn-primary">
@@ -24,8 +26,8 @@ export function Hero() {
             </Link>
           </div>
         </div>
+        <OrderStack />
       </div>
-      <HeroLoop />
     </section>
   );
 }

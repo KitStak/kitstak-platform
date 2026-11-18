@@ -81,7 +81,7 @@ export function ReadyView({ answers, account, estimate, headingRef, onEdit }: Re
         <StakVisual stack={answers.products} extras={answers.guided ? ['Guided setup'] : []} />
         {estimate ? (
           <div className={styles.estimate}>
-            <QuoteSummary quote={estimate} billing={answers.billing} />
+            <QuoteSummary quote={estimate} billing={answers.billing} seats={answers.seats} />
           </div>
         ) : null}
       </aside>

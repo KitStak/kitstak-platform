@@ -3,6 +3,8 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  /* Steps slide in from the right. Clip keeps that from adding a sideways scroll on phones. */
+  overflow-x: clip;
 }
 
 /* ------------------------------------------------------------ Top bar and progress */
@@ -331,6 +333,36 @@
   font-weight: var(--weight-bold);
   letter-spacing: -0.02em;
   line-height: 1.15;
+}
+/* A product that is not open yet: same row, no hover lift, no tick box. */
+.stack[data-soon] {
+  cursor: default;
+  background: var(--surface-sunken, transparent);
+}
+.stack[data-soon]:hover {
+  border-color: var(--border-default);
+  box-shadow: none;
+}
+.stack[data-soon]:active {
+  transform: none;
+}
+.soon {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.soonLink {
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
 }
 .badge {
   padding: 3px 10px;
@@ -710,6 +742,15 @@
   .stackGlyph {
     width: 48px;
     height: 48px;
+  }
+  /* No room for the link beside the text on a phone: it goes under the text, in the same column. */
+  .stack[data-soon] {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .soonLink {
+    grid-column: 2;
+    justify-self: start;
+    padding: 6px 0;
   }
   .nav :global(.btn-lg) {
     height: 52px;

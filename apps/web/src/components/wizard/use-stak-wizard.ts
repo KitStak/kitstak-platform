@@ -2,7 +2,15 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_ANSWERS, STEP_IDS, applyPrefill, canLeaveStep, parseAnswers } from '@/lib/stak';
+import { ROUTES } from '@/components/site-links';
+import {
+  DEFAULT_ANSWERS,
+  STEP_IDS,
+  applyPrefill,
+  asksOnlyForUnopenedProducts,
+  canLeaveStep,
+  parseAnswers,
+} from '@/lib/stak';
 import type { StakAnswers, StepId } from '@/lib/stak';
 
 const STORAGE_KEY = 'kitstak.stak.v1';
@@ -65,7 +73,13 @@ export function useStakWizard(canFinish: boolean): StakWizard {
 
   // Saved answers first, then anything a deep link carries (?stack=, ?seats=, ...).
   useEffect(() => {
-    setAnswers(applyPrefill(readStored(), new URLSearchParams(window.location.search)));
+    const params = new URLSearchParams(window.location.search);
+    // An old or typed link for a product that is coming soon goes to the walkthrough form.
+    if (asksOnlyForUnopenedProducts(params)) {
+      router.replace(ROUTES.demo);
+      return;
+    }
+    setAnswers(applyPrefill(readStored(), params));
     setIsReady(true);
     // Runs once on mount: later URL changes are step changes, not new prefills.
   }, []);

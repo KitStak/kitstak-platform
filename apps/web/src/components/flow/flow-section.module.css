@@ -181,3 +181,16 @@
     font-size: 0;
   }
 }
+/* Small phones: give the two record columns the room so long values stay inside their cells. */
+@media (max-width: 400px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr);
+    padding: 12px;
+  }
+  .cell {
+    padding: 10px;
+  }
+  .cellValue {
+    overflow-wrap: anywhere;
+  }
+}

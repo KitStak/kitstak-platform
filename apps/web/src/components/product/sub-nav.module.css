@@ -137,3 +137,36 @@
     gap: 12px;
   }
 }
+/*
+ * Phones: five product pills leave no room for the section links on one row. The switch gets its
+ * own row, and that row slides under the header once the bar sticks, so only the section links
+ * stay pinned.
+ */
+@media (max-width: 560px) {
+  .bar {
+    --switch-row: 44px;
+    top: calc(var(--header-h) - var(--switch-row));
+  }
+  .inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    height: auto;
+  }
+  .switch {
+    height: 32px;
+    margin: 6px 0;
+  }
+  .switch a {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    padding: 0 6px;
+  }
+  .sections ul {
+    margin: 0 -12px;
+  }
+  .sections a {
+    line-height: 44px;
+  }
+}

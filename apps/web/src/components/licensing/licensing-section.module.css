@@ -57,8 +57,24 @@
 .switch[data-product='projects'][aria-checked='true'] .slab {
   background: var(--stak-projects);
 }
+.switch[data-product='pulse'][aria-checked='true'] .slab {
+  background: var(--stak-pulse);
+}
 .switchLabel {
   font-weight: var(--weight-semibold);
+}
+/* "Coming soon" beside a product whose app is not open yet. The same pill as the calculator switch. */
+.soon {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  vertical-align: middle;
+  white-space: nowrap;
 }
 .state {
   font-size: var(--type-sm);
@@ -73,16 +89,16 @@
   border-radius: var(--radius-xl);
   padding: clamp(28px, 4vw, 48px);
   box-shadow: var(--elevation-modal);
-  min-height: 440px;
+  min-height: 480px;
 }
 .stack {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   width: 160px;
   margin-bottom: 40px;
 }
 .stack span {
-  height: 32px;
+  height: 26px;
   transform-origin: left;
   transform: scaleX(0.08);
   opacity: 0.25;
@@ -100,6 +116,9 @@
 }
 .stack span[data-product='projects'][data-on] {
   background: var(--stak-projects);
+}
+.stack span[data-product='pulse'][data-on] {
+  background: var(--stak-pulse);
 }
 .stack span[data-on] {
   transform: none;
