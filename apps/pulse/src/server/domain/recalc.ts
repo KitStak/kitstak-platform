@@ -58,6 +58,16 @@ export async function assertOpen(executor: Executor, orgId: string, dates: reado
   if (hit) throw monthClosedError(hit);
 }
 
+/**
+ * SQL: the line aliased `alias` belongs to a live job. A deleted job's lines keep their own
+ * `deleted_at` empty (so restoring the job brings them back), and this guard keeps them out of
+ * every rollup, the same way `v_facts` does. VAS lines with no job always count.
+ */
+function liveJob(alias: string, jobOptional = false): SQL {
+  const live = `EXISTS (SELECT 1 FROM pulse.jobs lj WHERE lj.id = ${alias}.job_id AND lj.deleted_at IS NULL)`;
+  return sql.raw(jobOptional ? `(${alias}.job_id IS NULL OR ${live})` : live);
+}
+
 /** SQL: the row aliased `alias` is dated in an open month. */
 function openMonth(alias: string, dateColumn: string): SQL {
   return sql.raw(
@@ -225,11 +235,11 @@ export async function refreshCompanyDays(executor: Executor, orgId: string, site
     WITH direct AS (
       SELECT work_date, sum(hours) AS h, sum(gross_pay_cents) AS g, sum(overhead_cents) AS o, sum(shared_cents) AS s
         FROM (
-          SELECT work_date, hours, gross_pay_cents, overhead_cents, shared_cents FROM pulse.production_entries
-           WHERE org_id = ${orgId} AND site_id = ${siteId} AND deleted_at IS NULL AND work_date BETWEEN ${from}::date AND ${to}::date
+          SELECT pe.work_date, pe.hours, pe.gross_pay_cents, pe.overhead_cents, pe.shared_cents FROM pulse.production_entries pe
+           WHERE pe.org_id = ${orgId} AND pe.site_id = ${siteId} AND pe.deleted_at IS NULL AND pe.work_date BETWEEN ${from}::date AND ${to}::date AND ${liveJob('pe')}
           UNION ALL
-          SELECT work_date, hours, gross_pay_cents, overhead_cents, shared_cents FROM pulse.vas_entries
-           WHERE org_id = ${orgId} AND site_id = ${siteId} AND deleted_at IS NULL AND work_date BETWEEN ${from}::date AND ${to}::date
+          SELECT ve.work_date, ve.hours, ve.gross_pay_cents, ve.overhead_cents, ve.shared_cents FROM pulse.vas_entries ve
+           WHERE ve.org_id = ${orgId} AND ve.site_id = ${siteId} AND ve.deleted_at IS NULL AND ve.work_date BETWEEN ${from}::date AND ${to}::date AND ${liveJob('ve', true)}
         ) u GROUP BY work_date
     ), ind AS (
       SELECT work_date, sum(hours) AS h, sum(cost_cents) AS c, sum(gross_pay_cents) AS g, sum(overhead_cents) AS o
@@ -294,14 +304,15 @@ async function allocatePool(executor: Executor, orgId: string, siteId: string, s
   const rule = settings.sharedCostRule;
   if (rule === 'none' || rule === 'percent_of_labor') {
     const value = rule === 'none' ? sql`0::bigint` : sql`round(labor_cost_cents::numeric * ${settings.sharedPctBp} / 10000)::bigint`;
-    const live = rule === 'none' ? sql`0::bigint` : sql`CASE WHEN deleted_at IS NULL AND hours > 0 THEN ${value} ELSE 0::bigint END`;
+    const takes = (alias: string, jobOptional: boolean) => sql`${sql.raw(alias)}.deleted_at IS NULL AND ${sql.raw(alias)}.hours > 0 AND ${liveJob(alias, jobOptional)}`;
+    const live = (alias: string, jobOptional: boolean) => (rule === 'none' ? sql`0::bigint` : sql`CASE WHEN ${takes(alias, jobOptional)} THEN ${value} ELSE 0::bigint END`);
     const moved: PoolMove[] = [];
     moved.push(
       ...(await rows<PoolMove>(
         executor,
         sql`WITH prev AS (SELECT id, shared_cents AS old FROM pulse.production_entries WHERE ${range})
-            UPDATE pulse.production_entries p SET shared_cents = ${live} FROM prev
-             WHERE p.id = prev.id AND p.shared_cents IS DISTINCT FROM ${live}
+            UPDATE pulse.production_entries p SET shared_cents = ${live('p', false)} FROM prev
+             WHERE p.id = prev.id AND p.shared_cents IS DISTINCT FROM ${live('p', false)}
             RETURNING p.job_id, NULL::uuid AS client_id, prev.old::text AS old, p.shared_cents::text AS shared`,
       )),
     );
@@ -309,8 +320,8 @@ async function allocatePool(executor: Executor, orgId: string, siteId: string, s
       ...(await rows<PoolMove>(
         executor,
         sql`WITH prev AS (SELECT id, shared_cents AS old FROM pulse.vas_entries WHERE ${range})
-            UPDATE pulse.vas_entries p SET shared_cents = ${live} FROM prev
-             WHERE p.id = prev.id AND p.shared_cents IS DISTINCT FROM ${live}
+            UPDATE pulse.vas_entries p SET shared_cents = ${live('p', true)} FROM prev
+             WHERE p.id = prev.id AND p.shared_cents IS DISTINCT FROM ${live('p', true)}
             RETURNING p.job_id, p.client_id, prev.old::text AS old, p.shared_cents::text AS shared`,
       )),
     );
@@ -329,14 +340,14 @@ async function allocatePool(executor: Executor, orgId: string, siteId: string, s
     sql`
     WITH takers AS (
       SELECT 'p'::text AS t, id, job_id, NULL::uuid AS client_id, work_date, (hours * 100)::numeric AS w, shared_cents AS old,
-             (deleted_at IS NULL AND hours > 0) AS takes,
+             (e.deleted_at IS NULL AND e.hours > 0 AND ${liveJob('e')}) AS takes,
              -- What the row is, in words that are the same in every workspace: a file exported from one
              -- workspace and imported into another then spreads the odd cents the same way.
              (COALESCE((SELECT j.number FROM pulse.jobs j WHERE j.id = e.job_id), '') || '|' || e.shift || '|' ||
               COALESCE((SELECT c.code FROM pulse.labor_classes c WHERE c.id = e.labor_class_id), '')) COLLATE "C" AS skey
         FROM pulse.production_entries e WHERE ${range}
       UNION ALL
-      SELECT 'v', id, job_id, client_id, work_date, (hours * 100)::numeric, shared_cents, (deleted_at IS NULL AND hours > 0),
+      SELECT 'v', id, job_id, client_id, work_date, (hours * 100)::numeric, shared_cents, (e.deleted_at IS NULL AND e.hours > 0 AND ${liveJob('e', true)}),
              (COALESCE((SELECT c.code FROM pulse.clients c WHERE c.id = e.client_id), '') || '|' ||
               COALESCE((SELECT s.code FROM pulse.vas_services s WHERE s.id = e.vas_service_id), '') || '|' ||
               COALESCE((SELECT j.number FROM pulse.jobs j WHERE j.id = e.job_id), '') || '|' || e.quantity::text) COLLATE "C"

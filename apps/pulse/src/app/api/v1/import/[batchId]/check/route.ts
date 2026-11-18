@@ -8,7 +8,7 @@ export const maxDuration = 300;
 const schema = z.object({
   mapping: z.array(z.string().max(60).nullable()).max(200).optional(),
   options: z
-    .object({ mode: z.enum(['all_or_nothing', 'skip_bad_rows']), dateOrder: z.enum(['MDY', 'DMY']).nullable(), createMissing: z.boolean(), lookalikes: z.enum(['skip', 'add']) })
+    .object({ mode: z.enum(['all_or_nothing', 'skip_bad_rows']), dateOrder: z.enum(['MDY', 'DMY']).nullable(), createMissing: z.boolean(), createLaborClasses: z.boolean(), lookalikes: z.enum(['skip', 'add']) })
     .partial()
     .optional(),
   savePresetAs: z.string().max(80).nullable().optional(),

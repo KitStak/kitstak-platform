@@ -5,6 +5,7 @@ import { Teach } from '@/components/pulse/teach';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { shiftDate } from '@/features/jobs/job-math';
 import { routes } from '@/lib/routes';
+import { targetMarginBp } from '@/lib/profit';
 import {
   findClientByRef,
   getProfit,
@@ -125,7 +126,7 @@ export async function NewJobPage({ searchParams }: { readonly searchParams?: Pro
         workOrders={sources.workOrders}
         seesMoney={page.access.seesMoney}
         defaults={{
-          targetMarginBp: settings.defaultTargetMarginBp,
+          targetMarginBp: targetMarginBp({ orgDefault: settings.defaultTargetMarginBp }),
           loadedRateCents: settings.defaultLoadedRateCents,
           partsOwner: settings.defaultPartsOwner,
           sharedRule: settings.sharedCostRule,

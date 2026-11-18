@@ -10,6 +10,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Check, Pencil, X } from 'lucide-react';
 import { ComboChart } from '@/components/charts/cartesian';
+import { trendMarginLine } from './trend-margin';
 import { DonutChart } from '@/components/charts/radial';
 import { KpiTile, MarginPill, marginHealth } from '@/components/charts/stats';
 import { ExplainNumber } from '@/components/pulse/explain';
@@ -144,6 +145,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
   const total = trend.data?.total ?? null;
   const previous = comparable(before.data);
   const points = useMemo(() => [...(trend.data?.rows ?? [])].sort((a, b) => a.key.localeCompare(b.key)), [trend.data]);
+  const marginLine = useMemo(() => trendMarginLine(points), [points]);
   const serveRow = serve.data?.rows[0]?.cells ?? null;
   const cell = (key: string): number | null => (serveRow && typeof serveRow[key] === 'number' ? (serveRow[key] as number) : null);
   const vs = 'vs before';
@@ -194,7 +196,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
         <Section title="Trend" hint={`${rangeLabel(period)}, by ${bucket}`} testId="client-trend">
           <ComboChart
             title={`Revenue, cost and margin for ${client.name}`}
-            description="Bars show revenue and cost. The line on top is the margin after all costs, next to this client’s target margin."
+            description={`Bars show revenue and cost. The line on top is the margin after all costs, next to this client’s target margin.${marginLine.skipped > 0 ? ` ${marginLine.skipped === 1 ? `One ${bucket}` : `${marginLine.skipped} ${bucket}s`} with very little revenue ${marginLine.skipped === 1 ? 'is' : 'are'} left off the margin line so the rest stay readable.` : ''}`}
             loading={!trend.data}
             refreshing={trend.isFetching && Boolean(trend.data)}
             dates={points.map((row) => row.key)}
@@ -203,7 +205,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
               { id: 'revenue', label: 'Revenue', values: points.map((row) => row.revenueCents) },
               { id: 'cost', label: 'Cost', values: points.map((row) => row.costCents) },
             ]}
-            lines={[{ id: 'margin', label: 'Margin after all costs', values: points.map((row) => row.marginBp) }]}
+            lines={[{ id: 'margin', label: 'Margin after all costs', values: marginLine.values }]}
             barFormat="money"
             lineFormat="percent"
             lineTarget={{ value: targetBp, label: 'Target margin' }}

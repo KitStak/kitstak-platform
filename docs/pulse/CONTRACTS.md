@@ -448,6 +448,11 @@ E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium_headle
 - Logins: `admin@kitstak.io` / `KitStak-Demo-2026!` (org `kitstak`, seeded, an explicit Pulse owner after the seed) and
   `maya@northwind-robotics.example` / `Northwind-Demo-2026!` (org `northwind-robotics`, seeded with the rich demo, an
   explicit Pulse owner after the seed; to see first run states, use a throwaway org).
+- Logins with no money, for checking money hiding (org `kitstak`, password `KitStak!demo2026`, the same as the WMS
+  access seed): `j.okafor@kitstak.io` (Pulse supervisor, sees money off) and `cs.team@kitstak.io` (Pulse viewer, sees
+  money off). The rich kitstak seed adds them when no other seed made them (`login` on the plan's `roles`, through
+  `ensureDemoLogin` in `seed/context.ts`) and never resets an existing password. Other staff seeded by WMS with the
+  same password: `ops.manager@kitstak.io` (manager) and `finance@kitstak.io` (viewer with sees money on).
 - Seeds write through the domain layer (`tsx --conditions=react-server`), after wiping the org's rows under
   `pulse.allow_purge`. Helpers: `src/server/db/seed/context.ts` (`seedContext(orgSlug, email?)`, `orgMembers`,
   `ensurePulseOwner`, `wipeOrg`). Register a seed in `SEEDS` in `index.ts`.
@@ -874,8 +879,8 @@ cd apps/pulse && E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell pnpm exec
 `@kitstak/ui`, `@kitstak/db`, `@kitstak/entitlements`, `@kitstak/pulse-bridge` and `kitstak-web` have no lint script;
 `@kitstak/ui` has no typecheck script (its sources are typechecked by every app that imports them).
 
-A no money reader has no demo password. To look at the app as one, change your own row in `pulse.member_roles`
-(`role = 'viewer' | 'supervisor'`, `sees_money = false`) on a dev database and put it back; the seed rebuilds the rows.
+No money readers have demo logins (section 11): `j.okafor@kitstak.io` (supervisor) and `cs.team@kitstak.io` (viewer), both
+`KitStak!demo2026`, money off.
 
 ### 19.4 Still open
 
@@ -896,7 +901,7 @@ Product gaps the teams reported, none of them a broken screen:
 - **Data**: files are parsed on the main thread; save progress lives in server memory; 50,000 rows was not timed (5,000
   was); "Download everything" is built in memory; undo of a jobs import soft deletes jobs that got work afterwards.
 - **Integrations**: warehouse extra service records are counted, not written into `vas_entries`; contract rates do not
-  set job prices; pulled project time is not removed when the entry is deleted in Projects; change notes are answered
+  set job prices; change notes are answered
   on Connected apps and the cron tick only; several spec extras in the sibling apps are not built (work order list
   margin column, dashboard tiles, tasks from alerts, switcher badge).
 - **Seed**: no time punches, device links, kiosk PINs, quote scenarios, report schedules or sync runs; fewer jobs and
@@ -951,3 +956,37 @@ Covered by `src/server/domain/standalone.db.test.ts` unless noted.
   to the signed in email with a Join button, because a Pulse only workspace has no other place to accept one.
 - **Two clients cannot share a name** when added by hand (`catalog.ts` `createClient`). Imports and sync are unchanged.
 - Upload limit is 60 files a person an hour (17 kinds of data on day one). `UTC` is always in the time zone list.
+
+### 19.7 Round two fixes (the blocking issues from the round one critics)
+
+Each one was checked again against the running app on port 3500, not only by tests.
+
+- **A deleted job no longer leaks cost.** `recalc.ts` counts a production or service line only while its job is live
+  (`liveJob()`, the same rule `v_facts` uses): company days, the shared cost pool and the bridge all skip a deleted job's
+  lines, and those lines hold 0 shared. Restore brings the shares back. Any `recalcOrg` run cleans old leaked rows.
+- **No false green on a job with no plan.** `planHasCosts()` and `costKnown` (`lib/profit`): with no cost plan and no
+  pace, projected margin, profit and cost at finish are null and the new rule D4 says "No plan yet, so Pulse cannot tell
+  if this job will make money." (SPEC 4.13, 4.14).
+- **Search finds records.** `searchAll` (`search.ts`) finds jobs, clients, job types and extra services (every typed
+  word must match, ranked, org scoped, no money fields). The palette fetches `/api/v1/search` live and opens the top
+  match on Enter; `/search` lists record panels first; `/clients` redirects to the client list.
+- **One number per figure.** Pace names its window ("In the last 5 work days"), the Pace card and the Plan tab name
+  their yardstick, unit cost "so far" and "by the finish" are labeled apart, and Alerts read the live risk reason, so the
+  loss on Home, the job, the jobs list and Alerts match to the dollar (`jobHeadlineFigures()`, `impactAsOf`). The Plan
+  view title follows its toggle. The Home and Profit tile is "Margin on jobs", with "Company margin, after overhead".
+- **CRM deal search works.** It ordered by an outer alias, so Postgres refused it and the catch hid the error. Fixed,
+  and every fail soft catch in the sibling readers now logs one line (`integrations/log.ts` `logSoftFail`).
+- **No lost edits.** `PUT /api/v1/log/rows` locks the row, updates on the version it read, and answers 409 with the
+  fresh row for a missing or old version. `GET /api/v1/production` returns `meta { truncated, limit, offset, nextOffset }`.
+- **Warehouse parts are dated the day they were used** (Kitting ledger, site time zone), with a stable
+  `woc:<componentId>:<date>` ref and BigInt cents (`wms-usage.ts`). Bridge notes are settled after the work, so retries
+  and parking happen (`finishBridgeEvents`). Gone Projects time is removed. `explain` answers 404 for an unknown job.
+- **No money roles see no payroll dollars.** Stored period checklists, settings (burden defaults need `wage:read`,
+  target margin and floor need `money:read`, `wagesHidden`) and every page payload are gated; the DTO walk test covers
+  38 more readers. An unknown labor class in an import is a problem row unless "Add new labor classes" is on.
+- **Phone and tablet.** The alerts bell shows at every width and the phone drawer shows the open alerts count. Jobs
+  use cards up to 1024 px (with Due), and the table folds Client and Trend away below 1280 px, so no money column
+  leaves the screen. One page frame on every route; date pickers, axe and chart label fixes.
+
+Checks at commit: typecheck and lint clean, 667 unit and database tests, 57 Playwright tests against port 3500.
+Dev data note: job stats were recomputed once with `recalcOrg` (no restamp) so stored rows use the new rules.

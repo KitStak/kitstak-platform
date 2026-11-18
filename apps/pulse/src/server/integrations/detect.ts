@@ -14,6 +14,7 @@ import { findWmsTenantSchema, isWmsSchemaName } from '@kitstak/db/wms-tenants';
 import { db } from '@/server/db';
 import { orgModuleFlags } from '@/server/entitlements';
 import type { DomainContext } from '@/server/domain/_shared';
+import { logSoftFail } from './log';
 
 const TABLE_TTL_MS = 5 * 60_000;
 const tableCache = new Map<string, { exists: boolean; at: number }>();
@@ -26,7 +27,8 @@ export async function tableExists(qualified: string): Promise<boolean> {
     const exists = Boolean(result.rows[0]?.exists);
     tableCache.set(qualified, { exists, at: Date.now() });
     return exists;
-  } catch {
+  } catch (error) {
+    logSoftFail(null, 'detect.tableExists', error);
     return false;
   }
 }
@@ -60,7 +62,8 @@ export async function wmsTenantSchemaFor(orgId: string): Promise<string | null> 
     if (schemaCache.size > 5000) schemaCache.clear();
     schemaCache.set(orgId, { schema, at: Date.now() });
     return schema;
-  } catch {
+  } catch (error) {
+    logSoftFail(orgId, 'detect.wmsTenantSchemaFor', error);
     return null;
   }
 }
@@ -73,7 +76,8 @@ export async function wmsSchemaFor(ctx: DomainContext): Promise<string | null> {
   try {
     const flags = await orgModuleFlags(ctx.orgId);
     return flags.wms ? await wmsTenantSchemaFor(ctx.orgId) : null;
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'detect.wmsSchemaFor', error);
     return null;
   }
 }
@@ -93,7 +97,8 @@ export async function integrationAvailability(ctx: DomainContext): Promise<Integ
       flags.projects ? tableExists('pm.projects') : Promise.resolve(false),
     ]);
     return { crm: crmTables, wms: wmsSchema !== null, projects: projectsTables };
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'detect.integrationAvailability', error);
     return { crm: false, wms: false, projects: false };
   }
 }

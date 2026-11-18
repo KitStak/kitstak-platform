@@ -30,7 +30,7 @@ import {
   scaledToNumber,
 } from '../money';
 import { DEFAULT_WORKING_DAYS, addWorkDays } from './calendar';
-import { planFigures } from './plan';
+import { planFigures, planHasCosts } from './plan';
 import { CONFIDENCE_LABELS, type ActualTotals, type Confidence, type IsoDate, type JobKind, type JobMode, type JobStatus, type MaterialMethod, type MoneyBuckets, type PlanTotals, type PricingModel } from './types';
 import { type SentenceOptions, countWord, sentenceNumber } from './words';
 
@@ -112,6 +112,12 @@ export interface Projection {
   readonly basis: 'units' | 'hours' | 'none';
   /** False when there is no target pace and no evidence day, so the projection equals the plan. */
   readonly paceKnown: boolean;
+  /**
+   * False when Pulse cannot price the work still to do: no cost plan and nothing to project from,
+   * or hours left with no cost of an hour. Unknown cost is never counted as zero cost: the
+   * margin is `null` and the money at finish is only what happened so far (rule D4).
+   */
+  readonly costKnown: boolean;
   readonly unitsLeft: number | null;
   /** Share done in basis points. It can pass 10000 when more is made than planned. */
   readonly pctCompleteBp: number | null;
@@ -173,6 +179,7 @@ function flat(input: ProjectionInput, mode: JobMode | null, totals: ActualTotals
     mode,
     basis: 'none',
     paceKnown: true,
+    costKnown: true,
     unitsLeft: null,
     pctCompleteBp: null,
     pctCompleteShownBp: null,
@@ -279,8 +286,10 @@ export function projectJob(input: ProjectionInput): Projection {
   const planUnits = plan ? quantityToScaled(plan.units) : ZERO;
 
   if (!paceKnown) {
-    // No target pace and no evidence day: the projection equals the plan, or what happened so far with no plan.
-    const totals: ActualTotals = plan
+    // No target pace and no evidence day: the projection equals the plan. With no cost plan (none at
+    // all, or only a price) the cost of the work left is unknown, so only what happened so far is shown.
+    const costPlan = input.plan !== null && planHasCosts(input.plan) && plan !== null;
+    const totals: ActualTotals = costPlan
       ? { unitsGood: scaledToNumber(plannedUnits, 3), hours: plan.laborHours, revenueCents: plan.revenueCents, laborCents: plan.laborCents, materialCents: plan.materialCents, otherCents: plan.otherCents, sharedCents: plan.sharedCents }
       : a;
     const base = flat(input, mode, totals);
@@ -288,6 +297,8 @@ export function projectJob(input: ProjectionInput): Projection {
       ...base,
       basis: 'units',
       paceKnown: false,
+      costKnown: costPlan,
+      projectedMarginBp: costPlan ? base.projectedMarginBp : null,
       unitsLeft: scaledToNumber(unitsLeft, 3),
       pctCompleteBp: pctBp,
       pctCompleteShownBp: Math.min(10000, pctBp),
@@ -312,7 +323,7 @@ export function projectJob(input: ProjectionInput): Projection {
       materialLeft = input.plannedMaterialLeftCents;
     } else if (unitsGood > ZERO) {
       materialLeft = fracRound(fracMul(cents(jobMaterial), frac(unitsLeft, unitsGood)));
-    } else if (plan && planUnits > ZERO) {
+    } else if (plan && planUnits > ZERO && planHasCosts(input.plan)) {
       materialLeft = fracRound(fracMul(cents(plan.materialCents), frac(unitsLeft, planUnits)));
     } else if (!blank(input.materialCostPerUnit)) {
       materialLeft = fracRound(fracMul(fracMul(unitsLeftFrac, fracOf(input.materialCostPerUnit as Decimal, 4)), frac(HUNDRED)));
@@ -346,6 +357,8 @@ export function projectJob(input: ProjectionInput): Projection {
   }
 
   const projectedProfit = revenueAtFinish - costAtFinish;
+  // Hours still to work with no cost of an hour anywhere: their labor is unknown, not free.
+  const costKnown = !(rateLeft === null && fracCmp(hoursLeft, FRAC_ZERO) > 0);
   const hoursLeftScaled = fracToScaled(hoursLeft, 2);
   const projectedHours = hoursSoFar + hoursLeftScaled;
 
@@ -385,6 +398,7 @@ export function projectJob(input: ProjectionInput): Projection {
     mode,
     basis: unitBased ? 'units' : 'hours',
     paceKnown: true,
+    costKnown,
     unitsLeft: unitBased ? scaledToNumber(unitsLeft, 3) : null,
     pctCompleteBp: pctBp,
     pctCompleteShownBp: Math.min(10000, pctBp),
@@ -405,7 +419,7 @@ export function projectJob(input: ProjectionInput): Projection {
     costAtFinishCents: costAtFinish,
     revenueAtFinishCents: revenueAtFinish,
     projectedProfitCents: projectedProfit,
-    projectedMarginBp: marginBp(projectedProfit, revenueAtFinish),
+    projectedMarginBp: costKnown ? marginBp(projectedProfit, revenueAtFinish) : null,
     projectedLaborHours: scaledToNumber(projectedHours, 2),
     projectedUnits: scaledToNumber(projectedUnits, 3),
     unitsPerDay: unitsPerDay ? fracToNumber(unitsPerDay, 3) : null,

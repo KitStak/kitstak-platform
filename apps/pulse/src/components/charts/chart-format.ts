@@ -20,7 +20,8 @@ export type ChartFormat = ChartFormatPreset | ChartFormatter;
 
 const PRESETS: Readonly<Record<ChartFormatPreset, ChartFormatter>> = {
   money: {
-    axis: (value) => formatMoneyCompact(Math.round(value)),
+    // Under $1,000 compact notation shows half dollars ("-$502.5"): whole dollars read better.
+    axis: (value) => (Math.abs(value) < 100_000 ? formatMoneyWhole(Math.round(value)) : formatMoneyCompact(Math.round(value))),
     // Cents matter on small amounts and are noise on big ones.
     value: (value) => (Math.abs(value) >= 100_000 ? formatMoneyWhole(Math.round(value)) : formatMoney(Math.round(value))),
   },

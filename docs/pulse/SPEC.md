@@ -359,7 +359,7 @@ that type is also booked as a client level `fee`.
 
 ```
 cost     = labor + material + other + shared
-profit   = revenue - cost                         margin = profit / revenue                 ("Margin after all costs")
+profit   = revenue - cost                         margin = profit / revenue                 ("Margin on jobs"; company margin after overhead is the bridge's company profit / revenue)
 profit_before_shared = revenue - labor - material - other
 margin_before_shared = profit_before_shared / revenue                                       ("Margin before shared costs")
 labor_pct_of_revenue = labor / revenue
@@ -547,6 +547,11 @@ projected_finish_date = today + ceil(units_left / units_per_day) work days (sett
 Hour based (`planned_units = 0`, plan labor hours > 0): `hours_left = max(0, plan hours - H_a)`, `pct_complete = H_a / plan hours`, `w` uses that
 percent, labor, shared and other as above, material left 0, revenue as above, no finish date from pace.
 
+**Unknown cost is never zero cost.** `cost_known` is false when the job has no cost plan (none, or only units and revenue) and pace is unknown,
+or when hours are still to work and there is no cost of an hour (`rate_left` unknown). Then `projected_margin` is null, and the stored
+`projected_profit` and `cost_at_finish` are null ("not known yet" on screen). Material left only uses plan material per unit when the plan has
+costs. Rule D4 (4.14) says so in words.
+
 When pace is unknown the projection equals the budget. A job past its planned units has `units_left = 0`, so the projection is what happened so far,
 and rule W8 says so. The job page says in words what was assumed, with the confidence word: "Early guess. We assume the rest of the job runs at
 35 units per person per hour, a blend of your plan (40) and your first day (25)."
@@ -569,31 +574,33 @@ matching rule sets the status. R1, R2 and W1 are skipped when `pm` is null (reve
 
 | Status | Rule (any one) | Words (money variant shown; each rule also has a no money variant) |
 |---|---|---|
-| **Losing money** (`losing`) | L1 Projected mode, `projected_profit < 0`, and `evidence_days >= 2` or `pct_complete >= 20%` | "At this pace the job ends about $1,840 in the red. It costs $3.12 a unit to make and sells for $2.75." |
+| **Losing money** (`losing`) | L1 Projected mode, `projected_profit < 0`, and `evidence_days >= 2` or `pct_complete >= 20%` | "At this pace the job ends about $1,840 in the red. By the finish, each unit costs $3.12 to make and sells for $2.75." (cost and price per unit at finish; the job card's "Cost for one unit so far" is a different number and says so) |
 | | L2 Final mode and `profit < 0` | "This job lost $620. Labor ran 31% over the budget." |
 | | L3 Actuals mode, profit of the last 30 days `< 0`, with entries on 5 or more days | "This work lost $410 in the last 30 days." |
 | **At risk** (`at_risk`) | R1 `pm < target - at_risk_gap_bp` (default 10 points) | "Margin is heading for 14%. Your target is 30%." |
 | | R2 `pm < margin_floor_bp` (default 10%) | "Margin is heading for 6%, under your 10% floor." |
 | | R3 plan hours > 0, `projected_labor_hours > plan hours x (1 + labor_risk_over_bp)` (15%), and `pm < target` or `pm` null | "Labor is heading 25% over the plan." |
-| | R4 `evidence_days >= 2`, UPH of the last 5 evidence days `< productivity_risk_bp` (80%) of target pace, and `pm < target` or `pm` null | "The crew is making 31 units per person per hour. The target pace is 42." |
+| | R4 `evidence_days >= 2`, UPH of the last 5 evidence days `< productivity_risk_bp` (80%) of target pace, and `pm < target` or `pm` null | "In the last 5 work days the crew made 31 units per person per hour. The target pace is 42." (the window is named, so it is never mistaken for the whole job pace on the Pace card) |
 | | R5 `projected_finish_date > due_date` | "At this pace the job finishes Dec 9. It is due Dec 2." |
 | | R6 linked WMS work order is in Shortage | "The warehouse is short on parts for this job." |
 | **Not enough data** (`no_data`) | D1 one or more days have units and no confirmed hours | "3 days have units and no hours. Profit is not complete yet." |
 | | D2 no price (per unit with no unit price, fixed with no fixed price, hourly with no bill rate) | "This job has no price yet, so Pulse cannot work out profit." |
-| | D3 hours with no rate (`needs_rate`) | "Some hours have no labor rate, so their cost is missing." |
+| | D3 hours with no rate (`needs_rate`), or Projected mode with hours still to work and no cost of an hour anywhere (4.13 `cost_known = false`) on a job that has a cost plan | "Some hours have no labor rate, so their cost is missing." |
+| | D4 Projected mode, no cost plan (no quote and no budget, or a plan with only units and revenue, such as the quick add row saves from a price), and Pulse cannot price the work still to do (`cost_known = false`: no target pace and no evidence day, or hours left with no cost of an hour). Next step "Add a quote or a budget" | "No plan yet, so Pulse cannot tell if this job will make money." No money: "No plan yet, so Pulse cannot tell how this job will go." |
 | **Heads up** (`heads_up`) | W1 `pm < target` | "Margin is heading for 26%, a little under your 30% target." |
 | | W2 projected labor hours over plan by `labor_watch_over_bp` (5%) or more, when R3 did not fire | "Labor is heading 8% over the plan." |
-| | W3 UPH of the last 5 evidence days under `productivity_watch_bp` (95%) of target pace, when R4 did not fire | "The crew is a bit under the target pace: 39 of 42 units per person per hour." |
+| | W3 UPH of the last 5 evidence days under `productivity_watch_bp` (95%) of target pace, when R4 did not fire | "In the last 5 work days the crew was a bit under the target pace: 39 of 42 units per person per hour." |
 | | W4 material cost per good unit > plan material per unit x (1 + `material_watch_over_bp`, 5%) | "Materials cost $1.42 a unit. The plan was $1.30." |
 | | W5 no production entry on the last `no_entry_days` (3) work days that are fully past in the site time zone, counted from the later of the start date and the day the job became active | "Nothing has been logged for 4 work days." |
 | | W6 due in 3 work days or less and under 90% done | "Due Friday and 72% done." |
-| | W7 no quote and no budget | "This job has no plan, so Pulse cannot compare it with anything." |
+| | W7 no cost plan (no quote and no budget, or a plan with only units and revenue), when D4 did not fire: Pulse can project from logged days but has nothing to compare with | "This job has no plan, so Pulse cannot compare it with anything." With a price only plan: "This job has a price but no cost plan, so Pulse cannot compare it with anything." |
 | | W8 `units_good > planned_units > 0` | "This job is past its planned units. Update the plan or finish the job." |
 | **On track** (`on_track`) | none of the above | "On track. Margin is heading for 34% against a 30% target." |
 
 Losing money and At risk win over Not enough data, because missing hours can only make the real number worse. A job with a D rule never shows On track
 or Heads up, and never appears in "best jobs" rankings or the wall "Nice work" panel. Every profit DTO for such a job carries `laborMissing: true` and
-the UI marks the number "Not complete yet".
+the UI marks the number "Not complete yet". D4 and W7 never fire together: D4 is for a job Pulse cannot price at all, W7 for one it can price from
+what happened but cannot compare with a plan.
 
 In Actuals mode R3, R5, W2 and W6 apply only when the job has a monthly plan (plan totals are read as "per month" for `ongoing` jobs and compared with
 the last 30 days).
@@ -1004,7 +1011,10 @@ Engine rules (`src/lib/csv.ts` + `src/server/domain/imports.ts`, same code for e
   run on the server from the raw strings.
 - Headers match by exact name or alias, ignoring case, spaces, underscores and punctuation (`Units Good`, `units_good`, `Good units`, `qty finished` all map to `units_good`). Unmatched columns are shown and can be mapped by hand or ignored. Mappings are saved as presets keyed by the header set, so next month's file maps itself.
 - Dates: `YYYY-MM-DD`, `M/D/YYYY`, `D/M/YYYY` (per `settings.date_order` or the import option), `Nov 3 2026`, Excel serial numbers. Money: `1234.5`, `$1,234.50`, `(45.00)` and `-45` for negatives. Percents: `28`, `28%` (both mean 28 percent). Yes and no: `yes|no|true|false|1|0`.
-- Lookups by code first, then exact name without case: client, job, job type, labor class, site, service, item. Option per import: "Create missing clients, job types, labor classes and items" (on by default, each created row is listed in the check step).
+- Lookups by code first, then exact name without case: client, job, job type, labor class, site, service, item. Option per import: "Create missing clients, job types and items" (on by default, each created row is listed in the check step).
+  An unknown labor class is a problem row by default, because a class made on the fly would cost hours at the default rate: "There is no labor class X. Add it in Labor
+  first, or turn on Add new labor classes." The separate option "Add new labor classes" (off by default, needs `rate:manage`) allows it. The labor rates file still adds
+  the classes it names, because each row carries the rate.
 - Every row gets an action in the check step: new, changed (with a field by field diff), unchanged, **looks the same**, skipped or error. Errors are plain: "Row 14, labor_hours: 9x is not a number." "Row 22, job_number: there is no job J-2040. Add it first or turn on Create missing." "Row 31: October is closed."
 - **No double money.** Streams whose rows may have no natural key (costs with no `reference`, revenue with no `invoice_number`, other time, materials with no `lot`, service entries) get a look alike check:
   a keyless file row that equals a live row on every key column listed in the table below plus the amount or quantity is marked "looks the same as a row already here" and is skipped unless the person picks "Add them anyway". And when the same file (same hash, same stream) was imported before, the check step says so first: "You imported this same file on Nov 3."
@@ -1055,8 +1065,10 @@ Ground rules:
 - **When sync runs**: "Sync now"; on a page load when the last sync is older than 10 minutes (through `after()`, never blocking the page); on a bridge event; and on the 15 minute cron tick.
   Only one run per org and source at a time: a run takes the lease `sync_state.locked_until = now() + 5 minutes` with a conditional update and gives up quietly if it cannot.
   The cron tick walks orgs oldest `last_run_at` first, with a 240 second budget per invocation (`maxDuration = 300`) and a try and catch per org, so one bad org never blocks the rest.
-- **Bridge events are fast.** Every Pulse `(app)` request and every cron tick first claims the org's waiting `bridge_events` (`FOR UPDATE SKIP LOCKED`, sets `claimed_at`, bumps `attempts`;
-  claims older than 5 minutes can be retaken; 5 failed attempts park the event with `last_error`). So a change in a sibling shows in Pulse on the next Pulse page load, and within 15 minutes with nobody looking.
+- **Bridge events are fast.** Every Pulse `(app)` request and every cron tick first claims the org's waiting `bridge_events` (`FOR UPDATE SKIP LOCKED`, sets `claimed_at` as a
+  5 minute lease, bumps `attempts`; a claim never sets `processed_at`). After the work each claimed note is settled: done sets `processed_at`; failed stores `last_error` and
+  keeps the lease, so the retry waits 5 minutes; busy (another sync holds the app) gives back the lease and the try. The 5th failed try parks the note (`processed_at` plus
+  `last_error`, "Gave up after 5 tries."), so it no longer blocks a new note for the same record. So a change in a sibling shows in Pulse on the next Pulse page load, and within 15 minutes with nobody looking.
 - Links between apps store a path, never a host. The host comes from `appUrls()` at read time and carries the theme with `withThemeParam`.
 
 ### 8.1 `@kitstak/pulse-bridge` (new package, used by Portal, CRM, WMS, Projects and by Pulse itself for access)
@@ -1122,7 +1134,7 @@ An id is cast to uuid only when it matches the uuid pattern, so one odd id canno
 | `work_orders` + kit `products` | `pulse.jobs` (`source = 'wms'`, number = work order code, `wms_work_order` link, kit SKU and name, `planned_units = requested_qty`) | status map: Open to planned, In Process to active, Completed to completed (with `actual_finish_at`), Cancelled to cancelled, Shortage to active with `wms_shortage = true` (rule R6). Auto created when `wms_auto_create_jobs`, else offered as "Work orders with no job". |
 | `inventory_transactions`, kit built rows | `pulse.production_entries` per work order per day: `units_good`, `source_ref = wms:built:<workOrderId>:<date>`, `hours_confirmed = false` | **Exact predicate**: `type = 'Kitting' AND work_order_id IS NOT NULL AND product_id = work_orders.kit_product_id`. Rows with `to_status = 'Stock'` add `uom_qty`; rows with `from_status = 'Stock'` (disassembly) subtract. Component rows share the type and work order and are excluded by the product test. Day = `at` in the warehouse time zone. If the sum over days differs from `work_orders.processed_qty`, the job gets a Things to fix item. **Adoption**: if a person already typed a row for that job, day, `day` shift and default class, the sync adopts it (adds the `source_ref`; sets units only if the person left them at 0) instead of inserting a second row. The log grid shows these rows as "From the warehouse" and asks for people and hours (rule D1 until then). |
 | `tasks` (Completed, timed, with `work_order_id`) | hint only: suggested people and hours on that row | WMS task time is scan time for one user, never shown as payroll hours and never costed until a person confirms |
-| `work_order_components` | `pulse.material_usage` (`quantity_used = consumed_qty`, `quantity_planned = total_qty`, unit cost snapshot, `supplied_by` left blank so it follows the job and client) and job `material_method = 'actual'` | **Client owned parts cost 0** (4.6): for a warehouse client the rows track quantity and scrap only. They cost money only where the parts owner resolves to `us`. Unit cost snapshot: the `unit_cost` of the `purchase_order_lines` row behind the product's newest `receipts.received_at`; else `products.purchase_price`. |
+| `work_order_components` | `pulse.material_usage` (`quantity_used = consumed_qty`, `quantity_planned = total_qty`, unit cost snapshot, `supplied_by` left blank so it follows the job and client) and job `material_method = 'actual'` | **Client owned parts cost 0** (4.6): for a warehouse client the rows track quantity and scrap only. They cost money only where the parts owner resolves to `us`. Unit cost snapshot: the `unit_cost` of the `purchase_order_lines` row behind the product's newest `receipts.received_at`; else `products.purchase_price`. **Dated the day the part was used**: each part takes the date of its `inventory_transactions` Kitting rows on that work order, in the site time zone (a part leaving a location counts as used, a part coming back is subtracted); anything the ledger does not explain goes on the build day (last kit build, else `actual_finish_at`, else `actual_start_at`). Stable ref `woc:<componentId>:<date>`, so a second pull changes nothing; rows from older pulls are moved to the right day, rows that came another way (`pick:` rows) are never added twice, closed months are left alone and counted. Cents come from BigInt math (`mulQuantityPrice`), never floats. |
 | `kit_components` x cost | standard material cost per kit for the quote and the calculator, counted only for parts we own | |
 | `products` | `pulse.items` (sku, name, cost snapshot, `wms_product_id`; `supplied_by = 'client'` when the product has a `client_id`) | |
 | `lookup_values` (vas_type) + `vas_operations` + `billing_fees` (VAS) | `pulse.vas_services` and `pulse.vas_entries`; revenue = value (Total Price) or value x contract rate (Vas Quantity); no rate gives `amount_cents = null` and a "No price set yet" fix item | tied to a job when `reference_number` is a work order code |
@@ -1151,6 +1163,8 @@ fee and bill rows there, runs the sync and drops it. Pulse never writes to a rea
   (`ended_at IS NOT NULL`, `deleted_at IS NULL`) per day in the site time zone into `pulse.production_entries` (`source = 'projects'`, `source_ref = pm:<projectId>:<date>`,
   `units_good = 0`, headcount = distinct people, hours = minutes / 60 rounded to 2 decimals, the job's default labor class), then costs them with the Pulse rate. The Work log says so:
   "Everyone's project time is costed as Packer." These rows cost money and stay out of pace (4.12). Late edits to time in a closed Pulse month are skipped and listed.
+  When a day's time is gone from Projects, the pulled row for that day is soft deleted, unless its month is closed (counted as skipped) or a person changed its
+  hours. A Projects read that fails marks the sync run failed and keeps every row, so a bad read never removes time.
   The job Work log shows planned time (`sum(estimate_minutes)`) against logged time.
 - Project status, health, due date and progress show on the job header chip.
 
@@ -1194,7 +1208,7 @@ no route sends CORS headers. Every write checks the session, entitlement, role, 
 | `GET /api/v1/summary?from&to` | open jobs, at risk, losing, revenue, cost, profit on jobs, company profit and its bridge, margin, entry progress today |
 | `GET /api/v1/jobs`, `/jobs/[ref]`, `/jobs/attention?limit=` | lists and job detail DTOs with status, reasons (rendered for the reader), totals, projection |
 | `GET /api/v1/profit?by&from&to&...`, `/api/v1/company-bridge?from&to&site` | Profit explorer rows; the bridge lines |
-| `GET /api/v1/log?date&site`, `PUT /api/v1/log/rows` | the day grid; autosave of one row with its `version` (409 with the fresh row when stale) |
+| `GET /api/v1/log?date&site`, `PUT /api/v1/log/rows` | the day grid; autosave of one row with its `version`. Changing a row that exists (by id, or by job, day, shift and labor class) without a version, or with an old one, is 409 with the fresh row, never an overwrite; the update is conditional on the version read under a row lock |
 | `POST /api/v1/import/[batchId]/rows` | upload chunk of raw rows (section 7) |
 | `GET /api/v1/alerts/unread` | `{ count }` |
 | `GET /api/v1/export/<stream>.csv`, `GET /api/v1/reports/<slug>.csv` | CSV files |

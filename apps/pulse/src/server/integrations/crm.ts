@@ -11,6 +11,7 @@ import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { rows, type DomainContext } from '@/server/domain/_shared';
 import { integrationAvailability, tableExists } from './detect';
+import { logSoftFail } from './log';
 
 export interface CrmDeal {
   readonly id: string;
@@ -47,7 +48,8 @@ export async function crmReady(ctx: DomainContext): Promise<boolean> {
   try {
     if (!(await integrationAvailability(ctx)).crm) return false;
     return (await tableExists('crm.items')) && (await tableExists('crm.boards')) && (await tableExists('crm.columns'));
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'crm.crmReady', error);
     return false;
   }
 }
@@ -118,6 +120,12 @@ async function dealRows(ctx: DomainContext, where: SQL, order: SQL, limit: numbe
   });
 }
 
+/**
+ * Won deals first, then newest close date. `won` is worked out in the outer select, so the order
+ * repeats the rule on the inner row (`d.label`): an outer alias cannot be used inside an expression.
+ */
+export const SEARCH_ORDER = sql`(coalesce(d.label ->> 'isDone', 'false') = 'true') desc, d.close_date desc nulls last, d.updated_at desc`;
+
 const idList = (ids: readonly string[]): SQL => sql`(${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`;
 
 /** Deals by id. Ids that are not uuids are ignored, so one odd id cannot break a read. */
@@ -126,7 +134,8 @@ export async function getDeals(ctx: DomainContext, ids: readonly string[]): Prom
   if (clean.length === 0 || !(await crmReady(ctx))) return [];
   try {
     return await dealRows(ctx, sql`i.id in ${idList(clean)}`, sql`d.name`, clean.length);
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'crm.getDeals', error);
     return [];
   }
 }
@@ -139,7 +148,8 @@ export async function listWonDeals(ctx: DomainContext, options: { limit?: number
       ? sql`and (left(i.values #>> '{close_date,date}', 10) !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' or left(i.values #>> '{close_date,date}', 10)::date >= current_date - ${options.sinceDays}::int)`
       : sql``;
     return await dealRows(ctx, sql`coalesce(${STAGE_LABEL} ->> 'isDone', 'false') = 'true' ${since}`, sql`d.close_date desc nulls last, d.updated_at desc`, Math.min(options.limit ?? 50, 500));
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'crm.listWonDeals', error);
     return [];
   }
 }
@@ -150,8 +160,9 @@ export async function searchDeals(ctx: DomainContext, query: string, limit = 12)
   try {
     const text = query.trim().slice(0, 80);
     const match = text ? sql`(i.name ilike ${`%${text}%`} or a.name ilike ${`%${text}%`})` : sql`true`;
-    return await dealRows(ctx, match, sql`d.won desc nulls last, d.close_date desc nulls last, d.updated_at desc`, Math.min(limit, 50));
-  } catch {
+    return await dealRows(ctx, match, SEARCH_ORDER, Math.min(limit, 50));
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'crm.searchDeals', error);
     return [];
   }
 }
@@ -172,7 +183,8 @@ export async function getAccounts(ctx: DomainContext, ids: readonly string[]): P
            where i.org_id = ${ctx.orgId} and i.deleted_at is null and i.id in ${idList(clean)}`,
     );
     return found.map((row) => ({ id: row.id, name: row.name, boardId: row.board_id, health: row.health, coreCustomerId: row.core_customer_id, path: `/${ctx.orgSlug}/boards/${row.board_id}?item=${row.id}` }));
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'crm.getAccounts', error);
     return [];
   }
 }

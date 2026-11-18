@@ -89,6 +89,21 @@ export function errorResponse(error: unknown, headers: Record<string, string> = 
 
 type RouteContext<P> = { params: Promise<P> };
 
+const META = Symbol('pulse.api.meta');
+interface WithMeta<T> {
+  readonly [META]: Readonly<Record<string, unknown>>;
+  readonly data: T;
+}
+
+/** A list answer with paging facts next to it: `{ data, meta }` (meta is never inside `data`). */
+export function withMeta<T>(data: T, meta: Readonly<Record<string, unknown>>): WithMeta<T> {
+  return { [META]: meta, data };
+}
+
+function isWithMeta(value: unknown): value is WithMeta<unknown> {
+  return typeof value === 'object' && value !== null && META in value;
+}
+
 export function apiRoute<P = Record<string, never>, T = unknown>(
   handler: (args: ApiArgs<P>) => Promise<T>,
   options: ApiOptions = {},
@@ -110,7 +125,8 @@ export function apiRoute<P = Record<string, never>, T = unknown>(
         params,
         searchParams: new URL(request.url).searchParams,
       });
-      return NextResponse.json({ data: data ?? null }, { headers: cors });
+      const body = isWithMeta(data) ? { data: data.data ?? null, meta: data[META] } : { data: data ?? null };
+      return NextResponse.json(body, { headers: cors });
     } catch (error) {
       return errorResponse(error, cors);
     }

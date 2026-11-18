@@ -114,7 +114,7 @@ const jobs: JobSpec[] = [
   },
   {
     n: 'J-1026', name: 'Orchard Pet Supply chew toy 3-pack', client: 'ORCH', type: 'KIT', status: 'active', start: -16, crew: 5, pace: 45, quotePace: 68, qm: 0.18, pct: 0.52, mat: 0.05, owner: 'us',
-    pinned: 'The crew beats the target pace. The price is the problem: it was quoted to win the account.',
+    pinned: 'The crew beats the target pace but not the faster pace the quote assumed. The quote was priced to win the account, so the price is the problem.',
     notes: [{ at: 0.3, body: 'Sales matched a competitor at this price. At our real pace each pack costs more to make than it sells for. Reprice before the next order.' }],
     expect: 'losing',
   },
@@ -128,6 +128,9 @@ const jobs: JobSpec[] = [
   { n: 'J-1039', name: 'Copperline January sampler box', client: 'CPL', type: 'SUB', status: 'planned', start: 9, len: 10, crew: 0, pace: 38, planned: 24000, qm: 0.32, mat: 0.06 },
 ];
 
+/** Local demo password for the seeded staff sign ins (the WMS access seed uses the same one). */
+export const DEMO_STAFF_PASSWORD = 'KitStak!demo2026';
+
 export const kitstakPlan: OrgPlan = {
   seed: 'kitstak-2026',
   sites: [
@@ -137,11 +140,12 @@ export const kitstakPlan: OrgPlan = {
   defaultPartsOwner: 'client',
   roles: [
     { email: 'ops.manager@kitstak.io', role: 'manager', seesMoney: true },
-    { email: 'j.okafor@kitstak.io', role: 'supervisor', seesMoney: false },
+    // Demo sign ins for checking money hiding (CONTRACTS section 11). Same password as the WMS seed.
+    { email: 'j.okafor@kitstak.io', role: 'supervisor', seesMoney: false, login: { name: 'Jonah Okafor', orgRole: 'member', password: DEMO_STAFF_PASSWORD } },
     { email: 't.nguyen@kitstak.io', role: 'supervisor', seesMoney: false },
     { email: 'd.castillo@kitstak.io', role: 'supervisor', seesMoney: false },
     { email: 'finance@kitstak.io', role: 'viewer', seesMoney: true },
-    { email: 'cs.team@kitstak.io', role: 'viewer', seesMoney: false },
+    { email: 'cs.team@kitstak.io', role: 'viewer', seesMoney: false, login: { name: 'Evan Brooks', orgRole: 'viewer', password: DEMO_STAFF_PASSWORD } },
     { email: 'dana@apexthreads.com', role: 'none' },
     { email: 'marcus@novaforge.io', role: 'none' },
     { email: 'integrations@kitstak.io', role: 'none' },

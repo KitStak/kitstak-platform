@@ -19,16 +19,23 @@ import {
   createSite,
   deleteProductionEntries,
   evaluateAlerts,
+  getCloseChecklist,
   getCompanyBridge,
   getJob,
+  getOnboardingState,
+  getSettings,
   getProfit,
   getSummary,
   listActivity,
   listAlerts,
   listJobs,
+  listJobTypes,
+  listLaborClasses,
   listLaborRates,
+  listPeriods,
   listProduction,
   listSites,
+  listVasServices,
   markDayComplete,
   reopenPeriod,
   restoreProductionEntries,
@@ -40,8 +47,28 @@ import {
   setMemberRole,
   updateSettings,
 } from './test-exports';
+import * as domain from './test-exports';
 
 const ready = await databaseReady();
+
+/** Every money looking field or sentence in a DTO tree a reader without money received. */
+function moneyLeaks(value: unknown, path: string, leaks: string[] = []): string[] {
+  if (value === null || value === undefined) return leaks;
+  if (typeof value === 'string') {
+    if (/[$€£]\s?\d/.test(value) || /\d\s?%[^.]*margin|margin[^.]*\d\s?%/i.test(value) || /\bcents\b/i.test(value)) leaks.push(`${path}: "${value}"`);
+    return leaks;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => moneyLeaks(item, `${path}[${index}]`, leaks));
+    return leaks;
+  }
+  if (typeof value !== 'object') return leaks;
+  for (const [key, inner] of Object.entries(value)) {
+    if (/(cents|marginbp|marginfloorbp|marginbeforesharedbp|laborpctbp|payrolltaxbp|benefitsbp|burdenbp|unitprice|unitcost|materialcostperunit|unitamount|defaultprice|defaultcostperunit|wage)$/i.test(key) && inner !== null) leaks.push(`${path}.${key} = ${JSON.stringify(inner)}`);
+    moneyLeaks(inner, `${path}.${key}`, leaks);
+  }
+  return leaks;
+}
 
 async function expectError(run: () => Promise<unknown>, code: string, message?: RegExp): Promise<void> {
   let caught: unknown;
@@ -291,7 +318,7 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
         if (Array.isArray(value)) return value.forEach((item, index) => walk(item, `${path}[${index}]`));
         if (typeof value !== 'object') return;
         for (const [key, inner] of Object.entries(value)) {
-          if (/(cents|marginbp|marginbeforesharedbp|laborpctbp|unitprice|unitcost|materialcostperunit|unitamount|defaultprice|defaultcostperunit)$/i.test(key) && inner !== null) leaks.push(`${path}.${key} = ${JSON.stringify(inner)}`);
+          if (/(cents|marginbp|marginfloorbp|marginbeforesharedbp|laborpctbp|payrolltaxbp|benefitsbp|burdenbp|unitprice|unitcost|materialcostperunit|unitamount|defaultprice|defaultcostperunit)$/i.test(key) && inner !== null) leaks.push(`${path}.${key} = ${JSON.stringify(inner)}`);
           walk(inner, `${path}.${key}`);
         }
       };
@@ -306,13 +333,93 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
       walk(await getCompanyBridge(viewer, { from: '2026-01-01', to: '2026-12-31' }), 'bridge');
       walk(await listAlerts(viewer, { status: 'all' }), 'alerts');
       walk((await listActivity(viewer, { limit: 200 })).items, 'activity');
+      // Month close and settings, plus what the job, labor and welcome pages hand to the browser.
+      await org.query(
+        `insert into pulse.periods (org_id, period_month, status, checklist) values ($1, '2025-06-01', 'open', $2::jsonb)
+         on conflict (org_id, period_month) do update set checklist = excluded.checklist`,
+        [org.orgId, JSON.stringify({ periodMonth: '2025-06-01', payrollGapCents: 123456, ready: true })],
+      );
+      for (const who of [viewer, supervisor]) {
+        walk(await listPeriods(who), 'periods');
+        walk(await getCloseChecklist(who, '2026-02'), 'checklist');
+        walk(await getSettings(who), 'settings');
+        walk(await listLaborClasses(who, { includeArchived: true }), 'laborClasses');
+        walk(await listVasServices(who), 'services');
+        walk(await listJobTypes(who), 'jobTypes');
+        walk(await listSites(who), 'sites');
+        walk(await getOnboardingState(who), 'welcome');
+      }
       expect(leaks).toEqual([]);
+      expect((await getSettings(viewer)).moneyHidden).toBe(true);
       // Units, hours and pace are still there.
       const withWork = jobs.find((job) => Number(job.stats.unitsGood) > 0)!;
       expect(Number(withWork.stats.hours)).toBeGreaterThan(0);
       await expectError(() => listLaborRates(viewer), 'FORBIDDEN', /does not include money/);
       await expectError(() => createJob(viewer, { name: 'Nope', clientId }), 'FORBIDDEN');
       await expectError(() => saveProductionEntry(viewer, { jobId: jobs[0]!.id, workDate: '2026-03-02', unitsGood: '1' }), 'FORBIDDEN');
+    });
+
+    it('every other reader a viewer or supervisor without money can open has no money in it', async () => {
+      const range = { from: '2026-01-01', to: '2026-12-31' };
+      const [job] = await listJobs(owner);
+      const [client] = await domain.listClients(owner);
+      const readers: Record<string, (who: DomainContext) => Promise<unknown>> = {
+        clients: (who) => domain.listClients(who),
+        client: (who) => domain.getClient(who, client!.id),
+        items: (who) => domain.listItems(who),
+        attention: (who) => domain.listJobsNeedingAttention(who),
+        jobPrices: (who) => domain.listJobPrices(who, job!.id),
+        jobPlans: (who) => domain.getJobPlans(who, job!.id),
+        jobProfit: (who) => domain.getJobProfit(who, job!.id),
+        logGrid: (who) => domain.getLogGrid(who, {}),
+        reviewQueue: (who) => domain.getReviewQueue(who, {}),
+        paceBoard: (who) => domain.getPaceBoard(who, range),
+        goals: (who) => domain.getGoalsBoard(who, {}),
+        notifications: (who) => domain.listNotifications(who, {}),
+        closeBoard: (who) => domain.getCloseBoard(who),
+        closeDetail: (who) => domain.getCloseDetail(who, '2026-02'),
+        closeEvents: (who) => domain.listCloseEvents(who),
+        trend: (who) => domain.getProfitTrend(who, range),
+        facts: (who) => domain.listFacts(who, range),
+        pivot: (who) => domain.getProfitPivot(who, 'client', 'type', range),
+        profitEntries: (who) => domain.listProfitEntries(who, range),
+        badges: (who) => domain.getBadges(who),
+        laborSummary: (who) => domain.getLaborSummary(who, range),
+        punches: (who) => domain.listPunches(who, {}),
+        quotes: (who) => domain.listQuoteScenarios(who, {}),
+        calculator: (who) => domain.getCalculatorSetup(who),
+        similar: (who) => domain.listSimilarJobs(who, {}),
+        standards: (who) => domain.listStandards(who, {}),
+        targets: (who) => domain.listTargets(who, {}),
+        indirect: (who) => domain.listIndirect(who, {}),
+        paidHours: (who) => domain.listPaidHours(who, {}),
+        materials: (who) => domain.listMaterialUsage(who, {}),
+        services: (who) => domain.listVasEntries(who, {}),
+        costs: (who) => domain.listCosts(who, {}),
+        revenue: (who) => domain.listRevenue(who, {}),
+        dayReviews: (who) => domain.listDayReviews(who, {}),
+        wall: (who) => domain.getWallBoard(who, {}),
+        alertRules: (who) => domain.listAlertRules(who),
+        sample: (who) => domain.getSampleState(who),
+        productionPage: (who) => domain.listProductionPage(who, {}),
+      };
+      const leaks: string[] = [];
+      const opened: string[] = [];
+      for (const [who, label] of [[viewer, 'viewer'], [supervisor, 'supervisor']] as const) {
+        for (const [name, read] of Object.entries(readers)) {
+          let value: unknown;
+          try {
+            value = await read(who);
+          } catch (error) {
+            if (isDomainError(error) && (error.code === 'FORBIDDEN' || error.code === 'NOT_FOUND')) continue;
+            throw error;
+          }
+          opened.push(`${label}.${name}`);
+          moneyLeaks(value, `${label}.${name}`, leaks);
+        }
+      }
+      expect(opened.length).toBeGreaterThan(40);
+      expect(leaks).toEqual([]);
     });
 
     it('the sees money switch shows money but never the wage, and a manager never receives the wage either', async () => {
@@ -323,6 +430,10 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
         expect(rates[0]).toMatchObject({ loadedRateCents: 2176, wageCents: null, payrollTaxBp: null, benefitsBp: null, otherBurdenBp: null, overheadPerHourCents: null, wagesHidden: true });
       }
       await expectError(() => createLaborRate(manager, { laborClassId: packer, effectiveFrom: '2026-09-01', wageCents: 1700 }), 'FORBIDDEN');
+      // Settings: a manager sees money targets but not the wage burden defaults.
+      expect(await getSettings(manager)).toMatchObject({ defaultPayrollTaxBp: null, defaultBenefitsBp: null, defaultOtherBurdenBp: null, defaultOverheadPerHourCents: null, wagesHidden: true, moneyHidden: false });
+      expect((await getSettings(manager)).defaultTargetMarginBp).not.toBeNull();
+      expect((await getSettings(owner)).defaultPayrollTaxBp).not.toBeNull();
     });
 
     it('a supervisor logs the last 7 days only, and not after the day is marked complete', async () => {

@@ -8,6 +8,7 @@
  * here only sums stamped cents.
  */
 import 'server-only';
+import { jobChartLabel } from '@/lib/job-label';
 import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { reportRuns, reportSchedules } from '@/server/db/schema';
@@ -432,7 +433,7 @@ async function jobProfit(ctx: DomainContext, filters: ReportFilters): Promise<Bu
     }),
     total: { job: 'Total', ...profitCells(profit.total) },
     summary: headline(profit.total),
-    chart: rankingChart('Profit by job', sorted.map((row) => ({ label: meta.get(row.key)?.number ?? row.label, profit: row.profitCents }))),
+    chart: rankingChart('Profit by job', sorted.map((row) => ({ label: ((job) => (job ? jobChartLabel(job.number, job.name) : row.label))(meta.get(row.key)), profit: row.profitCents }))),
     notes: ['Each job counts only the work and costs dated inside these days.'],
   };
 }
@@ -733,7 +734,7 @@ async function planVsActualReport(ctx: DomainContext, filters: ReportFilters, wh
     ],
     chart:
       shown.length > 0
-        ? { type: 'hbar', title: `Actual profit against the ${word.toLowerCase()}`, description: `How far each job is from its ${word.toLowerCase()}. Bars to the left are behind.`, labels: shown.map((row) => String(row.cells.job)), series: [{ id: 'difference', label: 'Difference', values: shown.map((row) => row.cells.difference as number) }], format: 'money', signColors: true }
+        ? { type: 'hbar', title: `Actual profit against the ${word.toLowerCase()}`, description: `How far each job is from its ${word.toLowerCase()}. Bars to the left are behind.`, labels: shown.map((row) => jobChartLabel(String(row.cells.job), row.cells.name as string | null)), series: [{ id: 'difference', label: 'Difference', values: shown.map((row) => row.cells.difference as number) }], format: 'money', signColors: true }
         : null,
     notes: [`Jobs with work logged inside these days. Each job shows its whole life so far, against the ${word.toLowerCase()} for the work done so far.`],
   };
@@ -783,7 +784,7 @@ async function openJobsAtRisk(ctx: DomainContext, filters: ReportFilters): Promi
       { label: 'At risk', value: jobs.length - losing, kind: 'number' },
       { label: 'Projected profit of these jobs', value: impact, kind: 'money' },
     ],
-    chart: rankingChart('Projected profit of jobs at risk', jobs.map((job) => ({ label: job.number, profit: job.stats.projectedProfitCents }))),
+    chart: rankingChart('Projected profit of jobs at risk', jobs.map((job) => ({ label: jobChartLabel(job.number, job.name), profit: job.stats.projectedProfitCents }))),
     notes: ['This report is about right now, so the dates above do not change it. Worst jobs first.'],
   };
 }
@@ -811,7 +812,7 @@ async function paceVsTarget(ctx: DomainContext, filters: ReportFilters): Promise
       { label: 'Jobs with no target pace', value: list.length - withTarget.length, kind: 'number' },
       { label: 'Labor hours', value: num(profit.total.hours), kind: 'hours' },
     ],
-    chart: shown.length > 0 ? { type: 'hbar', title: 'Pace as a share of target', description: '100% means the crew hit the target pace. Slowest jobs at the top.', labels: shown.map((item) => item.job.number), series: [{ id: 'pct', label: 'Pace as % of target', values: shown.map((item) => item.pct) }], format: 'percent' } : null,
+    chart: shown.length > 0 ? { type: 'hbar', title: 'Pace as a share of target', description: '100% means the crew hit the target pace. Slowest jobs at the top.', labels: shown.map((item) => jobChartLabel(item.job.number, item.job.name)), series: [{ id: 'pct', label: 'Pace as % of target', values: shown.map((item) => item.pct) }], format: 'percent' } : null,
     notes: ['Pace here is units over all labor hours inside these days, setup time included.'],
   };
 }
@@ -894,7 +895,7 @@ async function materialAndScrap(ctx: DomainContext, filters: ReportFilters): Pro
       { label: 'Scrap as % of material', value: money ? scrapRateBp(scrap, material) : null, kind: 'percent' },
       { label: 'Units scrapped', value: scrapUnits, kind: 'number' },
     ],
-    chart: money && top.length > 0 ? { type: 'hbar', title: 'Scrap cost by job', description: 'The jobs that lost the most money to scrap.', labels: top.map((row) => row.number), series: [{ id: 'scrap', label: 'Scrap cost', values: top.map((row) => centsOut(row.scrap)) }], format: 'money' } : null,
+    chart: money && top.length > 0 ? { type: 'hbar', title: 'Scrap cost by job', description: 'The jobs that lost the most money to scrap.', labels: top.map((row) => jobChartLabel(row.number, row.name)), series: [{ id: 'scrap', label: 'Scrap cost', values: top.map((row) => centsOut(row.scrap)) }], format: 'money' } : null,
     notes: ['Scrap cost is part of material cost. Parts the client supplied cost you nothing, so they show as scrapped parts with no scrap cost.'],
   };
 }
@@ -945,7 +946,7 @@ async function readyToBill(ctx: DomainContext, filters: ReportFilters): Promise<
       { label: 'Of that, on finished jobs', value: done.reduce<number | null>((sum, job) => (job.stats.notBilledYetCents === null ? sum : (sum ?? 0) + job.stats.notBilledYetCents), jobs.length > 0 ? 0 : null), kind: 'money' },
       { label: 'Jobs waiting for an invoice', value: jobs.length, kind: 'number' },
     ],
-    chart: top.length > 0 ? { type: 'hbar', title: 'Not billed yet by job', description: 'Earned work that is not on an invoice, biggest first.', labels: top.map((job) => job.number), series: [{ id: 'not_billed', label: 'Not billed yet', values: top.map((job) => job.stats.notBilledYetCents) }], format: 'money' } : null,
+    chart: top.length > 0 ? { type: 'hbar', title: 'Not billed yet by job', description: 'Earned work that is not on an invoice, biggest first.', labels: top.map((job) => jobChartLabel(job.number, job.name)), series: [{ id: 'not_billed', label: 'Not billed yet', values: top.map((job) => job.stats.notBilledYetCents) }], format: 'money' } : null,
     notes: ['This report is about right now, so the dates above do not change it. Earned is work done at the job price. Billed is what you put on invoices.'],
   };
 }

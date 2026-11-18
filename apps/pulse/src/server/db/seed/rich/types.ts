@@ -172,7 +172,8 @@ export interface OrgPlan {
   seed: string;
   sites: SiteSpec[];
   defaultPartsOwner: 'us' | 'client';
-  roles: { email: string; role: PulseRole; seesMoney?: boolean }[];
+  /** Pulse roles. `login` also makes the person a demo sign in when no other seed made them. */
+  roles: { email: string; role: PulseRole; seesMoney?: boolean; login?: { name: string; orgRole: 'member' | 'viewer'; password: string } }[];
   classes: ClassSpec[];
   types: TypeSpec[];
   services: ServiceSpec[];

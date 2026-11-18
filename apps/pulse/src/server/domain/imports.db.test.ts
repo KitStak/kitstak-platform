@@ -197,6 +197,34 @@ describe.skipIf(!ready)('imports and exports', () => {
     expect(gone).toHaveLength(0);
   });
 
+  it('treats an unknown labor class as a problem unless new classes are turned on', async () => {
+    const csv = ['work_date,job_number,shift,labor_class,units_good,people,hours_each', '2026-11-12,J-1042,day,GHOST,40,1,2'].join('\n');
+    // Add what is missing is on by default, and still does not invent a labor class at a default rate.
+    const strict = await upload(owner, 'production', csv);
+    expect(strict.options.createLaborClasses).toBe(false);
+    expect(strict.counts).toMatchObject({ error: 1, create: 0 });
+    expect(strict.willCreate).toEqual([]);
+    expect(strict.missingLaborClasses).toEqual(['GHOST']);
+    const problem = await listImportRows(owner, strict.id, { action: 'error' });
+    expect(problem.rows[0]?.messages[0]).toMatchObject({ level: 'error', column: 'labor_class' });
+    expect(problem.rows[0]?.messages[0]?.text).toBe('There is no labor class GHOST. Add it in Labor first, or turn on Add new labor classes.');
+    // Turning it on from the Check step adds the class, and says so.
+    const open = await checkImportBatch(owner, strict.id, { options: { createLaborClasses: true } });
+    expect(open.counts).toMatchObject({ error: 0, create: 1 });
+    expect(open.willCreate).toEqual([{ kind: 'labor_class', code: 'GHOST' }]);
+    expect(open.missingLaborClasses).toEqual([]);
+    await discardImportBatch(owner, open.id);
+    const none = await org.query("select 1 from pulse.labor_classes where org_id = $1 and code = 'GHOST'", [org.orgId]);
+    expect(none).toHaveLength(0);
+  });
+
+  it('a blank entry id that matches the job, day, shift and labor class updates that entry', async () => {
+    const csv = ['entry_id,work_date,job_number,shift,labor_class,units_good', ',2026-11-03,J-1042,day,PACK,810'].join('\n');
+    const checked = await upload(owner, 'production', csv);
+    expect(checked.counts).toMatchObject({ update: 1, create: 0, error: 0 });
+    await discardImportBatch(owner, checked.id);
+  });
+
   it('refuses rows in a closed month and keeps the history', async () => {
     await org.query("insert into pulse.periods (org_id, period_month, status, closed_at) values ($1, '2026-10-01', 'closed', now())", [org.orgId]);
     const checked = await upload(owner, 'costs', ['cost_date,category,amount', '2026-10-15,rent,100.00'].join('\n'));

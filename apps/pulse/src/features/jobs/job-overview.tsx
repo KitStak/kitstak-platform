@@ -49,13 +49,17 @@ import {
   formatUnits,
 } from '@/lib/format';
 import { absBig, centsToNumber, perHourCents, perUnitCents, subCents, toCents } from '@/lib/money';
-import { CONFIDENCE_LABELS, paceDays, runningTotal, shouldCostPerUnit, unitsPerHour } from '@/lib/profit';
+import { CONFIDENCE_LABELS, paceDays, runningTotal, shouldCostPerUnit, targetMarginBp, unitsPerHour } from '@/lib/profit';
 import { shortDate } from '@/lib/profit/calendar';
+import { planHasCosts } from '@/lib/profit/plan';
+import { recentDays } from '@/lib/profit/risk';
 import { routes } from '@/lib/routes';
 import type { JobDetailDTO, JobLinkDTO, LaborClassDTO, SettingsDTO, VasServiceDTO } from '@/lib/types';
 import { addJobLinkAction, removeJobLinkAction } from '@/server/actions/jobs';
 import { useJobDaily, useJobProduction, useRefreshJob } from './job-data';
+import { latestWorkByDay } from './latest-work';
 import { nextStepHref, planInUse, planToTotals, rowPace, singularUnit, statsToActual } from './job-math';
+import { jobHeadlineFigures, paceYardsticks, planPace } from './job-figures';
 import { Explain, UnitsProgress } from './job-ui';
 import { JobWhatIf } from './job-whatif';
 import { callAction, useJobActions } from './use-job-actions';
@@ -137,12 +141,18 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
   const daily = useJobDaily(job.number, seesMoney);
 
   const actual = statsToActual(stats);
-  const plan = planToTotals(planInUse(job));
+  // A plan with only a price says nothing about cost, so it gives no "should cost".
+  const pricedPlan = planToTotals(planInUse(job));
+  const plan = planHasCosts(pricedPlan) ? pricedPlan : null;
+  const figures = jobHeadlineFigures(stats, job.plannedUnits);
+  const yardsticks = paceYardsticks({
+    uph: stats.uph,
+    targetPace: stats.standardUph,
+    planPace: planPace(plan),
+    planWord: job.budget ? 'budget' : 'quote',
+  });
   const laborPerHour = stats.laborCents === null ? null : perHourCents(stats.laborCents, stats.hours);
-  const costPerUnit =
-    actual && Number(stats.unitsGood) > 0
-      ? perUnitCents(toCents(stats.costCents ?? 0), stats.unitsGood)
-      : null;
+  const costPerUnit = actual ? figures.costPerUnitSoFarCents : null;
   const shouldCost = actual && plan && Number(stats.unitsGood) > 0 ? shouldCostPerUnit(plan, actual) : null;
   const planCostPerUnit =
     plan && plan.units !== null && Number(plan.units) > 0
@@ -156,7 +166,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
       : null;
   const health = stats.riskStatus
     ? null
-    : marginHealth(stats.marginBp, stats.targetMarginBp ?? settings.defaultTargetMarginBp);
+    : marginHealth(stats.marginBp, targetMarginBp({ job: stats.targetMarginBp, orgDefault: settings.defaultTargetMarginBp }));
 
   const money = useMemo(() => {
     const rows = [...(daily.data?.rows ?? [])].sort((a, b) => a.key.localeCompare(b.key));
@@ -200,7 +210,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
         reason.nextStep && all.findIndex((other) => other.nextStep === reason.nextStep) === index,
     )
     .slice(0, 3);
-  const recent = (production.data ?? []).filter((row) => row.deletedAt === null).slice(0, 7);
+  const recent = latestWorkByDay(production.data ?? []);
   const lateBy = job.dueDate && stats.projectedFinishDate && stats.projectedFinishDate > job.dueDate;
 
   return (
@@ -446,7 +456,9 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
               footer={
                 stats.mode === 'projected' ? (
                   <span className="text-xs text-fg-muted">
-                    Heading for {formatMoney(stats.projectedProfitCents, { cents: false })}
+                    {stats.projectedProfitCents === null
+                      ? 'Heading for: not known until there is a plan or a day of work'
+                      : `Heading for ${formatMoney(stats.projectedProfitCents, { cents: false })}`}
                   </span>
                 ) : undefined
               }
@@ -548,7 +560,14 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                     size="sm"
                   />
                 ) : null}
-                <span className="text-xs text-fg-muted">target {formatPace(stats.standardUph)}</span>
+                <span className="text-xs text-fg-muted" data-testid="pace-yardstick">
+                  {yardsticks.againstTarget}
+                </span>
+                {figures.paceRecent ? (
+                  <span className="text-xs text-fg-muted" data-testid="pace-recent">
+                    {recentDays(figures.paceRecent.days) ?? 'Lately'}: {figures.paceRecent.text}
+                  </span>
+                ) : null}
               </>
             ) : (
               <span className="text-xs text-fg-muted">No target pace set</span>
@@ -575,7 +594,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
         {seesMoney ? (
           <>
             <KpiTile
-              label={`Cost for one ${unit}`}
+              label={`Cost for one ${unit} so far`}
               value={costPerUnit === null ? null : formatMoney(costPerUnit)}
               emptyText="No units yet"
               footer={
@@ -614,6 +633,15 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                       value: shouldCost === null ? 'No plan' : formatMoney(shouldCost),
                       kind: 'note',
                     },
+                    ...(figures.costPerUnitAtFinishCents !== null && stats.mode === 'projected'
+                      ? [
+                          {
+                            label: 'By the finish, at this pace',
+                            value: formatMoney(figures.costPerUnitAtFinishCents),
+                            kind: 'note' as const,
+                          },
+                        ]
+                      : []),
                   ]}
                 />
               }
@@ -681,6 +709,16 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
           </>
         )}
       </div>
+
+      {yardsticks.conflict ? (
+        <p
+          className="flex items-start gap-2 rounded-lg border border-border-subtle bg-sunken px-3.5 py-2.5 text-sm text-fg-secondary"
+          data-testid="pace-yardsticks"
+        >
+          <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-muted" />
+          <span>{yardsticks.conflict}</span>
+        </p>
+      ) : null}
 
       {/* Charts. */}
       <div className="grid gap-5 lg:grid-cols-2">
@@ -775,8 +813,13 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                 : 'No work logged yet. The first day you log shows up here.'}
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table aria-label="Latest work entries">
+            <div
+              role="region"
+              aria-label="Latest work, one row per day"
+              tabIndex={0}
+              className="overflow-x-auto rounded-b-xl focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+            >
+              <Table aria-label="Latest work, one row per day">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
                     <TableHeaderCell>Day</TableHeaderCell>

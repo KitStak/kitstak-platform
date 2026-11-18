@@ -20,6 +20,7 @@ import { cn } from '@/components/ui/cn';
 import { formatHours, formatMoney, formatMoneyWhole, formatNumber, formatPace, formatPercentBp, formatPercentWhole } from '@/lib/format';
 import { useAlerts, useJobsNeedingAttention, useProfit, useSummary } from '@/lib/hooks/use-data';
 import { CONFIDENCE_LABELS } from '@/lib/profit/types';
+import { companyMarginBp } from './company-margin';
 import { suggestBucket } from '@/lib/profit/trends';
 import { compareRange, rangeLabel, type RangePreset } from '@/lib/reports';
 import { routes } from '@/lib/routes';
@@ -157,6 +158,8 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
       ].filter((item) => item.count > 0 && (seesMoney || item.one.includes('hours')))
     : [];
   const loadingTiles = !total;
+  // Jobs are not the company: after time not on a job and overhead, the company keeps less.
+  const companyMargin = total && bridge ? companyMarginBp(bridge.companyProfitCents, total.revenueCents) : null;
   const clientRows = ranking(byClient.data?.rows ?? [], (row) => (seesMoney ? row.profitCents : num(row.unitsGood)));
   const typeRows = ranking(byType.data?.rows ?? [], (row) => (seesMoney ? row.profitCents : num(row.unitsGood)));
   const cost = total && seesMoney ? [{ id: 'labor', label: 'Labor', value: total.laborCents ?? 0 }, { id: 'material', label: 'Material', value: total.materialCents ?? 0 }, { id: 'other', label: 'Other costs', value: total.otherCents ?? 0 }, { id: 'shared', label: 'Time not on a job', value: total.sharedCents ?? 0 }].filter((slice) => slice.value > 0) : [];
@@ -230,7 +233,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
           <KpiTile label="Revenue" loading={loadingTiles} value={total ? formatMoneyWhole(total.revenueCents) : null} delta={total ? moneyDelta(total.revenueCents, previous?.revenueCents, 'up', vs) : undefined} sparkline={spark((row) => row.revenueCents)} explain={<ExplainNumber metric="revenue" scope={scope} />} />
           <KpiTile label="Cost" loading={loadingTiles} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, previous?.costCents, 'down', vs) : undefined} sparkline={spark((row) => row.costCents)} explain={<ExplainNumber metric="cost" scope={scope} />} />
           <KpiTile label="Profit on jobs" loading={loadingTiles} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, previous?.profitCents, 'up', vs) : undefined} sparkline={spark((row) => row.profitCents)} explain={<ExplainNumber metric="profit" scope={scope} />} />
-          <KpiTile label="Margin after all costs" loading={loadingTiles} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined} sparkline={spark((row) => row.marginBp)} explain={<ExplainNumber metric="margin" scope={scope} />} />
+          <KpiTile label="Margin on jobs" loading={loadingTiles} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined} sparkline={spark((row) => row.marginBp)} explain={<ExplainNumber metric="margin" scope={scope} />} footer={companyMargin !== null ? <span className="text-xs text-fg-muted" data-testid="home-company-margin">Company margin, after overhead: <span className="font-medium text-fg tabular-nums">{formatPercentBp(companyMargin)}</span></span> : undefined} />
           <KpiTile label="Labor as % of revenue" loading={loadingTiles} value={total ? formatPercentBp(total.laborPctBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.laborPctBp, previous?.laborPctBp, 'down', vs) : undefined} sparkline={spark((row) => row.laborPctBp)} explain={<ExplainNumber metric="labor_pct" scope={scope} />} />
           <KpiTile label="Units per person per hour" loading={loadingTiles} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
         </div>
@@ -362,7 +365,12 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                         </span>
                         <span className="block truncate text-sm text-fg-secondary">{alert.body}</span>
                       </span>
-                      {seesMoney && alert.impactCents !== null && alert.impactCents !== 0 ? <span className="shrink-0 text-sm text-danger-text tabular-nums">{formatMoney(alert.impactCents, { cents: false })}</span> : null}
+                      {seesMoney && alert.impactCents !== null && alert.impactCents !== 0 ? (
+                        <span className="shrink-0 text-right text-sm text-danger-text tabular-nums" data-testid="home-alert-stake">
+                          {formatMoney(alert.impactCents, { cents: false })}
+                          {alert.impactAsOf === 'fired' ? <span className="block text-xs text-fg-muted">when it fired</span> : null}
+                        </span>
+                      ) : null}
                     </Link>
                   </li>
                 ))}
@@ -380,7 +388,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
           ) : seesMoney ? (
             <ComboChart
               title="Revenue, cost and margin over time"
-              description="Bars show revenue and cost. The line on top is the margin after all costs, next to your target margin."
+              description="Bars show revenue and cost. The line on top is the margin on jobs, next to your target margin."
               loading={!trend.data}
               refreshing={trend.isFetching && Boolean(trend.data)}
               dates={dates}
@@ -389,7 +397,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                 { id: 'revenue', label: 'Revenue', values: points.map((row) => row.revenueCents) },
                 { id: 'cost', label: 'Cost', values: points.map((row) => row.costCents) },
               ]}
-              lines={[{ id: 'margin', label: 'Margin after all costs', values: points.map((row) => row.marginBp) }]}
+              lines={[{ id: 'margin', label: 'Margin on jobs', values: points.map((row) => row.marginBp) }]}
               barFormat="money"
               lineFormat="percent"
               lineTarget={{ value: targetMarginBp, label: 'Target margin' }}

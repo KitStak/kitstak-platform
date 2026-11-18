@@ -61,7 +61,7 @@ import {
   type PlanInput,
   type ProductionInput,
 } from '@/server/domain';
-import { orgMembers } from '../context';
+import { ensureDemoLogin, orgMembers } from '../context';
 import type { ClassSpec, JobSpec, OrgPlan } from './types';
 
 /* ------------------------------------------------------------------ small helpers */
@@ -157,6 +157,7 @@ export interface RichSummary {
 export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichSummary> {
   const started = Date.now();
   const log = (text: string): void => void process.stdout.write(`  [${ctx.orgSlug}] ${text}\n`);
+  for (const role of plan.roles) if (role.login) await ensureDemoLogin(ctx.orgId, { email: role.email, ...role.login });
   const members = await orgMembers(ctx.orgId);
   const userId = (email: string | undefined): string | null => members.find((member) => member.email === email)?.id ?? null;
 

@@ -297,7 +297,7 @@ function MapStep({ batch, onChecked, onDiscard }: { readonly batch: ImportBatchD
               checked={options.createMissing}
               onCheckedChange={(checked) => setOptions((current) => ({ ...current, createMissing: checked }))}
               label="Add what is missing"
-              description="When the file names a client, job type, labor class or item that Pulse does not have yet, add it. Each one is listed in the check."
+              description="When the file names a client, job type or item that Pulse does not have yet, add it. Each one is listed in the check. New labor classes are asked for on the next step."
               data-testid="option-create-missing"
             />
 
@@ -443,6 +443,15 @@ function CountTiles({ counts, filter, onFilter }: { readonly counts: ImportCount
       })}
     </ul>
   );
+}
+
+/** "PACK", "PACK and LEAD" or "PACK, LEAD and 3 more", for a sentence. */
+function listWords(codes: readonly string[]): string {
+  const shown = codes.slice(0, 3);
+  const more = codes.length - shown.length;
+  if (more > 0) return `${shown.join(', ')} and ${more} more`;
+  if (shown.length <= 1) return shown[0] ?? '';
+  return `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`;
 }
 
 function CheckStep({ batch, onBatch, onRemap, onDiscard }: { readonly batch: ImportBatchDTO; readonly onBatch: (batch: ImportBatchDTO) => void; readonly onRemap: () => void; readonly onDiscard: () => void }) {
@@ -621,6 +630,20 @@ function CheckStep({ batch, onBatch, onRemap, onDiscard }: { readonly batch: Imp
                   </Button>
                 </div>
               </div>
+            ) : null}
+            {batch.missingLaborClasses.length > 0 || options.createLaborClasses ? (
+              <Checkbox
+                checked={options.createLaborClasses}
+                disabled={working}
+                onCheckedChange={(checked) => void recheck({ createLaborClasses: checked === true })}
+                label="Add new labor classes"
+                description={
+                  batch.missingLaborClasses.length > 0
+                    ? `Pulse does not have ${listWords(batch.missingLaborClasses)}. Turn this on to add ${batch.missingLaborClasses.length === 1 ? 'it' : 'them'}. A new class has no rate yet, so its hours cost the workspace default until you set one in Labor.`
+                    : 'New labor classes in this file will be added. A new class has no rate yet, so its hours cost the workspace default until you set one in Labor.'
+                }
+                data-testid="option-create-labor-classes"
+              />
             ) : null}
             {counts.lookalike > 0 || options.lookalikes === 'add' ? (
               <Switch

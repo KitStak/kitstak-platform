@@ -59,6 +59,7 @@ import {
 import { LoadError, Section, TableSkeleton, comparable, moneyDelta, numberDelta, pointsDelta } from './profit-ui';
 import { CHART_MEASURES, ChartView, ContributionView, ParetoView, PivotView, ServeView, TableView, type ChartMeasure } from './profit-views';
 import { useQueryState } from './use-query-state';
+import { companyMarginBp } from '@/features/home/company-margin';
 import { ViewsMenu } from './views-menu';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -288,7 +289,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
                 <KpiTile label="Revenue" loading={!total} value={total ? formatMoneyWhole(total.revenueCents) : null} delta={total ? moneyDelta(total.revenueCents, prior?.revenueCents, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="revenue" scope={scope} />} />
                 <KpiTile label="Cost" loading={!total} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, prior?.costCents, 'down', compareLabel) : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
                 <KpiTile label="Profit" loading={!total} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, prior?.profitCents, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />
-                <KpiTile label="Margin after all costs" loading={!total} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue' }) : null} delta={total ? pointsDelta(total.marginBp, prior?.marginBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin" scope={scope} />} footer={!comparing && total?.marginBp !== null && total ? <span className="text-xs text-fg-muted">Target {formatPercentWhole(targetMarginBp)}</span> : undefined} />
+                <KpiTile label="Margin on jobs" loading={!total} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue' }) : null} delta={total ? pointsDelta(total.marginBp, prior?.marginBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin" scope={scope} />} footer={!comparing && total?.marginBp !== null && total ? <span className="text-xs text-fg-muted">Target {formatPercentWhole(targetMarginBp)}{wholeCompany && bridge.data && companyMarginBp(bridge.data.companyProfitCents, total.revenueCents) !== null ? <>. Company margin, after overhead: <span className="font-medium text-fg tabular-nums" data-testid="profit-company-margin">{formatPercentBp(companyMarginBp(bridge.data.companyProfitCents, total.revenueCents))}</span></> : null}</span> : undefined} />
                 <KpiTile label="Margin before shared costs" loading={!total} value={total ? formatPercentBp(total.marginBeforeSharedBp, { empty: 'No revenue' }) : null} delta={total ? pointsDelta(total.marginBeforeSharedBp, prior?.marginBeforeSharedBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin_before_shared" scope={scope} />} />
               </>
             ) : null}

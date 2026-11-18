@@ -29,11 +29,18 @@ export async function PUT(request: Request): Promise<NextResponse> {
       for (const issue of parsed.error.issues) fields[issue.path.join('.') || 'form'] ??= issue.message;
       throw new DomainError('VALIDATION', 'Some fields need another look.', fields);
     }
+    const input = parsed.data;
     try {
-      return NextResponse.json({ data: await saveProductionEntry(ctx, parsed.data) });
+      // An open editor must send the version it read: a missing or old one is a 409, never an overwrite.
+      return NextResponse.json({ data: await saveProductionEntry(ctx, input, { requireVersion: true }) });
     } catch (error) {
-      if (isDomainError(error) && error.code === 'CONFLICT' && parsed.data.id) {
-        const [fresh] = (await listProduction(ctx, { jobId: parsed.data.jobId, from: parsed.data.workDate, to: parsed.data.workDate, includeDeleted: true })).filter((row) => row.id === parsed.data.id);
+      if (isDomainError(error) && error.code === 'CONFLICT') {
+        // The row as it is now: by id, or (a line the editor thought was new) by job, day, shift and labor class.
+        const sameDay = await listProduction(ctx, { jobId: input.jobId, from: input.workDate, to: input.workDate, includeDeleted: Boolean(input.id) });
+        const shift = input.shift?.trim() || 'day';
+        const fresh = input.id
+          ? sameDay.find((row) => row.id === input.id)
+          : sameDay.find((row) => row.deletedAt === null && row.shift === shift && row.laborClassId === (input.laborClassId ?? null));
         return NextResponse.json({ error: { code: error.code, message: error.message, fresh: fresh ?? null } }, { status: 409 });
       }
       throw error;

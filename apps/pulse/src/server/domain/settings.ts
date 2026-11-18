@@ -11,7 +11,7 @@ import { invalid } from '@/server/errors';
 import type { AlertKind, AlertSeverity } from '@/lib/constants';
 import { isPulseRole, type PulseRole } from '@/lib/permissions';
 import type { SettingsDTO } from '@/lib/types';
-import { defined, diff, inTx, iso, isValidTimezone, moneyOut, type DomainContext } from './_shared';
+import { defined, diff, hideUnless, inTx, iso, isValidTimezone, moneyOut, type DomainContext } from './_shared';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
 
@@ -95,8 +95,14 @@ export async function generalJobTypeId(orgId: string, executor: Executor = db): 
   return created!.id;
 }
 
-export function toSettingsDTO(row: SettingsRow, access: Pick<PulseAccess, 'seesMoney'>): SettingsDTO {
+/**
+ * Money hiding (SPEC section 3): money targets and dollar defaults need `money:read`; the wage
+ * burden defaults (payroll taxes, benefits, other burden, overhead per hour) need `wage:read`,
+ * the same as the wage detail of a labor rate.
+ */
+export function toSettingsDTO(row: SettingsRow, access: Pick<PulseAccess, 'seesMoney' | 'seesWages'>): SettingsDTO {
   const money = access.seesMoney;
+  const wages = access.seesWages && money;
   return {
     currency: row.currency,
     timezone: row.timezone,
@@ -104,14 +110,14 @@ export function toSettingsDTO(row: SettingsRow, access: Pick<PulseAccess, 'seesM
     fiscalYearStartMonth: row.fiscalYearStartMonth,
     workingDays: row.workingDays,
     defaultShiftHours: row.defaultShiftHours,
-    defaultPayrollTaxBp: row.defaultPayrollTaxBp,
-    defaultBenefitsBp: row.defaultBenefitsBp,
-    defaultOtherBurdenBp: row.defaultOtherBurdenBp,
-    defaultOverheadPerHourCents: moneyOut(money, row.defaultOverheadPerHourCents),
+    defaultPayrollTaxBp: hideUnless(wages, row.defaultPayrollTaxBp),
+    defaultBenefitsBp: hideUnless(wages, row.defaultBenefitsBp),
+    defaultOtherBurdenBp: hideUnless(wages, row.defaultOtherBurdenBp),
+    defaultOverheadPerHourCents: moneyOut(wages, row.defaultOverheadPerHourCents),
     defaultOvertimeMultiplier: row.defaultOvertimeMultiplier,
     defaultLoadedRateCents: moneyOut(money, row.defaultLoadedRateCents),
-    defaultTargetMarginBp: row.defaultTargetMarginBp,
-    marginFloorBp: row.marginFloorBp,
+    defaultTargetMarginBp: hideUnless(money, row.defaultTargetMarginBp),
+    marginFloorBp: hideUnless(money, row.marginFloorBp),
     atRiskGapBp: row.atRiskGapBp,
     laborWatchOverBp: row.laborWatchOverBp,
     laborRiskOverBp: row.laborRiskOverBp,
@@ -139,6 +145,7 @@ export function toSettingsDTO(row: SettingsRow, access: Pick<PulseAccess, 'seesM
     onboarding: row.onboarding,
     sampleLoadedAt: iso(row.sampleLoadedAt),
     moneyHidden: !money,
+    wagesHidden: !wages,
   };
 }
 

@@ -58,6 +58,7 @@ import type { JobPlanDTO } from '@/lib/types';
 import { deletePlanAction, makeBudgetFromQuoteAction, savePlanAction } from '@/server/actions/jobs';
 import { PlanDialog } from './forms/job-dialogs';
 import { useJobCosts, useJobProduction, useJobProjection, useJobServices, useRefreshJob } from './job-data';
+import { paceYardsticks, planPace } from './job-figures';
 import { planToTotals, statsToActual } from './job-math';
 import type { JobTabProps } from './job-overview';
 import { Explain, LoadError, toneClass } from './job-ui';
@@ -320,6 +321,16 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
   const planWord = view === 'quote' || against === 'quote' || !job.budget ? 'quote' : 'budget';
   const drag = waterfall ? biggestDrag(waterfall.bars) : null;
   const lift = waterfall ? biggestLift(waterfall.bars) : null;
+  const yardsticks = paceYardsticks({ uph: job.stats.uph, targetPace: job.stats.standardUph, planPace: planPace(plan), planWord });
+  // Which plan the Plan view uses, in one line, so "Plan" never quietly means the quote.
+  const planSource =
+    view !== 'plan'
+      ? null
+      : !job.budget
+        ? 'There is no budget yet, so your plan is the quote.'
+        : against === 'quote'
+          ? 'Compared with the quote, not your budget.'
+          : 'Your plan is your budget.';
 
   return (
     <div className="flex flex-col gap-5" data-testid="job-plan">
@@ -411,9 +422,7 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
       </div>
 
       <Panel
-        title={
-          view === 'quote' ? 'Quote vs actual' : `${planWord === 'budget' ? 'Budget' : 'Quote'} vs actual`
-        }
+        title={view === 'quote' ? 'Quote vs actual' : 'Plan vs actual'}
         action={
           <Explain
             title="The plan column"
@@ -445,6 +454,11 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
         }
         bodyClassName="p-0"
       >
+        {planSource ? (
+          <p className="border-b border-border-subtle px-4 py-2.5 text-sm text-fg-secondary" data-testid="plan-source">
+            {planSource}
+          </p>
+        ) : null}
         {!table || !plan ? (
           <p className="p-4 text-sm text-fg-secondary">There is no {planWord} to compare with yet.</p>
         ) : (
@@ -534,6 +548,10 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
             </ul>
             <p className="border-t border-border-subtle px-4 py-2.5 text-xs text-fg-muted">
               Green means better than the plan, red means worse. For costs and hours, less is better.
+              {yardsticks.againstPlan && rows.some((row) => row.key === 'uph')
+                ? ` Units per person per hour is compared ${yardsticks.againstPlan}.`
+                : ''}
+              {yardsticks.conflict ? <span className="mt-1 block text-fg-secondary" data-testid="plan-pace-yardsticks">{yardsticks.conflict}</span> : null}
               {projection.loading
                 ? ' Loading the projection.'
                 : !showProjected && !completed && job.status === 'active'

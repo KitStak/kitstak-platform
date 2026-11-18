@@ -104,6 +104,17 @@ export function planFigures(plan: PlanTotals): PlanFigures {
 }
 
 /**
+ * True when a plan says what the work should cost: some labor hours, labor, material, other or
+ * shared cost. A plan with only units and revenue (what the quick add row saves from a price)
+ * is a price, not a cost plan, so it cannot tell if the job makes money.
+ */
+export function planHasCosts(plan: PlanTotals | null | undefined): boolean {
+  if (!plan) return false;
+  const s = scalePlan(plan);
+  return s.hours > ZERO || s.labor > ZERO || s.material > ZERO || s.other > ZERO || s.shared > ZERO;
+}
+
+/**
  * The share of the job that is done (`f` in 4.10): units good over plan units; for a plan with
  * no units, labor hours over plan hours; with neither, 1 ("Whole job"). It may go above 1.
  */

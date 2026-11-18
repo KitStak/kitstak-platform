@@ -11,7 +11,8 @@ loadDotenv({ path: path.join(APP_ROOT, '.env.local'), quiet: true });
 loadDotenv({ path: path.join(APP_ROOT, '.env'), quiet: true });
 
 import { and, eq, sql } from 'drizzle-orm';
-import { member, organization, user } from '@kitstak/db/schema';
+import { hashPassword } from 'better-auth/crypto';
+import { account, member, organization, user } from '@kitstak/db/schema';
 import { db, getPool } from '@/server/db';
 import { memberRoles } from '@/server/db/schema';
 import type { DomainContext } from '@/server/domain/_shared';
@@ -72,6 +73,32 @@ export async function ensurePulseOwner(ctx: DomainContext): Promise<void> {
     .insert(memberRoles)
     .values({ orgId: ctx.orgId, userId: ctx.userId, role: 'owner', seesMoney: true, updatedBy: ctx.userId })
     .onConflictDoUpdate({ target: [memberRoles.orgId, memberRoles.userId], set: { role: 'owner', seesMoney: true, updatedAt: new Date() } });
+}
+
+/** A demo sign in a seed makes sure exists. Local demo data only: never point a seed at production. */
+export interface DemoLogin {
+  readonly email: string;
+  readonly name: string;
+  readonly orgRole: 'member' | 'viewer';
+  readonly password: string;
+}
+
+/**
+ * Makes sure a demo person can sign in to the org: adds the user with an email and password
+ * account and the org membership when they are missing. An existing user keeps their password
+ * and their membership role, so the WMS and Projects seeds (which make the same people) win.
+ */
+export async function ensureDemoLogin(orgId: string, login: DemoLogin): Promise<string> {
+  const email = login.email.trim().toLowerCase();
+  let found = await userByEmail(email);
+  if (!found) {
+    [found] = await db.insert(user).values({ name: login.name, email, emailVerified: true }).returning();
+    await db.insert(account).values({ accountId: found!.id, providerId: 'credential', userId: found!.id, password: await hashPassword(login.password), updatedAt: new Date() });
+  }
+  const userId = found!.id;
+  const [membership] = await db.select({ id: member.id }).from(member).where(and(eq(member.organizationId, orgId), eq(member.userId, userId)));
+  if (!membership) await db.insert(member).values({ organizationId: orgId, userId, role: login.orgRole, createdAt: new Date() });
+  return userId;
 }
 
 /** Every `pulse` table with an `org_id`, children before parents. `member_roles` is kept unless asked for. */

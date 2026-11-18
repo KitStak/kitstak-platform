@@ -15,7 +15,13 @@ export function SearchForm({ initial }: { readonly initial: string }) {
   return (
     <form role="search" onSubmit={onSubmit} className="flex items-center gap-2" data-testid="search-form">
       <div className="min-w-0 flex-1">
-        <SearchInput value={value} onValueChange={setValue} placeholder="Search pages, reports and data files" aria-label="Search" autoFocus />
+        <SearchInput
+          value={value}
+          onValueChange={setValue}
+          placeholder="Search jobs, clients, pages and reports"
+          aria-label="Search"
+          autoFocus
+        />
       </div>
       <Button type="submit">Search</Button>
     </form>

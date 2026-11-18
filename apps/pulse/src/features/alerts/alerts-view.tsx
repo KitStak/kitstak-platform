@@ -235,7 +235,7 @@ export function AlertsView({ initialOpen, initialSnoozed, today, canManageRules 
         <Tabs value={tab} onValueChange={(value) => (setTab(value as InboxTab), setSelected(new Set()))}>
           <TabsList variant="pill" aria-label="Alert lists" className="max-w-full overflow-x-auto">
             {INBOX_TABS.map((item) => (
-              <TabsTrigger key={item.id} value={item.id} variant="pill" count={counts[item.id]} className="shrink-0 whitespace-nowrap" data-testid={`alerts-tab-${item.id}`}>
+              <TabsTrigger key={item.id} value={item.id} variant="pill" count={counts[item.id]} className="shrink-0 whitespace-nowrap" aria-controls="alerts-panel" data-testid={`alerts-tab-${item.id}`}>
                 {item.label}
               </TabsTrigger>
             ))}
@@ -257,7 +257,7 @@ export function AlertsView({ initialOpen, initialSnoozed, today, canManageRules 
 
       {active.isError && active.data ? <p role="alert" className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-text">We could not refresh the alerts. You are looking at the last list we loaded.</p> : null}
 
-      <section aria-label={INBOX_TABS.find((item) => item.id === tab)?.label} className="overflow-hidden rounded-xl border border-border-subtle bg-panel shadow-xs">
+      <section id="alerts-panel" role="tabpanel" aria-label={INBOX_TABS.find((item) => item.id === tab)?.label} className="overflow-hidden rounded-xl border border-border-subtle bg-panel shadow-xs">
         {active.isLoading || (!active.data && !active.isError) ? (
           <div role="status" aria-busy="true" className="flex flex-col gap-3 p-4" data-testid="alerts-loading">
             <span className="sr-only">Loading alerts</span>
@@ -476,12 +476,16 @@ function AlertRow({
             ) : null}
             {stake !== null && stake > 0 ? (
               <span className="inline-flex items-center gap-0.5 tabular-nums" data-testid="alert-stake">
-                {formatMoney(stake)} at stake
+                {formatMoney(stake, { cents: false })} {alert.impactAsOf === 'fired' ? 'at stake when this alert fired' : 'at stake'}
                 <How
                   title="Money at stake"
-                  formula="How much profit this problem is costing, worked out by the rule that raised the alert from the same numbers the job page shows. The reason above says which numbers."
+                  formula={
+                    alert.impactAsOf === 'fired'
+                      ? 'How much profit this problem was costing when the alert fired. The job no longer shows this reason, so the figure is not live. The next check clears the alert if the problem is gone.'
+                      : 'How much profit this problem is costing right now, from the same numbers the job page and Home show. The reason above says which numbers.'
+                  }
                   lines={[
-                    { label: alert.entityLabel ?? 'This alert', value: formatMoney(stake), op: 'start' },
+                    { label: alert.entityLabel ?? 'This alert', value: formatMoney(stake, { cents: false }), op: 'start' },
                     { label: 'First seen', value: formatRelative(alert.firstSeenAt), op: 'note' },
                     { label: 'Last checked', value: formatRelative(alert.lastSeenAt), op: 'note' },
                   ]}

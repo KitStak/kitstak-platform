@@ -144,10 +144,13 @@ const PRICING_ALIASES = { unit: 'per_unit', each: 'per_unit', piece: 'per_unit',
 const REASONS = ['meeting', 'training', 'cleanup', 'waiting', 'maintenance', 'break', 'other'] as const;
 const REASON_ALIASES = { meetings: 'meeting', 'clean up': 'cleanup', cleaning: 'cleanup', wait: 'waiting', 'down time': 'waiting', downtime: 'waiting', idle: 'waiting', repair: 'maintenance', breaks: 'break', lunch: 'break', misc: 'other' } as const;
 
-const entryId = () =>
+const ENTRY_ID_TAIL = 'Exports fill it in, so a file you export and import again updates the same rows.';
+
+/** `blank` says what a row with no entry id does, in the words of this stream's match rule. */
+const entryId = (blank = 'Leave blank to match the row by its other columns: a match updates that entry, and no match adds a new one.') =>
   col('entry_id', 'code', {
     label: 'Entry ID',
-    help: 'Leave blank for a new row. Exports fill it in, so a file you export and import again updates the same rows.',
+    help: `${blank} ${ENTRY_ID_TAIL}`,
     aliases: ['id', 'row id', 'pulse id'],
     examples: ['', ''],
   });
@@ -331,7 +334,7 @@ const production = defineStream({
   keyColumns: ['job_number', 'work_date', 'shift', 'labor_class'],
   lookAlikeColumns: [],
   columns: [
-    entryId(),
+    entryId('Leave blank and a row with the same job, day, shift and labor class updates that entry. No match adds a new one.'),
     col('work_date', 'date', { required: true, label: 'Work date', help: 'The day the work was done.', aliases: ['date', 'day', 'production date', 'shift date', 'entry date'], examples: ['2026-11-02', '2026-11-03'] }),
     col('job_number', 'code', { required: true, label: 'Job number', help: 'The job the work was for.', aliases: ['job', 'job no', 'job id', 'work order', 'wo', 'wo number', 'order number'], examples: ['J-1042', 'J-1042'] }),
     col('shift', 'code', { label: 'Shift', help: 'The shift, like day or night. Blank means day.', aliases: ['shift name'], examples: ['day', 'day'] }),
@@ -392,7 +395,7 @@ const indirectTime = defineStream({
   keyColumns: [],
   lookAlikeColumns: ['work_date', 'site_code', 'labor_class', 'reason', 'labor_hours'],
   columns: [
-    entryId(),
+    entryId('Leave blank to add a new row. A row with the same day, site, labor class, reason and hours as one already here is left out, so time is not counted twice.'),
     col('work_date', 'date', { required: true, label: 'Work date', help: 'The day of the time.', aliases: ['date', 'day', 'entry date'], examples: ['2026-11-02', '2026-11-03'] }),
     siteCode(),
     laborClass(),
@@ -425,7 +428,7 @@ const timePunches = defineStream({
   keyColumns: ['employee_id', 'work_date', 'job_number', 'reason', 'labor_class'],
   lookAlikeColumns: [],
   columns: [
-    entryId(),
+    entryId('Leave blank and a row with the same employee, day, job or reason, and labor class updates that entry. No match adds a new one.'),
     col('employee_id', 'code', { required: true, label: 'Employee ID', help: 'The ID of the person in your time clock or payroll system.', aliases: ['employee', 'employee number', 'employee no', 'emp id', 'emp no', 'badge', 'badge number', 'badge id', 'worker id', 'payroll id', 'associate id'], examples: ['E-1001', 'E-1002'] }),
     col('employee_name', 'text', { label: 'Employee name', help: 'The name of the person. Pulse uses it only to roll the hours up.', aliases: ['name', 'worker', 'worker name', 'associate', 'associate name', 'full name'], examples: ['Jordan Lee', 'Priya Shah'] }),
     col('work_date', 'date', { required: true, label: 'Work date', help: 'The day of the hours.', aliases: ['date', 'day', 'punch date', 'shift date', 'clock date'], examples: ['2026-11-02', '2026-11-02'] }),
@@ -450,7 +453,7 @@ const materials = defineStream({
   keyColumns: ['job_number', 'usage_date', 'item_sku', 'lot'],
   lookAlikeColumns: ['job_number', 'usage_date', 'item_sku', 'quantity_used', 'unit_cost'],
   columns: [
-    entryId(),
+    entryId('Leave blank and a row with the same job, date, item and lot updates that entry. With no lot, a row with the same job, date, item, quantity and cost as one already here is left out.'),
     col('usage_date', 'date', { required: true, label: 'Usage date', help: 'The day the parts were used.', aliases: ['date', 'day', 'work date', 'issue date', 'transaction date', 'used on'], examples: ['2026-11-02', '2026-11-02'] }),
     col('job_number', 'code', { required: true, label: 'Job number', help: 'The job the parts were used on.', aliases: ['job', 'job no', 'job id', 'work order', 'wo', 'wo number'], examples: ['J-1042', 'J-1042'] }),
     col('item_sku', 'code', { required: true, label: 'Item SKU', help: 'The SKU or part number.', aliases: ['sku', 'item', 'item number', 'item code', 'part', 'part number', 'part no', 'material', 'component', 'product code'], examples: ['BOX-12X9', 'TISSUE-RED'] }),
@@ -487,7 +490,7 @@ const costs = defineStream({
   keyColumns: ['job_number', 'client_code', 'cost_date', 'category', 'reference'],
   lookAlikeColumns: ['job_number', 'client_code', 'cost_date', 'category', 'amount'],
   columns: [
-    entryId(),
+    entryId('Leave blank and a row with the same job, client or company, date, category and reference updates that entry. With no reference, a row with the same date, category and amount as one already here is left out.'),
     col('cost_date', 'date', { required: true, label: 'Cost date', help: 'The day of the cost.', aliases: ['date', 'day', 'invoice date', 'bill date', 'expense date', 'posting date', 'transaction date'], examples: ['2026-11-05', '2026-11-01'] }),
     col('job_number', 'code', { label: 'Job number', help: 'The job the cost is for. Leave job_number and client_code blank for a company cost like rent.', aliases: ['job', 'job no', 'job id', 'work order', 'wo', 'wo number'], examples: ['J-1042', ''] }),
     col('client_code', 'code', { label: 'Client', help: 'The client the cost is for, when it is not for one job.', aliases: ['client', 'customer', 'customer code', 'client name', 'customer name'], examples: ['', ''] }),
@@ -506,7 +509,7 @@ const revenue = defineStream({
   keyColumns: ['job_number', 'client_code', 'invoice_number', 'description'],
   lookAlikeColumns: ['job_number', 'client_code', 'revenue_date', 'kind', 'amount'],
   columns: [
-    entryId(),
+    entryId('Leave blank and a row with the same job or client, invoice number and description updates that entry. With no invoice number, a row with the same date, kind and amount as one already here is left out.'),
     col('revenue_date', 'date', { required: true, label: 'Revenue date', help: 'The day of the invoice, fee, adjustment or credit.', aliases: ['date', 'day', 'invoice date', 'bill date', 'posting date', 'transaction date'], examples: ['2026-11-07', '2026-11-12'] }),
     col('job_number', 'code', { label: 'Job number', help: 'The job the money is for. Fill in job_number or client_code.', aliases: ['job', 'job no', 'job id', 'work order', 'wo', 'wo number'], examples: ['J-1042', ''] }),
     col('client_code', 'code', { label: 'Client', help: 'The client the money is for, when it is not for one job.', aliases: ['client', 'customer', 'customer code', 'client name', 'customer name', 'bill to'], examples: ['', 'ACME'] }),
@@ -554,7 +557,7 @@ const servicesDone = defineStream({
   keyColumns: [],
   lookAlikeColumns: ['client_code', 'job_number', 'work_date', 'service_code', 'quantity'],
   columns: [
-    entryId(),
+    entryId('Leave blank to add a new row. A row with the same client, job, day, service and quantity as one already here is left out, so it is not counted twice.'),
     col('work_date', 'date', { required: true, label: 'Work date', help: 'The day the service was done.', aliases: ['date', 'day', 'service date', 'entry date'], examples: ['2026-11-03', '2026-11-04'] }),
     col('client_code', 'code', { required: true, label: 'Client', help: 'The client the service was for.', aliases: ['client', 'customer', 'customer code', 'client name', 'customer name'], examples: ['ACME', 'ACME'] }),
     col('job_number', 'code', { label: 'Job number', help: 'The job the service belongs to, if any.', aliases: ['job', 'job no', 'job id', 'work order', 'wo', 'wo number'], examples: ['J-1042', ''] }),

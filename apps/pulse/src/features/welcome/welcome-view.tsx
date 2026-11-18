@@ -131,9 +131,10 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
   };
 
   let wageExample: string | null = null;
-  if (num(wage)) {
+  const { defaultPayrollTaxBp: taxBp, defaultBenefitsBp: benefitsBp, defaultOtherBurdenBp: otherBp } = settings;
+  if (num(wage) && taxBp !== null && benefitsBp !== null && otherBp !== null) {
     try {
-      const rate = loadedRate({ wageCents: Math.round(Number(wage) * 100), payrollTaxBp: settings.defaultPayrollTaxBp, benefitsBp: settings.defaultBenefitsBp, otherBurdenBp: settings.defaultOtherBurdenBp, overheadPerHourCents: settings.defaultOverheadPerHourCents ?? 0, overtimeMultiplier: settings.defaultOvertimeMultiplier });
+      const rate = loadedRate({ wageCents: Math.round(Number(wage) * 100), payrollTaxBp: taxBp, benefitsBp, otherBurdenBp: otherBp, overheadPerHourCents: settings.defaultOverheadPerHourCents ?? 0, overtimeMultiplier: settings.defaultOvertimeMultiplier });
       wageExample = formatMoneyPerHour(Number(rate.loadedRateCents));
     } catch {
       wageExample = null;
@@ -258,7 +259,7 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
                 </Button>
                 <p className="basis-full text-sm text-fg-muted" data-testid="step-rate-example">
                   {wageExample
-                    ? `With ${formatPercentBp(settings.defaultPayrollTaxBp)} payroll taxes and ${formatPercentBp(settings.defaultBenefitsBp)} benefits on top, a packer really costs ${wageExample}. You can add overhead and more labor classes later.`
+                    ? `With ${formatPercentBp(taxBp ?? 0)} payroll taxes and ${formatPercentBp(benefitsBp ?? 0)} benefits on top, a packer really costs ${wageExample}. You can add overhead and more labor classes later.`
                     : 'Type a wage to see what an hour really costs.'}
                 </p>
               </form>

@@ -8,7 +8,7 @@ import { Menu, X } from 'lucide-react';
 import { CountBadge, IconButton } from '@/components/ui';
 import { navMatches, type NavEntry } from '@/lib/nav';
 import { NAV_ICONS } from './nav-icons';
-import { badgeFor, badgeLabel, useNavGroups } from './nav-model';
+import { drawerBadgeFor, drawerBadgeLabel, useNavGroups } from './nav-model';
 
 const rowClass = [
   'flex h-10 w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 text-base text-fg outline-none',
@@ -22,7 +22,7 @@ function SheetLink({ entry, badge, active }: { readonly entry: NavEntry; readonl
   const Icon = NAV_ICONS[entry.id];
   return (
     <li>
-      <Link href={entry.href} aria-label={badgeLabel(entry, badge)} aria-current={active ? 'page' : undefined} data-testid={`mobile-nav-${entry.id}`} className={rowClass}>
+      <Link href={entry.href} aria-label={drawerBadgeLabel(entry, badge)} aria-current={active ? 'page' : undefined} data-testid={`mobile-nav-${entry.id}`} className={rowClass}>
         <Icon aria-hidden className="size-[18px] shrink-0 text-icon" />
         <span className="min-w-0 flex-1 truncate">{entry.label}</span>
         {badge > 0 ? <CountBadge count={badge} ringClassName="ring-transparent" /> : null}
@@ -45,7 +45,7 @@ export function MobileNav() {
   const list = (entries: readonly NavEntry[]) => (
     <ul className="flex flex-col gap-0.5">
       {entries.map((entry) => (
-        <SheetLink key={entry.id} entry={entry} badge={badgeFor(entry, badges)} active={navMatches(entry, pathname)} />
+        <SheetLink key={entry.id} entry={entry} badge={drawerBadgeFor(entry, badges)} active={navMatches(entry, pathname)} />
       ))}
     </ul>
   );

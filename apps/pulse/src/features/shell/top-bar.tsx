@@ -142,7 +142,7 @@ export function TopBar() {
               href={routes.alerts()}
               aria-label={alerts > 0 ? `Alerts (${alerts} open)` : 'Alerts'}
               data-testid="topbar-alerts"
-              className="relative hidden size-8 items-center justify-center rounded-md text-icon sm:inline-flex hover:bg-hover hover:text-icon-strong focus-visible:outline-2 focus-visible:outline-focus"
+              className="relative inline-flex size-8 shrink-0 items-center justify-center rounded-md text-icon hover:bg-hover hover:text-icon-strong focus-visible:outline-2 focus-visible:outline-focus"
             >
               <Bell aria-hidden className="size-[18px]" />
               {alerts > 0 ? (

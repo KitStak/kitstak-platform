@@ -183,7 +183,8 @@ export function JobWhatIf({
   const doneUnits = Number(job.stats.unitsGood);
   const unitBased = baseline.basis === 'units';
   const delta = result.projectedProfitCents - baseline.projectedProfitCents;
-  const paceStep = basePace !== null && basePace >= 20 ? 0.5 : 0.1;
+  // One decimal, the same rounding as every other pace on the page, so the slider starts on the pace the cards show.
+  const paceStep = 0.1;
   const priceStep = basePrice !== null && basePrice >= 5 ? 0.05 : 0.01;
   const unitStep = baseUnits >= 5000 ? 100 : baseUnits >= 500 ? 10 : 1;
 

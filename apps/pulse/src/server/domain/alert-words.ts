@@ -105,3 +105,31 @@ export function renderAlertWords(kind: string, params: Params, seesMoney: boolea
   }
 }
 
+
+/** A job's current risk reason, as `pulse.job_stats.risk_reasons` stores it. */
+export interface LiveReason {
+  readonly rule: string;
+  readonly params: Record<string, unknown>;
+  readonly impactCents: number | null;
+}
+
+/**
+ * The live version of a stored job alert. An alert is written when it fires and refreshed when
+ * alerts are checked, so between checks its money can lag the job page. When the job still has
+ * the reason that raised the alert, its current numbers are used (`impactAsOf: 'live'`), so Home,
+ * the job page and the alert show one figure. When the reason is gone, the stored figure stays
+ * and is labeled as the one from when the alert fired.
+ */
+export function liveJobAlert(
+  stored: { readonly params: Record<string, unknown>; readonly impactCents: bigint | null },
+  live: readonly LiveReason[] | null,
+): { readonly params: Record<string, unknown>; readonly impactCents: bigint | null; readonly impactAsOf: 'live' | 'fired' } {
+  const rule = typeof stored.params.rule === 'string' ? stored.params.rule : null;
+  const current = rule && live ? live.find((reason) => reason.rule === rule) : undefined;
+  if (!current) return { params: stored.params, impactCents: stored.impactCents, impactAsOf: rule && stored.impactCents !== null ? 'fired' : 'live' };
+  return {
+    params: { ...stored.params, reason: current.params, nextStep: stored.params.nextStep },
+    impactCents: current.impactCents === null ? null : BigInt(Math.round(current.impactCents)),
+    impactAsOf: 'live',
+  };
+}

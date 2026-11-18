@@ -18,6 +18,7 @@ import { wmsTable } from '@kitstak/db/wms-tenants';
 import { db } from '@/server/db';
 import { rows, type DomainContext } from '@/server/domain/_shared';
 import { wmsSchemaFor, wmsTableExists } from './detect';
+import { logSoftFail } from './log';
 
 export interface WmsWorkOrder {
   readonly id: string;
@@ -89,7 +90,8 @@ export async function wmsReady(ctx: DomainContext): Promise<string | null> {
     const schema = await wmsSchemaFor(ctx);
     if (!schema) return null;
     return (await wmsTableExists(schema, 'work_orders')) && (await wmsTableExists(schema, 'work_order_components')) ? schema : null;
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'wms.wmsReady', error);
     return null;
   }
 }
@@ -174,7 +176,8 @@ export async function listWorkOrders(ctx: DomainContext, options: { ids?: readon
       materialConsumedCents: cents(row.consumed_cents),
       path: `/work-orders/${encodeURIComponent(row.id)}`,
     }));
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'wms.listWorkOrders', error);
     return [];
   }
 }
@@ -203,7 +206,8 @@ export async function workOrderBuildsByDay(ctx: DomainContext, workOrderIds: rea
            order by 1, 2`,
     );
     return found.map((row) => ({ workOrderId: row.work_order_id, workDate: row.work_date, kits: num(row.kits) })).filter((row) => row.kits > 0);
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'wms.workOrderBuildsByDay', error);
     return [];
   }
 }
@@ -241,7 +245,8 @@ export async function listBilledRevenue(ctx: DomainContext, options: { from?: st
       amountCents: cents(row.amount_cents),
       approved: row.approved === true,
     }));
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'wms.listBilledRevenue', error);
     return [];
   }
 }
@@ -286,7 +291,8 @@ export async function listVasRevenue(ctx: DomainContext, options: { from?: strin
       revenueCents: row.revenue_cents === null ? null : cents(row.revenue_cents),
       workOrderId: row.work_order_id,
     }));
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'wms.listVasRevenue', error);
     return [];
   }
 }

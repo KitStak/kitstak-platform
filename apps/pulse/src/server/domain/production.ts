@@ -116,6 +116,16 @@ export interface ProductionInput {
   importBatchId?: string | null;
 }
 
+export interface SaveOptions {
+  /**
+   * Autosave of an open editor (PUT /api/v1/log/rows): changing a row that already exists needs
+   * the version the editor read. A missing or old version is a CONFLICT, never an overwrite.
+   */
+  readonly requireVersion?: boolean;
+}
+
+const STALE_ROW = 'Someone else changed this row. Here is the new one.';
+
 const num = (value: string | null | undefined): number => Number(value ?? 0);
 
 function checkHours(hours: string, overtime: string, setup: string): void {
@@ -137,10 +147,11 @@ interface Saved {
 }
 
 /** Writes one entry inside `tx` and records what it touched. Stamps and rollups run in `finishProduction`. */
-async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess, input: ProductionInput, touched: Touched, fixedJobs: Set<string>, ids: string[]): Promise<Saved> {
+async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess, input: ProductionInput, touched: Touched, fixedJobs: Set<string>, ids: string[], options: SaveOptions = {}): Promise<Saved> {
   let existing: EntryRow | undefined;
+  // Rows are read FOR UPDATE: a second save of the same row waits here, then sees the new version.
   if (input.id) {
-    [existing] = isUuid(input.id) ? await tx.select().from(productionEntries).where(and(eq(productionEntries.orgId, ctx.orgId), eq(productionEntries.id, input.id), isNull(productionEntries.deletedAt))) : [];
+    [existing] = isUuid(input.id) ? await tx.select().from(productionEntries).where(and(eq(productionEntries.orgId, ctx.orgId), eq(productionEntries.id, input.id), isNull(productionEntries.deletedAt))).for('update') : [];
     if (!existing) throw notFound('That entry');
   }
   const job = await getJobRow(ctx, input.jobId ?? existing?.jobId ?? '', tx);
@@ -161,11 +172,13 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
           laborClassId ? eq(productionEntries.laborClassId, laborClassId) : isNull(productionEntries.laborClassId),
           isNull(productionEntries.deletedAt),
         ),
-      );
+      )
+      .for('update');
   }
   await assertCanLogDay(tx, ctx, access, site.id, site.timezone, input.workDate);
   if (existing && existing.workDate !== input.workDate) await assertCanLogDay(tx, ctx, access, site.id, site.timezone, existing.workDate);
   await assertOpen(tx, ctx.orgId, [input.workDate, existing?.workDate]);
+  if (existing && options.requireVersion && (input.version === null || input.version === undefined)) throw conflict(STALE_ROW);
   if (existing) assertVersion(existing.version, input.version);
   const hours = input.hours ?? existing?.hours ?? '0';
   const overtimeHours = input.overtimeHours ?? existing?.overtimeHours ?? '0';
@@ -195,8 +208,9 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
     [row] = (await tx
       .update(productionEntries)
       .set({ ...values, meta: lockedFields(existing, Object.keys(change.after)), version: sql`version + 1`, updatedBy: ctx.userId, updatedAt: new Date() })
-      .where(eq(productionEntries.id, existing.id))
+      .where(and(eq(productionEntries.id, existing.id), eq(productionEntries.version, existing.version)))
       .returning()) as [EntryRow];
+    if (!row) throw conflict(STALE_ROW);
     await logActivity(tx, ctx, { verb: 'production.edited', entityType: 'production', entityId: row.id, jobId: job.id, clientId: job.clientId, ...change, meta: { workDate: row.workDate } });
     touchDay(touched, existing.siteId, existing.workDate);
     if (existing.jobId !== job.id) touched.jobIds.add(existing.jobId);
@@ -263,13 +277,13 @@ async function reload(tx: Executor, ctx: DomainContext, id: string, access: Acce
 }
 
 /** Saves one entry (the autosave of one grid row, the Work log form, the kiosk). */
-export async function saveProductionEntry(ctx: DomainContext, input: ProductionInput): Promise<SaveProductionResult> {
+export async function saveProductionEntry(ctx: DomainContext, input: ProductionInput, options: SaveOptions = {}): Promise<SaveProductionResult> {
   const access = await requirePulse(ctx, 'production:log');
   return inTx(async (tx) => {
     const touched = newTouched();
     const fixedJobs = new Set<string>();
     const ids: string[] = [];
-    const saved = await writeEntry(tx, ctx, access, input, touched, fixedJobs, ids);
+    const saved = await writeEntry(tx, ctx, access, input, touched, fixedJobs, ids, options);
     await finishProduction(tx, ctx, ids, fixedJobs, touched);
     return { entry: await reload(tx, ctx, saved.row.id, access), created: saved.created };
   });
@@ -366,8 +380,36 @@ export interface ProductionFilters {
   readonly offset?: number;
 }
 
+export const PRODUCTION_PAGE_DEFAULT = 1000;
+export const PRODUCTION_PAGE_MAX = 10_000;
+
+/** One page of entries and whether more are waiting (`GET /api/v1/production`). */
+export interface ProductionPage {
+  readonly rows: ProductionEntryDTO[];
+  /** True when more rows match than this page holds. */
+  readonly truncated: boolean;
+  readonly limit: number;
+  readonly offset: number;
+  /** The `offset` of the next page, or null on the last page. */
+  readonly nextOffset: number | null;
+}
+
+/** Entries across days, newest first, with a flag when the page stopped before the end. */
+export async function listProductionPage(ctx: DomainContext, filters: ProductionFilters = {}): Promise<ProductionPage> {
+  const limit = Math.max(1, Math.min(filters.limit ?? PRODUCTION_PAGE_DEFAULT, PRODUCTION_PAGE_MAX));
+  const offset = Math.max(filters.offset ?? 0, 0);
+  // One extra row tells us whether there is a next page.
+  const found = await queryProduction(ctx, filters, limit + 1, offset);
+  const truncated = found.length > limit;
+  return { rows: truncated ? found.slice(0, limit) : found, truncated, limit, offset, nextOffset: truncated ? offset + limit : null };
+}
+
 /** Entries across days, newest first (`/log/entries`, a job's Work log, exports). */
 export async function listProduction(ctx: DomainContext, filters: ProductionFilters = {}): Promise<ProductionEntryDTO[]> {
+  return queryProduction(ctx, filters, Math.min(filters.limit ?? PRODUCTION_PAGE_DEFAULT, PRODUCTION_PAGE_MAX), Math.max(filters.offset ?? 0, 0));
+}
+
+async function queryProduction(ctx: DomainContext, filters: ProductionFilters, limit: number, offset: number): Promise<ProductionEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const where: (SQL | undefined)[] = [eq(productionEntries.orgId, ctx.orgId)];
   if (!filters.includeDeleted) where.push(isNull(productionEntries.deletedAt));
@@ -388,8 +430,8 @@ export async function listProduction(ctx: DomainContext, filters: ProductionFilt
     .innerJoin(jobs, eq(jobs.id, productionEntries.jobId))
     .where(and(...where))
     .orderBy(desc(productionEntries.workDate), asc(jobs.number), asc(productionEntries.shift), asc(productionEntries.createdAt))
-    .limit(Math.min(filters.limit ?? 1000, 10_000))
-    .offset(Math.max(filters.offset ?? 0, 0));
+    .limit(limit)
+    .offset(offset);
   return found.map((item) => toProductionDTO(item.row, item, access, closed));
 }
 
@@ -408,7 +450,7 @@ export async function getLogGrid(ctx: DomainContext, options: { date?: string | 
     .select({ row: productionEntries, number: jobs.number, name: jobs.name })
     .from(productionEntries)
     .innerJoin(jobs, eq(jobs.id, productionEntries.jobId))
-    .where(and(eq(productionEntries.orgId, ctx.orgId), eq(productionEntries.siteId, site.id), eq(productionEntries.workDate, date), isNull(productionEntries.deletedAt)))
+    .where(and(eq(productionEntries.orgId, ctx.orgId), eq(productionEntries.siteId, site.id), eq(productionEntries.workDate, date), isNull(productionEntries.deletedAt), isNull(jobs.deletedAt)))
     .orderBy(asc(productionEntries.shift), asc(productionEntries.createdAt));
   const withEntries = [...new Set(entries.map((item) => item.row.jobId))];
   const jobRows = await db
@@ -478,6 +520,7 @@ export async function getPreviousCrew(ctx: DomainContext, options: { date: strin
     db,
     sql`SELECT p.job_id, to_char(p.work_date, 'YYYY-MM-DD') AS work_date, p.labor_class_id, p.shift, p.headcount::text, p.hours::text
           FROM pulse.production_entries p
+          JOIN pulse.jobs pj ON pj.id = p.job_id AND pj.deleted_at IS NULL
           JOIN (
             SELECT job_id, max(work_date) AS d FROM pulse.production_entries
              WHERE org_id = ${ctx.orgId} AND site_id = ${site.id} AND deleted_at IS NULL AND hours > 0 AND work_date < ${options.date}::date AND work_date >= ${options.date}::date - 30

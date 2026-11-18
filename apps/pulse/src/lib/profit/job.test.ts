@@ -781,9 +781,9 @@ describe('risk status (4.14)', () => {
     expect(result.status).toBe('losing');
     expect(result.headline?.rule).toBe('L1');
     expect(result.headline?.impactCents).toBe(b(-158750));
-    expect(riskHeadline(result)).toBe('At this pace the job ends about $1,588 in the red. It costs $1.36 a unit to make and sells for $1.20.');
+    expect(riskHeadline(result)).toBe('At this pace the job ends about $1,588 in the red. By the finish, each unit costs $1.36 to make and sells for $1.20.');
     expect(riskHeadline(result, { seesMoney: false })).toBe('At this pace the job ends in the red. It costs more to make than it sells for.');
-    expect(riskHeadline(result, { unitLabel: 'kit' })).toContain('a kit to make');
+    expect(riskHeadline(result, { unitLabel: 'kit' })).toContain('each kit costs');
     // one evidence day and under 20% done is too early to call
     const early = base(
       { unitPrice: '1.20', evidenceDays: 1 },
@@ -948,12 +948,12 @@ describe('risk status (4.14)', () => {
       }
       expect(['losing', 'at_risk', 'no_data', 'heads_up']).toContain(ruleStatus(rule));
     }
-    expect(riskSentence({ rule: 'L1', params })).toBe('At this pace the job ends about $1,840 in the red. It costs $3.12 a unit to make and sells for $2.75.');
+    expect(riskSentence({ rule: 'L1', params })).toBe('At this pace the job ends about $1,840 in the red. By the finish, each unit costs $3.12 to make and sells for $2.75.');
     // With extra services or fees the revenue side holds them too, so the two numbers explain the loss.
     expect(riskSentence({ rule: 'L1', params: { ...params, revenuePerUnitCents: 290 } })).toBe(
-      'At this pace the job ends about $1,840 in the red. It costs $3.12 a unit to make and brings in $2.90, extra services and fees included.',
+      'At this pace the job ends about $1,840 in the red. By the finish, each unit costs $3.12 to make and brings in $2.90, extra services and fees included.',
     );
-    expect(riskSentence({ rule: 'L1', params: { ...params, revenuePerUnitCents: 275 } })).toBe('At this pace the job ends about $1,840 in the red. It costs $3.12 a unit to make and sells for $2.75.');
+    expect(riskSentence({ rule: 'L1', params: { ...params, revenuePerUnitCents: 275 } })).toBe('At this pace the job ends about $1,840 in the red. By the finish, each unit costs $3.12 to make and sells for $2.75.');
     expect(riskSentence({ rule: 'R1', params })).toBe('Margin is heading for 14%. Your target is 30%.');
   });
 });

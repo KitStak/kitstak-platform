@@ -46,7 +46,6 @@ import {
   DropdownMenuTrigger,
   Field,
   IconButton,
-  Input,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -61,6 +60,7 @@ import {
   TableRow,
   ToggleGroup,
   toast,
+  IsoDatePicker,
 } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { MarginPill } from '@/components/charts/stats';
@@ -82,12 +82,14 @@ import { centsToNumber, sumCents } from '@/lib/money';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 import { routes } from '@/lib/routes';
 import type { ClientDTO, JobListItemDTO, JobTypeDTO, SiteDTO } from '@/lib/types';
+import { shortDate } from '@/lib/profit/calendar';
 import { shiftDate } from './job-math';
 import { JobStatusBadge, LoadError, RiskPill, UnitsProgress } from './job-ui';
 import {
   DEFAULT_COLUMNS,
   JOB_COLUMNS,
   SORT_OPTIONS,
+  columnCellClass,
   jobsCsv,
   sortJobs,
   type ColumnContext,
@@ -599,21 +601,23 @@ export function JobsView({
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Due from">
                   {({ inputId }) => (
-                    <Input
+                    <IsoDatePicker
                       id={inputId}
-                      type="date"
-                      value={view.dueFrom ?? ''}
-                      onChange={(event) => patch({ dueFrom: event.target.value || null })}
+                      aria-label="Due from"
+                      placeholder="Any day"
+                      value={view.dueFrom ?? null}
+                      onChange={(value) => patch({ dueFrom: value })}
                     />
                   )}
                 </Field>
                 <Field label="Due to">
                   {({ inputId }) => (
-                    <Input
+                    <IsoDatePicker
                       id={inputId}
-                      type="date"
-                      value={view.dueTo ?? ''}
-                      onChange={(event) => patch({ dueTo: event.target.value || null })}
+                      aria-label="Due to"
+                      placeholder="Any day"
+                      value={view.dueTo ?? null}
+                      onChange={(value) => patch({ dueTo: value })}
                     />
                   )}
                 </Field>
@@ -718,7 +722,7 @@ export function JobsView({
                   variant="secondary"
                   leadingIcon={<Columns3 aria-hidden />}
                   data-testid="jobs-columns"
-                  className="hidden md:inline-flex"
+                  className="hidden lg:inline-flex"
                 >
                   Columns
                 </Button>
@@ -903,7 +907,7 @@ export function JobsView({
       ) : (
         <>
           {/* Wide screens: the table. */}
-          <div className="hidden overflow-x-auto rounded-xl border border-border-subtle bg-panel shadow-xs md:block">
+          <div className="hidden overflow-x-auto rounded-xl border border-border-subtle bg-panel shadow-xs lg:block">
             <Table aria-label="Jobs" data-testid="jobs-table" aria-busy={jobsQuery.isFetching}>
               <TableHead>
                 <TableRow className="hover:bg-transparent">
@@ -928,12 +932,13 @@ export function JobsView({
                         key={column.id}
                         label={column.label}
                         numeric={column.numeric}
+                        className={columnCellClass(column)}
                         active={view.sort === column.id || (column.id === 'risk' && view.sort === 'worst')}
                         dir={view.dir}
                         onSort={() => setSort(column.id === 'risk' ? 'worst' : column.id)}
                       />
                     ) : (
-                      <TableHeaderCell key={column.id} numeric={column.numeric}>
+                      <TableHeaderCell key={column.id} numeric={column.numeric} className={columnCellClass(column)}>
                         {column.label}
                       </TableHeaderCell>
                     ),
@@ -967,7 +972,7 @@ export function JobsView({
                           onCheckedChange={(value) => toggleSelect(job.id, value === true)}
                         />
                       </TableCell>
-                      <TableCell className="max-w-[300px]">
+                      <TableCell className="max-w-[220px] xl:max-w-[300px]">
                         <Link
                           href={routes.job(job.number)}
                           onClick={(event) => event.stopPropagation()}
@@ -978,6 +983,9 @@ export function JobsView({
                           </span>
                           <span className="flex items-center gap-1.5 text-xs text-fg-muted">
                             {job.number}
+                            {columns.some((column) => column.id === 'client') ? (
+                              <span className="min-w-0 truncate xl:hidden">· {job.clientName}</span>
+                            ) : null}
                             {job.archivedAt ? (
                               <span className="rounded-sm bg-muted px-1 text-2xs font-medium text-fg-secondary">
                                 Archived
@@ -990,7 +998,7 @@ export function JobsView({
                         </Link>
                       </TableCell>
                       {columns.map((column) => (
-                        <TableCell key={column.id} numeric={column.numeric} className={column.className}>
+                        <TableCell key={column.id} numeric={column.numeric} className={columnCellClass(column)}>
                           {column.cell(job, columnContext)}
                         </TableCell>
                       ))}
@@ -1004,8 +1012,8 @@ export function JobsView({
             </Table>
           </div>
 
-          {/* Phones: one card per job. */}
-          <ul className="flex flex-col gap-2 md:hidden" aria-label="Jobs" data-testid="jobs-cards">
+          {/* Phones and tablets: one card per job, two across on tablets. */}
+          <ul className="flex flex-col gap-2 lg:hidden" aria-label="Jobs" data-testid="jobs-cards">
             {groups.map((group) => (
               <li key={group.key} className="flex flex-col gap-2">
                 {view.group !== 'none' ? (
@@ -1013,7 +1021,7 @@ export function JobsView({
                     <GroupSummary label={group.label} jobs={group.jobs} seesMoney={shell.seesMoney} />
                   </div>
                 ) : null}
-                <ul className="flex flex-col gap-2">
+                <ul className="grid gap-2 sm:grid-cols-2">
                   {group.jobs.map((job) => (
                     <li
                       key={job.id}
@@ -1035,6 +1043,11 @@ export function JobsView({
                         <RiskPill job={job} size="sm" />
                         {tab !== 'open' || job.status === 'on_hold' ? (
                           <JobStatusBadge status={job.status} />
+                        ) : null}
+                        {job.dueDate ? (
+                          <span className="ml-auto text-xs whitespace-nowrap text-fg-muted" data-testid="job-card-due">
+                            Due <span className="font-medium text-fg-secondary">{shortDate(job.dueDate)}</span>
+                          </span>
                         ) : null}
                       </div>
                       {job.stats.headline ? (
@@ -1093,12 +1106,14 @@ export function JobsView({
 
 function SortHeader({
   label,
+  className,
   numeric,
   active,
   dir,
   onSort,
 }: {
   readonly label: string;
+  readonly className?: string;
   readonly numeric?: boolean;
   readonly active: boolean;
   readonly dir: 'asc' | 'desc';
@@ -1107,6 +1122,7 @@ function SortHeader({
   return (
     <TableHeaderCell
       numeric={numeric}
+      className={className}
       aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
       <button

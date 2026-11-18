@@ -121,7 +121,7 @@ function RowName({ by, row, onDrill, range }: { readonly by: ProfitGroup; readon
       {by === 'job' && row.riskStatus ? <MarginPill status={row.riskStatus} size="sm" className="hidden lg:inline-flex" /> : null}
       {row.laborMissing ? (
         <Tooltip content="Some labor is missing here, so profit is not complete yet.">
-          <span tabIndex={0} aria-label="Some labor is missing here, so profit is not complete yet." className="inline-flex rounded-sm text-warning-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+          <span tabIndex={0} role="img" aria-label="Some labor is missing here, so profit is not complete yet." className="inline-flex rounded-sm text-warning-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
             <TriangleAlert aria-hidden className="size-3.5" />
           </span>
         </Tooltip>
@@ -293,7 +293,8 @@ export function ChartView({ by, rows, measure, order, onMeasure, onOrder, target
     );
   }
   const pick = (row: ProfitRowDTO): number | null => (!seesMoney ? Number(row.unitsGood) : measure === 'profit' ? row.profitCents : measure === 'margin' ? row.marginBp : row.revenueCents);
-  const ranked = rows.filter((row) => pick(row) !== null).sort((a, b) => ((pick(b) as number) - (pick(a) as number)) * (order === 'best' ? 1 : -1));
+  // A job with numbers that are not complete yet (no hours, no rate, no plan) never ranks as a best job (SPEC 4.14).
+  const ranked = rows.filter((row) => pick(row) !== null && !(order === 'best' && by === 'job' && row.laborMissing)).sort((a, b) => ((pick(b) as number) - (pick(a) as number)) * (order === 'best' ? 1 : -1));
   const shown = ranked.slice(0, 12);
   const label = seesMoney ? CHART_MEASURE_LABELS[measure] : 'Units';
   return (
@@ -557,7 +558,7 @@ export function PivotView({ by, colBy, measure, onColBy, onMeasure, scope, seesM
                       const value = pivotValue(pivot.cells[row.key]?.[col.key], measure);
                       return (
                         <TableCell key={col.key} numeric className={cn('whitespace-nowrap', tone(value))}>
-                          {value === null ? <span className="text-fg-muted" aria-label="No activity" /> : formatValue(value, kind)}
+                          {value === null ? <span className="sr-only">No activity</span> : formatValue(value, kind)}
                         </TableCell>
                       );
                     })}

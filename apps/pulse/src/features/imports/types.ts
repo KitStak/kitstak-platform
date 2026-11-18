@@ -34,13 +34,19 @@ export interface ImportOptions {
   readonly mode: 'all_or_nothing' | 'skip_bad_rows';
   /** How to read 3/4/2026. `null` lets Pulse work it out from the file. */
   readonly dateOrder: 'MDY' | 'DMY' | null;
-  /** Add clients, job types, labor classes and items the file mentions and Pulse does not have yet. */
+  /** Add clients, job types and items the file mentions and Pulse does not have yet. */
   readonly createMissing: boolean;
+  /**
+   * Add labor classes the file names and Pulse does not have yet. Off by default: a new class
+   * has no rate of its own, so its hours would be costed at the workspace default. The labor
+   * rates file always adds the classes it names, because each row carries the rate.
+   */
+  readonly createLaborClasses: boolean;
   /** What to do with rows that look the same as rows already here. */
   readonly lookalikes: 'skip' | 'add';
 }
 
-export const DEFAULT_IMPORT_OPTIONS: ImportOptions = { mode: 'all_or_nothing', dateOrder: null, createMissing: true, lookalikes: 'skip' };
+export const DEFAULT_IMPORT_OPTIONS: ImportOptions = { mode: 'all_or_nothing', dateOrder: null, createMissing: true, createLaborClasses: false, lookalikes: 'skip' };
 
 export interface ImportMessage {
   readonly level: 'error' | 'warning' | 'info';
@@ -99,6 +105,8 @@ export interface ImportBatchDTO {
   readonly counts: ImportCounts;
   /** Records Pulse will add because the file mentions them (only with Create missing). */
   readonly willCreate: readonly ImportWillCreate[];
+  /** Labor class codes the file names that Pulse does not have, left as problems (see `createLaborClasses`). */
+  readonly missingLaborClasses: readonly string[];
   /** Problems with the file as a whole, like a needed column that is not matched. */
   readonly problems: readonly string[];
   /** "You imported this same file on Nov 3." or `null`. */

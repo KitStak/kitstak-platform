@@ -12,6 +12,7 @@ import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { rows, type DomainContext } from '@/server/domain/_shared';
 import { integrationAvailability, tableExists } from './detect';
+import { logSoftFail } from './log';
 
 export interface PmProject {
   readonly id: string;
@@ -42,7 +43,8 @@ export async function projectsReady(ctx: DomainContext): Promise<boolean> {
   try {
     if (!(await integrationAvailability(ctx)).projects) return false;
     return (await tableExists('pm.projects')) && (await tableExists('pm.tasks')) && (await tableExists('pm.time_entries'));
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'projects.projectsReady', error);
     return false;
   }
 }
@@ -97,7 +99,8 @@ export async function getProjects(ctx: DomainContext, ids: readonly string[]): P
   if (clean.length === 0 || !(await projectsReady(ctx))) return [];
   try {
     return await projectRows(ctx, sql`p.id in (${sql.join(clean.map((id) => sql`${id}::uuid`), sql`, `)})`, clean.length);
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'projects.getProjects', error);
     return [];
   }
 }
@@ -107,16 +110,19 @@ export async function searchProjects(ctx: DomainContext, query: string, limit = 
   try {
     const text = query.trim().slice(0, 80);
     return await projectRows(ctx, text ? sql`(p.name ilike ${`%${text}%`} or p.key ilike ${`${text}%`})` : sql`true`, Math.min(limit, 50));
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'projects.searchProjects', error);
     return [];
   }
 }
 
 /**
  * Finished time entries of the given projects, summed per day in `timezone`. A day is the day
- * the entry started. Entries still running and deleted entries are left out.
+ * the entry started. Entries still running and deleted entries are left out. With
+ * `throwOnError` a failed read throws (after the log line) instead of reading as "no time", for a
+ * caller that takes rows away when time is gone.
  */
-export async function projectTimeByDay(ctx: DomainContext, projectIds: readonly string[], timezone: string): Promise<PmTimeDay[]> {
+export async function projectTimeByDay(ctx: DomainContext, projectIds: readonly string[], timezone: string, options: { throwOnError?: boolean } = {}): Promise<PmTimeDay[]> {
   const clean = [...new Set(projectIds.filter((id) => UUID.test(id)))];
   if (clean.length === 0 || !(await projectsReady(ctx))) return [];
   try {
@@ -131,7 +137,9 @@ export async function projectTimeByDay(ctx: DomainContext, projectIds: readonly 
            order by 1, 2`,
     );
     return found.map((row) => ({ projectId: row.project_id, workDate: row.work_date, minutes: Number(row.minutes) || 0, people: Number(row.people) || 0 }));
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'projects.projectTimeByDay', error);
+    if (options.throwOnError) throw error;
     return [];
   }
 }

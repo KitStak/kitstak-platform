@@ -396,3 +396,18 @@ describe('reading real world files', () => {
     expect(formatIssue(31, { column: null, message: 'October is closed.' })).toBe('Row 31: October is closed.');
   });
 });
+
+describe('entry id help says what a blank entry id does', () => {
+  const help = (stream: StreamId): string => anyStreamDef(stream).columns.find((column) => column.key === 'entry_id')?.help ?? '';
+
+  it('says a blank id with the same job, day, shift and labor class updates that entry', () => {
+    expect(help('production')).toBe('Leave blank and a row with the same job, day, shift and labor class updates that entry. No match adds a new one. Exports fill it in, so a file you export and import again updates the same rows.');
+  });
+
+  it('never claims a blank id always means a new row', () => {
+    for (const stream of STREAM_IDS) {
+      const text = help(stream);
+      if (text) expect(text, stream).not.toMatch(/^Leave blank for a new row/);
+    }
+  });
+});

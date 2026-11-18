@@ -105,14 +105,16 @@ export interface SettingsDTO {
   readonly fiscalYearStartMonth: number;
   readonly workingDays: readonly number[];
   readonly defaultShiftHours: DecimalString;
-  readonly defaultPayrollTaxBp: number;
-  readonly defaultBenefitsBp: number;
-  readonly defaultOtherBurdenBp: number;
+  /** Wage burden defaults: null when the reader may not see wages (`wage:read`). */
+  readonly defaultPayrollTaxBp: number | null;
+  readonly defaultBenefitsBp: number | null;
+  readonly defaultOtherBurdenBp: number | null;
   readonly defaultOverheadPerHourCents: MoneyCents;
   readonly defaultOvertimeMultiplier: DecimalString;
   readonly defaultLoadedRateCents: MoneyCents;
-  readonly defaultTargetMarginBp: number;
-  readonly marginFloorBp: number;
+  /** Null when the reader may not see money. */
+  readonly defaultTargetMarginBp: number | null;
+  readonly marginFloorBp: number | null;
   readonly atRiskGapBp: number;
   readonly laborWatchOverBp: number;
   readonly laborRiskOverBp: number;
@@ -140,6 +142,8 @@ export interface SettingsDTO {
   readonly onboarding: Readonly<Record<string, unknown>>;
   readonly sampleLoadedAt: string | null;
   readonly moneyHidden: boolean;
+  /** True when the wage burden defaults above are hidden. */
+  readonly wagesHidden: boolean;
 }
 
 /** A person and their Pulse role (People and roles). */
@@ -856,6 +860,8 @@ export interface AlertDTO {
   readonly body: string;
   readonly nextStep: string | null;
   readonly impactCents: MoneyCents;
+  /** `live`: the job's current figure, the same one Home and the job page show. `fired`: the figure from when the alert fired, because the job no longer has that reason. */
+  readonly impactAsOf?: 'live' | 'fired';
   readonly url: string | null;
   readonly status: AlertStatus;
   readonly snoozedUntil: string | null;
@@ -948,9 +954,9 @@ export interface JobListFilters {
   readonly limit?: number;
 }
 
-/** One search hit for the command palette. */
+/** One search hit for the command palette and `/search`. Never carries money. */
 export interface SearchHitDTO {
-  readonly type: 'job' | 'client' | 'service';
+  readonly type: 'job' | 'client' | 'jobType' | 'service';
   readonly id: string;
   readonly title: string;
   readonly subtitle: string | null;

@@ -50,6 +50,13 @@ export interface JobColumn {
   readonly csv: (job: JobListItemDTO, ctx: ColumnContext) => readonly (string | number | null)[];
   readonly csvHeaders?: readonly string[];
   readonly className?: string;
+  /** Folds away below xl so the money and due columns stay on screen on tablets and small laptops. */
+  readonly wideOnly?: boolean;
+}
+
+/** Classes for a column's header and body cells, including when it folds away. */
+export function columnCellClass(column: Pick<JobColumn, 'className' | 'wideOnly'>): string {
+  return cn(column.className, column.wideOnly && 'hidden xl:table-cell');
 }
 
 const money = (cents: number | null): ReactNode =>
@@ -67,6 +74,7 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     id: 'client',
     label: 'Client',
     defaultOn: true,
+    wideOnly: true,
     sort: (job) => job.clientName.toLowerCase(),
     cell: (job) => <span className="block max-w-[180px] truncate text-fg-secondary">{job.clientName}</span>,
     csv: (job) => [job.clientName],
@@ -110,7 +118,7 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     label: 'Status and reason',
     defaultOn: true,
     sort: (job) => riskRank(job),
-    className: 'min-w-[260px] max-w-[420px]',
+    className: 'min-w-[200px] max-w-[280px] xl:min-w-[260px] xl:max-w-[420px]',
     cell: (job) => (
       <div className="flex min-w-0 flex-col items-start gap-0.5 py-0.5">
         <RiskPill job={job} size="sm" />
@@ -239,6 +247,7 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
     label: 'Trend',
     longLabel: 'Trend, last 12 weeks',
     defaultOn: true,
+    wideOnly: true,
     cell: (job, ctx) => {
       const values = ctx.trends.get(job.id);
       if (!values || values.every((value) => value === 0))

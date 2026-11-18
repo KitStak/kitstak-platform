@@ -490,15 +490,11 @@ export function BulkView({
                   >
                     <label className="flex min-w-0 flex-col gap-1">
                       <span className="text-xs text-fg-muted lg:sr-only">Day</span>
-                      <input
-                        type="date"
-                        aria-label="Day"
-                        max={today}
+                      <IsoDatePicker
+                        aria-label={`Day for the row on ${shortDate(row.date)}`}
                         value={row.date}
-                        onChange={(event) =>
-                          event.target.value && change(row.key, { date: event.target.value })
-                        }
-                        className={cell}
+                        clearable={false}
+                        onChange={(value) => value && change(row.key, { date: value > today ? today : value })}
                       />
                     </label>
                     <label className="col-span-1 flex min-w-0 flex-col gap-1 sm:col-span-3 lg:col-span-1">

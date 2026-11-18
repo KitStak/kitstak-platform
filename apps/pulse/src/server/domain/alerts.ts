@@ -13,11 +13,11 @@ import { conflict, invalid, notFound } from '@/server/errors';
 import { ALERT_KINDS, type AlertEntityType, type AlertKind, type AlertSeverity, type AlertStatus } from '@/lib/constants';
 import { addDays, endOfMonth, startOfMonth } from '@/lib/profit';
 import type { AlertDTO, AlertRuleDTO } from '@/lib/types';
-import { cleanText, defined, diff, inTx, iso, isoRequired, isUuid, moneyOut, monthName, rows, singular, todayInZone, type DomainContext } from './_shared';
+import { cleanText, defined, diff, inTx, iso, isoRequired, isUuid, moneyOut, monthName, rows, singular, todayInZone, uuidArray, type DomainContext } from './_shared';
 import { softDeleteRow } from './_crud';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
-import { renderAlertWords } from './alert-words';
+import { liveJobAlert, renderAlertWords, type LiveReason } from './alert-words';
 import { isQuietNow, quietOf } from '@/features/alerts/quiet-hours';
 import { filterOrgMembers } from './people';
 import { notify } from './notifications';
@@ -337,7 +337,25 @@ export async function clearAlert(executor: Executor, ctx: DomainContext, kind: A
 
 /* ---------------------------------------------------------------- inbox */
 
-function toAlertDTO(row: AlertRow, access: Pick<PulseAccess, 'seesMoney'>): AlertDTO {
+/** Current risk reasons of the jobs behind these alerts, so an open alert reads the same money as the job page. */
+async function liveReasonsFor(executor: Executor, orgId: string, found: readonly AlertRow[]): Promise<Map<string, LiveReason[]>> {
+  const ids = [...new Set(found.filter((row) => row.entityType === 'job' && row.status !== 'resolved' && isUuid(row.entityId)).map((row) => row.entityId as string))];
+  const out = new Map<string, LiveReason[]>();
+  if (ids.length === 0) return out;
+  const live = await rows<{ job_id: string; risk_reasons: LiveReason[] | null }>(
+    executor,
+    sql`SELECT job_id::text AS job_id, risk_reasons FROM pulse.job_stats WHERE org_id = ${orgId} AND job_id = ANY(${uuidArray(ids)})`,
+  );
+  for (const row of live) out.set(row.job_id, row.risk_reasons ?? []);
+  return out;
+}
+
+function toAlertDTO(stored: AlertRow, access: Pick<PulseAccess, 'seesMoney'>, live?: Map<string, LiveReason[]>): AlertDTO {
+  const current =
+    stored.entityType === 'job' && stored.status !== 'resolved' && live
+      ? liveJobAlert({ params: (stored.params ?? {}) as Record<string, unknown>, impactCents: stored.impactCents }, live.get(stored.entityId ?? '') ?? null)
+      : null;
+  const row = current ? { ...stored, params: current.params, impactCents: current.impactCents } : stored;
   const words = renderAlertWords(row.kind, row.params ?? {}, access.seesMoney);
   const params = (row.params ?? {}) as Record<string, unknown>;
   const label = [params.jobNumber, params.jobName].filter((part) => typeof part === 'string' && part).join(' ') || (params.clientName as string | undefined) || (params.serviceName as string | undefined) || null;
@@ -353,6 +371,7 @@ function toAlertDTO(row: AlertRow, access: Pick<PulseAccess, 'seesMoney'>): Aler
     body: words.body,
     nextStep: words.nextStep,
     impactCents: moneyOut(access.seesMoney, row.impactCents),
+    impactAsOf: current?.impactAsOf ?? 'live',
     url: row.url,
     status: row.status as AlertStatus,
     snoozedUntil: row.snoozedUntil,
@@ -379,7 +398,8 @@ export async function listAlerts(ctx: DomainContext, filters: { status?: AlertSt
     filters.assignedTo ? eq(alerts.assignedTo, filters.assignedTo) : undefined,
   ];
   const found = await db.select().from(alerts).where(and(...where)).orderBy(SEVERITY_ORDER, sql`${alerts.impactCents} asc nulls last`, desc(alerts.lastSeenAt)).limit(Math.min(filters.limit ?? 200, 1000));
-  return found.map((row) => toAlertDTO(row, access));
+  const live = await liveReasonsFor(db, ctx.orgId, found);
+  return found.map((row) => toAlertDTO(row, access, live));
 }
 
 export async function countOpenAlerts(ctx: DomainContext): Promise<number> {
@@ -431,6 +451,6 @@ export async function updateAlert(ctx: DomainContext, alertId: string, change: A
     const [row] = await tx.update(alerts).set({ ...values, updatedAt: new Date() }).where(eq(alerts.id, before.id)).returning();
     await logActivity(tx, ctx, { verb: 'alert.updated', entityType: 'alert', entityId: before.id, jobId: before.entityType === 'job' && isUuid(before.entityId) ? before.entityId : null, before: { status: before.status, snoozedUntil: before.snoozedUntil, assignedTo: before.assignedTo }, after: { status: row!.status, snoozedUntil: row!.snoozedUntil, assignedTo: row!.assignedTo }, meta: { action: change.action } });
     if (change.action === 'assign' && change.userId) await notify(tx, ctx, [change.userId], { kind: `alert:${before.kind}`, params: before.params ?? {}, url: before.url ?? '/alerts', alertId: before.id });
-    return toAlertDTO(row!, access);
+    return toAlertDTO(row!, access, await liveReasonsFor(tx, ctx.orgId, [row!]));
   });
 }

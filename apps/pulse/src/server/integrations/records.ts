@@ -14,6 +14,7 @@ import { appOfTarget, type LinkableType, type LiveRecordDTO, type RecordOptionDT
 import { crmReady, getAccounts, getDeals, searchDeals, type CrmDeal } from './crm';
 import { getProjects, projectsReady, searchProjects, type PmProject } from './projects';
 import { listWorkOrders, wmsReady, type WmsWorkOrder } from './wms';
+import { logSoftFail } from './log';
 
 export interface RecordTarget {
   readonly type: LinkTargetType;
@@ -119,7 +120,8 @@ export async function searchRecords(ctx: DomainContext, type: LinkableType, quer
     }
     const linked = await linkedJobs(ctx, type, options.map((option) => option.id));
     return options.map((option) => ({ ...option, linkedJobNumber: linked.get(option.id) ?? null }));
-  } catch {
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'records.searchRecords', error);
     return [];
   }
 }

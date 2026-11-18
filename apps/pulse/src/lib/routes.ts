@@ -55,7 +55,7 @@ export interface NewJobPrefill {
 export const routes = {
   home: () => '/',
   welcome: () => '/welcome',
-  jobs: (opts?: { tab?: 'open' | 'all' | 'completed' | 'planned'; risk?: string; view?: string }) => withQuery('/jobs', { tab: opts?.tab, risk: opts?.risk, view: opts?.view }),
+  jobs: (opts?: { tab?: 'open' | 'all' | 'completed' | 'planned'; risk?: string; view?: string; q?: string }) => withQuery('/jobs', { tab: opts?.tab, risk: opts?.risk, view: opts?.view, q: opts?.q }),
   newJob: (prefill: NewJobPrefill = {}) => withQuery('/jobs/new', { ...prefill }),
   job: (ref: string) => `/jobs/${encodeURIComponent(ref)}`,
   jobTab: (ref: string, tab: JobTab) => (tab === 'overview' ? `/jobs/${encodeURIComponent(ref)}` : `/jobs/${encodeURIComponent(ref)}/${tab}`),
@@ -64,8 +64,8 @@ export const routes = {
   logEntries: () => '/log/entries',
   /** Many days at once (the bulk grid). */
   logBulk: () => '/log/bulk',
-  profit: (opts?: { by?: ProfitView; client?: string; from?: string; to?: string }) =>
-    withQuery('/profit', { by: opts?.by, client: opts?.client, from: opts?.from, to: opts?.to }),
+  profit: (opts?: { by?: ProfitView; client?: string; jobType?: string; from?: string; to?: string }) =>
+    withQuery('/profit', { by: opts?.by, client: opts?.client, jobType: opts?.jobType, from: opts?.from, to: opts?.to }),
   client: (id: string) => `/clients/${encodeURIComponent(id)}`,
   services: () => '/services',
   service: (id: string) => `/services/${encodeURIComponent(id)}`,

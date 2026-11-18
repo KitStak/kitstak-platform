@@ -22,6 +22,12 @@ const firstOfMonth = (month: string): string => {
   return `${month.slice(0, 7)}-01`;
 };
 
+/** The stored close checklist, with every money field nulled for a reader without `money:read`. */
+export function checklistOut(checklist: Readonly<Record<string, unknown>> | null, money: boolean): Readonly<Record<string, unknown>> | null {
+  if (!checklist || money) return checklist;
+  return Object.fromEntries(Object.entries(checklist).map(([key, value]) => [key, /cents$/i.test(key) ? null : value]));
+}
+
 function toDTO(row: PeriodRow, money: boolean): PeriodDTO {
   return {
     periodMonth: row.periodMonth,
@@ -32,7 +38,7 @@ function toDTO(row: PeriodRow, money: boolean): PeriodDTO {
     reopenedBy: row.reopenedBy,
     reopenReason: row.reopenReason,
     snapshot: money ? row.snapshot : null,
-    checklist: row.checklist,
+    checklist: checklistOut(row.checklist, money),
   };
 }
 

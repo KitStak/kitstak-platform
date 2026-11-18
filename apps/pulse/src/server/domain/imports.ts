@@ -124,10 +124,14 @@ interface Env {
   readonly members: ReadonlyMap<string, string>;
   readonly closed: ReadonlySet<string>;
   readonly pending: { kind: RefKind; ent: Ent }[];
+  /** Labor class codes the file names that Pulse does not have and may not add. */
+  readonly missingLaborClasses: Set<string>;
+  /** The stream being read: the labor rates file always adds the classes it names. */
+  readonly stream: StreamId | null;
   readonly batchId: string;
 }
 
-async function loadEnv(executor: Executor, ctx: DomainContext, access: PulseAccess, options: ImportOptions, batchId: string): Promise<Env> {
+async function loadEnv(executor: Executor, ctx: DomainContext, access: PulseAccess, options: ImportOptions, batchId: string, stream: StreamId | null = null): Promise<Env> {
   const settings = await loadSettings(ctx.orgId, executor);
   const lookups: Record<RefKind, Lookup> = { client: new Lookup(), job_type: new Lookup(), labor_class: new Lookup(), item: new Lookup(), site: new Lookup(), service: new Lookup(), job: new Lookup() };
   const org = ctx.orgId;
@@ -158,7 +162,17 @@ async function loadEnv(executor: Executor, ctx: DomainContext, access: PulseAcce
   const members = new Map(
     (await rows<{ id: string; email: string }>(executor, sql`SELECT u.id, lower(u.email) AS email FROM core.member m JOIN core."user" u ON u.id = m.user_id WHERE m.organization_id = ${org}`)).map((row) => [row.email, row.id]),
   );
-  return { ctx, access, settings, options, lookups, defaultSite, members, closed: await closedMonths(executor, org), pending: [], batchId };
+  return { ctx, access, settings, options, lookups, defaultSite, members, closed: await closedMonths(executor, org), pending: [], missingLaborClasses: new Set(), stream, batchId };
+}
+
+/**
+ * A file may add a labor class only when the person turned on Add new labor classes (a new class
+ * has no rate, so its hours would cost the workspace default), or when it is the labor rates file,
+ * whose rows carry the rate. Either way it takes `rate:manage`, the same as adding one by hand.
+ */
+function mayAddLaborClass(env: Env): boolean {
+  if (!canPulse(env.access.role, 'rate:manage')) return false;
+  return env.stream === 'labor_rates' ? env.options.createMissing : env.options.createLaborClasses;
 }
 
 /** Finds a record by code or name. A missing one is queued for creation, or reported in plain words. */
@@ -167,6 +181,11 @@ function ref(env: Env, kind: RefKind, text: unknown, column: string, issues: Row
   const found = env.lookups[kind].find(text);
   if (found) return found;
   const word = KIND_WORDS[kind];
+  if (kind === 'labor_class' && !mayAddLaborClass(env)) {
+    env.missingLaborClasses.add(text.trim());
+    issues.push({ level: 'error', column, message: `There is no labor class ${text.trim()}. Add it in Labor first, or turn on Add new labor classes.` });
+    return null;
+  }
   if (CREATABLE.has(kind) && env.options.createMissing) {
     const code = text.trim();
     const ent: Ent = { id: null, code, name: typeof data.name === 'string' && data.name.trim() !== '' ? data.name.trim() : code, data, pending: true };
@@ -789,6 +808,7 @@ interface Plan {
   readonly rows: RowPlan[];
   readonly problems: string[];
   readonly willCreate: ImportWillCreate[];
+  readonly missingLaborClasses: string[];
   readonly dateOrderNote: string | null;
   readonly layout: 'totals' | 'lines' | null;
   readonly env: Env;
@@ -824,7 +844,7 @@ async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAc
   const handler = HANDLERS[stream];
   const headers = batch.header ?? [];
   const columns = new Map(def.columns.map((column) => [column.key, column]));
-  const env = await loadEnv(executor, ctx, access, { ...options, createMissing: options.createMissing && canPulse(access.role, 'job:manage') }, batch.id);
+  const env = await loadEnv(executor, ctx, access, { ...options, createMissing: options.createMissing && canPulse(access.role, 'job:manage') }, batch.id, stream);
   const problems: string[] = [];
 
   // File level checks: needed columns, one header per column.
@@ -841,7 +861,7 @@ async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAc
   }
   if (raw.length === 0) problems.push('This file has no rows under the header row.');
   if (problems.length > 0) {
-    return { rows: raw.map((row) => ({ n: row.n, action: 'error' as const, messages: [], changes: [], entityId: null, planned: null, existing: null })), problems, willCreate: [], dateOrderNote: null, layout, env };
+    return { rows: raw.map((row) => ({ n: row.n, action: 'error' as const, messages: [], changes: [], entityId: null, planned: null, existing: null })), problems, willCreate: [], missingLaborClasses: [], dateOrderNote: null, layout, env };
   }
 
   const input = { headers, rows: raw.map((row) => row.cells), rowNumbers: raw.map((row) => row.n), columns: mapping };
@@ -1086,7 +1106,7 @@ async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAc
   const willCreate = env.pending.filter((item) => used.has(item.ent)).map((item) => ({ kind: item.kind as ImportWillCreate['kind'], code: item.ent.code }));
   // Only create what a row that is saved really uses.
   for (let index = env.pending.length - 1; index >= 0; index -= 1) if (!used.has((env.pending[index] as { ent: Ent }).ent)) env.pending.splice(index, 1);
-  return { rows: plans, problems, willCreate, dateOrderNote, layout, env };
+  return { rows: plans, problems, willCreate, missingLaborClasses: [...env.missingLaborClasses], dateOrderNote, layout, env };
 }
 
 /** Line by line plans: all lines of a job and plan in the file replace the lines of that plan. */
@@ -1136,6 +1156,7 @@ function optionsOf(batch: BatchRow): ImportOptions {
     mode: stored.mode === 'skip_bad_rows' ? 'skip_bad_rows' : DEFAULT_IMPORT_OPTIONS.mode,
     dateOrder: stored.dateOrder === 'MDY' || stored.dateOrder === 'DMY' ? stored.dateOrder : null,
     createMissing: stored.createMissing === undefined ? DEFAULT_IMPORT_OPTIONS.createMissing : Boolean(stored.createMissing),
+    createLaborClasses: stored.createLaborClasses === true,
     lookalikes: stored.lookalikes === 'add' ? 'add' : 'skip',
   };
 }
@@ -1199,6 +1220,7 @@ async function toBatchDTO(executor: Executor, batch: BatchRow, names?: ReadonlyM
     totalRows: batch.totalRows,
     counts: counts as unknown as ImportCounts,
     willCreate: Array.isArray(extra.willCreate) ? (extra.willCreate as ImportWillCreate[]) : [],
+    missingLaborClasses: Array.isArray(extra.missingLaborClasses) ? (extra.missingLaborClasses as unknown[]).filter((code): code is string => typeof code === 'string') : [],
     problems: Array.isArray(extra.problems) ? (extra.problems as string[]) : [],
     sameFileNote: typeof extra.sameFileNote === 'string' ? extra.sameFileNote : null,
     dateOrderNote: typeof extra.dateOrderNote === 'string' ? extra.dateOrderNote : null,
@@ -1406,7 +1428,7 @@ export async function checkImportBatch(ctx: DomainContext, batchId: string, inpu
         .update(importBatches)
         .set({
           mapping: { columns: mapping },
-          options: { ...options, bytes: stored.bytes ?? 0, sameFileNote: stored.sameFileNote ?? null, willCreate: plan.willCreate, problems: plan.problems, dateOrderNote: plan.dateOrderNote, layout: plan.layout },
+          options: { ...options, bytes: stored.bytes ?? 0, sameFileNote: stored.sameFileNote ?? null, willCreate: plan.willCreate, missingLaborClasses: plan.missingLaborClasses, problems: plan.problems, dateOrderNote: plan.dateOrderNote, layout: plan.layout },
           status: 'checked',
           createCount: counts.create,
           updateCount: counts.update,
@@ -1428,7 +1450,7 @@ export async function checkImportBatch(ctx: DomainContext, batchId: string, inpu
 }
 
 async function upsertPreset(tx: Executor, ctx: DomainContext, stream: StreamId, name: string, headers: readonly string[], mapping: readonly (string | null)[], options: ImportOptions): Promise<void> {
-  const values = { headerSignature: headerSignature(headers), mapping: mappingToPreset(headers, mapping), options: { mode: options.mode, dateOrder: options.dateOrder, createMissing: options.createMissing, lookalikes: options.lookalikes }, lastUsedAt: new Date(), updatedAt: new Date() };
+  const values = { headerSignature: headerSignature(headers), mapping: mappingToPreset(headers, mapping), options: { mode: options.mode, dateOrder: options.dateOrder, createMissing: options.createMissing, createLaborClasses: options.createLaborClasses, lookalikes: options.lookalikes }, lastUsedAt: new Date(), updatedAt: new Date() };
   await tx
     .insert(importPresets)
     .values({ orgId: ctx.orgId, stream, name, ...values })

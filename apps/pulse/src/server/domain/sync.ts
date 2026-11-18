@@ -34,7 +34,7 @@ import { deleteRevenue, saveRevenue } from './entries';
 import { recomputeJobs } from './job-stats';
 import { setJobStatus } from './jobs';
 import { pullWmsUsage } from './ledger';
-import { saveProductionEntry } from './production';
+import { deleteProductionEntries, saveProductionEntry } from './production';
 import { assertOpen, closedMonths, finishWrite, newTouched, restampFixedJob, restampProduction, touchDay, touchJob } from './recalc';
 import { loadSettings } from './settings';
 
@@ -268,6 +268,8 @@ async function syncWms(ctx: DomainContext, tally: Tally): Promise<void> {
       try {
         const pulled = await pullWmsUsage(ctx, link.job_number);
         tally.created += pulled.added.length;
+        tally.updated += pulled.updated + pulled.removed;
+        tally.skippedClosed += pulled.skippedClosed;
       } catch (error) {
         if (isClosedMonth(error)) tally.skippedClosed += 1;
         else tally.skipped += 1;
@@ -400,9 +402,12 @@ async function syncProjects(ctx: DomainContext, tally: Tally): Promise<void> {
   const byZone = new Map<string, LinkRow[]>();
   for (const link of feeds.values()) byZone.set(link.timezone, [...(byZone.get(link.timezone) ?? []), link]);
   let days = 0;
+  const seenRefs: string[] = [];
   for (const [timezone, zoneLinks] of byZone) {
-    const time = await projectTimeByDay(ctx, zoneLinks.map((link) => link.target_id), timezone);
+    // Strict read: rows are taken away below when their time is gone, so a failed read must not look like "no time".
+    const time = await projectTimeByDay(ctx, zoneLinks.map((link) => link.target_id), timezone, { throwOnError: true });
     days += time.length;
+    seenRefs.push(...time.map((day) => `pm:${day.projectId}:${day.workDate}`));
     for (const day of time) {
       const link = zoneLinks.find((item) => item.target_id === day.projectId);
       if (!link) continue;
@@ -436,6 +441,33 @@ async function syncProjects(ctx: DomainContext, tally: Tally): Promise<void> {
     }
   }
   tally.counts.timeDays = days;
+  await removeGoneProjectTime(ctx, [...feeds.keys()], new Set(seenRefs), closed, tally);
+}
+
+/**
+ * A day whose time was deleted in Projects is taken out of Pulse on the next sync, so labor is
+ * never counted for time nobody logged. Only rows the sync wrote (`source = 'projects'`) and only
+ * in open months; a row a person changed the hours on is theirs and stays.
+ */
+async function removeGoneProjectTime(ctx: DomainContext, projectIds: readonly string[], seen: ReadonlySet<string>, closed: ReadonlySet<string>, tally: Tally): Promise<void> {
+  if (projectIds.length === 0) return;
+  const pulled = await rows<EntryRow>(
+    db,
+    sql`SELECT ${ENTRY_COLUMNS} FROM pulse.production_entries e
+         WHERE e.org_id = ${ctx.orgId} AND e.source = 'projects' AND e.deleted_at IS NULL
+           AND split_part(e.source_ref, ':', 1) = 'pm' AND split_part(e.source_ref, ':', 2) IN (${sql.join(projectIds.map((id) => sql`${id}`), sql`, `)})`,
+  );
+  const gone = pulled.filter((row) => row.source_ref && !seen.has(row.source_ref) && !lockedFields(row).includes('hours'));
+  const open = gone.filter((row) => !closed.has(monthStart(row.work_date)));
+  tally.skippedClosed += gone.length - open.length;
+  if (open.length === 0) return;
+  try {
+    await deleteProductionEntries(ctx, open.map((row) => row.id));
+    tally.updated += open.length;
+  } catch (error) {
+    if (isClosedMonth(error)) tally.skippedClosed += open.length;
+    else tally.skipped += open.length;
+  }
 }
 
 /* ------------------------------------------------------------ run and state */
@@ -520,50 +552,102 @@ export async function runSync(ctx: DomainContext, source: SiblingApp | 'all'): P
  */
 export async function syncIfStale(ctx: DomainContext, trigger: 'page' | 'cron' = 'page'): Promise<void> {
   try {
-    const flagged = await claimBridgeEvents(ctx);
+    const claimed = await claimBridgeEvents(ctx);
     const state = await rows<{ source: SiblingApp; stale: boolean }>(
       db,
       sql`SELECT source, (last_run_at IS NULL OR last_run_at < now() - make_interval(mins => ${SYNC_STALE_MINUTES})) AS stale FROM pulse.sync_state WHERE org_id = ${ctx.orgId}`,
     );
     const fresh = new Set(state.filter((row) => !row.stale).map((row) => row.source));
     const available = await integrationAvailability(ctx);
+    // A note nobody can act on (an app that is not connected, a kind Pulse does not know) is done.
+    const nothingToDo = [...claimed.unknown, ...SOURCES.filter((source) => !available[source]).flatMap((source) => claimed.bySource.get(source) ?? [])];
+    await finishBridgeEvents(ctx, nothingToDo, { outcome: 'done' });
     for (const source of SOURCES) {
       if (!available[source]) continue;
-      if (flagged.has(source)) await runOne(ctx, source, 'event');
-      else if (!fresh.has(source)) await runOne(ctx, source, trigger);
+      const events = claimed.bySource.get(source) ?? [];
+      if (events.length > 0) {
+        const result = await runOne(ctx, source, 'event');
+        if (result.status === 'ok') await finishBridgeEvents(ctx, events, { outcome: 'done' });
+        else if (result.status === 'failed') await finishBridgeEvents(ctx, events, { outcome: 'failed', error: result.message });
+        else await finishBridgeEvents(ctx, events, { outcome: 'busy' });
+      } else if (!fresh.has(source)) await runOne(ctx, source, trigger);
     }
   } catch (error) {
-    console.error('[pulse] background sync skipped', { orgId: ctx.orgId, error });
+    console.error('[pulse] background sync skipped', { orgId: ctx.orgId, error: error instanceof Error ? error.message : String(error) });
   }
 }
 
 const EVENT_SOURCE: Readonly<Record<string, SiblingApp>> = { wms_work_order_changed: 'wms', crm_deal_stage_changed: 'crm', pm_time_logged: 'projects' };
 
+/** A note is tried this many times, then parked with its last error. */
+export const BRIDGE_EVENT_MAX_ATTEMPTS = 5;
+/** A claim older than this is treated as dropped (the request died) and can be taken again. */
+const BRIDGE_CLAIM_MINUTES = 5;
+
+interface ClaimedEvents {
+  readonly bySource: Map<SiblingApp, string[]>;
+  readonly unknown: string[];
+}
+
 /**
- * Takes the waiting change notes of this workspace (skipping ones another request holds) and
- * marks them done. Returns which apps asked for a refresh. A note that was claimed more than
- * five minutes ago and never finished can be taken again. Five tries park it.
+ * Takes the waiting change notes of this workspace (skipping ones another request holds): sets
+ * `claimed_at` as a five minute lease and bumps `attempts`. `processed_at` is only set once the
+ * note was handled (`finishBridgeEvents`). A claim older than five minutes that never finished
+ * can be taken again. A note that already used its five tries is parked: `processed_at` is set
+ * and `last_error` says why, so it stops blocking newer notes for the same record.
  */
-async function claimBridgeEvents(ctx: DomainContext): Promise<Set<SiblingApp>> {
-  const out = new Set<SiblingApp>();
+export async function claimBridgeEvents(ctx: DomainContext): Promise<ClaimedEvents> {
+  const out: ClaimedEvents = { bySource: new Map(), unknown: [] };
   try {
-    const claimed = await rows<{ kind: string }>(
+    await db.execute(
+      sql`UPDATE pulse.bridge_events SET processed_at = now(), last_error = COALESCE(last_error, ${`Gave up after ${BRIDGE_EVENT_MAX_ATTEMPTS} tries.`}), updated_at = now()
+           WHERE org_id = ${ctx.orgId} AND processed_at IS NULL AND attempts >= ${BRIDGE_EVENT_MAX_ATTEMPTS}
+             AND (claimed_at IS NULL OR claimed_at < now() - make_interval(mins => ${BRIDGE_CLAIM_MINUTES}))`,
+    );
+    const claimed = await rows<{ id: string; kind: string }>(
       db,
-      sql`UPDATE pulse.bridge_events SET claimed_at = now(), attempts = attempts + 1, processed_at = now(), updated_at = now()
+      sql`UPDATE pulse.bridge_events SET claimed_at = now(), attempts = attempts + 1, updated_at = now()
            WHERE id IN (SELECT id FROM pulse.bridge_events
-                         WHERE org_id = ${ctx.orgId} AND processed_at IS NULL AND attempts < 5
-                           AND (claimed_at IS NULL OR claimed_at < now() - interval '5 minutes')
+                         WHERE org_id = ${ctx.orgId} AND processed_at IS NULL AND attempts < ${BRIDGE_EVENT_MAX_ATTEMPTS}
+                           AND (claimed_at IS NULL OR claimed_at < now() - make_interval(mins => ${BRIDGE_CLAIM_MINUTES}))
                          ORDER BY created_at LIMIT 200 FOR UPDATE SKIP LOCKED)
-       RETURNING kind`,
+       RETURNING id::text AS id, kind`,
     );
     for (const event of claimed) {
       const source = EVENT_SOURCE[event.kind];
-      if (source) out.add(source);
+      if (source) out.bySource.set(source, [...(out.bySource.get(source) ?? []), event.id]);
+      else out.unknown.push(event.id);
     }
-  } catch {
-    return out;
+  } catch (error) {
+    console.error('[pulse] change notes not claimed', { orgId: ctx.orgId, message: error instanceof Error ? error.message : String(error) });
   }
   return out;
+}
+
+/**
+ * Settles claimed notes. `done`: handled, `processed_at` set. `failed`: keeps the lease so the
+ * next try waits five minutes, stores the error, and parks the note on its last try. `busy`:
+ * another sync held the app, so the lease and the try are given back and the next page load
+ * takes the note again.
+ */
+export async function finishBridgeEvents(ctx: DomainContext, ids: readonly string[], result: { outcome: 'done' | 'busy' } | { outcome: 'failed'; error: string }): Promise<void> {
+  if (ids.length === 0) return;
+  const list = sql`ARRAY[${sql.join(ids.map((id) => sql`${id}`), sql`, `)}]::uuid[]`;
+  try {
+    if (result.outcome === 'done') {
+      await db.execute(sql`UPDATE pulse.bridge_events SET processed_at = now(), last_error = NULL, updated_at = now() WHERE org_id = ${ctx.orgId} AND id = ANY(${list}) AND processed_at IS NULL`);
+    } else if (result.outcome === 'busy') {
+      await db.execute(sql`UPDATE pulse.bridge_events SET claimed_at = NULL, attempts = GREATEST(attempts - 1, 0), updated_at = now() WHERE org_id = ${ctx.orgId} AND id = ANY(${list}) AND processed_at IS NULL`);
+    } else if (result.outcome === 'failed') {
+      await db.execute(
+        sql`UPDATE pulse.bridge_events SET last_error = ${result.error.slice(0, 500)},
+                   processed_at = CASE WHEN attempts >= ${BRIDGE_EVENT_MAX_ATTEMPTS} THEN now() ELSE NULL END, updated_at = now()
+             WHERE org_id = ${ctx.orgId} AND id = ANY(${list}) AND processed_at IS NULL`,
+      );
+    }
+  } catch (error) {
+    console.error('[pulse] change notes not settled', { orgId: ctx.orgId, outcome: result.outcome, message: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 function toRun(row: Record<string, unknown>): SyncRunDTO {

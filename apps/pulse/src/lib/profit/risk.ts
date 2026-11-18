@@ -7,7 +7,7 @@
 import { type Cents, type Decimal, ZERO, centsToNumber, divRound, hoursToScaled, mulBp, perUnitCents, priceToScaled, quantityToScaled, toScaled } from '../money';
 import type { PulseStatus } from '../constants';
 import { DEFAULT_WORKING_DAYS, daysBetween, shortDate, weekdayName, workDaysBetween } from './calendar';
-import { flexFactor, flexPlan, planFigures } from './plan';
+import { flexFactor, flexPlan, planFigures, planHasCosts } from './plan';
 import type { Projection } from './projection';
 import type { ActualTotals, IsoDate, JobMode, JobStatus, PlanTotals } from './types';
 import { type SentenceOptions, countWord, sentenceMoney, sentenceNumber, sentencePercent, sentenceUnitMoney } from './words';
@@ -44,7 +44,7 @@ export const DEFAULT_RISK_THRESHOLDS: RiskThresholds = {
 };
 
 /** Every rule, in the order of the spec table. The order breaks ties between reasons. */
-export const RISK_RULES = ['L1', 'L2', 'L3', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'D1', 'D2', 'D3', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'] as const;
+export const RISK_RULES = ['L1', 'L2', 'L3', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'D1', 'D2', 'D3', 'D4', 'W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'] as const;
 export type RiskRule = (typeof RISK_RULES)[number];
 
 /** The status each rule belongs to. */
@@ -101,6 +101,7 @@ const RULE_NEXT_STEP: Readonly<Record<RiskRule, NextStep>> = {
   D1: 'add_hours',
   D2: 'add_price',
   D3: 'add_labor_rate',
+  D4: 'add_plan',
   W1: 'review_price',
   W2: 'check_crew',
   W3: 'check_crew',
@@ -151,7 +152,7 @@ export interface RiskInput {
   /** Evidence days over the whole job. */
   readonly evidenceDays: number;
   /** Pace of the last 5 evidence days. */
-  readonly window?: { readonly uph: number | null; readonly paceHours: Decimal; readonly unitsGood: Decimal } | null;
+  readonly window?: { readonly uph: number | null; readonly paceHours: Decimal; readonly unitsGood: Decimal; readonly days?: number } | null;
   readonly targetPace?: Decimal | null;
   /** Current unit price, for the losing money sentence. */
   readonly unitPrice?: Decimal | null;
@@ -258,7 +259,7 @@ export function assessRisk(input: RiskInput): RiskAssessment {
     if (extra > ZERO && p.rateLeftCents !== null) paceImpact = -divRound(extra * p.rateLeftCents, BigInt(100));
   }
   const paceRatio = windowUph !== null && targetPace !== null && targetPace > ZERO ? toScaled(windowUph, 3) * BigInt(10000) : null;
-  const paceParams = { uph: windowUph, targetPace: targetPace === null ? null : Number(targetPace) / 1000 };
+  const paceParams = { uph: windowUph, targetPace: targetPace === null ? null : Number(targetPace) / 1000, days: input.window?.days ?? null };
   if (input.evidenceDays >= 2 && paceRatio !== null && targetPace !== null && paceRatio < targetPace * BigInt(t.productivityRiskBp) && underTarget) {
     add('R4', paceParams, paceImpact);
   }
@@ -270,7 +271,12 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   // Not enough data
   if ((input.daysMissingHours ?? 0) > 0) add('D1', { days: input.daysMissingHours ?? 0 });
   if (input.noPrice) add('D2', {});
-  if (input.needsRate) add('D3', {});
+  const costPlan = planHasCosts(input.plan);
+  const costUnknown = mode === 'projected' && !p.costKnown;
+  // Hours left with no cost of an hour on a job that does have a cost plan: the rate is what is missing.
+  if (input.needsRate || (costUnknown && costPlan)) add('D3', {});
+  // D4: no cost plan (none, or only a price) and nothing to project the rest of the job from.
+  if (costUnknown && !costPlan) add('D4', { priceOnly: input.plan ? 1 : 0 });
 
   // Heads up
   if (pm !== null && pm < target && !fired.has('R1') && !fired.has('R2')) add('W1', { marginBp: pm, targetBp: target }, profit - mulBp(revenue, target));
@@ -295,7 +301,8 @@ export function assessRisk(input: RiskInput): RiskAssessment {
     const daysLeft = workDaysBetween(input.today, input.dueDate, input.workingDays ?? DEFAULT_WORKING_DAYS);
     if (daysLeft <= 3) add('W6', { dueDate: input.dueDate, pctBp: p.pctCompleteBp, calendarDays: daysBetween(input.today, input.dueDate) });
   }
-  if (!input.plan) add('W7', {});
+  // W7: nothing to compare with. D4 already says it more strongly when it fired.
+  if (!costPlan && !fired.has('D4')) add('W7', input.plan ? { priceOnly: 1 } : {});
   if (mode !== 'final' && plannedUnits > ZERO && unitsGood > plannedUnits) add('W8', { unitsGood: Number(unitsGood) / 1000, plannedUnits: Number(plannedUnits) / 1000 });
 
   const status = STATUS_ORDER.find((candidate) => reasons.some((reason) => reason.status === candidate)) ?? 'on_track';
@@ -304,7 +311,7 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   const own = reasons.filter((reason) => reason.status === status).sort(byImpact);
   const rest = reasons.filter((reason) => reason.status !== status).sort(byImpact);
   const sorted = [...own, ...rest];
-  return { status, reasons: sorted, headline: sorted[0] ?? null, laborMissing: fired.has('D1') || fired.has('D2') || fired.has('D3'), summary };
+  return { status, reasons: sorted, headline: sorted[0] ?? null, laborMissing: fired.has('D1') || fired.has('D2') || fired.has('D3') || fired.has('D4'), summary };
 }
 
 function text(params: RiskParams, key: string): string | null {
@@ -315,6 +322,15 @@ function text(params: RiskParams, key: string): string | null {
 function number(params: RiskParams, key: string): number | null {
   const value = params[key];
   return typeof value === 'number' ? value : null;
+}
+
+/**
+ * Names the pace window, so a reason pace (the last evidence days) is never mistaken for the
+ * whole job pace on the Pace card: "In the last 5 work days". `null` when the window is unknown.
+ */
+export function recentDays(days: number | null): string | null {
+  if (days === null || !(days > 0)) return null;
+  return days === 1 ? 'On the last work day' : `In the last ${days} work days`;
 }
 
 function marginLead(mode: string | null, percent: string): string {
@@ -348,9 +364,10 @@ export function riskSentence(reason: Pick<RiskReason, 'rule' | 'params'>, option
       const price = number(params, 'pricePerUnitCents');
       if (cost === null || price === null) return lead;
       const earned = number(params, 'revenuePerUnitCents');
+      // These are the numbers at the finish, so the words say so: the "so far" cost on the job card is a different number.
       if (earned !== null && Math.round(earned) !== Math.round(price))
-        return `${lead} It costs ${sentenceUnitMoney(cents('costPerUnitCents'), options)} a ${unit} to make and brings in ${sentenceUnitMoney(cents('revenuePerUnitCents'), options)}, extra services and fees included.`;
-      return `${lead} It costs ${sentenceUnitMoney(cents('costPerUnitCents'), options)} a ${unit} to make and sells for ${sentenceUnitMoney(cents('pricePerUnitCents'), options)}.`;
+        return `${lead} By the finish, each ${unit} costs ${sentenceUnitMoney(cents('costPerUnitCents'), options)} to make and brings in ${sentenceUnitMoney(cents('revenuePerUnitCents'), options)}, extra services and fees included.`;
+      return `${lead} By the finish, each ${unit} costs ${sentenceUnitMoney(cents('costPerUnitCents'), options)} to make and sells for ${sentenceUnitMoney(cents('pricePerUnitCents'), options)}.`;
     }
     case 'L2': {
       const lead = money ? `This job lost ${sentenceMoney(cents('lossCents'), options)}.` : 'This job lost money.';
@@ -365,8 +382,11 @@ export function riskSentence(reason: Pick<RiskReason, 'rule' | 'params'>, option
     case 'R3':
     case 'W2':
       return laborLead(mode, pctOf('overBp'));
-    case 'R4':
-      return `The crew is making ${sentenceNumber(number(params, 'uph') ?? 0, 1, options)} units per person per hour. The target pace is ${sentenceNumber(number(params, 'targetPace') ?? 0, 1, options)}.`;
+    case 'R4': {
+      const pace = `${sentenceNumber(number(params, 'uph') ?? 0, 1, options)} units per person per hour. The target pace is ${sentenceNumber(number(params, 'targetPace') ?? 0, 1, options)}.`;
+      const lately = recentDays(number(params, 'days'));
+      return lately ? `${lately} the crew made ${pace}` : `The crew is making ${pace}`;
+    }
     case 'R5':
       return `At this pace the job finishes ${shortDate(text(params, 'finishDate') ?? '1970-01-01')}. It is due ${shortDate(text(params, 'dueDate') ?? '1970-01-01')}.`;
     case 'R6':
@@ -381,8 +401,10 @@ export function riskSentence(reason: Pick<RiskReason, 'rule' | 'params'>, option
       return 'Some hours have no labor rate, so their cost is missing.';
     case 'W1':
       return money ? `${marginLead(mode, pctOf('marginBp'))}, a little under your ${pctOf('targetBp')} target.` : 'Profit is heading a little under your target.';
-    case 'W3':
-      return `The crew is a bit under the target pace: ${sentenceNumber(number(params, 'uph') ?? 0, 1, options)} of ${sentenceNumber(number(params, 'targetPace') ?? 0, 1, options)} units per person per hour.`;
+    case 'W3': {
+      const lately = recentDays(number(params, 'days'));
+      return `${lately ? `${lately} the crew was` : 'The crew is'} a bit under the target pace: ${sentenceNumber(number(params, 'uph') ?? 0, 1, options)} of ${sentenceNumber(number(params, 'targetPace') ?? 0, 1, options)} units per person per hour.`;
+    }
     case 'W4': {
       if (!money) return `Materials cost more for each ${unit} than the plan.`;
       const per = (key: string): Cents => BigInt(Math.round((number(params, key) ?? 0) * 100));
@@ -399,8 +421,12 @@ export function riskSentence(reason: Pick<RiskReason, 'rule' | 'params'>, option
       if (away === 1) return `Due tomorrow and ${done}.`;
       return `Due ${away < 7 ? weekdayName(due) : shortDate(due)} and ${done}.`;
     }
+    case 'D4':
+      return money ? 'No plan yet, so Pulse cannot tell if this job will make money.' : 'No plan yet, so Pulse cannot tell how this job will go.';
     case 'W7':
-      return 'This job has no plan, so Pulse cannot compare it with anything.';
+      return number(params, 'priceOnly') === 1
+        ? 'This job has a price but no cost plan, so Pulse cannot compare it with anything.'
+        : 'This job has no plan, so Pulse cannot compare it with anything.';
     default:
       return 'This job is past its planned units. Update the plan or finish the job.';
   }

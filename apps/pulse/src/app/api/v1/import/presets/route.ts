@@ -18,7 +18,7 @@ const schema = z.object({
   headers: z.array(z.string().max(2000)).min(1).max(200),
   mapping: z.array(z.string().max(60).nullable()).max(200),
   options: z
-    .object({ mode: z.enum(['all_or_nothing', 'skip_bad_rows']), dateOrder: z.enum(['MDY', 'DMY']).nullable(), createMissing: z.boolean(), lookalikes: z.enum(['skip', 'add']) })
+    .object({ mode: z.enum(['all_or_nothing', 'skip_bad_rows']), dateOrder: z.enum(['MDY', 'DMY']).nullable(), createMissing: z.boolean(), createLaborClasses: z.boolean(), lookalikes: z.enum(['skip', 'add']) })
     .partial()
     .optional(),
 });

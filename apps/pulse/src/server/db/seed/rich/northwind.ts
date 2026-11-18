@@ -82,7 +82,7 @@ const jobs: JobSpec[] = [
   },
   {
     n: 'J-1023', name: 'Highline Freight spare parts kits', client: 'HIGHLINE', type: 'SPARE', status: 'active', start: -14, crew: 2, pace: 9.2, quotePace: 19, qm: 0.04, pct: 0.55, mat: 4,
-    pinned: 'The crew beats the target pace. The price is the problem: the quote assumed twice the pace anyone has ever made.',
+    pinned: 'The crew beats the target pace but not the pace the quote assumed, which is twice what anyone has ever made. The price is the problem.',
     notes: [{ at: 0.3, body: 'This was priced from the old bagged kit, not the boxed kit. Reprice before the first quarter order.' }],
     expect: 'losing',
   },

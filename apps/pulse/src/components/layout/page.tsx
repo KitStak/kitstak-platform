@@ -2,9 +2,14 @@ import type { ReactNode } from 'react';
 import { PageHeader, type PageHeaderProps } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 
+/** The one frame every page sits in. Wide screens center it; the title never moves between routes. */
+export const PAGE_FRAME_MAX = 'max-w-[1680px]';
+
 /**
  * Standard page frame for top-level routes: PageHeader (title, subtitle, actions, tabs) and a
- * padded body. `width="full"` for views that use the whole canvas (board, table, timeline).
+ * padded body. Every route shares one frame, so the title sits in the same place on every page.
+ * `width` only limits how wide the body may grow under the title: `narrow` for forms and short
+ * reading pages (left aligned under the title, never centered), `default` and `full` use the frame.
  */
 export function Page({
   children,
@@ -17,18 +22,9 @@ export function Page({
   readonly bodyClassName?: string;
 }) {
   return (
-    <div className="flex min-h-full flex-col">
-      <PageHeader {...header} className={cn(width !== 'full' && 'mx-auto w-full', width === 'default' && 'max-w-[1240px]', width === 'narrow' && 'max-w-[880px]', header.className)} />
-      <div
-        className={cn(
-          'flex-1 px-6 py-5',
-          width === 'default' && 'mx-auto w-full max-w-[1240px]',
-          width === 'narrow' && 'mx-auto w-full max-w-[880px]',
-          bodyClassName,
-        )}
-      >
-        {children}
-      </div>
+    <div className={cn('mx-auto flex min-h-full w-full flex-col', PAGE_FRAME_MAX)} data-page-width={width}>
+      <PageHeader {...header} />
+      <div className={cn('w-full min-w-0 flex-1 px-6 py-5', width === 'narrow' && 'max-w-[880px]', bodyClassName)}>{children}</div>
     </div>
   );
 }

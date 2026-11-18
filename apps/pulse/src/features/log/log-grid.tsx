@@ -1495,7 +1495,8 @@ function Readout({
         <PopoverContent
           align="end"
           collisionPadding={12}
-          className="max-h-[min(72vh,var(--radix-popover-content-available-height))] w-[340px] max-w-[calc(100vw-32px)] overflow-y-auto"
+          side="left"
+          className="w-[340px] max-w-[calc(100vw-32px)] overflow-y-auto overscroll-contain"
         >
           <HowWeGotThis row={row} readout={readout} money={money} lines={lines} classById={classById} />
         </PopoverContent>

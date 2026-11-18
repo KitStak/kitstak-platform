@@ -39,7 +39,7 @@ async function upload(ctx: DomainContext, stream: StreamId, csv: string, options
   return checkImportBatch(ctx, start.batch.id, { options });
 }
 
-const save = async (ctx: DomainContext, stream: StreamId, csv: string): Promise<ImportBatchDTO> => commitImportBatch(ctx, (await upload(ctx, stream, csv)).id);
+const save = async (ctx: DomainContext, stream: StreamId, csv: string, options: Partial<ImportOptions> = {}): Promise<ImportBatchDTO> => commitImportBatch(ctx, (await upload(ctx, stream, csv, options)).id);
 
 describe.skipIf(!ready)('a workspace that licenses only Pulse', () => {
   let org: TestOrg;
@@ -114,7 +114,8 @@ describe.skipIf(!ready)('a workspace that licenses only Pulse', () => {
   });
 
   it('fills in the name and kind of a labor class that another file made on the fly', async () => {
-    await save(owner, 'job_types', 'job_type_code,name,default_labor_class\nRELABEL,Relabeling,TEMP');
+    // New labor classes are opt in (Add new labor classes on the Check step).
+    await save(owner, 'job_types', 'job_type_code,name,default_labor_class\nRELABEL,Relabeling,TEMP', { createLaborClasses: true });
     const before = await org.query<{ name: string; kind: string }>("select name, kind from pulse.labor_classes where org_id = $1 and code = 'TEMP'", [org.orgId]);
     expect(before).toEqual([{ name: 'TEMP', kind: 'employee' }]);
     await save(owner, 'labor_rates', 'labor_class_code,labor_class_name,kind,effective_from,wage_per_hour\nTEMP,Temp packer,temp_agency,2026-01-01,24.50');
@@ -136,7 +137,8 @@ describe.skipIf(!ready)('a workspace that licenses only Pulse', () => {
   });
 
   it('counts nothing twice when everything is exported and imported into another workspace', async () => {
-    const order: readonly StreamId[] = ['clients', 'job_types', 'labor_rates', 'jobs', 'production', 'indirect_time', 'paid_hours', 'time_punches'];
+    // Labor rates before job types: the rates file is what adds labor classes (SPEC 7 import order).
+    const order: readonly StreamId[] = ['clients', 'labor_rates', 'job_types', 'jobs', 'production', 'indirect_time', 'paid_hours', 'time_punches'];
     for (const stream of order) {
       const file = await exportStream(owner, stream);
       if (file.rowCount > 0) await save(copyOwner, stream, file.csv);

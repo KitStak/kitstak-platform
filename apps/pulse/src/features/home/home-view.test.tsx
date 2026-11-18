@@ -29,13 +29,13 @@ function fixtures(money: boolean) {
   return { trend, summary, job, byClient };
 }
 
-let data = fixtures(true);
+let data: ReturnType<typeof fixtures> & { alerts?: unknown[] } = fixtures(true);
 const ok = <T,>(value: T) => ({ data: value, isError: false, isFetching: false, isLoading: false, error: null, refetch: () => undefined });
 vi.mock('@/lib/hooks/use-data', () => ({
   useSummary: () => ok(data.summary),
   useProfit: (by: string) => ok(by === 'client' || by === 'type' ? data.byClient : data.trend),
   useJobsNeedingAttention: () => ok([data.job]),
-  useAlerts: () => ok([]),
+  useAlerts: () => ok(data.alerts ?? []),
   useExplain: () => ({ data: undefined, isError: false }),
 }));
 
@@ -58,7 +58,7 @@ describe('Home', () => {
     expect(html).toContain('$11,435');
     expect(html).toContain('3 jobs need you.');
     expect(html).toContain('data-testid="home-tiles"');
-    for (const label of ['Revenue', 'Cost', 'Profit on jobs', 'Margin after all costs', 'Labor as % of revenue', 'Units per person per hour', 'Not billed yet']) expect(html, label).toContain(label);
+    for (const label of ['Revenue', 'Cost', 'Profit on jobs', 'Margin on jobs', 'Labor as % of revenue', 'Units per person per hour', 'Not billed yet']) expect(html, label).toContain(label);
     expect(html).toContain('7 of 9 active jobs logged today');
     expect(html).toContain('J-1026');
     expect(html).toContain('-$4,632');
@@ -85,6 +85,23 @@ describe('Home', () => {
     expect(html).not.toContain('no price');
     expect(html).toContain('The crew is running behind the target pace.');
     expect(html).toContain('3 jobs need you.');
+  });
+
+  it('calls job margin what it is and shows the company margin next to it', () => {
+    const html = render();
+    // "Margin after all costs" was the margin on jobs only, before overhead and paid time on no job.
+    expect(html).not.toContain('Margin after all costs');
+    expect(html).toContain('Margin on jobs');
+    // Company profit $11,435 on revenue $48,210 is 23.7%.
+    expect(html).toContain('Company margin');
+    expect(html).toContain('23.7%');
+  });
+
+  it('labels an alert figure that is not live', () => {
+    data = { ...fixtures(true), alerts: [{ id: 'a1', title: 'J-1026 is losing money', body: 'Old words', severity: 'critical', impactCents: -466200, impactAsOf: 'fired', url: null }] };
+    const html = render();
+    expect(html).toContain('-$4,662');
+    expect(html).toContain('when it fired');
   });
 
   it('shows the first run checklist when there is nothing yet', () => {

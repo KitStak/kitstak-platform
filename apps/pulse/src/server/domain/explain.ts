@@ -10,7 +10,7 @@
 import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { invalid } from '@/server/errors';
+import { invalid, notFound } from '@/server/errors';
 import { EXPLAIN_METRICS, type ExplainMetric } from '@/lib/constants';
 import { perHourCents, subCents } from '@/lib/money';
 import { profitSummary } from '@/lib/profit';
@@ -33,7 +33,7 @@ const TITLES: Readonly<Record<ExplainMetric, string>> = {
   shared: 'Time not on a job',
   cost: 'Cost',
   profit: 'Profit',
-  margin: 'Margin after all costs',
+  margin: 'Margin on jobs',
   margin_before_shared: 'Margin before shared costs',
   labor_pct: 'Labor as % of revenue',
   uph: 'Units per person per hour',
@@ -52,7 +52,7 @@ const FORMULAS: Readonly<Record<ExplainMetric, string>> = {
   shared: 'Time not on a job is paid time for meetings, cleanup and waiting. Pulse spreads it over the jobs that ran in the same period.',
   cost: 'Cost is labor, plus material, plus other costs, plus the time not on a job these jobs carry.',
   profit: 'Profit is revenue less cost.',
-  margin: 'Margin after all costs is profit as a share of revenue.',
+  margin: 'Margin on jobs is profit on jobs as a share of revenue. Overhead and paid time on no job are not in it. The company margin takes those out too.',
   margin_before_shared: 'Margin before shared costs leaves out time not on a job. It shows what the work itself made.',
   labor_pct: 'Labor as % of revenue is labor cost as a share of revenue. Lower is better.',
   uph: 'Units per person per hour is good units over all labor hours.',
@@ -175,7 +175,7 @@ function moneyLines(metric: ExplainMetric, total: ProfitRowDTO): Line[] {
     case 'profit':
       return [line('Revenue', t.revenueCents, 'money', 'start'), line('Labor', t.laborCents, 'money', 'minus'), line('Material', t.materialCents, 'money', 'minus'), line('Other costs', t.otherCents, 'money', 'minus'), line('Time not on a job', t.sharedCents, 'money', 'minus'), line('Profit', t.profitCents, 'money', 'total')];
     case 'margin':
-      return [line('Profit', t.profitCents, 'money', 'start'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Margin after all costs', t.marginBp, 'percent', 'total')];
+      return [line('Profit', t.profitCents, 'money', 'start'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Margin on jobs', t.marginBp, 'percent', 'total')];
     case 'margin_before_shared': {
       // The same pure summary the profit rows use, so "before shared costs" is one rule everywhere.
       const before = t.revenueCents === null ? null : centsOut(profitSummary({ revenueCents: BigInt(t.revenueCents), laborCents: BigInt(t.laborCents ?? 0), materialCents: BigInt(t.materialCents ?? 0), otherCents: BigInt(t.otherCents ?? 0), sharedCents: BigInt(t.sharedCents ?? 0) }).profitBeforeSharedCents);
@@ -210,6 +210,12 @@ export async function explain(ctx: DomainContext, metric: string, scope: Explain
   const access = await requirePulse(ctx, 'pulse:read');
   if (!(EXPLAIN_METRICS as readonly string[]).includes(metric)) throw invalid('Pick a number to explain: revenue, cost, profit, margin, labor, units or hours.');
   for (const id of [scope.siteId, scope.clientId, scope.jobTypeId, scope.jobId, scope.vasServiceId]) if (id && !isUuid(id)) throw invalid('One of the filters is not valid.');
+  // A job that is not in this workspace (or was deleted) is "not found", like every job route,
+  // never a silent answer for the whole workspace.
+  if (scope.jobId) {
+    const [job] = await rows<{ id: string }>(db, sql`SELECT id FROM pulse.jobs WHERE org_id = ${ctx.orgId} AND id = ${scope.jobId}::uuid AND deleted_at IS NULL`);
+    if (!job) throw notFound('That job');
+  }
   const key = metric as ExplainMetric;
   const money = access.seesMoney;
   const filters: ProfitFilters = { from: scope.from, to: scope.to, siteId: scope.siteId ?? null, clientId: scope.clientId ?? null, jobTypeId: scope.jobTypeId ?? null, jobId: scope.jobId ?? null, vasServiceId: scope.vasServiceId ?? null, status: scope.status ?? null };

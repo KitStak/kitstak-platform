@@ -24,7 +24,7 @@ function toneOf(column: ReportColumnDTO, value: ReportCell): string {
 }
 
 function CellBody({ column, value, hidden }: { readonly column: ReportColumnDTO; readonly value: ReportCell; readonly hidden: boolean }) {
-  if (value === null || value === undefined || value === '') return hidden && column.money ? <span className="text-fg-muted">Hidden</span> : <span className="text-fg-muted" aria-label="Nothing">&nbsp;</span>;
+  if (value === null || value === undefined || value === '') return hidden && column.money ? <span className="text-fg-muted">Hidden</span> : <span className="text-fg-muted"><span className="sr-only">Nothing</span>&nbsp;</span>;
   if (column.kind === 'status' && (PULSE_STATUSES as readonly string[]).includes(String(value))) return <MarginPill status={value as PulseStatus} size="sm" />;
   if (column.kind === 'job_status') return <span className="whitespace-nowrap">{JOB_STATUS_LABELS[value as JobStatusValue] ?? String(value)}</span>;
   return <>{reportCellText(value, column.kind)}</>;
