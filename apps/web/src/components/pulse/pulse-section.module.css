@@ -87,21 +87,87 @@
   margin-right: 5px;
 }
 
-/* The full width chapter: a worked sum beside a two by two grid of points, under a wide heading. */
-.solo {
+/* "How we got this": one block per figure, then the lines for a number that is not complete. */
+.explain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.explain > li {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.explainHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.explainValue {
+  font-size: clamp(30px, 3.4vw, 44px);
+  line-height: 1;
+}
+.explainSteps {
   display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(0, 6fr);
-  gap: clamp(32px, 5vw, 72px);
-  align-items: start;
-  margin-top: clamp(40px, 5vw, 64px);
+  gap: 10px;
+  margin: 12px 0 0;
 }
-.solo > ul {
-  margin-top: 0;
+.explainSteps dt {
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
 }
-@media (max-width: 960px) {
-  .solo {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.explainSteps dd {
+  margin: 2px 0 0;
+  font-size: var(--type-base);
+  line-height: 1.5;
+}
+.explainSteps dd.explainFigures {
+  padding: 10px 12px;
+  margin-top: 4px;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--type-sm);
+  font-variant-numeric: tabular-nums;
+}
+.explainRows {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+.explainRows svg {
+  flex: none;
+  color: var(--brand-red);
+}
+.gaps {
+  margin-top: 16px;
+  font-size: var(--type-sm);
+  color: var(--text-secondary);
+}
+.gaps ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.gaps li {
+  padding: 3px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
 @media (max-width: 420px) {

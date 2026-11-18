@@ -48,6 +48,13 @@ describe('pulse visual data', () => {
     expect(atRisk.margin?.projected).toBe(14);
     expect(data.money(16000 * 0.3 - 16000 * 0.14)).toBe('$2,560');
     expect(atRisk.impact).toContain('$2,560');
+    // Every reason that names a target names the one the chart draws.
+    expect(data.TARGET_MARGIN).toBe(30);
+    for (const job of data.OPEN_JOBS) {
+      for (const match of job.reason.matchAll(/(\d+)% target|target is (\d+)%/g)) {
+        expect(Number(match[1] ?? match[2]), job.code).toBe(data.TARGET_MARGIN);
+      }
+    }
     // A job with profit that is not complete shows no margin.
     expect(data.OPEN_JOBS.find((job) => job.status === 'not-enough-data')!.margin).toBeUndefined();
   });
@@ -78,8 +85,6 @@ describe('pulse visual data', () => {
     expect(data.OVERTIME_HOUR).toBe(30.48);
     expect(data.CREW_DAY_HOURS).toBe(96);
     expect(data.CREW_DAY_COST).toBe(2123.84);
-    expect(data.MATERIAL_COST).toBe(1377);
-    expect(data.MATERIAL_SCRAP_COST).toBe(27);
   });
 
   it('keeps the days logged on J-1012 inside its month of money in at $2.75 a unit', () => {

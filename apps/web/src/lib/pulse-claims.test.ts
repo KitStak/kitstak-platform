@@ -18,17 +18,19 @@ import { describe, expect, it } from 'vitest';
 import { PRODUCT_NAV } from '@/components/nav/nav-data';
 import * as content from '@/components/pulse/pulse-content';
 import {
+  ALERT_RULES,
   CHAPTERS,
   CSV_STREAMS,
   FAQ,
   FIRST_STEPS,
   HERO,
   HERO_FACTS,
-  MATH_BRIDGE,
+  MATH_EXPLAIN,
   MATH_JOB,
   MONEY_OUT,
   PROFIT_CUTS,
   REPORTS,
+  ROLES,
   SECTIONS,
   STATUSES,
   usd,
@@ -187,8 +189,12 @@ describe('/pulse numbers', () => {
     expect(FIRST_STEPS).toHaveLength(5);
     for (const items of [MONEY_OUT, STATUSES, CSV_STREAMS, REPORTS])
       expect(new Set(items).size).toBe(items.length);
-    expect(HERO_FACTS.map((fact) => fact.value)).toEqual(['4', '1', '5', '0']);
+    expect(ROLES).toHaveLength(5);
+    // Every hero fact is a count of something real: profit cuts, statuses, money out costs, alert rules.
+    expect(HERO_FACTS.map((fact) => fact.value)).toEqual(['4', '5', '4', '12']);
     expect(PROFIT_CUTS).toHaveLength(Number(HERO_FACTS[0]!.value));
+    expect(ALERT_RULES).toBe(12);
+    expect(COPY.some((text) => text.includes('Twelve rules'))).toBe(true);
     // A count written out by hand in a sentence would drift; none may appear that the lists do not back.
     for (const text of COPY) {
       for (const match of text.matchAll(/\b(\d+) (kinds of data|reports|CSV templates)\b/g)) {
@@ -220,11 +226,15 @@ describe('/pulse numbers', () => {
     expect(MATH_JOB.status).toBe('At risk');
   });
 
-  it('walks from job profit to company profit exactly (SPEC 4.9)', () => {
-    const end = MATH_BRIDGE.start.cents + MATH_BRIDGE.steps.reduce((total, line) => total + line.cents, 0);
-    expect(end).toBe(MATH_BRIDGE.endCents);
-    expect(MATH_BRIDGE.endCents).toBe(3_990_000);
-    expect(2_100_000 - 1_620_000).toBe(-MATH_BRIDGE.steps[2].cents);
+  it('explains figures of the same worked job, in the spec wording (SPEC 4.15)', () => {
+    const { labor } = MATH_EXPLAIN;
+    expect(labor.hours * labor.rateCents).toBe(MATH_JOB.moneyOut[0].cents);
+    // The worked job states the same hours and the same rate.
+    expect(MATH_JOB.moneyOut[0].detail).toContain(`${labor.hours} hours`);
+    expect(MATH_JOB.moneyOut[0].detail).toContain(usd(labor.rateCents));
+    expect(MATH_EXPLAIN.gaps).toEqual(['2 days have no hours', 'Uses the default rate', 'Early guess']);
+    // No other hourly rate is quoted as an example anywhere in the copy.
+    for (const text of COPY) expect(text).not.toMatch(/\$26\.00|\$4,212/);
   });
 
   it('works the sample labor rate out exactly (SPEC 4.3)', () => {
@@ -353,6 +363,9 @@ const CLAIMS: readonly Claim[] = [
   { claim: 'How we got this', spec: /How we got this/ },
   { claim: 'Explain example: labor cost', spec: /Labor cost \$4,212\.00 = 162\.0 labor hours x \$26\.00/ },
   { claim: 'Company profit bridge worked example', spec: /48210 - 1150 - 2360 - 4800 = \$39,900\.00/ },
+  { claim: 'Data quality lines', spec: /"2 days have no hours",\s+"Uses the default rate", "Early guess"/ },
+  { claim: 'A number with no warning line is complete', spec: /A number with no warning line is complete/ },
+  { claim: 'Worked example: labor so far', spec: /125 hours, labor \$2,875\.00/ },
   { claim: 'Month close locks the month', spec: /Month close/, source: /close/i },
   { claim: 'Audit log', spec: /[Aa]udit log/, source: /audit/i },
   {

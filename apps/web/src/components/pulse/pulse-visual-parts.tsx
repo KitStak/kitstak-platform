@@ -12,8 +12,8 @@ const PULSE_LOGO_ON_LIGHT = '/brand/logos/kitstak-logo-pulse-on-light.svg';
 const PULSE_LOGO_ON_DARK = '/brand/logos/kitstak-logo-pulse-on-dark.svg';
 const PORTAL_ICON = '/brand/apps/kitstak-icon-portal.svg';
 
-/** The lettered logo artboard is 579 by 200. */
-const LOGO_RATIO = 579 / 200;
+/** The lettered logo artboard is 1045 by 200: the Pulse icon, KITSTAK, a divider, then PULSE. */
+const LOGO_RATIO = 1045 / 200;
 
 interface SizeProps {
   readonly size?: number;

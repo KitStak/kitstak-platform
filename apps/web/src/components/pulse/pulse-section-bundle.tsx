@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { PRICING, percentLabel } from '@/lib/pricing';
 import cta from '../product/cta.module.css';
-import { FULL_STACK, getStartedHref } from '../site-links';
+import { FULL_STACK, PULSE_IS_LIVE, ROUTES, getStartedHref } from '../site-links';
 import { StakMark } from '../stak-mark';
-import { BUNDLE } from './pulse-content';
+import { BUNDLE, HERO } from './pulse-content';
 
 interface PulseBundleSectionProps {
   readonly visual: React.ReactNode;
@@ -40,8 +40,12 @@ export function PulseBundleSection({ visual }: PulseBundleSectionProps) {
                 →
               </span>
             </Link>
-            <Link href={getStartedHref('pulse')} className="btn btn-ghost-inverse btn-lg">
-              {BUNDLE.secondaryLabel}
+            {/* No start button for Pulse until its app is open. */}
+            <Link
+              href={PULSE_IS_LIVE ? getStartedHref('pulse') : ROUTES.demo}
+              className="btn btn-ghost-inverse btn-lg"
+            >
+              {PULSE_IS_LIVE ? BUNDLE.startLabel : HERO.walkthroughLabel}
             </Link>
           </div>
         </div>

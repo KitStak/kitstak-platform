@@ -7,6 +7,14 @@ export const LINKS = {
   pulse: 'https://pulse.kitstak.app',
 } as const;
 
+/**
+ * Whether customers can open the Pulse app yet. It is still being built, so the site does not send
+ * anyone to it: the Pulse page leads with "Book a walkthrough", and the footer leaves out the Pulse
+ * start and sign in links. Set this to true on the day pulse.kitstak.app opens. That one line brings
+ * "Start with Pulse" and the sign in link back.
+ */
+export const PULSE_IS_LIVE: boolean = false;
+
 /** Marketing-site routes. Every internal link goes through here so navigation stays consistent. */
 export const ROUTES = {
   home: '/',

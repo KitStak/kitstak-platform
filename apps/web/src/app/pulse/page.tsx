@@ -5,7 +5,6 @@ import { Header } from '@/components/header';
 import { PageEffects } from '@/components/page-effects';
 import { Chapter, TileGrid } from '@/components/product/chapter';
 import { Faq, FounderBand } from '@/components/product/cta';
-import { IntegrationWall } from '@/components/product/integrations';
 import { PriceBand } from '@/components/product/price-band';
 import { ProductHero } from '@/components/product/product-hero';
 import { SubNav } from '@/components/product/sub-nav';
@@ -15,7 +14,6 @@ import {
   CLOSING,
   COST_FEATURES,
   CSV_FEATURES,
-  CSV_WALL,
   FAQ,
   FAQ_TITLE,
   HERO,
@@ -31,8 +29,7 @@ import {
   SECTIONS,
 } from '@/components/pulse/pulse-content';
 import { PulseBundleSection } from '@/components/pulse/pulse-section-bundle';
-import { BridgeMathVisual, JobMathVisual } from '@/components/pulse/pulse-section-math';
-import section from '@/components/pulse/pulse-section.module.css';
+import { ExplainVisual, JobMathVisual } from '@/components/pulse/pulse-section-math';
 import {
   CostRatesVisual,
   CsvVisual,
@@ -43,9 +40,18 @@ import {
   PulseStackVisual,
   RiskVisual,
 } from '@/components/pulse/pulse-visuals';
-import { ROUTES, getStartedHref } from '@/components/site-links';
+import { PULSE_IS_LIVE, ROUTES, getStartedHref } from '@/components/site-links';
 
-const START = getStartedHref('pulse');
+/**
+ * The main action. "Start with Pulse" only once the app is open to customers. Until then the page
+ * leads with a walkthrough, and the second button jumps to the worked job.
+ */
+const PRIMARY = PULSE_IS_LIVE
+  ? { href: getStartedHref('pulse'), label: HERO.startLabel }
+  : { href: ROUTES.demo, label: HERO.walkthroughLabel };
+const SECONDARY = PULSE_IS_LIVE
+  ? { href: ROUTES.demo, label: HERO.walkthroughLabel }
+  : { href: `#${CHAPTERS.answer.id}`, label: HERO.mathLabel };
 
 export const metadata: Metadata = {
   title: META.title,
@@ -109,12 +115,12 @@ export default function PulsePage() {
           app="pulse"
           lines={HERO.lines}
           lead={HERO.lead}
-          primary={{ href: START, label: HERO.primaryLabel }}
-          secondary={{ href: ROUTES.demo, label: HERO.secondaryLabel }}
+          primary={PRIMARY}
+          secondary={SECONDARY}
           visual={<PulseHeroVisual />}
           facts={HERO_FACTS}
         />
-        <SubNav current="pulse" sections={SECTIONS} cta={{ href: START, label: HERO.primaryLabel }} />
+        <SubNav current="pulse" sections={SECTIONS} cta={PRIMARY} />
 
         <Chapter {...CHAPTERS.problem}>
           <TileGrid tiles={PROBLEM_TILES} />
@@ -124,16 +130,16 @@ export default function PulsePage() {
 
         <Chapter {...CHAPTERS.profit} features={PROFIT_FEATURES} visual={<ProfitByJobVisual />} isFlipped />
 
-        {/* The proof sits high on the page, and it is the one full width chapter: heading on top,
-            the worked walk and its four points side by side under it. */}
-        <Chapter {...CHAPTERS.proof} tone="sunken">
-          <div className={section.solo}>
-            <div data-reveal>
-              <BridgeMathVisual />
-            </div>
-            <TileGrid tiles={PROOF_FEATURES} columns={2} />
-          </div>
-        </Chapter>
+        {/* The one thing a spreadsheet cannot do comes straight after the first profit screens. */}
+        <Chapter {...CHAPTERS.risk} features={RISK_FEATURES} visual={<RiskVisual />} tone="brand" />
+
+        <Chapter
+          {...CHAPTERS.proof}
+          features={PROOF_FEATURES}
+          visual={<ExplainVisual />}
+          tone="sunken"
+          isFlipped
+        />
 
         <Chapter {...CHAPTERS.log} features={LOG_FEATURES} visual={<DailyEntryVisual />} />
 
@@ -147,11 +153,7 @@ export default function PulsePage() {
 
         <Chapter {...CHAPTERS.costs} features={COST_FEATURES} visual={<CostRatesVisual />} />
 
-        <Chapter {...CHAPTERS.risk} features={RISK_FEATURES} visual={<RiskVisual />} tone="brand" isFlipped />
-
-        <Chapter {...CHAPTERS.csv} features={CSV_FEATURES} visual={<CsvVisual />}>
-          <IntegrationWall groups={CSV_WALL} />
-        </Chapter>
+        <Chapter {...CHAPTERS.csv} features={CSV_FEATURES} visual={<CsvVisual />} tone="sunken" isFlipped />
 
         {/* The links to the other apps live in the bundle band, the way the sibling pages sell the stack. */}
         <PulseBundleSection visual={<PulseStackVisual />} />
@@ -161,8 +163,8 @@ export default function PulsePage() {
         <FounderBand />
         <ClosingSection
           title={CLOSING.title}
-          startHref={START}
-          startLabel={CLOSING.startLabel}
+          startHref={PRIMARY.href}
+          startLabel={PRIMARY.label}
           note={CLOSING.note}
         />
       </main>

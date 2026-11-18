@@ -3,7 +3,7 @@
  *
  * Every figure here comes from the Pulse demo workspace and the worked examples in docs/pulse/SPEC.md
  * (the real cost of an hour in 4.3, plan vs actual and "Why profit changed" in 4.10 and 4.11, the company
- * profit bridge in 4.9, standard material cost in 4.6 and the story jobs in section 9), so the coded
+ * profit bridge in 4.9 and the story jobs in section 9), so the coded
  * visuals agree with the product screenshots that replace them later. Totals are never typed twice: they
  * are added up from the rows, and pulse-visual-data.test.ts checks that every view agrees.
  */
@@ -187,6 +187,9 @@ export const BRIDGE_STEPS: readonly { readonly label: string; readonly amount: n
 export const COMPANY_PROFIT = BRIDGE_STEPS.reduce((sum, step) => sum + step.amount, MONTH.profit);
 
 /* ===== Open jobs ===== */
+
+/** The target margin every job in the sample is judged against: the default of 30% (SPEC 4.12). */
+export const TARGET_MARGIN = 30;
 
 export interface OpenJob {
   readonly code: string;
@@ -457,11 +460,6 @@ export const CREW_DAY_HOURS = CREW_DAY.people * CREW_DAY.hoursEach;
 export const CREW_DAY_COST = cents(
   (CREW_DAY_HOURS - CREW_DAY.overtimeHours) * REAL_HOUR + CREW_DAY.overtimeHours * OVERTIME_HOUR,
 );
-
-/** Standard material cost: 3,000 good units and 60 scrap at $0.45 a unit (SPEC 4.6). */
-export const MATERIAL = { goodUnits: 3000, scrapUnits: 60, unitCost: 0.45 } as const;
-export const MATERIAL_COST = cents((MATERIAL.goodUnits + MATERIAL.scrapUnits) * MATERIAL.unitCost);
-export const MATERIAL_SCRAP_COST = cents(MATERIAL.scrapUnits * MATERIAL.unitCost);
 
 /* ===== CSV ===== */
 

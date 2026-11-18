@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ROUTES } from '../site-links';
 // Same band, grid and ruled list as the WMS section above it on the home page, so the two read as a pair.
 import styles from '../wms/wms-section.module.css';
-import { PulseHeroVisual } from './pulse-visuals';
+import { RiskVisual } from './pulse-visuals';
 
 /** Four rows, each one a chapter of the Pulse page in its own words (SPEC 8.5 lists the same set). */
 const CAPABILITIES = [
@@ -18,7 +18,10 @@ const CAPABILITIES = [
   },
 ] as const;
 
-/** Pulse on the home page: the same weight as the WMS and CRM sections, with the Pulse Home screen beside it. */
+/**
+ * Pulse on the home page: the same weight as the WMS and CRM sections. The picture is the open jobs
+ * chart, so the Pulse page a visitor clicks through to does not open on the same card.
+ */
 export function PulseHomeSection() {
   return (
     <section id="pulse" className={`section ${styles.section}`} aria-labelledby="pulse-heading">
@@ -50,7 +53,7 @@ export function PulseHomeSection() {
             </p>
           </div>
           <div className={styles.visual} data-reveal>
-            <PulseHeroVisual />
+            <RiskVisual />
           </div>
         </div>
       </div>

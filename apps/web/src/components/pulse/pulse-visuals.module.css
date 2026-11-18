@@ -241,7 +241,7 @@
 .jobFacts {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 20px;
+  gap: 6px 22px;
   margin: 8px 0 0;
   font-size: var(--type-sm);
   font-variant-numeric: tabular-nums;
@@ -260,16 +260,6 @@
 }
 .jobFacts [data-tone='bad'] dd {
   color: var(--danger-text);
-}
-.nextStep {
-  margin-top: 8px;
-  font-size: var(--type-sm);
-  font-weight: var(--weight-semibold);
-}
-.nextStep span {
-  margin-right: 6px;
-  font-weight: var(--weight-regular);
-  color: var(--text-muted);
 }
 .tableNote {
   margin-top: 8px;
@@ -521,20 +511,6 @@
 }
 
 /* ===== Real cost of an hour ===== */
-.pair {
-  display: grid;
-}
-.pairSecond {
-  position: relative;
-  margin: -16px 0 0 clamp(20px, 5vw, 72px);
-}
-.cardHead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-}
 .rateLayout {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -594,15 +570,6 @@
   height: 10px;
   margin-top: 5px;
 }
-.materialTable {
-  margin-top: 6px;
-}
-.materialTable tbody tr:last-child th,
-.materialTable tbody tr:last-child td {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
 /* ===== Jobs at risk ===== */
 .statusChips {
   list-style: none;
@@ -611,6 +578,88 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+/* The chart: one track per job on a shared scale, with a line at zero and a line at the target. */
+.marginKey {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 16px;
+  font-size: var(--type-xs);
+  color: var(--text-secondary);
+}
+.marginKey span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.marginKey span::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 8px;
+  background: var(--chart-2);
+}
+.marginKey [data-part='dot']::before {
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--text-primary);
+  border-radius: 50%;
+  background: var(--surface-panel);
+}
+.marginKey [data-part='target']::before {
+  width: 2px;
+  height: 16px;
+  background: var(--text-primary);
+}
+.marginTrack {
+  position: relative;
+  height: 12px;
+  margin: 14px 0 12px;
+  background: var(--surface-muted);
+}
+.marginTrack::before,
+.marginTrack::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+}
+.marginTrack::before {
+  left: calc(var(--zero) * 100%);
+  width: 1px;
+  background: var(--border-strong);
+}
+.marginTrack::after {
+  left: calc(var(--target) * 100%);
+  width: 2px;
+  background: var(--text-primary);
+}
+.marginTrack[data-empty] {
+  background: repeating-linear-gradient(90deg, var(--border-default) 0 6px, transparent 6px 12px);
+}
+.marginBar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--from) * 100%);
+  width: calc(var(--size) * 100%);
+  background: var(--chart-2);
+}
+.marginBar[data-loss] {
+  background: repeating-linear-gradient(135deg, var(--danger) 0 4px, transparent 4px 7px);
+}
+.marginDot {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--at) * 100%);
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--text-primary);
+  border-radius: 50%;
+  background: var(--surface-panel);
+  transform: translate(-50%, -50%);
 }
 
 /* ===== CSV ===== */
@@ -749,7 +798,7 @@
 }
 .links > li {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-columns: 124px minmax(0, 1fr);
   gap: 16px;
   padding: 16px 0;
   border-bottom: 1px solid var(--border-subtle);
@@ -806,11 +855,6 @@
 @container (max-width: 520px) {
   .wideOnly {
     display: none;
-  }
-  .links > li,
-  .linkFlow {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
   }
   .rateLayout {
     grid-template-columns: minmax(0, 1fr);
@@ -875,6 +919,14 @@
     gap: 8px;
   }
 }
+/* The connected apps card keeps its three columns until the panel is too narrow to hold them. */
+@container (max-width: 430px) {
+  .links > li,
+  .linkFlow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+}
 @container (max-width: 340px) {
   .table {
     font-size: var(--type-xs);
@@ -896,11 +948,5 @@
   }
   .headValue {
     font-size: 34px;
-  }
-}
-@media (max-width: 520px) {
-  /* Full width cards stack with a gap. The overlap only reads as a layered pair when offset. */
-  .pairSecond {
-    margin: 12px 0 0;
   }
 }

@@ -10,9 +10,6 @@ import {
   LOG_DAY,
   LOG_ROWS,
   LOG_TOTAL,
-  MATERIAL,
-  MATERIAL_COST,
-  MATERIAL_SCRAP_COST,
   MONTH,
   NEEDS_YOU,
   NEEDS_YOU_COUNT,
@@ -27,6 +24,7 @@ import {
   RATE_PARTS,
   REAL_HOUR,
   STATUS_COUNTS,
+  TARGET_MARGIN,
   WHY_READING,
   WHY_STEPS,
   count,
@@ -67,14 +65,15 @@ export function PulseHeroVisual() {
     <PulseShot slot="hero">
       <div className={`${mock.panel} ${styles.frame}`} data-lifted>
         <div className={`${mock.head} ${styles.head}`}>
-          <PulseWordmark height={48} />
+          <PulseWordmark height={36} />
           <div className={mock.sub}>{PERIOD} · sample data</div>
         </div>
 
         <p className={styles.answer}>
           Your jobs made <strong>{money(MONTH.profit)}</strong> this month at a{' '}
-          <strong>{percent(MONTH.margin, 0)} margin</strong>. After time not on a job and overhead, the
-          company made <strong>{money(COMPANY_PROFIT)}</strong>. {NEEDS_YOU_COUNT} jobs need you.
+          <strong>{percent(MONTH.margin, 0)} margin</strong>. After paid time that was not on a job, and
+          overhead, the company made <strong>{money(COMPANY_PROFIT)}</strong>. {NEEDS_YOU_COUNT} jobs need
+          you.
         </p>
 
         <dl className={styles.tiles}>
@@ -349,117 +348,67 @@ export function PlanVsActualVisual() {
   );
 }
 
-/* ===== Real cost of an hour, material cost ===== */
+/* ===== Real cost of an hour ===== */
 
 const RATE_TOKENS = ['--chart-1', '--chart-2', '--chart-3', '--chart-4'] as const;
 
-/** The rate builder for one labor class, and material cost by who buys the parts. */
+/** The rate builder for one labor class: the wage and what rides on top of it. */
 export function CostRatesVisual() {
-  const usedUnits = MATERIAL.goodUnits + MATERIAL.scrapUnits;
   return (
     <PulseShot slot="rates">
-      <div className={styles.pair}>
-        <div className={`${mock.panel} ${styles.frame}`} data-lifted>
-          <div className={`${mock.head} ${styles.head}`}>
-            <div>
-              <div className={mock.title}>Real cost of an hour</div>
-              <div className={mock.sub}>{RATE.laborClass} · rate builder · sample data</div>
-            </div>
+      <div className={`${mock.panel} ${styles.frame}`} data-lifted>
+        <div className={`${mock.head} ${styles.head}`}>
+          <div>
+            <div className={mock.title}>Real cost of an hour</div>
+            <div className={mock.sub}>{RATE.laborClass} · rate builder · sample data</div>
           </div>
-
-          <div className={styles.rateLayout}>
-            <div className={styles.rateTotal}>
-              <span className={mock.sub}>One hour really costs</span>
-              <span className={`numeral ${styles.rateValue}`}>{moneyCents(REAL_HOUR)}</span>
-              <span className={styles.rateAside}>Overtime hour {moneyCents(OVERTIME_HOUR)}</span>
-            </div>
-
-            <div>
-              <div
-                className={styles.rateBar}
-                role="img"
-                aria-label={`The real cost of an hour, ${moneyCents(REAL_HOUR)}, is the wage plus payroll taxes, benefits and overhead.`}
-              >
-                {RATE_PARTS.map((part, i) => (
-                  <span
-                    key={part.label}
-                    style={{ flexGrow: part.amount, background: `var(${RATE_TOKENS[i]})` }}
-                  />
-                ))}
-              </div>
-              <dl className={styles.rateParts}>
-                {RATE_PARTS.map((part, i) => (
-                  <div key={part.label}>
-                    <dt>
-                      <span
-                        className={styles.swatch}
-                        style={{ background: `var(${RATE_TOKENS[i]})` }}
-                        aria-hidden
-                      />
-                      <span>
-                        {part.label}
-                        <span className={styles.partDetail}>{part.detail}</span>
-                      </span>
-                    </dt>
-                    <dd>{moneyCents(part.amount)}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          </div>
-
-          <p className={mock.caption}>
-            {CREW_DAY.people} packers for {CREW_DAY.hoursEach} hours each, {CREW_DAY.overtimeHours} of the
-            hours overtime: {CREW_DAY_HOURS} labor hours cost {moneyCents(CREW_DAY_COST)}.
-          </p>
         </div>
 
-        <div className={`${mock.panel} ${styles.frame} ${styles.pairSecond}`}>
-          <div className={styles.cardHead}>
-            <span className={mock.title}>Material cost</span>
-            <span className={mock.sub}>Who buys the parts · sample data</span>
+        <div className={styles.rateLayout}>
+          <div className={styles.rateTotal}>
+            <span className={mock.sub}>One hour really costs</span>
+            <span className={`numeral ${styles.rateValue}`}>{moneyCents(REAL_HOUR)}</span>
+            <span className={styles.rateAside}>Overtime hour {moneyCents(OVERTIME_HOUR)}</span>
           </div>
-          <table className={`${styles.table} ${styles.materialTable}`}>
-            <caption className="visually-hidden">
-              Material cost for the same {count(usedUnits)} units, by who buys the parts. Sample data.
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Who buys the parts</th>
-                <th scope="col" className={styles.wideOnly}>
-                  Used
-                </th>
-                <th scope="col">Scrap</th>
-                <th scope="col">Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th scope="row">
-                  You buy them
-                  <span className={styles.partDetail}>
-                    {count(usedUnits)} units used × {moneyCents(MATERIAL.unitCost)}
-                  </span>
-                </th>
-                <td className={styles.wideOnly}>{count(usedUnits)}</td>
-                <td>
-                  {MATERIAL.scrapUnits}
-                  <span className={styles.partDetail}>{moneyCents(MATERIAL_SCRAP_COST)}</span>
-                </td>
-                <td className={styles.strong}>{moneyCents(MATERIAL_COST)}</td>
-              </tr>
-              <tr>
-                <th scope="row">
-                  The client owns them
-                  <span className={styles.partDetail}>Counted in units</span>
-                </th>
-                <td className={styles.wideOnly}>{count(usedUnits)}</td>
-                <td>{MATERIAL.scrapUnits}</td>
-                <td className={styles.strong}>{moneyCents(0)}</td>
-              </tr>
-            </tbody>
-          </table>
+
+          <div>
+            <div
+              className={styles.rateBar}
+              role="img"
+              aria-label={`The real cost of an hour, ${moneyCents(REAL_HOUR)}, is the wage plus payroll taxes, benefits and overhead.`}
+            >
+              {RATE_PARTS.map((part, i) => (
+                <span
+                  key={part.label}
+                  style={{ flexGrow: part.amount, background: `var(${RATE_TOKENS[i]})` }}
+                />
+              ))}
+            </div>
+            <dl className={styles.rateParts}>
+              {RATE_PARTS.map((part, i) => (
+                <div key={part.label}>
+                  <dt>
+                    <span
+                      className={styles.swatch}
+                      style={{ background: `var(${RATE_TOKENS[i]})` }}
+                      aria-hidden
+                    />
+                    <span>
+                      {part.label}
+                      <span className={styles.partDetail}>{part.detail}</span>
+                    </span>
+                  </dt>
+                  <dd>{moneyCents(part.amount)}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
         </div>
+
+        <p className={mock.caption}>
+          {CREW_DAY.people} packers for {CREW_DAY.hoursEach} hours each, {CREW_DAY.overtimeHours} of the hours
+          overtime: {CREW_DAY_HOURS} labor hours cost {moneyCents(CREW_DAY_COST)}.
+        </p>
       </div>
     </PulseShot>
   );
@@ -467,7 +416,20 @@ export function CostRatesVisual() {
 
 /* ===== Jobs at risk ===== */
 
-/** The Jobs list, worst first: a status, the reason in a sentence and a next step. */
+/* One scale for every row of the chart, wide enough for a loss and for the best job. */
+const MARGIN_AXIS = { min: -25, max: 45 } as const;
+
+function onAxis(margin: number): number {
+  return (margin - MARGIN_AXIS.min) / (MARGIN_AXIS.max - MARGIN_AXIS.min);
+}
+
+const AXIS_ZERO = onAxis(0);
+const AXIS_TARGET = onAxis(TARGET_MARGIN);
+
+/**
+ * The Jobs list, worst first, drawn as one chart: where each open job's margin is heading against
+ * the target. Under each bar sit the reason in a sentence, the money at stake and the next step.
+ */
 export function RiskVisual() {
   return (
     <PulseShot slot="risk">
@@ -487,6 +449,12 @@ export function RiskVisual() {
           ))}
         </ul>
 
+        <p className={styles.marginKey} aria-hidden>
+          <span data-part="bar">Projected margin</span>
+          <span data-part="dot">Margin so far</span>
+          <span data-part="target">Your target, {TARGET_MARGIN}%</span>
+        </p>
+
         <ol className={styles.jobList} aria-label="One open job of each status, worst first">
           {OPEN_JOBS.map((job) => (
             <li key={job.code}>
@@ -494,6 +462,7 @@ export function RiskVisual() {
                 <JobName code={job.code} name={job.name} />
                 <StatusPill status={job.status} />
               </div>
+              <MarginTrack job={job} />
               <p className={styles.reason}>{job.reason}</p>
               <JobFacts job={job} />
             </li>
@@ -504,32 +473,53 @@ export function RiskVisual() {
   );
 }
 
+/**
+ * One row of the chart: a bar from zero to the projected margin, a dot at the margin so far and a
+ * line at the target. A loss is striped as well as red. The figures are in the text under it.
+ */
+function MarginTrack({ job }: { readonly job: OpenJob }) {
+  const axis = { '--zero': AXIS_ZERO, '--target': AXIS_TARGET } as React.CSSProperties;
+  if (!job.margin) return <div className={styles.marginTrack} style={axis} data-empty aria-hidden />;
+
+  const { soFar, projected } = job.margin;
+  const from = Math.min(AXIS_ZERO, onAxis(projected));
+  return (
+    <div className={styles.marginTrack} style={axis} aria-hidden>
+      <span
+        className={styles.marginBar}
+        data-loss={projected < 0 || undefined}
+        style={{ '--from': from, '--size': Math.abs(onAxis(projected) - AXIS_ZERO) } as React.CSSProperties}
+      />
+      <span className={styles.marginDot} style={{ '--at': onAxis(soFar) } as React.CSSProperties} />
+    </div>
+  );
+}
+
 /** Margin so far, projected margin and the money at stake for one open job, then its next step. */
 function JobFacts({ job }: { readonly job: OpenJob }) {
   return (
-    <>
-      <dl className={styles.jobFacts}>
-        <div>
-          <dt>Margin so far</dt>
-          <dd>{job.margin ? percent(job.margin.soFar) : 'Not complete yet'}</dd>
+    <dl className={styles.jobFacts}>
+      <div>
+        <dt>So far</dt>
+        <dd>{job.margin ? percent(job.margin.soFar) : 'Not complete yet'}</dd>
+      </div>
+      <div>
+        <dt>Heading for</dt>
+        <dd>{job.margin ? percent(job.margin.projected) : 'Not complete yet'}</dd>
+      </div>
+      {job.impact ? (
+        <div data-tone="bad">
+          <dt>Impact</dt>
+          <dd>{job.impact}</dd>
         </div>
-        <div>
-          <dt>Projected margin</dt>
-          <dd>{job.margin ? percent(job.margin.projected) : 'Not complete yet'}</dd>
-        </div>
-        {job.impact ? (
-          <div data-tone="bad">
-            <dt>Impact</dt>
-            <dd>{job.impact}</dd>
-          </div>
-        ) : null}
-      </dl>
-      {job.nextStep ? (
-        <p className={styles.nextStep}>
-          <span>Next step</span> {job.nextStep}
-        </p>
       ) : null}
-    </>
+      {job.nextStep ? (
+        <div>
+          <dt>Next step</dt>
+          <dd>{job.nextStep}</dd>
+        </div>
+      ) : null}
+    </dl>
   );
 }
 
@@ -579,7 +569,7 @@ export function PulseStackVisual() {
     <PulseShot slot="stack">
       <div className={`${mock.panel} ${styles.frame}`} data-lifted>
         <div className={`${mock.head} ${styles.head}`}>
-          <PulseWordmark height={36} />
+          <PulseWordmark height={28} />
           <div className={styles.sync}>
             <PulseLoader size={34} />
             <span>Keeps in step within minutes</span>

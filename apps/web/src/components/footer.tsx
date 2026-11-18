@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Logo } from './logo';
 import { PRODUCT_NAV } from './nav/nav-data';
-import { LINKS, ROUTES, getStartedHref } from './site-links';
+import { LINKS, PULSE_IS_LIVE, ROUTES, getStartedHref } from './site-links';
 import styles from './footer.module.css';
 
 interface FooterLink {
@@ -27,7 +27,7 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: getStartedHref('wms'), label: 'Start with the WMS' },
       { href: getStartedHref('crm'), label: 'Start with the CRM' },
       { href: getStartedHref('projects'), label: 'Start with Projects' },
-      { href: getStartedHref('pulse'), label: 'Start with Pulse' },
+      ...(PULSE_IS_LIVE ? [{ href: getStartedHref('pulse'), label: 'Start with Pulse' }] : []),
       { href: ROUTES.demo, label: 'Book a walkthrough' },
     ],
   },
@@ -46,7 +46,7 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: LINKS.wms, label: 'KitStak WMS', external: true },
       { href: LINKS.crm, label: 'KitStak CRM', external: true },
       { href: LINKS.projects, label: 'KitStak Projects', external: true },
-      { href: LINKS.pulse, label: 'KitStak Pulse', external: true },
+      ...(PULSE_IS_LIVE ? [{ href: LINKS.pulse, label: 'KitStak Pulse', external: true }] : []),
     ],
   },
 ];

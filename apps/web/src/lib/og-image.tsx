@@ -28,11 +28,11 @@ const APP_ICON: Readonly<Record<OgApp, string>> = {
 };
 
 const KITSTAK_LOCKUP = { file: 'kitstak-lockup-cream.png', type: 'image/png', ratio: 1200 / 228 };
-/** The official lettered logo for dark backgrounds (viewBox 579 by 200). */
+/** The official lettered logo for dark backgrounds (viewBox 1045 by 200). */
 const PULSE_LOGO = {
   file: 'logos/kitstak-logo-pulse-on-dark.svg',
   type: 'image/svg+xml',
-  ratio: 579 / 200,
+  ratio: 1045 / 200,
 };
 
 export interface OgCard {
@@ -54,7 +54,7 @@ async function dataUrl(file: string, type: string): Promise<string> {
 
 export async function ogImage(card: OgCard): Promise<ImageResponse> {
   const logo = card.brand === 'pulse' ? PULSE_LOGO : KITSTAK_LOCKUP;
-  const logoHeight = card.brand === 'pulse' ? 132 : 60;
+  const logoHeight = card.brand === 'pulse' ? 96 : 60;
   // A long promise runs to three lines, so it is set a step smaller to stay inside the card.
   const promiseSize = card.promise.length > 32 ? 100 : 124;
   const [font, logoSrc, iconSrc] = await Promise.all([
