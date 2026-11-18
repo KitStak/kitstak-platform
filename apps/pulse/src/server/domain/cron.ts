@@ -37,6 +37,9 @@ export async function tickOrg(orgId: string): Promise<{ jobs: number; alerts: { 
   const ctx = await systemContext(orgId);
   if (!ctx) return null;
   const jobs = await rows<{ id: string }>(db, sql`SELECT id FROM pulse.jobs WHERE org_id = ${orgId} AND deleted_at IS NULL AND status IN ('active', 'on_hold')`);
+  // Sibling sync first (bridge events, then any connected app that is stale), so the rollups below see it. Never throws.
+  const { syncIfStale } = await import('./sync');
+  await syncIfStale(ctx, 'cron');
   if (jobs.length > 0) await db.transaction((tx) => recomputeJobs(tx, ctx, jobs.map((job) => job.id)));
   return { jobs: jobs.length, alerts: await evaluateAlerts(ctx) };
 }

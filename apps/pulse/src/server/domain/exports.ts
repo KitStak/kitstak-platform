@@ -4,6 +4,9 @@
  * imported back and changes nothing. The import engine reads existing rows through the same
  * function, which is why the round trip is lossless by construction.
  *
+ * Rows that hang off a deleted job or a deleted client are left out: they cannot be imported back,
+ * and a deleted job is not part of the numbers.
+ *
  * Money columns are dropped for readers without `money:read` and wage columns for readers
  * without `wage:read`. Every export writes an `export.run` activity row.
  */
@@ -145,7 +148,7 @@ function streamQuery(stream: StreamId, orgId: string, scope: StreamScope): SQL {
           FROM pulse.production_entries p
           JOIN pulse.jobs j ON j.id = p.job_id
           LEFT JOIN pulse.labor_classes lc ON lc.id = p.labor_class_id
-         WHERE p.org_id = ${orgId} AND p.deleted_at IS NULL${range('p.work_date')}${jobFilters}${siteFilter('p')}${only('p')}
+         WHERE p.org_id = ${orgId} AND p.deleted_at IS NULL AND j.deleted_at IS NULL${range('p.work_date')}${jobFilters}${siteFilter('p')}${only('p')}
          ORDER BY p.work_date, j.number, p.shift, lc.code NULLS FIRST, p.id LIMIT ${limit}`;
     case 'labor_rates':
       return sql`
@@ -182,7 +185,7 @@ function streamQuery(stream: StreamId, orgId: string, scope: StreamScope): SQL {
           JOIN pulse.sites s ON s.id = t.site_id
           LEFT JOIN pulse.jobs j ON j.id = t.job_id
           LEFT JOIN pulse.labor_classes lc ON lc.id = t.labor_class_id
-         WHERE t.org_id = ${orgId} AND t.deleted_at IS NULL${range('t.work_date')}${siteFilter('t')}${only('t')}
+         WHERE t.org_id = ${orgId} AND t.deleted_at IS NULL AND (t.job_id IS NULL OR j.deleted_at IS NULL)${range('t.work_date')}${siteFilter('t')}${only('t')}
                ${and(scope.clientId ? sql`j.client_id = ${scope.clientId}` : null)}
          ORDER BY t.work_date, t.employee_code, j.number NULLS LAST, t.id LIMIT ${limit}`;
     case 'materials':
@@ -191,7 +194,7 @@ function streamQuery(stream: StreamId, orgId: string, scope: StreamScope): SQL {
                m.quantity_scrapped, m.quantity_planned, m.unit_cost, m.uom, m.lot, m.supplied_by, m.note
           FROM pulse.material_usage m
           JOIN pulse.jobs j ON j.id = m.job_id
-         WHERE m.org_id = ${orgId} AND m.deleted_at IS NULL${range('m.usage_date')}${jobFilters}${siteFilter('m')}${only('m')}
+         WHERE m.org_id = ${orgId} AND m.deleted_at IS NULL AND j.deleted_at IS NULL${range('m.usage_date')}${jobFilters}${siteFilter('m')}${only('m')}
          ORDER BY m.usage_date, j.number, m.item_sku, m.id LIMIT ${limit}`;
     case 'items':
       return sql`
@@ -209,7 +212,7 @@ function streamQuery(stream: StreamId, orgId: string, scope: StreamScope): SQL {
           LEFT JOIN pulse.jobs j ON j.id = e.job_id
           LEFT JOIN pulse.clients c ON c.id = e.client_id
           LEFT JOIN pulse.sites s ON s.id = e.site_id
-         WHERE e.org_id = ${orgId} AND e.deleted_at IS NULL${range('e.cost_date')}${only('e')}
+         WHERE e.org_id = ${orgId} AND e.deleted_at IS NULL AND (e.job_id IS NULL OR j.deleted_at IS NULL) AND (e.scope <> 'client' OR c.deleted_at IS NULL)${range('e.cost_date')}${only('e')}
                ${and(scope.clientId ? sql`e.client_id = ${scope.clientId}` : null)}${and(scope.jobTypeId ? sql`j.job_type_id = ${scope.jobTypeId}` : null)}
                ${and(scope.status ? sql`j.status = ${scope.status}` : null)}${and(scope.siteId ? sql`e.site_id = ${scope.siteId}` : null)}
          ORDER BY e.cost_date, e.created_at, e.id LIMIT ${limit}`;
@@ -222,7 +225,7 @@ function streamQuery(stream: StreamId, orgId: string, scope: StreamScope): SQL {
           JOIN pulse.clients c ON c.id = e.client_id
           LEFT JOIN pulse.jobs j ON j.id = e.job_id
           LEFT JOIN pulse.vas_services vs ON vs.id = e.vas_service_id
-         WHERE e.org_id = ${orgId} AND e.deleted_at IS NULL AND e.kind <> 'fixed_true_up'${range('e.revenue_date')}${only('e')}
+         WHERE e.org_id = ${orgId} AND e.deleted_at IS NULL AND e.kind <> 'fixed_true_up' AND (CASE WHEN e.job_id IS NULL THEN c.deleted_at IS NULL ELSE j.deleted_at IS NULL END)${range('e.revenue_date')}${only('e')}
                ${and(scope.clientId ? sql`e.client_id = ${scope.clientId}` : null)}${and(scope.jobTypeId ? sql`j.job_type_id = ${scope.jobTypeId}` : null)}
                ${and(scope.status ? sql`j.status = ${scope.status}` : null)}${siteFilter('e')}
          ORDER BY e.revenue_date, e.created_at, e.id LIMIT ${limit}`;
@@ -244,7 +247,7 @@ function streamQuery(stream: StreamId, orgId: string, scope: StreamScope): SQL {
           JOIN pulse.vas_services vs ON vs.id = e.vas_service_id
           LEFT JOIN pulse.jobs j ON j.id = e.job_id
           LEFT JOIN pulse.labor_classes lc ON lc.id = e.labor_class_id
-         WHERE e.org_id = ${orgId} AND e.deleted_at IS NULL${range('e.work_date')}${only('e')}
+         WHERE e.org_id = ${orgId} AND e.deleted_at IS NULL AND c.deleted_at IS NULL AND (e.job_id IS NULL OR j.deleted_at IS NULL)${range('e.work_date')}${only('e')}
                ${and(scope.clientId ? sql`e.client_id = ${scope.clientId}` : null)}${and(scope.jobTypeId ? sql`j.job_type_id = ${scope.jobTypeId}` : null)}${siteFilter('e')}
          ORDER BY e.work_date, c.code, vs.code, e.id LIMIT ${limit}`;
     case 'target_pace':

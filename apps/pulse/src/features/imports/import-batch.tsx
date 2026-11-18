@@ -639,7 +639,7 @@ function CheckStep({ batch, onBatch, onRemap, onDiscard }: { readonly batch: Imp
                   ? `Nothing can be saved while ${rowsWord(counts.error)} ${counts.error === 1 ? 'has a problem' : 'have problems'}. Fix them, leave them out, or pick "Skip bad rows".`
                   : toSave === 0
                     ? 'Every row is already in Pulse, so saving changes nothing.'
-                    : `Ready. ${count(counts.create)} new and ${count(counts.update)} changed ${toSave === 1 ? 'row' : 'rows'} will be saved together. You can undo for 7 days.`}
+                    : `Ready. ${rowsWord(toSave)} will be saved together: ${count(counts.create)} new and ${count(counts.update)} changed.${counts.error > 0 ? ` The ${rowsWord(counts.error)} with problems ${counts.error === 1 ? 'is' : 'are'} left out.` : ''} You can undo for 7 days.`}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

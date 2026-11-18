@@ -249,12 +249,14 @@ test('settings: sites, job types and catalogs can be added, changed and removed'
   await page.getByTestId('site-name').fill(`E2E dock ${stamp}`);
   await page.getByTestId('site-code').fill(`E2E${stamp}`);
   await page.getByTestId('site-save').click();
+  await expect(page.getByTestId('site-dialog')).toBeHidden();
   const site = page.getByTestId(`site-E2E${stamp}`);
   await expect(site).toContainText(`E2E dock ${stamp}`);
   await page.reload();
   await page.getByTestId(`site-edit-E2E${stamp}`).click();
   await page.getByTestId('site-name').fill(`E2E dock ${stamp} north`);
   await page.getByTestId('site-save').click();
+  await expect(page.getByTestId('site-dialog')).toBeHidden();
   await expect(site).toContainText('north');
   await page.getByTestId(`site-delete-E2E${stamp}`).click();
   await page.getByRole('button', { name: 'Delete site' }).click();
@@ -267,6 +269,7 @@ test('settings: sites, job types and catalogs can be added, changed and removed'
   await page.getByLabel('Short code').fill(`E2ET${stamp}`);
   await page.getByLabel('Target margin').fill('31.5');
   await page.getByTestId('job-type-save').click();
+  await expect(page.getByTestId('job-type-dialog')).toBeHidden();
   const type = page.getByTestId(`job-type-E2ET${stamp}`);
   await expect(type).toContainText('target margin 31.5%');
   await page.reload();
@@ -281,11 +284,13 @@ test('settings: sites, job types and catalogs can be added, changed and removed'
   await page.getByTestId('client-name').fill(`E2E Client ${stamp}`);
   await page.getByTestId('client-code').fill(`E2EC${stamp}`);
   await page.getByTestId('client-save').click();
+  await expect(page.getByTestId('client-dialog')).toBeHidden();
   const client = page.getByTestId(`client-E2EC${stamp}`);
   await expect(client).toBeVisible();
   await page.getByTestId(`client-edit-E2EC${stamp}`).click();
   await page.getByLabel('Contact name').fill('Robin Vale');
   await page.getByTestId('client-save').click();
+  await expect(page.getByTestId('client-dialog')).toBeHidden();
   await expect(client).toContainText('Robin Vale');
   await page.getByTestId(`client-delete-E2EC${stamp}`).click();
   await expect(client).toHaveCount(0);
@@ -305,6 +310,7 @@ test('settings: sites, job types and catalogs can be added, changed and removed'
   await page.getByTestId('item-sku').fill(`E2EI-${stamp}`);
   await page.getByTestId('item-cost').fill('0.0425');
   await page.getByTestId('item-save').click();
+  await expect(page.getByTestId('item-dialog')).toBeHidden();
   const item = page.getByTestId(`item-E2EI-${stamp}`);
   await expect(item).toContainText('$0.0425');
   await page.getByTestId(`item-delete-E2EI-${stamp}`).click();

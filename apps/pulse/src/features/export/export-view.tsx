@@ -52,7 +52,8 @@ export function ExportView({ initialCounts, seesMoney, canImport }: { readonly i
   const filters = { from, to, client, jobType, site, status, money: noMoney ? '0' : null };
   const active = [from, to, client, jobType, site, status].filter(Boolean).length;
   const byStream = useMemo(() => new Map(counts.data.map((row) => [row.stream, row.rows])), [counts.data]);
-  const total = counts.data.reduce((sum, row) => sum + row.rows, 0);
+  // Every workspace starts with the built in General job type, so that one row is not "data" yet.
+  const total = counts.data.reduce((sum, row) => sum + (row.stream === 'job_types' ? Math.max(row.rows - 1, 0) : row.rows), 0);
   const today = isoToday();
 
   const presets: readonly { id: string; label: string; from: string | null; to: string | null }[] = [

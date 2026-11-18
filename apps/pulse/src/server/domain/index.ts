@@ -38,3 +38,4 @@ export * from './ledger';
 export * from './exports';
 export * from './imports';
 export * from './sample';
+export * from './sync';

@@ -669,3 +669,65 @@ Everything here is additive on top of sections 5 to 9.
 
 Pure helpers with tests: `features/calculator/calc-model`, `features/alerts/{quiet-hours,rule-kinds,alert-model}`,
 `features/goals/goal-math`, `features/wall/wall-math`, `features/periods/close-model`.
+
+## 17. Import, export, settings, onboarding and saved views (owner: data)
+
+What the data team added on top of sections 5 to 10. Everything here is additive.
+
+**Domain (`@/server/domain`)**
+- **`exports`**: `loadStreamRows(executor, orgId, stream, scope)` reads the live rows of any of the 17 streams as CSV shaped
+  records (codes instead of ids, one statement per stream). `exportStream(ctx, stream, filters)` and
+  `exportEverything(ctx, filters)` build the files (money columns dropped without `money:read`, wage columns without
+  `wage:read`, labor rates refused without money, cut at 200,000 rows) and write an `export.run` activity row.
+  `countStreamRows(ctx)`. Filters: `from,to,clientId,jobTypeId,siteId,status,layout,hideMoney`.
+- **`imports`**: one engine for every stream. `createImportBatch`, `appendImportRows(ctx, id, rows, { done })`,
+  `checkImportBatch(ctx, id, { mapping, options, savePresetAs })` (the dry run), `editImportRows` (fix cells or leave rows
+  out, then check again), `commitImportBatch` (plans again inside one transaction, writes, restamps, rebuilds rollups,
+  snapshots every changed row), `undoImportBatch` (7 days; rows changed after the import are left alone and counted),
+  `discardImportBatch`, `getImportBatch`, `listImportRows`, `listImportBatches`, `listImportStreams`,
+  `importErrorReport`, `getImportProgress`, and presets (`listImportPresets`, `saveImportPreset`, `renameImportPreset`,
+  `deleteImportPreset`). Existing rows are read through `loadStreamRows` and compared in CSV terms, so an export imported
+  back reads "No change" for every row. Rules: a blank cell leaves what is there; rows match by `entry_id` (the row id, or
+  the id the row had in the file it came from, kept in `source_ref` with `source = 'csv'`), then by the stream's key
+  columns, then the look alike check; clients, job types, labor classes and items can be created on the fly (managers
+  only); closed months and supervisor day locks are row errors; labor rates need `rate:manage`.
+  Limits: 10 MB, 50,000 rows, 200 columns, 2,000 characters a cell, 5 unfinished batches per org, 20 uploads per person
+  per hour (`PULSE_IMPORT_UPLOADS_PER_HOUR` overrides it for tests).
+- **`sample`**: `loadSampleData`, `clearSampleData` (every sample row carries `is_sample`; real work is never touched),
+  `getSampleState`, `purgeAllData(ctx, confirmSlug)` (owner only; keeps settings, sites, people, alert rules and the audit
+  log) and `getOnboardingState` (the five getting started steps judged from real data, plus the first profit number).
+- **`activity`** gained an optional `q` filter (free text; money readers also search before and after values).
+  **`notifications.notify`** now skips people who turned that kind off (`user_prefs.prefs.notify[kind] === false`).
+
+**API**
+| Route | What |
+| --- | --- |
+| `GET import` | `{ batches, streams }` for the import center |
+| `POST import` | open a batch: `{ stream, fileName, fileSize, fileHash, delimiter, headers }` returns `{ batch, presets, appliedPresetId }` |
+| `GET, DELETE import/<batch>` | one batch, or discard an unsaved one |
+| `GET, POST, PATCH import/<batch>/rows` | preview rows (`action,offset,limit`), append a chunk (`{ rows, done }`), fix or skip rows (`{ edits }`) |
+| `POST import/<batch>/check`, `/commit`, `/undo`; `GET /progress`, `/errors.csv` | dry run, save, undo, progress, error report |
+| `GET, POST import/presets`, `PATCH, DELETE import/presets/<id>` | saved column mappings |
+| `GET import/sample`, `import/onboarding` | `SampleStateDTO`, `OnboardingStateDTO` |
+| `GET templates/<stream>.csv`, `<stream>-how-to.csv`, `job_plans-lines.csv`, `all.zip` | templates with two example rows |
+| `GET export`, `export/<stream>.csv`, `export/everything.zip`, `export/audit.csv` | row counts, one stream, a zip of all streams, the audit log |
+
+**Actions**: `data.ts` (`loadSampleDataAction`, `clearSampleDataAction`, `purgeAllDataAction({ confirm })`).
+
+**Schema**: `drizzle/0005_saved_view_pages.sql` widens `saved_views.page` with `audit` and `export`
+(`SAVED_VIEW_PAGES` in `@/lib/constants`).
+
+**UI any team can mount by path**
+- `@/features/views/saved-views-bar`: `<SavedViewsBar page="jobs" ignore={['entries']} />`. A view is the query string of
+  the page, so it works on any list whose filters, sort and columns live in the URL: save, rename, update, share (managers),
+  open by default, delete with Undo. Helpers in `@/features/views/view-query`.
+- `@/features/settings/settings-tabs` (`SettingsTabs`), `@/features/settings/sections/more` (`SampleDataCard`),
+  `@/features/settings/audit-format` (plain words for audit rows: `verbLabel`, `thingLabel`, `auditChanges`, `auditSummary`),
+  `@/features/imports/when` (`When`, a time in the reader's zone), `@/features/export/zip` (`zip(entries)`, no dependency).
+- Deep links: `/import/new?stream=<id>`, `/import/<batch>`, `/export?from=&to=&client=&jobType=&site=&status=&money=0`,
+  `/settings?section=general|sites|job-types|labor|cost-rules|people|catalogs|notifications|devices|sample-data|danger|math`,
+  `/settings/audit?q=&actor=&type=&action=&from=&to=`.
+
+Dev note: on the shared Turbopack dev server a new export added to an already loaded domain file is sometimes not seen
+through the `@/server/domain` barrel until the file gets a real code edit. Importing by file path
+(`@/server/domain/sample`) always works.
