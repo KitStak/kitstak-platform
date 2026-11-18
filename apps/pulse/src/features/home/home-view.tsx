@@ -482,7 +482,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
               {fixes.map((item) => (
                 <li key={item.one} className="flex items-center justify-between gap-3 text-sm">
                   <span className="flex min-w-0 items-center gap-2 text-fg">
-                    <Wrench aria-hidden className="size-4 shrink-0 text-[var(--label-orange-text)]" />
+                    <Wrench aria-hidden className="size-4 shrink-0 text-warning-text" />
                     <span>
                       <strong className="font-semibold tabular-nums">{item.count}</strong> {item.count === 1 ? item.one : item.many}
                     </span>

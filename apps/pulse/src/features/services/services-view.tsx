@@ -51,7 +51,7 @@ export function FlagPill({ line, targetMarginBp }: { readonly line: ServiceLine;
   const severe = line.flag === 'below_cost' || line.flag === 'standard_below_cost' || line.flag === 'no_price';
   return (
     <Tooltip content={sentence ?? SERVICE_FLAG_WORDS[line.flag]}>
-      <span tabIndex={0} data-testid="service-flag" className={cn('inline-flex h-5 max-w-full items-center gap-1 rounded-sm px-2 text-xs font-medium whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus', severe ? 'bg-danger-subtle text-danger-text' : 'bg-[var(--label-orange-subtle)] text-[var(--label-orange-text)]')}>
+      <span tabIndex={0} data-testid="service-flag" className={cn('inline-flex h-5 max-w-full items-center gap-1 rounded-sm px-2 text-xs font-medium whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus', severe ? 'bg-danger-subtle text-danger-text' : 'bg-warning-subtle text-warning-text')}>
         <TriangleAlert aria-hidden className="size-3 shrink-0" />
         <span className="truncate">{SERVICE_FLAG_WORDS[line.flag]}</span>
         <span className="sr-only">. {sentence}</span>

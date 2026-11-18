@@ -11,7 +11,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { centsToNumber } from '@/lib/money';
-import { addDays, addWorkDays, endOfMonth, isWorkDay, loadedRate, startOfMonth, weekday } from '@/lib/profit';
+import { addDays, addWorkDays, endOfMonth, isWorkDay, loadedRate, planSharedAuto, startOfMonth, weekday } from '@/lib/profit';
 import {
   addNote,
   closePeriod,
@@ -708,6 +708,19 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
     closedMonths.push(month);
   }
   log(`${reviews} days approved, ${closedMonths.length} months closed`);
+
+  /* 6b. Time not on a job in every plan. Plans were saved before any work existed, so the automatic
+     fill worked out to zero. Fill it now from the same 90 day figures a quote saved by hand uses. */
+  const [recent] = await rows<{ shared: string; labor: string }>(
+    db,
+    sql`SELECT COALESCE(sum(amount_cents) FILTER (WHERE kind = 'shared'), 0)::text AS shared, COALESCE(sum(amount_cents) FILTER (WHERE kind = 'labor'), 0)::text AS labor
+          FROM pulse.fact_days WHERE org_id = ${ctx.orgId} AND work_date > CURRENT_DATE - 90`,
+  );
+  const autoPlans = await rows<{ id: string; labor_cents: string }>(db, sql`SELECT id::text, labor_cents::text FROM pulse.job_plans WHERE org_id = ${ctx.orgId} AND shared_auto`);
+  for (const row of autoPlans) {
+    const shared = planSharedAuto({ rule: 'by_labor_hours', laborCents: BigInt(row.labor_cents), shared90Cents: BigInt(recent?.shared ?? 0), labor90Cents: BigInt(recent?.labor ?? 0) });
+    await db.execute(sql`UPDATE pulse.job_plans SET shared_cents = ${shared.toString()}::bigint WHERE id = ${row.id}::uuid AND org_id = ${ctx.orgId}`);
+  }
 
   /* 7. Alerts and the inbox */
   await recomputeJobs(db, ctx, sims.map((sim) => sim.jobId));

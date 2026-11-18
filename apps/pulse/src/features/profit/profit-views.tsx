@@ -121,7 +121,7 @@ function RowName({ by, row, onDrill, range }: { readonly by: ProfitGroup; readon
       {by === 'job' && row.riskStatus ? <MarginPill status={row.riskStatus} size="sm" className="hidden lg:inline-flex" /> : null}
       {row.laborMissing ? (
         <Tooltip content="Some labor is missing here, so profit is not complete yet.">
-          <span tabIndex={0} aria-label="Some labor is missing here, so profit is not complete yet." className="inline-flex rounded-sm text-[var(--label-orange-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+          <span tabIndex={0} aria-label="Some labor is missing here, so profit is not complete yet." className="inline-flex rounded-sm text-warning-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
             <TriangleAlert aria-hidden className="size-3.5" />
           </span>
         </Tooltip>

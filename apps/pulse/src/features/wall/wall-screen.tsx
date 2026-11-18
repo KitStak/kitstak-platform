@@ -212,7 +212,7 @@ export function WallScreen({ board, panels, rotateSeconds, controls, linkName }:
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <span className={cn('tabular-nums', stale && 'font-semibold text-[var(--label-orange-text)]')} data-testid="wall-updated" suppressHydrationWarning>
+          <span className={cn('tabular-nums', stale && 'font-semibold text-warning-text')} data-testid="wall-updated" suppressHydrationWarning>
             {stale ? `Last updated ${ageMinutes} minutes ago. Check the connection.` : ageMinutes === 0 ? 'Updated just now' : `Updated ${ageMinutes} ${ageMinutes === 1 ? 'minute' : 'minutes'} ago`}
           </span>
           <span key="controls" className="contents">

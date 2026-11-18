@@ -80,7 +80,7 @@ const LINK_WORDS: Readonly<Record<string, string>> = {
 
 const BANNER: Readonly<Record<string, string>> = {
   losing: 'border-danger/40 bg-danger-subtle',
-  at_risk: 'border-[var(--label-orange-bg)]/50 bg-[var(--label-orange-subtle)]',
+  at_risk: 'border-warning/40 bg-warning-subtle',
   no_data: 'border-border-default bg-sunken',
   heads_up: 'border-[var(--label-yellow-bg)]/50 bg-[var(--label-yellow-subtle)]',
   on_track: 'border-success/40 bg-success-subtle',

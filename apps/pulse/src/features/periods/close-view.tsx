@@ -35,7 +35,7 @@ const keys = {
 };
 
 const ITEM_ICON = { ok: CircleCheck, fix: CircleAlert, check: TriangleAlert } as const;
-const ITEM_TONE = { ok: 'text-success', fix: 'text-danger-text', check: 'text-[var(--label-orange-text)]' } as const;
+const ITEM_TONE = { ok: 'text-success', fix: 'text-danger-text', check: 'text-warning-text' } as const;
 const ITEM_WORD = { ok: 'Done', fix: 'Fix this first', check: 'Worth a look' } as const;
 
 const money = (cents: number | null, hidden: boolean): string => (cents === null ? (hidden ? 'Hidden' : 'No numbers yet') : Math.abs(cents) >= 1_000_000 ? formatMoneyWhole(cents) : formatMoney(cents));
