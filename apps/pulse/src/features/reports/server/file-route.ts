@@ -9,6 +9,7 @@ import { toDomainContext } from '@/server/domain/_shared';
 import { orgHasPulseModule } from '@/server/entitlements';
 import { DomainError } from '@/server/errors';
 import { errorResponse, type ApiArgs } from '@/server/http/api';
+import { PRINT_PAGE_CONTENT_SECURITY_POLICY } from '@/server/http/csp';
 import { getApiContext } from '@/server/session';
 
 export function fileRoute<P = Record<string, never>>(handler: (args: ApiArgs<P>) => Promise<unknown>) {
@@ -36,7 +37,7 @@ export function htmlResponse(body: string): NextResponse {
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'no-referrer',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
+      'Content-Security-Policy': PRINT_PAGE_CONTENT_SECURITY_POLICY,
     },
   });
 }

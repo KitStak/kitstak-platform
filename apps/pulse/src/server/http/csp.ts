@@ -44,7 +44,8 @@ export function buildContentSecurityPolicy(nonce: string, isDev: boolean): strin
 }
 
 /**
- * Policy for `/api/*` answers. JSON needs nothing, so nothing is allowed. A route that sends its
- * own page (a report to print) sets its own header, and that one wins.
+ * Policy for the one HTML answer that is not a Next page: a report to print, sent by an API route
+ * (`htmlResponse`). The page is self contained: its own inline style, one inline line that opens
+ * the print box, no outside files, no forms, no frames.
  */
-export const API_CONTENT_SECURITY_POLICY = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+export const PRINT_PAGE_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'";

@@ -5,11 +5,12 @@
  *    so the pre-paint theme script picks it up (portal pattern).
  * 2. Sets the Content-Security-Policy with a fresh nonce on every page (CRM pattern). Next reads
  *    the nonce from the request header and stamps its own scripts with it, so every page must be
- *    rendered per request (the root layout reads the nonce, which makes that so).
+ *    rendered per request (the root layout reads the nonce, which makes that so). The one HTML
+ *    answer that is not a page, a report to print, sets its own policy in `htmlResponse`.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { extractThemeHandoff, THEME_COOKIE, THEME_COOKIE_MAX_AGE_SECONDS } from '@kitstak/ui/theme';
-import { API_CONTENT_SECURITY_POLICY, buildContentSecurityPolicy, createNonce, NONCE_HEADER } from '@/server/http/csp';
+import { buildContentSecurityPolicy, createNonce, NONCE_HEADER } from '@/server/http/csp';
 
 const CSP_HEADER = 'Content-Security-Policy';
 
@@ -30,11 +31,9 @@ export function proxy(request: NextRequest): NextResponse {
   // A caller must never pick the nonce.
   headers.delete(NONCE_HEADER);
 
-  if (isApi) {
-    const response = NextResponse.next({ request: { headers } });
-    response.headers.set(CSP_HEADER, API_CONTENT_SECURITY_POLICY);
-    return response;
-  }
+  // API routes answer with JSON or a file, not a page. A header set here would replace the one a
+  // route sets itself, and the report print page (`htmlResponse`) needs its own, tighter policy.
+  if (isApi) return NextResponse.next({ request: { headers } });
 
   const nonce = createNonce();
   const csp = buildContentSecurityPolicy(nonce, process.env.NODE_ENV !== 'production');
@@ -46,6 +45,6 @@ export function proxy(request: NextRequest): NextResponse {
 }
 
 export const config = {
-  // Every page and API route. Static files and Next internals carry no page, so they are skipped.
+  // Every page and API route (API routes only get the path header). Static files and Next internals carry no page, so they are skipped.
   matcher: ['/((?!_next/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff2?|css|js|map|txt|xml|webmanifest)$).*)'],
 };

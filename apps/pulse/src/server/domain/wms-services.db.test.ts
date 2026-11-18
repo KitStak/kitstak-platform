@@ -253,6 +253,11 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     const listed = (await listVasEntries(owner, { clientId })).find((row) => row.id === rate?.id);
     // A person types a price and labor hours on the pulled entry.
     await saveVasEntry(owner, { id: listed!.id, version: listed!.version, vasServiceId: listed!.vasServiceId, clientId, workDate: listed!.workDate, quantity: listed!.quantity, unitPrice: '70.0000', hours: '3' });
+    // Labor hours typed on the entry with its own total: the amount stays the warehouse's, though the
+    // matched Pulse service bills by the hour (3 hours at $200 would be a made up $600).
+    const own = (await listVasEntries(owner, { clientId })).find((row) => row.sourceRef === `wms:vas:${VAS_OWN}`);
+    const typed = await saveVasEntry(owner, { id: own!.id, version: own!.version, vasServiceId: own!.vasServiceId, clientId, workDate: own!.workDate, quantity: own!.quantity, unitPrice: own!.unitPrice, hours: '3' });
+    expect(typed).toMatchObject({ amountCents: 20000, hours: '3.00' });
     const fraction = await entry(VAS_FRACTION);
     await deleteVasEntry(owner, fraction!.id);
     // The warehouse then changes the count on the first one.
@@ -262,6 +267,7 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     // The new count comes in, the typed price and the hours stay: 4 x $70.00.
     const after = await org.query<{ quantity: string; unit_price: string; amount_cents: string; hours: string }>(`select quantity::text, unit_price::text, amount_cents::text, hours::text from pulse.vas_entries where id = $1`, [rate!.id]);
     expect(after[0]).toEqual({ quantity: '4.000', unit_price: '70.0000', amount_cents: '28000', hours: '3.00' });
+    expect(await entry(VAS_OWN)).toMatchObject({ amount_cents: '20000', version: typed.version });
     expect((await entry(VAS_FRACTION))?.deleted).toBe(true);
     expect((await entries()).some((row) => row.ref === `wms:vas:${VAS_FRACTION}`)).toBe(false);
   }, 60_000);

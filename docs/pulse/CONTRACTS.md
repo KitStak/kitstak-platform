@@ -231,7 +231,8 @@ lowercase `tx` or `executor` are for use inside a transaction.
   nextCursor }`, `addNote(ctx, { jobId?, clientId?, body })`, `countActivity`, `ACTIVITY_SAFE_FIELDS`.
 - **`profit`**: `getProfit(ctx, by, filters, { comparePrior?, trend? })` returns `ProfitResponse` (`rows`, `total`,
   `moneyHidden`), `getJobProfit(ctx, jobId)`, `getProfitTrend(ctx, filters, bucket?)`, `listFacts(ctx, filters & {
-  kinds?, limit? })` (the drill down), `getCompanyBridge(ctx, { from, to, siteId? })`, `getSummary`, `getLaborSummary`,
+  kinds?, limit?, offset? })` (the drill down, one page) and `listFactsPage` (the same page as `{ rows, truncated,
+  limit, offset, nextOffset }`), `getCompanyBridge(ctx, { from, to, siteId? })`, `getSummary`, `getLaborSummary`,
   `getBadges(ctx)`, `priorRange`, `autoBucket`.
 - **`recalc`**: `newTouched`, `touchDay`, `touchJob`, `assertOpen`, `closedMonths`, `restampProduction | restampIndirect
   | restampVas | restampUsage(executor, orgId, where)` (`where` is written against alias `src`; open months only),
@@ -301,7 +302,7 @@ send files with `csvResponse(fileName, body)`.
 | `GET indirect`, `paid-hours` | `site,from,to,deleted,limit` | `IndirectEntryDTO[]`, `PaidHoursDTO[]` |
 | `GET materials`, `costs`, `revenue`, `service-entries` | `job,client,site,from,to,deleted,limit` plus `scope` / `kind` / `service,noPrice` | matching DTO arrays |
 | `GET profit` | `by (job\|client\|type\|service\|site\|month\|week\|day),from,to,site,client,jobType,job,service,status,compare,trend` | `ProfitResponse` |
-| `GET profit/trend`, `profit/facts` | profit filters, `bucket` / `kinds,limit` | `TrendPointDTO[]`, `FactRowDTO[]` |
+| `GET profit/trend`, `profit/facts` | profit filters, `bucket` / `kinds,limit,offset` | `TrendPointDTO[]`, `FactRowDTO[]` plus `meta { truncated, limit, offset, nextOffset }` (like `production`) |
 | `GET company-bridge` | `from,to,site` | `CompanyBridgeDTO` |
 | `GET periods`, `periods/[month]/checklist` | month is `YYYY-MM` | `PeriodDTO[]`, `CloseChecklistDTO` |
 | `GET day-reviews` | `site,from,to,status` | `DayReviewDTO[]` |
@@ -326,7 +327,8 @@ Each hook takes its filters and an optional React Query options object, so a ser
   `useJobPlans`, `useJobPrices`, `useJobDays`.
 - **Streams**: `useLogGrid`, `usePreviousCrew`, `useProduction`, `useIndirect`, `usePaidHours`, `useMaterialUsage`,
   `useCosts`, `useRevenue`, `useVasEntries`, `useDayReviews`.
-- **Profit**: `useSummary`, `useProfit(by, params)`, `useProfitTrend`, `useProfitFacts`, `useCompanyBridge`,
+- **Profit**: `useSummary`, `useProfit(by, params)`, `useProfitTrend`, `useProfitFacts` (reads every page through
+  `collectPages` in `src/lib/paging.ts` and returns `{ rows, truncated }`), `useCompanyBridge`,
   `useLaborSummary`.
 - **Control**: `usePeriods`, `useCloseChecklist`, `useAlerts`, `useAlertsUnread`, `useAlertRules`, `useNotifications`,
   `useSavedViews`, `useUserPrefs`, `useActivity`, `useSearch`.
@@ -489,6 +491,37 @@ E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium_headle
     folders plus additive edits to the shared files, and never revert a file you did not write.
 12. **Verify before you report**: `pnpm typecheck`, `pnpm lint`, `pnpm test` in `apps/pulse` (and in any sibling app
     you touched), then look at your pages in light and dark at 1440 and 390 px with real seeded data.
+13. **The database keeps workspaces apart too.** Every `pulse` table has row level security on and one policy,
+    `pulse_org_isolation`, for read, add, change and remove: a row is allowed only when its `org_id` equals the
+    session setting `pulse.org_id` (migration `0007_rls_policies.sql`). What that means in plain words:
+    - The app connects as the role that owns the tables. An owner skips RLS and RLS is not forced, so nothing changes
+      for the app. Workspace scoping in the domain layer (`org_id` in every query) is still the first guard.
+    - Any other role sees no rows and can write none, unless it sets `pulse.org_id`
+      (`select set_config('pulse.org_id', '<org uuid>', true)` inside a transaction). Then it sees and writes that one
+      workspace only. A value that is not a uuid is an error.
+    - The migration grants nothing. On Supabase, `anon` and `authenticated` hold no grant on `pulse` and still see nothing.
+    - `pulse.v_facts` is `security_invoker`, so the view cannot be used to step around the policies.
+    - A new table needs `ENABLE ROW LEVEL SECURITY` and its policy in the migration that makes it (copy the
+      `CREATE POLICY` line from 0007). `src/server/domain/rls.db.test.ts` fails when a `pulse` table has RLS off, or
+      on with no policy, or forced. The same test makes a plain role and proves the three points above.
+14. **Every page sends a Content-Security-Policy.** `src/proxy.ts` makes a fresh nonce for each request and sets the
+    header from `buildContentSecurityPolicy` (`src/server/http/csp.ts`, the same shape as CRM): `default-src 'self'`,
+    scripts by nonce with `strict-dynamic`, `frame-ancestors 'none'`, `base-uri 'self'`, `form-action 'self'`,
+    `object-src 'none'`, images from this origin plus `data:`, `blob:` and https (avatars), fonts and fetches from this
+    origin only. `unsafe-eval` and websockets are added for `next dev` only. Rules that follow from it:
+    - An inline `<script>` must carry the nonce: read it in a server component with `(await headers()).get(NONCE_HEADER)`.
+      The root layout does this for the theme script, and that read also keeps every route rendered per request,
+      which a nonce needs. Do not add a page that is built ahead of time.
+    - Do not load a script, font, style or frame from another origin, and do not fetch another origin from the browser.
+      Links to Portal, CRM, WMS and Projects are plain page moves and need no entry.
+    - API routes get no header from the proxy (it would replace a route's own). The report print page sets its own
+      tighter policy in `htmlResponse` (`PRINT_PAGE_CONTENT_SECURITY_POLICY`).
+    - `src/server/http/csp.test.ts` asserts the header on every main route.
+15. **The line of an alert rule is money.** `AlertRuleDTO` builders take `canSeeMoney` (`toRuleDTO` in
+    `domain/alerts.ts`): a reader without money gets `threshold: null`, `moneyHidden: true` and a name with no numbers,
+    and the screen prints "more than a set amount" or "under a set line" (`ruleSentence(kind, threshold, { moneyHidden })`).
+    A rule's stored name never holds its line (`storedRuleName`). A reader without money cannot set, change or try out
+    a line (create, update and preview answer FORBIDDEN).
 
 ## 13. Known gaps, by owner (as written before the teams built; kept for history)
 
@@ -565,7 +598,7 @@ for a missing chart instead of drawing one in a feature folder.
 | `BulletChart` (`bullet`) | progress against a target in a row or table cell | `label`, `value`, `target`, `max`, `format`, `goodWhen: 'up' \| 'down'`, `targetLabel`, `size: 'sm' \| 'md'`, `loading` |
 | `ProgressRing` (`radial`) | how far along | `value`, `max`, `label`, `size`, `tone`, `children` (center text), `hideValue` |
 | `Sparkline` (`sparkline`) | tiny trend in a tile or table cell | `values`, `label`, `format`, `width`, `height`, `fluid`, `tone`, `area` |
-| `KpiTile` (`stats`) | one headline number | `label`, `value` (formatted text or `null`), `delta` (DeltaBadge props), `sparkline`, `explain` (the "how we got this" trigger), `footer`, `emptyText`, `loading`, `error` |
+| `KpiTile` (`stats`) | one headline number | `label`, `value` (formatted text or `null`), `delta` (DeltaBadge props), `deltaPending` (keeps room for the change while it loads), `sparkline`, `explain` (the "how we got this" trigger), `footer`, `emptyText`, `loading`, `error` |
 | `DeltaBadge` (`stats`) | a change with arrow and tone | `delta` (raw number, sign only), `text` (from `formatMoneyDelta` and friends), `goodWhen`, `label`, `size` |
 | `MarginPill` (`stats`) | margin or job health as icon plus words | `health: 'healthy' \| 'watch' \| 'at_risk' \| 'losing' \| 'none'` or `status: PulseStatus` (uses `PULSE_STATUS_LABELS`), `marginBp`, `label`, `size` |
 
@@ -591,9 +624,10 @@ What the profit team added on top of sections 5 to 9. Everything here is additiv
   `@/lib/constants`; `scope` is `ProfitFilters`. Figures come from `getProfit` and `getCompanyBridge`, so an explanation
   cannot disagree with the screen. Money is `null` without `money:read`; the wage split shows only with `wage:read`.
 - **`reports`**: `buildReport(ctx, slug, filters, { hideMoney? })` builds any of the 19 reports as one `ReportDTO`
-  (columns, rows, total, summary, chart, notes). `getProfitPivot(ctx, rowBy, colBy, filters)` (two way pivot, totals
+  (columns, rows, total, summary, chart, aside, notes). `aside` is money in the total that is no row of the ranking: on `job-profit`,
+  "Put on a client, not on a job", which is left out of the chart and sits in its own last row. `getProfitPivot(ctx, rowBy, colBy, filters)` (two way pivot, totals
   equal `getProfit`), `listProfitEntries(ctx, filters & { kinds?, limit? })` (drill down rows with job, client and
-  service names). Schedules: `listReportSchedules`, `saveReportSchedule`, `setReportScheduleEnabled`,
+  service names; `noJob: true`, `job=none` on the API, gives only rows put on a client with no job). Schedules: `listReportSchedules`, `saveReportSchedule`, `setReportScheduleEnabled`,
   `deleteReportSchedule`, `restoreReportSchedule`, `runReportSchedule` (build now), `listReportRuns`,
   `getReportRunFile(ctx, runId, 'csv' | 'html')`, `runDueReportSchedules(ctx)` (the hourly cron).
 - **`catalog`** gained `restoreVasService(ctx, id)` (undo of a delete).
@@ -647,8 +681,10 @@ Everything here is additive on top of sections 5 to 9.
   `listSimilarJobs`, `quoteFromJob(ctx, ref)` (a job's actuals as a filled calculator form), `createJobFromScenario`.
 - **`alert-ops`**: `saveAlertRuleFull` (rule plus quiet hours in `scope.quiet`), `countAlertsByStatus`,
   `bulkUpdateAlerts`, `previewAlertRule` (what a rule would have said in the last 30 days).
-- **`goals`**: `getGoalsBoard(ctx, { month? })`. **`period-ops`**: `getCloseBoard`, `getCloseDetail(ctx, month)`,
-  `listCloseEvents`. **`wall`**: `getWallBoard(ctx, options)`, `getWallForDevice(token)` (never money).
+- **`goals`**: `getGoalsBoard(ctx, { month? })`. **`period-ops`**: `getCloseBoard` (each month with job profit, `companyProfitCents` and
+  `companyMarginBp`), `getCloseDetail(ctx, month)` (adds `bridge: CloseBridgeDTO`, the steps from job profit to company profit, and
+  `saved` when the figures are the ones stored with the close), `listCloseEvents`. `closePeriod` stores `snapshot.company` beside
+  `snapshot.bridge`. **`wall`**: `getWallBoard(ctx, options)`, `getWallForDevice(token)` (never money).
 - **`ledger`**: `saveCostsBulk`, `saveMaterialUsageBulk`, `saveRevenueBulk`, `saveVasEntriesBulk` (all or nothing),
   `previewWmsUsage(ctx, jobRef)`, `pullWmsUsage(ctx, jobRef)` (adds only what is new, safe to run again).
 
@@ -757,7 +793,9 @@ their own servers. `getOrgSummary`, `getJobsForRecord`, `getJobSummaries`, `getC
   `getAccounts(ctx, ids)`. Won is the board's own `isDone` stage label. `CrmDeal.valueCents` is whole cents.
 - `wms`: `wmsReady` (the org's own tenant schema or null), `listWorkOrders(ctx, { ids?, query?, openOnly? })` (finished
   quantity plus planned and consumed component cost in cents), `workOrderBuildsByDay(ctx, ids, timezone)`,
-  `listBilledRevenue(ctx)` (summary lines only, so a bill is never counted twice), `listVasRevenue(ctx)`.
+  `listBilledRevenue(ctx)` (summary lines only, so a bill is never counted twice), `listVasRecords(ctx)` (each extra
+  service record with its own price or the client's contract rate; null when there is no warehouse to read) and
+  `listContractPrices(ctx, workOrderIds)` (what the contract's work order fees make each work order earn).
 - `projects`: `projectsReady`, `getProjects`, `searchProjects` (only projects the reader may see in Projects),
   `projectTimeByDay(ctx, projectIds, timezone)`.
 - `records`: `resolveRecords(ctx, targets)` (a linked record as it is right now: `live`, `gone` or `offline`) and
@@ -774,7 +812,11 @@ their own servers. `getOrgSummary`, `getJobsForRecord`, `getJobSummaries`, `getC
   a project link `meta.key`, `meta.percentDone`, `meta.dueDate`); `jobs.wms_shortage`; a job the warehouse finished is
   set to completed; kits built per day as production rows (`source_ref = wms:built:<workOrderId>:<date>`); parts used
   through money-ops' `pullWmsUsage`; warehouse bills as `invoice` revenue rows per client, bill and kind of work
-  (`source = 'wms'`, `source_ref = wms:bill:<reportId>:<operation>`, billed memo, never profit); project time as
+  (`source = 'wms'`, `source_ref = wms:bill:<reportId>:<operation>`, billed memo, never profit); warehouse extra
+  service records as extra service entries (`wms-services.ts`, `pullWmsServices`: `source = 'wms'`,
+  `source_ref = wms:vas:<recordId>`, on the job linked to the record's work order, else on the client, with
+  `meta.wms.path` back to the warehouse); job prices from the warehouse contract's work order fees
+  (`applyWmsContractPrices`, remembered on the link as `meta.contractPrice`); project time as
   production rows with shift `projects` (`source = 'projects'`, `source_ref = pm:<projectId>:<date>`, units 0).
 - Never double counts: a ref is looked up before anything is added; a day a person already typed is adopted (it gets
   the `source_ref` and `meta.adopted_from`, its `source` stays `manual`); `meta.locked_fields` are left alone; a
@@ -813,9 +855,9 @@ they all read through the bridge. **Actions** (`@/server/actions/integrations`):
   (`pulse.job_links` with `pm_project`), which needs no Projects migration.
 - Every app's shell passes `urls.pulse` and `entitled.pulse` to the shared app switcher.
 
-Not built (see the integration report): VAS records into `vas_entries`, contract rates into job prices, the work
-orders list margin column, the bill detail margin tile, tasks from alerts through `@kitstak/pm-bridge`, the app
-switcher attention badge, and removing pulled project time when the time entry is deleted in Projects.
+Not built (see the integration report): the work
+orders list margin column, the bill detail margin tile, tasks from alerts through `@kitstak/pm-bridge`, and the app
+switcher attention badge.
 
 ## 19. Release integration: what was joined up, how to verify, what is open
 
@@ -861,9 +903,9 @@ This section is the state of the app after the eight teams finished and the tree
 
 ### 19.2 Migrations
 
-- Journal: `0000_pulse_init`, `0005_saved_view_pages` (idx 0 and 5). Numbers 0001 to 0004 and 0006 were reserved per
-  team and never used; the runner sorts by `idx`, so the gap is harmless. The next migration takes `0007` or any free
-  number above the last applied one.
+- Journal: `0000_pulse_init`, `0005_saved_view_pages`, `0007_rls_policies` (idx 0, 5 and 7). Numbers 0001 to 0004 and
+  0006 were reserved per team and never used; the runner sorts by `idx`, so the gap is harmless. The next migration
+  takes any free number above the last applied one.
 - Verified on an empty database: `@kitstak/db` (7 migrations), CRM, WMS (12), Projects (6), then Pulse (2), in that
   order, all applied; the resulting `pulse` schema is byte identical to the dev database (`pg_dump -s -n pulse`).
 
@@ -903,18 +945,21 @@ Product gaps the teams reported, none of them a broken screen:
   Goals, not the top navigation.
 - **Data**: files are parsed on the main thread; save progress lives in server memory; 50,000 rows was not timed (5,000
   was); "Download everything" is built in memory; undo of a jobs import soft deletes jobs that got work afterwards.
-- **Integrations**: warehouse extra service records are counted, not written into `vas_entries`; contract rates do not
-  set job prices; change notes are answered
+- **Integrations**: change notes are answered
   on Connected apps and the cron tick only; several spec extras in the sibling apps are not built (work order list
-  margin column, dashboard tiles, tasks from alerts, switcher badge).
+  margin column, dashboard tiles, tasks from alerts, switcher badge). Small edges of the warehouse money pull: a
+  contract rate sets the job price but does not rewrite the job's quote; a work order fee with conditions (some
+  products only) is left to the warehouse bill; a flat fee for each work order is used only when it is the contract's
+  only work order fee; a tiered service fee is read at its first tier.
 - **Seed**: no time punches, device links, kiosk PINs, quote scenarios, report schedules or sync runs; fewer jobs and
   entries than the spec sketch; warehouse jobs sit on fixed work order dates.
-- **Across teams**: alert rule sentences show their dollar line to readers without money (a setting, not a result);
-  Services, Target pace and Goals have no saved views (their page is not in `SAVED_VIEW_PAGES`, which is also a database
+- **Across teams**: Services, Target pace and Goals have no saved views (their page is not in `SAVED_VIEW_PAGES`, which is also a database
   CHECK); a view saved on one report shows on every report; Supervisors
   land on Log work and the floor version of Home (`/?floor=1`) has no link; the 404 for a missing job only fires on a
   full page load.
-- **Foundation leftovers**: big restamps run inline; no plain role RLS test; no CSP header.
+- **Foundation leftovers**: big restamps run inline. The Content-Security-Policy was checked in a browser against
+  `next dev` (which adds `unsafe-eval` and websockets); the production policy is covered by unit tests and has not
+  been walked against a production build yet.
 
 ### 19.5 Bundle QA fixes (integrations lens)
 
@@ -976,7 +1021,14 @@ Each one was checked again against the running app on port 3500, not only by tes
 - **One number per figure.** Pace names its window ("In the last 5 work days"), the Pace card and the Plan tab name
   their yardstick, unit cost "so far" and "by the finish" are labeled apart, and Alerts read the live risk reason, so the
   loss on Home, the job, the jobs list and Alerts match to the dollar (`jobHeadlineFigures()`, `impactAsOf`). The Plan
-  view title follows its toggle. The Home and Profit tile is "Margin on jobs", with "Company margin, after overhead".
+  view title follows its toggle. A headline margin has two names on every screen, "Job margin" and "Company margin"; the margin before time not on a job is a line inside "How we got this" (SPEC, on screen words).
+- **Moments in time never differ between server and browser.** The server does not know the reader's time zone or clock, so
+  "4 days ago" or "3:42 PM" worked out in render caused hydration errors (Alerts, Month close). Client components show a
+  timestamp with `RelativeTime` or `LocalTime` from `@/components/pulse/local-time` (or `formatMoment(iso, style, useHydrated())`
+  inside a sentence): UTC text on the server and during hydration, local time right after. Do not call `formatRelative` or an
+  `Intl.DateTimeFormat` with no `timeZone` in the render of a server rendered component, and do not reach for `suppressHydrationWarning`.
+- **Home arrives whole.** `HomePage` reads the period before and the jobs that need you on the server (`initialBefore`,
+  `initialAttention`), so the "vs before" chips and the list are in the first HTML. `KpiTile deltaPending` keeps room for a chip that is still loading.
 - **CRM deal search works.** It ordered by an outer alias, so Postgres refused it and the catch hid the error. Fixed,
   and every fail soft catch in the sibling readers now logs one line (`integrations/log.ts` `logSoftFail`).
 - **No lost edits.** `PUT /api/v1/log/rows` locks the row, updates on the version it read, and answers 409 with the

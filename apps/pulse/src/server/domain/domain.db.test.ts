@@ -282,6 +282,48 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
       await expectError(() => reopenPeriod(admin, '2025-12', 'oops'), 'FORBIDDEN');
       await reopenPeriod(owner, '2025-12', 'Closed by mistake');
     });
+
+    it('shows company profit beside job profit on the close screen, and saves both with the close', async () => {
+      const crew = (await createLaborClass(owner, { code: 'CLOSE', name: 'Close crew' })).id;
+      await createLaborRate(owner, { laborClassId: crew, effectiveFrom: '2025-08-01', wageCents: 2000, payrollTaxBp: 0, benefitsBp: 0, otherBurdenBp: 0, overheadPerHourCents: 500, overtimeMultiplier: '1.50' });
+      const job = await createJob(owner, { name: 'August work', clientId, status: 'active', unitPrice: '10.0000' });
+      // $1,000.00 of revenue and 10 hours at $25.00 (of which $5.00 is overhead): job profit $750.00.
+      await saveProductionEntry(owner, { jobId: job.id, workDate: '2025-08-12', laborClassId: crew, unitsGood: '100', hours: '10' });
+      // 12 hours were paid, so 2 paid hours are on no job. Rent of $200.00 is more than the $50.00 the rate covered.
+      await domain.savePaidHours(owner, { siteId, workDate: '2025-08-12', laborClassId: crew, paidHours: '12', paidCents: 24000 });
+      await domain.saveCost(owner, { costDate: '2025-08-05', category: 'rent', amountCents: 20000 });
+      const range = { from: '2025-08-01', to: '2025-08-31' };
+      const bridge = await getCompanyBridge(owner, range);
+      expect(bridge).toMatchObject({ workProfitCents: 75000, missingCostCents: 4000, overheadGapCents: 15000, hasCompanyCosts: true });
+      expect(bridge.companyProfitCents).toBe(75000 - (bridge.sharedGapCents ?? 0) - 4000 - 15000);
+
+      // Open month: the screen shows live numbers, and never job profit as the month's profit.
+      const live = await domain.getCloseDetail(owner, '2025-08');
+      expect(live).toMatchObject({ saved: false, revenueCents: 100000, costCents: 25000, profitCents: 75000, marginBp: 7500, companyProfitCents: bridge.companyProfitCents });
+      expect(live.companyProfitCents).toBeLessThan(live.profitCents!);
+      expect(live.companyMarginBp).toBe(Math.round((bridge.companyProfitCents! * 10000) / 100000));
+      expect(live.bridge).toMatchObject({ jobProfitCents: 75000, missingCostCents: 4000, overheadGapCents: 15000, companyCostCents: 20000, overheadAbsorbedCents: 5000, hasCompanyCosts: true, companyProfitCents: bridge.companyProfitCents });
+      const row = async (who: DomainContext) => (await domain.getCloseBoard(who)).months.find((month) => month.periodMonth === '2025-08-01')!;
+      expect(await row(owner)).toMatchObject({ status: 'open', profitCents: 75000, companyProfitCents: bridge.companyProfitCents, companyMarginBp: live.companyMarginBp });
+
+      // Closing saves the company figures with the job figures.
+      const closed = await closePeriod(owner, '2025-08');
+      expect(closed.snapshot).toMatchObject({ company: { jobProfitCents: 75000, jobMarginBp: 7500, companyProfitCents: bridge.companyProfitCents, companyMarginBp: live.companyMarginBp }, bridge: { companyProfitCents: bridge.companyProfitCents } });
+      const saved = await domain.getCloseDetail(owner, '2025-08');
+      expect(saved).toMatchObject({ saved: true, profitCents: 75000, companyProfitCents: bridge.companyProfitCents, companyMarginBp: live.companyMarginBp });
+      expect(await row(owner)).toMatchObject({ status: 'closed', companyProfitCents: bridge.companyProfitCents, companyMarginBp: live.companyMarginBp });
+
+      // A reader without money gets the checklist and the lock counts, and no figure, open or closed.
+      const floor = await org.member('member', 'Flo Floor');
+      await setMemberRole(owner, floor.userId, { role: 'viewer', seesMoney: false });
+      const hidden = await domain.getCloseDetail(floor, '2025-08');
+      expect(hidden).toMatchObject({ moneyHidden: true, saved: false, revenueCents: null, costCents: null, profitCents: null, marginBp: null, companyProfitCents: null, companyMarginBp: null });
+      expect(Object.entries(hidden.bridge).filter(([key, value]) => key.endsWith('Cents') && value !== null)).toEqual([]);
+      expect(await row(floor)).toMatchObject({ profitCents: null, marginBp: null, companyProfitCents: null, companyMarginBp: null });
+      expect(moneyLeaks(hidden, 'closeDetail')).toEqual([]);
+      await reopenPeriod(owner, '2025-08', 'Test is done');
+      expect((await domain.getCloseDetail(owner, '2025-08')).saved).toBe(false);
+    });
   });
 
   describe('permissions and money hiding (SPEC section 3)', () => {
@@ -597,4 +639,26 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
     const left = await org.query<{ n: number }>('select (select count(*) from pulse.production_entries where org_id = $1)::int + (select count(*) from pulse.settings where org_id = $1)::int + (select count(*) from pulse.activity where org_id = $1)::int as n', [gone.orgId]);
     expect(left[0]!.n).toBe(0);
   });
+});
+
+describe.skipIf(!ready)('getting started (database)', () => {
+  it('quotes the labor rate in effect today, never an old one that a newer rate replaced', async () => {
+    const org = await createTestOrg('pulse-welcome');
+    try {
+      const owner = await org.member('owner', 'Wendy Welcome');
+      const today = (await listSites(owner))[0]!.today;
+      const plain = { payrollTaxBp: 0, benefitsBp: 0, otherBurdenBp: 0, overheadPerHourCents: 0, overtimeMultiplier: '1.50' };
+      const packer = (await createLaborClass(owner, { code: 'PACK', name: 'Packer' })).id;
+      await createLaborRate(owner, { laborClassId: packer, effectiveFrom: addDaysForTest(today, -400), wageCents: 2000, ...plain });
+      expect((await getOnboardingState(owner)).rate).toEqual({ name: 'Packer', loadedRateCents: 2000 });
+      // A raise that started last month, a raise that starts next month, and a second class.
+      await createLaborRate(owner, { laborClassId: packer, effectiveFrom: addDaysForTest(today, -30), wageCents: 2100, ...plain });
+      await createLaborRate(owner, { laborClassId: packer, effectiveFrom: addDaysForTest(today, 30), wageCents: 2300, ...plain });
+      const lead = (await createLaborClass(owner, { code: 'LEAD', name: 'Line lead' })).id;
+      await createLaborRate(owner, { laborClassId: lead, effectiveFrom: addDaysForTest(today, -10), wageCents: 3000, ...plain });
+      expect((await getOnboardingState(owner)).rate).toEqual({ name: 'Packer', loadedRateCents: 2100 });
+    } finally {
+      await org.destroy();
+    }
+  }, 120_000);
 });

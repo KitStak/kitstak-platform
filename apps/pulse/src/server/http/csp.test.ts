@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { config, proxy } from '@/proxy';
-import { API_CONTENT_SECURITY_POLICY, buildContentSecurityPolicy, createNonce, NONCE_HEADER } from './csp';
+import { buildContentSecurityPolicy, createNonce, NONCE_HEADER, PRINT_PAGE_CONTENT_SECURITY_POLICY } from './csp';
 
 const directives = (policy: string): Map<string, string[]> =>
   new Map(
@@ -83,11 +83,21 @@ describe('proxy sends the header on every page', () => {
     expect(api.headers.get(`x-middleware-request-${NONCE_HEADER}`)).toBeNull();
   });
 
-  it('gives API answers a policy that allows nothing', () => {
-    const response = proxy(new NextRequest('http://localhost:3500/api/v1/jobs'));
-    expect(response.headers.get('content-security-policy')).toBe(API_CONTENT_SECURITY_POLICY);
-    expect(API_CONTENT_SECURITY_POLICY).toContain("default-src 'none'");
-    expect(API_CONTENT_SECURITY_POLICY).toContain("frame-ancestors 'none'");
+  it('leaves API answers alone, so a route can send its own policy', () => {
+    // A header set by the proxy would replace the one the report print page sets for itself.
+    const response = proxy(new NextRequest('http://localhost:3500/api/v1/reports/job-profit.html?print=1'));
+    expect(response.headers.get('content-security-policy')).toBeNull();
+    expect(response.headers.get('x-middleware-request-content-security-policy')).toBeNull();
+  });
+
+  it('locks the report print page down', () => {
+    const policy = directives(PRINT_PAGE_CONTENT_SECURITY_POLICY);
+    expect(policy.get('default-src')).toEqual(["'none'"]);
+    expect(policy.get('frame-ancestors')).toEqual(["'none'"]);
+    expect(policy.get('base-uri')).toEqual(["'none'"]);
+    expect(policy.get('form-action')).toEqual(["'none'"]);
+    expect(policy.get('object-src')).toEqual(["'none'"]);
+    expect(PRINT_PAGE_CONTENT_SECURITY_POLICY).not.toContain('unsafe-eval');
   });
 
   it('keeps the theme handoff redirect and the path header', () => {

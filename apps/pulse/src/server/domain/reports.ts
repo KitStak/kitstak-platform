@@ -135,7 +135,7 @@ const PIVOT_JOINS = sql`
   LEFT JOIN pulse.sites s ON s.id = f.site_id`;
 
 /** The row for revenue and costs typed in against a client with no job. It is not a job, so rankings leave it out. */
-export const CLIENT_LEVEL_LABEL = 'Put on a client, not on a job';
+const CLIENT_LEVEL_LABEL = 'Put on a client, not on a job';
 const CLIENT_LEVEL_TEXT = 'Chargebacks, freight, fees, credits and extra services typed in against a client with no job. They count in the total, but they are not a job, so the ranking leaves them out.';
 
 const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = { job: CLIENT_LEVEL_LABEL, client: 'No client', type: 'No job type', service: 'Core job work', site: 'No site', month: '', week: '', day: '' };

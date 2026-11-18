@@ -606,8 +606,14 @@ export async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Pr
     if (!client) throw invalid('Pick a job or a client for this service.', { jobId: 'Pick a job or a client.' });
     const site = job ? await getSiteRow(ctx, job.siteId, tx) : await resolveSite(ctx, input.siteId ?? existing?.siteId, tx);
     const unitPrice = input.unitPrice === undefined ? (existing?.unitPrice ?? service.defaultPrice) : input.unitPrice;
+    // An entry pulled from the warehouse carries the warehouse's amount. Typing labor hours or a note on it
+    // must not work the amount out again from the Pulse service: it changes only with the price or the count.
+    const keepsPulledAmount =
+      existing !== undefined && existing.source === 'wms' && ctx.actorKind !== 'integration' && input.amountCents === undefined &&
+      Number(input.quantity) === Number(existing.quantity) && (unitPrice === null ? existing.unitPrice === null : existing.unitPrice !== null && Number(unitPrice) === Number(existing.unitPrice));
     let amount: bigint | null;
     if (input.amountCents !== null && input.amountCents !== undefined) amount = BigInt(input.amountCents);
+    else if (keepsPulledAmount) amount = existing?.amountCents ?? null;
     else if (unitPrice === null) amount = null;
     else if (service.billing === 'flat') amount = mulQuantityPrice('1', unitPrice);
     else amount = mulQuantityPrice(service.billing === 'per_hour' ? hours : input.quantity, unitPrice);

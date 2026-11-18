@@ -14,7 +14,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { alertRules } from '@/server/db/schema';
 import { forbidden, invalid, notFound } from '@/server/errors';
-import { ALERT_KINDS, type AlertKind, type AlertSeverity, type AlertStatus } from '@/lib/constants';
+import { ALERT_KINDS, type AlertKind, type AlertStatus } from '@/lib/constants';
 import { formatMoneyWhole } from '@/lib/format';
 import { addDays, isWorkDay, startOfMonth, workDaysBetween } from '@/lib/profit';
 import { isClockTime, type QuietHours } from '@/features/alerts/quiet-hours';

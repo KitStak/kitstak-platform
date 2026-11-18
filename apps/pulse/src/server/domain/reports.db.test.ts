@@ -19,6 +19,7 @@ import {
   getProfit,
   getProfitPivot,
   getReportRunFile,
+  listClients,
   listProfitEntries,
   listReportRuns,
   listReportSchedules,
@@ -26,6 +27,7 @@ import {
   restoreReportSchedule,
   runDueReportSchedules,
   runReportSchedule,
+  saveCost,
   saveReportSchedule,
   setMemberRole,
   setReportScheduleEnabled,
@@ -106,7 +108,10 @@ describe.skipIf(!ready)('reports, pivot, drill down and explain add up to the Pr
     expect(await answer('profit')).toBe(total.profitCents);
     expect(await answer('labor')).toBe(total.laborCents);
     const margin = await explain(owner, 'margin', range);
-    expect(margin.lines[margin.lines.length - 1]?.value).toBe(total.marginBp);
+    expect(margin.title).toBe('Job margin');
+    expect(margin.lines.find((line) => line.op === 'total')).toMatchObject({ label: 'Job margin', value: total.marginBp });
+    // The margin before time not on a job is a note inside "How we got this", not a headline of its own.
+    expect(margin.lines[margin.lines.length - 1]).toMatchObject({ label: 'Before time not on a job', op: 'note', value: total.marginBeforeSharedBp });
     expect(margin.formula.length).toBeGreaterThan(10);
     expect(margin.links.length).toBeGreaterThan(0);
     const labor = await explain(owner, 'labor', range);
@@ -152,6 +157,47 @@ describe.skipIf(!ready)('reports, pivot, drill down and explain add up to the Pr
       expect((why.total.start as number) + (why.total.total as number)).toBe(why.total.end);
     }
   }, 120_000);
+
+  it('job profit report: costs put on a client with no job get their own row, stay out of the ranking and drill to their entries', async () => {
+    const [client] = await listClients(owner);
+    // A chargeback far bigger than any job's loss: it must not show up as the worst "job".
+    await saveCost(owner, { clientId: client!.id, costDate: range.to, category: 'freight', amountCents: 98_765_400, note: 'Chargeback' });
+    const profit = await getProfit(owner, 'job', range);
+    const none = profit.rows.find((row) => row.key === 'none')!;
+    const report = await buildReport(owner, 'job-profit', range);
+    const label = 'Put on a client, not on a job';
+    expect(report.aside).toMatchObject({ key: 'client_level', label, valueCents: none.profitCents });
+    expect(report.aside!.text).toMatch(/not a job/);
+    // Its own named row, under every job, with no link to a job page.
+    const last = report.rows[report.rows.length - 1]!;
+    expect(last).toMatchObject({ id: 'none', href: null });
+    expect(last.cells).toMatchObject({ job: label, profit: none.profitCents });
+    const jobs = report.rows.slice(0, -1);
+    expect(jobs.every((row) => row.id !== 'none' && typeof row.href === 'string')).toBe(true);
+    expect(jobs.map((row) => row.cells.profit)).toEqual([...jobs.map((row) => row.cells.profit as number)].sort((a, b) => b - a));
+    // The ranking chart holds jobs only, so its worst bar is a real job.
+    expect(report.chart!.labels).not.toContain(label);
+    expect(report.chart!.labels.length).toBe(Math.min(12, jobs.length));
+    expect(Math.min(...(report.chart!.series[0]!.values as number[]))).toBeGreaterThan(none.profitCents!);
+    // The total still counts it, so the report matches the Profit page.
+    expect(report.total?.profit).toBe(profit.total.profitCents);
+    expect(report.rows.reduce((sum, row) => sum + (row.cells.profit as number), 0)).toBe(profit.total.profitCents);
+    // The drill down gives exactly the rows behind the number.
+    const entries = await listProfitEntries(owner, { ...range, noJob: true, limit: 2000 });
+    expect(entries.rows.length).toBeGreaterThan(0);
+    expect(entries.rows.every((row) => row.jobId === null)).toBe(true);
+    expect(entries.rows.some((row) => row.note === 'Chargeback' && row.amountCents === 98_765_400)).toBe(true);
+    const net = entries.rows.reduce((sum, row) => sum + (row.kind.startsWith('revenue') ? 1 : -1) * (row.amountCents ?? 0), 0);
+    expect(net).toBe(none.profitCents);
+    expect(new Set(entries.rows.map((row) => `${row.sourceTable}:${row.sourceId}`)).size).toBe(report.aside!.entryCount);
+    // Money hidden: the row and the note stay, the figure does not.
+    const blank = await buildReport(owner, 'job-profit', range, { hideMoney: true });
+    expect(blank.aside).toMatchObject({ label, valueCents: null });
+    const hidden = await listProfitEntries(viewer, { ...range, noJob: true });
+    expect(hidden.rows.every((row) => row.amountCents === null)).toBe(true);
+    // The printed report and the file say what the row is.
+    expect(report.notes.some((note) => note.startsWith(label))).toBe(true);
+  });
 
   it('reports: money reports are refused without money, open reports come back with money blank', async () => {
     await expect(buildReport(viewer, 'job-profit', range)).rejects.toMatchObject({ code: 'FORBIDDEN' });

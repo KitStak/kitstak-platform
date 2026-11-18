@@ -26,7 +26,10 @@ or a double dash. Use commas, periods or colons. Ranges read "to". Enforced by E
 | needs flags | Things to fix |
 | flexed plan | Plan for the work done so far |
 | variance waterfall | Why profit changed |
-| contribution margin | Margin before shared costs |
+| margin | Exactly two names for a headline margin, on every screen: **Job margin** (profit on jobs / revenue) and **Company margin** (company profit / revenue). No other margin name is a visible label. |
+| contribution margin, margin before shared costs | Only inside "How we got this", as the line "Before time not on a job". As a table column next to Contribution it reads "Contribution %". |
+| job cost | Job cost (never "All cost": overhead and paid time on no job are not in it) |
+| rows with a client and no job | Put on a client, not on a job |
 | utilization | Share of paid time spent on jobs |
 | earned, billed | Earned (work done), Billed (invoiced), Not billed yet |
 | basis points, cents | never shown |
@@ -245,6 +248,9 @@ same, but do not count in pace (4.12), so a setup day does not make the job look
 
 Entry check shown inline: if `abs(hours - headcount * hours_each_default) > 0.5 * headcount * hours_each_default` (default shift length from
 settings) Pulse asks "12 people for 8 hours is 96 labor hours. You typed 9.6. Is that right?" It is a warning, not a block.
+The Log work grid works hours each back out when labor hours are typed, so its question uses the numbers in the row: "9.6 labor hours for
+12 people is 0.8 hours each. A full shift of 8 hours each would be 96 labor hours. Is that right?" The hours each cell has no grey example
+number. A job with units and no labor hours names the empty field: "Add the hours each", "Add people", or "Add people and the hours each".
 
 ### 4.5 Time not on a job, paid hours and the payroll check
 
@@ -272,7 +278,9 @@ settings) Pulse asks "12 people for 8 hours is 96 labor hours. You typed 9.6. Is
   `percent_of_labor` (shown as "Your 8% covered $3,100. Real time not on a job cost $3,640." so the percent can be tuned).
 - **Share of paid time spent on jobs** = direct hours / paid hours (or / (direct + indirect) when paid hours are not entered).
 - **Payroll check** (shown on Labor and in the month close list when `paid_cents` exists): over the days that have `paid_cents`,
-  `payroll_gap = sum(paid_cents) - sum(gross_pay_cents of direct and indirect entries)`. "Payroll paid $41,200. The hours in Pulse add up to $39,350 of pay. $1,850 is not on any job or reason."
+  `payroll_gap = sum(paid_cents) - sum(gross_pay_cents of direct and indirect entries)`. "Payroll paid $41,200. The hours in Pulse add up to $39,350 of pay. The payroll gap is $1,850: pay that no logged hour explains."
+  The payroll gap is its own name on screen. It is not the cost of "Paid time not on any job" (`missing_cents`, which prices each day's missing
+  hours at that day's average pay and feeds company profit). The two can differ by a few dollars, and the info popover on the Labor tile says why.
 
 Worked example (largest remainder). Pool $100.00 (10000 cents). Three takers with 96.00, 40.00 and 24.50 hours: weights 9600, 4000, 2450, `W = 16050`.
 Bases `floor(96000000 / 16050) = 5981`, `floor(40000000 / 16050) = 2492`, `floor(24500000 / 16050) = 1526`, sum 9999, 1 cent left.
@@ -359,17 +367,19 @@ that type is also booked as a client level `fee`.
 
 ```
 cost     = labor + material + other + shared
-profit   = revenue - cost                         margin = profit / revenue                 ("Margin on jobs"; company margin after overhead is the bridge's company profit / revenue)
+profit   = revenue - cost                         margin = profit / revenue                 ("Job margin"; "Company margin" is the bridge's company profit / revenue)
 profit_before_shared = revenue - labor - material - other
-margin_before_shared = profit_before_shared / revenue                                       ("Margin before shared costs")
+margin_before_shared = profit_before_shared / revenue                                       (a line inside "How we got this": "Before time not on a job")
 labor_pct_of_revenue = labor / revenue
 cost_per_unit   = cost / units_good               profit_per_unit = profit / units_good
 should_cost_per_unit = plan cost for the work done so far / units_good                      (4.10; replaces a typed goal when a plan exists)
 cost_to_serve (client, range) = all cost of the client's jobs + client level costs, also per unit and per job
 ```
 
-A job page, the Profit explorer and the calculator show both margins. A job can sit under target after all costs and still help pay the rent:
-the calculator uses margin before shared costs for the lowest price worth taking, and margin after all costs for the target price.
+Every screen uses two names for a headline margin and no others: **Job margin** and **Company margin**. The job page, the Profit explorer and
+the calculator show the job margin; its "How we got this" also gives the margin before time not on a job. A job can sit under target and still
+help pay the rent: the calculator uses the margin before time not on a job for the lowest price worth taking, and the job margin for the target price.
+Home, Profit and Month close show the company margin beside the job margin.
 
 **Facts.** One SQL view, **`pulse.v_facts`**, is the row level source for every profit number on jobs and clients. It is a `UNION ALL` of stamped rows:
 `(org_id, site_id, client_id, job_id, job_type_id, vas_service_id, work_date, kind, amount_cents, units_good, units_scrap, hours, source_table, source_id)`
@@ -628,6 +638,12 @@ an hour. See 14 entries." Only readers with `wage:read` get the next line: "$26.
 locks every stream row dated in that month: edits, deletes, imports, sync writes and restamps that would touch it are refused with
 "October is closed. Ask the owner to reopen it." Reopen needs a reason and is logged. Reports mark closed months with a lock. Week based reports follow
 `settings.week_start`. Sync and cron treat "closed month" as a counted skip listed under "Came in after the month was closed", never as an error.
+
+The close screen and the month list show what the company kept, never job profit alone. The month card reads: Revenue, Job cost, Job profit
+with the job margin, then the bridge steps of 4.9 (time not on a job that no job carried, paid time not on any job, overhead the hourly rate did
+not cover), then Company profit with the company margin. Each month in the list shows company profit and company margin. The snapshot stored
+with the close holds the totals, the whole bridge and `company: { jobProfitCents, jobMarginBp, companyProfitCents, companyMarginBp }`, and a
+closed month shows those saved figures. A reader without `money:read` gets the checklist and the lock counts with every figure null.
 
 ### 4.17 What gets restamped, and when
 
@@ -976,7 +992,7 @@ lives in the URL query string on every list, chart and report, so any view can b
 | `/log/review` **Review the day** | Manager queue of days marked complete, each with its odd rows (units with no hours, pace under 50% or over 200% of target, more hours than paid), fix in place, Approve or Send back with a note. |
 | `/log/entries` | Every entry across days with filters, bulk edit, bulk delete with undo, export. |
 | `/kiosk/t/[token]` **Floor tablet** | Opened from a kiosk device link, never from a personal login, so a shared tablet holds no suite session. Pick your name, type your 4 digit PIN (5 wrong tries lock that name for 5 minutes), then: pick a job card, number pad for units, steppers for people and hours each, Save. One job at a time, big confirmation, next job. Locks after 2 minutes idle. Entries are saved under the person who unlocked. When wifi drops, entries wait on the tablet ("Saved on this tablet. Will send when online.") and send with a stable key, so nothing is logged twice. One site only, no money anywhere, portrait and landscape. |
-| `/profit` **Profit** | Tabs `?by=` job, client, type, service, site, month, week or day. Ranking bar chart (profit or margin, best and worst switch) above a table: revenue, labor, material, other, time not on a job, cost, profit, margin after all costs, margin before shared costs, units, units per person per hour, labor as % of revenue, should cost vs actual cost per unit, change vs prior period, trend sparkline. Click a row to drill: client to its jobs to its daily entries. A breadcrumb shows the path and totals always match the level above. Compare to prior period or plan. The **Company** row opens the company profit bridge. The Sites tab is a site against site table: margin, pace against target pace, time not on a job, cost per unit by job type. Export. |
+| `/profit` **Profit** | Tabs `?by=` job, client, type, service, site, month, week or day. Ranking bar chart (profit or margin, best and worst switch) above a table: revenue, labor, material, other, time not on a job, cost, profit, job margin, contribution % (optional column), units, units per person per hour, labor as % of revenue, should cost vs actual cost per unit, change vs prior period, trend sparkline. Click a row to drill: client to its jobs to its daily entries. A breadcrumb shows the path and totals always match the level above. Compare to prior period or plan. The **Company** row opens the company profit bridge. The Sites tab is a site against site table: margin, pace against target pace, time not on a job, cost per unit by job type. Export. |
 | `/clients/[id]` | Reached from the Clients tab of Profit. Tiles, trend, plan vs actual profit for the period, labor as % of revenue, cost to serve per unit and per job, Earned, Billed and Not billed yet, jobs table, services table, client level revenue and costs with the "revenue with no cost tracked" note, warehouse billing outside profit, who buys the parts, contact, links to the CRM account and WMS client, target margin, activity. |
 | `/services`, `/services/[id]` **Extra services** | Service catalog (price, unit, target pace) and profit by service: revenue per unit, cost per unit, margin, volume, trend, clients using it. Service page: entries, add entry, entries with no price to fix, WMS operations pulled. |
 | `/labor` | Tabs **Rates** (labor classes and the rate builder: wage, payroll taxes and workers comp %, benefits and paid time off %, other %, overhead per hour with the overhead helper, overtime multiplier, live "one hour really costs $21.76" readout, effective date timeline, history, change preview), **Time** (on jobs vs not on a job vs paid time not on any job by day, share of paid time spent on jobs, time not on a job by reason, paid hours entry, payroll check, "covered vs real" when the percent rule is on), **Cost** (labor cost by class, job type and client, overtime share). The Rates tab needs `rate:manage`. |
