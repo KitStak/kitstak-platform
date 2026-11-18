@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { ROUTES } from '../site-links';
-import { HeroLoop } from './hero-loop';
+import { OrderStack } from './order-stack';
 import styles from './hero.module.css';
 
+/** The chip loop (./hero-loop) is unmounted, not deleted. The hero uses the original animated order stack. */
 export function Hero() {
   return (
     <section id="top" className={styles.hero} aria-labelledby="hero-heading">
@@ -25,8 +26,8 @@ export function Hero() {
             </Link>
           </div>
         </div>
+        <OrderStack />
       </div>
-      <HeroLoop />
     </section>
   );
 }
