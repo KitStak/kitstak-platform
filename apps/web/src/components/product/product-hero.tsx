@@ -27,13 +27,22 @@ interface ProductHeroProps {
   readonly facts: readonly HeroFact[];
   /** Optional short status shown beside the breadcrumb (e.g. "New"). */
   readonly badge?: string;
+  /**
+   * `stacked` puts the visual under the copy at the full width of the page. For a wide picture, such
+   * as a product screenshot, that would be too small to read in half the width.
+   */
+  readonly layout?: 'split' | 'stacked';
 }
 
-export function ProductHero({ product, app, lines, lead, primary, secondary, visual, facts, badge }: ProductHeroProps) {
+export function ProductHero({ product, app, lines, lead, primary, secondary, visual,
+  facts,
+  badge,
+  layout = 'split',
+}: ProductHeroProps) {
   return (
     <section id="top" className={styles.hero} aria-labelledby="hero-heading">
-      <div className={`container ${styles.inner}`}>
-        <div>
+      <div className={`container ${styles.inner}`} data-layout={layout}>
+        <div className={styles.copy}>
           <nav aria-label="Breadcrumb" className={styles.crumbs}>
             <Link href={ROUTES.products}>Products</Link>
             <span aria-hidden>/</span>
@@ -50,14 +59,16 @@ export function ProductHero({ product, app, lines, lead, primary, secondary, vis
               </span>
             ))}
           </h1>
-          <p className={styles.lead}>{lead}</p>
-          <div className={styles.actions}>
-            <Link href={primary.href} className="btn btn-primary btn-lg">
-              {primary.label} <span className="btn-arrow" aria-hidden>→</span>
-            </Link>
-            <Link href={secondary.href} className="btn btn-ghost-inverse btn-lg">
-              {secondary.label}
-            </Link>
+          <div className={styles.pitch}>
+            <p className={styles.lead}>{lead}</p>
+            <div className={styles.actions}>
+              <Link href={primary.href} className="btn btn-primary btn-lg">
+                {primary.label} <span className="btn-arrow" aria-hidden>→</span>
+              </Link>
+              <Link href={secondary.href} className="btn btn-ghost-inverse btn-lg">
+                {secondary.label}
+              </Link>
+            </div>
           </div>
         </div>
         <div className={styles.visual}>{visual}</div>

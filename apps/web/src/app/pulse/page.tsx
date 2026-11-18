@@ -103,6 +103,10 @@ const STRUCTURED_DATA = {
 /** JSON for a script tag: `<` is escaped so no string in the copy can close the tag early. */
 const STRUCTURED_DATA_JSON = JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u003c');
 
+/*
+ * The screenshot chapters are stacked: copy on top, then the real screen across the page, so it can be
+ * read. The rate builder is a narrow dialog, so that chapter keeps the picture beside the copy.
+ */
 export default function PulsePage() {
   return (
     <>
@@ -118,6 +122,7 @@ export default function PulsePage() {
           primary={PRIMARY}
           secondary={SECONDARY}
           visual={<PulseHeroVisual />}
+          layout="stacked"
           facts={HERO_FACTS}
         />
         <SubNav current="pulse" sections={SECTIONS} cta={PRIMARY} />
@@ -128,10 +133,16 @@ export default function PulsePage() {
 
         <Chapter {...CHAPTERS.answer} features={ANSWER_FEATURES} visual={<JobMathVisual />} tone="sunken" />
 
-        <Chapter {...CHAPTERS.profit} features={PROFIT_FEATURES} visual={<ProfitByJobVisual />} isFlipped />
+        <Chapter {...CHAPTERS.profit} features={PROFIT_FEATURES} visual={<ProfitByJobVisual />} isStacked />
 
         {/* The one thing a spreadsheet cannot do comes straight after the first profit screens. */}
-        <Chapter {...CHAPTERS.risk} features={RISK_FEATURES} visual={<RiskVisual />} tone="brand" />
+        <Chapter
+          {...CHAPTERS.risk}
+          features={RISK_FEATURES}
+          visual={<RiskVisual />}
+          tone="brand"
+          isStacked
+        />
 
         <Chapter
           {...CHAPTERS.proof}
@@ -141,19 +152,19 @@ export default function PulsePage() {
           isFlipped
         />
 
-        <Chapter {...CHAPTERS.log} features={LOG_FEATURES} visual={<DailyEntryVisual />} />
+        <Chapter {...CHAPTERS.log} features={LOG_FEATURES} visual={<DailyEntryVisual />} isStacked />
 
         <Chapter
           {...CHAPTERS.plan}
           features={PLAN_FEATURES}
           visual={<PlanVsActualVisual />}
           tone="sunken"
-          isFlipped
+          isStacked
         />
 
         <Chapter {...CHAPTERS.costs} features={COST_FEATURES} visual={<CostRatesVisual />} />
 
-        <Chapter {...CHAPTERS.csv} features={CSV_FEATURES} visual={<CsvVisual />} tone="sunken" isFlipped />
+        <Chapter {...CHAPTERS.csv} features={CSV_FEATURES} visual={<CsvVisual />} tone="sunken" isStacked />
 
         {/* The links to the other apps live in the bundle band, the way the sibling pages sell the stack. */}
         <PulseBundleSection visual={<PulseStackVisual />} />
