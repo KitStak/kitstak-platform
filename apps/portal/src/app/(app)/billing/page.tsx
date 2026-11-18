@@ -15,6 +15,7 @@ const MODULE_NAMES: Readonly<Record<string, string>> = {
   crm: 'KitStak CRM',
   wms: 'KitStak WMS',
   projects: 'KitStak Projects',
+  pulse: 'KitStak Pulse',
 };
 
 const STATUS_BADGE: Readonly<

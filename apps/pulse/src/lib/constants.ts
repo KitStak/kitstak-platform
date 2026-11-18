@@ -220,7 +220,7 @@ export type AlertStatus = (typeof ALERT_STATUSES)[number];
 export const ALERT_ENTITY_TYPES = ['job', 'client', 'vas_service', 'site', 'period', 'import', 'sync', 'deal'] as const;
 export type AlertEntityType = (typeof ALERT_ENTITY_TYPES)[number];
 
-export const SAVED_VIEW_PAGES = ['jobs', 'profit', 'log', 'labor', 'reports', 'alerts'] as const;
+export const SAVED_VIEW_PAGES = ['jobs', 'profit', 'log', 'labor', 'reports', 'alerts', 'audit', 'export'] as const;
 export type SavedViewPage = (typeof SAVED_VIEW_PAGES)[number];
 
 export const JOB_MODE_VALUES = ['projected', 'actuals', 'final'] as const;

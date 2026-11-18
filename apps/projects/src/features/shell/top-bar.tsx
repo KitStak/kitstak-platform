@@ -158,7 +158,7 @@ export function TopBar() {
         <AppSwitcher
           current="projects"
           urls={appUrls}
-          entitled={{ crm: modules.crm, wms: modules.wms, projects: modules.projects }}
+          entitled={{ crm: modules.crm, wms: modules.wms, projects: modules.projects, pulse: modules.pulse }}
           notInPlan={notInPlan}
         />
         <ThemeToggle className="hidden sm:inline-flex" />

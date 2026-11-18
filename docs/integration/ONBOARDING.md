@@ -57,8 +57,25 @@ Portal is the contract; CRM/WMS echo it exactly where steps correspond:
 | wms_client (wms only) | Add your first client |
 | wms_catalog | Build your product catalog |
 | wms_first_order | Create your first order |
+| projects_first_project | Start your first project |
+| projects_assign_task | Give someone a task |
+| projects_connect | Connect work to a deal or order |
+| pulse_labor_rate | Set your labor cost per hour |
+| pulse_first_job | Add your first job |
+| pulse_first_entry | Log a day of work |
+| pulse_connect | Link a job to a deal or work order |
 
-The portal's WMS rows are a 3-step rollup of the WMS panel's 5.
+The portal's WMS rows are a 3-step rollup of the WMS panel's 5. Projects and Pulse steps
+appear only when the org is licensed for that module, and always after the CRM and WMS
+steps. A skip of a `projects_*` or `pulse_*` step is stored under scope `portal` (the
+`core.onboarding_progress.scope` CHECK is still `portal | crm | wms`).
+
+| step | requires | Portal deep link (carries `?setup=<key>`) |
+| --- | --- | --- |
+| pulse_labor_rate | none | Pulse `/labor?tab=rates` |
+| pulse_first_job | none | Pulse `/jobs/new` |
+| pulse_first_entry | pulse_first_job | Pulse `/log` |
+| pulse_connect | pulse_first_job | Pulse `/jobs` |
 
 ## Detection predicates (keep in lockstep)
 
@@ -73,6 +90,16 @@ The portal's WMS rows are a 3-step rollup of the WMS panel's 5.
   from `WMS_PLATFORM_ORG_SLUG`, default `kitstak`) or an org with a REAL entitlement row
   (`isEntitled`). The dev allow-all switch alone never surfaces WMS install state into
   an unrelated org's guide.
+- projects_first_project: a live `pm.projects` row that is not a template and not the
+  sample project. projects_assign_task: a live task with an assignee. projects_connect: a
+  `pm.integration_links` row. All three sit behind `to_regclass('pm.projects')`.
+- pulse_labor_rate: a live `pulse.labor_rates` row, OR `pulse.settings.default_loaded_rate_cents > 0`.
+- pulse_first_job: a live `pulse.jobs` row with `is_sample = false`.
+- pulse_first_entry: a live `pulse.production_entries` row with `is_sample = false`.
+- pulse_connect: a `pulse.job_links` row. Offered only when CRM or WMS is also in the
+  plan, so a Pulse only org never sees a step it cannot finish.
+- The four Pulse counts come from `getSetupSignals` in `@kitstak/pulse-bridge`, which is
+  guarded by `to_regclass('pulse.jobs')`: an install without Pulse returns `null` quietly.
 - Every portal signal read degrades to `null` → step renders `todo`; a failed read never
   breaks the page. WMS panel likewise degrades (hides) if its probe fails.
 

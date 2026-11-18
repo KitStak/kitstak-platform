@@ -234,3 +234,38 @@ describe('KitStak Projects steps', () => {
     expect(steps.map((step) => step.key)).toContain('projects_first_project');
   });
 });
+
+describe('KitStak Pulse steps', () => {
+  const withPulse: SetupSignals = { ...freshSignals, pulseEntitled: true, pulseLaborRates: 0, pulseJobs: 0, pulseEntries: 0, pulseLinks: 0 };
+
+  it('adds the Pulse steps last when Pulse is licensed', () => {
+    const keys = buildSetupSteps(withPulse, null, {}).map((step) => step.key);
+    expect(keys.slice(-4)).toEqual(['pulse_labor_rate', 'pulse_first_job', 'pulse_first_entry', 'pulse_connect']);
+  });
+
+  it('leaves Pulse out when the module is not licensed', () => {
+    const steps = buildSetupSteps(freshSignals, null, {});
+    expect(steps.some((step) => step.scope === 'pulse')).toBe(false);
+  });
+
+  it('locks logging and linking until the first job exists, then detects every step', () => {
+    const before = buildSetupSteps(withPulse, null, {});
+    expect(before.find((step) => step.key === 'pulse_first_entry')?.lockedBy).toBe('Add your first job');
+    expect(before.find((step) => step.key === 'pulse_connect')?.lockedBy).toBe('Add your first job');
+    expect(before.find((step) => step.key === 'pulse_labor_rate')?.lockedBy).toBeNull();
+    const after = buildSetupSteps({ ...withPulse, pulseLaborRates: 1, pulseJobs: 3, pulseEntries: 12, pulseLinks: 2 }, null, {});
+    expect(after.filter((step) => step.scope === 'pulse').every((step) => step.status === 'done')).toBe(true);
+  });
+
+  it('works alone: no link step when there is no CRM or WMS to link to', () => {
+    const steps = buildSetupSteps({ ...withPulse, crmEntitled: false, wmsEntitled: false }, null, {});
+    const keys = steps.map((step) => step.key);
+    expect(keys).not.toContain('pulse_connect');
+    expect(keys).toContain('pulse_first_job');
+  });
+
+  it('a failed Pulse read leaves the steps to do, never done', () => {
+    const steps = buildSetupSteps({ ...withPulse, pulseLaborRates: null, pulseJobs: null, pulseEntries: null, pulseLinks: null }, null, {});
+    expect(steps.filter((step) => step.scope === 'pulse').every((step) => step.status === 'todo')).toBe(true);
+  });
+});

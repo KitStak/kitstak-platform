@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
 import { after } from 'next/server';
-import { CalendarDays, CreditCard, FolderKanban, LayoutGrid, ListChecks, Package, Plus, Settings2, Users, type LucideIcon } from 'lucide-react';
+import { CalendarDays, ClipboardPen, CreditCard, FolderKanban, LayoutGrid, ListChecks, Package, PackagePlus, Plus, Settings2, Users, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { Module } from '@kitstak/entitlements';
 import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
 import { getOrgGlance, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
-import { getCustomerWork, getLauncherStats } from '@/server/product-stats';
+import { getCustomerWork, getLauncherStats, getPulseAttention } from '@/server/product-stats';
 import { CustomerWorkPanel } from '@/features/launcher/customer-work';
+import { PulseAttentionPanel } from '@/features/launcher/pulse-attention';
 import { getSetupState, markGuideSeen } from '@/server/onboarding';
 import { CreateOrgForm } from '@/features/launcher/create-org-form';
 import { ProductTile } from '@/features/launcher/product-tile';
@@ -36,6 +37,10 @@ const PRODUCTS: Readonly<Record<Module, ProductCopy>> = {
     name: 'KitStak Projects',
     tagline: 'Projects, tasks and timelines',
   },
+  pulse: {
+    name: 'KitStak Pulse',
+    tagline: 'Know which jobs make money',
+  },
 };
 
 function productUrl(module: Module): string {
@@ -46,6 +51,8 @@ function productUrl(module: Module): string {
       return env.NEXT_PUBLIC_WMS_URL;
     case 'projects':
       return env.NEXT_PUBLIC_PROJECTS_URL;
+    case 'pulse':
+      return env.NEXT_PUBLIC_PULSE_URL;
   }
 }
 
@@ -58,6 +65,8 @@ function emptyStateUrl(module: Module, orgSlug: string): string {
       return `${env.NEXT_PUBLIC_WMS_URL}/orders`;
     case 'projects':
       return `${env.NEXT_PUBLIC_PROJECTS_URL}/projects/new`;
+    case 'pulse':
+      return `${env.NEXT_PUBLIC_PULSE_URL}/jobs/new`;
   }
 }
 
@@ -144,10 +153,11 @@ export default async function LauncherPage({
     );
   }
 
-  const [{ devAllowAll, modules }, stats, customerWork, glance, setup, params] = await Promise.all([
+  const [{ devAllowAll, modules }, stats, customerWork, pulseAttention, glance, setup, params] = await Promise.all([
     getOrgModuleStates(activeOrg.id),
-    getLauncherStats(activeOrg.id),
+    getLauncherStats(activeOrg.id, session.user.id),
     getCustomerWork(activeOrg.id),
+    getPulseAttention(activeOrg.id, session.user.id),
     getOrgGlance(activeOrg.id),
     getSetupState(activeOrg),
     searchParams,
@@ -182,6 +192,12 @@ export default async function LauncherPage({
       ? [
           { label: 'New project', href: `${env.NEXT_PUBLIC_PROJECTS_URL}/projects/new`, icon: FolderKanban, external: true },
           { label: 'My work', href: `${env.NEXT_PUBLIC_PROJECTS_URL}/my-work`, icon: ListChecks, external: true },
+        ]
+      : []),
+    ...(entitledFor('pulse')
+      ? [
+          { label: 'New job', href: `${env.NEXT_PUBLIC_PULSE_URL}/jobs/new`, icon: PackagePlus, external: true },
+          { label: 'Log work', href: `${env.NEXT_PUBLIC_PULSE_URL}/log`, icon: ClipboardPen, external: true },
         ]
       : []),
     { label: 'Billing', href: '/billing', icon: CreditCard, external: false },
@@ -224,6 +240,10 @@ export default async function LauncherPage({
         })}
       </section>
 
+      {entitledFor('pulse') && pulseAttention ? (
+        <PulseAttentionPanel attention={pulseAttention} pulseUrl={env.NEXT_PUBLIC_PULSE_URL} />
+      ) : null}
+
       {entitledFor('projects') ? (
         <CustomerWorkPanel rows={customerWork} projectsUrl={env.NEXT_PUBLIC_PROJECTS_URL} />
       ) : null}
@@ -252,7 +272,7 @@ export default async function LauncherPage({
             />
             <GlanceCell
               item={{
-                // Counts the licensed apps (CRM, WMS, Projects); the Portal itself is always on.
+                // Counts the licensed apps (CRM, WMS, Projects, Pulse); the Portal itself is always on.
                 label: 'Apps on your plan',
                 value: `${modules.filter((state) => state.entitled).length} of ${modules.length} apps`,
                 icon: LayoutGrid,

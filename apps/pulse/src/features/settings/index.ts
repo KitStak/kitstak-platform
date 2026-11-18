@@ -1,1 +1,2 @@
-export { SettingsAppsPage, SettingsAuditPage, SettingsClosePage, SettingsPage } from './settings-page';
+export { SettingsAppsPage, SettingsClosePage } from './settings-page';
+export { SettingsAuditPage, SettingsPage } from './workspace-page';

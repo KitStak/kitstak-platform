@@ -29,6 +29,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_CRM_URL: z.url().default('http://localhost:3100'),
   NEXT_PUBLIC_WMS_URL: z.url().default('http://localhost:3000'),
   NEXT_PUBLIC_PROJECTS_URL: z.url().default('http://localhost:3400'),
+  NEXT_PUBLIC_PULSE_URL: z.url().default('http://localhost:3500'),
   /**
    * Cookie domain for cross-subdomain SSO (`.kitstak.io` in prod). Leave unset in dev —
    * localhost ports already share host-only `kitstak.*` cookies (BLUEPRINT.md §1.2).

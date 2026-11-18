@@ -1,11 +1,12 @@
-import { BellRing, ListChecks } from 'lucide-react';
-import { Page, Panel } from '@/components/layout/page';
-import { ButtonLink } from '@/components/pulse/button-link';
+import { Page } from '@/components/layout/page';
 import { RouteTabs } from '@/components/pulse/route-tabs';
-import { Teach } from '@/components/pulse/teach';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { routes } from '@/lib/routes';
-import { pulsePage, type PulsePage } from '@/server/page';
+import { getSettings, listAlertRules, listAlerts, listClients, listJobTypes, listSites } from '@/server/domain';
+import { todayInZone } from '@/server/domain/_shared';
+import { pulsePage } from '@/server/page';
+import { AlertsView } from './alerts-view';
+import { RulesView } from './rules-view';
 
 function Frame({ view, children }: { readonly view: 'inbox' | 'rules'; readonly children: React.ReactNode }) {
   return (
@@ -23,53 +24,38 @@ function Frame({ view, children }: { readonly view: 'inbox' | 'rules'; readonly 
         />
       }
     >
-      <Panel>{children}</Panel>
+      {children}
     </Page>
   );
 }
 
-const blocked = (page: PulsePage) => page.blocked;
-
-/** Alerts inbox: open, snoozed and resolved alerts, each with the next step. */
+/** Alerts inbox: open, snoozed and done alerts, each with why it fired and the next step. */
 export async function AlertsPage() {
   const page = await pulsePage(routes.alerts(), 'alerts');
-  if (blocked(page)) return <PageBlocked title="Alerts" role={page.access.role} />;
+  if (page.blocked) return <PageBlocked title="Alerts" role={page.access.role} />;
+  const [open, snoozed, settings] = await Promise.all([listAlerts(page.ctx, { status: 'open', limit: 500 }), listAlerts(page.ctx, { status: 'snoozed', limit: 500 }), getSettings(page.ctx)]);
   return (
     <Frame view="inbox">
-      <Teach
-        icon={BellRing}
-        title="Nothing needs you right now"
-        why="Pulse watches every open job. When one slips, for example the margin is heading under your target or a day was not logged, an alert lands here with what happened and what to do next."
-        points={['What happened, in plain words', 'The next step, and a link straight to the job', 'Snooze it, hand it to someone, or mark it done']}
-        actions={
-          <>
-            <ButtonLink href={routes.alertRules()} icon={<ListChecks aria-hidden />}>
-              See the rules
-            </ButtonLink>
-            <ButtonLink href={routes.jobs()} variant="secondary">
-              Open jobs
-            </ButtonLink>
-          </>
-        }
-      />
+      <AlertsView initialOpen={open} initialSnoozed={snoozed} today={todayInZone(settings.timezone)} canManageRules={page.can('alert:manage')} />
     </Frame>
   );
 }
 
-/** Alert rules: plain sentence rules with thresholds, scope and who gets told. */
+/** Alert rules: plain sentence rules with a line, who gets told, quiet hours and a 30 day preview. */
 export async function AlertRulesPage() {
   const page = await pulsePage(routes.alertRules(), 'alerts');
-  if (blocked(page)) return <PageBlocked title="Alert rules" role={page.access.role} />;
-  const canManage = page.can('alert:manage');
+  if (page.blocked) return <PageBlocked title="Alert rules" role={page.access.role} />;
+  const [rules, clients, jobTypes, sites] = await Promise.all([listAlertRules(page.ctx), listClients(page.ctx, {}), listJobTypes(page.ctx), listSites(page.ctx)]);
   return (
     <Frame view="rules">
-      <Teach
-        icon={ListChecks}
-        title="No alert rules yet"
-        why="A rule is one plain sentence, like: tell me when a job’s margin is heading under 15 percent. You pick the number, which jobs it covers and who gets told."
-        points={['Margin heading under a number you choose', 'Pace under the target for two days in a row', 'A day with no entries, or a cost with no job']}
-        actions={<ButtonLink href={routes.alerts()}>Back to the inbox</ButtonLink>}
-        footnote={canManage ? 'Rules need at least one job to watch. Add a job and the starter rules switch on.' : 'A manager sets the rules. You get told when one of them fires for you.'}
+      <RulesView
+        initialRules={rules}
+        canManage={page.can('alert:manage')}
+        options={{
+          clients: clients.map((client) => ({ id: client.id, name: client.name })),
+          jobTypes: jobTypes.map((type) => ({ id: type.id, name: type.name })),
+          sites: sites.map((site) => ({ id: site.id, name: site.name })),
+        }}
       />
     </Frame>
   );

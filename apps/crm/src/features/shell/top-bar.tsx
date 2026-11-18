@@ -43,6 +43,7 @@ const APP_URLS = {
   crm: process.env.NEXT_PUBLIC_CRM_URL ?? 'http://localhost:3100',
   wms: process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
   projects: process.env.NEXT_PUBLIC_PROJECTS_URL ?? 'http://localhost:3400',
+  pulse: process.env.NEXT_PUBLIC_PULSE_URL ?? 'http://localhost:3500',
 } as const;
 
 function HelpMenu() {

@@ -36,6 +36,7 @@ export interface OrgModuleFlags {
   readonly crm: boolean;
   readonly wms: boolean;
   readonly projects: boolean;
+  readonly pulse: boolean;
 }
 
 /**
@@ -43,9 +44,9 @@ export interface OrgModuleFlags {
  * closed per module on read errors so a billing hiccup only hides integrations.
  */
 export async function orgModuleFlags(orgId: string): Promise<OrgModuleFlags> {
-  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true };
-  const read = (module: 'crm' | 'wms' | 'projects') =>
+  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true, pulse: true };
+  const read = (module: 'crm' | 'wms' | 'projects' | 'pulse') =>
     hasModule(db as unknown as EntitlementsDb, orgId, module).catch(() => false);
-  const [crm, wms, projects] = await Promise.all([read('crm'), read('wms'), read('projects')]);
-  return { crm, wms, projects };
+  const [crm, wms, projects, pulse] = await Promise.all([read('crm'), read('wms'), read('projects'), read('pulse')]);
+  return { crm, wms, projects, pulse };
 }

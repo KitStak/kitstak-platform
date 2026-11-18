@@ -205,7 +205,7 @@ export async function getCloseDetail(ctx: DomainContext, month: string): Promise
       detail: count.company_costs === 0 ? `No rent, utilities or other company costs are typed for ${name}. Without them the company profit trusts your overhead per hour.` : `${plural(count.company_costs, 'company cost is', 'company costs are')} in for ${name}.`,
       state: count.company_costs === 0 ? 'check' : 'ok',
       count: count.company_costs,
-      href: `/costs?scope=company&month=${start.slice(0, 7)}`,
+      href: `/settings/close?month=${start.slice(0, 7)}#company-costs`,
       hrefLabel: count.company_costs === 0 ? 'Add company costs' : 'Open company costs',
       amountCents: access.seesMoney ? Number(count.company_cents) : null,
     },

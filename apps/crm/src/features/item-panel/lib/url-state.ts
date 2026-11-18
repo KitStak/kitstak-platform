@@ -7,7 +7,7 @@ export const ITEM_PARAM = 'item';
 export const TAB_PARAM = 'itemTab';
 export const UPDATE_PARAM = 'update';
 
-export const PANEL_TABS = ['updates', 'files', 'activity', 'card', 'projects'] as const;
+export const PANEL_TABS = ['updates', 'files', 'activity', 'card', 'projects', 'pulse'] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
 export const DEFAULT_TAB: PanelTab = 'updates';
 

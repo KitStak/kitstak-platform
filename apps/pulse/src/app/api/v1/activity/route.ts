@@ -4,7 +4,7 @@ import { listActivity } from '@/server/domain';
 
 /**
  * The audit feed, newest first: `{ items, nextCursor }`.
- * `?job=&client=&entityType=&entityId=&actor=&verb=production.&from=&to=&cursor=&limit=`.
+ * `?job=&client=&entityType=&entityId=&actor=&verb=production.&q=&from=&to=&cursor=&limit=`.
  */
 export const GET = apiRoute(async ({ ctx, searchParams }) =>
   listActivity(ctx, {
@@ -14,6 +14,7 @@ export const GET = apiRoute(async ({ ctx, searchParams }) =>
     entityId: uuidParam(searchParams, 'entityId'),
     actorId: uuidParam(searchParams, 'actor'),
     verbPrefix: str(searchParams, 'verb'),
+    q: str(searchParams, 'q'),
     from: dateParam(searchParams, 'from'),
     to: dateParam(searchParams, 'to'),
     cursor: str(searchParams, 'cursor'),

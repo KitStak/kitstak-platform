@@ -22,15 +22,16 @@ export default async function AppLayout({ children }: { readonly children: React
 
   // Real entitlement reads for the shared AppSwitcher (BLUEPRINT.md §6); no org → both locked.
   const moduleStates = activeOrg ? await getOrgModuleStates(activeOrg.id) : null;
-  const entitledFor = (module: 'crm' | 'wms' | 'projects'): boolean =>
+  const entitledFor = (module: 'crm' | 'wms' | 'projects' | 'pulse'): boolean =>
     moduleStates?.modules.find((state) => state.module === module)?.entitled ?? false;
   const appUrls = {
     portal: env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3300',
     crm: env.NEXT_PUBLIC_CRM_URL,
     wms: env.NEXT_PUBLIC_WMS_URL,
     projects: env.NEXT_PUBLIC_PROJECTS_URL,
+    pulse: env.NEXT_PUBLIC_PULSE_URL,
   };
-  const entitled = { crm: entitledFor('crm'), wms: entitledFor('wms'), projects: entitledFor('projects') };
+  const entitled = { crm: entitledFor('crm'), wms: entitledFor('wms'), projects: entitledFor('projects'), pulse: entitledFor('pulse') };
 
   return (
     <div className="flex min-h-dvh flex-col bg-app">
@@ -76,6 +77,7 @@ export default async function AppLayout({ children }: { readonly children: React
               crmUrl={appUrls.crm}
               wmsUrl={appUrls.wms}
               projectsUrl={appUrls.projects}
+              pulseUrl={appUrls.pulse}
               entitled={entitled}
             />
             <AppSwitcher
@@ -92,7 +94,7 @@ export default async function AppLayout({ children }: { readonly children: React
       <footer className="border-t border-border-subtle">
         <div className="mx-auto flex w-full max-w-[1120px] items-center justify-between px-4 py-4 text-xs text-fg-muted sm:px-6">
           <span>© {new Date().getFullYear()} KitStak</span>
-          <span>Portal · CRM · WMS · Projects</span>
+          <span>Portal · CRM · WMS · Projects · Pulse</span>
         </div>
       </footer>
     </div>

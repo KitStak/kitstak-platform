@@ -627,3 +627,45 @@ with a `Response`).
 
 Real 404s for `/clients/<id>` and `/services/<id>` come from `profitRecordMissing` in the `(app)` layout.
 Supervisors still land on Log work; `/?floor=1` shows them the no money version of Home.
+
+## 16. Money ops: calculator, entry ledgers, alerts, goals, month close, wall (owner: money-ops)
+
+Everything here is additive on top of sections 5 to 9.
+
+**Domain (`@/server/domain`)**
+- **`quotes`**: `listQuoteScenarios`, `getQuoteScenario`, `saveQuoteScenario` (the answer is worked out again on the
+  server with `runCalc`), `setQuoteScenarioStatus`, `deleteQuoteScenario`, `restoreQuoteScenario`, `getCalculatorSetup`,
+  `listSimilarJobs`, `quoteFromJob(ctx, ref)` (a job's actuals as a filled calculator form), `createJobFromScenario`.
+- **`alert-ops`**: `saveAlertRuleFull` (rule plus quiet hours in `scope.quiet`), `countAlertsByStatus`,
+  `bulkUpdateAlerts`, `previewAlertRule` (what a rule would have said in the last 30 days).
+- **`goals`**: `getGoalsBoard(ctx, { month? })`. **`period-ops`**: `getCloseBoard`, `getCloseDetail(ctx, month)`,
+  `listCloseEvents`. **`wall`**: `getWallBoard(ctx, options)`, `getWallForDevice(token)` (never money).
+- **`ledger`**: `saveCostsBulk`, `saveMaterialUsageBulk`, `saveRevenueBulk`, `saveVasEntriesBulk` (all or nothing),
+  `previewWmsUsage(ctx, jobRef)`, `pullWmsUsage(ctx, jobRef)` (adds only what is new, safe to run again).
+
+**API**: `GET quotes`, `quotes/[id]`, `quotes/setup`, `quotes/similar`, `quotes/from-job?job=`, `alerts/counts`,
+`alert-rules/preview?kind=&threshold=&client=&jobType=&site=&rule=`, `goals/board?month=YYYY-MM`, `periods/board`,
+`periods/[month]/detail`, `periods/events`, `materials/wms-preview?job=`.
+
+**Actions (`@/server/actions/money-ops`)**: `saveQuoteScenarioAction`, `setQuoteScenarioStatusAction`,
+`deleteQuoteScenarioAction`, `restoreQuoteScenarioAction`, `createJobFromScenarioAction`, `saveAlertRuleFullAction`,
+`bulkUpdateAlertsAction`, `saveCostsBulkAction`, `saveMaterialUsageBulkAction`, `saveRevenueBulkAction`,
+`saveVasEntriesBulkAction`, `pullWmsUsageAction`.
+
+**UI any team can mount by path (client components, need the app shell)**
+- `@/features/costs/cost-ledger`: `<CostLedger scope="job|client|company|all" jobId? clientId? from? to? today />`.
+- `@/features/materials/material-ledger`: `<MaterialLedger jobId? jobRef? clientId? from? to? today />` (with `jobId`
+  and `jobRef` it offers "Pull from the warehouse" when the job has a WMS work order).
+- `@/features/revenue/revenue-ledger`: `<RevenueLedger jobId? clientId? from? to? today />` (invoices, fees,
+  adjustments, credits). `@/features/revenue/service-ledger`: `<ServiceLedger jobId? clientId? serviceId? from? to? today />`.
+- All four are built on `@/features/costs/ledger-kit` (`Ledger`: cells edit in place, row checkboxes, lock marks for a
+  closed month, cards on a phone; `BulkAddDialog`: add many rows, paste from a spreadsheet; `useLedgerRows`,
+  `useLedgerActions`: optimistic rows with Undo). A new ledger names its columns and how a cell becomes a save.
+- `@/features/calculator/how`: `<How title formula lines warnings? />`, the "How we got this" popover for a number that
+  is worked out on the screen (use `ExplainNumber` when the number comes from the profit rollups).
+- Month close (`/settings/close?month=YYYY-MM`) mounts all four ledgers for the picked month under "Entries dated in".
+- Deep links: `/calculator?job=<number>` (what if from a job's actuals), `/calculator?scenario=<id>`,
+  `/goals?month=YYYY-MM`, `/wall?site=&panels=jobs,pace,totals,due,nice&rotate=15&money=1`.
+
+Pure helpers with tests: `features/calculator/calc-model`, `features/alerts/{quiet-hours,rule-kinds,alert-model}`,
+`features/goals/goal-math`, `features/wall/wall-math`, `features/periods/close-model`.

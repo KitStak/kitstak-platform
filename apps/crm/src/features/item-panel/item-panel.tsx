@@ -72,6 +72,9 @@ import { ProjectsTab } from './projects/projects-tab';
 import { openWorkCount, ProjectsHealthLine } from './projects/projects-health';
 import { ProjectsMark } from './projects/projects-mark';
 import { useItemProjects } from './projects/api';
+import { PulseHealthLine, PulseTab } from './pulse/pulse-tab';
+import { PulseMark } from './pulse/pulse-mark';
+import { useItemPulse } from './pulse/api';
 import { useOptionalOrg } from '@/features/shell/org-context';
 
 // Memoized: switching tabs re-renders the body, not every mounted tab.
@@ -510,6 +513,14 @@ function PanelBody({
   // link) renders right away with a skeleton; it only disappears if the pm schema turns out missing.
   const projectsAvailable = projectsEligible && projectsQuery.data?.available !== false;
   const projectsCount = projectsAvailable ? (projectsQuery.data?.work.projects.length ?? 0) + (projectsQuery.data?.work.openTasks ?? 0) : 0;
+  // KitStak Pulse "Profit" tab: deals and accounts only, top-level records, org licensed for Pulse.
+  // Hidden as soon as the server says Pulse is not installed or this person has no Pulse role.
+  const pulseKind = data.payload?.board.kind ?? data.detail?.board.kind;
+  const pulseEntitled = (shellOrg?.apps?.entitled.pulse ?? false) && (pulseKind === 'deals' || pulseKind === 'accounts');
+  const pulseEligible = pulseEntitled && data.item?.parentItemId === null;
+  const pulseQuery = useItemPulse(itemId, pulseEntitled && data.item?.parentItemId == null);
+  const pulseAvailable = pulseEligible && pulseQuery.data?.available !== false && !pulseQuery.isError;
+  const pulseCount = pulseAvailable ? (pulseQuery.data?.jobs.length ?? 0) : 0;
   const actions = useItemActions(data.boardId, data.term);
   const baseServices = useBoardCellServices(data.boardId, data.payload?.items ?? []);
   const linked = data.detail?.linkedItems;
@@ -722,6 +733,11 @@ function PanelBody({
                 />
               </div>
             ) : null}
+            {pulseAvailable && pulseQuery.data?.available ? (
+              <div className="px-2 pt-1 empty:hidden">
+                <PulseHealthLine data={pulseQuery.data} onOpen={() => setTab('pulse')} />
+              </div>
+            ) : null}
           </div>
           {removed ? (
             <div className={cn('px-4 pb-2', inner)}>
@@ -756,6 +772,11 @@ function PanelBody({
                 {projectsAvailable ? (
                   <TabsTrigger value="projects" icon={<ProjectsMark size={14} />} count={projectsCount || undefined} data-testid="tab-projects">
                     Projects
+                  </TabsTrigger>
+                ) : null}
+                {pulseAvailable ? (
+                  <TabsTrigger value="pulse" icon={<PulseMark size={14} />} count={pulseCount || undefined} data-testid="tab-pulse">
+                    Profit
                   </TabsTrigger>
                 ) : null}
               </TabsList>
@@ -807,6 +828,11 @@ function PanelBody({
               {visited.has('projects') && projectsAvailable ? (
                 <TabsContent value="projects" forceMount className={KEEP_MOUNTED}>
                   <ProjectsTab itemId={item.id} recordName={item.name} term={data.term} canEdit={canEdit} />
+                </TabsContent>
+              ) : null}
+              {visited.has('pulse') && pulseAvailable ? (
+                <TabsContent value="pulse" forceMount className={KEEP_MOUNTED}>
+                  <PulseTab itemId={item.id} recordName={item.name} />
                 </TabsContent>
               ) : null}
             </div>

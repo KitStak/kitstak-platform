@@ -25,7 +25,7 @@ export interface ShellContextValue {
    */
   readonly activeApps: ReadonlySet<string> | null;
   /** KitStak module unlock state for the app switcher (undefined = show every app unlocked). */
-  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean; readonly pulse?: boolean };
 }
 
 const ShellContext = React.createContext<ShellContextValue>({

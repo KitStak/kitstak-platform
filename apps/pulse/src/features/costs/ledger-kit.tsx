@@ -11,7 +11,7 @@
  * The ledgers stay thin: each one names its columns, how a cell edit becomes a save, and how a
  * typed bulk row becomes an input.
  */
-import { useEffect, useId, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import { CircleAlert, ClipboardPaste, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button, Checkbox, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, IconButton, Skeleton, Tooltip, toast } from '@/components/ui';
@@ -39,12 +39,14 @@ export function useLedgerRows<Row extends { id: string }>(serverRows: readonly R
   const [patches, setPatches] = useState<ReadonlyMap<string, Row>>(new Map());
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [added, setAdded] = useState<readonly Row[]>([]);
-  // New server data wins: drop the overlay.
-  useEffect(() => {
+  // New server data wins: drop the overlay (state is reset while rendering, not in an effect).
+  const [seen, setSeen] = useState(serverRows);
+  if (seen !== serverRows) {
+    setSeen(serverRows);
     setPatches(new Map());
     setAdded([]);
     setHidden(new Set());
-  }, [serverRows]);
+  }
   const rows = useMemo(() => {
     const base = serverRows ?? [];
     const known = new Set(base.map((row) => row.id));
@@ -147,7 +149,7 @@ function EditableCell({
           numeric && 'flex-row-reverse text-right',
         )}
       >
-        <span className="min-w-0 truncate">{display}</span>
+        <span className={cn('min-w-0', numeric || editor.kind === 'date' || editor.kind === 'money' || editor.kind === 'number' ? 'whitespace-nowrap' : 'truncate')}>{display}</span>
         <Pencil aria-hidden className="size-3 shrink-0 text-fg-muted opacity-0 group-hover/cell:opacity-100 group-focus-visible/cell:opacity-100" />
       </button>
     );
@@ -254,7 +256,8 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
     });
   const cell = (row: Row, column: LedgerColumn<Row>, suffix: string) => {
     const editor = canEdit && !row.locked ? (column.editor?.(row) ?? null) : null;
-    if (!editor) return column.render(row);
+    // In the table a cell that cannot be edited stays on one line; the phone card (suffix set) lets it wrap.
+    if (!editor) return suffix ? column.render(row) : <span className={cn('block', column.numeric ? 'whitespace-nowrap' : 'max-w-[240px] truncate')}>{column.render(row)}</span>;
     return <EditableCell label={`${column.header.toLowerCase()} of ${rowName(row)}`} display={column.render(row)} editor={editor} numeric={column.numeric} onCommit={(value) => onCommit(row, column.id, value)} testId={`${testId}-${row.id}-${column.id}${suffix}`} />;
   };
 
@@ -346,7 +349,7 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
                   </td>
                 ) : null}
                 {columns.map((column, index) => (
-                  <td key={column.id} className={cn('max-w-[280px] px-3 py-1.5 align-middle first:pl-4', column.numeric && 'text-right', column.className)}>
+                  <td key={column.id} className={cn('max-w-[260px] px-3 py-1.5 align-middle first:pl-4', column.numeric && 'text-right whitespace-nowrap', column.className)}>
                     {index === 0 && rowBadges ? (
                       <span className="flex items-center gap-2">
                         {cell(row, column, '')}
@@ -430,6 +433,7 @@ export function BulkAddDialog<Input>({
   description,
   columns,
   noun,
+  nouns,
   toInput,
   onSubmit,
   testId,
@@ -441,6 +445,8 @@ export function BulkAddDialog<Input>({
   readonly columns: readonly BulkColumn[];
   /** One row, in the count on the button: "cost", "material row". */
   readonly noun: string;
+  /** The plural, when adding an s is wrong ("entries"). */
+  readonly nouns?: string;
   /** Checks one typed row. Rows with every cell empty (or still at the starting values) are skipped before this is called. */
   readonly toInput: (cells: BulkCells) => BulkRowResult<Input>;
   /** Saves the rows. Returns null when it worked, or a message, with the row it is about when known. */
@@ -453,18 +459,22 @@ export function BulkAddDialog<Input>({
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // A fresh grid each time the dialog opens.
-  useEffect(() => {
-    if (!open) return;
-    setRows(Array.from({ length: START_ROWS }, () => blank));
-    setErrors({});
-    setMessage(null);
-  }, [open, blank]);
+  // A fresh grid each time the dialog opens (state is reset while rendering, not in an effect).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (open) {
+      setRows(Array.from({ length: START_ROWS }, () => blank));
+      setErrors({});
+      setMessage(null);
+    }
+  }
 
   const touchedRow = (cells: BulkCells): boolean => columns.some((column) => (cells[column.id] ?? '').trim() !== (column.initial ?? '').trim());
   const filled = rows.map((cells, index) => ({ cells, index })).filter((row) => touchedRow(row.cells));
   const setCell = (rowIndex: number, columnId: string, value: string) => {
     setRows((current) => current.map((cells, index) => (index === rowIndex ? { ...cells, [columnId]: value } : cells)));
+    setMessage(null);
     setErrors((current) => {
       if (!current[rowIndex]?.[columnId]) return current;
       const rest = { ...current[rowIndex] };
@@ -628,7 +638,7 @@ export function BulkAddDialog<Input>({
             Cancel
           </Button>
           <Button onClick={() => void submit()} loading={saving} data-testid={`${testId}-save`}>
-            {filled.length === 0 ? `Add ${noun}s` : `Add ${filled.length} ${filled.length === 1 ? noun : `${noun}s`}`}
+            {filled.length === 0 ? `Add ${nouns ?? `${noun}s`}` : `Add ${filled.length} ${filled.length === 1 ? noun : (nouns ?? `${noun}s`)}`}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -688,6 +698,7 @@ export function useLedgerActions<Row extends { id: string; version: number }, In
   restore,
   toInput,
   noun,
+  nouns,
   refresh,
 }: {
   readonly overlay: ReturnType<typeof useLedgerRows<Row>>;
@@ -698,6 +709,8 @@ export function useLedgerActions<Row extends { id: string; version: number }, In
   readonly toInput: (row: Row) => Input;
   /** One row in words: "cost", "material row". */
   readonly noun: string;
+  /** The plural, when adding an s is wrong ("entries"). */
+  readonly nouns?: string;
   readonly refresh: () => Promise<void>;
 }) {
   const Noun = `${noun.charAt(0).toUpperCase()}${noun.slice(1)}`;
@@ -737,7 +750,7 @@ export function useLedgerActions<Row extends { id: string; version: number }, In
     if (problem) toast.error(kept.length === ids.length ? `Couldn't delete the ${noun}` : `${kept.length} of ${ids.length} could not be deleted`, problem);
     if (gone.length === 0) return;
     void refresh();
-    toast.undo(gone.length === 1 ? `${Noun} deleted` : `${gone.length} ${noun}s deleted`, {
+    toast.undo(gone.length === 1 ? `${Noun} deleted` : `${gone.length} ${nouns ?? `${noun}s`} deleted`, {
       onUndo: async () => {
         for (const id of gone) {
           const back = await attempt(() => restore({ id }));
@@ -752,7 +765,7 @@ export function useLedgerActions<Row extends { id: string; version: number }, In
   const added = (rows: readonly Row[]): void => {
     overlay.add(rows);
     void refresh();
-    toast.undo(rows.length === 1 ? `${Noun} added` : `${rows.length} ${noun}s added`, {
+    toast.undo(rows.length === 1 ? `${Noun} added` : `${rows.length} ${nouns ?? `${noun}s`} added`, {
       onUndo: async () => {
         overlay.hide(rows.map((row) => row.id));
         for (const row of rows) {

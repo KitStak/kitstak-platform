@@ -71,9 +71,19 @@ export interface SetupSignals {
   readonly pmAssignedTasks?: number | null;
   /** Projects/tasks linked to a CRM or WMS record. */
   readonly pmLinks?: number | null;
+  /** KitStak Pulse module (omitted = not licensed: no Pulse steps). */
+  readonly pulseEntitled?: boolean;
+  /** Labor rates, or a default labor cost per hour in Pulse settings. */
+  readonly pulseLaborRates?: number | null;
+  /** Real jobs (sample data does not count). */
+  readonly pulseJobs?: number | null;
+  /** Days of work logged on a job (sample data does not count). */
+  readonly pulseEntries?: number | null;
+  /** Jobs linked to a CRM deal, a WMS work order or a project. */
+  readonly pulseLinks?: number | null;
 }
 
-export type SetupScope = 'portal' | 'crm' | 'wms' | 'projects';
+export type SetupScope = 'portal' | 'crm' | 'wms' | 'projects' | 'pulse';
 export type SetupStepStatus = 'todo' | 'done' | 'skipped';
 
 export type SetupStepKey =
@@ -86,7 +96,11 @@ export type SetupStepKey =
   | 'wms_first_order'
   | 'projects_first_project'
   | 'projects_assign_task'
-  | 'projects_connect';
+  | 'projects_connect'
+  | 'pulse_labor_rate'
+  | 'pulse_first_job'
+  | 'pulse_first_entry'
+  | 'pulse_connect';
 
 export const SETUP_STEP_KEYS: readonly SetupStepKey[] = [
   'profile',
@@ -99,6 +113,10 @@ export const SETUP_STEP_KEYS: readonly SetupStepKey[] = [
   'projects_first_project',
   'projects_assign_task',
   'projects_connect',
+  'pulse_labor_rate',
+  'pulse_first_job',
+  'pulse_first_entry',
+  'pulse_connect',
 ];
 
 export function isSetupStepKey(value: string): value is SetupStepKey {
@@ -144,6 +162,10 @@ const wantsProjects = (signals: SetupSignals): boolean => signals.projectsEntitl
 /** The cross-app step only makes sense when there is a CRM or WMS to connect to. */
 const wantsConnect = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
   wantsProjects(signals) && (wantsCrm(signals, profile) || wantsWms(signals, profile));
+const wantsPulse = (signals: SetupSignals): boolean => signals.pulseEntitled === true;
+/** Linking a job only makes sense when there is a CRM or WMS record to link it to. */
+const wantsPulseConnect = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
+  wantsPulse(signals) && (wantsCrm(signals, profile) || wantsWms(signals, profile));
 /** Solo founders skip the invite step — unless a teammate or invite shows up anyway. */
 const wantsInvite = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
   profile?.teamSize !== 'solo' || signals.memberCount > 1 || signals.pendingInvites > 0;
@@ -264,13 +286,59 @@ const BLUEPRINTS: readonly StepBlueprint[] = [
     requires: 'projects_first_project',
     include: wantsConnect,
   },
+  {
+    key: 'pulse_labor_rate',
+    scope: 'pulse',
+    title: 'Set your labor cost per hour',
+    description: 'One number is enough to start: what an hour of work really costs you.',
+    cta: 'Set the rate',
+    minutes: 2,
+    auto: true,
+    detect: (signals) => count(signals.pulseLaborRates ?? null) > 0,
+    include: (signals) => wantsPulse(signals),
+  },
+  {
+    key: 'pulse_first_job',
+    scope: 'pulse',
+    title: 'Add your first job',
+    description: 'A job is one piece of work for one client, with one price.',
+    cta: 'Add a job',
+    minutes: 2,
+    auto: true,
+    detect: (signals) => count(signals.pulseJobs ?? null) > 0,
+    include: (signals) => wantsPulse(signals),
+  },
+  {
+    key: 'pulse_first_entry',
+    scope: 'pulse',
+    title: 'Log a day of work',
+    description: 'Type the units made, the people and the hours. Pulse works out the profit.',
+    cta: 'Log work',
+    minutes: 1,
+    auto: true,
+    detect: (signals) => count(signals.pulseEntries ?? null) > 0,
+    requires: 'pulse_first_job',
+    include: (signals) => wantsPulse(signals),
+  },
+  {
+    key: 'pulse_connect',
+    scope: 'pulse',
+    title: 'Link a job to a deal or work order',
+    description: 'A linked job fills in its own client, quantity and price, and shows its profit on that record.',
+    cta: 'Link a job',
+    minutes: 1,
+    auto: true,
+    detect: (signals) => count(signals.pulseLinks ?? null) > 0,
+    requires: 'pulse_first_job',
+    include: wantsPulseConnect,
+  },
 ];
 
 /** 3PLs and distributors set up the warehouse first; brands start from the pipeline. */
 function scopeOrder(profile: SetupProfile | null): readonly SetupScope[] {
   const wmsFirst =
     profile !== null && (profile.businessType === '3pl' || profile.businessType === 'distributor');
-  return wmsFirst ? ['portal', 'wms', 'crm', 'projects'] : ['portal', 'crm', 'wms', 'projects'];
+  return wmsFirst ? ['portal', 'wms', 'crm', 'projects', 'pulse'] : ['portal', 'crm', 'wms', 'projects', 'pulse'];
 }
 
 /** Explicit per-step override rows from core.onboarding_progress. */

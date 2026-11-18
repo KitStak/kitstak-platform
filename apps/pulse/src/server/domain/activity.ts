@@ -103,6 +103,8 @@ export interface ActivityFilters {
   readonly entityId?: string | null;
   readonly actorId?: string | null;
   readonly verbPrefix?: string | null;
+  /** Free text: matches the action, the record type, a note and (for money readers) the before and after values. */
+  readonly q?: string | null;
   readonly from?: string | null;
   readonly to?: string | null;
   readonly cursor?: string | null;
@@ -120,6 +122,14 @@ export async function listActivity(ctx: DomainContext, filters: ActivityFilters 
   if (filters.entityId) where.push(eq(activity.entityId, filters.entityId));
   if (filters.actorId) where.push(eq(activity.actorId, filters.actorId));
   if (filters.verbPrefix) where.push(sql`${activity.verb} like ${`${filters.verbPrefix.replace(/[%_]/g, '')}%`}`);
+  if (filters.q && filters.q.trim() !== '') {
+    const like = `%${filters.q.trim().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    where.push(
+      access.seesMoney
+        ? sql`(${activity.verb} ilike ${like} or ${activity.entityType} ilike ${like} or ${activity.body} ilike ${like} or ${activity.before}::text ilike ${like} or ${activity.after}::text ilike ${like} or ${activity.meta}::text ilike ${like})`
+        : sql`(${activity.verb} ilike ${like} or ${activity.entityType} ilike ${like} or ${activity.body} ilike ${like})`,
+    );
+  }
   if (filters.from) where.push(gte(activity.createdAt, new Date(`${filters.from}T00:00:00Z`)));
   if (filters.to) where.push(lte(activity.createdAt, new Date(`${filters.to}T23:59:59.999Z`)));
   if (filters.cursor) {

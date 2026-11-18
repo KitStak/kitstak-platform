@@ -128,6 +128,7 @@ export const importPresets = pulseSchema.table('import_presets', {
 export const savedViews = pulseSchema.table('saved_views', {
   ...base(),
   userId: uuid('user_id'),
+  /** One of `SAVED_VIEW_PAGES` (CHECK in SQL: jobs, profit, log, labor, reports, alerts, audit, export). */
   page: text('page').notNull(),
   name: text('name').notNull(),
   config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),

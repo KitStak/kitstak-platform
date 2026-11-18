@@ -39,7 +39,7 @@ export interface ShellProps {
   /** Custom Branding: CSS re-pointing the primary tokens at the brand accent (null = default theme). */
   readonly brandCss?: string | null;
   /** KitStak module unlock state for the request's org (shared app switcher). */
-  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean; readonly pulse?: boolean };
   /** The organization whose warehouse is open, and every org warehouse the user can switch to. */
   readonly org?: { readonly id: string; readonly name: string };
   readonly orgs?: readonly { readonly id: string; readonly name: string }[];
@@ -47,13 +47,13 @@ export interface ShellProps {
 
 /** Sibling modules the org holds (allow-all outside production, like the WMS gate). */
 async function loadEntitledApps(db: AppDb, orgId: string): Promise<NonNullable<ShellProps['entitledApps']>> {
-  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true };
+  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true, pulse: true };
   try {
-    const check = (module: 'crm' | 'projects') => hasModule(db as unknown as EntitlementsDb, orgId, module).catch(() => false);
-    const [crm, projects] = await Promise.all([check('crm'), check('projects')]);
-    return { crm, wms: true, projects };
+    const check = (module: 'crm' | 'projects' | 'pulse') => hasModule(db as unknown as EntitlementsDb, orgId, module).catch(() => false);
+    const [crm, projects, pulse] = await Promise.all([check('crm'), check('projects'), check('pulse')]);
+    return { crm, wms: true, projects, pulse };
   } catch {
-    return { crm: false, wms: true, projects: false };
+    return { crm: false, wms: true, projects: false, pulse: false };
   }
 }
 

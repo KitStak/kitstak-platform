@@ -73,6 +73,7 @@ const APP_URLS = {
   crm: process.env.NEXT_PUBLIC_CRM_URL ?? 'http://localhost:3100',
   wms: process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
   projects: process.env.NEXT_PUBLIC_PROJECTS_URL ?? 'http://localhost:3400',
+  pulse: process.env.NEXT_PUBLIC_PULSE_URL ?? 'http://localhost:3500',
 } as const;
 
 function TopBar({ org, orgs }: { readonly org?: OrgRef; readonly orgs?: readonly OrgRef[] }) {
@@ -150,7 +151,7 @@ export function AppShell({
   readonly permissions: readonly string[];
   readonly initialContext?: InitialShellContext | null;
   readonly activeApps?: readonly string[] | null;
-  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean; readonly pulse?: boolean };
   readonly passwordChange?: 'reset' | 'expired' | null;
   readonly idleMinutes?: number | null;
   /** The organization whose warehouse is open, and the others the user can switch to. */

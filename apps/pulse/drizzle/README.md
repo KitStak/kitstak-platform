@@ -19,5 +19,6 @@ Hand-written SQL, applied by `pnpm --filter kitstak-pulse db:migrate` (`scripts/
 | File | Contents |
 | --- | --- |
 | `0000_pulse_init.sql` | The whole `pulse` schema: 46 tables (setup, jobs and plans, the eight dated streams, rollups, control and system tables), `UNIQUE (org_id, id)` and composite `(org_id, x_id)` foreign keys on every table, the shared SD, V and STREAM columns, the append only trigger on `pulse.activity` (SQLSTATE `KP002`), the closed month trigger `pulse.guard_closed_month` on the eight dated streams (SQLSTATE `KP001`, message `month_closed:YYYY-MM`), the rate lookup `pulse.rate_for(org, class, site, date)`, the facts view `pulse.v_facts`, RLS on every table, and the four value entitlement module CHECK. |
+| `0005_saved_view_pages.sql` | Widens the `saved_views.page` CHECK with `audit` and `export`, so the audit log and the export page can keep saved views (data team). |
 
 Add a row to the table above with each new file.

@@ -23,7 +23,21 @@ export interface NotifyInput {
 
 /** Fans one notification out to `userIds`, minus the actor. Call inside the write transaction. */
 export async function notify(executor: Executor, ctx: DomainContext, userIds: readonly string[], input: NotifyInput): Promise<number> {
-  const targets = [...new Set(userIds)].filter((id) => id !== ctx.userId || ctx.actorKind !== 'user');
+  const wanted = [...new Set(userIds)].filter((id) => id !== ctx.userId || ctx.actorKind !== 'user');
+  if (wanted.length === 0) return 0;
+  // People can turn a kind of notification off for themselves (Settings, Notifications).
+  const switchKey = input.kind.replace(/^alert:/, '');
+  const muted = new Set(
+    (
+      await executor.execute(
+        sql`SELECT user_id FROM pulse.user_prefs WHERE org_id = ${ctx.orgId} AND prefs->'notify'->>${switchKey} = 'false' AND user_id = ANY(ARRAY[${sql.join(
+          wanted.map((id) => sql`${id}`),
+          sql`, `,
+        )}]::uuid[])`,
+      )
+    ).rows.map((row) => String((row as { user_id: string }).user_id)),
+  );
+  const targets = wanted.filter((id) => !muted.has(id));
   if (targets.length === 0) return 0;
   const url = input.url && input.url.startsWith('/') && !input.url.startsWith('//') ? input.url : null;
   await executor.insert(notifications).values(targets.map((userId) => ({ orgId: ctx.orgId, userId, kind: input.kind, params: input.params ?? {}, url, alertId: input.alertId ?? null, jobId: input.jobId ?? null })));
