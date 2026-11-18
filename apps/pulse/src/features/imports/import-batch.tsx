@@ -748,7 +748,7 @@ function RowsTable({ batch, filter, onFilter, onBatch, readOnly = false }: { rea
         </div>
       ) : (rows.data?.rows.length ?? 0) === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-fg-muted" data-testid="rows-empty">
-          {batch.totalRows === 0 || !rows.data ? 'The rows of this import were cleared after its 7 day undo window.' : 'No rows of this kind.'}
+          {rows.data?.cleared ? 'The row details of this import were cleared after its 7 day undo window. The counts above are still right.' : 'No rows of this kind.'}
         </p>
       ) : (
         <div className={cn('overflow-x-auto', rows.isPlaceholderData && 'opacity-60')}>

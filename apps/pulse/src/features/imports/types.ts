@@ -155,6 +155,8 @@ export interface ImportStreamSummaryDTO {
 export interface ImportRowsPage {
   readonly rows: readonly ImportRowDTO[];
   readonly total: number;
+  /** True when the row details were cleared after the undo window (the counts on the batch stay). */
+  readonly cleared: boolean;
 }
 
 /** Upload limits (SPEC section 7). The browser checks them first; the server checks them again. */

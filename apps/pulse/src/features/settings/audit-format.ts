@@ -140,6 +140,8 @@ export function valueText(key: string, value: unknown): string {
   if (typeof value === 'number' && /cents$/i.test(key)) return (value / 100).toFixed(2);
   if (typeof value === 'number' && /bp$/i.test(key)) return `${(value / 100).toFixed(2).replace(/\.?0+$/, '')}%`;
   if (typeof value === 'object') return JSON.stringify(value);
+  // Stored decimals come with padding zeros ("31.5000"): show them the way a person types them.
+  if (typeof value === 'string' && /^-?\d+\.\d+$/.test(value)) return value.replace(/0+$/, '').replace(/\.$/, '');
   return String(value);
 }
 

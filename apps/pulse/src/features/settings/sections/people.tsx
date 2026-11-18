@@ -179,7 +179,7 @@ export function PeopleSection({ settings, canEdit }: { readonly settings: Settin
               const me = person.id === shell.user.id;
               const alwaysMoney = canSeeMoney(person.role, false);
               return (
-                <li key={person.id} data-testid={`person-${person.email}`} className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-center">
+                <li key={person.id} data-testid={`person-${person.email}`} className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,0.9fr)_190px] lg:items-center">
                   <div className="flex min-w-0 items-center gap-3">
                     <PersonAvatar userId={person.id} size="md" />
                     <div className="min-w-0">

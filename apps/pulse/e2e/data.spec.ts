@@ -357,7 +357,7 @@ test('audit log: search, before and after, saved views and the CSV export', asyn
   await expect(view).toHaveAttribute('data-active', 'yes');
   await page.goto('/settings/audit');
   await expect(view).toHaveAttribute('data-active', 'no');
-  await view.getByRole('button', { name: `E2E settings ${stamp}` }).click();
+  await view.getByRole('button', { name: `E2E settings ${stamp}`, exact: true }).click();
   await expect(page).toHaveURL(/action=settings\./);
   await page.getByTestId(`view-menu-E2E settings ${stamp}`).click();
   await page.getByRole('menuitem', { name: 'Rename and options' }).click();

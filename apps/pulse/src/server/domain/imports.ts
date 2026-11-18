@@ -1419,13 +1419,15 @@ export async function listImportRows(ctx: DomainContext, batchId: string, filter
       : filters.action && filters.action !== 'all'
         ? sql`AND action = ${filters.action}`
         : sql``;
-  const [total] = await rows<{ n: number }>(db, sql`SELECT count(*)::int AS n FROM pulse.import_rows WHERE batch_id = ${batch.id} ${where}`);
+  // The daily cleanup empties the row bodies once the undo window has passed. Counts and messages stay.
+  const [total] = await rows<{ n: number; cleared: number }>(db, sql`SELECT count(*) FILTER (WHERE raw IS NOT NULL)::int AS n, count(*) FILTER (WHERE raw IS NULL)::int AS cleared FROM pulse.import_rows WHERE batch_id = ${batch.id} ${where}`);
   const found = await rows<{ n: number; raw: { c?: unknown; s?: unknown } | null; action: string | null; messages: unknown; parsed: { changes?: unknown } | null; entity_id: string | null }>(
     db,
-    sql`SELECT row_number AS n, raw, action, messages, parsed, entity_id FROM pulse.import_rows WHERE batch_id = ${batch.id} ${where} ORDER BY row_number LIMIT ${limit} OFFSET ${offset}`,
+    sql`SELECT row_number AS n, raw, action, messages, parsed, entity_id FROM pulse.import_rows WHERE batch_id = ${batch.id} AND raw IS NOT NULL ${where} ORDER BY row_number LIMIT ${limit} OFFSET ${offset}`,
   );
   return {
     total: total?.n ?? 0,
+    cleared: (total?.n ?? 0) === 0 && (total?.cleared ?? 0) > 0,
     rows: found.map(
       (row): ImportRowDTO => ({
         rowNumber: row.n,
@@ -1958,14 +1960,4 @@ export async function deleteImportPreset(ctx: DomainContext, presetId: string): 
   if (!row) throw notFound('That saved mapping');
   await accessFor(ctx, row.stream);
   await db.delete(importPresets).where(eq(importPresets.id, row.id));
-}
-
-/** Clears what the undo window no longer needs (the daily cleanup). Counts and messages stay. */
-export async function cleanupImports(executor: Executor = db): Promise<number> {
-  const result = await executor.execute(sql`
-    UPDATE pulse.import_rows ir SET raw = NULL, parsed = NULL, before = NULL
-      FROM pulse.import_batches b
-     WHERE ir.batch_id = b.id AND (ir.raw IS NOT NULL OR ir.before IS NOT NULL)
-       AND ((b.status = 'committed' AND b.undo_until < now()) OR (b.status = 'undone' AND b.undone_at < now() - interval '7 days'))`);
-  return result.rowCount ?? 0;
 }

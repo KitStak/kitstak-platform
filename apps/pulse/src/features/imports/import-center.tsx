@@ -129,7 +129,7 @@ export function ImportCenter({ initial, allowed }: { readonly initial: ImportCen
                       )}
                     </p>
                     <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
-                      <ButtonLink href={routes.newImport(stream.id)} size="sm" icon={<Upload aria-hidden className="size-3.5" />} testId={`import-${stream.id}`}>
+                      <ButtonLink href={routes.newImport(stream.id)} size="sm" variant="secondary" icon={<Upload aria-hidden className="size-3.5" />} testId={`import-${stream.id}`}>
                         Import
                       </ButtonLink>
                       <a href={fileLinks.template(stream.file)} download aria-label={`Download the ${stream.name} template`} data-testid={`template-${stream.id}`} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">

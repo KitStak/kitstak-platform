@@ -169,7 +169,7 @@ export function ImportUpload({ stream }: { readonly stream: StreamInfo }) {
   };
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
       <Panel title="1. Upload your file">
         {loaded && parsed ? (
           <div className="flex flex-col gap-4" data-testid="upload-preview">
