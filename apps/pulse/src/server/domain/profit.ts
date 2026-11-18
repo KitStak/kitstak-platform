@@ -329,18 +329,34 @@ export async function getProfitTrend(ctx: DomainContext, filters: ProfitFilters,
   return result.rows.map((row) => ({ bucket: row.key, revenueCents: row.revenueCents, costCents: row.costCents, profitCents: row.profitCents, marginBp: row.marginBp, unitsGood: row.unitsGood, hours: row.hours }));
 }
 
-/** The stamped rows behind a number (drill down and "See 14 entries"). Reads `v_facts`. */
-export async function listFacts(ctx: DomainContext, filters: ProfitFilters & { kinds?: readonly FactKind[]; limit?: number }): Promise<FactRowDTO[]> {
+export const FACTS_PAGE_DEFAULT = 500;
+export const FACTS_PAGE_MAX = 5000;
+
+/** One page of stamped rows and whether more are waiting (`GET /api/v1/profit/facts`). */
+export interface FactsPage {
+  readonly rows: FactRowDTO[];
+  /** True when more rows match than this page holds. */
+  readonly truncated: boolean;
+  readonly limit: number;
+  readonly offset: number;
+  /** The `offset` of the next page, or null on the last page. */
+  readonly nextOffset: number | null;
+}
+
+type FactFilters = ProfitFilters & { kinds?: readonly FactKind[]; limit?: number; offset?: number };
+
+async function queryFacts(ctx: DomainContext, filters: FactFilters, limit: number, offset: number): Promise<FactRowDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   checkRange(filters);
   const kinds = filters.kinds && filters.kinds.length > 0 ? sql`AND f.kind = ANY(${sql`ARRAY[${sql.join(filters.kinds.map((kind) => sql`${kind}`), sql`, `)}]::text[]`})` : sql``;
   const found = await rows<{ work_date: string; kind: FactKind; amount_cents: string; units_good: string; hours: string; job_id: string | null; client_id: string; vas_service_id: string | null; source_table: string; source_id: string }>(
     db,
+    // One source row can give several kinds (an extra service entry earns, costs labor and parts), so the kind is part of the order: pages never overlap.
     sql`SELECT to_char(f.work_date, 'YYYY-MM-DD') AS work_date, f.kind, f.amount_cents::text, f.units_good::text, f.hours::text, f.job_id, f.client_id, f.vas_service_id, f.source_table, f.source_id
           FROM pulse.v_facts f LEFT JOIN pulse.jobs j ON j.id = f.job_id
          WHERE ${whereOf(ctx.orgId, filters)} ${kinds}
-         ORDER BY f.work_date DESC, f.source_table, f.source_id
-         LIMIT ${Math.min(filters.limit ?? 500, 5000)}`,
+         ORDER BY f.work_date DESC, f.source_table, f.source_id, f.kind
+         LIMIT ${limit} OFFSET ${offset}`,
   );
   return found.map((row) => ({
     workDate: row.work_date,
@@ -354,6 +370,21 @@ export async function listFacts(ctx: DomainContext, filters: ProfitFilters & { k
     sourceTable: row.source_table,
     sourceId: row.source_id,
   }));
+}
+
+/** The stamped rows behind a number (drill down and "See 14 entries"). Reads `v_facts`. One page: use `listFactsPage` to know whether it is all of them. */
+export async function listFacts(ctx: DomainContext, filters: FactFilters): Promise<FactRowDTO[]> {
+  return queryFacts(ctx, filters, Math.max(1, Math.min(filters.limit ?? FACTS_PAGE_DEFAULT, FACTS_PAGE_MAX)), Math.max(filters.offset ?? 0, 0));
+}
+
+/** The stamped rows behind a number, one page at a time, with a flag when the page stopped before the end. */
+export async function listFactsPage(ctx: DomainContext, filters: FactFilters): Promise<FactsPage> {
+  const limit = Math.max(1, Math.min(filters.limit ?? FACTS_PAGE_DEFAULT, FACTS_PAGE_MAX));
+  const offset = Math.max(filters.offset ?? 0, 0);
+  // One extra row tells us whether there is a next page.
+  const found = await queryFacts(ctx, filters, limit + 1, offset);
+  const truncated = found.length > limit;
+  return { rows: truncated ? found.slice(0, limit) : found, truncated, limit, offset, nextOffset: truncated ? offset + limit : null };
 }
 
 /**

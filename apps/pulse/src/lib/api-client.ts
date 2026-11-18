@@ -20,6 +20,12 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
   return apiRequest<T>(path, { ...init, method: 'GET' });
 }
 
+/** A list answer with its paging facts: `{ data, meta }`. `meta` is null for a route that sends none. */
+export async function apiGetPage<T, M = Record<string, unknown>>(path: string, init?: RequestInit): Promise<{ data: T; meta: M | null }> {
+  const payload = await apiEnvelope<T>(path, { ...init, method: 'GET' });
+  return { data: payload.data as T, meta: (payload.meta as M | undefined) ?? null };
+}
+
 export async function apiPost<T>(path: string, body: unknown, init?: RequestInit): Promise<T> {
   return apiRequest<T>(path, {
     ...init,
@@ -30,13 +36,23 @@ export async function apiPost<T>(path: string, body: unknown, init?: RequestInit
 }
 
 async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
+  return (await apiEnvelope<T>(path, init)).data as T;
+}
+
+interface Envelope<T> {
+  data?: T;
+  meta?: unknown;
+  error?: { code: string; message: string; fields?: Record<string, string> };
+}
+
+async function apiEnvelope<T>(path: string, init: RequestInit): Promise<Envelope<T>> {
   let response: Response;
   try {
     response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init });
   } catch {
     throw new ApiClientError('NETWORK_ERROR', 'We couldn’t reach KitStak. Check your connection and try again.', 0);
   }
-  let payload: { data?: T; error?: { code: string; message: string; fields?: Record<string, string> } } | null = null;
+  let payload: Envelope<T> | null = null;
   try {
     payload = await response.json();
   } catch {
@@ -51,7 +67,7 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
       error?.fields,
     );
   }
-  return payload.data as T;
+  return payload;
 }
 
 /** Builds `/api/v1/...?a=1` skipping undefined/null params. */
