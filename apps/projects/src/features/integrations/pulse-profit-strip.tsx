@@ -77,7 +77,8 @@ function Metric({ label, value, tone }: { readonly label: string; readonly value
 }
 
 function JobRow({ job, data }: { readonly job: PulseProfitJob; readonly data: PulseProfit }) {
-  const done = job.pctCompleteBp === null ? null : Math.round(job.pctCompleteBp / 100);
+  // A finished job reads as full even when Pulse stopped tracking its percent.
+  const done = job.pctCompleteBp === null ? (job.status === 'completed' ? 100 : null) : Math.round(job.pctCompleteBp / 100);
   const tone = statusTone(job.risk);
   const open = job.status !== 'completed' && job.status !== 'cancelled';
   return (

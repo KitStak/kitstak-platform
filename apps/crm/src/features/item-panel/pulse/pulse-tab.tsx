@@ -66,7 +66,9 @@ function Stat({ label, value, hint, tone, raised }: { readonly label: string; re
 }
 
 function percentDone(job: ItemPulseJob): number | null {
-  return job.pctCompleteBp === null ? null : Math.round(job.pctCompleteBp / 100);
+  // A finished job reads as full even when Pulse stopped tracking its percent.
+  if (job.pctCompleteBp === null) return job.status === 'completed' ? 100 : null;
+  return Math.round(job.pctCompleteBp / 100);
 }
 
 function JobCard({ job, moneyHidden, canLog, dealValueCents }: { readonly job: ItemPulseJob; readonly moneyHidden: boolean; readonly canLog: boolean; readonly dealValueCents: number | null }) {

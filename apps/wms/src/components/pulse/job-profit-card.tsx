@@ -48,7 +48,8 @@ function PlanBar({ label, planCents, actualCents }: { readonly label: string; re
 }
 
 function JobBlock({ job, data }: { readonly job: WorkOrderPulseJob; readonly data: WorkOrderPulseDto }) {
-  const done = job.pctCompleteBp === null ? null : Math.round(job.pctCompleteBp / 100);
+  // A finished job reads as full even when Pulse stopped tracking its percent.
+  const done = job.pctCompleteBp === null ? (job.status === 'completed' ? 100 : null) : Math.round(job.pctCompleteBp / 100);
   const tone = statusTone(job.risk);
   const open = job.status !== 'completed' && job.status !== 'cancelled';
   return (
