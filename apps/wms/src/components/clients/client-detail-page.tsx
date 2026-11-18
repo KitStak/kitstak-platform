@@ -7,6 +7,7 @@
  * Billing contracts · Activity (change log + notes). Tab state lives in the URL.
  */
 import { ClientProjectsStrip } from '@/components/projects/client-projects-strip';
+import { ClientProfitStrip } from '@/components/pulse/client-profit-strip';
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -524,6 +525,7 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
           />
         </div>
         <ClientProjectsStrip clientId={c.id} />
+        <ClientProfitStrip clientId={c.id} />
         <TabFocusGuard>
           <UnderlineTabs
             tabs={tabs}

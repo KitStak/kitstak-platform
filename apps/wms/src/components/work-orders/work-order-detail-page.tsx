@@ -87,6 +87,7 @@ import {
 import { WorkOrderWizard } from './wizard/work-order-wizard';
 import { WoStatusPill } from './wo-status';
 import { ProjectTasksCard } from '@/components/projects/project-tasks-card';
+import { JobProfitCard } from '@/components/pulse/job-profit-card';
 
 const TABS = [
   'components',
@@ -821,6 +822,7 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
               {wo.kittingInstructions || 'No kitting instructions.'}
             </p>
           </section>
+          <JobProfitCard workOrderId={wo.id} workOrderCode={wo.code} />
           <ProjectTasksCard kind="work-order" variant="aside" recordId={wo.id} recordLabel={wo.code} />
         </aside>
       </div>

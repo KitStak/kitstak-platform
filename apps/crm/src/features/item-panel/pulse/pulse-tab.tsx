@@ -53,9 +53,9 @@ function LinkButton({
   );
 }
 
-function Stat({ label, value, hint, tone }: { readonly label: string; readonly value: string; readonly hint?: string; readonly tone?: 'danger' | 'success' }) {
+function Stat({ label, value, hint, tone, raised }: { readonly label: string; readonly value: string; readonly hint?: string; readonly tone?: 'danger' | 'success'; readonly raised?: boolean }) {
   return (
-    <div className="flex min-w-0 flex-col rounded-md bg-sunken px-3 py-2">
+    <div className={cn('flex min-w-0 flex-col rounded-md px-3 py-2', raised ? 'border border-border-subtle bg-panel' : 'bg-sunken')}>
       <dt className="order-2 truncate text-xs text-fg-muted">{label}</dt>
       <dd className={cn('order-1 truncate text-base font-semibold tabular-nums', tone === 'danger' ? 'text-danger-text' : tone === 'success' ? 'text-success-text' : 'text-fg')}>
         {value}
@@ -157,10 +157,10 @@ function PeriodRow({ title, period }: { readonly title: string; readonly period:
     <div>
       <h4 className="text-xs font-semibold text-fg-secondary">{title}</h4>
       <dl className="mt-1.5 grid grid-cols-2 gap-2 @min-[520px]:grid-cols-4">
-        <Stat label="Revenue" value={formatCents(period.revenueCents)} />
-        <Stat label="Cost" value={formatCents(period.costCents)} />
-        <Stat label="Profit" value={formatCents(period.profitCents)} tone={(period.profitCents ?? 0) < 0 ? 'danger' : undefined} />
-        <Stat label="Margin" value={formatMarginBp(period.marginBp, { empty: 'None yet' })} tone={period.marginBp !== null && period.marginBp < 0 ? 'danger' : undefined} />
+        <Stat raised label="Revenue" value={formatCents(period.revenueCents)} />
+        <Stat raised label="Cost" value={formatCents(period.costCents)} />
+        <Stat raised label="Profit" value={formatCents(period.profitCents)} tone={(period.profitCents ?? 0) < 0 ? 'danger' : undefined} />
+        <Stat raised label="Margin" value={formatMarginBp(period.marginBp, { empty: 'None yet' })} tone={period.marginBp !== null && period.marginBp < 0 ? 'danger' : undefined} />
       </dl>
     </div>
   );
@@ -203,6 +203,20 @@ function MarginTrend({ trend, targetBp }: { readonly trend: readonly PulseMonthP
       </ol>
       <p className="mt-2 text-2xs text-fg-muted">Green is at or above target, amber is below it, red is a loss.</p>
     </figure>
+  );
+}
+
+/** Where the numbers come from, in plain words. The full working is one click away in Pulse. */
+function HowWeGotThis() {
+  return (
+    <details className="rounded-md border border-border-subtle bg-panel px-3 py-2 text-xs text-fg-secondary" data-testid="crm-pulse-how">
+      <summary className="cursor-pointer font-medium text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">How we got these numbers</summary>
+      <p className="mt-2">
+        Revenue is what the logged units and services earn at the job&apos;s price. Cost is labor (hours times your real cost of an hour), materials, other costs and the job&apos;s share of time not
+        on a job. Profit is revenue minus cost. Margin is profit as a share of revenue.
+      </p>
+      <p className="mt-1.5">These are the same numbers you see in KitStak Pulse, read at the moment this tab loaded. Open a job in Pulse to see every entry behind them.</p>
+    </details>
   );
 }
 
@@ -270,26 +284,39 @@ function DealView({ data, recordName }: { readonly data: ItemPulseDto; readonly 
     );
   }
   const totals = data.totals;
+  const dealValue = data.deal?.valueCents ?? null;
+  const single = data.jobs.length === 1;
+  // With several jobs the deal is split across them, so the quotes are checked as one sum.
+  // Adding stored whole cents is a count, not profit math.
+  const quoted = data.jobs.filter((job) => job.quoteRevenueCents !== null);
+  const quoteSum = quoted.reduce((sum, job) => sum + (job.quoteRevenueCents ?? 0), 0);
+  const quotesDiffer = !data.moneyHidden && !single && dealValue !== null && quoted.length === data.jobs.length && quoteSum !== dealValue;
   return (
     <div className="flex flex-col gap-4">
       <Header data={data} title="Job profit" />
       {data.moneyHidden ? <MoneyHiddenNote /> : null}
       {!data.moneyHidden && totals && data.jobs.length > 1 ? (
         <dl className="grid grid-cols-2 gap-2 @min-[520px]:grid-cols-4" data-testid="crm-pulse-totals">
-          <Stat label={`Revenue, ${totals.jobs} jobs`} value={formatCents(totals.revenueCents)} />
-          <Stat label="Cost" value={formatCents(totals.costCents)} />
-          <Stat label="Profit" value={formatCents(totals.profitCents)} tone={(totals.profitCents ?? 0) < 0 ? 'danger' : undefined} />
-          <Stat label="Margin" value={formatMarginBp(totals.marginBp, { empty: 'None yet' })} />
+          <Stat raised label={`Revenue, ${totals.jobs} jobs`} value={formatCents(totals.revenueCents)} />
+          <Stat raised label="Cost" value={formatCents(totals.costCents)} />
+          <Stat raised label="Profit" value={formatCents(totals.profitCents)} tone={(totals.profitCents ?? 0) < 0 ? 'danger' : undefined} />
+          <Stat raised label="Margin" value={formatMarginBp(totals.marginBp, { empty: 'None yet' })} tone={totals.marginBp !== null && totals.marginBp < 0 ? 'danger' : undefined} />
         </dl>
+      ) : null}
+      {quotesDiffer ? (
+        <p className="rounded-md border border-warning/40 bg-warning-subtle px-2.5 py-1.5 text-xs text-warning-text" data-testid="crm-pulse-quote-check">
+          This deal is {formatCents(dealValue)} here. The {data.jobs.length} Pulse quotes add up to {formatCents(quoteSum)}. Open a job to update its quote, or keep them.
+        </p>
       ) : null}
       <section aria-label="Pulse jobs made from this deal" className="flex flex-col gap-2">
         <SectionTitle count={data.jobs.length}>{data.jobs.length === 1 ? 'Job from this deal' : 'Jobs from this deal'}</SectionTitle>
         <ul className="flex flex-col gap-2">
           {data.jobs.map((job) => (
-            <JobCard key={job.id} job={job} moneyHidden={data.moneyHidden} canLog={data.canLog} dealValueCents={data.deal?.valueCents ?? null} />
+            <JobCard key={job.id} job={job} moneyHidden={data.moneyHidden} canLog={data.canLog} dealValueCents={single ? dealValue : null} />
           ))}
         </ul>
       </section>
+      <HowWeGotThis />
     </div>
   );
 }
@@ -356,6 +383,7 @@ function AccountView({ data, client, recordName }: { readonly data: ItemPulseDto
           Open client in Pulse
         </LinkButton>
       </div>
+      <HowWeGotThis />
     </div>
   );
 }
