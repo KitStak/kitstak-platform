@@ -30,6 +30,7 @@ import {
   isAppLive,
   startLink,
   toStack,
+  walkthroughHref,
 } from '@/components/site-links';
 import type { Stack } from '@/components/site-links';
 import { BundleCalculator } from '@/components/stak/bundle-calculator';
@@ -88,6 +89,7 @@ describe('isPulseStartLink', () => {
     expect(isPulseStartLink('/get-started?stack=crm,wms,projects')).toBe(false);
     expect(isPulseStartLink('/pulse#profit')).toBe(false);
     expect(isPulseStartLink(ROUTES.demo)).toBe(false);
+    expect(isPulseStartLink(walkthroughHref('pulse'))).toBe(false);
   });
 });
 
@@ -110,10 +112,14 @@ describe.skipIf(PULSE_IS_LIVE)('while Pulse is coming soon', () => {
   });
 
   test('a Pulse only stack goes to the walkthrough form, not the wizard', () => {
-    expect(getStartedHref('pulse')).toBe(ROUTES.demo);
-    expect(getStartedHref(['pulse'])).toBe(ROUTES.demo);
-    expect(wizardHref({ stack: ['pulse'], seats: 5, warehouses: 1, billing: 'annual' })).toBe(ROUTES.demo);
-    expect(startLink('pulse')).toEqual({ href: ROUTES.demo, label: 'Book a walkthrough' });
+    const pulseWalkthrough = '/contact?topic=demo&product=pulse';
+
+    expect(getStartedHref('pulse')).toBe(pulseWalkthrough);
+    expect(getStartedHref(['pulse'])).toBe(pulseWalkthrough);
+    expect(wizardHref({ stack: ['pulse'], seats: 5, warehouses: 1, billing: 'annual' })).toBe(
+      pulseWalkthrough,
+    );
+    expect(startLink('pulse')).toEqual({ href: pulseWalkthrough, label: 'Book a walkthrough' });
   });
 
   test('the wizard will not take Pulse from a link or from saved answers', () => {
@@ -147,7 +153,7 @@ describe.skipIf(PULSE_IS_LIVE)('while Pulse is coming soon', () => {
     ]) {
       expect(SURFACES[name]).toContain('>Coming soon<');
     }
-    expect(SURFACES['products cards']).toContain('href="/contact?topic=demo">Book a walkthrough<');
+    expect(SURFACES['products cards']).toContain('href="/contact?topic=demo&amp;product=pulse">Book a walkthrough<');
   });
 
   test('the Pulse page copy says it is coming soon and does not read as open today', () => {
@@ -221,7 +227,7 @@ function sourceFiles(dir: string): readonly string[] {
 
 describe('start links in source', () => {
   const files = sourceFiles(srcRoot).map((file) => ({
-    name: path.relative(srcRoot, file),
+    name: path.relative(srcRoot, file).split(path.sep).join('/'),
     source: readFileSync(file, 'utf8'),
   }));
 

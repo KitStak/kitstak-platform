@@ -41,7 +41,7 @@ import {
   PulseStackVisual,
   RiskVisual,
 } from '@/components/pulse/pulse-visuals';
-import { PULSE_IS_LIVE, ROUTES, availabilityLabel, getStartedHref } from '@/components/site-links';
+import { PULSE_IS_LIVE, ROUTES, availabilityLabel, getStartedHref, walkthroughHref } from '@/components/site-links';
 
 /**
  * The main action. "Start with Pulse" only once the app is open to customers. Until then the page
@@ -49,9 +49,9 @@ import { PULSE_IS_LIVE, ROUTES, availabilityLabel, getStartedHref } from '@/comp
  */
 const PRIMARY = PULSE_IS_LIVE
   ? { href: getStartedHref('pulse'), label: HERO.startLabel }
-  : { href: ROUTES.demo, label: HERO.walkthroughLabel };
+  : { href: walkthroughHref('pulse'), label: HERO.walkthroughLabel };
 const SECONDARY = PULSE_IS_LIVE
-  ? { href: ROUTES.demo, label: HERO.walkthroughLabel }
+  ? { href: walkthroughHref('pulse'), label: HERO.walkthroughLabel }
   : { href: `#${CHAPTERS.answer.id}`, label: HERO.mathLabel };
 
 export const metadata: Metadata = {

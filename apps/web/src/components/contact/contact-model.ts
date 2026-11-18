@@ -1,4 +1,6 @@
-import { CONTACT, isAppLive } from '../site-links';
+import { priceOf } from '@/lib/pricing';
+import { CONTACT, isAppLive, isProductId } from '../site-links';
+import type { ProductId } from '../site-links';
 
 export const TOPICS = [
   {
@@ -66,6 +68,20 @@ export interface ContactDraft {
 
 export function parseTopic(value: string | null | undefined): TopicId {
   return TOPICS.find((topic) => topic.id === value)?.id ?? 'other';
+}
+
+/** Reads `?product=` from a walkthrough link. Null for anything that is not a product. */
+export function parseProduct(value: string | null | undefined): ProductId | null {
+  return value && isProductId(value) ? value : null;
+}
+
+/**
+ * The first line of the message when a visitor books a walkthrough from one product page, so they
+ * do not have to say which product they mean. Empty for every other way into the form.
+ */
+export function starterMessage(topic: TopicId, product: ProductId | null): string {
+  if (topic !== 'demo' || product === null) return '';
+  return `I would like a walkthrough of ${priceOf(product).name}.`;
 }
 
 /** `mailto:` link that opens the visitor's own email app with the message filled in. */
