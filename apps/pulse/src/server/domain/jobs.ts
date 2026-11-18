@@ -685,6 +685,20 @@ export async function setJobStatus(ctx: DomainContext, jobId: string, status: Jo
   });
 }
 
+/**
+ * "Log work" on a job that is not on the day yet (a link from CRM or WMS): makes it active and, when
+ * its start day is later, moves the start day back to the day being logged, so it gets a row.
+ */
+export async function startJobForDay(ctx: DomainContext, jobId: string, date: string): Promise<JobDetailDTO> {
+  await requirePulse(ctx, 'job:manage');
+  const row = await getJobRow(ctx, jobId);
+  if (row.status === 'completed') throw conflict('This job is completed. Reopen it on the job page to log more work.');
+  let version = row.version;
+  if (row.startDate && row.startDate > date) version = (await updateJob(ctx, row.id, { startDate: date }, version)).version;
+  if (row.status !== 'active') return setJobStatus(ctx, row.id, 'active', { version });
+  return getJob(ctx, row.id);
+}
+
 /** Bulk actions on the Jobs page: set status or owner on many jobs. Returns how many changed. */
 export async function bulkUpdateJobs(ctx: DomainContext, jobIds: readonly string[], patch: { status?: JobStatusValue; ownerId?: string | null; archived?: boolean }): Promise<{ changed: number; failed: { jobId: string; message: string }[] }> {
   await requirePulse(ctx, 'job:manage');

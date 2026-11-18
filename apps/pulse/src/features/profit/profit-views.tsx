@@ -45,6 +45,9 @@ import {
 } from './profit-model';
 import { LoadError, SortHeader, TableSkeleton } from './profit-ui';
 
+/** Table percents keep one decimal place so a column lines up ("38.0%" next to "45.3%"). */
+const FIXED = { fixed: true } as const;
+
 type Patch = Readonly<Record<string, string | null>>;
 
 function toneFor(column: Pick<ProfitColumn, 'id'>, value: number | null): string {
@@ -226,7 +229,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
                       <TableCell key={column.id} numeric className={cn('whitespace-nowrap', toneFor(column, value))}>
                         <span className="inline-flex items-center justify-end gap-0.5">
                           {column.id === 'profit' && extra && seesMoney ? <ExplainNumber metric="profit" scope={{ ...scope, ...extra }} label={`How we got the profit of ${rowLabel(by, row)}`} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" /> : null}
-                          {column.id === 'margin' && value !== null && by !== 'job' ? formatPercentBp(value) : formatValue(value, column.kind)}
+                          {column.id === 'margin' && value !== null && by !== 'job' ? formatPercentBp(value, FIXED) : formatValue(value, column.kind)}
                         </span>
                       </TableCell>
                     );
@@ -313,7 +316,12 @@ export function ChartView({ by, rows, measure, order, onMeasure, onOrder, target
         />
         {ranked.length > shown.length ? (
           <span className="text-xs text-fg-muted">
-            Showing {shown.length} of {ranked.length}. The table has them all.
+            Showing the top {shown.length} of {ranked.length}. The table has them all.
+          </span>
+        ) : null}
+        {rows.length > ranked.length ? (
+          <span className="text-xs text-fg-muted" data-testid="chart-left-out">
+            {rows.length - ranked.length} {rows.length - ranked.length === 1 ? VIEW_NOUN[by] : `${VIEW_NOUN[by]}s`} left out because {rows.length - ranked.length === 1 ? 'its' : 'their'} numbers are not complete yet.
           </span>
         ) : null}
       </div>
@@ -396,14 +404,14 @@ export function ContributionView({ by, rows, total, onDrill, range, refreshing }
                     {parts ? formatMoney(parts.contributionCents) : ''}
                   </TableCell>
                   <TableCell numeric className={cn((row.marginBeforeSharedBp ?? 0) < 0 && 'text-danger-text')}>
-                    {formatPercentBp(row.marginBeforeSharedBp)}
+                    {formatPercentBp(row.marginBeforeSharedBp, FIXED)}
                   </TableCell>
                   <TableCell numeric>{formatMoney(row.sharedCents)}</TableCell>
                   <TableCell numeric className={cn((row.profitCents ?? 0) < 0 && 'text-danger-text')}>
                     {formatMoney(row.profitCents)}
                   </TableCell>
                   <TableCell numeric className={cn((row.marginBp ?? 0) < 0 && 'text-danger-text')}>
-                    {formatPercentBp(row.marginBp)}
+                    {formatPercentBp(row.marginBp, FIXED)}
                   </TableCell>
                 </TableRow>
               );
@@ -415,10 +423,10 @@ export function ContributionView({ by, rows, total, onDrill, range, refreshing }
               <TableCell numeric>{formatMoney(total.revenueCents)}</TableCell>
               <TableCell numeric>{totalParts ? formatMoney(totalParts.directCents) : ''}</TableCell>
               <TableCell numeric>{totalParts ? formatMoney(totalParts.contributionCents) : ''}</TableCell>
-              <TableCell numeric>{formatPercentBp(total.marginBeforeSharedBp)}</TableCell>
+              <TableCell numeric>{formatPercentBp(total.marginBeforeSharedBp, FIXED)}</TableCell>
               <TableCell numeric>{formatMoney(total.sharedCents)}</TableCell>
               <TableCell numeric>{formatMoney(total.profitCents)}</TableCell>
-              <TableCell numeric>{formatPercentBp(total.marginBp)}</TableCell>
+              <TableCell numeric>{formatPercentBp(total.marginBp, FIXED)}</TableCell>
             </tr>
           </tfoot>
         </Table>
@@ -434,10 +442,12 @@ export function ParetoView({ by, rows, onDrill, range, refreshing }: { readonly 
   const noun = VIEW_NOUN[by];
   const count = view.ranked.length;
   const makers = view.ranked.filter((item) => item.profitCents > BigInt(0));
+  const plural = (n: number): string => (n === 1 ? noun : `${noun}s`);
+  const lostNote = view.losing > 0 ? ` ${view.losing} ${plural(view.losing)} lost money and gave back ${formatMoney(view.gaveBackCents)}.` : '';
   const sentence =
     view.toEighty === null
       ? `Together these ${noun}s made no profit in this period, so there is no share to rank.`
-      : `${view.toEighty} of ${count} ${count === 1 ? noun : `${noun}s`} ${view.toEighty === 1 ? 'makes' : 'make'} 80% of the profit.${view.losing > 0 ? ` ${view.losing} lost money and gave some of it back.` : ''}`;
+      : `${view.toEighty} of ${count} ${plural(count)} ${view.toEighty === 1 ? 'makes' : 'make'} 80% of the ${formatMoney(view.madeCents)} that ${makers.length === 1 ? `1 ${noun}` : `${makers.length} ${noun}s`} made.${lostNote}`;
   return (
     <div className="flex flex-col gap-4">
       <p className="text-md font-medium text-fg" data-testid="pareto-sentence">
@@ -445,7 +455,7 @@ export function ParetoView({ by, rows, onDrill, range, refreshing }: { readonly 
       </p>
       <ParetoChart
         title={`Profit by ${noun}, biggest first`}
-        description={`Bars are profit. The line is the running share of all profit made. Only ${noun}s that made money are drawn.`}
+        description={`Bars are profit. The line is the running share of the ${formatMoney(view.madeCents)} made, the same base as the table. Only ${noun}s that made money are drawn. "Other" adds up the rest of them.`}
         items={makers.map((item) => ({ id: item.item.key, label: rowLabel(by, item.item), value: centsToNumber(item.profitCents) }))}
         format="money"
         valueLabel="Profit"
@@ -487,12 +497,12 @@ export function ParetoView({ by, rows, onDrill, range, refreshing }: { readonly 
                     {formatMoney(item.profitCents)}
                   </TableCell>
                   <TableCell numeric className={cn(losing && 'text-danger-text')}>
-                    {formatPercentBp(item.profitShareBp)}
+                    {formatPercentBp(item.profitShareBp, FIXED)}
                   </TableCell>
-                  <TableCell numeric>{formatPercentBp(item.cumulativeProfitShareBp)}</TableCell>
-                  <TableCell numeric>{formatPercentBp(item.revenueShareBp)}</TableCell>
+                  <TableCell numeric>{formatPercentBp(item.cumulativeProfitShareBp, FIXED)}</TableCell>
+                  <TableCell numeric>{formatPercentBp(item.revenueShareBp, FIXED)}</TableCell>
                   <TableCell numeric className={cn(losing && 'text-danger-text')}>
-                    {formatPercentBp(item.marginBp)}
+                    {formatPercentBp(item.marginBp, FIXED)}
                   </TableCell>
                 </TableRow>
               );

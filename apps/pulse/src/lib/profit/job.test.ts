@@ -443,6 +443,12 @@ describe('projected finish (4.13)', () => {
     expect(jobMode({ status: 'on_hold', kind: 'one_time', plannedUnits: 100 })).toBeNull();
     expect(jobMode({ status: 'cancelled', kind: 'one_time', plannedUnits: 100 })).toBeNull();
   });
+  it('never calls one day of work solid, and never says "based on the plan" when there is no plan', () => {
+    const oneDay = projectJob({ ...PROJECTION_INPUT, plan: null, targetPace: null, actual: { ...ACTUAL, unitsGood: 8000 }, window: { days: 1, unitsGood: 8000, paceHours: '24.00', hours: '24.00', laborCostCents: b(55200) }, evidenceDays: 1 });
+    expect(oneDay.confidence).toBe('early');
+    const nothing = projectJob({ ...PROJECTION_INPUT, plan: null, window: null, evidenceDays: 0, targetPace: null, actual: { unitsGood: 0, hours: 0, revenueCents: b(0), laborCents: b(0), materialCents: b(0), otherCents: b(0), sharedCents: b(0) } });
+    expect(nothing.confidence).toBeNull();
+  });
   it('matches the worked example', () => {
     const p = projectJob(PROJECTION_INPUT);
     expect(p.mode).toBe('projected');
@@ -823,6 +829,8 @@ describe('risk status (4.14)', () => {
     expect(r2.status).toBe('at_risk');
     const floor = r2.reasons.find((reason) => reason.rule === 'R2');
     expect(riskSentence(floor as never)).toBe('Margin is heading for 6%, under your 10% floor.');
+    // One reason per problem: under the floor does not also say "far under target".
+    expect(r2.reasons.map((reason) => reason.rule)).not.toContain('R1');
     expect(riskSentence(floor as never, { seesMoney: false })).toBe('Profit is heading under your lowest allowed margin.');
     expect(riskSentence({ rule: 'R1', params: {} }, { seesMoney: false })).toBe('Profit is heading well under your target.');
   });

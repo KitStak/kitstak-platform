@@ -96,9 +96,12 @@ const JOB_SELECT = sql`
     left join pulse.clients c on c.id = j.client_id
     left join pulse.job_stats st on st.job_id = j.id`;
 
-/** Worst health first, then the newest job. */
-const JOB_ORDER = sql`order by case st.risk_status when 'losing' then 0 when 'at_risk' then 1 when 'heads_up' then 2 when 'on_track' then 3 else 4 end,
-                               j.created_at desc`;
+/**
+ * Worst health first, then the job heading for the least profit at finish: the same order as
+ * Pulse's own Open jobs list and Home, so a list in a sibling app reads the same as Pulse.
+ */
+const JOB_ORDER = sql`order by case st.risk_status when 'losing' then 0 when 'at_risk' then 1 when 'no_data' then 2 when 'heads_up' then 3 when 'on_track' then 4 else 5 end,
+                               st.projected_profit_cents asc nulls last, j.due_date asc nulls last, j.number asc`;
 
 function toJob(row: JobRow, money: boolean): PulseJobSummary {
   const risk = isPulseStatus(row.risk_status) ? row.risk_status : null;
@@ -264,7 +267,8 @@ export async function listJobsNeedingAttention(db: BridgeExecutor, who: PulseRea
     if ('available' in gated) return gated;
     const { access } = gated;
     const limit = Math.min(Math.max(options.limit ?? 5, 1), 50);
-    const where = sql`j.org_id = ${who.orgId}::uuid and j.deleted_at is null and j.archived_at is null and j.status = 'active' and st.risk_status in ('losing', 'at_risk')`;
+    // Open jobs, as Pulse counts them: active or on hold.
+    const where = sql`j.org_id = ${who.orgId}::uuid and j.deleted_at is null and j.archived_at is null and j.status in ('active', 'on_hold') and st.risk_status in ('losing', 'at_risk')`;
     const rows = await query<JobRow>(db, sql`${JOB_SELECT} where ${where} ${JOB_ORDER} limit ${limit}`);
     const ids = await query<{ id: string }>(db, sql`select j.id::text as id from pulse.jobs j join pulse.job_stats st on st.job_id = j.id where ${where} limit 2000`);
     return {
@@ -420,8 +424,8 @@ export async function getOrgSummary(db: BridgeExecutor, who: PulseReader, range?
       db,
       sql`select count(*) as total,
                  count(*) filter (where j.status in ('active', 'on_hold') and j.archived_at is null) as open_jobs,
-                 count(*) filter (where j.status = 'active' and j.archived_at is null and st.risk_status = 'at_risk') as at_risk,
-                 count(*) filter (where j.status = 'active' and j.archived_at is null and st.risk_status = 'losing') as losing
+                 count(*) filter (where j.status in ('active', 'on_hold') and j.archived_at is null and st.risk_status = 'at_risk') as at_risk,
+                 count(*) filter (where j.status in ('active', 'on_hold') and j.archived_at is null and st.risk_status = 'losing') as losing
             from pulse.jobs j left join pulse.job_stats st on st.job_id = j.id
            where j.org_id = ${who.orgId}::uuid and j.deleted_at is null`,
     );

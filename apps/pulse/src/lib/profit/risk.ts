@@ -241,8 +241,10 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   if (mode === 'actuals' && profit < ZERO && (input.entryDays30 ?? 0) >= 5) add('L3', { lossCents: num(-profit) }, profit);
 
   // At risk
-  if (pm !== null && pm < target - t.atRiskGapBp) add('R1', { marginBp: pm, targetBp: target }, profit - mulBp(revenue, target - t.atRiskGapBp));
-  if (pm !== null && pm < t.marginFloorBp) add('R2', { marginBp: pm, floorBp: t.marginFloorBp }, profit - mulBp(revenue, t.marginFloorBp));
+  // Under the floor says it all: the "far under target" reason would repeat the same margin.
+  const underFloor = pm !== null && pm < t.marginFloorBp;
+  if (pm !== null && !underFloor && pm < target - t.atRiskGapBp) add('R1', { marginBp: pm, targetBp: target }, profit - mulBp(revenue, target - t.atRiskGapBp));
+  if (pm !== null && underFloor) add('R2', { marginBp: pm, floorBp: t.marginFloorBp }, profit - mulBp(revenue, t.marginFloorBp));
   const projectedHours = hoursToScaled(p.projectedLaborHours);
   const laborOverBp = planHours > ZERO ? Number(divRound((projectedHours - planHours) * BigInt(10000), planHours)) : null;
   const laborImpact = plan ? -(p.atFinish.laborCents - plan.laborCents) : ZERO;

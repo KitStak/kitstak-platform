@@ -9,7 +9,7 @@ import type { ExplainMetric, ProfitGroup } from '@/lib/constants';
 import { rawCell, type CsvCell } from '@/lib/csv/write';
 import { formatHours, formatMoney, formatMoneyPlain, formatNumber, formatPace, formatPercentBp } from '@/lib/format';
 import type { ProfitParams } from '@/lib/hooks/use-data';
-import { addCents, centsToNumber } from '@/lib/money';
+import { addCents, centsToNumber, ratioBp } from '@/lib/money';
 import { addDays, endOfMonth } from '@/lib/profit/calendar';
 import { rankByProfit, rowsToReachProfitShare, type RankedRow } from '@/lib/profit/clients';
 import { profitSummary } from '@/lib/profit/summary';
@@ -115,7 +115,7 @@ export function formatValue(value: number | null | undefined, kind: ColumnKind):
     case 'money':
       return formatMoney(value);
     case 'percent':
-      return formatPercentBp(value);
+      return formatPercentBp(value, { fixed: true });
     case 'hours':
       return formatHours(value, { maxDigits: 1 });
     case 'pace':
@@ -286,16 +286,29 @@ export function contribution(row: ProfitRowDTO): { directCents: number; contribu
 
 export interface ParetoView {
   readonly ranked: readonly RankedRow<ProfitRowDTO>[];
-  /** How many of the top rows make 80% of all profit. Null when total profit is zero or less. */
+  /** How many of the top rows make 80% of the profit made. Null when nothing made a profit. */
   readonly toEighty: number | null;
   readonly losing: number;
+  /** Profit from the rows that made money. Every share in this view is a share of this, so the running share never passes 100%. */
+  readonly madeCents: bigint;
+  /** Money lost by the rows that lost money, as a positive amount. */
+  readonly gaveBackCents: bigint;
 }
 
-/** The whale curve: rows ranked by profit with each one's share and the running share. */
+/**
+ * The whale curve: rows ranked by profit with each one's share and the running share. The base is
+ * profit from the rows that made money (the same base the chart draws), so the headline, the chart
+ * and the table agree. The running share climbs to 100% at the last money maker, then the rows that
+ * lost money pull it back down.
+ */
 export function paretoView(rows: readonly ProfitRowDTO[]): ParetoView {
   const withMoney = rows.filter((row) => row.profitCents !== null && row.revenueCents !== null);
-  const ranked = rankByProfit(withMoney, (row) => ({ revenueCents: BigInt(row.revenueCents as number), profitCents: BigInt(row.profitCents as number) }));
-  return { ranked, toEighty: rowsToReachProfitShare(ranked), losing: ranked.filter((row) => row.profitCents < BigInt(0)).length };
+  const base = rankByProfit(withMoney, (row) => ({ revenueCents: BigInt(row.revenueCents as number), profitCents: BigInt(row.profitCents as number) }));
+  const zero = BigInt(0);
+  const madeCents = base.reduce((sum, row) => (row.profitCents > zero ? sum + row.profitCents : sum), zero);
+  const lostCents = base.reduce((sum, row) => (row.profitCents < zero ? sum + row.profitCents : sum), zero);
+  const ranked = base.map((row) => ({ ...row, profitShareBp: ratioBp(row.profitCents, madeCents), cumulativeProfitShareBp: ratioBp(row.cumulativeProfitCents, madeCents) }));
+  return { ranked, toEighty: rowsToReachProfitShare(ranked), losing: ranked.filter((row) => row.profitCents < zero).length, madeCents, gaveBackCents: -lostCents };
 }
 
 export const PIVOT_MEASURES = ['profit', 'revenue', 'cost', 'margin', 'units', 'hours'] as const;

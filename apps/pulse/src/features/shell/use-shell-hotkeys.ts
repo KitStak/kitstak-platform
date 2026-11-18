@@ -22,7 +22,7 @@ function overlayIsOpen(): boolean {
 
 export function useShellHotkeys(): void {
   const router = useRouter();
-  const { pulseRole } = useShell();
+  const { pulseRole, seesMoney } = useShell();
   const store = useShellStore;
   useHotkey(
     'mod+k',
@@ -53,7 +53,7 @@ export function useShellHotkeys(): void {
 
   const pendingG = useRef<number | null>(null);
   useEffect(() => {
-    const chords = chordTargets(pulseRole);
+    const chords = chordTargets(pulseRole, seesMoney);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || isEditableTarget(event.target)) return;
       if (overlayIsOpen()) return;
@@ -87,5 +87,5 @@ export function useShellHotkeys(): void {
       if (pendingG.current !== null) window.clearTimeout(pendingG.current);
       pendingG.current = null;
     };
-  }, [router, pulseRole]);
+  }, [router, pulseRole, seesMoney]);
 }

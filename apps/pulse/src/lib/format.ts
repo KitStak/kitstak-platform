@@ -141,6 +141,8 @@ export function formatCompactNumber(value: Decimal | bigint | Missing, options: 
 export interface PercentFormatOptions extends FormatOptions {
   /** Decimal places. Default 1 ("22.4%"). */
   readonly digits?: number;
+  /** Always show every decimal place ("38.0%"), so a table column lines up. Default false. */
+  readonly fixed?: boolean;
 }
 
 /** Basis points as a percent: 2236 is "22.4%". */
@@ -153,7 +155,7 @@ export function formatPercentBp(bp: number | bigint | Missing, options: PercentF
 export function formatPercent(ratio: number | Missing, options: PercentFormatOptions = {}): string {
   if (isMissing(ratio) || !Number.isFinite(ratio)) return options.empty ?? '';
   const digits = options.digits ?? 1;
-  const formatter = numberFormat(options.locale ?? DEFAULT_LOCALE, { style: 'percent', minimumFractionDigits: 0, maximumFractionDigits: digits });
+  const formatter = numberFormat(options.locale ?? DEFAULT_LOCALE, { style: 'percent', minimumFractionDigits: options.fixed ? digits : 0, maximumFractionDigits: digits });
   const text = formatter.format(ratio);
   return /^-0(?:[.,]0+)?\s?%$/.test(text) ? text.slice(1) : text;
 }

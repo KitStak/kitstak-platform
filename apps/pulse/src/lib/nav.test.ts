@@ -26,6 +26,8 @@ describe('navigation', () => {
     expect(navFor('supervisor').map((item) => item.id)).toEqual(['jobs', 'log', 'labor', 'alerts', 'target-pace', 'import']);
     expect(navFor('viewer')).toHaveLength(NAV.length);
     expect(navFor('none')).toEqual([]);
+    expect(navFor('viewer', false).map((item) => item.id)).not.toContain('profit');
+    expect(chordTargets('viewer', false)).not.toHaveProperty('p');
   });
 
   it('lands supervisors on the log', () => {

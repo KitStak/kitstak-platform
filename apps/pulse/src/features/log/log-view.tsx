@@ -53,8 +53,10 @@ import { routes } from '@/lib/routes';
 import type { LaborClassDTO, LogGridDTO, SiteDTO } from '@/lib/types';
 import { quickAddJobAction } from '@/server/actions/jobs';
 import { markDayCompleteAction, reviewDayAction } from '@/server/actions/log';
+import { JobFocusBanner } from './job-focus-banner';
+import type { FocusJob } from './job-focus';
 import { LogGrid, type GridTotals, type LogGridHandle } from './log-grid';
-import type { PaceThresholds } from './log-math';
+import { moneyReadout, type PaceThresholds } from './log-math';
 import { OtherTimeStrip } from './other-time';
 
 export interface LogViewProps {
@@ -63,27 +65,46 @@ export interface LogViewProps {
   readonly laborClasses: readonly LaborClassDTO[];
   readonly thresholds: PaceThresholds;
   readonly focusJob?: string | null;
+  /** The job a `?job=` link asked for, as the server found it. */
+  readonly focus?: FocusJob | null;
 }
 
-const EMPTY_TOTALS: GridTotals = {
-  units: 0,
-  hours: 0,
-  people: 0,
-  jobsLogged: 0,
-  jobs: 0,
-  money: null,
-  unsaved: 0,
-};
 
-export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: LogViewProps) {
+/**
+ * The footer totals straight from the saved day, so the footer is right on the first paint. The
+ * grid replaces them with live totals (typed but unsaved rows included) once it is on screen.
+ */
+function savedTotals(grid: LogGridDTO, seesMoney: boolean): GridTotals {
+  let units = 0;
+  let hours = 0;
+  let people = 0;
+  let jobsLogged = 0;
+  const entries = grid.rows.flatMap((row) => row.entries);
+  for (const row of grid.rows) {
+    let rowUnits = 0;
+    let rowHours = 0;
+    for (const entry of row.entries) {
+      rowUnits += Number(entry.unitsGood) || 0;
+      rowHours += Number(entry.hours) || 0;
+      people += Number(entry.headcount ?? 0) || 0;
+    }
+    units += rowUnits;
+    hours += rowHours;
+    if (rowUnits > 0 || rowHours > 0) jobsLogged += 1;
+  }
+  return { units, hours, people, jobsLogged, jobs: grid.rows.length, money: seesMoney ? moneyReadout(entries) : null, unsaved: 0 };
+}
+
+export function LogView({ initial, sites, laborClasses, thresholds, focusJob, focus }: LogViewProps) {
   const shell = useShell();
   const queryClient = useQueryClient();
   const [date, setDate] = useState(initial.date);
   const [siteId, setSiteId] = useState(initial.siteId);
   const [filter, setFilter] = useState('');
-  const [totals, setTotals] = useState<GridTotals>(EMPTY_TOTALS);
+  const [totals, setTotals] = useState<GridTotals>(() => savedTotals(initial, shell.seesMoney));
   const [quickAdd, setQuickAdd] = useState(false);
   const [tablet, setTablet] = useState(false);
+  const [focusDismissed, setFocusDismissed] = useState(false);
   const gridRef = useRef<LogGridHandle>(null);
   const isInitial = date === initial.date && siteId === initial.siteId;
   const grid = useLogGrid(
@@ -112,6 +133,8 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
     [siteId],
   );
 
+  const findRef = useRef<HTMLInputElement>(null);
+  useHotkey('f', () => findRef.current?.focus());
   useHotkey('[', () => go(addDays(date, -1)));
   useHotkey(']', () => go(addDays(date, 1)));
 
@@ -127,6 +150,11 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
   }, [focusJob, Boolean(data)]);
 
   const refreshDay = () => queryClient.invalidateQueries({ queryKey: qk.streams() });
+  const focusMissing =
+    Boolean(focus) &&
+    !focusDismissed &&
+    data !== undefined &&
+    !data.rows.some((item) => item.jobId === focus?.id || item.jobNumber.toLowerCase() === (focus?.number ?? focus?.ref ?? '').toLowerCase());
   const complete = useServerAction(markDayCompleteAction, { invalidate: [qk.streams()] });
   const review = useServerAction(reviewDayAction, { invalidate: [qk.streams()] });
 
@@ -216,9 +244,19 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
             <Input
               leadingIcon={<Search aria-hidden />}
               value={filter}
+              ref={findRef}
               onChange={(event) => setFilter(event.target.value)}
-              placeholder="Find a job"
-              aria-label="Find a job on this day"
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || !data) return;
+                const q = filter.trim().toLowerCase();
+                const hit = data.rows.find((row) => !q || `${row.jobNumber} ${row.jobName} ${row.clientName}`.toLowerCase().includes(q));
+                if (!hit) return;
+                event.preventDefault();
+                gridRef.current?.focusJob(hit.jobId);
+              }}
+              placeholder="Find a job (F)"
+              aria-label="Find a job on this day. Press Enter to go to it."
+              aria-keyshortcuts="F"
             />
           </div>
           <div className="ml-auto flex items-center gap-1 sm:ml-0">
@@ -227,7 +265,7 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
                 variant="secondary"
                 leadingIcon={<Copy aria-hidden />}
                 onClick={() => void copyYesterday()}
-                loading={crew.isFetching && !crew.data}
+                disabled={crew.isFetching && !crew.data}
                 title={
                   crewDay
                     ? `Fills people and hours from the last day each job ran, most recently ${shortDate(crewDay)}`
@@ -260,6 +298,21 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
           </div>
         </div>
 
+        {focus && focusMissing && data ? (
+          <JobFocusBanner
+            key={`${data.date}:${data.siteId}`}
+            job={focus}
+            date={data.date}
+            siteId={data.siteId}
+            canManage={shell.can('job:manage')}
+            onGo={(nextDate, nextSite) => go(nextDate, nextSite)}
+            onDismiss={() => setFocusDismissed(true)}
+            onStarted={async (jobId) => {
+              await refreshDay();
+              setTimeout(() => gridRef.current?.focusJob(jobId), 250);
+            }}
+          />
+        ) : null}
         {data ? (
           <DayBanner
             data={data}
@@ -523,6 +576,7 @@ function KeysHelp() {
     [['Esc'], 'Put the row back'],
     [['Ctrl', 'D'], 'Copy the cell above'],
     [['[', ']'], 'Day before, day after'],
+    [['F'], 'Find a job, then Enter to go to it'],
   ];
   return (
     <Popover>

@@ -170,7 +170,7 @@ async function pulseStats(orgId: string, userId: string | undefined): Promise<re
     if (summary.totalJobs === 0) {
       return [
         { label: 'Open jobs', value: 0 },
-        { label: 'At risk', value: 0 },
+        { label: 'Losing or at risk', value: 0 },
       ];
     }
     const risky = summary.atRisk + summary.losing;
@@ -184,7 +184,8 @@ async function pulseStats(orgId: string, userId: string | undefined): Promise<re
         };
     return [
       { label: 'Open jobs', value: summary.openJobs, display: String(summary.openJobs) },
-      { label: 'At risk', value: risky, display: String(risky), tone: summary.losing > 0 ? 'danger' : risky > 0 ? 'warning' : 'default' },
+      // Same words as the link to Pulse (losing money plus at risk), so the number matches what opens.
+      { label: 'Losing or at risk', value: risky, display: String(risky), tone: summary.losing > 0 ? 'danger' : risky > 0 ? 'warning' : 'default' },
       third,
     ];
   } catch (error: unknown) {

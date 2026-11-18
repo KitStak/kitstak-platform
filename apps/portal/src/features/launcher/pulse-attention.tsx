@@ -12,7 +12,6 @@ import { AppMark } from './app-mark';
 export function PulseAttentionPanel({ attention, pulseUrl }: { readonly attention: PulseAttention; readonly pulseUrl: string }) {
   if (attention.jobs.length === 0) return null;
   const base = pulseUrl.replace(/\/+$/, '');
-  const more = attention.total - attention.jobs.length;
   return (
     <section aria-labelledby="pulse-attention-title" data-testid="pulse-attention">
       <div className="flex items-center justify-between gap-3">
@@ -26,7 +25,7 @@ export function PulseAttentionPanel({ attention, pulseUrl }: { readonly attentio
           rel="noopener"
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-fg-secondary hover:text-fg hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         >
-          {more > 0 ? `See all ${attention.total}` : 'Open in Pulse'}
+          {`See all ${attention.total} in Pulse`}
           <ArrowUpRight aria-hidden className="size-3.5" />
         </a>
       </div>
@@ -59,17 +58,7 @@ export function PulseAttentionPanel({ attention, pulseUrl }: { readonly attentio
                   {job.riskLabel}
                 </span>
                 {attention.moneyHidden ? null : (
-                  <span className="flex shrink-0 items-baseline gap-3 text-right tabular-nums">
-                    <span className="text-xs text-fg-muted">
-                      Margin <span className="font-semibold text-fg">{formatMarginBp(job.marginBp, { empty: 'none yet' })}</span>
-                    </span>
-                    <span className="text-xs text-fg-muted">
-                      Profit{' '}
-                      <span className={cn('font-semibold', (job.profitCents ?? 0) < 0 ? 'text-danger-text' : 'text-fg')}>
-                        {formatCents(job.profitCents, { empty: 'none yet' })}
-                      </span>
-                    </span>
-                  </span>
+                  <PulseJobMoney job={job} />
                 )}
               </a>
             </li>
@@ -77,5 +66,27 @@ export function PulseAttentionPanel({ attention, pulseUrl }: { readonly attentio
         })}
       </ul>
     </section>
+  );
+}
+
+/**
+ * The same two figures Pulse leads with on the job: where margin and profit are heading at finish.
+ * A job with no forecast yet shows its profit so far, and says so.
+ */
+function PulseJobMoney({ job }: { readonly job: PulseAttention['jobs'][number] }) {
+  const forecast = job.projectedProfitCents !== null;
+  const profit = forecast ? job.projectedProfitCents : job.profitCents;
+  const margin = forecast ? job.projectedMarginBp : job.marginBp;
+  const when = forecast ? 'at finish' : 'so far';
+  return (
+    <span className="flex shrink-0 items-baseline gap-3 text-right tabular-nums">
+      <span className="text-xs text-fg-muted">
+        Margin {when} <span className="font-semibold text-fg">{formatMarginBp(margin, { empty: 'none yet' })}</span>
+      </span>
+      <span className="text-xs text-fg-muted">
+        Profit {when}{' '}
+        <span className={cn('font-semibold', (profit ?? 0) < 0 ? 'text-danger-text' : 'text-fg')}>{formatCents(profit, { empty: 'none yet' })}</span>
+      </span>
+    </span>
   );
 }

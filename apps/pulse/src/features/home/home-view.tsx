@@ -17,7 +17,7 @@ import { ExplainStatic } from '@/components/pulse/explain';
 import { StepList, Teach } from '@/components/pulse/teach';
 import { ProgressBar } from '@/components/ui/feedback';
 import { cn } from '@/components/ui/cn';
-import { formatHours, formatMoney, formatMoneyWhole, formatNumber, formatPace, formatPercentBp, formatPercentWhole } from '@/lib/format';
+import { formatHours, formatMoney, formatMoneyWhole, formatNumber, formatPace, formatPercentBp } from '@/lib/format';
 import { useAlerts, useJobsNeedingAttention, useProfit, useSummary } from '@/lib/hooks/use-data';
 import { CONFIDENCE_LABELS } from '@/lib/profit/types';
 import { companyMarginBp } from './company-margin';
@@ -183,7 +183,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                   {total.marginBp !== null ? (
                     <>
                       {' '}
-                      at a <strong className="font-semibold text-fg tabular-nums">{formatPercentWhole(total.marginBp)}</strong> margin
+                      at a <strong className="font-semibold text-fg tabular-nums">{formatPercentBp(total.marginBp)}</strong> margin
                     </>
                   ) : null}
                   .

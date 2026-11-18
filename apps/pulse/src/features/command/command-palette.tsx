@@ -148,10 +148,11 @@ function Item({
 }
 
 /** Status line above the search everything row: looking, or nothing found yet. */
-function PaletteEmpty({ typing, looking }: { readonly typing: boolean; readonly looking: boolean }) {
+function PaletteEmpty({ typing, looking, records }: { readonly typing: boolean; readonly looking: boolean; readonly records: number }) {
   const localCount = useCommandState((state) => state.filtered.count);
-  // The search everything row always counts as one match.
-  if (!typing || localCount > 1) return null;
+  // The search everything row always counts as one match. Record rows that arrive after the typing
+  // stops are not always in cmdk's count yet, so they are counted here too.
+  if (!typing || localCount > 1 || records > 0) return null;
   return (
     <div
       className="px-6 pt-6 pb-2 text-center text-sm text-fg-muted"
@@ -262,7 +263,7 @@ export function CommandPalette() {
 
   const typed = query.trim();
   const typing = typed.length > 0;
-  const pages = navFor(pulseRole);
+  const pages = navFor(pulseRole, seesMoney);
   const hasAccess = pulseRole !== 'none';
   const lookup = useDebouncedValue(typed, RECORD_DEBOUNCE_MS);
   const recordsOn = open && hasAccess && typed.length >= RECORD_MIN_CHARS;
@@ -318,7 +319,7 @@ export function CommandPalette() {
         <Kbd>Esc</Kbd>
       </div>
       <Command.List className="min-h-0 flex-1 overflow-y-auto pb-2">
-        <PaletteEmpty typing={typing} looking={looking} />
+        <PaletteEmpty typing={typing} looking={looking} records={recordHits.length} />
 
         {recordHits.length > 0 ? <RecordGroup hits={recordHits} typed={typed} onGo={go} /> : null}
 

@@ -138,6 +138,18 @@ test.describe('production', () => {
     await expect(page.getByTestId('standard-row').filter({ hasText: note })).toHaveCount(0);
   });
 
+  test('log work link: a job that is not on the day says why and offers the fix', async ({ page }) => {
+    await signIn(page);
+    // WO000095 is planned in the demo, so it has no row on the day yet.
+    await page.goto('/log?job=WO000095');
+    const banner = page.getByTestId('job-focus-banner');
+    await expect(banner).toContainText('WO000095');
+    await expect(banner).toContainText('is planned');
+    await expect(banner.getByRole('button', { name: 'Start the job and log work' })).toBeFocused();
+    await page.goto('/log?job=NO-SUCH-JOB-1');
+    await expect(page.getByTestId('job-focus-banner')).toContainText('Pulse has no job called NO-SUCH-JOB-1');
+  });
+
   test('floor tablet: an unknown link shows nothing but "not active", with no session', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();

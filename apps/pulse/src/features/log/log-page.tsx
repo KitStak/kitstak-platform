@@ -5,10 +5,12 @@ import { RouteTabs } from '@/components/pulse/route-tabs';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { isIsoDate, todayIso } from '@/lib/dates';
 import { routes } from '@/lib/routes';
-import { getLogGrid, getReviewQueue, getSettings, listLaborClasses, listSites } from '@/server/domain';
+import { getJob, getLogGrid, getReviewQueue, getSettings, listLaborClasses, listSites } from '@/server/domain';
+import type { DomainContext } from '@/server/domain/_shared';
 import { pulsePage, type PulsePage } from '@/server/page';
 import { BulkView } from './bulk-view';
 import { EntriesView } from './entries-view';
+import type { FocusJob } from './job-focus';
 import { LogView } from './log-view';
 import { ReviewView } from './review-view';
 
@@ -57,6 +59,17 @@ function Frame({
   );
 }
 
+/** The job a `?job=` link asks for, found by id or number. Never throws: a missing job is a message, not an error page. */
+async function findFocusJob(ctx: DomainContext, ref: string, sites: readonly { id: string; name: string }[]): Promise<FocusJob> {
+  try {
+    const job = await getJob(ctx, ref);
+    if (job.deletedAt) throw new Error('deleted');
+    return { ref, id: job.id, number: job.number, name: job.name, status: job.status, siteId: job.siteId, siteName: sites.find((site) => site.id === job.siteId)?.name ?? null, startDate: job.startDate };
+  } catch {
+    return { ref, id: null, number: null, name: null, status: null, siteId: null, siteName: null, startDate: null };
+  }
+}
+
 /** Log work: the day grid, one row per active job. Units, people and hours, keyboard first. */
 export async function LogPage({
   searchParams,
@@ -71,7 +84,10 @@ export async function LogPage({
   if (page.blocked) return <PageBlocked title="Log work" role={page.access.role} />;
   const sites = await listSites(page.ctx);
   const wantedSite = one(query.site);
-  const siteId = wantedSite && sites.some((site) => site.id === wantedSite) ? wantedSite : undefined;
+  const jobRef = one(query.job)?.trim() || null;
+  const focus = jobRef ? await findFocusJob(page.ctx, jobRef, sites) : null;
+  // A "Log work" link opens the job's own site unless the link names one.
+  const siteId = wantedSite && sites.some((site) => site.id === wantedSite) ? wantedSite : (focus?.siteId ?? undefined);
   const [grid, laborClasses, settings] = await Promise.all([
     getLogGrid(page.ctx, { date, siteId }),
     listLaborClasses(page.ctx, { includeArchived: true }),
@@ -88,7 +104,8 @@ export async function LogPage({
         sites={sites}
         laborClasses={laborClasses}
         thresholds={{ watchBp: settings.productivityWatchBp, riskBp: settings.productivityRiskBp }}
-        focusJob={one(query.job) ?? null}
+        focusJob={jobRef}
+        focus={focus}
       />
     </Frame>
   );

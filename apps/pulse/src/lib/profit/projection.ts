@@ -166,10 +166,19 @@ function cents(value: Cents): Fraction {
   return frac(value);
 }
 
-function confidenceOf(weight: Fraction, hasEvidence: boolean): Confidence {
+/** Days of real work it takes before a projection can be called "Solid". One day is only ever an early guess. */
+const SOLID_DAYS = 3;
+
+function confidenceOf(weight: Fraction, hasEvidence: boolean, evidenceDays: number): Confidence {
   if (!hasEvidence) return 'plan';
-  if (fracCmp(weight, FRAC_ONE) >= 0) return 'solid';
+  if (evidenceDays <= 1) return 'early';
+  if (fracCmp(weight, FRAC_ONE) >= 0 && evidenceDays >= SOLID_DAYS) return 'solid';
   return fracCmp(weight, frac(BigInt(1), BigInt(2))) < 0 ? 'early' : 'good';
+}
+
+/** "Based on the plan" only when there is a plan to base it on. */
+function withPlan(confidence: Confidence, input: ProjectionInput): Confidence | null {
+  return confidence === 'plan' && input.plan === null ? null : confidence;
 }
 
 function flat(input: ProjectionInput, mode: JobMode | null, totals: ActualTotals): Projection {
@@ -303,7 +312,7 @@ export function projectJob(input: ProjectionInput): Projection {
       pctCompleteBp: pctBp,
       pctCompleteShownBp: Math.min(10000, pctBp),
       paceWeightBp: Number(fracRound(fracMul(weight, frac(BigInt(10000))))),
-      confidence: 'plan',
+      confidence: costPlan ? 'plan' : null,
       costSoFarCents: costSoFar,
       rateLeftCents: rateLeft ? fracRound(rateLeft) : null,
     };
@@ -406,7 +415,7 @@ export function projectJob(input: ProjectionInput): Projection {
     planPace: planPaceOk ? fracToNumber(planPaceOk, 3) : null,
     paceWeightBp: Number(fracRound(fracMul(weight, frac(BigInt(10000))))),
     paceUph: pace ? fracToNumber(pace, 3) : null,
-    confidence: unitBased ? confidenceOf(weight, hasEvidence) : hoursSoFar > ZERO ? confidenceOf(weight, true) : 'plan',
+    confidence: withPlan(unitBased ? confidenceOf(weight, hasEvidence, input.evidenceDays) : hoursSoFar > ZERO ? confidenceOf(weight, true, input.evidenceDays > 0 ? input.evidenceDays : SOLID_DAYS) : 'plan', input),
     hoursLeft: scaledToNumber(hoursLeftScaled, 2),
     rateLeftCents: rateLeft ? fracRound(rateLeft) : null,
     laborLeftCents: laborLeft,

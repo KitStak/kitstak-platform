@@ -1420,7 +1420,7 @@ function Readout({
   if (!hasWork) {
     return (
       <p className="text-xs text-fg-muted">
-        {readout.targetUph ? `Target ${formatPace(readout.targetUph, { empty: '' })}` : 'No target pace yet'}
+        {readout.targetUph ? `Target pace ${formatPace(readout.targetUph, { empty: '', withWords: true })}` : 'No target pace yet'}
         {readout.goalUnits ? `. Goal ${units(readout.goalUnits, row.unitLabel)}` : ''}
       </p>
     );

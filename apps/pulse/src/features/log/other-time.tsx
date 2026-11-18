@@ -10,7 +10,7 @@ import { cn } from '@/components/ui/cn';
 import { INDIRECT_REASONS, INDIRECT_REASON_LABELS, type IndirectReason } from '@/lib/constants';
 import { formatHours, formatMoney } from '@/lib/format';
 import { useServerAction } from '@/lib/hooks/use-action';
-import { decimalToCents, centsToDecimal } from '@/lib/money';
+import { decimalToCents } from '@/lib/money';
 import { laborHoursFromCrew } from '@/lib/profit';
 import { qk } from '@/lib/query-keys';
 import type { IndirectEntryDTO, LaborClassDTO, PaidHoursDTO } from '@/lib/types';
@@ -316,7 +316,7 @@ function PaidHoursRow({
   });
   const shownHours = hours ?? tidy(all?.paidHours);
   const shownPay =
-    pay ?? (all?.paidCents !== null && all?.paidCents !== undefined ? centsToDecimal(all.paidCents) : '');
+    pay ?? (all?.paidCents !== null && all?.paidCents !== undefined ? formatMoney(all.paidCents) : '');
   const classHours = byClass.reduce((total, row) => total + Number(row.paidHours), 0);
   const dirty = hours !== null || pay !== null;
 
@@ -327,7 +327,7 @@ function PaidHoursRow({
     if (seesMoney) {
       const text = shownPay.replace(/[$,\s]/g, '');
       if (text === '') cents = null;
-      else if (!/^\d+(\.\d{1,2})?$/.test(text)) return setError('Type the pay like 13190.33.');
+      else if (!/^\d+(\.\d{1,2})?$/.test(text)) return setError('Type the pay like $13,190.33.');
       else cents = Number(decimalToCents(text));
     }
     setError(null);

@@ -109,6 +109,8 @@ describe('numbers, percents, hours, units and pace', () => {
     expect(formatPercentBp(3000)).toBe('30%');
     expect(formatPercentBp(-1250)).toBe('-12.5%');
     expect(formatPercentBp(2236, { digits: 2 })).toBe('22.36%');
+    expect(formatPercentBp(3800, { fixed: true })).toBe('38.0%');
+    expect(formatPercentBp(-2, { fixed: true })).toBe('0.0%');
     expect(formatPercentWhole(2236)).toBe('22%');
     expect(formatPercent(0.2236)).toBe('22.4%');
     expect(formatPercentBp(null, { empty: 'No revenue yet' })).toBe('No revenue yet');

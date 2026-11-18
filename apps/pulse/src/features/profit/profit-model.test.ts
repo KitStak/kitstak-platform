@@ -118,6 +118,16 @@ describe('views', () => {
     expect(paretoView([row('a', 'A', { profitCents: -1 })]).toEighty).toBeNull();
   });
 
+  it('measures every share against profit from the rows that made money, so the running share tops out at 100%', () => {
+    const view = paretoView([row('a', 'A', { profitCents: 60000 }), row('b', 'B', { profitCents: 30000 }), row('c', 'C', { profitCents: 10000 }), row('d', 'D', { profitCents: -40000 })]);
+    expect(view.madeCents).toBe(BigInt(100000));
+    expect(view.gaveBackCents).toBe(BigInt(40000));
+    expect(view.ranked.map((item) => item.cumulativeProfitShareBp)).toEqual([6000, 9000, 10000, 6000]);
+    expect(view.ranked.map((item) => item.profitShareBp)).toEqual([6000, 3000, 1000, -4000]);
+    expect(Math.max(...view.ranked.map((item) => item.cumulativeProfitShareBp ?? 0))).toBeLessThanOrEqual(10000);
+    expect(view.toEighty).toBe(2);
+  });
+
   it('writes the pivot grid as rows with totals', () => {
     const cell = (profit: number) => ({ revenueCents: profit * 2, costCents: profit, profitCents: profit, marginBp: 5000, unitsGood: '10.000', hours: '1.00' });
     const pivot: ProfitPivotDTO = { rowBy: 'client', colBy: 'month', from: '2026-10-01', to: '2026-11-17', rows: [{ key: 'a', label: 'Acme', sublabel: null }], cols: [{ key: '2026-10-01', label: '2026-10-01', sublabel: null }, { key: '2026-11-01', label: '2026-11-01', sublabel: null }], cells: { a: { '2026-10-01': cell(1000) } }, rowTotals: { a: cell(1000) }, colTotals: { '2026-10-01': cell(1000) }, total: cell(1000), moneyHidden: false };

@@ -13,6 +13,7 @@ import {
   savePaidHours,
   saveProductionBulk,
   saveProductionEntry,
+  startJobForDay,
 } from '@/server/domain';
 import { runAction } from './_action';
 import { headcount, hours, indirectReason, isoDate, positiveCents, productionInput, text, uuid, version } from './schemas';
@@ -86,4 +87,10 @@ const reviewSchema = z.object({ siteId: uuid, date: isoDate, decision: z.enum(['
 /** Approve a completed day, send it back with a note, or reopen it. */
 export async function reviewDayAction(input: z.input<typeof reviewSchema>) {
   return runAction(reviewSchema, input, (data, ctx) => reviewDay(ctx, data));
+}
+
+const startSchema = z.object({ jobId: uuid, date: isoDate });
+/** Puts a planned or on hold job on the day so work can be logged on it (the "Log work" links from CRM and WMS). */
+export async function startJobForDayAction(input: z.input<typeof startSchema>) {
+  return runAction(startSchema, input, (data, ctx) => startJobForDay(ctx, data.jobId, data.date));
 }

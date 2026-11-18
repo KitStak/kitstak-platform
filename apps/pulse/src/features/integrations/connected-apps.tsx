@@ -43,6 +43,9 @@ import {
 
 type SwitchKey = keyof ConnectedAppsDTO['switches'];
 
+/** A label inside a sentence: "Work order" is "work order", but "CRM deal" keeps its capitals. */
+const inSentence = (words: string): string => (/^[A-Z]{2,}/.test(words) ? words : `${words.charAt(0).toLowerCase()}${words.slice(1)}`);
+
 interface Flow {
   readonly text: string;
   /** A switch that turns this flow on or off. */
@@ -393,7 +396,7 @@ function LinkRow({
         <span className="truncate font-medium text-fg">{link.jobName}</span>
       </Link>
       <span className="flex min-w-0 max-w-full items-center gap-2 sm:max-w-[46%]">
-        <span className="sr-only">linked to {TARGET_WORDS[link.targetType].toLowerCase()}</span>
+        <span className="sr-only">linked to a {inSentence(TARGET_WORDS[link.targetType])}</span>
         <RecordChip
           type={link.targetType}
           id={link.targetId}

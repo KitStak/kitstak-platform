@@ -37,6 +37,8 @@ export interface NavEntry {
   readonly chord?: string;
   /** Roles that do not see this entry. Supervisors log work and never see money pages. */
   readonly hiddenFor?: readonly PulseRole[];
+  /** Only for people who see money: a viewer with money hidden would land on a "not part of your role" page. */
+  readonly money?: boolean;
   /** Which live count shows as a badge on this entry. */
   readonly badge?: 'jobsAtRisk';
 }
@@ -84,6 +86,7 @@ export const NAV: readonly NavEntry[] = [
     keywords: ['margin', 'revenue', 'cost', 'clients', 'job types', 'extra services', 'sites', 'months'],
     chord: 'P',
     hiddenFor: ['supervisor'],
+    money: true,
   },
   {
     id: 'labor',
@@ -176,10 +179,10 @@ export function navMatches(entry: NavEntry, pathname: string): boolean {
   return entry.prefixes.some((prefix) => (prefix === '/' ? pathname === '/' : pathname === prefix || pathname.startsWith(`${prefix}/`)));
 }
 
-/** The entries a role may see, in order. People with no role see nothing. */
-export function navFor(role: PulseRole): readonly NavEntry[] {
+/** The entries a role may see, in order. People with no role see nothing; `seesMoney` false drops the money pages. */
+export function navFor(role: PulseRole, seesMoney = true): readonly NavEntry[] {
   if (role === 'none') return [];
-  return NAV.filter((entry) => !entry.hiddenFor?.includes(role));
+  return NAV.filter((entry) => !entry.hiddenFor?.includes(role) && (seesMoney || !entry.money));
 }
 
 /** Where a role lands after sign in: supervisors go straight to the log. */
@@ -188,9 +191,9 @@ export function landingPath(role: PulseRole): string {
 }
 
 /** Go to shortcuts (`g` then the letter) as a map of lowercase letter to path. */
-export function chordTargets(role: PulseRole): Readonly<Record<string, string>> {
+export function chordTargets(role: PulseRole, seesMoney = true): Readonly<Record<string, string>> {
   const out: Record<string, string> = {};
-  for (const entry of navFor(role)) {
+  for (const entry of navFor(role, seesMoney)) {
     if (entry.chord) out[entry.chord.toLowerCase()] = entry.href;
   }
   return out;
@@ -249,6 +252,6 @@ export const SUB_PAGES: readonly SubPage[] = [
 
 /** The sub pages a role may open. `seesMoney` drops the money only ones. */
 export function subPagesFor(role: PulseRole, seesMoney: boolean): readonly SubPage[] {
-  const parents = new Set(navFor(role).map((entry) => entry.id));
+  const parents = new Set(navFor(role, seesMoney).map((entry) => entry.id));
   return SUB_PAGES.filter((page) => parents.has(page.parent) && (!page.needs || canPulse(role, page.needs)) && (!page.money || seesMoney));
 }
