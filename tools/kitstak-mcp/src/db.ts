@@ -2,6 +2,8 @@
  * Database access: one organization's WMS warehouse, read only.
  *
  * Isolation, in layers:
+ *  0. CRM, Projects and core tables are shared across orgs: every query filters on the
+ *     org id resolved once at startup (WHERE org_id = $1). The WMS adds per-org schemas:
  *  1. The tenant schema is resolved once at startup from core.wms_tenants (status active)
  *     and validated against the same pattern the platform uses before it is ever used as
  *     an identifier.
@@ -9,8 +11,9 @@
  *     pinned to that schema (transaction-local, so it is safe on the Supabase transaction
  *     pooler) and a statement timeout. All table references are also schema-qualified.
  *  3. Tools only run fixed, parameterized SQL written here. The model never sends SQL.
- *  4. The connection uses a dedicated read-only Postgres role granted SELECT on one tenant
- *     schema only (sql/readonly-role.sql). Startup refuses a role that can write.
+ *  4. The connection uses a dedicated read-only Postgres role (sql/readonly-role.sql):
+ *     SELECT on one WMS schema and on chosen CRM/Projects/core tables, nothing secret
+ *     (no sessions, accounts, API tokens or webhooks). Startup refuses a role that can write.
  */
 import postgres from 'postgres';
 import type { Config } from './config.js';
@@ -61,24 +64,53 @@ export function connect(config: Config): Sql {
   });
 }
 
-/** Resolves the org's active warehouse schema and the optional client narrowing. */
-export async function resolveTenant(sql: Sql, config: Config): Promise<Tenant> {
+export interface Org {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+}
+
+/** The organization this server reads (by slug or uuid). Every module filters on its id. */
+export async function resolveOrg(sql: Sql, config: Config): Promise<Org> {
   const byId = UUID_RE.test(config.org);
   const rows = await sql.begin('read only', async (tx) => {
-    return await tx<{ org_id: string; name: string; slug: string; schema_name: string }[]>`
-      SELECT o.id::text AS org_id, o.name, o.slug, t.schema_name
-      FROM core.wms_tenants t
-      JOIN core.organization o ON o.id = t.org_id
-      WHERE t.status = 'active'
-        AND ${byId ? tx`o.id = ${config.org}::uuid` : tx`o.slug = ${config.org}`}
+    return await tx<{ id: string; name: string; slug: string }[]>`
+      SELECT o.id::text AS id, o.name, o.slug FROM core.organization o
+      WHERE ${byId ? tx`o.id = ${config.org}::uuid` : tx`o.slug = ${config.org}`}
       LIMIT 1`;
   });
   const row = rows[0];
-  if (!row) throw new Error(`No active WMS warehouse found for organization "${config.org}".`);
+  if (!row) throw new Error(`No organization found for "${config.org}".`);
+  return row;
+}
+
+/**
+ * The org's active WMS warehouse and the optional client narrowing, or null when the org
+ * has no warehouse or the role was not granted its schema.
+ */
+export async function resolveTenant(sql: Sql, org: Org, config: Config): Promise<Tenant | null> {
+  const rows = await sql.begin('read only', async (tx) => {
+    return await tx<{ schema_name: string; usable: boolean }[]>`
+      SELECT t.schema_name,
+        (has_schema_privilege(t.schema_name, 'USAGE') AND COALESCE((
+          SELECT has_table_privilege(c.oid, 'SELECT') FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = t.schema_name AND c.relname = 'shipment_orders'), false)) AS usable
+      FROM core.wms_tenants t
+      WHERE t.org_id = ${org.id}::uuid AND t.status = 'active'
+      LIMIT 1`;
+  });
+  const row = rows[0];
+  if (!row || !row.usable) {
+    if (config.clientCodes.length > 0) {
+      throw new Error("KITSTAK_MCP_CLIENTS is set but this role cannot read the org's WMS warehouse.");
+    }
+    return null;
+  }
   if (!isWmsSchemaName(row.schema_name)) {
     throw new Error(`Refusing unexpected WMS schema name ${JSON.stringify(row.schema_name)}.`);
   }
-  const base = { orgId: row.org_id, orgName: row.name, orgSlug: row.slug, schema: row.schema_name };
+  const base = { orgId: org.id, orgName: org.name, orgSlug: org.slug, schema: row.schema_name };
   if (config.clientCodes.length === 0) return { ...base, clientIds: 'all', clientCodes: [] };
 
   const clients = await readTenant(
@@ -96,28 +128,77 @@ export async function resolveTenant(sql: Sql, config: Config): Promise<Tenant> {
   return { ...base, clientIds: clients.map((c) => c.id), clientCodes: config.clientCodes };
 }
 
+/** Whether the role can read user names (column grant on core."user") and org members. */
+export async function canReadUserNames(sql: Sql): Promise<boolean> {
+  const [row] = await sql.begin('read only', async (tx) => {
+    return await tx<{ ok: boolean }[]>`
+      SELECT (has_schema_privilege('core', 'USAGE')
+        AND has_column_privilege('core."user"', 'name', 'SELECT')
+        AND has_column_privilege('core."user"', 'id', 'SELECT')
+        AND has_table_privilege('core.member', 'SELECT')) AS ok`;
+  });
+  return row?.ok === true;
+}
+
 /**
- * Refuses to run as a role that can change the warehouse, unless explicitly allowed.
- * Checks INSERT/UPDATE/DELETE on the tenant's orders table and superuser status.
+ * Looks tables up in the catalog by name (not to_regclass, which errors on a schema the
+ * role has no USAGE on) so detection works whatever the role was granted.
  */
-export async function assertReadOnlyRole(sql: Sql, tenant: Tenant, allowWriteRole: boolean): Promise<string> {
-  const table = `${tenant.schema}.shipment_orders`;
+function splitTable(table: string): [string, string] {
+  const [schema, name] = table.split('.');
+  if (!schema || !name) throw new Error(`Expected schema.table, got ${table}`);
+  return [schema, name];
+}
+
+/** A table the role can read, for module detection. */
+export async function canRead(sql: Sql, table: string): Promise<boolean> {
+  const [schema, name] = splitTable(table);
+  const [row] = await sql.begin('read only', async (tx) => {
+    return await tx<{ ok: boolean }[]>`
+      SELECT COALESCE((
+        SELECT has_schema_privilege(n.oid, 'USAGE') AND has_table_privilege(c.oid, 'SELECT')
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = ${schema} AND c.relname = ${name}), false) AS ok`;
+  });
+  return row?.ok === true;
+}
+
+/**
+ * Refuses to run as a role that can change data, unless explicitly allowed. Checks
+ * superuser status and INSERT/UPDATE/DELETE on a sample table of every module in use.
+ */
+export async function assertReadOnlyRole(
+  sql: Sql,
+  tables: readonly string[],
+  allowWriteRole: boolean,
+): Promise<string> {
   const [row] = await sql.begin('read only', async (tx) => {
     return await tx<{ role: string; superuser: boolean; can_write: boolean }[]>`
       SELECT current_user AS role,
         COALESCE((SELECT rolsuper FROM pg_roles WHERE rolname = current_user), false) AS superuser,
-        (has_table_privilege(${table}::text, 'INSERT')
-          OR has_table_privilege(${table}::text, 'UPDATE')
-          OR has_table_privilege(${table}::text, 'DELETE')) AS can_write`;
+        COALESCE((
+          SELECT bool_or(has_table_privilege(c.oid, 'INSERT') OR has_table_privilege(c.oid, 'UPDATE')
+            OR has_table_privilege(c.oid, 'DELETE'))
+          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE (n.nspname || '.' || c.relname) IN ${tx(tables as string[])}), false) AS can_write`;
   });
   if (!row) throw new Error('Could not inspect the database role.');
   if ((row.superuser || row.can_write) && !allowWriteRole) {
     throw new Error(
-      `Database role "${row.role}" can write to the warehouse. Connect as the read-only role from ` +
+      `Database role "${row.role}" can write to KitStak data. Connect as the read-only role from ` +
         'sql/readonly-role.sql (or set KITSTAK_MCP_ALLOW_WRITE_ROLE=1 for local testing only).',
     );
   }
   return row.role;
+}
+
+/** Runs `fn` in a READ ONLY transaction for the shared schemas (core, crm, pm). */
+export async function readShared<T>(sql: Sql, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const result = await sql.begin('read only', async (tx) => {
+    await tx.unsafe(`SET LOCAL statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
+    return await fn(tx);
+  });
+  return result as T;
 }
 
 /**

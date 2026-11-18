@@ -6,12 +6,14 @@
 export interface Config {
   /** Postgres connection string for the read-only role (see sql/readonly-role.sql). */
   readonly databaseUrl: string;
-  /** Organization slug or uuid: the one warehouse (WMS tenant schema) this server reads. */
+  /** Organization slug or uuid: the one org (and its WMS warehouse) this server reads. */
   readonly org: string;
   /** Optional client codes to narrow every tool to; empty means all clients of the org. */
   readonly clientCodes: readonly string[];
   /** Default row limit for list tools (hard cap 200). */
   readonly defaultLimit: number;
+  /** Include private/shareable CRM boards, closed workspaces and private projects. */
+  readonly includePrivate: boolean;
   /** Escape hatch for local testing only: run even if the role can write. */
   readonly allowWriteRole: boolean;
 }
@@ -38,6 +40,7 @@ export function loadConfig(env: Env = process.env): Config {
     org: org!,
     clientCodes,
     defaultLimit,
+    includePrivate: env.KITSTAK_MCP_INCLUDE_PRIVATE === '1',
     allowWriteRole: env.KITSTAK_MCP_ALLOW_WRITE_ROLE === '1',
   };
 }

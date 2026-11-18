@@ -1,11 +1,12 @@
 /**
- * The read-only tools. Each one runs fixed, parameterized SQL inside `readTenant`, so it
+ * WMS tools (warehouse: customers, orders, inventory, kits). Each one runs fixed, parameterized SQL inside `readTenant`, so it
  * only ever sees the configured organization's warehouse (and clients, when narrowed).
  */
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { MAX_LIMIT } from './config.js';
 import { clientScope, readTenant, type Sql, type Tenant, type Tx } from './db.js';
+import { dateArg, fail, json, like, limitArg, READ_ONLY } from './util.js';
 
 /** Order statuses the WMS counts as open (apps/wms/src/server/domain/atp.ts). */
 export const OPEN_ORDER_STATUSES = [
@@ -24,69 +25,25 @@ export const OPEN_ORDER_STATUSES = [
   'Partially Shipped',
 ] as const;
 
-const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
-
-function json(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
-}
-
-function fail(message: string) {
-  return { content: [{ type: 'text' as const, text: message }], isError: true };
-}
-
-function like(q: string): string {
-  return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-}
-
-export interface ToolContext {
+export interface WmsContext {
   readonly sql: Sql;
   readonly tenant: Tenant;
   readonly defaultLimit: number;
 }
 
-const limitArg = z
-  .number()
-  .int()
-  .min(1)
-  .max(MAX_LIMIT)
-  .optional()
-  .describe(`Max rows (default 50, max ${MAX_LIMIT}).`);
 const clientArg = z.string().optional().describe('Client (3PL customer) code, e.g. "FRIDA".');
-const dateArg = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}/)
-  .optional();
-
 /** `AND c.code = $1` when a client code filter is given. */
 function clientCodeFilter(tx: Tx, code: string | undefined, column = 'c.code') {
   return code ? tx`AND ${tx(column)} = ${code}` : tx``;
 }
 
-export function registerTools(server: McpServer, ctx: ToolContext): void {
+export function registerWmsTools(server: McpServer, ctx: WmsContext): void {
   const { sql, tenant } = ctx;
   const lim = (n: number | undefined) => Math.min(n ?? ctx.defaultLimit, MAX_LIMIT);
   const run = <T>(fn: Parameters<typeof readTenant<T>>[2]) => readTenant<T>(sql, tenant, fn);
 
   server.registerTool(
-    'whoami',
-    {
-      title: 'Connection info',
-      description:
-        'Which KitStak organization and warehouse this server reads, and any client narrowing. Read only.',
-      inputSchema: {},
-      annotations: READ_ONLY,
-    },
-    async () =>
-      json({
-        organization: tenant.orgName,
-        slug: tenant.orgSlug,
-        clients: tenant.clientIds === 'all' ? 'all' : tenant.clientCodes,
-        access: 'read only',
-      }),
-  );
-
-  server.registerTool(
-    'list_customers',
+    'wms_list_customers',
     {
       title: 'List customers',
       description:
@@ -115,7 +72,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
   );
 
   server.registerTool(
-    'list_warehouses',
+    'wms_list_warehouses',
     {
       title: 'List warehouses',
       description: 'List warehouse buildings: code, name, city, state, time zone, active and default flags.',
@@ -133,7 +90,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
   );
 
   server.registerTool(
-    'search_orders',
+    'wms_search_orders',
     {
       title: 'Search orders',
       description:
@@ -199,7 +156,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
   );
 
   server.registerTool(
-    'get_order',
+    'wms_get_order',
     {
       title: 'Get order',
       description:
@@ -250,7 +207,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
   );
 
   server.registerTool(
-    'order_status_summary',
+    'wms_order_status_summary',
     {
       title: 'Order status summary',
       description:
@@ -282,7 +239,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
   );
 
   server.registerTool(
-    'search_products',
+    'wms_search_products',
     {
       title: 'Search products',
       description: 'Search SKUs by SKU, name or barcode. Shows client, kit flag, status and reorder point.',
@@ -315,7 +272,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
   );
 
   server.registerTool(
-    'get_inventory',
+    'wms_get_inventory',
     {
       title: 'Get inventory',
       description:
@@ -383,7 +340,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
   );
 
   server.registerTool(
-    'low_stock',
+    'wms_low_stock',
     {
       title: 'Low stock',
       description:
@@ -411,7 +368,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
   );
 
   server.registerTool(
-    'get_kit',
+    'wms_get_kit',
     {
       title: 'Get kit',
       description:
@@ -466,7 +423,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
   );
 
   server.registerTool(
-    'list_work_orders',
+    'wms_list_work_orders',
     {
       title: 'List kitting work orders',
       description:
