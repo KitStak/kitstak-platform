@@ -4,11 +4,26 @@
  * money always come from `@/lib/profit` and `@/lib/money`; nothing here invents a formula.
  */
 import { centsToNumber, toCents } from '@/lib/money';
-import { crewHoursCheck, laborHoursFromCrew, productivityBp, profitSummary, unitsPerHour } from '@/lib/profit';
+import {
+  crewHoursCheck,
+  laborHoursFromCrew,
+  productivityBp,
+  profitSummary,
+  unitsPerHour,
+} from '@/lib/profit';
 import type { LogGridRowDTO, ProductionEntryDTO } from '@/lib/types';
 
 /** The cells a person can type in, in keyboard order. */
-export const LINE_FIELDS = ['unitsGood', 'unitsScrap', 'unitsRework', 'people', 'hoursEach', 'hours', 'overtime', 'note'] as const;
+export const LINE_FIELDS = [
+  'unitsGood',
+  'unitsScrap',
+  'unitsRework',
+  'people',
+  'hoursEach',
+  'hours',
+  'overtime',
+  'note',
+] as const;
 export type LineField = (typeof LINE_FIELDS)[number];
 
 export interface LineValues {
@@ -25,7 +40,18 @@ export interface LineValues {
   laborClassId: string | null;
 }
 
-export const EMPTY_VALUES: LineValues = { unitsGood: '', unitsScrap: '', unitsRework: '', people: '', hoursEach: '', hours: '', overtime: '', setup: '', note: '', laborClassId: null };
+export const EMPTY_VALUES: LineValues = {
+  unitsGood: '',
+  unitsScrap: '',
+  unitsRework: '',
+  people: '',
+  hoursEach: '',
+  hours: '',
+  overtime: '',
+  setup: '',
+  note: '',
+  laborClassId: null,
+};
 
 /** "1,250" or " 12.50 " to a plain number. Empty text is 0. Returns null for text that is not a number of 0 or more. */
 export function parseTyped(text: string | null | undefined): number | null {
@@ -45,7 +71,10 @@ export function tidy(value: string | number | null | undefined): string {
 }
 
 /** Hours each, worked back from labor hours and people (2 places). Empty when either is missing. */
-export function hoursEachFrom(hours: string | number | null | undefined, people: string | number | null | undefined): string {
+export function hoursEachFrom(
+  hours: string | number | null | undefined,
+  people: string | number | null | undefined,
+): string {
   const h = Number(hours ?? 0);
   const p = Number(people ?? 0);
   if (!(h > 0) || !(p > 0)) return '';
@@ -77,8 +106,10 @@ export function applyField(values: LineValues, field: LineField | 'setup', text:
   if (field === 'people' || field === 'hoursEach') {
     const people = parseTyped(next.people);
     const each = parseTyped(next.hoursEach);
-    if (people !== null && each !== null && people > 0 && each > 0) next.hours = tidy(laborHoursFromCrew(people, each));
-    else if ((people === 0 || each === 0) && field === 'hoursEach' && text.trim() === '') next.hours = values.hours;
+    if (people !== null && each !== null && people > 0 && each > 0)
+      next.hours = tidy(laborHoursFromCrew(people, each));
+    else if ((people === 0 || each === 0) && field === 'hoursEach' && text.trim() === '')
+      next.hours = values.hours;
   }
   if (field === 'hours') {
     const people = parseTyped(next.people);
@@ -90,9 +121,19 @@ export function applyField(values: LineValues, field: LineField | 'setup', text:
 
 /** The first thing wrong with a line in plain words, or null when it can be saved. */
 export function lineProblem(values: LineValues): string | null {
-  const labels: Record<string, string> = { unitsGood: 'Units', unitsScrap: 'Scrap', unitsRework: 'Rework', people: 'People', hoursEach: 'Hours each', hours: 'Labor hours', overtime: 'Overtime', setup: 'Setup hours' };
+  const labels: Record<string, string> = {
+    unitsGood: 'Units',
+    unitsScrap: 'Scrap',
+    unitsRework: 'Rework',
+    people: 'People',
+    hoursEach: 'Hours each',
+    hours: 'Labor hours',
+    overtime: 'Overtime',
+    setup: 'Setup hours',
+  };
   for (const [field, label] of Object.entries(labels)) {
-    if (parseTyped(values[field as keyof LineValues] as string) === null) return `${label} must be a number of 0 or more.`;
+    if (parseTyped(values[field as keyof LineValues] as string) === null)
+      return `${label} must be a number of 0 or more.`;
   }
   const hours = parseTyped(values.hours) ?? 0;
   if ((parseTyped(values.overtime) ?? 0) > hours) return 'Overtime cannot be more than the labor hours.';
@@ -102,17 +143,31 @@ export function lineProblem(values: LineValues): string | null {
 }
 
 export const isBlank = (values: LineValues): boolean =>
-  ['unitsGood', 'unitsScrap', 'unitsRework', 'people', 'hours', 'overtime', 'setup'].every((field) => (parseTyped(values[field as keyof LineValues] as string) ?? 0) === 0) && values.note.trim() === '';
+  ['unitsGood', 'unitsScrap', 'unitsRework', 'people', 'hours', 'overtime', 'setup'].every(
+    (field) => (parseTyped(values[field as keyof LineValues] as string) ?? 0) === 0,
+  ) && values.note.trim() === '';
 
 export const sameValues = (a: LineValues, b: LineValues): boolean =>
   a.laborClassId === b.laborClassId &&
   a.note.trim() === b.note.trim() &&
-  (['unitsGood', 'unitsScrap', 'unitsRework', 'people', 'hours', 'overtime', 'setup'] as const).every((field) => (parseTyped(a[field]) ?? -1) === (parseTyped(b[field]) ?? -1));
+  (['unitsGood', 'unitsScrap', 'unitsRework', 'people', 'hours', 'overtime', 'setup'] as const).every(
+    (field) => (parseTyped(a[field]) ?? -1) === (parseTyped(b[field]) ?? -1),
+  );
 
 const fixed = (text: string, places: number): string => (parseTyped(text) ?? 0).toFixed(places);
 
 /** The body the server takes for one line. */
-export function toPayload(values: LineValues): { unitsGood: string; unitsScrap: string; unitsRework: string; headcount: string | null; hours: string; overtimeHours: string; setupHours: string; note: string | null; laborClassId: string | null } {
+export function toPayload(values: LineValues): {
+  unitsGood: string;
+  unitsScrap: string;
+  unitsRework: string;
+  headcount: string | null;
+  hours: string;
+  overtimeHours: string;
+  setupHours: string;
+  note: string | null;
+  laborClassId: string | null;
+} {
   const people = parseTyped(values.people) ?? 0;
   return {
     unitsGood: fixed(values.unitsGood, 3),
@@ -200,12 +255,20 @@ export interface PasteResult {
  * rows go to their job (then units, people, hours each, note). Otherwise the block is laid down
  * from the cell that has focus, to the right and down, like a spreadsheet.
  */
-export function planPaste(block: readonly (readonly string[])[], lines: readonly PasteTarget[], startKey: string, startField: LineField): PasteResult {
+export function planPaste(
+  block: readonly (readonly string[])[],
+  lines: readonly PasteTarget[],
+  startKey: string,
+  startField: LineField,
+): PasteResult {
   const changes = new Map<string, Partial<Record<LineField, string>>>();
   let skipped = 0;
   const byNumber = new Map(lines.map((line) => [line.jobNumber.toLowerCase(), line.key]));
   const rowsWithJob = block.filter((cells) => byNumber.has((cells[0] ?? '').toLowerCase()));
-  const byJob = block.length > 0 && rowsWithJob.length >= Math.max(1, block.length - 1) && block.some((cells) => cells.length > 1);
+  const byJob =
+    block.length > 0 &&
+    rowsWithJob.length >= Math.max(1, block.length - 1) &&
+    block.some((cells) => cells.length > 1);
   if (byJob) {
     for (const cells of block) {
       const key = byNumber.get((cells[0] ?? '').toLowerCase());
@@ -273,7 +336,10 @@ export function paceTone(bp: number | null, thresholds: PaceThresholds = DEFAULT
 }
 
 /** Units the usual crew should finish in one shift at the target pace. */
-export function dailyGoal(row: Pick<LogGridRowDTO, 'usualCrew' | 'targetUph'>, shiftHours: string): number | null {
+export function dailyGoal(
+  row: Pick<LogGridRowDTO, 'usualCrew' | 'targetUph'>,
+  shiftHours: string,
+): number | null {
   const people = row.usualCrew.reduce((total, line) => total + Number(line.headcount ?? 0), 0);
   const target = Number(row.targetUph ?? 0);
   const shift = Number(shiftHours);
@@ -282,7 +348,12 @@ export function dailyGoal(row: Pick<LogGridRowDTO, 'usualCrew' | 'targetUph'>, s
 }
 
 /** The live pace readout of one job for the day, from what is typed in its lines right now. */
-export function rowReadout(row: Pick<LogGridRowDTO, 'usualCrew' | 'targetUph'>, lines: readonly LineValues[], shiftHours: string, thresholds?: PaceThresholds): RowReadout {
+export function rowReadout(
+  row: Pick<LogGridRowDTO, 'usualCrew' | 'targetUph'>,
+  lines: readonly LineValues[],
+  shiftHours: string,
+  thresholds?: PaceThresholds,
+): RowReadout {
   let units = 0;
   let hours = 0;
   let setup = 0;
@@ -295,7 +366,16 @@ export function rowReadout(row: Pick<LogGridRowDTO, 'usualCrew' | 'targetUph'>, 
   const uph = units > 0 ? unitsPerHour(units.toFixed(3), paceHours.toFixed(2)) : null;
   const target = row.targetUph ? Number(row.targetUph) : null;
   const bp = uph === null ? null : productivityBp(uph, row.targetUph);
-  return { units, hours, paceHours, uph, targetUph: target, productivityBp: bp, tone: paceTone(bp, thresholds), goalUnits: dailyGoal(row, shiftHours) };
+  return {
+    units,
+    hours,
+    paceHours,
+    uph,
+    targetUph: target,
+    productivityBp: bp,
+    tone: paceTone(bp, thresholds),
+    goalUnits: dailyGoal(row, shiftHours),
+  };
 }
 
 export interface MoneyReadout {
@@ -312,12 +392,35 @@ export interface MoneyReadout {
 
 /** Today's money for a set of saved entries, or null when money is hidden from this reader. */
 export function moneyReadout(entries: readonly ProductionEntryDTO[]): MoneyReadout | null {
-  if (entries.length === 0) return { revenueCents: 0, laborCents: 0, materialCents: 0, sharedCents: 0, costCents: 0, profitCents: 0, marginBp: null, laborPerUnitCents: null, rateCents: null };
-  if (entries.some((entry) => entry.moneyHidden || entry.laborCostCents === null || entry.baseRevenueCents === null)) return null;
-  const sum = (pick: (entry: ProductionEntryDTO) => number | null): bigint => entries.reduce((total, entry) => total + toCents(pick(entry) ?? 0), BigInt(0));
+  if (entries.length === 0)
+    return {
+      revenueCents: 0,
+      laborCents: 0,
+      materialCents: 0,
+      sharedCents: 0,
+      costCents: 0,
+      profitCents: 0,
+      marginBp: null,
+      laborPerUnitCents: null,
+      rateCents: null,
+    };
+  if (
+    entries.some(
+      (entry) => entry.moneyHidden || entry.laborCostCents === null || entry.baseRevenueCents === null,
+    )
+  )
+    return null;
+  const sum = (pick: (entry: ProductionEntryDTO) => number | null): bigint =>
+    entries.reduce((total, entry) => total + toCents(pick(entry) ?? 0), BigInt(0));
   const units = entries.reduce((total, entry) => total + Number(entry.unitsGood), 0);
   const summary = profitSummary(
-    { revenueCents: sum((e) => e.baseRevenueCents), laborCents: sum((e) => e.laborCostCents), materialCents: sum((e) => e.stdMaterialCents), otherCents: BigInt(0), sharedCents: sum((e) => e.sharedCents) },
+    {
+      revenueCents: sum((e) => e.baseRevenueCents),
+      laborCents: sum((e) => e.laborCostCents),
+      materialCents: sum((e) => e.stdMaterialCents),
+      otherCents: BigInt(0),
+      sharedCents: sum((e) => e.sharedCents),
+    },
     units.toFixed(3),
   );
   return {
@@ -328,7 +431,8 @@ export function moneyReadout(entries: readonly ProductionEntryDTO[]): MoneyReado
     costCents: centsToNumber(summary.costCents),
     profitCents: centsToNumber(summary.profitCents),
     marginBp: summary.marginBp,
-    laborPerUnitCents: summary.laborCostPerUnitCents === null ? null : centsToNumber(summary.laborCostPerUnitCents),
+    laborPerUnitCents:
+      summary.laborCostPerUnitCents === null ? null : centsToNumber(summary.laborCostPerUnitCents),
     rateCents: entries.find((entry) => entry.rateCents !== null)?.rateCents ?? null,
   };
 }

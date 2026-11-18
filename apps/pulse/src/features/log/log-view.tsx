@@ -1,9 +1,41 @@
 'use client';
 /** Log work, day view: pick a day and a site, type the day, see pace and money as you go. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, ClipboardPen, Copy, Keyboard, Lock, PackagePlus, RefreshCw, Search, TabletSmartphone, Undo2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardPen,
+  Copy,
+  Keyboard,
+  Lock,
+  PackagePlus,
+  RefreshCw,
+  Search,
+  TabletSmartphone,
+  Undo2,
+} from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Button, Combobox, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Field, IconButton, Input, IsoDatePicker, Kbd, Popover, PopoverContent, PopoverTrigger, Select, Skeleton, toast } from '@/components/ui';
+import {
+  Button,
+  Combobox,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  Field,
+  IconButton,
+  Input,
+  IsoDatePicker,
+  Kbd,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Select,
+  Skeleton,
+  toast,
+} from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
@@ -33,7 +65,15 @@ export interface LogViewProps {
   readonly focusJob?: string | null;
 }
 
-const EMPTY_TOTALS: GridTotals = { units: 0, hours: 0, people: 0, jobsLogged: 0, jobs: 0, money: null, unsaved: 0 };
+const EMPTY_TOTALS: GridTotals = {
+  units: 0,
+  hours: 0,
+  people: 0,
+  jobsLogged: 0,
+  jobs: 0,
+  money: null,
+  unsaved: 0,
+};
 
 export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: LogViewProps) {
   const shell = useShell();
@@ -46,27 +86,40 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
   const [tablet, setTablet] = useState(false);
   const gridRef = useRef<LogGridHandle>(null);
   const isInitial = date === initial.date && siteId === initial.siteId;
-  const grid = useLogGrid({ date, siteId }, { initialData: isInitial ? initial : undefined, placeholderData: undefined, refetchOnWindowFocus: totals.unsaved === 0 });
+  const grid = useLogGrid(
+    { date, siteId },
+    {
+      initialData: isInitial ? initial : undefined,
+      placeholderData: undefined,
+      retry: 1,
+      refetchOnWindowFocus: totals.unsaved === 0,
+    },
+  );
   const crew = usePreviousCrew({ date, siteId }, { enabled: shell.can('production:log') });
   const data = grid.data;
   const site = sites.find((item) => item.id === siteId);
   const today = site?.today ?? initial.today;
   const canLog = shell.can('production:log');
 
-  const go = useCallback((nextDate: string, nextSite = siteId) => {
-    gridRef.current?.flush();
-    setDate(nextDate);
-    setSiteId(nextSite);
-    setFilter('');
-    window.history.replaceState(null, '', routes.log({ date: nextDate, site: nextSite }));
-  }, [siteId]);
+  const go = useCallback(
+    (nextDate: string, nextSite = siteId) => {
+      gridRef.current?.flush();
+      setDate(nextDate);
+      setSiteId(nextSite);
+      setFilter('');
+      window.history.replaceState(null, '', routes.log({ date: nextDate, site: nextSite }));
+    },
+    [siteId],
+  );
 
   useHotkey('[', () => go(addDays(date, -1)));
   useHotkey(']', () => go(addDays(date, 1)));
 
   useEffect(() => {
     if (focusJob && data) {
-      const row = data.rows.find((item) => item.jobId === focusJob || item.jobNumber.toLowerCase() === focusJob.toLowerCase());
+      const row = data.rows.find(
+        (item) => item.jobId === focusJob || item.jobNumber.toLowerCase() === focusJob.toLowerCase(),
+      );
       if (row) setTimeout(() => gridRef.current?.focusJob(row.jobId), 80);
     }
     // Only when the day first shows.
@@ -82,13 +135,22 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
     const done = await complete.run({ siteId, date });
     if (!done) return;
     const flags = done.flags.length;
-    toast.undo(flags > 0 ? `Day marked complete. ${flags} ${flags === 1 ? 'row looks' : 'rows look'} odd, a manager will check.` : 'Day marked complete', {
-      onUndo: async () => {
-        if (shell.can('day:review')) await review.run({ siteId, date, decision: 'reopen' });
-        else toast.info('Ask a manager to send the day back', 'Only a manager can open a day again once it is marked complete.');
+    toast.undo(
+      flags > 0
+        ? `Day marked complete. ${flags} ${flags === 1 ? 'row looks' : 'rows look'} odd, a manager will check.`
+        : 'Day marked complete',
+      {
+        onUndo: async () => {
+          if (shell.can('day:review')) await review.run({ siteId, date, decision: 'reopen' });
+          else
+            toast.info(
+              'Ask a manager to send the day back',
+              'Only a manager can open a day again once it is marked complete.',
+            );
+        },
+        undoLabel: shell.can('day:review') ? 'Undo' : 'How to undo',
       },
-      undoLabel: shell.can('day:review') ? 'Undo' : 'How to undo',
-    });
+    );
   }
 
   async function copyYesterday() {
@@ -105,51 +167,120 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
     return days.length > 0 ? days[days.length - 1]! : null;
   }, [crew.data]);
 
-  const siteOptions = sites.filter((item) => !item.archivedAt || item.id === siteId).map((item) => ({ value: item.id, label: item.name }));
+  const siteOptions = sites
+    .filter((item) => !item.archivedAt || item.id === siteId)
+    .map((item) => ({ value: item.id, label: item.name }));
 
   return (
     <div className="flex flex-col gap-4" data-testid="log-view">
       <Panel bodyClassName="p-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle px-3 py-2.5">
           <div className="flex items-center gap-1" role="group" aria-label="Day">
-            <IconButton label="Day before" shortcut={['[']} icon={<ChevronLeft aria-hidden />} variant="ghost" onClick={() => go(addDays(date, -1))} />
-            <IsoDatePicker value={date} onChange={(value) => value && go(value)} aria-label="Day to log" clearable={false} displayFormat="EEE, MMM d" />
-            <IconButton label="Day after" shortcut={[']']} icon={<ChevronRight aria-hidden />} variant="ghost" onClick={() => go(addDays(date, 1))} />
+            <IconButton
+              label="Day before"
+              shortcut={['[']}
+              icon={<ChevronLeft aria-hidden />}
+              variant="ghost"
+              onClick={() => go(addDays(date, -1))}
+            />
+            <IsoDatePicker
+              value={date}
+              onChange={(value) => value && go(value)}
+              aria-label="Day to log"
+              clearable={false}
+              displayFormat="EEE, MMM d"
+            />
+            <IconButton
+              label="Day after"
+              shortcut={[']']}
+              icon={<ChevronRight aria-hidden />}
+              variant="ghost"
+              onClick={() => go(addDays(date, 1))}
+            />
             {date !== today ? (
               <Button variant="tertiary" onClick={() => go(today)}>
                 Today
               </Button>
             ) : null}
           </div>
-          {siteOptions.length > 1 ? <Select aria-label="Site" value={siteId} onValueChange={(value) => go(date, value)} options={siteOptions} className="w-52 max-w-full" /> : null}
+          {siteOptions.length > 1 ? (
+            <Select
+              aria-label="Site"
+              value={siteId}
+              onValueChange={(value) => go(date, value)}
+              options={siteOptions}
+              className="w-52 max-w-full"
+            />
+          ) : null}
           <div className="order-last w-full sm:order-none sm:ml-auto sm:w-56">
-            <Input leadingIcon={<Search aria-hidden />} value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Find a job" aria-label="Find a job on this day" />
+            <Input
+              leadingIcon={<Search aria-hidden />}
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Find a job"
+              aria-label="Find a job on this day"
+            />
           </div>
           <div className="ml-auto flex items-center gap-1 sm:ml-0">
             {canLog && data?.canEdit ? (
-              <Button variant="secondary" leadingIcon={<Copy aria-hidden />} onClick={() => void copyYesterday()} loading={crew.isFetching && !crew.data} title={crewDay ? `Fills people and hours from the last day each job ran, most recently ${shortDate(crewDay)}` : undefined}>
+              <Button
+                variant="secondary"
+                leadingIcon={<Copy aria-hidden />}
+                onClick={() => void copyYesterday()}
+                loading={crew.isFetching && !crew.data}
+                title={
+                  crewDay
+                    ? `Fills people and hours from the last day each job ran, most recently ${shortDate(crewDay)}`
+                    : undefined
+                }
+              >
                 <span className="hidden sm:inline">Copy yesterday’s crew</span>
                 <span className="sm:hidden">Copy crew</span>
               </Button>
             ) : null}
             {shell.can('job:manage') ? (
-              <Button variant="secondary" leadingIcon={<PackagePlus aria-hidden />} onClick={() => setQuickAdd(true)}>
+              <Button
+                variant="secondary"
+                leadingIcon={<PackagePlus aria-hidden />}
+                onClick={() => setQuickAdd(true)}
+              >
                 <span className="hidden sm:inline">Add a job</span>
                 <span className="sm:hidden">Job</span>
               </Button>
             ) : null}
-            {canLog ? <IconButton label="Floor tablet" icon={<TabletSmartphone aria-hidden />} variant="ghost" onClick={() => setTablet(true)} /> : null}
+            {canLog ? (
+              <IconButton
+                label="Floor tablet"
+                icon={<TabletSmartphone aria-hidden />}
+                variant="ghost"
+                onClick={() => setTablet(true)}
+              />
+            ) : null}
             <KeysHelp />
           </div>
         </div>
 
-        {data ? <DayBanner data={data} onReopen={shell.can('day:review') ? () => void review.run({ siteId, date, decision: 'reopen' }) : undefined} reopening={review.pending} /> : null}
+        {data ? (
+          <DayBanner
+            data={data}
+            onReopen={
+              shell.can('day:review')
+                ? () => void review.run({ siteId, date, decision: 'reopen' })
+                : undefined
+            }
+            reopening={review.pending}
+          />
+        ) : null}
 
         {grid.isError && !data ? (
           <div className="flex flex-col items-center gap-3 px-6 py-12 text-center" role="alert">
             <p className="text-base font-medium text-fg">We could not load this day</p>
             <p className="max-w-md text-sm text-fg-muted">{grid.error.message}</p>
-            <Button variant="secondary" leadingIcon={<RefreshCw aria-hidden />} onClick={() => void grid.refetch()}>
+            <Button
+              variant="secondary"
+              leadingIcon={<RefreshCw aria-hidden />}
+              onClick={() => void grid.refetch()}
+            >
               Try again
             </Button>
           </div>
@@ -164,7 +295,11 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
             icon={ClipboardPen}
             title="No jobs are running on this day"
             why="Each active job at this site gets one row here. Type the units finished, how many people worked on it and the hours each, and Pulse works out the labor cost and the pace."
-            points={['Tab and Enter move through the grid, no mouse needed', 'Pace against the target shows as you type', 'Every row saves itself, with undo']}
+            points={[
+              'Tab and Enter move through the grid, no mouse needed',
+              'Pace against the target shows as you type',
+              'Every row saves itself, with undo',
+            ]}
             actions={
               <>
                 {shell.can('job:manage') ? (
@@ -177,16 +312,32 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
                 </ButtonLink>
               </>
             }
-            footnote={shell.can('job:manage') ? 'A job shows up here once it is active and its start day has come.' : 'Ask a manager to add the first job, then come back to log the day.'}
+            footnote={
+              shell.can('job:manage')
+                ? 'A job shows up here once it is active and its start day has come.'
+                : 'Ask a manager to add the first job, then come back to log the day.'
+            }
           />
         ) : (
           <div className="py-2">
-            <LogGrid key={`${data.date}:${data.siteId}`} ref={gridRef} grid={data} laborClasses={laborClasses} thresholds={thresholds} seesMoney={shell.seesMoney} filter={filter} onTotals={setTotals} />
+            <LogGrid
+              key={`${data.date}:${data.siteId}`}
+              ref={gridRef}
+              grid={data}
+              laborClasses={laborClasses}
+              thresholds={thresholds}
+              seesMoney={shell.seesMoney}
+              filter={filter}
+              onTotals={setTotals}
+            />
           </div>
         )}
 
         {data && data.rows.length > 0 ? (
-          <div data-testid="log-totals" className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border-default bg-sunken px-4 py-3">
+          <div
+            data-testid="log-totals"
+            className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border-default bg-sunken px-4 py-3"
+          >
             <Total label="Units good" value={formatNumber(totals.units, { maxDigits: 0 })} />
             <Total label="Labor hours" value={formatHours(totals.hours)} />
             <Total label="Jobs logged" value={`${totals.jobsLogged} of ${totals.jobs}`} />
@@ -194,20 +345,39 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
               <>
                 <Total label="Labor cost today" value={formatMoney(totals.money.laborCents)} />
                 <Total label="Earned today" value={formatMoney(totals.money.revenueCents)} />
-                <Total label="Margin today" value={totals.money.marginBp === null ? 'No revenue yet' : formatPercentBp(totals.money.marginBp)} tone={totals.money.profitCents < 0 ? 'bad' : undefined} hint="Earned minus labor, materials and the share of time not on a job, divided by earned. Open the info button on a row for its own numbers." />
+                <Total
+                  label="Margin today"
+                  value={
+                    totals.money.marginBp === null ? 'No revenue yet' : formatPercentBp(totals.money.marginBp)
+                  }
+                  tone={totals.money.profitCents < 0 ? 'bad' : undefined}
+                  hint="Earned minus labor, materials and the share of time not on a job, divided by earned. Open the info button on a row for its own numbers."
+                />
               </>
             ) : null}
             <div className="ml-auto flex items-center gap-3">
               <span className="text-xs text-fg-muted" aria-live="polite">
-                {totals.unsaved > 0 ? `Saving ${totals.unsaved} ${totals.unsaved === 1 ? 'row' : 'rows'}` : 'All changes saved'}
+                {totals.unsaved > 0
+                  ? `Saving ${totals.unsaved} ${totals.unsaved === 1 ? 'row' : 'rows'}`
+                  : 'All changes saved'}
               </span>
               {canLog && data.canEdit && !data.review ? (
-                <Button leadingIcon={<CheckCircle2 aria-hidden />} onClick={() => void markComplete()} loading={complete.pending} disabled={totals.unsaved > 0}>
+                <Button
+                  leadingIcon={<CheckCircle2 aria-hidden />}
+                  onClick={() => void markComplete()}
+                  loading={complete.pending}
+                  disabled={totals.unsaved > 0}
+                >
                   Mark day complete
                 </Button>
               ) : null}
               {canLog && data.canEdit && data.review?.status === 'sent_back' ? (
-                <Button leadingIcon={<CheckCircle2 aria-hidden />} onClick={() => void markComplete()} loading={complete.pending} disabled={totals.unsaved > 0}>
+                <Button
+                  leadingIcon={<CheckCircle2 aria-hidden />}
+                  onClick={() => void markComplete()}
+                  loading={complete.pending}
+                  disabled={totals.unsaved > 0}
+                >
                   Mark complete again
                 </Button>
               ) : null}
@@ -218,7 +388,16 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
 
       {data ? (
         <Panel>
-          <OtherTimeStrip date={data.date} siteId={data.siteId} indirect={data.indirect} paid={data.paid} laborClasses={laborClasses} canEdit={data.canEdit && canLog} seesMoney={shell.seesMoney} shiftHours={data.shiftHours} />
+          <OtherTimeStrip
+            date={data.date}
+            siteId={data.siteId}
+            indirect={data.indirect}
+            paid={data.paid}
+            laborClasses={laborClasses}
+            canEdit={data.canEdit && canLog}
+            seesMoney={shell.seesMoney}
+            shiftHours={data.shiftHours}
+          />
         </Panel>
       ) : null}
 
@@ -235,7 +414,11 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
       />
       <Dialog open={tablet} onOpenChange={setTablet}>
         <DialogContent size="lg">
-          <DialogHeader title="Floor tablet" description="A shared tablet on the floor for logging units, people and hours. It needs no sign in: people pick their name and type a 4 digit PIN." icon={<TabletSmartphone aria-hidden />} />
+          <DialogHeader
+            title="Floor tablet"
+            description="A shared tablet on the floor for logging units, people and hours. It needs no sign in: people pick their name and type a 4 digit PIN."
+            icon={<TabletSmartphone aria-hidden />}
+          />
           <DialogBody>
             <DeviceLinksPanel kind="kiosk" defaultSiteId={siteId} />
           </DialogBody>
@@ -245,40 +428,80 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
   );
 }
 
-function Total({ label, value, tone, hint }: { readonly label: string; readonly value: string; readonly tone?: 'bad'; readonly hint?: string }) {
+function Total({
+  label,
+  value,
+  tone,
+  hint,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly tone?: 'bad';
+  readonly hint?: string;
+}) {
   return (
     <div className="flex flex-col" title={hint}>
       <span className="text-xs text-fg-muted">{label}</span>
-      <span className={cn('text-md font-semibold tabular-nums', tone === 'bad' ? 'text-danger-text' : 'text-fg')}>{value}</span>
+      <span
+        className={cn('text-md font-semibold tabular-nums', tone === 'bad' ? 'text-danger-text' : 'text-fg')}
+      >
+        {value}
+      </span>
     </div>
   );
 }
 
-function DayBanner({ data, onReopen, reopening }: { readonly data: LogGridDTO; readonly onReopen?: () => void; readonly reopening: boolean }) {
+function DayBanner({
+  data,
+  onReopen,
+  reopening,
+}: {
+  readonly data: LogGridDTO;
+  readonly onReopen?: () => void;
+  readonly reopening: boolean;
+}) {
   const review = data.review;
   if (!review && data.canEdit) return null;
   const sentBack = review?.status === 'sent_back';
-  const tone = sentBack ? 'bg-warning-subtle text-warning-text' : review?.status === 'approved' ? 'bg-success-subtle text-success-text' : 'bg-info-subtle text-info-text';
+  const tone = sentBack
+    ? 'bg-warning-subtle text-warning-text'
+    : review?.status === 'approved'
+      ? 'bg-success-subtle text-success-text'
+      : 'bg-info-subtle text-info-text';
   const words = data.monthClosed
     ? 'This month is closed, so the day cannot change. An owner can reopen the month under Settings, Month close.'
     : sentBack
       ? `A manager sent this day back${review?.note ? `: “${review.note}”` : '.'} Fix it, then mark it complete again.`
       : review?.status === 'approved'
-        ? 'This day is approved. A manager can still change it.'
+        ? data.canEdit
+          ? 'This day is approved. You can still change it, and the numbers update right away.'
+          : (data.lockedReason ?? 'This day is approved. Ask a manager if it needs a fix.')
         : review?.status === 'complete'
           ? data.canEdit
             ? 'This day is marked complete and is waiting for review. You can still fix rows.'
             : 'This day is marked complete. Ask a manager to send it back if it needs a fix.'
           : (data.lockedReason ?? 'You can look at this day but not change it.');
   return (
-    <div data-testid="day-banner" role="status" className={cn('flex flex-wrap items-center gap-2 px-4 py-2 text-sm', tone)}>
-      {sentBack ? <Undo2 aria-hidden className="size-4 shrink-0" /> : review?.status ? <CheckCircle2 aria-hidden className="size-4 shrink-0" /> : <Lock aria-hidden className="size-4 shrink-0" />}
+    <div
+      data-testid="day-banner"
+      role="status"
+      className={cn('flex flex-wrap items-center gap-2 px-4 py-2 text-sm', tone)}
+    >
+      {sentBack ? (
+        <Undo2 aria-hidden className="size-4 shrink-0" />
+      ) : review?.status ? (
+        <CheckCircle2 aria-hidden className="size-4 shrink-0" />
+      ) : (
+        <Lock aria-hidden className="size-4 shrink-0" />
+      )}
       <span className="min-w-0 flex-1">{words}</span>
       {review && !data.monthClosed ? (
         <span className="flex items-center gap-2">
-          <ButtonLink href={routes.logReview()} variant="tertiary" size="sm">
-            Open review
-          </ButtonLink>
+          {onReopen ? (
+            <ButtonLink href={routes.logReview()} variant="tertiary" size="sm">
+              Open review
+            </ButtonLink>
+          ) : null}
           {onReopen && review.status !== 'sent_back' ? (
             <Button variant="secondary" size="sm" onClick={onReopen} loading={reopening}>
               Open the day again
@@ -319,15 +542,35 @@ function KeysHelp() {
           ))}
         </ul>
         <h3 className="mt-3 text-sm font-semibold text-fg">Paste from a spreadsheet</h3>
-        <p className="mt-1 text-sm text-fg-secondary">Copy cells in your spreadsheet, click a cell here and paste. The cells fill to the right and down from where you clicked.</p>
-        <p className="mt-1 text-sm text-fg-secondary">If the first copied column holds job numbers, each row goes to its job. The next columns are units, people, hours each and a note.</p>
-        <p className="mt-2 text-xs text-fg-muted">Rows save by themselves. Each row has its own undo, and a paste can be undone in one go.</p>
+        <p className="mt-1 text-sm text-fg-secondary">
+          Copy cells in your spreadsheet, click a cell here and paste. The cells fill to the right and down
+          from where you clicked.
+        </p>
+        <p className="mt-1 text-sm text-fg-secondary">
+          If the first copied column holds job numbers, each row goes to its job. The next columns are units,
+          people, hours each and a note.
+        </p>
+        <p className="mt-2 text-xs text-fg-muted">
+          Rows save by themselves. Each row has its own undo, and a paste can be undone in one go.
+        </p>
       </PopoverContent>
     </Popover>
   );
 }
 
-function QuickAddJob({ open, onOpenChange, siteId, date, onAdded }: { readonly open: boolean; readonly onOpenChange: (open: boolean) => void; readonly siteId: string; readonly date: string; readonly onAdded: (jobId: string) => void | Promise<void> }) {
+function QuickAddJob({
+  open,
+  onOpenChange,
+  siteId,
+  date,
+  onAdded,
+}: {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly siteId: string;
+  readonly date: string;
+  readonly onAdded: (jobId: string) => void | Promise<void>;
+}) {
   const clients = useClients({ activeOnly: true }, { enabled: open });
   const [clientId, setClientId] = useState<string | null>(null);
   const [clientName, setClientName] = useState('');
@@ -341,9 +584,22 @@ function QuickAddJob({ open, onOpenChange, siteId, date, onAdded }: { readonly o
     if (!clientId && !clientName.trim()) return setError('Pick a client, or type a new client name.');
     if (!name.trim()) return setError('Give the job a name.');
     setError(null);
-    const job = await add.run({ clientId, clientName: clientId ? null : clientName.trim(), name: name.trim(), plannedUnits: units.trim() ? units.replace(/,/g, '') : null, unitPrice: price.trim() ? price.replace(/[$,]/g, '') : null, siteId });
+    const job = await add.run({
+      clientId,
+      clientName: clientId ? null : clientName.trim(),
+      name: name.trim(),
+      plannedUnits: units.trim() ? units.replace(/,/g, '') : null,
+      unitPrice: price.trim() ? price.replace(/[$,]/g, '') : null,
+      siteId,
+    });
     if (!job) {
-      setError(add.fieldErrors.name ?? add.fieldErrors.plannedUnits ?? add.fieldErrors.unitPrice ?? add.fieldErrors.clientId ?? 'We could not add the job. Check the numbers and try again.');
+      setError(
+        add.fieldErrors.name ??
+          add.fieldErrors.plannedUnits ??
+          add.fieldErrors.unitPrice ??
+          add.fieldErrors.clientId ??
+          'We could not add the job. Check the numbers and try again.',
+      );
       return;
     }
     toast.success(`Added ${job.number}`, `It is on the grid for ${formatLongDate(date)}.`);
@@ -354,7 +610,11 @@ function QuickAddJob({ open, onOpenChange, siteId, date, onAdded }: { readonly o
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
-        <DialogHeader title="Add a job" description="For a job that is running today and is not on the grid yet. You can fill in the rest on the job page later." icon={<PackagePlus aria-hidden />} />
+        <DialogHeader
+          title="Add a job"
+          description="For a job that is running today and is not on the grid yet. You can fill in the rest on the job page later."
+          icon={<PackagePlus aria-hidden />}
+        />
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -362,7 +622,11 @@ function QuickAddJob({ open, onOpenChange, siteId, date, onAdded }: { readonly o
           }}
         >
           <DialogBody className="flex flex-col gap-3">
-            <Field label="Client" required hint={clientId ? undefined : 'Pick one, or type a new name below.'}>
+            <Field
+              label="Client"
+              required
+              hint={clientId ? undefined : 'Pick one, or type a new name below.'}
+            >
               {({ inputId }) => (
                 <Combobox
                   id={inputId}
@@ -376,14 +640,52 @@ function QuickAddJob({ open, onOpenChange, siteId, date, onAdded }: { readonly o
               )}
             </Field>
             {!clientId ? (
-              <Field label="Or a new client">{({ inputId }) => <Input id={inputId} value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Client name" maxLength={200} />}</Field>
+              <Field label="Or a new client">
+                {({ inputId }) => (
+                  <Input
+                    id={inputId}
+                    value={clientName}
+                    onChange={(event) => setClientName(event.target.value)}
+                    placeholder="Client name"
+                    maxLength={200}
+                  />
+                )}
+              </Field>
             ) : null}
             <Field label="Job name" required>
-              {({ inputId }) => <Input id={inputId} value={name} onChange={(event) => setName(event.target.value)} placeholder="Holiday gift set, wave 2" maxLength={200} />}
+              {({ inputId }) => (
+                <Input
+                  id={inputId}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Holiday gift set, wave 2"
+                  maxLength={200}
+                />
+              )}
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Units planned">{({ inputId }) => <Input id={inputId} inputMode="decimal" value={units} onChange={(event) => setUnits(event.target.value)} placeholder="5,000" />}</Field>
-              <Field label="Price for each unit">{({ inputId }) => <Input id={inputId} inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="1.25" />}</Field>
+              <Field label="Units planned">
+                {({ inputId }) => (
+                  <Input
+                    id={inputId}
+                    inputMode="decimal"
+                    value={units}
+                    onChange={(event) => setUnits(event.target.value)}
+                    placeholder="5,000"
+                  />
+                )}
+              </Field>
+              <Field label="Price for each unit">
+                {({ inputId }) => (
+                  <Input
+                    id={inputId}
+                    inputMode="decimal"
+                    value={price}
+                    onChange={(event) => setPrice(event.target.value)}
+                    placeholder="1.25"
+                  />
+                )}
+              </Field>
             </div>
             {error ? (
               <p role="alert" className="text-sm text-danger-text">

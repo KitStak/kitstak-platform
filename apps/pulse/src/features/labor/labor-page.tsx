@@ -19,15 +19,26 @@ function parseTab(value: string | string[] | undefined, fallback: LaborTab): Lab
 }
 
 /** Labor: Rates (the real cost of an hour), Time (where paid hours go) and Cost. */
-export async function LaborPage({ searchParams }: { readonly searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+export async function LaborPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const requested = (await searchParams).tab;
   const page = await pulsePage(routes.labor(), 'labor');
   if (page.blocked) return <PageBlocked title="Labor" role={page.access.role} />;
   // Rates need `rate:manage`; Cost shows money. Supervisors and no money viewers get Time only.
-  const tabs = LABOR_TABS.filter((id) => (id === 'rates' ? page.can('rate:manage') : id === 'cost' ? page.access.seesMoney : true));
+  const tabs = LABOR_TABS.filter((id) =>
+    id === 'rates' ? page.can('rate:manage') : id === 'cost' ? page.access.seesMoney : true,
+  );
   const tab = parseTab(requested, tabs[0] ?? 'time');
-  if (!tabs.includes(tab)) return <PageBlocked title={`Labor ${TAB_LABELS[tab].toLowerCase()}`} role={page.access.role} />;
-  const [sites, laborClasses, settings] = await Promise.all([listSites(page.ctx), listLaborClasses(page.ctx, { includeArchived: true }), getSettings(page.ctx)]);
+  if (!tabs.includes(tab))
+    return <PageBlocked title={`Labor ${TAB_LABELS[tab].toLowerCase()}`} role={page.access.role} />;
+  const [sites, laborClasses, settings] = await Promise.all([
+    listSites(page.ctx),
+    listLaborClasses(page.ctx, { includeArchived: true }),
+    getSettings(page.ctx),
+  ]);
   const today = sites.find((site) => site.isDefault)?.today ?? sites[0]?.today ?? todayIso();
   const rates = tab === 'rates' ? await listLaborRates(page.ctx) : [];
   const importStream = tab === 'rates' ? 'labor_rates' : 'paid_hours';
@@ -38,14 +49,36 @@ export async function LaborPage({ searchParams }: { readonly searchParams: Promi
       subtitle="What an hour really costs, where paid time goes, and what labor adds up to."
       actions={
         canImport && tab !== 'cost' ? (
-          <ButtonLink href={routes.newImport(importStream)} variant="secondary" icon={<FileSpreadsheet aria-hidden />}>
+          <ButtonLink
+            href={routes.newImport(importStream)}
+            variant="secondary"
+            icon={<FileSpreadsheet aria-hidden />}
+          >
             {tab === 'rates' ? 'Import labor rates' : 'Import paid hours'}
           </ButtonLink>
         ) : null
       }
-      tabs={<RouteTabs label="Labor views" active={tab} tabs={tabs.map((id) => ({ id, label: TAB_LABELS[id], href: routes.labor(id) }))} />}
+      tabs={
+        <RouteTabs
+          label="Labor views"
+          active={tab}
+          tabs={tabs.map((id) => ({ id, label: TAB_LABELS[id], href: routes.labor(id) }))}
+        />
+      }
     >
-      {tab === 'rates' ? <RatesView initialClasses={laborClasses} initialRates={rates} sites={sites} settings={settings} today={today} /> : tab === 'time' ? <TimeView sites={sites} laborClasses={laborClasses} settings={settings} today={today} /> : <CostView sites={sites} today={today} />}
+      {tab === 'rates' ? (
+        <RatesView
+          initialClasses={laborClasses}
+          initialRates={rates}
+          sites={sites}
+          settings={settings}
+          today={today}
+        />
+      ) : tab === 'time' ? (
+        <TimeView sites={sites} laborClasses={laborClasses} settings={settings} today={today} />
+      ) : (
+        <CostView sites={sites} today={today} />
+      )}
     </Page>
   );
 }

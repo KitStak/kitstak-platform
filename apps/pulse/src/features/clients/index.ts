@@ -1,1 +1,1 @@
-export { ClientPage } from './client-page';
+export { ClientByLinkPage, ClientPage } from './client-page';

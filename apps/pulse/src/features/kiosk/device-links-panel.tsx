@@ -5,7 +5,18 @@
  * Mount it anywhere inside the signed in shell: `<DeviceLinksPanel kind="kiosk" />`.
  */
 import { useState } from 'react';
-import { Check, Copy, ExternalLink, KeyRound, Link2, Plus, Power, RefreshCw, TabletSmartphone, Tv } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  KeyRound,
+  Link2,
+  Plus,
+  Power,
+  RefreshCw,
+  TabletSmartphone,
+  Tv,
+} from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Badge, Button, IconButton, Input, Select, Skeleton, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
@@ -18,15 +29,36 @@ import { PULSE_ROLE_LABELS, canPulse } from '@/lib/permissions';
 import { shortDate } from '@/lib/profit';
 import { qk } from '@/lib/query-keys';
 import type { CreatedDeviceLinkDTO, DeviceLinkDTO } from '@/lib/types';
-import { createDeviceLinkAction, renewDeviceLinkAction, revokeDeviceLinkAction, setMyKioskPinAction } from '@/server/actions/floor';
+import {
+  createDeviceLinkAction,
+  renewDeviceLinkAction,
+  revokeDeviceLinkAction,
+  setMyKioskPinAction,
+} from '@/server/actions/floor';
 import { setKioskPinAction } from '@/server/actions/settings';
 
 const WORDS = {
-  kiosk: { one: 'floor tablet link', icon: TabletSmartphone, placeholder: 'Line 2 tablet', empty: 'No floor tablet links yet. Make one, then open it on the tablet and keep that page open.' },
-  wall: { one: 'wall display link', icon: Tv, placeholder: 'Break room TV', empty: 'No wall display links yet. Make one, then open it on the TV browser.' },
+  kiosk: {
+    one: 'floor tablet link',
+    icon: TabletSmartphone,
+    placeholder: 'Line 2 tablet',
+    empty: 'No floor tablet links yet. Make one, then open it on the tablet and keep that page open.',
+  },
+  wall: {
+    one: 'wall display link',
+    icon: Tv,
+    placeholder: 'Break room TV',
+    empty: 'No wall display links yet. Make one, then open it on the TV browser.',
+  },
 } as const;
 
-export function DeviceLinksPanel({ kind, defaultSiteId }: { readonly kind: 'kiosk' | 'wall'; readonly defaultSiteId?: string | null }) {
+export function DeviceLinksPanel({
+  kind,
+  defaultSiteId,
+}: {
+  readonly kind: 'kiosk' | 'wall';
+  readonly defaultSiteId?: string | null;
+}) {
   const shell = useShell();
   const canManage = shell.can('device:manage');
   const queryClient = useQueryClient();
@@ -41,14 +73,23 @@ export function DeviceLinksPanel({ kind, defaultSiteId }: { readonly kind: 'kios
   const revoke = useServerAction(revokeDeviceLinkAction, { invalidate });
   const renew = useServerAction(renewDeviceLinkAction, { invalidate });
   const words = WORDS[kind];
-  const siteOptions = (sites.data ?? []).filter((site) => !site.archivedAt).map((site) => ({ value: site.id, label: site.name }));
-  const chosenSite = siteId ?? siteOptions.find((option) => (sites.data ?? []).find((site) => site.id === option.value)?.isDefault)?.value ?? siteOptions[0]?.value;
+  const siteOptions = (sites.data ?? [])
+    .filter((site) => !site.archivedAt)
+    .map((site) => ({ value: site.id, label: site.name }));
+  const chosenSite =
+    siteId ??
+    siteOptions.find((option) => (sites.data ?? []).find((site) => site.id === option.value)?.isDefault)
+      ?.value ??
+    siteOptions[0]?.value;
 
   const urlOf = (path: string) => (typeof window === 'undefined' ? path : `${window.location.origin}${path}`);
 
   async function make() {
     if (!name.trim()) {
-      toast.warning('Give the link a name', `For example "${words.placeholder}", so you can tell links apart later.`);
+      toast.warning(
+        'Give the link a name',
+        `For example "${words.placeholder}", so you can tell links apart later.`,
+      );
       return;
     }
     const made = await create.run({ kind, name: name.trim(), siteId: chosenSite ?? null });
@@ -94,12 +135,23 @@ export function DeviceLinksPanel({ kind, defaultSiteId }: { readonly kind: 'kios
           >
             <label className="flex flex-col gap-1 text-xs text-fg-muted">
               Name of the device
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={words.placeholder} maxLength={80} aria-label="Name of the device" />
+              <Input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder={words.placeholder}
+                maxLength={80}
+                aria-label="Name of the device"
+              />
             </label>
             {siteOptions.length > 1 ? (
               <label className="flex flex-col gap-1 text-xs text-fg-muted">
                 Site
-                <Select aria-label="Site for the device" value={chosenSite} onValueChange={setSiteId} options={siteOptions} />
+                <Select
+                  aria-label="Site for the device"
+                  value={chosenSite}
+                  onValueChange={setSiteId}
+                  options={siteOptions}
+                />
               </label>
             ) : (
               <span className="hidden sm:block" />
@@ -109,26 +161,50 @@ export function DeviceLinksPanel({ kind, defaultSiteId }: { readonly kind: 'kios
             </Button>
           </form>
           {fresh ? (
-            <div role="status" data-testid="new-device-link" className="flex flex-col gap-2 rounded-lg border border-success/40 bg-success-subtle p-3">
+            <div
+              role="status"
+              data-testid="new-device-link"
+              className="flex flex-col gap-2 rounded-lg border border-success/40 bg-success-subtle p-3"
+            >
               <p className="text-sm font-medium text-fg">
-                <Check aria-hidden className="mr-1 inline size-4 align-[-3px] text-success-text" />
-                “{fresh.link.name}” is ready. Copy the link now: for safety, Pulse cannot show it again.
+                <Check aria-hidden className="mr-1 inline size-4 align-[-3px] text-success-text" />“
+                {fresh.link.name}” is ready. Copy the link now: for safety, Pulse cannot show it again.
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                <input readOnly aria-label="The new link" value={urlOf(fresh.path)} onFocus={(event) => event.currentTarget.select()} className="h-9 min-w-0 flex-1 basis-64 rounded-md border border-border-input bg-panel px-2 font-mono text-xs text-fg" />
-                <Button variant="secondary" leadingIcon={copied ? <Check aria-hidden /> : <Copy aria-hidden />} onClick={() => void copy(fresh.path)}>
+                <input
+                  readOnly
+                  aria-label="The new link"
+                  value={urlOf(fresh.path)}
+                  onFocus={(event) => event.currentTarget.select()}
+                  className="h-9 min-w-0 flex-1 basis-64 rounded-md border border-border-input bg-panel px-2 font-mono text-xs text-fg"
+                />
+                <Button
+                  variant="secondary"
+                  leadingIcon={copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+                  onClick={() => void copy(fresh.path)}
+                >
                   {copied ? 'Copied' : 'Copy link'}
                 </Button>
-                <a href={fresh.path} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-focus">
+                <a
+                  href={fresh.path}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-focus"
+                >
                   Open <ExternalLink aria-hidden className="size-3.5" />
                 </a>
               </div>
-              <p className="text-xs text-fg-secondary">It works for 90 days at {fresh.link.siteName}. Anyone with the link can open the screen, so share it only with the device.</p>
+              <p className="text-xs text-fg-secondary">
+                It works for 90 days at {fresh.link.siteName}. Anyone with the link can open the screen, so
+                share it only with the device.
+              </p>
             </div>
           ) : null}
         </section>
       ) : (
-        <p className="rounded-lg border border-border-subtle bg-sunken px-3 py-2 text-sm text-fg-secondary">A manager makes the link for a shared device. You can set your own PIN below.</p>
+        <p className="rounded-lg border border-border-subtle bg-sunken px-3 py-2 text-sm text-fg-secondary">
+          A manager makes the link for a shared device. You can set your own PIN below.
+        </p>
       )}
 
       {canManage ? (
@@ -140,9 +216,17 @@ export function DeviceLinksPanel({ kind, defaultSiteId }: { readonly kind: 'kios
               <Skeleton height={44} className="w-full" />
             </div>
           ) : links.isError ? (
-            <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-danger/40 bg-danger-subtle px-3 py-2 text-sm text-danger-text">
+            <div
+              role="alert"
+              className="flex items-center justify-between gap-3 rounded-lg border border-danger/40 bg-danger-subtle px-3 py-2 text-sm text-danger-text"
+            >
               <span>We could not load the links. {links.error.message}</span>
-              <Button variant="secondary" size="sm" leadingIcon={<RefreshCw aria-hidden />} onClick={() => void links.refetch()}>
+              <Button
+                variant="secondary"
+                size="sm"
+                leadingIcon={<RefreshCw aria-hidden />}
+                onClick={() => void links.refetch()}
+              >
                 Try again
               </Button>
             </div>
@@ -159,14 +243,30 @@ export function DeviceLinksPanel({ kind, defaultSiteId }: { readonly kind: 'kios
                   <div className="min-w-0 flex-1 basis-48">
                     <p className="truncate text-sm font-medium text-fg">{link.name}</p>
                     <p className="truncate text-xs text-fg-muted">
-                      {link.siteName}. Starts with <span className="font-mono">{link.tokenPrefix}</span>. {link.lastSeenAt ? `Last opened ${formatRelative(link.lastSeenAt)}` : 'Not opened yet'}.
+                      {link.siteName}. Starts with <span className="font-mono">{link.tokenPrefix}</span>.{' '}
+                      {link.lastSeenAt ? `Last opened ${formatRelative(link.lastSeenAt)}` : 'Not opened yet'}.
                     </p>
                   </div>
-                  <Badge tone={link.status === 'active' ? 'success' : link.status === 'expired' ? 'warning' : 'neutral'}>
-                    {link.status === 'active' ? `Works until ${shortDate(link.expiresAt.slice(0, 10))}` : link.status === 'expired' ? 'Ran out' : 'Turned off'}
+                  <Badge
+                    tone={
+                      link.status === 'active' ? 'success' : link.status === 'expired' ? 'warning' : 'neutral'
+                    }
+                  >
+                    {link.status === 'active'
+                      ? `Works until ${shortDate(link.expiresAt.slice(0, 10))}`
+                      : link.status === 'expired'
+                        ? 'Ran out'
+                        : 'Turned off'}
                   </Badge>
                   {link.status === 'active' ? (
-                    <IconButton label={`Turn off ${link.name}`} icon={<Power aria-hidden />} size="sm" variant="ghost" loading={revoke.pending} onClick={() => void turnOff(link)} />
+                    <IconButton
+                      label={`Turn off ${link.name}`}
+                      icon={<Power aria-hidden />}
+                      size="sm"
+                      variant="ghost"
+                      loading={revoke.pending}
+                      onClick={() => void turnOff(link)}
+                    />
                   ) : (
                     <Button
                       variant="secondary"
@@ -174,7 +274,11 @@ export function DeviceLinksPanel({ kind, defaultSiteId }: { readonly kind: 'kios
                       loading={renew.pending}
                       onClick={() =>
                         void renew.run({ linkId: link.id }).then((done) => {
-                          if (done) toast.success(`"${link.name}" works again`, 'The same link is good for 90 more days.');
+                          if (done)
+                            toast.success(
+                              `"${link.name}" works again`,
+                              'The same link is good for 90 more days.',
+                            );
                         })
                       }
                     >
@@ -193,7 +297,15 @@ export function DeviceLinksPanel({ kind, defaultSiteId }: { readonly kind: 'kios
   );
 }
 
-function PinField({ label, onSave, pending }: { readonly label: string; readonly onSave: (pin: string) => Promise<boolean>; readonly pending: boolean }) {
+function PinField({
+  label,
+  onSave,
+  pending,
+}: {
+  readonly label: string;
+  readonly onSave: (pin: string) => Promise<boolean>;
+  readonly pending: boolean;
+}) {
   const [pin, setPin] = useState('');
   return (
     <form
@@ -241,7 +353,10 @@ function KioskPins() {
         toast.error("Couldn't save the PIN", result.error.message);
         return false;
       }
-      toast.success(pin ? `PIN set for ${name}` : `PIN removed for ${name}`, pin ? 'Tell them the 4 digits in person.' : undefined);
+      toast.success(
+        pin ? `PIN set for ${name}` : `PIN removed for ${name}`,
+        pin ? 'Tell them the 4 digits in person.' : undefined,
+      );
       await queryClient.invalidateQueries({ queryKey: qk.roles() });
       return true;
     } catch {
@@ -258,12 +373,19 @@ function KioskPins() {
       <h3 className="flex items-center gap-1.5 text-sm font-semibold text-fg">
         <KeyRound aria-hidden className="size-4 text-icon" /> PINs
       </h3>
-      <p className="text-sm text-fg-muted">On the tablet, people pick their name and type a 4 digit PIN. Only people with a PIN show up there. Entries are saved under the person who unlocked.</p>
+      <p className="text-sm text-fg-muted">
+        On the tablet, people pick their name and type a 4 digit PIN. Only people with a PIN show up there.
+        Entries are saved under the person who unlocked.
+      </p>
       {mine.data?.canUseKiosk ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border-subtle px-3 py-2">
           <div>
             <p className="text-sm font-medium text-fg">Your PIN</p>
-            <p className={cn('text-xs', mine.data.hasKioskPin ? 'text-success-text' : 'text-fg-muted')}>{mine.data.hasKioskPin ? 'You have a PIN. Set a new one any time.' : 'You do not have a PIN yet.'}</p>
+            <p className={cn('text-xs', mine.data.hasKioskPin ? 'text-success-text' : 'text-fg-muted')}>
+              {mine.data.hasKioskPin
+                ? 'You have a PIN. Set a new one any time.'
+                : 'You do not have a PIN yet.'}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <PinField
@@ -294,7 +416,10 @@ function KioskPins() {
         people.isLoading ? (
           <Skeleton height={44} className="w-full" />
         ) : floorPeople.length === 0 ? (
-          <p className="text-sm text-fg-muted">Nobody else can log production yet. Give people the Supervisor role under Settings, People and roles.</p>
+          <p className="text-sm text-fg-muted">
+            Nobody else can log production yet. Give people the Supervisor role under Settings, People and
+            roles.
+          </p>
         ) : (
           <ul className="divide-y divide-border-subtle rounded-lg border border-border-subtle">
             {floorPeople

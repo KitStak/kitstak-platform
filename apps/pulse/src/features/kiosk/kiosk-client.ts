@@ -23,14 +23,28 @@ export interface QueuedEntry {
   readonly failed?: string;
 }
 
-export type KioskResult<T> = { readonly ok: true; readonly data: T } | { readonly ok: false; readonly code: string; readonly message: string };
+export type KioskResult<T> =
+  | { readonly ok: true; readonly data: T }
+  | { readonly ok: false; readonly code: string; readonly message: string };
 
 /** POST to `/api/v1/kiosk/<path>`. A dropped connection or a timeout comes back as `NETWORK_ERROR`. */
-export async function kioskPost<T>(path: 'state' | 'unlock' | 'jobs' | 'production', body: Record<string, unknown>, timeoutMs = 12_000): Promise<KioskResult<T>> {
+export async function kioskPost<T>(
+  path: 'state' | 'unlock' | 'jobs' | 'production',
+  body: Record<string, unknown>,
+  timeoutMs = 12_000,
+): Promise<KioskResult<T>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`/api/v1/kiosk/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: controller.signal });
+    const response = await fetch(`/api/v1/kiosk/${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      signal: controller.signal,
+    });
     type Payload = { data?: T; error?: { code?: string; message?: string } };
     const payload: Payload | null = await response
       .json()
@@ -38,8 +52,17 @@ export async function kioskPost<T>(path: 'state' | 'unlock' | 'jobs' | 'producti
       .catch(() => null);
     if (response.ok && payload && 'data' in payload) return { ok: true, data: payload.data as T };
     // A gateway or proxy error with no JSON body is treated like a dropped connection: try again later.
-    if (!payload?.error && response.status >= 500) return { ok: false, code: 'NETWORK_ERROR', message: 'The server did not answer. The tablet will try again.' };
-    return { ok: false, code: payload?.error?.code ?? 'INTERNAL', message: payload?.error?.message ?? 'Something went wrong. Please try again.' };
+    if (!payload?.error && response.status >= 500)
+      return {
+        ok: false,
+        code: 'NETWORK_ERROR',
+        message: 'The server did not answer. The tablet will try again.',
+      };
+    return {
+      ok: false,
+      code: payload?.error?.code ?? 'INTERNAL',
+      message: payload?.error?.message ?? 'Something went wrong. Please try again.',
+    };
   } catch {
     return { ok: false, code: 'NETWORK_ERROR', message: 'No connection. The tablet will try again.' };
   } finally {
@@ -52,7 +75,12 @@ const storageKey = (token: string): string => `pulse-kiosk-queue:${token.slice(0
 function isEntry(value: unknown): value is QueuedEntry {
   if (!value || typeof value !== 'object') return false;
   const entry = value as Record<string, unknown>;
-  return typeof entry.clientRef === 'string' && typeof entry.jobId === 'string' && typeof entry.unitsGood === 'string' && typeof entry.session === 'string';
+  return (
+    typeof entry.clientRef === 'string' &&
+    typeof entry.jobId === 'string' &&
+    typeof entry.unitsGood === 'string' &&
+    typeof entry.session === 'string'
+  );
 }
 
 export function loadQueue(token: string): QueuedEntry[] {

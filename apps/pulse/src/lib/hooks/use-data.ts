@@ -292,3 +292,37 @@ export const useActivity = (params: ActivityParams = {}, opts?: Opts<Page<Activi
 /** Jobs, clients and services for the command palette. Runs from 2 characters. */
 export const useSearch = (q: string, opts?: Opts<SearchHitDTO[]>) =>
   useQuery({ queryKey: qk.search(q), queryFn: get<SearchHitDTO[]>('search', { q }), enabled: q.trim().length >= 2, staleTime: SHORT, placeholderData: keepPreviousData, ...opts });
+
+/* ---------------------------------------------------------------- profit team: explain, pivot, drill down, reports */
+
+/** "How we got this" for one number. Loads when `enabled` (the popover is open). */
+export const useExplain = (metric: string, params: ProfitParams = {}, opts?: Opts<import('@/lib/types').ExplainDTO>) => {
+  const query = { metric, ...profitQuery(params) };
+  return useQuery({ queryKey: qk.explain(metric, query), queryFn: get<import('@/lib/types').ExplainDTO>('explain', query), staleTime: SHORT, ...opts });
+};
+/** Profit grouped by two things at once. */
+export const useProfitPivot = (rows: ProfitGroup, cols: ProfitGroup, params: ProfitParams = {}, opts?: Opts<import('@/lib/types').ProfitPivotDTO>) => {
+  const query = { rows, cols, ...profitQuery(params) };
+  return useQuery({ queryKey: qk.profitPivot(rows, cols, query), queryFn: get<import('@/lib/types').ProfitPivotDTO>('profit/pivot', query), staleTime: SHORT, placeholderData: keepPreviousData, ...opts });
+};
+/** The named rows behind a profit number (the last stop of a drill down). */
+export const useProfitEntries = (params: ProfitParams & { kinds?: readonly FactKind[]; limit?: number } = {}, opts?: Opts<import('@/lib/types').ProfitEntriesDTO>) => {
+  const query = { ...profitQuery(params), kinds: list(params.kinds), limit: params.limit };
+  return useQuery({ queryKey: qk.profitEntries(query), queryFn: get<import('@/lib/types').ProfitEntriesDTO>('profit/entries', query), staleTime: SHORT, placeholderData: keepPreviousData, ...opts });
+};
+export interface ReportParams {
+  from?: string | null;
+  to?: string | null;
+  siteId?: string | null;
+  clientId?: string | null;
+  jobTypeId?: string | null;
+  status?: JobStatusValue | null;
+}
+/** The query string of a report, shared by the page, the CSV link and the print link. */
+export const reportQuery = (params: ReportParams): Query => ({ from: params.from, to: params.to, site: params.siteId, client: params.clientId, jobType: params.jobTypeId, status: params.status });
+export const useReport = (slug: string, params: ReportParams = {}, opts?: Opts<import('@/lib/types').ReportDTO>) => {
+  const query = reportQuery(params);
+  return useQuery({ queryKey: qk.report(slug, query), queryFn: get<import('@/lib/types').ReportDTO>(`reports/${encodeURIComponent(slug)}`, query), staleTime: SHORT, placeholderData: keepPreviousData, ...opts });
+};
+export const useReportSchedules = (opts?: Opts<import('@/lib/types').ReportScheduleDTO[]>) => useQuery({ queryKey: qk.reportSchedules(), queryFn: get<import('@/lib/types').ReportScheduleDTO[]>('reports/schedules'), staleTime: SHORT, ...opts });
+export const useReportRuns = (opts?: Opts<import('@/lib/types').ReportRunDTO[]>) => useQuery({ queryKey: qk.reportRuns(), queryFn: get<import('@/lib/types').ReportRunDTO[]>('reports/runs'), staleTime: SHORT, ...opts });

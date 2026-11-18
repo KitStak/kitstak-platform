@@ -77,4 +77,13 @@ export const qk = {
   prefs: () => ['prefs'] as const,
   activity: (params?: Params) => ['activity', params ?? {}] as const,
   search: (q: string) => ['search', q] as const,
+
+  // Profit team: explain, pivot, drill down rows, reports and schedules.
+  explain: (metric: string, params?: Params) => ['profit', 'explain', metric, params ?? {}] as const,
+  profitPivot: (rows: string, cols: string, params?: Params) => ['profit', 'pivot', rows, cols, params ?? {}] as const,
+  profitEntries: (params?: Params) => ['profit', 'entries', params ?? {}] as const,
+  reportsRoot: () => ['reports'] as const,
+  report: (slug: string, params?: Params) => ['reports', 'one', slug, params ?? {}] as const,
+  reportSchedules: () => ['reports', 'schedules'] as const,
+  reportRuns: () => ['reports', 'runs'] as const,
 } as const;

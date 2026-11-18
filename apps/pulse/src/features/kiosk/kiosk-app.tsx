@@ -8,7 +8,22 @@
  * is logged twice. This screen never shows money.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Check, CloudOff, Delete, Lock, Minus, Plus, RefreshCw, TrendingDown, TrendingUp, Trash2, Users, Wifi } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Check,
+  CloudOff,
+  Delete,
+  Lock,
+  Minus,
+  Plus,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+  Trash2,
+  Users,
+  Wifi,
+} from 'lucide-react';
 import { cn } from '@/components/ui/cn';
 import { formatHours, formatNumber, formatPace } from '@/lib/format';
 import { laborHoursFromCrew, productivityBp, unitsPerHour } from '@/lib/profit';
@@ -81,7 +96,17 @@ export function KioskApp({ token, initial }: { readonly token: string; readonly 
       for (const entry of [...queueRef.current]) {
         if (entry.failed) continue;
         const session = unlockedRef.current?.session ?? entry.session;
-        const result = await kioskPost<KioskSaveDTO>('production', { token, session, clientRef: entry.clientRef, jobId: entry.jobId, workDate: entry.workDate, unitsGood: entry.unitsGood, unitsScrap: entry.unitsScrap, headcount: entry.headcount, hoursEach: entry.hoursEach });
+        const result = await kioskPost<KioskSaveDTO>('production', {
+          token,
+          session,
+          clientRef: entry.clientRef,
+          jobId: entry.jobId,
+          workDate: entry.workDate,
+          unitsGood: entry.unitsGood,
+          unitsScrap: entry.unitsScrap,
+          headcount: entry.headcount,
+          hoursEach: entry.hoursEach,
+        });
         if (result.ok) {
           saveQueue(queueRef.current.filter((item) => item.clientRef !== entry.clientRef));
           setOnline(true);
@@ -94,12 +119,20 @@ export function KioskApp({ token, initial }: { readonly token: string; readonly 
         setOnline(true);
         if (result.code === 'UNAUTHENTICATED') {
           // The session it was typed under ran out. It goes out after the next unlock.
-          saveQueue(queueRef.current.map((item) => (item.clientRef === entry.clientRef ? { ...item, needsUnlock: true } : item)));
+          saveQueue(
+            queueRef.current.map((item) =>
+              item.clientRef === entry.clientRef ? { ...item, needsUnlock: true } : item,
+            ),
+          );
           if (!unlockedRef.current) break;
           continue;
         }
         if (result.code === 'RATE_LIMITED') break;
-        saveQueue(queueRef.current.map((item) => (item.clientRef === entry.clientRef ? { ...item, failed: result.message } : item)));
+        saveQueue(
+          queueRef.current.map((item) =>
+            item.clientRef === entry.clientRef ? { ...item, failed: result.message } : item,
+          ),
+        );
       }
     } finally {
       flushing.current = false;
@@ -172,7 +205,9 @@ export function KioskApp({ token, initial }: { readonly token: string; readonly 
       setPin('');
       if (result.code === 'NETWORK_ERROR') {
         setOnline(false);
-        setPinError('No connection. The tablet needs wifi to check your PIN. Entries you already saved are safe.');
+        setPinError(
+          'No connection. The tablet needs wifi to check your PIN. Entries you already saved are safe.',
+        );
       } else if (result.code === 'NOT_FOUND') setDead(true);
       else setPinError(result.message);
       return;
@@ -222,13 +257,29 @@ export function KioskApp({ token, initial }: { readonly token: string; readonly 
     // Stored on the tablet first, so a dropped connection or a closed tab cannot lose it.
     saveQueue([...queueRef.current, entry]);
     setBusy(true);
-    const result = await kioskPost<KioskSaveDTO>('production', { token, session: entry.session, clientRef: entry.clientRef, jobId: entry.jobId, workDate: entry.workDate, unitsGood: entry.unitsGood, unitsScrap: entry.unitsScrap, headcount: entry.headcount, hoursEach: entry.hoursEach });
+    const result = await kioskPost<KioskSaveDTO>('production', {
+      token,
+      session: entry.session,
+      clientRef: entry.clientRef,
+      jobId: entry.jobId,
+      workDate: entry.workDate,
+      unitsGood: entry.unitsGood,
+      unitsScrap: entry.unitsScrap,
+      headcount: entry.headcount,
+      hoursEach: entry.hoursEach,
+    });
     setBusy(false);
     const hours = laborHoursFromCrew(input.people, input.hoursEach);
     if (result.ok) {
       setOnline(true);
       saveQueue(queueRef.current.filter((item) => item.clientRef !== entry.clientRef));
-      setJobs((list) => list.map((item) => (item.jobId === job.jobId ? { ...item, todayUnits: result.data.todayUnits, todayHours: result.data.todayHours } : item)));
+      setJobs((list) =>
+        list.map((item) =>
+          item.jobId === job.jobId
+            ? { ...item, todayUnits: result.data.todayUnits, todayHours: result.data.todayHours }
+            : item,
+        ),
+      );
       setDone({ job, queued: false, result: result.data, units: input.units, hours });
       setScreen('done');
       return;
@@ -259,20 +310,37 @@ export function KioskApp({ token, initial }: { readonly token: string; readonly 
         <div className="min-w-0 flex-1">
           <p className="truncate text-lg font-semibold">{state.siteName}</p>
           <p className="truncate text-sm text-fg-muted">
-            {new Date(`${state.today}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            {new Date(`${state.today}T12:00:00`).toLocaleDateString('en-US', {
+              weekday: 'long',
+              month: 'long',
+              day: 'numeric',
+            })}
             {unlocked ? `. Logging as ${unlocked.person.name}` : ''}
           </p>
         </div>
         <span
           role="status"
           data-testid="kiosk-connection"
-          className={cn('inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium', !online || waiting > 0 ? 'bg-warning-subtle text-warning-text' : 'bg-success-subtle text-success-text')}
+          className={cn(
+            'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium',
+            !online || waiting > 0
+              ? 'bg-warning-subtle text-warning-text'
+              : 'bg-success-subtle text-success-text',
+          )}
         >
           {!online ? <CloudOff aria-hidden className="size-4" /> : <Wifi aria-hidden className="size-4" />}
-          {waiting > 0 ? `${waiting} saved on this tablet. Will send when online.` : online ? 'Online' : 'No connection'}
+          {waiting > 0
+            ? `${waiting} saved on this tablet. Will send when online.`
+            : online
+              ? 'Online'
+              : 'No connection'}
         </span>
         {waiting > 0 && online ? (
-          <button type="button" className={cn(quiet, 'min-h-11 rounded-xl px-4 text-base')} onClick={() => void flush()}>
+          <button
+            type="button"
+            className={cn(quiet, 'min-h-11 rounded-xl px-4 text-base')}
+            onClick={() => void flush()}
+          >
             <RefreshCw aria-hidden className="size-5" /> Send now
           </button>
         ) : null}
@@ -286,15 +354,25 @@ export function KioskApp({ token, initial }: { readonly token: string; readonly 
       {failed.length > 0 ? (
         <div role="alert" className="border-b border-danger/40 bg-danger-subtle px-5 py-3 text-danger-text">
           <p className="text-base font-semibold">
-            {failed.length === 1 ? 'One entry was not accepted.' : `${failed.length} entries were not accepted.`} Tell a manager, then clear it.
+            {failed.length === 1
+              ? 'One entry was not accepted.'
+              : `${failed.length} entries were not accepted.`}{' '}
+            Tell a manager, then clear it.
           </p>
           <ul className="mt-1 flex flex-col gap-1">
             {failed.map((entry) => (
               <li key={entry.clientRef} className="flex flex-wrap items-center gap-3 text-base">
                 <span className="min-w-0 flex-1">
-                  {entry.jobLabel}: {formatNumber(entry.unitsGood, { maxDigits: 0 })} units by {entry.personName}. {entry.failed}
+                  {entry.jobLabel}: {formatNumber(entry.unitsGood, { maxDigits: 0 })} units by{' '}
+                  {entry.personName}. {entry.failed}
                 </span>
-                <button type="button" className={cn(quiet, 'min-h-11 rounded-xl px-4 text-base')} onClick={() => saveQueue(queueRef.current.filter((item) => item.clientRef !== entry.clientRef))}>
+                <button
+                  type="button"
+                  className={cn(quiet, 'min-h-11 rounded-xl px-4 text-base')}
+                  onClick={() =>
+                    saveQueue(queueRef.current.filter((item) => item.clientRef !== entry.clientRef))
+                  }
+                >
                   <Trash2 aria-hidden className="size-5" /> Clear
                 </button>
               </li>
@@ -315,7 +393,17 @@ export function KioskApp({ token, initial }: { readonly token: string; readonly 
             }}
           />
         ) : null}
-        {screen === 'pin' && person ? <PinPad person={person} pin={pin} busy={busy} error={pinError} onDigit={typePin} onBack={() => (setPin(pin.slice(0, -1)), setPinError(null))} onCancel={lock} /> : null}
+        {screen === 'pin' && person ? (
+          <PinPad
+            person={person}
+            pin={pin}
+            busy={busy}
+            error={pinError}
+            onDigit={typePin}
+            onBack={() => (setPin(pin.slice(0, -1)), setPinError(null))}
+            onCancel={lock}
+          />
+        ) : null}
         {screen === 'jobs' && unlocked ? (
           <JobCards
             jobs={jobs}
@@ -326,7 +414,16 @@ export function KioskApp({ token, initial }: { readonly token: string; readonly 
             onRefresh={() => void refreshJobs()}
           />
         ) : null}
-        {screen === 'entry' && job ? <Entry key={job.jobId} job={job} shiftHours={Number(state.shiftHours) || 8} busy={busy} onSave={saveEntry} onBack={() => setScreen('jobs')} /> : null}
+        {screen === 'entry' && job ? (
+          <Entry
+            key={job.jobId}
+            job={job}
+            shiftHours={Number(state.shiftHours) || 8}
+            busy={busy}
+            onSave={saveEntry}
+            onBack={() => setScreen('jobs')}
+          />
+        ) : null}
         {screen === 'done' && done ? (
           <Done
             done={done}
@@ -346,25 +443,45 @@ export function KioskApp({ token, initial }: { readonly token: string; readonly 
 
 export function NotActive() {
   return (
-    <div data-testid="kiosk" className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-app px-6 py-10 text-center text-fg">
+    <div
+      data-testid="kiosk"
+      className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-app px-6 py-10 text-center text-fg"
+    >
       <span aria-hidden className="flex size-24 items-center justify-center rounded-3xl bg-muted text-icon">
         <Lock className="size-12" strokeWidth={1.5} />
       </span>
-      <h1 className="text-3xl font-semibold tracking-[-0.02em] sm:text-4xl">This tablet link is not active</h1>
-      <p className="max-w-xl text-lg text-fg-secondary sm:text-xl">The link may have run out or been turned off. Ask a manager to make a new one in Pulse under Log work, Floor tablet, then open it on this tablet.</p>
+      <h1 className="text-3xl font-semibold tracking-[-0.02em] sm:text-4xl">
+        This tablet link is not active
+      </h1>
+      <p className="max-w-xl text-lg text-fg-secondary sm:text-xl">
+        The link may have run out or been turned off. Ask a manager to make a new one in Pulse under Log work,
+        Floor tablet, then open it on this tablet.
+      </p>
     </div>
   );
 }
 
-function Names({ people, onPick }: { readonly people: readonly KioskPersonDTO[]; readonly onPick: (person: KioskPersonDTO) => void }) {
+function Names({
+  people,
+  onPick,
+}: {
+  readonly people: readonly KioskPersonDTO[];
+  readonly onPick: (person: KioskPersonDTO) => void;
+}) {
   if (people.length === 0) {
     return (
       <div className="m-auto flex max-w-2xl flex-col items-center gap-5 text-center">
-        <span aria-hidden className="flex size-24 items-center justify-center rounded-3xl bg-primary-subtle text-primary-text">
+        <span
+          aria-hidden
+          className="flex size-24 items-center justify-center rounded-3xl bg-primary-subtle text-primary-text"
+        >
           <Users className="size-12" strokeWidth={1.5} />
         </span>
         <h1 className="text-3xl font-semibold tracking-[-0.02em]">Nobody has a PIN yet</h1>
-        <p className="text-xl text-fg-secondary">To log work here, a person needs a 4 digit PIN. Sign in to Pulse on a phone or computer, open Log work, tap Floor tablet and set your PIN. Your name then shows up on this screen.</p>
+        <p className="text-xl text-fg-secondary">
+          To log work here, a person needs a 4 digit PIN. Sign in to Pulse on a phone or computer, open Log
+          work, tap Floor tablet and set your PIN. Your name then shows up on this screen.
+        </p>
       </div>
     );
   }
@@ -377,8 +494,15 @@ function Names({ people, onPick }: { readonly people: readonly KioskPersonDTO[];
       <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {people.map((person) => (
           <li key={person.id}>
-            <button type="button" className={cn(quiet, 'min-h-24 w-full justify-start gap-4 px-6 text-left text-2xl')} onClick={() => onPick(person)}>
-              <span aria-hidden className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-xl font-semibold text-primary-text">
+            <button
+              type="button"
+              className={cn(quiet, 'min-h-24 w-full justify-start gap-4 px-6 text-left text-2xl')}
+              onClick={() => onPick(person)}
+            >
+              <span
+                aria-hidden
+                className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-xl font-semibold text-primary-text"
+              >
                 {person.name
                   .split(/\s+/)
                   .slice(0, 2)
@@ -396,7 +520,23 @@ function Names({ people, onPick }: { readonly people: readonly KioskPersonDTO[];
 
 const padKey = cn(quiet, 'min-h-20 text-3xl tabular-nums');
 
-function PinPad({ person, pin, busy, error, onDigit, onBack, onCancel }: { readonly person: KioskPersonDTO; readonly pin: string; readonly busy: boolean; readonly error: string | null; readonly onDigit: (digit: string) => void; readonly onBack: () => void; readonly onCancel: () => void }) {
+function PinPad({
+  person,
+  pin,
+  busy,
+  error,
+  onDigit,
+  onBack,
+  onCancel,
+}: {
+  readonly person: KioskPersonDTO;
+  readonly pin: string;
+  readonly busy: boolean;
+  readonly error: string | null;
+  readonly onDigit: (digit: string) => void;
+  readonly onBack: () => void;
+  readonly onCancel: () => void;
+}) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (/^\d$/.test(event.key)) onDigit(event.key);
@@ -414,10 +554,23 @@ function PinPad({ person, pin, busy, error, onDigit, onBack, onCancel }: { reado
       </div>
       <div className="flex gap-4" role="status" aria-label={`${pin.length} of 4 digits typed`}>
         {[0, 1, 2, 3].map((index) => (
-          <span key={index} className={cn('size-6 rounded-full border-2 transition-colors', index < pin.length ? 'border-primary bg-primary' : 'border-border-strong bg-transparent')} />
+          <span
+            key={index}
+            className={cn(
+              'size-6 rounded-full border-2 transition-colors',
+              index < pin.length ? 'border-primary bg-primary' : 'border-border-strong bg-transparent',
+            )}
+          />
         ))}
       </div>
-      <p role="alert" data-testid="pin-error" className={cn('min-h-14 text-center text-lg font-medium', error ? 'text-danger-text' : 'text-fg-muted')}>
+      <p
+        role="alert"
+        data-testid="pin-error"
+        className={cn(
+          'min-h-14 text-center text-lg font-medium',
+          error ? 'text-danger-text' : 'text-fg-muted',
+        )}
+      >
         {error ?? (busy ? 'Checking' : '')}
       </p>
       <div className="grid w-full grid-cols-3 gap-3">
@@ -432,7 +585,13 @@ function PinPad({ person, pin, busy, error, onDigit, onBack, onCancel }: { reado
         <button type="button" className={padKey} disabled={busy} onClick={() => onDigit('0')}>
           0
         </button>
-        <button type="button" className={padKey} aria-label="Delete the last digit" disabled={busy || pin.length === 0} onClick={onBack}>
+        <button
+          type="button"
+          className={padKey}
+          aria-label="Delete the last digit"
+          disabled={busy || pin.length === 0}
+          onClick={onBack}
+        >
           <Delete aria-hidden className="size-8" />
         </button>
       </div>
@@ -440,12 +599,22 @@ function PinPad({ person, pin, busy, error, onDigit, onBack, onCancel }: { reado
   );
 }
 
-function JobCards({ jobs, onPick, onRefresh }: { readonly jobs: readonly KioskJobDTO[]; readonly onPick: (job: KioskJobDTO) => void; readonly onRefresh: () => void }) {
+function JobCards({
+  jobs,
+  onPick,
+  onRefresh,
+}: {
+  readonly jobs: readonly KioskJobDTO[];
+  readonly onPick: (job: KioskJobDTO) => void;
+  readonly onRefresh: () => void;
+}) {
   if (jobs.length === 0) {
     return (
       <div className="m-auto flex max-w-2xl flex-col items-center gap-5 text-center">
         <h1 className="text-3xl font-semibold tracking-[-0.02em]">No jobs are running at this site</h1>
-        <p className="text-xl text-fg-secondary">A manager adds jobs in Pulse. Once a job is active and its start day has come, it shows here.</p>
+        <p className="text-xl text-fg-secondary">
+          A manager adds jobs in Pulse. Once a job is active and its start day has come, it shows here.
+        </p>
         <button type="button" className={quiet} onClick={onRefresh}>
           <RefreshCw aria-hidden className="size-6" /> Look again
         </button>
@@ -469,9 +638,16 @@ function JobCards({ jobs, onPick, onRefresh }: { readonly jobs: readonly KioskJo
                 <span className="text-base font-medium text-fg-secondary tabular-nums">{job.jobNumber}</span>
                 <span className="line-clamp-2 text-2xl leading-tight font-semibold">{job.jobName}</span>
                 <span className="text-lg text-fg-secondary">{job.clientName}</span>
-                <span className={cn('mt-auto inline-flex items-center gap-2 rounded-full px-3 py-1 text-base font-medium', logged ? 'bg-success-subtle text-success-text' : 'bg-muted text-fg-secondary')}>
+                <span
+                  className={cn(
+                    'mt-auto inline-flex items-center gap-2 rounded-full px-3 py-1 text-base font-medium',
+                    logged ? 'bg-success-subtle text-success-text' : 'bg-muted text-fg-secondary',
+                  )}
+                >
                   {logged ? <Check aria-hidden className="size-4" /> : null}
-                  {logged ? `Today: ${formatNumber(job.todayUnits, { maxDigits: 0 })} ${job.unitLabel}, ${formatHours(job.todayHours)} labor hours` : 'Nothing logged today'}
+                  {logged
+                    ? `Today: ${formatNumber(job.todayUnits, { maxDigits: 0 })} ${job.unitLabel}, ${formatHours(job.todayHours)} labor hours`
+                    : 'Nothing logged today'}
                 </span>
               </button>
             </li>
@@ -482,19 +658,51 @@ function JobCards({ jobs, onPick, onRefresh }: { readonly jobs: readonly KioskJo
   );
 }
 
-function Stepper({ label, value, step, min, max, onChange, hint }: { readonly label: string; readonly value: number; readonly step: number; readonly min: number; readonly max: number; readonly onChange: (value: number) => void; readonly hint?: string }) {
+function Stepper({
+  label,
+  value,
+  step,
+  min,
+  max,
+  onChange,
+  hint,
+}: {
+  readonly label: string;
+  readonly value: number;
+  readonly step: number;
+  readonly min: number;
+  readonly max: number;
+  readonly onChange: (value: number) => void;
+  readonly hint?: string;
+}) {
   const clamp = (next: number) => Math.min(max, Math.max(min, Math.round(next * 100) / 100));
   return (
     <div className="flex flex-col gap-2">
       <span className="text-lg font-medium text-fg-secondary">{label}</span>
       <div className="flex items-center gap-3">
-        <button type="button" className={cn(quiet, 'size-20 px-0')} aria-label={`Fewer ${label.toLowerCase()}`} disabled={value <= min} onClick={() => onChange(clamp(value - step))}>
+        <button
+          type="button"
+          className={cn(quiet, 'size-20 px-0')}
+          aria-label={`Fewer ${label.toLowerCase()}`}
+          disabled={value <= min}
+          onClick={() => onChange(clamp(value - step))}
+        >
           <Minus aria-hidden className="size-8" />
         </button>
-        <output aria-live="polite" aria-label={label} className="min-w-24 flex-1 text-center text-5xl font-semibold tabular-nums">
+        <output
+          aria-live="polite"
+          aria-label={label}
+          className="min-w-24 flex-1 text-center text-5xl font-semibold tabular-nums"
+        >
           {formatNumber(value, { maxDigits: 2 })}
         </output>
-        <button type="button" className={cn(quiet, 'size-20 px-0')} aria-label={`More ${label.toLowerCase()}`} disabled={value >= max} onClick={() => onChange(clamp(value + step))}>
+        <button
+          type="button"
+          className={cn(quiet, 'size-20 px-0')}
+          aria-label={`More ${label.toLowerCase()}`}
+          disabled={value >= max}
+          onClick={() => onChange(clamp(value + step))}
+        >
           <Plus aria-hidden className="size-8" />
         </button>
       </div>
@@ -503,7 +711,24 @@ function Stepper({ label, value, step, min, max, onChange, hint }: { readonly la
   );
 }
 
-function Entry({ job, shiftHours, busy, onSave, onBack }: { readonly job: KioskJobDTO; readonly shiftHours: number; readonly busy: boolean; readonly onSave: (input: { units: number; scrap: number; people: number; hoursEach: number }) => Promise<string | undefined>; readonly onBack: () => void }) {
+function Entry({
+  job,
+  shiftHours,
+  busy,
+  onSave,
+  onBack,
+}: {
+  readonly job: KioskJobDTO;
+  readonly shiftHours: number;
+  readonly busy: boolean;
+  readonly onSave: (input: {
+    units: number;
+    scrap: number;
+    people: number;
+    hoursEach: number;
+  }) => Promise<string | undefined>;
+  readonly onBack: () => void;
+}) {
   const [units, setUnits] = useState('');
   const [scrap, setScrap] = useState('');
   const [target, setTarget] = useState<'units' | 'scrap'>('units');
@@ -513,7 +738,10 @@ function Entry({ job, shiftHours, busy, onSave, onBack }: { readonly job: KioskJ
   const unitsNumber = Number(units || 0);
   const scrapNumber = Number(scrap || 0);
   const hours = laborHoursFromCrew(people, hoursEach);
-  const pace = useMemo(() => (unitsNumber > 0 ? unitsPerHour(unitsNumber, hours) : null), [hours, unitsNumber]);
+  const pace = useMemo(
+    () => (unitsNumber > 0 ? unitsPerHour(unitsNumber, hours) : null),
+    [hours, unitsNumber],
+  );
   const share = pace === null ? null : productivityBp(pace, job.targetUph);
   const ahead = share !== null && share >= 10000;
 
@@ -536,7 +764,8 @@ function Entry({ job, shiftHours, busy, onSave, onBack }: { readonly job: KioskJ
   });
 
   async function save() {
-    if (unitsNumber === 0 && scrapNumber === 0 && hours === 0) return setError('Type the units finished first.');
+    if (unitsNumber === 0 && scrapNumber === 0 && hours === 0)
+      return setError('Type the units finished first.');
     const problem = await onSave({ units: unitsNumber, scrap: scrapNumber, people, hoursEach });
     if (problem) setError(problem);
   }
@@ -553,17 +782,38 @@ function Entry({ job, shiftHours, busy, onSave, onBack }: { readonly job: KioskJ
         </div>
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section aria-label="Units" className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-panel p-5">
+        <section
+          aria-label="Units"
+          className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-panel p-5"
+        >
           <div className="grid grid-cols-2 gap-3">
-            <button type="button" aria-pressed={target === 'units'} onClick={() => setTarget('units')} className={cn('flex flex-col rounded-2xl border-2 px-4 py-3 text-left transition-colors focus-visible:outline-4 focus-visible:outline-focus', target === 'units' ? 'border-primary bg-primary-subtle' : 'border-border-input bg-panel')}>
+            <button
+              type="button"
+              aria-pressed={target === 'units'}
+              onClick={() => setTarget('units')}
+              className={cn(
+                'flex flex-col rounded-2xl border-2 px-4 py-3 text-left transition-colors focus-visible:outline-4 focus-visible:outline-focus',
+                target === 'units' ? 'border-primary bg-primary-subtle' : 'border-border-input bg-panel',
+              )}
+            >
               <span className="text-lg font-medium text-fg-secondary">Good {job.unitLabel}</span>
               <span data-testid="kiosk-units" className="text-5xl font-semibold tabular-nums">
                 {units === '' ? '0' : formatNumber(units, { maxDigits: 0 })}
               </span>
             </button>
-            <button type="button" aria-pressed={target === 'scrap'} onClick={() => setTarget('scrap')} className={cn('flex flex-col rounded-2xl border-2 px-4 py-3 text-left transition-colors focus-visible:outline-4 focus-visible:outline-focus', target === 'scrap' ? 'border-primary bg-primary-subtle' : 'border-border-input bg-panel')}>
+            <button
+              type="button"
+              aria-pressed={target === 'scrap'}
+              onClick={() => setTarget('scrap')}
+              className={cn(
+                'flex flex-col rounded-2xl border-2 px-4 py-3 text-left transition-colors focus-visible:outline-4 focus-visible:outline-focus',
+                target === 'scrap' ? 'border-primary bg-primary-subtle' : 'border-border-input bg-panel',
+              )}
+            >
               <span className="text-lg font-medium text-fg-secondary">Scrap</span>
-              <span className="text-5xl font-semibold tabular-nums">{scrap === '' ? '0' : formatNumber(scrap, { maxDigits: 0 })}</span>
+              <span className="text-5xl font-semibold tabular-nums">
+                {scrap === '' ? '0' : formatNumber(scrap, { maxDigits: 0 })}
+              </span>
             </button>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -578,20 +828,57 @@ function Entry({ job, shiftHours, busy, onSave, onBack }: { readonly job: KioskJ
             <button type="button" className={padKey} onClick={() => press('0')}>
               0
             </button>
-            <button type="button" className={padKey} aria-label="Delete the last digit" onClick={() => press('back')}>
+            <button
+              type="button"
+              className={padKey}
+              aria-label="Delete the last digit"
+              onClick={() => press('back')}
+            >
               <Delete aria-hidden className="size-8" />
             </button>
           </div>
         </section>
-        <section aria-label="Crew" className="flex flex-col gap-6 rounded-2xl border border-border-subtle bg-panel p-5">
+        <section
+          aria-label="Crew"
+          className="flex flex-col gap-6 rounded-2xl border border-border-subtle bg-panel p-5"
+        >
           <Stepper label="People" value={people} step={1} min={0} max={500} onChange={setPeople} />
-          <Stepper label="Hours each" value={hoursEach} step={0.5} min={0} max={24} onChange={setHoursEach} hint={`${formatNumber(people)} people for ${formatHours(hoursEach)} hours is ${formatHours(hours)} labor hours.`} />
-          <div aria-live="polite" data-testid="kiosk-pace" className={cn('flex items-center gap-3 rounded-2xl px-4 py-3 text-xl font-medium', pace === null ? 'bg-muted text-fg-secondary' : share === null ? 'bg-muted text-fg' : ahead ? 'bg-success-subtle text-success-text' : 'bg-warning-subtle text-warning-text')}>
+          <Stepper
+            label="Hours each"
+            value={hoursEach}
+            step={0.5}
+            min={0}
+            max={24}
+            onChange={setHoursEach}
+            hint={`${formatNumber(people)} ${people === 1 ? 'person' : 'people'} for ${formatHours(hoursEach, { style: 'unit' })} is ${formatHours(hours, { style: 'unit' }).replace(' hour', ' labor hour')}.`}
+          />
+          <div
+            aria-live="polite"
+            data-testid="kiosk-pace"
+            className={cn(
+              'flex items-center gap-3 rounded-2xl px-4 py-3 text-xl font-medium',
+              pace === null
+                ? 'bg-muted text-fg-secondary'
+                : share === null
+                  ? 'bg-muted text-fg'
+                  : ahead
+                    ? 'bg-success-subtle text-success-text'
+                    : 'bg-warning-subtle text-warning-text',
+            )}
+          >
             {pace === null ? (
-              job.targetUph ? `Target pace: ${formatPace(job.targetUph)} for each person each hour` : 'Type the units to see the pace'
+              job.targetUph ? (
+                `Target pace: ${formatPace(job.targetUph)} for each person each hour`
+              ) : (
+                'Type the units to see the pace'
+              )
             ) : (
               <>
-                {share === null ? null : ahead ? <TrendingUp aria-hidden className="size-7 shrink-0" /> : <TrendingDown aria-hidden className="size-7 shrink-0" />}
+                {share === null ? null : ahead ? (
+                  <TrendingUp aria-hidden className="size-7 shrink-0" />
+                ) : (
+                  <TrendingDown aria-hidden className="size-7 shrink-0" />
+                )}
                 <span>
                   {formatPace(pace)} for each person each hour
                   {job.targetUph ? `. The target is ${formatPace(job.targetUph)}` : ''}
@@ -600,11 +887,20 @@ function Entry({ job, shiftHours, busy, onSave, onBack }: { readonly job: KioskJ
             )}
           </div>
           {error ? (
-            <p role="alert" className="flex items-start gap-2 rounded-2xl bg-danger-subtle px-4 py-3 text-lg font-medium text-danger-text">
+            <p
+              role="alert"
+              className="flex items-start gap-2 rounded-2xl bg-danger-subtle px-4 py-3 text-lg font-medium text-danger-text"
+            >
               <AlertTriangle aria-hidden className="mt-0.5 size-6 shrink-0" /> {error}
             </p>
           ) : null}
-          <button type="button" data-testid="kiosk-save" className={cn(primary, 'mt-auto min-h-20 text-2xl')} disabled={busy} onClick={() => void save()}>
+          <button
+            type="button"
+            data-testid="kiosk-save"
+            className={cn(primary, 'mt-auto min-h-20 text-2xl')}
+            disabled={busy}
+            onClick={() => void save()}
+          >
             <Check aria-hidden className="size-7" /> {busy ? 'Saving' : 'Save'}
           </button>
         </section>
@@ -613,15 +909,39 @@ function Entry({ job, shiftHours, busy, onSave, onBack }: { readonly job: KioskJ
   );
 }
 
-function Done({ done, onNext, onLock }: { readonly done: DoneState; readonly onNext: () => void; readonly onLock: () => void }) {
+function Done({
+  done,
+  onNext,
+  onLock,
+}: {
+  readonly done: DoneState;
+  readonly onNext: () => void;
+  readonly onLock: () => void;
+}) {
   return (
-    <div data-testid="kiosk-done" className="m-auto flex w-full max-w-2xl flex-col items-center gap-6 text-center">
-      <span aria-hidden className={cn('flex size-32 items-center justify-center rounded-full', done.queued ? 'bg-warning-subtle text-warning-text' : 'bg-success-subtle text-success-text')}>
-        {done.queued ? <CloudOff className="size-16" strokeWidth={1.75} /> : <Check className="size-16" strokeWidth={2.25} />}
+    <div
+      data-testid="kiosk-done"
+      className="m-auto flex w-full max-w-2xl flex-col items-center gap-6 text-center"
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'flex size-32 items-center justify-center rounded-full',
+          done.queued ? 'bg-warning-subtle text-warning-text' : 'bg-success-subtle text-success-text',
+        )}
+      >
+        {done.queued ? (
+          <CloudOff className="size-16" strokeWidth={1.75} />
+        ) : (
+          <Check className="size-16" strokeWidth={2.25} />
+        )}
       </span>
-      <h1 className="text-4xl font-semibold tracking-[-0.02em]">{done.queued ? 'Saved on this tablet' : done.result?.duplicate ? 'Already saved' : 'Saved'}</h1>
+      <h1 className="text-4xl font-semibold tracking-[-0.02em]">
+        {done.queued ? 'Saved on this tablet' : done.result?.duplicate ? 'Already saved' : 'Saved'}
+      </h1>
       <p className="text-2xl text-fg-secondary">
-        {formatNumber(done.units, { maxDigits: 0 })} {done.job.unitLabel} and {formatHours(done.hours)} labor hours for {done.job.jobNumber}.
+        {formatNumber(done.units, { maxDigits: 0 })} {done.job.unitLabel} and {formatHours(done.hours)} labor
+        hours for {done.job.jobNumber}.
       </p>
       <p className="text-xl text-fg-secondary">
         {done.queued
@@ -631,7 +951,13 @@ function Done({ done, onNext, onLock }: { readonly done: DoneState; readonly onN
             : ''}
       </p>
       <div className="flex w-full flex-col gap-3 sm:flex-row">
-        <button type="button" data-testid="kiosk-next" className={cn(primary, 'min-h-20 flex-1 text-2xl')} onClick={onNext} autoFocus>
+        <button
+          type="button"
+          data-testid="kiosk-next"
+          className={cn(primary, 'min-h-20 flex-1 text-2xl')}
+          onClick={onNext}
+          autoFocus
+        >
           Next job
         </button>
         <button type="button" className={cn(quiet, 'min-h-20 text-2xl sm:w-48')} onClick={onLock}>

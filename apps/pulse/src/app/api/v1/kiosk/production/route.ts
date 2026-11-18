@@ -17,4 +17,6 @@ const schema = z.object({
 });
 
 /** Saves one tablet entry. The `clientRef` makes a retry safe: the same entry is never logged twice. */
-export const POST = kioskRoute(schema, { limit: 120 }, ({ token, session, ...entry }) => saveKioskProduction(token, session, entry));
+export const POST = kioskRoute(schema, { limit: 120 }, ({ token, session, ...entry }) =>
+  saveKioskProduction(token, session, entry),
+);

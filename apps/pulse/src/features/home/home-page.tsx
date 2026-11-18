@@ -1,28 +1,53 @@
 import { redirect } from 'next/navigation';
-import { CircleDollarSign, PackagePlus, Rocket } from 'lucide-react';
-import { Page, Panel } from '@/components/layout/page';
+import { PackagePlus } from 'lucide-react';
+import { Page } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
-import { StepList, Teach } from '@/components/pulse/teach';
 import { PageBlocked } from '@/features/access/page-blocked';
+import { parsePeriod, searchGetter } from '@/features/profit/period';
 import { landingPath } from '@/lib/nav';
+import { suggestBucket } from '@/lib/profit/trends';
 import { routes } from '@/lib/routes';
+import { getProfit, getSettings, getSummary, listSites, todayInZone } from '@/server/domain';
 import { pulsePage } from '@/server/page';
+import { HomeView } from './home-view';
 
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? '';
 }
 
-/** Home: the two line answer, tiles, jobs that need you and the setup checklist. */
-export async function HomePage() {
+/** A read that failed leaves the client to load it again (and show the retry state if that fails too). */
+async function soft<T>(read: Promise<T>): Promise<T | undefined> {
+  try {
+    return await read;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Home: the two line answer, the headline numbers for a period, the jobs that need you, the
+ * trend, today's entries and alerts. People who may not see money get units, hours and pace.
+ * Supervisors land on Log work; `/?floor=1` shows them the floor version of Home.
+ */
+export async function HomePage({ searchParams }: { readonly searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const query = (await searchParams) ?? {};
   const page = await pulsePage(routes.home(), 'home');
-  // Supervisors log work; they land on the log, never on a money page.
-  if (page.access.role === 'supervisor') redirect(landingPath(page.access.role));
-  if (page.blocked) return <PageBlocked title="Home" role={page.access.role} />;
+  const floor = searchGetter(query)('floor') === '1';
+  if (page.access.role === 'supervisor' && !floor) redirect(landingPath(page.access.role));
+  if (page.access.role === 'none' || (page.blocked && page.access.role !== 'supervisor')) return <PageBlocked title="Home" role={page.access.role} />;
+  const [settings, sites] = await Promise.all([soft(getSettings(page.ctx)), soft(listSites(page.ctx))]);
+  const site = sites?.find((item) => item.isDefault) ?? sites?.[0];
+  const today = site?.today ?? todayInZone(settings?.timezone ?? 'UTC');
+  const weekStart = settings?.weekStart ?? 1;
+  const period = parsePeriod(searchGetter(query), today, weekStart);
+  const range = { from: period.from, to: period.to };
+  const [summary, trend] = await Promise.all([soft(getSummary(page.ctx, range)), soft(getProfit(page.ctx, suggestBucket(range), range))]);
   const name = firstName(page.context.user.name);
   return (
     <Page
       title={name ? `Hello, ${name}` : 'Home'}
-      subtitle={`How ${page.context.org.name} is doing, and which jobs need you.`}
+      subtitle={page.access.seesMoney ? `How ${page.context.org.name} is doing, and which jobs need you.` : `How the floor at ${page.context.org.name} is doing, and which jobs need you.`}
+      width="full"
       actions={
         page.can('job:manage') ? (
           <ButtonLink href={routes.newJob()} icon={<PackagePlus aria-hidden />} testId="home-new-job">
@@ -31,43 +56,7 @@ export async function HomePage() {
         ) : null
       }
     >
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Panel>
-          <Teach
-            icon={CircleDollarSign}
-            title="No profit numbers yet"
-            why="Pulse turns your jobs, daily work and costs into one answer: are we making money, and if not, why? Add a job and log one day to see it here."
-            points={[
-              'Profit on your jobs, and profit for the whole company',
-              'Jobs that need you, worst first, with the reason',
-              'Today’s entries, alerts and things to fix',
-            ]}
-            actions={
-              <>
-                {page.can('job:manage') ? (
-                  <ButtonLink href={routes.newJob()} icon={<PackagePlus aria-hidden />}>
-                    Add your first job
-                  </ButtonLink>
-                ) : null}
-                <ButtonLink href={routes.welcome()} variant="secondary" icon={<Rocket aria-hidden />}>
-                  Other ways to start
-                </ButtonLink>
-              </>
-            }
-          />
-        </Panel>
-        <Panel title="Five steps to your first profit number">
-          <StepList
-            steps={[
-              { title: 'Set a labor rate', detail: 'Tell Pulse what an hour of work really costs you.', action: <ButtonLink href={routes.labor('rates')} variant="secondary" size="sm">Open</ButtonLink> },
-              { title: 'Add a client', detail: 'The company you do the work for.', action: <ButtonLink href={routes.profit({ by: 'client' })} variant="secondary" size="sm">Open</ButtonLink> },
-              { title: 'Add a job', detail: 'One piece of work with a price and a number of units.', action: <ButtonLink href={routes.newJob()} variant="secondary" size="sm">Open</ButtonLink> },
-              { title: 'Log a day', detail: 'Units finished, people and hours.', action: <ButtonLink href={routes.log()} variant="secondary" size="sm">Open</ButtonLink> },
-              { title: 'See your profit', detail: 'Revenue, cost and margin for the job, right away.', action: <ButtonLink href={routes.profit()} variant="secondary" size="sm">Open</ButtonLink> },
-            ]}
-          />
-        </Panel>
-      </div>
+      <HomeView today={today} weekStart={weekStart} targetMarginBp={settings?.defaultTargetMarginBp ?? 3000} initialSummary={summary} initialTrend={trend} initialRange={range} />
     </Page>
   );
 }

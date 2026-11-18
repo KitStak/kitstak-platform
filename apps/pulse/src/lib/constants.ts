@@ -234,3 +234,7 @@ export type JobTab = (typeof JOB_TABS)[number];
 
 /** How many days back a supervisor may log or edit (SPEC section 3). */
 export const SUPERVISOR_EDIT_DAYS = 7;
+
+/* ---- "How we got this" (profit team): the numbers `GET /api/v1/explain` can explain ---- */
+export const EXPLAIN_METRICS = ['revenue', 'labor', 'material', 'other', 'shared', 'cost', 'profit', 'margin', 'margin_before_shared', 'labor_pct', 'uph', 'cost_per_unit', 'units', 'hours', 'company_profit', 'not_billed'] as const;
+export type ExplainMetric = (typeof EXPLAIN_METRICS)[number];

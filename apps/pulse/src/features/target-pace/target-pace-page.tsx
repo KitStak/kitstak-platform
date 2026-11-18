@@ -13,7 +13,13 @@ export async function TargetPacePage() {
   const page = await pulsePage(routes.targetPace(), 'target-pace');
   if (page.blocked) return <PageBlocked title="Target pace" role={page.access.role} />;
   const canManage = page.can('standard:manage');
-  const [standards, jobTypes, laborClasses, sites, settings] = await Promise.all([listStandards(page.ctx), listJobTypes(page.ctx, { includeArchived: true }), listLaborClasses(page.ctx, { includeArchived: true }), listSites(page.ctx), getSettings(page.ctx)]);
+  const [standards, jobTypes, laborClasses, sites, settings] = await Promise.all([
+    listStandards(page.ctx),
+    listJobTypes(page.ctx, { includeArchived: true }),
+    listLaborClasses(page.ctx, { includeArchived: true }),
+    listSites(page.ctx),
+    getSettings(page.ctx),
+  ]);
   const today = sites.find((site) => site.isDefault)?.today ?? sites[0]?.today ?? todayIso();
   return (
     <Page
@@ -21,13 +27,24 @@ export async function TargetPacePage() {
       subtitle="How many units one person should finish in an hour, and how the floor is doing against it."
       actions={
         canManage ? (
-          <ButtonLink href={routes.newImport('target_pace')} variant="secondary" icon={<FileSpreadsheet aria-hidden />}>
+          <ButtonLink
+            href={routes.newImport('target_pace')}
+            variant="secondary"
+            icon={<FileSpreadsheet aria-hidden />}
+          >
             Import target pace
           </ButtonLink>
         ) : null
       }
     >
-      <TargetPaceView initialStandards={standards} jobTypes={jobTypes} laborClasses={laborClasses} sites={sites} today={today} thresholds={{ watchBp: settings.productivityWatchBp, riskBp: settings.productivityRiskBp }} />
+      <TargetPaceView
+        initialStandards={standards}
+        jobTypes={jobTypes}
+        laborClasses={laborClasses}
+        sites={sites}
+        today={today}
+        thresholds={{ watchBp: settings.productivityWatchBp, riskBp: settings.productivityRiskBp }}
+      />
     </Page>
   );
 }

@@ -18,6 +18,7 @@ import { softDeleteRow } from './_crud';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
 import { renderAlertWords } from './alert-words';
+import { isQuietNow, quietOf } from '@/features/alerts/quiet-hours';
 import { filterOrgMembers } from './people';
 import { notify } from './notifications';
 import { userIdsWithRoles } from './roles';
@@ -272,7 +273,7 @@ export async function evaluateAlerts(ctx: DomainContext): Promise<{ created: num
   await requirePulse(ctx, 'pulse:read');
   return inTx(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`pulse-alerts:${ctx.orgId}`}))`);
-    await loadSettings(ctx.orgId, tx);
+    const settings = await loadSettings(ctx.orgId, tx);
     const rules = await tx.select().from(alertRules).where(and(eq(alertRules.orgId, ctx.orgId), isNull(alertRules.deletedAt), eq(alertRules.enabled, true)));
     const candidates = await collect(tx, ctx, rules);
     const live = await tx.select().from(alerts).where(and(eq(alerts.orgId, ctx.orgId), inArray(alerts.status, ['open', 'snoozed', 'dismissed']), inArray(alerts.kind, [...EVALUATED_KINDS])));
@@ -291,6 +292,8 @@ export async function evaluateAlerts(ctx: DomainContext): Promise<{ created: num
         updated += 1;
         continue;
       }
+      // Quiet hours (money ops): a rule raises nothing new inside its window. The first check after the window picks the condition up.
+      if (isQuietNow(quietOf(candidate.rule.scope), settings.timezone)) continue;
       const [row] = await tx
         .insert(alerts)
         .values({ orgId: ctx.orgId, ruleId: candidate.rule.id, kind: candidate.kind, severity: candidate.rule.severity, entityType: candidate.entityType, entityId: candidate.entityId, params: candidate.params, impactCents: candidate.impactCents, url: candidate.url, dedupeKey: key })

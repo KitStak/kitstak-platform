@@ -2,7 +2,20 @@
 /** Labor, Cost: what labor adds up to by labor class, job type and client, and the overtime share. */
 import { useMemo } from 'react';
 import { Info, RefreshCw, Users } from 'lucide-react';
-import { Button, IconButton, Popover, PopoverContent, PopoverTrigger, Skeleton, Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '@/components/ui';
+import {
+  Button,
+  IconButton,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '@/components/ui';
 import { BarChart } from '@/components/charts/cartesian';
 import { KpiTile } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
@@ -22,7 +35,8 @@ const perHour = (cents: number | null, hours: string | number): number | null =>
 };
 
 /** Share of two hour totals in basis points, through the one rounding rule (hours as hundredths). */
-const hoursShareBp = (part: number, whole: number): number | null => ratioBp(Math.round(part * 100), Math.round(whole * 100));
+const hoursShareBp = (part: number, whole: number): number | null =>
+  ratioBp(Math.round(part * 100), Math.round(whole * 100));
 
 export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[]; readonly today: string }) {
   const { state, setState } = useRange(today, 'last_30');
@@ -64,7 +78,11 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
           <div role="alert" className="flex flex-col items-center gap-3 py-8 text-center">
             <p className="text-base font-medium text-fg">We could not load labor cost</p>
             <p className="text-sm text-fg-muted">{summary.error.message}</p>
-            <Button variant="secondary" leadingIcon={<RefreshCw aria-hidden />} onClick={() => void summary.refetch()}>
+            <Button
+              variant="secondary"
+              leadingIcon={<RefreshCw aria-hidden />}
+              onClick={() => void summary.refetch()}
+            >
               Try again
             </Button>
           </div>
@@ -75,7 +93,11 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
             icon={Users}
             title="No labor cost in these days"
             why="Once hours are logged and a rate is set, labor cost shows here by kind of worker, job type and client, with the share that was overtime."
-            points={['Labor cost by labor class, job type and client', 'Overtime share', 'Labor as a share of revenue']}
+            points={[
+              'Labor cost by labor class, job type and client',
+              'Overtime share',
+              'Labor as a share of revenue',
+            ]}
             actions={
               <>
                 <ButtonLink href={routes.log()}>Log work</ButtonLink>
@@ -89,22 +111,44 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiTile label="Labor cost on jobs" value={formatMoney(totals.labor, { cents: false })} footer={<span className="text-xs text-fg-muted">{formatHours(totals.direct, { maxDigits: 0 })} labor hours</span>} />
+            <KpiTile
+              label="Labor cost on jobs"
+              value={formatMoney(totals.labor, { cents: false })}
+              footer={
+                <span className="text-xs text-fg-muted">
+                  {formatHours(totals.direct, { maxDigits: 0 })} labor hours
+                </span>
+              }
+            />
             <KpiTile
               label="Real cost of an hour, on average"
-              value={formatMoneyPerHour(perHour(totals.labor, totals.direct.toFixed(2)), { empty: 'No hours' })}
+              value={formatMoneyPerHour(perHour(totals.labor, totals.direct.toFixed(2)), {
+                empty: 'No hours',
+              })}
               footer={<span className="text-xs text-fg-muted">Labor cost divided by labor hours</span>}
               explain={
                 <Popover>
                   <PopoverTrigger asChild>
-                    <IconButton label="How we got the average cost of an hour" icon={<Info aria-hidden />} size="sm" variant="ghost" />
+                    <IconButton
+                      label="How we got the average cost of an hour"
+                      icon={<Info aria-hidden />}
+                      size="sm"
+                      variant="ghost"
+                    />
                   </PopoverTrigger>
-                  <PopoverContent align="end" className="w-80 max-w-[calc(100vw-32px)] text-sm text-fg-secondary">
+                  <PopoverContent
+                    align="end"
+                    className="w-80 max-w-[calc(100vw-32px)] text-sm text-fg-secondary"
+                  >
                     <h3 className="mb-1 text-sm font-semibold text-fg">How we got this</h3>
                     <p className="tabular-nums">
-                      {formatMoney(totals.labor)} of labor cost divided by {formatHours(totals.direct)} labor hours on jobs.
+                      {formatMoney(totals.labor)} of labor cost divided by {formatHours(totals.direct)} labor
+                      hours on jobs.
                     </p>
-                    <p className="mt-1">Each entry was costed at the real cost of an hour for its labor class on that day: wage, plus taxes and benefits, plus overhead. Overtime hours cost more.</p>
+                    <p className="mt-1">
+                      Each entry was costed at the real cost of an hour for its labor class on that day: wage,
+                      plus taxes and benefits, plus overhead. Overtime hours cost more.
+                    </p>
                   </PopoverContent>
                 </Popover>
               }
@@ -113,9 +157,24 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
               label="Labor as a share of revenue"
               value={revenue !== null && revenue > 0 ? formatPercentBp(ratioBp(totals.labor, revenue)) : null}
               emptyText="No revenue yet"
-              footer={<span className="text-xs text-fg-muted">{revenue !== null ? `Of ${formatMoney(revenue, { cents: false })} earned` : 'Labor cost divided by earned revenue'}</span>}
+              footer={
+                <span className="text-xs text-fg-muted">
+                  {revenue !== null
+                    ? `Of ${formatMoney(revenue, { cents: false })} earned`
+                    : 'Labor cost divided by earned revenue'}
+                </span>
+              }
             />
-            <KpiTile label="Overtime share" value={totals.hours > 0 ? formatPercentBp(hoursShareBp(totals.overtime, totals.hours)) : null} footer={<span className="text-xs text-fg-muted">{formatHours(totals.overtime, { maxDigits: 0 })} overtime hours of {formatHours(totals.hours, { maxDigits: 0 })}</span>} />
+            <KpiTile
+              label="Overtime share"
+              value={totals.hours > 0 ? formatPercentBp(hoursShareBp(totals.overtime, totals.hours)) : null}
+              footer={
+                <span className="text-xs text-fg-muted">
+                  {formatHours(totals.overtime, { maxDigits: 0 })} overtime hours of{' '}
+                  {formatHours(totals.hours, { maxDigits: 0 })}
+                </span>
+              }
+            />
           </div>
 
           <Panel title="Labor cost by labor class">
@@ -130,7 +189,11 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
               tableToggle
               series={[
                 { id: 'jobs', label: 'On jobs', values: data.byClass.map((row) => row.laborCents) },
-                { id: 'indirect', label: 'Not on a job', values: data.byClass.map((row) => row.indirectCents) },
+                {
+                  id: 'indirect',
+                  label: 'Not on a job',
+                  values: data.byClass.map((row) => row.indirectCents),
+                },
               ]}
             />
             <div className="mt-4 overflow-x-auto">
@@ -152,13 +215,25 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
                       <TableRow key={row.laborClassId ?? 'none'}>
                         <TableCell>
                           {row.name}
-                          {row.needsRate > 0 ? <span className="ml-2 text-xs text-warning-text">{row.needsRate} with no rate</span> : null}
+                          {row.needsRate > 0 ? (
+                            <span className="ml-2 text-xs text-warning-text">
+                              {row.needsRate} with no rate
+                            </span>
+                          ) : null}
                         </TableCell>
                         <TableCell numeric>{formatHours(row.directHours)}</TableCell>
                         <TableCell numeric>{formatMoney(row.laborCents)}</TableCell>
-                        <TableCell numeric>{formatMoney(perHour(row.laborCents, row.directHours), { empty: '' })}</TableCell>
-                        <TableCell numeric>{hours > 0 && Number(row.overtimeHours) > 0 ? formatPercentBp(hoursShareBp(Number(row.overtimeHours), hours)) : ''}</TableCell>
-                        <TableCell numeric>{row.indirectCents ? formatMoney(row.indirectCents) : ''}</TableCell>
+                        <TableCell numeric>
+                          {formatMoney(perHour(row.laborCents, row.directHours), { empty: '' })}
+                        </TableCell>
+                        <TableCell numeric>
+                          {hours > 0 && Number(row.overtimeHours) > 0
+                            ? formatPercentBp(hoursShareBp(Number(row.overtimeHours), hours))
+                            : ''}
+                        </TableCell>
+                        <TableCell numeric>
+                          {row.indirectCents ? formatMoney(row.indirectCents) : ''}
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -168,8 +243,20 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
           </Panel>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <GroupTable title="Labor cost by job type" first="Job type" rows={byType.data?.rows} loading={byType.isLoading} error={byType.isError ? byType.error.message : null} />
-            <GroupTable title="Labor cost by client" first="Client" rows={byClient.data?.rows} loading={byClient.isLoading} error={byClient.isError ? byClient.error.message : null} />
+            <GroupTable
+              title="Labor cost by job type"
+              first="Job type"
+              rows={byType.data?.rows}
+              loading={byType.isLoading}
+              error={byType.isError ? byType.error.message : null}
+            />
+            <GroupTable
+              title="Labor cost by client"
+              first="Client"
+              rows={byClient.data?.rows}
+              loading={byClient.isLoading}
+              error={byClient.isError ? byClient.error.message : null}
+            />
           </div>
         </>
       )}
@@ -177,8 +264,26 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
   );
 }
 
-function GroupTable({ title, first, rows, loading, error }: { readonly title: string; readonly first: string; readonly rows: readonly ProfitRowDTO[] | undefined; readonly loading: boolean; readonly error: string | null }) {
-  const sorted = useMemo(() => [...(rows ?? [])].filter((row) => (row.laborCents ?? 0) !== 0 || Number(row.hours) > 0).sort((a, b) => (b.laborCents ?? 0) - (a.laborCents ?? 0)), [rows]);
+function GroupTable({
+  title,
+  first,
+  rows,
+  loading,
+  error,
+}: {
+  readonly title: string;
+  readonly first: string;
+  readonly rows: readonly ProfitRowDTO[] | undefined;
+  readonly loading: boolean;
+  readonly error: string | null;
+}) {
+  const sorted = useMemo(
+    () =>
+      [...(rows ?? [])]
+        .filter((row) => (row.laborCents ?? 0) !== 0 || Number(row.hours) > 0)
+        .sort((a, b) => (b.laborCents ?? 0) - (a.laborCents ?? 0)),
+    [rows],
+  );
   return (
     <Panel title={title} bodyClassName="p-0">
       {loading ? (
@@ -211,8 +316,12 @@ function GroupTable({ title, first, rows, loading, error }: { readonly title: st
                   </TableCell>
                   <TableCell numeric>{formatHours(row.hours)}</TableCell>
                   <TableCell numeric>{formatMoney(row.laborCents)}</TableCell>
-                  <TableCell numeric>{formatMoney(perHour(row.laborCents, row.hours), { empty: '' })}</TableCell>
-                  <TableCell numeric>{row.laborPctBp === null ? '' : formatPercentBp(row.laborPctBp)}</TableCell>
+                  <TableCell numeric>
+                    {formatMoney(perHour(row.laborCents, row.hours), { empty: '' })}
+                  </TableCell>
+                  <TableCell numeric>
+                    {row.laborPctBp === null ? '' : formatPercentBp(row.laborPctBp)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

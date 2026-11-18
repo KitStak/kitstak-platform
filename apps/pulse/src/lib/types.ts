@@ -1176,3 +1176,195 @@ export interface PaceSuggestionRowDTO extends PaceSuggestionDTO {
   /** The all clients, all classes target in force today, if any. */
   readonly current: DecimalString | null;
 }
+
+/* ------------------------------------------------------------------ profit team: explain, drill down, pivot, reports */
+
+/** How a number in an explanation is written. Money is cents, percent is basis points. */
+export type ExplainUnit = 'money' | 'percent' | 'number' | 'hours' | 'pace' | 'money_per_hour' | 'money_per_unit' | 'text';
+
+export interface ExplainLineDTO {
+  readonly label: string;
+  /** Null when the reader may not see it. */
+  readonly value: number | null;
+  readonly unit: ExplainUnit;
+  /** How the line joins the one above: the first line starts, `total` is the answer, `note` is extra detail. */
+  readonly op: 'start' | 'plus' | 'minus' | 'times' | 'divide' | 'total' | 'note';
+  /** For `text` lines and unit words ("kits"). */
+  readonly text?: string | null;
+}
+
+/** `GET /api/v1/explain`: "How we got this" for one number (SPEC 4.15). */
+export interface ExplainDTO {
+  readonly metric: string;
+  readonly title: string;
+  /** What the number covers: "Acme Outdoor, Nov 1 to Nov 17, 2026". */
+  readonly scope: string;
+  /** The rule in plain words. */
+  readonly formula: string;
+  readonly lines: readonly ExplainLineDTO[];
+  /** Data quality lines. Empty means the number is complete. */
+  readonly quality: readonly string[];
+  /** Links to the rows behind the number. */
+  readonly links: readonly { readonly label: string; readonly href: string }[];
+  readonly from: string;
+  readonly to: string;
+  readonly moneyHidden: boolean;
+}
+
+/** One stamped row behind a profit number, with the names a person needs to read it. */
+export interface ProfitEntryDTO {
+  readonly workDate: string;
+  readonly kind: FactRowDTO['kind'];
+  readonly amountCents: MoneyCents;
+  readonly unitsGood: DecimalString;
+  readonly hours: DecimalString;
+  readonly jobId: string | null;
+  readonly jobNumber: string | null;
+  readonly jobName: string | null;
+  readonly clientId: string;
+  readonly clientName: string | null;
+  readonly serviceName: string | null;
+  readonly sourceTable: string;
+  readonly sourceId: string;
+  /** Where the row was typed: "Work log", "Extra service", "Cost". */
+  readonly sourceLabel: string;
+  readonly note: string | null;
+}
+
+export interface ProfitEntriesDTO {
+  readonly rows: readonly ProfitEntryDTO[];
+  /** True when more rows exist than were sent. */
+  readonly truncated: boolean;
+  readonly moneyHidden: boolean;
+}
+
+/** One cell of the pivot: the numbers where a row group meets a column group. */
+export interface PivotCellDTO {
+  readonly revenueCents: MoneyCents;
+  readonly costCents: MoneyCents;
+  readonly profitCents: MoneyCents;
+  readonly marginBp: number | null;
+  readonly unitsGood: DecimalString;
+  readonly hours: DecimalString;
+}
+
+/** `GET /api/v1/profit/pivot`: profit grouped by two things at once. */
+export interface ProfitPivotDTO {
+  readonly rowBy: ProfitGroup;
+  readonly colBy: ProfitGroup;
+  readonly from: string;
+  readonly to: string;
+  readonly rows: readonly { readonly key: string; readonly label: string; readonly sublabel: string | null }[];
+  readonly cols: readonly { readonly key: string; readonly label: string; readonly sublabel: string | null }[];
+  /** `cells[rowKey][colKey]`; a missing cell had no activity. */
+  readonly cells: Readonly<Record<string, Readonly<Record<string, PivotCellDTO>>>>;
+  readonly rowTotals: Readonly<Record<string, PivotCellDTO>>;
+  readonly colTotals: Readonly<Record<string, PivotCellDTO>>;
+  readonly total: PivotCellDTO;
+  readonly moneyHidden: boolean;
+}
+
+/** How a report cell is written. Money is cents, percent and points are basis points. */
+export type ReportCellKind = 'text' | 'money' | 'percent' | 'number' | 'hours' | 'pace' | 'date' | 'datetime' | 'status' | 'job_status';
+export type ReportCell = string | number | null;
+
+export interface ReportColumnDTO {
+  readonly key: string;
+  readonly label: string;
+  readonly kind: ReportCellKind;
+  /** Holds money or a margin: blanked when the reader, or a scheduled build, may not see money. */
+  readonly money?: boolean;
+  /** Good direction, for the tone of a difference column. */
+  readonly signed?: 'up_good' | 'down_good';
+}
+
+export interface ReportRowDTO {
+  readonly id: string;
+  readonly cells: Readonly<Record<string, ReportCell>>;
+  /** Where the row leads (a job, a client), inside Pulse. */
+  readonly href?: string | null;
+}
+
+export interface ReportSeriesDTO {
+  readonly id: string;
+  readonly label: string;
+  readonly values: readonly (number | null)[];
+}
+
+export interface ReportChartDTO {
+  readonly type: 'bar' | 'hbar' | 'stacked' | 'line' | 'combo' | 'waterfall' | 'pareto';
+  readonly title: string;
+  /** One sentence on how to read it. */
+  readonly description: string;
+  readonly labels: readonly string[];
+  readonly series: readonly ReportSeriesDTO[];
+  readonly format: 'money' | 'percent' | 'number' | 'hours';
+  /** Combo charts: the line panel. */
+  readonly lines?: readonly ReportSeriesDTO[];
+  readonly lineFormat?: 'money' | 'percent' | 'number' | 'hours';
+  /** Losses drawn in the down color. */
+  readonly signColors?: boolean;
+  /** Waterfall: where it starts and what the last bar is called. */
+  readonly start?: { readonly label: string; readonly value: number };
+  readonly endLabel?: string;
+}
+
+/** `GET /api/v1/reports/<slug>`: one built report. The page, the CSV and the print view all read this. */
+export interface ReportDTO {
+  readonly slug: string;
+  readonly name: string;
+  readonly description: string;
+  readonly from: string;
+  readonly to: string;
+  /** False for reports about right now (open jobs at risk, ready to bill). */
+  readonly usesDates: boolean;
+  /** The filters in words: "Nov 1 to Nov 17, 2026, Main site". */
+  readonly filtersLabel: string;
+  readonly generatedAt: string;
+  readonly columns: readonly ReportColumnDTO[];
+  readonly rows: readonly ReportRowDTO[];
+  readonly total: Readonly<Record<string, ReportCell>> | null;
+  readonly summary: readonly { readonly label: string; readonly value: ReportCell; readonly kind: ReportCellKind }[];
+  readonly chart: ReportChartDTO | null;
+  /** Plain sentences on how to read the report or what is missing. */
+  readonly notes: readonly string[];
+  readonly truncated: boolean;
+  readonly moneyHidden: boolean;
+}
+
+export interface ReportScheduleDTO {
+  readonly id: string;
+  readonly name: string;
+  readonly report: string;
+  readonly reportName: string;
+  readonly cadence: 'daily' | 'weekly' | 'monthly';
+  readonly weekday: number | null;
+  readonly dayOfMonth: number | null;
+  readonly hour: number;
+  /** Which days each build covers and its filters: `{ range, siteId?, clientId?, jobTypeId? }`. */
+  readonly config: Readonly<Record<string, unknown>>;
+  readonly recipientUserIds: readonly string[];
+  readonly includeMoney: boolean;
+  readonly enabled: boolean;
+  readonly lastRunAt: string | null;
+  readonly nextRunAt: string | null;
+  readonly createdBy: string | null;
+  readonly mine: boolean;
+  readonly canEdit: boolean;
+}
+
+export interface ReportRunDTO {
+  readonly id: string;
+  readonly scheduleId: string | null;
+  readonly scheduleName: string | null;
+  readonly report: string;
+  readonly reportName: string;
+  readonly periodLabel: string | null;
+  readonly rowCount: number;
+  readonly includeMoney: boolean;
+  readonly status: 'ready' | 'failed';
+  readonly error: string | null;
+  readonly createdAt: string;
+  /** False when the build holds money and the reader may not see money. */
+  readonly canOpen: boolean;
+}

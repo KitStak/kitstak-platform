@@ -10,6 +10,7 @@ import {
   deleteJobType,
   deleteVasService,
   restoreClient,
+  restoreVasService,
   updateClient,
   updateItem,
   updateJobType,
@@ -120,4 +121,9 @@ export async function updateVasServiceAction(input: z.input<typeof updateService
 const serviceIdSchema = z.object({ serviceId: uuid });
 export async function deleteVasServiceAction(input: z.input<typeof serviceIdSchema>) {
   return runAction(serviceIdSchema, input, (data, ctx) => deleteVasService(ctx, data.serviceId));
+}
+
+/** Undo of a deleted extra service. */
+export async function restoreVasServiceAction(input: z.input<typeof serviceIdSchema>) {
+  return runAction(serviceIdSchema, input, (data, ctx) => restoreVasService(ctx, data.serviceId));
 }

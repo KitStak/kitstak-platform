@@ -670,3 +670,13 @@ export async function deleteVasService(ctx: DomainContext, serviceId: string): P
     await logActivity(tx, ctx, { verb: 'service.deleted', entityType: 'service', entityId: serviceId, before: { code: before.code, name: before.name } });
   });
 }
+
+/** Brings a deleted extra service back (the Undo of a delete). Added by the profit team. */
+export async function restoreVasService(ctx: DomainContext, serviceId: string): Promise<VasServiceDTO> {
+  const access = await requirePulse(ctx, 'vas:manage');
+  return inTx(async (tx) => {
+    await restoreRow(tx, ctx.orgId, 'vas_services', serviceId, 'That service');
+    await logActivity(tx, ctx, { verb: 'service.restored', entityType: 'service', entityId: serviceId });
+    return toVasServiceDTO(await getVasServiceRow(ctx, serviceId, tx), access);
+  });
+}

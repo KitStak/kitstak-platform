@@ -14,7 +14,10 @@ export interface RangeState {
   readonly siteId: string | null;
 }
 
-export function presetRange(preset: Exclude<RangePreset, 'custom'>, today: string): { from: string; to: string } {
+export function presetRange(
+  preset: Exclude<RangePreset, 'custom'>,
+  today: string,
+): { from: string; to: string } {
   if (preset === 'this_month') return { from: startOfMonth(today), to: today };
   if (preset === 'last_month') {
     const start = addMonths(startOfMonth(today), -1);
@@ -24,7 +27,11 @@ export function presetRange(preset: Exclude<RangePreset, 'custom'>, today: strin
 }
 
 export function useRange(today: string, initial: Exclude<RangePreset, 'custom'> = 'last_30') {
-  const [state, setState] = useState<RangeState>(() => ({ preset: initial, ...presetRange(initial, today), siteId: null }));
+  const [state, setState] = useState<RangeState>(() => ({
+    preset: initial,
+    ...presetRange(initial, today),
+    siteId: null,
+  }));
   return useMemo(() => ({ state, setState }), [state]);
 }
 
@@ -36,19 +43,57 @@ const PRESETS: readonly { value: RangePreset; label: string }[] = [
   { value: 'custom', label: 'Pick days' },
 ];
 
-export function RangeBar({ state, onChange, sites, today }: { readonly state: RangeState; readonly onChange: (next: RangeState) => void; readonly sites: readonly SiteDTO[]; readonly today: string }) {
+export function RangeBar({
+  state,
+  onChange,
+  sites,
+  today,
+}: {
+  readonly state: RangeState;
+  readonly onChange: (next: RangeState) => void;
+  readonly sites: readonly SiteDTO[];
+  readonly today: string;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="range-bar">
-      <ToggleGroup label="Days to show" value={state.preset} onValueChange={(preset) => onChange(preset === 'custom' ? { ...state, preset } : { ...state, preset, ...presetRange(preset, today) })} options={PRESETS} />
+      <ToggleGroup
+        label="Days to show"
+        value={state.preset}
+        onValueChange={(preset) =>
+          onChange(
+            preset === 'custom' ? { ...state, preset } : { ...state, preset, ...presetRange(preset, today) },
+          )
+        }
+        options={PRESETS}
+      />
       {state.preset === 'custom' ? (
         <>
-          <IsoDatePicker aria-label="From day" value={state.from} clearable={false} onChange={(value) => value && onChange({ ...state, from: value > state.to ? state.to : value })} />
+          <IsoDatePicker
+            aria-label="From day"
+            value={state.from}
+            clearable={false}
+            onChange={(value) => value && onChange({ ...state, from: value > state.to ? state.to : value })}
+          />
           <span className="text-sm text-fg-muted">to</span>
-          <IsoDatePicker aria-label="To day" value={state.to} clearable={false} onChange={(value) => value && onChange({ ...state, to: value < state.from ? state.from : value })} />
+          <IsoDatePicker
+            aria-label="To day"
+            value={state.to}
+            clearable={false}
+            onChange={(value) => value && onChange({ ...state, to: value < state.from ? state.from : value })}
+          />
         </>
       ) : null}
       {sites.length > 1 ? (
-        <Select aria-label="Site" className="w-52" value={state.siteId ?? 'all'} onValueChange={(value) => onChange({ ...state, siteId: value === 'all' ? null : value })} options={[{ value: 'all', label: 'All sites' }, ...sites.map((site) => ({ value: site.id, label: site.name }))]} />
+        <Select
+          aria-label="Site"
+          className="w-52"
+          value={state.siteId ?? 'all'}
+          onValueChange={(value) => onChange({ ...state, siteId: value === 'all' ? null : value })}
+          options={[
+            { value: 'all', label: 'All sites' },
+            ...sites.map((site) => ({ value: site.id, label: site.name })),
+          ]}
+        />
       ) : null}
     </div>
   );

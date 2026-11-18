@@ -1,7 +1,16 @@
 'use server';
 /** Production team actions: device links, kiosk PINs and time punches. */
 import { z } from 'zod';
-import { createDeviceLink, deletePunches, renewDeviceLink, restorePunches, revokeDeviceLink, savePunches, setMyKioskPin, updateDeviceLink } from '@/server/domain';
+import {
+  createDeviceLink,
+  deletePunches,
+  renewDeviceLink,
+  restorePunches,
+  revokeDeviceLink,
+  savePunches,
+  setMyKioskPin,
+  updateDeviceLink,
+} from '@/server/domain';
 import { runAction } from './_action';
 import { hours, indirectReason, isoDate, name, positiveCents, uuid, version } from './schemas';
 
@@ -14,27 +23,49 @@ const createLinkSchema = z.object({
 });
 /** Makes a device link. The answer holds the secret path once: show it, then forget it. */
 export async function createDeviceLinkAction(input: z.input<typeof createLinkSchema>) {
-  return runAction(createLinkSchema, input, (data, ctx) => createDeviceLink(ctx, data), { revalidate: false });
+  return runAction(createLinkSchema, input, (data, ctx) => createDeviceLink(ctx, data), {
+    revalidate: false,
+  });
 }
 
 const linkIdSchema = z.object({ linkId: uuid });
 /** Turns a device link off. Pair with `renewDeviceLinkAction` for undo. */
 export async function revokeDeviceLinkAction(input: z.input<typeof linkIdSchema>) {
-  return runAction(linkIdSchema, input, (data, ctx) => revokeDeviceLink(ctx, data.linkId), { revalidate: false });
+  return runAction(linkIdSchema, input, (data, ctx) => revokeDeviceLink(ctx, data.linkId), {
+    revalidate: false,
+  });
 }
 
-const renewSchema = z.object({ linkId: uuid, expiresInDays: z.number().int().min(1).max(365).nullable().optional() });
+const renewSchema = z.object({
+  linkId: uuid,
+  expiresInDays: z.number().int().min(1).max(365).nullable().optional(),
+});
 /** Turns a link back on, or gives it more days. */
 export async function renewDeviceLinkAction(input: z.input<typeof renewSchema>) {
-  return runAction(renewSchema, input, (data, ctx) => renewDeviceLink(ctx, data.linkId, { expiresInDays: data.expiresInDays }), { revalidate: false });
+  return runAction(
+    renewSchema,
+    input,
+    (data, ctx) => renewDeviceLink(ctx, data.linkId, { expiresInDays: data.expiresInDays }),
+    { revalidate: false },
+  );
 }
 
-const updateLinkSchema = z.object({ linkId: uuid, patch: z.object({ name: name(80).optional(), config: z.record(z.string(), z.unknown()).optional() }) });
+const updateLinkSchema = z.object({
+  linkId: uuid,
+  patch: z.object({ name: name(80).optional(), config: z.record(z.string(), z.unknown()).optional() }),
+});
 export async function updateDeviceLinkAction(input: z.input<typeof updateLinkSchema>) {
-  return runAction(updateLinkSchema, input, (data, ctx) => updateDeviceLink(ctx, data.linkId, data.patch), { revalidate: false });
+  return runAction(updateLinkSchema, input, (data, ctx) => updateDeviceLink(ctx, data.linkId, data.patch), {
+    revalidate: false,
+  });
 }
 
-const myPinSchema = z.object({ pin: z.string().regex(/^\d{4}$/, 'Type 4 digits.').nullable() });
+const myPinSchema = z.object({
+  pin: z
+    .string()
+    .regex(/^\d{4}$/, 'Type 4 digits.')
+    .nullable(),
+});
 /** Sets or clears the signed in person's own kiosk PIN. */
 export async function setMyKioskPinAction(input: z.input<typeof myPinSchema>) {
   return runAction(myPinSchema, input, (data, ctx) => setMyKioskPin(ctx, data.pin), { revalidate: false });

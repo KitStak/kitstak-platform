@@ -17,7 +17,22 @@ import { addDays, isWorkDay, productivityBp, shortDate, unitsPerHour, weekdayNam
 import { qk } from '@/lib/query-keys';
 import type { ProductionEntryDTO } from '@/lib/types';
 import { deleteProductionEntriesAction, saveProductionBulkAction } from '@/server/actions/log';
-import { EMPTY_VALUES, applyField, isBlank, isBlockPaste, lineProblem, paceTone, parsePasted, parseTyped, tidy, toPayload, valuesFromEntry, type LineField, type LineValues, type PaceThresholds } from './log-math';
+import {
+  EMPTY_VALUES,
+  applyField,
+  isBlank,
+  isBlockPaste,
+  lineProblem,
+  paceTone,
+  parsePasted,
+  parseTyped,
+  tidy,
+  toPayload,
+  valuesFromEntry,
+  type LineField,
+  type LineValues,
+  type PaceThresholds,
+} from './log-math';
 
 interface BulkRow {
   readonly key: string;
@@ -27,18 +42,36 @@ interface BulkRow {
 }
 
 const FIELDS: readonly LineField[] = ['unitsGood', 'unitsScrap', 'people', 'hoursEach', 'hours', 'note'];
-const LABELS: Readonly<Record<string, string>> = { unitsGood: 'Units good', unitsScrap: 'Scrap', people: 'People', hoursEach: 'Hours each', hours: 'Labor hours', note: 'Note' };
+const LABELS: Readonly<Record<string, string>> = {
+  unitsGood: 'Units good',
+  unitsScrap: 'Scrap',
+  people: 'People',
+  hoursEach: 'Hours each',
+  hours: 'Labor hours',
+  note: 'Note',
+};
 const INVALIDATE = [qk.streams(), qk.jobsRoot(), qk.profitRoot(), qk.summaryRoot(), qk.badges()] as const;
 
 let seq = 0;
-const newRow = (date: string, jobId = '', values: Partial<LineValues> = {}): BulkRow => ({ key: `bulk-${(seq += 1)}`, date, jobId, values: { ...EMPTY_VALUES, ...values } });
+const newRow = (date: string, jobId = '', values: Partial<LineValues> = {}): BulkRow => ({
+  key: `bulk-${(seq += 1)}`,
+  date,
+  jobId,
+  values: { ...EMPTY_VALUES, ...values },
+});
 
 const cell =
   'h-10 w-full min-w-0 rounded-md border border-border-input bg-panel px-2 text-sm tabular-nums text-fg placeholder:text-fg-placeholder hover:border-border-input-hover focus-visible:border-focus focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus lg:h-8';
 
 const COLS = 'lg:grid-cols-[150px_minmax(180px,1fr)_84px_64px_64px_76px_84px_minmax(90px,150px)_150px_64px]';
 
-export function BulkView({ today, thresholds }: { readonly today: string; readonly thresholds: PaceThresholds }) {
+export function BulkView({
+  today,
+  thresholds,
+}: {
+  readonly today: string;
+  readonly thresholds: PaceThresholds;
+}) {
   const jobs = useJobs({ tab: 'open', limit: 500 });
   const settings = useSettings();
   const [rows, setRows] = useState<BulkRow[]>(() => [newRow(today)]);
@@ -46,20 +79,41 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
   const [fillFrom, setFillFrom] = useState(addDays(today, -4));
   const [fillTo, setFillTo] = useState(today);
   const container = useRef<HTMLDivElement>(null);
-  const jobList = useMemo(() => [...(jobs.data ?? [])].sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true })), [jobs.data]);
+  const jobList = useMemo(
+    () =>
+      [...(jobs.data ?? [])].sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true })),
+    [jobs.data],
+  );
   const jobById = useMemo(() => new Map(jobList.map((job) => [job.id, job])), [jobList]);
-  const jobByNumber = useMemo(() => new Map(jobList.map((job) => [job.number.toLowerCase(), job])), [jobList]);
+  const jobByNumber = useMemo(
+    () => new Map(jobList.map((job) => [job.number.toLowerCase(), job])),
+    [jobList],
+  );
   const dates = rows.map((row) => row.date).sort();
-  const existing = useProduction({ from: dates[0] ?? today, to: dates[dates.length - 1] ?? today, limit: 5000 }, { enabled: rows.some((row) => row.jobId) });
+  const existing = useProduction(
+    { from: dates[0] ?? today, to: dates[dates.length - 1] ?? today, limit: 5000 },
+    { enabled: rows.some((row) => row.jobId) },
+  );
   const [saveError, setSaveError] = useState<string | null>(null);
-  const save = useServerAction(saveProductionBulkAction, { invalidate: INVALIDATE, silentError: true, onError: (problem) => setSaveError(`Nothing was saved. ${problem.message}`) });
+  const save = useServerAction(saveProductionBulkAction, {
+    invalidate: INVALIDATE,
+    silentError: true,
+    onError: (problem) => setSaveError(`Nothing was saved. ${problem.message}`),
+  });
   const workingDays = settings.data?.workingDays;
 
   /** The entry a row would land on: same job, day, day shift and the job's own labor class. */
   const match = (row: BulkRow): ProductionEntryDTO | undefined => {
     const job = jobById.get(row.jobId);
     if (!job) return undefined;
-    return (existing.data ?? []).find((entry) => entry.jobId === row.jobId && entry.workDate === row.date && entry.shift === 'day' && entry.laborClassId === (job.defaultLaborClassId ?? null) && !entry.deletedAt);
+    return (existing.data ?? []).find(
+      (entry) =>
+        entry.jobId === row.jobId &&
+        entry.workDate === row.date &&
+        entry.shift === 'day' &&
+        entry.laborClassId === (job.defaultLaborClassId ?? null) &&
+        !entry.deletedAt,
+    );
   };
 
   const filled = rows.filter((row) => row.jobId && !isBlank(row.values));
@@ -68,19 +122,29 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
   for (const row of rows) {
     if (!row.jobId && isBlank(row.values)) continue;
     if (!row.jobId) problems.set(row.key, 'Pick a job for this row.');
-    else if (isBlank(row.values)) problems.set(row.key, 'Type units, or people and hours. Or remove the row.');
+    else if (isBlank(row.values))
+      problems.set(row.key, 'Type units, or people and hours. Or remove the row.');
     else if (lineProblem(row.values)) problems.set(row.key, lineProblem(row.values)!);
-    else if (seen.has(`${row.jobId}:${row.date}`)) problems.set(row.key, 'This job already has a row for this day above. Add the numbers together.');
+    else if (seen.has(`${row.jobId}:${row.date}`))
+      problems.set(row.key, 'This job already has a row for this day above. Add the numbers together.');
     else if (row.date > today) problems.set(row.key, 'This day is in the future.');
     seen.add(`${row.jobId}:${row.date}`);
   }
   const replaces = filled.filter((row) => match(row)).length;
 
-  const change = (key: string, patch: Partial<BulkRow>) => setRows((previous) => previous.map((row) => (row.key === key ? { ...row, ...patch } : row)));
-  const setField = (key: string, field: LineField, text: string) => setRows((previous) => previous.map((row) => (row.key === key ? { ...row, values: applyField(row.values, field, text) } : row)));
+  const change = (key: string, patch: Partial<BulkRow>) =>
+    setRows((previous) => previous.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+  const setField = (key: string, field: LineField, text: string) =>
+    setRows((previous) =>
+      previous.map((row) =>
+        row.key === key ? { ...row, values: applyField(row.values, field, text) } : row,
+      ),
+    );
 
   function focus(key: string, field: string) {
-    const el = container.current?.querySelector<HTMLInputElement>(`[data-row="${key}"][data-field="${field}"]`);
+    const el = container.current?.querySelector<HTMLInputElement>(
+      `[data-row="${key}"][data-field="${field}"]`,
+    );
     el?.focus();
     el?.select?.();
   }
@@ -131,8 +195,29 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
     for (let day = fillFrom; day <= fillTo && added.length < 62; day = addDays(day, 1)) {
       if (!isWorkDay(day, workingDays)) continue;
       if (rows.some((row) => row.jobId === job.id && row.date === day)) continue;
-      const entry = (existing.data ?? []).find((item) => item.jobId === job.id && item.workDate === day && item.shift === 'day' && item.laborClassId === (job.defaultLaborClassId ?? null) && !item.deletedAt);
-      added.push(newRow(day, job.id, entry ? valuesFromEntry(entry) : crew > 0 ? applyField(applyField(EMPTY_VALUES, 'people', tidy(crew)), 'hoursEach', tidy(settings.data?.defaultShiftHours ?? '8')) : {}));
+      const entry = (existing.data ?? []).find(
+        (item) =>
+          item.jobId === job.id &&
+          item.workDate === day &&
+          item.shift === 'day' &&
+          item.laborClassId === (job.defaultLaborClassId ?? null) &&
+          !item.deletedAt,
+      );
+      added.push(
+        newRow(
+          day,
+          job.id,
+          entry
+            ? valuesFromEntry(entry)
+            : crew > 0
+              ? applyField(
+                  applyField(EMPTY_VALUES, 'people', tidy(crew)),
+                  'hoursEach',
+                  tidy(settings.data?.defaultShiftHours ?? '8'),
+                )
+              : {},
+        ),
+      );
     }
     if (added.length === 0) {
       toast.info('No days to add', 'Those days are already on the sheet, or the range has no work days.');
@@ -150,20 +235,28 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
     const start = rows.findIndex((row) => row.key === key);
     const startCol = FIELDS.indexOf(field);
     // A block whose first column is a day and second a job number makes new rows.
-    const asRows = block.filter((cells) => parseDate(cells[0] ?? '').ok && jobByNumber.has((cells[1] ?? '').toLowerCase()));
+    const asRows = block.filter(
+      (cells) => parseDate(cells[0] ?? '').ok && jobByNumber.has((cells[1] ?? '').toLowerCase()),
+    );
     if (asRows.length > 0 && asRows.length >= block.length - 1) {
       const added = asRows.map((cells) => {
         const parsed = parseDate(cells[0] ?? '');
         const job = jobByNumber.get((cells[1] ?? '').toLowerCase())!;
         let values: LineValues = EMPTY_VALUES;
-        (['unitsGood', 'unitsScrap', 'people', 'hoursEach', 'hours', 'note'] as const).forEach((name, index) => {
-          const value = cells[2 + index] ?? '';
-          if (value !== '') values = applyField(values, name, name === 'note' ? value : value.replace(/[$,\s]/g, ''));
-        });
+        (['unitsGood', 'unitsScrap', 'people', 'hoursEach', 'hours', 'note'] as const).forEach(
+          (name, index) => {
+            const value = cells[2 + index] ?? '';
+            if (value !== '')
+              values = applyField(values, name, name === 'note' ? value : value.replace(/[$,\s]/g, ''));
+          },
+        );
         return newRow(parsed.ok ? String(parsed.value) : today, job.id, values);
       });
       setRows((previous) => [...previous.filter((row) => row.jobId || !isBlank(row.values)), ...added]);
-      toast.success(`Pasted ${added.length} ${added.length === 1 ? 'row' : 'rows'}`, block.length > asRows.length ? 'The header row was left out.' : undefined);
+      toast.success(
+        `Pasted ${added.length} ${added.length === 1 ? 'row' : 'rows'}`,
+        block.length > asRows.length ? 'The header row was left out.' : undefined,
+      );
       return;
     }
     setRows((previous) => {
@@ -178,7 +271,8 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
         let values = row.values;
         cells.forEach((value, c) => {
           const name = FIELDS[startCol + c];
-          if (name && value !== '') values = applyField(values, name, name === 'note' ? value : value.replace(/[$,\s]/g, ''));
+          if (name && value !== '')
+            values = applyField(values, name, name === 'note' ? value : value.replace(/[$,\s]/g, ''));
         });
         next[next.indexOf(row)] = { ...row, values };
       });
@@ -189,7 +283,9 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
   async function saveAll() {
     setSaveError(null);
     if (problems.size > 0) {
-      setSaveError(`${problems.size} ${problems.size === 1 ? 'row needs' : 'rows need'} a fix before anything is saved.`);
+      setSaveError(
+        `${problems.size} ${problems.size === 1 ? 'row needs' : 'rows need'} a fix before anything is saved.`,
+      );
       return;
     }
     if (filled.length === 0) {
@@ -197,27 +293,56 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
       return;
     }
     const before = filled.map((row) => ({ row, entry: match(row) }));
-    const result = await save.run({ entries: before.map(({ row, entry }) => ({ id: entry?.id ?? null, jobId: row.jobId, workDate: row.date, shift: 'day', version: entry?.version ?? null, ...toPayload({ ...row.values, laborClassId: jobById.get(row.jobId)?.defaultLaborClassId ?? null, setup: entry ? tidy(entry.setupHours) : '', overtime: entry ? tidy(entry.overtimeHours) : '' }) })) });
+    const result = await save.run({
+      entries: before.map(({ row, entry }) => ({
+        id: entry?.id ?? null,
+        jobId: row.jobId,
+        workDate: row.date,
+        shift: 'day',
+        version: entry?.version ?? null,
+        ...toPayload({
+          ...row.values,
+          laborClassId: jobById.get(row.jobId)?.defaultLaborClassId ?? null,
+          setup: entry ? tidy(entry.setupHours) : '',
+          overtime: entry ? tidy(entry.overtimeHours) : '',
+        }),
+      })),
+    });
     if (!result) return;
     const kept = rows.filter((row) => !filled.includes(row));
     setRows(kept.length > 0 ? kept : [newRow(today)]);
     const saved = result.entries;
-    toast.undo(`Saved ${filled.length} ${filled.length === 1 ? 'row' : 'rows'}: ${result.created} new, ${result.updated} changed`, {
-      onUndo: async () => {
-        const created = before.map((item, index) => ({ ...item, saved: saved[index] })).filter((item) => !item.entry && item.saved);
-        const edited = before.map((item, index) => ({ ...item, saved: saved[index] })).filter((item) => item.entry && item.saved);
-        if (created.length > 0) {
-          const gone = await deleteProductionEntriesAction({ ids: created.map((item) => item.saved!.id) });
-          if (!gone.ok) throw new Error(gone.error.message);
-        }
-        if (edited.length > 0) {
-          const back = await saveProductionBulkAction({ entries: edited.map((item) => ({ id: item.entry!.id, jobId: item.entry!.jobId, workDate: item.entry!.workDate, version: item.saved!.version, ...toPayload(valuesFromEntry(item.entry!)) })) });
-          if (!back.ok) throw new Error(back.error.message);
-        }
-        setRows((previous) => [...previous.filter((row) => row.jobId || !isBlank(row.values)), ...filled]);
-        await existing.refetch();
+    toast.undo(
+      `Saved ${filled.length} ${filled.length === 1 ? 'row' : 'rows'}: ${result.created} new, ${result.updated} changed`,
+      {
+        onUndo: async () => {
+          const created = before
+            .map((item, index) => ({ ...item, saved: saved[index] }))
+            .filter((item) => !item.entry && item.saved);
+          const edited = before
+            .map((item, index) => ({ ...item, saved: saved[index] }))
+            .filter((item) => item.entry && item.saved);
+          if (created.length > 0) {
+            const gone = await deleteProductionEntriesAction({ ids: created.map((item) => item.saved!.id) });
+            if (!gone.ok) throw new Error(gone.error.message);
+          }
+          if (edited.length > 0) {
+            const back = await saveProductionBulkAction({
+              entries: edited.map((item) => ({
+                id: item.entry!.id,
+                jobId: item.entry!.jobId,
+                workDate: item.entry!.workDate,
+                version: item.saved!.version,
+                ...toPayload(valuesFromEntry(item.entry!)),
+              })),
+            });
+            if (!back.ok) throw new Error(back.error.message);
+          }
+          setRows((previous) => [...previous.filter((row) => row.jobId || !isBlank(row.values)), ...filled]);
+          await existing.refetch();
+        },
       },
-    });
+    );
   }
 
   return (
@@ -228,11 +353,19 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
             <h2 className="flex items-center gap-1.5 text-base font-semibold text-fg">
               <CalendarRange aria-hidden className="size-4 text-icon" /> Fill a run of days for one job
             </h2>
-            <p className="text-sm text-fg-muted">Pick a job and the days. Pulse adds one row for each work day, with the usual crew filled in. Days that are already logged come in with their numbers.</p>
+            <p className="text-sm text-fg-muted">
+              Pick a job and the days. Pulse adds one row for each work day, with the usual crew filled in.
+              Days that are already logged come in with their numbers.
+            </p>
           </div>
           <label className="flex min-w-0 basis-64 flex-col gap-1 text-xs text-fg-muted">
             Job
-            <select className={cn(cell, 'cursor-pointer')} value={fillJob} onChange={(event) => setFillJob(event.target.value)} aria-label="Job to fill">
+            <select
+              className={cn(cell, 'cursor-pointer')}
+              value={fillJob}
+              onChange={(event) => setFillJob(event.target.value)}
+              aria-label="Job to fill"
+            >
               <option value="">{jobs.isLoading ? 'Loading jobs' : 'Pick a job'}</option>
               {jobList.map((job) => (
                 <option key={job.id} value={job.id}>
@@ -243,11 +376,21 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
           </label>
           <label className="flex flex-col gap-1 text-xs text-fg-muted">
             From
-            <IsoDatePicker value={fillFrom} onChange={(value) => value && setFillFrom(value)} clearable={false} aria-label="First day" />
+            <IsoDatePicker
+              value={fillFrom}
+              onChange={(value) => value && setFillFrom(value)}
+              clearable={false}
+              aria-label="First day"
+            />
           </label>
           <label className="flex flex-col gap-1 text-xs text-fg-muted">
             To
-            <IsoDatePicker value={fillTo} onChange={(value) => value && setFillTo(value > today ? today : value)} clearable={false} aria-label="Last day" />
+            <IsoDatePicker
+              value={fillTo}
+              onChange={(value) => value && setFillTo(value > today ? today : value)}
+              clearable={false}
+              aria-label="Last day"
+            />
           </label>
           <Button variant="secondary" leadingIcon={<Plus aria-hidden />} onClick={fillRun}>
             Add the days
@@ -257,7 +400,13 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
 
       <Panel bodyClassName="p-0">
         <div ref={container}>
-          <div aria-hidden className={cn('hidden items-end gap-1 border-b border-border-default px-3 py-2 text-xs font-medium text-fg-muted lg:grid', COLS)}>
+          <div
+            aria-hidden
+            className={cn(
+              'hidden items-end gap-1 border-b border-border-default px-3 py-2 text-xs font-medium text-fg-muted lg:grid',
+              COLS,
+            )}
+          >
             <span>Day</span>
             <span>Job</span>
             <span className="pr-2 text-right">Units good</span>
@@ -280,7 +429,10 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
                 const job = jobById.get(row.jobId);
                 const entry = match(row);
                 const problem = problems.get(row.key);
-                const pace = unitsPerHour(parseTyped(row.values.unitsGood) ?? 0, parseTyped(row.values.hours) ?? 0);
+                const pace = unitsPerHour(
+                  parseTyped(row.values.unitsGood) ?? 0,
+                  parseTyped(row.values.hours) ?? 0,
+                );
                 const target = job?.stats.standardUph ?? job?.standardUph ?? null;
                 const tone = paceTone(pace === null ? null : productivityBp(pace, target), thresholds);
                 const input = (field: LineField, text = false) => (
@@ -301,14 +453,35 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
                   </label>
                 );
                 return (
-                  <li key={row.key} data-testid="bulk-row" className={cn('grid grid-cols-2 gap-2 px-3 py-3 sm:grid-cols-4 lg:items-center lg:gap-1 lg:py-1.5', COLS)}>
+                  <li
+                    key={row.key}
+                    data-testid="bulk-row"
+                    className={cn(
+                      'grid grid-cols-2 gap-2 px-3 py-3 sm:grid-cols-4 lg:items-center lg:gap-1 lg:py-1.5',
+                      COLS,
+                    )}
+                  >
                     <label className="flex min-w-0 flex-col gap-1">
                       <span className="text-xs text-fg-muted lg:sr-only">Day</span>
-                      <input type="date" aria-label="Day" max={today} value={row.date} onChange={(event) => event.target.value && change(row.key, { date: event.target.value })} className={cell} />
+                      <input
+                        type="date"
+                        aria-label="Day"
+                        max={today}
+                        value={row.date}
+                        onChange={(event) =>
+                          event.target.value && change(row.key, { date: event.target.value })
+                        }
+                        className={cell}
+                      />
                     </label>
                     <label className="col-span-1 flex min-w-0 flex-col gap-1 sm:col-span-3 lg:col-span-1">
                       <span className="text-xs text-fg-muted lg:sr-only">Job</span>
-                      <select aria-label={`Job for the row on ${shortDate(row.date)}`} value={row.jobId} onChange={(event) => change(row.key, { jobId: event.target.value })} className={cn(cell, 'cursor-pointer truncate')}>
+                      <select
+                        aria-label={`Job for the row on ${shortDate(row.date)}`}
+                        value={row.jobId}
+                        onChange={(event) => change(row.key, { jobId: event.target.value })}
+                        className={cn(cell, 'cursor-pointer truncate')}
+                      >
                         <option value="">Pick a job</option>
                         {jobList.map((item) => (
                           <option key={item.id} value={item.id}>
@@ -331,9 +504,28 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
                       ) : (
                         <>
                           <span className="text-fg-muted">{weekdayName(row.date).slice(0, 3)}</span>
-                          {entry ? <Badge tone="warning" size="sm">Replaces what is logged</Badge> : row.jobId && !isBlank(row.values) ? <Badge tone="success" size="sm">New</Badge> : null}
+                          {entry ? (
+                            <Badge tone="warning" size="sm">
+                              Replaces what is logged
+                            </Badge>
+                          ) : row.jobId && !isBlank(row.values) ? (
+                            <Badge tone="success" size="sm">
+                              New
+                            </Badge>
+                          ) : null}
                           {pace !== null ? (
-                            <span className={cn('tabular-nums', tone === 'bad' ? 'text-danger-text' : tone === 'watch' ? 'text-warning-text' : tone === 'good' ? 'text-success-text' : 'text-fg-secondary')}>
+                            <span
+                              className={cn(
+                                'tabular-nums',
+                                tone === 'bad'
+                                  ? 'text-danger-text'
+                                  : tone === 'watch'
+                                    ? 'text-warning-text'
+                                    : tone === 'good'
+                                      ? 'text-success-text'
+                                      : 'text-fg-secondary',
+                              )}
+                            >
                               {formatPace(pace)}
                               {target ? ` of ${formatPace(target)}` : ''} an hour
                             </span>
@@ -342,8 +534,26 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
                       )}
                     </div>
                     <div className="col-span-full flex items-center justify-end gap-0.5 lg:col-span-1">
-                      <IconButton label="Duplicate this row for the next work day" icon={<Copy aria-hidden />} size="sm" variant="ghost" onClick={() => duplicate(row)} />
-                      <IconButton label="Remove this row from the sheet" icon={<Trash2 aria-hidden />} size="sm" variant="ghost" onClick={() => setRows((previous) => (previous.length > 1 ? previous.filter((item) => item.key !== row.key) : [newRow(today)]))} />
+                      <IconButton
+                        label="Duplicate this row for the next work day"
+                        icon={<Copy aria-hidden />}
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => duplicate(row)}
+                      />
+                      <IconButton
+                        label="Remove this row from the sheet"
+                        icon={<Trash2 aria-hidden />}
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          setRows((previous) =>
+                            previous.length > 1
+                              ? previous.filter((item) => item.key !== row.key)
+                              : [newRow(today)],
+                          )
+                        }
+                      />
                     </div>
                   </li>
                 );
@@ -352,19 +562,42 @@ export function BulkView({ today, thresholds }: { readonly today: string; readon
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3 border-t border-border-default bg-sunken px-4 py-3">
-          <Button variant="secondary" leadingIcon={<Plus aria-hidden />} onClick={() => setRows((previous) => [...previous, newRow(previous[previous.length - 1]?.date ?? today, previous[previous.length - 1]?.jobId ?? '')])}>
+          <Button
+            variant="secondary"
+            leadingIcon={<Plus aria-hidden />}
+            onClick={() =>
+              setRows((previous) => [
+                ...previous,
+                newRow(
+                  previous[previous.length - 1]?.date ?? today,
+                  previous[previous.length - 1]?.jobId ?? '',
+                ),
+              ])
+            }
+          >
             Add a row
           </Button>
           <span className="flex items-center gap-1.5 text-xs text-fg-muted">
-            <ClipboardPaste aria-hidden className="size-3.5" /> Paste rows from a spreadsheet: day, job number, units, scrap, people, hours each, labor hours, note.
+            <ClipboardPaste aria-hidden className="size-3.5" /> Paste rows from a spreadsheet: day, job
+            number, units, scrap, people, hours each, labor hours, note.
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-3">
             <span className="text-sm text-fg-secondary" aria-live="polite">
               {filled.length} {filled.length === 1 ? 'row' : 'rows'} to save
-              {filled.length > 0 ? `, ${formatNumber(filled.reduce((sum, row) => sum + (parseTyped(row.values.unitsGood) ?? 0), 0), { maxDigits: 0 })} units, ${formatHours(filled.reduce((sum, row) => sum + (parseTyped(row.values.hours) ?? 0), 0))} labor hours` : ''}
+              {filled.length > 0
+                ? `, ${formatNumber(
+                    filled.reduce((sum, row) => sum + (parseTyped(row.values.unitsGood) ?? 0), 0),
+                    { maxDigits: 0 },
+                  )} units, ${formatHours(filled.reduce((sum, row) => sum + (parseTyped(row.values.hours) ?? 0), 0))} labor hours`
+                : ''}
               {replaces > 0 ? `. ${replaces} will replace what is logged` : ''}
             </span>
-            <Button leadingIcon={<Save aria-hidden />} onClick={() => void saveAll()} loading={save.pending} disabled={filled.length === 0}>
+            <Button
+              leadingIcon={<Save aria-hidden />}
+              onClick={() => void saveAll()}
+              loading={save.pending}
+              disabled={filled.length === 0}
+            >
               Save all rows
             </Button>
           </div>

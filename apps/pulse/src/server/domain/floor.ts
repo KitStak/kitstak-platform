@@ -20,7 +20,10 @@ import { listStandards, suggestStandard } from './standards';
  * The manager queue: every site day of the last `days` days that has work logged or a review
  * state, newest first, with its odd rows computed fresh and the jobs that look forgotten.
  */
-export async function getReviewQueue(ctx: DomainContext, options: { siteId?: string | null; days?: number } = {}): Promise<DayQueueDTO[]> {
+export async function getReviewQueue(
+  ctx: DomainContext,
+  options: { siteId?: string | null; days?: number } = {},
+): Promise<DayQueueDTO[]> {
   await requirePulse(ctx, 'pulse:read');
   const span = Math.min(Math.max(options.days ?? 14, 1), 62);
   const sites = (await listSites(ctx)).filter((site) => !options.siteId || site.id === options.siteId);
@@ -28,7 +31,14 @@ export async function getReviewQueue(ctx: DomainContext, options: { siteId?: str
   const newest = sites.reduce((latest, site) => (site.today > latest ? site.today : latest), sites[0]!.today);
   const from = addDays(newest, -(span - 1));
   const siteFilter = options.siteId ? sql`AND p.site_id = ${options.siteId}` : sql``;
-  const dayRows = await rows<{ site_id: string; d: string; entries: number; jobs: number; units: string; hours: string }>(
+  const dayRows = await rows<{
+    site_id: string;
+    d: string;
+    entries: number;
+    jobs: number;
+    units: string;
+    hours: string;
+  }>(
     db,
     sql`SELECT p.site_id, to_char(p.work_date, 'YYYY-MM-DD') AS d, count(*)::int AS entries, count(DISTINCT p.job_id)::int AS jobs, sum(p.units_good)::text AS units, sum(p.hours)::text AS hours
           FROM pulse.production_entries p
@@ -37,7 +47,15 @@ export async function getReviewQueue(ctx: DomainContext, options: { siteId?: str
   );
   const reviews = await listDayReviews(ctx, { siteId: options.siteId ?? null, from, to: newest });
   // Jobs logged on a day, per site, to spot a job that ran yesterday and is missing today.
-  const jobDays = await rows<{ site_id: string; d: string; job_id: string; number: string; name: string; status: string; completed: string | null }>(
+  const jobDays = await rows<{
+    site_id: string;
+    d: string;
+    job_id: string;
+    number: string;
+    name: string;
+    status: string;
+    completed: string | null;
+  }>(
     db,
     sql`SELECT DISTINCT p.site_id, to_char(p.work_date, 'YYYY-MM-DD') AS d, p.job_id, j.number, j.name, j.status, to_char(j.completed_date, 'YYYY-MM-DD') AS completed
           FROM pulse.production_entries p JOIN pulse.jobs j ON j.id = p.job_id
@@ -47,7 +65,9 @@ export async function getReviewQueue(ctx: DomainContext, options: { siteId?: str
   const siteName = new Map(sites.map((site) => [site.id, site.name]));
   const keys = new Map<string, { siteId: string; date: string }>();
   for (const row of dayRows) keys.set(`${row.site_id}:${row.d}`, { siteId: row.site_id, date: row.d });
-  for (const review of reviews) if (siteName.has(review.siteId)) keys.set(`${review.siteId}:${review.workDate}`, { siteId: review.siteId, date: review.workDate });
+  for (const review of reviews)
+    if (siteName.has(review.siteId))
+      keys.set(`${review.siteId}:${review.workDate}`, { siteId: review.siteId, date: review.workDate });
   const byDay = new Map(dayRows.map((row) => [`${row.site_id}:${row.d}`, row]));
   const byReview = new Map(reviews.map((review) => [`${review.siteId}:${review.workDate}`, review]));
   const loggedDates = new Map<string, string[]>();
@@ -58,7 +78,9 @@ export async function getReviewQueue(ctx: DomainContext, options: { siteId?: str
   }
   for (const list of loggedDates.values()) list.sort();
 
-  const ordered = [...keys.values()].filter((key) => siteName.has(key.siteId)).sort((a, b) => (a.date === b.date ? a.siteId.localeCompare(b.siteId) : b.date.localeCompare(a.date)));
+  const ordered = [...keys.values()]
+    .filter((key) => siteName.has(key.siteId))
+    .sort((a, b) => (a.date === b.date ? a.siteId.localeCompare(b.siteId) : b.date.localeCompare(a.date)));
   return Promise.all(
     ordered.map(async ({ siteId, date }): Promise<DayQueueDTO> => {
       const key = `${siteId}:${date}`;
@@ -67,12 +89,22 @@ export async function getReviewQueue(ctx: DomainContext, options: { siteId?: str
       const approved = review?.status === 'approved';
       const flags = approved ? [] : await dayFlags(ctx, siteId, date);
       const previous = (loggedDates.get(siteId) ?? []).filter((d) => d < date).pop();
-      const today = new Set(jobDays.filter((row) => row.site_id === siteId && row.d === date).map((row) => row.job_id));
-      const missing = approved || !previous
-        ? []
-        : jobDays
-            .filter((row) => row.site_id === siteId && row.d === previous && !today.has(row.job_id) && row.status === 'active' && (!row.completed || row.completed > date))
-            .map((row) => ({ jobId: row.job_id, jobNumber: row.number, jobName: row.name }));
+      const today = new Set(
+        jobDays.filter((row) => row.site_id === siteId && row.d === date).map((row) => row.job_id),
+      );
+      const missing =
+        approved || !previous
+          ? []
+          : jobDays
+              .filter(
+                (row) =>
+                  row.site_id === siteId &&
+                  row.d === previous &&
+                  !today.has(row.job_id) &&
+                  row.status === 'active' &&
+                  (!row.completed || row.completed > date),
+              )
+              .map((row) => ({ jobId: row.job_id, jobNumber: row.number, jobName: row.name }));
       return {
         siteId,
         siteName: siteName.get(siteId) ?? '',
@@ -101,7 +133,13 @@ interface PaceAgg {
 
 const emptyAgg = (): PaceAgg => ({ units: 0, paceHours: 0, earned: 0, earnedPaceHours: 0, days: new Set() });
 
-function paceRow(key: string, label: string, sublabel: string | null, agg: PaceAgg, directTarget?: string | null): PaceBoardRowDTO {
+function paceRow(
+  key: string,
+  label: string,
+  sublabel: string | null,
+  agg: PaceAgg,
+  directTarget?: string | null,
+): PaceBoardRowDTO {
   const uph = unitsPerHour(agg.units.toFixed(3), agg.paceHours.toFixed(2));
   // For a mix of jobs the fair target is the pace the same units needed at each job's own target.
   const mixedTarget = agg.earned > 0 ? unitsPerHour(agg.units.toFixed(3), agg.earned.toFixed(2)) : null;
@@ -114,7 +152,12 @@ function paceRow(key: string, label: string, sublabel: string | null, agg: PaceA
     paceHours: agg.paceHours.toFixed(2),
     uph: uph === null ? null : uph.toFixed(3),
     targetUph: target === null ? null : target.toFixed(3),
-    productivityBp: directTarget !== undefined ? productivityBp(uph, directTarget) : agg.earnedPaceHours > 0 && agg.earned > 0 ? productivityBp(agg.earned.toFixed(3), agg.earnedPaceHours.toFixed(3)) : null,
+    productivityBp:
+      directTarget !== undefined
+        ? productivityBp(uph, directTarget)
+        : agg.earnedPaceHours > 0 && agg.earned > 0
+          ? productivityBp(agg.earned.toFixed(3), agg.earnedPaceHours.toFixed(3))
+          : null,
     days: agg.days.size,
   };
 }
@@ -123,7 +166,10 @@ function paceRow(key: string, label: string, sublabel: string | null, agg: PaceA
  * Pace against target pace for a date range: by job, by labor class and by day. Only counted
  * hours are used (confirmed hours minus setup hours, SPEC 4.12).
  */
-export async function getPaceBoard(ctx: DomainContext, filters: { from: string; to: string; siteId?: string | null }): Promise<PaceBoardDTO> {
+export async function getPaceBoard(
+  ctx: DomainContext,
+  filters: { from: string; to: string; siteId?: string | null },
+): Promise<PaceBoardDTO> {
   await requirePulse(ctx, 'pulse:read');
   const found = await rows<{
     job_id: string;
@@ -212,28 +258,47 @@ export async function getPaceBoard(ctx: DomainContext, filters: { from: string; 
       jobVersion: row.job_version,
       unitLabel: row.unit_label,
     }))
-    .sort((a, b) => (a.productivityBp ?? Number.MAX_SAFE_INTEGER) - (b.productivityBp ?? Number.MAX_SAFE_INTEGER));
+    .sort(
+      (a, b) => (a.productivityBp ?? Number.MAX_SAFE_INTEGER) - (b.productivityBp ?? Number.MAX_SAFE_INTEGER),
+    );
   return {
     from: filters.from,
     to: filters.to,
     byJob: jobRows,
-    byClass: [...byClass.entries()].map(([key, entry]) => paceRow(key, entry.name, null, entry.agg)).sort((a, b) => Number(b.paceHours) - Number(a.paceHours)),
-    byDay: [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, agg]) => paceRow(date, shortDate(date), weekdayName(date), agg)),
+    byClass: [...byClass.entries()]
+      .map(([key, entry]) => paceRow(key, entry.name, null, entry.agg))
+      .sort((a, b) => Number(b.paceHours) - Number(a.paceHours)),
+    byDay: [...byDay.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, agg]) => paceRow(date, shortDate(date), weekdayName(date), agg)),
   };
 }
 
 /** "Suggest from history" for every job type at once, next to the target in force today. */
 export async function suggestAllStandards(ctx: DomainContext): Promise<PaceSuggestionRowDTO[]> {
   await requirePulse(ctx, 'pulse:read');
-  const [types, standards, sites] = await Promise.all([listJobTypes(ctx), listStandards(ctx), listSites(ctx)]);
+  const [types, standards, sites] = await Promise.all([
+    listJobTypes(ctx),
+    listStandards(ctx),
+    listSites(ctx),
+  ]);
   const today = sites[0]?.today ?? todayInZone('UTC');
   const out: PaceSuggestionRowDTO[] = [];
   for (const type of types) {
     const suggestion = await suggestStandard(ctx, { jobTypeId: type.id });
     const current = standards
-      .filter((row) => row.jobTypeId === type.id && !row.clientId && !row.laborClassId && row.effectiveFrom <= today)
+      .filter(
+        (row) =>
+          row.jobTypeId === type.id && !row.clientId && !row.laborClassId && row.effectiveFrom <= today,
+      )
       .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
-    out.push({ ...suggestion, jobTypeId: type.id, jobTypeName: type.name, unitLabel: type.unitLabel, current: current?.unitsPerLaborHour ?? type.defaultStandardUph ?? null });
+    out.push({
+      ...suggestion,
+      jobTypeId: type.id,
+      jobTypeName: type.name,
+      unitLabel: type.unitLabel,
+      current: current?.unitsPerLaborHour ?? type.defaultStandardUph ?? null,
+    });
   }
   return out;
 }
