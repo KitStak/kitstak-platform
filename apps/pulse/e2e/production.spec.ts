@@ -105,7 +105,9 @@ test.describe('production', () => {
     await expect(dialog.getByTestId('rate-readout')).toContainText('$30.48');
     await expect(dialog.getByTestId('rate-preview')).toContainText(/No logged work|This changes/);
     await dialog.getByRole('button', { name: 'Add the rate' }).click();
-    await expect(page.getByText(new RegExp(`New rate for ${name}`))).toBeVisible();
+    // The dialog closes once the rate is saved (its own title also reads "New rate for ...").
+    await expect(dialog).toBeHidden();
+    await expect(page.getByTestId('rate-row')).toHaveCount(1);
 
     await page.reload();
     await page.getByRole('button', { name: new RegExp(name) }).click();

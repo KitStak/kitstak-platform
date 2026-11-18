@@ -87,7 +87,8 @@ for (const who of ['admin', 'maya'] as const satisfies readonly Login[]) {
       const watch = watchPage(page);
       const jobs = await apiData<{ number: string }[]>(page, 'jobs?tab=open&limit=3');
       expect(jobs.length, 'the demo has open jobs').toBeGreaterThan(0);
-      for (const [suffix, title] of JOB_TABS) await test.step(`/jobs/:ref${suffix}`, () => check(page, watch, `/jobs/${jobs[0]!.number}${suffix}`, title));
+      // The tab title leads with the job number, so several open jobs can be told apart.
+      for (const [suffix, title] of JOB_TABS) await test.step(`/jobs/:ref${suffix}`, () => check(page, watch, `/jobs/${jobs[0]!.number}${suffix}`, title === 'Job' ? jobs[0]!.number : `${jobs[0]!.number} · ${title}`));
       const clients = await apiData<{ id: string }[]>(page, 'clients');
       await test.step('/clients/:id', () => check(page, watch, `/clients/${clients[0]!.id}`, 'Client'));
       const services = await apiData<{ id: string }[]>(page, 'services');

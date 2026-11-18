@@ -180,6 +180,12 @@ test('6. job tabs use the shared ledgers: add a cost in place, see profit move, 
   await page.reload();
   const row = page.getByTestId('cost-ledger-row');
   await expect(row).toContainText('E2E Freight Co');
+  // The ledger exports what is on screen.
+  const [costs] = await Promise.all([page.waitForEvent('download'), page.getByTestId('cost-ledger-export').click()]);
+  const costCsv = readFileSync(await costs.path(), 'utf8');
+  expect(costCsv).toContain('Date,What for,Paid to,Reference,Note,Amount');
+  expect(costCsv).toContain('E2E Freight Co');
+  expect(costCsv).toContain('$125.00');
   await row.getByRole('button', { name: /^Delete the/ }).click();
   await expect(page.getByTestId('cost-ledger-row')).toHaveCount(0);
   await toast(page, /Deleted|removed/i).getByRole('button', { name: 'Undo' }).click();

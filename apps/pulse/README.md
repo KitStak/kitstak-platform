@@ -10,8 +10,8 @@ Auth session, shared Postgres, `pulse` schema). Product spec: `docs/pulse/SPEC.m
 ```bash
 # once: shared platform tables, then this app's pulse schema, then demo data
 pnpm --filter @kitstak/db db:migrate
-pnpm --filter kitstak-pulse db:migrate
-pnpm --filter kitstak-pulse db:seed
+pnpm --filter kitstak-pulse db:migrate      # with the sibling apps: db, CRM, WMS, Projects, then Pulse last
+pnpm --filter kitstak-pulse db:seed         # the rich demo for both demo workspaces, about 50 seconds
 
 pnpm --filter kitstak-pulse dev          # http://localhost:3500
 # or from the repo root: pnpm dev:pulse
@@ -40,6 +40,29 @@ starts reloading in a loop, restart it.
 | `db:seed` | Seeds demo data through the real domain layer (`src/server/db/seed`) |
 | `shot` | `node scripts/shot.mjs --base http://localhost:3505 / /jobs` saves light and dark screenshots |
 | `e2e` | Playwright checks against a running dev server (`E2E_BASE_URL`) |
+
+## Tests
+
+```bash
+pnpm --filter kitstak-pulse typecheck
+pnpm --filter kitstak-pulse lint
+pnpm --filter kitstak-pulse test            # Vitest: pure math, render tests, and database tests on throwaway orgs
+
+# Browser suite, against a running dev server with the seeded demo. One worker: the specs share the demo data.
+cd apps/pulse
+E2E_BASE_URL=http://localhost:3500 pnpm exec playwright test --workers=1
+```
+
+| Spec | What it proves |
+| --- | --- |
+| `e2e/routes.spec.ts` | Every route renders for both demo workspaces: status 200, its own title, a heading, no script error, no console error, no failed request. Unknown records answer 404. |
+| `e2e/core-flows.spec.ts` | The five day one flows on one job (create a job, log a day, see its profit change, import a CSV, export a CSV), then the seams: shared ledgers on the job tabs, the command palette and go to keys, list state in the address bar and saved views. |
+| `e2e/smoke.spec.ts` | Sign in, the top navigation, search, the app switcher, device link pages, health. |
+| `e2e/production.spec.ts`, `profit.spec.ts`, `money-ops.spec.ts`, `data.spec.ts` | Each team's write screens: do the thing, reload to prove it was saved, put the data back. |
+
+Sign in happens once per login and the cookies are kept in `test-results/.auth` (the auth server
+rate limits sign-ins). When the installed browser is older than the one `@playwright/test` wants, point
+`E2E_CHROMIUM` at it. Never run `playwright install` on a shared machine.
 
 ## Layout
 

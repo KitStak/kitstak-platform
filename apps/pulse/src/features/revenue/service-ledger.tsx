@@ -87,7 +87,7 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
         : []),
       ...(serviceId ? [] : [{ id: 'service', header: 'Service', primary: true, render: (row: VasEntryDTO) => serviceById.get(row.vasServiceId)?.name ?? 'A service', editor: (row: VasEntryDTO) => ({ kind: 'select' as const, value: row.vasServiceId, options: (services.data ?? []).filter((service) => service.active || service.id === row.vasServiceId).map((service) => ({ value: service.id, label: service.name })) }) } satisfies LedgerColumn<VasEntryDTO>]),
       { id: 'quantity', header: 'How many', numeric: true, primary: Boolean(serviceId), render: (row) => `${qty(row.quantity)} ${serviceById.get(row.vasServiceId)?.unitLabel ?? ''}`.trim(), editor: (row) => ({ kind: 'number', value: String(Number(row.quantity)) }) },
-      { id: 'hours', header: 'Labor hours', numeric: true, render: (row) => (Number(row.hours) > 0 ? formatHours(row.hours) : <span className="text-fg-muted">None</span>), editor: (row) => ({ kind: 'number', value: String(Number(row.hours)) }) },
+      { id: 'hours', header: 'Labor hours', numeric: true, render: (row) => (Number(row.hours) > 0 ? formatHours(row.hours) : <span className="text-fg-muted" data-empty-cell>None</span>), editor: (row) => ({ kind: 'number', value: String(Number(row.hours)) }) },
       ...(shell.seesMoney
         ? ([
             { id: 'unitPrice', header: 'Price of one', numeric: true, render: (row) => (row.noPrice ? <Badge size="sm" tone="warning">No price yet</Badge> : formatUnitPrice(row.unitPrice, { empty: 'Hidden' })), editor: (row) => (row.moneyHidden ? null : { kind: 'number', value: row.unitPrice === null ? '' : String(Number(row.unitPrice)), placeholder: '0.00' }) },
@@ -221,6 +221,7 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
       bodyClassName="p-0"
     >
       <Ledger<VasEntryDTO>
+        exportName={`extra-services-done-${today}`}
         testId="service-ledger"
         caption={title}
         columns={columns}

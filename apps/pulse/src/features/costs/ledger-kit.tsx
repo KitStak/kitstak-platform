@@ -13,10 +13,11 @@
  */
 import { useId, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
-import { CircleAlert, ClipboardPaste, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CircleAlert, ClipboardPaste, Download, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button, Checkbox, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, IconButton, Skeleton, Tooltip, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { keepOpenForToasts } from '@/features/calculator/toast-safe';
+import { downloadCsv } from '@/features/profit/csv-download';
 import { centsToDecimal, centsToNumber, decimalToCents } from '@/lib/money';
 import { qk } from '@/lib/query-keys';
 
@@ -239,10 +240,22 @@ export interface LedgerProps<Row extends { id: string; locked: boolean }> {
   readonly rowBadges?: (row: Row) => ReactNode;
   readonly footer?: ReactNode;
   readonly lockedHint?: string;
+  /** File name (no extension) for "Export CSV": the rows and columns on screen, as shown. Leave out for no export. */
+  readonly exportName?: string;
 }
 
-export function Ledger<Row extends { id: string; locked: boolean }>({ testId, caption, columns, rows, loading, error, onRetry, empty, canEdit, rowName, onCommit, onDelete, rowBadges, footer, lockedHint = 'This month is closed, so this row cannot change.' }: LedgerProps<Row>) {
+export function Ledger<Row extends { id: string; locked: boolean }>({ testId, caption, columns, rows, loading, error, onRetry, empty, canEdit, rowName, onCommit, onDelete, rowBadges, footer, lockedHint = 'This month is closed, so this row cannot change.', exportName }: LedgerProps<Row>) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const tableRef = useRef<HTMLTableElement>(null);
+  /** Saves the table as shown: same rows, same order, same words. Placeholders like "Add" come out blank. */
+  const exportCsv = () => {
+    const table = tableRef.current;
+    if (!table || !exportName) return;
+    const text = (cell: Element): string => (cell.querySelector('[data-empty-cell]') ? '' : (cell.textContent ?? '').replace(/\s+/g, ' ').trim());
+    const body = [...table.querySelectorAll('tbody tr')].map((row) => [...row.querySelectorAll('td[data-col]')].map(text));
+    downloadCsv(`${exportName}.csv`, columns.map((column) => column.header), body);
+    toast.success(`Saved ${body.length} ${body.length === 1 ? 'row' : 'rows'} as a CSV file`);
+  };
   const live = rows.filter((row) => selected.has(row.id));
   const selectable = canEdit && Boolean(onDelete);
   const open = rows.filter((row) => !row.locked);
@@ -315,7 +328,7 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
       ) : null}
 
       <div className="hidden overflow-x-auto sm:block">
-        <table className="w-full border-collapse text-left text-sm text-fg tabular-nums">
+        <table ref={tableRef} className="w-full border-collapse text-left text-sm text-fg tabular-nums">
           <caption className="sr-only">{caption}</caption>
           <thead>
             <tr className="border-b border-border-default text-xs text-fg-muted">
@@ -349,7 +362,7 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
                   </td>
                 ) : null}
                 {columns.map((column, index) => (
-                  <td key={column.id} className={cn('max-w-[260px] px-3 py-1.5 align-middle first:pl-4', column.numeric && 'text-right whitespace-nowrap', column.className)}>
+                  <td key={column.id} data-col={column.id} className={cn('max-w-[260px] px-3 py-1.5 align-middle first:pl-4', column.numeric && 'text-right whitespace-nowrap', column.className)}>
                     {index === 0 && rowBadges ? (
                       <span className="flex items-center gap-2">
                         {cell(row, column, '')}
@@ -396,6 +409,13 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
           </li>
         ))}
       </ul>
+      {exportName ? (
+        <div className="flex justify-end border-t border-border-subtle px-3 py-1.5">
+          <Button variant="ghost" size="sm" leadingIcon={<Download aria-hidden />} onClick={exportCsv} data-testid={`${testId}-export`}>
+            Export CSV
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

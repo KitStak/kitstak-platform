@@ -1,10 +1,11 @@
 # KitStak Pulse: team contracts
 
-Foundation is in place: a runnable app (`apps/pulse`, port 3500), the `pulse` schema migrated (46 tables), the full
-domain layer for jobs, production, time, materials, costs, revenue, extra services, plans, rates, periods, alerts and
-profit, server actions, 58 `/api/v1` route files, React Query hooks, the pure money / profit / CSV libraries, the design
-system, the shell, and a page for every route in the spec. Most pages are still **teaching frames**: they render the
-right header, tabs and empty state but do not read data yet. Each team now makes its pages real.
+Pulse is built: a runnable app (`apps/pulse`, port 3500), the `pulse` schema (47 tables, two migrations), the domain
+layer, server actions, the `/api/v1` routes, React Query hooks, the pure money / profit / CSV libraries, the design
+system, the shell, and a real page for every route in the spec. Sections 1 to 13 are the foundation contract the teams
+built on; sections 14 to 18 are what each team added; **section 19 is the state after release integration** (what was
+joined up across teams, how to verify, and what is still open). Where an older section says something "does not exist
+yet", section 19 and the team sections win.
 
 Read `docs/pulse/SPEC.md` for what to build and `apps/pulse/AGENTS.md` for the house rules. This file says who owns
 what and what already exists, so nobody builds a thing twice. When you need something outside your folders, add it in a
@@ -54,9 +55,8 @@ src/features/<area>/<area>-view.tsx   'use client': hooks (initialData = server 
   `@/features/access/page-blocked` and stop. `pageContext(returnTo)` is the smaller form: `{ ctx, context }`.
 - The `(app)` layout already checks the `pulse` entitlement (locked screen), the Pulse role ("Ask an admin for access"
   screen for role `none`), and renders the shell. Supervisors are sent from `/` to `/log`.
-- **Real 404s** go in `src/app/(app)/layout.tsx` before any Suspense boundary (unknown report slugs do this today).
-  Unknown jobs, clients, services and import batches still render an in page "We could not find that" at status 200:
-  the owning team moves each to a real `notFound()`.
+- **Real 404s** go in `src/app/(app)/layout.tsx` before any Suspense boundary. Unknown reports, jobs, clients,
+  services and import batches all answer a real 404 this way.
 - **Client components import client files by path** (`@/features/log/log-grid`), never a feature `index.ts`, because an
   index also exports server pages and would pull server code into the browser bundle.
 - Add a route: create `src/app/(app)/<path>/page.tsx` and the feature files, add a builder to `src/lib/routes.ts`, and
@@ -68,32 +68,32 @@ src/features/<area>/<area>-view.tsx   'use client': hooks (initialData = server 
 
 Routes and their feature folder:
 
-| Route | Feature folder | Team | State today |
+| Route | Feature folder | Team | State |
 | --- | --- | --- | --- |
-| `/` | `features/home` | profit | teaching frame, checklist |
-| `/jobs?tab=open\|all\|completed\|planned` | `features/jobs` (`jobs-page.tsx`) | jobs | teaching frame |
-| `/jobs/new` | `features/jobs` (`new-job-page.tsx`) | jobs | teaching frame, no form |
-| `/jobs/[ref]`, `/plan`, `/work`, `/materials`, `/money-in`, `/activity` | `features/jobs` (`job-page.tsx`) | jobs | tab frame; shows "We could not find that job" for every ref until it reads `getJob` |
-| `/jobs/by-link` | page file only | jobs | redirects to a prefilled new job |
-| `/log?date=`, `/log/review`, `/log/entries` | `features/log` | production | teaching frame |
-| `/labor?tab=rates\|time\|cost` | `features/labor` | production | teaching frame |
-| `/target-pace` | `features/target-pace` | production | teaching frame |
-| `/kiosk/t/[token]` (public, no shell) | `features/kiosk` | production | "link is not active" |
-| `/profit?by=` | `features/profit` | profit | teaching frame |
-| `/clients/[id]`, `/clients/by-link` | `features/clients` | profit | frame |
-| `/services`, `/services/[id]` | `features/services` | profit | frame |
-| `/reports`, `/reports/[slug]` (19 slugs in `src/lib/reports.ts`) | `features/reports` | profit | catalog, real 404 |
-| `/calculator` | `features/calculator` | money-ops | teaching frame, no form |
-| `/goals` | `features/goals` | money-ops | teaching frame |
-| `/alerts`, `/alerts/rules` | `features/alerts` | money-ops | teaching frame |
-| `/settings/close` | `features/settings` today, moves to `features/periods` | money-ops | frame |
-| `/wall` (signed in, refreshes every 60 s), `/wall/t/[token]` (public) | `features/wall` | money-ops | frame |
-| `/import`, `/import/new?stream=`, `/import/[batchId]` | `features/imports` | data | stream catalog, no upload |
-| `/export` | `features/export` | data | stream catalog |
-| `/settings?section=`, `/settings/audit` | `features/settings` | data | math text is real, no forms |
-| `/settings/apps` | `features/settings` | integrations | live connection status |
-| `/welcome` | `features/welcome` | data | teaching frame |
-| `/search?q=` | `features/search` | foundation | works on the nav list; `searchAll` is ready for records |
+| `/` | `features/home` | profit | real |
+| `/jobs?tab=open\|all\|completed\|planned` | `features/jobs` (`jobs-page.tsx`) | jobs | real |
+| `/jobs/new` | `features/jobs` (`new-job-page.tsx`) | jobs | real (three step wizard) |
+| `/jobs/[ref]`, `/plan`, `/work`, `/materials`, `/money-in`, `/activity` | `features/jobs` (`job-page.tsx`) | jobs | real; unknown or deleted job answers 404 |
+| `/jobs/by-link` | page file only | jobs | opens the linked job, else a prefilled new job |
+| `/log?date=`, `/log/bulk`, `/log/review`, `/log/entries` | `features/log` | production | real |
+| `/labor?tab=rates\|time\|cost` | `features/labor` | production | real |
+| `/target-pace` | `features/target-pace` | production | real |
+| `/kiosk/t/[token]` (public, no shell) | `features/kiosk` | production | real (PIN, offline queue) |
+| `/profit?by=` | `features/profit` | profit | real |
+| `/clients/[id]`, `/clients/by-link` | `features/clients` | profit | real, 404 for unknown |
+| `/services`, `/services/[id]` | `features/services` | profit | real, 404 for unknown |
+| `/reports`, `/reports/[slug]` (19 slugs in `src/lib/reports.ts`) | `features/reports` | profit | real, 404 for unknown |
+| `/calculator` | `features/calculator` | money-ops | real |
+| `/goals` | `features/goals` | money-ops | real |
+| `/alerts?tab=&q=`, `/alerts/rules` | `features/alerts` | money-ops | real |
+| `/settings/close` | `features/periods` | money-ops | real |
+| `/wall` (signed in, refreshes every 60 s), `/wall/t/[token]` (public) | `features/wall` | money-ops | real |
+| `/import`, `/import/new?stream=`, `/import/[batchId]` | `features/imports` | data | real, 404 for unknown |
+| `/export` | `features/export` | data | real |
+| `/settings?section=`, `/settings/audit` | `features/settings` | data | real |
+| `/settings/apps` | `features/settings` + `features/integrations` | integrations | real (sync, links) |
+| `/welcome` | `features/welcome` | data | real |
+| `/search?q=` | `features/search` | foundation | pages, reports and data files; `searchAll` is ready for records |
 | `/login`, `/forgot-password`, `/no-workspace` | `app/(auth)`, `app/no-workspace` | foundation | done |
 
 ## 3. Data model (`pulse` schema)
@@ -109,7 +109,7 @@ and composite `(org_id, x_id)` foreign keys, so a row can never point into anoth
 | Dated streams | `production_entries`, `indirect_entries`, `paid_hours`, `time_punches`, `material_usage`, `cost_entries`, `revenue_entries`, `vas_entries` |
 | Rollups | `fact_days`, `company_days`, view `v_facts` |
 | Control | `periods`, `day_reviews`, `alert_rules`, `alerts`, `notifications`, `saved_views`, `activity`, `user_prefs` |
-| System (tables exist, no domain yet) | `import_batches`, `import_rows`, `import_presets`, `quote_scenarios`, `report_schedules`, `report_runs`, `device_links`, `sync_state`, `sync_runs`, `dismissals`, `bridge_events` |
+| System (domains added by the teams: `imports`, `quotes`, `reports`, `devices`, `sync`) | `import_batches`, `import_rows`, `import_presets`, `quote_scenarios`, `report_schedules`, `report_runs`, `device_links`, `sync_state`, `sync_runs`, `dismissals`, `bridge_events` |
 
 Conventions:
 
@@ -262,8 +262,7 @@ actions take `{ <entity>Id, patch, version? }`; save actions for stream rows tak
 | `views` | `saveViewAction`, `deleteViewAction`, `updateUserPrefsAction({ patch })`, `recordRecentJobAction` |
 
 After a stream write, invalidate `qk.streams()`, `qk.jobsRoot()`, `qk.profitRoot()`, `qk.summaryRoot()` and `qk.badges()`.
-The actions typecheck and the domain under them is tested, but no action has been called over the wire yet: the first
-team to use one reports anything odd.
+Every action in this table is called by a real screen and covered by the browser suite (section 19.3).
 
 ## 7. JSON API (`/api/v1`, envelope `{ data }` or `{ error: { code, message, fields? } }`)
 
@@ -412,19 +411,19 @@ numeric strings are exact) and come out as rounded numbers. `bigint` does not JS
 - `@/components/pulse`: `Teach` and `StepList` (the teaching empty state: what this is, why it matters, next step),
   `ButtonLink`, `RouteTabs` (tabs that are URLs), `BrandLoader`; `PersonAvatar` (by user id) from `@/components/pulse/person`.
 - `@/components/layout/page`: `Page` (header plus body; `width="default|narrow|full"`), `Panel`.
-- `src/components/charts` does not exist yet. The **profit** team creates it first (bar, line, stacked bar, waterfall,
-  sparkline, donut, progress ring; SVG, token colors, light and dark, keyboard reachable, a screen reader table for
-  each). Every other team imports charts from there by path and asks profit for a missing one. Do not add a chart
-  dependency: Projects' own SVG charts in `apps/projects/src/features/dashboards/charts.tsx` are the model.
+- `@/components/charts` is the one chart library (hand built SVG, no dependency): see section 14.
+- `@/components/pulse/explain`: `ExplainNumber` (server figures, section 15) and `ExplainStatic` (figures the screen
+  already holds). `@/components/pulse/export-link`: `ExportStreamLink`. See section 19.
 - Shell API: `useShell()` gives `user`, `org`, `orgRole`, `orgs`, `pulseRole`, `seesMoney`, `seesWages`, `can(action)`,
   `modules`, `integrations`, `appUrls`, `badges`. `useShellStore.getState().openPalette(query?)` and
   `.openShortcuts()`. The shell is being reworked by its owner right now: do not edit `src/features/shell`, add nav
   entries only through `src/lib/nav.ts`.
 - Badges: `loadShell()` fills `shellContext.badges` from `getBadges(ctx)` on every server render. A view that changes a
   job's risk or an alert calls `router.refresh()` or invalidates `qk.badges()`.
-- Shortcuts in use: Ctrl or Cmd+K and `/` open the palette, `l` log work, `n` new job, `?` shortcuts, `g` then `h j l
-  p a` (home, jobs, log, profit, alerts), Ctrl or Cmd+Z undo. `[` and `]` are reserved for the log page (previous and
-  next day).
+- Shortcuts in use: Ctrl or Cmd+K and `/` open the palette, `l` log work, `n` new job, `?` shortcuts, Ctrl or Cmd+Z
+  undo, and `g` then a letter for every navigation entry (the `chord` in `src/lib/nav.ts`): `h` home, `j` jobs, `l`
+  log, `p` profit, `b` labor, `a` alerts, `r` reports, `t` target pace, `c` calculator, `o` goals, `i` import and
+  export, `s` settings. `[` and `]` are reserved for the log page (previous and next day).
 - Money hiding in UI: never branch on the role to hide a number. Render what the DTO gives; a `null` money field shows
   nothing or "Hidden", and `seesMoney` from `useShell()` only decides whether a money column or tab exists at all.
 - Brand: `PulseMark` (`@/features/shell/logo`), loader `/brand/kitstak-loader-pulse.svg`. The official mark is the
@@ -434,12 +433,12 @@ numeric strings are exact) and come out as rounded numbers. `bigint` does not JS
 
 ```bash
 cd apps/pulse
-pnpm typecheck && pnpm lint && pnpm test          # 17 files, 355 tests; DB tests skip when Postgres is down
+pnpm typecheck && pnpm lint && pnpm test          # 44 files, 569 tests; DB tests skip when Postgres is down
 pnpm db:migrate                                    # applies drizzle/*.sql (table drizzle.__kitstak_pulse_migrations)
 pnpm db:seed [--org=<slug>] [--email=] [--seed=rich|minimal] [--keep]   # no flags: the rich demo for kitstak and northwind-robotics (about 50 s)
 NEXT_DIST_DIR=.next/<name> pnpm exec next dev -p 35xx        # personal servers 3501 to 3520, dist dir inside .next/
 node scripts/shot.mjs --base http://localhost:35xx --out <dir> [--theme dark] [--width 390] [--full] / /jobs /profit
-E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome pnpm exec playwright test
+E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell pnpm exec playwright test --workers=1
 ```
 
 - `E2E_CHROMIUM` is needed on this machine: `@playwright/test` wants a newer browser build than the one installed.
@@ -483,7 +482,9 @@ E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium-1243/c
 12. **Verify before you report**: `pnpm typecheck`, `pnpm lint`, `pnpm test` in `apps/pulse` (and in any sibling app
     you touched), then look at your pages in light and dark at 1440 and 390 px with real seeded data.
 
-## 13. Known gaps, by owner
+## 13. Known gaps, by owner (as written before the teams built; kept for history)
+
+> Everything listed here was the to do list handed to the teams. It is done unless section 19 lists it as still open.
 
 - **jobs**: the jobs list, the at risk and losing money board, the new job form (`createJobAction`, `quickAddJobAction`),
   the job page and all six tabs (plan vs actual and quote vs actual from `planVsActual` and `quoteLinesVsActual`, the
@@ -732,7 +733,7 @@ Dev note: on the shared Turbopack dev server a new export added to an already lo
 through the `@/server/domain` barrel until the file gets a real code edit. Importing by file path
 (`@/server/domain/sample`) always works.
 
-## 17. Integrations: sibling readers, sync, the bridge and Connected apps (owner: integrations)
+## 18. Integrations: sibling readers, sync, the bridge and Connected apps (owner: integrations)
 
 Everything here is additive. Pulse still works with nothing else installed.
 
@@ -807,3 +808,102 @@ they all read through the bridge. **Actions** (`@/server/actions/integrations`):
 Not built (see the integration report): VAS records into `vas_entries`, contract rates into job prices, the work
 orders list margin column, the bill detail margin tile, tasks from alerts through `@kitstak/pm-bridge`, the app
 switcher attention badge, and removing pulled project time when the time entry is deleted in Projects.
+
+## 19. Release integration: what was joined up, how to verify, what is open
+
+This section is the state of the app after the eight teams finished and the tree was integrated.
+
+### 19.1 Seams that were closed
+
+- **Job tabs mount the shared entry ledgers.** `features/jobs/job-materials.tsx` mounts `MaterialLedger` (with the
+  warehouse pull when WMS is connected) and `CostLedger scope="job"`; `job-money-in.tsx` mounts `RevenueLedger` and
+  `ServiceLedger`. The jobs team's temporary dialogs (`features/jobs/forms/entry-forms.tsx`) are gone. The quick
+  actions on the job overview are links to those ledgers (`#other-costs`, `#invoices`, `#extra-services`).
+  `forms/job-dialogs.tsx` (edit job, plan, price) and `forms/work-entry-form.tsx` stay: they are not duplicates.
+- **A planned job starts with its first logged work.** `production.ts` `startPlannedJobs` (inside `finishProduction`)
+  turns a `planned` job `active` when the first production entry is saved on it, sets `activated_at` and logs
+  `job.status_changed`. Before this a new job (the wizard defaults to Planned) never showed on the day sheet, so "create
+  a job, then log work" was a dead end. Imports write entries with their own bulk insert and do not start a job.
+- **Entries of a deleted job leave the entry lists.** `listProduction` skips them unless `jobId` or `includeDeleted` is
+  given. They were already out of every rollup; the All entries page linked to job pages that answer 404.
+- **Saved views on every list.** Jobs and Profit keep their own bars (they store more than a query). Every other list
+  mounts `SavedViewsBar` from `@/features/views/saved-views-bar`: All entries (`page="log"`), Alerts, Labor time and
+  cost, every report, the audit log and Export. For that, list state moved into the address bar with
+  `@/features/views/use-url-state` (`useUrlState()` for keys, `useUrlText(key)` for a search box; it writes with
+  `history.replaceState`, so no server round trip): Alerts `?tab=&q=`, All entries
+  `?from=&to=&site=&class=&source=&needsHours=1&removed=1&job=`, Labor and Target pace `?range=&from=&to=&site=`.
+- **CSV on every list.** Already there: jobs, a job's work log, All entries, profit (five views), services, service
+  entries, reports, audit log, Export. Added: Alerts (what is on screen, money left out for no money readers), Labor
+  cost and Labor time (client side, `downloadCsv`), and `ExportStreamLink` (`@/components/pulse/export-link`, the
+  template columns, imports back) on Target pace, Goals and Labor rates. The four entry ledgers export what is on
+  screen (`exportName` on `Ledger` in `features/costs/ledger-kit.tsx`), on the job tabs and on month close.
+- **"How we got this" on every KPI tile.** All 64 `KpiTile`s carry `explain`. Numbers with server figures use
+  `ExplainNumber`; numbers the screen already holds use the new `ExplainStatic` (`@/components/pulse/explain`:
+  `title`, `rule`, `rows`, `footnote`).
+- **Command palette and keys.** `src/lib/nav.ts` gained a `chord` for every navigation entry and `SUB_PAGES` /
+  `subPagesFor(role, seesMoney)`: every tab, second level screen and settings section, with the role and money rules.
+  The palette lists them under "More pages" while typing, and "Log many days" and "Review the day" under "Do
+  something". A page with its own row outranks the section it sits under. The shortcut sheet lists the new go to keys
+  (a data only edit in `features/shell/shortcuts-dialog.tsx`).
+- **Job pages name the job in the browser tab** (`jobPageTitle` in `src/lib/routes.ts`): "J-1026", "J-1026 · Work log".
+- **People and roles for non admins.** The settings section no longer calls `GET /api/v1/roles` (403) for a reader
+  without `roles:manage`; it says who to ask.
+- **Seed.** The seeded Alerts view uses the query shape (`{ query: 'tab=mine' }`). The Northwind jobs view that named
+  a filter the jobs list does not have is now "Finished jobs, newest first".
+
+### 19.2 Migrations
+
+- Journal: `0000_pulse_init`, `0005_saved_view_pages` (idx 0 and 5). Numbers 0001 to 0004 and 0006 were reserved per
+  team and never used; the runner sorts by `idx`, so the gap is harmless. The next migration takes `0007` or any free
+  number above the last applied one.
+- Verified on an empty database: `@kitstak/db` (7 migrations), CRM, WMS (12), Projects (6), then Pulse (2), in that
+  order, all applied; the resulting `pulse` schema is byte identical to the dev database (`pg_dump -s -n pulse`).
+
+### 19.3 How to verify (exact commands, run from the repo root unless noted)
+
+```bash
+pnpm --filter kitstak-pulse typecheck && pnpm --filter kitstak-pulse lint && pnpm --filter kitstak-pulse test
+for p in kitstak-portal kitstak-crm kitstak-projects kitstak-web @kitstak/db @kitstak/entitlements @kitstak/pulse-bridge; do pnpm --filter $p typecheck; done
+for p in kitstak-portal kitstak-crm kitstak-projects; do pnpm --filter $p lint; done
+(cd apps/wms && NODE_OPTIONS=--max-old-space-size=3200 pnpm exec tsc --noEmit && NODE_OPTIONS=--max-old-space-size=3200 pnpm exec eslint)
+for p in kitstak-portal @kitstak/ui @kitstak/entitlements @kitstak/pulse-bridge kitstak-projects kitstak-crm; do pnpm --filter $p test; done
+pnpm --filter kitstak-pulse db:migrate && pnpm --filter kitstak-pulse db:seed
+cd apps/pulse && E2E_CHROMIUM=/opt/pw-browsers/chromium_headless_shell pnpm exec playwright test --workers=1
+```
+
+`@kitstak/ui`, `@kitstak/db`, `@kitstak/entitlements`, `@kitstak/pulse-bridge` and `kitstak-web` have no lint script;
+`@kitstak/ui` has no typecheck script (its sources are typechecked by every app that imports them).
+
+A no money reader has no demo password. To look at the app as one, change your own row in `pulse.member_roles`
+(`role = 'viewer' | 'supervisor'`, `sees_money = false`) on a dev database and put it back; the seed rebuilds the rows.
+
+### 19.4 Still open
+
+Product gaps the teams reported, none of them a broken screen:
+
+- **Jobs**: no "won deals with no job yet" strip, no "deal value changed in CRM" notice, no revision history list on
+  the plan tab, no per month plan for ongoing jobs, no usual crew editor, no "Refresh from WMS", no planned against used
+  rollup per item, links cannot be added by hand on the job page (`LinkRecordDialog` lives on Connected apps only). The
+  board is read only. Quick add is hidden under 768 px.
+- **Production**: kiosk logs one row per job on the default labor class; the idle time of a tablet link has no field
+  in the UI; the kiosk rate limit is per server process; punches have no edit in place.
+- **Profit**: no "compare to plan" and no should cost column in the explorer; time groupings compare by position; the
+  print page of a report has no chart; plan reports use each job's whole life; the audit log report stops at 2,000
+  rows; scheduled builds need `CRON_SECRET` (only "Build now" was exercised).
+- **Money ops**: the Done tab of Alerts loads the latest 200 and 200 with no paging; the rule preview replays 13 of 21
+  kinds from daily numbers and falls back to raised alerts for the rest; the wall is reached from the palette and
+  Goals, not the top navigation.
+- **Data**: files are parsed on the main thread; save progress lives in server memory; 50,000 rows was not timed (5,000
+  was); "Download everything" is built in memory; undo of a jobs import soft deletes jobs that got work afterwards.
+- **Integrations**: warehouse extra service records are counted, not written into `vas_entries`; contract rates do not
+  set job prices; pulled project time is not removed when the entry is deleted in Projects; change notes are answered
+  on Connected apps and the cron tick only; several spec extras in the sibling apps are not built (work order list
+  margin column, dashboard tiles, tasks from alerts, switcher badge).
+- **Seed**: no time punches, device links, kiosk PINs, quote scenarios, report schedules or sync runs; fewer jobs and
+  entries than the spec sketch; warehouse jobs sit on fixed work order dates.
+- **Across teams**: alert rule sentences show their dollar line to readers without money (a setting, not a result);
+  Services, Target pace and Goals have no saved views (their page is not in `SAVED_VIEW_PAGES`, which is also a database
+  CHECK); a view saved on one report shows on every report; Supervisors
+  land on Log work and the floor version of Home (`/?floor=1`) has no link; the 404 for a missing job only fires on a
+  full page load.
+- **Foundation leftovers**: big restamps run inline; no plain role RLS test; no CSP header.

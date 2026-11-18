@@ -15,6 +15,16 @@ export const JOB_TAB_LABELS: Readonly<Record<JobTab, string>> = {
   activity: 'Activity',
 };
 
+/**
+ * Browser tab title for a job page: the job number first, so several open jobs can be told apart
+ * ("J-1026", "J-1026 · Work log"). A link by id, which says nothing to a person, keeps the tab's name.
+ */
+export function jobPageTitle(ref: string, tab: JobTab): string {
+  const isNumber = /^[A-Za-z]{1,6}-?\d{1,12}$/.test(ref);
+  if (!isNumber) return tab === 'overview' ? 'Job' : JOB_TAB_LABELS[tab];
+  return tab === 'overview' ? ref.toUpperCase() : `${ref.toUpperCase()} · ${JOB_TAB_LABELS[tab]}`;
+}
+
 export const PROFIT_VIEWS = ['job', 'client', 'type', 'service', 'site', 'month', 'week', 'day'] as const;
 export type ProfitView = (typeof PROFIT_VIEWS)[number];
 

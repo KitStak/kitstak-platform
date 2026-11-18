@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { BellRing, BookOpen, Boxes, Building2, CalendarCheck2, HandCoins, History, MonitorSmartphone, Plug, Scale, Settings2, Shapes, TestTubeDiagonal, TriangleAlert, UsersRound, type LucideIcon } from 'lucide-react';
 import { cn } from '@/components/ui/cn';
+import { Panel } from '@/components/layout/page';
 import { useShell } from '@/features/shell/shell-context';
 import { useSettings } from '@/lib/hooks/use-data';
 import { routes } from '@/lib/routes';
@@ -90,7 +91,17 @@ export function SettingsView({ initialSettings, initialSample }: { readonly init
         {active === 'job-types' ? <JobTypesSection canEdit={shell.can('job:manage')} /> : null}
         {active === 'labor' ? <LaborDefaultsSection settings={settings} canEdit={canEdit} /> : null}
         {active === 'cost-rules' ? <CostRulesSection settings={settings} canEdit={canEdit} /> : null}
-        {active === 'people' ? <PeopleSection settings={settings} canEdit={canRoles} /> : null}
+        {active === 'people' ? (
+          canRoles ? (
+            <PeopleSection settings={settings} canEdit={canRoles} />
+          ) : (
+            <Panel title="People and roles">
+              <p className="text-sm text-fg-secondary" data-testid="people-admin-only">
+                Only an admin or the owner of this workspace can see who uses Pulse and change roles. Ask one of them if you need a different role or need to see money.
+              </p>
+            </Panel>
+          )
+        ) : null}
         {active === 'catalogs' ? <CatalogsSection canEdit={shell.can('job:manage')} seesMoney={shell.seesMoney} /> : null}
         {active === 'notifications' ? <NotificationsSection /> : null}
         {active === 'devices' ? <DevicesSection /> : null}

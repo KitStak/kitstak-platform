@@ -371,6 +371,8 @@ export async function listProduction(ctx: DomainContext, filters: ProductionFilt
   const access = await requirePulse(ctx, 'pulse:read');
   const where: (SQL | undefined)[] = [eq(productionEntries.orgId, ctx.orgId)];
   if (!filters.includeDeleted) where.push(isNull(productionEntries.deletedAt));
+  // Entries of a deleted job are out of every number, so they stay out of the lists too (the job page is gone).
+  if (!filters.includeDeleted && !filters.jobId) where.push(isNull(jobs.deletedAt));
   if (filters.jobId) where.push(eq(productionEntries.jobId, filters.jobId));
   if (filters.clientId) where.push(eq(jobs.clientId, filters.clientId));
   if (filters.siteId) where.push(eq(productionEntries.siteId, filters.siteId));

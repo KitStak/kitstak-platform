@@ -91,9 +91,9 @@ export function MaterialLedger({ jobId, jobRef, clientId, from, to, today, title
             } satisfies LedgerColumn<MaterialUsageDTO>,
           ]
         : []),
-      { id: 'itemName', header: 'Part', primary: true, render: (row) => row.itemName ?? row.itemSku ?? <span className="text-fg-muted">Add a name</span>, editor: (row) => ({ kind: 'text', value: row.itemName ?? '', placeholder: 'Name of the part' }) },
+      { id: 'itemName', header: 'Part', primary: true, render: (row) => row.itemName ?? row.itemSku ?? <span className="text-fg-muted" data-empty-cell>Add a name</span>, editor: (row) => ({ kind: 'text', value: row.itemName ?? '', placeholder: 'Name of the part' }) },
       // The list of every job is wide already, so the SKU column shows only on a single job.
-      ...(showJob ? [] : [{ id: 'itemSku', header: 'SKU', render: (row: MaterialUsageDTO) => row.itemSku ?? <span className="text-fg-muted">None</span> } satisfies LedgerColumn<MaterialUsageDTO>]),
+      ...(showJob ? [] : [{ id: 'itemSku', header: 'SKU', render: (row: MaterialUsageDTO) => row.itemSku ?? <span className="text-fg-muted" data-empty-cell>None</span> } satisfies LedgerColumn<MaterialUsageDTO>]),
       { id: 'quantityUsed', header: 'Used', numeric: true, render: (row) => qty(row.quantityUsed), editor: (row) => ({ kind: 'number', value: String(Number(row.quantityUsed)) }) },
       { id: 'quantityScrapped', header: 'Scrapped', numeric: true, render: (row) => (Number(row.quantityScrapped) > 0 ? qty(row.quantityScrapped) : <span className="text-fg-muted">0</span>), editor: (row) => ({ kind: 'number', value: String(Number(row.quantityScrapped)) }) },
       ...(shell.seesMoney
@@ -270,6 +270,7 @@ export function MaterialLedger({ jobId, jobRef, clientId, from, to, today, title
       bodyClassName="p-0"
     >
       <Ledger<MaterialUsageDTO>
+        exportName={`material-used-${today}`}
         testId="usage-ledger"
         caption={title}
         columns={columns}

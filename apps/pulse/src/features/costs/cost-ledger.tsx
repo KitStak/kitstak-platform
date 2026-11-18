@@ -85,9 +85,9 @@ export function CostLedger({ scope, jobId, clientId, from, to, today, title, cla
           ]
         : []),
       { id: 'category', header: 'What for', primary: true, render: (row) => COST_CATEGORY_LABELS[row.category], editor: (row) => ({ kind: 'select', value: row.category, options: COST_CATEGORIES.map((value) => ({ value, label: COST_CATEGORY_LABELS[value] })) }) },
-      { id: 'vendor', header: 'Paid to', render: (row) => row.vendor ?? <span className="text-fg-muted">Add</span>, editor: (row) => ({ kind: 'text', value: row.vendor ?? '', placeholder: 'Who was paid' }) },
-      { id: 'reference', header: 'Reference', render: (row) => row.reference ?? <span className="text-fg-muted">Add</span>, editor: (row) => ({ kind: 'text', value: row.reference ?? '', placeholder: 'Bill or PO number' }) },
-      { id: 'note', header: 'Note', render: (row) => row.note ?? <span className="text-fg-muted">Add</span>, editor: (row) => ({ kind: 'text', value: row.note ?? '' }), emptyWhen: (row) => !row.note },
+      { id: 'vendor', header: 'Paid to', render: (row) => row.vendor ?? <span className="text-fg-muted" data-empty-cell>Add</span>, editor: (row) => ({ kind: 'text', value: row.vendor ?? '', placeholder: 'Who was paid' }) },
+      { id: 'reference', header: 'Reference', render: (row) => row.reference ?? <span className="text-fg-muted" data-empty-cell>Add</span>, editor: (row) => ({ kind: 'text', value: row.reference ?? '', placeholder: 'Bill or PO number' }) },
+      { id: 'note', header: 'Note', render: (row) => row.note ?? <span className="text-fg-muted" data-empty-cell>Add</span>, editor: (row) => ({ kind: 'text', value: row.note ?? '' }), emptyWhen: (row) => !row.note },
       { id: 'amount', header: 'Amount', numeric: true, render: (row) => <span className={row.amountCents !== null && row.amountCents < 0 ? 'text-success-text' : undefined}>{formatMoney(row.amountCents, { empty: 'Hidden' })}</span>, editor: (row) => (row.amountCents === null ? null : { kind: 'money', value: centsText(row.amountCents) }) },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `forLabel` only reads `targets`
@@ -210,6 +210,7 @@ export function CostLedger({ scope, jobId, clientId, from, to, today, title, cla
     >
       {scope === 'company' && rows.length > 0 ? <p className="border-b border-border-subtle px-4 py-2.5 text-xs text-fg-muted">These bills belong to no single job. They count in company profit as your real overhead.</p> : null}
       <Ledger<CostEntryDTO>
+        exportName={`costs-${today}`}
         testId="cost-ledger"
         caption={heading}
         columns={columns}

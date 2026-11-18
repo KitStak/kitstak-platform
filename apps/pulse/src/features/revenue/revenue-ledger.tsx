@@ -85,8 +85,8 @@ export function RevenueLedger({ jobId, clientId, from, to, today, title = 'Invoi
           ]
         : []),
       { id: 'kind', header: 'Kind', primary: true, render: (row) => REVENUE_KIND_LABELS[row.kind], editor: (row) => (editable(row) ? { kind: 'select', value: row.kind, options: REVENUE_KINDS.map((value) => ({ value, label: REVENUE_KIND_LABELS[value] })) } : null) },
-      { id: 'description', header: 'What for', render: (row) => row.description ?? (editable(row) ? <span className="text-fg-muted">Add</span> : 'Written by Pulse'), editor: (row) => (editable(row) ? { kind: 'text', value: row.description ?? '', placeholder: 'What it was for' } : null) },
-      { id: 'invoiceNumber', header: 'Invoice number', render: (row) => row.invoiceNumber ?? (editable(row) ? <span className="text-fg-muted">Add</span> : ''), editor: (row) => (editable(row) ? { kind: 'text', value: row.invoiceNumber ?? '', placeholder: 'INV 1042' } : null) },
+      { id: 'description', header: 'What for', render: (row) => row.description ?? (editable(row) ? <span className="text-fg-muted" data-empty-cell>Add</span> : 'Written by Pulse'), editor: (row) => (editable(row) ? { kind: 'text', value: row.description ?? '', placeholder: 'What it was for' } : null) },
+      { id: 'invoiceNumber', header: 'Invoice number', render: (row) => row.invoiceNumber ?? (editable(row) ? <span className="text-fg-muted" data-empty-cell>Add</span> : ''), editor: (row) => (editable(row) ? { kind: 'text', value: row.invoiceNumber ?? '', placeholder: 'INV 1042' } : null) },
       { id: 'amount', header: 'Amount', numeric: true, render: (row) => <span className={row.amountCents !== null && row.amountCents < 0 ? 'text-danger-text' : undefined}>{formatMoney(row.amountCents, { empty: 'Hidden' })}</span>, editor: (row) => (editable(row) && row.amountCents !== null ? { kind: 'money', value: centsText(Math.abs(row.amountCents)) } : null) },
     ],
     [showFor, targets],
@@ -187,6 +187,7 @@ export function RevenueLedger({ jobId, clientId, from, to, today, title = 'Invoi
     >
       {rows.length > 0 ? <p className="border-b border-border-subtle px-4 py-2.5 text-xs text-fg-muted">An invoice records what you billed. Earned revenue comes from the work log, so an invoice never changes profit. Fees, adjustments and credits do.</p> : null}
       <Ledger<RevenueEntryDTO>
+        exportName={`invoices-fees-credits-${today}`}
         testId="revenue-ledger"
         caption={title}
         columns={columns}

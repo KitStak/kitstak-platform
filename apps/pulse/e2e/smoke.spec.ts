@@ -84,15 +84,23 @@ test.describe('smoke', () => {
     test('the top navigation has seven items and the More menu, and every page opens', async ({ page }) => {
       await page.goto('/');
       await expect(page.getByTestId('nav-home')).toHaveAttribute('aria-current', 'page');
+      // The More button toggles its menu, so only press it when the link is not on screen yet.
+      const openMore = async (testId: string) => {
+        if (!(await page.getByTestId(testId).isVisible())) await page.getByTestId('nav-more').click();
+        await expect(page.getByTestId(testId)).toBeVisible();
+      };
       for (const [testId, path, heading] of NAV_PAGES) {
         const inMore = MORE_PAGES.has(testId);
-        if (inMore) await page.getByTestId('nav-more').click();
+        if (inMore) await openMore(testId);
         await page.getByTestId(testId).click();
         await page.waitForURL((url) => url.pathname === path);
         await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
-        if (inMore) await page.getByTestId('nav-more').click();
+        if (inMore) await openMore(testId);
         await expect(page.getByTestId(testId)).toHaveAttribute('aria-current', 'page');
-        if (inMore) await page.keyboard.press('Escape');
+        if (inMore) {
+          await page.keyboard.press('Escape');
+          await expect(page.getByTestId(testId)).toBeHidden();
+        }
       }
     });
 
@@ -125,9 +133,11 @@ test.describe('smoke', () => {
       await expect(page.getByTestId('search-empty')).toBeVisible();
     });
 
-    test('an unknown job lands on a helpful page, and an unknown report answers 404', async ({ page }) => {
-      await page.goto('/jobs/J-0000');
-      await expect(page.getByTestId('job-not-found')).toBeVisible();
+    test('an unknown job and an unknown report answer 404 with a helpful page', async ({ page }) => {
+      const job = await page.goto('/jobs/J-0000');
+      expect(job?.status()).toBe(404);
+      await expect(page.getByText('We could not find that')).toBeVisible();
+      await expect(page.getByRole('link', { name: 'See all jobs' })).toBeVisible();
       const response = await page.goto('/reports/not-a-report');
       expect(response?.status()).toBe(404);
     });
