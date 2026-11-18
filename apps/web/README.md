@@ -32,7 +32,10 @@ mobile drawer and the footer all read `src/components/nav/nav-data.ts`.
 
 - **Pricing** — `src/lib/pricing.ts` (`PRICING`, `PRICING_IS_PLACEHOLDER`). Stand-in numbers; every
   page and the wizard read from here. The Pulse line (`PRICING.pulse`, per user) is a stand-in like the
-  rest: the Pulse spec states no price and no unit, so both need the owner's sign-off.
+  rest: the Pulse spec states no price and no unit, so both need the owner's sign-off. While it carries
+  `isUnconfirmed: true`, the `/pulse` price band and every quote that includes Pulse print "Pulse pricing
+  is not final" beside the number, and the `/products` FAQ says Pulse pricing is being set. When the
+  owner confirms the price and unit, set them, remove the flag and update that FAQ answer.
 - **Contact details** — `CONTACT` in `src/components/site-links.ts`. The contact form has no backend:
   it opens the visitor's email app (`buildMailto`).
 - **Account creation** — the wizard's last step collects name, email and company in memory only, then
@@ -45,7 +48,10 @@ mobile drawer and the footer all read `src/components/nav/nav-data.ts`.
   slots are the visual components exported from `src/components/pulse/pulse-visuals.tsx`
   (`PulseHeroVisual`, `ProfitByJobVisual`, `DailyEntryVisual`, `PlanVsActualVisual`, `CostRatesVisual`,
   `RiskVisual`, `CsvVisual`, `PulseStackVisual`, `PulseBundleVisual`), each placed by
-  `src/app/pulse/page.tsx`. Swap a slot's contents for the light and dark captures when they exist.
+  `src/app/pulse/page.tsx`. When the captures exist, put them at the paths in
+  `src/components/pulse/pulse-shots.ts` and set `ready: true` on that slot. `PulseShot` then shows the
+  screenshot in place of the coded visual. The sample numbers in the coded visuals are illustrations, so
+  check each screenshot against the copy beside it.
 - **Pulse sign-in link**. The footer links to `LINKS.pulse` (`https://pulse.kitstak.app`). Check that
   origin answers before the site ships.
 
@@ -66,6 +72,33 @@ does not say the product does it, the site does not say it either. No customer n
   band). `src/lib/pulse-placements.test.ts` fails if one falls out of step.
 - Home "Run all four" plans: the plans without Pulse are written out in
   `src/components/licensing/licensing-plans.ts`; the plans with Pulse are composed from them.
+
+### Pulse release checklist
+
+The `/pulse` page describes the finished product in the present tense. `docs/pulse/CONTRACTS.md`
+section 13 lists parts of it that were not built yet when this page was written. Do not deploy `/pulse`,
+the Pulse entry in the Products menu or the footer sign-in link to production until every line below is
+ticked. Each one is a click through on the Pulse demo workspace, signed off by the Pulse team.
+
+- [ ] Import: upload a CSV, match the columns, see the check step, save, then undo the import.
+- [ ] Export: download one kind of data as CSV, then "Download everything".
+- [ ] Floor tablet and wall display: open a kiosk link, enter a 4 digit PIN, log a row. No money shows.
+- [ ] Sync with each app: a won CRM deal becomes a job, a WMS work order becomes a job with its units,
+      and time from a linked Projects project counts as labor hours.
+- [ ] Pulse numbers in the other apps: the Profit tab on a CRM deal, the Job profit card on a WMS work
+      order, the Job profit strip on a project and the Pulse tile in Portal.
+- [ ] Alerts: the inbox (snooze, assign, dismiss), the rules tab with its twelve rules, and "Create a
+      task in Projects".
+- [ ] Quote calculator: cost per unit, the price for the target margin and the lowest price worth taking.
+- [ ] Month close: close a month, see its rows lock, reopen it with a reason.
+- [ ] Reports: all 19 open, and each one exports CSV.
+- [ ] "How we got this" opens on a money figure, a margin and a status.
+- [ ] Settings: change a risk limit and see "this would flag N jobs" before saving.
+- [ ] `https://pulse.kitstak.app` answers and shows the sign-in page.
+- [ ] The owner has confirmed the Pulse price and unit (see "Placeholders to replace before launch").
+
+If a feature is cut or changes, change the copy in `src/components/pulse/pulse-content.ts` to match
+before the page ships.
 
 ## Social preview images
 
