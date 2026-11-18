@@ -25,8 +25,10 @@ describe('pulse visual data', () => {
     expect(data.COMPANY_PROFIT).toBe(39900);
   });
 
-  it('counts three jobs that need you and 22 open jobs', () => {
+  it('counts six jobs that need you, lists the worst three, and has 22 open jobs', () => {
+    expect(data.NEEDS_YOU_COUNT).toBe(6);
     expect(data.NEEDS_YOU).toHaveLength(3);
+    for (const job of data.NEEDS_YOU) expect(['losing-money', 'at-risk']).toContain(job.status);
     expect(data.STATUS_COUNTS.reduce((sum, item) => sum + item.jobs, 0)).toBe(22);
     expect(new Set(data.OPEN_JOBS.map((job) => job.status)).size).toBe(5);
   });
@@ -35,7 +37,7 @@ describe('pulse visual data', () => {
     for (const row of data.LOG_ROWS) {
       if (row.crew) expect(row.crew.reduce((sum, line) => sum + line.people, 0)).toBe(row.people);
     }
-    expect(data.LOG_TOTAL).toEqual({ units: 8672, hours: 232 });
+    expect(data.LOG_TOTAL).toEqual({ units: 7184, hours: 184 });
     expect(data.LOG_ROWS.map((row) => data.paceOf(row.units, data.laborHours(row)))).toEqual([
       45, 31, 38, 25,
     ]);
@@ -54,6 +56,14 @@ describe('pulse visual data', () => {
     expect(data.CREW_DAY_COST).toBe(2123.84);
     expect(data.MATERIAL_COST).toBe(1377);
     expect(data.MATERIAL_SCRAP_COST).toBe(27);
+  });
+
+  it('keeps the days logged on J-1012 inside its month of money in at $2.75 a unit', () => {
+    const monthUnits = data.PROFIT_VIEWS[0]!.rows.find((row) => row.code === 'J-1012')!.moneyIn / 2.75;
+    const logged = data.LOG_ROWS.find((row) => row.code === 'J-1012')!.units;
+    const imported = Number(data.CSV_PREVIEW.find((row) => row.job === 'J-1012')!.units.replace(',', ''));
+    expect(monthUnits).toBe(2400);
+    expect(logged + imported).toBeLessThanOrEqual(monthUnits);
   });
 
   it('lists 17 CSV streams and a check that covers every row of the file', () => {

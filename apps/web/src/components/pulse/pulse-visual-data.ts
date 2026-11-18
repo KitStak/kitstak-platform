@@ -222,7 +222,12 @@ export const STATUS_COUNTS: readonly { readonly status: RiskStatus; readonly job
   { status: 'on-track', jobs: 10 },
 ];
 
-/** "Jobs that need you" on Home: the three worst open jobs. */
+/** Jobs that need you are the losing and at risk ones (SPEC 8.1, listJobsNeedingAttention): 6 here. */
+export const NEEDS_YOU_COUNT = STATUS_COUNTS.filter(
+  (item) => item.status === 'losing-money' || item.status === 'at-risk',
+).reduce((sum, item) => sum + item.jobs, 0);
+
+/** "Jobs that need you" on Home: the three worst of them. */
 export const NEEDS_YOU: readonly OpenJob[] = [
   {
     code: 'J-1012',
@@ -260,6 +265,11 @@ export interface LogRow {
 
 export const LOG_DAY = 'Tuesday, Nov 17';
 
+/*
+ * J-1012 sells at $2.75 a unit (SPEC 9), so its $6,600 of money in this month is 2,400 units. The
+ * day below and the day in the CSV preview are 744 and 720 of them, so the days fit inside the month.
+ */
+
 export const LOG_ROWS: readonly LogRow[] = [
   {
     code: 'J-1005',
@@ -277,8 +287,8 @@ export const LOG_ROWS: readonly LogRow[] = [
   {
     code: 'J-1012',
     name: 'Harbor Roast holiday gift set',
-    units: 2232,
-    people: 9,
+    units: 744,
+    people: 3,
     hoursEach: 8,
     targetPace: 46,
   },
@@ -467,6 +477,6 @@ export const CSV_PREVIEW: readonly {
   readonly hours: string;
 }[] = [
   { row: 13, workDate: '2026-11-16', job: 'J-1005', units: '4,180', hours: '96' },
-  { row: 14, workDate: '2026-11-16', job: 'J-1012', units: '2,170', hours: CSV_PROBLEM.value },
+  { row: 14, workDate: '2026-11-16', job: 'J-1012', units: '720', hours: CSV_PROBLEM.value },
   { row: 15, workDate: '2026-11-16', job: 'J-1023', units: '1,480', hours: '40' },
 ];

@@ -54,7 +54,7 @@ export function JobMathVisual() {
                 <span className={styles.lineName}>{line.label}</span>
                 <span className={styles.lineDetail}>{line.detail}</span>
               </th>
-              <td>{usd(-line.cents)}</td>
+              <td>{usd(line.cents)}</td>
             </tr>
           ))}
           <tr className={styles.lineSum}>

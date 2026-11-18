@@ -15,6 +15,7 @@ import {
   MATERIAL_SCRAP_COST,
   MONTH,
   NEEDS_YOU,
+  NEEDS_YOU_COUNT,
   OPEN_JOBS,
   OVERTIME_HOUR,
   PERIOD,
@@ -72,7 +73,7 @@ export function PulseHeroVisual() {
         <p className={styles.answer}>
           Your jobs made <strong>{money(MONTH.profit)}</strong> this month at a{' '}
           <strong>{percent(MONTH.margin, 0)} margin</strong>. After time not on a job and overhead, the
-          company made <strong>{money(COMPANY_PROFIT)}</strong>. {NEEDS_YOU.length} jobs need you.
+          company made <strong>{money(COMPANY_PROFIT)}</strong>. {NEEDS_YOU_COUNT} jobs need you.
         </p>
 
         <dl className={styles.tiles}>
@@ -98,9 +99,12 @@ export function PulseHeroVisual() {
         </div>
 
         <div className={styles.groupLabel} aria-hidden>
-          Jobs that need you
+          Jobs that need you · worst {NEEDS_YOU.length} of {NEEDS_YOU_COUNT}
         </div>
-        <ul className={styles.jobList} aria-label="Jobs that need you">
+        <ul
+          className={styles.jobList}
+          aria-label={`Jobs that need you, the worst ${NEEDS_YOU.length} of ${NEEDS_YOU_COUNT}`}
+        >
           {NEEDS_YOU.map((job) => (
             <li key={job.code}>
               <div className={styles.jobLine}>
@@ -543,7 +547,7 @@ const LINKS_BY_APP = [
   {
     id: 'portal',
     name: 'KitStak Portal',
-    into: 'One sign-in and one app switcher for every app.',
+    into: 'Billing and setup steps for Pulse live in Portal.',
     back: 'A Pulse tile with open jobs, jobs at risk and jobs losing money.',
   },
 ] as const;
@@ -586,8 +590,8 @@ export function PulseStackVisual() {
           ))}
         </ul>
         <p className={mock.caption}>
-          Pulse copies what it needs and never changes your CRM or WMS data. Take any app away and Pulse keeps
-          working.
+          One sign-in and one app switcher cover every app. Pulse copies what it needs and never changes your
+          CRM or WMS data. Take any app away and Pulse keeps working.
         </p>
       </div>
     </PulseShot>

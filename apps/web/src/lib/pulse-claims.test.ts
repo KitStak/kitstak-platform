@@ -195,9 +195,9 @@ describe('/pulse numbers', () => {
     }
   });
 
-  it('formats money the way the site does', () => {
+  it('formats money the way Pulse does, with a plain hyphen for a loss', () => {
     expect(usd(156_500)).toBe('$1,565.00');
-    expect(usd(-26_000)).toBe('−$260.00');
+    expect(usd(-26_000)).toBe('-$260.00');
     expect(usd(3_990_000, false)).toBe('$39,900');
   });
 
