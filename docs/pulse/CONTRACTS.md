@@ -571,3 +571,59 @@ Unit tests: `src/components/charts/{scale.test.ts,charts.test.tsx}`.
 
 Known limits: time axes assume evenly spaced buckets; no brush or zoom; no stacked area; no scatter; ComboChart
 `overlay` is a dual axis chart, so prefer `split`; the Waterfall always starts its value axis at zero.
+
+## 15. Profit, reports and "How we got this" (owner: profit)
+
+What the profit team added on top of sections 5 to 9. Everything here is additive.
+
+**Domain (`@/server/domain`)**
+- **`explain`**: `explain(ctx, metric, scope)` returns `ExplainDTO` (title, scope in words, the rule in plain words,
+  lines with numbers and units, data quality lines, links to the rows). `metric` is one of `EXPLAIN_METRICS` in
+  `@/lib/constants`; `scope` is `ProfitFilters`. Figures come from `getProfit` and `getCompanyBridge`, so an explanation
+  cannot disagree with the screen. Money is `null` without `money:read`; the wage split shows only with `wage:read`.
+- **`reports`**: `buildReport(ctx, slug, filters, { hideMoney? })` builds any of the 19 reports as one `ReportDTO`
+  (columns, rows, total, summary, chart, notes). `getProfitPivot(ctx, rowBy, colBy, filters)` (two way pivot, totals
+  equal `getProfit`), `listProfitEntries(ctx, filters & { kinds?, limit? })` (drill down rows with job, client and
+  service names). Schedules: `listReportSchedules`, `saveReportSchedule`, `setReportScheduleEnabled`,
+  `deleteReportSchedule`, `restoreReportSchedule`, `runReportSchedule` (build now), `listReportRuns`,
+  `getReportRunFile(ctx, runId, 'csv' | 'html')`, `runDueReportSchedules(ctx)` (the hourly cron).
+- **`catalog`** gained `restoreVasService(ctx, id)` (undo of a delete).
+
+**API**
+| Route | Params | Returns |
+| --- | --- | --- |
+| `GET explain` | `metric` plus the profit filters | `ExplainDTO` |
+| `GET profit/pivot` | `rows,cols` plus the profit filters | `ProfitPivotDTO` |
+| `GET profit/entries` | profit filters, `kinds,limit` | `ProfitEntriesDTO` |
+| `GET reports/<slug>`, `reports/<slug>.csv`, `reports/<slug>.html` | `from,to,site,client,jobType,status` (`print=1` on `.html`) | `ReportDTO`, a CSV file, a self contained page to print |
+| `GET reports/schedules`, `reports/runs`, `reports/runs/<id>?format=csv\|html` | | `ReportScheduleDTO[]`, `ReportRunDTO[]`, the build's file |
+| `GET cron/reports` | `Authorization: Bearer $CRON_SECRET` | builds due schedules (hourly in `vercel.json`) |
+
+File routes use `fileRoute` from `src/features/reports/server/file-route.ts` (same checks as `apiRoute`, may answer
+with a `Response`).
+
+**Actions**: `reports.ts` (`saveReportScheduleAction`, `deleteReportScheduleAction`, `restoreReportScheduleAction`,
+`setReportScheduleEnabledAction`, `runReportScheduleAction`), `catalog.ts` gained `restoreVasServiceAction`.
+
+**Hooks**: `useExplain`, `useProfitPivot`, `useProfitEntries`, `useReport`, `useReportSchedules`, `useReportRuns`, and
+`reportQuery(params)` for building the CSV and print links. Keys: `qk.explain`, `qk.profitPivot`, `qk.profitEntries`,
+`qk.report`, `qk.reportSchedules`, `qk.reportRuns`.
+
+**Pure helpers (`@/lib/reports`)**: `RANGE_PRESETS`, `resolveRange`, `COMPARE_MODES`, `compareRange`, `rangeLabel`,
+`SCHEDULE_RANGES`, `resolveScheduleRange`, `nextScheduleRun`, `scheduleSentence`.
+
+**UI any team can mount by path**
+- `@/components/pulse/explain`: `<ExplainNumber metric="profit" scope={{ from, to, jobId }} />`, the "How we got this"
+  popover for any number. It loads on open.
+- `@/features/profit/period-picker` + `@/features/profit/period` (`parsePeriod`, `periodQuery`): the period picker and
+  its URL form (`?range=`, `?from=&to=`, `?compare=prior|last_year`). `@/features/profit/filter-bar` (`FilterBar`,
+  `parseFilters`), `@/features/profit/use-query-state` (`useQueryState`), `@/features/profit/csv-download`
+  (`downloadCsv`), `@/features/profit/entries-drawer` (`EntriesDrawer`), `@/features/profit/profit-ui` (`LoadError`,
+  `Section`, `TableSkeleton`, `moneyDelta`, `pointsDelta`, `numberDelta`, `runDelete`).
+- `@/features/reports/report-table` and `report-chart`: render any `ReportDTO`. `report-format` has `reportToCsv`,
+  `reportToHtml` and `reportCellText` (pure).
+- Deep links into the explorer: `/profit?by=&range=&from=&to=&compare=&site=&client=&jobType=&job=&service=&status=&view=&sort=&cols=&entries=`.
+  `entries=all|revenue|labor|material|other|shared` opens the rows behind the number.
+
+Real 404s for `/clients/<id>` and `/services/<id>` come from `profitRecordMissing` in the `(app)` layout.
+Supervisors still land on Log work; `/?floor=1` shows them the no money version of Home.

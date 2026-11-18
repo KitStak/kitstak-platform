@@ -26,7 +26,7 @@ import { SCHEDULE_RANGE_LABELS, scheduleSentence, type ScheduleRange } from '@/l
 import { routes } from '@/lib/routes';
 import type { ReportScheduleDTO } from '@/lib/types';
 import { deleteReportScheduleAction, restoreReportScheduleAction, runReportScheduleAction, setReportScheduleEnabledAction } from '@/server/actions/reports';
-import { LoadError, Section, TableSkeleton } from '@/features/profit/profit-ui';
+import { LoadError, Section, TableSkeleton, runDelete } from '@/features/profit/profit-ui';
 import { ScheduleDialog } from './schedule-dialog';
 
 function when(iso: string | null): string {
@@ -46,7 +46,6 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
   const keys = [qk.reportSchedules(), qk.reportRuns()] as const;
   const run = useServerAction(runReportScheduleAction, { invalidate: keys, errorTitle: "Couldn't build the report" });
   const enable = useServerAction(setReportScheduleEnabledAction, { invalidate: keys });
-  const remove = useServerAction(deleteReportScheduleAction, { invalidate: keys, errorTitle: "Couldn't delete the schedule" });
 
   const buildNow = async (schedule: ReportScheduleDTO) => {
     setBuilding(schedule.id);
@@ -66,11 +65,9 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
 
   const deleteSchedule = async (schedule: ReportScheduleDTO) => {
     queryClient.setQueryData<ReportScheduleDTO[]>(qk.reportSchedules(), (current) => (current ?? []).filter((item) => item.id !== schedule.id));
-    const done = await remove.run({ scheduleId: schedule.id });
-    if (done === undefined) {
-      void queryClient.invalidateQueries({ queryKey: qk.reportSchedules() });
-      return;
-    }
+    const deleted = await runDelete(deleteReportScheduleAction, { scheduleId: schedule.id }, "Couldn't delete the schedule");
+    void queryClient.invalidateQueries({ queryKey: qk.reportSchedules() });
+    if (!deleted) return;
     toast.undo(`Deleted the schedule ${schedule.name}`, {
       onUndo: async () => {
         const result = await restoreReportScheduleAction({ scheduleId: schedule.id });

@@ -21,6 +21,7 @@ import type { SavedViewDTO } from '@/lib/types';
 import { deleteViewAction, saveViewAction } from '@/server/actions/views';
 import { useShell } from '@/features/shell/shell-context';
 import { viewToQuery } from './profit-model';
+import { runDelete } from './profit-ui';
 
 /** Keys that are part of a view. Open drawers are not. */
 const SKIP = new Set(['entries', 'day', 'savedView']);
@@ -34,7 +35,6 @@ export function ViewsMenu({ params, onApply }: { readonly params: URLSearchParam
   const [name, setName] = useState('');
   const [shared, setShared] = useState(false);
   const save = useServerAction(saveViewAction, { invalidate: [qk.views('profit')], silentError: true });
-  const remove = useServerAction(deleteViewAction, { invalidate: [qk.views('profit')] });
   const list = views.data ?? [];
 
   const currentQuery = (): Record<string, string> => {
@@ -57,11 +57,9 @@ export function ViewsMenu({ params, onApply }: { readonly params: URLSearchParam
   const deleteView = async (view: SavedViewDTO) => {
     // Take it off the list right away; put it back if the server says no.
     queryClient.setQueryData<SavedViewDTO[]>(qk.views('profit'), (current) => (current ?? []).filter((item) => item.id !== view.id));
-    const done = await remove.run({ viewId: view.id });
-    if (done === undefined) {
-      void queryClient.invalidateQueries({ queryKey: qk.views('profit') });
-      return;
-    }
+    const deleted = await runDelete(deleteViewAction, { viewId: view.id }, "Couldn't delete the view");
+    void queryClient.invalidateQueries({ queryKey: qk.views('profit') });
+    if (!deleted) return;
     toast.undo(`Deleted the view ${view.name}`, {
       onUndo: async () => {
         const result = await saveViewAction({ page: 'profit', name: view.name, config: { ...view.config }, shared: view.shared });

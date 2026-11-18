@@ -17,7 +17,8 @@ import { cn } from '@/components/ui/cn';
 import { PROFIT_GROUPS, type ProfitGroup } from '@/lib/constants';
 import type { CsvCell } from '@/lib/csv/write';
 import { formatMoney, formatMoneyWhole, formatPace, formatPercentBp, formatPercentWhole } from '@/lib/format';
-import { useCompanyBridge, useJob, useProfit, useProfitPivot, useVasServices, type ProfitParams } from '@/lib/hooks/use-data';
+import { apiPath } from '@/lib/api-client';
+import { reportQuery, useCompanyBridge, useJob, useProfit, useProfitPivot, useVasServices, type ProfitParams } from '@/lib/hooks/use-data';
 import { COMPARE_MODE_SHORT, rangeLabel, type RangePreset } from '@/lib/reports';
 import { routes } from '@/lib/routes';
 import type { ClientDTO, JobTypeDTO, SiteDTO } from '@/lib/types';
@@ -155,6 +156,11 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
     if (!data || !total) return;
     const stamp = `${period.from}-to-${period.to}`;
     const nameHeader = VIEW_LABELS[by].replace(/s$/, '');
+    if (mode === 'serve') {
+      // Cost to serve is a report: its CSV comes from the same build the view shows.
+      window.location.assign(apiPath('reports/cost-to-serve.csv', reportQuery({ from: period.from, to: period.to, siteId: filters.siteId, clientId: filters.clientId, jobTypeId: filters.jobTypeId, status: filters.status })));
+      return;
+    }
     if (mode === 'pivot') {
       if (!pivot.data) return;
       const grid = pivotCsv(pivot.data, pivotMeasure);
@@ -196,7 +202,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
           <PeriodPicker period={period} onChange={setPeriod} />
           <div className="flex items-center gap-2">
             <ViewsMenu params={url.params} onApply={(query) => url.replaceAll(query)} />
-            <Button variant="secondary" leadingIcon={<Download aria-hidden />} onClick={exportView} disabled={!data || empty || (mode === 'pivot' && !pivot.data) || mode === 'serve' || mode === 'chart'} data-testid="profit-export" title={mode === 'chart' ? 'Switch to the table to export it.' : mode === 'serve' ? 'Use the Cost to serve report to export it.' : undefined}>
+            <Button variant="secondary" leadingIcon={<Download aria-hidden />} onClick={exportView} disabled={!data || empty || (mode === 'pivot' && !pivot.data)} data-testid="profit-export" title={mode === 'chart' ? 'Exports the numbers behind the chart, as the table shows them.' : undefined}>
               Export CSV
             </Button>
           </div>

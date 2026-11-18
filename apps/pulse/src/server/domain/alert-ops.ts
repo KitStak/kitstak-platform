@@ -17,7 +17,7 @@ import { invalid, notFound } from '@/server/errors';
 import { ALERT_KINDS, type AlertKind, type AlertSeverity, type AlertStatus } from '@/lib/constants';
 import { formatMoneyWhole } from '@/lib/format';
 import { addDays, isWorkDay, startOfMonth, workDaysBetween } from '@/lib/profit';
-import { isClockTime, quietOf, type QuietHours } from '@/features/alerts/quiet-hours';
+import { isClockTime, type QuietHours } from '@/features/alerts/quiet-hours';
 import type { AlertDTO, AlertRuleDTO } from '@/lib/types';
 import { isUuid, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse } from './access';

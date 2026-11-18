@@ -6,8 +6,8 @@
  */
 import { formatDateLong } from '@/components/charts/scale';
 import type { ExplainMetric, ProfitGroup } from '@/lib/constants';
-import type { CsvCell } from '@/lib/csv/write';
-import { formatDecimalPlain, formatHours, formatMoney, formatMoneyPlain, formatNumber, formatPace, formatPercentBp } from '@/lib/format';
+import { rawCell, type CsvCell } from '@/lib/csv/write';
+import { formatHours, formatMoney, formatMoneyPlain, formatNumber, formatPace, formatPercentBp } from '@/lib/format';
 import type { ProfitParams } from '@/lib/hooks/use-data';
 import { addCents, centsToNumber } from '@/lib/money';
 import { addDays, endOfMonth } from '@/lib/profit/calendar';
@@ -128,9 +128,10 @@ export function formatValue(value: number | null | undefined, kind: ColumnKind):
 /** A value as a spreadsheet wants it: plain numbers, percent as a number. */
 export function csvValue(value: number | null | undefined, kind: ColumnKind): CsvCell {
   if (value === null || value === undefined) return '';
-  if (kind === 'money') return formatMoneyPlain(value);
-  if (kind === 'percent') return formatDecimalPlain(value / 100, 2);
-  return String(value);
+  // Marked as numbers, so a negative amount is not mistaken for a formula.
+  if (kind === 'money') return rawCell(formatMoneyPlain(value));
+  if (kind === 'percent') return rawCell((value / 100).toFixed(2));
+  return value;
 }
 
 export const csvHeader = (column: Pick<ProfitColumn, 'label' | 'kind'>): string => (column.kind === 'percent' ? `${column.label} (%)` : column.label);

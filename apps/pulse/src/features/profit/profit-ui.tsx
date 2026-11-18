@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, CircleAlert, RotateCw } from 'lucide-react';
 import type { DeltaBadgeProps } from '@/components/charts/stats';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/toast';
 import { cn } from '@/components/ui/cn';
 import { formatMoneyDelta, formatNumberDelta, formatPercentDelta, formatPointsDelta } from '@/lib/format';
 import { compareMoney, compareNumber } from '@/lib/profit/trends';
@@ -53,7 +54,8 @@ export function moneyDelta(current: number | null, previous: number | null | und
   if (current === null || previous === null || previous === undefined) return undefined;
   const change = compareMoney(BigInt(current), BigInt(previous), goodWhen);
   if (change.deltaCents === null) return undefined;
-  const percent = change.changeBp === null ? '' : ` (${formatPercentDelta(change.changeBp)})`;
+  // Past five times the earlier number a percent stops meaning anything: the money says it all.
+  const percent = change.changeBp === null || Math.abs(change.changeBp) > 50000 ? '' : ` (${formatPercentDelta(change.changeBp)})`;
   return { delta: change.deltaCents, text: `${formatMoneyDelta(change.deltaCents, { cents: false })}${percent}`, goodWhen, label };
 }
 
@@ -106,4 +108,21 @@ export function TableSkeleton({ rows = 8, label }: { readonly rows?: number; rea
  */
 export function comparable<T extends { readonly rows: readonly unknown[]; readonly total: unknown }>(response: T | undefined): T['total'] | null {
   return response && response.rows.length > 0 ? response.total : null;
+}
+
+/**
+ * Runs a server action that returns nothing (a delete) and says whether it worked. On a failure
+ * it shows the server's plain message. `useServerAction` cannot tell "deleted" from "failed"
+ * for these, because both come back with no data.
+ */
+export async function runDelete<I>(action: (input: I) => Promise<{ readonly ok: true } | { readonly ok: false; readonly error: { readonly message: string } }>, input: I, errorTitle: string): Promise<boolean> {
+  try {
+    const result = await action(input);
+    if (result.ok) return true;
+    toast.error(errorTitle, result.error.message);
+    return false;
+  } catch {
+    toast.error(errorTitle, 'Check your connection and try again.');
+    return false;
+  }
 }

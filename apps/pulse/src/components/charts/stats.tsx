@@ -165,9 +165,9 @@ export function KpiTile({ label, value, delta, sparkline, explain, footer, empty
     );
   }
   return (
-    <section aria-label={label} className={cn('flex min-h-[124px] min-w-0 flex-col rounded-lg border border-border-subtle bg-panel p-4', className)}>
+    <section aria-label={label} className={cn('@container flex min-h-[124px] min-w-0 flex-col rounded-lg border border-border-subtle bg-panel p-4', className)}>
       <div className="flex items-start justify-between gap-2">
-        <h3 className="min-w-0 truncate text-xs font-medium text-fg-secondary">{label}</h3>
+        <h3 className="line-clamp-2 min-w-0 text-xs font-medium text-fg-secondary">{label}</h3>
         {explain ? <div className="-mt-1 -mr-1.5 shrink-0">{explain}</div> : null}
       </div>
       {error ? (
@@ -178,7 +178,7 @@ export function KpiTile({ label, value, delta, sparkline, explain, footer, empty
         <>
           <div className="mt-1.5 flex items-end justify-between gap-3">
             <p className={cn('min-w-0 truncate font-semibold tracking-tight', value === null ? 'text-md text-fg-muted' : 'text-xl text-fg')}>{value ?? emptyText}</p>
-            {sparkline && value !== null ? <Sparkline values={sparkline.values} label={sparkline.label ?? `${label} trend`} format={sparkline.format} tone={sparkline.tone} width={88} height={30} className="mb-0.5" /> : null}
+            {sparkline && value !== null ? <Sparkline values={sparkline.values} label={sparkline.label ?? `${label} trend`} format={sparkline.format} tone={sparkline.tone} width={88} height={30} className="mb-0.5 hidden shrink-0 @[15.5rem]:block" /> : null}
           </div>
           {(delta && value !== null) || footer ? (
             <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2.5">

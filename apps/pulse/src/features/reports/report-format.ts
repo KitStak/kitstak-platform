@@ -4,8 +4,8 @@
  * download routes and scheduled builds, so all four show the same numbers.
  */
 import { JOB_STATUS_LABELS, PULSE_STATUS_LABELS, type JobStatusValue, type PulseStatus } from '@/lib/constants';
-import { toCsv, type CsvCell } from '@/lib/csv/write';
-import { formatDecimalPlain, formatHours, formatMoney, formatMoneyPlain, formatNumber, formatPace, formatPercentBp } from '@/lib/format';
+import { rawCell, toCsv, type CsvCell } from '@/lib/csv/write';
+import { formatHours, formatMoney, formatMoneyPlain, formatNumber, formatPace, formatPercentBp } from '@/lib/format';
 import { shortDate } from '@/lib/profit/calendar';
 import type { ReportCell, ReportCellKind, ReportDTO } from '@/lib/types';
 
@@ -51,14 +51,15 @@ export function reportCellText(value: ReportCell, kind: ReportCellKind, empty = 
 export function reportCellCsv(value: ReportCell, kind: ReportCellKind): CsvCell {
   if (value === null || value === undefined || value === '') return '';
   switch (kind) {
+    // Numbers are marked as numbers, so a negative amount is not mistaken for a formula.
     case 'money':
-      return formatMoneyPlain(Number(value));
+      return rawCell(formatMoneyPlain(Number(value)));
     case 'percent':
-      return formatDecimalPlain(Number(value) / 100, 2);
+      return rawCell((Number(value) / 100).toFixed(2));
     case 'number':
     case 'hours':
     case 'pace':
-      return String(value);
+      return typeof value === 'number' ? value : String(value);
     case 'status':
     case 'job_status':
       return statusWords(String(value));

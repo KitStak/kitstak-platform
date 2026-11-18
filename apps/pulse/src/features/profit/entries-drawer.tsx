@@ -15,6 +15,7 @@ import { ToggleGroup } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/cn';
 import type { FactKind } from '@/lib/constants';
 import { formatHours, formatMoney, formatMoneyPlain, formatNumber } from '@/lib/format';
+import { rawCell } from '@/lib/csv/write';
 import { useProfitEntries, type ProfitParams } from '@/lib/hooks/use-data';
 import { sumFacts } from '@/lib/profit/summary';
 import { centsToNumber } from '@/lib/money';
@@ -39,7 +40,7 @@ export function EntriesDrawer({ open, onClose, filter, onFilter, scope, title, f
     downloadCsv(
       fileName,
       ['Day', 'Job', 'Job name', 'Client', 'What', 'Typed in', 'Extra service', 'Note', 'Units', 'Labor hours', 'Amount'],
-      rows.map((row) => [row.workDate, row.jobNumber ?? '', row.jobName ?? '', row.clientName ?? '', FACT_KIND_LABELS[row.kind] ?? row.kind, row.sourceLabel, row.serviceName ?? '', row.note ?? '', Number(row.unitsGood) || '', Number(row.hours) || '', row.amountCents === null ? '' : formatMoneyPlain(COST_KINDS.has(row.kind) ? -row.amountCents : row.amountCents)]),
+      rows.map((row) => [row.workDate, row.jobNumber ?? '', row.jobName ?? '', row.clientName ?? '', FACT_KIND_LABELS[row.kind] ?? row.kind, row.sourceLabel, row.serviceName ?? '', row.note ?? '', Number(row.unitsGood) || '', Number(row.hours) || '', row.amountCents === null ? '' : rawCell(formatMoneyPlain(COST_KINDS.has(row.kind) ? -row.amountCents : row.amountCents))]),
     );
   return (
     <Drawer open={open} onOpenChange={(next) => (next ? undefined : onClose())}>

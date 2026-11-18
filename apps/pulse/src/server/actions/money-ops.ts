@@ -23,28 +23,8 @@ import { alertKind, alertSeverity, cents, costCategory, headcount, hours, isoDat
 
 /* ---------------------------------------------------------------- calculator */
 
-const line = z.record(z.string(), z.unknown());
-const calcInputs = z
-  .object({
-    clientId: z.string().nullable().optional(),
-    jobTypeId: z.string().nullable().optional(),
-    jobId: z.string().nullable().optional(),
-    unitLabel: z.string().max(40).optional(),
-    units: z.string().max(40).optional(),
-    standardUph: z.string().max(40).optional(),
-    crew: z.array(line).max(20).optional(),
-    shiftHours: z.string().max(20).optional(),
-    setupHours: z.string().max(20).optional(),
-    partsOwner: z.string().max(10).optional(),
-    materialPerUnit: z.string().max(40).optional(),
-    services: z.array(line).max(30).optional(),
-    otherCosts: z.array(line).max(30).optional(),
-    sharedPct: z.string().max(20).optional(),
-    targetMarginPct: z.string().max(20).optional(),
-    pricePerUnit: z.string().max(40).optional(),
-    startDate: z.string().nullable().optional(),
-  })
-  .passthrough();
+/** The form as typed. The domain reads it field by field (`reviveInputs`), so only the size is checked here. */
+const calcInputs = z.custom<unknown>((value) => value !== null && typeof value === 'object' && !Array.isArray(value) && JSON.stringify(value).length < 20_000, 'That form is too big to save.');
 
 const scenarioSchema = z.object({ id: uuid.nullable().optional(), name: name(120), inputs: calcInputs, status: z.enum(['draft', 'sent', 'won', 'lost']).optional() });
 export type SaveQuoteScenarioActionInput = z.input<typeof scenarioSchema>;

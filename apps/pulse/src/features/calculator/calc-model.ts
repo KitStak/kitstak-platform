@@ -458,3 +458,13 @@ export function trimDecimal(value: string | null | undefined): string {
   if (!value) return '';
   return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value;
 }
+
+/** The word for one unit: "kits" gives "kit", "boxes" gives "box", "assemblies" gives "assembly". Empty gives "unit". */
+export function singularUnit(unitLabel: string | null | undefined): string {
+  const word = (unitLabel ?? '').trim();
+  if (!word) return 'unit';
+  if (/ies$/i.test(word) && word.length > 4) return `${word.slice(0, -3)}y`;
+  if (/(xes|ses|zes|ches|shes)$/i.test(word)) return word.slice(0, -2);
+  if (/s$/i.test(word) && !/ss$/i.test(word) && word.length > 2) return word.slice(0, -1);
+  return word;
+}

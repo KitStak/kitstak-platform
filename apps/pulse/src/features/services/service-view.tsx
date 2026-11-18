@@ -18,6 +18,7 @@ import { ToggleGroup } from '@/components/ui/toggle-group';
 import { toast } from '@/components/ui/toast';
 import { cn } from '@/components/ui/cn';
 import { formatHours, formatMoney, formatMoneyPlain, formatMoneyWhole, formatNumber, formatPace, formatPercentBp, formatUnitPrice } from '@/lib/format';
+import { rawCell } from '@/lib/csv/write';
 import { useServerAction } from '@/lib/hooks/use-action';
 import { useLaborClasses, useProfit, useProfitEntries, useVasEntries, useVasService } from '@/lib/hooks/use-data';
 import { suggestBucket } from '@/lib/profit/trends';
@@ -35,6 +36,8 @@ import { ServiceFormDialog } from './service-form';
 import { BILLING_LABELS, SERVICE_FLAG_WORDS, flagSentence, serviceLine, serviceRateCents, unitWord } from './services-model';
 
 const DEFAULTS = { preset: 'last_90' } as const;
+/** Money for a CSV cell: a plain number, marked so a negative amount is not mistaken for a formula. */
+const money = (cents: number | null) => (cents === null ? '' : rawCell(formatMoneyPlain(cents)));
 
 export function ServiceView({ service: initialService, today, weekStart, targetMarginBp, canManage, orgSlug }: { readonly service: VasServiceDTO; readonly today: string; readonly weekStart: number; readonly targetMarginBp: number; readonly canManage: boolean; readonly orgSlug: string }) {
   const queryClient = useQueryClient();
@@ -88,7 +91,7 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
       ['Day', 'Client', 'Job', 'Quantity', 'Price', 'Amount', 'Labor hours', 'Labor cost', 'Parts cost', 'Note'],
       shownEntries.map((entry) => {
         const info = label.get(entry.id);
-        return [entry.workDate, info?.clientName ?? '', info?.jobNumber ?? '', entry.quantity, entry.unitPrice ?? '', formatMoneyPlain(entry.amountCents), entry.hours, formatMoneyPlain(entry.laborCostCents), formatMoneyPlain(entry.materialCents), entry.note ?? ''];
+        return [entry.workDate, info?.clientName ?? '', info?.jobNumber ?? '', entry.quantity, entry.unitPrice ?? '', money(entry.amountCents), entry.hours, money(entry.laborCostCents), money(entry.materialCents), entry.note ?? ''];
       }),
     );
 

@@ -1,50 +1,34 @@
-import { Calculator, HandCoins, Gauge } from 'lucide-react';
-import { Page, Panel } from '@/components/layout/page';
-import { ButtonLink } from '@/components/pulse/button-link';
-import { StepList, Teach } from '@/components/pulse/teach';
+import { Page } from '@/components/layout/page';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { routes } from '@/lib/routes';
+import { getCalculatorSetup, getQuoteScenario, listQuoteScenarios, quoteFromJob, type QuoteFromJobDTO, type QuoteScenarioDTO } from '@/server/domain';
+import { isDomainError } from '@/server/errors';
 import { pulsePage } from '@/server/page';
+import { CalculatorLoadError, CalculatorView } from './calculator-view';
 
-/** Calculator: price a new job for a target margin, or open a real job in what if mode. */
-export async function CalculatorPage() {
-  const page = await pulsePage(routes.calculator(), 'calculator');
+type Search = Promise<Record<string, string | string[] | undefined>>;
+const one = (value: string | string[] | undefined): string | null => (typeof value === 'string' && value.trim() ? value.trim() : null);
+
+/** Calculator: price a new job for a target margin, or open a real job in what if mode (`?job=`), or a saved scenario (`?scenario=`). */
+export async function CalculatorPage({ searchParams }: { readonly searchParams?: Search }) {
+  const params = (await searchParams) ?? {};
+  const jobRef = one(params.job);
+  const scenarioId = one(params.scenario);
+  const page = await pulsePage(routes.calculator({ job: jobRef ?? undefined, scenario: scenarioId ?? undefined }), 'calculator');
   if (page.blocked || !page.access.seesMoney) return <PageBlocked title="Calculator" role={page.access.role} />;
+  const [setup, scenarios] = await Promise.all([getCalculatorSetup(page.ctx), listQuoteScenarios(page.ctx)]);
+  let fromJob: QuoteFromJobDTO | null = null;
+  let scenario: QuoteScenarioDTO | null = null;
+  let problem: string | null = null;
+  try {
+    if (scenarioId) scenario = await getQuoteScenario(page.ctx, scenarioId);
+    else if (jobRef && setup.hasRate) fromJob = await quoteFromJob(page.ctx, jobRef);
+  } catch (error) {
+    problem = isDomainError(error) ? (scenarioId ? 'That scenario is not here any more. It may have been deleted.' : `We could not find the job "${jobRef}". Check the job number and try again.`) : 'Something went wrong on our side. Please try again.';
+  }
   return (
     <Page title="Calculator" subtitle="Price a new job, or test a what if, before you say yes.">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <Panel>
-          <Teach
-            icon={Calculator}
-            title="The calculator needs a labor rate first"
-            why="To price a job, Pulse has to know what an hour of work really costs you. Set one labor rate, then come back: type the units, the pace and the crew, and you get the price for the margin you want."
-            points={['The price per unit that hits your target margin', 'The lowest price worth taking, and the break even price', 'What happened last time on jobs like this one']}
-            actions={
-              <>
-                {page.can('rate:manage') ? (
-                  <ButtonLink href={routes.labor('rates')} icon={<HandCoins aria-hidden />}>
-                    Set a labor rate
-                  </ButtonLink>
-                ) : null}
-                <ButtonLink href={routes.targetPace()} variant="secondary" icon={<Gauge aria-hidden />}>
-                  Target pace
-                </ButtonLink>
-              </>
-            }
-            footnote={page.can('rate:manage') ? undefined : 'Ask an admin to set the first labor rate.'}
-          />
-        </Panel>
-        <Panel title="How the price is worked out">
-          <StepList
-            steps={[
-              { title: 'Labor', detail: 'Units divided by the pace gives hours. Hours times the real cost of an hour gives labor cost.' },
-              { title: 'Materials and other costs', detail: 'Parts you pay for, per unit, plus things like freight and packaging.' },
-              { title: 'Shared costs', detail: 'A fair share of time not on a job, like meetings and cleanup.' },
-              { title: 'Price', detail: 'Cost divided by one minus your target margin. A 30 percent margin on a $7.00 cost is a $10.00 price.' },
-            ]}
-          />
-        </Panel>
-      </div>
+      {problem ? <CalculatorLoadError message={problem} /> : <CalculatorView initialSetup={setup} initialScenarios={scenarios} initialFromJob={fromJob} initialScenario={scenario} />}
     </Page>
   );
 }

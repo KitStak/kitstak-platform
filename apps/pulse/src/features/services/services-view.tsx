@@ -23,6 +23,7 @@ import { toast } from '@/components/ui/toast';
 import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/components/ui/cn';
 import { formatMoney, formatMoneyPlain, formatMoneyWhole, formatNumber, formatPercentBp, formatUnitPrice } from '@/lib/format';
+import { rawCell } from '@/lib/csv/write';
 import { useServerAction } from '@/lib/hooks/use-action';
 import { useLaborClasses, useProfit, useVasServices } from '@/lib/hooks/use-data';
 import { qk } from '@/lib/query-keys';
@@ -33,12 +34,14 @@ import { deleteVasServiceAction, restoreVasServiceAction, updateVasServiceAction
 import { downloadCsv } from '@/features/profit/csv-download';
 import { parsePeriod, periodQuery } from '@/features/profit/period';
 import { PeriodPicker, type PeriodChange } from '@/features/profit/period-picker';
-import { LoadError, Section, TableSkeleton } from '@/features/profit/profit-ui';
+import { LoadError, Section, TableSkeleton, runDelete } from '@/features/profit/profit-ui';
 import { useQueryState } from '@/features/profit/use-query-state';
 import { ServiceFormDialog } from './service-form';
 import { BILLING_LABELS, SERVICE_FLAG_WORDS, flagSentence, serviceLine, serviceRateCents, type ServiceLine } from './services-model';
 
 const DEFAULTS = { preset: 'last_90' } as const;
+/** Money for a CSV cell: a plain number, marked so a negative amount is not mistaken for a formula. */
+const money = (cents: number | null) => (cents === null ? '' : rawCell(formatMoneyPlain(cents)));
 type Show = 'all' | 'underpriced' | 'off';
 
 export function FlagPill({ line, targetMarginBp }: { readonly line: ServiceLine; readonly targetMarginBp: number }) {
@@ -69,7 +72,6 @@ export function ServicesView({ initialServices, today, weekStart, targetMarginBp
   const [formOpen, setFormOpen] = useState(false);
   const keys = [qk.services(), ['services'], qk.profitRoot()] as const;
   const update = useServerAction(updateVasServiceAction, { invalidate: keys });
-  const remove = useServerAction(deleteVasServiceAction, { invalidate: keys, errorTitle: "Couldn't delete the service" });
 
   const setPeriod = useCallback((change: PeriodChange) => set(periodQuery({ preset: change.preset ?? period.preset, from: change.from ?? period.from, to: change.to ?? period.to, compare: 'none' }, DEFAULTS)), [period, set]);
 
@@ -101,8 +103,9 @@ export function ServicesView({ initialServices, today, weekStart, targetMarginBp
   };
 
   const deleteService = async (service: VasServiceDTO) => {
-    const done = await remove.run({ serviceId: service.id });
-    if (done === undefined) return;
+    const deleted = await runDelete(deleteVasServiceAction, { serviceId: service.id }, `Couldn't delete ${service.name}`);
+    if (!deleted) return;
+    await queryClient.invalidateQueries({ queryKey: ['services'] });
     toast.undo(`Deleted ${service.name}`, {
       onUndo: async () => {
         const result = await restoreVasServiceAction({ serviceId: service.id });
@@ -116,7 +119,7 @@ export function ServicesView({ initialServices, today, weekStart, targetMarginBp
     downloadCsv(
       `${orgSlug}-extra-services-${period.from}-to-${period.to}.csv`,
       ['Service', 'Code', 'Unit', 'Billed', 'Active', 'Price', 'Standard cost', 'Margin at list price (%)', 'Volume', 'Revenue', 'Cost', 'Profit', 'Margin (%)', 'Revenue per unit', 'Cost per unit', 'Flag', 'Price for target margin'],
-      shown.map((line) => [line.service.name, line.service.code, line.service.unitLabel, BILLING_LABELS[line.service.billing] ?? line.service.billing, line.service.active ? 'Yes' : 'No', line.price ?? '', line.standardCost ?? '', line.standardMarginBp === null ? '' : String(line.standardMarginBp / 100), line.volume, formatMoneyPlain(line.revenueCents), formatMoneyPlain(line.costCents), formatMoneyPlain(line.profitCents), line.marginBp === null ? '' : String(line.marginBp / 100), line.revenuePerUnit ?? '', line.costPerUnit ?? '', line.flag ? SERVICE_FLAG_WORDS[line.flag] : '', line.priceForTarget ?? '']),
+      shown.map((line) => [line.service.name, line.service.code, line.service.unitLabel, BILLING_LABELS[line.service.billing] ?? line.service.billing, line.service.active ? 'Yes' : 'No', line.price ?? '', line.standardCost ?? '', line.standardMarginBp === null ? '' : rawCell((line.standardMarginBp / 100).toFixed(2)), line.volume, money(line.revenueCents), money(line.costCents), money(line.profitCents), line.marginBp === null ? '' : rawCell((line.marginBp / 100).toFixed(2)), line.revenuePerUnit ?? '', line.costPerUnit ?? '', line.flag ? SERVICE_FLAG_WORDS[line.flag] : '', line.priceForTarget ?? '']),
     );
 
   const openNew = () => {
