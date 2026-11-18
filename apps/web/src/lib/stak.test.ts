@@ -1,9 +1,18 @@
 import { describe, expect, test } from 'vitest';
-import { getStartedHref, parseStack, toggleProduct } from '@/components/site-links';
+import {
+  FULL_STACK,
+  PULSE_IS_LIVE,
+  ROUTES,
+  getStartedHref,
+  parseStack,
+  startableStack,
+  toggleProduct,
+} from '@/components/site-links';
 import {
   DEFAULT_ANSWERS,
   accountErrors,
   applyPrefill,
+  asksOnlyForUnopenedProducts,
   canLeaveStep,
   handoffUrl,
   parseAnswers,
@@ -21,6 +30,12 @@ describe('parseStack', () => {
     expect(parseStack('crm')).toEqual(['crm']);
     expect(parseStack('projects,crm')).toEqual(['crm', 'projects']);
     expect(parseStack('crm,wms,projects')).toEqual(['crm', 'wms', 'projects']);
+  });
+
+  test('reads Pulse on its own and puts it last in a mix', () => {
+    expect(parseStack('pulse')).toEqual(['pulse']);
+    expect(parseStack('pulse,crm')).toEqual(['crm', 'pulse']);
+    expect(parseStack('pulse,projects,wms,crm')).toEqual(FULL_STACK);
   });
 
   test('keeps old "both" links working', () => {
@@ -52,6 +67,18 @@ describe('toggleProduct and getStartedHref', () => {
     expect(getStartedHref(['projects', 'crm'])).toBe('/get-started?stack=crm,projects');
     expect(getStartedHref()).toBe('/get-started');
   });
+
+  test('links into the wizard with Pulse only once the Pulse app is open', () => {
+    // While Pulse is coming soon it never rides into the wizard, and alone it goes to the walkthrough.
+    expect(getStartedHref('pulse')).toBe(PULSE_IS_LIVE ? '/get-started?stack=pulse' : ROUTES.demo);
+    expect(getStartedHref(['pulse', 'wms'])).toBe(
+      PULSE_IS_LIVE ? '/get-started?stack=wms,pulse' : '/get-started?stack=wms',
+    );
+    expect(getStartedHref(FULL_STACK)).toBe(
+      PULSE_IS_LIVE ? '/get-started?stack=crm,wms,projects,pulse' : '/get-started?stack=crm,wms,projects',
+    );
+    expect(toggleProduct(['crm', 'pulse'], 'wms')).toEqual(['crm', 'wms', 'pulse']);
+  });
 });
 
 describe('portalFocus', () => {
@@ -59,6 +86,8 @@ describe('portalFocus', () => {
     expect(portalFocus(['crm', 'wms', 'projects'])).toBe('both');
     expect(portalFocus(['wms', 'projects'])).toBe('wms');
     expect(portalFocus(['projects'])).toBeNull();
+    expect(portalFocus(['pulse'])).toBeNull();
+    expect(portalFocus(['crm', 'pulse'])).toBe('crm');
   });
 });
 
@@ -127,7 +156,11 @@ describe('setupPlan', () => {
 
   test('adds the Projects first-run last, named after the chosen template', () => {
     const plan = setupPlan(
-      answers({ products: ['crm', 'projects'], businessType: 'brand', projectTemplates: ['client-onboarding'] }),
+      answers({
+        products: ['crm', 'projects'],
+        businessType: 'brand',
+        projectTemplates: ['client-onboarding'],
+      }),
     );
 
     expect(plan.at(-1)).toMatchObject({ key: 'first_project', app: 'Projects' });
@@ -140,6 +173,35 @@ describe('setupPlan', () => {
     expect(apps).toEqual(['Portal', 'Portal', 'Projects']);
   });
 
+  test('adds the Pulse first job last, after every other app', () => {
+    const plan = setupPlan(answers({ products: FULL_STACK, businessType: '3pl' }));
+
+    expect(plan.at(-1)).toMatchObject({ key: 'first_job', app: 'Pulse', isDone: false });
+    expect(plan.at(-2)).toMatchObject({ app: 'Projects' });
+  });
+
+  test('works for a Pulse-only stack and follows the way the team wants to start', () => {
+    const note = (startMode: StakAnswers['startMode']) =>
+      setupPlan(answers({ products: ['pulse'], businessType: '3pl', startMode })).at(-1)?.note;
+
+    expect(setupPlan(answers({ products: ['pulse'], businessType: '3pl' })).map((s) => s.app)).toEqual([
+      'Portal',
+      'Portal',
+      'Pulse',
+    ]);
+    expect(note('sample')).toMatch(/sample data/);
+    expect(note('import')).toMatch(/import/i);
+    expect(note('fresh')).toMatch(/labor rate/);
+  });
+
+  test('leaves Pulse out when it is not chosen', () => {
+    const apps = setupPlan(answers({ products: ['crm', 'wms', 'projects'], businessType: 'brand' })).map(
+      (s) => s.app,
+    );
+
+    expect(apps).not.toContain('Pulse');
+  });
+
   test('describes the catalog step as an import when importing data', () => {
     const plan = setupPlan(answers({ products: ['wms'], businessType: '3pl', startMode: 'import' }));
 
@@ -149,7 +211,9 @@ describe('setupPlan', () => {
 
 describe('accountErrors', () => {
   test('returns no errors for a complete account', () => {
-    expect(accountErrors({ name: 'Dana Reyes', email: 'dana@example.com', company: 'Northwind' })).toEqual({});
+    expect(accountErrors({ name: 'Dana Reyes', email: 'dana@example.com', company: 'Northwind' })).toEqual(
+      {},
+    );
   });
 
   test('flags every missing field', () => {
@@ -163,13 +227,17 @@ describe('accountErrors', () => {
   });
 
   test('flags over-long input', () => {
-    expect(accountErrors({ name: 'x'.repeat(200), email: 'a@b.co', company: 'Northwind' }).name).toBeDefined();
+    expect(
+      accountErrors({ name: 'x'.repeat(200), email: 'a@b.co', company: 'Northwind' }).name,
+    ).toBeDefined();
   });
 });
 
 describe('handoffUrl', () => {
   test('carries the setup answers and no personal details', () => {
-    const url = new URL(handoffUrl(answers({ products: ['crm', 'wms'], businessType: '3pl', teamSize: 'medium' })));
+    const url = new URL(
+      handoffUrl(answers({ products: ['crm', 'wms'], businessType: '3pl', teamSize: 'medium' })),
+    );
 
     expect(url.pathname).toBe('/signup');
     expect(url.searchParams.get('focus')).toBe('both');
@@ -177,7 +245,23 @@ describe('handoffUrl', () => {
     expect(url.searchParams.get('businessType')).toBe('3pl');
     expect(url.searchParams.get('teamSize')).toBe('medium');
     expect(url.searchParams.get('startMode')).toBe('fresh');
-    expect([...url.searchParams.keys()].sort()).toEqual(['businessType', 'focus', 'products', 'startMode', 'teamSize']);
+    expect([...url.searchParams.keys()].sort()).toEqual([
+      'businessType',
+      'focus',
+      'products',
+      'startMode',
+      'teamSize',
+    ]);
+  });
+
+  test('sends Pulse to sign-up only once the Pulse app is open, and never a focus for it', () => {
+    const alone = new URL(handoffUrl(answers({ products: ['pulse'], businessType: '3pl' })));
+    const whole = new URL(handoffUrl(answers({ products: FULL_STACK, businessType: '3pl' })));
+
+    expect(alone.searchParams.get('focus')).toBeNull();
+    expect(alone.searchParams.get('products')).toBe(PULSE_IS_LIVE ? 'pulse' : null);
+    expect(whole.searchParams.get('focus')).toBe('both');
+    expect(whole.searchParams.get('products')).toBe(startableStack(FULL_STACK).join(','));
   });
 
   test('sends no focus for a Projects-only stack', () => {
@@ -199,6 +283,21 @@ describe('parseAnswers', () => {
     });
 
     expect(parseAnswers(JSON.parse(JSON.stringify(saved)))).toEqual(saved);
+  });
+
+  test('round-trips Pulse answers and keeps only real Pulse choices', () => {
+    const saved = answers({
+      products: ['wms', 'pulse'],
+      businessType: '3pl',
+      pulseNeeds: ['job_profit', 'csv'],
+    });
+
+    // A saved stack keeps Pulse only once the Pulse app is open.
+    expect(parseAnswers(JSON.parse(JSON.stringify(saved)))).toEqual({
+      ...saved,
+      products: startableStack(saved.products),
+    });
+    expect(parseAnswers({ pulseNeeds: ['at_risk', 'payroll'] }).pulseNeeds).toEqual(['at_risk']);
   });
 
   test('upgrades answers saved with the old focus field', () => {
@@ -226,14 +325,53 @@ describe('parseAnswers', () => {
   });
 });
 
+describe('asksOnlyForUnopenedProducts', () => {
+  const ask = (query: string) => asksOnlyForUnopenedProducts(new URLSearchParams(query));
+
+  test('is true only for a link whose every product is coming soon', () => {
+    expect(ask('stack=pulse')).toBe(!PULSE_IS_LIVE);
+    expect(ask('stack=wms,pulse')).toBe(false);
+    expect(ask('stack=crm')).toBe(false);
+  });
+
+  test('is false for a link with no stack, or one that names no product', () => {
+    expect(ask('')).toBe(false);
+    expect(ask('seats=4')).toBe(false);
+    expect(ask('stack=nothing')).toBe(false);
+  });
+});
+
 describe('wizardHref and applyPrefill', () => {
   test('round-trips a priced stack through the query string', () => {
-    const href = wizardHref({ stack: ['crm', 'wms', 'projects'], seats: 12, warehouses: 3, billing: 'monthly' });
+    const href = wizardHref({
+      stack: ['crm', 'wms', 'projects'],
+      seats: 12,
+      warehouses: 3,
+      billing: 'monthly',
+    });
     const params = new URL(href, 'https://kitstak.com').searchParams;
 
     const result = applyPrefill(DEFAULT_ANSWERS, params);
 
-    expect(result).toMatchObject({ products: ['crm', 'wms', 'projects'], seats: 12, warehouses: 3, billing: 'monthly' });
+    expect(result).toMatchObject({
+      products: ['crm', 'wms', 'projects'],
+      seats: 12,
+      warehouses: 3,
+      billing: 'monthly',
+    });
+  });
+
+  test('round-trips a stack with Pulse through the query string', () => {
+    const href = wizardHref({ stack: FULL_STACK, seats: 7, warehouses: 2, billing: 'annual' });
+    const params = new URL(href, 'https://kitstak.com').searchParams;
+
+    const open = startableStack(FULL_STACK);
+
+    expect(params.get('stack')).toBe(open.join(','));
+    expect(applyPrefill(DEFAULT_ANSWERS, params)).toMatchObject({ products: open, seats: 7, warehouses: 2 });
+    expect(applyPrefill(DEFAULT_ANSWERS, new URLSearchParams({ stack: 'pulse' })).products).toEqual(
+      startableStack(['pulse']),
+    );
   });
 
   test('keeps the base answers when the query is empty', () => {

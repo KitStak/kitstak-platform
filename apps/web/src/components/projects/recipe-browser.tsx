@@ -36,7 +36,7 @@ export function RecipeBrowser() {
           </button>
         ))}
       </div>
-      <ul className={styles.recipeList}>
+      <ul className={styles.recipeList} tabIndex={0} aria-label="Automation recipes">
         {shown.map((recipe) => (
           <li key={recipe.id} className={`${mock.row} ${styles.recipeItem}`}>
             <span className={styles.recipeTop}>

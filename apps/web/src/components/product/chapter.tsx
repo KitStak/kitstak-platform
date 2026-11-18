@@ -18,6 +18,11 @@ interface ChapterProps {
   readonly tone?: 'plain' | 'sunken' | 'brand';
   /** Put the visual on the left at desktop widths. */
   readonly isFlipped?: boolean;
+  /**
+   * Put the visual under the copy at the full width of the page. For a wide picture, such as a
+   * product screenshot of a table, that would be too small to read in half the width.
+   */
+  readonly isStacked?: boolean;
   readonly children?: React.ReactNode;
 }
 
@@ -32,13 +37,19 @@ export function Chapter({
   visual,
   tone = 'plain',
   isFlipped = false,
+  isStacked = false,
   children,
 }: ChapterProps) {
   const headingId = `${id}-heading`;
   return (
     <section id={id} className={`section ${styles.chapter}`} data-tone={tone} aria-labelledby={headingId}>
       <div className="container">
-        <div className={styles.grid} data-flipped={isFlipped || undefined} data-solo={visual ? undefined : true}>
+        <div
+          className={styles.grid}
+          data-flipped={(isFlipped && !isStacked) || undefined}
+          data-stacked={isStacked && visual ? true : undefined}
+          data-solo={visual ? undefined : true}
+        >
           <div className={styles.copy}>
             <p className={styles.label} data-reveal>
               <span className={`numeral ${styles.index}`}>{index}</span>

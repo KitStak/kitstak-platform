@@ -12,7 +12,7 @@ import { StakMark } from '@/components/stak-mark';
 
 export const metadata: Metadata = {
   title: 'Contact KitStak - talk to the founder',
-  description: 'Talk to the founder, book a walkthrough of the CRM or the WMS, or ask about pricing and bundles.',
+  description: 'Talk to the founder, book a walkthrough of the CRM, the WMS, Projects or Pulse, or ask about pricing and bundles.',
   alternates: { canonical: '/contact' },
 };
 
@@ -25,7 +25,7 @@ const PATHS = [
   },
   {
     title: 'See what it costs',
-    body: 'Price the CRM, the WMS, Projects or a bundle for your team.',
+    body: 'Price the CRM, the WMS, Projects, Pulse or a bundle for your team.',
     href: ROUTES.pricing,
     label: 'Price your stack',
   },

@@ -1,7 +1,16 @@
 import Link from 'next/link';
-import { PRICING, PRICING_IS_PLACEHOLDER, formatUsd, percentLabel } from '@/lib/pricing';
+import {
+  MORE_SEATS_ACTION,
+  PRICING,
+  formatUsd,
+  includedSeatsLabel,
+  moreSeatsPrompt,
+  percentLabel,
+  preliminaryPriceNote,
+  priceOf,
+} from '@/lib/pricing';
 import type { ProductId } from '@/lib/pricing';
-import { ROUTES, getStartedHref } from '../site-links';
+import { ROUTES, availabilityLabel, startLink } from '../site-links';
 import styles from './price-band.module.css';
 
 interface PriceBandProps {
@@ -11,7 +20,12 @@ interface PriceBandProps {
 
 /** Starting price for one product, with the bundle saving beside it. */
 export function PriceBand({ product, included }: PriceBandProps) {
-  const price = PRICING[product];
+  const price = priceOf(product);
+  const start = startLink(product);
+  const availability = availabilityLabel(product);
+  const seats = includedSeatsLabel(product);
+  const moreSeats = moreSeatsPrompt(product);
+  const preliminary = preliminaryPriceNote([product]);
   return (
     <section id="pricing" className={`section ${styles.band}`} aria-labelledby="pricing-heading">
       <div className={`container ${styles.grid}`}>
@@ -20,7 +34,8 @@ export function PriceBand({ product, included }: PriceBandProps) {
             One price. Everything in it.
           </h2>
           <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-            You get the whole product, not a starter tier. And it costs less when you run it alongside the others.
+            You get the whole product, not a starter tier. And it costs less when you run it alongside the
+            others.
           </p>
           <ul className={styles.included}>
             {included.map((item, i) => (
@@ -35,7 +50,10 @@ export function PriceBand({ product, included }: PriceBandProps) {
         </div>
 
         <div className={styles.card} data-reveal>
-          <p className={styles.cardName}>{price.name}</p>
+          <p className={styles.cardName}>
+            {price.name}
+            {availability ? <span className={styles.soon}>{availability}</span> : null}
+          </p>
           <p className={styles.amount}>
             <span className={`numeral ${styles.figure}`}>{formatUsd(price.monthlyCents)}</span>
             <span className={styles.per}>
@@ -44,17 +62,29 @@ export function PriceBand({ product, included }: PriceBandProps) {
               per month
             </span>
           </p>
+          {seats && moreSeats ? (
+            <p className={styles.seats}>
+              {seats}. {moreSeats} <Link href={ROUTES.contact}>{MORE_SEATS_ACTION}</Link>
+            </p>
+          ) : null}
           <p className={styles.bundleLine}>
-            <strong>{percentLabel(PRICING.bundleDiscount)} off</strong> each product when you stack two or more, and{' '}
-            {percentLabel(PRICING.annualDiscount)} off again billed yearly.
+            <strong>{percentLabel(PRICING.bundleDiscount)} off</strong> each product when you stack two or
+            more, and {percentLabel(PRICING.annualDiscount)} off again billed yearly.
           </p>
-          <Link href={getStartedHref(product)} className="btn btn-primary btn-lg btn-block">
-            Start with {product === 'projects' ? 'Projects' : `the ${product.toUpperCase()}`} <span className="btn-arrow" aria-hidden>→</span>
+          {/* A product whose app is not open yet gets a walkthrough, not a start button. */}
+          <Link href={start.href} className="btn btn-primary btn-lg btn-block">
+            {start.label}{' '}
+            <span className="btn-arrow" aria-hidden>
+              →
+            </span>
           </Link>
           <Link href={ROUTES.pricing} className={`text-link ${styles.calc}`}>
-            Price your stack <span className="btn-arrow" aria-hidden>→</span>
+            Price your stack{' '}
+            <span className="btn-arrow" aria-hidden>
+              →
+            </span>
           </Link>
-          {PRICING_IS_PLACEHOLDER ? <p className={styles.fine}>Preliminary pricing, shown for planning.</p> : null}
+          {preliminary ? <p className={styles.fine}>{preliminary}</p> : null}
         </div>
       </div>
     </section>

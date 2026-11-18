@@ -75,6 +75,20 @@
   letter-spacing: -0.025em;
   line-height: 1.15;
 }
+.status {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  line-height: 1.5;
+  opacity: 0.8;
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .blurb {
   display: block;
   margin-top: 4px;

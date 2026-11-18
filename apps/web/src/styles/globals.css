@@ -14,6 +14,9 @@
   --on-brand-rule: rgb(244 241 233 / 0.16);
   /* The third bar of the stack (Projects): the rose already used inside every app icon. */
   --stak-projects: #d65a6e;
+  /* The fourth bar (Pulse): the lightest step of the same crimson family. Ink on it is navy, not white. */
+  --stak-pulse: #ec8b9a;
+  --stak-pulse-ink: var(--brand-navy);
 }
 
 *,

@@ -2,22 +2,26 @@ import type { Metadata, Viewport } from 'next';
 import { Bebas_Neue, Inter } from 'next/font/google';
 import '@kitstak/ui/styles/tokens.css';
 import '@/styles/globals.css';
+import { PULSE_IS_LIVE } from '@/components/site-links';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 const bebas = Bebas_Neue({ subsets: ['latin'], weight: '400', variable: '--font-bebas', display: 'swap' });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://kitstak.com'),
-  title: 'KitStak - CRM, WMS and Projects on one stack',
-  description:
-    'KitStak runs your customers, your warehouse and your projects on one database and one sign-in. Use the CRM, the WMS, Projects, or any mix.',
+  title: 'KitStak - CRM, WMS, Projects and Pulse on one stack',
+  description: PULSE_IS_LIVE
+    ? 'KitStak runs your customers, your warehouse and your projects on one database and one sign-in. Pulse shows the profit on every job. Use the CRM, the WMS, Projects, Pulse, or any mix.'
+    : 'KitStak runs your customers, your warehouse and your projects on one database and one sign-in. Pulse shows the profit on every job. Use the CRM, the WMS, Projects or any mix. Pulse is coming soon.',
   openGraph: {
     title: 'KitStak',
-    description: 'CRM, WMS and Projects on one stack.',
+    description: 'CRM, WMS, Projects and Pulse on one stack.',
     url: 'https://kitstak.com',
     siteName: 'KitStak',
     type: 'website',
   },
+  // The preview image itself comes from each route's opengraph-image and twitter-image files.
+  twitter: { card: 'summary_large_image' },
 };
 
 export const viewport: Viewport = {

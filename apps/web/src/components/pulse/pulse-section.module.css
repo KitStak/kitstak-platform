@@ -1,0 +1,204 @@
+/* Page level pieces of /pulse that the shared product blocks do not cover: the worked sums.
+   Tokens only, so both themes come for free. */
+
+/* Worked sum (a ledger on a mock panel) */
+.ledger {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: var(--type-base);
+}
+.ledger th,
+.ledger td {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+  text-align: left;
+  font-weight: var(--weight-regular);
+}
+.ledger td {
+  padding-left: 16px;
+  text-align: right;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--type-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+}
+.lineName {
+  display: block;
+  font-weight: var(--weight-semibold);
+}
+.lineDetail {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+}
+.lineIn td {
+  font-weight: var(--weight-semibold);
+}
+.lineSum th,
+.lineSum td {
+  border-bottom: 2px solid var(--border-strong);
+}
+.lineSum td {
+  font-weight: var(--weight-semibold);
+}
+.lineTotal th,
+.lineTotal td {
+  padding-top: 16px;
+  border-bottom: 0;
+  vertical-align: middle;
+}
+.lineTotal .lineName {
+  font-size: var(--type-md);
+  font-weight: var(--weight-bold);
+}
+.lineTotal td {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 3.4vw, 44px);
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  font-size: var(--type-base);
+  line-height: 1.5;
+}
+.verdict p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.verdict strong {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+.pillIcon {
+  flex: none;
+  margin-right: 5px;
+}
+
+/* "How we got this": one block per figure, then the lines for a number that is not complete. */
+.explain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.explain > li {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.explainHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.explainValue {
+  font-size: clamp(30px, 3.4vw, 44px);
+  line-height: 1;
+}
+.explainSteps {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+.explainSteps dt {
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.explainSteps dd {
+  margin: 2px 0 0;
+  font-size: var(--type-base);
+  line-height: 1.5;
+}
+.explainSteps dd.explainFigures {
+  padding: 10px 12px;
+  margin-top: 4px;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--type-sm);
+  font-variant-numeric: tabular-nums;
+}
+/* A note inside the illustration, not a control: no underline and no arrow. */
+.explainRows {
+  margin-top: 12px;
+  font-size: var(--type-sm);
+  color: var(--text-secondary);
+}
+.gaps {
+  margin-top: 16px;
+  font-size: var(--type-sm);
+  color: var(--text-secondary);
+}
+.gaps ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.gaps li {
+  padding: 3px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .verdict {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .lineTotal td {
+    font-size: 28px;
+  }
+}
+
+/* "Coming soon" over the Pulse heading on the home page. The same pill as the calculator switch. */
+.soon {
+  display: inline-block;
+  margin: 0 0 14px;
+  padding: 2px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* The bundle band on /pulse. The shared band splits in half. Here the picture is a real settings
+   screen, so from 1280 pixels up it gets the wider column, about 660 pixels. The class is doubled so
+   it wins over the shared band whatever order the stylesheets load in. The width matches
+   SIDE_COLUMN_WIDE_FROM in pulse-shots.ts. */
+@media (min-width: 1280px) {
+  .bundleWide.bundleWide {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 64px;
+  }
+}
+
+/* The Jobs picture on the home page is shorter than the copy beside it. It sits in the middle of its
+   column, so no empty space is left under it. Below 960 pixels the section is one column. */
+@media (min-width: 961px) {
+  .homeVisual {
+    align-self: center;
+  }
+}

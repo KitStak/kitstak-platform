@@ -145,6 +145,7 @@ export default function CrmPage() {
             'On-hand units and open shipment orders on the account page',
             'One customer list shared by both apps, never re-keyed',
             'One sign-in, one launcher, one bill',
+            'With Pulse, a won deal shows the profit on the jobs made from it',
           ]}
           visual={<AccountLink />}
         />

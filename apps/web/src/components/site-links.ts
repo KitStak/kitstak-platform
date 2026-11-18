@@ -4,7 +4,30 @@ export const LINKS = {
   crm: 'https://crm.kitstak.app',
   wms: 'https://wms.kitstak.app',
   projects: 'https://projects.kitstak.app',
+  pulse: 'https://pulse.kitstak.app',
 } as const;
+
+/**
+ * Whether customers can open the Pulse app yet. It is still being built, so the site does not send
+ * anyone toward an account for it. While this is false, every Pulse start button becomes "Book a
+ * walkthrough", start links leave Pulse out, the setup wizard will not take it, and the site labels
+ * Pulse "Coming soon". Set this to true on the day pulse.kitstak.app opens. That one line brings
+ * "Start with Pulse", the wizard row and the sign in link back.
+ */
+export const PULSE_IS_LIVE: boolean = false;
+
+/** False for a product whose app customers cannot open yet. Such a product gets no start button. */
+export function isAppLive(product: 'crm' | 'wms' | 'projects' | 'pulse'): boolean {
+  return product !== 'pulse' || PULSE_IS_LIVE;
+}
+
+/** The one wording for a product that is not available yet. */
+export const COMING_SOON = 'Coming soon';
+
+/** "Coming soon" for a product whose app is not open yet, otherwise null. */
+export function availabilityLabel(product: 'crm' | 'wms' | 'projects' | 'pulse'): string | null {
+  return isAppLive(product) ? null : COMING_SOON;
+}
 
 /** Marketing-site routes. Every internal link goes through here so navigation stays consistent. */
 export const ROUTES = {
@@ -14,6 +37,7 @@ export const ROUTES = {
   wms: '/wms',
   crm: '/crm',
   projects: '/projects',
+  pulse: '/pulse',
   pricing: '/products#pricing',
   bundle: '/products#bundle',
   getStarted: '/get-started',
@@ -23,7 +47,7 @@ export const ROUTES = {
 } as const;
 
 /** The licensable apps, in the order the stack is drawn (matches @kitstak/entitlements `MODULES`). */
-export const PRODUCT_IDS = ['crm', 'wms', 'projects'] as const;
+export const PRODUCT_IDS = ['crm', 'wms', 'projects', 'pulse'] as const;
 export type ProductId = (typeof PRODUCT_IDS)[number];
 
 /** A chosen set of products, always in `PRODUCT_IDS` order with no repeats. Empty means none yet. */
@@ -59,10 +83,46 @@ export function stackParam(stack: Stack): string {
   return stack.join(',');
 }
 
-/** Deep link into the setup wizard with products already chosen. */
+/** How each product reads after "Start with": "Start with the CRM", "Start with Pulse". */
+export const START_NAME: Readonly<Record<ProductId, string>> = {
+  crm: 'the CRM',
+  wms: 'the WMS',
+  projects: 'Projects',
+  pulse: 'Pulse',
+};
+
+/** The products in `stack` a visitor can start on today. Leaves out any whose app is not open yet. */
+export function startableStack(stack: Stack): Stack {
+  return stack.filter(isAppLive);
+}
+
+/** Every product a visitor can start on today. The whole stack once every app is open. */
+export const STARTABLE_STACK: Stack = startableStack(PRODUCT_IDS);
+
+/** The label on every button that books a walkthrough. */
+export const WALKTHROUGH_LABEL = 'Book a walkthrough';
+
+/**
+ * Deep link into the setup wizard with products already chosen. A product whose app is not open yet
+ * never rides along. If none of the chosen products is open, the link goes to the walkthrough form.
+ */
 export function getStartedHref(stack?: Stack | ProductId): string {
-  const products = typeof stack === 'string' ? [stack] : (stack ?? []);
-  return products.length > 0 ? `${ROUTES.getStarted}?stack=${stackParam(toStack(products))}` : ROUTES.getStarted;
+  const products = toStack(typeof stack === 'string' ? [stack] : (stack ?? []));
+  if (products.length === 0) return ROUTES.getStarted;
+  const open = startableStack(products);
+  return open.length > 0 ? `${ROUTES.getStarted}?stack=${stackParam(open)}` : ROUTES.demo;
+}
+
+export interface StartLink {
+  readonly href: string;
+  readonly label: string;
+}
+
+/** The start button for one product: "Start with ..." when its app is open, a walkthrough when it is not. */
+export function startLink(product: ProductId): StartLink {
+  return isAppLive(product)
+    ? { href: getStartedHref(product), label: `Start with ${START_NAME[product]}` }
+    : { href: ROUTES.demo, label: WALKTHROUGH_LABEL };
 }
 
 /**

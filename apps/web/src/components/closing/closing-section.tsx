@@ -10,6 +10,8 @@ interface ClosingSectionProps {
   readonly startLabel?: string;
   /** Small print under the buttons. */
   readonly note?: string;
+  /** A product lockup shown in place of the KitStak one. It must read on navy in both themes. */
+  readonly logo?: React.ReactNode;
 }
 
 export function ClosingSection({
@@ -17,12 +19,13 @@ export function ClosingSection({
   startHref = ROUTES.getStarted,
   startLabel = 'Set up your Stak',
   note = 'About five minutes. No card needed to set up.',
+  logo,
 }: ClosingSectionProps) {
   return (
     <section className={styles.band} aria-labelledby="closing-heading">
       <div className={`container ${styles.inner}`}>
         <div className={styles.mark} aria-hidden data-reveal>
-          <Logo height={34} tone="inverse" />
+          {logo ?? <Logo height={34} tone="inverse" />}
         </div>
         <h2 id="closing-heading" className={styles.title} data-reveal>
           {title}

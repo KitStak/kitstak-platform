@@ -72,10 +72,25 @@
 .switch[data-product='projects'][aria-checked='true'] .slab {
   background: var(--stak-projects);
 }
+.switch[data-product='pulse'][aria-checked='true'] .slab {
+  background: var(--stak-pulse);
+}
 .switchName {
   display: block;
   font-weight: var(--weight-semibold);
   font-size: var(--type-md);
+}
+.soon {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  vertical-align: middle;
+  white-space: nowrap;
 }
 .switchBlurb {
   display: block;
@@ -139,6 +154,45 @@
 }
 .quote {
   margin: 28px 0 24px;
+}
+/* The second total: what the products open today cost, while one in the stack is coming soon. */
+.today {
+  display: grid;
+  gap: 4px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--on-brand-rule);
+  font-size: var(--type-sm);
+  line-height: 1.5;
+  color: var(--brand-cream);
+}
+.todayLabel {
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+}
+/* The price a visitor can pay today. It is set large, so it is not lost under the stack total. */
+.todayPrice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  color: var(--on-brand-muted);
+}
+.todayPrice strong {
+  font-size: clamp(36px, 4vw, 48px);
+  font-weight: inherit;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--brand-cream);
+}
+.todayNote {
+  color: var(--on-brand-muted);
+}
+.waiting {
+  margin-top: 12px;
+  text-align: center;
+  font-size: var(--type-sm);
+  color: var(--on-brand-muted);
 }
 .talk {
   display: block;

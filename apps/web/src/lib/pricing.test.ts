@@ -1,9 +1,22 @@
 import { describe, expect, test } from 'vitest';
-import { PRICING, formatUsd, isBundle, quote } from './pricing';
+import {
+  PRICING,
+  formatUsd,
+  includedSeatsLabel,
+  isBundle,
+  isPerSeat,
+  moreSeatsPrompt,
+  overSeatsNote,
+  preliminaryPriceNote,
+  quote,
+  todayPriceNote,
+} from './pricing';
+import { startableStack } from '@/components/site-links';
 
 const CRM = PRICING.crm.monthlyCents;
 const WMS = PRICING.wms.monthlyCents;
 const PROJECTS = PRICING.projects.monthlyCents;
+const PULSE = PRICING.pulse.monthlyCents;
 
 describe('quote', () => {
   test('prices the CRM alone per user with no bundle saving', () => {
@@ -32,9 +45,101 @@ describe('quote', () => {
     expect(q.listMonthlyCents).toBe((CRM + PROJECTS) * 8);
   });
 
+  test('prices Pulse at $29 flat per organization, covering up to 5 seats', () => {
+    expect(PULSE).toBe(2900);
+    expect(PRICING.pulse).toMatchObject({ basis: 'flat_per_org', unit: 'organization', includedSeats: 5 });
+    expect(formatUsd(PULSE)).toBe('$29');
+  });
+
+  test('prices Pulse as one flat line that seats and warehouses never change', () => {
+    const sizes = [
+      { seats: 1, warehouses: 1 },
+      { seats: 5, warehouses: 1 },
+      { seats: 6, warehouses: 4 },
+      { seats: 60, warehouses: 12 },
+      { seats: 9999, warehouses: 9999 },
+    ];
+
+    for (const size of sizes) {
+      const alone = quote({ stack: ['pulse'], ...size, billing: 'monthly' });
+
+      expect(alone.lines).toHaveLength(1);
+      expect(alone.lines[0]).toMatchObject({
+        product: 'pulse',
+        basis: 'flat_per_org',
+        quantity: 1,
+        unitLabel: 'organization',
+        unitCents: PULSE,
+        subtotalCents: PULSE,
+        basisLabel: 'Flat price per organization. Up to 5 seats.',
+      });
+      expect(alone.listMonthlyCents).toBe(PULSE);
+      expect(alone.bundleSavingsCents).toBe(0);
+      expect(alone.monthlyCents).toBe(PULSE);
+    }
+  });
+
+  test('keeps the Pulse line the same when seats go above 5 in a mixed stack', () => {
+    const pulseLine = (seats: number) =>
+      quote({ stack: ['crm', 'projects', 'pulse'], seats, warehouses: 1, billing: 'monthly' }).lines.find(
+        (l) => l.product === 'pulse',
+      );
+
+    expect(pulseLine(40)).toEqual(pulseLine(3));
+    expect(pulseLine(40)?.subtotalCents).toBe(PULSE);
+  });
+
+  test('says how each per unit line was reached', () => {
+    const q = quote({ stack: ['crm', 'wms'], seats: 5, warehouses: 1, billing: 'monthly' });
+
+    expect(q.lines.map((l) => [l.basis, l.basisLabel])).toEqual([
+      ['per_unit', '5 users × $29'],
+      ['per_unit', '1 warehouse × $349'],
+    ]);
+  });
+
+  test('applies the bundle discount to Pulse the same way as to every other product', () => {
+    const mixed = quote({ stack: ['wms', 'pulse'], seats: 6, warehouses: 2, billing: 'monthly' });
+
+    expect(mixed.lines.map((l) => [l.product, l.quantity])).toEqual([
+      ['wms', 2],
+      ['pulse', 1],
+    ]);
+    expect(mixed.listMonthlyCents).toBe(WMS * 2 + PULSE);
+    expect(mixed.bundleSavingsCents).toBe(Math.round((WMS * 2 + PULSE) * PRICING.bundleDiscount));
+    expect(mixed.monthlyCents).toBe(mixed.listMonthlyCents - mixed.bundleSavingsCents);
+  });
+
+  test('applies the yearly discount to Pulse alone and on top of the bundle discount', () => {
+    const alone = quote({ stack: ['pulse'], seats: 5, warehouses: 1, billing: 'annual' });
+    const mixed = quote({ stack: ['crm', 'pulse'], seats: 5, warehouses: 1, billing: 'annual' });
+    const afterBundle = Math.round((CRM * 5 + PULSE) * (1 - PRICING.bundleDiscount));
+
+    expect(alone.bundleSavingsCents).toBe(0);
+    expect(alone.annualSavingsCents).toBe(Math.round(PULSE * PRICING.annualDiscount));
+    expect(alone.monthlyCents).toBe(PULSE - alone.annualSavingsCents);
+    expect(mixed.annualSavingsCents).toBe(Math.round(afterBundle * PRICING.annualDiscount));
+    expect(mixed.monthlyCents).toBe(afterBundle - mixed.annualSavingsCents);
+  });
+
+  test('applies the bundle discount across all four products', () => {
+    const four = quote({
+      stack: ['crm', 'wms', 'projects', 'pulse'],
+      seats: 4,
+      warehouses: 1,
+      billing: 'monthly',
+    });
+
+    expect(four.lines.map((l) => l.product)).toEqual(['crm', 'wms', 'projects', 'pulse']);
+    expect(four.listMonthlyCents).toBe((CRM + PROJECTS) * 4 + WMS + PULSE);
+    expect(four.bundleSavingsCents).toBe(Math.round(four.listMonthlyCents * PRICING.bundleDiscount));
+  });
+
   test('gives a single product no bundle saving', () => {
     expect(isBundle(['projects'])).toBe(false);
-    expect(quote({ stack: ['projects'], seats: 3, warehouses: 1, billing: 'monthly' }).bundleSavingsCents).toBe(0);
+    expect(
+      quote({ stack: ['projects'], seats: 3, warehouses: 1, billing: 'monthly' }).bundleSavingsCents,
+    ).toBe(0);
   });
 
   test('applies the bundle discount to any two products and to all three', () => {
@@ -44,7 +149,9 @@ describe('quote', () => {
     expect(pair.bundleSavingsCents).toBe(Math.round((CRM * 10 + WMS) * PRICING.bundleDiscount));
     expect(pair.monthlyCents).toBe(pair.listMonthlyCents - pair.bundleSavingsCents);
     expect(three.lines).toHaveLength(3);
-    expect(three.bundleSavingsCents).toBe(Math.round((CRM * 4 + WMS + PROJECTS * 4) * PRICING.bundleDiscount));
+    expect(three.bundleSavingsCents).toBe(
+      Math.round((CRM * 4 + WMS + PROJECTS * 4) * PRICING.bundleDiscount),
+    );
   });
 
   test('stacks the annual discount on top of the bundle discount', () => {
@@ -68,6 +175,78 @@ describe('quote', () => {
     const q = quote({ stack: ['crm'], seats: Number.NaN, warehouses: 1, billing: 'monthly' });
 
     expect(q.lines[0]?.quantity).toBe(1);
+  });
+});
+
+describe('billing basis', () => {
+  test('charges the CRM and Projects per seat, the WMS per warehouse and Pulse flat', () => {
+    expect((['crm', 'wms', 'projects', 'pulse'] as const).map(isPerSeat)).toEqual([true, false, true, false]);
+    expect(PRICING.wms).toMatchObject({ basis: 'per_unit', quantityFrom: 'warehouses' });
+  });
+
+  test('names the seat limit only for the flat product, and quotes no price above it', () => {
+    expect(includedSeatsLabel('pulse')).toBe('Up to 5 seats');
+    expect(moreSeatsPrompt('pulse')).toBe('Need more than 5 seats?');
+    for (const id of ['crm', 'wms', 'projects'] as const) {
+      expect(includedSeatsLabel(id)).toBeNull();
+      expect(moreSeatsPrompt(id)).toBeNull();
+    }
+    expect(Object.keys(PRICING.pulse).sort()).toEqual(
+      ['basis', 'includedSeats', 'isConfirmed', 'monthlyCents', 'name', 'unit', 'unitPlural'].sort(),
+    );
+  });
+
+  test('warns when the team is bigger than the flat price covers, and only then', () => {
+    expect(overSeatsNote('pulse', 5)).toBeNull();
+    expect(overSeatsNote('pulse', 6)).toBe('The Pulse price covers up to 5 seats.');
+    for (const id of ['crm', 'wms', 'projects'] as const) expect(overSeatsNote(id, 60)).toBeNull();
+  });
+});
+
+describe('preliminaryPriceNote', () => {
+  test('never calls the confirmed Pulse price preliminary or not final', () => {
+    expect(preliminaryPriceNote(['pulse'])).toBeNull();
+    expect(preliminaryPriceNote(['crm'])).toBe('Preliminary pricing, shown for planning.');
+    expect(preliminaryPriceNote(['crm', 'pulse'])).toBe('Preliminary pricing for CRM, shown for planning.');
+    expect(preliminaryPriceNote(['crm', 'wms', 'projects', 'pulse'])).toBe(
+      'Preliminary pricing for CRM, WMS and Projects, shown for planning.',
+    );
+  });
+});
+
+describe('todayPriceNote', () => {
+  const base = { seats: 5, warehouses: 1, billing: 'annual' } as const;
+
+  // Pulse is coming soon in this build. Once it opens every case below returns null.
+  const pulseIsOpen = startableStack(['pulse']).length === 1;
+
+  test('prices the stack without the product that is coming soon, the way the wizard does', () => {
+    const note = todayPriceNote({ ...base, stack: ['crm', 'pulse'] });
+    if (pulseIsOpen) {
+      expect(note).toBeNull();
+      return;
+    }
+    const crmAlone = quote({ ...base, stack: ['crm'] });
+    const withPulse = quote({ ...base, stack: ['crm', 'pulse'] });
+    // The case the note exists for: two products quoted for less than one costs today.
+    expect(withPulse.monthlyCents).toBeLessThan(crmAlone.monthlyCents);
+    expect(note).toBe(
+      `Today, without Pulse: ${formatUsd(crmAlone.monthlyCents)} per month, billed yearly. The bundle saving starts when Pulse opens.`,
+    );
+  });
+
+  test('says Pulse joins the bundle when the rest is already one', () => {
+    const note = todayPriceNote({ ...base, billing: 'monthly', stack: ['crm', 'wms', 'pulse'] });
+    if (pulseIsOpen) return;
+    const today = quote({ ...base, billing: 'monthly', stack: ['crm', 'wms'] });
+    expect(note).toBe(
+      `Today, without Pulse: ${formatUsd(today.monthlyCents)} per month, billed monthly. Pulse joins the bundle when it opens.`,
+    );
+  });
+
+  test('is silent when nothing is waiting, or nothing can be set up', () => {
+    expect(todayPriceNote({ ...base, stack: ['crm', 'wms'] })).toBeNull();
+    if (!pulseIsOpen) expect(todayPriceNote({ ...base, stack: ['pulse'] })).toBeNull();
   });
 });
 

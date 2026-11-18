@@ -1,0 +1,945 @@
+/* Illustrations for the Pulse page. Tokens only, so every theme works with no extra rules. */
+
+/* ===== Brand files ===== */
+/* The lettered logo ships as two files: navy letters for light surfaces, cream for dark ones. */
+.wordmark {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  max-width: 100%;
+}
+.wordmark img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.onDark {
+  opacity: 0;
+}
+:global(:root[data-theme='dark']) .onLight {
+  opacity: 0;
+}
+:global(:root[data-theme='dark']) .onDark {
+  opacity: 1;
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme='light'])) .onLight {
+    opacity: 0;
+  }
+  :global(:root:not([data-theme='light'])) .onDark {
+    opacity: 1;
+  }
+}
+
+/* ===== Shared pieces ===== */
+/* Each panel is a size container, so a visual adapts to its column and not to the window. */
+.frame {
+  container-type: inline-size;
+}
+/* Panel heads wrap, so a long sub line never squeezes the pill or button beside it. */
+.frame > .head {
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+.head button {
+  white-space: nowrap;
+}
+.status {
+  gap: 6px;
+}
+.status svg {
+  flex: none;
+}
+.statusCount {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+.job {
+  display: block;
+  min-width: 0;
+}
+.jobCode {
+  margin-right: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-regular);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.jobTitle {
+  font-weight: var(--weight-semibold);
+}
+.groupLabel {
+  margin-top: 22px;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.strong {
+  font-weight: var(--weight-semibold);
+}
+.partDetail {
+  display: block;
+  font-size: var(--type-xs);
+  font-weight: var(--weight-regular);
+  color: var(--text-muted);
+}
+
+/* A real table: left aligned names, right aligned figures. */
+.table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: var(--type-sm);
+  font-variant-numeric: tabular-nums;
+}
+.table th,
+.table td {
+  padding: 8px 0 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: right;
+  vertical-align: top;
+  font-weight: var(--weight-regular);
+}
+.table th:first-child,
+.table td:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+.table thead th {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  vertical-align: bottom;
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.table tbody th {
+  font-weight: var(--weight-medium);
+}
+.table tfoot th,
+.table tfoot td {
+  border-bottom: 0;
+  font-weight: var(--weight-semibold);
+}
+.table tfoot tr:first-child th,
+.table tfoot tr:first-child td {
+  border-top: 1px solid var(--border-strong);
+}
+.table td[data-tone='bad'] {
+  color: var(--danger-text);
+}
+.table td[data-tone='good'] {
+  color: var(--success-text);
+}
+.table td[data-tone='flat'] {
+  color: var(--text-muted);
+}
+
+/* ===== Hero: Home ===== */
+.answer {
+  margin-top: 18px;
+  font-size: var(--type-md);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.answer strong {
+  color: var(--text-primary);
+  font-weight: var(--weight-bold);
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0 0;
+}
+.tiles > div {
+  display: grid;
+  align-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+}
+.tiles dt {
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.tiles dd {
+  margin: 8px 0 0;
+  font-size: clamp(30px, 3.4vw, 46px);
+}
+.splitBar {
+  display: flex;
+  gap: 3px;
+  height: 14px;
+  margin-top: 16px;
+}
+.splitBar span {
+  flex-basis: 0;
+}
+.splitBar [data-part='out'] {
+  background: var(--chart-5);
+}
+.splitBar [data-part='profit'] {
+  background: var(--chart-2);
+}
+.splitKey {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-top: 6px;
+  font-size: var(--type-xs);
+  color: var(--text-secondary);
+}
+.splitKey span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.splitKey span::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  background: var(--chart-5);
+}
+.splitKey [data-part='profit']::before {
+  background: var(--chart-2);
+}
+
+.jobList {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.jobList > li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--type-base);
+}
+.jobList > li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.jobLine {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.reason {
+  margin-top: 4px;
+  max-width: 60ch;
+  font-size: var(--type-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+/* The facts under a job's reason: margins, the money at stake and the next step. */
+.jobFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin: 8px 0 0;
+  font-size: var(--type-sm);
+  font-variant-numeric: tabular-nums;
+}
+.jobFacts > div {
+  display: grid;
+  gap: 1px;
+}
+.jobFacts dt {
+  font-size: var(--type-xs);
+  color: var(--text-muted);
+}
+.jobFacts dd {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+}
+.jobFacts [data-tone='bad'] dd {
+  color: var(--danger-text);
+}
+.tableNote {
+  margin-top: 8px;
+  font-size: var(--type-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ===== Profit ===== */
+.headFigure {
+  display: grid;
+  justify-items: end;
+}
+.headValue {
+  margin-top: 4px;
+  font-size: 44px;
+}
+.profitTabs {
+  margin-top: 16px;
+}
+.profitPanel {
+  animation: fade 400ms var(--ease-out) both;
+}
+.table tr[data-rest] th,
+.table tr[data-rest] td {
+  color: var(--text-muted);
+}
+.table tr[data-rest] .jobTitle {
+  font-weight: var(--weight-regular);
+}
+.rankTrack {
+  display: block;
+  height: 6px;
+  margin-top: 7px;
+  max-width: 260px;
+  background: var(--surface-selected);
+}
+.rankTrack span {
+  display: block;
+  height: 100%;
+  background: var(--chart-2);
+  transform-origin: left;
+  transform: scaleX(var(--share));
+}
+/* A loss is drawn striped as well as red, and the figure carries its minus sign. */
+.table tr[data-loss] .rankTrack span {
+  background: repeating-linear-gradient(135deg, var(--danger) 0 4px, transparent 4px 7px);
+}
+.table tr[data-loss] td {
+  color: var(--danger-text);
+}
+/* What the bars under each name mean. Drawn with the same fills as the bars themselves. */
+.rankKey {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 10px;
+  font-size: var(--type-xs);
+  color: var(--text-secondary);
+}
+.rankKey span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rankKey span::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 6px;
+  background: var(--chart-2);
+}
+.rankKey [data-part='loss']::before {
+  background: repeating-linear-gradient(135deg, var(--danger) 0 4px, transparent 4px 7px);
+}
+/* The Company row under the table. It opens the walk from profit on jobs to company profit. */
+.companyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--type-sm);
+  font-variant-numeric: tabular-nums;
+}
+.companyToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+.companyToggle:hover {
+  text-decoration: underline;
+}
+.companyToggle svg {
+  flex: none;
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+.companyToggle[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+.bridge tbody th.bridgeStep {
+  padding-left: 16px;
+  color: var(--text-secondary);
+}
+.bridge td {
+  white-space: nowrap;
+}
+
+/* ===== Log work ===== */
+.saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--success-text);
+  white-space: nowrap;
+}
+.crew {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.crew > span:not(:global(.visually-hidden)) {
+  padding: 2px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-regular);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.logTable thead th:not(:first-child) {
+  max-width: 76px;
+}
+.pace {
+  display: inline-grid;
+  justify-items: end;
+  gap: 2px;
+}
+.pace strong {
+  font-size: var(--type-md);
+  font-weight: var(--weight-bold);
+  line-height: 1.2;
+}
+.pace span {
+  font-size: var(--type-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.pace[data-tone='good'] span {
+  color: var(--success-text);
+}
+.pace[data-tone='low'] span {
+  color: var(--danger-text);
+}
+.dayTotals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-strong);
+}
+.dayTotals > div {
+  display: grid;
+  align-content: space-between;
+}
+.dayTotals dt {
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.dayTotals dd {
+  margin: 6px 0 0;
+  font-size: clamp(30px, 3.2vw, 44px);
+}
+
+/* ===== Plan vs actual ===== */
+.planTable td {
+  white-space: nowrap;
+}
+.why {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+}
+.why li {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr) 62px;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--type-sm);
+}
+.whyLabel {
+  color: var(--text-secondary);
+}
+.why li[data-kind='total'] .whyLabel {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+}
+.whyTrack {
+  height: 14px;
+  background: var(--surface-muted);
+}
+.whyTrack span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  margin-left: calc(var(--from) * 100%);
+  width: calc(var(--size) * 100%);
+  background: var(--chart-1);
+}
+.why li[data-kind='down'] .whyTrack span {
+  background: var(--danger);
+}
+.why li[data-kind='up'] .whyTrack span {
+  background: var(--success);
+}
+.why li[data-kind='flat'] .whyTrack span {
+  background: var(--border-strong);
+}
+.whyValue {
+  text-align: right;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.reading {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  font-size: var(--type-sm);
+  line-height: 1.5;
+}
+
+/* ===== Real cost of an hour ===== */
+.rateLayout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(20px, 3vw, 36px);
+  margin-top: 18px;
+}
+.rateTotal {
+  display: grid;
+  gap: 6px;
+}
+.rateValue {
+  font-size: clamp(56px, 6vw, 76px);
+}
+.rateAside {
+  font-size: var(--type-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.rateBar {
+  display: flex;
+  gap: 3px;
+  height: 22px;
+}
+.rateBar span {
+  flex-basis: 0;
+}
+.rateParts {
+  margin: 10px 0 0;
+}
+.rateParts > div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--type-sm);
+}
+.rateParts > div:last-child {
+  border-bottom: 0;
+}
+.rateParts dt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: var(--weight-medium);
+}
+.rateParts dd {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+}
+/* ===== Jobs at risk ===== */
+.statusChips {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* The chart: one track per job on a shared scale, with a line at zero and a line at the target. */
+.marginKey {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 16px;
+  font-size: var(--type-xs);
+  color: var(--text-secondary);
+}
+.marginKey span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.marginKey span::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 8px;
+  background: var(--chart-2);
+}
+.marginKey [data-part='dot']::before {
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--text-primary);
+  border-radius: 50%;
+  background: var(--surface-panel);
+}
+.marginKey [data-part='target']::before {
+  width: 2px;
+  height: 16px;
+  background: var(--text-primary);
+}
+.marginTrack {
+  position: relative;
+  height: 12px;
+  margin: 14px 0 12px;
+  background: var(--surface-muted);
+}
+.marginTrack::before,
+.marginTrack::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+}
+.marginTrack::before {
+  left: calc(var(--zero) * 100%);
+  width: 1px;
+  background: var(--border-strong);
+}
+.marginTrack::after {
+  left: calc(var(--target) * 100%);
+  width: 2px;
+  background: var(--text-primary);
+}
+.marginTrack[data-empty] {
+  background: repeating-linear-gradient(90deg, var(--border-default) 0 6px, transparent 6px 12px);
+}
+.marginBar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--from) * 100%);
+  width: calc(var(--size) * 100%);
+  background: var(--chart-2);
+}
+.marginBar[data-loss] {
+  background: repeating-linear-gradient(135deg, var(--danger) 0 4px, transparent 4px 7px);
+}
+.marginDot {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--at) * 100%);
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--text-primary);
+  border-radius: 50%;
+  background: var(--surface-panel);
+  transform: translate(-50%, -50%);
+}
+
+/* ===== CSV ===== */
+.steps {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.stepIndex {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-size: var(--type-xs);
+  font-variant-numeric: tabular-nums;
+}
+.steps li[data-state='done'] {
+  color: var(--text-secondary);
+}
+.steps li[data-state='done'] .stepIndex {
+  border-color: var(--success);
+  color: var(--success-text);
+}
+.steps li[data-state='current'] {
+  color: var(--text-primary);
+}
+.steps li[data-state='current'] .stepIndex {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+.checkStage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  min-height: 268px;
+  margin-top: 16px;
+}
+.checking {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  min-height: 268px;
+  font-size: var(--type-sm);
+  color: var(--text-secondary);
+  text-align: center;
+}
+.counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.counts > div {
+  display: grid;
+  align-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+.counts dt {
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.counts dd {
+  margin: 6px 0 0;
+  font-size: 30px;
+}
+.counts > div[data-problem] {
+  border-color: var(--danger);
+}
+.counts > div[data-problem] dt {
+  color: var(--danger-text);
+}
+.preview {
+  font-family: var(--font-mono);
+  font-size: var(--type-xs);
+}
+.preview thead th {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-regular);
+}
+.badCell {
+  display: inline-block;
+  margin-right: 3px;
+  padding: 1px 6px;
+  outline: 2px solid var(--danger);
+  outline-offset: 1px;
+  border-radius: var(--radius-xs);
+  background: var(--danger-subtle);
+  color: var(--danger-text);
+  font-weight: var(--weight-bold);
+}
+.problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--danger-text);
+}
+.problem svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ===== Connected apps ===== */
+.links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.links > li {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.linkApp {
+  display: flex;
+  align-items: center;
+  align-self: start;
+  gap: 10px;
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+  line-height: 1.25;
+}
+.linkFlow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+.linkFlow dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.linkFlow dd {
+  margin: 4px 0 0;
+  font-size: var(--type-sm);
+  line-height: 1.5;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .profitPanel {
+    animation: none;
+  }
+  .companyToggle svg {
+    transition: none;
+  }
+}
+
+/* ===== Narrow panels ===== */
+@container (max-width: 520px) {
+  .wideOnly {
+    display: none;
+  }
+  .rateLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .why li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 3px 12px;
+  }
+  .whyTrack {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    height: 10px;
+  }
+
+  /* Log work restacks into one card per job, the way the product does on a phone. */
+  .logTable,
+  .logTable tbody {
+    display: block;
+  }
+  .logTable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .logTable tbody tr {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px 8px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .logTable tbody th,
+  .logTable tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+  .logTable tbody th,
+  .logTable tbody td.paceCell {
+    grid-column: 1 / -1;
+  }
+  .logTable tbody td {
+    display: grid;
+    align-content: space-between;
+  }
+  .logTable tbody td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: var(--type-2xs);
+    font-weight: var(--weight-semibold);
+    line-height: 1.3;
+    color: var(--text-muted);
+  }
+  .pace {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+}
+/* The connected apps card keeps its three columns until the panel is too narrow to hold them. */
+@container (max-width: 430px) {
+  .links > li,
+  .linkFlow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+}
+@container (max-width: 340px) {
+  .table {
+    font-size: var(--type-xs);
+  }
+  .table th,
+  .table td {
+    padding-left: 8px;
+  }
+  /* Three across cannot hold the word "Unchanged" at this width. */
+  .counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .counts > div {
+    padding: 8px 10px;
+  }
+  .jobLine {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .headValue {
+    font-size: 34px;
+  }
+}

@@ -1,6 +1,17 @@
-import { PRICING, PRICING_IS_PLACEHOLDER, formatUsd, isBundle, percentLabel } from '@/lib/pricing';
+import Link from 'next/link';
+import {
+  MORE_SEATS_ACTION,
+  OVER_SEATS_ACTION,
+  PRICING,
+  formatUsd,
+  isBundle,
+  moreSeatsPrompt,
+  overSeatsNote,
+  percentLabel,
+  preliminaryPriceNote,
+} from '@/lib/pricing';
 import type { Billing, Quote } from '@/lib/pricing';
-import { PRODUCT_IDS } from '../site-links';
+import { PRODUCT_IDS, ROUTES } from '../site-links';
 import type { ProductId, Stack } from '../site-links';
 import styles from './stak-parts.module.css';
 
@@ -12,7 +23,12 @@ interface StakVisualProps {
   readonly extras?: readonly string[];
 }
 
-const SLAB_LABEL: Readonly<Record<ProductId, string>> = { crm: 'CRM', wms: 'WMS', projects: 'Projects' };
+const SLAB_LABEL: Readonly<Record<ProductId, string>> = {
+  crm: 'CRM',
+  wms: 'WMS',
+  projects: 'Projects',
+  pulse: 'Pulse',
+};
 
 /** The stack as a live diagram: one bar per product, lit when it is in the stack. */
 export function StakVisual({ stack, extras = [] }: StakVisualProps) {
@@ -37,11 +53,19 @@ export function StakVisual({ stack, extras = [] }: StakVisualProps) {
 interface QuoteSummaryProps {
   readonly quote: Quote;
   readonly billing: Billing;
+  /** The team size the visitor chose. Over a flat product's seat limit, the summary says so plainly. */
+  readonly seats?: number;
 }
 
 /** Line items, savings and the monthly figure. Sits on the navy brand surface. */
-export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
-  const hasBundle = isBundle(quote.lines.map((line) => line.product));
+export function QuoteSummary({ quote, billing, seats = 0 }: QuoteSummaryProps) {
+  const products = quote.lines.map((line) => line.product);
+  const hasBundle = isBundle(products);
+  const preliminary = preliminaryPriceNote(products);
+  // A flat product covers a set number of seats. Above that there is no listed price.
+  const moreSeats = products.map(moreSeatsPrompt).find((prompt) => prompt !== null) ?? null;
+  // The team is bigger than the flat price covers. The total must not read as a quote for that team.
+  const overSeats = products.map((id) => overSeatsNote(id, seats)).find((note) => note !== null) ?? null;
   return (
     <div aria-live="polite">
       <ul className={styles.lines}>
@@ -49,9 +73,7 @@ export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
           <li key={line.product}>
             <span>
               {line.name}
-              <span className={styles.lineBasis}>
-                {line.quantity} {line.unitLabel} × {formatUsd(line.unitCents)}
-              </span>
+              <span className={styles.lineBasis}>{line.basisLabel}</span>
             </span>
             <span className={styles.lineAmount}>{formatUsd(line.subtotalCents)}</span>
           </li>
@@ -86,7 +108,16 @@ export function QuoteSummary({ quote, billing }: QuoteSummaryProps) {
           Add another product and take {percentLabel(PRICING.bundleDiscount)} off every one.
         </p>
       )}
-      {PRICING_IS_PLACEHOLDER ? <p className={styles.fine}>Preliminary pricing, shown for planning.</p> : null}
+      {overSeats ? (
+        <p className={styles.overSeats}>
+          {overSeats} For more, <Link href={ROUTES.contact}>{OVER_SEATS_ACTION}</Link>.
+        </p>
+      ) : moreSeats ? (
+        <p className={styles.fine}>
+          {moreSeats} <Link href={ROUTES.contact}>{MORE_SEATS_ACTION}</Link>
+        </p>
+      ) : null}
+      {preliminary ? <p className={styles.fine}>{preliminary}</p> : null}
     </div>
   );
 }
@@ -102,10 +133,16 @@ interface StepperProps {
 }
 
 export function Stepper({ label, value, min = 1, max, onChange }: StepperProps) {
-  const set = (next: number) => onChange(Math.min(Math.max(Number.isFinite(next) ? Math.round(next) : min, min), max));
+  const set = (next: number) =>
+    onChange(Math.min(Math.max(Number.isFinite(next) ? Math.round(next) : min, min), max));
   return (
     <div className={styles.stepper}>
-      <button type="button" aria-label={`Fewer ${label}`} onClick={() => set(value - 1)} disabled={value <= min}>
+      <button
+        type="button"
+        aria-label={`Fewer ${label}`}
+        onClick={() => set(value - 1)}
+        disabled={value <= min}
+      >
         −
       </button>
       <input
@@ -117,7 +154,12 @@ export function Stepper({ label, value, min = 1, max, onChange }: StepperProps) 
         value={value}
         onChange={(event) => set(event.target.valueAsNumber)}
       />
-      <button type="button" aria-label={`More ${label}`} onClick={() => set(value + 1)} disabled={value >= max}>
+      <button
+        type="button"
+        aria-label={`More ${label}`}
+        onClick={() => set(value + 1)}
+        disabled={value >= max}
+      >
         +
       </button>
     </div>

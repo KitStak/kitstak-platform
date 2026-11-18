@@ -3,13 +3,14 @@
  * Use these wherever a single app is being identified: menus, product pages, cards, the wizard.
  * The KitStak logo and the two-bar mark stay for the brand itself and for the bundle.
  */
-export type AppId = 'crm' | 'wms' | 'projects';
+export type AppId = 'crm' | 'wms' | 'projects' | 'pulse';
 
 /** The brand export names the WMS icon "warehouse". */
 const ICON_FILE: Readonly<Record<AppId, string>> = {
   crm: '/brand/apps/kitstak-icon-crm.svg',
   wms: '/brand/apps/kitstak-icon-warehouse.svg',
   projects: '/brand/apps/kitstak-icon-projects.svg',
+  pulse: '/brand/apps/kitstak-icon-pulse.svg',
 };
 
 interface AppIconProps {

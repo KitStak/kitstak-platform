@@ -1,4 +1,4 @@
-import { CONTACT } from '../site-links';
+import { CONTACT, isAppLive } from '../site-links';
 
 export const TOPICS = [
   {
@@ -12,7 +12,7 @@ export const TOPICS = [
   {
     id: 'demo',
     label: 'Book a walkthrough',
-    note: 'A guided tour of the WMS, the CRM, Projects or the whole stack, using an operation like yours.',
+    note: 'A guided tour of the WMS, the CRM, Projects, Pulse or the whole stack, using an operation like yours.',
     prompt: 'Which product do you want to see, and what does your operation look like?',
     action: 'Request a walkthrough',
     subject: 'Walkthrough request',
@@ -24,6 +24,17 @@ export const TOPICS = [
     prompt: 'Which organization is it for, and how does your team plan and track projects today?',
     action: 'Ask about Projects',
     subject: 'KitStak Projects',
+  },
+  {
+    id: 'pulse',
+    label: 'KitStak Pulse',
+    // Nobody can add Pulse to an account until its app is open.
+    note: isAppLive('pulse')
+      ? 'Add Pulse to an organization you already run, or ask how it fits the way you track job profit today.'
+      : 'Pulse is coming soon. Ask how it fits the way you track job profit today, or book a walkthrough.',
+    prompt: 'What kind of jobs do you run, and how do you work out what each one made today?',
+    action: 'Ask about Pulse',
+    subject: 'KitStak Pulse',
   },
   {
     id: 'sales',
