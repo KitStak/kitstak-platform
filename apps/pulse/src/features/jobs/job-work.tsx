@@ -38,13 +38,13 @@ import { laborCostPerUnit, paceDays, unitsPerHour } from '@/lib/profit';
 import { toCents } from '@/lib/money';
 import { shortDate, weekdayName } from '@/lib/profit/calendar';
 import { routes } from '@/lib/routes';
-import type { ProductionEntryDTO } from '@/lib/types';
 import { deleteProductionEntriesAction, restoreProductionEntriesAction } from '@/server/actions/log';
 import { WorkEntryForm } from './forms/work-entry-form';
 import { useDeleteWithUndo, useJobProduction, useRefreshJob } from './job-data';
 import { rowPace, shiftDate, singularUnit } from './job-math';
 import type { JobTabProps } from './job-overview';
 import { Explain, LoadError } from './job-ui';
+import { groupWorkDays, type WorkDay } from './work-days';
 
 const SOURCE_WORDS: Readonly<Record<string, string>> = {
   manual: 'Typed in',
@@ -81,8 +81,8 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
   const canEditAny = shell.can('production:edit_any');
   const classNames = useMemo(() => new Map(laborClasses.map((item) => [item.id, item.name])), [laborClasses]);
   const oldest = shiftDate(today, -SUPERVISOR_EDIT_DAYS);
-  const canEdit = (row: ProductionEntryDTO) =>
-    canLog && !row.locked && (canEditAny || row.workDate >= oldest);
+  const canEdit = (day: WorkDay) =>
+    canLog && !day.locked && (canEditAny || day.workDate >= oldest);
   const jobOpen = job.status === 'active' || job.status === 'on_hold' || job.status === 'planned';
 
   const rows = useMemo(
@@ -90,7 +90,10 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
     [production.data, hidden],
   );
 
-  const editingRow = rows.find((row) => row.id === editingId) ?? null;
+  const days = useMemo(() => groupWorkDays(rows), [rows]);
+  const editingDay = days.find((day) => day.workDate === editingId) ?? null;
+  const crewNames = (day: WorkDay) =>
+    day.laborClassIds.map((id) => (id ? (classNames.get(id) ?? 'Crew') : 'Not set')).join(', ');
 
   const chart = useMemo(() => {
     const days = paceDays(
@@ -155,29 +158,31 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
     toast.success(`Exported ${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}`);
   };
 
-  const remove = (row: ProductionEntryDTO) =>
+  const remove = (day: WorkDay) => {
+    const ids = day.rows.map((row) => row.id);
     void removeWithUndo({
-      label: `the entry for ${shortDate(row.workDate)}`,
-      hide: () => setHidden((current) => new Set(current).add(row.id)),
+      label: `the work for ${shortDate(day.workDate)}`,
+      hide: () => setHidden((current) => new Set([...current, ...ids])),
       show: () =>
         setHidden((current) => {
           const next = new Set(current);
-          next.delete(row.id);
+          for (const id of ids) next.delete(id);
           return next;
         }),
-      remove: () => deleteProductionEntriesAction({ ids: [row.id] }),
-      restore: () => restoreProductionEntriesAction({ ids: [row.id] }),
+      remove: () => deleteProductionEntriesAction({ ids }),
+      restore: () => restoreProductionEntriesAction({ ids }),
     });
+  };
 
-  const saved = async (created: boolean, editing: boolean) => {
+  const saved = async (created: number, editing: boolean) => {
     setEditingId(null);
     await refresh();
     toast.success(
       editing
-        ? 'Entry saved'
-        : created
+        ? 'Day saved'
+        : created > 0
           ? 'Day added'
-          : 'That day already had an entry for this crew, so it was updated',
+          : 'That day already had those labor types, so they were updated',
     );
   };
 
@@ -394,16 +399,16 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
           />
         ) : (
           <>
-            {editingRow ? (
+            {editingDay ? (
               <div className="border-b border-border-subtle bg-sunken p-4">
                 <p className="mb-2 text-sm font-medium text-fg">
-                  Editing the entry for {shortDate(editingRow.workDate)}
+                  Editing the work for {shortDate(editingDay.workDate)}
                 </p>
                 <WorkEntryForm
-                  key={editingRow.id}
+                  key={editingDay.workDate}
                   jobId={job.id}
                   unit={job.unitLabel}
-                  row={editingRow}
+                  day={editingDay}
                   today={today}
                   laborClasses={laborClasses}
                   defaultLaborClassId={job.defaultLaborClassId}
@@ -432,44 +437,58 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {rows.map((row) => (
+                  {days.map((day) => (
                     <TableRow
-                      key={row.id}
-                      data-testid={`work-row-${row.workDate}`}
-                      data-selected={editingId === row.id}
+                      key={day.workDate}
+                      data-testid={`work-row-${day.workDate}`}
+                      data-selected={editingId === day.workDate}
                     >
                       <TableCell className="whitespace-nowrap">
-                        <span className="font-medium">{shortDate(row.workDate)}</span>{' '}
-                        <span className="text-xs text-fg-muted">{weekdayName(row.workDate).slice(0, 3)}</span>
-                        {row.note ? (
+                        <span className="font-medium">{shortDate(day.workDate)}</span>{' '}
+                        <span className="text-xs text-fg-muted">{weekdayName(day.workDate).slice(0, 3)}</span>
+                        {day.notes.length > 0 ? (
                           <span className="block max-w-[220px] truncate text-xs text-fg-muted">
-                            {row.note}
+                            {day.notes.join(', ')}
                           </span>
                         ) : null}
                       </TableCell>
                       <TableCell className="text-fg-secondary">
-                        {row.laborClassId ? (classNames.get(row.laborClassId) ?? 'Crew') : 'Not set'}
-                        {row.source !== 'manual' ? (
+                        {day.rows.length > 1 ? (
+                          <ul className="flex flex-col">
+                            {day.rows.map((row) => (
+                              <li key={row.id} className="whitespace-nowrap">
+                                {row.laborClassId ? (classNames.get(row.laborClassId) ?? 'Crew') : 'Not set'}{' '}
+                                <span className="text-2xs text-fg-muted tabular-nums">
+                                  {formatHours(row.hours)}
+                                  {row.headcount ? `, ${formatNumber(row.headcount)} people` : ''}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          crewNames(day)
+                        )}
+                        {day.sources.some((source) => source !== 'manual') ? (
                           <span className="block text-2xs text-fg-muted">
-                            {SOURCE_WORDS[row.source] ?? row.source}
+                            {day.sources.map((source) => SOURCE_WORDS[source] ?? source).join(', ')}
                           </span>
                         ) : null}
                       </TableCell>
-                      <TableCell numeric>{formatNumber(row.unitsGood, { maxDigits: 0 })}</TableCell>
+                      <TableCell numeric>{formatNumber(day.unitsGood, { maxDigits: 0 })}</TableCell>
                       <TableCell numeric>
-                        {Number(row.unitsScrap) > 0 ? formatNumber(row.unitsScrap, { maxDigits: 0 }) : ''}
+                        {Number(day.unitsScrap) > 0 ? formatNumber(day.unitsScrap, { maxDigits: 0 }) : ''}
                       </TableCell>
-                      <TableCell numeric>{formatNumber(row.headcount, { empty: '' })}</TableCell>
+                      <TableCell numeric>{formatNumber(day.headcount, { empty: '' })}</TableCell>
                       <TableCell numeric>
-                        {row.hoursConfirmed ? (
+                        {day.hoursConfirmed ? (
                           <>
-                            {formatHours(row.hours)}
-                            {Number(row.setupHours) > 0 || Number(row.overtimeHours) > 0 ? (
+                            {formatHours(day.hours)}
+                            {Number(day.setupHours) > 0 || Number(day.overtimeHours) > 0 ? (
                               <span className="block text-2xs text-fg-muted">
                                 {[
-                                  Number(row.setupHours) > 0 ? `${formatHours(row.setupHours)} setup` : null,
-                                  Number(row.overtimeHours) > 0
-                                    ? `${formatHours(row.overtimeHours)} overtime`
+                                  Number(day.setupHours) > 0 ? `${formatHours(day.setupHours)} setup` : null,
+                                  Number(day.overtimeHours) > 0
+                                    ? `${formatHours(day.overtimeHours)} overtime`
                                     : null,
                                 ]
                                   .filter(Boolean)
@@ -483,24 +502,32 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell numeric>{formatPace(rowPace(row), { empty: '' })}</TableCell>
+                      <TableCell numeric>{formatPace(day.pace, { empty: '' })}</TableCell>
                       {seesMoney ? (
                         <TableCell numeric>
-                          {row.needsRate ? (
+                          {day.needsRate ? (
                             <span className="text-[var(--label-yellow-text)]">No rate</span>
                           ) : (
-                            formatMoneyPerHour(row.rateCents, { empty: '' }).replace(' an hour', '')
+                            <span
+                              title={
+                                day.rows.length > 1
+                                  ? 'Blended across the labor types: labor cost over labor hours'
+                                  : undefined
+                              }
+                            >
+                              {formatMoneyPerHour(day.rateCents, { empty: '' }).replace(' an hour', '')}
+                            </span>
                           )}
                         </TableCell>
                       ) : null}
                       {seesMoney ? (
-                        <TableCell numeric>{formatMoney(row.laborCostCents, { empty: '' })}</TableCell>
+                        <TableCell numeric>{formatMoney(day.laborCostCents, { empty: '' })}</TableCell>
                       ) : null}
                       <TableCell>
-                        <PersonAvatar userId={row.enteredBy ?? row.createdBy} size="sm" />
+                        <PersonAvatar userId={day.rows[0]?.enteredBy ?? day.rows[0]?.createdBy ?? null} size="sm" />
                       </TableCell>
                       <TableCell className="pl-0 text-right whitespace-nowrap">
-                        {row.locked ? (
+                        {day.locked ? (
                           <span
                             className="inline-flex items-center gap-1 text-xs text-fg-muted"
                             title="This month is closed. Ask the owner to reopen it."
@@ -508,21 +535,21 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
                             <Lock aria-hidden className="size-3.5" />
                             Closed
                           </span>
-                        ) : canEdit(row) ? (
+                        ) : canEdit(day) ? (
                           <>
                             <IconButton
-                              label={`Edit the entry for ${shortDate(row.workDate)}`}
+                              label={`Edit the work for ${shortDate(day.workDate)}`}
                               icon={<Pencil aria-hidden />}
                               size="sm"
-                              onClick={() => setEditingId(row.id)}
-                              data-testid={`work-edit-${row.workDate}`}
+                              onClick={() => setEditingId(day.workDate)}
+                              data-testid={`work-edit-${day.workDate}`}
                             />
                             <IconButton
-                              label={`Delete the entry for ${shortDate(row.workDate)}`}
+                              label={`Delete the work for ${shortDate(day.workDate)}`}
                               icon={<Trash2 aria-hidden />}
                               size="sm"
-                              onClick={() => remove(row)}
-                              data-testid={`work-delete-${row.workDate}`}
+                              onClick={() => remove(day)}
+                              data-testid={`work-delete-${day.workDate}`}
                             />
                           </>
                         ) : null}
@@ -534,41 +561,39 @@ export function JobWork({ job, today, laborClasses }: JobTabProps) {
             </div>
 
             <ul className="flex flex-col divide-y divide-border-subtle md:hidden" data-testid="work-cards">
-              {rows.map((row) => (
-                <li key={row.id} className="px-4 py-3">
+              {days.map((day) => (
+                <li key={day.workDate} className="px-4 py-3">
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-fg">
-                        {shortDate(row.workDate)}{' '}
-                        <span className="text-xs font-normal text-fg-muted">
-                          {row.laborClassId ? classNames.get(row.laborClassId) : ''}
-                        </span>
+                        {shortDate(day.workDate)}{' '}
+                        <span className="text-xs font-normal text-fg-muted">{crewNames(day)}</span>
                       </p>
                       <p className="mt-0.5 text-sm text-fg-secondary tabular-nums">
-                        {formatNumber(row.unitsGood, { maxDigits: 0 })} good,{' '}
-                        {row.hoursConfirmed ? `${formatHours(row.hours)} labor hours` : 'hours missing'}
-                        {rowPace(row) !== null ? `, pace ${formatPace(rowPace(row))}` : ''}
-                        {seesMoney && row.laborCostCents !== null
-                          ? `, ${formatMoney(row.laborCostCents)}`
-                          : ''}
+                        {formatNumber(day.unitsGood, { maxDigits: 0 })} good,{' '}
+                        {day.hoursConfirmed ? `${formatHours(day.hours)} labor hours` : 'hours missing'}
+                        {day.pace !== null ? `, pace ${formatPace(day.pace)}` : ''}
+                        {seesMoney && day.laborCostCents !== null ? `, ${formatMoney(day.laborCostCents)}` : ''}
                       </p>
-                      {row.note ? <p className="mt-0.5 text-xs text-fg-muted">{row.note}</p> : null}
+                      {day.notes.length > 0 ? (
+                        <p className="mt-0.5 text-xs text-fg-muted">{day.notes.join(', ')}</p>
+                      ) : null}
                     </div>
-                    {row.locked ? (
+                    {day.locked ? (
                       <Lock aria-label="This month is closed" className="mt-1 size-4 text-fg-muted" />
-                    ) : canEdit(row) ? (
+                    ) : canEdit(day) ? (
                       <div className="flex shrink-0">
                         <IconButton
-                          label={`Edit the entry for ${shortDate(row.workDate)}`}
+                          label={`Edit the work for ${shortDate(day.workDate)}`}
                           icon={<Pencil aria-hidden />}
                           size="sm"
-                          onClick={() => setEditingId(row.id)}
+                          onClick={() => setEditingId(day.workDate)}
                         />
                         <IconButton
-                          label={`Delete the entry for ${shortDate(row.workDate)}`}
+                          label={`Delete the work for ${shortDate(day.workDate)}`}
                           icon={<Trash2 aria-hidden />}
                           size="sm"
-                          onClick={() => remove(row)}
+                          onClick={() => remove(day)}
                         />
                       </div>
                     ) : null}
