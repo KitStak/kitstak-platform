@@ -443,6 +443,40 @@ export async function ensureContractRates(tx: Tx): Promise<{ created: string[]; 
   return { created, skipped };
 }
 
+const KITTING_VAS = { client: 'HRB', vasType: 'Grade B Pallet', value: 2, note: 'Two pallets built for the gift box work order' } as const;
+
+/**
+ * One extra service done for a work order: pallets for the client's newest completed work order,
+ * logged on the day it finished and pointing at it ("Work Order" reference). KitStak Pulse puts
+ * this record on the job linked to that work order. Idempotent on (client, note).
+ */
+export async function ensureKittingVas(tx: Tx): Promise<{ created: string[]; skipped: string[] }> {
+  const label = `VAS operation ${KITTING_VAS.client} ${KITTING_VAS.vasType} for a work order`;
+  const order = await dbGet<{ code: string; clientId: string; warehouseId: string; finishedAt: string }>(
+    tx,
+    sql`SELECT wo.code, wo.client_id AS "clientId", wo.warehouse_id AS "warehouseId", wo.actual_finish_at AS "finishedAt"
+        FROM work_orders wo JOIN clients c ON c.id = wo.client_id
+        WHERE c.code = ${KITTING_VAS.client} AND wo.status = 'Completed' AND wo.actual_finish_at IS NOT NULL
+        ORDER BY wo.actual_finish_at DESC LIMIT 1`,
+  );
+  const vasType = await dbGet<{ id: string }>(tx, sql`SELECT id FROM lookup_values WHERE type = 'vas_type' AND name = ${KITTING_VAS.vasType} ORDER BY created_at LIMIT 1`);
+  if (!order || !vasType) return { created: [], skipped: [] };
+  const existing = await dbGet<{ id: string }>(tx, sql`SELECT id FROM vas_operations WHERE client_id = ${order.clientId} AND note = ${KITTING_VAS.note} LIMIT 1`);
+  if (existing) return { created: [], skipped: [label] };
+  await tx.insert(schema.vasOperations).values({
+    clientId: order.clientId,
+    warehouseId: order.warehouseId,
+    vasTypeId: vasType.id,
+    operationAt: order.finishedAt,
+    calculationType: 'Vas Quantity',
+    value: KITTING_VAS.value,
+    note: KITTING_VAS.note,
+    referenceOrderType: 'Work Order',
+    referenceNumber: order.code,
+  });
+  return { created: [label], skipped: [] };
+}
+
 export async function seedBilling(w: World, tx: Tx): Promise<void> {
   await seedContract(w, tx, 'APX', 'Monthly', 'Apparel 3PL 2026', false);
   await seedContract(w, tx, 'NVF', 'SemiMonthly', 'Electronics 3PL 2026', false);
@@ -451,4 +485,5 @@ export async function seedBilling(w: World, tx: Tx): Promise<void> {
   await seedContract(w, tx, 'HRB', 'Monthly', 'Wholesale 2026', true);
   await seedVas(w, tx);
   await ensureContractRates(tx);
+  await ensureKittingVas(tx);
 }
