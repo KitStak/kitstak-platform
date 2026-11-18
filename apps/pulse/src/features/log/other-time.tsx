@@ -149,7 +149,7 @@ export function OtherTimeStrip({
               <span className="min-w-28 font-medium text-fg">{INDIRECT_REASON_LABELS[entry.reason]}</span>
               <span className="text-fg-secondary">{className(entry.laborClassId)}</span>
               <span className="tabular-nums text-fg-secondary">
-                {entry.headcount ? `${tidy(entry.headcount)} people, ` : ''}
+                {entry.headcount ? `${tidy(entry.headcount)} ${Number(entry.headcount) === 1 ? 'person' : 'people'}, ` : ''}
                 {formatHours(entry.hours, { style: 'unit' })}
               </span>
               {seesMoney && entry.costCents !== null ? (

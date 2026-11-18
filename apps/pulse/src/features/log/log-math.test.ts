@@ -141,6 +141,15 @@ describe('the people times hours each helper', () => {
 describe('line checks', () => {
   it('says what is wrong in plain words', () => {
     expect(lineProblem({ ...EMPTY_VALUES, unitsGood: 'abc' })).toBe('Units must be a number of 0 or more.');
+    // The server keeps these ceilings; the row says so in plain words before it is sent.
+    expect(lineProblem({ ...EMPTY_VALUES, unitsGood: '100000000' })).toBe(
+      'Units is too big. Type a number under 100,000,000.',
+    );
+    expect(lineProblem({ ...EMPTY_VALUES, unitsGood: '99999999' })).toBeNull();
+    expect(lineProblem({ ...EMPTY_VALUES, people: '10000' })).toBe('People is too big. Type a number under 10,000.');
+    expect(lineProblem({ ...EMPTY_VALUES, hoursEach: '-2', hours: '8' })).toBe(
+      'Hours each must be a number of 0 or more.',
+    );
     expect(lineProblem({ ...EMPTY_VALUES, hours: '8', overtime: '9' })).toBe(
       'Overtime cannot be more than the labor hours.',
     );

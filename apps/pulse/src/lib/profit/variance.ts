@@ -209,7 +209,7 @@ export function varianceReading(bar: VarianceBar, waterfall: Pick<Waterfall, 'ho
         : `Time not on a job: this job carried less meetings, cleanup and waiting than planned.${effect(amount, options)}`;
     default:
       if (flat) return 'Other: everything else matched the plan.';
-      return amount < ZERO ? `Other: other costs and fees came in worse than planned.${effect(amount, options)}` : `Other: other costs and fees came in better than planned.${effect(amount, options)}`;
+      return amount < ZERO ? `Other: other costs, fees and extra services came in worse than planned.${effect(amount, options)}` : `Other: other costs, fees and extra services came in better than planned.${effect(amount, options)}`;
   }
 }
 

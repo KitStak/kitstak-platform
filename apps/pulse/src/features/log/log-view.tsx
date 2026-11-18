@@ -336,7 +336,7 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
         {data && data.rows.length > 0 ? (
           <div
             data-testid="log-totals"
-            className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border-default bg-sunken px-4 py-3"
+            className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border-default bg-sunken px-4 py-3 md:sticky md:bottom-0 md:z-10"
           >
             <Total label="Units good" value={formatNumber(totals.units, { maxDigits: 0 })} />
             <Total label="Labor hours" value={formatHours(totals.hours)} />
@@ -357,9 +357,11 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob }: 
             ) : null}
             <div className="ml-auto flex items-center gap-3">
               <span className="text-xs text-fg-muted" aria-live="polite">
-                {totals.unsaved > 0
-                  ? `Saving ${totals.unsaved} ${totals.unsaved === 1 ? 'row' : 'rows'}`
-                  : 'All changes saved'}
+                {(totals.stuck ?? 0) > 0
+                  ? `${totals.stuck} ${totals.stuck === 1 ? 'row is' : 'rows are'} not saved. Fix the red ${totals.stuck === 1 ? 'row' : 'rows'} first.`
+                  : totals.unsaved > 0
+                    ? `Saving ${totals.unsaved} ${totals.unsaved === 1 ? 'row' : 'rows'}`
+                    : 'All changes saved'}
               </span>
               {canLog && data.canEdit && !data.review ? (
                 <Button
@@ -494,7 +496,7 @@ function DayBanner({
       ) : (
         <Lock aria-hidden className="size-4 shrink-0" />
       )}
-      <span className="min-w-0 flex-1">{words}</span>
+      <span className="min-w-[12rem] flex-1">{words}</span>
       {review && !data.monthClosed ? (
         <span className="flex items-center gap-2">
           {onReopen ? (

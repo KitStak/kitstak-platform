@@ -238,7 +238,28 @@ export function BulkView({
     const asRows = block.filter(
       (cells) => parseDate(cells[0] ?? '').ok && jobByNumber.has((cells[1] ?? '').toLowerCase()),
     );
-    if (asRows.length > 0 && asRows.length >= block.length - 1) {
+    // Rows that start with a day or name a job are meant as new rows, even when some of them cannot be used.
+    const meantAsRows = block.filter(
+      (cells) => parseDate(cells[0] ?? '').ok || jobByNumber.has((cells[1] ?? '').toLowerCase()),
+    );
+    if (meantAsRows.length > 0 && meantAsRows.length >= block.length - 1 && block.some((cells) => cells.length > 2)) {
+      const leftOut: string[] = [];
+      block.forEach((cells, index) => {
+        if (asRows.includes(cells)) return;
+        const day = cells[0] ?? '';
+        const number = cells[1] ?? '';
+        // A header row ("Day, Job, Units") is not a miss.
+        if (index === 0 && !parseDate(day).ok && !jobByNumber.has(number.toLowerCase())) return;
+        leftOut.push(
+          !parseDate(day).ok
+            ? `"${day}" is not a day`
+            : `"${number}" is not a job you can log to`,
+        );
+      });
+      if (asRows.length === 0) {
+        toast.warning('Nothing was pasted', `${leftOut.slice(0, 3).join('. ')}.`);
+        return;
+      }
       const added = asRows.map((cells) => {
         const parsed = parseDate(cells[0] ?? '');
         const job = jobByNumber.get((cells[1] ?? '').toLowerCase())!;
@@ -253,10 +274,16 @@ export function BulkView({
         return newRow(parsed.ok ? String(parsed.value) : today, job.id, values);
       });
       setRows((previous) => [...previous.filter((row) => row.jobId || !isBlank(row.values)), ...added]);
-      toast.success(
-        `Pasted ${added.length} ${added.length === 1 ? 'row' : 'rows'}`,
-        block.length > asRows.length ? 'The header row was left out.' : undefined,
-      );
+      if (leftOut.length > 0)
+        toast.warning(
+          `Pasted ${added.length} ${added.length === 1 ? 'row' : 'rows'}, left out ${leftOut.length}`,
+          `${leftOut.slice(0, 3).join('. ')}${leftOut.length > 3 ? `, and ${leftOut.length - 3} more` : ''}.`,
+        );
+      else
+        toast.success(
+          `Pasted ${added.length} ${added.length === 1 ? 'row' : 'rows'}`,
+          block.length > asRows.length ? 'The header row was left out.' : undefined,
+        );
       return;
     }
     setRows((previous) => {

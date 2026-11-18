@@ -207,7 +207,27 @@ function mergeLines(previous: readonly Line[], grid: LogGridDTO): Line[] {
 
 interface SaveResponse {
   data?: { entry: ProductionEntryDTO; created: boolean };
-  error?: { code: string; message: string; fresh?: ProductionEntryDTO | null };
+  error?: { code: string; message: string; fresh?: ProductionEntryDTO | null; fields?: Record<string, string> };
+}
+
+const SERVER_FIELD_LABELS: Record<string, string> = {
+  unitsGood: 'Units good',
+  unitsScrap: 'Scrap',
+  unitsRework: 'Rework',
+  headcount: 'People',
+  hours: 'Labor hours',
+  overtimeHours: 'Overtime',
+  setupHours: 'Setup hours',
+  note: 'Note',
+};
+
+/** Names the field the server turned down, so "Some fields need another look" never stands alone. */
+function saveErrorMessage(error: NonNullable<SaveResponse['error']> | undefined): string {
+  if (!error) return 'Something went wrong. Please try again.';
+  const first = Object.entries(error.fields ?? {})[0];
+  if (error.code !== 'VALIDATION' || !first) return error.message;
+  const label = SERVER_FIELD_LABELS[first[0]];
+  return label ? `${label}: ${first[1]}` : first[1];
 }
 
 async function putRow(
@@ -228,7 +248,7 @@ async function putRow(
     return {
       ok: false,
       code: 'NETWORK_ERROR',
-      message: 'Not saved. Check your connection. Pulse will try again when you change the row.',
+      message: 'Not saved. Check your connection. Pulse will keep trying by itself.',
     };
   }
   let payload: SaveResponse | null = null;
@@ -241,7 +261,7 @@ async function putRow(
   return {
     ok: false,
     code: payload?.error?.code ?? 'INTERNAL',
-    message: payload?.error?.message ?? 'Something went wrong. Please try again.',
+    message: saveErrorMessage(payload?.error),
     fresh: payload?.error?.fresh,
   };
 }
@@ -273,6 +293,8 @@ export interface GridTotals {
   readonly jobs: number;
   readonly money: MoneyReadout | null;
   readonly unsaved: number;
+  /** Rows that could not be saved and need a fix (part of `unsaved`). */
+  readonly stuck?: number;
 }
 
 const COLS =
@@ -309,6 +331,9 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingFocus = useRef<string | null>(null);
+  // Lines whose save never reached the server (no connection). They are sent again by themselves.
+  const offlineKeys = useRef(new Set<string>());
+  const retryOffline = useRef<() => void>(() => undefined);
   const canEdit = grid.canEdit;
   const classById = useMemo(() => new Map(laborClasses.map((item) => [item.id, item])), [laborClasses]);
   const liveClasses = useMemo(() => laborClasses.filter((item) => !item.archivedAt), [laborClasses]);
@@ -345,20 +370,40 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
       timers.current.delete(key);
       const line = linesRef.current.find((item) => item.key === key);
       if (!line || line.status === 'saving' || !canEdit) return;
-      if (sameValues(line.values, line.saved) && line.status !== 'error') {
-        if (line.status === 'dirty') update(key, (item) => ({ ...item, status: 'idle', message: null }));
-        return;
-      }
+      // Checked first: a bad "hours each" leaves the labor hours as they were, so the row can look unchanged.
       const problem = lineProblem(line.values);
       if (problem) {
         update(key, (item) => ({ ...item, status: 'error', message: problem }));
+        return;
+      }
+      if (sameValues(line.values, line.saved) && line.status !== 'error') {
+        if (line.status === 'dirty') update(key, (item) => ({ ...item, status: 'idle', message: null }));
         return;
       }
       if (!line.entry && isBlank(line.values)) {
         update(key, (item) => ({ ...item, status: 'idle', message: null }));
         return;
       }
+      // One line for each labor class: a second line with the same class would write over the first.
+      const classOf = (item: Line) => item.values.laborClassId ?? rowById.get(item.jobId)?.defaultLaborClassId ?? null;
+      const twin = linesRef.current.find(
+        (other) =>
+          other.key !== key &&
+          other.jobId === line.jobId &&
+          other.shift === line.shift &&
+          classOf(other) === classOf(line),
+      );
+      if (twin) {
+        const name = classById.get(classOf(line) ?? '')?.name ?? 'that labor class';
+        update(key, (item) => ({
+          ...item,
+          status: 'error',
+          message: `This job already has a line for ${name}. Pick another labor class, or add these people to that line.`,
+        }));
+        return;
+      }
       const sent = line.values;
+      offlineKeys.current.delete(key);
       update(key, (item) => ({ ...item, status: 'saving', message: null }));
       const result = await putRow({
         id: line.entry?.id ?? null,
@@ -405,10 +450,32 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
         }));
         return;
       }
+      if (result.code === 'NETWORK_ERROR') offlineKeys.current.add(key);
       update(key, (item) => ({ ...item, status: 'error', message: result.message }));
     },
-    [canEdit, grid.date, scheduleRefresh, update],
+    [canEdit, classById, grid.date, rowById, scheduleRefresh, update],
   );
+
+  // A tablet on the floor drops its connection now and then. Rows that could not be sent go out
+  // again when the browser is back online, and every few seconds until then.
+  useEffect(() => {
+    retryOffline.current = () => {
+      for (const key of [...offlineKeys.current]) {
+        const line = linesRef.current.find((item) => item.key === key);
+        if (!line || line.status !== 'error') offlineKeys.current.delete(key);
+        else void saveLine(key);
+      }
+    };
+  }, [saveLine]);
+  useEffect(() => {
+    const run = () => retryOffline.current();
+    const timer = setInterval(run, 6000);
+    window.addEventListener('online', run);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('online', run);
+    };
+  }, []);
 
   const schedule = useCallback(
     (key: string, delay = 900) => {
@@ -648,11 +715,16 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
       const plan = planPaste(
         block,
         visibleLines
-          .filter(
-            (line) =>
-              line.entry ||
-              linesRef.current.filter((other) => other.jobId === line.jobId)[0]?.key === line.key,
-          )
+          .filter((line) => {
+            if (linesRef.current.filter((other) => other.jobId === line.jobId)[0]?.key === line.key) return true;
+            if (!line.entry) return false;
+            // A column of units goes one job down each row: extra crew lines have no units cells to fill.
+            const startsInUnits = field === 'unitsGood' || field === 'unitsScrap' || field === 'unitsRework';
+            const showsUnits = (['unitsGood', 'unitsScrap', 'unitsRework'] as const).some(
+              (name) => (parseTyped(line.values[name]) ?? 0) > 0,
+            );
+            return !startsInUnits || showsUnits;
+          })
           .map((line) => ({ key: line.key, jobNumber: rowById.get(line.jobId)?.jobNumber ?? '' })),
         key,
         field,
@@ -708,7 +780,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
         if (move(key, field, 0, 1)) event.preventDefault();
       } else if (event.key === 'Escape') {
         const line = linesRef.current.find((item) => item.key === key);
-        if (line && !sameValues(line.values, line.saved)) {
+        if (line && (!sameValues(line.values, line.saved) || line.status === 'error' || line.status === 'dirty')) {
           event.preventDefault();
           const pending = timers.current.get(key);
           if (pending) clearTimeout(pending);
@@ -895,16 +967,25 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
           const current = linesRef.current.filter((line) => line.jobId === row.jobId);
           if (current.some((line) => (parseTyped(line.values.hours) ?? 0) > 0)) continue;
           jobs += 1;
-          previous.lines.forEach((crewLine, index) => {
+          // The biggest crew goes first, so the main line (the one that holds the units) keeps its
+          // labor class and a helper such as a line lead lands on a line of its own.
+          const crewLines = [...previous.lines].sort(
+            (a, b) => Number(b.hours) - Number(a.hours),
+          );
+          const wanted = new Set(crewLines.map((item) => item.laborClassId));
+          crewLines.forEach((crewLine, index) => {
             const fill = (base: LineValues): LineValues =>
               applyField(
                 { ...base, laborClassId: crewLine.laborClassId, people: tidy(crewLine.headcount) },
                 'hours',
                 tidy(crewLine.hours),
               );
+            const first = current[0];
             const match =
               current.find((line) => line.values.laborClassId === crewLine.laborClassId) ??
-              (index === 0 ? current[0] : undefined);
+              (index === 0 && first && (!first.entry || !wanted.has(first.values.laborClassId))
+                ? first
+                : undefined);
             if (match && !changes.has(match.key)) changes.set(match.key, fill(match.values));
             else {
               const line = draftLine(row, crewLine.laborClassId);
@@ -961,6 +1042,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
       unsaved: lines.filter(
         (line) => line.status === 'dirty' || line.status === 'saving' || line.status === 'error',
       ).length,
+      stuck: lines.filter((line) => line.status === 'error').length,
     };
   }, [grid.rows.length, lines, seesMoney]);
 
@@ -1027,7 +1109,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                   extra?: { placeholder?: string; className?: string; text?: boolean },
                 ) => (
                   <label className="flex min-w-0 flex-col gap-1">
-                    <span className="text-xs text-fg-muted xl:sr-only">{FIELD_LABELS[field]}</span>
+                    <span className="truncate text-xs text-fg-muted xl:sr-only">{FIELD_LABELS[field]}</span>
                     <input
                       data-line={line.key}
                       data-field={field}
@@ -1054,7 +1136,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                   <div
                     key={line.key}
                     className={cn(
-                      'grid grid-cols-3 gap-x-2 gap-y-2 sm:grid-cols-4 xl:items-center xl:gap-1',
+                      'grid grid-cols-3 gap-x-2 gap-y-2 sm:grid-cols-4 md:grid-cols-9 xl:items-center xl:gap-1',
                       COLS,
                       !first &&
                         'mt-2 border-t border-dashed border-border-subtle pt-2 xl:mt-1 xl:border-0 xl:pt-0',
@@ -1091,7 +1173,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                     )}
                     {showUnits ? input('unitsScrap') : <span className="hidden xl:block" />}
                     {showUnits ? input('unitsRework') : <span className="hidden xl:block" />}
-                    <label className="flex min-w-0 flex-col gap-1">
+                    <label className="flex min-w-0 flex-col gap-1 md:col-span-2 xl:col-span-1">
                       <span className="text-xs text-fg-muted xl:sr-only">Crew</span>
                       <select
                         aria-label={`Labor class for ${row.jobNumber}, line ${index + 1}`}
@@ -1104,7 +1186,17 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                         {laborClasses
                           .filter((item) => !item.archivedAt || item.id === line.values.laborClassId)
                           .map((item) => (
-                            <option key={item.id} value={item.id}>
+                            <option
+                              key={item.id}
+                              value={item.id}
+                              disabled={lines.some(
+                                (other) =>
+                                  other.key !== line.key &&
+                                  other.jobId === line.jobId &&
+                                  other.shift === line.shift &&
+                                  (other.values.laborClassId ?? row.defaultLaborClassId) === item.id,
+                              )}
+                            >
                               {item.name}
                             </option>
                           ))}
@@ -1115,14 +1207,14 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                     {input('hours', { className: 'font-medium' })}
                     {input('overtime')}
                     <div
-                      className={cn('col-span-1 xl:col-span-1', first ? 'sm:col-span-3' : 'sm:col-span-2')}
+                      className={cn('col-span-1 xl:col-span-1', first ? 'sm:col-span-3 md:col-span-4' : 'sm:col-span-2')}
                     >
                       {input('note', { text: true, placeholder: 'Add a note' })}
                     </div>
                     <div
                       className={cn(
                         'min-w-0 xl:col-span-1',
-                        first ? 'col-span-2 sm:col-span-3' : 'hidden xl:block',
+                        first ? 'col-span-full sm:col-span-3 md:col-span-4 md:self-end' : 'hidden xl:block',
                       )}
                     >
                       {first ? (
@@ -1139,7 +1231,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                     <div
                       className={cn(
                         'flex items-center justify-end gap-1 xl:col-span-1',
-                        first ? 'col-span-1' : 'col-span-full sm:col-span-1',
+                        'col-span-full sm:col-span-1 md:self-end',
                       )}
                     >
                       <LineState line={line} onUndo={() => undoLine(line)} disabled={disabled} />
@@ -1226,7 +1318,18 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                         )}
                       >
                         <AlertTriangle aria-hidden className="mt-px size-3.5 shrink-0" />
-                        <span>{line.message ?? question}</span>
+                        <span>
+                          {line.message ?? question}
+                          {line.status === 'error' && line.message && !lineProblem(line.values) ? (
+                            <button
+                              type="button"
+                              className="ml-2 rounded-sm font-medium text-fg underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                              onClick={() => void saveLine(line.key)}
+                            >
+                              Try again
+                            </button>
+                          ) : null}
+                        </span>
                       </p>
                     ) : null}
                   </div>

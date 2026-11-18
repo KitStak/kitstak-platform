@@ -267,7 +267,7 @@ export function TargetPaceView({
         ) : (
           <>
             <ul
-              className="mt-3 divide-y divide-border-subtle border-t border-border-subtle md:hidden"
+              className="mt-3 divide-y divide-border-subtle border-t border-border-subtle lg:hidden"
               aria-label="Suggested targets"
             >
               {(suggestions.data ?? []).map((row) => {
@@ -319,7 +319,7 @@ export function TargetPaceView({
                 );
               })}
             </ul>
-            <div className="mt-3 hidden overflow-x-auto border-t border-border-subtle md:block">
+            <div className="mt-3 hidden overflow-x-auto border-t border-border-subtle lg:block">
               <Table className="min-w-[680px]">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">

@@ -223,7 +223,9 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   if (mode === 'projected' && profit < ZERO && (input.evidenceDays >= 2 || pct >= 2000)) {
     const costPerUnit = perUnitCents(p.costAtFinishCents, p.projectedUnits);
     const price = input.unitPrice === null || input.unitPrice === undefined || input.unitPrice === '' ? null : divRound(priceToScaled(input.unitPrice), BigInt(100));
-    add('L1', { lossCents: num(-profit), costPerUnitCents: costPerUnit === null ? null : num(costPerUnit), pricePerUnitCents: price === null ? null : num(price) }, profit);
+    // Cost for one unit holds extra services and fees, so the revenue side has to hold them too or the two numbers would not explain the loss.
+    const revenuePerUnit = perUnitCents(p.revenueAtFinishCents, p.projectedUnits);
+    add('L1', { lossCents: num(-profit), costPerUnitCents: costPerUnit === null ? null : num(costPerUnit), pricePerUnitCents: price === null ? null : num(price), revenuePerUnitCents: revenuePerUnit === null ? null : num(revenuePerUnit) }, profit);
   }
   if (mode === 'final' && profit < ZERO) {
     let laborOverBp: number | null = null;
@@ -345,6 +347,9 @@ export function riskSentence(reason: Pick<RiskReason, 'rule' | 'params'>, option
       const cost = number(params, 'costPerUnitCents');
       const price = number(params, 'pricePerUnitCents');
       if (cost === null || price === null) return lead;
+      const earned = number(params, 'revenuePerUnitCents');
+      if (earned !== null && Math.round(earned) !== Math.round(price))
+        return `${lead} It costs ${sentenceUnitMoney(cents('costPerUnitCents'), options)} a ${unit} to make and brings in ${sentenceUnitMoney(cents('revenuePerUnitCents'), options)}, extra services and fees included.`;
       return `${lead} It costs ${sentenceUnitMoney(cents('costPerUnitCents'), options)} a ${unit} to make and sells for ${sentenceUnitMoney(cents('pricePerUnitCents'), options)}.`;
     }
     case 'L2': {

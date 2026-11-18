@@ -117,7 +117,11 @@ export function flagSentence(line: ServiceLine, targetMarginBp: number, money: (
     case 'below_cost':
       return `Each ${unitWord(line.service.unitLabel)} cost ${money(line.costPerUnit)} to do and earned ${money(line.revenuePerUnit)}.${fix}`;
     case 'under_target':
-      return `It made a ${percent(line.marginBp)} margin. Your target is ${percent(targetMarginBp)}.${fix}`;
+      return `It made a ${percent(line.marginBp)} margin. Your target is ${percent(targetMarginBp)}.${
+        line.costPerUnit && line.revenuePerUnit
+          ? ` Each ${unitWord(line.service.unitLabel)} cost ${money(line.costPerUnit)} to do and earned ${money(line.revenuePerUnit)}.`
+          : ''
+      }${fix}`;
     case 'no_price':
       return 'This service has no price, so every entry earns nothing until one is set.';
     case 'standard_below_cost':

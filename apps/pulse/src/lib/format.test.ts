@@ -158,6 +158,10 @@ describe('changes with a sign', () => {
     expect(formatPercentDelta(1250)).toBe('+12.5%');
     expect(formatPercentDelta(-300)).toBe('-3%');
     expect(formatPercentDelta(0)).toBe('0%');
+    // A change that rounds to nothing carries no sign.
+    expect(formatPercentDelta(-4, { digits: 0 })).toBe('0%');
+    expect(formatPercentDelta(-2)).toBe('0%');
+    expect(formatPercentDelta(-60, { digits: 0 })).toBe('-1%');
     expect(formatPointsDelta(240)).toBe('+2.4 points');
     expect(formatPointsDelta(-100)).toBe('-1 point');
     expect(formatPointsDelta(0)).toBe('0 points');

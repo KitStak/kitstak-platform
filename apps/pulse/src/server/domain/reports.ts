@@ -766,7 +766,7 @@ async function whyProfitChanged(ctx: DomainContext, filters: ReportFilters): Pro
       money && falls.length > 0
         ? { type: 'waterfall', title: 'Why profit changed', description: 'Start at planned profit. Each bar adds or takes away. The last bar is actual profit.', labels: sum.bars.map((bar) => bar.label), series: [{ id: 'change', label: 'Effect on profit', values: sum.bars.map((bar) => centsOut(bar.amountCents)) }], format: 'money', start: { label: 'Planned profit', value: centsOut(sum.startCents) ?? 0 }, endLabel: 'Actual profit' }
         : null,
-    notes: ['Open jobs start from the plan for the work done so far. Finished jobs start from the whole plan. Jobs with no plan are left out.', 'The bars are worked out job by job and then added, so they always sum to the change.'],
+    notes: ['Jobs with work logged inside these days. Each job shows its whole life so far, not only these days, so the totals can be larger than the profit of the period.', 'Open jobs start from the plan for the work done so far. Finished jobs start from the whole plan. Jobs with no plan are left out.', 'The bars are worked out job by job and then added, so they always sum to the change.'],
   };
 }
 

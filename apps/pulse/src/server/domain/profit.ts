@@ -34,6 +34,8 @@ interface Bucket {
   shared: bigint;
   billed: bigint;
   units: number;
+  /** Good units of the job work only. In the services view `units` also holds service quantities, which never add into a total. */
+  baseUnits?: number;
   scrap: number;
   hours: number;
   jobs: number;
@@ -54,6 +56,7 @@ interface RawRow {
   shared: string;
   billed: string;
   units: string;
+  base_units: string;
   scrap: string;
   hours: string;
   jobs: number;
@@ -125,6 +128,7 @@ const sums = (unitKinds: SQL): SQL => sql`
   COALESCE(sum(f.amount_cents) FILTER (WHERE f.kind = 'shared'), 0)::text AS shared,
   COALESCE(sum(f.amount_cents) FILTER (WHERE f.kind = 'billed_memo'), 0)::text AS billed,
   COALESCE(sum(f.units_good) FILTER (WHERE ${unitKinds}), 0)::text AS units,
+  COALESCE(sum(f.units_good) FILTER (WHERE f.kind = 'revenue_base'), 0)::text AS base_units,
   COALESCE(sum(f.units_scrap), 0)::text AS scrap,
   COALESCE(sum(f.hours), 0)::text AS hours,
   count(DISTINCT f.job_id)::int AS jobs`;
@@ -160,6 +164,7 @@ async function grouped(orgId: string, by: ProfitGroup, filters: ProfitFilters, w
     shared: BigInt(row.shared),
     billed: BigInt(row.billed),
     units: Number(row.units),
+    baseUnits: Number(row.base_units),
     scrap: Number(row.scrap),
     hours: Number(row.hours),
     jobs: row.jobs,
@@ -179,7 +184,7 @@ function totalOf(buckets: readonly Bucket[], label: string): Bucket {
     total.other += bucket.other;
     total.shared += bucket.shared;
     total.billed += bucket.billed;
-    total.units += bucket.units;
+    total.units += bucket.baseUnits ?? bucket.units;
     total.scrap += bucket.scrap;
     total.hours += bucket.hours;
     total.laborMissing ||= bucket.laborMissing;

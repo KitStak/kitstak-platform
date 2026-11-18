@@ -427,6 +427,7 @@ export function KioskApp({ token, initial }: { readonly token: string; readonly 
         {screen === 'done' && done ? (
           <Done
             done={done}
+            sent={done.queued && waiting === 0 && failed.length === 0}
             onNext={() => {
               setDone(null);
               setJob(null);
@@ -910,14 +911,18 @@ function Entry({
 }
 
 function Done({
-  done,
+  done: saved,
+  sent,
   onNext,
   onLock,
 }: {
   readonly done: DoneState;
+  /** The entry waited on this tablet and has now reached the server. */
+  readonly sent: boolean;
   readonly onNext: () => void;
   readonly onLock: () => void;
 }) {
+  const done = sent ? { ...saved, queued: false } : saved;
   return (
     <div
       data-testid="kiosk-done"
@@ -948,7 +953,9 @@ function Done({
           ? 'There is no connection right now. It will send when the tablet is online. You can keep logging.'
           : done.result
             ? `Today so far on this job: ${formatNumber(done.result.todayUnits, { maxDigits: 0 })} ${done.job.unitLabel} in ${formatHours(done.result.todayHours)} labor hours${done.result.uph ? `, ${formatPace(done.result.uph)} for each person each hour` : ''}.`
-            : ''}
+            : sent
+              ? 'The tablet is back online and this was sent.'
+              : ''}
       </p>
       <div className="flex w-full flex-col gap-3 sm:flex-row">
         <button

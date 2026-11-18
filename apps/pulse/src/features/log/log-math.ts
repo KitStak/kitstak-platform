@@ -135,7 +135,14 @@ export function lineProblem(values: LineValues): string | null {
     if (parseTyped(values[field as keyof LineValues] as string) === null)
       return `${label} must be a number of 0 or more.`;
   }
+  // The same ceilings the server keeps, said in plain words before the row is sent.
+  for (const field of ['unitsGood', 'unitsScrap', 'unitsRework'] as const) {
+    if ((parseTyped(values[field]) ?? 0) >= 100_000_000)
+      return `${labels[field]} is too big. Type a number under 100,000,000.`;
+  }
+  if ((parseTyped(values.people) ?? 0) >= 10_000) return 'People is too big. Type a number under 10,000.';
   const hours = parseTyped(values.hours) ?? 0;
+  if (hours >= 100_000_000) return 'Labor hours is too big. Check people and hours each.';
   if ((parseTyped(values.overtime) ?? 0) > hours) return 'Overtime cannot be more than the labor hours.';
   if ((parseTyped(values.setup) ?? 0) > hours) return 'Setup hours cannot be more than the labor hours.';
   if ((parseTyped(values.hoursEach) ?? 0) > 24) return 'Hours each cannot be more than 24.';

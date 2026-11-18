@@ -247,7 +247,9 @@ export function formatPercentDelta(bp: number | bigint | Missing, options: Perce
   if (isMissing(bp)) return options.empty ?? '';
   const value = Number(bp);
   const body = formatPercentBp(Math.abs(value), options);
-  return withSign(Math.sign(value), body, body);
+  // A change that rounds to nothing carries no sign: "0%", never "-0%".
+  const rounded = Number((Math.abs(value) / 100).toFixed(options.digits ?? 1));
+  return withSign(rounded === 0 ? 0 : Math.sign(value), body, body);
 }
 
 /** A change in margin, in points: "+2.4 points", "-1 point", "0 points". */

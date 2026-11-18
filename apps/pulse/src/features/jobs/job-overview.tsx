@@ -40,6 +40,7 @@ import { PULSE_STATUS_LABELS } from '@/lib/constants';
 import {
   formatHours,
   formatMoney,
+  formatMoneyPerHour,
   formatMoneyPerUnit,
   formatNumber,
   formatPace,
@@ -47,7 +48,7 @@ import {
   formatPercentDelta,
   formatUnits,
 } from '@/lib/format';
-import { absBig, centsToNumber, perUnitCents, subCents, toCents } from '@/lib/money';
+import { absBig, centsToNumber, perHourCents, perUnitCents, subCents, toCents } from '@/lib/money';
 import { CONFIDENCE_LABELS, paceDays, runningTotal, shouldCostPerUnit, unitsPerHour } from '@/lib/profit';
 import { shortDate } from '@/lib/profit/calendar';
 import { routes } from '@/lib/routes';
@@ -137,11 +138,22 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
 
   const actual = statsToActual(stats);
   const plan = planToTotals(planInUse(job));
+  const laborPerHour = stats.laborCents === null ? null : perHourCents(stats.laborCents, stats.hours);
   const costPerUnit =
     actual && Number(stats.unitsGood) > 0
       ? perUnitCents(toCents(stats.costCents ?? 0), stats.unitsGood)
       : null;
   const shouldCost = actual && plan && Number(stats.unitsGood) > 0 ? shouldCostPerUnit(plan, actual) : null;
+  const planCostPerUnit =
+    plan && plan.units !== null && Number(plan.units) > 0
+      ? perUnitCents(
+          toCents(plan.laborCents ?? 0) +
+            toCents(plan.materialCents ?? 0) +
+            toCents(plan.otherCents ?? 0) +
+            toCents(plan.sharedCents ?? 0),
+          plan.units,
+        )
+      : null;
   const health = stats.riskStatus
     ? null
     : marginHealth(stats.marginBp, stats.targetMarginBp ?? settings.defaultTargetMarginBp);
@@ -394,7 +406,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
               }
             />
             <KpiTile
-              label="Cost so far"
+              label={job.status === 'completed' ? 'Final cost' : 'Cost so far'}
               value={formatMoney(stats.costCents, { cents: false })}
               footer={
                 costPerUnit !== null ? (
@@ -410,6 +422,15 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                       label: `Labor, ${formatHours(stats.hours, { style: 'unit', maxDigits: 0 })}`,
                       value: formatMoney(stats.laborCents),
                     },
+                    ...(laborPerHour !== null
+                      ? [
+                          {
+                            label: 'Average real cost of an hour',
+                            value: formatMoneyPerHour(laborPerHour),
+                            kind: 'note' as const,
+                          },
+                        ]
+                      : []),
                     { label: 'Material', value: formatMoney(stats.materialCents) },
                     { label: 'of that, scrap', value: formatMoney(stats.scrapCents), kind: 'note' },
                     { label: 'Other costs', value: formatMoney(stats.otherCents) },
@@ -420,7 +441,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
               }
             />
             <KpiTile
-              label="Profit so far"
+              label={job.status === 'completed' ? 'Final profit' : 'Profit so far'}
               value={formatMoney(stats.profitCents, { cents: false })}
               footer={
                 stats.mode === 'projected' ? (
@@ -568,8 +589,12 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                     />
                     <span className="text-xs text-fg-muted">should cost {formatMoney(shouldCost)}</span>
                   </>
+                ) : planCostPerUnit !== null ? (
+                  <span className="text-xs text-fg-muted">the plan says {formatMoney(planCostPerUnit)}</span>
                 ) : (
-                  <span className="text-xs text-fg-muted">Add a plan to see what it should cost</span>
+                  <span className="text-xs text-fg-muted">
+                    {plan ? 'Shows up after the first units' : 'Add a plan to see what it should cost'}
+                  </span>
                 )
               }
               explain={
@@ -799,7 +824,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                   icon={<ClipboardPen aria-hidden />}
                   className="justify-start"
                 >
-                  Log today
+                  {job.status === 'completed' || job.status === 'cancelled' ? 'Add a late day' : 'Log today'}
                 </ButtonLink>
               ) : null}
               {shell.can('cost:manage') ? (

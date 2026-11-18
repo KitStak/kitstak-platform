@@ -109,6 +109,16 @@ const VERB_WORDS: Readonly<Record<string, string>> = {
   'link.added': 'linked a record',
   'link.removed': 'removed a link',
   'note.added': 'left a note',
+  'shared.moved': 'moved the share of time not on a job',
+};
+
+/** The kind of an invoice, fee or credit row, in on screen words. */
+const ENTRY_KIND_WORDS: Readonly<Record<string, string>> = {
+  invoice: 'Invoice',
+  fee: 'Fee',
+  adjustment: 'Adjustment',
+  credit: 'Credit',
+  fixed_true_up: 'Fixed price true up',
 };
 
 function verbWords(item: ActivityDTO): string {
@@ -136,7 +146,13 @@ function show(key: string, value: unknown): string {
   if (key === 'partsOwner') return value === 'client' ? 'The client' : 'We do';
   if (key === 'materialMethod') return value === 'actual' ? 'The parts really used' : 'A cost for each unit';
   if (key === 'kind')
-    return value === 'ongoing' ? 'Ongoing' : value === 'one_time' ? 'One time' : String(value);
+    return value === 'ongoing'
+      ? 'Ongoing'
+      : value === 'one_time'
+        ? 'One time'
+        : typeof value === 'string' && value in ENTRY_KIND_WORDS
+          ? (ENTRY_KIND_WORDS[value] as string)
+          : String(value);
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'object') return 'changed';
   const text = String(value);
@@ -158,7 +174,7 @@ function changes(item: ActivityDTO): { label: string; before: string | null; aft
     .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
     .slice(0, 6)
     .map((key) => ({
-      label: FIELD_WORDS[key] as string,
+      label: key === 'kind' && !item.verb.startsWith('job.') ? 'Kind' : (FIELD_WORDS[key] as string),
       before: created ? null : show(key, before[key]),
       after: show(key, after[key]),
     }));

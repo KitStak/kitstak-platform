@@ -280,7 +280,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                       {seesMoney && job.stats.projectedProfitCents !== null ? (
                         <div className="text-right">
                           <p className={cn('text-sm font-semibold tabular-nums', job.stats.projectedProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatMoney(job.stats.projectedProfitCents, { cents: false })}</p>
-                          <p className="text-xs text-fg-muted">projected profit{job.stats.confidence ? `, ${CONFIDENCE_LABELS[job.stats.confidence].toLowerCase()}` : ''}</p>
+                          <p className="text-xs text-fg-muted">{job.stats.mode === 'actuals' ? 'profit, last 30 days' : job.stats.mode === 'final' ? 'final profit' : 'projected profit'}{job.stats.confidence ? `, ${CONFIDENCE_LABELS[job.stats.confidence].toLowerCase()}` : ''}</p>
                         </div>
                       ) : null}
                       {job.stats.riskStatus ? <MarginPill status={job.stats.riskStatus} /> : null}

@@ -505,7 +505,7 @@ export function EntriesView({
                     </p>
                     <p className="mt-0.5 text-sm tabular-nums text-fg-secondary">
                       {formatNumber(row.unitsGood, { maxDigits: 0 })} units,{' '}
-                      {row.headcount ? `${formatNumber(row.headcount)} people, ` : ''}
+                      {row.headcount ? `${formatNumber(row.headcount)} ${Number(row.headcount) === 1 ? 'person' : 'people'}, ` : ''}
                       {row.hoursConfirmed ? `${formatHours(row.hours)} labor hours` : 'needs hours'}
                       {shell.seesMoney && row.laborCostCents !== null
                         ? `, ${formatMoney(row.laborCostCents)}`

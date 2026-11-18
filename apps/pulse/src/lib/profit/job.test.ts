@@ -319,7 +319,7 @@ describe('why profit changed (4.11)', () => {
     expect(read('scrap', false)).toBe('Scrap: some material was scrapped.');
     expect(read('material')).toBe('Material: parts for good units cost more than planned. That cost $10.');
     expect(read('shared')).toBe('Time not on a job: this job carried more meetings, cleanup and waiting than planned. That cost $60.');
-    expect(read('other')).toBe('Other: other costs and fees came in better than planned. That saved $600.');
+    expect(read('other')).toBe('Other: other costs, fees and extra services came in better than planned. That saved $600.');
     expect(read('price')).toBe('Price: revenue matched the plan for this many units.');
     expect(read('volume')).toBe('Volume: the job made fewer units than planned. That took away $4,200.');
     for (const bar of waterfall.bars) {
@@ -949,6 +949,11 @@ describe('risk status (4.14)', () => {
       expect(['losing', 'at_risk', 'no_data', 'heads_up']).toContain(ruleStatus(rule));
     }
     expect(riskSentence({ rule: 'L1', params })).toBe('At this pace the job ends about $1,840 in the red. It costs $3.12 a unit to make and sells for $2.75.');
+    // With extra services or fees the revenue side holds them too, so the two numbers explain the loss.
+    expect(riskSentence({ rule: 'L1', params: { ...params, revenuePerUnitCents: 290 } })).toBe(
+      'At this pace the job ends about $1,840 in the red. It costs $3.12 a unit to make and brings in $2.90, extra services and fees included.',
+    );
+    expect(riskSentence({ rule: 'L1', params: { ...params, revenuePerUnitCents: 275 } })).toBe('At this pace the job ends about $1,840 in the red. It costs $3.12 a unit to make and sells for $2.75.');
     expect(riskSentence({ rule: 'R1', params })).toBe('Margin is heading for 14%. Your target is 30%.');
   });
 });

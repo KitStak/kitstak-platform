@@ -114,7 +114,9 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
   const completed = job.status === 'completed';
   const [view, setView] = useState<'plan' | 'quote'>('plan');
   const [against, setAgainst] = useState<'budget' | 'quote'>(job.budget ? 'budget' : 'quote');
-  const [basis, setBasis] = useState<'so_far' | 'whole'>(completed ? 'whole' : 'so_far');
+  // With no work logged the plan for the work done is all zeros, so the whole job plan is the useful view.
+  const nothingDone = Number(job.stats.unitsGood) === 0 && Number(job.stats.hours) === 0;
+  const [basis, setBasis] = useState<'so_far' | 'whole'>(completed || nothingDone ? 'whole' : 'so_far');
   const [mode, setMode] = useState<VarianceMode>(completed ? 'whole_job' : 'so_far');
   const [editing, setEditing] = useState<'quote' | 'budget' | null>(null);
   const [busy, setBusy] = useState(false);
@@ -128,6 +130,10 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
     view === 'quote' ? job.quote : against === 'budget' ? (job.budget ?? job.quote) : job.quote;
   const plan = planToTotals(chosen);
   const projected = projection.projection?.mode === 'projected' ? projection.projection.atFinish : null;
+  const serviceCostLeft =
+    projection.projection?.mode === 'projected' && projection.projection.serviceCostLeftCents > BigInt(0)
+      ? projection.projection.serviceCostLeftCents
+      : null;
 
   const table = useMemo(
     () =>
@@ -533,12 +539,22 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
                 : !showProjected && !completed && job.status === 'active'
                   ? ' There is no projection for this job, so that column is left out.'
                   : ''}
+              {showProjected && serviceCostLeft !== null
+                ? ` Projected other cost includes ${formatMoney(serviceCostLeft)} for extra services still to come.`
+                : ''}
             </p>
           </>
         )}
       </Panel>
 
-      {waterfall && plan ? (
+      {nothingDone && plan && !completed ? (
+        <Panel title="Why profit changed" bodyClassName="p-4">
+          <p className="text-sm text-fg-secondary" data-testid="waterfall-empty">
+            No work is logged on this job yet. After the first day is in, this chart shows what moved profit away
+            from the {planWord}: price, labor, scrap, material and time not on a job.
+          </p>
+        </Panel>
+      ) : waterfall && plan ? (
         <Panel
           title="Why profit changed"
           action={

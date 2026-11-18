@@ -210,8 +210,13 @@ export function JobWhatIf({
                 kind: 'minus',
               },
               {
+                label: 'Extra services cost to come',
+                value: formatMoney(result.serviceCostLeftCents),
+                kind: 'minus',
+              },
+              {
                 label: 'Other cost to come',
-                value: formatMoney(result.otherLeftCents + result.serviceCostLeftCents),
+                value: formatMoney(result.otherLeftCents),
                 kind: 'minus',
               },
               { label: 'Profit at finish', value: formatMoney(result.projectedProfitCents), kind: 'total' },

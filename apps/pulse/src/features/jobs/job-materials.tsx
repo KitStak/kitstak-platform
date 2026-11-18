@@ -245,7 +245,7 @@ export function JobMaterials({ job, today }: JobTabProps) {
       </Panel>
 
       <div id="parts-used" className="scroll-mt-24">
-        <MaterialLedger jobId={job.id} jobRef={job.number} today={today} title="Material used" />
+        <MaterialLedger jobId={job.id} jobRef={job.number} today={today} title="Material used" recordsOnly={job.materialMethod === 'standard'} />
       </div>
       {seesMoney ? (
         <div id="other-costs" className="scroll-mt-24">

@@ -166,7 +166,13 @@ export async function getClientRow(ctx: DomainContext, clientId: string, executo
 
 export async function getClient(ctx: DomainContext, clientId: string): Promise<ClientDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
-  return toClientDTO(await getClientRow(ctx, clientId, db, true), access);
+  const row = await getClientRow(ctx, clientId, db, true);
+  const [counts] = await rows<{ n: number; open: number }>(
+    db,
+    sql`SELECT count(*)::int AS n, count(*) FILTER (WHERE status IN ('active', 'on_hold'))::int AS open
+          FROM pulse.jobs WHERE org_id = ${ctx.orgId} AND client_id = ${row.id} AND deleted_at IS NULL`,
+  );
+  return toClientDTO(row, access, { jobCount: counts?.n ?? 0, openJobCount: counts?.open ?? 0 });
 }
 
 /**

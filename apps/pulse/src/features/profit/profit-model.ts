@@ -94,7 +94,7 @@ export const PROFIT_COLUMNS: readonly ProfitColumn[] = [
   { id: 'margin_before', label: 'Margin before shared', help: 'Margin before shared costs: what the work itself made, with time not on a job left out.', kind: 'percent', get: (row) => row.marginBeforeSharedBp, metric: 'margin_before_shared', goodWhen: 'up', byDefault: false, money: true },
   { id: 'labor_pct', label: 'Labor % of revenue', help: 'Labor cost as a share of revenue. Lower is better.', kind: 'percent', get: (row) => row.laborPctBp, metric: 'labor_pct', goodWhen: 'down', byDefault: false, money: true },
   { id: 'units', label: 'Units', help: 'Good units logged. Scrap is left out.', kind: 'number', get: (row) => dec(row.unitsGood), metric: 'units', byDefault: true, money: false },
-  { id: 'hours', label: 'Hours', help: 'Labor hours: people times hours each.', kind: 'hours', get: (row) => dec(row.hours), metric: 'hours', byDefault: true, money: false },
+  { id: 'hours', label: 'Labor hours', help: 'Labor hours: people times hours each.', kind: 'hours', get: (row) => dec(row.hours), metric: 'hours', byDefault: true, money: false },
   { id: 'uph', label: 'Units per hour', help: 'Units per person per hour: good units over all labor hours.', kind: 'pace', get: (row) => dec(row.uph), metric: 'uph', goodWhen: 'up', byDefault: true, money: false },
   { id: 'cost_per_unit', label: 'Cost per unit', help: 'All cost over good units.', kind: 'money', get: (row) => row.costPerUnitCents, metric: 'cost_per_unit', goodWhen: 'down', byDefault: false, money: true },
 ];

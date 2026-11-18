@@ -402,7 +402,7 @@ function GoalDialog({
 
   const submit = async () => {
     if (draft.scope !== 'org' && !draft.scopeId) return setError({ field: 'scopeId', message: 'Pick what this goal is for.' });
-    if (stored === null) return setError({ field: 'value', message: info.unit === 'percent' ? 'Type a number from 1 to 100, like 28.' : 'Type a number above zero, like 95000.' });
+    if (stored === null) return setError({ field: 'value', message: info.unit === 'percent' ? 'Type a number from 1 to 100, like 28.' : info.unit === 'pace' ? 'Type a number above zero, like 40.' : info.unit === 'money_per_unit' ? 'Type a number above zero, like 1.25.' : 'Type a number above zero, like 95000.' });
     setSaving(true);
     setError(null);
     try {

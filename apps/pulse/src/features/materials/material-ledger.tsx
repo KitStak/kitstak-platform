@@ -45,6 +45,11 @@ export interface MaterialLedgerProps {
   readonly today: string;
   readonly title?: string;
   readonly className?: string;
+  /**
+   * True on a job that costs material by a cost for each unit: the rows are a record and do not
+   * add to the job cost, and each row's explanation says so.
+   */
+  readonly recordsOnly?: boolean;
 }
 
 type RowInput = SaveMaterialUsageActionInput;
@@ -55,7 +60,7 @@ const BOUGHT_BY = [
 ] as const;
 const qty = (value: string | null): string => formatNumber(value ?? '0', { maxDigits: 3 });
 
-export function MaterialLedger({ jobId, jobRef, clientId, from, to, today, title = 'Parts used', className }: MaterialLedgerProps) {
+export function MaterialLedger({ jobId, jobRef, clientId, from, to, today, title = 'Parts used', className, recordsOnly = false }: MaterialLedgerProps) {
   const shell = useShell();
   const queryClient = useQueryClient();
   const canEdit = shell.can('material:log');
@@ -118,11 +123,11 @@ export function MaterialLedger({ jobId, jobRef, clientId, from, to, today, title
                               { label: 'Parts used', value: qty(row.quantityUsed), op: 'start' },
                               { label: 'parts scrapped', value: qty(row.quantityScrapped), op: 'plus' },
                               { label: 'cost of one part', value: formatUnitPrice(row.unitCost), op: 'times' },
-                              { label: 'cost on the job', value: formatMoney(row.costCents), op: 'total' },
+                              { label: recordsOnly ? 'cost of these parts' : 'cost on the job', value: formatMoney(row.costCents), op: 'total' },
                               ...(row.scrapCents !== null && row.scrapCents > 0 ? [{ label: 'Of that, lost to scrap', value: formatMoney(row.scrapCents), op: 'note' as const }] : []),
                             ]
                       }
-                      warnings={row.resolvedSuppliedBy !== 'client' && Number(row.unitCost ?? 0) === 0 ? ['This part has no cost yet, so it adds nothing to the job.'] : []}
+                      warnings={[...(row.resolvedSuppliedBy !== 'client' && Number(row.unitCost ?? 0) === 0 ? ['This part has no cost yet, so it adds nothing to the job.'] : []), ...(recordsOnly && row.resolvedSuppliedBy !== 'client' ? ['This job costs material by a cost for each unit, so this row is a record. It does not add to the job cost.'] : [])]}
                       className="size-5"
                     />
                   ) : null}
@@ -132,7 +137,7 @@ export function MaterialLedger({ jobId, jobRef, clientId, from, to, today, title
           ] satisfies LedgerColumn<MaterialUsageDTO>[])
         : []),
     ],
-    [showJob, targets, shell.seesMoney],
+    [showJob, targets, shell.seesMoney, recordsOnly],
   );
 
   const onCommit = async (row: MaterialUsageDTO, columnId: string, value: string): Promise<string | null> => {
