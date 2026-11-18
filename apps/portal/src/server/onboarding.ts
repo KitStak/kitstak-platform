@@ -14,21 +14,20 @@ import { env } from '@/server/env';
 import { getOrgModuleStates } from '@/server/entitlements';
 import {
   buildSetupSteps,
-  parseSetupProfile,
   summarizeSetup,
-  type SetupOverrides,
   type SetupProfile,
   type SetupStep,
   type SetupStepKey,
   type SetupSignals,
   type SetupSummary,
-  isSetupStepKey,
+  readProgressRows,
+  GUIDE_STEP_KEY,
+  type ProgressState,
 } from '@/lib/setup-model';
 
 const DEACTIVATED_PREFIX = 'deactivated:';
 
-/** Org-level row that records the guide itself being dismissed. */
-export const GUIDE_STEP_KEY = 'guide';
+export { GUIDE_STEP_KEY };
 
 async function countOrNull(query: ReturnType<typeof sql>, label: string): Promise<number | null> {
   try {
@@ -235,42 +234,17 @@ function stepHref(key: SetupStepKey, orgSlug: string, profile: SetupProfile | nu
   }
 }
 
-interface ProgressRows {
-  readonly profile: SetupProfile | null;
-  readonly overrides: SetupOverrides;
-  readonly dismissed: boolean;
-  readonly seen: boolean;
-}
-
-async function getProgressRows(orgId: string): Promise<ProgressRows> {
+async function getProgressRows(orgId: string): Promise<ProgressState> {
   const rows = await db
     .select({
+      scope: onboardingProgress.scope,
       stepKey: onboardingProgress.stepKey,
       status: onboardingProgress.status,
       payload: onboardingProgress.payload,
     })
     .from(onboardingProgress)
     .where(and(eq(onboardingProgress.orgId, orgId), isNull(onboardingProgress.userId)));
-  let profile: SetupProfile | null = null;
-  let dismissed = false;
-  let seen = false;
-  const overrides: Partial<Record<SetupStepKey, 'completed' | 'skipped'>> = {};
-  for (const row of rows) {
-    if (row.stepKey === 'profile' && row.status === 'completed') {
-      profile = parseSetupProfile(row.payload);
-      overrides.profile = 'completed';
-      continue;
-    }
-    if (row.stepKey === GUIDE_STEP_KEY) {
-      seen = true;
-      dismissed = row.status === 'dismissed';
-      continue;
-    }
-    if (isSetupStepKey(row.stepKey) && (row.status === 'completed' || row.status === 'skipped')) {
-      overrides[row.stepKey] = row.status;
-    }
-  }
-  return { profile, overrides, dismissed, seen };
+  return readProgressRows(rows);
 }
 
 /**

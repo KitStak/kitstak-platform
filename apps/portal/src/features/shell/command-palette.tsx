@@ -361,7 +361,7 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl,
             <PaletteItem
               value="setup-guide"
               keywords={['setup', 'guide', 'get started', 'onboarding', 'checklist', 'welcome']}
-              onSelect={() => go('/?setup=1')}
+              onSelect={() => go('/settings/organization#setup')}
               icon={<ListChecks aria-hidden className="size-4" />}
               meta="Your guided setup checklist"
             >
