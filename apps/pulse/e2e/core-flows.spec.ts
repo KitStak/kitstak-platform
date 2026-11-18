@@ -249,18 +249,18 @@ test('8. list state lives in the address bar and comes back as a saved view', as
   await page.getByRole('switch', { name: 'Needs hours' }).click();
   await expect(page).toHaveURL(/needsHours=1/);
   const name = `E2E needs hours ${stamp}`;
-  await page.getByRole('button', { name: 'Save view' }).click();
-  await page.getByRole('dialog').getByRole('textbox').first().fill(name);
-  await page.getByRole('dialog').getByRole('button', { name: /^Save/ }).click();
-  await expect(toast(page, /saved/i).first()).toBeVisible();
+  await page.getByTestId('view-save').click();
+  await page.getByTestId('view-name').fill(name);
+  await page.getByTestId('view-submit').click();
+  await expect(page.getByTestId(`view-${name}`)).toHaveAttribute('data-active', 'yes');
   await open(page, '/log/entries');
   await expect(page).not.toHaveURL(/needsHours/);
-  await page.getByRole('button', { name, exact: true }).click();
+  await page.getByTestId(`view-${name}`).getByRole('button', { name, exact: true }).click();
   await expect(page).toHaveURL(/needsHours=1/);
   await expect(page.getByRole('switch', { name: 'Needs hours' })).toBeChecked();
-  await page.getByRole('button', { name: new RegExp(`More for ${name}|Options for ${name}|${name} options`) }).click();
-  await page.getByRole('menuitem', { name: 'Delete' }).click();
-  await expect(toast(page, /Deleted|removed/i).first()).toBeVisible();
+  await page.getByTestId(`view-menu-${name}`).click();
+  await page.getByRole('menuitem', { name: /Delete/ }).click();
+  await expect(page.getByTestId(`view-${name}`)).toHaveCount(0);
 
   // Labor keeps its days in the address bar; the stream backed lists export the import columns.
   await open(page, '/labor?tab=cost');
@@ -270,7 +270,7 @@ test('8. list state lives in the address bar and comes back as a saved view', as
   expect(readFileSync(await labor.path(), 'utf8')).toContain('Labor class');
   await open(page, '/target-pace');
   const [pace] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-target_pace').click()]);
-  expect(pace.suggestedFilename()).toMatch(/target_pace/);
+  expect(pace.suggestedFilename()).toMatch(/^pulse-target-pace-.*\.csv$/);
   expect(watch.problems).toEqual([]);
 });
 
@@ -288,6 +288,7 @@ test('9. clean up: undo the import and delete the job', async ({ page }) => {
   const confirm = page.getByRole('alertdialog').getByRole('button', { name: /Delete/ });
   if (await confirm.isVisible().catch(() => false)) await confirm.click();
   await page.waitForURL((url) => url.pathname === '/jobs', { timeout: 30_000 });
-  const gone = await page.request.get(`/api/v1/jobs/${job!.number}`);
-  expect(gone.status()).toBe(404);
+  // Deleted jobs can be brought back, so the record stays; its page is gone.
+  const gone = await page.goto(`/jobs/${job!.number}`);
+  expect(gone?.status()).toBe(404);
 });
