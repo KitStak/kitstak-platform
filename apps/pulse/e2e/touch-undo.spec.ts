@@ -57,7 +57,7 @@ for (const [width, height] of [
       expect((await undo.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
       await undo.tap();
-      await expect(toast(page, 'back')).toBeVisible();
+      await expect(toast(page, 'Put the work for')).toBeVisible();
       const after = await apiData<{ unitsGood: string }[]>(page, `production?job=${job!.id}&from=${day}&to=${day}`);
       expect(Number(after[0]!.unitsGood)).toBe(Number(was));
 
