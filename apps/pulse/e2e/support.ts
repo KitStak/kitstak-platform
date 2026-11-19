@@ -30,7 +30,7 @@ async function holdDevReloads(context: BrowserContext): Promise<void> {
   const marked = context as BrowserContext & { __holdDevReloads?: boolean };
   if (marked.__holdDevReloads) return;
   marked.__holdDevReloads = true;
-  await context.routeWebSocket(/_next\/webpack-hmr/, (socket) => {
+  await context.routeWebSocket(/\/_next\/(webpack-)?hmr/, (socket) => {
     const server = socket.connectToServer();
     const seen = new Set<string>();
     server.onMessage((message) => {
