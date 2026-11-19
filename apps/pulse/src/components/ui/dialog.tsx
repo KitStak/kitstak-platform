@@ -37,10 +37,12 @@ export const DialogOverlay = forwardRef<
 });
 
 /** What a dialog remembers about the control that opened it, to find it again on close. */
-interface Opener {
+export interface Opener {
   readonly element: HTMLElement;
   readonly id: string;
   readonly testId: string | null;
+  /** The first word of its name ("Delete"), to find a control of the same kind nearby. */
+  readonly verb: string | null;
   /** The button of the menu the opener sat in: a menu row is gone once the menu closes. */
   readonly menuButton: HTMLElement | null;
   /** The opener's parents, nearest first, for when the opener itself is gone (its row was deleted). */
@@ -57,7 +59,7 @@ function usable(element: HTMLElement | null | undefined): element is HTMLElement
   return element.getClientRects().length > 0;
 }
 
-function rememberOpener(active: Element | null): Opener | null {
+export function rememberOpener(active: Element | null): Opener | null {
   if (!(active instanceof HTMLElement) || active === document.body || active.id === 'main-content') return null;
   const menu = active.closest('[role="menu"]');
   const menuButtonId = menu?.getAttribute('aria-labelledby');
@@ -67,6 +69,7 @@ function rememberOpener(active: Element | null): Opener | null {
     element: active,
     id: active.id,
     testId: active.getAttribute('data-testid'),
+    verb: (active.getAttribute('aria-label') ?? active.textContent ?? '').trim().split(/\s+/)[0]?.toLowerCase() || null,
     menuButton: menuButtonId ? document.getElementById(menuButtonId) : null,
     parents,
   };
@@ -88,11 +91,18 @@ export function returnFocusTarget(opener: Opener | null): HTMLElement | null {
     if (same) return same;
   }
   if (usable(opener.menuButton)) return opener.menuButton;
+  // The same kind of control on the next row: "work-delete-2026-11-12" finds "work-delete-2026-11-11".
+  const family = opener.testId?.replace(/-(\d{4}-\d{2}-\d{2}|[0-9a-f-]{8,}|\d+)$/i, '') ?? null;
+  const sameKind = (element: HTMLElement): boolean =>
+    family !== null && family !== opener.testId
+      ? (element.getAttribute('data-testid') ?? '').startsWith(`${family}-`)
+      : opener.verb !== null && (element.getAttribute('aria-label') ?? element.textContent ?? '').trim().toLowerCase().startsWith(opener.verb);
   for (const parent of opener.parents) {
     if (!parent.isConnected) continue;
     if (parent.id === 'main-content') return parent;
-    const inside = [...parent.querySelectorAll<HTMLElement>(TABBABLE)].find(usable);
-    if (inside) return inside;
+    const inside = [...parent.querySelectorAll<HTMLElement>(TABBABLE)].filter(usable);
+    const near = inside.find(sameKind) ?? inside[0];
+    if (near) return near;
   }
   return document.getElementById('main-content');
 }

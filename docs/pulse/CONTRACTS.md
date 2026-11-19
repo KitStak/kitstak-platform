@@ -218,7 +218,8 @@ lowercase `tx` or `executor` are for use inside a transaction.
   `DayConflict` "day_exists" or "stale" with the day as it is now). Every typed write refuses a work date after today
   at the site or more than 10 years back (`assertNotFutureDay`, the shared rule `assertEntryDate` and
   `@/lib/entry-dates`) and hours with 0 people. The actions and `PUT log/rows` pass `requireVersion`:
-  a row that exists needs the version the editor read. `deleteProductionEntries`,
+  a row that exists needs the version the editor read. `PUT log/rows` also passes `knownDayIds` (its `seen`): a new
+  line is refused (`DAY_CHANGED`) when the job's day holds a line the editor did not see, under the day form's lock. `deleteProductionEntries`,
   `restoreProductionEntries`, `listProduction(ctx, filters)`, `getLogGrid(ctx, { date?, siteId? })`,
   `getPreviousCrew(ctx, { date, siteId? })`, `assertCanLogDay`, `dayLockReason`.
 - **`time`**: `listIndirect`, `saveIndirectEntry`, `deleteIndirectEntry`, `restoreIndirectEntry`, `listPaidHours`,
@@ -310,7 +311,7 @@ send files with `csvResponse(fileName, body)`.
 | `GET jobs/by-link` | `type (crm_deal\|crm_account\|wms_work_order\|wms_shipment_order\|wms_client\|pm_project\|pm_task\|core_customer),id` | `JobListItemDTO[]` |
 | `GET jobs/[ref]`, `/plans`, `/prices`, `/days` | id or number; `by=day\|week\|month` | `JobDetailDTO`, `JobPlansDTO`, `JobPriceDTO[]`, `ProfitResponse` for the job's whole life |
 | `GET log`, `log/previous-crew` | `date,site` | `LogGridDTO`, `PreviousCrewDTO[]` |
-| `PUT log/rows` | JSON production row | `{ entry, created }`; a 409 carries `error.fresh` (the newer row) |
+| `PUT log/rows` | JSON production row, plus `seen` (ids of the lines of that job and day the editor shows) | `{ entry, created }`; a 409 carries `error.fresh` (the newer row). A new line on a day that holds a line not in `seen` is 409 with `error.reason` "day_changed" and `error.day` |
 | `PUT log/days` | `{ jobId, workDate, mode: create\|edit, fromDate?, read?: [{ id, version }], lines[] }` | `{ entries, created, updated, removed }`; a 409 carries `error.reason` (`day_exists` or `stale`), `error.workDate` and `error.fresh` (the day as it is now) |
 | `GET production` | `job,client,site,laborClass,from,to,source,needsHours,deleted,limit,offset` | `ProductionEntryDTO[]` |
 | `GET indirect`, `paid-hours` | `site,from,to,deleted,limit` | `IndirectEntryDTO[]`, `PaidHoursDTO[]` |

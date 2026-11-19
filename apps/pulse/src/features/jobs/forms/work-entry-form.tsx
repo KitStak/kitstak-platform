@@ -173,10 +173,12 @@ export function WorkEntryForm({
   );
   const setupTotal = lines.reduce((total, line) => total + (parseTyped(line.setup) ?? 0), 0);
   const pace = goodNumber && goodNumber > 0 && paceHours > 0 ? unitsPerHour(String(goodNumber), paceHours.toFixed(2)) : null;
+  /** "Nov 17", with the year when it is not this year, so a day a year back never reads as this week. */
+  const dayWords = (value: string): string => (value.slice(0, 4) === today.slice(0, 4) ? shortDate(value) : `${shortDate(value)}, ${value.slice(0, 4)}`);
   // The Log work grid leaves a job off the days before it starts. The form says so, and asks.
   const beforeStart =
-    date && startDate && date < startDate && !(day && day.workDate === date)
-      ? `This job starts on ${shortDate(startDate)}, so ${shortDate(date)} is before it starts. Is that the right day?`
+    !clash && date && startDate && date < startDate && !(day && day.workDate === date)
+      ? `This job starts on ${dayWords(startDate)}, so ${dayWords(date)} is before it starts. Is that the right day?`
       : null;
   const questions = [
     ...(beforeStart ? [beforeStart] : []),
@@ -394,7 +396,7 @@ export function WorkEntryForm({
         >
           <TriangleAlert aria-hidden className="size-5 shrink-0 text-warning-text" />
           <p className="min-w-0 flex-1 basis-64 text-sm text-fg">
-            <span className="font-medium">{shortDate(clash.workDate)} already has work on this job:</span>{' '}
+            <span className="font-medium">{dayWords(clash.workDate)} already has work on this job:</span>{' '}
             <span className="tabular-nums">{clashWords}.</span>{' '}
             {editing
               ? 'Pick another day, or open that day to change it.'

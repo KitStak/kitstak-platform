@@ -26,7 +26,7 @@ const memory = new Map<Login, Cookie[]>();
  * times a second, so no click lands. The suite drops those reload orders and the live code updates
  * on the dev socket, and passes everything else (the page needs the rest of it to start).
  */
-async function holdDevReloads(context: BrowserContext): Promise<void> {
+export async function holdDevReloads(context: BrowserContext): Promise<void> {
   const marked = context as BrowserContext & { __holdDevReloads?: boolean };
   if (marked.__holdDevReloads) return;
   marked.__holdDevReloads = true;

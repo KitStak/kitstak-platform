@@ -6,7 +6,8 @@ import { Teach } from '@/components/pulse/teach';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { routes } from '@/lib/routes';
 import type { VasServiceDTO } from '@/lib/types';
-import { getProfit, getSettings, getVasService, listSites, listVasServices, todayInZone } from '@/server/domain';
+import { getProfit, getSettings, getVasService, listSites, listVasEntries, listVasServices, todayInZone } from '@/server/domain';
+import { suggestBucket } from '@/lib/profit/trends';
 import { parsePeriod, searchGetter } from '@/features/profit/period';
 import { isDomainError } from '@/server/errors';
 import { pulsePage, type PulsePage } from '@/server/page';
@@ -56,8 +57,9 @@ export async function ServicesPage({ searchParams }: { readonly searchParams?: P
 }
 
 /** One extra service: its numbers, price against standard cost, the clients using it and its entries. */
-export async function ServicePage({ params }: { readonly params: Promise<{ id: string }> }) {
+export async function ServicePage({ params, searchParams }: { readonly params: Promise<{ id: string }>; readonly searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const id = decodeURIComponent((await params).id);
+  const query = (await searchParams) ?? {};
   const page = await pulsePage(routes.service(id), 'profit');
   if (page.blocked || !page.access.seesMoney) return <PageBlocked title="Extra service" role={page.access.role} />;
   let service: VasServiceDTO | null = null;
@@ -76,9 +78,18 @@ export async function ServicePage({ params }: { readonly params: Promise<{ id: s
     );
   }
   const time = await clock(page);
+  // The numbers for the period in the address are read here too, so the tiles and the note above
+  // them arrive whole on the first paint instead of pushing the page down a moment later.
+  const period = parsePeriod(searchGetter(query), time.today, time.weekStart, SERVICES_PERIOD_DEFAULTS);
+  const scope = { from: period.from, to: period.to, vasServiceId: service.id };
+  const [trend, entries] = await Promise.all([
+    getProfit(page.ctx, suggestBucket(period), scope).catch(() => undefined),
+    listVasEntries(page.ctx, { vasServiceId: service.id, from: period.from, to: period.to, limit: 500 }).catch(() => undefined),
+  ]);
+  const initial = trend && entries ? { from: period.from, to: period.to, trend, entries } : undefined;
   return (
     <Page title={service.name} subtitle={`${service.code} · billed in ${service.unitLabel}`} width="full" breadcrumbs={[...crumbs, { label: service.name }]}>
-      <ServiceView service={service} {...time} canManage={page.can('vas:manage')} orgSlug={page.context.org.slug} />
+      <ServiceView service={service} {...time} initial={initial} canManage={page.can('vas:manage')} orgSlug={page.context.org.slug} />
     </Page>
   );
 }

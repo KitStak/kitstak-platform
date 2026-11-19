@@ -502,7 +502,7 @@ function AlertRow({
                     ) : undefined
                   }
                   align="start"
-                  className="size-5"
+                  className="size-5 pointer-coarse:size-6"
                 />
               </span>
             ) : null}

@@ -8,6 +8,7 @@
  *  - The bulk save needs a version for a row that exists, and refuses two lines for one labor class.
  *  - Work cannot be dated after today, and hours with 0 people are refused.
  *  - The day can be put back exactly as it was (the Undo of an edit).
+ *  - A grid line (PUT /api/v1/log/rows) adds to a day only when it saw every line the day has.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestOrg, databaseReady, type TestOrg } from '@/test/db';
@@ -15,7 +16,7 @@ import { addDays } from '@/lib/profit';
 import type { DomainContext } from './_shared';
 import { createLaborClass, createLaborRate } from './labor';
 import { quickAddJob } from './jobs';
-import { DayConflict, listProduction, saveProductionBulk, saveProductionDay, saveProductionEntry } from './production';
+import { DAY_CHANGED, DayConflict, listProduction, saveProductionBulk, saveProductionDay, saveProductionEntry } from './production';
 
 const ready = await databaseReady();
 
@@ -204,5 +205,31 @@ describe.skipIf(!ready)('saving a whole day of work', () => {
     // People left empty is still allowed (hours known, head count not): the screens ask for it.
     const noPeople = await saveProductionEntry(owner, { jobId, workDate: addDays(today, -16), hours: '5' });
     expect(noPeople.entry.headcount).toBeNull();
+  });
+  it('lets a grid line join a day only when it saw every line on it, and never crosses a day form save', async () => {
+    const date = addDays(today, -20);
+    // An empty day: a grid line needs to have seen nothing.
+    const first = await saveProductionEntry(owner, { jobId, workDate: date, laborClassId: packer, headcount: '2', hours: '16', unitsGood: '100' }, { requireVersion: true, knownDayIds: [] });
+    expect(first.created).toBe(true);
+    // A second labor class from a grid that shows the first line: fine, that is how the grid works.
+    const second = await saveProductionEntry(owner, { jobId, workDate: date, laborClassId: lead, headcount: '1', hours: '8' }, { requireVersion: true, knownDayIds: [first.entry.id] });
+    expect(second.created).toBe(true);
+    // A grid that loaded before the second line came in: refused, and the day is as it was.
+    const third = await createLaborClass(owner, { code: 'TEMP', name: 'Temp' });
+    await expect(saveProductionEntry(owner, { jobId, workDate: date, laborClassId: third.id, headcount: '1', hours: '4' }, { requireVersion: true, knownDayIds: [first.entry.id] })).rejects.toMatchObject({ code: 'CONFLICT', message: DAY_CHANGED });
+    expect(await hoursOf(date)).toEqual([8, 16]);
+    // Other callers (the kiosk, the bulk save) do not pass the list and are not changed.
+    await expect(saveProductionEntry(owner, { jobId, workDate: date, laborClassId: third.id, headcount: '1', hours: '4' })).resolves.toMatchObject({ created: true });
+
+    // The day form and a grid line on the same empty day at the same moment: one wins, the other is told.
+    const race = addDays(today, -21);
+    const results = await Promise.allSettled([
+      saveProductionDay(owner, { jobId, workDate: race, mode: 'create', lines: [{ laborClassId: packer, unitsGood: '5', headcount: '1', hours: '2' }] }),
+      saveProductionEntry(owner, { jobId, workDate: race, laborClassId: lead, headcount: '1', hours: '3' }, { requireVersion: true, knownDayIds: [] }),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const refused = results.find((result) => result.status === 'rejected') as PromiseRejectedResult;
+    expect(refused.reason instanceof DayConflict ? refused.reason.reason : (refused.reason as { message: string }).message).toMatch(/day_exists|Someone else added work/);
+    expect((await day(race)).length).toBe(1);
   });
 });

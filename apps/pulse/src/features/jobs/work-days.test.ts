@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProductionEntryDTO } from '@/lib/types';
-import { groupWorkDays, isEmptyEntry, planDayLines, repeatedLaborLines, restoreDayLines } from './work-days';
+import { groupWorkDays, hasShifts, isEmptyEntry, laborLineWords, planDayLines, repeatedLaborLines, restoreDayLines, shiftWords } from './work-days';
 
 const entry = (over: Partial<ProductionEntryDTO>): ProductionEntryDTO =>
   ({
@@ -84,6 +84,35 @@ describe('repeatedLaborLines', () => {
   it('names every line of a labor class picked twice', () => {
     expect(repeatedLaborLines([{ laborClassId: 'a' }, { laborClassId: 'b' }])).toEqual([]);
     expect(repeatedLaborLines([{ laborClassId: 'a' }, { laborClassId: 'b' }, { laborClassId: 'a' }])).toEqual([0, 2]);
+  });
+});
+
+describe('shifts on one day', () => {
+  it('lets a day line and a night line share a labor class, and still catches a repeat on one shift', () => {
+    expect(repeatedLaborLines([{ laborClassId: 'a', shift: 'day' }, { laborClassId: 'a', shift: 'night' }])).toEqual([]);
+    expect(repeatedLaborLines([{ laborClassId: 'a', shift: 'night' }, { laborClassId: 'a', shift: 'night' }])).toEqual([0, 1]);
+    expect(repeatedLaborLines([{ laborClassId: 'a' }, { laborClassId: 'a', shift: 'day' }])).toEqual([0, 1]);
+  });
+
+  it('names the shift only when it is not the usual day shift', () => {
+    expect(shiftWords('day')).toBeNull();
+    expect(shiftWords(null)).toBeNull();
+    expect(shiftWords('night')).toBe('Night shift');
+  });
+
+  it('says which shift each line is on in the delete question when the day has two', () => {
+    const rows = [{ shift: 'day', hours: '1.00' }, { shift: 'night', hours: '8.00' }];
+    expect(hasShifts(rows)).toBe(true);
+    expect(rows.map((row) => laborLineWords(row, 'Machine operator', hasShifts(rows), (hours) => String(Number(hours))))).toEqual([
+      'Machine operator, day shift, 1 hour',
+      'Machine operator, night shift, 8 hours',
+    ]);
+    expect(laborLineWords({ shift: 'day', hours: '4.00' }, 'Packer', false, (hours) => String(Number(hours)))).toBe('Packer, 4 hours');
+  });
+
+  it('keeps the shift of a line read from the day when it saves', () => {
+    const [line] = planDayLines({ unitsGood: '1', unitsScrap: '0', note: null, lines: [{ id: 'x', laborClassId: 'a', shift: 'night', headcount: '1', hours: '8', setupHours: '0', overtimeHours: '0' }] });
+    expect(line?.shift).toBe('night');
   });
 });
 

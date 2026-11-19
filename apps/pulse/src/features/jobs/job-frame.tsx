@@ -197,6 +197,7 @@ export function JobFrame({
       }
       tabs={
         <div className="flex flex-col gap-3">
+          {/* On a touch screen every chip here is 44px tall, so a thumb hits the one it means. */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-2" data-testid="job-meta">
             {canManage ? (
               <DropdownMenu>
@@ -205,7 +206,7 @@ export function JobFrame({
                     type="button"
                     aria-label={`Stage: ${job.status.replace('_', ' ')}. Change it`}
                     data-testid="job-stage"
-                    className="inline-flex items-center gap-1 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    className="inline-flex items-center gap-1 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus pointer-coarse:h-11 pointer-coarse:px-1"
                   >
                     <JobStatusBadge status={job.status} />
                     <ChevronDown aria-hidden className="size-3.5 text-fg-muted" />
@@ -241,7 +242,7 @@ export function JobFrame({
                     type="button"
                     data-testid="job-owner"
                     aria-label={`Owner: ${ownerName ?? 'nobody'}. Change it`}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-subtle bg-panel px-2 text-sm text-fg hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-subtle bg-panel px-2 text-sm text-fg hover:bg-hover pointer-coarse:h-11 pointer-coarse:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                   >
                     {job.ownerId ? (
                       <PersonAvatar userId={job.ownerId} size="xs" decorative />
@@ -299,7 +300,7 @@ export function JobFrame({
                     type="button"
                     data-testid="job-due"
                     aria-label={`Due date: ${job.dueDate ? shortDate(job.dueDate) : 'not set'}. Change it`}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-subtle bg-panel px-2 text-sm text-fg hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-subtle bg-panel px-2 text-sm text-fg hover:bg-hover pointer-coarse:h-11 pointer-coarse:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                   >
                     <CalendarDays aria-hidden className="size-3.5 text-fg-muted" />
                     {job.dueDate ? `Due ${shortDate(job.dueDate)}` : 'No due date'}
@@ -350,7 +351,7 @@ export function JobFrame({
 
             <Link
               href={routes.client(job.clientId)}
-              className="inline-flex h-7 items-center rounded-md px-1.5 text-sm text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              className="inline-flex h-7 items-center rounded-md px-1.5 text-sm text-primary-text hover:underline pointer-coarse:h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
               {job.clientName}
             </Link>
@@ -365,7 +366,7 @@ export function JobFrame({
                     target="_blank"
                     rel="noreferrer"
                     data-testid="job-link-chip"
-                    className="inline-flex h-7 max-w-[220px] items-center gap-1 rounded-md border border-border-subtle bg-panel px-2 text-xs text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    className="inline-flex h-7 max-w-[220px] items-center gap-1 rounded-md border border-border-subtle bg-panel px-2 text-xs text-fg-secondary hover:bg-hover pointer-coarse:h-11 hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                   >
                     <span className="truncate">{link.title ?? 'Linked record'}</span>
                     <ExternalLink aria-hidden className="size-3 shrink-0" />

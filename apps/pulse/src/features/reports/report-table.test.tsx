@@ -46,13 +46,16 @@ describe('ReportTable', () => {
     expect(html).toMatch(/<div class="hidden md:block print:block">/);
   });
 
-  it('pins Cost, Profit and Job margin from 768 px, each with its own offset', () => {
+  it('pins Profit and Job margin from 768 px, and Cost too from 1024 px, each with its own offset', () => {
     const html = renderToStaticMarkup(<ReportTable report={report()} />);
     const head = html.slice(html.indexOf('<thead'), html.indexOf('</thead>'));
-    const pinned = [...head.matchAll(/<th[^>]*style="right:(\d+)(?:px)?"[^>]*class="([^"]*)"[^>]*>|<th[^>]*class="([^"]*)"[^>]*style="right:(\d+)(?:px)?"[^>]*>/g)].map((match) => ({ right: Number(match[1] ?? match[4]), className: match[2] ?? match[3] ?? '' }));
-    expect(pinned.map((item) => item.right)).toEqual([232, 116, 0]);
-    for (const item of pinned) expect(item.className).toContain('md:sticky');
-    expect(head).not.toContain('lg:sticky');
+    const pinned = [...head.matchAll(/<th[^>]*style="right:([^"]+)"[^>]*class="([^"]*)"[^>]*>|<th[^>]*class="([^"]*)"[^>]*style="right:([^"]+)"[^>]*>/g)].map((match) => ({ right: (match[1] ?? match[4] ?? '').replace(/\s+/g, ''), className: match[2] ?? match[3] ?? '' }));
+    expect(pinned.map((item) => item.right)).toEqual(['calc(var(--pin-w)*2)', 'calc(var(--pin-w)*1)', 'calc(var(--pin-w)*0)']);
+    // On a tablet Cost scrolls with the rest, so the other columns keep about half the box (round four, designer issue 6).
+    expect(pinned[0]?.className).toContain('lg:sticky');
+    expect(pinned[0]?.className).not.toContain('md:sticky');
+    for (const item of pinned.slice(1)) expect(item.className).toContain('md:sticky');
+    for (const item of pinned) expect(item.className).toContain('[--pin-w:116px]');
   });
 
   it('a reader without money sees Hidden in the cards, never a blank that looks like zero', () => {

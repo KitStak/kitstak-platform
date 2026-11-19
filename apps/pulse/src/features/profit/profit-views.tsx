@@ -197,15 +197,16 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
   // The answer columns stay pinned to the right edge from 768 px while the rest scrolls under them
   // (the same pattern as a built report), so Profit and Job margin are on screen without scrolling.
   const pinned = columns.length + (comparing ? 2 : 0) + (showTrend ? 1 : 0) >= 7 ? columns.filter((column) => PINNED_COLUMNS.includes(column.id)) : [];
-  const pin = (id: string, surface: string, head = false): { readonly className: string; readonly style: { readonly right: number } } | null => {
+  const pin = (id: string, surface: string, head = false): { readonly className: string; readonly style: { readonly right: string } } | null => {
     const index = pinned.findIndex((column) => column.id === id);
     if (index < 0) return null;
     // A hairline on the left edge of the pinned block, where the scrolling columns slide under it. A header cell keeps the line under the header row.
     const edge = index === 0;
     const line = head ? (edge ? 'md:shadow-[-1px_0_0_var(--border-default),inset_0_-1px_0_var(--border-default)]' : 'md:shadow-[inset_0_-1px_0_var(--border-default)]') : edge ? 'md:shadow-[-1px_0_0_var(--border-default)]' : '';
+    // Narrower under 1024px, with the name column, so the columns that scroll keep about half the box.
     return {
-      className: cn('z-[1] w-[116px] max-w-[116px] min-w-[116px] md:sticky print:static', surface, line),
-      style: { right: (pinned.length - 1 - index) * 116 },
+      className: cn('z-[1] w-[var(--pin-w)] max-w-[var(--pin-w)] min-w-[var(--pin-w)] [--pin-w:116px] md:sticky print:static', surface, line),
+      style: { right: `calc(var(--pin-w) * ${pinned.length - 1 - index})` },
     };
   };
   return (
@@ -243,7 +244,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
         <Table className="min-w-max" data-testid="profit-table">
           <TableHead>
             <tr>
-              <TableHeaderCell className="sticky left-0 z-[2] min-w-[240px] bg-panel" aria-sort={sort.column === 'name' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+              <TableHeaderCell className="sticky left-0 z-[2] min-w-[240px] bg-panel max-lg:w-[150px] max-lg:max-w-[150px] max-lg:min-w-[150px] lg:max-xl:w-[220px] lg:max-xl:max-w-[220px] lg:max-xl:min-w-[220px]" aria-sort={sort.column === 'name' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
                 <SortHeader id="name" label={nameLabel} sort={sort} onSort={onSort} />
               </TableHeaderCell>
               {columns.map((column) => {
@@ -273,7 +274,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
               const extra = rowScope(by, row.key, range);
               return (
                 <TableRow key={row.key} data-testid="profit-row" className={cn('group', drill && 'cursor-pointer')} onClick={drill ? () => onDrill(drill.patch) : undefined}>
-                  <TableCell className="sticky left-0 z-[1] max-w-[340px] bg-panel group-hover:bg-hover">
+                  <TableCell className="sticky left-0 z-[1] max-w-[340px] bg-panel group-hover:bg-hover max-lg:max-w-[150px] lg:max-xl:max-w-[220px]">
                     <RowName by={by} row={row} onDrill={onDrill} range={range} />
                   </TableCell>
                   {columns.map((column) => {

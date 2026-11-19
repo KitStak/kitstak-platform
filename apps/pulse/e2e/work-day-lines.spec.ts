@@ -36,7 +36,15 @@ test('add two labor types to one day and see one line', async ({ page }) => {
   await form.getByTestId('work-people-1').fill('8');
   await form.getByTestId('work-hours-1').fill('64');
   await form.getByTestId('work-save').click();
+  // A day a year back is often before the job starts. The form asks first, and the second press saves.
+  if (await form.getByTestId('work-crew-confirm').isVisible()) {
+    await expect(form.getByTestId('work-crew-question')).toContainText('before it starts');
+    await expect(form.getByTestId('work-save')).toHaveText(/Yes, add the day/);
+    await form.getByTestId('work-save').click();
+  }
   await expect(toast(page, 'Added the work for')).toBeVisible();
+  // A good save never ends on the "already has work" notice: the form moves on to a free day.
+  await expect(form.getByTestId('work-day-exists')).toHaveCount(0);
 
   const row = page.getByTestId(`work-row-${day}`);
   await expect(row).toHaveCount(1);

@@ -27,7 +27,7 @@ import { suggestBucket } from '@/lib/profit/trends';
 import { qk } from '@/lib/query-keys';
 import { rangeLabel } from '@/lib/reports';
 import { routes } from '@/lib/routes';
-import type { VasServiceDTO } from '@/lib/types';
+import type { ProfitResponse, VasEntryDTO, VasServiceDTO } from '@/lib/types';
 import { updateVasServiceAction } from '@/server/actions/catalog';
 import { downloadCsv } from '@/features/profit/csv-download';
 import { parsePeriod, periodQuery } from '@/features/profit/period';
@@ -43,7 +43,15 @@ const DEFAULTS = { preset: 'last_90' } as const;
 /** Money for a CSV cell: a plain number, marked so a negative amount is not mistaken for a formula. */
 const money = (cents: number | null) => (cents === null ? '' : rawCell(formatMoneyPlain(cents)));
 
-export function ServiceView({ service: initialService, today, weekStart, targetMarginBp, canManage, orgSlug }: { readonly service: VasServiceDTO; readonly today: string; readonly weekStart: number; readonly targetMarginBp: number; readonly canManage: boolean; readonly orgSlug: string }) {
+/** What the server read for the period the page opens on (the trend and the entries), so the first paint is whole. */
+export interface InitialServiceData {
+  readonly from: string;
+  readonly to: string;
+  readonly trend: ProfitResponse;
+  readonly entries: VasEntryDTO[];
+}
+
+export function ServiceView({ service: initialService, today, weekStart, targetMarginBp, initial, canManage, orgSlug }: { readonly service: VasServiceDTO; readonly today: string; readonly weekStart: number; readonly targetMarginBp: number; readonly initial?: InitialServiceData; readonly canManage: boolean; readonly orgSlug: string }) {
   const queryClient = useQueryClient();
   const shell = useShell();
   const canFixEntries = shell.can('vas:manage');
@@ -55,9 +63,10 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
   const onlyNoPrice = get('entries') === 'no-price';
   const [formOpen, setFormOpen] = useState(false);
 
-  const trend = useProfit(bucket, scope);
+  const fromServer = Boolean(initial) && initial?.from === period.from && initial?.to === period.to;
+  const trend = useProfit(bucket, scope, { initialData: fromServer ? initial?.trend : undefined });
   const clients = useProfit('client', scope);
-  const entries = useVasEntries({ serviceId: service.id, from: period.from, to: period.to, limit: 500 });
+  const entries = useVasEntries({ serviceId: service.id, from: period.from, to: period.to, limit: 500 }, { initialData: fromServer ? initial?.entries : undefined });
   const names = useProfitEntries({ ...scope, kinds: ['revenue_vas'], limit: 2000 });
   const classes = useLaborClasses();
   const update = useServerAction(updateVasServiceAction, { invalidate: [['services'], qk.profitRoot()] });

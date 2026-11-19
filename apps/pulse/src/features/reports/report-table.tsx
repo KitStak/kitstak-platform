@@ -24,7 +24,6 @@ const NUMERIC: ReadonlySet<ReportCellKind> = new Set<ReportCellKind>(['money', '
 const PINNED_KEYS: readonly string[] = ['cost', 'profit', 'margin'];
 /** A report that goes down to the company number pins that answer instead. */
 const COMPANY_KEYS: readonly string[] = ['company_profit', 'company_margin'];
-const PIN_WIDTH = 116;
 
 /** The keys of the answer columns this report has, in column order. */
 function answerKeys(columns: readonly ReportColumnDTO[]): readonly string[] {
@@ -32,16 +31,28 @@ function answerKeys(columns: readonly ReportColumnDTO[]): readonly string[] {
   return columns.filter((column) => keys.includes(column.key)).map((column) => column.key);
 }
 
-/** Classes and the right offset for a pinned column, or null for a column that scrolls. */
-function pinOf(columns: readonly ReportColumnDTO[], key: string): { readonly className: string; readonly right: number } | null {
+/**
+ * Classes and the right offset for a pinned column, or null for a column that scrolls. Under
+ * 1024px the pinned columns are narrower and only the last two stay pinned (Cost scrolls), so the
+ * columns that scroll keep about half of a tablet's box instead of a thin slit.
+ */
+function pinOf(columns: readonly ReportColumnDTO[], key: string): { readonly className: string; readonly right: string } | null {
   const pinned = answerKeys(columns);
   const index = pinned.indexOf(key);
   // Pinning only pays off on a table wide enough to scroll.
   if (index < 0 || columns.length < 9) return null;
+  const fromRight = pinned.length - 1 - index;
+  const wideOnly = fromRight >= 2;
   return {
     // A hairline on the left edge of the pinned block, where the scrolling columns slide under it.
-    className: cn('z-[1] w-[116px] max-w-[116px] min-w-[116px] md:sticky print:static', index === 0 && 'md:shadow-[-1px_0_0_var(--border-default)]'),
-    right: (pinned.length - 1 - index) * PIN_WIDTH,
+    className: cn(
+      'z-[1] w-[var(--pin-w)] max-w-[var(--pin-w)] min-w-[var(--pin-w)] [--pin-w:116px] print:static',
+      wideOnly ? 'lg:sticky' : 'md:sticky',
+      index === 0 && 'lg:shadow-[-1px_0_0_var(--border-default)]',
+      fromRight === 1 && 'md:max-lg:shadow-[-1px_0_0_var(--border-default)]',
+      index === 0 && fromRight === 1 && 'md:shadow-[-1px_0_0_var(--border-default)]',
+    ),
+    right: `calc(var(--pin-w) * ${fromRight})`,
   };
 }
 
@@ -143,7 +154,7 @@ export function ReportTable({ report, pageSize = 100 }: { readonly report: Pick<
                 const active = sort?.key === column.key;
                 const pin = pinOf(report.columns, column.key);
                 return (
-                  <TableHeaderCell key={column.key} numeric={numeric} aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} style={pin ? { right: pin.right } : undefined} className={cn('max-w-[220px] whitespace-normal', index === 0 && 'sticky left-0 z-[1] bg-panel max-lg:max-w-[168px]', pin && 'bg-panel', pin?.className)}>
+                  <TableHeaderCell key={column.key} numeric={numeric} aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'} style={pin ? { right: pin.right } : undefined} className={cn('max-w-[220px] whitespace-normal', index === 0 && 'sticky left-0 z-[1] bg-panel max-lg:max-w-[120px]', pin && 'bg-panel', pin?.className)}>
                     <button
                       type="button"
                       onClick={() => cycle(column.key, numeric)}
@@ -167,7 +178,7 @@ export function ReportTable({ report, pageSize = 100 }: { readonly report: Pick<
                   const body = <CellBody column={column} value={value} hidden={report.moneyHidden} />;
                   const pin = pinOf(report.columns, column.key);
                   return (
-                    <TableCell key={column.key} numeric={numeric} style={pin ? { right: pin.right } : undefined} className={cn(numeric ? 'whitespace-nowrap' : 'max-w-[320px]', toneOf(column, value), index === 0 && 'sticky left-0 z-[1] bg-panel font-medium max-lg:max-w-[168px]', pin && 'bg-panel font-medium', pin?.className)}>
+                    <TableCell key={column.key} numeric={numeric} style={pin ? { right: pin.right } : undefined} className={cn(numeric ? 'whitespace-nowrap' : 'max-w-[320px]', toneOf(column, value), index === 0 && 'sticky left-0 z-[1] bg-panel font-medium max-lg:max-w-[120px]', pin && 'bg-panel font-medium', pin?.className)}>
                       {index === 0 && row.href ? (
                         <Link href={row.href} className="rounded-sm text-fg underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                           {body}

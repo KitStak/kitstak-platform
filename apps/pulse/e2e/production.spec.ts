@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { holdDevReloads } from './support';
 
 /**
  * Production team write screens: each test does the thing, reloads the page to prove it was
@@ -13,6 +14,7 @@ type Cookie = Awaited<ReturnType<import('@playwright/test').BrowserContext['cook
 let session: Cookie[] | null = null;
 
 async function signIn(page: Page) {
+  await holdDevReloads(page.context());
   if (!session && process.env.E2E_COOKIES) session = JSON.parse(readFileSync(process.env.E2E_COOKIES, 'utf8')) as Cookie[];
   if (!session) {
     const response = await page.request.post('/api/auth/sign-in/email', { data: { email: 'admin@kitstak.io', password: 'KitStak-Demo-2026!' }, headers: { origin: ORIGIN() } });
