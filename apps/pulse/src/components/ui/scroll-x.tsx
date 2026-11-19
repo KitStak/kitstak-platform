@@ -50,13 +50,20 @@ export function ScrollX({
     const left = node.scrollLeft > 1;
     const right = node.scrollLeft + node.clientWidth < node.scrollWidth - 1;
     const down = node.scrollHeight > node.clientHeight + 1;
-    // Columns pinned to an edge stay readable: the fade sits beside them, never over them.
+    // Columns pinned to an edge stay readable: the fade sits beside them, never over them. A pinned
+    // column only counts while it is held at the edge. On a wide screen it sits in its own place in
+    // the row, and the fade belongs at the edge of the box.
     const head = node.querySelector('thead tr');
+    const box = node.getBoundingClientRect();
     const pinnedWidth = (side: 'left' | 'right'): number =>
       head
         ? [...head.children].reduce((total, cell) => {
             const style = getComputedStyle(cell);
-            return style.position === 'sticky' && style[side] !== 'auto' ? total + cell.getBoundingClientRect().width : total;
+            if (style.position !== 'sticky' || style[side] === 'auto') return total;
+            const rect = cell.getBoundingClientRect();
+            const offset = Number.parseFloat(style[side]) || 0;
+            const held = side === 'right' ? rect.right >= box.right - offset - 1 : rect.left <= box.left + offset + 1;
+            return held ? total + rect.width : total;
           }, 0)
         : 0;
     const insetLeft = Math.round(pinnedWidth('left'));

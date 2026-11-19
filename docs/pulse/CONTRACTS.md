@@ -186,7 +186,9 @@ lowercase `tx` or `executor` are for use inside a transaction.
   { q?, includeInactive?, includeDeleted? })`, `getClient`, `findClientByRef(ctx, { pulseClientId?, coreCustomerId?,
   crmAccountItemId? })`, `createClient(ctx, input, { guardLookAlike? })` (with the guard on, a name that looks like a
   client you have is refused unless `input.confirmNew`; `assertClientNameNotLookAlike` is the one server guard),
-  `ensureClientByName(tx, ctx, name)`, `updateClient(ctx, id, patch, version?)`,
+  `ensureClientByName(tx, ctx, name)`, `updateClient(ctx, id, patch, version?, { guardLookAlike? })` (a rename never takes
+  the exact name of another client, and with the guard on a new name close to another client is refused unless
+  `patch.confirmNew`),
   `deleteClient`, `restoreClient`), job types (`listJobTypes`, `createJobType`, `updateJobType`, `deleteJobType`), items
   (`listItems(ctx, { q?, clientId?, limit? })`, `createItem`, `updateItem`, `deleteItem`), extra services
   (`listVasServices`, `getVasService`, `createVasService`, `updateVasService`, `deleteVasService`). Each has an
@@ -678,7 +680,7 @@ What the profit team added on top of sections 5 to 9. Everything here is additiv
 - **`reports`**: `buildReport(ctx, slug, filters, { hideMoney? })` builds any of the 19 reports as one `ReportDTO`
   (columns, rows, total, summary, chart, aside, notes). `aside` is money in the total that is no row of the ranking: on `job-profit`,
   "Put on a client, not on a job", which is left out of the chart and sits in its own last row. `getProfitPivot(ctx, rowBy, colBy, filters)` (two way pivot, totals
-  equal `getProfit`), `listProfitEntries(ctx, filters & { kinds?, limit? })` (drill down rows with job, client and
+  equal `getProfit`; an extra service cell with revenue and no cost has `marginBp: null` and `costMissing: true`, the same "No cost yet" rule as `getProfit` rows), `listProfitEntries(ctx, filters & { kinds?, limit? })` (drill down rows with job, client and
   service names; `noJob: true`, `job=none` on the API, gives only rows put on a client with no job). Schedules: `listReportSchedules`, `saveReportSchedule`, `setReportScheduleEnabled`,
   `deleteReportSchedule`, `restoreReportSchedule`, `runReportSchedule` (build now), `listReportRuns`,
   `getReportRunFile(ctx, runId, 'csv' | 'html')`, `runDueReportSchedules(ctx)` (the hourly cron).
@@ -1118,7 +1120,7 @@ Each one was checked against the running app, not only by tests. Email reports s
   do `createJobAction`, `createClientAction` (`confirmNew`) and `createJobFromScenarioAction`.
 - **Plan vs actual on a tablet.** Below 1024 px the table is label and value cards, so "Projected at finish" is whole.
   `ScrollX` (`@/components/ui/scroll-x`, built into the `Table` primitive) gives every table that still scrolls a tab
-  stop, a name and a fade cue.
+  stop, a name and a fade cue. A tab bar or a row of buttons uses it with `tabStop={false}`: the fade, and its own items as tab stops.
 - **"Put on a client, not on a job"** is out of the job ranking on the job profit report. It has its own row and a panel
   with one plain sentence and a link to the entries behind it (`profit/entries?job=none`).
 - **Log work.** "Hours each" has no grey number. The warning names the missing box ("Add the hours each", "Add people").

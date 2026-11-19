@@ -208,15 +208,16 @@ export function DatePicker({
           </button>
         ) : null}
       </div>
-      <PopoverContent flush className="flex">
-        <div className="flex w-32 flex-col gap-0.5 border-r border-border-subtle p-2">
+      {/* On a phone the shortcuts sit in a row above the calendar, so the whole week fits on screen. */}
+      <PopoverContent flush className="flex flex-col sm:flex-row">
+        <div className="flex flex-row flex-wrap gap-0.5 border-b border-border-subtle p-2 sm:w-32 sm:flex-col sm:flex-nowrap sm:border-r sm:border-b-0">
           {quickPicks.map((pick) => (
             <Button key={pick.label} variant="ghost" size="sm" className="justify-start" onClick={() => choose(pick.date())}>
               {pick.label}
             </Button>
           ))}
           {valid && clearable ? (
-            <Button variant="danger-ghost" size="sm" className="mt-auto justify-start" onClick={() => choose(null)}>
+            <Button variant="danger-ghost" size="sm" className="justify-start sm:mt-auto" onClick={() => choose(null)}>
               Clear
             </Button>
           ) : null}

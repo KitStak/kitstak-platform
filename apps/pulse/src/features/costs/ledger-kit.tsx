@@ -202,6 +202,7 @@ function EditableCell({
           disabled={saving}
           className="min-w-[132px]"
           triggerClassName="h-7 px-1.5"
+          clearable={false}
           defaultOpen
           data-testid={testId ? `${testId}-input` : undefined}
           value={value || null}
