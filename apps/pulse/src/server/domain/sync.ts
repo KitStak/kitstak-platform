@@ -348,12 +348,14 @@ async function syncWms(ctx: DomainContext, tally: Tally): Promise<void> {
   try {
     const priced = settings.wmsContractPrices
       ? await applyWmsContractPrices(ctx, links.filter((link) => orderById.has(link.target_id)))
-      : { updated: 0, skipped: 0, skippedClosed: 0, jobs: 0, notApplied: 0 };
+      : { updated: 0, skipped: 0, skippedClosed: 0, jobs: 0, notApplied: 0, typed: 0, warehouseBill: 0 };
     tally.updated += priced.updated;
     tally.skipped += priced.skipped;
     tally.skippedClosed += priced.skippedClosed;
     tally.counts.contractJobs = priced.jobs;
     tally.counts.contractNotApplied = priced.notApplied;
+    tally.counts.contractTyped = priced.typed;
+    tally.counts.contractWarehouseBill = priced.warehouseBill;
   } catch (error) {
     tally.skipped += 1;
     logSoftFail(ctx.orgId, 'sync.contractPrices', error);
@@ -371,6 +373,7 @@ async function syncWms(ctx: DomainContext, tally: Tally): Promise<void> {
       tally.counts.vasInPulse = services.inPulse;
       tally.counts.vasNoPrice = services.noPrice;
       tally.counts.vasContractPriced = services.contractPriced;
+      tally.counts.vasWarehouseBill = services.warehouseBill;
       tally.counts.vasNoClient = services.noClient;
     }
   } catch (error) {

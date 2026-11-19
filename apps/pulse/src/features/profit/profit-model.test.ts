@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProfitPivotDTO, ProfitRowDTO } from '@/lib/types';
 import { parsePeriod, periodQuery } from './period';
-import { compareRows, contribution, csvValue, defaultSort, drillTarget, formatValue, modesFor, paretoView, parseSort, pivotCsv, rowLabel, rowScope, sortParam, sortRows, viewToQuery, visibleColumns } from './profit-model';
+import { compareRows, contribution, csvValue, defaultSort, drillTarget, formatValue, modesFor, noCostTotalNote, noCostWords, paretoView, parseSort, pivotCsv, rowLabel, rowScope, sortParam, sortRows, viewToQuery, visibleColumns } from './profit-model';
 
 const row = (key: string, label: string, patch: Partial<ProfitRowDTO> = {}): ProfitRowDTO =>
   ({ key, label, sublabel: null, revenueCents: 100000, baseRevenueCents: 100000, vasRevenueCents: 0, otherRevenueCents: 0, laborCents: 40000, materialCents: 20000, otherCents: 5000, sharedCents: 5000, costCents: 70000, profitCents: 30000, marginBp: 3000, marginBeforeSharedBp: 3500, laborPctBp: 4000, billedCents: 0, unitsGood: '1000.000', unitsScrap: '0.000', hours: '25.00', uph: '40.000', costPerUnitCents: 70, profitPerUnitCents: 30, jobCount: 1, prior: null, trend: null, laborMissing: false, costMissing: false, riskStatus: null, ...patch }) as ProfitRowDTO;
@@ -139,15 +139,40 @@ describe('views', () => {
     ]);
   });
 
-  it('writes "No cost yet" in place of a margin for extra service work with no cost logged', () => {
+  it('keeps number columns numbers for extra service work with no cost logged: an empty cell and a Cost known flag', () => {
     const cell = (costMissing: boolean) => ({ revenueCents: 1000, costCents: costMissing ? 0 : 400, profitCents: costMissing ? 1000 : 600, marginBp: costMissing ? null : 6000, unitsGood: '0.000', hours: '0.00', costMissing });
     const pivot: ProfitPivotDTO = { rowBy: 'service', colBy: 'month', from: '2026-10-01', to: '2026-10-31', rows: [{ key: 'a', label: 'Labeling', sublabel: null }], cols: [{ key: '2026-10-01', label: '2026-10-01', sublabel: null }], cells: { a: { '2026-10-01': cell(true) } }, rowTotals: { a: cell(true) }, colTotals: { '2026-10-01': cell(false) }, total: cell(false), moneyHidden: false };
-    expect(pivotCsv(pivot, 'margin').rows).toEqual([
-      ['Labeling', 'No cost yet', 'No cost yet'],
-      ['Total', { raw: '60.00' }, { raw: '60.00' }],
+    const margin = pivotCsv(pivot, 'margin');
+    expect(margin.headers).toEqual(['Extra services', 'October 2026', 'Total', 'Cost known']);
+    expect(margin.rows).toEqual([
+      ['Labeling', '', '', 'No'],
+      ['Total', { raw: '60.00' }, { raw: '60.00' }, 'Yes'],
     ]);
-    // Other numbers of the same cell are written as they are.
+    // Profit and cost are not known either: never the revenue, never $0.00.
+    expect(pivotCsv(pivot, 'profit').rows[0]).toEqual(['Labeling', '', '', 'No']);
+    expect(pivotCsv(pivot, 'cost').rows[0]).toEqual(['Labeling', '', '', 'No']);
+    // Revenue does not depend on the cost: written as it is, with no flag column.
     expect(pivotCsv(pivot, 'revenue').rows[0]).toEqual(['Labeling', { raw: '10.00' }, { raw: '10.00' }]);
+  });
+
+  it('reads a cost and a profit it does not know as Not known, and says how the total treats them', () => {
+    const unknown = { ...row('a', 'Programming', { revenueCents: 19500, profitCents: 19500 }), costMissing: true, marginBp: null };
+    expect(noCostWords(unknown, 'profit')).toBe('Not known');
+    expect(noCostWords(unknown, 'cost')).toBe('Not known');
+    expect(noCostWords(unknown, 'margin')).toBe('No cost yet');
+    expect(noCostWords(unknown, 'revenue')).toBeNull();
+    expect(noCostWords({ costMissing: false }, 'profit')).toBeNull();
+    expect(noCostTotalNote([unknown, row('b', 'Labeling', { profitCents: 100 })], 'extra service', 'extra services')).toBe(
+      '1 extra service has no known cost, so its cost and profit read Not known. The total counts it with no cost against it, so it still adds up, and its profit is too high by what that work really cost.',
+    );
+    expect(noCostTotalNote([row('b', 'Labeling', { profitCents: 100 })], 'extra service', 'extra services')).toBeNull();
+    // It is not ranked by a profit nobody knows.
+    expect(paretoView([unknown, row('b', 'Labeling', { profitCents: 100 })]).ranked.map((item) => item.item.key)).toEqual(['b']);
+  });
+
+  it('shows part units as they are, like the CSV', () => {
+    expect(formatValue(3.5, 'number')).toBe('3.5');
+    expect(formatValue(4, 'number')).toBe('4');
   });
 });
 

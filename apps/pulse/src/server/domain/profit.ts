@@ -11,7 +11,7 @@ import { scoped } from '@/server/db/scope';
 import { invalid } from '@/server/errors';
 import { PROFIT_GROUPS, type FactKind, type ProfitGroup, type PulseStatus } from '@/lib/constants';
 import { marginBp } from '@/lib/money';
-import { addDays, companyBridge, daysBetween, payrollGap, profitSummary, sharedGap as sharedGapOf, spreadCompanyCosts, utilizationBp } from '@/lib/profit';
+import { addDays, companyBridge, daysBetween, payrollGap, profitSummary, sharedGap as sharedGapOf, spreadCompanyCosts, utilizationBp, type CompanyCostSpreadMode } from '@/lib/profit';
 import type { BadgesDTO, CompanyBridgeDTO, FactRowDTO, LaborSummaryDTO, ProfitFilters, ProfitResponse, ProfitRowDTO, SummaryDTO, TrendPointDTO } from '@/lib/types';
 import { centsOut, countServiceEntriesNoPrice, isUuid, moneyOut, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse, type PulseAccess } from './access';
@@ -401,7 +401,7 @@ export const listFactsPage = scoped(async function listFactsPage(ctx: DomainCont
  * company profit = profit on jobs, less time not on a job that no job carried, less paid time
  * not on any job, less the overhead the hourly rate did not cover.
  */
-export const getCompanyBridge = scoped(async function getCompanyBridge(ctx: DomainContext, filters: { from: string; to: string; siteId?: string | null }): Promise<CompanyBridgeDTO> {
+export const getCompanyBridge = scoped(async function getCompanyBridge(ctx: DomainContext, filters: { from: string; to: string; siteId?: string | null; spread?: CompanyCostSpreadMode | null }): Promise<CompanyBridgeDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   checkRange(filters);
   const settings = await loadSettings(ctx.orgId);
@@ -447,7 +447,9 @@ export const getCompanyBridge = scoped(async function getCompanyBridge(ctx: Doma
          WHERE org_id = ${ctx.orgId} AND work_date >= date_trunc('month', ${filters.from}::date)::date AND work_date < (date_trunc('month', ${filters.to}::date) + interval '1 month')::date ${site}
          GROUP BY 1 HAVING sum(company_cost_cents) > 0`,
   );
-  const spread = spreadCompanyCosts(months.map((row) => ({ month: row.month, monthCostCents: row.cost, overheadAbsorbedCents: row.absorbed })), filters.from, filters.to);
+  // By calendar day (the default) or by work day: the workspace setting, unless the view asks for one.
+  const mode: CompanyCostSpreadMode = filters.spread ?? (settings.companyCostSpread === 'work_days' ? 'work_days' : 'calendar');
+  const spread = spreadCompanyCosts(months.map((row) => ({ month: row.month, monthCostCents: row.cost, overheadAbsorbedCents: row.absorbed })), filters.from, filters.to, { spread: mode, workingDays: settings.workingDays });
   const workProfit = BigInt(work?.profit ?? 0);
   const indirect = BigInt(day?.indirect ?? 0);
   const applied = BigInt(day?.applied ?? 0);
@@ -493,10 +495,14 @@ export const getCompanyBridge = scoped(async function getCompanyBridge(ctx: Doma
     hasCompanyCosts,
     companyCostPartial: spread.partial,
     companyCostNote: spread.note,
+    companyCostSpread: spread.spread,
     companyCostParts: spread.parts.map((part) => ({
       month: part.month,
       daysCounted: part.daysCounted,
       daysInMonth: part.daysInMonth,
+      workDaysCounted: part.workDaysCounted,
+      workDaysInMonth: part.workDaysInMonth,
+      spread: part.spread,
       monthCostCents: moneyOut(money, part.monthCostCents),
       countedCents: moneyOut(money, part.countedCents),
     })),

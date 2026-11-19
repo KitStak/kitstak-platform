@@ -42,6 +42,8 @@ export const settings = pulseSchema.table('settings', {
   /** Off: the warehouse contract no longer sets job prices (migration 0011). */
   wmsContractPrices: boolean('wms_contract_prices').notNull().default(true),
   wmsBillingOpsInProfit: text('wms_billing_ops_in_profit').array().notNull().default([]),
+  /** How company costs are shared out over part of a month: 'calendar' or 'work_days' (migration 0013). */
+  companyCostSpread: text('company_cost_spread').notNull().default('calendar'),
   crmSuggestJobs: boolean('crm_suggest_jobs').notNull().default(true),
   projectsTimeImport: boolean('projects_time_import').notNull().default(true),
   recalcStartedAt: tstz('recalc_started_at'),

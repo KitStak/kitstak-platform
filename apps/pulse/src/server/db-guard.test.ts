@@ -190,7 +190,7 @@ describe('no query path around the database guard', () => {
   it('keeps systemDb, the raw pool and the sibling handle to the listed files', () => {
     const using = (pattern: RegExp): string[] => ALL.filter((file) => pattern.test(read(file))).map(rel);
     expect(using(/\bsystemDb\b/).filter((file) => !SYSTEM_DB_ALLOWED.has(file))).toEqual([]);
-    expect(using(/\bgetPool\s*\(|\bcreatePgPool\b|\bcreatePgClient\b|new\s+(pg\.)?(Pool|Client)\s*\(|from 'pg'/).filter((file) => !RAW_POOL_ALLOWED.has(file))).toEqual([]);
+    expect(using(/\b(getPool|getOwnerPool|createGuardedDb)\s*\(|\bcreatePgPool\b|\bcreatePgClient\b|new\s+(pg\.)?(Pool|Client)\s*\(|from 'pg'/).filter((file) => !RAW_POOL_ALLOWED.has(file))).toEqual([]);
     expect(using(/\bsiblingDb\b/).filter((file) => !SIBLING_ALLOWED.has(file))).toEqual([]);
   });
 
@@ -219,7 +219,8 @@ describe('no query path around the database guard', () => {
   });
 
   it('runs API handlers and server actions inside withOrg', () => {
-    expect(read(path.join(SRC, 'server/http/api.ts'))).toMatch(/withOrg\(context\.org\.id, \(\) =>\s*handler\(/);
+    // The address check for deleted jobs and clients runs first, inside the same scope.
+    expect(read(path.join(SRC, 'server/http/api.ts'))).toMatch(/withOrg\(context\.org\.id, async \(\) => \{\s*(\/\/[^\n]*\s*)?await assertAddressRefsReadable\(ctx, searchParams\);\s*return handler\(/);
     expect(read(path.join(SRC, 'server/actions/_action.ts'))).toMatch(/withOrg\(context\.org\.id, \(\) => handler\(/);
   });
 });

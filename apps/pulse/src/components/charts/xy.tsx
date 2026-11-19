@@ -22,8 +22,13 @@ export interface XYSeries {
   readonly id: string;
   readonly label: string;
   readonly values: readonly (number | null)[];
+  /** Words for a gap at that position ("Not known"). Left out, a gap reads "No data". */
+  readonly gapText?: readonly (string | null)[];
   readonly color: string;
 }
+
+/** What a gap reads at one position: the series' own words, else "No data". */
+const gapWords = (series: Pick<XYSeries, 'gapText'>, index: number): string => series.gapText?.[index] ?? 'No data';
 
 export interface XYFloat {
   readonly from: number;
@@ -137,7 +142,7 @@ export function XYChart(props: XYProps) {
             category.long,
             ...all.map((item) => {
               const value = item.series.values[index];
-              return value === null || value === undefined ? 'No data' : item.fmt.value(value);
+              return value === null || value === undefined ? gapWords(item.series, index) : item.fmt.value(value);
             }),
           ]),
         };
@@ -275,7 +280,7 @@ function Plot(props: PlotProps) {
     for (const series of bars) {
       const value = series.values[active];
       const color = props.signColors && bars.length === 1 && (value ?? 0) < 0 ? CHART_COLORS.down : series.color;
-      rows.push({ id: series.id, label: series.label, value: value === null || value === undefined ? 'No data' : format.value(value), color, shape: 'box' });
+      rows.push({ id: series.id, label: series.label, value: value === null || value === undefined ? gapWords(series, active) : format.value(value), color, shape: 'box' });
       if (value !== null && value !== undefined) {
         total += value;
         if (value > 0) stackTop += value;
@@ -285,7 +290,7 @@ function Plot(props: PlotProps) {
     if (stacked) rows.push({ id: 'total', label: 'Total', value: format.value(total), muted: true });
     for (const series of lines) {
       const value = series.values[active];
-      rows.push({ id: series.id, label: series.label, value: value === null || value === undefined ? 'No data' : lineFormat.value(value), color: series.color, shape: 'line' });
+      rows.push({ id: series.id, label: series.label, value: value === null || value === undefined ? gapWords(series, active) : lineFormat.value(value), color: series.color, shape: 'line' });
       if (value !== null && value !== undefined) top = Math.min(top, lineRegion.y(value));
     }
     if (target) rows.push({ id: 'target', label: target.label, value: (ownLines && target.on === 'lines' ? lineFormat : hasBars ? format : lineFormat).value(target.value), color: 'var(--text-secondary)', shape: 'dash', muted: true });

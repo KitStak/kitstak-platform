@@ -32,6 +32,7 @@ const settingsSchema = z
     sharedCostRule,
     sharedPctBp: positiveBp,
     sharedSpread,
+    companyCostSpread: z.enum(['calendar', 'work_days']),
     defaultPartsOwner: partsOwner,
     defaultMemberRole: z.enum(['manager', 'supervisor', 'viewer', 'none']),
     jobNumberPrefix: z.string().max(12),

@@ -132,6 +132,18 @@ function seenLines(app: AppConnectionDTO): string[] {
       );
     if (has('contractJobs') && (c.contractJobs ?? 0) > 0)
       lines.push(`${plural(c.contractJobs ?? 0, 'linked job follows', 'linked jobs follow')} a warehouse contract rate for work orders`);
+    if (has('contractTyped') && (c.contractTyped ?? 0) > 0)
+      lines.push(
+        `${plural(c.contractTyped ?? 0, 'linked job has', 'linked jobs have')} a price typed in Pulse instead of the contract rate. The contract rate comes back when its rates change in the warehouse.`,
+      );
+    if (has('contractWarehouseBill') && (c.contractWarehouseBill ?? 0) > 0)
+      lines.push(
+        `${plural(c.contractWarehouseBill ?? 0, 'linked job is', 'linked jobs are')} priced by the warehouse bill, because the contract rate changes with volume or is for some products only. Pulse keeps the job's own price.`,
+      );
+    if (has('vasWarehouseBill') && (c.vasWarehouseBill ?? 0) > 0)
+      lines.push(
+        `${plural(c.vasWarehouseBill ?? 0, 'extra service record is', 'extra service records are')} priced by the warehouse bill, for the same reason, so Pulse shows no price for them yet.`,
+      );
   }
   if (app.app === 'projects' && has('linkedProjects')) {
     lines.push(

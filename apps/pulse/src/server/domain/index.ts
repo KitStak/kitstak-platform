@@ -8,6 +8,7 @@ export * from './catalog';
 export * from './cron';
 export * from './entries';
 export * from './jobs';
+export * from './deleted';
 export { recomputeJobs } from './job-stats';
 export * from './labor';
 export * from './notifications';

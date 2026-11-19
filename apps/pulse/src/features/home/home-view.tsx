@@ -21,7 +21,7 @@ import { HOME_ATTENTION_LIMIT } from '@/lib/constants';
 import { formatHours, formatMoney, formatMoneyWhole, formatNumber, formatPace, formatPercentBp } from '@/lib/format';
 import { useAlerts, useJobsNeedingAttention, useProfit, useSummary } from '@/lib/hooks/use-data';
 import { CONFIDENCE_LABELS } from '@/lib/profit/types';
-import { companyMarginBp, companyWords } from './company-margin';
+import { companyMarginBp, companySentence, companyWords } from './company-margin';
 import { suggestBucket } from '@/lib/profit/trends';
 import { compareRange, rangeLabel, type RangePreset } from '@/lib/reports';
 import { routes } from '@/lib/routes';
@@ -161,7 +161,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
         { count: fix.unitsNoHours, one: 'day has units and no hours', many: 'days have units and no hours', href: routes.logEntries(), action: 'Add the hours' },
         { count: fix.needsRate, one: 'entry has no labor rate', many: 'entries have no labor rate', href: routes.labor('rates'), action: 'Set a rate' },
         { count: fix.noPrice, one: 'job has no price', many: 'jobs have no price', href: routes.jobs({ tab: 'open' }), action: 'Open jobs' },
-        { count: fix.serviceNoPrice, one: 'extra service entry has no price', many: 'extra service entries have no price', href: routes.services(), action: 'Open services' },
+        { count: fix.serviceNoPrice, one: 'extra service entry has no price', many: 'extra service entries have no price', href: routes.servicesNoPrice(), action: fix.serviceNoPrice === 1 ? 'Price the entry' : 'Price the entries' },
       ].filter((item) => item.count > 0 && (seesMoney || item.one.includes('hours')))
     : [];
   const loadingTiles = !total;
@@ -198,7 +198,8 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                 {bridge && bridge.companyProfitCents !== null ? (
                   <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
                     <span>
-                      {companyWords(bridge).lead}, the company made <strong className={cn('font-semibold tabular-nums', bridge.companyProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatMoneyWhole(bridge.companyProfitCents)}</strong>.
+                      {companySentence(bridge).lead} <strong className={cn('font-semibold tabular-nums', bridge.companyProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatMoneyWhole(bridge.companyProfitCents)}</strong>.
+                      {companySentence(bridge).reason ? <span data-testid="home-company-reason"> {companySentence(bridge).reason}</span> : null}
                     </span>
                     <ExplainNumber metric="company_profit" scope={scope} label="How we got company profit" align="start" />
                   </p>

@@ -26,7 +26,7 @@ import { cn } from '@/components/ui/cn';
 import { formatMoney, formatMoneyPlain, formatMoneyWhole, formatNumber, formatPercentBp, formatUnitPrice } from '@/lib/format';
 import { rawCell } from '@/lib/csv/write';
 import { useServerAction } from '@/lib/hooks/use-action';
-import { useLaborClasses, useProfit, useVasServices } from '@/lib/hooks/use-data';
+import { useLaborClasses, useProfit, useVasEntries, useVasServices } from '@/lib/hooks/use-data';
 import { qk } from '@/lib/query-keys';
 import { rangeLabel } from '@/lib/reports';
 import { routes } from '@/lib/routes';
@@ -37,13 +37,14 @@ import { parsePeriod, periodQuery } from '@/features/profit/period';
 import { PeriodPicker, type PeriodChange } from '@/features/profit/period-picker';
 import { LoadError, Section, TableSkeleton, runDelete } from '@/features/profit/profit-ui';
 import { useQueryState } from '@/features/profit/use-query-state';
+import { NoPriceEntries, noPriceMonth } from './no-price-entries';
 import { ServiceFormDialog } from './service-form';
 import { BILLING_LABELS, NO_COST_REASON, NO_COST_WORDS, SERVICE_FLAG_WORDS, flagSentence, isUnderpriced, serviceLine, serviceRateCents, type ServiceLine } from './services-model';
 
 const DEFAULTS = { preset: 'last_90' } as const;
 /** Money for a CSV cell: a plain number, marked so a negative amount is not mistaken for a formula. */
 const money = (cents: number | null) => (cents === null ? '' : rawCell(formatMoneyPlain(cents)));
-type Show = 'all' | 'underpriced' | 'off';
+type Show = 'all' | 'underpriced' | 'off' | 'no-price';
 
 export function FlagPill({ line, targetMarginBp }: { readonly line: ServiceLine; readonly targetMarginBp: number }) {
   if (!line.flag) return null;
@@ -67,7 +68,12 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
   const { get, set } = useQueryState();
   const period = useMemo(() => parsePeriod(get, today, weekStart, DEFAULTS), [get, today, weekStart]);
   const scope = { from: period.from, to: period.to };
-  const show: Show = get('show') === 'underpriced' ? 'underpriced' : get('show') === 'off' ? 'off' : 'all';
+  const rawShow = get('show');
+  const show: Show = rawShow === 'underpriced' || rawShow === 'off' || rawShow === 'no-price' ? rawShow : 'all';
+  const noPriceAt = noPriceMonth(get('month'));
+  // The same list "Fix this first" and Home count: every unpriced entry in a month that is still open.
+  const unpriced = useVasEntries({ noPrice: true, openMonths: true, limit: 2000 });
+  const unpricedCount = unpriced.data?.length ?? 0;
   const services = useVasServices({ includeInactive: true }, { initialData: initialServices });
   // Read on the server for the period the page opened on, so the rows arrive with their numbers.
   const fromServer = Boolean(initialProfit) && scope.from === initialProfit?.from && scope.to === initialProfit?.to;
@@ -93,7 +99,8 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
   const extras = useMemo(() => {
     const rows = (profit.data?.rows ?? []).filter((row) => row.key !== 'none');
     const sum = (pick: (row: (typeof rows)[number]) => number | null): number | null => (rows.length === 0 ? 0 : rows.reduce<number | null>((total, row) => (pick(row) === null || total === null ? null : total + (pick(row) as number)), 0));
-    return { revenue: sum((row) => row.revenueCents), profit: sum((row) => row.profitCents) };
+    // Rows with no known cost count with no cost in the total, so the total still adds up. The tile says how much of it that is.
+    return { revenue: sum((row) => row.revenueCents), profit: sum((row) => row.profitCents), noCostRevenue: sum((row) => (row.costMissing ? row.revenueCents : 0)) };
   }, [profit.data]);
 
   const toggle = async (service: VasServiceDTO) => {
@@ -167,8 +174,9 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
   const exportRows = () =>
     downloadCsv(
       `${orgSlug}-extra-services-${period.from}-to-${period.to}.csv`,
-      ['Service', 'Code', 'Unit', 'Billed', 'Active', 'Price', 'Standard cost', 'Margin at list price (%)', 'Volume', 'Revenue', 'Cost', 'Profit', 'Margin (%)', 'Revenue per unit', 'Cost per unit', 'Flag', 'Price for target margin'],
-      shown.map((line) => [line.service.name, line.service.code, line.service.unitLabel, BILLING_LABELS[line.service.billing] ?? line.service.billing, line.service.active ? 'Yes' : 'No', line.price ?? '', line.standardCost ?? '', line.standardMarginBp === null ? '' : rawCell((line.standardMarginBp / 100).toFixed(2)), line.volume, money(line.revenueCents), money(line.costCents), money(line.profitCents), line.marginBp === null ? '' : rawCell((line.marginBp / 100).toFixed(2)), line.revenuePerUnit ?? '', line.costPerUnit ?? '', line.flag ? SERVICE_FLAG_WORDS[line.flag] : '', line.priceForTarget ?? '']),
+      // Number columns stay numbers: a cost Pulse does not know is an empty cell, and "Cost known" says why.
+      ['Service', 'Code', 'Unit', 'Billed', 'Active', 'Price', 'Standard cost', 'Margin at list price (%)', 'Volume', 'Revenue', 'Cost', 'Profit', 'Margin (%)', 'Cost known', 'Revenue per unit', 'Cost per unit', 'Flag', 'Price for target margin'],
+      shown.map((line) => [line.service.name, line.service.code, line.service.unitLabel, BILLING_LABELS[line.service.billing] ?? line.service.billing, line.service.active ? 'Yes' : 'No', line.price ?? '', line.standardCost ?? '', line.standardMarginBp === null ? '' : rawCell((line.standardMarginBp / 100).toFixed(2)), line.volume, money(line.revenueCents), line.costMissing ? '' : money(line.costCents), line.costMissing ? '' : money(line.profitCents), line.marginBp === null ? '' : rawCell((line.marginBp / 100).toFixed(2)), line.volume > 0 ? (line.costMissing ? 'No' : 'Yes') : '', line.revenuePerUnit ?? '', line.costPerUnit ?? '', line.flag ? SERVICE_FLAG_WORDS[line.flag] : '', line.priceForTarget ?? '']),
     );
 
   const openNew = () => {
@@ -227,7 +235,23 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="services-tiles">
         <KpiTile label="Revenue from extra services" explain={<ExplainStatic title="Revenue from extra services" rule="What every extra service entry in this period earned: how many times its price. Core job work is counted apart." rows={[{ label: 'Extra services', value: formatMoney(extras.revenue, { empty: 'Hidden' }), kind: 'total' }, { label: 'Core job work', value: core ? formatMoney(core.revenueCents, { empty: 'Hidden' }) : 'None', kind: 'note' }]} />} loading={!profit.data} value={profit.data ? formatMoneyWhole(extras.revenue) : null} footer={core ? <span className="text-xs text-fg-muted tabular-nums">{formatMoneyWhole(core.revenueCents)} from core job work</span> : undefined} />
-        <KpiTile label="Profit from extra services" explain={<ExplainStatic title="Profit from extra services" rule="Revenue from extra services, less their labor, their parts and their share of time not on a job." rows={[{ label: 'Revenue from extra services', value: formatMoney(extras.revenue, { empty: 'Hidden' }) }, { label: 'Profit from extra services', value: formatMoney(extras.profit, { empty: 'Hidden' }), kind: 'total' }]} />} loading={!profit.data} value={profit.data ? formatMoneyWhole(extras.profit) : null} />
+        <KpiTile
+          label="Profit from extra services"
+          explain={
+            <ExplainStatic
+              title="Profit from extra services"
+              rule={`Revenue from extra services, less their labor, their parts and their share of time not on a job.${(extras.noCostRevenue ?? 0) > 0 ? ' A service with no known cost shows "Not known" on its own row, and counts here with no cost against it, so this total is too high by whatever that work really cost.' : ''}`}
+              rows={[
+                { label: 'Revenue from extra services', value: formatMoney(extras.revenue, { empty: 'Hidden' }) },
+                ...((extras.noCostRevenue ?? 0) > 0 ? [{ label: 'Of that, from services with no known cost', value: formatMoney(extras.noCostRevenue), kind: 'note' as const }] : []),
+                { label: 'Profit from extra services', value: formatMoney(extras.profit, { empty: 'Hidden' }), kind: 'total' as const },
+              ]}
+            />
+          }
+          loading={!profit.data}
+          value={profit.data ? formatMoneyWhole(extras.profit) : null}
+          footer={(extras.noCostRevenue ?? 0) > 0 ? <span className="text-xs text-fg-muted tabular-nums" data-testid="services-no-cost-in-total">Counts {formatMoneyWhole(extras.noCostRevenue)} with no known cost</span> : undefined}
+        />
         <KpiTile label="Services in use" explain={<ExplainStatic title="Services in use" rule="Active services with at least one entry in this period." rows={[{ label: 'With entries in this period', value: formatNumber(lines.filter((line) => line.volume > 0).length), kind: 'total' }, { label: 'Active services', value: formatNumber(lines.filter((line) => line.service.active).length), kind: 'note' }]} />} loading={!services.data} value={services.data ? formatNumber(lines.filter((line) => line.volume > 0).length) : null} footer={<span className="text-xs text-fg-muted">of {lines.filter((line) => line.service.active).length} active</span>} />
         <KpiTile
           label="Underpriced"
@@ -255,6 +279,9 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
         />
       </div>
 
+      {show === 'no-price' ? (
+        <NoPriceEntries month={noPriceAt} services={services.data ?? []} onShowAll={() => set({ show: null, month: null })} />
+      ) : (
       <Section
         title={`Services, ${shown.length}`}
         hint={`Activity for ${rangeLabel(period)}. Target margin ${formatPercentBp(targetMarginBp)}.`}
@@ -265,10 +292,11 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
             label="Which services to show"
             size="sm"
             value={show}
-            onValueChange={(value) => set({ show: value === 'all' ? null : value })}
+            onValueChange={(value) => set({ show: value === 'all' ? null : value, month: null })}
             options={[
               { value: 'all', label: 'Active' },
               { value: 'underpriced', label: `Underpriced (${underpriced.length})` },
+              ...(unpricedCount > 0 ? [{ value: 'no-price', label: `Entries with no price (${unpricedCount})` }] : []),
               { value: 'off', label: 'Turned off' },
             ]}
           />
@@ -317,7 +345,7 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
                       </div>
                       <div className="min-w-0">
                         <dt className="text-xs text-fg-muted">Volume</dt>
-                        <dd className="text-fg">{line.volume > 0 ? formatNumber(line.volume, { maxDigits: 0 }) : none}</dd>
+                        <dd className="text-fg">{line.volume > 0 ? formatNumber(line.volume, { maxDigits: 3 }) : none}</dd>
                       </div>
                       <div className="min-w-0">
                         <dt className="text-xs text-fg-muted">Price</dt>
@@ -391,7 +419,7 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
                           {formatPercentBp(line.standardMarginBp)}
                         </TableCell>
                         <TableCell numeric className="whitespace-nowrap">
-                          {line.volume > 0 ? formatNumber(line.volume, { maxDigits: 0 }) : <span className="text-fg-muted">None</span>}
+                          {line.volume > 0 ? formatNumber(line.volume, { maxDigits: 3 }) : <span className="text-fg-muted">None</span>}
                         </TableCell>
                         <TableCell numeric className="whitespace-nowrap">
                           {line.volume > 0 ? formatMoney(line.revenueCents) : ''}
@@ -402,7 +430,7 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
                         <TableCell numeric className={cn('whitespace-nowrap', (line.marginBp ?? 0) < 0 && 'text-danger-text')}>
                           {marginBody(line)}
                         </TableCell>
-                        <TableCell>{line.trend && line.trend.length > 1 && line.volume > 0 ? <Sparkline values={[...line.trend]} label={`${service.name} profit over the period`} format="money" width={84} height={24} tone={(line.profitCents ?? 0) < 0 ? 'bad' : 'accent'} /> : null}</TableCell>
+                        <TableCell>{line.trend && line.trend.length > 1 && line.volume > 0 && !line.costMissing ? <Sparkline values={[...line.trend]} label={`${service.name} profit over the period`} format="money" width={84} height={24} tone={(line.profitCents ?? 0) < 0 ? 'bad' : 'accent'} /> : null}</TableCell>
                         <TableCell>
                           <FlagPill line={line} targetMarginBp={targetMarginBp} />
                         </TableCell>
@@ -420,6 +448,7 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
           </>
         )}
       </Section>
+      )}
       {noCost.length > 0 ? (
         <p className="text-xs text-fg-muted" data-testid="services-no-cost-note">
           {noCost.length} {noCost.length === 1 ? 'service shows' : 'services show'} &ldquo;{NO_COST_WORDS}&rdquo; in place of a margin. {NO_COST_REASON} Work that comes in from the warehouse has a price and no hours until someone adds them.

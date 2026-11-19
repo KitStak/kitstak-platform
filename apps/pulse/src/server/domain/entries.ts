@@ -15,11 +15,12 @@ import { conflict, invalid, notFound } from '@/server/errors';
 import type { CostCategory, CostScope, PartsOwnerValue, RevenueKind, StoredRevenueKind, StreamSource } from '@/lib/constants';
 import { mulQuantityPrice } from '@/lib/money';
 import type { CostEntryDTO, MaterialUsageDTO, RevenueEntryDTO, VasEntryDTO } from '@/lib/types';
-import { assertVersion, cleanText, diff, hideUnless, inTx, iso, isoRequired, isUuid, moneyOut, monthStart, type DomainContext } from './_shared';
+import { assertEntryDate, assertVersion, cleanText, diff, hideUnless, inTx, iso, isoRequired, isUuid, moneyOut, monthStart, type DomainContext } from './_shared';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
 import { getClientRow, getSiteRow, getVasServiceRow, insertItem, resolveSite } from './catalog';
 import { getJobRow } from './jobs';
+import { assertReadableRefs, liveRefsOnly } from './deleted';
 import { assertOpen, closedMonths, finishWrite, newTouched, restampUsage, restampVas, touchDay, touchJob } from './recalc';
 import { defaultSiteId } from './settings';
 
@@ -95,8 +96,14 @@ function toUsageDTO(row: UsageRow, access: Access, closed: ReadonlySet<string>):
   };
 }
 
+/** The time zone that sets "today" for an entry (the date rule): its site, else the default site. */
+async function zoneOf(ctx: DomainContext, executor: Executor, siteId: string | null | undefined): Promise<string> {
+  return (siteId ? await getSiteRow(ctx, siteId, executor) : await resolveSite(ctx, null, executor)).timezone;
+}
+
 export const listMaterialUsage = scoped(async function listMaterialUsage(ctx: DomainContext, filters: EntryFilters = {}): Promise<MaterialUsageDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  const seesDeletedRows = await assertReadableRefs(ctx, { jobId: filters.jobId }, access);
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
     .select()
@@ -106,6 +113,7 @@ export const listMaterialUsage = scoped(async function listMaterialUsage(ctx: Do
         eq(materialUsage.orgId, ctx.orgId),
         filters.includeDeleted ? undefined : isNull(materialUsage.deletedAt),
         filters.jobId ? eq(materialUsage.jobId, filters.jobId) : undefined,
+        seesDeletedRows ? undefined : liveRefsOnly({ job: materialUsage.jobId }),
         filters.siteId ? eq(materialUsage.siteId, filters.siteId) : undefined,
         filters.from ? gte(materialUsage.usageDate, filters.from) : undefined,
         filters.to ? lte(materialUsage.usageDate, filters.to) : undefined,
@@ -149,6 +157,7 @@ export const saveMaterialUsage = scoped(async function saveMaterialUsage(ctx: Do
       assertVersion(existing.version, input.version);
     }
     const job = await getJobRow(ctx, input.jobId, tx);
+    assertEntryDate('material', await zoneOf(ctx, tx, job.siteId), input.usageDate, { field: 'usageDate', source: input.source ?? existing?.source, before: existing?.usageDate });
     await assertOpen(tx, ctx.orgId, [input.usageDate, existing?.usageDate]);
     let item: typeof items.$inferSelect | undefined;
     if (input.itemId) [item] = await tx.select().from(items).where(and(eq(items.orgId, ctx.orgId), eq(items.id, input.itemId), isNull(items.deletedAt)));
@@ -236,6 +245,7 @@ function toCostDTO(row: CostRow, access: Access, closed: ReadonlySet<string>): C
 
 export const listCosts = scoped(async function listCosts(ctx: DomainContext, filters: EntryFilters & { scope?: CostScope | null } = {}): Promise<CostEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  const seesDeletedRows = await assertReadableRefs(ctx, { jobId: filters.jobId, clientId: filters.clientId }, access);
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
     .select()
@@ -247,6 +257,7 @@ export const listCosts = scoped(async function listCosts(ctx: DomainContext, fil
         filters.scope ? eq(costEntries.scope, filters.scope) : undefined,
         filters.jobId ? eq(costEntries.jobId, filters.jobId) : undefined,
         filters.clientId ? eq(costEntries.clientId, filters.clientId) : undefined,
+        seesDeletedRows ? undefined : liveRefsOnly({ job: costEntries.jobId, client: costEntries.clientId }),
         filters.siteId ? eq(costEntries.siteId, filters.siteId) : undefined,
         filters.from ? gte(costEntries.costDate, filters.from) : undefined,
         filters.to ? lte(costEntries.costDate, filters.to) : undefined,
@@ -295,6 +306,7 @@ export const saveCost = scoped(async function saveCost(ctx: DomainContext, input
     const client = job ? null : input.clientId ? await getClientRow(ctx, input.clientId, tx) : null;
     const scope: CostScope = job ? 'job' : client ? 'client' : 'company';
     const siteId = job ? job.siteId : input.siteId ? (await getSiteRow(ctx, input.siteId, tx)).id : scope === 'client' ? await defaultSiteId(ctx.orgId, tx) : null;
+    assertEntryDate('cost', await zoneOf(ctx, tx, siteId), input.costDate, { field: 'costDate', source: input.source ?? existing?.source, before: existing?.costDate });
     const values = {
       scope,
       jobId: job?.id ?? null,
@@ -371,6 +383,7 @@ function toRevenueDTO(row: RevenueRow, access: Access, closed: ReadonlySet<strin
 
 export const listRevenue = scoped(async function listRevenue(ctx: DomainContext, filters: EntryFilters & { kind?: StoredRevenueKind | null } = {}): Promise<RevenueEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  const seesDeletedRows = await assertReadableRefs(ctx, { jobId: filters.jobId, clientId: filters.clientId }, access);
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
     .select()
@@ -382,6 +395,7 @@ export const listRevenue = scoped(async function listRevenue(ctx: DomainContext,
         filters.kind ? eq(revenueEntries.kind, filters.kind) : undefined,
         filters.jobId ? eq(revenueEntries.jobId, filters.jobId) : undefined,
         filters.clientId ? eq(revenueEntries.clientId, filters.clientId) : undefined,
+        seesDeletedRows ? undefined : liveRefsOnly({ job: revenueEntries.jobId, client: revenueEntries.clientId }),
         filters.from ? gte(revenueEntries.revenueDate, filters.from) : undefined,
         filters.to ? lte(revenueEntries.revenueDate, filters.to) : undefined,
       ),
@@ -434,6 +448,7 @@ export const saveRevenue = scoped(async function saveRevenue(ctx: DomainContext,
     else if (input.quantity && input.unitPrice) amount = mulQuantityPrice(input.quantity, input.unitPrice);
     else throw invalid('Type an amount, or a quantity and a price.', { amountCents: 'Type an amount.' });
     if (input.kind === 'credit' && amount > BigInt(0)) amount = -amount;
+    assertEntryDate('revenue', await zoneOf(ctx, tx, job?.siteId ?? existing?.siteId), input.revenueDate, { field: 'revenueDate', source: input.source ?? existing?.source, before: existing?.revenueDate });
     const values = {
       siteId: job?.siteId ?? existing?.siteId ?? (await defaultSiteId(ctx.orgId, tx)),
       jobId: job?.id ?? null,
@@ -541,8 +556,13 @@ function toVasEntryDTO(row: VasRow, access: Access, closed: ReadonlySet<string>,
   };
 }
 
-export const listVasEntries = scoped(async function listVasEntries(ctx: DomainContext, filters: EntryFilters & { vasServiceId?: string | null; noPrice?: boolean } = {}): Promise<VasEntryDTO[]> {
+/**
+ * `openMonths` keeps only entries dated in a month that is not closed, the same rule as the count of
+ * unpriced entries on Home (`countServiceEntriesNoPrice`), so "Fix this first" lists exactly those.
+ */
+export const listVasEntries = scoped(async function listVasEntries(ctx: DomainContext, filters: EntryFilters & { vasServiceId?: string | null; noPrice?: boolean; openMonths?: boolean } = {}): Promise<VasEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  const seesDeletedRows = await assertReadableRefs(ctx, { jobId: filters.jobId, clientId: filters.clientId }, access);
   const closed = await closedMonths(db, ctx.orgId);
   const where: (SQL | undefined)[] = [
     eq(vasEntries.orgId, ctx.orgId),
@@ -550,10 +570,14 @@ export const listVasEntries = scoped(async function listVasEntries(ctx: DomainCo
     filters.vasServiceId ? eq(vasEntries.vasServiceId, filters.vasServiceId) : undefined,
     filters.jobId ? eq(vasEntries.jobId, filters.jobId) : undefined,
     filters.clientId ? eq(vasEntries.clientId, filters.clientId) : undefined,
+    seesDeletedRows ? undefined : liveRefsOnly({ job: vasEntries.jobId, client: vasEntries.clientId }),
     filters.siteId ? eq(vasEntries.siteId, filters.siteId) : undefined,
     filters.from ? gte(vasEntries.workDate, filters.from) : undefined,
     filters.to ? lte(vasEntries.workDate, filters.to) : undefined,
     filters.noPrice ? isNull(vasEntries.amountCents) : undefined,
+    filters.openMonths
+      ? sql`NOT EXISTS (SELECT 1 FROM pulse.periods p WHERE p.org_id = ${vasEntries.orgId} AND p.status = 'closed' AND p.period_month = date_trunc('month', ${vasEntries.workDate})::date)`
+      : undefined,
   ];
   const found = await db.select().from(vasEntries).where(and(...where)).orderBy(desc(vasEntries.workDate), asc(vasEntries.createdAt)).limit(cap(filters.limit));
   const wmsBase = found.some((row) => row.source === 'wms') ? await warehouseBase(ctx) : null;
@@ -606,6 +630,7 @@ export const saveVasEntry = scoped(async function saveVasEntry(ctx: DomainContex
     const client = job ? await getClientRow(ctx, job.clientId, tx, true) : input.clientId ? await getClientRow(ctx, input.clientId, tx) : null;
     if (!client) throw invalid('Pick a job or a client for this service.', { jobId: 'Pick a job or a client.' });
     const site = job ? await getSiteRow(ctx, job.siteId, tx) : await resolveSite(ctx, input.siteId ?? existing?.siteId, tx);
+    assertEntryDate('vas', site.timezone, input.workDate, { field: 'workDate', source: input.source ?? existing?.source, before: existing?.workDate });
     const unitPrice = input.unitPrice === undefined ? (existing?.unitPrice ?? service.defaultPrice) : input.unitPrice;
     // An entry pulled from the warehouse carries the warehouse's amount. Typing labor hours or a note on it
     // must not work the amount out again from the Pulse service: it changes only with the price or the count.

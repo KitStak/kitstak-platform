@@ -1,12 +1,13 @@
 'use client';
 /**
  * The Workspace tab of Settings: a list of sections on the left (a picker on small screens) and
- * the chosen section on the right. The section lives in the address (`?section=`), so a link can
+ * the chosen section on the right. On a phone the list is a picker. The section lives in the address (`?section=`), so a link can
  * point straight at one.
  */
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { BellRing, BookOpen, Boxes, Building2, CalendarCheck2, HandCoins, History, MonitorSmartphone, Plug, Scale, Settings2, Shapes, TestTubeDiagonal, TriangleAlert, UsersRound, type LucideIcon } from 'lucide-react';
+import { Select } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { ScrollX } from '@/components/ui/scroll-x';
 import { Panel } from '@/components/layout/page';
@@ -50,6 +51,7 @@ export const SETTINGS_SECTIONS: readonly SectionInfo[] = [
 export function SettingsView({ initialSettings, initialSample }: { readonly initialSettings: SettingsDTO; readonly initialSample: SampleStateDTO }) {
   const shell = useShell();
   const params = useSearchParams();
+  const router = useRouter();
   const wanted = params?.get('section') ?? 'general';
   const active = SETTINGS_SECTIONS.find((section) => section.id === wanted && !section.href)?.id ?? 'general';
   const settings = useSettings({ initialData: initialSettings }).data ?? initialSettings;
@@ -60,7 +62,21 @@ export function SettingsView({ initialSettings, initialSample }: { readonly init
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start" data-testid="settings" data-section={active}>
       <nav aria-label="Settings sections" className="min-w-0 lg:sticky lg:top-4">
-        <ScrollX label="Settings sections" tabStop={false} fade="app" scrollerClassName="pb-1 lg:overflow-visible lg:pb-0" testId="settings-nav-scroll">
+        {/* On a phone a sideways strip showed 3 of 15 names. A picker shows the whole list. */}
+        <div className="sm:hidden">
+          <Select
+            aria-label="Settings section"
+            size="lg"
+            value={active}
+            onValueChange={(id) => {
+              const section = SETTINGS_SECTIONS.find((item) => item.id === id);
+              if (section) router.push(section.href ?? routes.settings(section.id), { scroll: false });
+            }}
+            options={SETTINGS_SECTIONS.map((section) => ({ value: section.id, label: section.title, icon: <section.icon aria-hidden className="size-4 shrink-0 text-icon" /> }))}
+            data-testid="settings-section-picker"
+          />
+        </div>
+        <ScrollX label="Settings sections" tabStop={false} fade="app" className="max-sm:hidden" scrollerClassName="pb-1 lg:overflow-visible lg:pb-0" testId="settings-nav-scroll">
         <ul className="flex gap-1 lg:flex-col">
           {SETTINGS_SECTIONS.map((section) => {
             const current = section.id === active;

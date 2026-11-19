@@ -25,6 +25,15 @@
  *    rate from its first day. A job that already has a price keeps it for the days behind it: the
  *    contract rate starts today. A completed job that already has a price is left alone.
  *  - Only a contract that has started is read (`listContractPrices`).
+ *  - A fee is read at the rate the warehouse bill charges for one unit: its standard rate, or its
+ *    tier rate when every unit gets the same one. When the rate depends on the volume of a whole
+ *    billing period (tiers with different rates, or units charged only above a count), or a fee
+ *    applies to some products only ("Charge if"), Pulse cannot know the price of one job or one
+ *    record. The job's price is then left as it is, the link says the warehouse bill prices it
+ *    (`meta.contractBilledBy`), and a warehouse record gets no price. Connected apps counts both.
+ *  - "Follows the contract" means the price in force on the job is the contract's. A price typed
+ *    in Pulse after the contract set it is counted apart, and the job page stops saying the price
+ *    came from the contract.
  *  - The workspace can turn the whole rule off: "Let warehouse contract rates set job prices" on
  *    Connected apps (`settings.wmsContractPrices`, on by default). The sync then skips this step.
  *  - The link keeps what was applied (`meta.contractPrice`, `contractName`, `contractPriceAt`),
@@ -71,6 +80,8 @@ export interface WmsServicesResult {
   noPrice: number;
   /** Records priced by the client's contract rate. */
   contractPriced: number;
+  /** Records with no price because only the warehouse bill can price them (volume tiers or conditions). */
+  warehouseBill: number;
   /** Records whose client is not in Pulse yet. */
   noClient: number;
   /** Live entries in Pulse that came from the warehouse, after this pull. */
@@ -154,7 +165,7 @@ async function ensureService(ctx: DomainContext, record: WmsVasRecord, services:
  */
 export const pullWmsServices = scoped(async function pullWmsServices(ctx: DomainContext): Promise<WmsServicesResult> {
   await requirePulse(ctx, 'vas:manage');
-  const result: WmsServicesResult = { read: false, created: 0, updated: 0, removed: 0, skipped: 0, skippedClosed: 0, records: 0, noPrice: 0, contractPriced: 0, noClient: 0, inPulse: 0 };
+  const result: WmsServicesResult = { read: false, created: 0, updated: 0, removed: 0, skipped: 0, skippedClosed: 0, records: 0, noPrice: 0, contractPriced: 0, warehouseBill: 0, noClient: 0, inPulse: 0 };
   let records: WmsVasRecord[] | null;
   try {
     // Strict read: entries are taken out below when their record is gone, so a failed read must not look like "no records".
@@ -218,6 +229,7 @@ export const pullWmsServices = scoped(async function pullWmsServices(ctx: Domain
       }
       if (priceLocked ? have?.amount_cents === null : amount === null) result.noPrice += 1;
       else if (!priceLocked && record.priceFrom === 'contract') result.contractPriced += 1;
+      if (!priceLocked && record.priceFrom === 'warehouse_bill') result.warehouseBill += 1;
       const keepTarget = Boolean(have) && (locked.includes('jobId') || locked.includes('clientId'));
       const wanted = {
         vasServiceId: have && locked.includes('vasServiceId') ? have.vas_service_id : await ensureService(ctx, record, services),
@@ -259,7 +271,7 @@ export const pullWmsServices = scoped(async function pullWmsServices(ctx: Domain
         note: wanted.note,
         source: 'wms',
         sourceRef: ref,
-        meta: { wms: { vasOperationId: record.id, path: record.path, priceFrom: record.priceFrom, contractName: record.contractName } },
+        meta: { wms: { vasOperationId: record.id, path: record.path, priceFrom: record.priceFrom, contractName: record.contractName, ...(record.billedBy ? { billedBy: record.billedBy } : {}) } },
       });
       if (have) result.updated += 1;
       else result.created += 1;
@@ -301,10 +313,14 @@ export interface ContractPriceResult {
   updated: number;
   skipped: number;
   skippedClosed: number;
-  /** Linked jobs whose client has a contract rate for work orders. */
+  /** Linked jobs whose price in force is the contract's rate (after this run). */
   jobs: number;
-  /** Jobs the contract could not price, because the job is priced another way (hourly, or fixed against a unit rate). */
+  /** Jobs the contract could not price, because the job is priced another way (hourly, or fixed against a unit rate), or it was finished with its own price. */
   notApplied: number;
+  /** Jobs with a price typed in Pulse after the contract set one. It stays until the contract's rates change. */
+  typed: number;
+  /** Jobs only the warehouse bill can price: their contract fee has volume tiers or conditions. Their price is left as it is. */
+  warehouseBill: number;
 }
 
 /** A link between a job and a work order, as the sync already holds it. */
@@ -327,7 +343,7 @@ export interface ContractLink {
  */
 export const applyWmsContractPrices = scoped(async function applyWmsContractPrices(ctx: DomainContext, links: readonly ContractLink[]): Promise<ContractPriceResult> {
   await requirePulse(ctx, 'revenue:manage');
-  const result: ContractPriceResult = { updated: 0, skipped: 0, skippedClosed: 0, jobs: 0, notApplied: 0 };
+  const result: ContractPriceResult = { updated: 0, skipped: 0, skippedClosed: 0, jobs: 0, notApplied: 0, typed: 0, warehouseBill: 0 };
   // One work order feeds one job: the oldest link wins.
   const first = new Map<string, ContractLink>();
   for (const link of links) if (!first.has(link.target_id) && link.job_status !== 'cancelled') first.set(link.target_id, link);
@@ -344,8 +360,28 @@ export const applyWmsContractPrices = scoped(async function applyWmsContractPric
     const link = first.get(price.workOrderId);
     const job = link ? jobById.get(link.job_id) : undefined;
     if (!link || !job) continue;
-    result.jobs += 1;
-    if (link.meta?.contractPrice === price.signature) continue;
+    if (price.billedBy) {
+      // Only the warehouse bill can price this job. Its price stays as it is, and the link says why.
+      result.warehouseBill += 1;
+      if (link.meta?.contractBilledSignature === price.signature) continue;
+      await db.execute(
+        sql`UPDATE pulse.job_links SET meta = meta || ${JSON.stringify({ contractBilledBy: price.billedBy, contractBilledSignature: price.signature, contractName: price.contractName, contractPriceAt: new Date().toISOString() })}::jsonb, updated_at = now()
+             WHERE id = ${link.link_id} AND org_id = ${ctx.orgId}`,
+      );
+      continue;
+    }
+    // The contract can price the job again: the note that the warehouse bill prices it goes.
+    if (typeof link.meta?.contractBilledBy === 'string') {
+      await db.execute(sql`UPDATE pulse.job_links SET meta = meta - 'contractBilledBy' - 'contractBilledSignature', updated_at = now() WHERE id = ${link.link_id} AND org_id = ${ctx.orgId}`);
+    }
+    /** Is the price in force on the job the contract's? */
+    const follows = (unitPrice: string | null, fixedCents: string | null, model: string): boolean =>
+      price.unitPrice !== null ? model === 'per_unit' && sameNumber(unitPrice, price.unitPrice) : price.perOrderCents !== null && model === 'fixed' && fixedCents !== null && Number(fixedCents) === price.perOrderCents;
+    if (link.meta?.contractPrice === price.signature) {
+      if (follows(job.unit_price, job.fixed_price_cents, job.pricing_model)) result.jobs += 1;
+      else result.typed += 1;
+      continue;
+    }
     const firstTime = typeof link.meta?.contractPrice !== 'string';
     const note = `Warehouse contract rate: ${price.contractName}`.slice(0, 200);
     // What the job earns today, before the contract: a unit price, or a fixed price.
@@ -376,6 +412,7 @@ export const applyWmsContractPrices = scoped(async function applyWmsContractPric
         sql`UPDATE pulse.job_links SET meta = meta || ${JSON.stringify({ contractPrice: price.signature, contractName: price.contractName, contractUnitPrice: price.unitPrice, contractFixedCents: price.unitPrice === null ? price.perOrderCents : null, contractPriceAt: new Date().toISOString() })}::jsonb, updated_at = now()
              WHERE id = ${link.link_id} AND org_id = ${ctx.orgId}`,
       );
+      result.jobs += 1;
     } catch (error) {
       if (isClosedMonth(error)) result.skippedClosed += 1;
       else {

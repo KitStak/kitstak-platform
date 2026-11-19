@@ -2,8 +2,9 @@
  * Cost, profit, margin and the company profit bridge (docs/pulse/SPEC.md 4.9). Pure functions.
  * Ratios are `null` when the divisor is 0 or less, never 0 and never infinity.
  */
-import { type Cents, type CentsLike, type Decimal, ZERO, marginBp, marginGap, perUnitCents, prorateDays, ratioBp, toCents } from '../money';
-import type { IsoDate, MoneyBuckets, SharedCostRule } from './types';
+import { type Cents, type CentsLike, type Decimal, ZERO, marginBp, marginGap, perUnitCents, prorateCounted, prorateDays, ratioBp, toCents } from '../money';
+import { DEFAULT_WORKING_DAYS, weekday } from './calendar';
+import type { CompanyCostSpreadMode, IsoDate, MoneyBuckets, SharedCostRule } from './types';
 
 /** The kinds of row in `pulse.v_facts`. */
 export const FACT_KINDS = ['revenue_base', 'revenue_vas', 'revenue_other', 'labor', 'material', 'other', 'shared', 'billed_memo'] as const;
@@ -191,6 +192,14 @@ export interface CompanyCostPart {
   readonly month: IsoDate;
   readonly daysCounted: number;
   readonly daysInMonth: number;
+  /** Working days of the month that are in the range, and in the whole month (`settings.working_days`). */
+  readonly workDaysCounted: number;
+  readonly workDaysInMonth: number;
+  /**
+   * How this month's share was counted: by calendar day, or by work day. A month with no working
+   * day at all falls back to calendar days, so its costs are never lost.
+   */
+  readonly spread: CompanyCostSpreadMode;
   /** The whole month of company costs. */
   readonly monthCostCents: Cents;
   /** The share for the days in the range: equal to the month when the whole month is in the range. */
@@ -200,6 +209,8 @@ export interface CompanyCostPart {
 }
 
 export interface CompanyCostSpread {
+  /** How a part month was shared out: by calendar day (the default) or by work day. */
+  readonly spread: CompanyCostSpreadMode;
   /** Months with company costs above zero, oldest first. Only these count in the overhead step. */
   readonly parts: CompanyCostPart[];
   /** The sum of the counted shares. */
@@ -234,14 +245,37 @@ function joinWords(items: readonly string[]): string {
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
+/** How many of the days `firstDay` to `lastDay` of a month are working days. */
+function workDaysIn(month: IsoDate, firstDay: number, lastDay: number, workingDays: readonly number[]): number {
+  let count = 0;
+  const prefix = month.slice(0, 8);
+  for (let day = firstDay; day <= lastDay; day += 1) if (workingDays.includes(weekday(`${prefix}${String(day).padStart(2, '0')}`))) count += 1;
+  return count;
+}
+
+export interface CompanyCostSpreadOptions {
+  /** `calendar` (the default): every day of the month carries the same share. `work_days`: only working days do. */
+  readonly spread?: CompanyCostSpreadMode;
+  /** JS weekday numbers (0 is Sunday) from `settings.working_days`. Monday to Friday when left out. */
+  readonly workingDays?: readonly number[];
+}
+
 /**
- * Company costs are monthly, so a range that is not whole calendar months gets a share by day (4.9).
- * For each calendar month with company costs above zero: `share = prorateDays(month costs, first day, last day, days in month)`.
+ * Company costs are monthly, so a range that is not whole calendar months gets a share (4.9).
+ * For each calendar month with company costs above zero, by calendar day (the default):
+ * `share = prorateDays(month costs, first day, last day, days in month)`. By work day:
+ * `share = prorateCounted(month costs, work days before the range, work days through its end,
+ * work days in the month)`, so a day that is not a working day gets no share even if work was
+ * logged on it. Both use the same rounding, so the parts of a month add back to the month to the
+ * cent, and a whole month is the same in both ways (month close never changes).
  * A month with no company costs is left out: Pulse trusts the overhead inside the hourly rates for it.
  * Example: $70,500.00 typed in for November, range Nov 1 to Nov 18: `divRound(7050000 * 18, 30) = 4230000`,
- * and the screen says "Company costs for 18 of 30 days."
+ * and the screen says "Company costs for 18 of 30 days." By work day, Monday to Friday, the same
+ * range is 13 of 21 work days: `divRound(7050000 * 13, 21) = 4364286`, "Company costs for 13 of 21 work days."
  */
-export function spreadCompanyCosts(months: readonly CompanyCostMonthInput[], from: IsoDate, to: IsoDate): CompanyCostSpread {
+export function spreadCompanyCosts(months: readonly CompanyCostMonthInput[], from: IsoDate, to: IsoDate, options: CompanyCostSpreadOptions = {}): CompanyCostSpread {
+  const mode: CompanyCostSpreadMode = options.spread ?? 'calendar';
+  const workingDays = options.workingDays && options.workingDays.length > 0 ? options.workingDays : DEFAULT_WORKING_DAYS;
   const parts: CompanyCostPart[] = [];
   for (const row of [...months].sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0))) {
     const monthCostCents = toCents(row.monthCostCents);
@@ -251,12 +285,19 @@ export function spreadCompanyCosts(months: readonly CompanyCostMonthInput[], fro
     const firstDay = from.slice(0, 7) === prefix ? Number(from.slice(8, 10)) : 1;
     const lastDay = to.slice(0, 7) === prefix ? Number(to.slice(8, 10)) : daysInMonth;
     if (from.slice(0, 7) > prefix || to.slice(0, 7) < prefix || lastDay < firstDay) continue;
+    const workDaysInMonth = workDaysIn(row.month, 1, daysInMonth, workingDays);
+    const workBefore = workDaysIn(row.month, 1, firstDay - 1, workingDays);
+    const workDaysCounted = workDaysIn(row.month, firstDay, lastDay, workingDays);
+    const spread: CompanyCostSpreadMode = mode === 'work_days' && workDaysInMonth > 0 ? 'work_days' : 'calendar';
     parts.push({
       month: row.month,
       daysCounted: lastDay - firstDay + 1,
       daysInMonth,
+      workDaysCounted,
+      workDaysInMonth,
+      spread,
       monthCostCents,
-      countedCents: prorateDays(monthCostCents, firstDay, lastDay, daysInMonth),
+      countedCents: spread === 'work_days' ? prorateCounted(monthCostCents, workBefore, workBefore + workDaysCounted, workDaysInMonth) : prorateDays(monthCostCents, firstDay, lastDay, daysInMonth),
       overheadAbsorbedCents: toCents(row.overheadAbsorbedCents),
     });
   }
@@ -265,7 +306,10 @@ export function spreadCompanyCosts(months: readonly CompanyCostMonthInput[], fro
   const countsOverhead = parts.length > 0;
   const monthsTouched = (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 + Number(to.slice(5, 7)) - Number(from.slice(5, 7)) + 1;
   const monthsWithout = monthsTouched - parts.length;
-  const anyPartMonth = parts.some((part) => part.daysCounted < part.daysInMonth);
+  // A month counts in part when the range misses some of the days that carry a share of it.
+  const isPart = (part: CompanyCostPart): boolean => (part.spread === 'work_days' ? part.workDaysCounted < part.workDaysInMonth : part.daysCounted < part.daysInMonth);
+  const counted = (part: CompanyCostPart): string => (part.spread === 'work_days' ? `${part.workDaysCounted} of ${part.workDaysInMonth} work days` : `${part.daysCounted} of ${part.daysInMonth} days`);
+  const anyPartMonth = parts.some(isPart);
   const partial = countsOverhead && (anyPartMonth || monthsWithout > 0);
   let note: string | null = null;
   if (partial) {
@@ -273,13 +317,12 @@ export function spreadCompanyCosts(months: readonly CompanyCostMonthInput[], fro
     const sentences: string[] = [];
     if (anyPartMonth) {
       if (monthsTouched === 1) {
-        const only = parts[0]!;
-        sentences.push(`Company costs for ${only.daysCounted} of ${only.daysInMonth} days.`);
+        sentences.push(`Company costs for ${counted(parts[0]!)}.`);
       } else if (parts.length <= 3) {
-        const words = parts.map((part) => (part.daysCounted < part.daysInMonth ? `${part.daysCounted} of ${part.daysInMonth} days in ${monthWord(part.month, withYear)}` : `all of ${monthWord(part.month, withYear)}`));
+        const words = parts.map((part) => (isPart(part) ? `${counted(part)} in ${monthWord(part.month, withYear)}` : `all of ${monthWord(part.month, withYear)}`));
         sentences.push(`Company costs for ${joinWords(words)}.`);
       } else {
-        const words = parts.filter((part) => part.daysCounted < part.daysInMonth).map((part) => `${part.daysCounted} of ${part.daysInMonth} days in ${monthWord(part.month, withYear)}`);
+        const words = parts.filter(isPart).map((part) => `${counted(part)} in ${monthWord(part.month, withYear)}`);
         sentences.push(`Company costs for ${joinWords(words)}, and for each whole month between.`);
       }
     }
@@ -308,5 +351,5 @@ export function spreadCompanyCosts(months: readonly CompanyCostMonthInput[], fro
     }
     note = sentences.join(' ');
   }
-  return { parts, companyCostCents, overheadAbsorbedCents, countsOverhead, partial, note };
+  return { spread: mode, parts, companyCostCents, overheadAbsorbedCents, countsOverhead, partial, note };
 }

@@ -20,6 +20,8 @@ export type ServiceFlag = 'below_cost' | 'under_target' | 'no_price' | 'no_cost'
 /** Shown in place of a margin when a service earned money and no cost of any kind is logged for it. */
 export const NO_COST_WORDS = 'No cost yet';
 export const NO_COST_REASON = 'No labor hours or parts are logged for this work, so Pulse does not know what it cost.';
+/** Shown in place of a cost or a profit that Pulse does not know. Never $0.00, and never the revenue. */
+export const NOT_KNOWN = 'Not known';
 
 export const SERVICE_FLAG_WORDS: Readonly<Record<ServiceFlag, string>> = {
   below_cost: 'Costs more than it earns',

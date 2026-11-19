@@ -24,6 +24,7 @@ import type { ActivityDTO, Page } from '@/lib/types';
 import { cleanText, inTx, isoRequired, jsonSafe, type DomainContext } from './_shared';
 import { hideLinesInText } from '@/features/alerts/rule-kinds';
 import { requirePulse } from './access';
+import { assertReadableRefs, liveRefsOnly } from './deleted';
 import { getPeople } from './people';
 
 export interface ActivityEntry {
@@ -120,7 +121,14 @@ export interface ActivityFilters {
 export const listActivity = scoped(async function listActivity(ctx: DomainContext, filters: ActivityFilters = {}): Promise<Page<ActivityDTO>> {
   const access = await requirePulse(ctx, 'pulse:read');
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
+  // The history of a deleted job or client is for a person who may manage jobs (deleted.ts).
+  const seesDeletedRows = await assertReadableRefs(
+    ctx,
+    { jobId: filters.jobId ?? (filters.entityType === 'job' ? filters.entityId : null), clientId: filters.clientId ?? (filters.entityType === 'client' ? filters.entityId : null) },
+    access,
+  );
   const where: SQL[] = [eq(activity.orgId, ctx.orgId)];
+  if (!seesDeletedRows) where.push(liveRefsOnly({ job: activity.jobId, client: activity.clientId }));
   if (filters.jobId) where.push(eq(activity.jobId, filters.jobId));
   if (filters.clientId) where.push(eq(activity.clientId, filters.clientId));
   if (filters.entityType) where.push(eq(activity.entityType, filters.entityType));

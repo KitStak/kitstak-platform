@@ -16,9 +16,10 @@ export const inputSurface = cva(
     'flex w-full items-center gap-2 rounded-md border bg-panel text-fg',
     'transition-[border-color,box-shadow,background-color] duration-[var(--duration-fast)] ease-out',
     'border-border-input hover:border-border-input-hover',
-    'focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--focus-ring-soft)] focus-within:hover:border-primary',
+    // Focus is blue and an error is red with a double edge, so the two never look alike (globals.css).
+    'focus-within:border-focus focus-within:shadow-[0_0_0_3px_var(--focus-ring-soft)] focus-within:hover:border-focus',
     'has-[:disabled]:cursor-not-allowed has-[:disabled]:bg-muted has-[:disabled]:opacity-60 has-[:disabled]:hover:border-border-input',
-    'data-[invalid=true]:border-danger data-[invalid=true]:hover:border-danger data-[invalid=true]:focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--danger)_22%,transparent)]',
+    'data-[invalid=true]:border-danger data-[invalid=true]:shadow-[inset_0_0_0_1px_var(--danger)] data-[invalid=true]:hover:border-danger data-[invalid=true]:focus-within:border-danger data-[invalid=true]:focus-within:hover:border-danger data-[invalid=true]:focus-within:shadow-[inset_0_0_0_1px_var(--danger),0_0_0_3px_var(--focus-ring-soft)]',
   ],
   {
     variants: {
@@ -81,9 +82,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       className={cn(
         'block w-full resize-y rounded-md border border-border-input bg-panel px-2.5 py-2 text-sm text-fg',
         'transition-[border-color,box-shadow] duration-[var(--duration-fast)] ease-out outline-none',
-        'hover:border-border-input-hover focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]',
+        'hover:border-border-input-hover focus:border-focus focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]',
         'disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60',
-        'aria-invalid:border-danger',
+        'aria-invalid:border-danger aria-invalid:shadow-[inset_0_0_0_1px_var(--danger)] aria-invalid:focus:border-danger aria-invalid:focus:shadow-[inset_0_0_0_1px_var(--danger),0_0_0_3px_var(--focus-ring-soft)]',
         className,
       )}
       {...props}

@@ -150,7 +150,8 @@ to parent foreign keys are `NO ACTION` (an org cascade deletes parents and child
   every job's summary from raw hours, units, rates and prices with only the pure library, and asserts equality to the
   cent against the row stamps, `fact_days`, `job_stats`, `getJobProfit`, the profit page total and the company bridge.
 - Derived numbers in DTOs come from the pure library: `toProfitRow` uses `profitSummary`, `getCompanyBridge` uses
-  `spreadCompanyCosts` (company costs are monthly, so a part month counts its share by day, SPEC 4.9), `companyBridge`,
+  `spreadCompanyCosts` (company costs are monthly, so a part month counts its share by calendar day or, with
+  `settings.company_cost_spread = 'work_days'`, by work day, SPEC 4.9), `companyBridge`,
   `sharedGap`, `payrollGap` and `utilizationBp`, `recomputeJobs` uses `paceDays`, `projectJob` and
   `assessRisk`. **Never write a margin, a per unit cost or a rounding rule in a component.** Call the library.
 - Risk rules follow SPEC 4.14 exactly, with these confirmed readings: the headline is the most negative impact inside
@@ -1156,8 +1157,9 @@ Every major issue from `docs/pulse/round-3-critics.json` except CI, and the mino
 deferred.
 
 - **Company profit for any days.** Company costs are monthly, so a range that is not whole calendar months counts its
-  share by day: the days in range over the days in the month, in BigInt cents, rounded so the parts of a month always
-  add back to the whole month (`prorateDays`, `spreadCompanyCosts`). The rule lives in `getCompanyBridge`, so Home,
+  share by day: the days in range over the days in the month (or, since round five, the work days in range over the
+  work days in the month when the workspace picks work days), in BigInt cents, rounded so the parts of a month always
+  add back to the whole month (`prorateDays`, `prorateCounted`, `spreadCompanyCosts`). The rule lives in `getCompanyBridge`, so Home,
   Profit, the reports, the popover and `GET /api/v1/company-bridge` agree. The screen says "Company costs for 18 of 30
   days." for a part month and never says "after overhead" when none was counted. A whole month, and so month close,
   did not change by a cent. A range of several whole months now equals the sum of its months.
@@ -1184,7 +1186,8 @@ deferred.
   Settings and the welcome step refuse a client name close to one you have until the person confirms. Renaming a
   client is covered too. Imports, sync, seed and sample data are unchanged.
 - **No cost yet.** An extra service with revenue and no cost has no margin (`costMissing`, `marginBp: null`) in the
-  lists, the service page, the profit explorer, the pivot and their CSV files. An entry with no price has "Set the
+  lists, the service page, the profit explorer, the pivot and their CSV files (since round five its cost and profit read
+  "Not known" on screen, and in a CSV those cells are empty with a "Cost known" column). An entry with no price has "Set the
   price" on the row, and a link to the warehouse contract when it came from the warehouse.
 - **One count of unpriced entries** feeds Home "Things to fix" and the month close checklist.
 - **Log work.** A job with units and no labor hours shows "no margin yet: add the hours" and is left out of "Margin

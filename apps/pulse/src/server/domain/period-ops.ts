@@ -11,8 +11,9 @@ import { invalid } from '@/server/errors';
 import { canPulse } from '@/lib/permissions';
 import { endOfMonth, startOfMonth } from '@/lib/profit';
 import { marginBp } from '@/lib/money';
+import { routes } from '@/lib/routes';
 import type { CompanyBridgeDTO, ProfitRowDTO } from '@/lib/types';
-import { monthName, rows, todayInZone, type DomainContext } from './_shared';
+import { fullMonthViewWords, monthName, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse } from './access';
 import { listActivity } from './activity';
 import { getPeople } from './people';
@@ -47,6 +48,12 @@ export interface CloseMonthDTO {
   /** What the company kept: profit on jobs after the costs no job carried (SPEC 4.9). */
   readonly companyProfitCents: number | null;
   readonly companyMarginBp: number | null;
+  /**
+   * For a month that is not over yet, plain words that its company numbers are a full month view:
+   * all of the month's company costs against the work so far (round five, decision B). Home and
+   * Profit count only the days so far. Null for a month that is over, and for a reader without money.
+   */
+  readonly fullMonthNote: string | null;
 }
 
 /** The walk from job profit to company profit, as the close screen shows it. Every money field is null when hidden. */
@@ -128,6 +135,7 @@ export const getCloseBoard = scoped(async function getCloseBoard(ctx: DomainCont
         marginBp: access.seesMoney ? (numbers?.marginBp ?? null) : null,
         companyProfitCents: access.seesMoney && numbers ? companyProfit : null,
         companyMarginBp: access.seesMoney ? companyMargin(companyProfit, numbers?.revenueCents) : null,
+        fullMonthNote: access.seesMoney && period.status === 'open' && endOfMonth(period.periodMonth) >= today ? fullMonthViewWords(period.periodMonth, liveBridges.get(period.periodMonth)?.hasCompanyCosts ?? false) : null,
       };
     }),
     today,
@@ -232,8 +240,8 @@ export const getCloseDetail = scoped(async function getCloseDetail(ctx: DomainCo
       detail: checklist.servicesNoPrice === 0 ? 'Every extra service entry has a price.' : `${plural(checklist.servicesNoPrice, 'extra service entry has', 'extra service entries have')} no price, so that work earned nothing on paper.`,
       state: checklist.servicesNoPrice === 0 ? 'ok' : 'fix',
       count: checklist.servicesNoPrice,
-      href: checklist.servicesNoPrice === 0 ? null : '/services',
-      hrefLabel: 'Open extra services',
+      href: checklist.servicesNoPrice === 0 ? null : routes.servicesNoPrice(start),
+      hrefLabel: checklist.servicesNoPrice === 1 ? 'Price the entry' : 'Price the entries',
       amountCents: null,
     },
     {

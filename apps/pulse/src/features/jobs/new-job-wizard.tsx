@@ -919,7 +919,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                       invalid={invalid}
                       value={form.units}
                       onChange={(event) => set('units', event.target.value)}
-                      placeholder="5000"
                       inputMode="decimal"
                       size="lg"
                       data-testid="wizard-units"
@@ -1048,7 +1047,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                         invalid={invalid}
                         value={form.unitPrice}
                         onChange={(event) => set('unitPrice', event.target.value)}
-                        placeholder="1.25"
                         inputMode="decimal"
                         size="lg"
                         leadingIcon={<span className="text-fg-muted">$</span>}
@@ -1074,7 +1072,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                         invalid={invalid}
                         value={form.fixedPrice}
                         onChange={(event) => set('fixedPrice', event.target.value)}
-                        placeholder="12500"
                         inputMode="decimal"
                         size="lg"
                         leadingIcon={<span className="text-fg-muted">$</span>}
@@ -1096,7 +1093,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                         invalid={invalid}
                         value={form.billRate}
                         onChange={(event) => set('billRate', event.target.value)}
-                        placeholder="38"
                         inputMode="decimal"
                         size="lg"
                         leadingIcon={<span className="text-fg-muted">$</span>}
@@ -1155,7 +1151,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                         invalid={invalid}
                         value={form.laborHours}
                         onChange={(event) => set('laborHours', event.target.value)}
-                        placeholder="120"
                         inputMode="decimal"
                         size="lg"
                         data-testid="wizard-hours"
@@ -1193,7 +1188,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                         invalid={invalid}
                         value={form.pace}
                         onChange={(event) => set('pace', event.target.value)}
-                        placeholder="40"
                         inputMode="decimal"
                         size="lg"
                         data-testid="wizard-pace"
@@ -1217,7 +1211,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                       invalid={invalid}
                       value={form.setupHours}
                       onChange={(event) => set('setupHours', event.target.value)}
-                      placeholder="0"
                       inputMode="decimal"
                       size="lg"
                       data-testid="wizard-setup"
@@ -1258,7 +1251,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                       invalid={invalid}
                       value={form.rate}
                       onChange={(event) => set('rate', event.target.value)}
-                      placeholder="22.50"
                       inputMode="decimal"
                       size="lg"
                       leadingIcon={<span className="text-fg-muted">$</span>}
@@ -1298,7 +1290,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                           invalid={invalid}
                           value={form.materialPerUnit}
                           onChange={(event) => set('materialPerUnit', event.target.value)}
-                          placeholder="0.45"
                           inputMode="decimal"
                           size="lg"
                           leadingIcon={<span className="text-fg-muted">$</span>}
@@ -1353,7 +1344,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                               ),
                             )
                           }
-                          placeholder="250"
                           inputMode="decimal"
                           leadingIcon={<span className="text-fg-muted">$</span>}
                           data-testid={`wizard-other-amount-${index}`}

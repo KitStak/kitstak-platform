@@ -25,7 +25,7 @@ export interface DrawerContentProps extends Omit<ComponentPropsWithoutRef<typeof
 export const DrawerContent = forwardRef<ElementRef<typeof DialogPrimitive.Content>, DrawerContentProps>(
   function DrawerContent({ className, width = 560, modal = true, title, description, actions, children, style, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) {
     const body = useRef<HTMLDivElement>(null);
-    const focus = useReturnFocus({
+    const { probe, ...focus } = useReturnFocus({
       onOpenAutoFocus: (event) => {
         onOpenAutoFocus?.(event);
         if (event.defaultPrevented) return;
@@ -55,6 +55,7 @@ export const DrawerContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
           {...props}
           {...focus}
         >
+          {probe}
           <header className="flex items-start gap-3 border-b border-border-subtle px-6 py-4">
             <div className="min-w-0 flex-1">
               <DialogPrimitive.Title className="truncate text-xl font-semibold">{title}</DialogPrimitive.Title>

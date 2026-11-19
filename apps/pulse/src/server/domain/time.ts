@@ -10,7 +10,7 @@ import { indirectEntries, paidHours } from '@/server/db/schema';
 import { invalid, notFound } from '@/server/errors';
 import type { IndirectReason, StreamSource } from '@/lib/constants';
 import type { IndirectEntryDTO, PaidHoursDTO } from '@/lib/types';
-import { assertVersion, cleanText, diff, inTx, iso, isoRequired, isUuid, moneyOut, monthStart, type DomainContext } from './_shared';
+import { assertEntryDate, assertVersion, cleanText, diff, inTx, iso, isoRequired, isUuid, moneyOut, monthStart, type DomainContext } from './_shared';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
 import { getSiteRow, resolveSite } from './catalog';
@@ -118,6 +118,7 @@ export const saveIndirectEntry = scoped(async function saveIndirectEntry(ctx: Do
       assertVersion(existing.version, input.version);
     }
     const site = existing && !input.siteId ? await getSiteRow(ctx, existing.siteId, tx) : await resolveSite(ctx, input.siteId, tx);
+    assertEntryDate('indirect', site.timezone, input.workDate, { field: 'workDate', source: input.source ?? existing?.source, before: existing?.workDate });
     await assertCanLogDay(tx, ctx, access, site.id, site.timezone, input.workDate);
     await assertOpen(tx, ctx.orgId, [input.workDate, existing?.workDate]);
     const values = {
@@ -209,6 +210,8 @@ export const savePaidHours = scoped(async function savePaidHours(ctx: DomainCont
   const access = await requirePulse(ctx, 'production:log');
   return inTx(async (tx) => {
     const site = await resolveSite(ctx, input.siteId, tx);
+    // Paid hours are one row per site, day and labor class, so a save never moves a row to another day.
+    assertEntryDate('paid_hours', site.timezone, input.workDate, { field: 'workDate', source: input.source });
     await assertCanLogDay(tx, ctx, access, site.id, site.timezone, input.workDate);
     await assertOpen(tx, ctx.orgId, [input.workDate]);
     const classId = input.laborClassId ?? null;

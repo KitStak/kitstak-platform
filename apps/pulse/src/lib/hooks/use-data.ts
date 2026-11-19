@@ -205,8 +205,8 @@ export const useRevenue = (params: EntryListParams & { kind?: StoredRevenueKind 
   const query = { ...entryQuery(params), kind: params.kind };
   return useQuery({ queryKey: qk.revenue(query), queryFn: get<RevenueEntryDTO[]>('revenue', query), staleTime: SHORT, ...opts });
 };
-export const useVasEntries = (params: EntryListParams & { serviceId?: string | null; noPrice?: boolean } = {}, opts?: Opts<VasEntryDTO[]>) => {
-  const query = { ...entryQuery(params), service: params.serviceId, noPrice: params.noPrice };
+export const useVasEntries = (params: EntryListParams & { serviceId?: string | null; noPrice?: boolean; openMonths?: boolean } = {}, opts?: Opts<VasEntryDTO[]>) => {
+  const query = { ...entryQuery(params), service: params.serviceId, noPrice: params.noPrice, open: params.openMonths };
   return useQuery({ queryKey: qk.serviceEntries(query), queryFn: get<VasEntryDTO[]>('service-entries', query), staleTime: SHORT, ...opts });
 };
 export const useDayReviews = (params: { siteId?: string | null; from?: string | null; to?: string | null; status?: DayReviewStatus | null } = {}, opts?: Opts<DayReviewDTO[]>) => {
@@ -227,8 +227,10 @@ export interface ProfitParams {
   status?: JobStatusValue | null;
   /** Only rows put on a client with no job. Read by the entries drill down. */
   noJob?: boolean;
+  /** How company costs are shared over part of a month, for this view only. Read by company profit. */
+  spread?: 'calendar' | 'work_days' | null;
 }
-const profitQuery = (params: ProfitParams): Query => ({ from: params.from, to: params.to, site: params.siteId, client: params.clientId, jobType: params.jobTypeId, job: params.noJob ? 'none' : params.jobId, service: params.serviceId, status: params.status });
+const profitQuery = (params: ProfitParams): Query => ({ from: params.from, to: params.to, site: params.siteId, client: params.clientId, jobType: params.jobTypeId, job: params.noJob ? 'none' : params.jobId, service: params.serviceId, status: params.status, spread: params.spread });
 
 export const useSummary = (params: { from?: string | null; to?: string | null; siteId?: string | null } = {}, opts?: Opts<SummaryDTO>) => {
   const query = { from: params.from, to: params.to, site: params.siteId };
@@ -258,8 +260,8 @@ export const useProfitFacts = (params: ProfitParams & { kinds?: readonly FactKin
     ...opts,
   });
 };
-export const useCompanyBridge = (params: { from?: string | null; to?: string | null; siteId?: string | null } = {}, opts?: Opts<CompanyBridgeDTO>) => {
-  const query = { from: params.from, to: params.to, site: params.siteId };
+export const useCompanyBridge = (params: { from?: string | null; to?: string | null; siteId?: string | null; spread?: 'calendar' | 'work_days' | null } = {}, opts?: Opts<CompanyBridgeDTO>) => {
+  const query = { from: params.from, to: params.to, site: params.siteId, spread: params.spread };
   return useQuery({ queryKey: qk.companyBridge(query), queryFn: get<CompanyBridgeDTO>('company-bridge', query), staleTime: SHORT, placeholderData: keepPreviousData, ...opts });
 };
 

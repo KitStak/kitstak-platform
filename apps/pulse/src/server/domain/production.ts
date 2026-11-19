@@ -14,11 +14,13 @@ import { SUPERVISOR_EDIT_DAYS, type JobStatusValue, type StreamSource } from '@/
 import { canPulse } from '@/lib/permissions';
 import { addDays } from '@/lib/profit';
 import type { LogGridDTO, LogGridRowDTO, PreviousCrewDTO, ProductionEntryDTO, SaveProductionResult } from '@/lib/types';
-import { assertVersion, cleanText, defined, diff, inTx, iso, isoRequired, isUuid, moneyOut, monthStart, rows, todayInZone, type DomainContext } from './_shared';
+import { assertEntryDate, assertVersion, cleanText, defined, diff, inTx, iso, isoRequired, isUuid, moneyOut, monthStart, rows, todayInZone, type DomainContext } from './_shared';
+import { isTypedSource } from '@/lib/entry-dates';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
 import { getSiteRow, resolveSite } from './catalog';
 import { getJobRow, type JobRow } from './jobs';
+import { assertReadableRefs } from './deleted';
 import { assertOpen, closedMonths, finishWrite, newTouched, restampFixedJob, restampProduction, touchDay, type Touched } from './recalc';
 import { toDayReviewDTO } from './reviews';
 import { listIndirect, listPaidHours } from './time';
@@ -124,22 +126,29 @@ export interface SaveOptions {
    * CONFLICT, never an overwrite.
    */
   readonly requireVersion?: boolean;
+  /**
+   * The ids of the lines of that job and day the editor has on screen (PUT /api/v1/log/rows, the
+   * Log work grid). When set, a new line is refused if the day holds a line the editor did not
+   * see: a day is never added to behind someone's back, the same rule as the day form. The grid
+   * still saves line by line, and a second labor class it adds to a day it shows is fine.
+   */
+  readonly knownDayIds?: readonly string[];
 }
 
 const STALE_ROW = 'Someone else changed this row. Here is the new one.';
+/** A new grid line on a day that gained work the editor did not see (PUT /api/v1/log/rows answers 409). */
+export const DAY_CHANGED = 'Someone else added work to this job on this day. Check the day, then save this line again.';
 export const FUTURE_DAY = 'Work cannot be dated after today. Pick today or an earlier day.';
 const ZERO_PEOPLE = 'Hours need people. Type how many people worked, or leave People empty.';
 const SAME_LINE_TWICE = 'This labor class is already on this day. Put its people and hours on one line.';
 
-/** Sources that copy a fact from another KitStak app. Their dates are not typed, so the future day rule skips them. */
-const SYNCED_SOURCES: ReadonlySet<string> = new Set(['wms', 'projects', 'punch']);
-
 /**
- * Work that was done cannot be dated after today at the site (SPEC 5.3). Every typed write path
- * ends here: the day form, the log grid, the bulk page and the API. Imports mark the row instead.
+ * Work that was done cannot be dated after today at the site (SPEC 5.3), nor more than 10 years
+ * back (`@/lib/entry-dates`, the rule every typed entry shares). Every typed write path ends here:
+ * the day form, the log grid, the bulk page and the API. Imports mark the row instead.
  */
-export function assertNotFutureDay(timezone: string, workDate: string, field = 'workDate'): void {
-  if (workDate > todayInZone(timezone)) throw invalid(FUTURE_DAY, { [field]: 'This day is after today.' });
+export function assertNotFutureDay(timezone: string, workDate: string, field = 'workDate', before?: string | null): void {
+  assertEntryDate('work', timezone, workDate, { field, before });
 }
 
 /** One row per job, day, shift and labor type: the key two lines of one save may not share. */
@@ -204,7 +213,8 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
     seen.set(key, index);
     seen.set(target, index);
   }
-  if (!SYNCED_SOURCES.has(input.source ?? existing?.source ?? 'manual')) assertNotFutureDay(site.timezone, input.workDate, at('workDate'));
+  // Rows copied from the warehouse, Projects or the time clock keep their dates (isTypedSource).
+  if (isTypedSource(input.source ?? existing?.source ?? 'manual')) assertNotFutureDay(site.timezone, input.workDate, at('workDate'), existing?.workDate);
   await assertCanLogDay(tx, ctx, access, site.id, site.timezone, input.workDate);
   if (existing && existing.workDate !== input.workDate) await assertCanLogDay(tx, ctx, access, site.id, site.timezone, existing.workDate);
   await assertOpen(tx, ctx.orgId, [input.workDate, existing?.workDate]);
@@ -311,6 +321,23 @@ async function reload(tx: Executor, ctx: DomainContext, id: string, access: Acce
   return toProductionDTO(found.row, found, access, await closedMonths(tx, ctx.orgId));
 }
 
+/**
+ * A new line from an editor that shows the day (the Log work grid) must have seen every line the
+ * job already has that day at its site. It takes the same lock as the day form, so a day the form
+ * is making and a line the grid adds cannot cross: whichever comes second is told.
+ */
+async function assertDaySeen(tx: Executor, ctx: DomainContext, jobId: string | undefined, workDate: string, known: readonly string[]): Promise<void> {
+  if (!jobId || !isUuid(jobId)) return;
+  const job = await getJobRow(ctx, jobId, tx);
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`pulse:day:${job.id}:${workDate}`}, 0))`);
+  const live = await tx
+    .select({ id: productionEntries.id })
+    .from(productionEntries)
+    .where(and(eq(productionEntries.orgId, ctx.orgId), eq(productionEntries.jobId, job.id), eq(productionEntries.siteId, job.siteId), eq(productionEntries.workDate, workDate), isNull(productionEntries.deletedAt)));
+  const seen = new Set(known);
+  if (live.some((row) => !seen.has(row.id))) throw conflict(DAY_CHANGED);
+}
+
 /** Saves one entry (the autosave of one grid row, the Work log form, the kiosk). */
 export const saveProductionEntry = scoped(async function saveProductionEntry(ctx: DomainContext, input: ProductionInput, options: SaveOptions = {}): Promise<SaveProductionResult> {
   const access = await requirePulse(ctx, 'production:log');
@@ -318,6 +345,7 @@ export const saveProductionEntry = scoped(async function saveProductionEntry(ctx
     const touched = newTouched();
     const fixedJobs = new Set<string>();
     const ids: string[] = [];
+    if (options.knownDayIds && !input.id) await assertDaySeen(tx, ctx, input.jobId, input.workDate, options.knownDayIds);
     const saved = await writeEntry(tx, ctx, access, input, touched, fixedJobs, ids, options);
     await finishProduction(tx, ctx, ids, fixedJobs, touched);
     return { entry: await reload(tx, ctx, saved.row.id, access), created: saved.created };
@@ -625,10 +653,12 @@ export const listProduction = scoped(async function listProduction(ctx: DomainCo
 
 async function queryProduction(ctx: DomainContext, filters: ProductionFilters, limit: number, offset: number): Promise<ProductionEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  // A deleted job (or client) and its rows are for a person who may manage jobs (deleted.ts).
+  const seesDeletedRows = await assertReadableRefs(ctx, { jobId: filters.jobId, clientId: filters.clientId }, access);
   const where: (SQL | undefined)[] = [eq(productionEntries.orgId, ctx.orgId)];
   if (!filters.includeDeleted) where.push(isNull(productionEntries.deletedAt));
   // Entries of a deleted job are out of every number, so they stay out of the lists too (the job page is gone).
-  if (!filters.includeDeleted && !filters.jobId) where.push(isNull(jobs.deletedAt));
+  if (!seesDeletedRows || (!filters.includeDeleted && !filters.jobId)) where.push(isNull(jobs.deletedAt));
   if (filters.jobId) where.push(eq(productionEntries.jobId, filters.jobId));
   if (filters.clientId) where.push(eq(jobs.clientId, filters.clientId));
   if (filters.siteId) where.push(eq(productionEntries.siteId, filters.siteId));

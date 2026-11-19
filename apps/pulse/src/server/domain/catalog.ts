@@ -15,6 +15,7 @@ import type { ClientDTO, ItemDTO, JobTypeDTO, SiteDTO, VasServiceDTO } from '@/l
 import { assertVersion, cleanText, defined, diff, hideUnless, inTx, iso, isoRequired, isUuid, isValidTimezone, rows, todayInZone, type DomainContext } from './_shared';
 import { codeFromName, freeCode, restoreRow, softDeleteRow } from './_crud';
 import { requirePulse, type PulseAccess } from './access';
+import { seesDeleted } from './deleted';
 import { logActivity } from './activity';
 import { recomputeJobs } from './job-stats';
 import { finishWrite, newTouched, restampUsage } from './recalc';
@@ -144,6 +145,8 @@ export function toClientDTO(row: ClientRow, access: Money, counts?: { jobCount: 
 
 export const listClients = scoped(async function listClients(ctx: DomainContext, options: { q?: string | null; includeInactive?: boolean; includeDeleted?: boolean } = {}): Promise<ClientDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  // Deleted clients are for people who may manage jobs and clients, the same right as deleted jobs (deleted.ts).
+  if (options.includeDeleted) await requirePulse(ctx, 'job:manage');
   const q = cleanText(options.q)?.toLowerCase().replace(/[%_\\]/g, '');
   const found = await db
     .select()
@@ -174,7 +177,8 @@ export const getClientRow = scoped(async function getClientRow(ctx: DomainContex
 
 export const getClient = scoped(async function getClient(ctx: DomainContext, clientId: string): Promise<ClientDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
-  const row = await getClientRow(ctx, clientId, db, true);
+  // A deleted client is found only for a person who may manage clients (deleted.ts).
+  const row = await getClientRow(ctx, clientId, db, seesDeleted(access));
   const [counts] = await rows<{ n: number; open: number }>(
     db,
     sql`SELECT count(*)::int AS n, count(*) FILTER (WHERE status IN ('active', 'on_hold'))::int AS open

@@ -26,58 +26,112 @@ export function clientNameKey(name: string): string {
   return clientNameWords(name).join(' ');
 }
 
-/** Edits (add, drop or swap one letter) to turn `a` into `b`, stopping early once past `max`. */
+/**
+ * One word in the form two names are compared by: a plural becomes one ("Supplies" is "supply",
+ * "Pets" is "pet", "Boxes" is "box"). Short words and words that end in "ss", "us" or "is" are
+ * kept, so "Glass", "Bus" and "Gas" stay as they are. Both names go through the same step, so a
+ * word that is not a real plural ("Series") still compares fairly.
+ */
+export function clientWordStem(word: string): string {
+  if (word.length > 4 && word.endsWith('ies')) return `${word.slice(0, -3)}y`;
+  if (word.length > 4 && /(ches|shes|sses|xes|zes)$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith('s') && !/(ss|us|is)$/.test(word)) return word.slice(0, -1);
+  return word;
+}
+
+/**
+ * Edits to turn `a` into `b`: add, drop or change one letter, or swap two letters side by side
+ * ("Trial" and "Trail" are one edit). Stops early once past `max`.
+ */
 function editDistance(a: string, b: string, max: number): number {
   if (Math.abs(a.length - b.length) > max) return max + 1;
+  let before: number[] = [];
   let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
   for (let i = 1; i <= a.length; i += 1) {
     const current = [i];
     let best = i;
     for (let j = 1; j <= b.length; j += 1) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      const value = Math.min((previous[j] ?? 0) + 1, (current[j - 1] ?? 0) + 1, (previous[j - 1] ?? 0) + cost);
+      let value = Math.min((previous[j] ?? 0) + 1, (current[j - 1] ?? 0) + 1, (previous[j - 1] ?? 0) + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) value = Math.min(value, (before[j - 2] ?? 0) + 1);
       current.push(value);
       if (value < best) best = value;
     }
     if (best > max) return max + 1;
+    before = previous;
     previous = current;
   }
   return previous[b.length] ?? max + 1;
 }
 
 /**
- * True when every word of `few` is a word of `many`, the start (3 letters or more) of one, or one
- * letter off a word of 5 letters or more ("Harbr" for "Harbor").
+ * Slips allowed in one word, by the longer of the two: none under 5 letters ("Bolt" and "Belt"
+ * stay apart), one from 5 letters, two from 9 letters ("Electornics" for "Electronics").
  */
-function wordsInside(few: readonly string[], many: readonly string[]): boolean {
-  return few.every((word) =>
-    many.some(
-      (other) =>
-        other === word ||
-        (word.length >= 3 && other.startsWith(word)) ||
-        (word.length >= 5 && other.length >= 5 && editDistance(word, other, 1) <= 1),
-    ),
-  );
+function wordSlips(a: string, b: string): number {
+  const longer = Math.max(a.length, b.length);
+  return longer >= 9 ? 2 : longer >= 5 ? 1 : 0;
+}
+
+/** Slips allowed in a whole name, by the length of the shorter one with no spaces. Grows with the name. */
+function nameSlips(length: number): number {
+  return length >= 16 ? 3 : length >= 9 ? 2 : length >= 5 ? 1 : 0;
+}
+
+interface NameWord {
+  readonly raw: string;
+  readonly stem: string;
+}
+
+/** Slips between two words, or null when they are too far apart: plurals aside, then letter by letter. */
+function wordGap(word: NameWord, other: NameWord): number | null {
+  if (word.stem === other.stem) return 0;
+  const slips = wordSlips(word.raw, other.raw);
+  if (slips === 0 || Math.min(word.raw.length, other.raw.length) < 4) return null;
+  const gap = Math.min(editDistance(word.raw, other.raw, slips), editDistance(word.stem, other.stem, slips));
+  return gap <= slips ? gap : null;
 }
 
 /**
- * True when two different names could be the same client: the same words once case, marks and
- * "Inc" are gone, one name made of the other's words ("Harbor" and "Harbor Roast Collective"),
- * or a slip of one or two letters ("Northwind" and "Nortwind").
+ * True when every word of `few` is a word of `many`, the start (3 letters or more) of one, or a
+ * slip off one ("Harbr" for "Harbor").
+ */
+function wordsInside(few: readonly NameWord[], many: readonly NameWord[]): boolean {
+  return few.every((word) => many.some((other) => wordGap(word, other) !== null || (word.stem.length >= 3 && other.stem.startsWith(word.stem))));
+}
+
+/**
+ * True when two different names could be the same client: the same words once case, marks,
+ * plurals and "Inc" are gone ("Orchard Pet Supplies LLC" and "Orchard Pet Supply"), one name made
+ * of the other's words ("Harbor" and "Harbor Roast Collective"), or a few slips. Slips are
+ * counted word by word, so a slip in each of two words is caught ("Sumit Trial Gear" for "Summit
+ * Trail Gear"), while one whole word that differs is not ("Acme Foods" and "Acme Tools").
  */
 export function clientNamesLookAlike(a: string, b: string): boolean {
-  const first = clientNameWords(a);
-  const second = clientNameWords(b);
+  const first = clientNameWords(a).map((raw) => ({ raw, stem: clientWordStem(raw) }));
+  const second = clientNameWords(b).map((raw) => ({ raw, stem: clientWordStem(raw) }));
   if (first.length === 0 || second.length === 0) return false;
-  const keyA = first.join(' ');
-  const keyB = second.join(' ');
+  const keyA = first.map((word) => word.stem).join('');
+  const keyB = second.map((word) => word.stem).join('');
   if (keyA === keyB) return true;
-  if (keyA.replace(/ /g, '') === keyB.replace(/ /g, '')) return true;
   const [few, many] = first.length <= second.length ? [first, second] : [second, first];
   if (wordsInside(few, many)) return true;
-  const shorter = Math.min(keyA.length, keyB.length);
-  const slips = shorter >= 9 ? 2 : shorter >= 5 ? 1 : 0;
-  return slips > 0 && editDistance(keyA, keyB, slips) <= slips;
+  const budget = nameSlips(Math.min(keyA.length, keyB.length));
+  if (budget === 0) return false;
+  if (first.length === second.length) {
+    // Word by word, in order: each word within its own slips, and the name within its budget.
+    let total = 0;
+    for (let index = 0; index < first.length; index += 1) {
+      const gap = wordGap(first[index]!, second[index]!);
+      if (gap === null) return false;
+      total += gap;
+    }
+    return total <= budget;
+  }
+  // A different count of words is a space put in or left out ("Nova Forge" and "NovaForge"):
+  // compare the names with no spaces, with one slip at most, so "Silver Lake Apparel" and
+  // "Silverline Apparel" stay two clients.
+  return editDistance(keyA, keyB, 1) <= 1;
 }
 
 export interface ClientNameRef {

@@ -11,6 +11,7 @@ import { scoped } from '@/server/db/scope';
 import { conflict, DomainError, invalid } from '@/server/errors';
 import type { ActorKind } from '@/lib/constants';
 import type { OrgRole } from '@/lib/permissions';
+import { entryDateProblem, isTypedSource, type EntryDateKind } from '@/lib/entry-dates';
 
 /** Who is acting, in which org. Built from the request (`toDomainContext`) or by scripts. */
 export interface DomainContext {
@@ -54,6 +55,17 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 export function monthName(month: string): string {
   return MONTHS[Number(month.slice(5, 7)) - 1] ?? month;
 }
+
+/**
+ * The plain note for a month that is not over yet on month close and the month close pack (round
+ * five, decision B): they count the whole month of company costs against the work so far, while
+ * Home and Profit count only the days so far. Holds a month name, never money.
+ */
+export function fullMonthViewWords(month: string, hasCompanyCosts: boolean): string {
+  const name = monthName(month);
+  return hasCompanyCosts ? `Full month view: all of ${name}'s company costs, set against the work so far.` : `Full month view: ${name} is not over yet, so these are the numbers so far.`;
+}
+
 /** "October 2026" for 2026-10 or 2026-10-01: a month named with its year, so two Octobers never look alike. */
 export function monthYear(month: string): string {
   return /^\d{4}-\d{2}/.test(month) ? `${monthName(month)} ${month.slice(0, 4)}` : monthName(month);
@@ -284,3 +296,16 @@ export const countServiceEntriesNoPrice = scoped(async function countServiceEntr
   );
   return row?.n ?? 0;
 }, 1);
+
+/**
+ * The one date rule for typed entries (`@/lib/entry-dates`): not after today at the site and not
+ * more than 10 years before it. Checked when a row is new or its date changes (`before` is the
+ * date the row has now), so an old row can still be fixed. Rows from another app keep their dates.
+ * Throws VALIDATION with the note on `field`.
+ */
+export function assertEntryDate(kind: EntryDateKind, timezone: string, date: string, options: { readonly field?: string; readonly source?: string | null; readonly before?: string | null } = {}): void {
+  if (!isTypedSource(options.source)) return;
+  if (options.before && options.before === date) return;
+  const problem = entryDateProblem(kind, date, todayInZone(timezone));
+  if (problem) throw invalid(problem.message, { [options.field ?? 'workDate']: problem.field });
+}

@@ -23,6 +23,7 @@ import { INDIRECT_REASONS, type IndirectReason, type StreamSource } from '@/lib/
 import { canPulse } from '@/lib/permissions';
 import type { PunchDTO, PunchRollupDTO } from '@/lib/types';
 import {
+  assertEntryDate,
   assertVersion,
   cleanText,
   inTx,
@@ -38,6 +39,7 @@ import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
 import { getSiteRow, resolveSite } from './catalog';
 import { getJobRow } from './jobs';
+import { assertReadableRefs, liveRefsOnly } from './deleted';
 import { assertCanLogDay } from './production';
 import {
   assertOpen,
@@ -103,8 +105,10 @@ export interface PunchFilters {
 /** Punches, newest day first, then by person. */
 export const listPunches = scoped(async function listPunches(ctx: DomainContext, filters: PunchFilters = {}): Promise<PunchDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  const seesDeletedRows = await assertReadableRefs(ctx, { jobId: filters.jobId }, access);
   const where: (SQL | undefined)[] = [eq(timePunches.orgId, ctx.orgId)];
   if (!filters.includeDeleted) where.push(isNull(timePunches.deletedAt));
+  if (!seesDeletedRows) where.push(liveRefsOnly({ job: timePunches.jobId }));
   if (filters.siteId) where.push(eq(timePunches.siteId, filters.siteId));
   if (filters.jobId) where.push(eq(timePunches.jobId, filters.jobId));
   if (filters.employeeCode) where.push(eq(timePunches.employeeCode, filters.employeeCode));
@@ -636,6 +640,7 @@ export const savePunches = scoped(async function savePunches(
             ? await getSiteRow(ctx, existing.siteId, tx)
             : await resolveSite(ctx, null, tx);
       const day = { siteId: site.id, date: input.workDate };
+      assertEntryDate('punch', site.timezone, input.workDate, { field: 'workDate', source: input.source ?? existing?.source, before: existing?.workDate });
       if (!checked.has(dayKey(day))) {
         await assertCanLogDay(tx, ctx, access, site.id, site.timezone, input.workDate);
         checked.add(dayKey(day));

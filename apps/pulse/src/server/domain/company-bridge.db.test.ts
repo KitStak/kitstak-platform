@@ -7,7 +7,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestOrg, databaseReady, type TestOrg } from '@/test/db';
 import type { CompanyBridgeDTO } from '@/lib/types';
-import type { DomainContext } from './_shared';
+import { todayInZone, type DomainContext } from './_shared';
 import * as domain from './test-exports';
 
 const ready = await databaseReady();
@@ -17,6 +17,7 @@ describe.skipIf(!ready)('company bridge for part months (database)', () => {
   let owner: DomainContext;
   let viewer: DomainContext;
   const bridge = (from: string, to: string): Promise<CompanyBridgeDTO> => domain.getCompanyBridge(owner, { from, to });
+  const byWorkDay = (from: string, to: string): Promise<CompanyBridgeDTO> => domain.getCompanyBridge(owner, { from, to, spread: 'work_days' });
 
   beforeAll(async () => {
     org = await createTestOrg('pulse-bridge-days');
@@ -50,7 +51,7 @@ describe.skipIf(!ready)('company bridge for part months (database)', () => {
     const september = await bridge('2025-09-01', '2025-09-30');
     expect(september).toMatchObject({ workProfitCents: 225000, companyCostCents: 100001, overheadAbsorbedCents: 15000, overheadGapCents: 85001, hasCompanyCosts: true, companyCostPartial: false, companyCostNote: null });
     expect(september.companyProfitCents).toBe(225000 - 85001);
-    expect(september.companyCostParts).toEqual([{ month: '2025-09-01', daysCounted: 30, daysInMonth: 30, monthCostCents: 100001, countedCents: 100001 }]);
+    expect(september.companyCostParts).toEqual([{ month: '2025-09-01', daysCounted: 30, daysInMonth: 30, workDaysCounted: 22, workDaysInMonth: 22, spread: 'calendar', monthCostCents: 100001, countedCents: 100001 }]);
     // The close screen reads the same function for the same whole month.
     const close = await domain.getCloseDetail(owner, '2025-09');
     expect(close.bridge).toMatchObject({ companyCostCents: 100001, overheadAbsorbedCents: 15000, overheadGapCents: 85001, companyProfitCents: september.companyProfitCents });
@@ -84,7 +85,7 @@ describe.skipIf(!ready)('company bridge for part months (database)', () => {
     // divRound(100001 * 14, 30) - divRound(100001 * 7, 30) = 46667 - 23334 = 23333.
     expect(week).toMatchObject({ hasCompanyCosts: true, companyCostCents: 23333, overheadAbsorbedCents: 5000, overheadGapCents: 18333, workProfitCents: 75000, companyProfitCents: 75000 - 18333 });
     expect(week.companyCostNote).toBe('Company costs for 7 of 30 days.');
-    expect(week.companyCostParts).toEqual([{ month: '2025-09-01', daysCounted: 7, daysInMonth: 30, monthCostCents: 100001, countedCents: 23333 }]);
+    expect(week.companyCostParts).toEqual([{ month: '2025-09-01', daysCounted: 7, daysInMonth: 30, workDaysCounted: 5, workDaysInMonth: 22, spread: 'calendar', monthCostCents: 100001, countedCents: 23333 }]);
   });
 
   it('counts each month by its own days for a range across two months', async () => {
@@ -93,8 +94,8 @@ describe.skipIf(!ready)('company bridge for part months (database)', () => {
     const septemberShare = 100001 - Math.round((100001 * 20) / 30); // 100001 - 66667 = 33334
     expect(septemberShare).toBe(33334);
     expect(across.companyCostParts).toEqual([
-      { month: '2025-09-01', daysCounted: 10, daysInMonth: 30, monthCostCents: 100001, countedCents: 33334 },
-      { month: '2025-10-01', daysCounted: 10, daysInMonth: 31, monthCostCents: 31000, countedCents: 10000 },
+      { month: '2025-09-01', daysCounted: 10, daysInMonth: 30, workDaysCounted: 7, workDaysInMonth: 22, spread: 'calendar', monthCostCents: 100001, countedCents: 33334 },
+      { month: '2025-10-01', daysCounted: 10, daysInMonth: 31, workDaysCounted: 8, workDaysInMonth: 23, spread: 'calendar', monthCostCents: 31000, countedCents: 10000 },
     ]);
     expect(across).toMatchObject({ companyCostCents: 43334, overheadAbsorbedCents: 10000, overheadGapCents: 33334, workProfitCents: 150000, companyProfitCents: 150000 - 33334 });
     expect(across.companyCostNote).toBe('Company costs for 10 of 30 days in September and 10 of 31 days in October.');
@@ -130,7 +131,7 @@ describe.skipIf(!ready)('company bridge for part months (database)', () => {
   it('hides the money and keeps the words for a reader without money', async () => {
     const hidden = await domain.getCompanyBridge(viewer, { from: '2025-09-08', to: '2025-09-14' });
     expect(hidden).toMatchObject({ moneyHidden: true, companyCostCents: null, overheadGapCents: null, companyProfitCents: null, companyCostNote: 'Company costs for 7 of 30 days.' });
-    expect(hidden.companyCostParts).toEqual([{ month: '2025-09-01', daysCounted: 7, daysInMonth: 30, monthCostCents: null, countedCents: null }]);
+    expect(hidden.companyCostParts).toEqual([{ month: '2025-09-01', daysCounted: 7, daysInMonth: 30, workDaysCounted: 5, workDaysInMonth: 22, spread: 'calendar', monthCostCents: null, countedCents: null }]);
   });
 
   it('explains a part month in the popover', async () => {
@@ -139,5 +140,102 @@ describe.skipIf(!ready)('company bridge for part months (database)', () => {
     expect(explained.quality).toContain('Company costs for 7 of 30 days.');
     const none = await domain.explain(owner, 'company_profit', { from: '2025-11-01', to: '2025-11-30' });
     expect(none.lines.some((item) => item.label.includes('Overhead'))).toBe(false);
+  });
+
+  it('labels a month that is not over yet as a full month view on month close and the close pack (round five, decision B)', async () => {
+    const today = todayInZone('America/Chicago');
+    const month = `${today.slice(0, 7)}-01`;
+    const name = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][Number(today.slice(5, 7)) - 1];
+    const job = (await domain.listJobs(owner, { tab: 'all' })).find((item) => item.name === 'Autumn kits')!;
+    const crew = (await domain.listLaborClasses(owner)).find((item) => item.code === 'PACK')!;
+    await domain.saveProductionEntry(owner, { jobId: job.id, workDate: month, laborClassId: crew.id, unitsGood: '10', hours: '1' });
+    await domain.saveCost(owner, { costDate: month, category: 'rent', amountCents: 60000 });
+    const board = await domain.getCloseBoard(owner);
+    const current = board.months.find((item) => item.periodMonth === month)!;
+    expect(current).toMatchObject({ inProgress: true, fullMonthNote: `Full month view: all of ${name}'s company costs, set against the work so far.` });
+    // A month that is over has no such note.
+    expect(board.months.find((item) => item.periodMonth === '2025-09-01')?.fullMonthNote).toBeNull();
+    // The month close pack says the same and points to month to date.
+    const pack = await domain.buildReport(owner, 'month-close-pack', { from: month, to: today });
+    expect(pack.notes).toContain(`Full month view: all of ${name}'s company costs, set against the work so far. For month to date, open Home or Profit.`);
+    expect(pack.rows.find((row) => row.id === 'Company profit:Company profit')?.cells.note).toBe('Full month view.');
+    // A month that is over says nothing of the kind.
+    const september = await domain.buildReport(owner, 'month-close-pack', { from: '2025-09-01', to: '2025-09-30' });
+    expect(september.notes.some((text) => text.startsWith('Full month view'))).toBe(false);
+    // Readers without money see no company numbers, so no note either.
+    expect((await domain.getCloseBoard(viewer)).months.find((item) => item.periodMonth === month)?.fullMonthNote).toBeNull();
+  });
+
+  // Round five, owner decision A: company costs can be shared by work day instead of calendar day.
+  // Working days are Monday to Friday (the default). September 2025 has 22 of them, October 23.
+  // Sep 20 is a Saturday that has work logged on it.
+  describe('shared by work day', () => {
+    it('is the same as calendar days for a whole month, so month close never changes', async () => {
+      for (const [from, to] of [['2025-09-01', '2025-09-30'], ['2025-10-01', '2025-10-31'], ['2025-09-01', '2025-10-31']] as const) {
+        const [calendar, work] = await Promise.all([bridge(from, to), byWorkDay(from, to)]);
+        for (const key of ['companyCostCents', 'overheadAbsorbedCents', 'overheadGapCents', 'companyProfitCents'] as const) expect(work[key], `${from} ${key}`).toBe(calendar[key]);
+        expect(work.companyCostNote).toBeNull();
+        expect(work.companyCostSpread).toBe('work_days');
+      }
+    });
+
+    it('adds the parts of a month back to the whole month to the cent, at every cut', async () => {
+      const whole = await byWorkDay('2025-09-01', '2025-09-30');
+      for (let day = 1; day < 30; day += 1) {
+        const cut = String(day).padStart(2, '0');
+        const next = String(day + 1).padStart(2, '0');
+        const [a, b] = await Promise.all([byWorkDay('2025-09-01', `2025-09-${cut}`), byWorkDay(`2025-09-${next}`, '2025-09-30')]);
+        expect((a.companyCostCents ?? 0) + (b.companyCostCents ?? 0), `split after day ${day}`).toBe(100001);
+        expect((a.companyProfitCents ?? 0) + (b.companyProfitCents ?? 0), `profit split after day ${day}`).toBe(whole.companyProfitCents);
+      }
+      // Two halves: Sep 1 to 15 has 11 of the 22 work days, so exactly half: divRound(100001 * 11, 22) = 50001.
+      const [first, second] = await Promise.all([byWorkDay('2025-09-01', '2025-09-15'), byWorkDay('2025-09-16', '2025-09-30')]);
+      expect(first.companyCostCents).toBe(50001);
+      expect(second.companyCostCents).toBe(50000);
+      expect(first.companyCostNote).toBe('Company costs for 11 of 22 work days.');
+    }, 120_000);
+
+    it('gives a work week its full share of the month, and a weekend none', async () => {
+      // Sep 8 to Sep 14: 5 of 22 work days. divRound(100001 * 10, 22) - divRound(100001 * 5, 22) = 45455 - 22728 = 22727.
+      const week = await byWorkDay('2025-09-08', '2025-09-14');
+      expect(week).toMatchObject({ companyCostCents: 22727, overheadAbsorbedCents: 5000, companyCostNote: 'Company costs for 5 of 22 work days.' });
+      expect(week.companyCostParts).toEqual([{ month: '2025-09-01', daysCounted: 7, daysInMonth: 30, workDaysCounted: 5, workDaysInMonth: 22, spread: 'work_days', monthCostCents: 100001, countedCents: 22727 }]);
+      // By calendar day the same week carries 7 of 30 days: 23333. Five work days of 22 is the fairer part of a month that is worked Monday to Friday.
+      // The weekend of Sep 20 and 21 has work on the Saturday, and still gets no share of company costs.
+      const weekend = await byWorkDay('2025-09-20', '2025-09-21');
+      expect(weekend).toMatchObject({ companyCostCents: 0, hasCompanyCosts: true, overheadAbsorbedCents: 5000, overheadGapCents: -5000, companyCostNote: 'Company costs for 0 of 22 work days.' });
+      const explained = await domain.explain(owner, 'company_profit', { from: '2025-09-20', to: '2025-09-21', companyCostSpread: 'work_days' });
+      expect(explained.formula).toContain('A day that is not a working day gets no share, even if work was logged on it.');
+    });
+
+    it('counts each month by its own work days for a range across two months', async () => {
+      // Sep 21 to Oct 10: 7 of 22 work days of September and 8 of 23 of October.
+      const across = await byWorkDay('2025-09-21', '2025-10-10');
+      // September: 100001 - divRound(100001 * 15, 22) = 100001 - 68183 = 31818. October: divRound(31000 * 8, 23) = 10783.
+      expect(across.companyCostParts.map((part) => [part.workDaysCounted, part.workDaysInMonth, part.countedCents])).toEqual([
+        [7, 22, 31818],
+        [8, 23, 10783],
+      ]);
+      expect(across.companyCostCents).toBe(31818 + 10783);
+      expect(across.companyCostNote).toBe('Company costs for 7 of 22 work days in September and 8 of 23 work days in October.');
+    });
+
+    it('is a workspace setting that every screen reads, and a view can ask for the other way', async () => {
+      await domain.updateSettings(owner, { companyCostSpread: 'work_days' });
+      try {
+        expect((await domain.getSettings(owner)).companyCostSpread).toBe('work_days');
+        const week = await bridge('2025-09-08', '2025-09-14');
+        expect(week.companyCostCents).toBe(22727);
+        const summary = await domain.getSummary(owner, { from: '2025-09-08', to: '2025-09-14' });
+        expect(summary.bridge.companyCostCents).toBe(22727);
+        // A view override wins over the setting.
+        expect((await domain.getCompanyBridge(owner, { from: '2025-09-08', to: '2025-09-14', spread: 'calendar' })).companyCostCents).toBe(23333);
+        // Month close is the whole month, so it is the same as before.
+        const close = await domain.getCloseDetail(owner, '2025-09');
+        expect(close.bridge).toMatchObject({ companyCostCents: 100001, overheadGapCents: 85001 });
+      } finally {
+        await domain.updateSettings(owner, { companyCostSpread: 'calendar' });
+      }
+    });
   });
 });

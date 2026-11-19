@@ -1,5 +1,5 @@
 'use client';
-import { forwardRef, useRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react';
+import { forwardRef, useRef, useState, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Check, X } from 'lucide-react';
 import { cn } from './cn';
@@ -36,26 +36,103 @@ export const DialogOverlay = forwardRef<
   );
 });
 
+/** What a dialog remembers about the control that opened it, to find it again on close. */
+interface Opener {
+  readonly element: HTMLElement;
+  readonly id: string;
+  readonly testId: string | null;
+  /** The button of the menu the opener sat in: a menu row is gone once the menu closes. */
+  readonly menuButton: HTMLElement | null;
+  /** The opener's parents, nearest first, for when the opener itself is gone (its row was deleted). */
+  readonly parents: readonly HTMLElement[];
+}
+
+const TABBABLE =
+  'a[href], button:not(:disabled), input:not([type="hidden"]):not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+/** On screen, enabled and not inside something hidden from the keyboard. */
+function usable(element: HTMLElement | null | undefined): element is HTMLElement {
+  if (!element || !element.isConnected) return false;
+  if (element.matches(':disabled') || element.closest('[inert], [aria-hidden="true"]')) return false;
+  return element.getClientRects().length > 0;
+}
+
+function rememberOpener(active: Element | null): Opener | null {
+  if (!(active instanceof HTMLElement) || active === document.body || active.id === 'main-content') return null;
+  const menu = active.closest('[role="menu"]');
+  const menuButtonId = menu?.getAttribute('aria-labelledby');
+  const parents: HTMLElement[] = [];
+  for (let node = active.parentElement; node && node !== document.body; node = node.parentElement) parents.push(node);
+  return {
+    element: active,
+    id: active.id,
+    testId: active.getAttribute('data-testid'),
+    menuButton: menuButtonId ? document.getElementById(menuButtonId) : null,
+    parents,
+  };
+}
+
 /**
- * Keyboard focus goes back to the control that opened a dialog or panel when it closes. Radix only
- * does this for a `DialogTrigger`; most dialogs here open from state, and focus fell to the top of
- * the page. Spread `onOpenAutoFocus` and `onCloseAutoFocus` onto the Radix content.
+ * Where keyboard focus goes when a dialog closes: the control that opened it, or the same control
+ * drawn again (same id or test id), or the menu button it came from. When it is gone for good (the
+ * row it sat on was deleted), the first control left in its nearest parent that is still on the
+ * page, and at the end the page content itself.
+ */
+export function returnFocusTarget(opener: Opener | null): HTMLElement | null {
+  if (!opener) return null;
+  if (usable(opener.element)) return opener.element;
+  const byId = opener.id ? document.getElementById(opener.id) : null;
+  if (usable(byId)) return byId;
+  if (opener.testId) {
+    const same = [...document.querySelectorAll<HTMLElement>(`[data-testid="${CSS.escape(opener.testId)}"]`)].find(usable);
+    if (same) return same;
+  }
+  if (usable(opener.menuButton)) return opener.menuButton;
+  for (const parent of opener.parents) {
+    if (!parent.isConnected) continue;
+    if (parent.id === 'main-content') return parent;
+    const inside = [...parent.querySelectorAll<HTMLElement>(TABBABLE)].find(usable);
+    if (inside) return inside;
+  }
+  return document.getElementById('main-content');
+}
+
+/** Renders nothing. Its first render runs before React moves focus to an `autoFocus` field inside. */
+function OpenerProbe({ onFirstRender }: { readonly onFirstRender: () => void }) {
+  useState(onFirstRender);
+  return null;
+}
+
+/**
+ * Keyboard focus goes back to the control that opened a dialog or panel when it closes, by Escape,
+ * Cancel, the Close button or a save. Radix only does this for a `DialogTrigger`, and only when
+ * nothing inside took focus first: most dialogs here open from state and have an `autoFocus`
+ * field, and focus fell to the top of the page. The opener is read while the dialog first renders,
+ * before any field inside is focused. Spread `onOpenAutoFocus` and `onCloseAutoFocus` onto the
+ * Radix content and render `probe` inside it.
  */
 export function useReturnFocus(handlers: { onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void } = {}) {
-  const opener = useRef<HTMLElement | null>(null);
+  const opener = useRef<Opener | null>(null);
   return {
+    probe: (
+      <OpenerProbe
+        onFirstRender={() => {
+          if (typeof document !== 'undefined') opener.current = rememberOpener(document.activeElement);
+        }}
+      />
+    ),
     onOpenAutoFocus: (event: Event) => {
-      const active = document.activeElement;
-      opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
       handlers.onOpenAutoFocus?.(event);
     },
     onCloseAutoFocus: (event: Event) => {
       handlers.onCloseAutoFocus?.(event);
-      const target = opener.current;
+      const remembered = opener.current;
       opener.current = null;
-      if (event.defaultPrevented || !target || !target.isConnected) return;
+      if (event.defaultPrevented) return;
+      const target = returnFocusTarget(remembered);
+      if (!target) return;
       event.preventDefault();
-      target.focus();
+      target.focus({ preventScroll: target.id === 'main-content' });
     },
   };
 }
@@ -68,7 +145,7 @@ export interface DialogContentProps extends ComponentPropsWithoutRef<typeof Dial
 
 export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Content>, DialogContentProps>(
   function DialogContent({ className, size = 'md', hideClose, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) {
-    const focus = useReturnFocus({ onOpenAutoFocus, onCloseAutoFocus });
+    const { probe, ...focus } = useReturnFocus({ onOpenAutoFocus, onCloseAutoFocus });
     return (
       <DialogPrimitive.Portal>
         <DialogOverlay />
@@ -84,6 +161,7 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
           {...props}
           {...focus}
         >
+          {probe}
           {children}
           {hideClose ? null : (
             <DialogPrimitive.Close asChild>

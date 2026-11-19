@@ -131,6 +131,7 @@ export function toSettingsDTO(row: SettingsRow, access: Pick<PulseAccess, 'seesM
     sharedCostRule: row.sharedCostRule as SettingsDTO['sharedCostRule'],
     sharedPctBp: row.sharedPctBp,
     sharedSpread: row.sharedSpread as SettingsDTO['sharedSpread'],
+    companyCostSpread: row.companyCostSpread === 'work_days' ? 'work_days' : 'calendar',
     defaultPartsOwner: row.defaultPartsOwner as SettingsDTO['defaultPartsOwner'],
     defaultMemberRole: (isPulseRole(row.defaultMemberRole) ? row.defaultMemberRole : 'none') as PulseRole,
     jobNumberPrefix: row.jobNumberPrefix,
@@ -183,6 +184,7 @@ export interface SettingsPatch {
   sharedCostRule?: SettingsDTO['sharedCostRule'];
   sharedPctBp?: number;
   sharedSpread?: SettingsDTO['sharedSpread'];
+  companyCostSpread?: SettingsDTO['companyCostSpread'];
   defaultPartsOwner?: 'us' | 'client';
   defaultMemberRole?: 'manager' | 'supervisor' | 'viewer' | 'none';
   jobNumberPrefix?: string;

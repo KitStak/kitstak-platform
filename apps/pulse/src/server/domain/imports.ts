@@ -60,6 +60,7 @@ import { shortDate } from '@/lib/profit/calendar';
 import { routes } from '@/lib/routes';
 import { STREAM_IDS, isStreamId, streamInfo, type StreamId } from '@/lib/streams';
 import { cleanText, inTx, iso, isoRequired, isUuid, monthStart, monthYear, rows, todayInZone, uuidArray, type DomainContext } from './_shared';
+import { entryDateProblem, type EntryDateKind } from '@/lib/entry-dates';
 import { pulseAccessFor, type PulseAccess } from './access';
 import { logActivity } from './activity';
 import { insertClient, insertItem, insertJobType } from './catalog';
@@ -303,6 +304,18 @@ function codeRef(env: Env, kind: RefKind, rec: Rec, field: string, column: strin
 function jobSite(env: Env, job: Ent | null): Ent | null {
   return job ? env.lookups.site.id(job.data.siteId as string) : null;
 }
+
+/** Dated streams that hold typed entries, and the kind the date rule names in its message (@/lib/entry-dates). */
+const ENTRY_KIND_OF_STREAM: Partial<Record<StreamId, EntryDateKind>> = {
+  production: 'work',
+  indirect_time: 'indirect',
+  paid_hours: 'paid_hours',
+  time_punches: 'punch',
+  materials: 'material',
+  costs: 'cost',
+  revenue: 'revenue',
+  services_done: 'vas',
+};
 
 const HANDLERS: Readonly<Record<StreamId, Handler>> = {
   clients: {
@@ -1084,19 +1097,19 @@ async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAc
         continue;
       }
     }
-    // Work that was done cannot be dated after today. A work log row is a problem row, the same rule
-    // as the day form, the log grid and the API. Other floor files keep it as a note.
-    if (handler.floor && dateField && typeof rec[dateField] === 'string') {
+    // The one date rule for typed entries (@/lib/entry-dates): not after today at the site and not
+    // more than 10 years back. A row that breaks it is a problem row, the same rule as the forms,
+    // the grid and the API. A row whose date did not change is left alone, so an old row can be fixed.
+    const entryKind = ENTRY_KIND_OF_STREAM[stream];
+    if (entryKind && dateField && typeof rec[dateField] === 'string' && rec[dateField] !== plan.existing?.record[dateField]) {
       const site = (plan.planned as Planned).refs.site ?? env.defaultSite;
-      const today = todayInZone(String(site.data.timezone ?? env.settings.timezone));
+      const today = todayInZone(String(site?.data.timezone ?? env.settings.timezone));
       const column = dateField.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-      if (String(rec[dateField]) > today) {
-        if (stream === 'production') {
-          plan.action = 'error';
-          plan.messages.push({ level: 'error', column, text: 'Work cannot be dated after today. Fix the date, or skip this row.' });
-          continue;
-        }
-        plan.messages.push({ level: 'warning', column, text: 'This day is in the future. Check the date.' });
+      const problem = entryDateProblem(entryKind, String(rec[dateField]), today);
+      if (problem) {
+        plan.action = 'error';
+        plan.messages.push({ level: 'error', column, text: `${problem.message.replace(/ (Pick today or an earlier day|Check the year)\.$/, '')} Fix the date, or skip this row.` });
+        continue;
       }
     }
   }

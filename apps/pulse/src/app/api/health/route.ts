@@ -1,15 +1,38 @@
 /**
- * Public health check: database ping, the newest applied Pulse migration, and the database guard
- * (`guard.on`: PULSE_DB_GUARD is set, `guard.ready`: the plain role exists and this login can use it).
- * 200 when the database answers, 503 when it does not. Never returns secrets or org data.
+ * Health check. Public answer: `{ status, app, database }` only, the CRM rule: the migration name
+ * and the state of the database guard are details for the people who run the app, so they need
+ * the health token (`HEALTH_TOKEN`, sent as the `x-health-token` header).
+ *
+ *   200 `ok`        the database answers, and the guard is off or in force.
+ *   503 `degraded`  the database answers, PULSE_DB_GUARD is on, but the plain role cannot be used,
+ *                   so the guard is NOT in force (the app keeps running as the login role).
+ *   503 `down`      the database does not answer.
+ *
+ * With the token the body adds `migration`, `guard { on, active, ready, reason, role, login,
+ * loginCanStepOut }` and `tookMs`. Never returns secrets or org data.
  */
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { asSystem } from '@/server/db/scope';
 import { dbGuardStatus } from '@/server/db/system';
+import { env } from '@/server/env';
 
 export const dynamic = 'force-dynamic';
+
+const HEALTH_TOKEN_HEADER = 'x-health-token';
+const NO_STORE = { 'Cache-Control': 'no-store' };
+
+const digest = (value: string): Buffer => createHash('sha256').update(value).digest();
+
+/** Details need a valid HEALTH_TOKEN in every environment. No token set: nobody sees details. */
+function canSeeDetails(request: Request): boolean {
+  const expected = env.HEALTH_TOKEN;
+  const presented = request.headers.get(HEALTH_TOKEN_HEADER);
+  if (!expected || !presented) return false;
+  return timingSafeEqual(digest(presented), digest(expected));
+}
 
 async function migrationVersionAsSystem(): Promise<string | null> {
   try {
@@ -25,14 +48,21 @@ async function migrationVersionAsSystem(): Promise<string | null> {
 /** The health check belongs to no workspace: it reads the migration table and pings the database. */
 const migrationVersion = (): Promise<string | null> => asSystem('health check (no workspace data)', migrationVersionAsSystem);
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: Request): Promise<NextResponse> {
   const startedAt = Date.now();
+  const details = canSeeDetails(request);
   try {
     await asSystem('health check (no workspace data)', () => db.execute(sql`select 1`));
     const guard = await dbGuardStatus();
-    return NextResponse.json({ status: 'ok', app: 'kitstak-pulse', database: 'ok', migration: await migrationVersion(), guard: { on: guard.on, ready: guard.ready }, tookMs: Date.now() - startedAt });
+    const degraded = guard.on && !guard.active;
+    const status = degraded ? 'degraded' : 'ok';
+    const body = details
+      ? { status, app: 'kitstak-pulse', database: 'ok', migration: await migrationVersion(), guard, tookMs: Date.now() - startedAt }
+      : { status, app: 'kitstak-pulse', database: 'ok' };
+    return NextResponse.json(body, { status: degraded ? 503 : 200, headers: NO_STORE });
   } catch (error) {
     console.error('[pulse] health check failed', error instanceof Error ? error.message : error);
-    return NextResponse.json({ status: 'down', app: 'kitstak-pulse', database: 'down', migration: null, tookMs: Date.now() - startedAt }, { status: 503 });
+    const body = details ? { status: 'down', app: 'kitstak-pulse', database: 'down', migration: null, tookMs: Date.now() - startedAt } : { status: 'down', app: 'kitstak-pulse', database: 'down' };
+    return NextResponse.json(body, { status: 503, headers: NO_STORE });
   }
 }

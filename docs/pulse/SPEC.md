@@ -398,7 +398,10 @@ work_profit       = sum of PROFIT_KINDS facts (jobs and client level rows)      
 shared_gap        = 4.5                                                             "Time not on a job that no job carried"
 missing_cost      = sum(missing_cents), or 0 under the full rule (it is in the pool) "Paid time not on any job"
 company_costs     = for each calendar month the range touches that has company costs above 0:
+                    by calendar day (the default):
                     prorateDays(costs dated in that whole month, first day in range, last day in range, days in the month)
+                    by work day (settings.company_cost_spread = 'work_days'):
+                    prorateCounted(costs dated in that whole month, work days before the range, work days through its end, work days in the month)
 overhead_absorbed = sum(overhead_cents) on production, service and indirect entries, on the days in the range of those same months
 overhead_gap      = company_costs - overhead_absorbed when at least one month counted, else 0      "Overhead your hourly rate did not cover"
 company_profit    = work_profit - shared_gap - missing_cost - overhead_gap
@@ -423,6 +426,34 @@ costs were counted: with none, the tile reads "After paid time not on any job".
 Worked example (part month). November company costs $70,500.00, range Nov 1 to Nov 18: `divRound(7050000 * 18, 30) = 4230000`
 ($42,300.00). The hourly rates covered $38,000.00 of overhead on those 18 days, so the overhead gap is $4,300.00. Nov 19 to Nov 30 gets
 the other $28,200.00.
+
+**Spread company costs by calendar days or by work days.** By calendar day every day of the month carries the same share, weekends too,
+so a work week carries less than its part of the month and month to date drops over a weekend. A workspace can pick
+**Work days** instead (Settings, Cost rules, "Spread company costs by", stored as `settings.company_cost_spread`, migration 0013). Then only
+the working days in Settings (`settings.working_days`) carry a share: the share for a range is
+`prorateCounted(C, w0, w1, W) = divRound(C * w1, W) - divRound(C * w0, W)`, where `W` is the work days in the month, `w0` the work days
+of the month before the range and `w1` the work days through its last day. It is the same rounding rule, so the parts of a month add
+back to the month to the cent, and a whole month is `C` in both ways: month close and closed months never change when someone switches.
+A day that is not a working day gets no share, even if work was logged on it, and "How we got this" says so. A month with no working
+day at all (not possible with the Settings check, which needs one) falls back to calendar days. The default is **Calendar days**, so
+nothing changes for a workspace until someone picks work days. The Profit page can show the other way for one view with
+`?spread=work_days` or `?spread=calendar` (the "Share company costs by work day" link beside the company sentence), and
+`GET /api/v1/company-bridge` and `GET /api/v1/explain` take the same `spread`. The note beside the number names the way in use:
+"Company costs for 13 of 21 work days." Worked example: November 2026 has 21 work days, Monday to Friday. Nov 1 to Nov 18 holds 13 of
+them: `divRound(7050000 * 13, 21) = 4364286` ($43,642.86). The working days are read as they are set today for every month: a month whose
+working days were different when it happened is not shared by its old working days (an assumption, since Pulse keeps no history of that
+setting; it only moves part months, never a whole one).
+
+**The month in progress on month close.** Month close and the month close pack are about whole months, so for a month that is not over
+yet they set all of the month's company costs against the work so far, while Home and Profit count only the days so far. Each place that
+shows it says so in plain words: the month card ("Full month view: all of November's company costs, set against the work so far. For month
+to date, open Home or Profit."), the month list ("Full month view, not month to date") and the close pack (a note, and "Full month view."
+on its Company profit line).
+
+**Why the company number moved.** The line under the cards says which bridge step moved the company number most: "The company made more
+than its jobs: $135,849. Your hourly rates covered more overhead than the company costs for these days, so overhead added to profit." When
+the company made less it names the biggest step down. A step of $0.00 for time not on a job that no job carried is left out of "How we got
+this", so it does not sit beside "Paid time not on any job" as an empty twin.
 
 Worked example. Profit on jobs $48,210.00. Shared gap $1,150.00. Paid time not on any job $2,360.00. Company costs $21,000.00, overhead absorbed
 $16,200.00, so overhead gap $4,800.00. `company_profit = 48210 - 1150 - 2360 - 4800 = $39,900.00`. Home says: "Your jobs made $48,210 this month.

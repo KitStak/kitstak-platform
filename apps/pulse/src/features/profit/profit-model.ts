@@ -124,7 +124,8 @@ export function formatValue(value: number | null | undefined, kind: ColumnKind):
     case 'pace':
       return formatPace(value);
     default:
-      return formatNumber(value, { maxDigits: 0 });
+      // Units can be part units (1.5 hours of an hourly service): show them as they are, like the CSV.
+      return formatNumber(value, { maxDigits: 3 });
   }
 }
 
@@ -305,7 +306,8 @@ export interface ParetoView {
  * lost money pull it back down.
  */
 export function paretoView(rows: readonly ProfitRowDTO[]): ParetoView {
-  const withMoney = rows.filter((row) => row.profitCents !== null && row.revenueCents !== null);
+  // A row with no known cost has no known profit, so it is not ranked by profit.
+  const withMoney = rows.filter((row) => row.profitCents !== null && row.revenueCents !== null && !row.costMissing);
   const base = rankByProfit(withMoney, (row) => ({ revenueCents: BigInt(row.revenueCents as number), profitCents: BigInt(row.profitCents as number) }));
   const zero = BigInt(0);
   const madeCents = base.reduce((sum, row) => (row.profitCents > zero ? sum + row.profitCents : sum), zero);
@@ -338,11 +340,41 @@ export function pivotValue(cell: PivotCellDTO | undefined, measure: PivotMeasure
   }
 }
 
-/** A margin cell of extra service work with revenue and no cost logged: the screen and the CSV say so in words. */
-export const pivotNoCost = (cell: PivotCellDTO | undefined, measure: PivotMeasure): boolean => measure === 'margin' && Boolean(cell?.costMissing);
 export const NO_COST_YET = 'No cost yet';
-/** The same for a row of the table: an extra service row with revenue and no cost has no margin (the server sends none). */
-export const rowNoCost = (row: Pick<ProfitRowDTO, 'costMissing'>, columnId: string): boolean => row.costMissing && (columnId === 'margin' || columnId === 'margin_before');
+/** Shown for a cost or a profit Pulse does not know. Never $0.00, and never the revenue. */
+export const NOT_KNOWN = 'Not known';
+/** The flag column a CSV adds beside the number columns, so they stay numbers. */
+export const COST_KNOWN_HEADER = 'Cost known';
+
+/** Columns whose number depends on the cost: with no cost known they read in words, not as a number. */
+const COST_COLUMNS: Readonly<Record<string, string>> = { margin: NO_COST_YET, margin_before: NO_COST_YET, cost: NOT_KNOWN, profit: NOT_KNOWN, cost_per_unit: NOT_KNOWN, contribution: NOT_KNOWN };
+
+/**
+ * The words for a cell of extra service work with revenue and no cost logged, or null when the cell
+ * shows its number. Margins read "No cost yet". Cost and profit read "Not known", never $0.00 or the
+ * revenue (round four, designer issue 4). In a CSV these cells are empty and "Cost known" says No.
+ */
+export const noCostWords = (row: Pick<ProfitRowDTO, 'costMissing'>, columnId: string): string | null => (row.costMissing ? (COST_COLUMNS[columnId] ?? null) : null);
+/** True when the cell shows words in place of its number. */
+export const rowNoCost = (row: Pick<ProfitRowDTO, 'costMissing'>, columnId: string): boolean => noCostWords(row, columnId) !== null;
+
+/** A pivot cell of extra service work with revenue and no cost logged: margin, cost and profit read in words. */
+export const pivotNoCostWords = (cell: PivotCellDTO | undefined, measure: PivotMeasure): string | null => (cell?.costMissing ? (COST_COLUMNS[measure] ?? null) : null);
+export const pivotNoCost = (cell: PivotCellDTO | undefined, measure: PivotMeasure): boolean => pivotNoCostWords(cell, measure) !== null;
+
+/**
+ * How a total treats rows with no known cost, in plain words for under the table, or null when no
+ * row has one: they count with no cost against them, so the total still adds up and is too high by
+ * whatever that work really cost.
+ */
+export function noCostTotalNote(rows: readonly Pick<ProfitRowDTO, 'costMissing'>[], noun: string, nouns: string): string | null {
+  const count = rows.filter((row) => row.costMissing).length;
+  if (count === 0) return null;
+  return `${count} ${count === 1 ? `${noun} has` : `${nouns} have`} no known cost, so ${count === 1 ? 'its' : 'their'} cost and profit read Not known. The total counts ${count === 1 ? 'it' : 'them'} with no cost against ${count === 1 ? 'it' : 'them'}, so it still adds up, and its profit is too high by what that work really cost.`;
+}
+
+/** Pivot measures that depend on the cost, so a pivot of them can have cells with no known cost. */
+const PIVOT_COST_MEASURES: ReadonlySet<string> = new Set(['cost', 'profit', 'margin']);
 
 /** The second grouping a pivot starts with: time for things, clients for time. */
 export function defaultPivotBy(by: ProfitGroup): ProfitGroup {
@@ -352,10 +384,19 @@ export function defaultPivotBy(by: ProfitGroup): ProfitGroup {
 /** The pivot grid as CSV: one row per row group, one column per column group, then the totals. */
 export function pivotCsv(pivot: ProfitPivotDTO, measure: PivotMeasure): { headers: string[]; rows: CsvCell[][] } {
   const kind = PIVOT_MEASURE_KIND[measure];
-  const headers = [VIEW_LABELS[pivot.rowBy], ...pivot.cols.map((col) => rowLabel(pivot.colBy, col)), 'Total'];
-  const out = (cell: PivotCellDTO | undefined): CsvCell => (pivotNoCost(cell, measure) ? NO_COST_YET : csvValue(pivotValue(cell, measure), kind));
-  const rows: CsvCell[][] = pivot.rows.map((row) => [rowLabel(pivot.rowBy, row), ...pivot.cols.map((col) => out(pivot.cells[row.key]?.[col.key])), out(pivot.rowTotals[row.key])]);
-  rows.push(['Total', ...pivot.cols.map((col) => out(pivot.colTotals[col.key])), out(pivot.total)]);
+  // Number columns stay numbers: a cell whose cost is not known is empty, and "Cost known" on the row says so.
+  const out = (cell: PivotCellDTO | undefined): CsvCell => (pivotNoCost(cell, measure) ? '' : csvValue(pivotValue(cell, measure), kind));
+  // Only a pivot that can hold extra service work with no known cost gets the flag column.
+  const anyUnknown = Object.values(pivot.cells).some((row) => Object.values(row).some((cell) => cell?.costMissing)) || Object.values(pivot.rowTotals).some((cell) => cell?.costMissing) || Object.values(pivot.colTotals).some((cell) => cell?.costMissing) || Boolean(pivot.total?.costMissing);
+  const flags = PIVOT_COST_MEASURES.has(measure) && (pivot.rowBy === 'service' || pivot.colBy === 'service' || anyUnknown);
+  const known = (cells: readonly (PivotCellDTO | undefined)[]): CsvCell[] => (flags ? [cells.some((cell) => pivotNoCost(cell, measure)) ? 'No' : 'Yes'] : []);
+  const headers = [VIEW_LABELS[pivot.rowBy], ...pivot.cols.map((col) => rowLabel(pivot.colBy, col)), 'Total', ...(flags ? [COST_KNOWN_HEADER] : [])];
+  const rows: CsvCell[][] = pivot.rows.map((row) => {
+    const cells = [...pivot.cols.map((col) => pivot.cells[row.key]?.[col.key]), pivot.rowTotals[row.key]];
+    return [rowLabel(pivot.rowBy, row), ...cells.map(out), ...known(cells)];
+  });
+  const totals = [...pivot.cols.map((col) => pivot.colTotals[col.key]), pivot.total];
+  rows.push(['Total', ...totals.map(out), ...known(totals)]);
   return { headers, rows };
 }
 

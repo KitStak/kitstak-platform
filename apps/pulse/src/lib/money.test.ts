@@ -33,6 +33,7 @@ import {
   mulQuantityCents,
   mulQuantityPrice,
   mulRatio,
+  prorateCounted,
   prorateDays,
   perHourCents,
   perUnitCents,
@@ -197,6 +198,23 @@ describe('multiplying (the spec examples from 4.2)', () => {
     }
     expect(() => prorateDays(100, 0, 3, 30)).toThrow(RangeError);
     expect(() => prorateDays(100, 5, 31, 30)).toThrow(RangeError);
+  });
+  it('gives counted parts of a month, like work days, their share with the same rounding', () => {
+    // $70,500.00 over 21 work days: the first 12 carry divRound(7050000 * 12, 21) = 4028571.
+    expect(prorateCounted(7050000, 0, 12, 21)).toBe(b(4028571));
+    expect(prorateCounted(7050000, 12, 21, 21)).toBe(b(7050000 - 4028571));
+    expect(prorateCounted(7050000, 0, 21, 21)).toBe(b(7050000));
+    // A stretch with no work day in it carries nothing.
+    expect(prorateCounted(7050000, 5, 5, 21)).toBe(b(0));
+    for (const cents of [1, 100001, -31999]) {
+      let sum = b(0);
+      for (let day = 0; day < 22; day += 1) sum += prorateCounted(cents, day, day + 1, 22);
+      expect(sum).toBe(b(cents));
+    }
+    // prorateDays is the same rule counted in calendar days.
+    expect(prorateDays(100001, 16, 30, 30)).toBe(prorateCounted(100001, 15, 30, 30));
+    expect(() => prorateCounted(100, 3, 2, 21)).toThrow(RangeError);
+    expect(() => prorateCounted(100, 0, 3, 0)).toThrow(RangeError);
   });
   it('stays exact at the top of the allowed range', () => {
     // just under 100,000,000 units at just under $1,000,000

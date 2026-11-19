@@ -127,6 +127,8 @@ export interface SettingsDTO {
   readonly sharedCostRule: SharedCostRuleValue;
   readonly sharedPctBp: number;
   readonly sharedSpread: SharedSpreadValue;
+  /** How company costs are shared out over part of a month: by calendar day (the default) or by work day (4.9). */
+  readonly companyCostSpread: 'calendar' | 'work_days';
   readonly defaultPartsOwner: PartsOwnerValue;
   readonly defaultMemberRole: PulseRole;
   readonly jobNumberPrefix: string;
@@ -512,6 +514,20 @@ export interface JobLinkDTO {
    * order: the contract's name and the day Pulse took the rate. No amounts, so every reader sees it.
    */
   readonly priceFromContract: { readonly contractName: string; readonly at: string | null } | null;
+  /**
+   * The warehouse contract behind this work order link, for the price dialog. `inEffect`: the price
+   * in force on the job is the contract's (else a price typed in Pulse wins until the contract's
+   * rates change). `billedBy`: only the warehouse bill can price the job (`tiers` or `conditions`).
+   * `unitPrice` and `fixedPriceCents` are the contract's, null when money is hidden.
+   */
+  readonly contract?: {
+    readonly contractName: string;
+    readonly inEffect: boolean;
+    readonly billedBy: 'tiers' | 'conditions' | null;
+    readonly unitPrice: string | null;
+    readonly fixedPriceCents: number | null;
+    readonly moneyHidden: boolean;
+  } | null;
 }
 
 export interface JobDetailDTO extends JobListItemDTO {
@@ -779,6 +795,8 @@ export interface ProfitFilters {
   readonly status?: JobStatusValue | null;
   /** Only rows put on a client with no job (the drill down behind "Put on a client, not on a job"). */
   readonly noJob?: boolean;
+  /** Company profit only: share company costs by calendar day or by work day for this view. Left out: the workspace setting. */
+  readonly companyCostSpread?: 'calendar' | 'work_days' | null;
 }
 
 /** The walk from profit on jobs to company profit (SPEC 4.9). */
@@ -790,7 +808,7 @@ export interface CompanyBridgeDTO {
   readonly missingCostCents: MoneyCents;
   /**
    * Company costs counted for these days (SPEC 4.9). Company costs are monthly, so a part month counts
-   * its share by day and a whole month counts all of it. Months with no company costs count nothing.
+   * its share by calendar day or by work day (`companyCostSpread`) and a whole month counts all of it. Months with no company costs count nothing.
    */
   readonly companyCostCents: MoneyCents;
   /** Overhead the hourly rates covered on the days of the months that count company costs (all days when none do). */
@@ -815,8 +833,23 @@ export interface CompanyBridgeDTO {
   readonly companyCostPartial: boolean;
   /** Plain words to show beside the company number when it is partial, like "Company costs for 18 of 30 days." Never holds money. */
   readonly companyCostNote: string | null;
+  /**
+   * How a part month was shared out: `calendar` (every day carries a share, the default) or
+   * `work_days` (only working days do). From `settings.companyCostSpread`, or the view's `spread`.
+   */
+  readonly companyCostSpread: 'calendar' | 'work_days';
   /** One row per calendar month that counted company costs, oldest first. */
-  readonly companyCostParts: readonly { readonly month: string; readonly daysCounted: number; readonly daysInMonth: number; readonly monthCostCents: MoneyCents; readonly countedCents: MoneyCents }[];
+  readonly companyCostParts: readonly {
+    readonly month: string;
+    readonly daysCounted: number;
+    readonly daysInMonth: number;
+    readonly workDaysCounted: number;
+    readonly workDaysInMonth: number;
+    /** `calendar` when the month was counted by calendar day, `work_days` by work day. */
+    readonly spread: 'calendar' | 'work_days';
+    readonly monthCostCents: MoneyCents;
+    readonly countedCents: MoneyCents;
+  }[];
   readonly moneyHidden: boolean;
 }
 

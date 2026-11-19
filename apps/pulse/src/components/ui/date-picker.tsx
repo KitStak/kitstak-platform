@@ -13,18 +13,19 @@ export type { DateRange, Matcher };
 const dayPickerClassNames = {
   root: 'ks-day-picker text-base',
   months: 'relative flex flex-wrap gap-6',
-  month_caption: 'flex h-8 items-center px-1 text-base font-semibold',
+  month_caption: 'flex h-8 pointer-coarse:h-11 items-center px-1 text-base font-semibold',
   nav: 'absolute top-0 right-0 flex items-center gap-0.5',
+  // On a touch screen the day cells, the month arrows and the shortcuts are 44px, so a thumb hits one day.
   button_previous:
-    'inline-flex size-8 items-center justify-center rounded-sm text-icon hover:bg-hover hover:text-icon-strong disabled:opacity-40',
+    'pointer-coarse:size-11 inline-flex size-8 items-center justify-center rounded-sm text-icon hover:bg-hover hover:text-icon-strong disabled:opacity-40',
   button_next:
-    'inline-flex size-8 items-center justify-center rounded-sm text-icon hover:bg-hover hover:text-icon-strong disabled:opacity-40',
-  weekday: 'h-8 w-9 text-xs font-semibold text-fg-muted',
+    'pointer-coarse:size-11 inline-flex size-8 items-center justify-center rounded-sm text-icon hover:bg-hover hover:text-icon-strong disabled:opacity-40',
+  weekday: 'h-8 w-9 pointer-coarse:w-11 text-xs font-semibold text-fg-muted',
   /** No cell spacing so a selected range reads as one continuous band. */
   month_grid: 'border-collapse',
   day: 'p-0 text-center',
   day_button:
-    'inline-flex size-9 items-center justify-center rounded-sm text-base text-fg transition-colors duration-[var(--duration-instant)] hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus',
+    'inline-flex size-9 pointer-coarse:size-11 items-center justify-center rounded-sm text-base text-fg transition-colors duration-[var(--duration-instant)] hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus',
   today: 'font-bold text-primary-text',
   selected: '[&>button]:bg-primary [&>button]:text-primary-fg [&>button]:hover:bg-primary-hover',
   range_middle: '[&>button]:!bg-primary-selected [&>button]:!text-fg [&>button]:rounded-none rounded-none',
@@ -186,8 +187,8 @@ export function DatePicker({
               'inline-flex w-full items-center gap-2 rounded-md border border-border-input bg-panel text-left text-sm',
               size === 'lg' ? 'h-10 px-3' : 'h-8 px-2.5',
               'transition-[border-color,box-shadow] duration-[var(--duration-fast)] outline-none hover:border-border-input-hover',
-              'focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)] data-[state=open]:border-primary',
-              'disabled:cursor-not-allowed disabled:opacity-60 data-[invalid=true]:border-danger',
+              'focus-visible:border-focus focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)] data-[state=open]:border-focus',
+              'disabled:cursor-not-allowed disabled:opacity-60 data-[invalid=true]:border-danger data-[invalid=true]:shadow-[inset_0_0_0_1px_var(--danger)] data-[invalid=true]:focus-visible:border-danger data-[invalid=true]:focus-visible:shadow-[inset_0_0_0_1px_var(--danger),0_0_0_3px_var(--focus-ring-soft)]',
               valid ? 'text-fg' : 'text-fg-placeholder',
               clearable && valid && 'pr-8',
               triggerClassName,
@@ -212,12 +213,12 @@ export function DatePicker({
       <PopoverContent flush className="flex flex-col sm:flex-row">
         <div className="flex flex-row flex-wrap gap-0.5 border-b border-border-subtle p-2 sm:w-32 sm:flex-col sm:flex-nowrap sm:border-r sm:border-b-0">
           {quickPicks.map((pick) => (
-            <Button key={pick.label} variant="ghost" size="sm" className="justify-start" onClick={() => choose(pick.date())}>
+            <Button key={pick.label} variant="ghost" size="sm" className="justify-start pointer-coarse:h-11 pointer-coarse:px-3" onClick={() => choose(pick.date())}>
               {pick.label}
             </Button>
           ))}
           {valid && clearable ? (
-            <Button variant="danger-ghost" size="sm" className="justify-start sm:mt-auto" onClick={() => choose(null)}>
+            <Button variant="danger-ghost" size="sm" className="justify-start sm:mt-auto pointer-coarse:h-11 pointer-coarse:px-3" onClick={() => choose(null)}>
               Clear
             </Button>
           ) : null}

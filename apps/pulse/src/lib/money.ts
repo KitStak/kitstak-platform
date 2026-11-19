@@ -255,9 +255,23 @@ export function prorateDays(monthCents: CentsLike, firstDay: number, lastDay: nu
   if (!Number.isInteger(firstDay) || !Number.isInteger(lastDay) || !Number.isInteger(daysInMonth) || daysInMonth < 1 || firstDay < 1 || lastDay > daysInMonth || lastDay < firstDay) {
     throw new RangeError('prorateDays needs whole days inside the month');
   }
+  return prorateCounted(monthCents, firstDay - 1, lastDay, daysInMonth);
+}
+
+/**
+ * The same rule counted in any unit, such as work days (4.9): the share of a monthly amount for
+ * the days after the first `before` of the month's `total` and through the first `through`. It is
+ * the rounded running total through `through` less the rounded running total through `before`, so
+ * the parts of a month add back to the whole month to the cent, and `0` to `total` is the amount.
+ * Example: $70,500.00 with 21 work days, work days 1 to 12: `divRound(7050000 * 12, 21) = 4028571`.
+ */
+export function prorateCounted(monthCents: CentsLike, before: number, through: number, total: number): Cents {
+  if (!Number.isInteger(before) || !Number.isInteger(through) || !Number.isInteger(total) || total < 1 || before < 0 || through > total || through < before) {
+    throw new RangeError('prorateCounted needs whole counts inside the month');
+  }
   const cents = toCents(monthCents);
-  const days = BigInt(daysInMonth);
-  return divRound(cents * BigInt(lastDay), days) - divRound(cents * BigInt(firstDay - 1), days);
+  const whole = BigInt(total);
+  return divRound(cents * BigInt(through), whole) - divRound(cents * BigInt(before), whole);
 }
 
 /**

@@ -101,6 +101,27 @@ describe.skipIf(!ready)('extra services with no price or no cost (database)', ()
     expect(hidden.rows.every((item) => !item.costMissing && item.marginBp === null)).toBe(true);
   });
 
+  it('links "Fix this first" to a list of exactly the entries it counts (round four, designer issue 3)', async () => {
+    const detail = await domain.getCloseDetail(owner, '2025-06');
+    expect(detail.items.find((item) => item.key === 'prices')).toMatchObject({ href: '/services?show=no-price&month=2025-06', hrefLabel: 'Price the entries' });
+    // The month list: the entries of June with no price, on the job and on the client.
+    const month = await domain.listVasEntries(owner, { noPrice: true, from: MONTH.from, to: MONTH.to });
+    expect(month.map((item) => item.workDate).sort()).toEqual(['2025-06-13', '2025-06-14', '2025-06-15']);
+    expect(month.every((item) => item.noPrice)).toBe(true);
+    // The Home list: every open month, the same number Home counts.
+    const open = await domain.listVasEntries(owner, { noPrice: true, openMonths: true });
+    expect(open.length).toBe((await domain.getSummary(owner, MONTH)).thingsToFix.serviceNoPrice);
+  });
+
+  it('never reads a profit it does not know as the revenue in the profit by service report', async () => {
+    const report = await domain.buildReport(owner, 'profit-by-service', MONTH);
+    const pickup = report.rows.find((item) => item.id === pickupId)!;
+    expect(pickup.cells).toMatchObject({ revenue: 5000, cost: null, profit: null, margin: null, cost_known: 'No' });
+    expect(report.rows.find((item) => item.id === reworkId)!.cells).toMatchObject({ profit: 12000, cost_known: 'Yes' });
+    expect(report.columns.some((column) => column.key === 'cost_known')).toBe(true);
+    expect(report.notes.some((text) => text.includes('The total counts them with no cost against them'))).toBe(true);
+  });
+
   it('drops the count when the entries get a price, and leaves a closed month out of Home', async () => {
     const list = await domain.listVasEntries(owner, { vasServiceId: unpricedId, from: MONTH.from, to: MONTH.to });
     const first = list.find((item) => item.workDate === '2025-06-13')!;

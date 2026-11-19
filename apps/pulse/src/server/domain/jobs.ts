@@ -297,14 +297,59 @@ async function linkModules(ctx: DomainContext): Promise<Pick<ModuleFlags, 'crm' 
   }
 }
 
-/** What the contract rate rule left on the link when it set this job's price (wms-services.ts). Names and a day only. */
-function contractNote(meta: Record<string, unknown> | null | undefined): JobLinkDTO['priceFromContract'] {
+type PricedJob = Pick<JobRow, 'pricingModel' | 'unitPrice' | 'fixedPriceCents'>;
+
+/**
+ * Is the price in force on the job the one the contract set? The link keeps the contract's rate
+ * (`meta.contractUnitPrice` or `meta.contractFixedCents`); the job's price is its newest price.
+ * A link from before those were kept counts as in force.
+ */
+function contractInEffect(meta: Record<string, unknown>, job: PricedJob): boolean {
+  if (typeof meta.contractUnitPrice === 'string') return job.pricingModel === 'per_unit' && job.unitPrice !== null && Number(job.unitPrice) === Number(meta.contractUnitPrice);
+  if (typeof meta.contractFixedCents === 'number') return job.pricingModel === 'fixed' && job.fixedPriceCents !== null && Number(job.fixedPriceCents) === meta.contractFixedCents;
+  return true;
+}
+
+/**
+ * What the contract rate rule left on the link (wms-services.ts). Names and a day only. Set only
+ * while the price in force is still the contract's: once someone types another price in Pulse,
+ * or the warehouse bill prices the job, the job page stops saying the price came from the contract.
+ */
+function contractNote(meta: Record<string, unknown> | null | undefined, job: PricedJob | null): JobLinkDTO['priceFromContract'] {
   if (typeof meta?.contractPrice !== 'string' || typeof meta.contractName !== 'string' || meta.contractName === '') return null;
+  if (typeof meta.contractBilledBy === 'string' || (job && !contractInEffect(meta, job))) return null;
   return { contractName: meta.contractName, at: typeof meta.contractPriceAt === 'string' ? meta.contractPriceAt : null };
 }
 
-function toLinkDTO(row: typeof jobLinks.$inferSelect, modules: Pick<ModuleFlags, 'crm' | 'wms' | 'projects'>): JobLinkDTO {
-  return { id: row.id, jobId: row.jobId, targetType: row.targetType as LinkTargetType, targetId: row.targetId, importsTime: row.importsTime, title: row.cachedTitle, status: row.cachedStatus, url: siblingLinkUrl(row.targetType as LinkTargetType, row.cachedUrl, modules), priceFromContract: contractNote(row.meta) };
+/** The contract behind the link, for the price dialog. Null when the rule never touched this link. */
+function contractOf(meta: Record<string, unknown> | null | undefined, job: PricedJob | null, access: Access | null): JobLinkDTO['contract'] {
+  if (!meta || typeof meta.contractName !== 'string' || meta.contractName === '') return null;
+  const billedBy = meta.contractBilledBy === 'tiers' || meta.contractBilledBy === 'conditions' ? meta.contractBilledBy : null;
+  if (!billedBy && typeof meta.contractPrice !== 'string') return null;
+  const money = access?.seesMoney ?? false;
+  return {
+    contractName: meta.contractName,
+    inEffect: !billedBy && (job ? contractInEffect(meta, job) : true),
+    billedBy,
+    unitPrice: money && !billedBy && typeof meta.contractUnitPrice === 'string' ? meta.contractUnitPrice : null,
+    fixedPriceCents: money && !billedBy && typeof meta.contractFixedCents === 'number' ? meta.contractFixedCents : null,
+    moneyHidden: !money,
+  };
+}
+
+function toLinkDTO(row: typeof jobLinks.$inferSelect, modules: Pick<ModuleFlags, 'crm' | 'wms' | 'projects'>, job: PricedJob | null = null, access: Access | null = null): JobLinkDTO {
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    targetType: row.targetType as LinkTargetType,
+    targetId: row.targetId,
+    importsTime: row.importsTime,
+    title: row.cachedTitle,
+    status: row.cachedStatus,
+    url: siblingLinkUrl(row.targetType as LinkTargetType, row.cachedUrl, modules),
+    priceFromContract: contractNote(row.meta, job),
+    contract: contractOf(row.meta, job, access),
+  };
 }
 
 function toPriceDTO(row: typeof jobPrices.$inferSelect, access: Access): JobPriceDTO {
@@ -336,7 +381,7 @@ async function detail(ctx: DomainContext, jobId: string, access: Access, executo
     prices: prices.map((price) => toPriceDTO(price, access)),
     quote: plans.quote,
     budget: plans.budget,
-    links: links.map((link) => toLinkDTO(link, modules)),
+    links: links.map((link) => toLinkDTO(link, modules, row.job, access)),
     owner: row.job.ownerId ? (people.get(row.job.ownerId) ?? null) : null,
   };
 }
@@ -994,7 +1039,7 @@ export const addJobLink = scoped(async function addJobLink(ctx: DomainContext, j
     await insertLinks(tx, ctx, job.id, [link]);
     const found = await tx.select().from(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, job.id))).orderBy(asc(jobLinks.createdAt));
     const modules = await linkModules(ctx);
-    return found.map((link) => toLinkDTO(link, modules));
+    return found.map((link) => toLinkDTO(link, modules, job));
   });
 });
 

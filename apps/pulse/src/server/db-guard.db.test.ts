@@ -65,6 +65,11 @@ describe.skipIf(!ready)('the database guard ties the running app to one workspac
     await orgB?.destroy();
   });
 
+  it('is in force: the flag is on and the login can really become the plain role', async () => {
+    const status = await dbGuardStatus();
+    expect(status).toMatchObject({ on: true, active: true, ready: true, reason: null, role: DB_GUARD_ROLE });
+  });
+
   it('runs a single statement and a transaction as the plain role with the workspace set', async () => {
     expect(loginRole).not.toBe(DB_GUARD_ROLE);
     await withOrg(ownerA.orgId, async () => {

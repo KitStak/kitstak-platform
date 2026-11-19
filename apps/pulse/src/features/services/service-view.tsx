@@ -37,7 +37,7 @@ import { useQueryState } from '@/features/profit/use-query-state';
 import { ServiceFormDialog } from './service-form';
 import { SetEntryPrice, WarehouseContractLink, WarehouseSourceLink } from '@/features/revenue/entry-price-fix';
 import { useShell } from '@/features/shell/shell-context';
-import { BILLING_LABELS, NO_COST_REASON, NO_COST_WORDS, SERVICE_FLAG_WORDS, flagSentence, serviceLine, serviceRateCents, unitWord } from './services-model';
+import { BILLING_LABELS, NOT_KNOWN, NO_COST_REASON, NO_COST_WORDS, SERVICE_FLAG_WORDS, flagSentence, serviceLine, serviceRateCents, unitWord } from './services-model';
 
 const DEFAULTS = { preset: 'last_90' } as const;
 /** Money for a CSV cell: a plain number, marked so a negative amount is not mistaken for a formula. */
@@ -137,8 +137,9 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
       ) : (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6" data-testid="service-tiles">
           <KpiTile label="Revenue" loading={!total} value={total ? formatMoneyWhole(total.revenueCents) : null} sparkline={points.length > 1 ? { values: points.map((row) => row.revenueCents) } : undefined} explain={<ExplainNumber metric="revenue" scope={scope} />} />
-          <KpiTile label="Cost" loading={!total} value={total ? (total.costMissing ? 'Not known' : formatMoneyWhole(total.costCents)) : null} footer={total?.costMissing ? <span className="text-xs text-fg-muted">No hours or parts logged</span> : undefined} sparkline={points.length > 1 ? { values: points.map((row) => row.costCents) } : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
-          <KpiTile label="Profit" loading={!total} value={total ? formatMoneyWhole(total.profitCents) : null} explain={<ExplainNumber metric="profit" scope={scope} />} />
+          <KpiTile label="Cost" loading={!total} value={total ? (total.costMissing ? NOT_KNOWN : formatMoneyWhole(total.costCents)) : null} footer={total?.costMissing ? <span className="text-xs text-fg-muted">No hours or parts logged</span> : undefined} sparkline={points.length > 1 ? { values: points.map((row) => (row.costMissing ? null : row.costCents)) } : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
+          {/* With no cost known, profit is not known either: it is never shown as the revenue (round four, designer issue 4). */}
+          <KpiTile label="Profit" loading={!total} value={total ? (total.costMissing ? NOT_KNOWN : formatMoneyWhole(total.profitCents)) : null} footer={total?.costMissing ? <span className="text-xs text-fg-muted" data-testid="service-profit-not-known">{NO_COST_REASON}</span> : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />
           <KpiTile
             label="Margin"
             loading={!total}
@@ -154,8 +155,8 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
               ) : undefined
             }
           />
-          <KpiTile label={`Volume, ${service.unitLabel}`} explain={<ExplainStatic title={`Volume, ${service.unitLabel}`} rule="How many, added up over every entry of this service in the period." rows={[{ label: 'Entries', value: formatNumber(entries.data?.length ?? 0) }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 0 }), kind: 'total' }]} />} loading={!entries.data} value={entries.data ? formatNumber(volume, { maxDigits: 0 }) : null} footer={entries.data ? <span className="text-xs text-fg-muted">{entries.data.length} {entries.data.length === 1 ? 'entry' : 'entries'}</span> : undefined} />
-          <KpiTile label={`Earned for one ${unit}`} explain={<ExplainStatic title={`Earned for one ${unit}`} rule="Revenue from this service in the period divided by its volume. The cost to do one is its cost divided the same way." rows={[{ label: 'Revenue', value: total ? formatMoney(total.revenueCents, { empty: 'Hidden' }) : 'None' }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 0 }) }, { label: 'Earned for one', value: line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : 'No volume yet', kind: 'total' }]} />} loading={!total || !entries.data} value={line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : null} emptyText="No volume yet" footer={line.costPerUnit ? <span className="text-xs text-fg-muted tabular-nums">{formatUnitPrice(line.costPerUnit)} to do one</span> : undefined} />
+          <KpiTile label={`Volume, ${service.unitLabel}`} explain={<ExplainStatic title={`Volume, ${service.unitLabel}`} rule="How many, added up over every entry of this service in the period." rows={[{ label: 'Entries', value: formatNumber(entries.data?.length ?? 0) }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 3 }), kind: 'total' }]} />} loading={!entries.data} value={entries.data ? formatNumber(volume, { maxDigits: 3 }) : null} footer={entries.data ? <span className="text-xs text-fg-muted">{entries.data.length} {entries.data.length === 1 ? 'entry' : 'entries'}</span> : undefined} />
+          <KpiTile label={`Earned for one ${unit}`} explain={<ExplainStatic title={`Earned for one ${unit}`} rule="Revenue from this service in the period divided by its volume. The cost to do one is its cost divided the same way." rows={[{ label: 'Revenue', value: total ? formatMoney(total.revenueCents, { empty: 'Hidden' }) : 'None' }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 3 }) }, { label: 'Earned for one', value: line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : 'No volume yet', kind: 'total' }]} />} loading={!total || !entries.data} value={line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : null} emptyText="No volume yet" footer={line.costPerUnit ? <span className="text-xs text-fg-muted tabular-nums">{formatUnitPrice(line.costPerUnit)} to do one</span> : undefined} />
         </div>
       )}
 
@@ -170,9 +171,9 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
             bucket={bucket}
             bars={[
               { id: 'revenue', label: 'Revenue', values: points.map((row) => row.revenueCents) },
-              { id: 'cost', label: 'Cost', values: points.map((row) => row.costCents) },
+              { id: 'cost', label: 'Cost', values: points.map((row) => (row.costMissing ? null : row.costCents)), gapText: points.map((row) => (row.costMissing ? NOT_KNOWN : null)) },
             ]}
-            lines={[{ id: 'margin', label: 'Margin', values: points.map((row) => row.marginBp) }]}
+            lines={[{ id: 'margin', label: 'Margin', values: points.map((row) => row.marginBp), gapText: points.map((row) => (row.costMissing ? NO_COST_WORDS : null)) }]}
             barFormat="money"
             lineFormat="percent"
             lineTarget={{ value: targetMarginBp, label: 'Target margin' }}
@@ -219,7 +220,7 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
               </dd>
             </div>
           </dl>
-          <p className="mt-3 border-t border-border-subtle pt-3 text-xs text-fg-muted">{line.costPerUnit ? `The target price uses what one ${unit} really cost in this period.` : `The target price uses the standard cost, because there is no volume in this period.`}</p>
+          <p className="mt-3 border-t border-border-subtle pt-3 text-xs text-fg-muted">{line.costPerUnit ? `The target price uses what one ${unit} really cost in this period.` : line.costMissing && volume > 0 ? `The target price uses the standard cost, because what this work really cost is not known yet.` : `The target price uses the standard cost, because there is no volume in this period.`}</p>
         </Section>
       </div>
 

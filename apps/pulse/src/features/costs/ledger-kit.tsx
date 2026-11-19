@@ -167,7 +167,7 @@ function EditableCell({
     disabled: saving,
     autoFocus: true,
     'data-testid': testId ? `${testId}-input` : undefined,
-    className: cn('h-7 w-full min-w-[84px] rounded-md border bg-panel px-1.5 text-sm text-fg outline-none focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]', error ? 'border-danger' : 'border-border-input', numeric && 'text-right tabular-nums'),
+    className: cn('h-7 w-full min-w-[84px] rounded-md border bg-panel px-1.5 text-sm text-fg outline-none focus:border-focus focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]', error ? 'border-danger' : 'border-border-input', numeric && 'text-right tabular-nums'),
   };
   return (
     <span className="flex min-w-0 flex-col gap-0.5">
@@ -681,7 +681,7 @@ export function BulkAddDialog<Input>({
                                 aria-label={cellLabel}
                                 aria-invalid={bad || undefined}
                                 data-testid={cellTestId}
-                                className={cn('h-8 w-full rounded-md border bg-panel px-2 text-sm text-fg outline-none hover:border-border-input-hover focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]', bad ? 'border-danger' : 'border-border-input', (column.kind === 'money' || column.kind === 'number') && 'text-right tabular-nums')}
+                                className={cn('h-8 w-full rounded-md border bg-panel px-2 text-sm text-fg outline-none hover:border-border-input-hover focus:border-focus focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]', bad ? 'border-danger' : 'border-border-input', (column.kind === 'money' || column.kind === 'number') && 'text-right tabular-nums')}
                                 type="text"
                                 inputMode={column.kind === 'money' || column.kind === 'number' ? 'decimal' : undefined}
                                 value={cells[column.id] ?? ''}

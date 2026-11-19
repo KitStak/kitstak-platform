@@ -66,7 +66,7 @@ import type {
   ReportRunDTO,
   ReportScheduleDTO,
 } from '@/lib/types';
-import { centsOut, cleanText, inTx, iso, isoRequired, isUuid, moneyOut, rows, todayInZone, type DomainContext } from './_shared';
+import { centsOut, cleanText, fullMonthViewWords, inTx, iso, isoRequired, isUuid, moneyOut, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse } from './access';
 import { listActivity, logActivity } from './activity';
 import { resolveSite } from './catalog';
@@ -473,13 +473,29 @@ async function profitBy(ctx: DomainContext, filters: ReportFilters, by: 'client'
   const profit = await getProfit(ctx, by, profitFilters(filters));
   const sorted = [...profit.rows].sort((a, b) => (b.profitCents ?? 0) - (a.profitCents ?? 0));
   const href = (row: ProfitRowDTO): string | null => (row.key === 'none' ? null : by === 'client' ? routes.client(row.key) : by === 'service' ? routes.service(row.key) : null);
+  // An extra service with no known cost: its cost, profit and margins are empty, never $0.00 and the
+  // revenue, and "Cost known" says No. The total still counts it, with no cost against it.
+  const services = by === 'service';
+  const unknown = sorted.filter((row) => row.costMissing);
+  const cellsOf = (row: ProfitRowDTO): Cells => {
+    const cells: Cells = { ...profitCells(row), labor_pct: row.laborPctBp, cost_per_unit: row.costPerUnitCents };
+    if (row.costMissing) for (const key of ['cost', 'profit', 'margin', 'margin_before', 'cost_per_unit']) cells[key] = null;
+    return services ? { ...cells, cost_known: row.key === 'none' ? null : row.costMissing ? 'No' : 'Yes' } : cells;
+  };
   return {
-    columns: [col('name', first, 'text'), col('code', 'Code', 'text'), col('jobs', 'Jobs', 'number'), ...PROFIT_COLUMNS, col('labor_pct', 'Labor as % of revenue', 'percent', { money: true }), col('cost_per_unit', 'Cost per unit', 'money')],
-    rows: sorted.map((row) => ({ id: row.key, href: href(row), cells: { name: row.label, code: row.sublabel, jobs: row.jobCount, ...profitCells(row), labor_pct: row.laborPctBp, cost_per_unit: row.costPerUnitCents } })),
+    columns: [col('name', first, 'text'), col('code', 'Code', 'text'), col('jobs', 'Jobs', 'number'), ...PROFIT_COLUMNS, col('labor_pct', 'Labor as % of revenue', 'percent', { money: true }), col('cost_per_unit', 'Cost per unit', 'money'), ...(services ? [col('cost_known', 'Cost known', 'text', { money: true })] : [])],
+    rows: sorted.map((row) => ({ id: row.key, href: href(row), cells: { name: row.label, code: row.sublabel, jobs: row.jobCount, ...cellsOf(row) } })),
     total: { name: 'Total', jobs: profit.total.jobCount, ...profitCells(profit.total), labor_pct: profit.total.laborPctBp, cost_per_unit: profit.total.costPerUnitCents },
     summary: headline(profit.total),
-    chart: rankingChart(`Profit by ${first.toLowerCase()}`, sorted.map((row) => ({ label: row.label, profit: row.profitCents }))),
-    notes: by === 'service' ? ['Core job work is everything that is not an extra service, so the total matches the Profit page.'] : [],
+    chart: rankingChart(`Profit by ${first.toLowerCase()}`, sorted.filter((row) => !row.costMissing).map((row) => ({ label: row.label, profit: row.profitCents }))),
+    notes: services
+      ? [
+          'Core job work is everything that is not an extra service, so the total matches the Profit page.',
+          ...(unknown.length > 0
+            ? [`${unknown.length} ${unknown.length === 1 ? 'service has' : 'services have'} no labor hours or parts logged, so Pulse does not know what that work cost. Their cost and profit are empty and Cost known says No. The total counts them with no cost against them, so it still adds up, and its profit is too high by what that work really cost.`]
+            : []),
+        ]
+      : [],
   };
 }
 
@@ -990,8 +1006,13 @@ async function monthClosePack(ctx: DomainContext, filters: ReportFilters): Promi
   const from = startOfMonth(filters.to);
   const to = endOfMonth(from);
   const scope = { from, to, siteId: filters.siteId ?? null };
-  const [profit, bridge, checklist] = await Promise.all([getProfit(ctx, 'month', scope, { comparePrior: false }), getCompanyBridge(ctx, scope), getCloseChecklist(ctx, from.slice(0, 7))]);
+  const [profit, bridge, checklist, settings] = await Promise.all([getProfit(ctx, 'month', scope, { comparePrior: false }), getCompanyBridge(ctx, scope), getCloseChecklist(ctx, from.slice(0, 7)), loadSettings(ctx.orgId)]);
   const total = profit.total;
+  // A month that is not over yet still counts all of its company costs (round five, decision B), so
+  // the pack says plainly that it is a full month view and where month to date lives.
+  const today = todayInZone(settings.timezone);
+  const inProgress = from <= today && today <= to;
+  const fullMonth = inProgress ? fullMonthViewWords(from, bridge.hasCompanyCosts) : null;
   const line = (section: string, name: string, amount: number | null, note: string | null = null): ReportRowDTO => ({ id: `${section}:${name}`, cells: { section, line: name, amount, count: null, note } });
   const count = (section: string, name: string, value: number, note: string): ReportRowDTO => ({ id: `${section}:${name}`, cells: { section, line: name, amount: null, count: value, note } });
   const list: ReportRowDTO[] = [
@@ -1005,7 +1026,7 @@ async function monthClosePack(ctx: DomainContext, filters: ReportFilters): Promi
     line('Company profit', 'Time not on a job that no job carried', bridge.sharedGapCents, 'Taken away.'),
     line('Company profit', 'Paid time not on any job', bridge.missingCostCents, 'Taken away.'),
     ...(bridge.hasCompanyCosts ? [line('Company profit', 'Overhead your hourly rate did not cover', bridge.overheadGapCents, 'Taken away. Below zero means the rate covered more than you spent.')] : []),
-    line('Company profit', 'Company profit', bridge.companyProfitCents),
+    line('Company profit', 'Company profit', bridge.companyProfitCents, fullMonth ? 'Full month view.' : null),
     line('Payroll check', 'Pay from the hours logged', bridge.grossPayCents),
     line('Payroll check', 'Pay you typed in', bridge.paidCents, bridge.paidCents === null && !bridge.moneyHidden ? 'No payroll total was typed in for this month.' : null),
     line('Payroll check', 'Gap', bridge.payrollGapCents ?? checklist.payrollGapCents),
@@ -1040,7 +1061,7 @@ async function monthClosePack(ctx: DomainContext, filters: ReportFilters): Promi
             endLabel: 'Company profit',
           }
         : null,
-    notes: [`This pack always covers one whole month: ${monthWords}, the month of the end day you picked.`, ...(filters.clientId || filters.jobTypeId || filters.status ? ['It is a company report, so the client, job type and status filters do not change it.'] : [])],
+    notes: [`This pack always covers one whole month: ${monthWords}, the month of the end day you picked.`, ...(fullMonth ? [`${fullMonth} For month to date, open Home or Profit.`] : []), ...(filters.clientId || filters.jobTypeId || filters.status ? ['It is a company report, so the client, job type and status filters do not change it.'] : [])],
   };
 }
 

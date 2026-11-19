@@ -544,7 +544,7 @@ function TimeField({ label, value, onChange, testId }: { readonly label: string;
           step={900}
           value={value}
           onChange={(event) => onChange(event.target.value || value)}
-          className="h-8 w-32 rounded-md border border-border-input bg-panel px-2 text-sm text-fg outline-none focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]"
+          className="h-8 w-32 rounded-md border border-border-input bg-panel px-2 text-sm text-fg outline-none focus:border-focus focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]"
           data-testid={testId}
         />
       )}

@@ -219,7 +219,7 @@ export const explain = scoped(async function explain(ctx: DomainContext, metric:
   }
   const key = metric as ExplainMetric;
   const money = access.seesMoney;
-  const filters: ProfitFilters = { from: scope.from, to: scope.to, siteId: scope.siteId ?? null, clientId: scope.clientId ?? null, jobTypeId: scope.jobTypeId ?? null, jobId: scope.jobId ?? null, vasServiceId: scope.vasServiceId ?? null, status: scope.status ?? null };
+  const filters: ProfitFilters = { from: scope.from, to: scope.to, siteId: scope.siteId ?? null, clientId: scope.clientId ?? null, jobTypeId: scope.jobTypeId ?? null, jobId: scope.jobId ?? null, vasServiceId: scope.vasServiceId ?? null, status: scope.status ?? null, companyCostSpread: scope.companyCostSpread ?? null };
   const [profit, words, quality, settings] = await Promise.all([getProfit(ctx, 'month', filters), scopeWords(ctx, filters), qualityLines(ctx, filters), loadSettings(ctx.orgId)]);
   const total = profit.total;
   let lines: Line[] = moneyLines(key, total);
@@ -244,12 +244,13 @@ export const explain = scoped(async function explain(ctx: DomainContext, metric:
     formula = `${FORMULAS.shared} ${SHARED_RULE_WORDS[settings.sharedCostRule] ?? ''}`.trim();
     links.push({ label: 'See the time not on a job', href: routes.labor('time') });
   } else if (key === 'company_profit') {
-    const bridge = await getCompanyBridge(ctx, { from: filters.from, to: filters.to, siteId: filters.siteId ?? null });
+    const bridge = await getCompanyBridge(ctx, { from: filters.from, to: filters.to, siteId: filters.siteId ?? null, spread: filters.companyCostSpread ?? null });
     // A step below zero adds to profit. It reads "plus" with the amount above zero, never "less" with a minus sign.
     const step = (takes: string, adds: string, cents: number | null): Line => (cents !== null && cents < 0 ? line(adds, -cents, 'money', 'plus') : line(takes, cents, 'money', 'minus'));
     lines = [
       line('Profit on jobs', bridge.workProfitCents, 'money', 'start'),
-      step('Time not on a job that no job carried', 'Jobs carried more time not on a job than was logged', bridge.sharedGapCents),
+      // Left out at zero, so it does not sit as an empty twin above "Paid time not on any job".
+      ...(bridge.sharedGapCents === 0 ? [] : [step('Time not on a job that no job carried', 'Jobs carried more time not on a job than was logged', bridge.sharedGapCents)]),
       step('Paid time not on any job', 'Paid time not on any job', bridge.missingCostCents),
       ...(bridge.hasCompanyCosts
         ? [
@@ -263,7 +264,12 @@ export const explain = scoped(async function explain(ctx: DomainContext, metric:
     if (!bridge.hasCompanyCosts) formula = `${FORMULAS.company_profit} No company costs were typed in for these days, so Pulse trusts the overhead inside your hourly rates.`;
     else if ((bridge.overheadGapCents ?? 0) < 0) formula = `${FORMULAS.company_profit} Your hourly rate covered more overhead than you spent, which adds to profit.`;
     // Company costs are monthly. A part month counts its share by day, and the popover says so.
-    if (bridge.hasCompanyCosts && bridge.companyCostPartial) formula = `${formula} Company costs are monthly, so part of a month counts its share by day.`;
+    if (bridge.hasCompanyCosts && bridge.companyCostPartial) {
+      formula =
+        bridge.companyCostSpread === 'work_days'
+          ? `${formula} Company costs are monthly, so part of a month counts its share by work day. A day that is not a working day gets no share, even if work was logged on it.`
+          : `${formula} Company costs are monthly, so part of a month counts its share by calendar day. Every day of the month carries the same share, days off too.`;
+    }
     if (bridge.companyCostNote) quality.push(bridge.companyCostNote);
     if (bridge.overLoggedDays > 0) quality.push(`${bridge.overLoggedDays} ${bridge.overLoggedDays === 1 ? 'day has' : 'days have'} more hours logged than paid.`);
     links.push({ label: 'See where paid time went', href: routes.labor('time') });
@@ -275,7 +281,15 @@ export const explain = scoped(async function explain(ctx: DomainContext, metric:
 
   // An extra service with revenue and no cost of any kind: the margin is not known, so it never reads 100%.
   if (money && total.costMissing) {
-    lines = lines.map((item) => (item.unit === 'percent' && item.value === null ? { ...item, unit: 'text' as const, text: 'No cost yet' } : item));
+    // Cost and profit are not known either: never $0.00, never the revenue (round four, designer issue 4).
+    const unknown = new Set(['Cost', 'Profit', 'Cost per unit', 'Profit before time not on a job']);
+    lines = lines.map((item) =>
+      item.unit === 'percent' && item.value === null
+        ? { ...item, unit: 'text' as const, value: null, text: 'No cost yet' }
+        : unknown.has(item.label) && item.unit === 'money'
+          ? { ...item, unit: 'text' as const, value: null, text: 'Not known' }
+          : item,
+    );
     quality.push('No labor hours or parts are logged for this work, so Pulse does not know what it cost. The margin shows once a cost is logged.');
   }
   if (!money) lines = lines.map((item) => (item.unit === 'money' || item.unit === 'money_per_hour' || item.unit === 'money_per_unit' || item.unit === 'percent' ? { ...item, value: null } : item));

@@ -76,9 +76,13 @@ export interface WmsVasRecord {
   readonly workDate: string;
   /**
    * Where the price comes from. `record`: the record carries its own total ("Total Price").
-   * `contract`: quantity times the rate on the client's approved contract. Null: no price yet.
+   * `contract`: quantity times the rate on the client's approved contract. `warehouse_bill`: the
+   * contract fee changes with volume or applies to some products only (`billedBy` says which), so
+   * only the warehouse bill can price it and Pulse leaves it with no price. Null: no price yet.
    */
-  readonly priceFrom: 'record' | 'contract' | null;
+  readonly priceFrom: 'record' | 'contract' | 'warehouse_bill' | null;
+  /** Why the warehouse bill prices this record: `tiers` (volume tiers) or `conditions` (a fee for some products only). */
+  readonly billedBy?: WmsBilledBy | null;
   /** How many, three places. A record with its own total counts as 1. */
   readonly quantity: string;
   /** Price of one, four places: the record's own total, or the contract rate. */
@@ -92,6 +96,13 @@ export interface WmsVasRecord {
   readonly path: string;
 }
 
+/**
+ * Why Pulse cannot price something from a warehouse contract fee: `tiers`, the rate depends on the
+ * volume of a whole billing period (tiers with different rates, or units charged only above a
+ * count); `conditions`, the fee is charged only for some products or orders ("Charge if").
+ */
+export type WmsBilledBy = 'tiers' | 'conditions';
+
 /** What the client's warehouse contract says a work order earns. */
 export interface WmsContractPrice {
   readonly workOrderId: string;
@@ -102,6 +113,11 @@ export interface WmsContractPrice {
   readonly perOrderCents: number | null;
   /** Changes when any rate behind the price changes. */
   readonly signature: string;
+  /**
+   * Set when only the warehouse bill can price this work order: a "Work Order" fee on the contract
+   * has volume tiers or conditions. `unitPrice` and `perOrderCents` are then null.
+   */
+  readonly billedBy: WmsBilledBy | null;
 }
 
 const num = (value: unknown): number => {
@@ -127,6 +143,55 @@ export const wmsReady = scoped(async function wmsReady(ctx: DomainContext): Prom
 });
 
 const textList = (values: readonly string[]): SQL => sql`(${sql.join(values.map((value) => sql`${value}`), sql`, `)})`;
+
+/**
+ * The rate Pulse may use for one warehouse fee (alias `f`), read the way the warehouse bill prices
+ * it (apps/wms `billing-engine.ts` priceFee and `priceQuantity`):
+ *
+ *  - A fee with "Charge if" conditions applies to some products or orders only. Pulse cannot tell
+ *    whether this work order or record is one of them: blocked, `conditions`. (The pricing mode
+ *    and "charge one time" marks the warehouse keeps in the same list start with `__` and are not
+ *    conditions.)
+ *  - No tiers: the standard rate, for every unit.
+ *  - "For each unit" (`perUnit`): the first tier's rate, for every unit.
+ *  - "From quantity": the first tier's rate when it charges from the first unit; a fee that skips
+ *    the first units of each billing period is blocked, `tiers`.
+ *  - One tier ("Graduated" or "Tier base"): its rate, for every unit.
+ *  - Several tiers with the same rate: that rate, for "Tier base", and for "Graduated" when the
+ *    tiers start at the first unit, leave no gap and have no end.
+ *  - Several tiers with different rates: the rate depends on the total of a whole billing period
+ *    across every work order, which one job or record cannot know: blocked, `tiers`.
+ *
+ * A minimum or maximum price on a fee is a top up or a cap of a whole billing period. It does not
+ * change the rate of one unit, so it does not block the rate (it stays on the warehouse bill).
+ */
+function feeRateParts(t: (name: string) => SQL, hasTiers: boolean): { joins: SQL; rate: SQL; blocked: SQL } {
+  const conds = sql`(case when jsonb_typeof(f.conditions::jsonb) = 'array' then f.conditions::jsonb else '[]'::jsonb end)`;
+  const tierStats = hasTiers
+    ? sql`select count(*)::int as n, min(ft.rate) as lo, max(ft.rate) as hi, coalesce(bool_or(ft.to_qty is null), false) as open_end,
+                 (array_agg(ft.rate order by ft.from_qty nulls first, ft.id))[1] as first_rate,
+                 (array_agg(ft.from_qty order by ft.from_qty nulls first, ft.id))[1] as first_from,
+                 coalesce(bool_and(ft.to_qty is null or exists (
+                   select 1 from ${t('billing_fee_tiers')} nt
+                    where nt.fee_id = ft.fee_id and nt.id <> ft.id and nt.from_qty <= ft.to_qty + 1 and coalesce(nt.to_qty, 'infinity'::float8) > ft.to_qty)), true) as gapless
+            from ${t('billing_fee_tiers')} ft where ft.fee_id = f.id`
+    : sql`select 0 as n, null::float8 as lo, null::float8 as hi, false as open_end, null::float8 as first_rate, null::float8 as first_from, true as gapless`;
+  const joins = sql`cross join lateral (
+      select exists (select 1 from jsonb_array_elements(${conds}) e where left(coalesce(e->>'field', ''), 2) <> '__') as conditional,
+             coalesce((select e->>'value' from jsonb_array_elements(${conds}) e where e->>'field' = '__pricingMode' limit 1), 'graduated') as mode
+    ) fm
+    cross join lateral (${tierStats}) fs`;
+  const rate = sql`(case
+      when fm.conditional then null
+      when fs.n = 0 then f.standard_rate
+      when fm.mode = 'perUnit' then fs.first_rate
+      when fm.mode = 'fromQuantity' then case when coalesce(fs.first_from, 1) <= 1 then fs.first_rate end
+      when fs.n = 1 then fs.first_rate
+      when fs.lo = fs.hi and (fm.mode = 'tierBase' or (coalesce(fs.first_from, 1) <= 1 and fs.open_end and fs.gapless)) then fs.lo
+    end)`;
+  const blocked = sql`(case when fm.conditional then 'conditions' when fs.n > 0 and ${rate} is null then 'tiers' end)`;
+  return { joins, rate, blocked };
+}
 const cleanIds = (ids: readonly string[]): string[] => [...new Set(ids.map((id) => id.trim()).filter((id) => id.length > 0 && id.length <= 64))];
 
 /**
@@ -290,7 +355,9 @@ export const WMS_VAS_PATH = '/billing/vas';
  *  - A "Total Price" record carries its own price: that total is used as it is.
  *  - A "Vas Quantity" record is priced by the client's contract: the VAS fee for that service on
  *    the newest approved contract of the same client and warehouse that had started by the day
- *    of the work. The rate is the fee's first tier when it has tiers, else its standard rate.
+ *    of the work, at the rate the warehouse bill charges for one unit (`feeRateParts`).
+ *  - A fee whose rate depends on the volume of a billing period, or that applies to some records
+ *    only, cannot price one record: `priceFrom` is `warehouse_bill` and there is no price.
  *  - No such fee means no price yet.
  *
  * Tied to a work order when the record names one. The day is the record's time in the warehouse
@@ -305,20 +372,22 @@ export const listVasRecords = scoped(async function listVasRecords(ctx: DomainCo
     const hasFees = (await wmsTableExists(schema, 'billing_fees')) && (await wmsTableExists(schema, 'billing_contracts'));
     const hasTiers = hasFees && (await wmsTableExists(schema, 'billing_fee_tiers'));
     const hasWarehouses = await wmsTableExists(schema, 'warehouses');
-    const feeRate = hasTiers ? sql`coalesce((select ft.rate from ${t('billing_fee_tiers')} ft where ft.fee_id = f.id order by ft.from_qty nulls first limit 1), f.standard_rate)` : sql`f.standard_rate`;
+    const fee = feeRateParts(t, hasTiers);
     const rate = hasFees
       ? sql`left join lateral (
-              select round(${feeRate}::numeric, 4) as rate, bc.name as contract_name
+              select case when ${fee.blocked} is null and ${fee.rate} >= 0 and ${fee.rate} < 1000000 then round(${fee.rate}::numeric, 4) end as rate,
+                     ${fee.blocked} as blocked, bc.name as contract_name
                 from ${t('billing_fees')} f
                 join ${t('billing_contracts')} bc on bc.id = f.contract_id
+                ${fee.joins}
                where bc.client_id = v.client_id and bc.warehouse_id = v.warehouse_id and bc.approval_status = 'Approved'
                  and f.operation_type = 'VAS' and f.vas_type_id = v.vas_type_id
-                 and ${feeRate} >= 0 and ${feeRate} < 1000000
+                 and (${fee.blocked} is not null or (${fee.rate} >= 0 and ${fee.rate} < 1000000))
                  and left(bc.calc_start_date, 10) <= left(v.operation_at, 10)
                order by bc.calc_start_date desc, f.updated_at desc, f.id
                limit 1
             ) r on true`
-      : sql`left join lateral (select null::numeric as rate, null::text as contract_name) r on true`;
+      : sql`left join lateral (select null::numeric as rate, null::text as blocked, null::text as contract_name) r on true`;
     const zone = hasWarehouses ? sql`coalesce((select nullif(wh.timezone, '') from ${t('warehouses')} wh where wh.id = v.warehouse_id), 'UTC')` : sql`'UTC'`;
     const found = await rows<{
       id: string;
@@ -332,6 +401,7 @@ export const listVasRecords = scoped(async function listVasRecords(ctx: DomainCo
       own_price: string;
       own_cents: string;
       rate: string | null;
+      blocked: WmsBilledBy | null;
       contract_name: string | null;
       work_order_id: string | null;
       note: string | null;
@@ -342,7 +412,7 @@ export const listVasRecords = scoped(async function listVasRecords(ctx: DomainCo
                  round(v.value::numeric, 3)::text as quantity,
                  round(v.value::numeric, 4)::text as own_price,
                  round(v.value::numeric * 100)::bigint::text as own_cents,
-                 r.rate::text as rate, r.contract_name,
+                 r.rate::text as rate, r.blocked, r.contract_name,
                  (select wo.id from ${t('work_orders')} wo where v.reference_order_type = 'Work Order' and wo.code = v.reference_number limit 1) as work_order_id
             from ${t('vas_operations')} v
             join ${t('lookup_values')} lv on lv.id = v.vas_type_id
@@ -353,7 +423,7 @@ export const listVasRecords = scoped(async function listVasRecords(ctx: DomainCo
     );
     return found.map((row): WmsVasRecord => {
       const own = row.calculation_type === 'Total Price';
-      const priceFrom = own ? 'record' : row.rate !== null ? 'contract' : null;
+      const priceFrom = own ? 'record' : row.blocked !== null ? 'warehouse_bill' : row.rate !== null ? 'contract' : null;
       return {
         id: row.id,
         clientId: row.client_id,
@@ -366,7 +436,8 @@ export const listVasRecords = scoped(async function listVasRecords(ctx: DomainCo
         // A price of one has to fit the column: a very large own total keeps its cents and shows no price of one.
         unitPrice: own ? (Number(row.own_price) < 1_000_000 ? row.own_price : null) : row.rate,
         ownCents: own ? cents(row.own_cents) : null,
-        contractName: priceFrom === 'contract' ? row.contract_name : null,
+        contractName: priceFrom === 'contract' || priceFrom === 'warehouse_bill' ? row.contract_name : null,
+        billedBy: priceFrom === 'warehouse_bill' ? row.blocked : null,
         workOrderId: row.work_order_id,
         note: row.note,
         path: WMS_VAS_PATH,
@@ -382,11 +453,14 @@ export const listVasRecords = scoped(async function listVasRecords(ctx: DomainCo
 /**
  * What the warehouse contract says each of these work orders earns: the "Work Order" fees on the
  * newest approved contract of the work order's client and warehouse that has started (a contract
- * with a start day in the future is not read yet). Only fees with no conditions are read (a fee
- * that applies to some products only is left to the warehouse bill), and a fee is read at its
- * standard rate: volume tiers are priced by the warehouse billing run over a whole period, which
- * one job cannot see, so tiers stay with the warehouse bill too.
- * A work order whose client has no such fee is left out. Fail soft: an empty list.
+ * with a start day in the future is not read yet).
+ *
+ * Each fee is read at the rate the warehouse bill would charge for one unit (`feeRateParts`): its
+ * standard rate, or its tier rate when the tiers give every unit the same rate. When a fee's rate
+ * depends on the volume of a whole billing period (tiers with different rates, or units charged
+ * only above a count), or the fee applies to some products only ("Charge if"), one job cannot know
+ * its price: the work order comes back with no price and `billedBy` set, and the warehouse bill
+ * prices it. A work order whose client has no such fee is left out. Fail soft: an empty list.
  */
 export const listContractPrices = scoped(async function listContractPrices(ctx: DomainContext, workOrderIds: readonly string[]): Promise<WmsContractPrice[]> {
   const ids = cleanIds(workOrderIds);
@@ -395,45 +469,61 @@ export const listContractPrices = scoped(async function listContractPrices(ctx: 
     const schema = await wmsReady(ctx);
     if (!schema || !(await wmsTableExists(schema, 'billing_fees')) || !(await wmsTableExists(schema, 'billing_contracts'))) return [];
     const t = (name: string) => wmsTable(schema, name);
-    const found = await rows<{ work_order_id: string; contract_id: string; contract_name: string; unit_price: string | null; per_order_cents: string | null; signature: string }>(
+    const fee = feeRateParts(t, await wmsTableExists(schema, 'billing_fee_tiers'));
+    const kinds = sql`('Per Kit', 'Per Component', 'Per WorkOrder')`;
+    const found = await rows<{ work_order_id: string; contract_id: string; contract_name: string; unit_price: string | null; per_order_cents: string | null; signature: string; blocked: WmsBilledBy | null; priced: boolean }>(
       siblingDb,
-      sql`select w.id as work_order_id, c.contract_id, c.contract_name,
-                 case when c.per_kit is null and c.per_component is null then null
-                      else round(coalesce(c.per_kit, 0) + coalesce(c.per_component, 0) * p.parts, 4)::text end as unit_price,
-                 round(c.per_order * 100)::bigint::text as per_order_cents,
-                 concat_ws('|', c.contract_id, coalesce(c.per_kit::text, ''), coalesce(c.per_component::text, ''), coalesce(c.per_order::text, ''), p.parts::text) as signature
+      sql`select w.id as work_order_id, c.contract_id, c.contract_name, a.blocked,
+                 (a.per_kit is not null or a.per_component is not null or a.per_order is not null) as priced,
+                 case when a.per_kit is null and a.per_component is null then null
+                      else round(coalesce(a.per_kit, 0) + coalesce(a.per_component, 0) * p.parts, 4)::text end as unit_price,
+                 round(a.per_order * 100)::bigint::text as per_order_cents,
+                 concat_ws('|', c.contract_id, coalesce(a.per_kit::text, ''), coalesce(a.per_component::text, ''), coalesce(a.per_order::text, ''), p.parts::text) as signature
             from ${t('work_orders')} w
             cross join lateral (
               select coalesce(sum(wc.component_qty), 0)::numeric as parts from ${t('work_order_components')} wc where wc.work_order_id = w.id
             ) p
             join lateral (
-              select bc.id as contract_id, bc.name as contract_name,
-                     sum(f.standard_rate::numeric) filter (where f.fee_by = 'Per Kit') as per_kit,
-                     sum(f.standard_rate::numeric) filter (where f.fee_by = 'Per Component') as per_component,
-                     sum(f.standard_rate::numeric) filter (where f.fee_by = 'Per WorkOrder') as per_order
+              select bc.id as contract_id, bc.name as contract_name
                 from ${t('billing_contracts')} bc
-                join ${t('billing_fees')} f on f.contract_id = bc.id
                where bc.client_id = w.client_id and bc.warehouse_id = w.warehouse_id and bc.approval_status = 'Approved'
                  -- A contract that has not started yet sets no price: its rates count from its start day.
                  and left(bc.calc_start_date, 10) <= to_char(now(), 'YYYY-MM-DD')
-                 and f.operation_type = 'Work Order' and f.fee_by in ('Per Kit', 'Per Component', 'Per WorkOrder')
-                 and f.standard_rate >= 0 and f.standard_rate < 1000000
-                 and (f.conditions is null or f.conditions = '[]'::jsonb)
-               group by bc.id, bc.name, bc.calc_start_date
+                 and exists (select 1 from ${t('billing_fees')} f where f.contract_id = bc.id and f.operation_type = 'Work Order' and f.fee_by in ${kinds})
                order by bc.calc_start_date desc, bc.id
                limit 1
             ) c on true
+            cross join lateral (
+              select sum(r.rate::numeric) filter (where r.fee_by = 'Per Kit' and r.usable) as per_kit,
+                     sum(r.rate::numeric) filter (where r.fee_by = 'Per Component' and r.usable) as per_component,
+                     sum(r.rate::numeric) filter (where r.fee_by = 'Per WorkOrder' and r.usable) as per_order,
+                     -- "conditions" sorts before "tiers": a fee for some products only is named first.
+                     min(r.blocked) as blocked
+                from (
+                  select f.fee_by, ${fee.rate} as rate, ${fee.blocked} as blocked,
+                         (${fee.blocked} is null and ${fee.rate} >= 0 and ${fee.rate} < 1000000) as usable
+                    from ${t('billing_fees')} f
+                    ${fee.joins}
+                   where f.contract_id = c.contract_id and f.operation_type = 'Work Order' and f.fee_by in ${kinds}
+                ) r
+            ) a
            where w.id in ${textList(ids)}`,
     );
     return found
+      .filter((row) => row.blocked !== null || row.priced)
       .filter((row) => row.unit_price === null || Number(row.unit_price) < 1_000_000)
-      .map((row) => ({
-        workOrderId: row.work_order_id,
-        contractName: row.contract_name,
-        unitPrice: row.unit_price,
-        perOrderCents: row.per_order_cents === null ? null : cents(row.per_order_cents),
-        signature: row.signature,
-      }));
+      .map((row) =>
+        row.blocked !== null
+          ? { workOrderId: row.work_order_id, contractName: row.contract_name, unitPrice: null, perOrderCents: null, signature: `${row.contract_id}|warehouse bill|${row.blocked}`, billedBy: row.blocked }
+          : {
+              workOrderId: row.work_order_id,
+              contractName: row.contract_name,
+              unitPrice: row.unit_price,
+              perOrderCents: row.per_order_cents === null ? null : cents(row.per_order_cents),
+              signature: row.signature,
+              billedBy: null,
+            },
+      );
   } catch (error) {
     logSoftFail(ctx.orgId, 'wms.listContractPrices', error);
     return [];

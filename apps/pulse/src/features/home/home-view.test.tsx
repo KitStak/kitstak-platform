@@ -22,7 +22,7 @@ function fixtures(money: boolean) {
   const m = <T,>(value: T): T | null => (money ? value : null);
   const total = row('total', 'Total', money);
   const trend: ProfitResponse = { by: 'day', from: '2026-11-01', to: '2026-11-17', rows: [row('2026-11-16', '', money), row('2026-11-17', '', money)], total, moneyHidden: !money };
-  const bridge: CompanyBridgeDTO = { from: '2026-11-01', to: '2026-11-17', workProfitCents: m(1494500), sharedGapCents: m(115000), missingCostCents: m(236000), companyCostCents: m(0), overheadAbsorbedCents: m(0), overheadGapCents: null, companyProfitCents: m(1143500), indirectCents: m(0), sharedAppliedCents: m(0), directHours: '312.00', indirectHours: '20.00', paidHours: '340.00', missingHours: '8.00', utilizationBp: 9176, paidCents: null, grossPayCents: m(0), payrollGapCents: null, overLoggedDays: 0, hasCompanyCosts: false, companyCostPartial: false, companyCostNote: null, companyCostParts: [], moneyHidden: !money };
+  const bridge: CompanyBridgeDTO = { from: '2026-11-01', to: '2026-11-17', workProfitCents: m(1494500), sharedGapCents: m(115000), missingCostCents: m(236000), companyCostCents: m(0), overheadAbsorbedCents: m(0), overheadGapCents: null, companyProfitCents: m(1143500), indirectCents: m(0), sharedAppliedCents: m(0), directHours: '312.00', indirectHours: '20.00', paidHours: '340.00', missingHours: '8.00', utilizationBp: 9176, paidCents: null, grossPayCents: m(0), payrollGapCents: null, overLoggedDays: 0, hasCompanyCosts: false, companyCostPartial: false, companyCostNote: null, companyCostSpread: 'calendar', companyCostParts: [], moneyHidden: !money };
   const summary: SummaryDTO = { from: '2026-11-01', to: '2026-11-17', openJobs: 9, atRisk: 2, losing: 1, headsUp: 1, onTrack: 5, noData: 0, total, prior: null, bridge, entryProgress: { activeJobs: 9, loggedToday: 7, date: '2026-11-17', daysReviewedThisWeek: 1, workDaysThisWeek: 1 }, notBilledYetCents: m(2500000), openAlerts: 0, thingsToFix: { needsRate: 2, noPrice: 1, unitsNoHours: 3, serviceNoPrice: 0 }, moneyHidden: !money };
   const job = { id: 'j1', number: 'J-1026', name: 'Chew toy 3 pack', clientName: 'Orchard Pet Supply', stats: { riskStatus: 'losing', headline: money ? 'At this pace the job ends in the red.' : 'The crew is running behind the target pace.', projectedProfitCents: m(-463200), confidence: 'solid' } } as unknown as JobListItemDTO;
   const byClient: ProfitResponse = { ...trend, by: 'client', rows: [row('c1', 'Lumen Skincare', money), row('c2', 'Orchard Pet Supply', money, { profitCents: m(-212400) })] };
@@ -76,6 +76,16 @@ describe('Home', () => {
     expect(html).toContain('After time not on a job and overhead, the company made');
     expect(html).toContain('data-testid="home-company-cost-note"');
     expect(html).toContain('Company costs for 18 of 30 days.');
+    // The step that moved the company number most, in plain words (round four, designer issue 9).
+    expect(html).toContain('The biggest step down is paid time not on any job.');
+  });
+
+  it('says why the company made more than its jobs', () => {
+    data = fixtures(true);
+    data.summary = { ...data.summary, bridge: { ...data.summary.bridge, hasCompanyCosts: true, companyCostCents: 4000000, overheadAbsorbedCents: 4800000, overheadGapCents: -800000, companyProfitCents: 1494500 - 115000 - 236000 + 800000, companyCostPartial: true, companyCostNote: 'Company costs for 17 of 30 days.' } };
+    const html = render();
+    expect(html).toContain('The company made more than its jobs:');
+    expect(html).toContain('Your hourly rates covered more overhead than the company costs for these days, so overhead added to profit.');
   });
 
   it('gives a reader without money units, hours and pace, and no money anywhere', () => {

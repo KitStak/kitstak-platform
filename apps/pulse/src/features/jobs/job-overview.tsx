@@ -989,6 +989,17 @@ function LinkedRecords({
                     ) : null}
                     .
                   </p>
+                ) : link.contract?.billedBy ? (
+                  <p className="mt-0.5 text-xs text-fg-secondary" data-testid="job-link-contract-bill">
+                    The warehouse contract {link.contract.contractName} prices this job on its own bill, because its rate{' '}
+                    {link.contract.billedBy === 'tiers' ? 'changes with volume' : 'is for some products only'}. Pulse keeps the
+                    job&apos;s own price.
+                  </p>
+                ) : link.contract && !link.contract.inEffect ? (
+                  <p className="mt-0.5 text-xs text-fg-secondary" data-testid="job-link-contract-typed">
+                    A price typed in Pulse is used instead of the warehouse contract {link.contract.contractName} until the
+                    contract&apos;s rates change.
+                  </p>
                 ) : null}
               </div>
               {link.url ? (

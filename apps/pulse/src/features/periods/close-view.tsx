@@ -162,6 +162,11 @@ export function CloseView({
                     <span className="text-xs text-fg-muted tabular-nums">
                       {board.moneyHidden ? (item.status === 'closed' ? `Closed ${formatMoment(item.closedAt, 'day', local)}` : 'Open') : item.companyProfitCents === null ? 'No numbers yet' : `Company profit ${formatMoneyWhole(item.companyProfitCents)} · ${formatPercentBp(item.companyMarginBp, { empty: 'no margin' })}`}
                     </span>
+                    {item.fullMonthNote && item.companyProfitCents !== null ? (
+                      <span className="text-xs text-fg-muted" data-testid={`close-month-full-${item.periodMonth.slice(0, 7)}`}>
+                        Full month view, not month to date
+                      </span>
+                    ) : null}
                   </button>
                 </li>
               );
@@ -357,6 +362,19 @@ function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly mon
                   ? 'The checklist is clear. Close the month to lock its numbers.'
                   : `${detail.toFix} ${detail.toFix === 1 ? 'step needs' : 'steps need'} fixing before these numbers can be trusted. You can still close the month, and the saved numbers will carry the gap.`}
           </p>
+          {!closed && month.fullMonthNote ? (
+            <p className="mt-1 max-w-[60ch] text-sm text-fg-secondary" data-testid="close-full-month">
+              {month.fullMonthNote} For month to date, open{' '}
+              <Link href={routes.home()} className="rounded-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                Home
+              </Link>{' '}
+              or{' '}
+              <Link href={routes.profit({ from: month.periodMonth, to: board.today < endOfMonth(month.periodMonth) ? board.today : endOfMonth(month.periodMonth) })} className="rounded-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                Profit
+              </Link>
+              .
+            </p>
+          ) : null}
           {!closed && month.reopenedAt ? (
             <p className="mt-1 text-sm text-fg-secondary">
               Reopened{month.reopenedByName ? ` by ${month.reopenedByName}` : ''} on {formatMoment(month.reopenedAt, 'day', local)}

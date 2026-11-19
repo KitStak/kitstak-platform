@@ -64,12 +64,17 @@ export function Toaster({ theme = 'system' }: ToasterProps) {
           description: 'text-sm text-fg-secondary',
           content: 'flex min-w-0 flex-1 flex-col gap-0.5',
           icon: 'shrink-0 flex',
+          // On a touch screen the buttons are 44px tall and wide, so a thumb lands on them.
           actionButton:
-            'shrink-0 rounded-sm px-2 h-7 text-sm font-semibold text-primary-text hover:bg-primary-subtle focus-visible:outline-2 focus-visible:outline-focus',
+            'shrink-0 rounded-sm px-2 h-7 text-sm font-semibold text-primary-text hover:bg-primary-subtle focus-visible:outline-2 focus-visible:outline-focus pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:px-3',
           cancelButton:
-            'shrink-0 rounded-sm px-2 h-7 text-sm font-medium text-fg-secondary hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus',
+            'shrink-0 rounded-sm px-2 h-7 text-sm font-medium text-fg-secondary hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:px-3',
+          // The close button sits in the row after the actions. It must be `relative`, never
+          // `static`: the touch hit area (globals.css, pointer coarse) is an absolute box sized from
+          // the nearest positioned box. With `static` that box was the whole toast, so a tap on
+          // Undo landed on Close and only hid the offer.
           closeButton:
-            '!static order-last !translate-none shrink-0 !size-6 !rounded-sm !border-0 !bg-transparent text-icon hover:!bg-hover',
+            '!relative !inset-auto order-last !translate-none shrink-0 !size-6 !rounded-sm !border-0 !bg-transparent text-icon hover:!bg-hover pointer-coarse:!size-11',
         },
       }}
     />

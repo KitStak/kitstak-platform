@@ -208,6 +208,11 @@ function mergeLines(previous: readonly Line[], grid: LogGridDTO): Line[] {
   return out;
 }
 
+/** The ids of the saved lines of one job on the grid: what a new line tells the server it saw. */
+function seenLines(lines: readonly Line[], jobId: string): string[] {
+  return lines.flatMap((line) => (line.jobId === jobId && line.entry ? [line.entry.id] : []));
+}
+
 interface SaveResponse {
   data?: { entry: ProductionEntryDTO; created: boolean };
   error?: { code: string; message: string; fresh?: ProductionEntryDTO | null; fields?: Record<string, string> };
@@ -469,6 +474,9 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
         workDate: grid.date,
         shift: line.shift,
         version: line.entry?.version ?? null,
+        // A new line names the lines of this job the grid shows, so the server can tell when
+        // someone else added work to the day in the meantime (the day form follows the same rule).
+        seen: seenLines(linesRef.current, line.jobId),
         ...toPayload(sent),
       });
       if (result.ok) {
@@ -509,6 +517,8 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
         return;
       }
       if (result.code === 'NETWORK_ERROR') offlineKeys.current.add(key);
+      // The day gained work this grid did not show: load it, and keep this line for the person to check.
+      if (result.code === 'CONFLICT') scheduleRefresh();
       update(key, (item) => ({ ...item, status: 'error', message: result.message }));
     },
     [canEdit, classById, grid.date, rowById, scheduleRefresh, update],
@@ -570,6 +580,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
             workDate: grid.date,
             shift: line.shift,
             version: line.entry?.version ?? null,
+            seen: seenLines(linesRef.current, line.jobId),
             ...toPayload(line.values),
           }),
         }).catch(() => undefined);

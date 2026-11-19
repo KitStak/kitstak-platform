@@ -887,7 +887,16 @@ function PaceBoard({
               />
             </div>
           ) : null}
-          <div>
+          {/* Below 1024px each row is a card, so the name and every number are on screen at once. */}
+          <PaceCards
+            tab={tab}
+            rows={rows}
+            jobs={data?.byJob ?? []}
+            thresholds={thresholds}
+            canManage={canManage}
+            onSetTarget={setJobTarget}
+          />
+          <div className="hidden lg:block">
             <Table className="min-w-[760px]" aria-label="Pace against target by job">
               <TableHead>
                 <TableRow className="hover:bg-transparent">
@@ -900,33 +909,7 @@ function PaceBoard({
                   <TableHeaderCell numeric>
                     <span className="inline-flex items-center gap-1">
                       Target
-                      {tab !== 'job' ? (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <IconButton
-                              label="How the target of a mix of jobs is made"
-                              icon={<Info aria-hidden />}
-                              size="sm"
-                              variant="ghost"
-                            />
-                          </PopoverTrigger>
-                          <PopoverContent
-                            align="end"
-                            className="w-80 max-w-[calc(100vw-32px)] text-left text-sm font-normal text-fg-secondary"
-                          >
-                            <h3 className="mb-1 text-sm font-semibold text-fg">How we got this</h3>
-                            <p>
-                              A {tab === 'class' ? 'labor class' : 'day'} covers many jobs, each with its own
-                              target. Pulse works out the hours those units should have taken at each job’s
-                              target, then divides the units by those hours.
-                            </p>
-                            <p className="mt-1">
-                              The share of target is those hours divided by the labor hours that were logged.
-                              Jobs with no target are left out of it.
-                            </p>
-                          </PopoverContent>
-                        </Popover>
-                      ) : null}
+                      {tab !== 'job' ? <MixedTargetHelp tab={tab} /> : null}
                     </span>
                   </TableHeaderCell>
                   <TableHeaderCell className="w-52">Share of target</TableHeaderCell>
@@ -1027,6 +1010,128 @@ function PaceBoard({
         <JobTargetDialog key={jobTarget.jobId} job={jobTarget} onClose={() => setJobTarget(null)} />
       ) : null}
     </Panel>
+  );
+}
+
+/** How the target of a labor class or a day is made. Shared by the table header and the cards. */
+function MixedTargetHelp({ tab }: { readonly tab: BoardTab }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <IconButton label="How the target of a mix of jobs is made" icon={<Info aria-hidden />} size="sm" variant="ghost" />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 max-w-[calc(100vw-32px)] text-left text-sm font-normal text-fg-secondary">
+        <h3 className="mb-1 text-sm font-semibold text-fg">How we got this</h3>
+        <p>
+          A {tab === 'class' ? 'labor class' : 'day'} covers many jobs, each with its own target. Pulse works out the
+          hours those units should have taken at each job’s target, then divides the units by those hours.
+        </p>
+        <p className="mt-1">
+          The share of target is those hours divided by the labor hours that were logged. Jobs with no target are left
+          out of it.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Pace against target as cards, for a phone and a tablet: the name, the share of target and every number. */
+function PaceCards({
+  tab,
+  rows,
+  jobs,
+  thresholds,
+  canManage,
+  onSetTarget,
+}: {
+  readonly tab: BoardTab;
+  readonly rows: readonly PaceBoardRowDTO[];
+  readonly jobs: PaceBoardDTO['byJob'];
+  readonly thresholds: PaceThresholds;
+  readonly canManage: boolean;
+  readonly onSetTarget: (job: PaceBoardDTO['byJob'][number]) => void;
+}) {
+  return (
+    <div className="lg:hidden">
+      {tab !== 'job' ? (
+        <p className="flex items-center gap-1 border-b border-border-subtle px-4 py-2 text-xs text-fg-muted">
+          The target of a {tab === 'class' ? 'labor class' : 'day'} is made from the target of each job in it.
+          <MixedTargetHelp tab={tab} />
+        </p>
+      ) : null}
+      <ul
+        className="divide-y divide-border-subtle"
+        aria-label={`Pace against target by ${tab === 'job' ? 'job' : tab === 'class' ? 'labor class' : 'day'}`}
+        data-testid="pace-cards"
+      >
+        {rows.map((row) => {
+          const tone = paceTone(row.productivityBp, thresholds);
+          const job = tab === 'job' ? jobs.find((item) => item.key === row.key) : undefined;
+          const compared = Boolean(row.uph && row.targetUph);
+          return (
+            <li key={row.key} className="flex flex-col gap-2 px-4 py-3" data-testid="pace-card">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  {job ? (
+                    <Link href={routes.job(job.jobId)} className="block text-sm font-medium text-fg hover:text-fg-link hover:underline">
+                      {row.label}
+                    </Link>
+                  ) : (
+                    <p className="text-sm font-medium text-fg">{row.label}</p>
+                  )}
+                  {row.sublabel ? <p className="text-xs text-fg-muted">{row.sublabel}</p> : null}
+                </div>
+                <span className={cn('shrink-0 text-base font-semibold tabular-nums', compared ? TONE_TEXT[tone] : 'text-fg-muted')}>
+                  {compared ? formatPercentBp(row.productivityBp, { digits: 0 }) : null}
+                </span>
+                {tab === 'job' && canManage && job ? (
+                  <IconButton
+                    label={`Set a target pace for ${row.label}`}
+                    icon={<Target aria-hidden />}
+                    size="lg"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => onSetTarget(job)}
+                  />
+                ) : null}
+              </div>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm tabular-nums sm:grid-cols-4">
+                <div>
+                  <dt className="text-2xs text-fg-muted">Units good</dt>
+                  <dd>{formatNumber(row.unitsGood, { maxDigits: 0 })}</dd>
+                </div>
+                <div>
+                  <dt className="text-2xs text-fg-muted">Labor hours</dt>
+                  <dd>{formatHours(row.paceHours)}</dd>
+                </div>
+                <div>
+                  <dt className="text-2xs text-fg-muted">Pace</dt>
+                  <dd className="font-medium text-fg">{row.uph ? formatPace(row.uph) : 'No pace yet'}</dd>
+                </div>
+                <div>
+                  <dt className="text-2xs text-fg-muted">Target</dt>
+                  <dd>
+                    {row.targetUph ? formatPace(row.targetUph) : <span className="text-fg-muted">None</span>}
+                    {job?.jobTargetUph ? <span className="block text-xs text-fg-muted">Set on the job</span> : null}
+                  </dd>
+                </div>
+              </dl>
+              {compared ? (
+                <BulletChart
+                  label={`Pace of ${row.label}`}
+                  value={Number(row.uph)}
+                  target={Number(row.targetUph)}
+                  size="sm"
+                  format="number"
+                />
+              ) : (
+                <p className="text-xs text-fg-muted">{row.targetUph ? 'No units yet' : 'No target to compare'}</p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

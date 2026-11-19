@@ -43,9 +43,9 @@ const triggerClass = (size: NonNullable<SelectProps['size']>, className?: string
   cn(
     'group inline-flex w-full items-center justify-between gap-2 rounded-md border border-border-input bg-panel text-left text-fg',
     'transition-[border-color,box-shadow] duration-[var(--duration-fast)] ease-out outline-none',
-    'hover:border-border-input-hover focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)]',
-    'data-[state=open]:border-primary disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60',
-    'aria-invalid:border-danger data-[placeholder]:text-fg-placeholder',
+    'hover:border-border-input-hover focus-visible:border-focus focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)]',
+    'data-[state=open]:border-focus disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60',
+    'aria-invalid:border-danger aria-invalid:shadow-[inset_0_0_0_1px_var(--danger)] aria-invalid:focus-visible:border-danger aria-invalid:focus-visible:shadow-[inset_0_0_0_1px_var(--danger),0_0_0_3px_var(--focus-ring-soft)] data-[placeholder]:text-fg-placeholder',
     SIZE[size],
     className,
   );
