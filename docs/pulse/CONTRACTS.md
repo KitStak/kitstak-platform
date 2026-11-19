@@ -1045,3 +1045,50 @@ Each one was checked again against the running app on port 3500, not only by tes
 
 Checks at commit: typecheck and lint clean, 667 unit and database tests, 57 Playwright tests against port 3500.
 Dev data note: job stats were recomputed once with `recalcOrg` (no restamp) so stored rows use the new rules.
+
+### 19.8 Round three fixes (the blocking issues from the round two critics)
+
+Each one was checked against the running app, not only by tests. Email reports stay deferred.
+
+- **Month close shows the company number.** The month card shows Job cost, Job profit and Job margin, then the bridge
+  steps (time not on a job that no job carried, paid time not on any job, overhead the hourly rate did not cover), then
+  Company profit and Company margin. The month list shows company profit. The close snapshot stores
+  `company { jobProfitCents, jobMarginBp, companyProfitCents, companyMarginBp }`. The words "All cost" are gone.
+- **Two margin names.** "Job margin" and "Company margin" are the only headline names. The before shared figure lives in
+  "How we got this" as "Before time not on a job", and as a table column it is "Contribution %".
+- **Job delete asks first and can be undone later.** `DeleteJobDialog` says what leaves the reports (money left out for
+  a reader without money). `deleteJobAction` does not revalidate the page that is gone, so the person lands on the jobs
+  list with the Undo toast. `/jobs/deleted` (a tab on Jobs, `job:manage`) lists deleted jobs with who, when and Restore.
+- **No silent look alike clients.** `src/lib/client-names.ts` is the one look alike rule for the screen and the server.
+  `ClientCombo` (quick add, the Log work "Add a job" dialog and the new job wizard) offers "Did you mean" first and only
+  makes a client from the "Create" row. `quickAddJob` refuses a look alike name unless `createClient` is true.
+- **Plan vs actual on a tablet.** Below 1024 px the table is label and value cards, so "Projected at finish" is whole.
+  `ScrollX` gives any table that still scrolls a tab stop, a name and a fade cue.
+- **"Put on a client, not on a job"** is out of the job ranking on the job profit report. It has its own row and a panel
+  with one plain sentence and a link to the entries behind it (`profit/entries?job=none`).
+- **Log work.** "Hours each" has no grey number. The warning names the missing box ("Add the hours each", "Add people").
+  The labor hours check now matches the numbers on the row.
+- **No hydration warnings from time.** `RelativeTime`, `LocalTime` and `useHydrated`
+  (`@/components/pulse/local-time`) print UTC text on the server and local time after hydration. Home reads the prior
+  period and "Jobs that need you" on the server, so the first screen does not jump.
+- **Warehouse money flows in.** Each warehouse extra service record becomes one extra service entry (`source = 'wms'`,
+  `source_ref = wms:vas:<record id>`), on the job linked to its work order or else on the client, dated the day the work
+  was done. The price is the record's own total, or else the count times the client's contract rate, or else no price
+  (Connected apps says how many and what to do). A second sync adds nothing, a changed record updates its entry, a
+  removed record is taken out, and closed months are left alone. Jobs linked to a work order take their price from the
+  contract's work order fees when Pulse first sees the contract and each time its rates change. Not built: the quote is
+  not rewritten with origin `wms_contract`, and there is no settings switch.
+- **Links to an app off the plan are plain words** (`JobDetailDTO.links[].url` and `VasEntryDTO.sourceUrl` are null).
+- **`GET /api/v1/profit/facts`** sends `meta { truncated, limit, offset, nextOffset }` and takes `offset`.
+- **CSP on every page.** `src/server/http/csp.ts` builds a nonce policy in `src/proxy.ts` (no eval in production). The
+  report print page sets its own tighter policy.
+- **RLS policies.** `0007_rls_policies.sql` adds `pulse_org_isolation` to all 46 tables, keyed on the session setting
+  `pulse.org_id`, and makes `pulse.v_facts` a security invoker view. RLS is not forced on the owner and nothing is
+  granted, so the app is unchanged. `rls.db.test.ts` proves a plain role sees nothing without the setting and only its
+  own org with it, and fails if a pulse table ever has RLS on with no policy.
+- **Alert rule lines are hidden from readers without money** (dollar and margin lines): `toRuleDTO(row, canSeeMoney)`
+  sends `threshold: null`, `moneyHidden: true` and a name with no numbers, and writes with a line are refused.
+- **The flaky kiosk test** built a "wrong secret" that was the real one about 1 run in 64. Fixed in the test.
+
+Local data note: the WMS seed sets every demo login to `KitStak!demo2026`, so after a full local seed the Pulse admin
+signs in with that password. Five wrong tries lock a login for 15 minutes (`core.password_policy_state`).
