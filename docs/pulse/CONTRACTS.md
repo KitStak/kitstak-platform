@@ -1265,3 +1265,53 @@ deferred.
 
 Migrations in this round: `0009_db_guard_role.sql` and `0011_wms_contract_prices_switch.sql`. Numbers 0008 and 0010
 were reserved and not used.
+
+### 19.10 Round five fixes (the issues from the round four critics)
+
+Every major and minor issue from `docs/pulse/round-4-critics.json` except CI. Email reports stay deferred.
+
+- **Calendar day or work day.** Company costs are shared by calendar day unless the workspace picks work days in
+  Settings (`settings.company_cost_spread`, migration 0013). Profit has a toggle for one look (`?spread=work_days`) that
+  does not change the setting. The sentence under the numbers says which one is in use. A whole month is the same
+  either way.
+- **Full month view.** The month in progress on Month close says "Full month view, not month to date", because its
+  company costs count the whole month.
+- **Extra services with no price** have their own list (`/services?show=no-price`). A service with no cost reads
+  "Not known" for cost and profit, and its CSV row has a "Cost known" column.
+- **Guard readiness.** The health check now really switches to `pulse_app` in a transaction it rolls back, so it can
+  no longer say ready when the switch fails (PostgreSQL 16 with a CREATEROLE migration role). Migration 0012 grants
+  the switch right. If the flag is on and the role cannot be used, Pulse keeps working as the login role, logs a loud
+  error, answers 503 "degraded" on the health check, and turns the guard on by itself within 30 seconds of a fix.
+- **Health check.** `/api/health` shows only status in public. The migration and the guard state need the
+  `x-health-token` header (`HEALTH_TOKEN`), as in CRM. A stronger setup, a login that owns nothing plus
+  `PULSE_OWNER_DATABASE_URL` for owner work, is in section 12, rule 13.
+- **Deleted jobs and clients.** Only people who may manage jobs see a deleted job, a deleted client or their rows. For
+  anyone else a filter by its id answers "not found" on every API route and download, deleted clients cannot be
+  listed, and lists leave their rows out.
+- **Dates.** Every typed entry (work, extra services, time not on a job, materials, other costs, revenue, paid hours,
+  punches) must be dated between 10 years ago and today at the site. Imports mark such rows as problem rows. Rows from
+  the warehouse, CRM, Projects and the time clock keep their dates. An old bad row can still be fixed.
+- **Contract rates.** Pulse reads a contract fee at the rate the warehouse bill gives every unit, including tiers that
+  give every unit the same rate. A fee whose rate changes with volume, or that applies to some products only, is left
+  to the warehouse bill: the job keeps its own price, the job page says why, and Connected apps counts them.
+- **Typed prices.** When someone types a price on a job that follows the contract, the dialog warns first. The job page
+  stops saying the price came from the contract, and Connected apps counts the job apart until the contract's rates
+  change.
+- **Undo by touch.** The toast close button's touch area used to cover the whole toast, so a tap on Undo hit Close.
+  Now it covers only the close button, and on touch screens both buttons are 44px.
+- **Focus.** Closing a dialog by Escape, Cancel, Close or a save puts the keyboard back on the control that opened it.
+  If that control is gone, focus goes to the same kind of control on the next row. After Save the day it lands on that
+  day's Edit button. Keyboard focus is blue and an error is red with a double edge.
+- **Touch and small screens.** On touch screens checkboxes, switches, date picker days, menu rows and job header chips
+  are at least 44px to tap. Pace against target is a list of cards below 1024px. On a phone, Settings has a section
+  picker with all 15 sections. On a tablet the pinned columns of Profit and the job profit report take about half the
+  box. A service page reads its numbers on the server, so it no longer jumps on first paint.
+- **Add a client** shows a look alike once, under the name, with "Use <client>" and "Add as a new client".
+- **Day form.** It asks before saving unusual hours or a day before the job starts (the first press asks, the second
+  saves). It turns its boxes off while the picked day already has work, moves on to a free day after a save, names the
+  shift when a day has more than one, and marks a labor class already used for that shift.
+- **Grid rule.** A new line from the Log work grid through `PUT /api/v1/log/rows` must list in `seen` the lines of that
+  job and day it shows. If the day holds a line it did not list, the answer is 409 `day_changed` and the grid shows the
+  day as it is now. It takes the same lock as the day form.
+
+Migrations in this round: `0012_db_guard_set_grant.sql` and `0013_company_cost_spread.sql`.
