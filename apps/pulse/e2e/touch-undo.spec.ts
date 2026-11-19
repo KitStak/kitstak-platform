@@ -45,14 +45,16 @@ for (const [width, height] of [
       const saved = toast(page, 'Saved the work for');
       await expect(saved).toBeVisible();
       const undo = saved.getByRole('button', { name: 'Undo' });
-      // The middle and both ends of Undo belong to Undo, not to the close button.
-      const box = (await undo.boundingBox())!;
-      const hits = await page.evaluate(
-        ({ x, y, w }) => [x + 2, x + w / 2, x + w - 2].map((left) => document.elementFromPoint(left, y)?.closest('button')?.textContent ?? null),
-        { x: box.x, y: box.y + box.height / 2, w: box.width },
-      );
-      expect(hits).toEqual(['Undo', 'Undo', 'Undo']);
-      expect(box.height).toBeGreaterThanOrEqual(44);
+      // The middle and both ends of Undo belong to Undo, not to the close button (once the toast has slid in).
+      const hits = async (): Promise<(string | null)[]> => {
+        const box = (await undo.boundingBox())!;
+        return page.evaluate(
+          ({ x, y, w }) => [x + 2, x + w / 2, x + w - 2].map((left) => document.elementFromPoint(left, y)?.closest('button')?.textContent ?? null),
+          { x: box.x, y: box.y + box.height / 2, w: box.width },
+        );
+      };
+      await expect.poll(hits).toEqual(['Undo', 'Undo', 'Undo']);
+      expect((await undo.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
       await undo.tap();
       await expect(toast(page, 'back')).toBeVisible();
