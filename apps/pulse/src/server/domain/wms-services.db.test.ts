@@ -367,7 +367,7 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     const [state] = await org.query<{ counts: Record<string, number> }>(`select counts from pulse.sync_state where org_id = $1 and source = 'wms'`, [org.orgId]);
     expect(state?.counts).toMatchObject({ contractJobs: 4, contractNotApplied: 1 });
     // A reader with no money still sees where the price came from: a name and a day, no amount.
-    expect(JSON.stringify((await getJob(owner, fresh.id)).links[0]?.priceFromContract)).not.toMatch(/4\.5|450/);
+    expect(Object.keys((await getJob(owner, fresh.id)).links[0]?.priceFromContract ?? {}).sort()).toEqual(['at', 'contractName']);
   }, 120_000);
 
   it('the workspace can turn the contract rule off, and on again', async () => {

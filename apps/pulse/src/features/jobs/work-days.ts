@@ -84,7 +84,14 @@ export function groupWorkDays(rows: readonly ProductionEntryDTO[]): WorkDay[] {
     if (list) list.push(row);
     else byDate.set(row.workDate, [row]);
   }
-  return [...byDate.entries()].map(([workDate, list]) => rollUp(workDate, list));
+  // Lines saved in one go share a timestamp, so the order is made steady here: the line that
+  // carries the day's units first (the form keeps units on its first line), then the most hours.
+  const steady = (list: ProductionEntryDTO[]): ProductionEntryDTO[] =>
+    [...list].sort(
+      (a, b) =>
+        Number(b.unitsGood) - Number(a.unitsGood) || Number(b.hours) - Number(a.hours) || a.id.localeCompare(b.id),
+    );
+  return [...byDate.entries()].map(([workDate, list]) => rollUp(workDate, steady(list)));
 }
 
 /** A row with nothing on it: no units, no hours, no people, no note. Clearing a row used to leave one behind. */

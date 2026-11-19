@@ -6,11 +6,15 @@ import { Teach } from '@/components/pulse/teach';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { routes } from '@/lib/routes';
 import type { VasServiceDTO } from '@/lib/types';
-import { getSettings, getVasService, listSites, listVasServices, todayInZone } from '@/server/domain';
+import { getProfit, getSettings, getVasService, listSites, listVasServices, todayInZone } from '@/server/domain';
+import { parsePeriod, searchGetter } from '@/features/profit/period';
 import { isDomainError } from '@/server/errors';
 import { pulsePage, type PulsePage } from '@/server/page';
 import { ServiceView } from './service-view';
 import { ServicesView } from './services-view';
+
+/** The period the list opens on. The same default as `services-view.tsx`. */
+const SERVICES_PERIOD_DEFAULTS = { preset: 'last_90' } as const;
 
 const crumbs = [{ label: 'Profit', href: routes.profit() }, { label: 'Extra services', href: routes.services() }];
 
@@ -21,11 +25,17 @@ async function clock(page: PulsePage): Promise<{ today: string; weekStart: numbe
 }
 
 /** Extra services: the catalog (price, standard cost, target pace) and profit by service, with the underpriced ones flagged. */
-export async function ServicesPage() {
+export async function ServicesPage({ searchParams }: { readonly searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
+  const query = (await searchParams) ?? {};
   const page = await pulsePage(routes.services(), 'profit');
   if (page.blocked || !page.access.seesMoney) return <PageBlocked title="Extra services" role={page.access.role} />;
   const canManage = page.can('vas:manage');
   const [services, time] = await Promise.all([listVasServices(page.ctx, { includeInactive: true }).catch(() => undefined), clock(page)]);
+  // The profit by service for the period in the address is read here too, so the table arrives
+  // with its numbers and its rows do not change size or order a moment after the first paint.
+  const period = parsePeriod(searchGetter(query), time.today, time.weekStart, SERVICES_PERIOD_DEFAULTS);
+  const range = { from: period.from, to: period.to };
+  const profit = await getProfit(page.ctx, 'service', range, { trend: true }).catch(() => undefined);
   return (
     <Page
       title="Extra services"
@@ -40,7 +50,7 @@ export async function ServicesPage() {
         ) : null
       }
     >
-      <ServicesView initialServices={services} {...time} canManage={canManage} canImport={page.can('import:run')} orgSlug={page.context.org.slug} />
+      <ServicesView initialServices={services} initialProfit={profit ? { ...range, profit } : undefined} {...time} canManage={canManage} canImport={page.can('import:run')} orgSlug={page.context.org.slug} />
     </Page>
   );
 }

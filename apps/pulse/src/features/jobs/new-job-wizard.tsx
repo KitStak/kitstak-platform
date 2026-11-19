@@ -5,7 +5,7 @@
  * or as a copy of a past job. Everything typed here becomes the job's quote.
  */
 import { useRouter } from 'next/navigation';
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -190,6 +190,7 @@ export function NewJobWizard(props: NewJobWizardProps) {
   const formId = useId();
   const [clientNew, setClientNew] = useState(false);
   const [clientOpen, setClientOpen] = useState(false);
+  const clientRef = useRef<HTMLInputElement>(null);
   const general = jobTypes.find((type) => type.code === 'GENERAL') ?? jobTypes[0];
   const defaultSite = sites.find((site) => site.isDefault) ?? sites[0];
   const classFor = (type: JobTypeDTO | undefined) =>
@@ -491,7 +492,9 @@ export function NewJobWizard(props: NewJobWizardProps) {
       const found = validate(step);
       setErrors(found);
       if (Object.keys(found).length > 0) {
-        toast.error('Something needs a second look', Object.values(found)[0]);
+        // A client slip is said under the Client box, with the keyboard in the box, the same as quick add.
+        if (found.client) clientRef.current?.focus();
+        else toast.error('Something needs a second look', Object.values(found)[0]);
         return;
       }
     }
@@ -835,6 +838,7 @@ export function NewJobWizard(props: NewJobWizardProps) {
                   {({ inputId }) => (
                     <ClientCombo
                       id={inputId}
+                      inputRef={clientRef}
                       error={errors.client || errors.clientId || errors.clientName || null}
                       hint={
                         form.client.trim() && !matchedClient && clientNew

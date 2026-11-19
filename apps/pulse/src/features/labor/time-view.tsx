@@ -68,15 +68,19 @@ export function TimeView({
   laborClasses,
   settings,
   today,
+  initialSummary,
 }: {
   readonly sites: readonly SiteDTO[];
   readonly laborClasses: readonly LaborClassDTO[];
   readonly settings: SettingsDTO;
   readonly today: string;
+  /** The summary the server read for the days the page opens on, so the first paint is whole. */
+  readonly initialSummary?: { readonly from: string; readonly to: string; readonly summary: LaborSummaryDTO };
 }) {
   const shell = useShell();
   const { state, setState } = useRange(today, 'last_30');
-  const summary = useLaborSummary({ from: state.from, to: state.to, siteId: state.siteId });
+  const fromServer = Boolean(initialSummary) && state.from === initialSummary?.from && state.to === initialSummary?.to && !state.siteId;
+  const summary = useLaborSummary({ from: state.from, to: state.to, siteId: state.siteId }, { initialData: fromServer ? initialSummary?.summary : undefined });
   const data = summary.data;
   const bridge = data?.bridge;
   const hasPaid = bridge ? Number(bridge.paidHours) > 0 : false;

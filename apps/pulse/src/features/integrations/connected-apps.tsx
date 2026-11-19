@@ -75,7 +75,7 @@ const INTO_PULSE: Readonly<Record<SiblingApp, readonly Flow[]>> = {
       toggle: 'wmsSyncBilling',
     },
     {
-      text: 'The rate for work orders on the client\'s approved warehouse contract becomes the price of a linked job. Turn this off to keep the prices you type in Pulse.',
+      text: 'Warehouse contract rates set job prices: the work order rate on the client\'s approved warehouse contract becomes the price of a linked job.',
       toggle: 'wmsContractPrices',
     },
     { text: 'A work order that is short of parts marks its job, so it shows up as at risk.' },

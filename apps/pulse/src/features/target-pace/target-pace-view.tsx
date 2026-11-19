@@ -103,6 +103,8 @@ export function TargetPaceView({
   sites,
   today,
   thresholds,
+  initialSuggestions,
+  initialBoard,
 }: {
   readonly initialStandards: StandardDTO[];
   readonly jobTypes: readonly JobTypeDTO[];
@@ -110,11 +112,14 @@ export function TargetPaceView({
   readonly sites: readonly SiteDTO[];
   readonly today: string;
   readonly thresholds: PaceThresholds;
+  /** Read on the server so the first paint is whole (no cards that load later and push the page down). */
+  readonly initialSuggestions?: PaceSuggestionRowDTO[];
+  readonly initialBoard?: InitialBoard;
 }) {
   const shell = useShell();
   const canManage = shell.can('standard:manage');
   const standards = useStandards({}, { initialData: initialStandards });
-  const suggestions = usePaceSuggestions();
+  const suggestions = usePaceSuggestions({ initialData: initialSuggestions });
   const clients = useClients({});
   const services = useVasServices({});
   const [form, setForm] = useState<StandardForm | null>(null);
@@ -514,7 +519,7 @@ export function TargetPaceView({
         )}
       </Panel>
 
-      <PaceBoard sites={sites} today={today} thresholds={thresholds} canManage={shell.can('job:manage')} />
+      <PaceBoard sites={sites} today={today} thresholds={thresholds} canManage={shell.can('job:manage')} initial={initialBoard} />
 
       {form ? (
         <StandardDialog
@@ -780,20 +785,30 @@ function StandardDialog({
 
 type BoardTab = 'job' | 'class' | 'day';
 
+/** The pace board the server read for the days the page opens on. */
+export interface InitialBoard {
+  readonly from: string;
+  readonly to: string;
+  readonly board: PaceBoardDTO;
+}
+
 function PaceBoard({
   sites,
   today,
   thresholds,
   canManage,
+  initial,
 }: {
   readonly sites: readonly SiteDTO[];
   readonly today: string;
   readonly thresholds: PaceThresholds;
   readonly canManage: boolean;
+  readonly initial?: InitialBoard;
 }) {
   const { state, setState } = useRange(today, 'last_30');
   const [tab, setTab] = useState<BoardTab>('job');
-  const board = usePaceBoard({ from: state.from, to: state.to, siteId: state.siteId });
+  const fromServer = Boolean(initial) && state.from === initial?.from && state.to === initial?.to && !state.siteId;
+  const board = usePaceBoard({ from: state.from, to: state.to, siteId: state.siteId }, { initialData: fromServer ? initial?.board : undefined });
   const [jobTarget, setJobTarget] = useState<PaceBoardDTO['byJob'][number] | null>(null);
   const data = board.data;
   const rows: readonly PaceBoardRowDTO[] = data

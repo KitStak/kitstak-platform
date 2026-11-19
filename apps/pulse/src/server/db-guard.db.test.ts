@@ -13,7 +13,7 @@ import { asSystem, currentDbScope, DB_GUARD_ROLE, DbGuardError, dbGuardRefusals,
 import { dbGuardStatus } from '@/server/db/system';
 import { jobs } from '@/server/db/schema';
 import { inTx, rows, type DomainContext } from '@/server/domain/_shared';
-import { createClient, createJob, getJob, listJobs, listOrgPeople, saveProductionEntry, updateJob } from '@/server/domain/test-exports';
+import { createClient, createJob, getJob, listJobs, listOrgPeople, orgsUsingPulse, saveProductionEntry, systemContext, tickOrg, updateJob } from '@/server/domain/test-exports';
 import { isDomainError } from '@/server/errors';
 import { createTestOrg, databaseReady, TEST_DATABASE_URL, type TestOrg } from '@/test/db';
 
@@ -226,6 +226,20 @@ describe.skipIf(!ready)('the database guard ties the running app to one workspac
       expect((await listJobs(ownerB)).map((job) => job.id)).toEqual([jobB]);
     });
   });
+
+  it('runs the cron tick under the guard: the fan out is system, each workspace is tied to itself', async () => {
+    // Cross workspace by design: the list of every workspace that uses Pulse.
+    const orgs = await orgsUsingPulse();
+    expect(orgs).toEqual(expect.arrayContaining([ownerA.orgId, ownerB.orgId]));
+    // One workspace's tick: rollups and alert rules, all as the plain role for that workspace.
+    const system = await systemContext(ownerA.orgId);
+    expect(system).toMatchObject({ orgId: ownerA.orgId, actorKind: 'system', userId: ownerA.userId });
+    expect(await tickOrg(ownerA.orgId)).toMatchObject({ jobs: 1 });
+    expect(await tickOrg(ownerB.orgId)).toMatchObject({ jobs: 1 });
+    // The tick left nothing in the other workspace, and nothing was refused on the way.
+    expect((await orgB.query<{ n: number }>('select count(*)::int as n from pulse.job_stats where org_id = $1', [ownerB.orgId]))[0]?.n).toBe(1);
+    expect(dbGuardRefusals()).toEqual([]);
+  }, 60_000);
 
   it('with the flag off the app runs as before: the login role, no scope needed', async () => {
     vi.stubEnv('PULSE_DB_GUARD', '0');

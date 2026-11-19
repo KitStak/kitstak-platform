@@ -817,7 +817,10 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                     <TableHeaderCell>Day</TableHeaderCell>
                     <TableHeaderCell numeric>Good {job.unitLabel}</TableHeaderCell>
                     <TableHeaderCell numeric>Labor hours</TableHeaderCell>
-                    <TableHeaderCell numeric>Pace</TableHeaderCell>
+                    {/* On a phone the pace gives way so the labor cost stays on screen. The Work log has both. */}
+                    <TableHeaderCell numeric className={seesMoney ? 'hidden sm:table-cell' : undefined}>
+                      Pace
+                    </TableHeaderCell>
                     {seesMoney ? <TableHeaderCell numeric>Labor cost</TableHeaderCell> : null}
                   </TableRow>
                 </TableHead>
@@ -834,7 +837,9 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                             <span className="text-[var(--label-yellow-text)]">Add hours</span>
                           )}
                         </TableCell>
-                        <TableCell numeric>{formatPace(rowPace(row), { empty: '' })}</TableCell>
+                        <TableCell numeric className={seesMoney ? 'hidden sm:table-cell' : undefined}>
+                          {formatPace(rowPace(row), { empty: '' })}
+                        </TableCell>
                         {seesMoney ? (
                           <TableCell numeric>
                             {formatMoney(row.laborCostCents, { empty: 'Hidden' })}

@@ -289,7 +289,7 @@ export const createClient = scoped(async function createClient(ctx: DomainContex
     }
     // A name close to a client you have needs a clear yes, the same as on quick add.
     if (options.guardLookAlike && !input.confirmNew)
-      await assertClientNameNotLookAlike(tx, ctx, name, ['name'], (typed, names) => `${typed} looks like ${nameList(names)}, a client you already have. Use that client, or say that this is a new client.`);
+      await assertClientNameNotLookAlike(tx, ctx, name, ['name'], (typed, names) => `${typed} looks like ${nameList(names)}, a client you already have. Use that client, or choose Add as a new client.`);
     return toClientDTO(await insertClient(tx, ctx, input), access);
   });
 });

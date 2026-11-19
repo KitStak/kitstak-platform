@@ -30,7 +30,7 @@ import { useLaborClasses, useProfit, useVasServices } from '@/lib/hooks/use-data
 import { qk } from '@/lib/query-keys';
 import { rangeLabel } from '@/lib/reports';
 import { routes } from '@/lib/routes';
-import type { VasServiceDTO } from '@/lib/types';
+import type { ProfitResponse, VasServiceDTO } from '@/lib/types';
 import { deleteVasServiceAction, restoreVasServiceAction, updateVasServiceAction } from '@/server/actions/catalog';
 import { downloadCsv } from '@/features/profit/csv-download';
 import { parsePeriod, periodQuery } from '@/features/profit/period';
@@ -62,14 +62,16 @@ export function FlagPill({ line, targetMarginBp }: { readonly line: ServiceLine;
   );
 }
 
-export function ServicesView({ initialServices, today, weekStart, targetMarginBp, canManage, canImport, orgSlug }: { readonly initialServices?: VasServiceDTO[]; readonly today: string; readonly weekStart: number; readonly targetMarginBp: number; readonly canManage: boolean; readonly canImport: boolean; readonly orgSlug: string }) {
+export function ServicesView({ initialServices, initialProfit, today, weekStart, targetMarginBp, canManage, canImport, orgSlug }: { readonly initialServices?: VasServiceDTO[]; readonly initialProfit?: { readonly from: string; readonly to: string; readonly profit: ProfitResponse }; readonly today: string; readonly weekStart: number; readonly targetMarginBp: number; readonly canManage: boolean; readonly canImport: boolean; readonly orgSlug: string }) {
   const queryClient = useQueryClient();
   const { get, set } = useQueryState();
   const period = useMemo(() => parsePeriod(get, today, weekStart, DEFAULTS), [get, today, weekStart]);
   const scope = { from: period.from, to: period.to };
   const show: Show = get('show') === 'underpriced' ? 'underpriced' : get('show') === 'off' ? 'off' : 'all';
   const services = useVasServices({ includeInactive: true }, { initialData: initialServices });
-  const profit = useProfit('service', { ...scope, trend: true });
+  // Read on the server for the period the page opened on, so the rows arrive with their numbers.
+  const fromServer = Boolean(initialProfit) && scope.from === initialProfit?.from && scope.to === initialProfit?.to;
+  const profit = useProfit('service', { ...scope, trend: true }, { initialData: fromServer ? initialProfit?.profit : undefined });
   const classes = useLaborClasses();
   const [editing, setEditing] = useState<VasServiceDTO | null>(null);
   const [formOpen, setFormOpen] = useState(false);

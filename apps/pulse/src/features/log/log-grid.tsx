@@ -47,8 +47,8 @@ import {
   IconButton,
   Popover,
   PopoverContent,
+  GridSelect,
   PopoverTrigger,
-  Select,
   toast,
 } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
@@ -310,8 +310,9 @@ const DEFAULT_CLASS = 'default';
 
 /**
  * The labor class of one line: the app's own Select (type a letter to jump, Enter or Space opens,
- * arrows move, Tab goes on to People). Kept apart and memoized so typing in a number box does not
- * draw every picker of the grid again.
+ * arrows move, Tab goes on to People). `GridSelect` draws a plain trigger until a person reaches
+ * it, so 30 pickers cost no more to draw than the old browser boxes. Kept apart and memoized so
+ * typing in a number box does not draw every picker of the grid again.
  */
 const ClassSelect = memo(function ClassSelect({
   label,
@@ -340,21 +341,8 @@ const ClassSelect = memo(function ClassSelect({
         .map((item) => ({ value: item.id, label: item.name, disabled: used.has(item.id) })),
     ];
   }, [laborClasses, taken, value]);
-  // R4-TEMP-MEASURE-START
-  if (typeof window !== 'undefined' && window.localStorage.getItem('r4-native') === '1')
-    return (
-      <select aria-label={label} disabled={disabled} value={value ?? ''} onChange={(event) => onChange(lineKey, event.target.value || null)} className={cn(cellInput, 'cursor-pointer truncate pr-1 text-left')}>
-        <option value="">Default class</option>
-        {options.slice(1).map((item) => (
-          <option key={item.value} value={item.value} disabled={item.disabled}>
-            {item.label}
-          </option>
-        ))}
-      </select>
-    );
-  // R4-TEMP-MEASURE-END
   return (
-    <Select
+    <GridSelect
       aria-label={label}
       disabled={disabled}
       value={value ?? DEFAULT_CLASS}

@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { BookmarkPlus, Check, MoreHorizontal, Pencil, RefreshCw, Star, StarOff, Trash2, Users, UsersRound } from 'lucide-react';
 import { Button, Checkbox, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Field, Input, Skeleton, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
+import { ScrollX } from '@/components/ui/scroll-x';
 import { useShell } from '@/features/shell/shell-context';
 import type { SavedViewPage } from '@/lib/constants';
 import { useSavedViews } from '@/lib/hooks/use-data';
@@ -135,7 +136,11 @@ export function SavedViewsBar({ page, ignore = [], label = 'Views', className }:
   const chip = 'inline-flex h-7 items-center gap-1.5 rounded-full border text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-1.5', className)} data-testid={`views-bar-${page}`} role="group" aria-label="Saved views">
+    // On a phone the views sit on one line that scrolls sideways. A wrapping list changed height
+    // when the views arrived a moment after the page, and pushed the whole screen down (layout shift).
+    // The row is as wide as its chips (`w-max`), so ScrollX sees it grow and gives the region a tab stop.
+    <ScrollX label="Saved views" className={className} scrollerClassName="-m-1 p-1">
+      <div className="flex w-max min-w-full flex-nowrap items-center gap-1.5 whitespace-nowrap sm:w-auto sm:flex-wrap [&>*]:shrink-0" data-testid={`views-bar-${page}`} role="group" aria-label="Saved views">
       <span className="mr-1 text-xs font-medium text-fg-muted">{label}</span>
       {views.isLoading ? <Skeleton width={160} height={28} /> : null}
       {views.isError ? (
@@ -207,6 +212,7 @@ export function SavedViewsBar({ page, ignore = [], label = 'Views', className }:
           Save view
         </Button>
       )}
+      </div>
       <Dialog open={dialog !== null} onOpenChange={(next) => !next && setDialog(null)}>
         <DialogContent size="sm" data-testid="view-dialog">
           <DialogHeader title={dialog?.mode === 'rename' ? 'Rename view' : 'Save this view'} description={dialog?.mode === 'rename' ? undefined : `Keeps what is on screen now: ${describeQuery(current).toLowerCase()}.`} />
@@ -250,6 +256,6 @@ export function SavedViewsBar({ page, ignore = [], label = 'Views', className }:
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ScrollX>
   );
 }

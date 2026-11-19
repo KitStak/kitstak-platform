@@ -478,7 +478,7 @@ export function EntriesView({
           />
         ) : (
           <>
-            <ul className="divide-y divide-border-subtle md:hidden" aria-label="Entries">
+            <ul className="divide-y divide-border-subtle lg:hidden" aria-label="Entries">
               {pageRows.map((row) => (
                 <li
                   key={row.id}
@@ -543,8 +543,8 @@ export function EntriesView({
                 </li>
               ))}
             </ul>
-            <div className="hidden overflow-x-auto md:block">
-              <Table className="min-w-[720px]">
+            <div className="hidden lg:block">
+              <Table className="min-w-[720px]" aria-label="Work entries">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
                     <TableHeaderCell className="w-9">
@@ -570,9 +570,9 @@ export function EntriesView({
                     </TableHeaderCell>
                     <TableHeaderCell>Day</TableHeaderCell>
                     <TableHeaderCell>Job</TableHeaderCell>
-                    <TableHeaderCell className="hidden lg:table-cell">Crew</TableHeaderCell>
+                    <TableHeaderCell className="hidden lg:table-cell">Labor class</TableHeaderCell>
                     <TableHeaderCell numeric>Units good</TableHeaderCell>
-                    <TableHeaderCell numeric className="hidden md:table-cell">
+                    <TableHeaderCell numeric className="hidden xl:table-cell">
                       Scrap
                     </TableHeaderCell>
                     <TableHeaderCell numeric>People</TableHeaderCell>
@@ -638,7 +638,7 @@ export function EntriesView({
                           {classById.get(row.laborClassId ?? '')?.name ?? 'Default class'}
                         </TableCell>
                         <TableCell numeric>{formatNumber(row.unitsGood, { maxDigits: 0 })}</TableCell>
-                        <TableCell numeric className="hidden md:table-cell">
+                        <TableCell numeric className="hidden xl:table-cell">
                           {Number(row.unitsScrap) > 0 ? formatNumber(row.unitsScrap, { maxDigits: 0 }) : ''}
                         </TableCell>
                         <TableCell numeric>{row.headcount ? formatNumber(row.headcount) : ''}</TableCell>
