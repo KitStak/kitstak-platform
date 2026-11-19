@@ -18,7 +18,7 @@ export function RouteTabs({ tabs, active, label }: { readonly tabs: readonly Rou
   return (
     <nav aria-label={label} className="-mb-px min-w-0">
       {/* On a phone the tabs scroll sideways: the fade says there are more, and each tab is its own tab stop. */}
-      <ScrollX label={label} tabStop={false} fade="app">
+      <ScrollX label={label} tabStop={false} fade="app" className="-mx-1 -my-1" scrollerClassName="px-1 py-1">
         <ul className="flex min-w-max items-end gap-6 border-b border-border-subtle">
         {tabs.map((tab) => {
           const current = tab.id === active;
