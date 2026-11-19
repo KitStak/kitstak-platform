@@ -338,6 +338,12 @@ export function pivotValue(cell: PivotCellDTO | undefined, measure: PivotMeasure
   }
 }
 
+/** A margin cell of extra service work with revenue and no cost logged: the screen and the CSV say so in words. */
+export const pivotNoCost = (cell: PivotCellDTO | undefined, measure: PivotMeasure): boolean => measure === 'margin' && Boolean(cell?.costMissing);
+export const NO_COST_YET = 'No cost yet';
+/** The same for a row of the table: an extra service row with revenue and no cost has no margin (the server sends none). */
+export const rowNoCost = (row: Pick<ProfitRowDTO, 'costMissing'>, columnId: string): boolean => row.costMissing && (columnId === 'margin' || columnId === 'margin_before');
+
 /** The second grouping a pivot starts with: time for things, clients for time. */
 export function defaultPivotBy(by: ProfitGroup): ProfitGroup {
   return isTimeGroup(by) ? 'client' : 'month';
@@ -347,8 +353,9 @@ export function defaultPivotBy(by: ProfitGroup): ProfitGroup {
 export function pivotCsv(pivot: ProfitPivotDTO, measure: PivotMeasure): { headers: string[]; rows: CsvCell[][] } {
   const kind = PIVOT_MEASURE_KIND[measure];
   const headers = [VIEW_LABELS[pivot.rowBy], ...pivot.cols.map((col) => rowLabel(pivot.colBy, col)), 'Total'];
-  const rows: CsvCell[][] = pivot.rows.map((row) => [rowLabel(pivot.rowBy, row), ...pivot.cols.map((col) => csvValue(pivotValue(pivot.cells[row.key]?.[col.key], measure), kind)), csvValue(pivotValue(pivot.rowTotals[row.key], measure), kind)]);
-  rows.push(['Total', ...pivot.cols.map((col) => csvValue(pivotValue(pivot.colTotals[col.key], measure), kind)), csvValue(pivotValue(pivot.total, measure), kind)]);
+  const out = (cell: PivotCellDTO | undefined): CsvCell => (pivotNoCost(cell, measure) ? NO_COST_YET : csvValue(pivotValue(cell, measure), kind));
+  const rows: CsvCell[][] = pivot.rows.map((row) => [rowLabel(pivot.rowBy, row), ...pivot.cols.map((col) => out(pivot.cells[row.key]?.[col.key])), out(pivot.rowTotals[row.key])]);
+  rows.push(['Total', ...pivot.cols.map((col) => out(pivot.colTotals[col.key])), out(pivot.total)]);
   return { headers, rows };
 }
 

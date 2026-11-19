@@ -175,12 +175,13 @@ function addInto(target: Bucket, source: Bucket): void {
   target.hours += source.hours;
 }
 
-const cellOf = (row: ProfitRowDTO): PivotCellDTO => ({ revenueCents: row.revenueCents, costCents: row.costCents, profitCents: row.profitCents, marginBp: row.marginBp, unitsGood: row.unitsGood, hours: row.hours });
+const cellOf = (row: ProfitRowDTO): PivotCellDTO => ({ revenueCents: row.revenueCents, costCents: row.costCents, profitCents: row.profitCents, marginBp: row.marginBp, unitsGood: row.unitsGood, hours: row.hours, costMissing: row.costMissing });
 
 /**
  * Profit grouped by two things at once (clients by month, job types by site). Every cell uses the
  * same `toProfitRow` as the explorer, and the row totals, column totals and grand total are sums
- * of the cells, so the grid always adds up to the Profit page.
+ * of the cells, so the grid always adds up to the Profit page. Extra service cells follow the same
+ * "No cost yet" rule as `getProfit`: revenue with no cost of any kind has no margin.
  */
 export const getProfitPivot = scoped(async function getProfitPivot(ctx: DomainContext, rowBy: ProfitGroup, colBy: ProfitGroup, filters: ProfitFilters): Promise<ProfitPivotDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
@@ -213,13 +214,16 @@ export const getProfitPivot = scoped(async function getProfitPivot(ctx: DomainCo
   const colTotals = new Map<string, Bucket>();
   const grand = emptyBucket('total', 'Total');
   const cells: Record<string, Record<string, PivotCellDTO>> = {};
+  // The same test `getProfit` uses: one service picked in the filters, or a group that is a service.
+  const oneService = Boolean(filters.vasServiceId);
+  const serviceGroup = (by: ProfitGroup, key: string): boolean => oneService || (by === 'service' && key !== 'none');
   for (const item of found) {
     const rk = item.rk ?? 'none';
     const ck = item.ck ?? 'none';
     if (!rowHeads.has(rk)) rowHeads.set(rk, { key: rk, label: item.rl ?? (NULL_LABELS[rowBy] || rk), sublabel: item.rs });
     if (!colHeads.has(ck)) colHeads.set(ck, { key: ck, label: item.cl ?? (NULL_LABELS[colBy] || ck), sublabel: item.cs });
     const bucket: Bucket = { ...emptyBucket(`${rk}|${ck}`, ''), base: BigInt(item.base), vas: BigInt(item.vas), otherRev: BigInt(item.other_rev), labor: BigInt(item.labor), material: BigInt(item.material), other: BigInt(item.other), shared: BigInt(item.shared), units: Number(item.units), hours: Number(item.hours) };
-    (cells[rk] ??= {})[ck] = cellOf(toProfitRow(bucket, access));
+    (cells[rk] ??= {})[ck] = cellOf(toProfitRow(bucket, access, { costCheck: serviceGroup(rowBy, rk) || serviceGroup(colBy, ck) }));
     if (!rowTotals.has(rk)) rowTotals.set(rk, emptyBucket(rk, ''));
     if (!colTotals.has(ck)) colTotals.set(ck, emptyBucket(ck, ''));
     addInto(rowTotals.get(rk)!, bucket);
@@ -237,7 +241,7 @@ export const getProfitPivot = scoped(async function getProfitPivot(ctx: DomainCo
     };
     return list.sort((a, b) => (revenue(a.key) === revenue(b.key) ? a.label.localeCompare(b.label) : revenue(a.key) > revenue(b.key) ? -1 : 1));
   };
-  const totalsOut = (totals: Map<string, Bucket>): Record<string, PivotCellDTO> => Object.fromEntries([...totals.entries()].map(([key, bucket]) => [key, cellOf(toProfitRow(bucket, access))]));
+  const totalsOut = (totals: Map<string, Bucket>, by: ProfitGroup): Record<string, PivotCellDTO> => Object.fromEntries([...totals.entries()].map(([key, bucket]) => [key, cellOf(toProfitRow(bucket, access, { costCheck: serviceGroup(by, key) }))]));
   return {
     rowBy,
     colBy,
@@ -246,9 +250,9 @@ export const getProfitPivot = scoped(async function getProfitPivot(ctx: DomainCo
     rows: sortHeads(rowHeads, rowBy, rowTotals),
     cols: sortHeads(colHeads, colBy, colTotals),
     cells,
-    rowTotals: totalsOut(rowTotals),
-    colTotals: totalsOut(colTotals),
-    total: cellOf(toProfitRow(grand, access)),
+    rowTotals: totalsOut(rowTotals, rowBy),
+    colTotals: totalsOut(colTotals, colBy),
+    total: cellOf(toProfitRow(grand, access, { costCheck: oneService })),
     moneyHidden: !access.seesMoney,
   };
 });

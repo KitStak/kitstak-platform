@@ -12,10 +12,12 @@
  * typed bulk row becomes an input.
  */
 import { ScrollX } from '@/components/ui/scroll-x';
+import { PINNED_CELL_SURFACE } from '@/components/ui/table';
 import { useId, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import { CircleAlert, ClipboardPaste, Download, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Button, Checkbox, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, IconButton, Skeleton, Tooltip, toast } from '@/components/ui';
+import { Button, Checkbox, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, IconButton, IsoDatePicker, Skeleton, Tooltip, toast } from '@/components/ui';
+import { GridSelect, Select } from '@/components/ui/select';
 import { cn } from '@/components/ui/cn';
 import { keepOpenForToasts } from '@/features/calculator/toast-safe';
 import { downloadCsv } from '@/features/profit/csv-download';
@@ -102,6 +104,8 @@ function EditableCell({
   const button = useRef<HTMLButtonElement>(null);
   const errorId = useId();
   const cancelled = useRef(false);
+  /** True between a pick in a list or calendar and the close that follows it. */
+  const picked = useRef(false);
 
   const start = () => {
     setValue(editor.value);
@@ -126,7 +130,7 @@ function EditableCell({
     if (problem) setError(problem);
     else finish(focusBack);
   };
-  const onKey = (event: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const onKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       event.preventDefault();
       void commit(event.currentTarget.value, true);
@@ -168,31 +172,58 @@ function EditableCell({
   return (
     <span className="flex min-w-0 flex-col gap-0.5">
       {editor.kind === 'select' ? (
-        <select
-          {...shared}
+        <Select
+          aria-label={label}
+          aria-describedby={error ? errorId : undefined}
+          invalid={Boolean(error)}
+          disabled={saving}
+          size="sm"
+          className="min-w-[84px]"
+          defaultOpen
+          data-testid={testId ? `${testId}-input` : undefined}
           value={value}
-          onChange={(event) => {
-            setValue(event.target.value);
-            void commit(event.target.value, true);
+          options={editor.options ?? []}
+          onValueChange={(next) => {
+            picked.current = true;
+            setValue(next);
+            void commit(next, true);
           }}
-          onBlur={() => finish(false)}
-          onKeyDown={onKey}
-        >
-          {(editor.options ?? []).map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          onOpenChange={(open) => {
+            // Closed with no pick (Escape or a click outside): the cell goes back to plain text.
+            if (!open && !picked.current) finish(true);
+            picked.current = false;
+          }}
+        />
+      ) : editor.kind === 'date' ? (
+        <IsoDatePicker
+          aria-label={label}
+          aria-describedby={error ? errorId : undefined}
+          invalid={Boolean(error)}
+          disabled={saving}
+          className="min-w-[132px]"
+          triggerClassName="h-7 px-1.5"
+          defaultOpen
+          data-testid={testId ? `${testId}-input` : undefined}
+          value={value || null}
+          onChange={(next) => {
+            picked.current = true;
+            setValue(next ?? '');
+            void commit(next ?? '', true);
+          }}
+          onOpenChange={(open) => {
+            if (!open && !picked.current) finish(true);
+            picked.current = false;
+          }}
+        />
       ) : (
         <input
           {...shared}
-          type={editor.kind === 'date' ? 'date' : 'text'}
+          type="text"
           inputMode={editor.kind === 'money' || editor.kind === 'number' ? 'decimal' : undefined}
           value={value}
           placeholder={editor.placeholder}
           onChange={(event) => setValue(event.target.value)}
-          onFocus={(event) => (editor.kind === 'date' ? undefined : event.currentTarget.select())}
+          onFocus={(event) => event.currentTarget.select()}
           onBlur={(event) => void commit(event.currentTarget.value, false)}
           onKeyDown={onKey}
         />
@@ -221,6 +252,11 @@ export interface LedgerColumn<Row> {
   readonly editor?: (row: Row) => CellEditor | null;
   /** Hide the column on a phone card when it has nothing to say for this row. */
   readonly emptyWhen?: (row: Row) => boolean;
+  /**
+   * Keep this column (the money of the row) pinned to the right edge of the table, next to the row
+   * action, while the other columns scroll under it. One column per ledger.
+   */
+  readonly pin?: boolean;
 }
 
 export interface LedgerProps<Row extends { id: string; locked: boolean }> {
@@ -301,6 +337,10 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
   if (rows.length === 0) return <div data-testid={`${testId}-empty`}>{empty}</div>;
 
   const primary = columns.find((column) => column.primary) ?? columns[0]!;
+  const hasActions = canEdit && Boolean(onDelete);
+  /** Sticky classes for the pinned money column: it sits left of the 40 px action column when there is one. */
+  const pinned = (column: LedgerColumn<Row>, surface: string): string | false =>
+    Boolean(column.pin) && cn('sticky z-[1] w-[128px] max-w-[128px] min-w-[128px] shadow-[-1px_0_0_var(--border-default)] print:static', hasActions ? 'right-10' : 'right-0', surface);
   return (
     <div data-testid={testId} className="flex flex-col">
       {selectable && live.length > 0 ? (
@@ -339,16 +379,16 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
                 </th>
               ) : null}
               {columns.map((column) => (
-                <th key={column.id} scope="col" className={cn('px-3 py-2 font-medium whitespace-nowrap first:pl-4', column.numeric && 'text-right', column.className)}>
+                <th key={column.id} scope="col" className={cn('px-3 py-2 font-medium whitespace-nowrap first:pl-4', column.numeric && 'text-right', column.className, pinned(column, 'bg-panel'))}>
                   {column.header}
                 </th>
               ))}
-              {canEdit && onDelete ? <th scope="col" className="w-10 px-2 py-2"><span className="sr-only">Actions</span></th> : null}
+              {hasActions ? <th scope="col" className="sticky right-0 z-[1] w-10 max-w-10 min-w-10 bg-panel px-1 py-2 print:static"><span className="sr-only">Actions</span></th> : null}
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id} data-selected={selected.has(row.id) || undefined} data-testid={`${testId}-row`} className="border-b border-border-subtle last:border-b-0 hover:bg-hover data-[selected=true]:bg-selected">
+              <tr key={row.id} data-selected={selected.has(row.id) || undefined} data-testid={`${testId}-row`} className="group border-b border-border-subtle last:border-b-0 hover:bg-hover data-[selected=true]:bg-selected">
                 {selectable ? (
                   <td className="py-1.5 pr-0 pl-4">
                     {row.locked ? (
@@ -363,7 +403,7 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
                   </td>
                 ) : null}
                 {columns.map((column, index) => (
-                  <td key={column.id} data-col={column.id} className={cn('max-w-[260px] px-3 py-1.5 align-middle first:pl-4', column.numeric && 'text-right whitespace-nowrap', column.className)}>
+                  <td key={column.id} data-col={column.id} className={cn('max-w-[260px] px-3 py-1.5 align-middle first:pl-4', column.numeric && 'text-right whitespace-nowrap', column.className, pinned(column, PINNED_CELL_SURFACE))}>
                     {index === 0 && rowBadges ? (
                       <span className="flex items-center gap-2">
                         {cell(row, column, '')}
@@ -374,9 +414,9 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
                     )}
                   </td>
                 ))}
-                {canEdit && onDelete ? (
-                  <td className="px-2 py-1.5 text-right">
-                    {row.locked ? null : <IconButton label={`Delete ${rowName(row)}`} icon={<Trash2 aria-hidden />} variant="ghost" size="sm" onClick={() => onDelete([row])} data-testid={`${testId}-${row.id}-delete`} />}
+                {hasActions ? (
+                  <td className={cn('sticky right-0 z-[1] w-10 max-w-10 min-w-10 px-1 py-1.5 text-right print:static', PINNED_CELL_SURFACE)}>
+                    {row.locked ? null : <IconButton label={`Delete ${rowName(row)}`} icon={<Trash2 aria-hidden />} variant="ghost" size="sm" onClick={() => onDelete?.([row])} data-testid={`${testId}-${row.id}-delete`} />}
                   </td>
                 ) : null}
               </tr>
@@ -439,9 +479,16 @@ export type BulkCells = Readonly<Record<string, string>>;
 export type BulkRowResult<Input> = { readonly input: Input } | { readonly errors: Readonly<Record<string, string>> };
 
 const START_ROWS = 4;
+/** Radix Select has no empty value, so the "nothing picked" row of an optional column carries this. */
+const NOTHING = '__nothing';
 
 /** Matches a pasted cell to a select option by value or by label, ignoring case. */
 function matchOption(column: BulkColumn, text: string): string {
+  if (column.kind === 'date') {
+    // A spreadsheet day like 11/3/2026 becomes the 2026-11-03 the calendar box reads.
+    const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text.trim());
+    return us ? `${us[3]}-${us[1]!.padStart(2, '0')}-${us[2]!.padStart(2, '0')}` : text;
+  }
   if (column.kind !== 'select') return text;
   const wanted = text.trim().toLowerCase();
   return column.options?.find((option) => option.value.toLowerCase() === wanted || option.label.toLowerCase() === wanted)?.value ?? column.initial ?? '';
@@ -504,7 +551,7 @@ export function BulkAddDialog<Input>({
     });
   };
 
-  const paste = (event: ClipboardEvent<HTMLInputElement | HTMLSelectElement>, rowIndex: number, columnIndex: number) => {
+  const paste = (event: ClipboardEvent<HTMLElement>, rowIndex: number, columnIndex: number) => {
     const text = event.clipboardData.getData('text');
     if (!/[\t\n]/.test(text)) return;
     event.preventDefault();
@@ -603,26 +650,44 @@ export function BulkAddDialog<Input>({
                       </th>
                       {columns.map((column, columnIndex) => {
                         const bad = Boolean(rowErrors[column.id]);
-                        const shared = {
-                          'aria-label': `${column.label}, row ${rowIndex + 1}`,
-                          'aria-invalid': bad || undefined,
-                          title: rowErrors[column.id],
-                          'data-testid': `${testId}-${rowIndex}-${column.id}`,
-                          className: cn('h-8 w-full rounded-md border bg-panel px-2 text-sm text-fg outline-none hover:border-border-input-hover focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]', bad ? 'border-danger' : 'border-border-input', (column.kind === 'money' || column.kind === 'number') && 'text-right tabular-nums'),
-                        };
+                        const cellLabel = `${column.label}, row ${rowIndex + 1}`;
+                        const cellTestId = `${testId}-${rowIndex}-${column.id}`;
+                        const canBeEmpty = !(column.required && column.initial);
                         return (
-                          <td key={column.id}>
+                          <td key={column.id} title={rowErrors[column.id]} onPaste={(event) => paste(event, rowIndex, columnIndex)}>
                             {column.kind === 'select' ? (
-                              <select {...shared} value={cells[column.id] ?? ''} onChange={(event) => setCell(rowIndex, column.id, event.target.value)} onPaste={(event) => paste(event, rowIndex, columnIndex)}>
-                                {column.required && column.initial ? null : <option value="">{column.placeholder ?? 'Pick one'}</option>}
-                                {(column.options ?? []).map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
+                              <GridSelect
+                                aria-label={cellLabel}
+                                invalid={bad}
+                                data-testid={cellTestId}
+                                value={cells[column.id] || (canBeEmpty ? NOTHING : '')}
+                                onValueChange={(next) => setCell(rowIndex, column.id, next === NOTHING ? '' : next)}
+                                placeholder={column.placeholder ?? 'Pick one'}
+                                options={[...(canBeEmpty ? [{ value: NOTHING, label: column.placeholder ?? 'Pick one' }] : []), ...(column.options ?? [])]}
+                              />
+                            ) : column.kind === 'date' ? (
+                              <IsoDatePicker
+                                aria-label={cellLabel}
+                                invalid={bad}
+                                data-testid={cellTestId}
+                                value={cells[column.id] || null}
+                                onChange={(next) => setCell(rowIndex, column.id, next ?? '')}
+                                clearable={canBeEmpty}
+                                placeholder={column.placeholder ?? 'Pick a day'}
+                              />
                             ) : (
-                              <input {...shared} type={column.kind === 'date' ? 'date' : 'text'} inputMode={column.kind === 'money' || column.kind === 'number' ? 'decimal' : undefined} value={cells[column.id] ?? ''} placeholder={column.placeholder} autoComplete="off" onChange={(event) => setCell(rowIndex, column.id, event.target.value)} onPaste={(event) => paste(event, rowIndex, columnIndex)} />
+                              <input
+                                aria-label={cellLabel}
+                                aria-invalid={bad || undefined}
+                                data-testid={cellTestId}
+                                className={cn('h-8 w-full rounded-md border bg-panel px-2 text-sm text-fg outline-none hover:border-border-input-hover focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]', bad ? 'border-danger' : 'border-border-input', (column.kind === 'money' || column.kind === 'number') && 'text-right tabular-nums')}
+                                type="text"
+                                inputMode={column.kind === 'money' || column.kind === 'number' ? 'decimal' : undefined}
+                                value={cells[column.id] ?? ''}
+                                placeholder={column.placeholder}
+                                autoComplete="off"
+                                onChange={(event) => setCell(rowIndex, column.id, event.target.value)}
+                              />
                             )}
                             {columnIndex === 0 && firstError ? (
                               <p role="alert" className="mt-0.5 flex items-start gap-1 text-2xs font-medium whitespace-nowrap text-danger-text">

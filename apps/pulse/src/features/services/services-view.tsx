@@ -18,7 +18,7 @@ import { Teach } from '@/components/pulse/teach';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { IconButton } from '@/components/ui/icon-button';
-import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '@/components/ui/table';
+import { PINNED_CELL_SURFACE, Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '@/components/ui/table';
 import { ToggleGroup } from '@/components/ui/toggle-group';
 import { toast } from '@/components/ui/toast';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -120,6 +120,49 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
       },
     });
   };
+
+  const rowMenu = (service: VasServiceDTO, testId: string) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <IconButton label={`Actions for ${service.name}`} icon={<MoreHorizontal aria-hidden />} size="sm" data-testid={testId} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          icon={<Pencil aria-hidden />}
+          onSelect={() => {
+            setEditing(service);
+            setFormOpen(true);
+          }}
+        >
+          Edit
+        </DropdownMenuItem>
+        <DropdownMenuItem icon={<Power aria-hidden />} onSelect={() => void toggle(service)}>
+          {service.active ? 'Turn off' : 'Turn on'}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="danger" icon={<Trash2 aria-hidden />} onSelect={() => void deleteService(service)}>
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+  /** The margin of one service in the period, with "How we got this". Blank when it had no volume. */
+  const marginBody = (line: ServiceLine, hover = true) => (
+    <span className={cn('inline-flex items-center justify-end gap-0.5', !hover && 'flex-row-reverse')}>
+      {line.volume > 0 ? <ExplainNumber metric="margin" scope={{ ...scope, serviceId: line.service.id }} label={`How we got the margin of ${line.service.name}`} className={hover ? 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100' : undefined} /> : null}
+      {line.volume > 0 ? (
+        line.costMissing ? (
+          <span className="text-fg-muted" title={NO_COST_REASON} data-testid={hover ? 'service-no-cost' : 'service-card-no-cost'}>
+            {NO_COST_WORDS}
+          </span>
+        ) : (
+          formatPercentBp(line.marginBp)
+        )
+      ) : (
+        ''
+      )}
+    </span>
+  );
 
   const exportRows = () =>
     downloadCsv(
@@ -240,7 +283,66 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
         ) : (
           <>
             {profit.isError ? <p className="border-b border-border-subtle px-4 py-2 text-sm text-danger-text">We could not load the activity for this period, so volume, revenue and margin are blank.</p> : null}
-            <div className="overflow-x-auto">
+            {/* Below 1280 px: one card per service, so revenue, cost, margin and the row menu are all on screen. */}
+            <ul className="grid gap-2 p-3 sm:grid-cols-2 xl:hidden" aria-label="Extra services" data-testid="services-cards">
+              {shown.map((line) => {
+                const service = line.service;
+                const none = <span className="font-normal text-fg-muted">None</span>;
+                return (
+                  <li key={service.id} className="flex flex-col gap-2.5 rounded-xl border border-border-subtle bg-panel p-3 shadow-xs" data-testid="service-card">
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <Link href={routes.service(service.id)} className="rounded-sm font-medium text-fg underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                          {service.name}
+                        </Link>
+                        <span className="block truncate text-xs text-fg-muted">
+                          {service.code} · {BILLING_LABELS[service.billing] ?? service.billing}, {service.unitLabel}
+                          {service.active ? '' : ' · turned off'}
+                        </span>
+                      </div>
+                      {canManage ? rowMenu(service, 'service-card-actions') : null}
+                    </div>
+                    <dl className="grid grid-cols-3 gap-x-3 gap-y-2 text-sm tabular-nums">
+                      <div className="min-w-0">
+                        <dt className="text-xs text-fg-muted">Revenue</dt>
+                        <dd className="font-medium text-fg" data-testid="service-card-revenue">{line.volume > 0 ? formatMoney(line.revenueCents) : none}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-xs text-fg-muted">Cost</dt>
+                        <dd className="font-medium text-fg" data-testid="service-card-cost">{line.volume > 0 ? line.costMissing ? <span className="font-normal text-fg-muted">Not known</span> : formatMoney(line.costCents) : none}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-xs text-fg-muted">Margin</dt>
+                        <dd className={cn('font-medium text-fg', (line.marginBp ?? 0) < 0 && 'text-danger-text')} data-testid="service-card-margin">{line.volume > 0 ? marginBody(line, false) : none}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-xs text-fg-muted">Volume</dt>
+                        <dd className="text-fg">{line.volume > 0 ? formatNumber(line.volume, { maxDigits: 0 }) : none}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-xs text-fg-muted">Price</dt>
+                        <dd className="text-fg">{line.price === null ? none : formatUnitPrice(line.price)}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-xs text-fg-muted" title="Parts for one unit plus labor at the target pace.">
+                          Standard cost
+                        </dt>
+                        <dd className="text-fg">{line.standardCost === null ? <span className="text-fg-muted">Not set</span> : formatUnitPrice(line.standardCost)}</dd>
+                      </div>
+                    </dl>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <FlagPill line={line} targetMarginBp={targetMarginBp} />
+                      {line.standardMarginBp !== null ? (
+                        <span className="text-xs text-fg-muted">
+                          Margin at list price <span className={cn('font-medium tabular-nums', line.standardMarginBp < 0 ? 'text-danger-text' : 'text-fg-secondary')}>{formatPercentBp(line.standardMarginBp)}</span>
+                        </span>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="hidden overflow-x-auto xl:block">
               <Table className="min-w-max" data-testid="services-table">
                 <TableHead>
                   <tr>
@@ -259,7 +361,7 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
                     <TableHeaderCell>Profit trend</TableHeaderCell>
                     <TableHeaderCell>Check</TableHeaderCell>
                     {canManage ? (
-                      <TableHeaderCell>
+                      <TableHeaderCell className="sticky right-0 z-[1] w-12 bg-panel">
                         <span className="sr-only">Actions</span>
                       </TableHeaderCell>
                     ) : null}
@@ -298,50 +400,15 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
                           {line.volume > 0 ? line.costMissing ? <span className="text-fg-muted">Not known</span> : formatMoney(line.costCents) : ''}
                         </TableCell>
                         <TableCell numeric className={cn('whitespace-nowrap', (line.marginBp ?? 0) < 0 && 'text-danger-text')}>
-                          <span className="inline-flex items-center justify-end gap-0.5">
-                            {line.volume > 0 ? <ExplainNumber metric="margin" scope={{ ...scope, serviceId: service.id }} label={`How we got the margin of ${service.name}`} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" /> : null}
-                            {line.volume > 0 ? (
-                              line.costMissing ? (
-                                <span className="text-fg-muted" title={NO_COST_REASON} data-testid="service-no-cost">
-                                  {NO_COST_WORDS}
-                                </span>
-                              ) : (
-                                formatPercentBp(line.marginBp)
-                              )
-                            ) : (
-                              ''
-                            )}
-                          </span>
+                          {marginBody(line)}
                         </TableCell>
                         <TableCell>{line.trend && line.trend.length > 1 && line.volume > 0 ? <Sparkline values={[...line.trend]} label={`${service.name} profit over the period`} format="money" width={84} height={24} tone={(line.profitCents ?? 0) < 0 ? 'bad' : 'accent'} /> : null}</TableCell>
                         <TableCell>
                           <FlagPill line={line} targetMarginBp={targetMarginBp} />
                         </TableCell>
                         {canManage ? (
-                          <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <IconButton label={`Actions for ${service.name}`} icon={<MoreHorizontal aria-hidden />} size="sm" data-testid="service-actions" />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  icon={<Pencil aria-hidden />}
-                                  onSelect={() => {
-                                    setEditing(service);
-                                    setFormOpen(true);
-                                  }}
-                                >
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem icon={<Power aria-hidden />} onSelect={() => void toggle(service)}>
-                                  {service.active ? 'Turn off' : 'Turn on'}
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem variant="danger" icon={<Trash2 aria-hidden />} onSelect={() => void deleteService(service)}>
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                          <TableCell className={cn('sticky right-0 z-[1] w-12', PINNED_CELL_SURFACE)}>
+                            {rowMenu(service, 'service-actions')}
                           </TableCell>
                         ) : null}
                       </TableRow>

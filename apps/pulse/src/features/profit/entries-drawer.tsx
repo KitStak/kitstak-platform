@@ -13,6 +13,7 @@ import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '@/components/ui/table';
 import { ToggleGroup } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/cn';
+import { ScrollX } from '@/components/ui/scroll-x';
 import type { FactKind } from '@/lib/constants';
 import { formatHours, formatMoney, formatMoneyPlain, formatNumber } from '@/lib/format';
 import { rawCell } from '@/lib/csv/write';
@@ -56,9 +57,9 @@ export function EntriesDrawer({ open, onClose, filter, onFilter, scope, title, f
         }
       >
         <div className="flex flex-col gap-4 p-4 sm:p-6">
-          <div className="max-w-full overflow-x-auto">
+          <ScrollX label="Which entries to show" tabStop={false} className="max-w-full">
             <ToggleGroup label="Which entries to show" size="sm" value={filter} onValueChange={onFilter} options={ENTRY_FILTERS.map((value) => ({ value, label: ENTRY_FILTER_LABELS[value] }))} />
-          </div>
+          </ScrollX>
           {sums ? (
             <dl className="grid grid-cols-3 gap-3 rounded-lg border border-border-subtle bg-sunken p-3 text-sm tabular-nums" data-testid="entries-sums">
               <div>

@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ToggleGroup } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/cn';
+import { ScrollX } from '@/components/ui/scroll-x';
 import { PROFIT_GROUPS, type ProfitGroup } from '@/lib/constants';
 import type { CsvCell } from '@/lib/csv/write';
 import { formatMoney, formatMoneyWhole, formatPace, formatPercentBp, formatPercentWhole } from '@/lib/format';
@@ -42,12 +43,14 @@ import {
   contribution,
   csvHeader,
   csvValue,
+  NO_COST_YET,
   defaultPivotBy,
   defaultSort,
   modesFor,
   paretoView,
   parseSort,
   pivotCsv,
+  rowNoCost,
   rowLabel,
   sortParam,
   sortRows,
@@ -182,14 +185,14 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
     if (mode === 'contribution') {
       const line = (name: string, row: typeof total): CsvCell[] => {
         const parts = contribution(row);
-        return [name, csvValue(row.revenueCents, 'money'), csvValue(parts?.directCents, 'money'), csvValue(parts?.contributionCents, 'money'), csvValue(row.marginBeforeSharedBp, 'percent'), csvValue(row.sharedCents, 'money'), csvValue(row.profitCents, 'money'), csvValue(row.marginBp, 'percent')];
+        return [name, csvValue(row.revenueCents, 'money'), csvValue(parts?.directCents, 'money'), csvValue(parts?.contributionCents, 'money'), row.costMissing ? NO_COST_YET : csvValue(row.marginBeforeSharedBp, 'percent'), csvValue(row.sharedCents, 'money'), csvValue(row.profitCents, 'money'), row.costMissing ? NO_COST_YET : csvValue(row.marginBp, 'percent')];
       };
       downloadCsv(`${orgSlug}-profit-contribution-${by}-${stamp}.csv`, [nameHeader, 'Revenue', 'Direct costs', 'Contribution', 'Contribution (%)', 'Time not on a job', 'Profit', 'Job margin (%)'], [...rows.map((row) => line(rowLabel(by, row), row)), line('Total', total)]);
       return;
     }
     const withName = by === 'job';
     const headers = [nameHeader, ...(withName ? ['Name'] : []), ...columns.map(csvHeader), ...(comparing ? ['Profit change', 'Margin change (points)'] : [])];
-    const line = (name: string, sub: string | null, row: typeof total, change: { profitDelta: number | null; marginDelta: number | null } | null | undefined): CsvCell[] => [name, ...(withName ? [sub ?? ''] : []), ...columns.map((column) => csvValue(column.get(row), column.kind)), ...(comparing ? [csvValue(change?.profitDelta ?? null, 'money'), csvValue(change?.marginDelta ?? null, 'percent')] : [])];
+    const line = (name: string, sub: string | null, row: typeof total, change: { profitDelta: number | null; marginDelta: number | null } | null | undefined): CsvCell[] => [name, ...(withName ? [sub ?? ''] : []), ...columns.map((column) => (rowNoCost(row, column.id) ? NO_COST_YET : csvValue(column.get(row), column.kind))), ...(comparing ? [csvValue(change?.profitDelta ?? null, 'money'), csvValue(change?.marginDelta ?? null, 'percent')] : [])];
     downloadCsv(`${orgSlug}-profit-by-${by}-${stamp}.csv`, headers, [...rows.map((row) => line(rowLabel(by, row), row.sublabel, row, compared.get(row.key))), line('Total', null, total, totalCompared)]);
   };
 
@@ -361,9 +364,9 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
                     </DropdownMenuContent>
                   </DropdownMenu>
                 ) : null}
-                <div className="max-w-full overflow-x-auto">
+                <ScrollX label="How to show the numbers" tabStop={false} className="max-w-full">
                   <ToggleGroup label="How to show the numbers" size="sm" value={mode} onValueChange={(value) => set({ view: value === 'table' ? null : value })} options={modes.filter((value) => seesMoney || value === 'table' || value === 'chart' || value === 'pivot').map((value) => ({ value, label: MODE_LABELS[value] }))} />
-                </div>
+                </ScrollX>
               </div>
             }
           >

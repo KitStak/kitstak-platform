@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarCheck2, CircleAlert, CircleCheck, History, Lock, LockOpen, TriangleAlert } from 'lucide-react';
 import { Badge, Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Field, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
+import { ScrollX } from '@/components/ui/scroll-x';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { formatMoment, useHydrated } from '@/components/pulse/local-time';
 import { Teach } from '@/components/pulse/teach';
@@ -138,7 +139,8 @@ export function CloseView({
       {boardQuery.isError ? <p role="alert" className="rounded-lg bg-danger-subtle px-3 py-2 text-sm text-danger-text">We could not refresh the list of months. You are looking at the last one we loaded.</p> : null}
       <div className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
         <nav aria-label="Months" className="min-w-0">
-          <ul className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0" data-testid="close-months">
+          <ScrollX label="Months" tabStop={false} fade="app" scrollerClassName="pb-1 lg:overflow-visible lg:pb-0" testId="close-months-scroll">
+          <ul className="flex gap-2 lg:flex-col" data-testid="close-months">
             {board.months.map((item) => {
               const active = item.periodMonth === month;
               return (
@@ -165,6 +167,7 @@ export function CloseView({
               );
             })}
           </ul>
+          </ScrollX>
         </nav>
 
         <div className="flex min-w-0 flex-col gap-5">
@@ -293,13 +296,15 @@ function MonthEntries({ month, today, moneyHidden }: { readonly month: CloseMont
           <h3 id="close-entries" className="text-base font-semibold text-fg">
             Entries dated in {month.label}
           </h3>
-          <TabsList variant="pill" aria-label="Kind of entry" className="max-w-full overflow-x-auto">
+          <ScrollX label="Kind of entry" tabStop={false} className="max-w-full">
+          <TabsList variant="pill" aria-label="Kind of entry">
             {tabs.map((item) => (
               <TabsTrigger key={item.id} value={item.id} variant="pill" className="shrink-0 whitespace-nowrap" data-testid={`close-entries-${item.id}`}>
                 {item.label}
               </TabsTrigger>
             ))}
           </TabsList>
+          </ScrollX>
         </div>
         {month.status === 'closed' ? <p className="text-sm text-fg-secondary">{month.label} is closed, so these rows are locked. Reopen the month to change one.</p> : null}
         {tabs.map((item) => (

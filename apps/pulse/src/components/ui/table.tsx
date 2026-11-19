@@ -28,6 +28,14 @@ export function Table({ className, scroll = true, scrollClassName, ...props }: T
   );
 }
 
+/**
+ * Surface classes for a body cell pinned to an edge with `position: sticky`. The row hover color is
+ * see through, so a pinned cell keeps its solid panel color and lays the hover tint over it: the
+ * columns that scroll under it never show through. The row needs the `group` class.
+ */
+export const PINNED_CELL_SURFACE =
+  'bg-panel group-hover:bg-[image:linear-gradient(var(--surface-hover),var(--surface-hover))] group-data-[selected=true]:bg-selected';
+
 export function TableHead({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
   return <thead className={cn('bg-panel shadow-[inset_0_-1px_0_var(--border-default)]', className)} {...props} />;
 }

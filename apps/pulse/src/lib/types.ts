@@ -1298,6 +1298,8 @@ export interface PivotCellDTO {
   readonly marginBp: number | null;
   readonly unitsGood: DecimalString;
   readonly hours: DecimalString;
+  /** An extra service cell with revenue and no cost of any kind: `marginBp` is null and the screen says "No cost yet". */
+  readonly costMissing: boolean;
 }
 
 /** `GET /api/v1/profit/pivot`: profit grouped by two things at once. */

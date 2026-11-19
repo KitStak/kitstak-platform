@@ -43,7 +43,7 @@ import { useJobs, useLaborSummary, useLogGrid } from '@/lib/hooks/use-data';
 import { shortDate } from '@/lib/profit';
 import { qk } from '@/lib/query-keys';
 import { routes } from '@/lib/routes';
-import type { LaborClassDTO, LaborSummaryDTO, SettingsDTO, SiteDTO } from '@/lib/types';
+import type { LaborClassDTO, LaborSummaryDTO, PunchDTO, SettingsDTO, SiteDTO } from '@/lib/types';
 import { deletePunchesAction, restorePunchesAction, savePunchesAction } from '@/server/actions/floor';
 import { RangeBar, useRange } from './range-bar';
 
@@ -303,7 +303,9 @@ export function TimeView({
                     <TableRow className="hover:bg-transparent">
                       <TableHeaderCell>Reason</TableHeaderCell>
                       <TableHeaderCell numeric>Labor hours</TableHeaderCell>
-                      <TableHeaderCell numeric>Share</TableHeaderCell>
+                      <TableHeaderCell numeric className="hidden sm:table-cell">
+                        Share
+                      </TableHeaderCell>
                       {!data.moneyHidden ? <TableHeaderCell numeric>Cost</TableHeaderCell> : null}
                     </TableRow>
                   </TableHead>
@@ -314,7 +316,7 @@ export function TimeView({
                           {INDIRECT_REASON_LABELS[row.reason as IndirectReason] ?? row.reason}
                         </TableCell>
                         <TableCell numeric>{formatHours(row.hours)}</TableCell>
-                        <TableCell numeric>
+                        <TableCell numeric className="hidden sm:table-cell">
                           {indirect > 0
                             ? formatPercentBp(Math.round((Number(row.hours) / indirect) * 10000), {
                                 digits: 0,
@@ -509,6 +511,10 @@ function DayEntry({
   );
 }
 
+/** Radix Select has no empty value, so the two "nothing picked" rows carry a name of their own. */
+const NO_TARGET = 'none';
+const DEFAULT_CLASS = 'default';
+
 const fieldClass =
   'h-10 w-full min-w-0 rounded-md border border-border-input bg-panel px-2 text-sm tabular-nums text-fg placeholder:text-fg-placeholder hover:border-border-input-hover focus-visible:border-focus focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus sm:h-8';
 
@@ -581,6 +587,26 @@ function PunchesPanel({
     setDraft({ ...draft, code: '', name: '', hours: '', overtime: '' });
   }
 
+  const targetWords = (row: PunchDTO): string => (row.jobNumber ? `${row.jobNumber} ${row.jobName ?? ''}` : row.reason ? (INDIRECT_REASON_LABELS[row.reason as IndirectReason] ?? row.reason) : 'Paid, not on any job');
+  const removeButton = (row: PunchDTO) =>
+    canLog && !row.locked ? (
+                      <IconButton
+                        label={`Remove the punch of ${row.employeeName ?? row.employeeCode} on ${shortDate(row.workDate)}`}
+                        icon={<Trash2 aria-hidden />}
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          void remove.run({ ids: [row.id] }).then((gone) => {
+                            if (gone)
+                              toast.undo('Punch removed', {
+                                description: 'The hours of that day were added up again.',
+                                onUndo: async () => void (await restore.run({ ids: [row.id] })),
+                              });
+                          })
+                        }
+                      />
+                    ) : null;
+
   return (
     <Panel
       title="Time punches"
@@ -620,12 +646,12 @@ function PunchesPanel({
         >
           <label className="flex flex-col gap-1 text-xs text-fg-muted">
             Day
-            <input
-              type="date"
+            <IsoDatePicker
               max={today}
-              className={fieldClass}
               value={draft.date}
-              onChange={(event) => event.target.value && setDraft({ ...draft, date: event.target.value })}
+              onChange={(value) => value && setDraft({ ...draft, date: value })}
+              clearable={false}
+              triggerClassName="h-10 sm:h-8"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs text-fg-muted">
@@ -649,44 +675,30 @@ function PunchesPanel({
           </label>
           <label className="flex flex-col gap-1 text-xs text-fg-muted">
             Job or reason
-            <select
-              className={cn(fieldClass, 'cursor-pointer')}
-              value={draft.target}
-              onChange={(event) => setDraft({ ...draft, target: event.target.value })}
-            >
-              <option value="">Paid, not on any job</option>
-              <optgroup label="Not on a job">
-                {INDIRECT_REASONS.map((reason) => (
-                  <option key={reason} value={reason}>
-                    {INDIRECT_REASON_LABELS[reason]}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Jobs">
-                {(jobs.data ?? []).map((job) => (
-                  <option key={job.id} value={job.id}>
-                    {job.number} {job.name}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
+            <Select
+              className="h-10 sm:h-8"
+              value={draft.target || NO_TARGET}
+              onValueChange={(value) => setDraft({ ...draft, target: value === NO_TARGET ? '' : value })}
+              options={[
+                { value: NO_TARGET, label: 'Paid, not on any job' },
+                ...INDIRECT_REASONS.map((reason) => ({ value: reason, label: INDIRECT_REASON_LABELS[reason], description: 'Not on a job' })),
+                ...(jobs.data ?? []).map((job) => ({ value: job.id, label: `${job.number} ${job.name}` })),
+              ]}
+              data-testid="punch-target"
+            />
           </label>
           <label className="flex flex-col gap-1 text-xs text-fg-muted">
             Labor class
-            <select
-              className={cn(fieldClass, 'cursor-pointer')}
-              value={draft.classId}
-              onChange={(event) => setDraft({ ...draft, classId: event.target.value })}
-            >
-              <option value="">Default class</option>
-              {laborClasses
-                .filter((item) => !item.archivedAt)
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-            </select>
+            <Select
+              className="h-10 sm:h-8"
+              value={draft.classId || DEFAULT_CLASS}
+              onValueChange={(value) => setDraft({ ...draft, classId: value === DEFAULT_CLASS ? '' : value })}
+              options={[
+                { value: DEFAULT_CLASS, label: 'Default class' },
+                ...laborClasses.filter((item) => !item.archivedAt).map((item) => ({ value: item.id, label: item.name })),
+              ]}
+              data-testid="punch-class"
+            />
           </label>
           <label className="flex flex-col gap-1 text-xs text-fg-muted">
             Hours
@@ -735,7 +747,47 @@ function PunchesPanel({
           punches when your time clock already knows who worked on what.
         </p>
       ) : (
-        <div className="mt-3 overflow-x-auto border-t border-border-subtle">
+        <>
+        {/* Phones: one card per punch, so the hours and the remove button are on screen. */}
+        <ul className="mt-3 flex flex-col divide-y divide-border-subtle border-t border-border-subtle sm:hidden" aria-label="Time punches" data-testid="punch-cards">
+          {rows.map((row) => (
+            <li key={row.id} className="flex items-start gap-2 px-4 py-3" data-testid="punch-card">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-fg">
+                  {row.employeeName ?? row.employeeCode}
+                  {row.employeeName ? <span className="ml-1.5 text-xs font-normal text-fg-muted">{row.employeeCode}</span> : null}
+                </p>
+                <p className="truncate text-xs text-fg-muted">
+                  {shortDate(row.workDate)} · {targetWords(row)}
+                </p>
+                <dl className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm tabular-nums">
+                  <div>
+                    <dt className="text-xs text-fg-muted">Hours</dt>
+                    <dd className="font-medium text-fg">{formatHours(row.hours)}</dd>
+                  </div>
+                  {Number(row.overtimeHours) > 0 ? (
+                    <div>
+                      <dt className="text-xs text-fg-muted">Overtime</dt>
+                      <dd className="text-fg">{formatHours(row.overtimeHours)}</dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt className="text-xs text-fg-muted">Labor class</dt>
+                    <dd className="text-fg">{classById.get(row.laborClassId ?? '') ?? 'Default class'}</dd>
+                  </div>
+                  {sites.length > 1 ? (
+                    <div>
+                      <dt className="text-xs text-fg-muted">Site</dt>
+                      <dd className="text-fg">{sites.find((site) => site.id === row.siteId)?.name}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              </div>
+              {removeButton(row)}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-3 hidden overflow-x-auto border-t border-border-subtle sm:block">
           <Table className="min-w-[640px]">
             <TableHead>
               <TableRow className="hover:bg-transparent">
@@ -762,11 +814,7 @@ function PunchesPanel({
                     ) : null}
                   </TableCell>
                   <TableCell className="max-w-[260px] truncate">
-                    {row.jobNumber
-                      ? `${row.jobNumber} ${row.jobName ?? ''}`
-                      : row.reason
-                        ? (INDIRECT_REASON_LABELS[row.reason as IndirectReason] ?? row.reason)
-                        : 'Paid, not on any job'}
+                    {targetWords(row)}
                   </TableCell>
                   <TableCell>{classById.get(row.laborClassId ?? '') ?? 'Default class'}</TableCell>
                   <TableCell numeric>{formatHours(row.hours)}</TableCell>
@@ -776,30 +824,13 @@ function PunchesPanel({
                   {sites.length > 1 ? (
                     <TableCell>{sites.find((site) => site.id === row.siteId)?.name}</TableCell>
                   ) : null}
-                  <TableCell>
-                    {canLog && !row.locked ? (
-                      <IconButton
-                        label={`Remove the punch of ${row.employeeName ?? row.employeeCode} on ${shortDate(row.workDate)}`}
-                        icon={<Trash2 aria-hidden />}
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          void remove.run({ ids: [row.id] }).then((gone) => {
-                            if (gone)
-                              toast.undo('Punch removed', {
-                                description: 'The hours of that day were added up again.',
-                                onUndo: async () => void (await restore.run({ ids: [row.id] })),
-                              });
-                          })
-                        }
-                      />
-                    ) : null}
-                  </TableCell>
+                  <TableCell>{removeButton(row)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
+        </>
       )}
     </Panel>
   );

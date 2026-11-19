@@ -28,6 +28,8 @@ export interface SelectProps {
   readonly autoFocus?: boolean;
   /** Start with the list open (used by `GridSelect` when it swaps in on a click). */
   readonly defaultOpen?: boolean;
+  /** Told each time the list opens or closes. */
+  readonly onOpenChange?: (open: boolean) => void;
   readonly 'data-testid'?: string;
 }
 
@@ -50,12 +52,12 @@ const triggerClass = (size: NonNullable<SelectProps['size']>, className?: string
 
 /** Single-select dropdown with typeahead, built on Radix Select. */
 export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select(
-  { value, onValueChange, options, placeholder = 'Select…', size = 'md', disabled, invalid, className, autoFocus, defaultOpen, 'data-testid': testId, ...aria },
+  { value, onValueChange, options, placeholder = 'Select…', size = 'md', disabled, invalid, className, autoFocus, defaultOpen, onOpenChange, 'data-testid': testId, ...aria },
   ref,
 ) {
   const selected = options.find((option) => option.value === value);
   return (
-    <SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled} name={aria.name} defaultOpen={defaultOpen}>
+    <SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled} name={aria.name} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
       <SelectPrimitive.Trigger
         ref={ref}
         id={aria.id}

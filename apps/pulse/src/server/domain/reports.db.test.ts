@@ -14,6 +14,7 @@ import { REPORTS } from '@/lib/reports';
 import type { DomainContext } from './_shared';
 import {
   buildReport,
+  createVasService,
   deleteReportSchedule,
   explain,
   getProfit,
@@ -29,6 +30,7 @@ import {
   runReportSchedule,
   saveCost,
   saveReportSchedule,
+  saveVasEntry,
   setMemberRole,
   setReportScheduleEnabled,
 } from './test-exports';
@@ -270,4 +272,31 @@ describe.skipIf(!ready)('reports, pivot, drill down and explain add up to the Pr
     expect(back.id).toBe(saved.id);
     expect((await listReportSchedules(owner)).map((item) => item.id)).toContain(saved.id);
   }, 120_000);
+  it('pivot: an extra service cell with revenue and no cost says "No cost yet", like the Profit page', async () => {
+    const [client] = await listClients(owner);
+    const service = await createVasService(owner, { name: 'Pivot relabel', defaultPrice: '2.0000' });
+    await saveVasEntry(owner, { vasServiceId: service.id, clientId: client!.id, workDate: range.to, quantity: '10' });
+    const byService = await getProfit(owner, 'service', range);
+    const row = byService.rows.find((item) => item.key === service.id)!;
+    expect(row.revenueCents).toBe(2000);
+    expect(row.costMissing).toBe(true);
+    expect(row.marginBp).toBeNull();
+    // Service down the side.
+    const pivot = await getProfitPivot(owner, 'service', 'month', range);
+    const cell = pivot.cells[service.id]![`${range.to.slice(0, 7)}-01`]!;
+    expect(cell).toMatchObject({ revenueCents: 2000, costCents: 0, profitCents: 2000, marginBp: null, costMissing: true });
+    expect(pivot.rowTotals[service.id]).toMatchObject({ marginBp: null, costMissing: true });
+    // Core job work has costs, so its cells keep a margin, and the grand total is not one service.
+    expect(pivot.rowTotals.none?.costMissing).toBe(false);
+    expect(pivot.total.costMissing).toBe(false);
+    // Service across the top, and one service picked in the filters.
+    const across = await getProfitPivot(owner, 'client', 'service', range);
+    expect(across.cells[client!.id]![service.id]).toMatchObject({ marginBp: null, costMissing: true });
+    expect(across.colTotals[service.id]).toMatchObject({ marginBp: null, costMissing: true });
+    const one = await getProfitPivot(owner, 'client', 'month', { ...range, vasServiceId: service.id });
+    expect(one.total).toMatchObject({ revenueCents: 2000, marginBp: null, costMissing: true });
+    // A reader without money gets no flag, like every other money field.
+    const hidden = await getProfitPivot(viewer, 'service', 'month', range);
+    expect(hidden.rowTotals[service.id]).toMatchObject({ revenueCents: null, marginBp: null, costMissing: false });
+  });
 });

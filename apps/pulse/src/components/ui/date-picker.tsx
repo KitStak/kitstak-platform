@@ -115,8 +115,14 @@ export interface DatePickerProps {
   readonly invalid?: boolean;
   /** The last day that can be picked. Later days are greyed out in the calendar. */
   readonly maxDate?: Date;
+  /** The first day that can be picked. Earlier days are greyed out in the calendar. */
+  readonly minDate?: Date;
   /** The shortcut rows next to the calendar. Default: Today, Tomorrow, Next week, In 2 weeks. */
   readonly quickPicks?: readonly QuickPick[];
+  /** Start with the calendar open (a table cell that turns into a picker on a click). */
+  readonly defaultOpen?: boolean;
+  /** Told each time the calendar opens or closes. */
+  readonly onOpenChange?: (open: boolean) => void;
   readonly 'data-testid'?: string;
 }
 
@@ -146,11 +152,18 @@ export function DatePicker({
   size = 'md',
   invalid,
   maxDate,
+  minDate,
   quickPicks = QUICK_PICKS,
+  defaultOpen = false,
+  onOpenChange,
   'data-testid': testId,
   ...aria
 }: DatePickerProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(defaultOpen);
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
   const valid = value && isValid(value) ? value : null;
   const choose = (date: Date | null) => {
     // A box that cannot be empty keeps its day when the picked day is clicked again.
@@ -209,7 +222,7 @@ export function DatePicker({
           ) : null}
         </div>
         <div className="p-3">
-          <Calendar selected={valid ?? undefined} onSelect={(date) => choose(date ?? null)} disabled={maxDate ? { after: maxDate } : undefined} />
+          <Calendar selected={valid ?? undefined} onSelect={(date) => choose(date ?? null)} disabled={[...(maxDate ? [{ after: maxDate }] : []), ...(minDate ? [{ before: minDate }] : [])]} />
         </div>
       </PopoverContent>
     </Popover>

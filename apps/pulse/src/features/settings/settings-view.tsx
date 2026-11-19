@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { BellRing, BookOpen, Boxes, Building2, CalendarCheck2, HandCoins, History, MonitorSmartphone, Plug, Scale, Settings2, Shapes, TestTubeDiagonal, TriangleAlert, UsersRound, type LucideIcon } from 'lucide-react';
 import { cn } from '@/components/ui/cn';
+import { ScrollX } from '@/components/ui/scroll-x';
 import { Panel } from '@/components/layout/page';
 import { useShell } from '@/features/shell/shell-context';
 import { useSettings } from '@/lib/hooks/use-data';
@@ -59,7 +60,8 @@ export function SettingsView({ initialSettings, initialSample }: { readonly init
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start" data-testid="settings" data-section={active}>
       <nav aria-label="Settings sections" className="min-w-0 lg:sticky lg:top-4">
-        <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+        <ScrollX label="Settings sections" tabStop={false} fade="app" scrollerClassName="pb-1 lg:overflow-visible lg:pb-0" testId="settings-nav-scroll">
+        <ul className="flex gap-1 lg:flex-col">
           {SETTINGS_SECTIONS.map((section) => {
             const current = section.id === active;
             return (
@@ -84,6 +86,7 @@ export function SettingsView({ initialSettings, initialSample }: { readonly init
             );
           })}
         </ul>
+        </ScrollX>
       </nav>
       <div className="min-w-0">
         {active === 'general' ? <GeneralSection settings={settings} canEdit={canEdit} /> : null}

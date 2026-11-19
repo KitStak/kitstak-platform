@@ -40,9 +40,10 @@ export async function createClientAction(input: CreateClientActionInput) {
   return runAction(createClientSchema, input, (data, ctx) => createClient(ctx, data, { guardLookAlike: true }));
 }
 
-const updateClientSchema = z.object({ clientId: uuid, patch: z.object(clientFields).partial(), version });
+const updateClientSchema = z.object({ clientId: uuid, patch: z.object(clientFields).partial(), version, confirmNew: z.boolean().optional() });
+/** A new name close to another client's is refused with `fields.clientLookAlike` until `confirmNew` is true, like `createClientAction`. */
 export async function updateClientAction(input: z.input<typeof updateClientSchema>) {
-  return runAction(updateClientSchema, input, (data, ctx) => updateClient(ctx, data.clientId, data.patch, data.version));
+  return runAction(updateClientSchema, input, (data, ctx) => updateClient(ctx, data.clientId, { ...data.patch, confirmNew: data.confirmNew }, data.version, { guardLookAlike: true }));
 }
 
 const clientIdSchema = z.object({ clientId: uuid });

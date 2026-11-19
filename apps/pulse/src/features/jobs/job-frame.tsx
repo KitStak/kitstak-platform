@@ -29,7 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   IconButton,
-  Input,
+  IsoDatePicker,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -322,12 +322,12 @@ export function JobFrame({
                     <label htmlFor="job-due-input" className="text-xs font-medium text-fg-secondary">
                       Due date
                     </label>
-                    <Input
+                    <IsoDatePicker
                       id="job-due-input"
-                      type="date"
-                      value={due}
-                      onChange={(event) => setDue(event.target.value)}
-                      autoFocus
+                      value={due || null}
+                      onChange={(value) => setDue(value ?? '')}
+                      clearable={false}
+                      placeholder="No due date"
                       data-testid="job-due-input"
                     />
                     <div className="flex justify-between gap-2">

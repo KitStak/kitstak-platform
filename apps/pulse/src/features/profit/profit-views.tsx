@@ -12,7 +12,7 @@ import { Sparkline } from '@/components/charts/sparkline';
 import { MarginPill } from '@/components/charts/stats';
 import { ExplainNumber } from '@/components/pulse/explain';
 import { Select } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '@/components/ui/table';
+import { PINNED_CELL_SURFACE, Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '@/components/ui/table';
 import { ToggleGroup } from '@/components/ui/toggle-group';
 import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/components/ui/cn';
@@ -35,6 +35,9 @@ import {
   formatValue,
   isTimeGroup,
   paretoView,
+  NO_COST_YET,
+  pivotNoCost,
+  rowNoCost,
   pivotValue,
   rowLabel,
   rowScope,
@@ -139,14 +142,14 @@ function RowName({ by, row, onDrill, range }: { readonly by: ProfitGroup; readon
 }
 
 /** An extra service row with revenue and no cost logged has no real margin (the server sends none). */
-const noCostYet = (row: ProfitRowDTO, columnId: string): boolean => row.costMissing && (columnId === 'margin' || columnId === 'margin_before');
+const noCostYet = rowNoCost;
 
 /** Shown in place of a margin that would read 100% only because no cost is logged. */
 function NoCostYet() {
   return (
     <Tooltip content="No labor hours or parts are logged for this work, so Pulse does not know what it cost.">
       <span tabIndex={0} className="rounded-sm font-normal text-fg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="profit-no-cost">
-        No cost yet
+        {NO_COST_YET}
       </span>
     </Tooltip>
   );
@@ -168,10 +171,35 @@ function ChangeCells({ compared }: { readonly compared: Compared | null | undefi
   );
 }
 
+/**
+ * The last two columns of a fixed table (Profit, then Job margin), pinned to the right edge from
+ * 768 px. `PIN_EDGE` draws the hairline where the scrolling columns slide under the pinned block.
+ */
+const PIN_EDGE = 'md:shadow-[-1px_0_0_var(--border-default)]';
+const PIN_LAST = 'right-0 z-[1] w-[104px] max-w-[104px] min-w-[104px] md:sticky print:static';
+const PIN_SECOND = cn('right-[104px] z-[1] w-[116px] max-w-[116px] min-w-[116px] md:sticky print:static', PIN_EDGE);
+
+/** The columns that answer the page. They stay on screen on a tablet while the other columns scroll. */
+const PINNED_COLUMNS: readonly string[] = ['profit', 'margin'];
+
 export function TableView({ by, rows, total, columns, compared, totalCompared, compareLabel, sort, onSort, onDrill, scope, range, seesMoney }: TableViewProps) {
   const comparing = compareLabel !== '';
   const showTrend = !isTimeGroup(by) && rows.some((row) => (row.trend?.length ?? 0) > 1);
   const nameLabel = VIEW_LABELS[by].replace(/s$/, '');
+  // The answer columns stay pinned to the right edge from 768 px while the rest scrolls under them
+  // (the same pattern as a built report), so Profit and Job margin are on screen without scrolling.
+  const pinned = columns.length + (comparing ? 2 : 0) + (showTrend ? 1 : 0) >= 7 ? columns.filter((column) => PINNED_COLUMNS.includes(column.id)) : [];
+  const pin = (id: string, surface: string, head = false): { readonly className: string; readonly style: { readonly right: number } } | null => {
+    const index = pinned.findIndex((column) => column.id === id);
+    if (index < 0) return null;
+    // A hairline on the left edge of the pinned block, where the scrolling columns slide under it. A header cell keeps the line under the header row.
+    const edge = index === 0;
+    const line = head ? (edge ? 'md:shadow-[-1px_0_0_var(--border-default),inset_0_-1px_0_var(--border-default)]' : 'md:shadow-[inset_0_-1px_0_var(--border-default)]') : edge ? 'md:shadow-[-1px_0_0_var(--border-default)]' : '';
+    return {
+      className: cn('z-[1] w-[116px] max-w-[116px] min-w-[116px] md:sticky print:static', surface, line),
+      style: { right: (pinned.length - 1 - index) * 116 },
+    };
+  };
   return (
     <>
       {/* Phones: one card per row, the same rows in the same order. */}
@@ -210,11 +238,14 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
               <TableHeaderCell className="sticky left-0 z-[2] min-w-[240px] bg-panel" aria-sort={sort.column === 'name' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
                 <SortHeader id="name" label={nameLabel} sort={sort} onSort={onSort} />
               </TableHeaderCell>
-              {columns.map((column) => (
-                <TableHeaderCell key={column.id} numeric aria-sort={sort.column === column.id ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                  <SortHeader id={column.id} label={column.label} sort={sort} onSort={onSort} numeric title={column.help} />
-                </TableHeaderCell>
-              ))}
+              {columns.map((column) => {
+                const pinnedHere = pin(column.id, 'bg-panel', true);
+                return (
+                  <TableHeaderCell key={column.id} numeric style={pinnedHere?.style} className={pinnedHere?.className} aria-sort={sort.column === column.id ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                    <SortHeader id={column.id} label={column.label} sort={sort} onSort={onSort} numeric title={column.help} />
+                  </TableHeaderCell>
+                );
+              })}
               {comparing ? (
                 <>
                   <TableHeaderCell numeric>
@@ -239,8 +270,9 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
                   </TableCell>
                   {columns.map((column) => {
                     const value = column.get(row);
+                    const pinnedHere = pin(column.id, PINNED_CELL_SURFACE);
                     return (
-                      <TableCell key={column.id} numeric className={cn('whitespace-nowrap', toneFor(column, value))}>
+                      <TableCell key={column.id} numeric style={pinnedHere?.style} className={cn('whitespace-nowrap', toneFor(column, value), pinnedHere?.className)}>
                         <span className="inline-flex items-center justify-end gap-0.5">
                           {column.id === 'profit' && extra && seesMoney ? <ExplainNumber metric="profit" scope={{ ...scope, ...extra }} label={`How we got the profit of ${rowLabel(by, row)}`} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" /> : null}
                           {noCostYet(row, column.id) ? <NoCostYet /> : column.id === 'margin' && value !== null && by !== 'job' ? formatPercentBp(value, FIXED) : formatValue(value, column.kind)}
@@ -261,8 +293,9 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
               </TableCell>
               {columns.map((column) => {
                 const value = column.get(total);
+                const pinnedHere = pin(column.id, 'bg-sunken');
                 return (
-                  <TableCell key={column.id} numeric className={cn('whitespace-nowrap', toneFor(column, value))}>
+                  <TableCell key={column.id} numeric style={pinnedHere?.style} className={cn('whitespace-nowrap', toneFor(column, value), pinnedHere?.className)}>
                     {noCostYet(total, column.id) ? <NoCostYet /> : formatValue(value, column.kind)}
                   </TableCell>
                 );
@@ -401,8 +434,12 @@ export function ContributionView({ by, rows, total, onDrill, range, refreshing }
                 Contribution %
               </TableHeaderCell>
               <TableHeaderCell numeric>Time not on a job</TableHeaderCell>
-              <TableHeaderCell numeric>Profit</TableHeaderCell>
-              <TableHeaderCell numeric>Job margin</TableHeaderCell>
+              <TableHeaderCell numeric className={cn(PIN_SECOND, 'bg-panel')}>
+                Profit
+              </TableHeaderCell>
+              <TableHeaderCell numeric className={cn(PIN_LAST, 'bg-panel')}>
+                Job margin
+              </TableHeaderCell>
             </tr>
           </TableHead>
           <TableBody>
@@ -423,11 +460,11 @@ export function ContributionView({ by, rows, total, onDrill, range, refreshing }
                     {formatPercentBp(row.marginBeforeSharedBp, FIXED)}
                   </TableCell>
                   <TableCell numeric>{formatMoney(row.sharedCents)}</TableCell>
-                  <TableCell numeric className={cn((row.profitCents ?? 0) < 0 && 'text-danger-text')}>
+                  <TableCell numeric className={cn(PIN_SECOND, PINNED_CELL_SURFACE, (row.profitCents ?? 0) < 0 && 'text-danger-text')}>
                     {formatMoney(row.profitCents)}
                   </TableCell>
-                  <TableCell numeric className={cn((row.marginBp ?? 0) < 0 && 'text-danger-text')}>
-                    {formatPercentBp(row.marginBp, FIXED)}
+                  <TableCell numeric className={cn(PIN_LAST, PINNED_CELL_SURFACE, (row.marginBp ?? 0) < 0 && 'text-danger-text')}>
+                    {row.costMissing ? <NoCostYet /> : formatPercentBp(row.marginBp, FIXED)}
                   </TableCell>
                 </TableRow>
               );
@@ -441,8 +478,12 @@ export function ContributionView({ by, rows, total, onDrill, range, refreshing }
               <TableCell numeric>{totalParts ? formatMoney(totalParts.contributionCents) : ''}</TableCell>
               <TableCell numeric>{formatPercentBp(total.marginBeforeSharedBp, FIXED)}</TableCell>
               <TableCell numeric>{formatMoney(total.sharedCents)}</TableCell>
-              <TableCell numeric>{formatMoney(total.profitCents)}</TableCell>
-              <TableCell numeric>{formatPercentBp(total.marginBp, FIXED)}</TableCell>
+              <TableCell numeric className={cn(PIN_SECOND, 'bg-sunken')}>
+                {formatMoney(total.profitCents)}
+              </TableCell>
+              <TableCell numeric className={cn(PIN_LAST, 'bg-sunken')}>
+                {total.costMissing ? <NoCostYet /> : formatPercentBp(total.marginBp, FIXED)}
+              </TableCell>
             </tr>
           </tfoot>
         </Table>
@@ -494,7 +535,9 @@ export function ParetoView({ by, rows, onDrill, range, refreshing }: { readonly 
               <TableHeaderCell numeric>Share of profit</TableHeaderCell>
               <TableHeaderCell numeric>Running share</TableHeaderCell>
               <TableHeaderCell numeric>Share of revenue</TableHeaderCell>
-              <TableHeaderCell numeric>Margin</TableHeaderCell>
+              <TableHeaderCell numeric className={cn(PIN_LAST, PIN_EDGE, 'bg-panel')}>
+                Margin
+              </TableHeaderCell>
             </tr>
           </TableHead>
           <TableBody>
@@ -517,7 +560,7 @@ export function ParetoView({ by, rows, onDrill, range, refreshing }: { readonly 
                   </TableCell>
                   <TableCell numeric>{formatPercentBp(item.cumulativeProfitShareBp, FIXED)}</TableCell>
                   <TableCell numeric>{formatPercentBp(item.revenueShareBp, FIXED)}</TableCell>
-                  <TableCell numeric className={cn(losing && 'text-danger-text')}>
+                  <TableCell numeric className={cn(PIN_LAST, PIN_EDGE, PINNED_CELL_SURFACE, losing && 'text-danger-text')}>
                     {formatPercentBp(item.marginBp, FIXED)}
                   </TableCell>
                 </TableRow>
@@ -581,15 +624,16 @@ export function PivotView({ by, colBy, measure, onColBy, onMeasure, scope, seesM
                   <TableRow key={row.key}>
                     <TableCell className="sticky left-0 z-[1] max-w-[260px] truncate bg-panel font-medium">{rowLabel(by, row)}</TableCell>
                     {cols.map((col) => {
-                      const value = pivotValue(pivot.cells[row.key]?.[col.key], measure);
+                      const cell = pivot.cells[row.key]?.[col.key];
+                      const value = pivotValue(cell, measure);
                       return (
                         <TableCell key={col.key} numeric className={cn('whitespace-nowrap', tone(value))}>
-                          {value === null ? <span className="sr-only">No activity</span> : formatValue(value, kind)}
+                          {pivotNoCost(cell, measure) ? <NoCostYet /> : value === null ? <span className="sr-only">No activity</span> : formatValue(value, kind)}
                         </TableCell>
                       );
                     })}
                     <TableCell numeric className={cn('bg-sunken font-semibold whitespace-nowrap', tone(pivotValue(pivot.rowTotals[row.key], measure)))}>
-                      {formatValue(pivotValue(pivot.rowTotals[row.key], measure), kind)}
+                      {pivotNoCost(pivot.rowTotals[row.key], measure) ? <NoCostYet /> : formatValue(pivotValue(pivot.rowTotals[row.key], measure), kind)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -599,11 +643,11 @@ export function PivotView({ by, colBy, measure, onColBy, onMeasure, scope, seesM
                   <TableCell className="sticky left-0 z-[1] bg-sunken">Total</TableCell>
                   {cols.map((col) => (
                     <TableCell key={col.key} numeric className={cn('whitespace-nowrap', tone(pivotValue(pivot.colTotals[col.key], measure)))}>
-                      {formatValue(pivotValue(pivot.colTotals[col.key], measure), kind)}
+                      {pivotNoCost(pivot.colTotals[col.key], measure) ? <NoCostYet /> : formatValue(pivotValue(pivot.colTotals[col.key], measure), kind)}
                     </TableCell>
                   ))}
                   <TableCell numeric className={cn('whitespace-nowrap', tone(pivotValue(pivot.total, measure)))} data-testid="pivot-total">
-                    {formatValue(pivotValue(pivot.total, measure), kind)}
+                    {pivotNoCost(pivot.total, measure) ? <NoCostYet /> : formatValue(pivotValue(pivot.total, measure), kind)}
                   </TableCell>
                 </tr>
               </tfoot>

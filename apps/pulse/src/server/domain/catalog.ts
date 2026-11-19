@@ -313,11 +313,30 @@ export const findClientLookAlikes = scoped(async function findClientLookAlikes(t
   return [...matchClientName(clean, live).lookAlikes];
 }, 1);
 
-export const updateClient = scoped(async function updateClient(ctx: DomainContext, clientId: string, patch: Partial<ClientInput>, version?: number | null): Promise<ClientDTO> {
+/**
+ * A rename is a typed client name too, so it gets the same two checks as a new client: never the
+ * exact name of another client, and (with the guard on) a clear yes for a name close to another
+ * client. The client's own old name does not count, so fixing a slip in a name is never asked about.
+ */
+export const updateClient = scoped(async function updateClient(ctx: DomainContext, clientId: string, patch: Partial<ClientInput>, version?: number | null, options: ClientGuardOptions = {}): Promise<ClientDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     const before = await getClientRow(ctx, clientId, tx);
     assertVersion(before.version, version);
+    const renamed = cleanText(patch.name);
+    if (renamed && renamed.toLowerCase() !== before.name.toLowerCase()) {
+      const others = (await tx.select({ id: clients.id, name: clients.name, code: clients.code }).from(clients).where(and(eq(clients.orgId, ctx.orgId), isNull(clients.deletedAt)))).filter((client) => client.id !== before.id);
+      if (others.some((client) => client.name.trim().toLowerCase() === renamed.toLowerCase()))
+        throw invalid(`You already have a client called ${renamed}. Give this one another name.`, { name: `You already have a client called ${renamed}.` });
+      if (options.guardLookAlike && !patch.confirmNew) {
+        const close = matchClientName(renamed, others.map((client) => ({ ...client, code: null }))).lookAlikes;
+        if (close.length > 0) {
+          const names = nameList(close.map((client) => client.name));
+          const text = `${renamed} looks like ${names}, a client you already have. Keep the old name, or choose Rename anyway.`;
+          throw invalid(text, { name: text, clientLookAlike: names });
+        }
+      }
+    }
     const values = defined({
       code: patch.code === undefined ? undefined : (cleanText(patch.code) ?? before.code),
       name: patch.name === undefined ? undefined : (cleanText(patch.name) ?? before.name),

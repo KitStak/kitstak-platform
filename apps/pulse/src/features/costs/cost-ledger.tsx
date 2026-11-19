@@ -88,7 +88,7 @@ export function CostLedger({ scope, jobId, clientId, from, to, today, title, cla
       { id: 'vendor', header: 'Paid to', render: (row) => row.vendor ?? <span className="text-fg-muted" data-empty-cell>Add</span>, editor: (row) => ({ kind: 'text', value: row.vendor ?? '', placeholder: 'Who was paid' }) },
       { id: 'reference', header: 'Reference', render: (row) => row.reference ?? <span className="text-fg-muted" data-empty-cell>Add</span>, editor: (row) => ({ kind: 'text', value: row.reference ?? '', placeholder: 'Bill or PO number' }) },
       { id: 'note', header: 'Note', render: (row) => row.note ?? <span className="text-fg-muted" data-empty-cell>Add</span>, editor: (row) => ({ kind: 'text', value: row.note ?? '' }), emptyWhen: (row) => !row.note },
-      { id: 'amount', header: 'Amount', numeric: true, render: (row) => <span className={row.amountCents !== null && row.amountCents < 0 ? 'text-success-text' : undefined}>{formatMoney(row.amountCents, { empty: 'Hidden' })}</span>, editor: (row) => (row.amountCents === null ? null : { kind: 'money', value: centsText(row.amountCents) }) },
+      { id: 'amount', header: 'Amount', numeric: true, pin: true, render: (row) => <span className={row.amountCents !== null && row.amountCents < 0 ? 'text-success-text' : undefined}>{formatMoney(row.amountCents, { empty: 'Hidden' })}</span>, editor: (row) => (row.amountCents === null ? null : { kind: 'money', value: centsText(row.amountCents) }) },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `forLabel` only reads `targets`
     [showFor, targets],

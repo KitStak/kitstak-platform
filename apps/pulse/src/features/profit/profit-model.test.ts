@@ -129,7 +129,7 @@ describe('views', () => {
   });
 
   it('writes the pivot grid as rows with totals', () => {
-    const cell = (profit: number) => ({ revenueCents: profit * 2, costCents: profit, profitCents: profit, marginBp: 5000, unitsGood: '10.000', hours: '1.00' });
+    const cell = (profit: number) => ({ revenueCents: profit * 2, costCents: profit, profitCents: profit, marginBp: 5000, unitsGood: '10.000', hours: '1.00', costMissing: false });
     const pivot: ProfitPivotDTO = { rowBy: 'client', colBy: 'month', from: '2026-10-01', to: '2026-11-17', rows: [{ key: 'a', label: 'Acme', sublabel: null }], cols: [{ key: '2026-10-01', label: '2026-10-01', sublabel: null }, { key: '2026-11-01', label: '2026-11-01', sublabel: null }], cells: { a: { '2026-10-01': cell(1000) } }, rowTotals: { a: cell(1000) }, colTotals: { '2026-10-01': cell(1000) }, total: cell(1000), moneyHidden: false };
     const csv = pivotCsv(pivot, 'profit');
     expect(csv.headers).toEqual(['Clients', 'October 2026', 'November 2026', 'Total']);
@@ -137,6 +137,17 @@ describe('views', () => {
       ['Acme', { raw: '10.00' }, '', { raw: '10.00' }],
       ['Total', { raw: '10.00' }, '', { raw: '10.00' }],
     ]);
+  });
+
+  it('writes "No cost yet" in place of a margin for extra service work with no cost logged', () => {
+    const cell = (costMissing: boolean) => ({ revenueCents: 1000, costCents: costMissing ? 0 : 400, profitCents: costMissing ? 1000 : 600, marginBp: costMissing ? null : 6000, unitsGood: '0.000', hours: '0.00', costMissing });
+    const pivot: ProfitPivotDTO = { rowBy: 'service', colBy: 'month', from: '2026-10-01', to: '2026-10-31', rows: [{ key: 'a', label: 'Labeling', sublabel: null }], cols: [{ key: '2026-10-01', label: '2026-10-01', sublabel: null }], cells: { a: { '2026-10-01': cell(true) } }, rowTotals: { a: cell(true) }, colTotals: { '2026-10-01': cell(false) }, total: cell(false), moneyHidden: false };
+    expect(pivotCsv(pivot, 'margin').rows).toEqual([
+      ['Labeling', 'No cost yet', 'No cost yet'],
+      ['Total', { raw: '60.00' }, { raw: '60.00' }],
+    ]);
+    // Other numbers of the same cell are written as they are.
+    expect(pivotCsv(pivot, 'revenue').rows[0]).toEqual(['Labeling', { raw: '10.00' }, { raw: '10.00' }]);
   });
 });
 

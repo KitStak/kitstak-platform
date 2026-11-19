@@ -442,7 +442,7 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
       partsOwner: form.partsOwner === NONE ? null : (form.partsOwner as 'us' | 'client'),
       notes: form.notes.trim() || null,
     };
-    const result = editing === 'new' ? await run(() => createClientAction({ ...input, confirmNew }), 'Could not add the client') : await run(() => updateClientAction({ clientId: (editing as ClientDTO).id, patch: input, version: (editing as ClientDTO).version }), 'Could not save the client');
+    const result = editing === 'new' ? await run(() => createClientAction({ ...input, confirmNew }), 'Could not add the client') : await run(() => updateClientAction({ clientId: (editing as ClientDTO).id, patch: input, version: (editing as ClientDTO).version, confirmNew }), 'Could not save the client');
     if ('data' in result) {
       toast.success(editing === 'new' ? 'Client added' : 'Client saved');
       setEditing(null);
@@ -561,9 +561,9 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
             <Button variant="secondary" onClick={() => setEditing(null)}>
               Cancel
             </Button>
-            {editing === 'new' && lookAlike !== null && lookAlike === form.name.trim() ? (
+            {editing !== null && lookAlike !== null && lookAlike === form.name.trim() ? (
               <Button variant="secondary" loading={pending} onClick={() => void save(true)} data-testid="client-save-new">
-                Add as a new client
+                {editing === 'new' ? 'Add as a new client' : 'Rename anyway'}
               </Button>
             ) : null}
             <Button type="submit" form="client-form" loading={pending} data-testid="client-save">
