@@ -33,6 +33,7 @@ import {
   ToggleGroup,
   toast,
 } from '@/components/ui';
+import { PINNED_CELL_SURFACE } from '@/components/ui/table';
 import { cn } from '@/components/ui/cn';
 import { BulletChart } from '@/components/charts/bullet';
 import { LineChart } from '@/components/charts/cartesian';
@@ -60,6 +61,9 @@ import type {
 } from '@/lib/types';
 import { updateJobAction } from '@/server/actions/jobs';
 import { deleteStandardAction, saveStandardAction } from '@/server/actions/planning';
+
+/** The row action cell stays at the right edge so it is on screen at tablet and phone width. */
+const PINNED_ACTION_CELL = `sticky right-0 z-[1] ${PINNED_CELL_SURFACE}`;
 
 const INVALIDATE = [
   qk.standards(),
@@ -333,7 +337,7 @@ export function TargetPaceView({
                     <TableHeaderCell numeric>History says</TableHeaderCell>
                     <TableHeaderCell>Slowest to fastest day</TableHeaderCell>
                     <TableHeaderCell>Based on</TableHeaderCell>
-                    <TableHeaderCell className="w-36">
+                    <TableHeaderCell className="sticky right-0 z-[1] w-36 bg-panel">
                       <span className="sr-only">Use it</span>
                     </TableHeaderCell>
                   </TableRow>
@@ -345,7 +349,7 @@ export function TargetPaceView({
                         ? Math.abs(Number(row.median) - Number(row.current)) / Number(row.current) < 0.02
                         : false;
                     return (
-                      <TableRow key={row.jobTypeId} data-testid="suggestion-row">
+                      <TableRow key={row.jobTypeId} className="group" data-testid="suggestion-row">
                         <TableCell>
                           {row.jobTypeName}
                           <span className="ml-1.5 text-xs text-fg-muted">
@@ -391,7 +395,7 @@ export function TargetPaceView({
                             'Log units and hours for this job type'
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className={PINNED_ACTION_CELL}>
                           {canManage && row.median ? (
                             same ? (
                               <span className="text-xs text-success-text">Matches your target</span>
@@ -441,14 +445,14 @@ export function TargetPaceView({
                   <TableHeaderCell numeric>Units per person per hour</TableHeaderCell>
                   <TableHeaderCell>Starts</TableHeaderCell>
                   <TableHeaderCell>Where it came from</TableHeaderCell>
-                  <TableHeaderCell className="w-20">
+                  <TableHeaderCell className="sticky right-0 z-[1] w-20 bg-panel">
                     <span className="sr-only">Actions</span>
                   </TableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {rows.map((row) => (
-                  <TableRow key={row.id} data-testid="standard-row">
+                  <TableRow key={row.id} className="group" data-testid="standard-row">
                     <TableCell>
                       {row.jobTypeId ? typeName(row.jobTypeId) : serviceName(row.vasServiceId)}
                       {row.vasServiceId ? (
@@ -477,7 +481,7 @@ export function TargetPaceView({
                       {BASIS_LABELS[row.basis]}
                       {row.note ? `. ${row.note}` : ''}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className={PINNED_ACTION_CELL}>
                       {canManage ? (
                         <span className="flex items-center justify-end gap-0.5">
                           <IconButton

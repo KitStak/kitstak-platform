@@ -1149,3 +1149,57 @@ Each one was checked against the running app, not only by tests. Email reports s
 
 Local data note: the WMS seed sets every demo login to `KitStak!demo2026`, so after a full local seed the Pulse admin
 signs in with that password. Five wrong tries lock a login for 15 minutes (`core.password_policy_state`).
+
+### 19.9 Round four fixes (the issues from the round three critics)
+
+Every major issue from `docs/pulse/round-3-critics.json` except CI, and the minor ones. CI and email reports stay
+deferred.
+
+- **Company profit for any days.** Company costs are monthly, so a range that is not whole calendar months counts its
+  share by day: the days in range over the days in the month, in BigInt cents, rounded so the parts of a month always
+  add back to the whole month (`prorateDays`, `spreadCompanyCosts`). The rule lives in `getCompanyBridge`, so Home,
+  Profit, the reports, the popover and `GET /api/v1/company-bridge` agree. The screen says "Company costs for 18 of 30
+  days." for a part month and never says "after overhead" when none was counted. A whole month, and so month close,
+  did not change by a cent. A range of several whole months now equals the sum of its months.
+- **The database guard.** With `PULSE_DB_GUARD=1` every query runs as the plain role `pulse_app` with the workspace
+  set, so the row level security policies apply to the running app. Work that must cross workspaces goes through
+  `asSystem`, and `db-guard.test.ts` lists every caller. On in tests and local dev. Off in production until the flag
+  is set there: the steps are in section 12, rule 13. It does not protect against SQL injection, and it was not tried
+  through a transaction pooler.
+- **A day is never overwritten by accident.** The Work log form saves a whole day through `PUT /api/v1/log/days`. A
+  day that already has work is shown before anything is saved, with a button to open it. The server refuses a new day
+  on a day with work, and refuses an edit unless it names every row with the version it read (409 with the day as it
+  is now). Saving an edit and deleting a day both have Undo. Deleting a day asks first and lists what will go.
+- **Saves cannot lose hours.** A save of a row that exists needs its version. Two lines for the same job, day, shift
+  and labor class are refused on the line.
+- **Work cannot be dated after today** (the site's own day) on the day form, the grid, the bulk page, the API and the
+  work log import, where it is a problem row. Rows from the warehouse, Projects and the time clock are exempt.
+- **Key numbers stay on screen.** Every `Table` wraps itself in `ScrollX` (tab stop, name, fade). Profit, reports and
+  the Company costs ledger pin their money columns to the right edge. Work log entries, extra services, client jobs,
+  schedules, labor cost and punches are cards at narrow widths. Target pace pins its row actions. Tab bars that scroll
+  show the same fade.
+- **One set of pickers.** No native select or date input is left on any screen (`native-controls.test.ts`). The alert
+  rules quiet hours box is still a native time input.
+- **One client box and one look alike guard.** Quick add, the Log work dialog, the new job wizard, the calculator,
+  Settings and the welcome step refuse a client name close to one you have until the person confirms. Renaming a
+  client is covered too. Imports, sync, seed and sample data are unchanged.
+- **No cost yet.** An extra service with revenue and no cost has no margin (`costMissing`, `marginBp: null`) in the
+  lists, the service page, the profit explorer, the pivot and their CSV files. An entry with no price has "Set the
+  price" on the row, and a link to the warehouse contract when it came from the warehouse.
+- **One count of unpriced entries** feeds Home "Things to fix" and the month close checklist.
+- **Log work.** A job with units and no labor hours shows "no margin yet: add the hours" and is left out of "Margin
+  today", which says so.
+- **Month close** shows one status at a time and passes the accessibility check at 1440, 768 and 390.
+- **Target margin** is a money column in the clients, job types and jobs exports and is not sent to a no money reader
+  on Home.
+- **Deleted jobs** can be listed or read only by a person who may manage jobs (403 on the list, 404 on the job).
+- **Warehouse contract rates** have a switch on Connected apps (`wmsContractPrices`, on by default, migration 0011).
+  A job with no price takes the rate from its first day. A job with a price gets the rate from today. A finished job
+  with a price is left alone. Volume tiers and fees with conditions stay with the warehouse bill.
+- **Layout shift.** Target pace, Labor time and Extra services arrive whole on first paint. Loads over the 0.1 line
+  on the seven routes the critic named went from 15 of 42 to 0 of 42.
+- **Alert rules for readers** who cannot change them: the page says so, shows each rule on or off, and shows the day
+  count. Dollar and percent lines stay hidden from no money roles (confirmed by the owner).
+
+Migrations in this round: `0009_db_guard_role.sql` and `0011_wms_contract_prices_switch.sql`. Numbers 0008 and 0010
+were reserved and not used.
