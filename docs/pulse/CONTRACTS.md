@@ -527,9 +527,11 @@ E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium_headle
       skip the guard: `src/server/db-guard.test.ts` lists every allowed caller and fails on a new one.
     - A statement that reaches `db` with no scope at all is refused (`DbGuardError`) and logged, so a forgotten scope
       is a loud error, never a quiet query as the owner. The whole test suite runs with the guard on.
-    - What the guard does not do: it is not a wall against SQL injection. The session still belongs to the login
-      role, so injected SQL could `RESET ROLE`. Every query is parameterised, which is the guard for that. The
-      stronger form is a separate login role for the app that owns nothing (see "still open" in the round four notes).
+    - What the guard does not do: it is not a wall against SQL injection. With one login (the default) the session
+      belongs to the role that owns the tables, so injected SQL could `RESET ROLE` and see every workspace. Every query
+      is parameterised, which is the guard for that. The two login setup below closes that door. In either setup SQL
+      that runs inside a guarded transaction can call `set_config('pulse.org_id', ...)` with another workspace's id,
+      so it can read one other workspace whose id it knows, never all of them at once.
     - Any other role sees no rows and can write none, unless it sets `pulse.org_id`
       (`select set_config('pulse.org_id', '<org uuid>', true)` inside a transaction). Then it sees and writes that one
       workspace only. A value that is not a uuid is an error.
@@ -538,21 +540,74 @@ E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium_headle
       `core.organization`, `core.member` and `core."user"` behind a policy for `pulse_app` only (rows of the workspace
       in `pulse.org_id`). Nothing else is granted to anyone. On Supabase, `anon` and `authenticated` hold no grant on
       `pulse` and still see nothing.
+    - Migration `0012_db_guard_set_grant.sql` fixes the SET right on PostgreSQL 16 and newer. A migration role with
+      CREATEROLE that is not a superuser, and that made `pulse_app`, holds a membership with ADMIN only
+      (`pg_auth_members`: admin true, inherit false, set false). `pg_has_role(..., 'MEMBER')` is then true, so 0009
+      skipped its grant, but `SET ROLE pulse_app` is refused ("permission denied to set role"). 0012 asks for the SET
+      right (`pg_has_role(current_user, 'pulse_app', 'SET')`, or MEMBER on PostgreSQL 15 and older) and when it is
+      missing runs `GRANT pulse_app TO <migration role> WITH INHERIT FALSE, SET TRUE` (the plain GRANT before 16). A
+      superuser needs nothing. A grant the migration role may not make (a plain owner with no CREATEROLE, or a role
+      made by someone else) is skipped with a NOTICE that names the SQL to run, and the run still passes.
+    - **Readiness is tested, not guessed.** `checkGuardRole` (`src/server/db.ts`) does on one connection what a guarded
+      statement does, then rolls back: `BEGIN; SET LOCAL ROLE pulse_app; SELECT set_config('pulse.org_id', ...)`, a read
+      of `pulse.jobs` and `core.member`, and a look at the write grants. It also checks that `pulse_app` is not a
+      superuser and cannot skip RLS. `ready` is true only when all of that works.
+    - **When the flag is on and the role cannot be used**, the app does not fail every request. It checks before the
+      first guarded statement; if the check fails, statements run as the login role, the same as with the flag off,
+      and every failed check writes one error line that starts `[pulse] THE DATABASE GUARD IS NOT IN FORCE` with the
+      reason. It checks again every 30 seconds (and at once after a statement is refused the role), so a grant made by
+      hand takes effect without a redeploy. `GET /api/health` answers 503 `degraded` while this lasts. Why not refuse to
+      start: the guard is the second wall (the org filter in every domain query is the first), production runs this way
+      today with the flag off, and failing closed would take every page down over a grant. The 503 and the log line
+      make it loud. The test suite fails if the guard is not in force (`db-guard.db.test.ts`).
+    - **Reading `GET /api/health`.** Without a token it answers `{ "status", "app", "database" }` only: 200 `ok`
+      (the database answers, and the guard is off or in force), 503 `degraded` (the flag is on and the guard is NOT in
+      force), 503 `down` (no database). Set `HEALTH_TOKEN` (24 characters or more) on the Pulse project and send it as
+      the header `x-health-token` to see the detail: `migration` (the newest applied Pulse migration) and
+      `guard { on, active, ready, reason, role, login, loginCanStepOut }`. `on`: the flag is set. `ready`: the check
+      above passed just now. `active`: the flag is on and statements run as `pulse_app` right now. `reason`: why
+      `ready` is false, with the SQL to run. `login`: the role the app signs in as. `loginCanStepOut`: true when that
+      login skips RLS by itself (a superuser, BYPASSRLS, or the owner of the tables), so SQL that runs `RESET ROLE`
+      would see every workspace.
     - **Turning the guard on in production** (it is OFF there until someone does this):
       1. Run the migrations with the direct database URL: `pnpm --filter kitstak-pulse db:migrate`. `0009` makes the
-         role and the grants. A step the migration role may not do is skipped with a NOTICE, and the run still passes.
-      2. Open `GET /api/health`. It answers `"guard": { "on": false, "ready": true }` when the role is there and the
-         app's login can use it. If `ready` is false, run this once as a database admin, with the app's login role in
-         place of `postgres` when the app signs in as another role, then check again:
-         `CREATE ROLE pulse_app NOLOGIN NOINHERIT NOBYPASSRLS;` (skip if it exists), `GRANT pulse_app TO postgres;`,
-         then apply `drizzle/0009_db_guard_role.sql` again by hand (every step in it is safe to repeat).
+         role and the grants, `0012` gives the migration role the SET right. A step the migration role may not do is
+         skipped with a NOTICE, and the run still passes. Read the NOTICE lines.
+      2. Set `HEALTH_TOKEN` on the Pulse project and redeploy. Then
+         `curl -s -H "x-health-token: $HEALTH_TOKEN" https://pulse.kitstak.app/api/health`. It must answer
+         `"guard": { "on": false, "active": false, "ready": true, ... }`. If `ready` is false, `reason` says what is
+         missing. Run as a database admin, with the app's login role (`login` in the answer) in place of `<login>`:
+         `CREATE ROLE pulse_app NOLOGIN NOINHERIT NOBYPASSRLS;` (skip if it exists),
+         `GRANT pulse_app TO <login> WITH INHERIT FALSE, SET TRUE;` (PostgreSQL 15 and older: `GRANT pulse_app TO
+         <login>;`), then apply `drizzle/0009_db_guard_role.sql` again by hand as the owner of the tables (every step in
+         it is safe to repeat). Check again until `ready` is true.
       3. Set the environment variable `PULSE_DB_GUARD=1` on the Pulse project and redeploy.
-      4. Check it is on: `GET /api/health` answers `"guard": { "on": true, "ready": true }`. Sign in, open Home, Jobs
-         and a job, and log one work row. In the database, `select usename, application_name, query from
-         pg_stat_activity where application_name = 'kitstak-pulse'` shows statements that start with
-         `BEGIN; SET LOCAL ROLE "pulse_app"`.
+      4. Check it is on: the health check answers 200 and `"guard": { "on": true, "active": true, "ready": true }`.
+         Sign in, open Home, Jobs and a job, and log one work row. In the database,
+         `select usename, application_name, query from pg_stat_activity where application_name = 'kitstak-pulse'`
+         shows statements that start with `BEGIN; SET LOCAL ROLE "pulse_app"`. If it answers 503 `degraded`, the guard
+         is not in force: read `reason`, fix the grant, and it turns itself on within 30 seconds.
       5. To turn it off: remove `PULSE_DB_GUARD` (or set it to `0`) and redeploy. The role and the grants can stay:
          they do nothing while the flag is off. To remove them as well: `DROP OWNED BY pulse_app; DROP ROLE pulse_app;`.
+    - **The two login setup (stronger, optional).** The app signs in for guarded work as a login that owns nothing
+      and may only become `pulse_app`, so `RESET ROLE` leaves it with no rights at all. The work that must run as the
+      owner (`asSystem`, better auth sign in, migrations) uses a second URL. The default (one login) does not change.
+      Run as a database admin, once (`<db>` is the database name; pick a strong password):
+      ```sql
+      CREATE ROLE pulse_login LOGIN PASSWORD '<strong password>'
+        NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+      GRANT CONNECT ON DATABASE <db> TO pulse_login;
+      GRANT pulse_app TO pulse_login WITH INHERIT FALSE, SET TRUE;
+      ```
+      On PostgreSQL 15 and older the last line is `GRANT pulse_app TO pulse_login;`.
+      Then on the Pulse project: `DATABASE_URL` = the URL with `pulse_login`, `PULSE_OWNER_DATABASE_URL` = the URL
+      with the owner role (the old `DATABASE_URL`), `DIRECT_URL` = the owner's direct URL (migrations run as the
+      owner), and `PULSE_DB_GUARD=1`. Redeploy. The health check then answers `"login": "pulse_login"`,
+      `"loginCanStepOut": false`. Guarded statements use the `pulse_login` pool; everything that runs as the owner
+      (`asSystem`, `systemDb`, the flag off or the guard not in force) uses the owner pool, named `kitstak-pulse-owner`
+      in `pg_stat_activity`. Two pools, each up to `DB_POOL_MAX` connections. To go back: set `DATABASE_URL` to the
+      owner URL again and remove `PULSE_OWNER_DATABASE_URL`. `guard-role.db.test.ts` proves with probe roles that
+      such a login, after `RESET ROLE`, is refused on `pulse.jobs`.
     - Cost: each statement outside a transaction takes two more round trips to the database (the opening line and
       the commit). A transaction takes one more. The numbers measured in dev are in the round four notes.
     - `pulse.v_facts` is `security_invoker`, so the view cannot be used to step around the policies.

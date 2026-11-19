@@ -86,4 +86,7 @@ unlocks the module locally; production needs
 `pulse_app` with the workspace set, so the row level security policies apply to the app itself.
 Set it in `.env.local` for local dev (the tests turn it on by themselves). Production stays off
 until it is set there; the steps are in `docs/pulse/CONTRACTS.md`, section 12, rule 13. It needs
-migration `0009_db_guard_role.sql`; `GET /api/health` shows `guard: { on, ready }`.
+migrations `0009_db_guard_role.sql` and `0012_db_guard_set_grant.sql`. `GET /api/health` answers only
+`{ status, app, database }` in public; with the header `x-health-token: $HEALTH_TOKEN` it adds the
+migration and `guard: { on, active, ready, reason, role, login, loginCanStepOut }`.
+`PULSE_OWNER_DATABASE_URL` is optional: the two login setup of rule 13.

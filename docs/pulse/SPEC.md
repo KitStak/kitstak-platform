@@ -60,10 +60,10 @@ two warehouses, no CRM boards) and `maya@northwind-robotics.example` / `Northwin
 
 Env (`src/server/env.ts`, lazy): `DATABASE_URL`, `DIRECT_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`,
 `NEXT_PUBLIC_PORTAL_URL`, `NEXT_PUBLIC_CRM_URL`, `NEXT_PUBLIC_WMS_URL`, `NEXT_PUBLIC_PROJECTS_URL`, `TRUSTED_ORIGINS`,
-`AUTH_COOKIE_DOMAIN`, `ENTITLEMENTS_DEV_ALLOW_ALL`, `CRON_SECRET`, `PULSE_DB_GUARD` (1 turns the database guard on: the app runs its queries as the plain role `pulse_app` with the workspace set, CONTRACTS section 12 rule 13; off in production until it is set there, on in tests and in local dev). `appUrls()` returns `{portal, crm, wms, projects, pulse}`.
+`AUTH_COOKIE_DOMAIN`, `ENTITLEMENTS_DEV_ALLOW_ALL`, `CRON_SECRET`, `PULSE_DB_GUARD` (1 turns the database guard on: the app runs its queries as the plain role `pulse_app` with the workspace set, CONTRACTS section 12 rule 13; off in production until it is set there, on in tests and in local dev), `HEALTH_TOKEN` (unlocks the detail of `GET /api/health`), `PULSE_OWNER_DATABASE_URL` (optional, the two login setup of rule 13). `appUrls()` returns `{portal, crm, wms, projects, pulse}`.
 `trustedOrigins()` adds the four sibling URLs, and dev ports 3500 to 3520 only when `NODE_ENV !== 'production'`.
 
-Ops surface, same as the siblings: `GET /api/health` (database ping, migration version), structured error logs with org id and
+Ops surface, same as the siblings: `GET /api/health` (database ping; the migration version and the guard state only with the health token), structured error logs with org id and
 request id, `error.tsx`, `not-found.tsx`, `global-error.tsx`, security headers and CSP in `next.config.ts` matching the sibling
 policy (including `connect-src 'self'`), and `robots` disallow all.
 
@@ -1269,7 +1269,7 @@ no route sends CORS headers. Every write checks the session, entitlement, role, 
 
 | Endpoint | Returns |
 |---|---|
-| `GET /api/health` | status, database ping, migration version (public) |
+| `GET /api/health` | status and database ping (public); migration version and guard state with the `x-health-token` header (`HEALTH_TOKEN`) |
 | `GET /api/v1/me` | user, org, Pulse role, `seesMoney`, `seesWages`, modules, integration availability |
 | `GET /api/v1/summary?from&to` | open jobs, at risk, losing, revenue, cost, profit on jobs, company profit and its bridge, margin, entry progress today |
 | `GET /api/v1/jobs`, `/jobs/[ref]`, `/jobs/attention?limit=` | lists and job detail DTOs with status, reasons (rendered for the reader), totals, projection |
