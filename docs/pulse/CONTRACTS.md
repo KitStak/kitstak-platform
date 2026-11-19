@@ -216,7 +216,8 @@ lowercase `tx` or `executor` are for use inside a transaction.
   5,000; two lines for one job, day, shift and labor class are refused on the line), `saveProductionDay(ctx, { jobId,
   workDate, mode: 'create'|'edit', fromDate?, read?, lines[] })` (a whole day of a job in one transaction; throws
   `DayConflict` "day_exists" or "stale" with the day as it is now). Every typed write refuses a work date after today
-  at the site (`assertNotFutureDay`) and hours with 0 people. The actions and `PUT log/rows` pass `requireVersion`:
+  at the site or more than 10 years back (`assertNotFutureDay`, the shared rule `assertEntryDate` and
+  `@/lib/entry-dates`) and hours with 0 people. The actions and `PUT log/rows` pass `requireVersion`:
   a row that exists needs the version the editor read. `deleteProductionEntries`,
   `restoreProductionEntries`, `listProduction(ctx, filters)`, `getLogGrid(ctx, { date?, siteId? })`,
   `getPreviousCrew(ctx, { date, siteId? })`, `assertCanLogDay`, `dayLockReason`.
@@ -1059,9 +1060,10 @@ Product gaps the teams reported, none of them a broken screen:
 - **Integrations**: change notes are answered
   on Connected apps and the cron tick only; several spec extras in the sibling apps are not built (work order list
   margin column, dashboard tiles, tasks from alerts, switcher badge). Small edges of the warehouse money pull: a
-  contract rate sets the job price but does not rewrite the job's quote; a work order fee with conditions (some
-  products only) is left to the warehouse bill; a flat fee for each work order is used only when it is the contract's
-  only work order fee; a tiered service fee is read at its first tier.
+  contract rate sets the job price but does not rewrite the job's quote; a work order or service fee with conditions
+  (some products only), or with tiers whose rate depends on volume, is left to the warehouse bill and Pulse sets no
+  price from it (a tier that gives every unit the same rate is read); a flat fee for each work order is used only
+  when it is the contract's only work order fee.
 - **Seed**: no time punches, device links, kiosk PINs, quote scenarios, report schedules or sync runs; fewer jobs and
   entries than the spec sketch; warehouse jobs sit on fixed work order dates.
 - **Across teams**: Services, Target pace and Goals have no saved views (their page is not in `SAVED_VIEW_PAGES`, which is also a database
@@ -1104,7 +1106,8 @@ Covered by `src/server/domain/standalone.db.test.ts` unless noted.
   set by hand in the second workspace. With those set, every `job_stats` column matched for 61 jobs.
 - **A row left out of an import keeps its reason**, and "Download rows left out" lists every left out row after the save.
 - **Import notes**: more than 24 hours each and dates like 3/4/2026 read with the usual order say so on the check
-  step. A work day after today is a problem row in the work log file (never saved) and a note in the other floor files.
+  step. A day after today, or more than 10 years back, is a problem row (never saved) in every dated file: work,
+  time not on a job, paid hours, punches, materials, other costs, revenue and extra services.
 - **A labor class made on the fly** (a job type or job named it first) gets its name and kind from the labor rates file.
 - **Getting started makes the Packer class with code `PACK`**, the code every template uses, and moves the cursor into
   the next step.
