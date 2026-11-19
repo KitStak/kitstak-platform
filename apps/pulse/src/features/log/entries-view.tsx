@@ -2,6 +2,7 @@
 /** Every production entry across days: filter, fix one, change many at once, remove with undo, export. */
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ClipboardList,
   ClipboardPen,
@@ -50,8 +51,8 @@ import { STREAM_SOURCES, type StreamSource } from '@/lib/constants';
 import { exportFileName, streamToCsv } from '@/lib/csv';
 import { formatHours, formatMoney, formatNumber, formatPace } from '@/lib/format';
 import { useServerAction } from '@/lib/hooks/use-action';
-import { useProduction } from '@/lib/hooks/use-data';
-import { addDays, shortDate, unitsPerHour, weekdayName } from '@/lib/profit';
+import { useProduction, useSettings } from '@/lib/hooks/use-data';
+import { addDays, shortDate, weekdayName } from '@/lib/profit';
 import { qk } from '@/lib/query-keys';
 import { routes } from '@/lib/routes';
 import type { LaborClassDTO, ProductionEntryDTO, SiteDTO } from '@/lib/types';
@@ -61,6 +62,16 @@ import {
   saveProductionBulkAction,
   saveProductionEntryAction,
 } from '@/server/actions/log';
+import { WorkEntryForm, type DaySaved } from '@/features/jobs/forms/work-entry-form';
+import {
+  groupJobDays,
+  groupWorkDays,
+  hasShifts,
+  laborLineWords,
+  restoreDayLines,
+  saveDay,
+  type JobDay,
+} from '@/features/jobs/work-days';
 import {
   applyField,
   hoursEachFrom,
@@ -127,6 +138,7 @@ export function EntriesView({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<ProductionEntryDTO | null>(null);
+  const [editingDay, setEditingDay] = useState<JobDay | null>(null);
   const [bulkClass, setBulkClass] = useState<string | undefined>(undefined);
 
   const query = useProduction({
@@ -158,11 +170,30 @@ export function EntriesView({
       setSelected(new Set());
     };
 
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // One line per job per day: the labor types of a day are rolled up, and chosen together.
+  const jobDays = useMemo(() => groupJobDays(rows), [rows]);
+  const pageCount = Math.max(1, Math.ceil(jobDays.length / PAGE_SIZE));
+  const pageDays = jobDays.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageRows = pageDays.flatMap((item) => item.day.rows);
   const chosen = rows.filter((row) => selected.has(row.id));
   const editable = chosen.filter((row) => !row.locked);
   const allOnPage = pageRows.length > 0 && pageRows.every((row) => selected.has(row.id));
+  const dayChoice = (item: JobDay): boolean | 'indeterminate' => {
+    const count = item.day.rows.filter((row) => selected.has(row.id)).length;
+    return count === 0 ? false : count === item.day.rows.length ? true : 'indeterminate';
+  };
+  const dayName = (item: JobDay) => `${item.first.jobNumber} on ${shortDate(item.first.workDate)}`;
+  const settings = useSettings();
+  /** One words line per labor type of the day: "Machine operator, 8 hours". A one type day is just the class. */
+  const crewLines = (item: JobDay): string[] => {
+    const name = (row: ProductionEntryDTO) => classById.get(row.laborClassId ?? '')?.name ?? 'Default class';
+    if (item.day.rows.length === 1) return [name(item.day.rows[0] as ProductionEntryDTO)];
+    const shifts = hasShifts(item.day.rows);
+    return item.day.rows.map((row) => laborLineWords(row, name(row), shifts, (hours) => formatHours(hours)));
+  };
+  const queryClient = useQueryClient();
+  const refreshEntries = () =>
+    Promise.all(INVALIDATE.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
   const totals = useMemo(
     () => ({
       units: rows.reduce((sum, row) => sum + Number(row.unitsGood), 0),
@@ -175,13 +206,20 @@ export function EntriesView({
   const restore = useServerAction(restoreProductionEntriesAction, { invalidate: INVALIDATE });
   const bulk = useServerAction(saveProductionBulkAction, { invalidate: INVALIDATE });
 
-  function toggle(id: string, on: boolean) {
+  function toggleDay(item: JobDay, on: boolean) {
     setSelected((previous) => {
       const next = new Set(previous);
-      if (on) next.add(id);
-      else next.delete(id);
+      for (const row of item.day.rows)
+        if (on) next.add(row.id);
+        else next.delete(row.id);
       return next;
     });
+  }
+
+  /** Opens the one-entry dialog for a day with one labor type, the day form for a day with more. */
+  function openDay(item: JobDay) {
+    if (item.day.rows.length > 1 || !item.first) setEditingDay(item);
+    else setEditing(item.first);
   }
 
   async function removeRows(targets: readonly ProductionEntryDTO[]) {
@@ -479,69 +517,71 @@ export function EntriesView({
         ) : (
           <>
             <ul className="divide-y divide-border-subtle lg:hidden" aria-label="Entries">
-              {pageRows.map((row) => (
-                <li
-                  key={row.id}
-                  data-testid="entry-card"
-                  className={cn(
-                    'flex items-start gap-3 px-3 py-2.5',
-                    selected.has(row.id) && 'bg-selected',
-                    row.deletedAt && 'text-fg-muted',
-                  )}
-                >
-                  <Checkbox
-                    className="mt-0.5"
-                    aria-label={`Choose ${row.jobNumber} on ${shortDate(row.workDate)}`}
-                    checked={selected.has(row.id)}
-                    onCheckedChange={(on) => toggle(row.id, on === true)}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-fg">
-                      <span className="text-fg-secondary">{row.jobNumber}</span> {row.jobName}
-                    </p>
-                    <p className="text-xs text-fg-muted">
-                      {weekdayName(row.workDate).slice(0, 3)}, {shortDate(row.workDate)}.{' '}
-                      {classById.get(row.laborClassId ?? '')?.name ?? 'Default class'}
-                    </p>
-                    <p className="mt-0.5 text-sm tabular-nums text-fg-secondary">
-                      {formatNumber(row.unitsGood, { maxDigits: 0 })} units,{' '}
-                      {row.headcount ? `${formatNumber(row.headcount)} ${Number(row.headcount) === 1 ? 'person' : 'people'}, ` : ''}
-                      {row.hoursConfirmed ? `${formatHours(row.hours)} labor hours` : 'needs hours'}
-                      {shell.seesMoney && row.laborCostCents !== null
-                        ? `, ${formatMoney(row.laborCostCents)}`
-                        : ''}
-                    </p>
-                  </div>
-                  {row.locked ? (
-                    <span className="text-xs text-fg-muted">Closed</span>
-                  ) : row.deletedAt ? (
-                    <IconButton
-                      label={`Put back ${row.jobNumber} on ${shortDate(row.workDate)}`}
-                      icon={<RotateCcw aria-hidden />}
-                      variant="ghost"
-                      disabled={!canLog}
-                      onClick={() => void restoreRows([row])}
+              {pageDays.map((item) => {
+                const { day, first } = item;
+                const chosenDay = dayChoice(item) === true;
+                return (
+                  <li
+                    key={item.key}
+                    data-testid="entry-card"
+                    className={cn(
+                      'flex items-start gap-3 px-3 py-2.5',
+                      chosenDay && 'bg-selected',
+                      first.deletedAt && 'text-fg-muted',
+                    )}
+                  >
+                    <Checkbox
+                      className="mt-0.5"
+                      aria-label={`Choose ${dayName(item)}`}
+                      checked={dayChoice(item)}
+                      onCheckedChange={(on) => toggleDay(item, on === true)}
                     />
-                  ) : (
-                    <span className="flex items-center">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-fg">
+                        <span className="text-fg-secondary">{first.jobNumber}</span> {first.jobName}
+                      </p>
+                      <p className="text-xs text-fg-muted">
+                        {weekdayName(first.workDate).slice(0, 3)}, {shortDate(first.workDate)}.{' '}
+                        {crewLines(item).join('; ')}
+                      </p>
+                      <p className="mt-0.5 text-sm tabular-nums text-fg-secondary">
+                        {formatNumber(day.unitsGood, { maxDigits: 0 })} units,{' '}
+                        {day.headcount ? `${formatNumber(day.headcount)} ${Number(day.headcount) === 1 ? 'person' : 'people'}, ` : ''}
+                        {day.hoursConfirmed ? `${formatHours(day.hours)} labor hours` : 'needs hours'}
+                        {shell.seesMoney && day.laborCostCents !== null ? `, ${formatMoney(day.laborCostCents)}` : ''}
+                      </p>
+                    </div>
+                    {day.locked ? (
+                      <span className="text-xs text-fg-muted">Closed</span>
+                    ) : first.deletedAt ? (
                       <IconButton
-                        label={`Edit ${row.jobNumber} on ${shortDate(row.workDate)}`}
-                        icon={<Pencil aria-hidden />}
+                        label={`Put back ${dayName(item)}`}
+                        icon={<RotateCcw aria-hidden />}
                         variant="ghost"
                         disabled={!canLog}
-                        onClick={() => setEditing(row)}
+                        onClick={() => void restoreRows(day.rows)}
                       />
-                      <IconButton
-                        label={`Remove ${row.jobNumber} on ${shortDate(row.workDate)}`}
-                        icon={<Trash2 aria-hidden />}
-                        variant="ghost"
-                        disabled={!canLog}
-                        onClick={() => void removeRows([row])}
-                      />
-                    </span>
-                  )}
-                </li>
-              ))}
+                    ) : (
+                      <span className="flex items-center">
+                        <IconButton
+                          label={`Edit ${dayName(item)}`}
+                          icon={<Pencil aria-hidden />}
+                          variant="ghost"
+                          disabled={!canLog}
+                          onClick={() => openDay(item)}
+                        />
+                        <IconButton
+                          label={`Remove ${dayName(item)}`}
+                          icon={<Trash2 aria-hidden />}
+                          variant="ghost"
+                          disabled={!canLog}
+                          onClick={() => void removeRows(day.rows)}
+                        />
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
             <div className="hidden lg:block">
               <Table className="min-w-[720px]" aria-label="Work entries">
@@ -570,7 +610,7 @@ export function EntriesView({
                     </TableHeaderCell>
                     <TableHeaderCell>Day</TableHeaderCell>
                     <TableHeaderCell>Job</TableHeaderCell>
-                    <TableHeaderCell className="hidden lg:table-cell">Labor class</TableHeaderCell>
+                    <TableHeaderCell className="hidden lg:table-cell">Labor</TableHeaderCell>
                     <TableHeaderCell numeric>Units good</TableHeaderCell>
                     <TableHeaderCell numeric className="hidden xl:table-cell">
                       Scrap
@@ -589,118 +629,119 @@ export function EntriesView({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {pageRows.map((row) => {
-                    const pace =
-                      Number(row.unitsGood) > 0
-                        ? unitsPerHour(
-                            row.unitsGood,
-                            Math.max(Number(row.hours) - Number(row.setupHours), 0).toFixed(2),
-                          )
-                        : null;
+                  {pageDays.map((item) => {
+                    const { day, first } = item;
+                    const sources = [...new Set(day.sources)];
                     return (
                       <TableRow
-                        key={row.id}
-                        data-selected={selected.has(row.id)}
+                        key={item.key}
+                        data-selected={dayChoice(item) === true}
                         data-testid="entry-row"
-                        className={cn(row.deletedAt && 'text-fg-muted')}
+                        className={cn(first.deletedAt && 'text-fg-muted')}
                       >
                         <TableCell>
                           <Checkbox
-                            aria-label={`Choose ${row.jobNumber} on ${shortDate(row.workDate)}`}
-                            checked={selected.has(row.id)}
-                            onCheckedChange={(on) => toggle(row.id, on === true)}
+                            aria-label={`Choose ${dayName(item)}`}
+                            checked={dayChoice(item)}
+                            onCheckedChange={(on) => toggleDay(item, on === true)}
                           />
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           <Link
-                            href={routes.log({ date: row.workDate, site: row.siteId, job: row.jobNumber })}
+                            href={routes.log({ date: first.workDate, site: first.siteId, job: first.jobNumber })}
                             className="hover:text-fg-link hover:underline"
                             title="Open this day"
                           >
-                            {weekdayName(row.workDate).slice(0, 3)}, {shortDate(row.workDate)}
+                            {weekdayName(first.workDate).slice(0, 3)}, {shortDate(first.workDate)}
                           </Link>
                         </TableCell>
                         <TableCell className="max-w-[280px]">
                           <Link
-                            href={routes.job(row.jobNumber)}
+                            href={routes.job(first.jobNumber)}
                             className="block truncate hover:text-fg-link hover:underline"
-                            title={`${row.jobNumber} ${row.jobName}`}
+                            title={`${first.jobNumber} ${first.jobName}`}
                           >
-                            <span className="text-fg-secondary">{row.jobNumber}</span> {row.jobName}
+                            <span className="text-fg-secondary">{first.jobNumber}</span> {first.jobName}
                           </Link>
                           {sites.length > 1 ? (
                             <span className="block truncate text-xs text-fg-muted">
-                              {siteById.get(row.siteId)?.name}
+                              {siteById.get(first.siteId)?.name}
                             </span>
                           ) : null}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                          {classById.get(row.laborClassId ?? '')?.name ?? 'Default class'}
+                        <TableCell className="hidden lg:table-cell" data-testid="entry-crew">
+                          {crewLines(item).map((line) => (
+                            <span key={line} className="block">
+                              {line}
+                            </span>
+                          ))}
                         </TableCell>
-                        <TableCell numeric>{formatNumber(row.unitsGood, { maxDigits: 0 })}</TableCell>
+                        <TableCell numeric>{formatNumber(day.unitsGood, { maxDigits: 0 })}</TableCell>
                         <TableCell numeric className="hidden xl:table-cell">
-                          {Number(row.unitsScrap) > 0 ? formatNumber(row.unitsScrap, { maxDigits: 0 }) : ''}
+                          {Number(day.unitsScrap) > 0 ? formatNumber(day.unitsScrap, { maxDigits: 0 }) : ''}
                         </TableCell>
-                        <TableCell numeric>{row.headcount ? formatNumber(row.headcount) : ''}</TableCell>
+                        <TableCell numeric>{day.headcount ? formatNumber(day.headcount) : ''}</TableCell>
                         <TableCell numeric>
-                          {!row.hoursConfirmed ? (
+                          {!day.hoursConfirmed ? (
                             <Badge tone="warning" size="sm">
                               Needs hours
                             </Badge>
                           ) : (
-                            formatHours(row.hours)
+                            formatHours(day.hours)
                           )}
                         </TableCell>
                         <TableCell numeric className="hidden md:table-cell">
-                          {pace === null ? '' : formatPace(pace)}
+                          {day.pace === null ? '' : formatPace(day.pace)}
                         </TableCell>
                         {shell.seesMoney ? (
                           <TableCell numeric>
-                            {row.needsRate ? (
+                            {day.needsRate ? (
                               <Badge tone="warning" size="sm">
                                 No rate
                               </Badge>
                             ) : (
-                              formatMoney(row.laborCostCents)
+                              formatMoney(day.laborCostCents)
                             )}
                           </TableCell>
                         ) : null}
-                        <TableCell className="hidden xl:table-cell">{SOURCE_LABELS[row.source]}</TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          {sources.length === 1 ? SOURCE_LABELS[sources[0] as StreamSource] : 'Mixed'}
+                        </TableCell>
                         <TableCell
                           className="hidden max-w-[200px] truncate xl:table-cell"
-                          title={row.note ?? undefined}
+                          title={day.notes[0] ?? undefined}
                         >
-                          {row.note}
+                          {day.notes[0]}
                         </TableCell>
                         <TableCell>
-                          {row.locked ? (
+                          {day.locked ? (
                             <span className="text-xs text-fg-muted">Closed</span>
-                          ) : row.deletedAt ? (
+                          ) : first.deletedAt ? (
                             <IconButton
-                              label={`Put back ${row.jobNumber} on ${shortDate(row.workDate)}`}
+                              label={`Put back ${dayName(item)}`}
                               icon={<RotateCcw aria-hidden />}
                               size="sm"
                               variant="ghost"
                               disabled={!canLog}
-                              onClick={() => void restoreRows([row])}
+                              onClick={() => void restoreRows(day.rows)}
                             />
                           ) : (
                             <span className="flex items-center justify-end gap-0.5">
                               <IconButton
-                                label={`Edit ${row.jobNumber} on ${shortDate(row.workDate)}`}
+                                label={`Edit ${dayName(item)}`}
                                 icon={<Pencil aria-hidden />}
                                 size="sm"
                                 variant="ghost"
                                 disabled={!canLog}
-                                onClick={() => setEditing(row)}
+                                onClick={() => openDay(item)}
                               />
                               <IconButton
-                                label={`Remove ${row.jobNumber} on ${shortDate(row.workDate)}`}
+                                label={`Remove ${dayName(item)}`}
                                 icon={<Trash2 aria-hidden />}
                                 size="sm"
                                 variant="ghost"
                                 disabled={!canLog}
-                                onClick={() => void removeRows([row])}
+                                onClick={() => void removeRows(day.rows)}
                               />
                             </span>
                           )}
@@ -711,7 +752,7 @@ export function EntriesView({
                 </TableBody>
               </Table>
             </div>
-            <TablePagination page={page} pageCount={pageCount} total={rows.length} onPageChange={setPage}>
+            <TablePagination page={page} pageCount={pageCount} total={jobDays.length} onPageChange={setPage}>
               <span className="whitespace-nowrap">
                 {formatNumber(totals.units, { maxDigits: 0 })} units, {formatHours(totals.hours)} labor hours
               </span>
@@ -719,6 +760,22 @@ export function EntriesView({
           </>
         )}
       </Panel>
+      {editingDay ? (
+        <EditDay
+          key={`${editingDay.key}:${editingDay.day.rows.map((row) => `${row.id}.${row.version}`).join(',')}`}
+          item={editingDay}
+          days={groupWorkDays(rows.filter((row) => row.jobId === editingDay.jobId))}
+          today={today}
+          shiftHours={settings.data?.defaultShiftHours ?? '8'}
+          laborClasses={laborClasses}
+          refresh={refreshEntries}
+          onOpenDay={(workDate) => {
+            const next = jobDays.find((item) => item.jobId === editingDay.jobId && item.first.workDate === workDate);
+            if (next) setEditingDay(next);
+          }}
+          onClose={() => setEditingDay(null)}
+        />
+      ) : null}
       {editing ? (
         <EditEntry
           key={editing.id}
@@ -874,6 +931,83 @@ function EditEntry({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Edits a whole day of a job, every labor type at once, in the same form as the job's Work log. */
+function EditDay({
+  item,
+  days,
+  today,
+  shiftHours,
+  laborClasses,
+  refresh,
+  onOpenDay,
+  onClose,
+}: {
+  readonly item: JobDay;
+  readonly days: ReturnType<typeof groupWorkDays>;
+  readonly today: string;
+  readonly shiftHours: string;
+  readonly laborClasses: readonly LaborClassDTO[];
+  readonly refresh: () => Promise<unknown>;
+  readonly onOpenDay: (workDate: string) => void;
+  readonly onClose: () => void;
+}) {
+  const saved = async (result: DaySaved) => {
+    onClose();
+    await refresh();
+    const before = result.before;
+    if (!before) return;
+    toast.undo(`Saved ${item.first.jobNumber} for ${shortDate(result.workDate)}`, {
+      description: 'Undo puts the day back the way it was.',
+      onUndo: async () => {
+        const live = new Set(result.entries.map((row) => row.id));
+        const back = await saveDay({
+          jobId: item.jobId,
+          workDate: before.workDate,
+          mode: 'edit',
+          fromDate: result.workDate,
+          read: result.entries.map((row) => ({ id: row.id, version: row.version })),
+          lines: restoreDayLines(before.rows, live),
+        });
+        if (!back.ok)
+          throw new Error(
+            back.reason === 'stale' ? 'The day was changed again after your save, so it was left as it is.' : back.message,
+          );
+        await refresh();
+      },
+    });
+  };
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent size="lg">
+        <DialogHeader
+          title={`Edit ${item.first.jobNumber}`}
+          description={item.first.jobName}
+          icon={<Pencil aria-hidden />}
+        />
+        <DialogBody>
+          <WorkEntryForm
+            jobId={item.jobId}
+            unit="units"
+            day={item.day}
+            days={days}
+            today={today}
+            shiftHours={shiftHours}
+            laborClasses={laborClasses}
+            defaultLaborClassId={item.first.laborClassId}
+            onSaved={saved}
+            onCancel={onClose}
+            onOpenDay={onOpenDay}
+            onStale={async () => {
+              await refresh();
+              onClose();
+            }}
+          />
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

@@ -263,3 +263,34 @@ export async function saveDay(body: DaySaveBody): Promise<DaySaveResult> {
   if (!error) return failed('INTERNAL', 'Something went wrong on our side. Please try again.');
   return { ok: false, code: error.code, message: error.message, fields: error.fields ?? {}, reason: error.reason ?? null, workDate: error.workDate ?? null, fresh: error.fresh ?? [] };
 }
+
+/** One job on one day, with every labor type that worked it rolled up (a line of All entries). */
+export interface JobDay {
+  /** `jobId|workDate`, stable for React keys. */
+  readonly key: string;
+  readonly jobId: string;
+  readonly day: WorkDay;
+  /** The first entry of the day: the job and site facts every entry of the day shares. */
+  readonly first: ProductionEntryDTO;
+}
+
+/**
+ * Groups entries from many jobs into one line per job per day, in the order each day first
+ * appears. `groupWorkDays` groups by date only, so it runs once for each job.
+ */
+export function groupJobDays(rows: readonly ProductionEntryDTO[]): JobDay[] {
+  const byKey = new Map<string, ProductionEntryDTO[]>();
+  for (const row of rows) {
+    const key = `${row.jobId}|${row.workDate}`;
+    const list = byKey.get(key);
+    if (list) list.push(row);
+    else byKey.set(key, [row]);
+  }
+  const days: JobDay[] = [];
+  for (const [key, list] of byKey) {
+    const [day] = groupWorkDays(list);
+    const first = day?.rows[0];
+    if (day && first) days.push({ key, jobId: first.jobId, day, first });
+  }
+  return days;
+}
