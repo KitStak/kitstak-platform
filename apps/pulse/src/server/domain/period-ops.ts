@@ -6,6 +6,7 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { invalid } from '@/server/errors';
 import { canPulse } from '@/lib/permissions';
 import { endOfMonth, startOfMonth } from '@/lib/profit';
@@ -15,7 +16,7 @@ import { monthName, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse } from './access';
 import { listActivity } from './activity';
 import { getPeople } from './people';
-import { getCloseChecklist, listPeriods } from './periods';
+import { closeFixCounts, getCloseChecklist, listPeriods } from './periods';
 import { getCompanyBridge, getProfit } from './profit';
 import { loadSettings } from './settings';
 
@@ -25,6 +26,12 @@ export interface CloseMonthDTO {
   readonly status: 'open' | 'closed';
   /** True when the month has not ended yet, so it cannot be closed. */
   readonly inProgress: boolean;
+  /**
+   * How many checklist steps say "Fix this first", for an open month that is over. Null for a closed
+   * month and for a month in progress. The list and the month card read this one number, so a month
+   * never says "Ready to close" beside "needs fixing".
+   */
+  readonly toFix: number | null;
   readonly closedAt: string | null;
   readonly closedByName: string | null;
   readonly reopenedAt: string | null;
@@ -85,7 +92,7 @@ export interface CloseBoardDTO {
 }
 
 /** Every month with data, newest first, open or closed, with its totals. */
-export async function getCloseBoard(ctx: DomainContext): Promise<CloseBoardDTO> {
+export const getCloseBoard = scoped(async function getCloseBoard(ctx: DomainContext): Promise<CloseBoardDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const settings = await loadSettings(ctx.orgId);
   const today = todayInZone(settings.timezone);
@@ -96,6 +103,8 @@ export async function getCloseBoard(ctx: DomainContext): Promise<CloseBoardDTO> 
   // An open month shows live company profit. A closed one shows what was saved with the close.
   const openMonths = access.seesMoney ? periods.filter((period) => !snapshotOf(period)?.bridge).map((period) => period.periodMonth) : [];
   const liveBridges = new Map(await Promise.all(openMonths.map(async (month) => [month, await getCompanyBridge(ctx, { from: month, to: endOfMonth(month) })] as const)));
+  const waiting = periods.filter((period) => period.status === 'open' && endOfMonth(period.periodMonth) < today).map((period) => period.periodMonth);
+  const fixes = new Map(await Promise.all(waiting.map(async (month) => [month, (await closeFixCounts(ctx, month)).toFix] as const)));
   const people = await getPeople(periods.flatMap((period) => [period.closedBy, period.reopenedBy]).filter((id): id is string => Boolean(id)));
   return {
     months: periods.map((period) => {
@@ -107,6 +116,7 @@ export async function getCloseBoard(ctx: DomainContext): Promise<CloseBoardDTO> 
         label: `${monthName(period.periodMonth)} ${period.periodMonth.slice(0, 4)}`,
         status: period.status,
         inProgress: endOfMonth(period.periodMonth) >= today,
+        toFix: fixes.get(period.periodMonth) ?? null,
         closedAt: period.status === 'closed' ? period.closedAt : null,
         closedByName: period.status === 'closed' && period.closedBy ? (people.get(period.closedBy)?.name ?? null) : null,
         reopenedAt: period.reopenedAt,
@@ -125,7 +135,7 @@ export async function getCloseBoard(ctx: DomainContext): Promise<CloseBoardDTO> 
     canReopen: canPulse(access.role, 'period:reopen'),
     moneyHidden: !access.seesMoney,
   };
-}
+});
 
 export interface CloseItemDTO {
   readonly key: 'rates' | 'hours' | 'prices' | 'reviews' | 'payroll' | 'company_costs';
@@ -167,7 +177,7 @@ export interface CloseDetailDTO {
 const plural = (count: number, one: string, many: string): string => `${count.toLocaleString('en-US')} ${count === 1 ? one : many}`;
 
 /** The close checklist of one month as steps, with where to go to fix each, and what the close will lock. */
-export async function getCloseDetail(ctx: DomainContext, month: string): Promise<CloseDetailDTO> {
+export const getCloseDetail = scoped(async function getCloseDetail(ctx: DomainContext, month: string): Promise<CloseDetailDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   if (!/^\d{4}-\d{2}(-\d{2})?$/.test(month)) throw invalid('Pick a month.');
   const start = startOfMonth(`${month.slice(0, 7)}-01`);
@@ -297,7 +307,7 @@ export async function getCloseDetail(ctx: DomainContext, month: string): Promise
     saved: Boolean(saved?.total),
     moneyHidden: !access.seesMoney,
   };
-}
+});
 
 export interface CloseEventDTO {
   readonly id: string;
@@ -310,7 +320,7 @@ export interface CloseEventDTO {
 }
 
 /** Who closed and reopened which month, newest first. The log cannot be edited. */
-export async function listCloseEvents(ctx: DomainContext, limit = 100): Promise<CloseEventDTO[]> {
+export const listCloseEvents = scoped(async function listCloseEvents(ctx: DomainContext, limit = 100): Promise<CloseEventDTO[]> {
   const page = await listActivity(ctx, { entityType: 'period', limit: Math.min(Math.max(limit, 1), 200) });
   return page.items
     .filter((item) => item.verb === 'period.closed' || item.verb === 'period.reopened')
@@ -327,4 +337,4 @@ export async function listCloseEvents(ctx: DomainContext, limit = 100): Promise<
         reason: typeof after.reopenReason === 'string' ? after.reopenReason : null,
       };
     });
-}
+});

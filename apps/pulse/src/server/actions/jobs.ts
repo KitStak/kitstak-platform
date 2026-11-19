@@ -78,11 +78,11 @@ const jobFields = {
   pinnedNote: text(1000).nullable().optional(),
 };
 
-const createJobSchema = z.object({ ...jobFields, quote: planInput.nullable().optional(), budget: planInput.nullable().optional(), links: z.array(jobLink).max(10).optional() }).refine((data) => Boolean(data.clientId) || Boolean(data.clientName), { message: 'Pick a client or type a new client name.', path: ['clientId'] });
+const createJobSchema = z.object({ ...jobFields, createClient: z.boolean().optional(), quote: planInput.nullable().optional(), budget: planInput.nullable().optional(), links: z.array(jobLink).max(10).optional() }).refine((data) => Boolean(data.clientId) || Boolean(data.clientName), { message: 'Pick a client or type a new client name.', path: ['clientId'] });
 export type CreateJobActionInput = z.input<typeof createJobSchema>;
 /** The "More options" new job form: basics, price and plan, links. */
 export async function createJobAction(input: CreateJobActionInput) {
-  return runAction(createJobSchema, input, (data, ctx) => createJob(ctx, data));
+  return runAction(createJobSchema, input, (data, ctx) => createJob(ctx, data, { guardLookAlike: true }));
 }
 
 const quickAddSchema = z

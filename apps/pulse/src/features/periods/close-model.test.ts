@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bridgeSteps, closableFrom, pickMonth } from './close-model';
+import { bridgeSteps, closableFrom, monthStatus, pickMonth } from './close-model';
 
 const months = [
   { periodMonth: '2026-11-01', status: 'open' as const, inProgress: true },
@@ -18,6 +18,18 @@ describe('pickMonth', () => {
   it('falls back to the newest month when nothing waits', () => {
     expect(pickMonth([months[0]!, months[2]!], null)).toBe('2026-11-01');
     expect(pickMonth([], null)).toBeNull();
+  });
+});
+
+describe('monthStatus', () => {
+  it('shows one status at a time', () => {
+    expect(monthStatus({ status: 'closed', inProgress: false }, null)).toMatchObject({ key: 'closed', label: 'Closed' });
+    expect(monthStatus({ status: 'open', inProgress: true }, null)).toMatchObject({ key: 'in_progress', label: 'In progress' });
+    expect(monthStatus({ status: 'open', inProgress: false }, 0)).toMatchObject({ key: 'ready', label: 'Ready to close' });
+  });
+  it('never says ready while a step needs fixing', () => {
+    expect(monthStatus({ status: 'open', inProgress: false }, 1)).toMatchObject({ key: 'to_fix', label: '1 thing to fix', tone: 'danger' });
+    expect(monthStatus({ status: 'open', inProgress: false }, 3)).toMatchObject({ key: 'to_fix', label: '3 things to fix' });
   });
 });
 

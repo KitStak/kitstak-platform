@@ -8,7 +8,7 @@
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Download, FileSpreadsheet, MoreHorizontal, Pencil, Plus, Power, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
+import { CircleHelp, Download, FileSpreadsheet, MoreHorizontal, Pencil, Plus, Power, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
 import { Sparkline } from '@/components/charts/sparkline';
 import { KpiTile } from '@/components/charts/stats';
 import { ButtonLink } from '@/components/pulse/button-link';
@@ -38,7 +38,7 @@ import { PeriodPicker, type PeriodChange } from '@/features/profit/period-picker
 import { LoadError, Section, TableSkeleton, runDelete } from '@/features/profit/profit-ui';
 import { useQueryState } from '@/features/profit/use-query-state';
 import { ServiceFormDialog } from './service-form';
-import { BILLING_LABELS, SERVICE_FLAG_WORDS, flagSentence, serviceLine, serviceRateCents, type ServiceLine } from './services-model';
+import { BILLING_LABELS, NO_COST_REASON, NO_COST_WORDS, SERVICE_FLAG_WORDS, flagSentence, isUnderpriced, serviceLine, serviceRateCents, type ServiceLine } from './services-model';
 
 const DEFAULTS = { preset: 'last_90' } as const;
 /** Money for a CSV cell: a plain number, marked so a negative amount is not mistaken for a formula. */
@@ -49,10 +49,12 @@ export function FlagPill({ line, targetMarginBp }: { readonly line: ServiceLine;
   if (!line.flag) return null;
   const sentence = flagSentence(line, targetMarginBp, (price) => formatUnitPrice(price), (bp) => formatPercentBp(bp));
   const severe = line.flag === 'below_cost' || line.flag === 'standard_below_cost' || line.flag === 'no_price';
+  // "No cost yet" is a gap in the data, not a bad price: it gets a neutral tone.
+  const neutral = line.flag === 'no_cost';
   return (
     <Tooltip content={sentence ?? SERVICE_FLAG_WORDS[line.flag]}>
-      <span tabIndex={0} data-testid="service-flag" className={cn('inline-flex h-5 max-w-full items-center gap-1 rounded-sm px-2 text-xs font-medium whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus', severe ? 'bg-danger-subtle text-danger-text' : 'bg-warning-subtle text-warning-text')}>
-        <TriangleAlert aria-hidden className="size-3 shrink-0" />
+      <span tabIndex={0} data-testid="service-flag" data-flag={line.flag} className={cn('inline-flex h-5 max-w-full items-center gap-1 rounded-sm px-2 text-xs font-medium whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus', neutral ? 'bg-muted text-fg-secondary' : severe ? 'bg-danger-subtle text-danger-text' : 'bg-warning-subtle text-warning-text')}>
+        {neutral ? <CircleHelp aria-hidden className="size-3 shrink-0" /> : <TriangleAlert aria-hidden className="size-3 shrink-0" />}
         <span className="truncate">{SERVICE_FLAG_WORDS[line.flag]}</span>
         <span className="sr-only">. {sentence}</span>
       </span>
@@ -80,9 +82,10 @@ export function ServicesView({ initialServices, today, weekStart, targetMarginBp
     const actuals = new Map((profit.data?.rows ?? []).map((row) => [row.key, row]));
     return (services.data ?? [])
       .map((service) => serviceLine(service, actuals.get(service.id), serviceRateCents(service, classes.data ?? []), targetMarginBp))
-      .sort((a, b) => Number(Boolean(b.flag)) - Number(Boolean(a.flag)) || (b.revenueCents ?? 0) - (a.revenueCents ?? 0) || a.service.name.localeCompare(b.service.name));
+      .sort((a, b) => Number(isUnderpriced(b.flag)) - Number(isUnderpriced(a.flag)) || Number(Boolean(b.flag)) - Number(Boolean(a.flag)) || (b.revenueCents ?? 0) - (a.revenueCents ?? 0) || a.service.name.localeCompare(b.service.name));
   }, [services.data, profit.data, classes.data, targetMarginBp]);
-  const underpriced = lines.filter((line) => line.flag && line.service.active);
+  const underpriced = lines.filter((line) => isUnderpriced(line.flag) && line.service.active);
+  const noCost = lines.filter((line) => line.costMissing && line.service.active);
   const shown = show === 'underpriced' ? underpriced : show === 'off' ? lines.filter((line) => !line.service.active) : lines.filter((line) => line.service.active);
   const core = profit.data?.rows.find((row) => row.key === 'none');
   const extras = useMemo(() => {
@@ -290,12 +293,22 @@ export function ServicesView({ initialServices, today, weekStart, targetMarginBp
                           {line.volume > 0 ? formatMoney(line.revenueCents) : ''}
                         </TableCell>
                         <TableCell numeric className="whitespace-nowrap">
-                          {line.volume > 0 ? formatMoney(line.costCents) : ''}
+                          {line.volume > 0 ? line.costMissing ? <span className="text-fg-muted">Not known</span> : formatMoney(line.costCents) : ''}
                         </TableCell>
                         <TableCell numeric className={cn('whitespace-nowrap', (line.marginBp ?? 0) < 0 && 'text-danger-text')}>
                           <span className="inline-flex items-center justify-end gap-0.5">
                             {line.volume > 0 ? <ExplainNumber metric="margin" scope={{ ...scope, serviceId: service.id }} label={`How we got the margin of ${service.name}`} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" /> : null}
-                            {line.volume > 0 ? formatPercentBp(line.marginBp) : ''}
+                            {line.volume > 0 ? (
+                              line.costMissing ? (
+                                <span className="text-fg-muted" title={NO_COST_REASON} data-testid="service-no-cost">
+                                  {NO_COST_WORDS}
+                                </span>
+                              ) : (
+                                formatPercentBp(line.marginBp)
+                              )
+                            ) : (
+                              ''
+                            )}
                           </span>
                         </TableCell>
                         <TableCell>{line.trend && line.trend.length > 1 && line.volume > 0 ? <Sparkline values={[...line.trend]} label={`${service.name} profit over the period`} format="money" width={84} height={24} tone={(line.profitCents ?? 0) < 0 ? 'bad' : 'accent'} /> : null}</TableCell>
@@ -338,6 +351,11 @@ export function ServicesView({ initialServices, today, weekStart, targetMarginBp
           </>
         )}
       </Section>
+      {noCost.length > 0 ? (
+        <p className="text-xs text-fg-muted" data-testid="services-no-cost-note">
+          {noCost.length} {noCost.length === 1 ? 'service shows' : 'services show'} &ldquo;{NO_COST_WORDS}&rdquo; in place of a margin. {NO_COST_REASON} Work that comes in from the warehouse has a price and no hours until someone adds them.
+        </p>
+      ) : null}
       <p className="text-xs text-fg-muted">
         Standard cost is the parts for one unit plus labor at the target pace and the real cost of an hour. A service with entries cannot be deleted, so its history stays: turn it off instead.
       </p>

@@ -9,9 +9,9 @@
  */
 import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
-import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { rows, type DomainContext } from '@/server/domain/_shared';
-import { integrationAvailability, tableExists } from './detect';
+import { integrationAvailability, tableExists, siblingDb } from './detect';
 import { logSoftFail } from './log';
 
 export interface PmProject {
@@ -39,7 +39,7 @@ export interface PmTimeDay {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function projectsReady(ctx: DomainContext): Promise<boolean> {
+export const projectsReady = scoped(async function projectsReady(ctx: DomainContext): Promise<boolean> {
   try {
     if (!(await integrationAvailability(ctx)).projects) return false;
     return (await tableExists('pm.projects')) && (await tableExists('pm.tasks')) && (await tableExists('pm.time_entries'));
@@ -47,7 +47,7 @@ export async function projectsReady(ctx: DomainContext): Promise<boolean> {
     logSoftFail(ctx.orgId, 'projects.projectsReady', error);
     return false;
   }
-}
+});
 
 /** Projects the reader can see in Projects itself: owners and admins all, others the org visible ones plus their own. */
 function visible(ctx: DomainContext): SQL {
@@ -69,7 +69,7 @@ async function projectRows(ctx: DomainContext, where: SQL, limit: number): Promi
     total: number;
     done: number;
   }>(
-    db,
+    siblingDb,
     sql`select p.id::text as id, p.key, p.name, p.status, p.health, p.due_date::text as due_date,
                p.crm_customer_id::text as core_customer_id, p.crm_item_id::text as crm_item_id,
                (select count(*)::int from pm.tasks t where t.project_id = p.id and t.deleted_at is null and t.parent_task_id is null) as total,
@@ -94,7 +94,7 @@ async function projectRows(ctx: DomainContext, where: SQL, limit: number): Promi
   }));
 }
 
-export async function getProjects(ctx: DomainContext, ids: readonly string[]): Promise<PmProject[]> {
+export const getProjects = scoped(async function getProjects(ctx: DomainContext, ids: readonly string[]): Promise<PmProject[]> {
   const clean = [...new Set(ids.filter((id) => UUID.test(id)))];
   if (clean.length === 0 || !(await projectsReady(ctx))) return [];
   try {
@@ -103,9 +103,9 @@ export async function getProjects(ctx: DomainContext, ids: readonly string[]): P
     logSoftFail(ctx.orgId, 'projects.getProjects', error);
     return [];
   }
-}
+});
 
-export async function searchProjects(ctx: DomainContext, query: string, limit = 12): Promise<PmProject[]> {
+export const searchProjects = scoped(async function searchProjects(ctx: DomainContext, query: string, limit = 12): Promise<PmProject[]> {
   if (!(await projectsReady(ctx))) return [];
   try {
     const text = query.trim().slice(0, 80);
@@ -114,7 +114,7 @@ export async function searchProjects(ctx: DomainContext, query: string, limit = 
     logSoftFail(ctx.orgId, 'projects.searchProjects', error);
     return [];
   }
-}
+});
 
 /**
  * Finished time entries of the given projects, summed per day in `timezone`. A day is the day
@@ -122,12 +122,12 @@ export async function searchProjects(ctx: DomainContext, query: string, limit = 
  * `throwOnError` a failed read throws (after the log line) instead of reading as "no time", for a
  * caller that takes rows away when time is gone.
  */
-export async function projectTimeByDay(ctx: DomainContext, projectIds: readonly string[], timezone: string, options: { throwOnError?: boolean } = {}): Promise<PmTimeDay[]> {
+export const projectTimeByDay = scoped(async function projectTimeByDay(ctx: DomainContext, projectIds: readonly string[], timezone: string, options: { throwOnError?: boolean } = {}): Promise<PmTimeDay[]> {
   const clean = [...new Set(projectIds.filter((id) => UUID.test(id)))];
   if (clean.length === 0 || !(await projectsReady(ctx))) return [];
   try {
     const found = await rows<{ project_id: string; work_date: string; minutes: number; people: number }>(
-      db,
+      siblingDb,
       sql`select te.project_id::text as project_id, ((te.started_at at time zone ${timezone})::date)::text as work_date,
                  sum(te.duration_minutes)::int as minutes, count(distinct te.user_id)::int as people
             from pm.time_entries te
@@ -142,4 +142,4 @@ export async function projectTimeByDay(ctx: DomainContext, projectIds: readonly 
     if (options.throwOnError) throw error;
     return [];
   }
-}
+});

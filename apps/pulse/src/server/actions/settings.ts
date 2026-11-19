@@ -40,6 +40,7 @@ const settingsSchema = z
     wmsSyncMaterials: z.boolean(),
     wmsSyncVas: z.boolean(),
     wmsSyncBilling: z.boolean(),
+    wmsContractPrices: z.boolean(),
     wmsBillingOpsInProfit: z.array(z.string().max(60)).max(20),
     crmSuggestJobs: z.boolean(),
     projectsTimeImport: z.boolean(),

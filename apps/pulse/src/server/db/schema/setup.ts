@@ -39,6 +39,8 @@ export const settings = pulseSchema.table('settings', {
   wmsSyncMaterials: boolean('wms_sync_materials').notNull().default(true),
   wmsSyncVas: boolean('wms_sync_vas').notNull().default(true),
   wmsSyncBilling: boolean('wms_sync_billing').notNull().default(true),
+  /** Off: the warehouse contract no longer sets job prices (migration 0011). */
+  wmsContractPrices: boolean('wms_contract_prices').notNull().default(true),
   wmsBillingOpsInProfit: text('wms_billing_ops_in_profit').array().notNull().default([]),
   crmSuggestJobs: boolean('crm_suggest_jobs').notNull().default(true),
   projectsTimeImport: boolean('projects_time_import').notNull().default(true),

@@ -4,6 +4,7 @@
  * browser (so a big file never has to fit in one request), then sent to the server in chunks as
  * plain text. The server does every check itself from those raw strings.
  */
+import { ScrollX } from '@/components/ui/scroll-x';
 import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ClipboardPaste, Download, FileSpreadsheet, FileUp, TriangleAlert, X } from 'lucide-react';
@@ -224,7 +225,7 @@ export function ImportUpload({ stream }: { readonly stream: StreamInfo }) {
             {parsed.headers.length > 0 ? (
               <div>
                 <p className="mb-1.5 text-xs font-medium text-fg-muted">The first rows, as Pulse reads them</p>
-                <div className="overflow-x-auto rounded-lg border border-border-subtle">
+                <ScrollX label="The first rows of the file" className="rounded-lg border border-border-subtle">
                   <table className="w-full min-w-max border-collapse text-left text-xs">
                     <thead>
                       <tr className="bg-sunken">
@@ -247,7 +248,7 @@ export function ImportUpload({ stream }: { readonly stream: StreamInfo }) {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </ScrollX>
               </div>
             ) : null}
 

@@ -5,11 +5,12 @@
 import 'server-only';
 import { getClient, getVasService, type DomainContext } from '@/server/domain';
 import { isDomainError } from '@/server/errors';
+import { scoped } from '@/server/db/scope';
 
 const RESERVED = new Set(['by-link']);
 
 /** True when `path` is `/clients/<id>` or `/services/<id>` and that record is not in this workspace. */
-export async function profitRecordMissing(ctx: DomainContext, path: string): Promise<boolean> {
+export const profitRecordMissing = scoped(async function profitRecordMissing(ctx: DomainContext, path: string): Promise<boolean> {
   const match = /^\/(clients|services)\/([^/?#]+)/.exec(path);
   if (!match) return false;
   let id = match[2] ?? '';
@@ -27,4 +28,4 @@ export async function profitRecordMissing(ctx: DomainContext, path: string): Pro
     // Only "not found" is a 404. Anything else lets the page show its own message.
     return isDomainError(error) && error.code === 'NOT_FOUND';
   }
-}
+});

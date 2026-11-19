@@ -60,7 +60,7 @@ import {
 import { LoadError, Section, TableSkeleton, comparable, moneyDelta, numberDelta, pointsDelta } from './profit-ui';
 import { CHART_MEASURES, ChartView, ContributionView, ParetoView, PivotView, ServeView, TableView, type ChartMeasure } from './profit-views';
 import { useQueryState } from './use-query-state';
-import { companyMarginBp } from '@/features/home/company-margin';
+import { companyMarginBp, companyWords } from '@/features/home/company-margin';
 import { ViewsMenu } from './views-menu';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -301,7 +301,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
                       value={total && bridge.data ? (companyMargin === null ? null : formatPercentBp(companyMargin)) : null}
                       emptyText={bridge.isError ? 'Could not load' : 'No revenue'}
                       explain={<ExplainNumber metric="company_profit" scope={{ from: period.from, to: period.to, siteId: filters.siteId }} label="How we got company profit" />}
-                      footer={companyMargin !== null ? <span className="text-xs text-fg-muted">After overhead and paid time not on any job</span> : undefined}
+                      footer={companyMargin !== null && bridge.data ? <span className="text-xs text-fg-muted" data-testid="profit-company-margin-words">{companyWords(bridge.data).tile}</span> : undefined}
                     />
                   </div>
                 ) : null}
@@ -314,8 +314,9 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
           {wholeCompany && seesMoney && bridge.data && total && bridge.data.companyProfitCents !== null ? (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border-subtle bg-sunken px-4 py-2.5 text-sm text-fg-secondary" data-testid="company-bridge">
               <span>
-                Your jobs made <strong className="font-semibold text-fg tabular-nums">{formatMoneyWhole(total.profitCents)}</strong>. After time not on a job and overhead, the company made{' '}
+                Your jobs made <strong className="font-semibold text-fg tabular-nums">{formatMoneyWhole(total.profitCents)}</strong>. {companyWords(bridge.data).lead}, the company made{' '}
                 <strong className={cn('font-semibold tabular-nums', bridge.data.companyProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatMoneyWhole(bridge.data.companyProfitCents)}</strong>.
+                {companyWords(bridge.data).note ? <span data-testid="company-cost-note"> {companyWords(bridge.data).note}</span> : null}
               </span>
               <ExplainNumber metric="company_profit" scope={{ from: period.from, to: period.to, siteId: filters.siteId }} label="How we got company profit" align="start" />
             </div>

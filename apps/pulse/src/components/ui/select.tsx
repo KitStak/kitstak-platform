@@ -25,6 +25,8 @@ export interface SelectProps {
   readonly 'aria-label'?: string;
   readonly 'aria-describedby'?: string;
   readonly className?: string;
+  readonly autoFocus?: boolean;
+  readonly 'data-testid'?: string;
 }
 
 const SIZE: Readonly<Record<NonNullable<SelectProps['size']>, string>> = {
@@ -35,7 +37,7 @@ const SIZE: Readonly<Record<NonNullable<SelectProps['size']>, string>> = {
 
 /** Single-select dropdown with typeahead, built on Radix Select. */
 export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select(
-  { value, onValueChange, options, placeholder = 'Select…', size = 'md', disabled, invalid, className, ...aria },
+  { value, onValueChange, options, placeholder = 'Select…', size = 'md', disabled, invalid, className, autoFocus, 'data-testid': testId, ...aria },
   ref,
 ) {
   const selected = options.find((option) => option.value === value);
@@ -47,6 +49,8 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
         aria-label={aria['aria-label']}
         aria-describedby={aria['aria-describedby']}
         aria-invalid={invalid || undefined}
+        autoFocus={autoFocus}
+        data-testid={testId}
         className={cn(
           'group inline-flex w-full items-center justify-between gap-2 rounded-md border border-border-input bg-panel text-left text-fg',
           'transition-[border-color,box-shadow] duration-[var(--duration-fast)] ease-out outline-none',

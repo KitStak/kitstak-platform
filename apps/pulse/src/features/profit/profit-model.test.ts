@@ -4,7 +4,7 @@ import { parsePeriod, periodQuery } from './period';
 import { compareRows, contribution, csvValue, defaultSort, drillTarget, formatValue, modesFor, paretoView, parseSort, pivotCsv, rowLabel, rowScope, sortParam, sortRows, viewToQuery, visibleColumns } from './profit-model';
 
 const row = (key: string, label: string, patch: Partial<ProfitRowDTO> = {}): ProfitRowDTO =>
-  ({ key, label, sublabel: null, revenueCents: 100000, baseRevenueCents: 100000, vasRevenueCents: 0, otherRevenueCents: 0, laborCents: 40000, materialCents: 20000, otherCents: 5000, sharedCents: 5000, costCents: 70000, profitCents: 30000, marginBp: 3000, marginBeforeSharedBp: 3500, laborPctBp: 4000, billedCents: 0, unitsGood: '1000.000', unitsScrap: '0.000', hours: '25.00', uph: '40.000', costPerUnitCents: 70, profitPerUnitCents: 30, jobCount: 1, prior: null, trend: null, laborMissing: false, riskStatus: null, ...patch }) as ProfitRowDTO;
+  ({ key, label, sublabel: null, revenueCents: 100000, baseRevenueCents: 100000, vasRevenueCents: 0, otherRevenueCents: 0, laborCents: 40000, materialCents: 20000, otherCents: 5000, sharedCents: 5000, costCents: 70000, profitCents: 30000, marginBp: 3000, marginBeforeSharedBp: 3500, laborPctBp: 4000, billedCents: 0, unitsGood: '1000.000', unitsScrap: '0.000', hours: '25.00', uph: '40.000', costPerUnitCents: 70, profitPerUnitCents: 30, jobCount: 1, prior: null, trend: null, laborMissing: false, costMissing: false, riskStatus: null, ...patch }) as ProfitRowDTO;
 
 const RANGE = { from: '2026-10-05', to: '2026-11-17' };
 

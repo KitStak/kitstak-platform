@@ -14,40 +14,50 @@ import { and, eq, sql } from 'drizzle-orm';
 import { hashPassword } from 'better-auth/crypto';
 import { account, member, organization, user } from '@kitstak/db/schema';
 import { db, getPool } from '@/server/db';
+import { asSystem } from '@/server/db/scope';
 import { memberRoles } from '@/server/db/schema';
 import type { DomainContext } from '@/server/domain/_shared';
 import { parseOrgRole } from '@/lib/permissions';
 
-export async function orgBySlug(slug: string) {
+/**
+ * A seed builds a workspace across schemas (core people, sibling records, raw pulse rows), so its
+ * own statements run as the owner. The domain calls inside still run for their one workspace.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic over any seed function shape
+export function asSeed<F extends (...args: any[]) => unknown>(fn: F): F {
+  return ((...args: unknown[]) => asSystem('demo seed (builds one workspace across schemas)', () => (fn as (...inner: unknown[]) => unknown)(...args))) as unknown as F;
+}
+
+export const orgBySlug = asSeed(async function orgBySlug(slug: string) {
   const [row] = await db.select().from(organization).where(eq(organization.slug, slug));
   return row ?? null;
-}
+});
 
-export async function userByEmail(email: string) {
+export const userByEmail = asSeed(async function userByEmail(email: string) {
   const [row] = await db.select().from(user).where(eq(user.email, email));
   return row ?? null;
-}
+});
 
 /** Members of an org (id, name, email, role). */
-export async function orgMembers(orgId: string) {
+export const orgMembers = asSeed(async function orgMembers(orgId: string) {
   const rows = await db
     .select({ id: user.id, name: user.name, email: user.email, role: member.role })
     .from(member)
     .innerJoin(user, eq(user.id, member.userId))
     .where(eq(member.organizationId, orgId));
   return rows.filter((row) => parseOrgRole(row.role));
-}
+});
 
 /** The first owner of an org, else its first admin, else any member: the person a seed acts as. */
-export async function defaultSeedEmail(orgId: string): Promise<string | null> {
+export const defaultSeedEmail = asSeed(async function defaultSeedEmail(orgId: string): Promise<string | null> {
   const members = await orgMembers(orgId);
   const order: Readonly<Record<string, number>> = { owner: 0, admin: 1, member: 2 };
   const rank = (role: string): number => order[parseOrgRole(role) ?? 'guest'] ?? 3;
   return [...members].sort((a, b) => rank(a.role) - rank(b.role) || a.email.localeCompare(b.email))[0]?.email ?? null;
-}
+});
 
 /** Acts as `email` in `orgSlug`. Throws when the org, the user or the membership is missing. */
-export async function seedContext(orgSlug: string, email?: string | null): Promise<DomainContext> {
+export const seedContext = asSeed(async function seedContext(orgSlug: string, email?: string | null): Promise<DomainContext> {
   const org = await orgBySlug(orgSlug);
   if (!org) throw new Error(`Seed: org ${orgSlug} not found. Run the platform seeds first.`);
   const who = email ?? (await defaultSeedEmail(org.id));
@@ -61,19 +71,19 @@ export async function seedContext(orgSlug: string, email?: string | null): Promi
   const orgRole = parseOrgRole(membership?.role);
   if (!orgRole) throw new Error(`Seed: ${who} is not a member of ${orgSlug}.`);
   return { orgId: org.id, orgSlug: org.slug, userId: actor.id, userName: actor.name, orgRole, actorKind: 'user' };
-}
+});
 
 /**
  * Makes the seed actor the Pulse owner of the org with an explicit role row, so the demo login
  * can use every screen (close a month, set rates, reopen). This is the "Run Pulse for this
  * workspace" step, done ahead of time for demo data.
  */
-export async function ensurePulseOwner(ctx: DomainContext): Promise<void> {
+export const ensurePulseOwner = asSeed(async function ensurePulseOwner(ctx: DomainContext): Promise<void> {
   await db
     .insert(memberRoles)
     .values({ orgId: ctx.orgId, userId: ctx.userId, role: 'owner', seesMoney: true, updatedBy: ctx.userId })
     .onConflictDoUpdate({ target: [memberRoles.orgId, memberRoles.userId], set: { role: 'owner', seesMoney: true, updatedAt: new Date() } });
-}
+});
 
 /** A demo sign in a seed makes sure exists. Local demo data only: never point a seed at production. */
 export interface DemoLogin {
@@ -88,7 +98,7 @@ export interface DemoLogin {
  * account and the org membership when they are missing. An existing user keeps their password
  * and their membership role, so the WMS and Projects seeds (which make the same people) win.
  */
-export async function ensureDemoLogin(orgId: string, login: DemoLogin): Promise<string> {
+export const ensureDemoLogin = asSeed(async function ensureDemoLogin(orgId: string, login: DemoLogin): Promise<string> {
   const email = login.email.trim().toLowerCase();
   let found = await userByEmail(email);
   if (!found) {
@@ -99,7 +109,7 @@ export async function ensureDemoLogin(orgId: string, login: DemoLogin): Promise<
   const [membership] = await db.select({ id: member.id }).from(member).where(and(eq(member.organizationId, orgId), eq(member.userId, userId)));
   if (!membership) await db.insert(member).values({ organizationId: orgId, userId, role: login.orgRole, createdAt: new Date() });
   return userId;
-}
+});
 
 /** Every `pulse` table with an `org_id`, children before parents. `member_roles` is kept unless asked for. */
 const WIPE_ORDER = [
@@ -154,13 +164,13 @@ const WIPE_ORDER = [
  * Removes the org's Pulse rows in one transaction under `pulse.allow_purge`, so closed months do
  * not block it. Seeds are idempotent: wipe, then rebuild through the domain layer.
  */
-export async function wipeOrg(orgId: string, options: { roles?: boolean } = {}): Promise<void> {
+export const wipeOrg = asSeed(async function wipeOrg(orgId: string, options: { roles?: boolean } = {}): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.execute(sql`SET LOCAL pulse.allow_purge = 'on'`);
     for (const table of WIPE_ORDER) await tx.execute(sql`DELETE FROM pulse.${sql.raw(table)} WHERE org_id = ${orgId}`);
     if (options.roles) await tx.execute(sql`DELETE FROM pulse.member_roles WHERE org_id = ${orgId}`);
   });
-}
+});
 
 export async function closeSeed(): Promise<void> {
   await getPool().end();

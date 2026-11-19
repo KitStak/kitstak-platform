@@ -60,7 +60,7 @@ two warehouses, no CRM boards) and `maya@northwind-robotics.example` / `Northwin
 
 Env (`src/server/env.ts`, lazy): `DATABASE_URL`, `DIRECT_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`,
 `NEXT_PUBLIC_PORTAL_URL`, `NEXT_PUBLIC_CRM_URL`, `NEXT_PUBLIC_WMS_URL`, `NEXT_PUBLIC_PROJECTS_URL`, `TRUSTED_ORIGINS`,
-`AUTH_COOKIE_DOMAIN`, `ENTITLEMENTS_DEV_ALLOW_ALL`, `CRON_SECRET`. `appUrls()` returns `{portal, crm, wms, projects, pulse}`.
+`AUTH_COOKIE_DOMAIN`, `ENTITLEMENTS_DEV_ALLOW_ALL`, `CRON_SECRET`, `PULSE_DB_GUARD` (1 turns the database guard on: the app runs its queries as the plain role `pulse_app` with the workspace set, CONTRACTS section 12 rule 13; off in production until it is set there, on in tests and in local dev). `appUrls()` returns `{portal, crm, wms, projects, pulse}`.
 `trustedOrigins()` adds the four sibling URLs, and dev ports 3500 to 3520 only when `NODE_ENV !== 'production'`.
 
 Ops surface, same as the siblings: `GET /api/health` (database ping, migration version), structured error logs with org id and
@@ -397,13 +397,32 @@ for the touched `(job, date)` pairs. Every date range screen reads `fact_days`; 
 work_profit       = sum of PROFIT_KINDS facts (jobs and client level rows)          "Profit on jobs"
 shared_gap        = 4.5                                                             "Time not on a job that no job carried"
 missing_cost      = sum(missing_cents), or 0 under the full rule (it is in the pool) "Paid time not on any job"
-overhead_absorbed = sum(overhead_cents) on production, service and indirect entries
-overhead_gap      = company_costs - overhead_absorbed when company_costs > 0 in the range, else 0   "Overhead your hourly rate did not cover"
+company_costs     = for each calendar month the range touches that has company costs above 0:
+                    prorateDays(costs dated in that whole month, first day in range, last day in range, days in the month)
+overhead_absorbed = sum(overhead_cents) on production, service and indirect entries, on the days in the range of those same months
+overhead_gap      = company_costs - overhead_absorbed when at least one month counted, else 0      "Overhead your hourly rate did not cover"
 company_profit    = work_profit - shared_gap - missing_cost - overhead_gap
 ```
 
 With no company costs entered, Pulse trusts the hourly overhead rate and the last line is hidden. A negative `overhead_gap` reads
 "Your hourly rate covered more overhead than you spent" and adds to profit.
+
+**Company costs are monthly, so a part month counts its share by day.** Rent is dated on one day and pays for the whole month. The
+bridge never charges a whole month against part of one, and never drops the step because the cost is dated on a day outside the range.
+For each calendar month, the share for days `a` to `b` of a month with `N` days is
+`prorateDays(C, a, b, N) = divRound(C * b, N) - divRound(C * (a - 1), N)` in `BigInt` cents with the rounding rule of 4.2. The two
+running totals telescope, so the parts of a month always add back to the whole month to the cent, and a whole month is `C` itself: a
+whole month, and so month close, is unchanged. Each month stands alone: a month with no company costs (or a net credit) counts nothing
+and trusts the hourly overhead rate, so a range of whole months equals the sum of its months. The rule lives in one place,
+`getCompanyBridge` (through the pure `spreadCompanyCosts`), so Home, Profit, the reports, "How we got this", month close and
+`GET /api/v1/company-bridge` agree for any days. When the figure covers part of a month the screen says so in plain words beside the
+number: "Company costs for 18 of 30 days." A range across months names each one: "Company costs for 12 of 31 days in October and
+18 of 30 days in November." A month in the range with none typed in is named too. The words "after overhead" only show when company
+costs were counted: with none, the tile reads "After paid time not on any job".
+
+Worked example (part month). November company costs $70,500.00, range Nov 1 to Nov 18: `divRound(7050000 * 18, 30) = 4230000`
+($42,300.00). The hourly rates covered $38,000.00 of overhead on those 18 days, so the overhead gap is $4,300.00. Nov 19 to Nov 30 gets
+the other $28,200.00.
 
 Worked example. Profit on jobs $48,210.00. Shared gap $1,150.00. Paid time not on any job $2,360.00. Company costs $21,000.00, overhead absorbed
 $16,200.00, so overhead gap $4,800.00. `company_profit = 48210 - 1150 - 2360 - 4800 = $39,900.00`. Home says: "Your jobs made $48,210 this month.
@@ -636,7 +655,7 @@ an hour. See 14 entries." Only readers with `wage:read` get the next line: "$26.
 
 `pulse.periods` holds one row per calendar month. Closing a month (admin) checks Things to fix and the payroll check, stores a snapshot of totals, and
 locks every stream row dated in that month: edits, deletes, imports, sync writes and restamps that would touch it are refused with
-"October is closed. Ask the owner to reopen it." Reopen needs a reason and is logged. Reports mark closed months with a lock. Week based reports follow
+"October 2026 is closed. Ask the owner to reopen it." Reopen needs a reason and is logged. Reports mark closed months with a lock. Week based reports follow
 `settings.week_start`. Sync and cron treat "closed month" as a counted skip listed under "Came in after the month was closed", never as an error.
 
 The close screen and the month list show what the company kept, never job profit alone. The month card reads: Revenue, Job cost, Job profit

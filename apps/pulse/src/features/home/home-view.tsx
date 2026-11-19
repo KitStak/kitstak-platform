@@ -21,7 +21,7 @@ import { HOME_ATTENTION_LIMIT } from '@/lib/constants';
 import { formatHours, formatMoney, formatMoneyWhole, formatNumber, formatPace, formatPercentBp } from '@/lib/format';
 import { useAlerts, useJobsNeedingAttention, useProfit, useSummary } from '@/lib/hooks/use-data';
 import { CONFIDENCE_LABELS } from '@/lib/profit/types';
-import { companyMarginBp } from './company-margin';
+import { companyMarginBp, companyWords } from './company-margin';
 import { suggestBucket } from '@/lib/profit/trends';
 import { compareRange, rangeLabel, type RangePreset } from '@/lib/reports';
 import { routes } from '@/lib/routes';
@@ -67,7 +67,8 @@ function ranking(rows: readonly ProfitRowDTO[], pick: (row: ProfitRowDTO) => num
 export interface HomeViewProps {
   readonly today: string;
   readonly weekStart: number;
-  readonly targetMarginBp: number;
+  /** The margin the company aims for. Null for a reader who cannot see money: it is never sent to them. */
+  readonly targetMarginBp: number | null;
   readonly initialSummary?: SummaryDTO;
   readonly initialTrend?: ProfitResponse;
   /** The period right before, for the "vs before" chips. */
@@ -197,9 +198,14 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                 {bridge && bridge.companyProfitCents !== null ? (
                   <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
                     <span>
-                      After time not on a job and overhead, the company made <strong className={cn('font-semibold tabular-nums', bridge.companyProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatMoneyWhole(bridge.companyProfitCents)}</strong>.
+                      {companyWords(bridge).lead}, the company made <strong className={cn('font-semibold tabular-nums', bridge.companyProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatMoneyWhole(bridge.companyProfitCents)}</strong>.
                     </span>
                     <ExplainNumber metric="company_profit" scope={scope} label="How we got company profit" align="start" />
+                  </p>
+                ) : null}
+                {bridge && bridge.companyProfitCents !== null && companyWords(bridge).note ? (
+                  <p className="mt-1 text-sm text-fg-muted" data-testid="home-company-cost-note">
+                    {companyWords(bridge).note}
                   </p>
                 ) : null}
               </>
@@ -406,7 +412,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
               lines={[{ id: 'margin', label: 'Job margin', values: points.map((row) => row.marginBp) }]}
               barFormat="money"
               lineFormat="percent"
-              lineTarget={{ value: targetMarginBp, label: 'Target margin' }}
+              lineTarget={targetMarginBp === null ? undefined : { value: targetMarginBp, label: 'Target margin' }}
               height={300}
               tableToggle
               emptyTitle="No work in this period yet"

@@ -6,6 +6,7 @@ import 'server-only';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { memberRoles } from '@/server/db/schema';
 import { conflict, forbidden, invalid, notFound } from '@/server/errors';
 import { isPulseRole, type PulseRole } from '@/lib/permissions';
@@ -23,7 +24,7 @@ export interface ResolvedMember {
 }
 
 /** Everyone in the org with their resolved Pulse access (one read per source, no query per person). */
-export async function resolveAllAccess(ctx: DomainContext, executor: Executor = db): Promise<ResolvedMember[]> {
+export const resolveAllAccess = scoped(async function resolveAllAccess(ctx: DomainContext, executor: Executor = db): Promise<ResolvedMember[]> {
   const settings = await loadSettings(ctx.orgId, executor);
   const people = await listOrgPeople(ctx, executor);
   const explicit = await executor.select().from(memberRoles).where(eq(memberRoles.orgId, ctx.orgId));
@@ -40,7 +41,7 @@ export async function resolveAllAccess(ctx: DomainContext, executor: Executor = 
     });
     return { person, access, hasKioskPin: Boolean(row?.kioskPinHash) };
   });
-}
+});
 
 function toDTO(member: ResolvedMember): MemberRoleDTO {
   return {
@@ -58,23 +59,23 @@ function toDTO(member: ResolvedMember): MemberRoleDTO {
   };
 }
 
-export async function listMemberRoles(ctx: DomainContext): Promise<MemberRoleDTO[]> {
+export const listMemberRoles = scoped(async function listMemberRoles(ctx: DomainContext): Promise<MemberRoleDTO[]> {
   await requirePulse(ctx, 'roles:manage');
   return (await resolveAllAccess(ctx)).map(toDTO);
-}
+});
 
 /** User ids of the people whose Pulse role is in `roles` (alert fan out). */
-export async function userIdsWithRoles(ctx: DomainContext, roles: readonly string[], executor: Executor = db): Promise<Map<string, PulseAccess>> {
+export const userIdsWithRoles = scoped(async function userIdsWithRoles(ctx: DomainContext, roles: readonly string[], executor: Executor = db): Promise<Map<string, PulseAccess>> {
   const out = new Map<string, PulseAccess>();
   for (const member of await resolveAllAccess(ctx, executor)) if (roles.includes(member.access.role)) out.set(member.person.id, member.access);
   return out;
-}
+});
 
 /**
  * Sets a person's explicit Pulse role and money switch. Only an owner may make or unmake an
  * owner, and the last owner cannot be removed.
  */
-export async function setMemberRole(ctx: DomainContext, userId: string, patch: { role?: PulseRole; seesMoney?: boolean }): Promise<MemberRoleDTO> {
+export const setMemberRole = scoped(async function setMemberRole(ctx: DomainContext, userId: string, patch: { role?: PulseRole; seesMoney?: boolean }): Promise<MemberRoleDTO> {
   const actor = await requirePulse(ctx, 'roles:manage');
   return inTx(async (tx) => {
     const members = await resolveAllAccess(ctx, tx);
@@ -100,10 +101,10 @@ export async function setMemberRole(ctx: DomainContext, userId: string, patch: {
     const after = (await resolveAllAccess(ctx, tx)).find((member) => member.person.id === userId)!;
     return toDTO(after);
   });
-}
+});
 
 /** Removes the explicit row, so the person's role follows the warehouse or the org role again. */
-export async function clearMemberRole(ctx: DomainContext, userId: string): Promise<MemberRoleDTO> {
+export const clearMemberRole = scoped(async function clearMemberRole(ctx: DomainContext, userId: string): Promise<MemberRoleDTO> {
   const actor = await requirePulse(ctx, 'roles:manage');
   return inTx(async (tx) => {
     const members = await resolveAllAccess(ctx, tx);
@@ -118,7 +119,7 @@ export async function clearMemberRole(ctx: DomainContext, userId: string): Promi
     await logActivity(tx, ctx, { verb: 'role.changed', entityType: 'member_role', entityId: userId, before: { role: target.access.role, source: 'explicit' }, after: { role: after.access.role, source: after.access.source } });
     return toDTO(after);
   });
-}
+});
 
 async function runState(ctx: DomainContext, executor: Executor = db): Promise<{ state: RunPulseDTO; members: ResolvedMember[] }> {
   const members = await resolveAllAccess(ctx, executor);
@@ -131,12 +132,12 @@ async function runState(ctx: DomainContext, executor: Executor = db): Promise<{ 
 }
 
 /** Is there a Pulse owner yet, and may this person take the job? Open to every member (it gates the welcome screen). */
-export async function whoRunsPulse(ctx: DomainContext): Promise<RunPulseDTO> {
+export const whoRunsPulse = scoped(async function whoRunsPulse(ctx: DomainContext): Promise<RunPulseDTO> {
   return (await runState(ctx)).state;
-}
+});
 
 /** "Run Pulse for this workspace": writes an explicit owner row for the caller when nobody owns Pulse yet. */
-export async function claimPulseOwnership(ctx: DomainContext): Promise<MemberRoleDTO> {
+export const claimPulseOwnership = scoped(async function claimPulseOwnership(ctx: DomainContext): Promise<MemberRoleDTO> {
   return inTx(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`pulse-owner:${ctx.orgId}`}))`);
     const { state, members } = await runState(ctx, tx);
@@ -150,15 +151,15 @@ export async function claimPulseOwnership(ctx: DomainContext): Promise<MemberRol
     const after = (await resolveAllAccess(ctx, tx)).find((member) => member.person.id === ctx.userId)!;
     return toDTO(after);
   });
-}
+});
 
 /** The caller's own access, read fresh (after a claim or a role change in the same request). */
-export async function myAccess(ctx: DomainContext, fresh = false): Promise<PulseAccess> {
+export const myAccess = scoped(async function myAccess(ctx: DomainContext, fresh = false): Promise<PulseAccess> {
   return fresh ? freshPulseAccess(ctx) : pulseAccessFor(ctx);
-}
+});
 
 /** Sets or clears a person's 4 digit kiosk PIN (stored as a salted scrypt hash). */
-export async function setKioskPin(ctx: DomainContext, userId: string, pin: string | null): Promise<void> {
+export const setKioskPin = scoped(async function setKioskPin(ctx: DomainContext, userId: string, pin: string | null): Promise<void> {
   await requirePulse(ctx, 'roles:manage');
   if (pin !== null && !/^\d{4}$/.test(pin)) throw invalid('A kiosk PIN is 4 digits.', { pin: 'Type 4 digits.' });
   await inTx(async (tx) => {
@@ -173,7 +174,7 @@ export async function setKioskPin(ctx: DomainContext, userId: string, pin: strin
       .onConflictDoUpdate({ target: [memberRoles.orgId, memberRoles.userId], set: { kioskPinHash: hash, updatedBy: ctx.userId, updatedAt: new Date() } });
     await logActivity(tx, ctx, { verb: 'role.changed', entityType: 'member_role', entityId: userId, meta: { kioskPin: pin === null ? 'cleared' : 'set' } });
   });
-}
+});
 
 /** Checks a kiosk PIN against the stored hash in constant time. */
 export function verifyKioskPin(stored: string | null, pin: string): boolean {

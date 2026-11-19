@@ -408,8 +408,11 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
   const [editing, setEditing] = useState<ClientDTO | 'new' | null>(null);
   const [form, setForm] = useState({ name: '', code: '', contactName: '', contactEmail: '', phone: '', margin: '', terms: '', partsOwner: NONE, status: 'active', notes: '' });
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
+  /** The typed name the server said looks like a client you have. While it stands, "Add as a new client" shows. */
+  const [lookAlike, setLookAlike] = useState<string | null>(null);
 
   const open = (client: ClientDTO | 'new'): void => {
+    setLookAlike(null);
     setForm(
       client === 'new'
         ? { name: '', code: '', contactName: '', contactEmail: '', phone: '', margin: '', terms: '', partsOwner: NONE, status: 'active', notes: '' }
@@ -419,7 +422,7 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
     setEditing(client);
   };
 
-  const save = async (): Promise<void> => {
+  const save = async (confirmNew = false): Promise<void> => {
     const problems: Record<string, string> = {};
     if (form.name.trim() === '') problems.name = 'Give the client a name.';
     const margin = percentBp(form.margin);
@@ -439,11 +442,14 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
       partsOwner: form.partsOwner === NONE ? null : (form.partsOwner as 'us' | 'client'),
       notes: form.notes.trim() || null,
     };
-    const result = editing === 'new' ? await run(() => createClientAction(input), 'Could not add the client') : await run(() => updateClientAction({ clientId: (editing as ClientDTO).id, patch: input, version: (editing as ClientDTO).version }), 'Could not save the client');
+    const result = editing === 'new' ? await run(() => createClientAction({ ...input, confirmNew }), 'Could not add the client') : await run(() => updateClientAction({ clientId: (editing as ClientDTO).id, patch: input, version: (editing as ClientDTO).version }), 'Could not save the client');
     if ('data' in result) {
       toast.success(editing === 'new' ? 'Client added' : 'Client saved');
       setEditing(null);
-    } else setErrors(result.fields);
+    } else {
+      setErrors(result.fields);
+      setLookAlike(result.fields.clientLookAlike ? form.name.trim() : null);
+    }
   };
 
   const remove = async (client: ClientDTO): Promise<void> => {
@@ -555,6 +561,11 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
             <Button variant="secondary" onClick={() => setEditing(null)}>
               Cancel
             </Button>
+            {editing === 'new' && lookAlike !== null && lookAlike === form.name.trim() ? (
+              <Button variant="secondary" loading={pending} onClick={() => void save(true)} data-testid="client-save-new">
+                Add as a new client
+              </Button>
+            ) : null}
             <Button type="submit" form="client-form" loading={pending} data-testid="client-save">
               {editing === 'new' ? 'Add client' : 'Save'}
             </Button>

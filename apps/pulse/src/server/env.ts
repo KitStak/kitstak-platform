@@ -40,6 +40,13 @@ const envSchema = z.object({
   /** Bearer token for scheduled routes (Vercel Cron sends `Authorization: Bearer $CRON_SECRET`). */
   CRON_SECRET: z.string().min(16).optional(),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(5),
+  /**
+   * `1` turns the database guard on: every query runs as the plain role `pulse_app` with the
+   * workspace set, so row level security applies to the app (CONTRACTS section 12, rule 13).
+   * Off when unset. Needs migration 0009; `GET /api/health` shows `guard: { on, ready }`.
+   * Read straight from `process.env` in `src/server/db/scope.ts`; listed here so it is documented.
+   */
+  PULSE_DB_GUARD: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof envSchema>;

@@ -35,6 +35,7 @@ import { DonutChart } from '@/components/charts/radial';
 import { DeltaBadge, KpiTile, MarginPill, marginHealth } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
+import { LocalTime } from '@/components/pulse/local-time';
 import { useShell } from '@/features/shell/shell-context';
 import { PULSE_STATUS_LABELS } from '@/lib/constants';
 import {
@@ -700,7 +701,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
               }
               value={stats.lastEntryDate ? shortDate(stats.lastEntryDate) : null}
               emptyText="None yet"
-              footer={<span className="text-xs text-fg-muted">{stats.entryCount} entries</span>}
+              footer={<span className="text-xs text-fg-muted">{stats.entryCount} {stats.entryCount === 1 ? 'entry' : 'entries'}</span>}
             />
           </>
         )}
@@ -809,12 +810,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                 : 'No work logged yet. The first day you log shows up here.'}
             </p>
           ) : (
-            <div
-              role="region"
-              aria-label="Latest work, one row per day"
-              tabIndex={0}
-              className="overflow-x-auto rounded-b-xl focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
-            >
+            <div className="overflow-hidden rounded-b-xl">
               <Table aria-label="Latest work, one row per day">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
@@ -977,6 +973,18 @@ function LinkedRecords({
                   {LINK_WORDS[link.targetType] ?? 'Record'}
                   {link.status ? ` · ${link.status}` : ''}
                 </p>
+                {link.priceFromContract ? (
+                  <p className="mt-0.5 text-xs text-fg-secondary" data-testid="job-link-contract-price">
+                    The price of this job came from the warehouse contract {link.priceFromContract.contractName}
+                    {link.priceFromContract.at ? (
+                      <>
+                        {' on '}
+                        <LocalTime iso={link.priceFromContract.at} style="day" />
+                      </>
+                    ) : null}
+                    .
+                  </p>
+                ) : null}
               </div>
               {link.url ? (
                 <a

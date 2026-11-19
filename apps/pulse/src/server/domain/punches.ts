@@ -16,6 +16,7 @@
 import 'server-only';
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { indirectEntries, jobs, paidHours, productionEntries, timePunches } from '@/server/db/schema';
 import { invalid, notFound } from '@/server/errors';
 import { INDIRECT_REASONS, type IndirectReason, type StreamSource } from '@/lib/constants';
@@ -100,7 +101,7 @@ export interface PunchFilters {
 }
 
 /** Punches, newest day first, then by person. */
-export async function listPunches(ctx: DomainContext, filters: PunchFilters = {}): Promise<PunchDTO[]> {
+export const listPunches = scoped(async function listPunches(ctx: DomainContext, filters: PunchFilters = {}): Promise<PunchDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const where: (SQL | undefined)[] = [eq(timePunches.orgId, ctx.orgId)];
   if (!filters.includeDeleted) where.push(isNull(timePunches.deletedAt));
@@ -125,7 +126,7 @@ export async function listPunches(ctx: DomainContext, filters: PunchFilters = {}
       closed,
     ),
   );
-}
+});
 
 export interface PunchInput {
   /** Edit this punch. Without it the punch is matched on person, day, job or reason and labor class, else created. */
@@ -166,7 +167,7 @@ function uniqueDays(days: readonly Day[]): Day[] {
  * site days. Runs inside the caller's transaction and records what it touched; the caller ends
  * with `finishWrite`. Exact: running it twice changes nothing.
  */
-export async function rollupPunches(
+export const rollupPunches = scoped(async function rollupPunches(
   tx: Executor,
   ctx: DomainContext,
   days: readonly Day[],
@@ -567,7 +568,7 @@ export async function rollupPunches(
     : [{ n: 0 }];
   out.punches = count?.n ?? 0;
   return out;
-}
+}, 1);
 
 function checkPunch(input: PunchInput): void {
   if (!cleanText(input.employeeCode))
@@ -590,7 +591,7 @@ function checkPunch(input: PunchInput): void {
  * Saves punches (typed, or a time clock or payroll file) in one transaction, then rebuilds the
  * rows they own. All or nothing, at most 5,000 at once.
  */
-export async function savePunches(
+export const savePunches = scoped(async function savePunches(
   ctx: DomainContext,
   inputs: readonly PunchInput[],
 ): Promise<{ punches: PunchDTO[]; created: number; updated: number; rollup: PunchRollupDTO }> {
@@ -729,7 +730,7 @@ export async function savePunches(
       rollup,
     };
   });
-}
+});
 
 async function punchesByIds(
   executor: Executor,
@@ -811,7 +812,7 @@ async function togglePunches(
 }
 
 /** Removes punches (soft) and rebuilds the rows they owned. Pair with `restorePunches` for undo. */
-export const deletePunches = (ctx: DomainContext, ids: readonly string[]): Promise<PunchDTO[]> =>
-  togglePunches(ctx, ids, false);
-export const restorePunches = (ctx: DomainContext, ids: readonly string[]): Promise<PunchDTO[]> =>
-  togglePunches(ctx, ids, true);
+export const deletePunches = scoped((ctx: DomainContext, ids: readonly string[]): Promise<PunchDTO[]> =>
+  togglePunches(ctx, ids, false));
+export const restorePunches = scoped((ctx: DomainContext, ids: readonly string[]): Promise<PunchDTO[]> =>
+  togglePunches(ctx, ids, true));

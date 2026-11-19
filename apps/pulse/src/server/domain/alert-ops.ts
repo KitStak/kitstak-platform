@@ -12,6 +12,7 @@
 import 'server-only';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { alertRules } from '@/server/db/schema';
 import { forbidden, invalid, notFound } from '@/server/errors';
 import { ALERT_KINDS, type AlertKind, type AlertStatus } from '@/lib/constants';
@@ -53,19 +54,19 @@ async function writeScope(ctx: DomainContext, ruleId: string, scope: AlertRuleIn
 }
 
 /** Creates or changes a rule, quiet hours included. One call for the rule editor. */
-export async function saveAlertRuleFull(ctx: DomainContext, input: AlertRuleFullInput & { id?: string | null }): Promise<AlertRuleDTO> {
+export const saveAlertRuleFull = scoped(async function saveAlertRuleFull(ctx: DomainContext, input: AlertRuleFullInput & { id?: string | null }): Promise<AlertRuleDTO> {
   const access = await requirePulse(ctx, 'alert:manage');
   const quiet = cleanQuiet(input.quiet);
   const { id, quiet: _quiet, ...rule } = input;
   void _quiet;
   const saved = id ? await updateAlertRule(ctx, id, rule) : await createAlertRule(ctx, rule);
   return writeScope(ctx, saved.id, input.scope ?? (saved.scope as AlertRuleInput['scope']), quiet, access.seesMoney);
-}
+});
 
 /* ---------------------------------------------------------------- inbox */
 
 /** How many alerts sit in each inbox tab. */
-export async function countAlertsByStatus(ctx: DomainContext): Promise<Readonly<Record<AlertStatus, number>> & { readonly mine: number }> {
+export const countAlertsByStatus = scoped(async function countAlertsByStatus(ctx: DomainContext): Promise<Readonly<Record<AlertStatus, number>> & { readonly mine: number }> {
   await requirePulse(ctx, 'pulse:read');
   const found = await rows<{ status: AlertStatus; n: number; mine: number }>(
     db,
@@ -77,10 +78,10 @@ export async function countAlertsByStatus(ctx: DomainContext): Promise<Readonly<
     out.mine += row.mine;
   }
   return out;
-}
+});
 
 /** The same change on many alerts. Each one is its own small transaction, so one stale row never blocks the rest. */
-export async function bulkUpdateAlerts(ctx: DomainContext, alertIds: readonly string[], change: AlertChange): Promise<{ updated: AlertDTO[]; failed: number }> {
+export const bulkUpdateAlerts = scoped(async function bulkUpdateAlerts(ctx: DomainContext, alertIds: readonly string[], change: AlertChange): Promise<{ updated: AlertDTO[]; failed: number }> {
   await requirePulse(ctx, change.action === 'assign' || change.action === 'link_task' ? 'alert:manage' : 'production:log');
   const ids = [...new Set(alertIds)].filter(isUuid).slice(0, 500);
   if (ids.length === 0) throw invalid('Pick at least one alert.');
@@ -95,7 +96,7 @@ export async function bulkUpdateAlerts(ctx: DomainContext, alertIds: readonly st
   }
   if (updated.length === 0) throw invalid('None of those alerts could be changed. Refresh the page and try again.');
   return { updated, failed };
-}
+});
 
 /* ---------------------------------------------------------------- preview */
 
@@ -175,7 +176,7 @@ const REPLAYED: readonly string[] = ['job_losing', 'job_at_risk', 'margin_below'
  * turns true (not on every day it stays true), the same way a live alert is one alert while its
  * condition lasts.
  */
-export async function previewAlertRule(ctx: DomainContext, input: RulePreviewInput): Promise<RulePreviewDTO> {
+export const previewAlertRule = scoped(async function previewAlertRule(ctx: DomainContext, input: RulePreviewInput): Promise<RulePreviewDTO> {
   const access = await requirePulse(ctx, 'alert:manage');
   if (!(ALERT_KINDS as readonly string[]).includes(input.kind)) throw invalid('Pick what the rule watches.');
   const settings = await loadSettings(ctx.orgId);
@@ -427,4 +428,4 @@ export async function previewAlertRule(ctx: DomainContext, input: RulePreviewInp
     hits.sort((a, b) => (a.date === b.date ? a.label.localeCompare(b.label) : a.date < b.date ? 1 : -1));
     return { from, to: today, basis: 'replay', total: hits.length, activeToday, hits: hits.slice(0, 60), perDay, note };
   }
-}
+});

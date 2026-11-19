@@ -102,6 +102,7 @@ export interface ConnectedAppsDTO {
   readonly switches: {
     readonly wmsSyncMaterials: boolean;
     readonly wmsSyncBilling: boolean;
+    readonly wmsContractPrices: boolean;
     readonly crmSuggestJobs: boolean;
     readonly projectsTimeImport: boolean;
   };

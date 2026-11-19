@@ -19,6 +19,7 @@ import { monthClosedError, monthStart, rows, uuidArray, type DomainContext } fro
 import { logActivity } from './activity';
 import { recomputeJobs } from './job-stats';
 import { loadSettings, type SettingsRow } from './settings';
+import { scoped } from '@/server/db/scope';
 
 /** What a write moved: jobs, clients with rows that have no job, and (site, day) pairs. */
 export interface Touched {
@@ -44,19 +45,19 @@ export function touchJob(touched: Touched, jobId: string | null | undefined, cli
 }
 
 /** First days of the org's closed months. */
-export async function closedMonths(executor: Executor, orgId: string): Promise<Set<string>> {
+export const closedMonths = scoped(async function closedMonths(executor: Executor, orgId: string): Promise<Set<string>> {
   const found = await rows<{ m: string }>(executor, sql`select to_char(period_month, 'YYYY-MM-DD') as m from pulse.periods where org_id = ${orgId} and status = 'closed'`);
   return new Set(found.map((row) => row.m));
-}
+}, 1);
 
 /** Refuses a write dated in a closed month, in the words of SPEC 4.16. */
-export async function assertOpen(executor: Executor, orgId: string, dates: readonly (string | null | undefined)[]): Promise<void> {
+export const assertOpen = scoped(async function assertOpen(executor: Executor, orgId: string, dates: readonly (string | null | undefined)[]): Promise<void> {
   const months = [...new Set(dates.filter((date): date is string => Boolean(date)).map(monthStart))];
   if (months.length === 0) return;
   const closed = await closedMonths(executor, orgId);
   const hit = months.filter((month) => closed.has(month)).sort()[0];
   if (hit) throw monthClosedError(hit);
-}
+}, 1);
 
 /**
  * SQL: the line aliased `alias` belongs to a live job. A deleted job's lines keep their own
@@ -79,7 +80,7 @@ function openMonth(alias: string, dateColumn: string): SQL {
  * Restamps live production entries in open months that match `where` (written against alias `src`).
  * Fixed price jobs keep their base revenue here: `restampFixedJob` owns it.
  */
-export async function restampProduction(executor: Executor, orgId: string, where: SQL): Promise<number> {
+export const restampProduction = scoped(async function restampProduction(executor: Executor, orgId: string, where: SQL): Promise<number> {
   const result = await executor.execute(sql`
     UPDATE pulse.production_entries p SET
       rate_cents = c.rate_cents, overtime_rate_cents = c.overtime_rate_cents, labor_cost_cents = c.labor,
@@ -108,9 +109,9 @@ export async function restampProduction(executor: Executor, orgId: string, where
     ) c
     WHERE p.id = c.id`);
   return result.rowCount ?? 0;
-}
+}, 1);
 
-export async function restampIndirect(executor: Executor, orgId: string, where: SQL): Promise<number> {
+export const restampIndirect = scoped(async function restampIndirect(executor: Executor, orgId: string, where: SQL): Promise<number> {
   const result = await executor.execute(sql`
     UPDATE pulse.indirect_entries p SET
       rate_cents = c.rate_cents, overtime_rate_cents = c.overtime_rate_cents, cost_cents = c.labor,
@@ -127,9 +128,9 @@ export async function restampIndirect(executor: Executor, orgId: string, where: 
     ) c
     WHERE p.id = c.id`);
   return result.rowCount ?? 0;
-}
+}, 1);
 
-export async function restampVas(executor: Executor, orgId: string, where: SQL): Promise<number> {
+export const restampVas = scoped(async function restampVas(executor: Executor, orgId: string, where: SQL): Promise<number> {
   const result = await executor.execute(sql`
     UPDATE pulse.vas_entries p SET
       rate_cents = c.rate_cents, overtime_rate_cents = c.overtime_rate_cents, labor_cost_cents = c.labor,
@@ -146,10 +147,10 @@ export async function restampVas(executor: Executor, orgId: string, where: SQL):
     ) c
     WHERE p.id = c.id`);
   return result.rowCount ?? 0;
-}
+}, 1);
 
 /** Who buys the parts, then the cost of what we buy (SPEC 4.6). */
-export async function restampUsage(executor: Executor, orgId: string, where: SQL): Promise<number> {
+export const restampUsage = scoped(async function restampUsage(executor: Executor, orgId: string, where: SQL): Promise<number> {
   const result = await executor.execute(sql`
     UPDATE pulse.material_usage p SET
       resolved_supplied_by = c.owner,
@@ -167,7 +168,7 @@ export async function restampUsage(executor: Executor, orgId: string, where: SQL
     ) c
     WHERE p.id = c.id`);
   return result.rowCount ?? 0;
-}
+}, 1);
 
 /**
  * Fixed price jobs earn by progress (SPEC 4.8). Restamps every open month entry of the job so
@@ -175,7 +176,7 @@ export async function restampUsage(executor: Executor, orgId: string, where: SQL
  * closed months are frozen and count as earlier stamps. Then rebuilds the true up of a completed job.
  * Does nothing for other pricing models.
  */
-export async function restampFixedJob(executor: Executor, ctx: DomainContext, jobId: string): Promise<void> {
+export const restampFixedJob = scoped(async function restampFixedJob(executor: Executor, ctx: DomainContext, jobId: string): Promise<void> {
   const [job] = await rows<{ pricing_model: string; status: string; completed_date: string | null; fixed_price_cents: string | null; client_id: string; site_id: string }>(
     executor,
     sql`select pricing_model, status, to_char(completed_date, 'YYYY-MM-DD') as completed_date, fixed_price_cents, client_id, site_id
@@ -226,10 +227,10 @@ export async function restampFixedJob(executor: Executor, ctx: DomainContext, jo
              'system', ${trueUpRef}, NULL
        WHERE NOT EXISTS (SELECT 1 FROM pulse.revenue_entries r WHERE r.org_id = ${ctx.orgId} AND r.source = 'system' AND r.source_ref = ${trueUpRef} AND r.deleted_at IS NULL)`);
   }
-}
+}, 1);
 
 /** Rebuilds `company_days` for one site and a day range from the stream tables (SPEC 4.5, 4.9). */
-export async function refreshCompanyDays(executor: Executor, orgId: string, siteId: string, from: string, to: string): Promise<void> {
+export const refreshCompanyDays = scoped(async function refreshCompanyDays(executor: Executor, orgId: string, siteId: string, from: string, to: string): Promise<void> {
   await executor.execute(sql`DELETE FROM pulse.company_days WHERE org_id = ${orgId} AND site_id = ${siteId} AND work_date BETWEEN ${from}::date AND ${to}::date`);
   await executor.execute(sql`
     WITH direct AS (
@@ -284,7 +285,7 @@ export async function refreshCompanyDays(executor: Executor, orgId: string, site
                 ELSE round(missing_hours * weighted / paid_hours)::bigint END,
            paid_cents, gross, company_cost, overhead, over_logged
       FROM calc`);
-}
+}, 1);
 
 interface PoolMove {
   job_id: string | null;
@@ -379,7 +380,7 @@ async function allocatePool(executor: Executor, orgId: string, siteId: string, s
 }
 
 /** Rebuilds `fact_days` for the given jobs, and for rows with no job of the given clients. */
-export async function refreshFacts(executor: Executor, orgId: string, jobIds: readonly string[], clientIds: readonly string[]): Promise<void> {
+export const refreshFacts = scoped(async function refreshFacts(executor: Executor, orgId: string, jobIds: readonly string[], clientIds: readonly string[]): Promise<void> {
   const insert = (where: SQL) => sql`
     INSERT INTO pulse.fact_days (org_id, work_date, site_id, client_id, job_id, job_type_id, vas_service_id, kind, amount_cents, units_good, units_scrap, hours)
     SELECT f.org_id, f.work_date, f.site_id, f.client_id, f.job_id, max(f.job_type_id::text)::uuid, f.vas_service_id, f.kind,
@@ -397,14 +398,14 @@ export async function refreshFacts(executor: Executor, orgId: string, jobIds: re
     await executor.execute(sql`DELETE FROM pulse.fact_days WHERE org_id = ${orgId} AND job_id IS NULL AND client_id = ANY(${ids})`);
     await executor.execute(insert(sql`f.job_id IS NULL AND f.client_id = ANY(${ids})`));
   }
-}
+}, 1);
 
 /**
  * The tail of every stream write: shared allocation for the touched pools, then `company_days`,
  * `fact_days` and `job_stats` for everything that moved. When a save on one job moves another
  * job's share by $1.00 or more, that other job gets a `shared.moved` activity row.
  */
-export async function finishWrite(executor: Executor, ctx: DomainContext, touched: Touched, options: { settings?: SettingsRow } = {}): Promise<void> {
+export const finishWrite = scoped(async function finishWrite(executor: Executor, ctx: DomainContext, touched: Touched, options: { settings?: SettingsRow } = {}): Promise<void> {
   const settings = options.settings ?? (await loadSettings(ctx.orgId, executor));
   const closed = await closedMonths(executor, ctx.orgId);
   const direct = new Set(touched.jobIds);
@@ -437,7 +438,7 @@ export async function finishWrite(executor: Executor, ctx: DomainContext, touche
     .filter(([jobId, move]) => direct.size > 0 && !direct.has(jobId) && (move.after - move.before >= BigInt(100) || move.before - move.after >= BigInt(100)))
     .map(([jobId, move]) => ({ verb: 'shared.moved', entityType: 'job', entityId: jobId, jobId, before: { sharedCents: move.before }, after: { sharedCents: move.after } }));
   if (notes.length > 0) await logActivity(executor, { ...ctx, actorKind: 'system' }, notes);
-}
+}, 1);
 
 /** Every (site, day) pool of the org that holds live direct or indirect rows in an open month. */
 async function allPoolDays(executor: Executor, orgId: string): Promise<{ site_id: string; work_date: string }[]> {
@@ -456,7 +457,7 @@ async function allPoolDays(executor: Executor, orgId: string): Promise<{ site_id
  * Restamps every open month row of the org and rebuilds every rollup. Used when a setting that
  * feeds the math changes (default rate, shared cost rule, thresholds), by the seed and by tests.
  */
-export async function recalcOrg(executor: Executor, ctx: DomainContext, options: { restamp?: boolean } = {}): Promise<{ jobs: number }> {
+export const recalcOrg = scoped(async function recalcOrg(executor: Executor, ctx: DomainContext, options: { restamp?: boolean } = {}): Promise<{ jobs: number }> {
   const settings = await loadSettings(ctx.orgId, executor);
   if (options.restamp !== false) {
     await restampProduction(executor, ctx.orgId, sql`true`);
@@ -475,4 +476,4 @@ export async function recalcOrg(executor: Executor, ctx: DomainContext, options:
   await executor.execute(sql`DELETE FROM pulse.fact_days WHERE org_id = ${ctx.orgId}`);
   await finishWrite(executor, ctx, touched, { settings });
   return { jobs: jobs.length };
-}
+}, 1);

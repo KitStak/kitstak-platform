@@ -27,7 +27,7 @@ import { deleteAlertRuleAction } from '@/server/actions/alerts';
 import { saveAlertRuleFullAction, type SaveAlertRuleFullActionInput } from '@/server/actions/money-ops';
 import type { RulePreviewDTO } from '@/server/domain/alert-ops';
 import { clockLabel, quietOf, quietSentence, type QuietHours } from './quiet-hours';
-import { RULE_GROUPS, RULE_KINDS, readThreshold, ruleSentence, storedRuleName, tellSentence, thresholdText, tidyThreshold } from './rule-kinds';
+import { RULE_GROUPS, RULE_KINDS, readThreshold, ruleSentence, storedRuleName, tellSentence, thresholdText, tidyThreshold, type RuleFacts } from './rule-kinds';
 
 interface Named {
   readonly id: string;
@@ -134,10 +134,11 @@ function toInput(draft: Draft, stored: string | null): SaveAlertRuleFullActionIn
 }
 
 /** The rule as this reader may see it: the full sentence, or the one with the line left out. */
-const sentenceOf = (rule: AlertRuleDTO): string => ((ALERT_KINDS as readonly string[]).includes(rule.kind) ? ruleSentence(rule.kind, rule.threshold, { moneyHidden: rule.moneyHidden }) : rule.name);
+const sentenceWith = (rule: AlertRuleDTO, facts: RuleFacts): string => ((ALERT_KINDS as readonly string[]).includes(rule.kind) ? ruleSentence(rule.kind, rule.threshold, { moneyHidden: rule.moneyHidden, facts }) : rule.name);
 
-export function RulesView({ initialRules, canManage, options }: { readonly initialRules: readonly AlertRuleDTO[]; readonly canManage: boolean; readonly options: RuleOptions }) {
+export function RulesView({ initialRules, canManage, options, facts = {} }: { readonly initialRules: readonly AlertRuleDTO[]; readonly canManage: boolean; readonly options: RuleOptions; readonly facts?: RuleFacts }) {
   const queryClient = useQueryClient();
+  const sentenceOf = (rule: AlertRuleDTO): string => sentenceWith(rule, facts);
   const rulesQuery = useAlertRules({ initialData: [...initialRules] });
   const rules = rulesQuery.data ?? [];
   const people = usePeople();
@@ -213,11 +214,11 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
                 {quietSentence(quiet)}
               </Badge>
             ) : null}
-            {!rule.enabled ? (
-              <Badge tone="neutral" size="sm">
-                Off
+            <span data-testid="rule-state">
+              <Badge tone={rule.enabled ? 'success' : 'neutral'} size="sm">
+                {rule.enabled ? 'On' : 'Off'}
               </Badge>
-            ) : null}
+            </span>
           </div>
         </div>
         {canManage && known ? (
@@ -235,7 +236,11 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
   return (
     <div className="flex flex-col gap-5" data-testid="rules">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-2xl text-sm text-fg-secondary">A rule is one plain sentence. When it comes true, an alert lands in the inbox and the people you picked get a message.</p>
+        <p className="max-w-2xl text-sm text-fg-secondary" data-testid="rules-intro">
+          {canManage
+            ? 'A rule is one plain sentence. When it comes true, an alert lands in the inbox and the people you picked get a message.'
+            : 'These are the rules that watch the work. When one comes true, an alert lands in the inbox and the people it names get a message. You can read them here. A manager or an admin can change them.'}
+        </p>
         {canManage ? (
           <Button leadingIcon={<Plus aria-hidden />} onClick={() => setDraft(NEW_DRAFT)} data-testid="rule-add">
             New rule
@@ -285,7 +290,9 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
             <h2 id="rules-stock" className="text-base font-semibold text-fg">
               Rules that come with Pulse
             </h2>
-            <p className="mt-0.5 text-sm text-fg-muted">You can change who gets told and turn one off. They cannot be deleted.</p>
+            <p className="mt-0.5 text-sm text-fg-muted" data-testid="rules-stock-note">
+              {canManage ? 'You can change who gets told and turn one off. They cannot be deleted.' : 'Each one shows if it is on or off and who it tells. A manager or an admin can change that.'}
+            </p>
           </header>
           <ul className="divide-y divide-border-subtle" data-testid="rules-stock-list">
             {stock.map(row)}
@@ -298,6 +305,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
           key={draft.id ?? 'new'}
           start={draft}
           options={options}
+          facts={facts}
           people={people.data ?? []}
           onClose={() => setDraft(null)}
           onSaved={async (saved, before) => {
@@ -336,12 +344,14 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
 function RuleBuilder({
   start,
   options,
+  facts,
   people,
   onClose,
   onSaved,
 }: {
   readonly start: Draft;
   readonly options: RuleOptions;
+  readonly facts: RuleFacts;
   readonly people: readonly { readonly id: string; readonly name: string; readonly email: string; readonly image?: string | null }[];
   readonly onClose: () => void;
   readonly onSaved: (saved: AlertRuleDTO, before: Draft | null) => Promise<void>;
@@ -357,7 +367,7 @@ function RuleBuilder({
   const scopeLists = { client: options.clients, jobType: options.jobTypes, site: options.sites } as const;
   const scopeError = info.scoped && draft.scopeKind !== 'all' && !draft.scopeId ? `Pick a ${SCOPE_WORD[draft.scopeKind]}.` : null;
   const quietError = draft.quietOn && draft.quietFrom === draft.quietTo && !draft.weekends ? 'Pick two different times, or tick weekends.' : null;
-  const sentence = ruleSentence(draft.kind, line.stored);
+  const sentence = ruleSentence(draft.kind, line.stored, { facts });
   const scopeName = draft.scopeKind === 'all' ? null : (scopeLists[draft.scopeKind].find((item) => item.id === draft.scopeId)?.name ?? null);
 
   const kindOptions = useMemo(

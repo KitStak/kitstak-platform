@@ -229,7 +229,7 @@ describe.skipIf(!ready)('imports and exports', () => {
     await org.query("insert into pulse.periods (org_id, period_month, status, closed_at) values ($1, '2026-10-01', 'closed', now())", [org.orgId]);
     const checked = await upload(owner, 'costs', ['cost_date,category,amount', '2026-10-15,rent,100.00'].join('\n'));
     const page = await listImportRows(owner, checked.id, { action: 'error' });
-    expect(page.rows[0]?.messages[0]?.text).toBe('October is closed. Ask the owner to reopen it.');
+    expect(page.rows[0]?.messages[0]?.text).toBe('October 2026 is closed. Ask the owner to reopen it.');
     await discardImportBatch(owner, checked.id);
     const history = await listImportBatches(owner, { limit: 100 });
     expect(history.length).toBeGreaterThan(30);

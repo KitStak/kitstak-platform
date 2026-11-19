@@ -8,6 +8,7 @@
 import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { JOB_STATUS_LABELS, type JobStatusValue } from '@/lib/constants';
 import { navFor } from '@/lib/nav';
 import { routes } from '@/lib/routes';
@@ -71,7 +72,7 @@ interface Ranked {
 }
 
 /** Jobs, clients, job types and extra services that match `query`, best first. Up to `limit` hits a kind. */
-export async function searchAll(ctx: DomainContext, query: string, limit = 8): Promise<SearchHitDTO[]> {
+export const searchAll = scoped(async function searchAll(ctx: DomainContext, query: string, limit = 8): Promise<SearchHitDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const words = searchWords(query);
   if (words.length === 0) return [];
@@ -182,4 +183,4 @@ export async function searchAll(ctx: DomainContext, query: string, limit = 8): P
   return ranked
     .sort((a, b) => b.score - a.score || KIND_ORDER[a.hit.type] - KIND_ORDER[b.hit.type] || a.order - b.order)
     .map((entry) => entry.hit);
-}
+});

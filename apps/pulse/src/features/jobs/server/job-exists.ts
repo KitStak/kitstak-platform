@@ -5,11 +5,12 @@
 import 'server-only';
 import { getJobRow, type DomainContext } from '@/server/domain';
 import { isDomainError } from '@/server/errors';
+import { scoped } from '@/server/db/scope';
 
 const RESERVED = new Set(['new', 'by-link', 'deleted']);
 
 /** True when `path` is a job page (`/jobs/<ref>...`) whose job is not in this workspace. */
-export async function jobRouteMissing(ctx: DomainContext, path: string): Promise<boolean> {
+export const jobRouteMissing = scoped(async function jobRouteMissing(ctx: DomainContext, path: string): Promise<boolean> {
   const match = /^\/jobs\/([^/?#]+)/.exec(path);
   if (!match) return false;
   let ref = match[1] ?? '';
@@ -26,4 +27,4 @@ export async function jobRouteMissing(ctx: DomainContext, path: string): Promise
     // Only "not found" is a 404. Anything else (the database is away) lets the page show its own error.
     return isDomainError(error) && error.code === 'NOT_FOUND';
   }
-}
+});

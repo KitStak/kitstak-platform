@@ -70,7 +70,8 @@ test.describe('production', () => {
     const strip = page.getByTestId('other-time');
     const note = `E2E cleanup ${Date.now()}`;
     await strip.getByRole('button', { name: 'Add other time' }).click();
-    await strip.getByLabel('Reason').selectOption('cleanup');
+    await strip.getByLabel('Reason').click();
+    await page.getByRole('option', { name: 'Cleanup' }).click();
     await strip.getByLabel('Labor hours').fill('1.5');
     await strip.getByLabel('Note').fill(note);
     await strip.getByRole('button', { name: 'Add', exact: true }).click();

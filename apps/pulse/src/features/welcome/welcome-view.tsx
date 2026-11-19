@@ -157,12 +157,12 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
     await finish('rate', () => createLaborRateAction({ laborClassId: made.data.id, effectiveFrom: `${(state.site?.today ?? new Date().toISOString().slice(0, 10)).slice(0, 4)}-01-01`, wageCents: Math.round(Number(wage) * 100) }), 'Labor rate set');
   };
 
-  const saveClient = async (): Promise<void> => {
+  const saveClient = async (confirmNew = false): Promise<void> => {
     if (clientName.trim() === '') {
       setErrors({ name: 'Type the client name.' });
       return;
     }
-    await finish('client', () => createClientAction({ name: clientName.trim() }), 'Client added');
+    await finish('client', () => createClientAction({ name: clientName.trim(), confirmNew }), 'Client added');
   };
 
   const saveJob = async (): Promise<void> => {
@@ -291,6 +291,11 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
                 <Button type="submit" loading={busy === 'client'} data-testid="step-client-save">
                   Add the client
                 </Button>
+                {errors.clientLookAlike ? (
+                  <Button type="button" variant="secondary" loading={busy === 'client'} onClick={() => void saveClient(true)} data-testid="step-client-save-new">
+                    Add as a new client
+                  </Button>
+                ) : null}
               </form>
             ) : (
               <p className="text-sm text-fg-muted">Your role cannot add clients. Ask a manager to do this step.</p>

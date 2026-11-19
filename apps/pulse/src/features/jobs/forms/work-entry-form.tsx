@@ -1,35 +1,45 @@
 'use client';
 /**
- * One day of work on a job: the units made that day, then one line for each labor type that
- * worked it (people and hours). Used for the add form at the top of the Work log and for editing
- * a whole day where it sits. Each labor line saves as its own entry, all in one go.
+ * One day of work on a job: the units made that day, then one line for each labor class that
+ * worked it (people, hours each and labor hours, the same three boxes as the Log work grid). Used
+ * to add a day and to edit a whole day. The day is saved in one go through `PUT /api/v1/log/days`.
+ *
+ * A day is never overwritten by accident. When the job already has work on the picked day the
+ * form says so before anything is saved and offers to open that day. The server checks again.
  */
-import { useState } from 'react';
-import { Check, Plus, Trash2, X } from 'lucide-react';
-import { Button, Field, IconButton, Input, Select, toast } from '@/components/ui';
-import { formatPace } from '@/lib/format';
-import { hoursToScaled, scaledToNumber, ZERO } from '@/lib/money';
+import { useMemo, useState } from 'react';
+import { Check, Info, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Button, Field, IconButton, Input, IsoDatePicker, Select, toast } from '@/components/ui';
+import { cn } from '@/components/ui/cn';
+import { applyField, crewQuestion, hoursEachFrom, parseTyped, tidy } from '@/features/log/log-math';
+import { formatHours, formatNumber, formatPace } from '@/lib/format';
 import { unitsPerHour } from '@/lib/profit/pace';
-import type { LaborClassDTO } from '@/lib/types';
-import { deleteProductionEntriesAction, saveProductionBulkAction } from '@/server/actions/log';
-import { readDecimal } from '../new-job-math';
-import { planDaySave, repeatedLaborClass, type LaborLineInput, type WorkDay } from '../work-days';
+import { shortDate } from '@/lib/profit/calendar';
+import type { LaborClassDTO, ProductionEntryDTO } from '@/lib/types';
+import {
+  groupWorkDays,
+  planDayLines,
+  repeatedLaborLines,
+  saveDay,
+  type DaySaveBody,
+  type WorkDay,
+} from '../work-days';
 
-const trim = (value: string | null | undefined): string =>
-  value ? value.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '') : '';
-
-const positive = (value: string | null | undefined): string => (value && Number(value) > 0 ? trim(value) : '');
+/** A taller box on a tablet or a touch screen, where a 32px box is hard to hit. */
+const TOUCH = 'max-lg:h-10 pointer-coarse:h-10';
 
 interface LineState {
   readonly key: number;
   readonly id: string | null;
-  readonly version?: number;
   readonly laborClassId: string;
   readonly people: string;
+  readonly hoursEach: string;
   readonly hours: string;
   readonly setup: string;
   readonly overtime: string;
 }
+
+type LineField = 'people' | 'hoursEach' | 'hours' | 'setup' | 'overtime';
 
 let nextKey = 1;
 const blankLine = (laborClassId: string): LineState => ({
@@ -37,55 +47,94 @@ const blankLine = (laborClassId: string): LineState => ({
   id: null,
   laborClassId,
   people: '',
+  hoursEach: '',
   hours: '',
   setup: '',
   overtime: '',
 });
 
+const fixed = (text: string, places: number): string => (parseTyped(text) ?? 0).toFixed(places);
+
+/** What a saved day looked like, for the Undo of the save. */
+export interface DaySaved {
+  readonly mode: 'create' | 'edit';
+  /** The day before the save (edit only). */
+  readonly before: WorkDay | null;
+  /** The day as it is now. */
+  readonly entries: readonly ProductionEntryDTO[];
+  readonly workDate: string;
+}
+
 export function WorkEntryForm({
   jobId,
   unit,
   day,
+  days,
   today,
+  shiftHours,
   laborClasses,
   defaultLaborClassId,
   onSaved,
   onCancel,
+  onOpenDay,
+  onStale,
 }: {
   readonly jobId: string;
   readonly unit: string;
+  /** The day being edited. Leave it out to add a new day. */
   readonly day?: WorkDay | null;
+  /** Every day that already has work on this job, so the form can say so before it saves. */
+  readonly days: readonly WorkDay[];
   readonly today: string;
+  /** Hours in a full shift, for the "is that right" check on labor hours. */
+  readonly shiftHours: string;
   readonly laborClasses: readonly LaborClassDTO[];
   readonly defaultLaborClassId: string | null;
-  readonly onSaved: (created: number) => void | Promise<void>;
+  readonly onSaved: (saved: DaySaved) => void | Promise<void>;
   readonly onCancel?: () => void;
+  /** Opens a day that already has work, to edit it. */
+  readonly onOpenDay: (workDate: string) => void;
+  /** Someone else changed the day while it was open: load it again. */
+  readonly onStale?: () => void | Promise<void>;
 }) {
   const firstClass = defaultLaborClassId ?? laborClasses[0]?.id ?? '';
   const editing = Boolean(day);
-  const [date, setDate] = useState(day?.workDate ?? today);
-  const [good, setGood] = useState(positive(day?.unitsGood));
-  const [scrap, setScrap] = useState(positive(day?.unitsScrap));
+  const [date, setDate] = useState<string | null>(day?.workDate ?? today);
+  const [good, setGood] = useState(tidy(day?.unitsGood));
+  const [scrap, setScrap] = useState(tidy(day?.unitsScrap));
   const [note, setNote] = useState(day?.notes[0] ?? '');
   const [lines, setLines] = useState<readonly LineState[]>(() =>
     day
       ? day.rows.map((row) => ({
           key: nextKey++,
           id: row.id,
-          version: row.version,
           laborClassId: row.laborClassId ?? '',
-          people: trim(row.headcount),
-          hours: positive(row.hours),
-          setup: positive(row.setupHours),
-          overtime: positive(row.overtimeHours),
+          people: tidy(row.headcount),
+          hoursEach: hoursEachFrom(row.hours, row.headcount),
+          hours: tidy(row.hours),
+          setup: tidy(row.setupHours),
+          overtime: tidy(row.overtimeHours),
         }))
       : [blankLine(firstClass)],
   );
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [saving, setSaving] = useState(false);
+  /** A day the server said already has work, before the list on screen knew about it. */
+  const [serverDay, setServerDay] = useState<WorkDay | null>(null);
 
-  const updateLine = (key: number, change: Partial<LineState>) =>
-    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...change } : line)));
+  const updateLine = (key: number, field: LineField, text: string) =>
+    setLines((current) =>
+      current.map((line) => {
+        if (line.key !== key) return line;
+        // People times hours each fills labor hours, the same rule as the Log work grid.
+        const next = applyField(
+          { ...line, unitsGood: '', unitsScrap: '', unitsRework: '', note: '' },
+          field,
+          text,
+        );
+        return { ...line, people: next.people, hoursEach: next.hoursEach, hours: next.hours, setup: next.setup, overtime: next.overtime };
+      }),
+    );
 
   const addLine = () =>
     setLines((current) => {
@@ -96,84 +145,125 @@ export function WorkEntryForm({
 
   const removeLine = (key: number) => setLines((current) => current.filter((line) => line.key !== key));
 
-  const goodText = readDecimal(good, 3);
+  // The day that already holds work on the picked date. Editing a day does not clash with itself.
+  const clash = useMemo(() => {
+    if (!date || (day && date === day.workDate)) return null;
+    return days.find((item) => item.workDate === date) ?? (serverDay?.workDate === date ? serverDay : null);
+  }, [date, day, days, serverDay]);
+
+  const goodNumber = parseTyped(good);
   // Pace for the day: good units over the labor hours that are not setup, across every line.
-  const paceScaled = lines.reduce(
-    (total, line) =>
-      total + hoursToScaled(readDecimal(line.hours, 2) ?? '0') - hoursToScaled(readDecimal(line.setup, 2) ?? '0'),
-    ZERO,
+  const paceHours = lines.reduce(
+    (total, line) => total + (parseTyped(line.hours) ?? 0) - (parseTyped(line.setup) ?? 0),
+    0,
   );
-  const paceHours = scaledToNumber(paceScaled, 2);
-  const pace = goodText && paceHours > 0 ? unitsPerHour(goodText, paceHours) : null;
+  const setupTotal = lines.reduce((total, line) => total + (parseTyped(line.setup) ?? 0), 0);
+  const pace = goodNumber && goodNumber > 0 && paceHours > 0 ? unitsPerHour(String(goodNumber), paceHours.toFixed(2)) : null;
+  const questions = lines
+    .map((line) =>
+      crewQuestion(
+        { ...line, unitsGood: '', unitsScrap: '', unitsRework: '', note: '' },
+        shiftHours,
+      ),
+    )
+    .filter((question): question is string => question !== null);
 
   const check = (): Record<string, string> => {
     const next: Record<string, string> = {};
     if (!date) next.workDate = 'Pick the day.';
-    if (good.trim() && !goodText) next.unitsGood = 'Type a number, like 1200.';
-    if (scrap.trim() && !readDecimal(scrap, 3)) next.unitsScrap = 'Type a number, like 15.';
+    else if (date > today) next.workDate = 'Work cannot be dated after today. Pick today or an earlier day.';
+    if (good.trim() && goodNumber === null) next.unitsGood = 'Type a number, like 1200.';
+    if (scrap.trim() && parseTyped(scrap) === null) next.unitsScrap = 'Type a number, like 15.';
     lines.forEach((line, index) => {
       const at = (field: string) => `${field}.${index}`;
-      const hoursText = readDecimal(line.hours, 2);
-      const setupText = readDecimal(line.setup, 2);
-      if (line.people.trim() && !readDecimal(line.people, 2)) next[at('headcount')] = 'Type how many people, like 4.';
-      if (line.hours.trim() && !hoursText) next[at('hours')] = 'Type hours, like 32.';
-      if (line.setup.trim() && !setupText) next[at('setupHours')] = 'Type hours, like 1.';
-      if (line.overtime.trim() && !readDecimal(line.overtime, 2)) next[at('overtimeHours')] = 'Type hours, like 2.';
-      if (setupText && Number(setupText) > Number(hoursText ?? 0))
+      const people = parseTyped(line.people);
+      const each = parseTyped(line.hoursEach);
+      const hours = parseTyped(line.hours);
+      const setup = parseTyped(line.setup);
+      const overtime = parseTyped(line.overtime);
+      if (people === null) next[at('headcount')] = 'Type how many people, like 4.';
+      if (each === null) next[at('hoursEach')] = 'Type the hours each person worked, like 8.';
+      else if (each > 24) next[at('hoursEach')] = 'Hours each cannot be more than 24.';
+      if (hours === null) next[at('hours')] = 'Type labor hours, like 32.';
+      if (setup === null) next[at('setupHours')] = 'Type setup hours, like 1.';
+      if (overtime === null) next[at('overtimeHours')] = 'Type overtime hours, like 2.';
+      if (hours !== null && setup !== null && setup > hours)
         next[at('setupHours')] = 'Setup hours are part of the labor hours, so they cannot be more.';
-      if (index > 0 && !line.hours.trim()) next[at('hours')] = 'Type the hours for each labor type you added.';
+      if (hours !== null && overtime !== null && overtime > hours)
+        next[at('overtimeHours')] = 'Overtime hours are part of the labor hours, so they cannot be more.';
+      // Every labor class on the day needs its hours. One line may stay empty when only units are known.
+      if (hours === 0 && (lines.length > 1 || (people ?? 0) > 0))
+        next[at('hours')] =
+          lines.length > 1 ? 'Type the hours for each labor class, or take the empty line off.' : 'Add the hours each.';
+      if ((hours ?? 0) > 0 && people === 0) next[at('headcount')] = 'Add people: how many worked these hours.';
     });
-    if (lines.length === 0) next.lines = 'Add at least one labor type.';
-    if (!good.trim() && !lines.some((line) => line.hours.trim()))
-      next.unitsGood = 'Type the units made, the hours worked, or both.';
-    if (repeatedLaborClass(lines.map((line) => ({ laborClassId: line.laborClassId || null }))) !== null)
-      next.lines = 'Each labor type can only be on the day once. Put its people and hours on one line.';
+    if (lines.length === 0) next.lines = 'Add at least one labor class.';
+    if (!(goodNumber && goodNumber > 0) && !lines.some((line) => (parseTyped(line.hours) ?? 0) > 0))
+      next.unitsGood ??= 'Type the units made, the hours worked, or both.';
+    for (const index of repeatedLaborLines(lines.map((line) => ({ laborClassId: line.laborClassId || null }))))
+      next[`laborClassId.${index}`] = 'Each labor class can only be on the day once. Put its people and hours on one line.';
     return next;
   };
 
   const save = async () => {
+    if (clash) return;
     const next = check();
     setErrors(next);
-    if (Object.keys(next).length > 0) return;
-    const parsed: LaborLineInput[] = lines.map((line) => ({
-      id: line.id,
-      version: line.version,
-      laborClassId: line.laborClassId || null,
-      headcount: readDecimal(line.people, 2),
-      hours: readDecimal(line.hours, 2) ?? '0',
-      setupHours: readDecimal(line.setup, 2) ?? '0',
-      overtimeHours: readDecimal(line.overtime, 2) ?? '0',
-    }));
-    const plan = planDaySave({
+    if (Object.keys(next).length > 0 || !date) return;
+    const body: DaySaveBody = {
       jobId,
       workDate: date,
-      unitsGood: goodText ?? '0',
-      unitsScrap: readDecimal(scrap, 3) ?? '0',
-      note: note.trim() || null,
-      lines: parsed,
-      existingIds: day?.rows.map((row) => row.id) ?? [],
-    });
+      mode: day ? 'edit' : 'create',
+      ...(day ? { fromDate: day.workDate, read: day.rows.map((row) => ({ id: row.id, version: row.version })) } : {}),
+      lines: planDayLines({
+        unitsGood: fixed(good, 3),
+        unitsScrap: fixed(scrap, 3),
+        unitsRework: day ? day.rows.reduce((total, row) => total + Number(row.unitsRework), 0).toFixed(3) : '0',
+        note: note.trim() || null,
+        lines: lines.map((line) => ({
+          id: line.id,
+          laborClassId: line.laborClassId || null,
+          headcount: (parseTyped(line.people) ?? 0) > 0 ? fixed(line.people, 2) : null,
+          hours: fixed(line.hours, 2),
+          setupHours: fixed(line.setup, 2),
+          overtimeHours: fixed(line.overtime, 2),
+        })),
+      }),
+    };
     setSaving(true);
     try {
-      const result = await saveProductionBulkAction({ entries: plan.entries });
+      const result = await saveDay(body);
       if (!result.ok) {
-        setErrors(result.error.fields ?? {});
-        toast.error("Couldn't save the day", result.error.message);
+        if (result.reason === 'day_exists') {
+          // The list on screen did not have this day yet. Show it, and let the person open it.
+          setServerDay(groupWorkDays(result.fresh)[0] ?? null);
+          return;
+        }
+        if (result.reason === 'stale') {
+          toast.error('Someone else changed this day', 'Here is the day as it is now. Check it and save again.');
+          await onStale?.();
+          return;
+        }
+        // The server names lines as entries.N.field: map them onto the boxes of this form.
+        setErrors(
+          Object.fromEntries(
+            Object.entries(result.fields).map(([key, value]) => {
+              const match = /^(?:entries|lines)\.(\d+)\.(\w+)$/.exec(key);
+              return [match ? `${match[2]}.${match[1]}` : key, value];
+            }),
+          ),
+        );
+        toast.error("Couldn't save the day", result.message);
         return;
-      }
-      if (plan.removeIds.length > 0) {
-        const removed = await deleteProductionEntriesAction({ ids: plan.removeIds });
-        if (!removed.ok) toast.error("Couldn't remove a labor type", removed.error.message);
       }
       if (!editing) {
         setGood('');
         setScrap('');
         setNote('');
         setLines([blankLine(firstClass)]);
+        setErrors({});
       }
-      await onSaved(result.data.created);
-    } catch {
-      toast.error("Couldn't save the day", 'Check your connection and try again.');
+      await onSaved({ mode: day ? 'edit' : 'create', before: day ?? null, entries: result.entries, workDate: date });
     } finally {
       setSaving(false);
     }
@@ -181,6 +271,14 @@ export function WorkEntryForm({
 
   const firstError = Object.values(errors).find(Boolean);
   const options = laborClasses.map((item) => ({ value: item.id, label: item.name }));
+  const classNames = new Map(laborClasses.map((item) => [item.id, item.name]));
+  const clashWords = clash
+    ? [
+        `${formatNumber(clash.unitsGood, { maxDigits: 0 })} good ${unit}`,
+        clash.hoursConfirmed ? `${formatHours(clash.hours)} labor hours` : 'no hours yet',
+        [...new Set(clash.laborClassIds.map((id) => (id ? (classNames.get(id) ?? 'A labor class') : 'No labor class')))].join(', '),
+      ].join(', ')
+    : '';
 
   return (
     <form
@@ -193,16 +291,22 @@ export function WorkEntryForm({
         void save();
       }}
     >
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-[150px_repeat(2,minmax(96px,140px))]">
-        <Field label="Day">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-[190px_repeat(2,minmax(96px,140px))]">
+        <Field label="Day" className="col-span-2 sm:col-span-1">
           {({ inputId }) => (
-            <Input
+            <IsoDatePicker
               id={inputId}
-              type="date"
               value={date}
               max={today}
+              clearable={false}
+              displayFormat="EEE, MMM d, yyyy"
               invalid={Boolean(errors.workDate)}
-              onChange={(event) => setDate(event.target.value)}
+              aria-describedby={clash ? 'work-day-exists' : undefined}
+              triggerClassName={TOUCH}
+              onChange={(value) => {
+                setDate(value);
+                setErrors((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== 'workDate')));
+              }}
               data-testid="work-date"
             />
           )}
@@ -215,7 +319,7 @@ export function WorkEntryForm({
               invalid={Boolean(errors.unitsGood)}
               onChange={(event) => setGood(event.target.value)}
               inputMode="decimal"
-              placeholder="0"
+              containerClassName={TOUCH}
               data-testid="work-good"
             />
           )}
@@ -228,95 +332,107 @@ export function WorkEntryForm({
               invalid={Boolean(errors.unitsScrap)}
               onChange={(event) => setScrap(event.target.value)}
               inputMode="decimal"
-              placeholder="0"
+              containerClassName={TOUCH}
               data-testid="work-scrap"
             />
           )}
         </Field>
       </div>
 
+      {clash ? (
+        <div
+          id="work-day-exists"
+          role="status"
+          data-testid="work-day-exists"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border-default bg-sunken px-3 py-2.5"
+        >
+          <Info aria-hidden className="size-4 shrink-0 text-icon" />
+          <p className="min-w-0 flex-1 basis-64 text-sm text-fg">
+            <span className="font-medium">{shortDate(clash.workDate)} already has work on this job:</span>{' '}
+            <span className="tabular-nums">{clashWords}.</span>{' '}
+            {editing
+              ? 'Pick another day, or open that day to change it.'
+              : 'A day is saved once, so nothing here is saved over it. Open that day to change its numbers or add a labor class.'}
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className={TOUCH}
+            leadingIcon={<Pencil aria-hidden />}
+            onClick={() => onOpenDay(clash.workDate)}
+            data-testid="work-open-existing"
+          >
+            Edit {shortDate(clash.workDate)}
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-2" data-testid="work-lines">
         {lines.map((line, index) => {
-          const err = (field: string) => Boolean(errors[`${field}.${index}`]);
-          const id = (name: string) => (index === 0 ? `work-${name}` : `work-${name}-${index}`);
+          const error = (field: string) => errors[`${field}.${index}`];
+          const testId = (name: string) => (index === 0 ? `work-${name}` : `work-${name}-${index}`);
+          const box = (field: LineField, label: string, errorKey: string, name: string) => (
+            <Field label={label}>
+              {({ inputId }) => (
+                <Input
+                  id={inputId}
+                  aria-label={`${label}, line ${index + 1}`}
+                  value={line[field]}
+                  invalid={Boolean(error(errorKey))}
+                  onChange={(event) => updateLine(line.key, field, event.target.value)}
+                  inputMode="decimal"
+                  containerClassName={TOUCH}
+                  data-testid={testId(name)}
+                />
+              )}
+            </Field>
+          );
           return (
             <div
               key={line.key}
-              className="grid grid-cols-2 items-end gap-2 sm:grid-cols-4 lg:grid-cols-[minmax(160px,1fr)_repeat(4,minmax(76px,110px))_36px]"
+              role="group"
+              aria-label={`Labor class line ${index + 1}`}
+              className={cn(
+                'grid grid-cols-2 items-end gap-2 rounded-lg border border-border-subtle bg-panel p-2.5',
+                'sm:grid-cols-3 md:grid-cols-[minmax(130px,1.5fr)_repeat(5,minmax(0,1fr))_40px]',
+              )}
               data-testid={`work-line-${index}`}
             >
-              <Field label="Labor type">
+              <Field label="Labor class" className="col-span-2 sm:col-span-3 md:col-span-1">
                 {({ inputId }) => (
                   <Select
                     id={inputId}
-                    aria-label={`Labor type, line ${index + 1}`}
+                    aria-label={`Labor class, line ${index + 1}`}
                     value={line.laborClassId || undefined}
-                    placeholder="Labor type"
-                    onValueChange={(value) => updateLine(line.key, { laborClassId: value })}
+                    placeholder="Pick one"
+                    invalid={Boolean(error('laborClassId'))}
+                    className={TOUCH}
+                    onValueChange={(value) =>
+                      setLines((current) =>
+                        current.map((item) => (item.key === line.key ? { ...item, laborClassId: value } : item)),
+                      )
+                    }
                     options={options}
                   />
                 )}
               </Field>
-              <Field label="People">
-                {({ inputId }) => (
-                  <Input
-                    id={inputId}
-                    value={line.people}
-                    invalid={err('headcount')}
-                    onChange={(event) => updateLine(line.key, { people: event.target.value })}
-                    inputMode="decimal"
-                    placeholder="4"
-                    data-testid={id('people')}
-                  />
-                )}
-              </Field>
-              <Field label="Labor hours">
-                {({ inputId }) => (
-                  <Input
-                    id={inputId}
-                    value={line.hours}
-                    invalid={err('hours')}
-                    onChange={(event) => updateLine(line.key, { hours: event.target.value })}
-                    inputMode="decimal"
-                    placeholder="32"
-                    data-testid={id('hours')}
-                  />
-                )}
-              </Field>
-              <Field label="Setup hours">
-                {({ inputId }) => (
-                  <Input
-                    id={inputId}
-                    value={line.setup}
-                    invalid={err('setupHours')}
-                    onChange={(event) => updateLine(line.key, { setup: event.target.value })}
-                    inputMode="decimal"
-                    placeholder="0"
-                  />
-                )}
-              </Field>
-              <Field label="Overtime">
-                {({ inputId }) => (
-                  <Input
-                    id={inputId}
-                    value={line.overtime}
-                    invalid={err('overtimeHours')}
-                    onChange={(event) => updateLine(line.key, { overtime: event.target.value })}
-                    inputMode="decimal"
-                    placeholder="0"
-                  />
-                )}
-              </Field>
+              {box('people', 'People', 'headcount', 'people')}
+              {box('hoursEach', 'Hours each', 'hoursEach', 'hours-each')}
+              {box('hours', 'Labor hours', 'hours', 'hours')}
+              {box('setup', 'Setup hours', 'setupHours', 'setup')}
+              {box('overtime', 'Overtime', 'overtimeHours', 'overtime')}
               {lines.length > 1 ? (
                 <IconButton
-                  label={`Remove labor type, line ${index + 1}`}
+                  label={`Remove labor class, line ${index + 1}`}
                   icon={<Trash2 aria-hidden />}
-                  size="sm"
+                  size="lg"
+                  className="justify-self-end"
                   onClick={() => removeLine(line.key)}
                   data-testid={`work-line-remove-${index}`}
                 />
               ) : (
-                <span aria-hidden />
+                <span aria-hidden className="hidden md:block" />
               )}
             </div>
           );
@@ -326,11 +442,12 @@ export function WorkEntryForm({
             type="button"
             variant="ghost"
             size="sm"
+            className={TOUCH}
             leadingIcon={<Plus aria-hidden />}
             onClick={addLine}
             data-testid="work-add-line"
           >
-            Add labor type
+            Add a labor class
           </Button>
         </div>
       </div>
@@ -342,31 +459,47 @@ export function WorkEntryForm({
           onChange={(event) => setNote(event.target.value)}
           maxLength={1000}
           placeholder="Note, like short two people after lunch"
-          containerClassName="min-w-[200px] flex-1"
+          containerClassName={cn('min-w-[200px] flex-1', TOUCH)}
         />
-        <Button type="submit" loading={saving} leadingIcon={<Check aria-hidden />} data-testid="work-save">
-          {editing ? 'Save' : 'Add the day'}
+        <Button
+          type="submit"
+          loading={saving}
+          disabled={Boolean(clash)}
+          className={TOUCH}
+          leadingIcon={<Check aria-hidden />}
+          data-testid="work-save"
+        >
+          {editing ? 'Save the day' : 'Add the day'}
         </Button>
         {onCancel ? (
-          <Button type="button" variant="ghost" leadingIcon={<X aria-hidden />} onClick={onCancel}>
+          <Button type="button" variant="ghost" className={TOUCH} leadingIcon={<X aria-hidden />} onClick={onCancel}>
             Cancel
           </Button>
         ) : null}
       </div>
-      <p className="text-xs text-fg-muted" aria-live="polite">
+      <div className="flex flex-col gap-1 text-xs text-fg-muted" aria-live="polite">
         {firstError ? (
-          <span role="alert" className="font-medium text-danger-text">
+          <p role="alert" className="font-medium text-danger-text" data-testid="work-error">
             {firstError}
-          </span>
-        ) : pace !== null ? (
-          <>
-            That is <span className="font-medium text-fg tabular-nums">{formatPace(pace)}</span> {unit} per
-            person per hour for the day. Labor hours are people times hours each: 4 people for 8 hours is 32.
-          </>
+          </p>
+        ) : null}
+        {questions.map((question) => (
+          <p key={question} className="font-medium text-[var(--label-yellow-text)]" data-testid="work-crew-question">
+            {question}
+          </p>
+        ))}
+        {firstError ? null : pace !== null ? (
+          <p>
+            That is <span className="font-medium text-fg tabular-nums">{formatPace(pace)}</span> {unit} per person
+            per hour for the day{setupTotal > 0 ? ', with setup hours left out' : ''}.
+          </p>
         ) : (
-          'Add a line for each labor type that worked the day. Labor hours are people times hours each: 4 people for 8 hours is 32.'
+          <p>
+            Add a line for each labor class that worked the day. Type people and hours each, and labor hours fill in.
+            Type over labor hours when people worked different hours.
+          </p>
         )}
-      </p>
+      </div>
     </form>
   );
 }

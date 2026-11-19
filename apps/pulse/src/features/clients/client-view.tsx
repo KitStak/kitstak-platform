@@ -389,7 +389,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
               {client.paymentTermsDays !== null ? (
                 <div className="flex items-start justify-between gap-3">
                   <dt className="text-fg-secondary">Payment terms</dt>
-                  <dd className="text-fg">{client.paymentTermsDays} days</dd>
+                  <dd className="text-fg">{client.paymentTermsDays} {client.paymentTermsDays === 1 ? 'day' : 'days'}</dd>
                 </div>
               ) : null}
               {client.contactName || client.contactEmail || client.phone ? (

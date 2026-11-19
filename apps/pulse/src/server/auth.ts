@@ -11,7 +11,7 @@ import 'server-only';
 import { createAuth, ipAddressFromTrustProxy, type KitstakAuth } from '@kitstak/auth';
 import * as schema from '@kitstak/db/schema';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
-import { db } from '@/server/db';
+import { systemDb } from '@/server/db/system';
 import { env, isProduction, trustedOrigins } from '@/server/env';
 
 const KITSTAK_METADATA_KEY = 'kitstak';
@@ -80,7 +80,8 @@ const kitstakOrgMetadataHooks = {
 function buildAuth(): KitstakAuth {
   const ipAddress = ipAddressFromTrustProxy(env.TRUST_PROXY);
   return createAuth({
-    db,
+    // Better auth keeps its own tables in core and runs before a workspace is known.
+    db: systemDb,
     schema,
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,

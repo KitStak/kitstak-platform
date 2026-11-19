@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarCheck2, CircleAlert, CircleCheck, History, Lock, LockOpen, TriangleAlert } from 'lucide-react';
-import { Badge, Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Field, Skeleton, Tabs, TabsList, TabsTrigger, Textarea, toast } from '@/components/ui';
+import { Badge, Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Field, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { formatMoment, useHydrated } from '@/components/pulse/local-time';
@@ -27,7 +27,7 @@ import { qk } from '@/lib/query-keys';
 import { routes } from '@/lib/routes';
 import { closePeriodAction, reopenPeriodAction } from '@/server/actions/planning';
 import type { CloseBoardDTO, CloseDetailDTO, CloseEventDTO, CloseItemDTO, CloseMonthDTO } from '@/server/domain/period-ops';
-import { bridgeSteps, closableFrom } from './close-model';
+import { bridgeSteps, closableFrom, monthStatus } from './close-model';
 
 const keys = {
   board: () => ['periods', 'board'] as const,
@@ -155,7 +155,7 @@ export function CloseView({
                   >
                     <span className="flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold text-fg">{item.label}</span>
-                      <MonthBadge month={item} />
+                      <MonthBadge month={item} toFix={item.periodMonth === month && detail ? detail.toFix : item.toFix} />
                     </span>
                     <span className="text-xs text-fg-muted tabular-nums">
                       {board.moneyHidden ? (item.status === 'closed' ? `Closed ${formatMoment(item.closedAt, 'day', local)}` : 'Open') : item.companyProfitCents === null ? 'No numbers yet' : `Company profit ${formatMoneyWhole(item.companyProfitCents)} · ${formatPercentBp(item.companyMarginBp, { empty: 'no margin' })}`}
@@ -286,12 +286,13 @@ function MonthEntries({ month, today, moneyHidden }: { readonly month: CloseMont
   const to = endOfMonth(month.periodMonth);
   const day = today <= to && today >= from ? today : to;
   return (
-    <section id="company-costs" aria-labelledby="close-entries" className="flex scroll-mt-4 flex-col gap-3" data-testid="close-entries">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id="close-entries" className="text-base font-semibold text-fg">
-          Entries dated in {month.label}
-        </h3>
-        <Tabs value={tab} onValueChange={(value) => setTab(value as EntryTab)}>
+    <section id="company-costs" aria-labelledby="close-entries" className="scroll-mt-4" data-testid="close-entries">
+      {/* The tab panels live inside the same Tabs, so every tab points at a panel that is on the page. */}
+      <Tabs value={tab} onValueChange={(value) => setTab(value as EntryTab)} className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 id="close-entries" className="text-base font-semibold text-fg">
+            Entries dated in {month.label}
+          </h3>
           <TabsList variant="pill" aria-label="Kind of entry" className="max-w-full overflow-x-auto">
             {tabs.map((item) => (
               <TabsTrigger key={item.id} value={item.id} variant="pill" className="shrink-0 whitespace-nowrap" data-testid={`close-entries-${item.id}`}>
@@ -299,27 +300,31 @@ function MonthEntries({ month, today, moneyHidden }: { readonly month: CloseMont
               </TabsTrigger>
             ))}
           </TabsList>
-        </Tabs>
-      </div>
-      {month.status === 'closed' ? <p className="text-sm text-fg-secondary">{month.label} is closed, so these rows are locked. Reopen the month to change one.</p> : null}
-      {tab === 'company' ? <CostLedger scope="company" today={day} from={from} to={to} title="Company costs" /> : null}
-      {tab === 'costs' ? <CostLedger scope="all" today={day} from={from} to={to} title="Other costs, every job and client" /> : null}
-      {tab === 'parts' ? <MaterialLedger today={day} from={from} to={to} /> : null}
-      {tab === 'money' ? <RevenueLedger today={day} from={from} to={to} /> : null}
-      {tab === 'services' ? <ServiceLedger today={day} from={from} to={to} /> : null}
+        </div>
+        {month.status === 'closed' ? <p className="text-sm text-fg-secondary">{month.label} is closed, so these rows are locked. Reopen the month to change one.</p> : null}
+        {tabs.map((item) => (
+          <TabsContent key={item.id} value={item.id} tabIndex={-1} className="focus-visible:outline-none">
+            {item.id === 'company' ? <CostLedger scope="company" today={day} from={from} to={to} title="Company costs" /> : null}
+            {item.id === 'costs' ? <CostLedger scope="all" today={day} from={from} to={to} title="Other costs, every job and client" /> : null}
+            {item.id === 'parts' ? <MaterialLedger today={day} from={from} to={to} /> : null}
+            {item.id === 'money' ? <RevenueLedger today={day} from={from} to={to} /> : null}
+            {item.id === 'services' ? <ServiceLedger today={day} from={from} to={to} /> : null}
+          </TabsContent>
+        ))}
+      </Tabs>
     </section>
   );
 }
 
-function MonthBadge({ month }: { readonly month: CloseMonthDTO }) {
-  if (month.status === 'closed')
-    return (
-      <Badge tone="neutral" icon={<Lock aria-hidden />}>
-        Closed
+function MonthBadge({ month, toFix }: { readonly month: CloseMonthDTO; readonly toFix: number | null }) {
+  const status = monthStatus(month, toFix);
+  return (
+    <span className="inline-flex shrink-0" data-testid="close-month-status" data-status={status.key}>
+      <Badge tone={status.tone} icon={status.key === 'closed' ? <Lock aria-hidden /> : undefined}>
+        {status.label}
       </Badge>
-    );
-  if (month.inProgress) return <Badge tone="primary">In progress</Badge>;
-  return <Badge tone="warning">Ready to close</Badge>;
+    </span>
+  );
 }
 
 function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly month: CloseMonthDTO; readonly detail: CloseDetailDTO; readonly board: CloseBoardDTO; readonly onClose: () => void; readonly onReopen: () => void }) {
@@ -336,7 +341,7 @@ function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly mon
         <div className="min-w-0">
           <h2 id="close-month-title" className="flex items-center gap-2 text-lg font-semibold tracking-[-0.01em] text-fg">
             {month.label}
-            <MonthBadge month={month} />
+            <MonthBadge month={month} toFix={detail.toFix} />
           </h2>
           <p className="mt-1 text-sm text-fg-secondary" data-testid="close-status-line">
             {closed
@@ -345,7 +350,7 @@ function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly mon
                 ? `${month.label} is not over yet. You can close it from ${closableFrom(month.periodMonth)}.`
                 : detail.ready
                   ? 'The checklist is clear. Close the month to lock its numbers.'
-                  : `${detail.toFix} ${detail.toFix === 1 ? 'step needs' : 'steps need'} fixing before these numbers can be trusted.`}
+                  : `${detail.toFix} ${detail.toFix === 1 ? 'step needs' : 'steps need'} fixing before these numbers can be trusted. You can still close the month, and the saved numbers will carry the gap.`}
           </p>
           {!closed && month.reopenedAt ? (
             <p className="mt-1 text-sm text-fg-secondary">
@@ -364,8 +369,8 @@ function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly mon
               <p className="max-w-[220px] text-right text-xs text-fg-muted">Only the owner of the workspace can reopen a month.</p>
             )
           ) : board.canClose ? (
-            <Button leadingIcon={<Lock aria-hidden />} onClick={onClose} disabled={month.inProgress} data-testid="close-button">
-              Close the month
+            <Button variant={!month.inProgress && !detail.ready ? 'secondary' : 'primary'} leadingIcon={<Lock aria-hidden />} onClick={onClose} disabled={month.inProgress} data-testid="close-button">
+              {!month.inProgress && !detail.ready ? 'Close it anyway' : 'Close the month'}
             </Button>
           ) : (
             <p className="max-w-[220px] text-right text-xs text-fg-muted">Only an admin or owner can close a month.</p>
@@ -375,12 +380,12 @@ function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly mon
 
       {/* Job profit on the left, company profit on the right, and the costs no job carried in between. */}
       <div className="mt-4 grid gap-px overflow-hidden rounded-b-xl border-t border-border-subtle bg-[color:var(--border-subtle)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)]" data-testid="close-numbers">
-        <dl className="flex flex-col gap-3 bg-panel px-4 py-3" data-testid="close-job-side">
-          <div className="grid grid-cols-2 gap-3">
-            <Figure label="Revenue" value={money(detail.revenueCents, hidden)} />
-            <Figure label="Job cost" value={money(detail.costCents, hidden)} testId="close-job-cost" />
-          </div>
+        {/* Each figure is one group of the list: a dl may only hold groups of dt and dd, one level deep. */}
+        <dl className="grid grid-cols-2 content-start gap-3 bg-panel px-4 py-3" data-testid="close-job-side">
+          <Figure label="Revenue" value={money(detail.revenueCents, hidden)} />
+          <Figure label="Job cost" value={money(detail.costCents, hidden)} testId="close-job-cost" />
           <Figure
+            className="col-span-2"
             label="Job profit"
             value={money(detail.profitCents, hidden)}
             sub={<>Job margin <span className="font-medium text-fg tabular-nums" data-testid="close-job-margin">{percent(detail.marginBp)}</span></>}
@@ -470,9 +475,9 @@ function MonthHeader({ month, detail, board, onClose, onReopen }: { readonly mon
 }
 
 /** One labeled number of the month header. */
-function Figure({ label, value, sub, how, strong, tone, testId }: { readonly label: string; readonly value: string; readonly sub?: ReactNode; readonly how?: ReactNode; readonly strong?: boolean; readonly tone?: 'bad'; readonly testId?: string }) {
+function Figure({ label, value, sub, how, strong, tone, testId, className }: { readonly label: string; readonly value: string; readonly sub?: ReactNode; readonly how?: ReactNode; readonly strong?: boolean; readonly tone?: 'bad'; readonly testId?: string; readonly className?: string }) {
   return (
-    <div className="min-w-0">
+    <div className={cn('min-w-0', className)}>
       <dt className="flex h-6 items-center gap-1 text-xs text-fg-muted">
         {label}
         {how}

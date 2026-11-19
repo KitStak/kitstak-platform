@@ -11,6 +11,7 @@
  * The ledgers stay thin: each one names its columns, how a cell edit becomes a save, and how a
  * typed bulk row becomes an input.
  */
+import { ScrollX } from '@/components/ui/scroll-x';
 import { useId, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import { CircleAlert, ClipboardPaste, Download, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
@@ -327,7 +328,7 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
         </div>
       ) : null}
 
-      <div className="hidden overflow-x-auto sm:block">
+      <ScrollX label={caption} className="hidden sm:block">
         <table ref={tableRef} className="w-full border-collapse text-left text-sm text-fg tabular-nums">
           <caption className="sr-only">{caption}</caption>
           <thead>
@@ -383,7 +384,7 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
           </tbody>
           {footer ? <tfoot className="border-t border-border-default text-sm font-semibold">{footer}</tfoot> : null}
         </table>
-      </div>
+      </ScrollX>
 
       <ul className="flex flex-col divide-y divide-border-subtle sm:hidden" aria-label={caption}>
         {rows.map((row) => (
@@ -568,7 +569,7 @@ export function BulkAddDialog<Input>({
             <ClipboardPaste aria-hidden className="size-3.5 shrink-0" />
             Copy rows from a spreadsheet and paste them into the first cell. The columns fill in order.
           </p>
-          <div className="-mx-6 overflow-x-auto px-6">
+          <ScrollX label={title} className="-mx-6" scrollerClassName="px-6">
             <table className="w-full min-w-[640px] border-separate border-spacing-x-1.5 border-spacing-y-1 text-sm">
               <caption className="sr-only">{title}</caption>
               <thead>
@@ -640,7 +641,7 @@ export function BulkAddDialog<Input>({
                 })}
               </tbody>
             </table>
-          </div>
+          </ScrollX>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button variant="ghost" size="sm" leadingIcon={<Plus aria-hidden />} onClick={() => setRows((current) => [...current, ...Array.from({ length: 3 }, () => blank)])} data-testid={`${testId}-more`}>
               Add 3 more rows

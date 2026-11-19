@@ -13,6 +13,7 @@
 import 'server-only';
 import { eq, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { settings } from '@/server/db/schema';
 import { conflict, invalid } from '@/server/errors';
 import { addDays, isWorkDay } from '@/lib/profit/calendar';
@@ -40,7 +41,7 @@ export interface SampleStateDTO {
   readonly entries: number;
 }
 
-export async function getSampleState(ctx: DomainContext): Promise<SampleStateDTO> {
+export const getSampleState = scoped(async function getSampleState(ctx: DomainContext): Promise<SampleStateDTO> {
   await requirePulse(ctx, 'pulse:read');
   const row = await loadSettings(ctx.orgId);
   const [counts] = await rows<{ jobs: number; clients: number; entries: number }>(
@@ -51,7 +52,7 @@ export async function getSampleState(ctx: DomainContext): Promise<SampleStateDTO
   );
   const jobs = counts?.jobs ?? 0;
   return { loaded: row.sampleLoadedAt !== null || jobs > 0, loadedAt: iso(row.sampleLoadedAt), jobs, clients: counts?.clients ?? 0, entries: counts?.entries ?? 0 };
-}
+});
 
 /** The last `count` work days that end yesterday, oldest first. */
 function recentWorkDays(today: string, count: number): string[] {
@@ -216,7 +217,7 @@ async function buildSampleShop(ctx: DomainContext): Promise<{ jobs: number; entr
 }
 
 /** Loads the made up shop. Refuses when sample data is already there. */
-export async function loadSampleData(ctx: DomainContext): Promise<SampleStateDTO> {
+export const loadSampleData = scoped(async function loadSampleData(ctx: DomainContext): Promise<SampleStateDTO> {
   await requirePulse(ctx, 'sample:manage');
   const state = await getSampleState(ctx);
   if (state.loaded) throw conflict('Sample data is already loaded. Remove it first if you want a fresh copy.');
@@ -247,7 +248,7 @@ export async function loadSampleData(ctx: DomainContext): Promise<SampleStateDTO
   await logActivity(db, ctx, { verb: 'sample.loaded', entityType: 'sample', after: { jobs: built.jobs, entries: built.entries } });
   await evaluateAlerts(ctx).catch(() => undefined);
   return getSampleState(ctx);
-}
+});
 
 /** Remembers which labor classes and job types the sample made (they have no sample mark of their own) and marks the items and services. */
 async function markSample(ctx: DomainContext, before: { labor_classes: Set<string>; job_types: Set<string>; vas_services: Set<string>; items: Set<string> }): Promise<void> {
@@ -271,7 +272,7 @@ async function deleteIfFree(tx: Executor, table: string, id: string): Promise<bo
 }
 
 /** Takes every sample row out again. Work somebody logged on a sample job goes with the job. */
-export async function clearSampleData(ctx: DomainContext): Promise<SampleStateDTO> {
+export const clearSampleData = scoped(async function clearSampleData(ctx: DomainContext): Promise<SampleStateDTO> {
   await requirePulse(ctx, 'sample:manage');
   await inTx(async (tx) => {
     await tx.execute(sql`SET LOCAL pulse.allow_purge = 'on'`);
@@ -319,7 +320,7 @@ export async function clearSampleData(ctx: DomainContext): Promise<SampleStateDT
   });
   await evaluateAlerts(ctx).catch(() => undefined);
   return getSampleState(ctx);
-}
+});
 
 /** Tables emptied by "Delete all Pulse data", children before parents. Settings, sites, people, alert rules and the audit log stay. */
 const PURGE_ORDER = [
@@ -366,7 +367,7 @@ const PURGE_ORDER = [
  * workspace, closed months included. Settings, sites, people and their roles, alert rules and the
  * audit log are kept. `confirm` must be the workspace slug, typed by the person.
  */
-export async function purgeAllData(ctx: DomainContext, confirm: string): Promise<{ deleted: number }> {
+export const purgeAllData = scoped(async function purgeAllData(ctx: DomainContext, confirm: string): Promise<{ deleted: number }> {
   await requirePulse(ctx, 'data:purge');
   if (confirm.trim().toLowerCase() !== ctx.orgSlug.toLowerCase()) throw invalid(`Type ${ctx.orgSlug} to confirm.`, { confirm: `Type ${ctx.orgSlug} to confirm.` });
   return inTx(async (tx) => {
@@ -383,7 +384,7 @@ export async function purgeAllData(ctx: DomainContext, confirm: string): Promise
     await logActivity(tx, ctx, { verb: 'data.purged', entityType: 'data', after: { rows: deleted } });
     return { deleted };
   });
-}
+});
 
 /* ------------------------------------------------------------------------------------------ */
 /* Getting started: the five steps                                                             */
@@ -406,7 +407,7 @@ export interface OnboardingStateDTO {
 }
 
 /** Where a workspace is on the way to its first profit number. Sample rows do not count as your own steps. */
-export async function getOnboardingState(ctx: DomainContext): Promise<OnboardingStateDTO> {
+export const getOnboardingState = scoped(async function getOnboardingState(ctx: DomainContext): Promise<OnboardingStateDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const row = await loadSettings(ctx.orgId);
   const org = ctx.orgId;
@@ -452,4 +453,4 @@ export async function getOnboardingState(ctx: DomainContext): Promise<Onboarding
     sample: await getSampleState(ctx),
     moneyHidden: !money,
   };
-}
+});

@@ -9,6 +9,7 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped, withOrg } from '@/server/db/scope';
 import { dailyGoal, readPanels, readRotate, wallCall, type WallPanel, type WallStatus } from '@/features/wall/wall-math';
 import { addDays, isWorkDay, workDaysBetween } from '@/lib/profit';
 import { rows, todayInZone, type DomainContext } from './_shared';
@@ -178,10 +179,10 @@ async function buildBoard(orgId: string, options: WallOptions & { showMoney: boo
 }
 
 /** The wall for a signed in person. Money shows only when asked for and only to a money role. */
-export async function getWallBoard(ctx: DomainContext, options: WallOptions = {}): Promise<WallBoardDTO> {
+export const getWallBoard = scoped(async function getWallBoard(ctx: DomainContext, options: WallOptions = {}): Promise<WallBoardDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   return buildBoard(ctx.orgId, { ...options, showMoney: Boolean(options.showMoney) && access.seesMoney });
-}
+});
 
 export interface WallDeviceDTO {
   readonly board: WallBoardDTO;
@@ -215,6 +216,6 @@ export async function getWallForDevice(token: string): Promise<WallDeviceDTO | '
   if (!device) return null;
   if (!allow(device.link.id)) return 'busy';
   const config = (device.link.config ?? {}) as { rotateSeconds?: unknown; panels?: unknown; hideClientNames?: unknown; allSites?: unknown };
-  const board = await buildBoard(device.link.orgId, { siteId: config.allSites === true ? null : device.site.id, hideClientNames: config.hideClientNames === true, showMoney: false });
+  const board = await withOrg(device.link.orgId, () => buildBoard(device.link.orgId, { siteId: config.allSites === true ? null : device.site.id, hideClientNames: config.hideClientNames === true, showMoney: false }));
   return { board, rotateSeconds: readRotate(config.rotateSeconds), panels: readPanels(config.panels), linkName: device.link.name };
 }

@@ -15,6 +15,7 @@ import 'server-only';
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { asSystem, scoped, withOrg } from '@/server/db/scope';
 import {
   clients,
   deviceLinks,
@@ -98,7 +99,7 @@ function toLinkDTO(row: LinkRow, siteName: string): DeviceLinkDTO {
 /* ---------------------------------------------------------------- manage links (signed in) */
 
 /** Device links of the org, newest first. Links that were turned off stay listed for the record. */
-export async function listDeviceLinks(
+export const listDeviceLinks = scoped(async function listDeviceLinks(
   ctx: DomainContext,
   filters: { kind?: DeviceKind | null } = {},
 ): Promise<DeviceLinkDTO[]> {
@@ -116,7 +117,7 @@ export async function listDeviceLinks(
     )
     .orderBy(desc(deviceLinks.createdAt));
   return found.map((item) => toLinkDTO(item.row, item.siteName));
-}
+});
 
 export interface DeviceLinkInput {
   kind: DeviceKind;
@@ -133,7 +134,7 @@ function expiry(days: number | null | undefined): Date {
 }
 
 /** Makes a link and returns its secret once. Store the returned path on the device, not in Pulse. */
-export async function createDeviceLink(
+export const createDeviceLink = scoped(async function createDeviceLink(
   ctx: DomainContext,
   input: DeviceLinkInput,
 ): Promise<CreatedDeviceLinkDTO> {
@@ -168,7 +169,7 @@ export async function createDeviceLink(
     });
     return { link: toLinkDTO(row!, site.name), token, path: devicePath(input.kind, token) };
   });
-}
+});
 
 async function getLinkRow(tx: Executor, ctx: DomainContext, linkId: string): Promise<LinkRow> {
   const [row] = isUuid(linkId)
@@ -184,7 +185,7 @@ async function getLinkRow(tx: Executor, ctx: DomainContext, linkId: string): Pro
 }
 
 /** Turns a link off right away. The screen shows "This link is not active" on its next request. */
-export async function revokeDeviceLink(ctx: DomainContext, linkId: string): Promise<DeviceLinkDTO> {
+export const revokeDeviceLink = scoped(async function revokeDeviceLink(ctx: DomainContext, linkId: string): Promise<DeviceLinkDTO> {
   await requirePulse(ctx, 'device:manage');
   return inTx(async (tx) => {
     const row = await getLinkRow(tx, ctx, linkId);
@@ -204,10 +205,10 @@ export async function revokeDeviceLink(ctx: DomainContext, linkId: string): Prom
     });
     return toLinkDTO(after!, site.name);
   });
-}
+});
 
 /** Undo of "turn off", and "renew": the same secret works again for the given number of days. */
-export async function renewDeviceLink(
+export const renewDeviceLink = scoped(async function renewDeviceLink(
   ctx: DomainContext,
   linkId: string,
   options: { expiresInDays?: number | null } = {},
@@ -230,10 +231,10 @@ export async function renewDeviceLink(
     });
     return toLinkDTO(after!, site.name);
   });
-}
+});
 
 /** Renames a link or changes its options (for a kiosk: `idleSeconds`). */
-export async function updateDeviceLink(
+export const updateDeviceLink = scoped(async function updateDeviceLink(
   ctx: DomainContext,
   linkId: string,
   patch: { name?: string; config?: Record<string, unknown> },
@@ -256,7 +257,7 @@ export async function updateDeviceLink(
       .returning();
     return toLinkDTO(after!, site.name);
   });
-}
+});
 
 /* ---------------------------------------------------------------- open a link (no sign in) */
 
@@ -272,7 +273,16 @@ const NOT_ACTIVE = 'This link is not active. Ask a manager to make a new one.';
  * Finds the live link behind a secret. Returns null for an unknown, expired or turned off link,
  * and when the org no longer has Pulse. Marks the link as seen (at most once a minute).
  */
-export async function resolveDeviceLink(token: string, kind: DeviceKind): Promise<ResolvedDevice | null> {
+export function resolveDeviceLink(token: string, kind: DeviceKind): Promise<ResolvedDevice | null> {
+  // The secret is all a TV or a tablet has, so the link is looked up across workspaces. Everything
+  // after that runs for the link's own workspace (`forDevice`).
+  return asSystem('device link lookup by its secret (no workspace is known yet)', () => findDeviceLink(token, kind));
+}
+
+/** Everything after the secret is checked runs for the link's own workspace. */
+const forDevice = <T>(device: ResolvedDevice, fn: () => T): T => withOrg(device.link.orgId, fn);
+
+async function findDeviceLink(token: string, kind: DeviceKind): Promise<ResolvedDevice | null> {
   if (typeof token !== 'string' || token.length < 16 || token.length > 128) return null;
   const [found] = await db
     .select({ link: deviceLinks, site: sites })
@@ -341,7 +351,7 @@ export async function getKioskState(token: string): Promise<KioskStateDTO | null
   const device = await resolveDeviceLink(token, 'kiosk');
   if (!device) return null;
   const settings = await loadSettings(device.link.orgId);
-  const people = await kioskPeople(device);
+  const people = await forDevice(device, () => kioskPeople(device));
   return {
     linkName: device.link.name,
     siteName: device.site.name,
@@ -396,6 +406,10 @@ export async function unlockKiosk(
 ): Promise<KioskSessionDTO> {
   const device = await resolveDeviceLink(token, 'kiosk');
   if (!device) throw new DomainError('NOT_FOUND', NOT_ACTIVE);
+  return forDevice(device, () => unlockKioskFor(device, input));
+}
+
+async function unlockKioskFor(device: ResolvedDevice, input: { userId: string; pin: string }): Promise<KioskSessionDTO> {
   if (!isUuid(input.userId) || !/^\d{4}$/.test(input.pin ?? ''))
     throw invalid('Pick your name and type your 4 digit PIN.');
   const people = await kioskPeople(device);
@@ -475,7 +489,7 @@ async function requireKioskSession(token: string, session: string): Promise<Kios
   const device = await resolveDeviceLink(token, 'kiosk');
   if (!device) throw new DomainError('NOT_FOUND', NOT_ACTIVE);
   const userId = readKioskSession(session, device.link.id);
-  const person = userId ? (await kioskPeople(device)).find((item) => item.id === userId) : undefined;
+  const person = userId ? (await forDevice(device, () => kioskPeople(device))).find((item) => item.id === userId) : undefined;
   if (!person)
     throw new DomainError('UNAUTHENTICATED', 'This tablet is locked. Pick your name and type your PIN.');
   return { device, ctx: deviceContext(device, person), person: { id: person.id, name: person.name } };
@@ -530,7 +544,7 @@ async function kioskJobs(device: ResolvedDevice): Promise<KioskJobDTO[]> {
 /** The job cards of an unlocked tablet. */
 export async function listKioskJobs(token: string, session: string): Promise<KioskJobDTO[]> {
   const actor = await requireKioskSession(token, session);
-  return kioskJobs(actor.device);
+  return forDevice(actor.device, () => kioskJobs(actor.device));
 }
 
 export interface KioskProductionInput {
@@ -561,6 +575,10 @@ export async function saveKioskProduction(
   input: KioskProductionInput,
 ): Promise<KioskSaveDTO> {
   const actor = await requireKioskSession(token, session);
+  return forDevice(actor.device, () => saveKioskProductionAs(actor, input));
+}
+
+async function saveKioskProductionAs(actor: KioskActor, input: KioskProductionInput): Promise<KioskSaveDTO> {
   const { device, ctx } = actor;
   const ref = cleanText(input.clientRef);
   if (!ref || !/^[A-Za-z0-9_-]{8,64}$/.test(ref)) throw invalid('This entry has no valid id. Type it again.');
@@ -715,7 +733,7 @@ export async function saveKioskProduction(
  * Lets a person who may log production set or clear their own kiosk PIN. Admins set PINs for
  * other people with `setKioskPin` in `roles.ts`.
  */
-export async function setMyKioskPin(
+export const setMyKioskPin = scoped(async function setMyKioskPin(
   ctx: DomainContext,
   pin: string | null,
 ): Promise<{ hasKioskPin: boolean }> {
@@ -747,10 +765,10 @@ export async function setMyKioskPin(
     });
   });
   return { hasKioskPin: pin !== null };
-}
+});
 
 /** Whether the signed in person has a kiosk PIN (the PIN itself is never readable). */
-export async function myKioskPinState(
+export const myKioskPinState = scoped(async function myKioskPinState(
   ctx: DomainContext,
 ): Promise<{ hasKioskPin: boolean; canUseKiosk: boolean }> {
   const access = await requirePulse(ctx, 'pulse:read');
@@ -759,4 +777,4 @@ export async function myKioskPinState(
     .from(memberRoles)
     .where(and(eq(memberRoles.orgId, ctx.orgId), eq(memberRoles.userId, ctx.userId)));
   return { hasKioskPin: Boolean(row?.hash), canUseKiosk: canPulse(access.role, 'production:log') };
-}
+});

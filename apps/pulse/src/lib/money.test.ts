@@ -33,6 +33,7 @@ import {
   mulQuantityCents,
   mulQuantityPrice,
   mulRatio,
+  prorateDays,
   perHourCents,
   perUnitCents,
   pow10,
@@ -183,6 +184,19 @@ describe('multiplying (the spec examples from 4.2)', () => {
     expect(mulBp(b(12345), 2500)).toBe(b(3086)); // 3086.25
     expect(mulBp(b(-12350), 5000)).toBe(b(-6175));
     expect(mulRatio(10000, b(2), b(3))).toBe(b(6667));
+  });
+  it('gives days of a month their share, and the shares add back to the month', () => {
+    expect(prorateDays(7050000, 1, 18, 30)).toBe(b(4230000));
+    expect(prorateDays(7050000, 1, 30, 30)).toBe(b(7050000));
+    expect(prorateDays(100001, 1, 15, 30)).toBe(b(50001));
+    expect(prorateDays(100001, 16, 30, 30)).toBe(b(50000));
+    for (const cents of [1, 100001, -31999, 7050000]) {
+      let sum = b(0);
+      for (let day = 1; day <= 31; day += 1) sum += prorateDays(cents, day, day, 31);
+      expect(sum).toBe(b(cents));
+    }
+    expect(() => prorateDays(100, 0, 3, 30)).toThrow(RangeError);
+    expect(() => prorateDays(100, 5, 31, 30)).toThrow(RangeError);
   });
   it('stays exact at the top of the allowed range', () => {
     // just under 100,000,000 units at just under $1,000,000

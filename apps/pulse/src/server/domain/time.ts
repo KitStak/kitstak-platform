@@ -5,6 +5,7 @@
 import 'server-only';
 import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { indirectEntries, paidHours } from '@/server/db/schema';
 import { invalid, notFound } from '@/server/errors';
 import type { IndirectReason, StreamSource } from '@/lib/constants';
@@ -63,7 +64,7 @@ export interface DayRangeFilters {
   readonly limit?: number;
 }
 
-export async function listIndirect(ctx: DomainContext, filters: DayRangeFilters = {}): Promise<IndirectEntryDTO[]> {
+export const listIndirect = scoped(async function listIndirect(ctx: DomainContext, filters: DayRangeFilters = {}): Promise<IndirectEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
@@ -81,7 +82,7 @@ export async function listIndirect(ctx: DomainContext, filters: DayRangeFilters 
     .orderBy(desc(indirectEntries.workDate), asc(indirectEntries.createdAt))
     .limit(Math.min(filters.limit ?? 2000, 10_000));
   return found.map((row) => toIndirectDTO(row, access, closed));
-}
+});
 
 export interface IndirectInput {
   id?: string | null;
@@ -106,7 +107,7 @@ async function finishDay(tx: Executor, ctx: DomainContext, days: readonly { site
 }
 
 /** Creates or edits one entry of time not on a job, and spreads its cost over the pool again. */
-export async function saveIndirectEntry(ctx: DomainContext, input: IndirectInput): Promise<IndirectEntryDTO> {
+export const saveIndirectEntry = scoped(async function saveIndirectEntry(ctx: DomainContext, input: IndirectInput): Promise<IndirectEntryDTO> {
   const access = await requirePulse(ctx, 'production:log');
   if (Number(input.overtimeHours ?? 0) > Number(input.hours)) throw invalid('Overtime hours cannot be more than the labor hours.', { overtimeHours: 'More than the labor hours.' });
   return inTx(async (tx) => {
@@ -147,7 +148,7 @@ export async function saveIndirectEntry(ctx: DomainContext, input: IndirectInput
     const [fresh] = await tx.select().from(indirectEntries).where(eq(indirectEntries.id, row.id));
     return toIndirectDTO(fresh!, access, await closedMonths(tx, ctx.orgId));
   });
-}
+});
 
 async function toggleIndirect(ctx: DomainContext, id: string, restore: boolean): Promise<IndirectEntryDTO> {
   const access = await requirePulse(ctx, 'production:log');
@@ -165,12 +166,12 @@ async function toggleIndirect(ctx: DomainContext, id: string, restore: boolean):
   });
 }
 
-export const deleteIndirectEntry = (ctx: DomainContext, id: string): Promise<IndirectEntryDTO> => toggleIndirect(ctx, id, false);
-export const restoreIndirectEntry = (ctx: DomainContext, id: string): Promise<IndirectEntryDTO> => toggleIndirect(ctx, id, true);
+export const deleteIndirectEntry = scoped((ctx: DomainContext, id: string): Promise<IndirectEntryDTO> => toggleIndirect(ctx, id, false));
+export const restoreIndirectEntry = scoped((ctx: DomainContext, id: string): Promise<IndirectEntryDTO> => toggleIndirect(ctx, id, true));
 
 /* ---------------------------------------------------------------- paid hours */
 
-export async function listPaidHours(ctx: DomainContext, filters: DayRangeFilters = {}): Promise<PaidHoursDTO[]> {
+export const listPaidHours = scoped(async function listPaidHours(ctx: DomainContext, filters: DayRangeFilters = {}): Promise<PaidHoursDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
@@ -188,7 +189,7 @@ export async function listPaidHours(ctx: DomainContext, filters: DayRangeFilters
     .orderBy(desc(paidHours.workDate), asc(paidHours.createdAt))
     .limit(Math.min(filters.limit ?? 2000, 10_000));
   return found.map((row) => toPaidDTO(row, access, closed));
-}
+});
 
 export interface PaidHoursInput {
   siteId?: string | null;
@@ -204,7 +205,7 @@ export interface PaidHoursInput {
 }
 
 /** Sets the paid hours of a site, day and labor class (one row per key, so this is an upsert). */
-export async function savePaidHours(ctx: DomainContext, input: PaidHoursInput): Promise<PaidHoursDTO> {
+export const savePaidHours = scoped(async function savePaidHours(ctx: DomainContext, input: PaidHoursInput): Promise<PaidHoursDTO> {
   const access = await requirePulse(ctx, 'production:log');
   return inTx(async (tx) => {
     const site = await resolveSite(ctx, input.siteId, tx);
@@ -231,7 +232,7 @@ export async function savePaidHours(ctx: DomainContext, input: PaidHoursInput): 
     await finishDay(tx, ctx, [{ siteId: row.siteId, date: row.workDate }]);
     return toPaidDTO(row, access, await closedMonths(tx, ctx.orgId));
   });
-}
+});
 
 async function togglePaid(ctx: DomainContext, id: string, restore: boolean): Promise<PaidHoursDTO> {
   const access = await requirePulse(ctx, 'production:log');
@@ -248,5 +249,5 @@ async function togglePaid(ctx: DomainContext, id: string, restore: boolean): Pro
   });
 }
 
-export const deletePaidHours = (ctx: DomainContext, id: string): Promise<PaidHoursDTO> => togglePaid(ctx, id, false);
-export const restorePaidHours = (ctx: DomainContext, id: string): Promise<PaidHoursDTO> => togglePaid(ctx, id, true);
+export const deletePaidHours = scoped((ctx: DomainContext, id: string): Promise<PaidHoursDTO> => togglePaid(ctx, id, false));
+export const restorePaidHours = scoped((ctx: DomainContext, id: string): Promise<PaidHoursDTO> => togglePaid(ctx, id, true));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clientNameKey, clientNamesLookAlike, matchClientName, nameList } from './client-names';
+import { clientNameKey, clientNamesLookAlike, matchClientName, nameList, CLIENT_NEEDED, clientBoxProblem, clientLookAlikeMessage } from './client-names';
 
 const clients = [
   { id: '1', name: 'Harbor Roast Collective', code: 'HRB' },
@@ -79,5 +79,24 @@ describe('nameList', () => {
     expect(nameList(['A'])).toBe('A');
     expect(nameList(['A', 'B'])).toBe('A or B');
     expect(nameList(['A', 'B', 'C', 'D'])).toBe('A, B or C');
+  });
+});
+
+describe('clientBoxProblem', () => {
+  const box = (text: string, clientId: string | null = null, createNew = false) => clientBoxProblem({ text, clientId, createNew }, clients);
+
+  it('is the one message set of every client box', () => {
+    expect(box('')).toBe(CLIENT_NEEDED);
+    // A close name: pick it, or choose Create. The server sends the same words.
+    expect(box('Harbor Roast Collectiv')).toBe(clientLookAlikeMessage('Harbor Roast Collectiv', ['Harbor Roast Collective']));
+    expect(box('Harbor Roast Collectiv')).toContain('Pick it from the list, or choose Create "Harbor Roast Collectiv" to add a new client.');
+    // Loose text close to nothing: a client is only made from the Create row.
+    expect(box('Summit Supply')).toBe('Summit Supply is not a client yet. Choose Create "Summit Supply" in the list to add it.');
+  });
+
+  it('is quiet for a picked client, a confirmed new client and an exact name', () => {
+    expect(box('Harbor Roast Collective', '1')).toBeNull();
+    expect(box('Harbor', null, true)).toBeNull();
+    expect(box('harbor roast collective')).toBeNull();
   });
 });

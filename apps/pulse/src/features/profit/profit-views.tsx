@@ -138,6 +138,20 @@ function RowName({ by, row, onDrill, range }: { readonly by: ProfitGroup; readon
   );
 }
 
+/** An extra service row with revenue and no cost logged has no real margin (the server sends none). */
+const noCostYet = (row: ProfitRowDTO, columnId: string): boolean => row.costMissing && (columnId === 'margin' || columnId === 'margin_before');
+
+/** Shown in place of a margin that would read 100% only because no cost is logged. */
+function NoCostYet() {
+  return (
+    <Tooltip content="No labor hours or parts are logged for this work, so Pulse does not know what it cost.">
+      <span tabIndex={0} className="rounded-sm font-normal text-fg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="profit-no-cost">
+        No cost yet
+      </span>
+    </Tooltip>
+  );
+}
+
 function ChangeCells({ compared }: { readonly compared: Compared | null | undefined }) {
   const profit = compared?.profitDelta ?? null;
   const margin = compared?.marginDelta ?? null;
@@ -175,7 +189,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
                   return (
                     <div key={id} className="min-w-[4.5rem]">
                       <dt className="text-xs text-fg-muted">{column.label}</dt>
-                      <dd className={cn('font-medium text-fg', toneFor(column, value))}>{formatValue(value, column.kind) || 'None'}</dd>
+                      <dd className={cn('font-medium text-fg', toneFor(column, value))}>{noCostYet(row, column.id) ? <NoCostYet /> : formatValue(value, column.kind) || 'None'}</dd>
                     </div>
                   );
                 })}
@@ -229,7 +243,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
                       <TableCell key={column.id} numeric className={cn('whitespace-nowrap', toneFor(column, value))}>
                         <span className="inline-flex items-center justify-end gap-0.5">
                           {column.id === 'profit' && extra && seesMoney ? <ExplainNumber metric="profit" scope={{ ...scope, ...extra }} label={`How we got the profit of ${rowLabel(by, row)}`} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" /> : null}
-                          {column.id === 'margin' && value !== null && by !== 'job' ? formatPercentBp(value, FIXED) : formatValue(value, column.kind)}
+                          {noCostYet(row, column.id) ? <NoCostYet /> : column.id === 'margin' && value !== null && by !== 'job' ? formatPercentBp(value, FIXED) : formatValue(value, column.kind)}
                         </span>
                       </TableCell>
                     );
@@ -249,7 +263,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
                 const value = column.get(total);
                 return (
                   <TableCell key={column.id} numeric className={cn('whitespace-nowrap', toneFor(column, value))}>
-                    {formatValue(value, column.kind)}
+                    {noCostYet(total, column.id) ? <NoCostYet /> : formatValue(value, column.kind)}
                   </TableCell>
                 );
               })}

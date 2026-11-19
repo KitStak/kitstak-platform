@@ -152,7 +152,7 @@ export function TargetPaceView({
       unitsPerLaborHour: pace,
       effectiveFrom: today,
       basis: 'history',
-      note: `Median of the last ${row.days} days with units and hours`,
+      note: row.days === 1 ? 'The 1 day with units and hours' : `Median of the last ${row.days} days with units and hours`,
     });
     if (!saved) return;
     toast.undo(`Target pace for ${row.jobTypeName} is now ${formatPace(pace)}`, {
@@ -319,8 +319,8 @@ export function TargetPaceView({
                 );
               })}
             </ul>
-            <div className="mt-3 hidden overflow-x-auto border-t border-border-subtle lg:block">
-              <Table className="min-w-[680px]">
+            <div className="mt-3 hidden border-t border-border-subtle lg:block">
+              <Table className="min-w-[680px]" aria-label="Suggested target pace by job type">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
                     <TableHeaderCell>Job type</TableHeaderCell>
@@ -426,8 +426,8 @@ export function TargetPaceView({
             one.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <Table className="min-w-[720px]">
+          <div>
+            <Table className="min-w-[720px]" aria-label="Targets with a start day">
               <TableHead>
                 <TableRow className="hover:bg-transparent">
                   <TableHeaderCell>For</TableHeaderCell>
@@ -868,8 +868,8 @@ function PaceBoard({
               />
             </div>
           ) : null}
-          <div className="overflow-x-auto">
-            <Table className="min-w-[760px]">
+          <div>
+            <Table className="min-w-[760px]" aria-label="Pace against target by job">
               <TableHead>
                 <TableRow className="hover:bg-transparent">
                   <TableHeaderCell>

@@ -4,11 +4,12 @@
  * with undo, make a job), the side by side compare of two scenarios, and the dialog that turns a
  * scenario into a job.
  */
+import { ScrollX } from '@/components/ui/scroll-x';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { FolderOpen, PackagePlus, Trash2 } from 'lucide-react';
-import { Badge, Button, Combobox, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Drawer, DrawerContent, Field, IconButton, Input, IsoDatePicker, Select, Skeleton, toast } from '@/components/ui';
+import { Badge, Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Drawer, DrawerContent, Field, IconButton, Input, IsoDatePicker, Select, Skeleton, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { Teach } from '@/components/pulse/teach';
 import { formatDecimalPlain, formatHours, formatMoney, formatMoneyDelta, formatNumber, formatPercentBp, formatPointsDelta, formatUnitPrice } from '@/lib/format';
@@ -18,6 +19,8 @@ import { routes } from '@/lib/routes';
 import type { CalculatorSetupDTO, QuoteScenarioDTO, QuoteStatus } from '@/server/domain/quotes';
 import { createJobFromScenarioAction, deleteQuoteScenarioAction, restoreQuoteScenarioAction, setQuoteScenarioStatusAction } from '@/server/actions/money-ops';
 import { crewHeadcount, runCalc, type CalcInputs, type CalcSummary } from './calc-model';
+import { ClientCombo, NO_CLIENT, type ClientChoice } from '@/features/jobs/client-combo';
+import { clientBoxProblem, matchClientName } from '@/lib/client-names';
 import { quoteKeys } from './hooks';
 import { keepOpenForToasts } from './toast-safe';
 
@@ -297,7 +300,7 @@ export function CompareDialog({ open, onOpenChange, scenarios, current, workingD
               {a && b ? (
                 <>
                   {!a.summary || !b.summary ? <p className="text-sm text-warning-text">One of these is missing numbers, so some rows are empty.</p> : null}
-                  <div className="-mx-6 overflow-x-auto px-6">
+                  <ScrollX label="Two scenarios side by side" className="-mx-6" scrollerClassName="px-6">
                     <table className="w-full min-w-[520px] border-collapse text-sm tabular-nums" data-testid="compare-table">
                       <thead>
                         <tr className="border-b border-border-default text-xs text-fg-muted">
@@ -331,7 +334,7 @@ export function CompareDialog({ open, onOpenChange, scenarios, current, workingD
                         })}
                       </tbody>
                     </table>
-                  </div>
+                  </ScrollX>
                   {verdict ? (
                     <p className="rounded-lg bg-sunken px-3 py-2 text-sm font-medium text-fg" data-testid="compare-verdict">
                       {verdict}
@@ -360,8 +363,12 @@ export function JobFromScenarioDialog({ scenario, setup, onClose }: { readonly s
   const router = useRouter();
   const queryClient = useQueryClient();
   const [name, setName] = useState(scenario.name);
-  const [clientId, setClientId] = useState<string | null>(scenario.clientId);
-  const [newClient, setNewClient] = useState('');
+  const [client, setClient] = useState<ClientChoice>(() => {
+    const found = setup.clients.find((item) => item.id === scenario.clientId);
+    return found ? { text: found.name, clientId: found.id, createNew: false } : NO_CLIENT;
+  });
+  const [clientOpen, setClientOpen] = useState(false);
+  const clientRef = useRef<HTMLInputElement>(null);
   const [startDate, setStartDate] = useState<string | null>(setup.defaults.today);
   const [dueDate, setDueDate] = useState<string | null>(null);
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
@@ -371,16 +378,23 @@ export function JobFromScenarioDialog({ scenario, setup, onClose }: { readonly s
   const submit = async () => {
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = 'Give the job a name.';
-    if (!clientId && !newClient.trim()) next.clientId = 'Pick a client, or type a new client name.';
+    // The same client box and the same words as quick add and the new job wizard.
+    const clientId = client.clientId ?? matchClientName(client.text.trim(), setup.clients).exact?.id ?? null;
+    const clientProblem = clientBoxProblem(client, setup.clients);
+    if (clientProblem) next.clientId = clientProblem;
     if (startDate && dueDate && dueDate < startDate) next.dueDate = 'The due date is before the start date.';
     setErrors(next);
-    if (Object.keys(next).length > 0) return;
+    if (Object.keys(next).length > 0) {
+      if (next.clientId) clientRef.current?.focus();
+      return;
+    }
     setSaving(true);
     try {
-      const result = await createJobFromScenarioAction({ scenarioId: scenario.id, name: name.trim(), clientId, clientName: clientId ? null : newClient.trim(), startDate, dueDate });
+      const result = await createJobFromScenarioAction({ scenarioId: scenario.id, name: name.trim(), clientId, clientName: clientId ? null : client.text.trim(), createClient: clientId === null && client.createNew, startDate, dueDate });
       if (!result.ok) {
         setErrors(result.error.fields ?? {});
-        toast.error("Couldn't create the job", result.error.message);
+        if (result.error.fields?.clientId) clientRef.current?.focus();
+        else toast.error("Couldn't create the job", result.error.message);
         return;
       }
       await Promise.all([queryClient.invalidateQueries({ queryKey: quoteKeys.list() }), queryClient.invalidateQueries({ queryKey: qk.jobsRoot() })]);
@@ -411,14 +425,25 @@ export function JobFromScenarioDialog({ scenario, setup, onClose }: { readonly s
             <Field label="Job name" required error={errors.name} className="sm:col-span-2">
               {({ inputId, describedBy, invalid }) => <Input id={inputId} aria-describedby={describedBy} invalid={invalid} value={name} maxLength={200} onChange={(event) => setName(event.target.value)} data-testid="job-from-scenario-name" autoFocus />}
             </Field>
-            <Field label="Client" required error={clientId ? null : errors.clientId} className="sm:col-span-2">
-              {({ inputId, invalid }) => <Combobox id={inputId} aria-label="Client" invalid={invalid} options={setup.clients.map((item) => ({ value: item.id, label: item.name }))} value={clientId} onValueChange={setClientId} placeholder="Pick a client" searchPlaceholder="Find a client" emptyMessage="No client matches" />}
+            <Field label="Client" required className="sm:col-span-2">
+              {({ inputId }) => (
+                <ClientCombo
+                  id={inputId}
+                  inputRef={clientRef}
+                  clients={setup.clients}
+                  value={client}
+                  onChange={(next) => {
+                    setClient(next);
+                    setErrors((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== 'clientId' && key !== 'clientName' && key !== 'clientLookAlike')));
+                  }}
+                  error={errors.clientId ?? errors.clientName ?? null}
+                  hint={client.createNew ? `"${client.text.trim()}" is new. Pulse adds it as a client when you create the job.` : 'Pick one from the list. To add a new client, type the name and choose Create.'}
+                  open={clientOpen}
+                  onOpenChange={setClientOpen}
+                  testId="job-from-scenario-client"
+                />
+              )}
             </Field>
-            {clientId ? null : (
-              <Field label="Or a new client" hint="Pulse adds the client for you." className="sm:col-span-2">
-                {({ inputId, describedBy }) => <Input id={inputId} aria-describedby={describedBy} value={newClient} maxLength={200} onChange={(event) => setNewClient(event.target.value)} placeholder="Client name" />}
-              </Field>
-            )}
             <Field label="Start date">{({ inputId }) => <IsoDatePicker id={inputId} aria-label="Start date" value={startDate} onChange={setStartDate} clearable />}</Field>
             <Field label="Due date" error={errors.dueDate}>
               {({ inputId }) => <IsoDatePicker id={inputId} aria-label="Due date" value={dueDate} onChange={setDueDate} clearable />}

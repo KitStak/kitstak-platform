@@ -16,9 +16,9 @@
 import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { wmsTable } from '@kitstak/db/wms-tenants';
-import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { rows, type DomainContext } from '@/server/domain/_shared';
-import { wmsSchemaFor, wmsTableExists } from './detect';
+import { wmsSchemaFor, wmsTableExists, siblingDb } from './detect';
 import { logSoftFail } from './log';
 
 export interface WmsWorkOrder {
@@ -115,7 +115,7 @@ const cents = (value: unknown): number => {
 const day = (value: string | null): string | null => (value && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null);
 
 /** The org's own warehouse schema when WMS is licensed and has work orders, else null. */
-export async function wmsReady(ctx: DomainContext): Promise<string | null> {
+export const wmsReady = scoped(async function wmsReady(ctx: DomainContext): Promise<string | null> {
   try {
     const schema = await wmsSchemaFor(ctx);
     if (!schema) return null;
@@ -124,7 +124,7 @@ export async function wmsReady(ctx: DomainContext): Promise<string | null> {
     logSoftFail(ctx.orgId, 'wms.wmsReady', error);
     return null;
   }
-}
+});
 
 const textList = (values: readonly string[]): SQL => sql`(${sql.join(values.map((value) => sql`${value}`), sql`, `)})`;
 const cleanIds = (ids: readonly string[]): string[] => [...new Set(ids.map((id) => id.trim()).filter((id) => id.length > 0 && id.length <= 64))];
@@ -134,7 +134,7 @@ const cleanIds = (ids: readonly string[]): string[] => [...new Set(ids.map((id) 
  * the unit cost of the newest received purchase order line for it, else the product's purchase
  * price (the warehouse has no cost at the time of use, so Pulse keeps its own copy on its rows).
  */
-export async function listWorkOrders(ctx: DomainContext, options: { ids?: readonly string[]; query?: string; openOnly?: boolean; limit?: number } = {}): Promise<WmsWorkOrder[]> {
+export const listWorkOrders = scoped(async function listWorkOrders(ctx: DomainContext, options: { ids?: readonly string[]; query?: string; openOnly?: boolean; limit?: number } = {}): Promise<WmsWorkOrder[]> {
   const schema = await wmsReady(ctx);
   if (!schema) return [];
   if (options.ids && cleanIds(options.ids).length === 0) return [];
@@ -163,7 +163,7 @@ export async function listWorkOrders(ctx: DomainContext, options: { ids?: readon
       planned_cents: string | null;
       consumed_cents: string | null;
     }>(
-      db,
+      siblingDb,
       sql`select w.id, w.code, w.status, w.type, w.extra_note, w.client_id, c.name as client_name, kp.sku, kp.name as kit_name,
                  w.requested_qty, w.processed_qty, w.planned_finish_at, w.actual_finish_at,
                  m.planned_cents::text as planned_cents, m.consumed_cents::text as consumed_cents
@@ -210,7 +210,7 @@ export async function listWorkOrders(ctx: DomainContext, options: { ids?: readon
     logSoftFail(ctx.orgId, 'wms.listWorkOrders', error);
     return [];
   }
-}
+});
 
 /**
  * Kits built per work order per day, from the warehouse ledger. Exact rule: a Kitting row for
@@ -218,14 +218,14 @@ export async function listWorkOrders(ctx: DomainContext, options: { ids?: readon
  * (disassembly) takes away. Component rows share the type and are left out by the product test.
  * The day is the ledger time in `timezone`.
  */
-export async function workOrderBuildsByDay(ctx: DomainContext, workOrderIds: readonly string[], timezone: string): Promise<WmsBuildDay[]> {
+export const workOrderBuildsByDay = scoped(async function workOrderBuildsByDay(ctx: DomainContext, workOrderIds: readonly string[], timezone: string): Promise<WmsBuildDay[]> {
   const ids = cleanIds(workOrderIds);
   const schema = ids.length > 0 ? await wmsReady(ctx) : null;
   if (!schema || !(await wmsTableExists(schema, 'inventory_transactions'))) return [];
   try {
     const t = (name: string) => wmsTable(schema, name);
     const found = await rows<{ work_order_id: string; work_date: string; kits: string }>(
-      db,
+      siblingDb,
       sql`select it.work_order_id, ((it.at::timestamptz at time zone ${timezone})::date)::text as work_date,
                  sum(case when it.to_location_id is not null then it.uom_qty else -it.uom_qty end)::text as kits
             from ${t('inventory_transactions')} it
@@ -240,14 +240,14 @@ export async function workOrderBuildsByDay(ctx: DomainContext, workOrderIds: rea
     logSoftFail(ctx.orgId, 'wms.workOrderBuildsByDay', error);
     return [];
   }
-}
+});
 
 /**
  * Billed revenue per bill and kind of work. Uses summary lines only (`is_detail = false`):
  * every fee also writes detail lines, and adding both would count a bill twice. Canceled bills
  * are left out. Draft bills come back with `approved: false`.
  */
-export async function listBilledRevenue(ctx: DomainContext, options: { from?: string; clientId?: string } = {}): Promise<WmsBilledLine[]> {
+export const listBilledRevenue = scoped(async function listBilledRevenue(ctx: DomainContext, options: { from?: string; clientId?: string } = {}): Promise<WmsBilledLine[]> {
   const schema = await wmsReady(ctx);
   if (!schema || !(await wmsTableExists(schema, 'billing_reports')) || !(await wmsTableExists(schema, 'billing_report_lines'))) return [];
   try {
@@ -255,7 +255,7 @@ export async function listBilledRevenue(ctx: DomainContext, options: { from?: st
     const from = options.from ? sql`and r.period_end >= ${options.from}` : sql``;
     const client = options.clientId ? sql`and r.client_id = ${options.clientId}` : sql``;
     const found = await rows<{ report_id: string; bill_number: string | null; client_id: string; period_end: string; operation: string; amount_cents: string; approved: boolean }>(
-      db,
+      siblingDb,
       sql`select r.id as report_id, r.bill_number, r.client_id, left(r.period_end, 10) as period_end, l.operation_type as operation,
                  round(sum(l.adjusted_price)::numeric * 100)::bigint::text as amount_cents, (r.bill_status = 'Approved') as approved
             from ${t('billing_reports')} r
@@ -279,7 +279,7 @@ export async function listBilledRevenue(ctx: DomainContext, options: { from?: st
     logSoftFail(ctx.orgId, 'wms.listBilledRevenue', error);
     return [];
   }
-}
+});
 
 /** The WMS screen that lists extra service records. */
 export const WMS_VAS_PATH = '/billing/vas';
@@ -297,7 +297,7 @@ export const WMS_VAS_PATH = '/billing/vas';
  * time zone. Answers null when this workspace has no warehouse to read (so a caller never
  * mistakes "cannot read" for "no records"), and throws only when `throwOnError` is set.
  */
-export async function listVasRecords(ctx: DomainContext, options: { throwOnError?: boolean } = {}): Promise<WmsVasRecord[] | null> {
+export const listVasRecords = scoped(async function listVasRecords(ctx: DomainContext, options: { throwOnError?: boolean } = {}): Promise<WmsVasRecord[] | null> {
   try {
     const schema = await wmsReady(ctx);
     if (!schema || !(await wmsTableExists(schema, 'vas_operations')) || !(await wmsTableExists(schema, 'lookup_values'))) return null;
@@ -336,7 +336,7 @@ export async function listVasRecords(ctx: DomainContext, options: { throwOnError
       work_order_id: string | null;
       note: string | null;
     }>(
-      db,
+      siblingDb,
       sql`select v.id, v.client_id, v.warehouse_id, v.vas_type_id, lv.name as vas_type, v.calculation_type, v.note,
                  case when v.operation_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' then ((v.operation_at::timestamptz at time zone ${zone})::date)::text else left(v.operation_at, 10) end as work_date,
                  round(v.value::numeric, 3)::text as quantity,
@@ -377,15 +377,18 @@ export async function listVasRecords(ctx: DomainContext, options: { throwOnError
     if (options.throwOnError) throw error;
     return null;
   }
-}
+});
 
 /**
  * What the warehouse contract says each of these work orders earns: the "Work Order" fees on the
- * newest approved contract of the work order's client and warehouse. Only fees with no
- * conditions are read (a fee that applies to some products only is left to the warehouse bill).
+ * newest approved contract of the work order's client and warehouse that has started (a contract
+ * with a start day in the future is not read yet). Only fees with no conditions are read (a fee
+ * that applies to some products only is left to the warehouse bill), and a fee is read at its
+ * standard rate: volume tiers are priced by the warehouse billing run over a whole period, which
+ * one job cannot see, so tiers stay with the warehouse bill too.
  * A work order whose client has no such fee is left out. Fail soft: an empty list.
  */
-export async function listContractPrices(ctx: DomainContext, workOrderIds: readonly string[]): Promise<WmsContractPrice[]> {
+export const listContractPrices = scoped(async function listContractPrices(ctx: DomainContext, workOrderIds: readonly string[]): Promise<WmsContractPrice[]> {
   const ids = cleanIds(workOrderIds);
   if (ids.length === 0) return [];
   try {
@@ -393,7 +396,7 @@ export async function listContractPrices(ctx: DomainContext, workOrderIds: reado
     if (!schema || !(await wmsTableExists(schema, 'billing_fees')) || !(await wmsTableExists(schema, 'billing_contracts'))) return [];
     const t = (name: string) => wmsTable(schema, name);
     const found = await rows<{ work_order_id: string; contract_id: string; contract_name: string; unit_price: string | null; per_order_cents: string | null; signature: string }>(
-      db,
+      siblingDb,
       sql`select w.id as work_order_id, c.contract_id, c.contract_name,
                  case when c.per_kit is null and c.per_component is null then null
                       else round(coalesce(c.per_kit, 0) + coalesce(c.per_component, 0) * p.parts, 4)::text end as unit_price,
@@ -411,6 +414,8 @@ export async function listContractPrices(ctx: DomainContext, workOrderIds: reado
                 from ${t('billing_contracts')} bc
                 join ${t('billing_fees')} f on f.contract_id = bc.id
                where bc.client_id = w.client_id and bc.warehouse_id = w.warehouse_id and bc.approval_status = 'Approved'
+                 -- A contract that has not started yet sets no price: its rates count from its start day.
+                 and left(bc.calc_start_date, 10) <= to_char(now(), 'YYYY-MM-DD')
                  and f.operation_type = 'Work Order' and f.fee_by in ('Per Kit', 'Per Component', 'Per WorkOrder')
                  and f.standard_rate >= 0 and f.standard_rate < 1000000
                  and (f.conditions is null or f.conditions = '[]'::jsonb)
@@ -433,4 +438,4 @@ export async function listContractPrices(ctx: DomainContext, workOrderIds: reado
     logSoftFail(ctx.orgId, 'wms.listContractPrices', error);
     return [];
   }
-}
+});

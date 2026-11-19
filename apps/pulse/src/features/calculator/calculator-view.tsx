@@ -8,6 +8,7 @@
  * Scenarios can be saved, opened, compared side by side and turned into a job whose quote is
  * exactly what the calculator showed. All math comes from `runCalc` (which calls `@/lib/profit`).
  */
+import { ScrollX } from '@/components/ui/scroll-x';
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -822,7 +823,7 @@ function Sensitivity({ run, unit }: { readonly run: CalcRun; readonly unit: stri
       bodyClassName="flex flex-col gap-4"
     >
       <p className="text-sm text-fg-secondary">Each row is a pace, from 20% under the target pace to 20% over. Each column is a price. The middle cell is the answer above.</p>
-      <div className="-mx-4 overflow-x-auto px-4">
+      <ScrollX label={`${show === 'margin' ? 'Margin' : 'Profit'} by pace and price`} className="-mx-4" scrollerClassName="px-4">
         <table className="w-full min-w-[460px] border-separate border-spacing-1 text-sm tabular-nums" data-testid="calc-grid">
           <caption className="sr-only">{show === 'margin' ? 'Margin' : 'Profit'} by pace and price</caption>
           <thead>
@@ -853,7 +854,7 @@ function Sensitivity({ run, unit }: { readonly run: CalcRun; readonly unit: stri
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollX>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-secondary">
         <li className="flex items-center gap-1.5"><span aria-hidden className="size-2.5 rounded-xs bg-success-subtle ring-1 ring-success/40" />Meets your {formatPercentBp(target)} target</li>
         <li className="flex items-center gap-1.5"><span aria-hidden className="size-2.5 rounded-xs bg-warning-subtle ring-1 ring-warning/40" />Makes money, under target</li>

@@ -14,6 +14,7 @@
  */
 import 'server-only';
 import { NextResponse } from 'next/server';
+import { withOrg } from '@/server/db/scope';
 import { toDomainContext, type DomainContext } from '@/server/domain/_shared';
 import { orgHasPulseModule } from '@/server/entitlements';
 import { trustedOrigins } from '@/server/env';
@@ -118,13 +119,16 @@ export function apiRoute<P = Record<string, never>, T = unknown>(
         throw new DomainError('NOT_ENTITLED', 'KitStak Pulse is not turned on for this organization.');
       }
       const params = route?.params ? await route.params : ({} as P);
-      const data = await handler({
-        ctx: toDomainContext(context),
-        context,
-        request,
-        params,
-        searchParams: new URL(request.url).searchParams,
-      });
+      // The whole handler runs for one workspace: the database guard ties every statement to it.
+      const data = await withOrg(context.org.id, () =>
+        handler({
+          ctx: toDomainContext(context),
+          context,
+          request,
+          params,
+          searchParams: new URL(request.url).searchParams,
+        }),
+      );
       const body = isWithMeta(data) ? { data: data.data ?? null, meta: data[META] } : { data: data ?? null };
       return NextResponse.json(body, { headers: cors });
     } catch (error) {

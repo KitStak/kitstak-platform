@@ -6,6 +6,7 @@
 import 'server-only';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { jobLinks, jobs } from '@/server/db/schema';
 import { appUrls } from '@/server/env';
 import type { DomainContext } from '@/server/domain/_shared';
@@ -49,7 +50,7 @@ function projectStatus(project: PmProject): { status: string; tone: RecordTone }
 const workOrderDetail = (order: WmsWorkOrder): string => `${order.finishedQty} of ${order.requestedQty} kits built`;
 
 /** The linked records as they are right now, in the order asked. */
-export async function resolveRecords(ctx: DomainContext, targets: readonly RecordTarget[]): Promise<LiveRecordDTO[]> {
+export const resolveRecords = scoped(async function resolveRecords(ctx: DomainContext, targets: readonly RecordTarget[]): Promise<LiveRecordDTO[]> {
   const of = (type: LinkTargetType): string[] => targets.filter((target) => target.type === type).map((target) => target.id);
   const [crm, wms, projects] = await Promise.all([crmReady(ctx), wmsReady(ctx).then((schema) => schema !== null), projectsReady(ctx)]);
   const [deals, accounts, orders, found] = await Promise.all([
@@ -84,7 +85,7 @@ export async function resolveRecords(ctx: DomainContext, targets: readonly Recor
     }
     return { ...base, state: 'gone', title: null, status: null, tone: 'quiet', detail: null, url: null };
   });
-}
+});
 
 /** Which of these records already have a job, by record id. */
 async function linkedJobs(ctx: DomainContext, type: LinkableType, ids: readonly string[]): Promise<Map<string, string>> {
@@ -100,7 +101,7 @@ async function linkedJobs(ctx: DomainContext, type: LinkableType, ids: readonly 
 }
 
 /** Records of one kind that match the text, for the link dialog. Empty when the app cannot be read. */
-export async function searchRecords(ctx: DomainContext, type: LinkableType, query: string, limit = 12): Promise<RecordOptionDTO[]> {
+export const searchRecords = scoped(async function searchRecords(ctx: DomainContext, type: LinkableType, query: string, limit = 12): Promise<RecordOptionDTO[]> {
   try {
     let options: Omit<RecordOptionDTO, 'linkedJobNumber'>[] = [];
     if (type === 'crm_deal') {
@@ -124,4 +125,4 @@ export async function searchRecords(ctx: DomainContext, type: LinkableType, quer
     logSoftFail(ctx.orgId, 'records.searchRecords', error);
     return [];
   }
-}
+});

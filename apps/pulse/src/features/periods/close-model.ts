@@ -30,7 +30,7 @@ export interface BridgeStep {
 export function bridgeSteps(bridge: { readonly sharedGapCents: number | null; readonly missingCostCents: number | null; readonly overheadGapCents: number | null; readonly hasCompanyCosts: boolean }): BridgeStep[] {
   if (bridge.sharedGapCents === null || bridge.missingCostCents === null) return [];
   const steps: BridgeStep[] = [
-    { key: 'shared_gap', label: 'Time not on a job that no job carried', cents: bridge.sharedGapCents, adds: bridge.sharedGapCents < 0 },
+    { key: 'shared_gap', label: bridge.sharedGapCents < 0 ? 'Jobs carried more time not on a job than was logged' : 'Time not on a job that no job carried', cents: bridge.sharedGapCents, adds: bridge.sharedGapCents < 0 },
     { key: 'missing_time', label: 'Paid time not on any job', cents: bridge.missingCostCents, adds: bridge.missingCostCents < 0 },
   ];
   if (bridge.hasCompanyCosts && bridge.overheadGapCents !== null) {
@@ -38,4 +38,23 @@ export function bridgeSteps(bridge: { readonly sharedGapCents: number | null; re
     steps.push({ key: 'overhead_gap', label: over ? 'Your hourly rate covered more overhead than you spent' : 'Overhead your hourly rate did not cover', cents: bridge.overheadGapCents, adds: over });
   }
   return steps;
+}
+
+/** The one status a month shows, in the list and on its card. */
+export interface MonthStatus {
+  readonly key: 'closed' | 'in_progress' | 'to_fix' | 'ready';
+  readonly label: string;
+  readonly tone: 'neutral' | 'primary' | 'danger' | 'success';
+}
+
+/**
+ * One status at a time: a closed month is "Closed", a month that is not over is "In progress", an
+ * open month with a "Fix this first" step says how many things to fix, and only a month with a
+ * clear checklist is "Ready to close".
+ */
+export function monthStatus(month: { readonly status: 'open' | 'closed'; readonly inProgress: boolean }, toFix: number | null): MonthStatus {
+  if (month.status === 'closed') return { key: 'closed', label: 'Closed', tone: 'neutral' };
+  if (month.inProgress) return { key: 'in_progress', label: 'In progress', tone: 'primary' };
+  if (toFix !== null && toFix > 0) return { key: 'to_fix', label: `${toFix} ${toFix === 1 ? 'thing' : 'things'} to fix`, tone: 'danger' };
+  return { key: 'ready', label: 'Ready to close', tone: 'success' };
 }

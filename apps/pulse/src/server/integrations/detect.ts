@@ -11,10 +11,21 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
 import { findWmsTenantSchema, isWmsSchemaName } from '@kitstak/db/wms-tenants';
-import { db } from '@/server/db';
+import { db, type Database } from '@/server/db';
+import { asSystem, scoped } from '@/server/db/scope';
 import { orgModuleFlags } from '@/server/entitlements';
 import type { DomainContext } from '@/server/domain/_shared';
 import { logSoftFail } from './log';
+
+/**
+ * The handle for sibling data: `crm`, `pm`, the WMS tenant schemas and the shared `core` tables
+ * of the other apps. Those schemas have no Pulse policy, so the plain role of the database guard
+ * cannot read them. A sibling read runs as the owner, and every reader keeps its own org filter.
+ * Never use it for a `pulse` table.
+ */
+export const siblingDb = {
+  execute: ((query: Parameters<Database['execute']>[0]) => asSystem('sibling read (crm, wms, pm and shared core tables have no Pulse policy)', () => db.execute(query))) as Database['execute'],
+} as unknown as Database;
 
 const TABLE_TTL_MS = 5 * 60_000;
 const tableCache = new Map<string, { exists: boolean; at: number }>();
@@ -23,7 +34,7 @@ export async function tableExists(qualified: string): Promise<boolean> {
   const cached = tableCache.get(qualified);
   if (cached && Date.now() - cached.at < TABLE_TTL_MS) return cached.exists;
   try {
-    const result = await db.execute<{ exists: boolean }>(sql`select to_regclass(${qualified}) is not null as exists`);
+    const result = await siblingDb.execute<{ exists: boolean }>(sql`select to_regclass(${qualified}) is not null as exists`);
     const exists = Boolean(result.rows[0]?.exists);
     tableCache.set(qualified, { exists, at: Date.now() });
     return exists;
@@ -52,11 +63,11 @@ const schemaCache = new Map<string, { schema: string | null; at: number }>();
  * The org's own ACTIVE WMS schema (validated), or null when it has no warehouse. Ignores module
  * entitlement (use `wmsSchemaFor` for integration reads). Fails soft.
  */
-export async function wmsTenantSchemaFor(orgId: string): Promise<string | null> {
+export const wmsTenantSchemaFor = scoped(async function wmsTenantSchemaFor(orgId: string): Promise<string | null> {
   const cached = schemaCache.get(orgId);
   if (cached && Date.now() - cached.at < SCHEMA_TTL_MS) return cached.schema;
   try {
-    const found = await findWmsTenantSchema(db, orgId);
+    const found = await asSystem('sibling read: the warehouse schema of this workspace (core.wms_tenants)', () => findWmsTenantSchema(db, orgId));
     // Only a usable warehouse counts: provisioned and migrated far enough to hold orders.
     const schema = found && (await wmsTableExists(found, 'shipment_orders')) ? found : null;
     if (schemaCache.size > 5000) schemaCache.clear();
@@ -66,13 +77,13 @@ export async function wmsTenantSchemaFor(orgId: string): Promise<string | null> 
     logSoftFail(orgId, 'detect.wmsTenantSchemaFor', error);
     return null;
   }
-}
+});
 
 /**
  * The WMS schema Pulse may read for this request's org: the WMS module is on AND the org has an
  * active warehouse. Null means "WMS not installed" for this org (never the platform schema).
  */
-export async function wmsSchemaFor(ctx: DomainContext): Promise<string | null> {
+export const wmsSchemaFor = scoped(async function wmsSchemaFor(ctx: DomainContext): Promise<string | null> {
   try {
     const flags = await orgModuleFlags(ctx.orgId);
     return flags.wms ? await wmsTenantSchemaFor(ctx.orgId) : null;
@@ -80,7 +91,7 @@ export async function wmsSchemaFor(ctx: DomainContext): Promise<string | null> {
     logSoftFail(ctx.orgId, 'detect.wmsSchemaFor', error);
     return null;
   }
-}
+});
 
 export interface IntegrationAvailability {
   readonly crm: boolean;
@@ -88,7 +99,7 @@ export interface IntegrationAvailability {
   readonly projects: boolean;
 }
 
-export async function integrationAvailability(ctx: DomainContext): Promise<IntegrationAvailability> {
+export const integrationAvailability = scoped(async function integrationAvailability(ctx: DomainContext): Promise<IntegrationAvailability> {
   try {
     const flags = await orgModuleFlags(ctx.orgId);
     const [crmTables, wmsSchema, projectsTables] = await Promise.all([
@@ -101,4 +112,4 @@ export async function integrationAvailability(ctx: DomainContext): Promise<Integ
     logSoftFail(ctx.orgId, 'detect.integrationAvailability', error);
     return { crm: false, wms: false, projects: false };
   }
-}
+});

@@ -17,6 +17,7 @@ import 'server-only';
 import { and, desc, eq, gte, inArray, lte, sql, type SQL } from 'drizzle-orm';
 import { verbLabel } from '@/features/settings/audit-format';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { activity } from '@/server/db/schema';
 import { invalid } from '@/server/errors';
 import type { ActivityDTO, Page } from '@/lib/types';
@@ -39,7 +40,7 @@ export interface ActivityEntry {
 }
 
 /** Append one or more events. Call inside the mutation's transaction. */
-export async function logActivity(executor: Executor, ctx: DomainContext, entries: ActivityEntry | readonly ActivityEntry[]): Promise<void> {
+export const logActivity = scoped(async function logActivity(executor: Executor, ctx: DomainContext, entries: ActivityEntry | readonly ActivityEntry[]): Promise<void> {
   const list = Array.isArray(entries) ? (entries as readonly ActivityEntry[]) : [entries as ActivityEntry];
   if (list.length === 0) return;
   await executor.insert(activity).values(
@@ -59,7 +60,7 @@ export async function logActivity(executor: Executor, ctx: DomainContext, entrie
       body: entry.body ?? null,
     })),
   );
-}
+}, 1);
 
 /** Fields a reader without `money:read` may see in `before` and `after`, per entity type. */
 export const ACTIVITY_SAFE_FIELDS: Readonly<Record<string, readonly string[]>> = {
@@ -116,7 +117,7 @@ export interface ActivityFilters {
 }
 
 /** The audit feed, newest first, with a `createdAt|id` cursor. */
-export async function listActivity(ctx: DomainContext, filters: ActivityFilters = {}): Promise<Page<ActivityDTO>> {
+export const listActivity = scoped(async function listActivity(ctx: DomainContext, filters: ActivityFilters = {}): Promise<Page<ActivityDTO>> {
   const access = await requirePulse(ctx, 'pulse:read');
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
   const where: SQL[] = [eq(activity.orgId, ctx.orgId)];
@@ -178,10 +179,10 @@ export async function listActivity(ctx: DomainContext, filters: ActivityFilters 
   });
   const last = page[page.length - 1];
   return { items, nextCursor: found.length > limit && last ? `${last.createdAt.toISOString()}|${last.id}` : null };
-}
+});
 
 /** A note on a job or a client (the composer on the Activity tab). */
-export async function addNote(ctx: DomainContext, input: { jobId?: string | null; clientId?: string | null; body: string }): Promise<{ id: string }> {
+export const addNote = scoped(async function addNote(ctx: DomainContext, input: { jobId?: string | null; clientId?: string | null; body: string }): Promise<{ id: string }> {
   await requirePulse(ctx, 'production:log');
   const body = cleanText(input.body);
   if (!body) throw invalid('Write a note first.', { body: 'Write a note first.' });
@@ -210,14 +211,14 @@ export async function addNote(ctx: DomainContext, input: { jobId?: string | null
       .returning({ id: activity.id });
     return { id: row!.id };
   });
-}
+});
 
 /** Ids of activity rows for tests and exports. */
-export async function countActivity(ctx: DomainContext, verbs: readonly string[], since?: Date): Promise<number> {
+export const countActivity = scoped(async function countActivity(ctx: DomainContext, verbs: readonly string[], since?: Date): Promise<number> {
   const where: SQL[] = [eq(activity.orgId, ctx.orgId)];
   if (verbs.length > 0) where.push(inArray(activity.verb, [...verbs]));
   if (since) where.push(gte(activity.createdAt, since));
   const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(activity).where(and(...where));
   return row?.n ?? 0;
-}
+});
 

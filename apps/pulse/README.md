@@ -81,3 +81,9 @@ rate limits sign-ins). When the installed browser is older than the one `@playwr
 See `.env.example`. `BETTER_AUTH_SECRET` must match the other apps. `ENTITLEMENTS_DEV_ALLOW_ALL=1`
 unlocks the module locally; production needs
 `pnpm --filter @kitstak/entitlements grant grant <org-slug> pulse`.
+
+`PULSE_DB_GUARD=1` turns the database guard on: the app runs every query as the plain role
+`pulse_app` with the workspace set, so the row level security policies apply to the app itself.
+Set it in `.env.local` for local dev (the tests turn it on by themselves). Production stays off
+until it is set there; the steps are in `docs/pulse/CONTRACTS.md`, section 12, rule 13. It needs
+migration `0009_db_guard_role.sql`; `GET /api/health` shows `guard: { on, ready }`.

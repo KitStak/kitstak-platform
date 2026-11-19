@@ -16,6 +16,7 @@ import { asc, eq } from 'drizzle-orm';
 import { member, organization } from '@kitstak/db/schema';
 import { auth, type AuthSession } from '@/server/auth';
 import { db } from '@/server/db';
+import { asSystem } from '@/server/db/scope';
 import { DomainError } from '@/server/errors';
 import { parseOrgRole, type OrgRole } from '@/lib/permissions';
 
@@ -53,18 +54,21 @@ export const getSession = cache(async (): Promise<Session | null> => getSessionF
 
 /** Active memberships, alphabetical (deactivated members excluded). */
 export async function listUserOrgs(userId: string): Promise<OrgSummary[]> {
-  const rows = await db
-    .select({
-      id: organization.id,
-      name: organization.name,
-      slug: organization.slug,
-      logo: organization.logo,
-      role: member.role,
-    })
-    .from(member)
-    .innerJoin(organization, eq(member.organizationId, organization.id))
-    .where(eq(member.userId, userId))
-    .orderBy(asc(organization.name));
+  // Runs before any workspace is known: it is how the workspace is found.
+  const rows = await asSystem('sign in: list the workspaces of a person', () =>
+    db
+      .select({
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug,
+        logo: organization.logo,
+        role: member.role,
+      })
+      .from(member)
+      .innerJoin(organization, eq(member.organizationId, organization.id))
+      .where(eq(member.userId, userId))
+      .orderBy(asc(organization.name)),
+  );
   const out: OrgSummary[] = [];
   for (const row of rows) {
     const role = parseOrgRole(row.role);

@@ -13,6 +13,7 @@ import {
   DialogHeader,
   Field,
   Input,
+  IsoDatePicker,
   Select,
   Textarea,
   ToggleGroup,
@@ -259,23 +260,23 @@ export function EditJobDialog({
       </Field>
       <Field label="Start date">
         {({ inputId }) => (
-          <Input
+          <IsoDatePicker
             id={inputId}
-            type="date"
-            value={startDate}
-            onChange={(event) => setStartDate(event.target.value)}
+            aria-label="Start date"
+            value={startDate || null}
+            onChange={(value) => setStartDate(value ?? '')}
           />
         )}
       </Field>
       <Field label="Due date" error={errors.dueDate}>
         {({ inputId, describedBy, invalid }) => (
-          <Input
+          <IsoDatePicker
             id={inputId}
+            aria-label="Due date"
             aria-describedby={describedBy}
             invalid={invalid}
-            type="date"
-            value={dueDate}
-            onChange={(event) => setDueDate(event.target.value)}
+            value={dueDate || null}
+            onChange={(value) => setDueDate(value ?? '')}
             data-testid="edit-job-due"
           />
         )}
@@ -847,13 +848,14 @@ export function PriceDialog({
       {!isFixed && whole === 'day' ? (
         <Field label="Starts on" error={errors.effectiveFrom}>
           {({ inputId, describedBy, invalid }) => (
-            <Input
+            <IsoDatePicker
               id={inputId}
+              aria-label="Starts on"
               aria-describedby={describedBy}
               invalid={invalid}
-              type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
+              clearable={false}
+              value={from || null}
+              onChange={(value) => setFrom(value ?? '')}
               data-testid="price-from"
             />
           )}

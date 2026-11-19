@@ -113,6 +113,32 @@ export function matchClientName<T extends ClientNameRef>(typed: string, clients:
   return { exact: null, lookAlikes };
 }
 
+/**
+ * The words every client box and the server use, so the same slip reads the same on quick add,
+ * the Log work "Add a job" dialog, the new job wizard and the calculator.
+ */
+export const CLIENT_NEEDED = 'Pick a client, or type a new client name.';
+
+/** A typed name close to clients that exist: pick one, or say that this is a new client. */
+export function clientLookAlikeMessage(typed: string, names: readonly string[]): string {
+  return `${typed} looks like ${nameList(names)}, a client you already have. Pick it from the list, or choose Create "${typed}" to add a new client.`;
+}
+
+/** Loose text that names no client: a client is only made from the Create row. */
+export function clientNotPickedMessage(typed: string): string {
+  return `${typed} is not a client yet. Choose Create "${typed}" in the list to add it.`;
+}
+
+/** The message for the text in a client box, or null when it names a client or a confirmed new one. */
+export function clientBoxProblem<T extends ClientNameRef>(choice: { readonly text: string; readonly clientId: string | null; readonly createNew: boolean }, clients: readonly T[]): string | null {
+  const typed = choice.text.trim();
+  if (!typed) return CLIENT_NEEDED;
+  if (choice.clientId || choice.createNew) return null;
+  const found = matchClientName(typed, clients);
+  if (found.exact) return null;
+  return found.lookAlikes.length > 0 ? clientLookAlikeMessage(typed, found.lookAlikes.map((item) => item.name)) : clientNotPickedMessage(typed);
+}
+
 /** "A", "A or B", "A, B or C": the look-alikes as words for a message. At most three are named. */
 export function nameList(names: readonly string[]): string {
   const shown = names.slice(0, 3);

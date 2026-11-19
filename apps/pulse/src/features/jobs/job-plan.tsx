@@ -57,7 +57,7 @@ import { routes } from '@/lib/routes';
 import type { JobPlanDTO } from '@/lib/types';
 import { deletePlanAction, makeBudgetFromQuoteAction, savePlanAction } from '@/server/actions/jobs';
 import { PlanDialog } from './forms/job-dialogs';
-import { ScrollX } from './scroll-x';
+import { ScrollX } from '@/components/ui/scroll-x';
 import { useJobCosts, useJobProduction, useJobProjection, useJobServices, useRefreshJob } from './job-data';
 import { paceYardsticks, planPace } from './job-figures';
 import { planToTotals, statsToActual } from './job-math';
@@ -465,7 +465,7 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
         ) : (
           <>
             <ScrollX label={`${planWord === 'budget' ? 'Budget' : 'Quote'} against actual`} className="hidden lg:block" testId="plan-table-scroll">
-              <Table aria-label={`${planWord} against actual`} data-testid="plan-table">
+              <Table scroll={false} aria-label={`${planWord} against actual`} data-testid="plan-table">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
                     <TableHeaderCell>
@@ -681,7 +681,7 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
           ) : (
             <>
             <ScrollX label="Quote lines against actual" testId="quote-lines-scroll">
-              <Table aria-label="Quote lines against actual" data-testid="quote-lines">
+              <Table scroll={false} aria-label="Quote lines against actual" data-testid="quote-lines">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
                     <TableHeaderCell>Line</TableHeaderCell>
@@ -733,7 +733,7 @@ export function JobPlan({ job, today, settings, laborClasses }: JobTabProps) {
       {bridge ? (
         <Panel title="From the quote to your budget" bodyClassName="p-0">
           <ScrollX label="Quote against budget" testId="quote-to-budget-scroll">
-            <Table aria-label="Quote against budget" data-testid="quote-to-budget">
+            <Table scroll={false} aria-label="Quote against budget" data-testid="quote-to-budget">
               <TableHead>
                 <TableRow className="hover:bg-transparent">
                   <TableHeaderCell>

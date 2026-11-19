@@ -74,6 +74,10 @@ const INTO_PULSE: Readonly<Record<SiblingApp, readonly Flow[]>> = {
       text: 'Warehouse bills come in as billed amounts for each client. They show what was invoiced and never change profit.',
       toggle: 'wmsSyncBilling',
     },
+    {
+      text: 'The rate for work orders on the client\'s approved warehouse contract becomes the price of a linked job. Turn this off to keep the prices you type in Pulse.',
+      toggle: 'wmsContractPrices',
+    },
     { text: 'A work order that is short of parts marks its job, so it shows up as at risk.' },
   ],
   projects: [
@@ -95,6 +99,7 @@ const TOGGLE_LABEL: Readonly<Record<SwitchKey, string>> = {
   crmSuggestJobs: 'Suggest jobs from won deals',
   wmsSyncMaterials: 'Pull parts used',
   wmsSyncBilling: 'Pull warehouse bills',
+  wmsContractPrices: 'Let warehouse contract rates set job prices',
   projectsTimeImport: 'Pull project time',
 };
 

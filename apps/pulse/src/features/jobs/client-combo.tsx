@@ -3,9 +3,14 @@
  * The Client box of quick add: type to search the clients you have, press Enter to take the
  * highlighted one. A name close to a client you already have shows that client first ("Did you
  * mean"), and a new client is only ever made from the "Create" row, never from loose text.
+ *
+ * The box owns its message: one set of words (`clientBoxProblem` in `@/lib/client-names`), shown
+ * right under the box, tied to it for screen readers, with the list opening below the message so
+ * it never covers it. Quick add, the Log work "Add a job" dialog, the new job wizard and the
+ * calculator all use it the same way.
  */
 import { useId, useMemo, useState, type KeyboardEvent, type Ref } from 'react';
-import { Check, Plus } from 'lucide-react';
+import { Check, CircleAlert, Plus } from 'lucide-react';
 import { Badge, Input, Popover, PopoverAnchor, PopoverContent } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { matchClientName } from '@/lib/client-names';
@@ -22,7 +27,7 @@ export interface ClientChoice {
 
 export const NO_CLIENT: ClientChoice = { text: '', clientId: null, createNew: false };
 
-type ClientLite = Pick<ClientDTO, 'id' | 'name' | 'code'>;
+type ClientLite = Pick<ClientDTO, 'id' | 'name'> & { readonly code?: string | null };
 
 interface Row {
   readonly key: string;
@@ -41,7 +46,7 @@ export function clientRows(
   const lower = typed.toLowerCase();
   const match = matchClientName(typed, clients);
   const holds = clients.filter(
-    (client) => client.name.toLowerCase().includes(lower) || client.code.toLowerCase().includes(lower),
+    (client) => client.name.toLowerCase().includes(lower) || (client.code ?? '').toLowerCase().includes(lower),
   );
   const ordered: ClientLite[] = [];
   const add = (client: ClientLite) => {
@@ -65,7 +70,9 @@ export function ClientCombo({
   onPicked,
   open,
   onOpenChange,
-  invalid,
+  error,
+  hint,
+  id,
   inputRef,
   testId = 'client-combo',
 }: {
@@ -76,11 +83,17 @@ export function ClientCombo({
   readonly onPicked?: () => void;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly invalid?: boolean;
+  /** What is wrong with the box, in the shared words. Shown under the box and read with it. */
+  readonly error?: string | null;
+  /** A quiet line under the box when nothing is wrong. */
+  readonly hint?: string | null;
+  /** The id the field label points at. */
+  readonly id?: string;
   readonly inputRef?: Ref<HTMLInputElement>;
   readonly testId?: string;
 }) {
   const listId = useId();
+  const messageId = `${listId}-message`;
   const [active, setActive] = useState(0);
   const typed = value.text.trim();
   const { existing, canCreate, lookAlike } = useMemo(() => clientRows(value.text, clients), [value.text, clients]);
@@ -138,11 +151,13 @@ export function ClientCombo({
   return (
     <Popover open={open && rows.length > 0} onOpenChange={onOpenChange}>
       <PopoverAnchor asChild>
-        <div>
+        <div className="flex flex-col gap-1.5">
           <Input
             ref={inputRef}
+            id={id}
             role="combobox"
             aria-label="Client"
+            aria-describedby={error || hint ? messageId : undefined}
             aria-expanded={open && rows.length > 0}
             aria-controls={listId}
             aria-autocomplete="list"
@@ -167,7 +182,7 @@ export function ClientCombo({
             }}
             onKeyDown={onKeyDown}
             placeholder="Client"
-            invalid={invalid}
+            invalid={Boolean(error)}
             autoComplete="off"
             maxLength={200}
             data-testid={testId}
@@ -182,6 +197,16 @@ export function ClientCombo({
               ) : undefined
             }
           />
+          {error ? (
+            <p id={messageId} role="alert" className="flex items-start gap-1 text-2xs font-medium text-danger-text" data-testid={`${testId}-error`}>
+              <CircleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
+              <span>{error}</span>
+            </p>
+          ) : hint ? (
+            <p id={messageId} className="text-2xs text-fg-muted">
+              {hint}
+            </p>
+          ) : null}
         </div>
       </PopoverAnchor>
       <PopoverContent
@@ -229,7 +254,7 @@ export function ClientCombo({
                   data-testid={`${testId}-option`}
                 >
                   <span className="min-w-0 flex-1 truncate">{client.name}</span>
-                  <span className="shrink-0 text-xs text-fg-muted">{client.code}</span>
+                  {client.code ? <span className="shrink-0 text-xs text-fg-muted">{client.code}</span> : null}
                 </div>
               ))}
             </div>

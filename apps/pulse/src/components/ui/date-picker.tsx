@@ -49,17 +49,20 @@ export interface CalendarProps {
   readonly modifiersClassNames?: Record<string, string>;
   /** Small note under the grid. */
   readonly footer?: ReactNode;
+  /** Days that cannot be picked, like every day after today. */
+  readonly disabled?: Matcher | Matcher[];
 }
 
 /** Inline single-date calendar. */
 /** Weeks start on Monday, like the project Calendar and Workload views. */
-export function Calendar({ selected, onSelect, weekStartsOn = 1, modifiers, modifiersClassNames, footer }: CalendarProps) {
+export function Calendar({ selected, onSelect, weekStartsOn = 1, modifiers, modifiersClassNames, footer, disabled }: CalendarProps) {
   return (
     <DayPicker
       mode="single"
       selected={selected}
       onSelect={onSelect}
       defaultMonth={selected}
+      disabled={disabled}
       weekStartsOn={weekStartsOn}
       showOutsideDays
       fixedWeeks
@@ -103,12 +106,21 @@ export interface DatePickerProps {
   readonly clearable?: boolean;
   readonly id?: string;
   readonly 'aria-label'?: string;
+  readonly 'aria-describedby'?: string;
   readonly className?: string;
+  /** Extra classes for the trigger itself (a taller box on touch screens). */
+  readonly triggerClassName?: string;
   /** Trigger height: `md` 32px (default), `lg` 40px to line up with `size="lg"` inputs and selects. */
   readonly size?: 'md' | 'lg';
+  readonly invalid?: boolean;
+  /** The last day that can be picked. Later days are greyed out in the calendar. */
+  readonly maxDate?: Date;
+  /** The shortcut rows next to the calendar. Default: Today, Tomorrow, Next week, In 2 weeks. */
+  readonly quickPicks?: readonly QuickPick[];
+  readonly 'data-testid'?: string;
 }
 
-interface QuickPick {
+export interface QuickPick {
   readonly label: string;
   readonly date: () => Date;
 }
@@ -130,13 +142,19 @@ export function DatePicker({
   clearable = true,
   id,
   className,
+  triggerClassName,
   size = 'md',
+  invalid,
+  maxDate,
+  quickPicks = QUICK_PICKS,
+  'data-testid': testId,
   ...aria
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const valid = value && isValid(value) ? value : null;
   const choose = (date: Date | null) => {
-    onChange(date);
+    // A box that cannot be empty keeps its day when the picked day is clicked again.
+    if (date !== null || clearable) onChange(date);
     setOpen(false);
   };
   return (
@@ -147,15 +165,19 @@ export function DatePicker({
             type="button"
             id={id}
             aria-label={aria['aria-label']}
+            aria-describedby={aria['aria-describedby']}
+            data-invalid={invalid ? 'true' : undefined}
+            data-testid={testId}
             disabled={disabled}
             className={cn(
               'inline-flex w-full items-center gap-2 rounded-md border border-border-input bg-panel text-left text-sm',
               size === 'lg' ? 'h-10 px-3' : 'h-8 px-2.5',
               'transition-[border-color,box-shadow] duration-[var(--duration-fast)] outline-none hover:border-border-input-hover',
               'focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)] data-[state=open]:border-primary',
-              'disabled:cursor-not-allowed disabled:opacity-60',
+              'disabled:cursor-not-allowed disabled:opacity-60 data-[invalid=true]:border-danger',
               valid ? 'text-fg' : 'text-fg-placeholder',
               clearable && valid && 'pr-8',
+              triggerClassName,
             )}
           >
             <CalendarDays aria-hidden className="size-4 shrink-0 text-icon" />
@@ -175,19 +197,19 @@ export function DatePicker({
       </div>
       <PopoverContent flush className="flex">
         <div className="flex w-32 flex-col gap-0.5 border-r border-border-subtle p-2">
-          {QUICK_PICKS.map((pick) => (
+          {quickPicks.map((pick) => (
             <Button key={pick.label} variant="ghost" size="sm" className="justify-start" onClick={() => choose(pick.date())}>
               {pick.label}
             </Button>
           ))}
-          {valid ? (
+          {valid && clearable ? (
             <Button variant="danger-ghost" size="sm" className="mt-auto justify-start" onClick={() => choose(null)}>
               Clear
             </Button>
           ) : null}
         </div>
         <div className="p-3">
-          <Calendar selected={valid ?? undefined} onSelect={(date) => choose(date ?? null)} />
+          <Calendar selected={valid ?? undefined} onSelect={(date) => choose(date ?? null)} disabled={maxDate ? { after: maxDate } : undefined} />
         </div>
       </PopoverContent>
     </Popover>

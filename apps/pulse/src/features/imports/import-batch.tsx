@@ -4,6 +4,7 @@
  * (the dry run), and the result with Undo. Every problem is shown in plain words on its cell and
  * can be fixed in place or the row left out, before anything is saved.
  */
+import { ScrollX } from '@/components/ui/scroll-x';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -792,7 +793,7 @@ function RowsTable({ batch, filter, onFilter, onBatch, readOnly = false }: { rea
             />
           ))}
         </ul>
-        <div className={cn('hidden overflow-x-auto md:block', rows.isPlaceholderData && 'opacity-60')}>
+        <ScrollX label="Rows of the file" className={cn('hidden md:block', rows.isPlaceholderData && 'opacity-60')}>
           <table className="w-full min-w-max border-collapse text-left text-sm">
             <thead>
               <tr className="bg-sunken text-xs text-fg-muted">
@@ -827,7 +828,7 @@ function RowsTable({ batch, filter, onFilter, onBatch, readOnly = false }: { rea
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollX>
         </>
       )}
       {total > PAGE_SIZE ? <TablePagination page={page} pageCount={Math.ceil(total / PAGE_SIZE)} total={total} onPageChange={setPage} /> : null}

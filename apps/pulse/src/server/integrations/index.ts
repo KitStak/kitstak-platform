@@ -1,6 +1,7 @@
 /** Sibling app readers (server only, fail soft). */
 export {
   integrationAvailability,
+  siblingDb,
   tableExists,
   wmsSchemaFor,
   wmsTableExists,

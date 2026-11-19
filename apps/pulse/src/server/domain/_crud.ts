@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import type { Executor } from '@/server/db';
 import { notFound } from '@/server/errors';
 import { rows } from './_shared';
+import { scoped } from '@/server/db/scope';
 
 export type SoftTable =
   | 'sites'
@@ -27,16 +28,16 @@ export type SoftTable =
   | 'saved_views';
 
 /** Marks a live row deleted. Throws NOT_FOUND when there is no live row. */
-export async function softDeleteRow(executor: Executor, orgId: string, table: SoftTable, id: string, what: string): Promise<void> {
+export const softDeleteRow = scoped(async function softDeleteRow(executor: Executor, orgId: string, table: SoftTable, id: string, what: string): Promise<void> {
   const found = await rows(executor, sql`UPDATE pulse.${sql.raw(table)} SET deleted_at = now(), updated_at = now() WHERE org_id = ${orgId} AND id = ${id} AND deleted_at IS NULL RETURNING id`);
   if (found.length === 0) throw notFound(what);
-}
+}, 1);
 
 /** Brings a deleted row back. Throws NOT_FOUND when there is no deleted row. */
-export async function restoreRow(executor: Executor, orgId: string, table: SoftTable, id: string, what: string): Promise<void> {
+export const restoreRow = scoped(async function restoreRow(executor: Executor, orgId: string, table: SoftTable, id: string, what: string): Promise<void> {
   const found = await rows(executor, sql`UPDATE pulse.${sql.raw(table)} SET deleted_at = NULL, updated_at = now() WHERE org_id = ${orgId} AND id = ${id} AND deleted_at IS NOT NULL RETURNING id`);
   if (found.length === 0) throw notFound(what);
-}
+}, 1);
 
 /** A short code from a name: "Acme Foods, Inc." gives "ACME-FOODS-INC". */
 export function codeFromName(name: string, max = 16): string {
@@ -51,7 +52,7 @@ export function codeFromName(name: string, max = 16): string {
 }
 
 /** First free code for a table with a live unique `lower(code)` key: CODE, CODE-2, CODE-3. */
-export async function freeCode(executor: Executor, orgId: string, table: 'clients' | 'job_types' | 'labor_classes' | 'vas_services' | 'sites', wanted: string): Promise<string> {
+export const freeCode = scoped(async function freeCode(executor: Executor, orgId: string, table: 'clients' | 'job_types' | 'labor_classes' | 'vas_services' | 'sites', wanted: string): Promise<string> {
   const taken = new Set(
     (await rows<{ code: string }>(executor, sql`SELECT lower(code) AS code FROM pulse.${sql.raw(table)} WHERE org_id = ${orgId} AND deleted_at IS NULL AND lower(code) LIKE ${`${wanted.toLowerCase()}%`}`)).map((row) => row.code),
   );
@@ -61,4 +62,4 @@ export async function freeCode(executor: Executor, orgId: string, table: 'client
     if (!taken.has(candidate.toLowerCase())) return candidate;
   }
   return `${wanted}-${Date.now()}`;
-}
+}, 1);

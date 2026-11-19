@@ -54,6 +54,7 @@ const rows: VasEntryDTO[] = [
   entry('typed', {}),
   entry('pulled', { source: 'wms', sourceRef: 'wms:vas:1', sourceUrl: 'http://wms.example/billing/vas' }),
   entry('offplan', { source: 'wms', sourceRef: 'wms:vas:2', sourceUrl: null, unitPrice: null, amountCents: null, noPrice: true }),
+  entry('unpriced', { source: 'wms', sourceRef: 'wms:vas:3', sourceUrl: 'http://wms.example/billing/vas', unitPrice: null, amountCents: null, noPrice: true }),
 ];
 const service = { id: 'svc1', code: 'PROG', name: 'Programming (hours)', unitLabel: 'hours', billing: 'per_unit', defaultPrice: null, defaultCostPerUnit: null, standardUph: null, defaultLaborClassId: null, wmsVasTypeId: 't1', color: null, active: true, version: 1, moneyHidden: false } as VasServiceDTO;
 
@@ -80,7 +81,23 @@ describe('extra services ledger, warehouse entries', () => {
   it('keeps the words and drops the link when there is no address', () => {
     expect(html.match(/From the warehouse/g)?.length).toBeGreaterThanOrEqual(2);
     expect(html).not.toContain('service-source-offplan');
-    expect(html.match(/href="http:\/\/wms\.example/g)).toHaveLength(html.match(/service-source-pulled/g)?.length ?? 0);
+    // Each row with a warehouse address links to its record once.
+    expect(html.match(/href="http:\/\/wms\.example\/billing\/vas"/g)).toHaveLength((html.match(/data-testid="service-source-pulled"/g)?.length ?? 0) + (html.match(/data-testid="service-source-unpriced"/g)?.length ?? 0));
+  });
+
+  it('shows the warehouse link as a link: link color and an underline', () => {
+    const link = html.match(/<a[^>]*data-testid="service-source-pulled"[^>]*>/)?.[0] ?? html.match(/<a[^>]*>(?=From the warehouse)/)?.[0] ?? '';
+    expect(link).toContain('text-fg-link');
+    expect(link).toMatch(/(^|[\s"])underline([\s"]|$)/);
+  });
+
+  it('gives an unpriced warehouse entry its fix right on the row', () => {
+    // Set the price in place, or open the warehouse contract. A priced row gets neither.
+    expect(html).toContain('data-testid="service-no-price-unpriced"');
+    expect(html).toContain('Set the price');
+    expect(html).toMatch(/<a[^>]+href="http:\/\/wms\.example\/billing"[^>]*data-testid="service-contract-unpriced"/);
+    expect(html).not.toContain('service-contract-pulled');
+    expect(html).not.toContain('service-contract-offplan');
   });
 
   it('lets a person type over a typed entry, and only the price and hours of a pulled one', () => {
@@ -91,6 +108,6 @@ describe('extra services ledger, warehouse entries', () => {
 
   it('flags the pulled entry that has no price yet', () => {
     expect(html).toContain('No price yet');
-    expect(html).toContain('1 with no price');
+    expect(html).toContain('2 with no price');
   });
 });

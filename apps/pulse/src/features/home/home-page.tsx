@@ -66,7 +66,7 @@ export async function HomePage({ searchParams }: { readonly searchParams?: Promi
         ) : null
       }
     >
-      <HomeView today={today} weekStart={weekStart} targetMarginBp={settings?.defaultTargetMarginBp ?? 3000} initialSummary={summary} initialTrend={trend} initialBefore={before} initialAttention={attention} initialRange={range} />
+      <HomeView today={today} weekStart={weekStart} targetMarginBp={page.access.seesMoney ? (settings?.defaultTargetMarginBp ?? 3000) : null} initialSummary={summary} initialTrend={trend} initialBefore={before} initialAttention={attention} initialRange={range} />
     </Page>
   );
 }

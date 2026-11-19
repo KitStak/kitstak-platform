@@ -7,7 +7,7 @@ import { useRef, useState } from 'react';
 import { CornerDownLeft, Plus } from 'lucide-react';
 import { Button, Input, toast } from '@/components/ui';
 import { ButtonLink } from '@/components/pulse/button-link';
-import { matchClientName, nameList } from '@/lib/client-names';
+import { clientBoxProblem, matchClientName } from '@/lib/client-names';
 import { formatMoney } from '@/lib/format';
 import { mulQuantityPrice } from '@/lib/money';
 import { routes } from '@/lib/routes';
@@ -53,13 +53,8 @@ export function QuickAddJob({
     const found = matchClientName(typedClient, clients);
     const clientId = client.clientId ?? found.exact?.id ?? null;
     const makeClient = clientId === null && client.createNew;
-    if (!typedClient) next.client = 'Pick a client, or type a new name.';
-    else if (clientId === null && !makeClient) {
-      next.client =
-        found.lookAlikes.length > 0
-          ? `Did you mean ${nameList(found.lookAlikes.map((item) => item.name))}? Pick it from the list, or choose Create "${typedClient}".`
-          : `${typedClient} is not a client yet. Choose Create "${typedClient}" in the list to add it.`;
-    }
+    const clientProblem = clientBoxProblem(client, clients);
+    if (clientProblem) next.client = clientProblem;
     if (!name.trim()) next.name = 'Give the job a name.';
     if (unitsText && !NUMBER.test(unitsText)) next.units = 'Type a number, like 5000.';
     if (priceText && !PRICE.test(priceText)) next.price = 'Type a price, like 1.25.';
@@ -83,7 +78,8 @@ export function QuickAddJob({
     setSaving(false);
     if (!result.ok) {
       setErrors(result.error.fields ?? {});
-      toast.error("Couldn't add the job", result.error.message);
+      if (result.error.fields?.clientId ?? result.error.fields?.clientName) clientRef.current?.focus();
+      else toast.error("Couldn't add the job", result.error.message);
       return;
     }
     const job = result.data;
@@ -115,10 +111,9 @@ export function QuickAddJob({
     });
   };
 
+  const clientError = errors.client ?? errors.clientId ?? errors.clientName ?? null;
+  // The client box shows its own message, right under the box.
   const firstError =
-    errors.client ??
-    errors.clientId ??
-    errors.clientName ??
     errors.name ??
     errors.units ??
     errors.plannedUnits ??
@@ -137,7 +132,7 @@ export function QuickAddJob({
       }}
       noValidate
     >
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(100px,1.1fr)_minmax(110px,1.6fr)_84px_104px_auto_auto] lg:grid-cols-[minmax(140px,1.1fr)_minmax(160px,1.6fr)_110px_120px_auto_auto] md:items-center">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(100px,1.1fr)_minmax(110px,1.6fr)_84px_104px_auto_auto] lg:grid-cols-[minmax(140px,1.1fr)_minmax(160px,1.6fr)_110px_120px_auto_auto] md:items-start">
         <div className="col-span-2 md:col-span-1">
           <ClientCombo
             clients={clients}
@@ -154,7 +149,7 @@ export function QuickAddJob({
             onPicked={() => nameRef.current?.focus()}
             open={clientOpen}
             onOpenChange={setClientOpen}
-            invalid={Boolean(errors.client ?? errors.clientId ?? errors.clientName)}
+            error={clientError}
             inputRef={clientRef}
             testId="quick-client"
           />

@@ -21,12 +21,21 @@
  *    fixed price at that fee.
  *  - The contract wins when Pulse first sees it and each time its rates change. A price a person
  *    types in Pulse after that stays until the contract changes again.
+ *  - The contract never rewrites what a job already earned. A job with no price yet takes the
+ *    rate from its first day. A job that already has a price keeps it for the days behind it: the
+ *    contract rate starts today. A completed job that already has a price is left alone.
+ *  - Only a contract that has started is read (`listContractPrices`).
+ *  - The workspace can turn the whole rule off: "Let warehouse contract rates set job prices" on
+ *    Connected apps (`settings.wmsContractPrices`, on by default). The sync then skips this step.
+ *  - The link keeps what was applied (`meta.contractPrice`, `contractName`, `contractPriceAt`),
+ *    and the job page says the price came from the contract.
  *
  * Everything is fail soft: with no warehouse to read, both calls do nothing.
  */
 import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { vasServices } from '@/server/db/schema';
 import { isDomainError } from '@/server/errors';
 import { logSoftFail } from '@/server/integrations/log';
@@ -143,7 +152,7 @@ async function ensureService(ctx: DomainContext, record: WmsVasRecord, services:
  * Pulls the warehouse's extra service records into `pulse.vas_entries`. Safe to run again.
  * Never throws for a warehouse that is missing or cannot be read: it answers `read: false`.
  */
-export async function pullWmsServices(ctx: DomainContext): Promise<WmsServicesResult> {
+export const pullWmsServices = scoped(async function pullWmsServices(ctx: DomainContext): Promise<WmsServicesResult> {
   await requirePulse(ctx, 'vas:manage');
   const result: WmsServicesResult = { read: false, created: 0, updated: 0, removed: 0, skipped: 0, skippedClosed: 0, records: 0, noPrice: 0, contractPriced: 0, noClient: 0, inPulse: 0 };
   let records: WmsVasRecord[] | null;
@@ -285,7 +294,7 @@ export async function pullWmsServices(ctx: DomainContext): Promise<WmsServicesRe
   const [live] = await rows<{ n: number }>(db, sql`SELECT count(*)::int AS n FROM pulse.vas_entries WHERE org_id = ${ctx.orgId} AND source = 'wms' AND source_ref LIKE 'wms:vas:%' AND deleted_at IS NULL`);
   result.inPulse = live?.n ?? 0;
   return result;
-}
+});
 
 export interface ContractPriceResult {
   /** Jobs whose price was set from the contract in this run. */
@@ -310,11 +319,13 @@ export interface ContractLink {
 /**
  * Sets the price of each linked job from the warehouse contract's work order rates. The contract
  * is applied once per set of rates (kept on the link as `meta.contractPrice`), so a price typed
- * in Pulse later is not fought over. The first time, the job's first price row takes the rate
- * (every open month is restamped). A later rate change starts a new dated price from today.
- * Closed months never change.
+ * in Pulse later is not fought over. The first time, a job with no price takes the rate on its
+ * first price row (every open month is restamped). A job that already has a price, and every
+ * later rate change, starts a new dated price from today. A completed job that already has a
+ * price is left alone. Closed months never change. The sync skips this whole step when the
+ * workspace turned off "Let warehouse contract rates set job prices".
  */
-export async function applyWmsContractPrices(ctx: DomainContext, links: readonly ContractLink[]): Promise<ContractPriceResult> {
+export const applyWmsContractPrices = scoped(async function applyWmsContractPrices(ctx: DomainContext, links: readonly ContractLink[]): Promise<ContractPriceResult> {
   await requirePulse(ctx, 'revenue:manage');
   const result: ContractPriceResult = { updated: 0, skipped: 0, skippedClosed: 0, jobs: 0, notApplied: 0 };
   // One work order feeds one job: the oldest link wins.
@@ -323,9 +334,9 @@ export async function applyWmsContractPrices(ctx: DomainContext, links: readonly
   if (first.size === 0) return result;
   const prices = await listContractPrices(ctx, [...first.keys()]);
   if (prices.length === 0) return result;
-  const jobs = await rows<{ id: string; pricing_model: string; unit_price: string | null; fixed_price_cents: string | null }>(
+  const jobs = await rows<{ id: string; status: string; pricing_model: string; unit_price: string | null; fixed_price_cents: string | null }>(
     db,
-    sql`SELECT id, pricing_model, unit_price::text AS unit_price, fixed_price_cents::text AS fixed_price_cents FROM pulse.jobs
+    sql`SELECT id, status, pricing_model, unit_price::text AS unit_price, fixed_price_cents::text AS fixed_price_cents FROM pulse.jobs
          WHERE org_id = ${ctx.orgId} AND deleted_at IS NULL AND id IN (${sql.join([...first.values()].map((link) => sql`${link.job_id}`), sql`, `)})`,
   );
   const jobById = new Map(jobs.map((job) => [job.id, job]));
@@ -337,10 +348,18 @@ export async function applyWmsContractPrices(ctx: DomainContext, links: readonly
     if (link.meta?.contractPrice === price.signature) continue;
     const firstTime = typeof link.meta?.contractPrice !== 'string';
     const note = `Warehouse contract rate: ${price.contractName}`.slice(0, 200);
+    // What the job earns today, before the contract: a unit price, or a fixed price.
+    const hasPrice = job.pricing_model === 'fixed' ? job.fixed_price_cents !== null && Number(job.fixed_price_cents) > 0 : job.unit_price !== null && Number(job.unit_price) > 0;
     try {
+      if (firstTime && hasPrice && job.status === 'completed') {
+        // A finished job that already has a price: the contract does not reach back into it.
+        result.notApplied += 1;
+        continue;
+      }
       if (price.unitPrice !== null && job.pricing_model === 'per_unit') {
         if (!sameNumber(job.unit_price, price.unitPrice)) {
-          await setJobPrice(ctx, job.id, firstTime ? { effectiveFrom: '0001-01-01', unitPrice: price.unitPrice, note } : { unitPrice: price.unitPrice, note });
+          // No price yet: the rate counts from the job's first day. A price already there keeps the days behind it.
+          await setJobPrice(ctx, job.id, firstTime && !hasPrice ? { effectiveFrom: '0001-01-01', unitPrice: price.unitPrice, note } : { unitPrice: price.unitPrice, note });
           result.updated += 1;
         }
       } else if (price.unitPrice === null && price.perOrderCents !== null && job.pricing_model !== 'hourly') {
@@ -354,7 +373,7 @@ export async function applyWmsContractPrices(ctx: DomainContext, links: readonly
         continue;
       }
       await db.execute(
-        sql`UPDATE pulse.job_links SET meta = meta || ${JSON.stringify({ contractPrice: price.signature, contractName: price.contractName, contractUnitPrice: price.unitPrice, contractFixedCents: price.unitPrice === null ? price.perOrderCents : null })}::jsonb, updated_at = now()
+        sql`UPDATE pulse.job_links SET meta = meta || ${JSON.stringify({ contractPrice: price.signature, contractName: price.contractName, contractUnitPrice: price.unitPrice, contractFixedCents: price.unitPrice === null ? price.perOrderCents : null, contractPriceAt: new Date().toISOString() })}::jsonb, updated_at = now()
              WHERE id = ${link.link_id} AND org_id = ${ctx.orgId}`,
       );
     } catch (error) {
@@ -366,4 +385,4 @@ export async function applyWmsContractPrices(ctx: DomainContext, links: readonly
     }
   }
   return result;
-}
+});

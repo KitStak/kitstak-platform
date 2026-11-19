@@ -135,6 +135,8 @@ export interface SettingsDTO {
   readonly wmsSyncMaterials: boolean;
   readonly wmsSyncVas: boolean;
   readonly wmsSyncBilling: boolean;
+  /** "Let warehouse contract rates set job prices" (Connected apps). On by default. */
+  readonly wmsContractPrices: boolean;
   readonly wmsBillingOpsInProfit: readonly string[];
   readonly crmSuggestJobs: boolean;
   readonly projectsTimeImport: boolean;
@@ -505,6 +507,11 @@ export interface JobLinkDTO {
   readonly status: string | null;
   /** Full URL into the sibling app (host added at read time), or null. */
   readonly url: string | null;
+  /**
+   * Set when the price of this job came from the client's warehouse contract through this work
+   * order: the contract's name and the day Pulse took the rate. No amounts, so every reader sees it.
+   */
+  readonly priceFromContract: { readonly contractName: string; readonly at: string | null } | null;
 }
 
 export interface JobDetailDTO extends JobListItemDTO {
@@ -743,6 +750,12 @@ export interface ProfitRowDTO {
   readonly trend: readonly number[] | null;
   /** A job in the group has units with no hours or hours with no rate. */
   readonly laborMissing: boolean;
+  /**
+   * An extra service row with revenue and no cost of any kind (no hours, no parts). Pulse does not know
+   * what the work cost, so `marginBp` is null and the screen says "No cost yet", never 100%.
+   * Always false for a reader without money, and for rows that are not about an extra service.
+   */
+  readonly costMissing: boolean;
   readonly riskStatus: PulseStatus | null;
 }
 
@@ -775,9 +788,14 @@ export interface CompanyBridgeDTO {
   readonly workProfitCents: MoneyCents;
   readonly sharedGapCents: MoneyCents;
   readonly missingCostCents: MoneyCents;
+  /**
+   * Company costs counted for these days (SPEC 4.9). Company costs are monthly, so a part month counts
+   * its share by day and a whole month counts all of it. Months with no company costs count nothing.
+   */
   readonly companyCostCents: MoneyCents;
+  /** Overhead the hourly rates covered on the days of the months that count company costs (all days when none do). */
   readonly overheadAbsorbedCents: MoneyCents;
-  /** Null when no company costs were entered (the line is hidden). */
+  /** Null when no company costs were counted (the line is hidden). */
   readonly overheadGapCents: MoneyCents;
   readonly companyProfitCents: MoneyCents;
   readonly indirectCents: MoneyCents;
@@ -791,7 +809,14 @@ export interface CompanyBridgeDTO {
   readonly grossPayCents: MoneyCents;
   readonly payrollGapCents: MoneyCents;
   readonly overLoggedDays: number;
+  /** True when company costs were counted, so the walk has the overhead step and the company number is "after overhead". */
   readonly hasCompanyCosts: boolean;
+  /** True when the range is not whole calendar months of company costs: a part month, or a month with none typed in. */
+  readonly companyCostPartial: boolean;
+  /** Plain words to show beside the company number when it is partial, like "Company costs for 18 of 30 days." Never holds money. */
+  readonly companyCostNote: string | null;
+  /** One row per calendar month that counted company costs, oldest first. */
+  readonly companyCostParts: readonly { readonly month: string; readonly daysCounted: number; readonly daysInMonth: number; readonly monthCostCents: MoneyCents; readonly countedCents: MoneyCents }[];
   readonly moneyHidden: boolean;
 }
 

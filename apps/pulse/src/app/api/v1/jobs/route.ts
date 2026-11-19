@@ -6,6 +6,7 @@ import { JOB_STATUS_VALUES, JOB_TABS, PULSE_STATUSES } from '@/lib/constants';
 /**
  * Jobs with their cached numbers and status reasons (worded for the reader).
  * `?tab=open|all|completed|planned&q=&client=&jobType=&site=&owner=&status=a,b&risk=losing,at_risk&limit=`.
+ * `deleted=1` adds deleted jobs and needs the right to manage jobs (403 without it), like `/api/v1/jobs/deleted`.
  */
 export const GET = apiRoute(async ({ ctx, searchParams }) =>
   listJobs(ctx, {

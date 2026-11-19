@@ -30,6 +30,7 @@ import {
 } from '@/lib/profit';
 import { centsOut, rows, todayInZone, uuidArray, type DomainContext } from './_shared';
 import { loadSettings, type SettingsRow } from './settings';
+import { scoped } from '@/server/db/scope';
 
 const B = (value: string | number | bigint | null | undefined): bigint => BigInt(value ?? 0);
 
@@ -147,7 +148,7 @@ const fixed = (value: number | null, digits: number): string | null => (value ==
  * Rebuilds `pulse.job_stats` for the given jobs: totals from the stream tables, then the
  * projection and the risk rules, then one batched upsert. Runs inside the caller's transaction.
  */
-export async function recomputeJobs(executor: Executor, ctx: DomainContext, jobIds: readonly string[], options: { settings?: SettingsRow } = {}): Promise<void> {
+export const recomputeJobs = scoped(async function recomputeJobs(executor: Executor, ctx: DomainContext, jobIds: readonly string[], options: { settings?: SettingsRow } = {}): Promise<void> {
   const unique = [...new Set(jobIds)];
   if (unique.length === 0) return;
   const settings = options.settings ?? (await loadSettings(ctx.orgId, executor));
@@ -173,7 +174,7 @@ export async function recomputeJobs(executor: Executor, ctx: DomainContext, jobI
   for (let offset = 0; offset < unique.length; offset += 200) {
     await recomputeChunk(executor, ctx, unique.slice(offset, offset + 200), settings, standards);
   }
-}
+}, 1);
 
 async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: readonly string[], settings: SettingsRow, standards: readonly StandardRow[]): Promise<void> {
   const idList = uuidArray(ids);

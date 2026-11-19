@@ -51,12 +51,13 @@ const jobFromScenarioSchema = z.object({
   name: name(200),
   clientId: uuid.nullable().optional(),
   clientName: text(200).nullable().optional(),
+  createClient: z.boolean().optional(),
   startDate: nullableDate.optional(),
   dueDate: nullableDate.optional(),
 });
 /** Makes a planned job from a scenario, with the scenario as its quote. */
 export async function createJobFromScenarioAction(input: z.input<typeof jobFromScenarioSchema>) {
-  return runAction(jobFromScenarioSchema, input, (data, ctx) => createJobFromScenario(ctx, data));
+  return runAction(jobFromScenarioSchema, input, (data, ctx) => createJobFromScenario(ctx, data, { guardLookAlike: true }));
 }
 
 /* ---------------------------------------------------------------- alerts */

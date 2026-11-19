@@ -15,12 +15,17 @@ const dollars = (value: string | null | undefined): Fraction | null => (value ==
 const cents = (value: number | null): Fraction | null => (value === null ? null : frac(BigInt(value), BigInt(100)));
 const marginOf = (price: Fraction | null, cost: Fraction | null): number | null => (price === null || cost === null || fracCmp(price, FRAC_ZERO) <= 0 ? null : fracToNumber(fracDiv(fracSub(price, cost), price), 4) * 10000);
 
-export type ServiceFlag = 'below_cost' | 'under_target' | 'no_price' | 'standard_below_cost' | 'standard_under_target';
+export type ServiceFlag = 'below_cost' | 'under_target' | 'no_price' | 'no_cost' | 'standard_below_cost' | 'standard_under_target';
+
+/** Shown in place of a margin when a service earned money and no cost of any kind is logged for it. */
+export const NO_COST_WORDS = 'No cost yet';
+export const NO_COST_REASON = 'No labor hours or parts are logged for this work, so Pulse does not know what it cost.';
 
 export const SERVICE_FLAG_WORDS: Readonly<Record<ServiceFlag, string>> = {
   below_cost: 'Costs more than it earns',
   under_target: 'Under your target margin',
   no_price: 'No price set',
+  no_cost: NO_COST_WORDS,
   standard_below_cost: 'Priced under its standard cost',
   standard_under_target: 'Priced under your target margin',
 };
@@ -38,6 +43,8 @@ export interface ServiceLine {
   readonly costCents: number | null;
   readonly profitCents: number | null;
   readonly marginBp: number | null;
+  /** Revenue with no cost of any kind in the period: the margin is not known, so it is never shown as 100%. */
+  readonly costMissing: boolean;
   readonly revenuePerUnit: Price;
   readonly costPerUnit: Price;
   readonly trend: readonly number[] | null;
@@ -76,19 +83,22 @@ export function serviceLine(service: VasServiceDTO, actual: ProfitRowDTO | undef
   const costPerUnit = units && cost ? fracDiv(cost, units) : null;
   const marginBp = actual?.marginBp ?? null;
 
+  const costMissing = Boolean(actual?.costMissing);
+  const hasActuals = revenuePerUnit !== null && costPerUnit !== null && fracCmp(revenuePerUnit, FRAC_ZERO) > 0;
+  const priceMissing = price === null || fracCmp(price, FRAC_ZERO) <= 0;
   let flag: ServiceFlag | null = null;
-  if (revenuePerUnit !== null && costPerUnit !== null && fracCmp(revenuePerUnit, FRAC_ZERO) > 0) {
-    if (fracCmp(costPerUnit, revenuePerUnit) >= 0) flag = 'below_cost';
-    else if (marginBp !== null && marginBp < targetMarginBp) flag = 'under_target';
-  } else if (price === null || fracCmp(price, FRAC_ZERO) <= 0) {
-    flag = service.active ? 'no_price' : null;
-  } else if (standardCost !== null && fracCmp(standardCost, price) >= 0) {
-    flag = 'standard_below_cost';
-  } else if (standardMarginBp !== null && standardMarginBp < targetMarginBp) {
-    flag = 'standard_under_target';
+  if (hasActuals && fracCmp(costPerUnit, revenuePerUnit) >= 0) flag = 'below_cost';
+  else if (hasActuals && marginBp !== null && marginBp < targetMarginBp) flag = 'under_target';
+  // A service with no list price is flagged even when some of its entries carry their own price.
+  else if (priceMissing && service.active) flag = 'no_price';
+  else if (costMissing) flag = 'no_cost';
+  else if (!hasActuals && !priceMissing) {
+    if (standardCost !== null && fracCmp(standardCost, price) >= 0) flag = 'standard_below_cost';
+    else if (standardMarginBp !== null && standardMarginBp < targetMarginBp) flag = 'standard_under_target';
   }
 
-  const basis = costPerUnit ?? standardCost;
+  // With no cost logged, the real cost of one is not known: fall back to the standard cost.
+  const basis = (costMissing ? null : costPerUnit) ?? standardCost;
   const priceForTarget = basis !== null && targetMarginBp < 10000 && fracCmp(basis, FRAC_ZERO) > 0 ? fracDiv(basis, frac(BigInt(10000 - targetMarginBp), BigInt(10000))) : null;
 
   return {
@@ -102,8 +112,9 @@ export function serviceLine(service: VasServiceDTO, actual: ProfitRowDTO | undef
     costCents: actual?.costCents ?? null,
     profitCents: actual?.profitCents ?? null,
     marginBp,
+    costMissing,
     revenuePerUnit: toPrice(revenuePerUnit),
-    costPerUnit: toPrice(costPerUnit),
+    costPerUnit: costMissing ? null : toPrice(costPerUnit),
     trend: actual?.trend ?? null,
     flag,
     priceForTarget: toPrice(priceForTarget),
@@ -123,7 +134,9 @@ export function flagSentence(line: ServiceLine, targetMarginBp: number, money: (
           : ''
       }${fix}`;
     case 'no_price':
-      return 'This service has no price, so every entry earns nothing until one is set.';
+      return 'This service has no list price, so an entry with no price of its own earns nothing until one is set.';
+    case 'no_cost':
+      return `${NO_COST_REASON} Add the labor hours on its entries to see a real margin.`;
     case 'standard_below_cost':
       return `At the target pace one ${unitWord(line.service.unitLabel)} should cost ${money(line.standardCost)}, which is more than the ${money(line.price)} price.${fix}`;
     case 'standard_under_target':
@@ -144,3 +157,8 @@ export function unitWord(unitLabel: string | null | undefined): string {
 }
 
 export const BILLING_LABELS: Readonly<Record<string, string>> = { per_unit: 'Per unit', per_hour: 'Per hour', flat: 'Flat fee' };
+
+/** True for the flags that mean the price is too low. "No cost yet" is a gap in the data, not a price problem. */
+export function isUnderpriced(flag: ServiceFlag | null): boolean {
+  return flag !== null && flag !== 'no_cost';
+}

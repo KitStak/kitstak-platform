@@ -126,7 +126,7 @@ Conventions:
 Database objects:
 
 - `pulse.guard_closed_month()` on the eight dated streams: SQLSTATE `KP001`, message `month_closed:YYYY-MM`. The domain
-  turns it into "October is closed. Ask the owner to reopen it." Bypassed only by `SET LOCAL pulse.allow_purge = 'on'`.
+  turns it into "October 2026 is closed. Ask the owner to reopen it." Bypassed only by `SET LOCAL pulse.allow_purge = 'on'`.
 - `pulse.activity_immutable()`: the audit log cannot be edited (SQLSTATE `KP002`).
 - `pulse.rate_for(org, class, site, date)` returns the dated rate in force: `(found, rate_cents, overtime_rate_cents,
   wage_cents, overhead_cents, mult, bill_rate_cents, rate_id, labor_class_id, source)`, `source` is `class`, `default`
@@ -150,7 +150,8 @@ to parent foreign keys are `NO ACTION` (an org cascade deletes parents and child
   every job's summary from raw hours, units, rates and prices with only the pure library, and asserts equality to the
   cent against the row stamps, `fact_days`, `job_stats`, `getJobProfit`, the profit page total and the company bridge.
 - Derived numbers in DTOs come from the pure library: `toProfitRow` uses `profitSummary`, `getCompanyBridge` uses
-  `companyBridge`, `sharedGap`, `payrollGap` and `utilizationBp`, `recomputeJobs` uses `paceDays`, `projectJob` and
+  `spreadCompanyCosts` (company costs are monthly, so a part month counts its share by day, SPEC 4.9), `companyBridge`,
+  `sharedGap`, `payrollGap` and `utilizationBp`, `recomputeJobs` uses `paceDays`, `projectJob` and
   `assessRisk`. **Never write a margin, a per unit cost or a rounding rule in a component.** Call the library.
 - Risk rules follow SPEC 4.14 exactly, with these confirmed readings: the headline is the most negative impact inside
   the group that set the status; W1 is not added when R1 or R2 fired; R5, R6, W5, W6 and W8 are skipped for completed
@@ -183,7 +184,9 @@ lowercase `tx` or `executor` are for use inside a transaction.
   inline), `setOnboarding(ctx, key, value)`, `defaultSiteId`, `generalJobTypeId`, `SYSTEM_ALERT_RULES`.
 - **`catalog`**: sites (`listSites`, `resolveSite`, `createSite`, `updateSite`, `deleteSite`), clients (`listClients(ctx,
   { q?, includeInactive?, includeDeleted? })`, `getClient`, `findClientByRef(ctx, { pulseClientId?, coreCustomerId?,
-  crmAccountItemId? })`, `createClient`, `ensureClientByName(tx, ctx, name)`, `updateClient(ctx, id, patch, version?)`,
+  crmAccountItemId? })`, `createClient(ctx, input, { guardLookAlike? })` (with the guard on, a name that looks like a
+  client you have is refused unless `input.confirmNew`; `assertClientNameNotLookAlike` is the one server guard),
+  `ensureClientByName(tx, ctx, name)`, `updateClient(ctx, id, patch, version?)`,
   `deleteClient`, `restoreClient`), job types (`listJobTypes`, `createJobType`, `updateJobType`, `deleteJobType`), items
   (`listItems(ctx, { q?, clientId?, limit? })`, `createItem`, `updateItem`, `deleteItem`), extra services
   (`listVasServices`, `getVasService`, `createVasService`, `updateVasService`, `deleteVasService`). Each has an
@@ -194,7 +197,8 @@ lowercase `tx` or `executor` are for use inside a transaction.
   `deleteLaborRate`, `previewLaborRate(ctx, input)` (how many rows and dollars a rate change restamps),
   `rateForEntry(ctx, { laborClassId, siteId, workDate })`.
 - **`jobs`**: read `listJobs(ctx, JobListFilters)`, `listJobsNeedingAttention(ctx, limit)`, `countJobsByRisk`,
-  `getJob(ctx, ref)`, `listDeletedJobs`, `findJobsByLink(ctx, type, id)`; create `createJob(ctx, JobInput)`,
+  `getJob(ctx, ref)`, `listDeletedJobs`, `findJobsByLink(ctx, type, id)`; create `createJob(ctx, JobInput, { guardLookAlike? })`
+  (the action turns the guard on: a typed `clientName` that looks like a client you have needs `createClient: true`),
   `quickAddJob(ctx, { clientId?|clientName?, createClient?, name, plannedUnits?, unitPrice?, siteId? })` (a `clientName`
   that looks like a client you have, see `src/lib/client-names.ts`, is refused with `VALIDATION` unless `createClient`
   is true; the exact name or code uses that client); change `updateJob(ctx, jobId,
@@ -204,8 +208,13 @@ lowercase `tx` or `executor` are for use inside a transaction.
   `deleteJobPrice`; links `addJobLink`, `removeJobLink`; DTOs `toJobDTO`, `toJobStatsDTO(stats, access, unitLabel)`.
 - **`plans`**: `getJobPlans(ctx, jobId)`, `savePlan(ctx, jobId, 'quote'|'budget', PlanInput)`,
   `makeBudgetFromQuote(ctx, jobId)`, `deletePlan(ctx, jobId, kind)`.
-- **`production`**: `saveProductionEntry(ctx, input)` (upsert by `id`, else by job, day, shift and class; returns `{
-  entry, created }`), `saveProductionBulk(ctx, inputs[])` (all or nothing, cap 5,000), `deleteProductionEntries`,
+- **`production`**: `saveProductionEntry(ctx, input, { requireVersion? })` (upsert by `id`, else by job, day, shift and
+  class; returns `{ entry, created }`), `saveProductionBulk(ctx, inputs[], { requireVersion? })` (all or nothing, cap
+  5,000; two lines for one job, day, shift and labor class are refused on the line), `saveProductionDay(ctx, { jobId,
+  workDate, mode: 'create'|'edit', fromDate?, read?, lines[] })` (a whole day of a job in one transaction; throws
+  `DayConflict` "day_exists" or "stale" with the day as it is now). Every typed write refuses a work date after today
+  at the site (`assertNotFutureDay`) and hours with 0 people. The actions and `PUT log/rows` pass `requireVersion`:
+  a row that exists needs the version the editor read. `deleteProductionEntries`,
   `restoreProductionEntries`, `listProduction(ctx, filters)`, `getLogGrid(ctx, { date?, siteId? })`,
   `getPreviousCrew(ctx, { date, siteId? })`, `assertCanLogDay`, `dayLockReason`.
 - **`time`**: `listIndirect`, `saveIndirectEntry`, `deleteIndirectEntry`, `restoreIndirectEntry`, `listPaidHours`,
@@ -298,6 +307,7 @@ send files with `csvResponse(fileName, body)`.
 | `GET jobs/[ref]`, `/plans`, `/prices`, `/days` | id or number; `by=day\|week\|month` | `JobDetailDTO`, `JobPlansDTO`, `JobPriceDTO[]`, `ProfitResponse` for the job's whole life |
 | `GET log`, `log/previous-crew` | `date,site` | `LogGridDTO`, `PreviousCrewDTO[]` |
 | `PUT log/rows` | JSON production row | `{ entry, created }`; a 409 carries `error.fresh` (the newer row) |
+| `PUT log/days` | `{ jobId, workDate, mode: create\|edit, fromDate?, read?: [{ id, version }], lines[] }` | `{ entries, created, updated, removed }`; a 409 carries `error.reason` (`day_exists` or `stale`), `error.workDate` and `error.fresh` (the day as it is now) |
 | `GET production` | `job,client,site,laborClass,from,to,source,needsHours,deleted,limit,offset` | `ProductionEntryDTO[]` |
 | `GET indirect`, `paid-hours` | `site,from,to,deleted,limit` | `IndirectEntryDTO[]`, `PaidHoursDTO[]` |
 | `GET materials`, `costs`, `revenue`, `service-entries` | `job,client,site,from,to,deleted,limit` plus `scope` / `kind` / `service,noPrice` | matching DTO arrays |
@@ -494,12 +504,54 @@ E2E_BASE_URL=http://localhost:35xx E2E_CHROMIUM=/opt/pw-browsers/chromium_headle
 13. **The database keeps workspaces apart too.** Every `pulse` table has row level security on and one policy,
     `pulse_org_isolation`, for read, add, change and remove: a row is allowed only when its `org_id` equals the
     session setting `pulse.org_id` (migration `0007_rls_policies.sql`). What that means in plain words:
-    - The app connects as the role that owns the tables. An owner skips RLS and RLS is not forced, so nothing changes
-      for the app. Workspace scoping in the domain layer (`org_id` in every query) is still the first guard.
+    - The app signs in as the role that owns the tables, and an owner skips RLS. So the app does not run its queries
+      as the owner: **the database guard** makes it run them as the plain role `pulse_app`, with the workspace set.
+      With `PULSE_DB_GUARD=1` every statement and every transaction on `db` opens with
+      `SET LOCAL ROLE pulse_app; SELECT set_config('pulse.org_id', '<org uuid>', true)` (`src/server/db.ts`), so the
+      policies apply to the app itself. A query that forgets its `org_id` filter, or is handed an id from another
+      workspace, gets nothing back and can change nothing. With the flag off the app runs as the owner, as before.
+      Workspace scoping in the domain layer (`org_id` in every query) is still the first guard.
+    - Where the workspace comes from (`src/server/db/scope.ts`): every exported function in `src/server/domain`,
+      `src/server/integrations` and `src/features/*/server` that is handed a `DomainContext` or an org id is declared
+      with `scoped(...)`, and its statements are tied to that workspace. `apiRoute` and `runAction` wrap the whole
+      handler in `withOrg`. A call for one workspace that turns to another half way is refused.
+    - The escape hatch is `asSystem('<reason>', fn)`: it runs as the owner, across workspaces, and is only for work
+      that is cross org by design: sign in (which workspaces a person has), module entitlements, the cron fan out and
+      the daily cleanup, the device link lookup by its secret, the health check, invitations for a person with no
+      workspace, the demo seed, and sibling data. Sibling schemas (`crm`, `pm`, the WMS tenant schemas, `core.customers`,
+      `core.wms_tenants`) have no Pulse policy, so sibling reads go through `siblingDb` (it wraps `asSystem`) and keep
+      their own org filter. Better auth uses the owner handle `systemDb` (`src/server/db/system.ts`). Nothing else may
+      skip the guard: `src/server/db-guard.test.ts` lists every allowed caller and fails on a new one.
+    - A statement that reaches `db` with no scope at all is refused (`DbGuardError`) and logged, so a forgotten scope
+      is a loud error, never a quiet query as the owner. The whole test suite runs with the guard on.
+    - What the guard does not do: it is not a wall against SQL injection. The session still belongs to the login
+      role, so injected SQL could `RESET ROLE`. Every query is parameterised, which is the guard for that. The
+      stronger form is a separate login role for the app that owns nothing (see "still open" in the round four notes).
     - Any other role sees no rows and can write none, unless it sets `pulse.org_id`
       (`select set_config('pulse.org_id', '<org uuid>', true)` inside a transaction). Then it sees and writes that one
       workspace only. A value that is not a uuid is an error.
-    - The migration grants nothing. On Supabase, `anon` and `authenticated` hold no grant on `pulse` and still see nothing.
+    - Grants: migration `0009_db_guard_role.sql` makes `pulse_app` (no login, not a superuser, cannot skip RLS, owns
+      nothing), lets the migration role become it, and grants it read and write on the `pulse` tables, plus read on
+      `core.organization`, `core.member` and `core."user"` behind a policy for `pulse_app` only (rows of the workspace
+      in `pulse.org_id`). Nothing else is granted to anyone. On Supabase, `anon` and `authenticated` hold no grant on
+      `pulse` and still see nothing.
+    - **Turning the guard on in production** (it is OFF there until someone does this):
+      1. Run the migrations with the direct database URL: `pnpm --filter kitstak-pulse db:migrate`. `0009` makes the
+         role and the grants. A step the migration role may not do is skipped with a NOTICE, and the run still passes.
+      2. Open `GET /api/health`. It answers `"guard": { "on": false, "ready": true }` when the role is there and the
+         app's login can use it. If `ready` is false, run this once as a database admin, with the app's login role in
+         place of `postgres` when the app signs in as another role, then check again:
+         `CREATE ROLE pulse_app NOLOGIN NOINHERIT NOBYPASSRLS;` (skip if it exists), `GRANT pulse_app TO postgres;`,
+         then apply `drizzle/0009_db_guard_role.sql` again by hand (every step in it is safe to repeat).
+      3. Set the environment variable `PULSE_DB_GUARD=1` on the Pulse project and redeploy.
+      4. Check it is on: `GET /api/health` answers `"guard": { "on": true, "ready": true }`. Sign in, open Home, Jobs
+         and a job, and log one work row. In the database, `select usename, application_name, query from
+         pg_stat_activity where application_name = 'kitstak-pulse'` shows statements that start with
+         `BEGIN; SET LOCAL ROLE "pulse_app"`.
+      5. To turn it off: remove `PULSE_DB_GUARD` (or set it to `0`) and redeploy. The role and the grants can stay:
+         they do nothing while the flag is off. To remove them as well: `DROP OWNED BY pulse_app; DROP ROLE pulse_app;`.
+    - Cost: each statement outside a transaction takes two more round trips to the database (the opening line and
+      the commit). A transaction takes one more. The numbers measured in dev are in the round four notes.
     - `pulse.v_facts` is `security_invoker`, so the view cannot be used to step around the policies.
     - A new table needs `ENABLE ROW LEVEL SECURITY` and its policy in the migration that makes it (copy the
       `CREATE POLICY` line from 0007). `src/server/domain/rls.db.test.ts` fails when a `pulse` table has RLS off, or
@@ -903,7 +955,8 @@ This section is the state of the app after the eight teams finished and the tree
 
 ### 19.2 Migrations
 
-- Journal: `0000_pulse_init`, `0005_saved_view_pages`, `0007_rls_policies` (idx 0, 5 and 7). Numbers 0001 to 0004 and
+- Journal: `0000_pulse_init`, `0005_saved_view_pages`, `0007_rls_policies` (idx 0, 5 and 7), then the round four
+  files, among them `0009_db_guard_role` and `0011_wms_contract_prices_switch`. Numbers 0001 to 0004 and
   0006 were reserved per team and never used; the runner sorts by `idx`, so the gap is harmless. The next migration
   takes any free number above the last applied one.
 - Verified on an empty database: `@kitstak/db` (7 migrations), CRM, WMS (12), Projects (6), then Pulse (2), in that
@@ -992,8 +1045,8 @@ Covered by `src/server/domain/standalone.db.test.ts` unless noted.
 - **Workspace settings are not in any CSV**: the default labor class, the site time zone and the cost rules have to be
   set by hand in the second workspace. With those set, every `job_stats` column matched for 61 jobs.
 - **A row left out of an import keeps its reason**, and "Download rows left out" lists every left out row after the save.
-- **Import notes**: a work day in the future, more than 24 hours each, and dates like 3/4/2026 read with the usual
-  order all say so on the check step.
+- **Import notes**: more than 24 hours each and dates like 3/4/2026 read with the usual order say so on the check
+  step. A work day after today is a problem row in the work log file (never saved) and a note in the other floor files.
 - **A labor class made on the fly** (a job type or job named it first) gets its name and kind from the labor rates file.
 - **Getting started makes the Packer class with code `PACK`**, the code every template uses, and moves the cursor into
   the next step.
@@ -1061,9 +1114,11 @@ Each one was checked against the running app, not only by tests. Email reports s
   list with the Undo toast. `/jobs/deleted` (a tab on Jobs, `job:manage`) lists deleted jobs with who, when and Restore.
 - **No silent look alike clients.** `src/lib/client-names.ts` is the one look alike rule for the screen and the server.
   `ClientCombo` (quick add, the Log work "Add a job" dialog and the new job wizard) offers "Did you mean" first and only
-  makes a client from the "Create" row. `quickAddJob` refuses a look alike name unless `createClient` is true.
+  makes a client from the "Create" row. `quickAddJob` refuses a look alike name unless `createClient` is true, and so
+  do `createJobAction`, `createClientAction` (`confirmNew`) and `createJobFromScenarioAction`.
 - **Plan vs actual on a tablet.** Below 1024 px the table is label and value cards, so "Projected at finish" is whole.
-  `ScrollX` gives any table that still scrolls a tab stop, a name and a fade cue.
+  `ScrollX` (`@/components/ui/scroll-x`, built into the `Table` primitive) gives every table that still scrolls a tab
+  stop, a name and a fade cue.
 - **"Put on a client, not on a job"** is out of the job ranking on the job profit report. It has its own row and a panel
   with one plain sentence and a link to the entries behind it (`profit/entries?job=none`).
 - **Log work.** "Hours each" has no grey number. The warning names the missing box ("Add the hours each", "Add people").
@@ -1083,8 +1138,8 @@ Each one was checked against the running app, not only by tests. Email reports s
 - **CSP on every page.** `src/server/http/csp.ts` builds a nonce policy in `src/proxy.ts` (no eval in production). The
   report print page sets its own tighter policy.
 - **RLS policies.** `0007_rls_policies.sql` adds `pulse_org_isolation` to all 46 tables, keyed on the session setting
-  `pulse.org_id`, and makes `pulse.v_facts` a security invoker view. RLS is not forced on the owner and nothing is
-  granted, so the app is unchanged. `rls.db.test.ts` proves a plain role sees nothing without the setting and only its
+  `pulse.org_id`, and makes `pulse.v_facts` a security invoker view. RLS is not forced on the owner and that file
+  granted nothing, so the app was unchanged in that round (round four adds the database guard, section 12 rule 13). `rls.db.test.ts` proves a plain role sees nothing without the setting and only its
   own org with it, and fails if a pulse table ever has RLS on with no policy.
 - **Alert rule lines are hidden from readers without money** (dollar and margin lines): `toRuleDTO(row, canSeeMoney)`
   sends `threshold: null`, `moneyHidden: true` and a name with no numbers, and writes with a line are refused.

@@ -7,6 +7,7 @@
 import 'server-only';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { jobPlanLines, jobPlans } from '@/server/db/schema';
 import { conflict, invalid, notFound } from '@/server/errors';
 import type { PlanKind, PlanLineCategory, PlanLineUnit, PlanOrigin } from '@/lib/constants';
@@ -67,7 +68,7 @@ export function toPlanDTO(row: PlanRow, lines: readonly LineRow[], access: Money
 }
 
 /** Both plans of a job (either may be null). */
-export async function loadPlans(ctx: DomainContext, jobId: string, access: Money, executor: Executor = db): Promise<JobPlansDTO> {
+export const loadPlans = scoped(async function loadPlans(ctx: DomainContext, jobId: string, access: Money, executor: Executor = db): Promise<JobPlansDTO> {
   const plans = await executor.select().from(jobPlans).where(and(eq(jobPlans.orgId, ctx.orgId), eq(jobPlans.jobId, jobId)));
   const lines = plans.length > 0 ? await executor.select().from(jobPlanLines).where(and(eq(jobPlanLines.orgId, ctx.orgId), eq(jobPlanLines.jobId, jobId))).orderBy(asc(jobPlanLines.position)) : [];
   const pick = (kind: PlanKind) => {
@@ -75,12 +76,12 @@ export async function loadPlans(ctx: DomainContext, jobId: string, access: Money
     return row ? toPlanDTO(row, lines, access) : null;
   };
   return { quote: pick('quote'), budget: pick('budget') };
-}
+});
 
-export async function getJobPlans(ctx: DomainContext, jobId: string): Promise<JobPlansDTO> {
+export const getJobPlans = scoped(async function getJobPlans(ctx: DomainContext, jobId: string): Promise<JobPlansDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   return loadPlans(ctx, jobId, access);
-}
+});
 
 export interface PlanLineInput {
   category: PlanLineCategory;
@@ -140,7 +141,7 @@ async function last90(executor: Executor, orgId: string): Promise<{ shared: bigi
  * Creates or replaces one plan of a job inside `tx`. Does not recompute the job: callers do.
  * Returns the saved row.
  */
-export async function upsertPlan(tx: Executor, ctx: DomainContext, jobId: string, kind: PlanKind, input: PlanInput): Promise<PlanRow> {
+export const upsertPlan = scoped(async function upsertPlan(tx: Executor, ctx: DomainContext, jobId: string, kind: PlanKind, input: PlanInput): Promise<PlanRow> {
   const [existing] = await tx.select().from(jobPlans).where(and(eq(jobPlans.orgId, ctx.orgId), eq(jobPlans.jobId, jobId), eq(jobPlans.plan, kind)));
   if (existing) assertVersion(existing.version, input.version);
   const settings = await loadSettings(ctx.orgId, tx);
@@ -229,7 +230,7 @@ export async function upsertPlan(tx: Executor, ctx: DomainContext, jobId: string
     meta: { plan: kind, origin: row.origin, lines: lines ? lines.length : undefined, created: !existing },
   });
   return row;
-}
+}, 1);
 
 async function assertJob(tx: Executor, ctx: DomainContext, jobId: string): Promise<void> {
   const found = await rows(tx, sql`SELECT 1 FROM pulse.jobs WHERE org_id = ${ctx.orgId} AND id = ${jobId} AND deleted_at IS NULL`);
@@ -237,7 +238,7 @@ async function assertJob(tx: Executor, ctx: DomainContext, jobId: string): Promi
 }
 
 /** Saves the quote or the budget of a job (totals or lines) and rebuilds the job's numbers. */
-export async function savePlan(ctx: DomainContext, jobId: string, kind: PlanKind, input: PlanInput): Promise<JobPlanDTO> {
+export const savePlan = scoped(async function savePlan(ctx: DomainContext, jobId: string, kind: PlanKind, input: PlanInput): Promise<JobPlanDTO> {
   const access = await requirePulse(ctx, 'plan:manage');
   return inTx(async (tx) => {
     await assertJob(tx, ctx, jobId);
@@ -246,10 +247,10 @@ export async function savePlan(ctx: DomainContext, jobId: string, kind: PlanKind
     const lines = await tx.select().from(jobPlanLines).where(eq(jobPlanLines.planId, row.id));
     return toPlanDTO(row, lines, access);
   });
-}
+});
 
 /** "Make my own budget": copies the quote (totals and lines) into a budget. */
-export async function makeBudgetFromQuote(ctx: DomainContext, jobId: string): Promise<JobPlanDTO> {
+export const makeBudgetFromQuote = scoped(async function makeBudgetFromQuote(ctx: DomainContext, jobId: string): Promise<JobPlanDTO> {
   const access = await requirePulse(ctx, 'plan:manage');
   return inTx(async (tx) => {
     await assertJob(tx, ctx, jobId);
@@ -290,10 +291,10 @@ export async function makeBudgetFromQuote(ctx: DomainContext, jobId: string): Pr
     const lines = await tx.select().from(jobPlanLines).where(eq(jobPlanLines.planId, row.id));
     return toPlanDTO(row, lines, access);
   });
-}
+});
 
 /** Removes the budget, so every "budget" reads the quote again. The quote itself cannot be deleted while a budget exists. */
-export async function deletePlan(ctx: DomainContext, jobId: string, kind: PlanKind): Promise<void> {
+export const deletePlan = scoped(async function deletePlan(ctx: DomainContext, jobId: string, kind: PlanKind): Promise<void> {
   await requirePulse(ctx, 'plan:manage');
   await inTx(async (tx) => {
     const plans = await tx.select().from(jobPlans).where(and(eq(jobPlans.orgId, ctx.orgId), eq(jobPlans.jobId, jobId)));
@@ -304,4 +305,4 @@ export async function deletePlan(ctx: DomainContext, jobId: string, kind: PlanKi
     await logActivity(tx, ctx, { verb: 'plan.revised', entityType: 'plan', entityId: row.id, jobId, field: kind, before: totalsOf(row), after: null, meta: { plan: kind, deleted: true } });
     await recomputeJobs(tx, ctx, [jobId]);
   });
-}
+});

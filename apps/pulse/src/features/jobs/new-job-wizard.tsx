@@ -26,6 +26,7 @@ import {
   Field,
   IconButton,
   Input,
+  IsoDatePicker,
   Select,
   Textarea,
   ToggleGroup,
@@ -65,7 +66,7 @@ import type {
   VasServiceDTO,
 } from '@/lib/types';
 import { createJobAction, type CreateJobActionInput } from '@/server/actions/jobs';
-import { matchClientName } from '@/lib/client-names';
+import { clientBoxProblem } from '@/lib/client-names';
 import { ClientCombo } from './client-combo';
 import { singularUnit } from './job-math';
 import { Explain } from './job-ui';
@@ -435,13 +436,12 @@ export function NewJobWizard(props: NewJobWizardProps) {
 
   const validate = (upTo: number): Record<string, string> => {
     const next: Record<string, string> = {};
-    if (!form.client.trim()) next.client = 'Pick a client or type a new name.';
-    else if (!matchedClient && !clientNew) {
-      // Two clients for one company split its profit in two. A close name needs a clear yes.
-      const close = matchClientName(form.client.trim(), clients).lookAlikes;
-      if (close[0])
-        next.client = `Did you mean ${close[0].name}? Pick it from the list, or choose Create "${form.client.trim()}".`;
-    }
+    // Two clients for one company split its profit in two. A new client is only made from the Create row.
+    const clientProblem = clientBoxProblem(
+      { text: form.client, clientId: matchedClient?.id ?? null, createNew: clientNew },
+      clients,
+    );
+    if (clientProblem) next.client = clientProblem;
     if (!form.name.trim()) next.name = 'Give the job a name.';
     if (form.units.trim() && readDecimal(form.units, 3) === null) next.units = 'Type a number, like 5000.';
     if (form.kind === 'one_time' && form.pricingModel === 'per_unit' && !form.units.trim())
@@ -514,6 +514,7 @@ export function NewJobWizard(props: NewJobWizardProps) {
       name: form.name.trim(),
       clientId: matchedClient?.id ?? null,
       clientName: matchedClient ? null : form.client.trim(),
+      createClient: !matchedClient && clientNew,
       jobTypeId: form.jobTypeId || null,
       siteId: form.siteId || null,
       kind: form.kind,
@@ -566,7 +567,10 @@ export function NewJobWizard(props: NewJobWizardProps) {
       return;
     }
     if (!result.ok) {
-      setErrors(result.error.fields ?? {});
+      const fields = result.error.fields ?? {};
+      setErrors(fields);
+      // A client name the server refused is fixed on the first step, in the Client box.
+      if (fields.clientId ?? fields.clientName) setStep(0);
       toast.error("Couldn't save the job", result.error.message);
       return;
     }
@@ -827,18 +831,16 @@ export function NewJobWizard(props: NewJobWizardProps) {
                   goTo(1);
                 }}
               >
-                <Field
-                  label="Client"
-                  required
-                  error={errors.client || errors.clientId}
-                  hint={
-                    form.client.trim() && !matchedClient && clientNew
-                      ? `"${form.client.trim()}" is new. Pulse adds it as a client when you save.`
-                      : 'Who the work is for.'
-                  }
-                >
-                  {({ invalid }) => (
+                <Field label="Client" required>
+                  {({ inputId }) => (
                     <ClientCombo
+                      id={inputId}
+                      error={errors.client || errors.clientId || errors.clientName || null}
+                      hint={
+                        form.client.trim() && !matchedClient && clientNew
+                          ? `"${form.client.trim()}" is new. Pulse adds it as a client when you save.`
+                          : 'Who the work is for.'
+                      }
                       clients={clients}
                       value={{ text: form.client, clientId: matchedClient?.id ?? null, createNew: clientNew && !matchedClient }}
                       onChange={(next) => {
@@ -847,7 +849,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                       }}
                       open={clientOpen}
                       onOpenChange={setClientOpen}
-                      invalid={invalid}
                       testId="wizard-client"
                     />
                   )}
@@ -938,12 +939,13 @@ export function NewJobWizard(props: NewJobWizardProps) {
                 </Field>
                 <Field label="Start date">
                   {({ inputId }) => (
-                    <Input
+                    <IsoDatePicker
                       id={inputId}
-                      type="date"
-                      value={form.startDate}
-                      onChange={(event) => set('startDate', event.target.value)}
+                      aria-label="Start date"
+                      value={form.startDate || null}
+                      onChange={(value) => set('startDate', value ?? '')}
                       size="lg"
+                      data-testid="wizard-start"
                     />
                   )}
                 </Field>
@@ -953,13 +955,13 @@ export function NewJobWizard(props: NewJobWizardProps) {
                   hint="Pulse warns you when the pace will miss it."
                 >
                   {({ inputId, describedBy, invalid }) => (
-                    <Input
+                    <IsoDatePicker
                       id={inputId}
+                      aria-label="Due date"
                       aria-describedby={describedBy}
                       invalid={invalid}
-                      type="date"
-                      value={form.dueDate}
-                      onChange={(event) => set('dueDate', event.target.value)}
+                      value={form.dueDate || null}
+                      onChange={(value) => set('dueDate', value ?? '')}
                       size="lg"
                       data-testid="wizard-due"
                     />

@@ -1,7 +1,7 @@
 /**
  * The Work log shows one line per day. A day can hold several labor types (one entry each in the
  * database), so this rolls those entries up into one day, and turns the day form back into the
- * entries to save and the ones to remove.
+ * lines of one whole day save.
  */
 import {
   fromScaled,
@@ -16,7 +16,6 @@ import {
   ZERO,
 } from '@/lib/money';
 import type { ProductionEntryDTO } from '@/lib/types';
-import type { SaveProductionActionInput } from '@/server/actions/log';
 import { rowPace } from './job-math';
 
 export interface WorkDay {
@@ -88,10 +87,21 @@ export function groupWorkDays(rows: readonly ProductionEntryDTO[]): WorkDay[] {
   return [...byDate.entries()].map(([workDate, list]) => rollUp(workDate, list));
 }
 
-/** One labor type line on the day form, already checked and turned into decimal strings. */
+/** A row with nothing on it: no units, no hours, no people, no note. Clearing a row used to leave one behind. */
+export function isEmptyEntry(row: ProductionEntryDTO): boolean {
+  return (
+    Number(row.unitsGood) === 0 &&
+    Number(row.unitsScrap) === 0 &&
+    Number(row.unitsRework) === 0 &&
+    Number(row.hours) === 0 &&
+    Number(row.headcount ?? 0) === 0 &&
+    !(row.note ?? '').trim()
+  );
+}
+
+/** One labor class line on the day form, already checked and turned into decimal strings. */
 export interface LaborLineInput {
   readonly id: string | null;
-  readonly version?: number;
   readonly laborClassId: string | null;
   readonly headcount: string | null;
   readonly hours: string;
@@ -99,51 +109,120 @@ export interface LaborLineInput {
   readonly overtimeHours: string;
 }
 
-export interface DayPlan {
-  readonly entries: SaveProductionActionInput[];
-  readonly removeIds: string[];
+/** One line of the body of `PUT /api/v1/log/days`. */
+export interface DayLinePayload {
+  readonly id?: string | null;
+  readonly laborClassId: string | null;
+  readonly shift?: string | null;
+  readonly unitsGood: string;
+  readonly unitsScrap: string;
+  readonly unitsRework?: string;
+  readonly headcount: string | null;
+  readonly hours: string;
+  readonly setupHours: string;
+  readonly overtimeHours: string;
+  readonly hoursConfirmed?: boolean;
+  readonly note: string | null;
 }
 
 /**
- * Turns the day form into entries to save. The day's units and note sit on the first labor line
+ * Turns the day form into the lines to save. The day's units and note sit on the first labor line
  * and the other lines carry hours only, so the day still adds up to the same units. Lines that
- * were on the day before and are gone now come back as ids to remove.
+ * were on the day before and are not sent are taken off by the server in the same save.
  */
-export function planDaySave(input: {
-  readonly jobId: string;
-  readonly workDate: string;
+export function planDayLines(input: {
   readonly unitsGood: string;
   readonly unitsScrap: string;
+  /** Rework is not on the form. What the day held stays on the first line. */
+  readonly unitsRework?: string;
   readonly note: string | null;
   readonly lines: readonly LaborLineInput[];
-  readonly existingIds: readonly string[];
-}): DayPlan {
-  const entries = input.lines.map((line, index) => ({
+}): DayLinePayload[] {
+  return input.lines.map((line, index) => ({
     id: line.id,
-    jobId: input.jobId,
-    workDate: input.workDate,
     laborClassId: line.laborClassId,
     unitsGood: index === 0 ? input.unitsGood : '0',
     unitsScrap: index === 0 ? input.unitsScrap : '0',
+    unitsRework: index === 0 ? (input.unitsRework ?? '0') : '0',
     headcount: line.headcount,
     hours: line.hours,
     setupHours: line.setupHours,
     overtimeHours: line.overtimeHours,
     hoursConfirmed: true,
     note: index === 0 ? input.note : null,
-    ...(line.id && line.version !== undefined ? { version: line.version } : {}),
   }));
-  const kept = new Set(input.lines.map((line) => line.id).filter(Boolean));
-  return { entries, removeIds: input.existingIds.filter((id) => !kept.has(id)) };
 }
 
-/** The labor type picked on more than one line, if any. One day holds one entry per labor type. */
-export function repeatedLaborClass(lines: readonly Pick<LaborLineInput, 'laborClassId'>[]): string | null {
-  const seen = new Set<string>();
-  for (const line of lines) {
-    const key = line.laborClassId ?? '';
-    if (seen.has(key)) return key;
-    seen.add(key);
+/** The lines that put a day back exactly as it was read (Undo of an edit). Rows that are gone come back as new lines. */
+export function restoreDayLines(before: readonly ProductionEntryDTO[], liveIds: ReadonlySet<string>): DayLinePayload[] {
+  return before.map((row) => ({
+    id: liveIds.has(row.id) ? row.id : null,
+    laborClassId: row.laborClassId,
+    shift: row.shift,
+    unitsGood: row.unitsGood,
+    unitsScrap: row.unitsScrap,
+    unitsRework: row.unitsRework,
+    headcount: row.headcount,
+    hours: row.hours,
+    setupHours: row.setupHours,
+    overtimeHours: row.overtimeHours,
+    hoursConfirmed: row.hoursConfirmed,
+    note: row.note,
+  }));
+}
+
+/** The index of every line whose labor class is on more than one line. One day holds one entry per labor class. */
+export function repeatedLaborLines(lines: readonly Pick<LaborLineInput, 'laborClassId'>[]): number[] {
+  const count = new Map<string, number>();
+  for (const line of lines) count.set(line.laborClassId ?? '', (count.get(line.laborClassId ?? '') ?? 0) + 1);
+  return lines.flatMap((line, index) => ((count.get(line.laborClassId ?? '') ?? 0) > 1 ? [index] : []));
+}
+
+export interface DaySaveBody {
+  readonly jobId: string;
+  readonly workDate: string;
+  readonly mode: 'create' | 'edit';
+  readonly fromDate?: string | null;
+  readonly read?: readonly { id: string; version: number }[];
+  readonly lines: readonly DayLinePayload[];
+}
+
+export type DaySaveResult =
+  | { readonly ok: true; readonly entries: ProductionEntryDTO[]; readonly created: number; readonly updated: number; readonly removed: ProductionEntryDTO[] }
+  | {
+      readonly ok: false;
+      readonly code: string;
+      readonly message: string;
+      readonly fields: Readonly<Record<string, string>>;
+      /** Set on a 409: the day already has work ("day_exists") or someone changed it ("stale"). */
+      readonly reason: 'day_exists' | 'stale' | null;
+      readonly workDate: string | null;
+      /** The day as it is now. */
+      readonly fresh: ProductionEntryDTO[];
+    };
+
+interface DaySaveWire {
+  data?: { entries: ProductionEntryDTO[]; created: number; updated: number; removed: ProductionEntryDTO[] };
+  error?: { code: string; message: string; fields?: Record<string, string>; reason?: 'day_exists' | 'stale'; workDate?: string; fresh?: ProductionEntryDTO[] };
+}
+
+/** Saves a whole day through `PUT /api/v1/log/days`. A 409 comes back with the day as it is now. */
+export async function saveDay(body: DaySaveBody): Promise<DaySaveResult> {
+  const failed = (code: string, message: string): DaySaveResult => ({ ok: false, code, message, fields: {}, reason: null, workDate: null, fresh: [] });
+  let response: Response;
+  try {
+    response = await fetch('/api/v1/log/days', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch {
+    return failed('NETWORK_ERROR', 'Check your connection and try again.');
   }
-  return null;
+  let payload: DaySaveWire | null = null;
+  try {
+    payload = (await response.json()) as DaySaveWire;
+  } catch {
+    payload = null;
+  }
+  if (response.ok && payload?.data) return { ok: true, ...payload.data };
+  const error = payload?.error;
+  if (!error) return failed('INTERNAL', 'Something went wrong on our side. Please try again.');
+  return { ok: false, code: error.code, message: error.message, fields: error.fields ?? {}, reason: error.reason ?? null, workDate: error.workDate ?? null, fresh: error.fresh ?? [] };
 }

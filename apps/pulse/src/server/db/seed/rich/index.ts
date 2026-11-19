@@ -8,6 +8,7 @@ import { printSummary, seedRich as runPlan, type RichSummary } from './engine';
 import { kitstakPlan } from './kitstak';
 import { northwindPlan } from './northwind';
 import type { OrgPlan } from './types';
+import { asSeed } from '../context';
 
 export const RICH_PLANS: Readonly<Record<string, OrgPlan>> = {
   kitstak: kitstakPlan,
@@ -17,8 +18,8 @@ export const RICH_PLANS: Readonly<Record<string, OrgPlan>> = {
 /** The orgs `db:seed` fills when no `--org` is given. */
 export const RICH_ORGS = Object.keys(RICH_PLANS);
 
-export async function seedRich(ctx: DomainContext): Promise<RichSummary> {
+export const seedRich = asSeed(async function seedRich(ctx: DomainContext): Promise<RichSummary> {
   const summary = await runPlan(ctx, RICH_PLANS[ctx.orgSlug] ?? kitstakPlan);
   printSummary(summary);
   return summary;
-}
+});

@@ -49,6 +49,7 @@ import {
 } from './test-exports';
 import * as domain from './test-exports';
 import { ruleSentence } from '@/features/alerts/rule-kinds';
+import { STREAM_IDS } from '@/lib/streams';
 
 const ready = await databaseReady();
 
@@ -254,10 +255,10 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
       const period = await closePeriod(owner, '2026-02');
       expect(period).toMatchObject({ periodMonth: '2026-02-01', status: 'closed' });
       expect(period.snapshot).toHaveProperty('bridge');
-      await expectError(() => saveProductionEntry(owner, { id: entry.id, jobId: job.id, workDate: '2026-02-10', unitsGood: '60' }), 'CONFLICT', /^February is closed\. Ask the owner to reopen it\.$/);
-      await expectError(() => saveProductionEntry(owner, { jobId: job.id, workDate: '2026-02-11', laborClassId: packer, unitsGood: '5', hours: '1' }), 'CONFLICT', /February is closed/);
-      await expectError(() => deleteProductionEntries(owner, [entry.id]), 'CONFLICT', /February is closed/);
-      await expectError(() => createLaborRate(owner, { laborClassId: packer, effectiveFrom: '2026-02-01', wageCents: 1700 }), 'CONFLICT', /February is closed/);
+      await expectError(() => saveProductionEntry(owner, { id: entry.id, jobId: job.id, workDate: '2026-02-10', unitsGood: '60' }), 'CONFLICT', /^February 2026 is closed\. Ask the owner to reopen it\.$/);
+      await expectError(() => saveProductionEntry(owner, { jobId: job.id, workDate: '2026-02-11', laborClassId: packer, unitsGood: '5', hours: '1' }), 'CONFLICT', /February 2026 is closed/);
+      await expectError(() => deleteProductionEntries(owner, [entry.id]), 'CONFLICT', /February 2026 is closed/);
+      await expectError(() => createLaborRate(owner, { laborClassId: packer, effectiveFrom: '2026-02-01', wageCents: 1700 }), 'CONFLICT', /February 2026 is closed/);
       // The trigger refuses a write that skips the domain layer, stamp only updates included.
       await expect(org.query('update pulse.production_entries set shared_cents = 1 where id = $1', [entry.id])).rejects.toMatchObject({ code: 'KP001' });
       await expect(org.query("insert into pulse.cost_entries (org_id, scope, cost_date, category, amount_cents) values ($1, 'company', '2026-02-05', 'rent', 100)", [org.orgId])).rejects.toMatchObject({ code: 'KP001' });
@@ -392,6 +393,29 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
         walk(await listSites(who), 'sites');
         walk(await getOnboardingState(who), 'welcome');
       }
+      // CSV out: no money column, target margin included, reaches a reader who cannot see money.
+      // The JSON walk above never saw these files, which is how a target margin got out in round three.
+      // cost_date and revenue_date are days, not money.
+      const moneyHeader = /^(?!.*_date$).*(^|_)(price|cost|amount|margin|revenue|wage|pay|rate|burden|overhead|tax|benefits|cents)(_|$)/;
+      const headersOf = (csv: string): string[] => (csv.replace(/^\uFEFF/, '').split(/\r?\n/)[0] ?? '').split(',');
+      for (const who of [viewer, supervisor]) {
+        for (const stream of STREAM_IDS) {
+          if (stream === 'labor_rates') {
+            await expectError(() => domain.exportStream(who, stream), 'FORBIDDEN');
+            continue;
+          }
+          const file = await domain.exportStream(who, stream, stream === 'job_plans' ? { layout: 'lines' } : {});
+          expect(file.withMoney, stream).toBe(false);
+          for (const header of headersOf(file.csv)) if (moneyHeader.test(header)) leaks.push(`${stream}.csv has the column ${header}`);
+        }
+        for (const file of await domain.exportEverything(who, {})) {
+          for (const header of headersOf(file.csv)) if (moneyHeader.test(header)) leaks.push(`everything.zip ${file.fileName} has the column ${header}`);
+        }
+      }
+      // The check itself works: the same files for the owner do carry those columns.
+      expect(headersOf((await domain.exportStream(owner, 'clients')).csv)).toContain('target_margin_pct');
+      expect(headersOf((await domain.exportStream(owner, 'job_types')).csv)).toContain('target_margin_pct');
+      expect(headersOf((await domain.exportStream(owner, 'jobs')).csv).filter((header) => moneyHeader.test(header)).length).toBeGreaterThan(5);
       expect(leaks).toEqual([]);
       expect((await getSettings(viewer)).moneyHidden).toBe(true);
       // Units, hours and pace are still there.
@@ -540,7 +564,9 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
       const saved = await saveProductionEntry(supervisor, { jobId: job.id, workDate: today, laborClassId: packer, unitsGood: '10', hours: '1' });
       expect(saved.entry).toMatchObject({ moneyHidden: true, laborCostCents: null, baseRevenueCents: null });
       await expectError(() => saveProductionEntry(supervisor, { jobId: job.id, workDate: addDaysForTest(today, -10), laborClassId: packer, unitsGood: '10', hours: '1' }), 'FORBIDDEN', /last 7 days/);
-      await expectError(() => saveProductionEntry(supervisor, { jobId: job.id, workDate: addDaysForTest(today, 1), laborClassId: packer, unitsGood: '10', hours: '1' }), 'FORBIDDEN');
+      // Nobody dates work after today, whatever the role.
+      await expectError(() => saveProductionEntry(supervisor, { jobId: job.id, workDate: addDaysForTest(today, 1), laborClassId: packer, unitsGood: '10', hours: '1' }), 'VALIDATION', /after today/);
+      await expectError(() => saveProductionEntry(owner, { jobId: job.id, workDate: addDaysForTest(today, 1), laborClassId: packer, unitsGood: '10', hours: '1' }), 'VALIDATION', /after today/);
       await expectError(() => createJob(supervisor, { name: 'Not mine to make', clientId }), 'FORBIDDEN');
       await markDayComplete(supervisor, { date: today });
       await expectError(() => saveProductionEntry(supervisor, { id: saved.entry.id, jobId: job.id, workDate: today, unitsGood: '12' }), 'FORBIDDEN', /marked complete/);

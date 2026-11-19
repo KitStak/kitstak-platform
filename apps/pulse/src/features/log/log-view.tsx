@@ -53,6 +53,7 @@ import type { LaborClassDTO, LogGridDTO, SiteDTO } from '@/lib/types';
 import { quickAddJobAction } from '@/server/actions/jobs';
 import { markDayCompleteAction, reviewDayAction } from '@/server/actions/log';
 import { ClientCombo, NO_CLIENT, type ClientChoice } from '@/features/jobs/client-combo';
+import { clientBoxProblem, matchClientName } from '@/lib/client-names';
 import { JobFocusBanner } from './job-focus-banner';
 import type { FocusJob } from './job-focus';
 import { LogGrid, type GridTotals, type LogGridHandle } from './log-grid';
@@ -401,10 +402,19 @@ export function LogView({ initial, sites, laborClasses, thresholds, focusJob, fo
                 <Total
                   label="Margin today"
                   value={
-                    totals.money.marginBp === null ? 'No revenue yet' : formatPercentBp(totals.money.marginBp)
+                    totals.money.marginBp === null
+                      ? totals.money.jobsNoHours > 0
+                        ? 'No margin yet'
+                        : 'No revenue yet'
+                      : formatPercentBp(totals.money.marginBp)
                   }
-                  tone={totals.money.profitCents < 0 ? 'bad' : undefined}
-                  hint="Earned minus labor, materials and the share of time not on a job, divided by earned. Open the info button on a row for its own numbers."
+                  tone={totals.money.marginProfitCents < 0 ? 'bad' : undefined}
+                  note={
+                    totals.money.jobsNoHours > 0
+                      ? `${totals.money.jobsNoHours} ${totals.money.jobsNoHours === 1 ? 'job has' : 'jobs have'} units and no hours, so ${totals.money.jobsNoHours === 1 ? 'it is' : 'they are'} left out`
+                      : undefined
+                  }
+                  hint="Earned minus labor, materials and the share of time not on a job, divided by earned. A job with units and no labor hours is left out until its hours are in. Open the info button on a row for its own numbers."
                 />
               </>
             ) : null}
@@ -488,11 +498,14 @@ function Total({
   value,
   tone,
   hint,
+  note,
 }: {
   readonly label: string;
   readonly value: string;
   readonly tone?: 'bad';
   readonly hint?: string;
+  /** A short line under the value, for when the number leaves something out. */
+  readonly note?: string;
 }) {
   return (
     <div className="flex flex-col" title={hint}>
@@ -502,6 +515,11 @@ function Total({
       >
         {value}
       </span>
+      {note ? (
+        <span className="max-w-[240px] text-xs text-fg-muted" data-testid="log-total-note">
+          {note}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -633,36 +651,54 @@ function QuickAddJob({
   const [name, setName] = useState('');
   const [units, setUnits] = useState('');
   const [price, setPrice] = useState('');
-  const add = useServerAction(quickAddJobAction, { silentError: true, invalidate: [qk.jobsRoot()] });
   const [error, setError] = useState<string | null>(null);
+  const [clientError, setClientError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const clientRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const add = useServerAction(quickAddJobAction, {
+    silentError: true,
+    invalidate: [qk.jobsRoot()],
+    // What the server refused goes to the box it is about, in the server's own words.
+    onError: (problem) => {
+      const fields = problem.fields ?? {};
+      if (fields.clientId ?? fields.clientName) {
+        setClientError(fields.clientId ?? fields.clientName ?? null);
+        clientRef.current?.focus();
+      } else if (fields.name) {
+        setNameError(fields.name);
+        nameRef.current?.focus();
+      } else setError(fields.plannedUnits ?? fields.unitPrice ?? problem.message);
+    },
+  });
 
   async function submit() {
-    if (!client.text.trim()) return setError('Pick a client, or type a new client name.');
-    if (!client.clientId && !client.createNew) {
-      setClientOpen(true);
-      return setError('Pick a client from the list, or choose Create to add a new one.');
-    }
-    if (!name.trim()) return setError('Give the job a name.');
+    // The same words and the same place as quick add and the new job wizard: under the Client box.
+    const exact = matchClientName(client.text.trim(), clients.data ?? []).exact;
+    const clientId = client.clientId ?? exact?.id ?? null;
+    const problem = clientBoxProblem(client, clients.data ?? []);
+    setClientError(problem);
+    setNameError(name.trim() ? null : 'Give the job a name.');
     setError(null);
+    if (problem) {
+      clientRef.current?.focus();
+      setClientOpen(true);
+      return;
+    }
+    if (!name.trim()) {
+      nameRef.current?.focus();
+      return;
+    }
     const job = await add.run({
-      clientId: client.clientId,
-      clientName: client.clientId ? null : client.text.trim(),
-      createClient: client.createNew,
+      clientId,
+      clientName: clientId ? null : client.text.trim(),
+      createClient: clientId === null && client.createNew,
       name: name.trim(),
       plannedUnits: units.trim() ? units.replace(/,/g, '') : null,
       unitPrice: price.trim() ? price.replace(/[$,]/g, '') : null,
       siteId,
     });
-    if (!job) {
-      setError(
-        add.fieldErrors.name ??
-          add.fieldErrors.plannedUnits ??
-          add.fieldErrors.unitPrice ??
-          add.fieldErrors.clientId ??
-          'We could not add the job. Check the numbers and try again.',
-      );
-      return;
-    }
+    if (!job) return;
     toast.success(
       `Added ${job.number}`,
       client.createNew
@@ -688,34 +724,44 @@ function QuickAddJob({
           }}
         >
           <DialogBody className="flex flex-col gap-3">
-            <Field label="Client" required hint="Pick one from the list. To add a new client, type the name and choose Create.">
-              {() => (
+            <Field label="Client" required>
+              {({ inputId }) => (
                 <ClientCombo
+                  id={inputId}
+                  inputRef={clientRef}
                   clients={clients.data ?? []}
                   value={client}
                   onChange={(next) => {
                     setClient(next);
-                    setError(null);
+                    setClientError(null);
                   }}
+                  error={clientError}
+                  hint="Pick one from the list. To add a new client, type the name and choose Create."
                   open={clientOpen}
                   onOpenChange={setClientOpen}
                   testId="log-add-job-client"
                 />
               )}
             </Field>
-            <Field label="Job name" required>
-              {({ inputId }) => (
+            <Field label="Job name" required error={nameError}>
+              {({ inputId, describedBy, invalid }) => (
                 <Input
                   id={inputId}
+                  ref={nameRef}
+                  aria-describedby={describedBy}
+                  invalid={invalid}
                   value={name}
-                  onChange={(event) => setName(event.target.value)}
+                  onChange={(event) => {
+                    setName(event.target.value);
+                    setNameError(null);
+                  }}
                   placeholder="Holiday gift set, wave 2"
                   maxLength={200}
                 />
               )}
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Units planned">
+              <Field label="Units to make">
                 {({ inputId }) => (
                   <Input
                     id={inputId}
@@ -726,7 +772,7 @@ function QuickAddJob({
                   />
                 )}
               </Field>
-              <Field label="Price for each unit">
+              <Field label="Price per unit">
                 {({ inputId }) => (
                   <Input
                     id={inputId}

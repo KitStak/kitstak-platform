@@ -10,13 +10,15 @@ import { createTestOrg, databaseReady, type TestOrg } from '@/test/db';
 import { listVasRecords } from '@/server/integrations/wms';
 import type { DomainContext } from './_shared';
 import { runSync } from './sync';
-import { addJobLink, closePeriod, createClient, createJob, createVasService, deleteVasEntry, getJobProfit, listJobPrices, listVasEntries, pullWmsServices, saveProductionEntry, saveVasEntry, setJobPrice } from './test-exports';
+import { addJobLink, closePeriod, createClient, createJob, createVasService, deleteVasEntry, getConnectedApps, getJob, getJobProfit, getSettings, listJobPrices, listVasEntries, pullWmsServices, saveProductionEntry, saveVasEntry, setJobPrice, setJobStatus, updateSettings } from './test-exports';
 
 const ready = await databaseReady();
 
 const WAREHOUSE = 'wh-1';
 const WO_KIT = '11111111-1111-4111-8111-0000000000a1';
 const WO_FLAT = '11111111-1111-4111-8111-0000000000a2';
+const WO_NEW = '11111111-1111-4111-8111-0000000000a3';
+const WO_DONE = '11111111-1111-4111-8111-0000000000a4';
 const TYPE_PROJECT = 'type-special-project';
 const TYPE_PROGRAM = 'type-programming';
 const TYPE_PALLET = 'type-pallet';
@@ -295,17 +297,26 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
          ('fee-part', 'contract-1', 'Work Order', 'Per Component', null, 0.25, '[]', '2026-11-01T00:00:00.000Z'),
          ('fee-some-products', 'contract-1', 'Work Order', 'Per Kit', null, 99, '[{"field":"Product","value":"x"}]', '2026-11-01T00:00:00.000Z')`,
     );
+    // A contract that has not started yet is not read, even though it is the newest one.
+    await org.query(`insert into "${schema}".billing_contracts values ('contract-next', 'Service Client next year', $1, $2, '2999-01-01', 'Approved')`, [customerId, WAREHOUSE]);
+    await org.query(`insert into "${schema}".billing_fees values ('fee-kit-next', 'contract-next', 'Work Order', 'Per Kit', null, 77, '[]', '2026-11-01T00:00:00.000Z')`);
     const result = await sync();
     // Both linked jobs of this client follow the contract.
     expect(result).toMatchObject({ status: 'ok', updated: 2 });
     // The work order with no parts list earns the kit rate alone.
     expect((await listJobPrices(owner, flatJobId))[0]).toMatchObject({ unitPrice: '4.2500' });
     // $4.25 a kit plus $0.25 a part times 4 parts = $5.25. The fee with conditions is left out.
+    // The job already had a price, so the contract rate starts today and the first price row stays.
     const prices = await listJobPrices(owner, kitJobId);
-    expect(prices).toHaveLength(1);
-    expect(prices[0]).toMatchObject({ effectiveFrom: '0001-01-01', unitPrice: '5.2500', note: 'Warehouse contract rate: Service Client 2026' });
-    // The 10 kits already logged are restamped: 10 x $5.25.
-    expect((await getJobProfit(owner, kitJobId)).baseRevenueCents).toBe(5250);
+    expect(prices).toHaveLength(2);
+    expect(prices[0]).toMatchObject({ unitPrice: '5.2500', note: 'Warehouse contract rate: Service Client 2026' });
+    expect(prices[0]?.effectiveFrom).not.toBe('0001-01-01');
+    expect(prices[1]).toMatchObject({ effectiveFrom: '0001-01-01', unitPrice: '5.0000' });
+    // The 10 kits logged in October keep what they earned: the contract does not reach back.
+    expect((await getJobProfit(owner, kitJobId)).baseRevenueCents).toBe(5000);
+    // The job says where its price came from, with no amount in it.
+    const [link] = (await getJob(owner, kitJobId)).links;
+    expect(link?.priceFromContract).toMatchObject({ contractName: 'Service Client 2026', at: expect.any(String) });
     // A second sync changes nothing.
     expect(await sync()).toMatchObject({ created: 0, updated: 0 });
     // A price typed in Pulse afterwards is not fought over.
@@ -323,6 +334,63 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     expect((await getJobProfit(owner, kitJobId)).baseRevenueCents).toBe(6000);
     const [state] = await org.query<{ counts: Record<string, number> }>(`select counts from pulse.sync_state where org_id = $1 and source = 'wms'`, [org.orgId]);
     expect(state?.counts).toMatchObject({ contractJobs: 2, contractNotApplied: 0 });
+  }, 120_000);
+
+  it('fills in a job with no price from its first day, and leaves a finished job with a price alone', async () => {
+    const q = (text: string, values?: unknown[]) => org.query(text.replaceAll('$S', `"${schema}"`), values);
+    await q(
+      `insert into $S.work_orders values
+         ($1, 'WO000503', 'In Process', 'Work Order with Picking', null, $3, $4, 'kit-1', 20, 0, null, null, null),
+         ($2, 'WO000504', 'Completed', 'Work Order with Picking', null, $3, $4, 'kit-1', 20, 20, null, null, null)`,
+      [WO_NEW, WO_DONE, customerId, WAREHOUSE],
+    );
+    const fresh = await createJob(owner, { name: 'No price yet', clientId, status: 'active', plannedUnits: '20' });
+    await addJobLink(owner, fresh.id, { targetType: 'wms_work_order', targetId: WO_NEW, title: 'WO000503' });
+    await saveProductionEntry(owner, { jobId: fresh.id, workDate: '2026-10-21', unitsGood: '4', headcount: '1', hours: '1' });
+    const done = await createJob(owner, { name: 'Finished with a price', clientId, status: 'active', plannedUnits: '20', unitPrice: '2.0000' });
+    await addJobLink(owner, done.id, { targetType: 'wms_work_order', targetId: WO_DONE, title: 'WO000504' });
+    await saveProductionEntry(owner, { jobId: done.id, workDate: '2026-10-22', unitsGood: '20', headcount: '1', hours: '4' });
+    await setJobStatus(owner, done.id, 'completed');
+    expect((await getJobProfit(owner, fresh.id)).baseRevenueCents).toBe(0);
+
+    await sync();
+    // No price yet: the kit rate ($4.50) counts from the first day, so the 4 kits already logged earn it.
+    const freshPrices = await listJobPrices(owner, fresh.id);
+    expect(freshPrices).toHaveLength(1);
+    expect(freshPrices[0]).toMatchObject({ effectiveFrom: '0001-01-01', unitPrice: '4.5000', note: 'Warehouse contract rate: Service Client 2026' });
+    expect((await getJobProfit(owner, fresh.id)).baseRevenueCents).toBe(1800);
+    expect((await getJob(owner, fresh.id)).links[0]?.priceFromContract?.contractName).toBe('Service Client 2026');
+    // Finished, with its own price: untouched, and not marked as priced by the contract.
+    expect((await listJobPrices(owner, done.id)).map((price) => price.unitPrice)).toEqual(['2.0000']);
+    expect((await getJobProfit(owner, done.id)).baseRevenueCents).toBe(4000);
+    expect((await getJob(owner, done.id)).links[0]?.priceFromContract).toBeNull();
+    const [state] = await org.query<{ counts: Record<string, number> }>(`select counts from pulse.sync_state where org_id = $1 and source = 'wms'`, [org.orgId]);
+    expect(state?.counts).toMatchObject({ contractJobs: 4, contractNotApplied: 1 });
+    // A reader with no money still sees where the price came from: a name and a day, no amount.
+    expect(JSON.stringify((await getJob(owner, fresh.id)).links[0]?.priceFromContract)).not.toMatch(/4\.5|450/);
+  }, 120_000);
+
+  it('the workspace can turn the contract rule off, and on again', async () => {
+    expect((await getSettings(owner)).wmsContractPrices).toBe(true);
+    await updateSettings(owner, { wmsContractPrices: false });
+    await org.query(`update "${schema}".billing_fees set standard_rate = 8 where id = 'fee-kit'`);
+    const off = await sync();
+    expect(off).toMatchObject({ status: 'ok', updated: 0 });
+    // Nothing moved: the prices are the ones from before the rate change.
+    expect((await listJobPrices(owner, kitJobId))[0]).toMatchObject({ unitPrice: '5.5000' });
+    expect((await listJobPrices(owner, flatJobId))[0]).toMatchObject({ unitPrice: '4.5000' });
+    const [state] = await org.query<{ counts: Record<string, number> }>(`select counts from pulse.sync_state where org_id = $1 and source = 'wms'`, [org.orgId]);
+    expect(state?.counts).toMatchObject({ contractJobs: 0 });
+    expect((await getConnectedApps(owner)).switches.wmsContractPrices).toBe(false);
+    // A price typed while the rule is off stays.
+    await setJobPrice(owner, flatJobId, { unitPrice: '3.0000' });
+    expect(await sync()).toMatchObject({ updated: 0 });
+    expect((await listJobPrices(owner, flatJobId))[0]).toMatchObject({ unitPrice: '3.0000' });
+    // On again: the contract has changed since Pulse last applied it, so it wins from today.
+    await updateSettings(owner, { wmsContractPrices: true });
+    await sync();
+    expect((await listJobPrices(owner, kitJobId))[0]).toMatchObject({ unitPrice: '9.0000' });
+    expect((await listJobPrices(owner, flatJobId))[0]).toMatchObject({ unitPrice: '8.0000' });
   }, 120_000);
 
   it('a contract with only a fee for each work order makes the job fixed price', async () => {

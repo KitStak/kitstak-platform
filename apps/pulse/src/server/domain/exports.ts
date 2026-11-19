@@ -13,6 +13,7 @@
 import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { forbidden, invalid } from '@/server/errors';
 import { type ColumnDef, type LooseRecord, type PlanLayout, anyStreamDef, recordKey } from '@/lib/csv/streams';
 import { streamToCsv } from '@/lib/csv/template';
@@ -296,7 +297,7 @@ function typed(column: ColumnDef, value: unknown): LooseRecord[string] {
 }
 
 /** The live rows of a stream as CSV shaped records. Runs inside `executor` (a transaction or the pool). */
-export async function loadStreamRows(executor: Executor, orgId: string, stream: StreamId, scope: StreamScope = {}): Promise<StreamRow[]> {
+export const loadStreamRows = scoped(async function loadStreamRows(executor: Executor, orgId: string, stream: StreamId, scope: StreamScope = {}): Promise<StreamRow[]> {
   const def = anyStreamDef(stream);
   const found = await rows<Record<string, unknown>>(executor, streamQuery(stream, orgId, scope));
   return found.map((row) => {
@@ -304,7 +305,7 @@ export async function loadStreamRows(executor: Executor, orgId: string, stream: 
     for (const column of def.columns) record[recordKey(column.key)] = column.key in row ? typed(column, row[column.key]) : null;
     return { id: String(row._id), stamp: String(row._stamp ?? ''), ref: row._ref === null || row._ref === undefined ? null : String(row._ref), record };
   });
-}
+}, 1);
 
 export interface ExportFilters extends StreamScope {
   /** Leave money columns out even for a reader who may see them. */
@@ -340,17 +341,17 @@ async function buildExport(ctx: DomainContext, stream: StreamId, filters: Export
 }
 
 /** One stream as a CSV file in the columns of its template. */
-export async function exportStream(ctx: DomainContext, stream: string, filters: ExportFilters = {}): Promise<ExportFile> {
+export const exportStream = scoped(async function exportStream(ctx: DomainContext, stream: string, filters: ExportFilters = {}): Promise<ExportFile> {
   const access = await requirePulse(ctx, 'export:run');
   if (!isStreamId(stream)) throw invalid(`There is no kind of data called ${stream}. Pick one of: ${STREAM_IDS.join(', ')}.`);
   if (filters.from && filters.to && filters.to < filters.from) throw invalid('The end date is before the start date.');
   const file = await buildExport(ctx, stream, filters, access);
   await logActivity(db, ctx, { verb: 'export.run', entityType: 'export', meta: { stream, rows: file.rowCount, withMoney: file.withMoney, from: filters.from ?? null, to: filters.to ?? null, fileName: file.fileName } });
   return file;
-}
+});
 
 /** Every stream the reader may export, for the "Download everything" zip. Streams with no rows are left out. */
-export async function exportEverything(ctx: DomainContext, filters: ExportFilters = {}): Promise<ExportFile[]> {
+export const exportEverything = scoped(async function exportEverything(ctx: DomainContext, filters: ExportFilters = {}): Promise<ExportFile[]> {
   const access = await requirePulse(ctx, 'export:run');
   if (filters.from && filters.to && filters.to < filters.from) throw invalid('The end date is before the start date.');
   const files: ExportFile[] = [];
@@ -361,7 +362,7 @@ export async function exportEverything(ctx: DomainContext, filters: ExportFilter
   }
   await logActivity(db, ctx, { verb: 'export.run', entityType: 'export', meta: { stream: 'everything', files: files.length, rows: files.reduce((sum, file) => sum + file.rowCount, 0), withMoney: access.seesMoney && !filters.hideMoney, from: filters.from ?? null, to: filters.to ?? null } });
   return files;
-}
+});
 
 export interface StreamCountDTO {
   readonly stream: StreamId;
@@ -389,7 +390,7 @@ const COUNT_TABLES: Readonly<Record<StreamId, string>> = {
 };
 
 /** How many live rows each stream holds, for the export page and the import cards. */
-export async function countStreamRows(ctx: DomainContext): Promise<StreamCountDTO[]> {
+export const countStreamRows = scoped(async function countStreamRows(ctx: DomainContext): Promise<StreamCountDTO[]> {
   await requirePulse(ctx, 'pulse:read');
   const parts = STREAM_IDS.map((id) => {
     const table = COUNT_TABLES[id];
@@ -400,4 +401,4 @@ export async function countStreamRows(ctx: DomainContext): Promise<StreamCountDT
   const found = await rows<{ stream: StreamId; n: number }>(db, sql.join(parts, sql` UNION ALL `));
   const byId = new Map(found.map((row) => [row.stream, row.n]));
   return STREAM_IDS.map((stream) => ({ stream, rows: byId.get(stream) ?? 0 }));
-}
+});

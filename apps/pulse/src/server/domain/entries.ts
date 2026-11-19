@@ -7,6 +7,7 @@
 import 'server-only';
 import { and, asc, desc, eq, gte, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { costEntries, items, materialUsage, revenueEntries, vasEntries } from '@/server/db/schema';
 import { appUrls } from '@/server/env';
 import { orgModuleFlags } from '@/server/entitlements';
@@ -94,7 +95,7 @@ function toUsageDTO(row: UsageRow, access: Access, closed: ReadonlySet<string>):
   };
 }
 
-export async function listMaterialUsage(ctx: DomainContext, filters: EntryFilters = {}): Promise<MaterialUsageDTO[]> {
+export const listMaterialUsage = scoped(async function listMaterialUsage(ctx: DomainContext, filters: EntryFilters = {}): Promise<MaterialUsageDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
@@ -113,7 +114,7 @@ export async function listMaterialUsage(ctx: DomainContext, filters: EntryFilter
     .orderBy(desc(materialUsage.usageDate), asc(materialUsage.createdAt))
     .limit(cap(filters.limit));
   return found.map((row) => toUsageDTO(row, access, closed));
-}
+});
 
 export interface MaterialUsageInput {
   id?: string | null;
@@ -138,7 +139,7 @@ export interface MaterialUsageInput {
   isSample?: boolean;
 }
 
-export async function saveMaterialUsage(ctx: DomainContext, input: MaterialUsageInput): Promise<MaterialUsageDTO> {
+export const saveMaterialUsage = scoped(async function saveMaterialUsage(ctx: DomainContext, input: MaterialUsageInput): Promise<MaterialUsageDTO> {
   const access = await requirePulse(ctx, 'material:log');
   return inTx(async (tx) => {
     let existing: UsageRow | undefined;
@@ -195,7 +196,7 @@ export async function saveMaterialUsage(ctx: DomainContext, input: MaterialUsage
     const [fresh] = await tx.select().from(materialUsage).where(eq(materialUsage.id, row.id));
     return toUsageDTO(fresh!, access, await closedMonths(tx, ctx.orgId));
   });
-}
+});
 
 async function toggleUsage(ctx: DomainContext, id: string, restore: boolean): Promise<MaterialUsageDTO> {
   const access = await requirePulse(ctx, 'material:log');
@@ -213,8 +214,8 @@ async function toggleUsage(ctx: DomainContext, id: string, restore: boolean): Pr
   });
 }
 
-export const deleteMaterialUsage = (ctx: DomainContext, id: string): Promise<MaterialUsageDTO> => toggleUsage(ctx, id, false);
-export const restoreMaterialUsage = (ctx: DomainContext, id: string): Promise<MaterialUsageDTO> => toggleUsage(ctx, id, true);
+export const deleteMaterialUsage = scoped((ctx: DomainContext, id: string): Promise<MaterialUsageDTO> => toggleUsage(ctx, id, false));
+export const restoreMaterialUsage = scoped((ctx: DomainContext, id: string): Promise<MaterialUsageDTO> => toggleUsage(ctx, id, true));
 
 /* ---------------------------------------------------------------- other costs */
 
@@ -233,7 +234,7 @@ function toCostDTO(row: CostRow, access: Access, closed: ReadonlySet<string>): C
   };
 }
 
-export async function listCosts(ctx: DomainContext, filters: EntryFilters & { scope?: CostScope | null } = {}): Promise<CostEntryDTO[]> {
+export const listCosts = scoped(async function listCosts(ctx: DomainContext, filters: EntryFilters & { scope?: CostScope | null } = {}): Promise<CostEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
@@ -254,7 +255,7 @@ export async function listCosts(ctx: DomainContext, filters: EntryFilters & { sc
     .orderBy(desc(costEntries.costDate), asc(costEntries.createdAt))
     .limit(cap(filters.limit));
   return found.map((row) => toCostDTO(row, access, closed));
-}
+});
 
 export interface CostInput {
   id?: string | null;
@@ -280,7 +281,7 @@ async function touchCost(tx: Executor, ctx: DomainContext, touched: ReturnType<t
   else touchJob(touched, row.jobId, row.clientId);
 }
 
-export async function saveCost(ctx: DomainContext, input: CostInput): Promise<CostEntryDTO> {
+export const saveCost = scoped(async function saveCost(ctx: DomainContext, input: CostInput): Promise<CostEntryDTO> {
   const access = await requirePulse(ctx, 'cost:manage');
   return inTx(async (tx) => {
     let existing: CostRow | undefined;
@@ -325,7 +326,7 @@ export async function saveCost(ctx: DomainContext, input: CostInput): Promise<Co
     await finishWrite(tx, ctx, touched);
     return toCostDTO(row, access, await closedMonths(tx, ctx.orgId));
   });
-}
+});
 
 async function toggleCost(ctx: DomainContext, id: string, restore: boolean): Promise<CostEntryDTO> {
   const access = await requirePulse(ctx, 'cost:manage');
@@ -342,8 +343,8 @@ async function toggleCost(ctx: DomainContext, id: string, restore: boolean): Pro
   });
 }
 
-export const deleteCost = (ctx: DomainContext, id: string): Promise<CostEntryDTO> => toggleCost(ctx, id, false);
-export const restoreCost = (ctx: DomainContext, id: string): Promise<CostEntryDTO> => toggleCost(ctx, id, true);
+export const deleteCost = scoped((ctx: DomainContext, id: string): Promise<CostEntryDTO> => toggleCost(ctx, id, false));
+export const restoreCost = scoped((ctx: DomainContext, id: string): Promise<CostEntryDTO> => toggleCost(ctx, id, true));
 
 /* ---------------------------------------------------------------- revenue entries */
 
@@ -368,7 +369,7 @@ function toRevenueDTO(row: RevenueRow, access: Access, closed: ReadonlySet<strin
   };
 }
 
-export async function listRevenue(ctx: DomainContext, filters: EntryFilters & { kind?: StoredRevenueKind | null } = {}): Promise<RevenueEntryDTO[]> {
+export const listRevenue = scoped(async function listRevenue(ctx: DomainContext, filters: EntryFilters & { kind?: StoredRevenueKind | null } = {}): Promise<RevenueEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
@@ -388,7 +389,7 @@ export async function listRevenue(ctx: DomainContext, filters: EntryFilters & { 
     .orderBy(desc(revenueEntries.revenueDate), asc(revenueEntries.createdAt))
     .limit(cap(filters.limit));
   return found.map((row) => toRevenueDTO(row, access, closed));
-}
+});
 
 export interface RevenueInput {
   id?: string | null;
@@ -413,7 +414,7 @@ export interface RevenueInput {
   isSample?: boolean;
 }
 
-export async function saveRevenue(ctx: DomainContext, input: RevenueInput): Promise<RevenueEntryDTO> {
+export const saveRevenue = scoped(async function saveRevenue(ctx: DomainContext, input: RevenueInput): Promise<RevenueEntryDTO> {
   const access = await requirePulse(ctx, 'revenue:manage');
   return inTx(async (tx) => {
     let existing: RevenueRow | undefined;
@@ -468,7 +469,7 @@ export async function saveRevenue(ctx: DomainContext, input: RevenueInput): Prom
     await finishWrite(tx, ctx, touched);
     return toRevenueDTO(row, access, await closedMonths(tx, ctx.orgId));
   });
-}
+});
 
 async function toggleRevenue(ctx: DomainContext, id: string, restore: boolean): Promise<RevenueEntryDTO> {
   const access = await requirePulse(ctx, 'revenue:manage');
@@ -486,8 +487,8 @@ async function toggleRevenue(ctx: DomainContext, id: string, restore: boolean): 
   });
 }
 
-export const deleteRevenue = (ctx: DomainContext, id: string): Promise<RevenueEntryDTO> => toggleRevenue(ctx, id, false);
-export const restoreRevenue = (ctx: DomainContext, id: string): Promise<RevenueEntryDTO> => toggleRevenue(ctx, id, true);
+export const deleteRevenue = scoped((ctx: DomainContext, id: string): Promise<RevenueEntryDTO> => toggleRevenue(ctx, id, false));
+export const restoreRevenue = scoped((ctx: DomainContext, id: string): Promise<RevenueEntryDTO> => toggleRevenue(ctx, id, true));
 
 /* ---------------------------------------------------------------- extra service entries */
 
@@ -540,7 +541,7 @@ function toVasEntryDTO(row: VasRow, access: Access, closed: ReadonlySet<string>,
   };
 }
 
-export async function listVasEntries(ctx: DomainContext, filters: EntryFilters & { vasServiceId?: string | null; noPrice?: boolean } = {}): Promise<VasEntryDTO[]> {
+export const listVasEntries = scoped(async function listVasEntries(ctx: DomainContext, filters: EntryFilters & { vasServiceId?: string | null; noPrice?: boolean } = {}): Promise<VasEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const closed = await closedMonths(db, ctx.orgId);
   const where: (SQL | undefined)[] = [
@@ -557,7 +558,7 @@ export async function listVasEntries(ctx: DomainContext, filters: EntryFilters &
   const found = await db.select().from(vasEntries).where(and(...where)).orderBy(desc(vasEntries.workDate), asc(vasEntries.createdAt)).limit(cap(filters.limit));
   const wmsBase = found.some((row) => row.source === 'wms') ? await warehouseBase(ctx) : null;
   return found.map((row) => toVasEntryDTO(row, access, closed, wmsBase));
-}
+});
 
 export interface VasEntryInput {
   id?: string | null;
@@ -587,7 +588,7 @@ export interface VasEntryInput {
   meta?: Record<string, unknown>;
 }
 
-export async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Promise<VasEntryDTO> {
+export const saveVasEntry = scoped(async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Promise<VasEntryDTO> {
   const access = await requirePulse(ctx, 'vas:manage');
   const wmsBase = await warehouseBase(ctx);
   const hours = input.hours ?? '0';
@@ -661,7 +662,7 @@ export async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Pr
     const [fresh] = await tx.select().from(vasEntries).where(eq(vasEntries.id, row.id));
     return toVasEntryDTO(fresh!, access, await closedMonths(tx, ctx.orgId), wmsBase);
   });
-}
+});
 
 async function toggleVasEntry(ctx: DomainContext, id: string, restore: boolean): Promise<VasEntryDTO> {
   const access = await requirePulse(ctx, 'vas:manage');
@@ -680,5 +681,5 @@ async function toggleVasEntry(ctx: DomainContext, id: string, restore: boolean):
   });
 }
 
-export const deleteVasEntry = (ctx: DomainContext, id: string): Promise<VasEntryDTO> => toggleVasEntry(ctx, id, false);
-export const restoreVasEntry = (ctx: DomainContext, id: string): Promise<VasEntryDTO> => toggleVasEntry(ctx, id, true);
+export const deleteVasEntry = scoped((ctx: DomainContext, id: string): Promise<VasEntryDTO> => toggleVasEntry(ctx, id, false));
+export const restoreVasEntry = scoped((ctx: DomainContext, id: string): Promise<VasEntryDTO> => toggleVasEntry(ctx, id, true));

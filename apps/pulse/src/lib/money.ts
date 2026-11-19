@@ -245,6 +245,22 @@ export function mulRatio(cents: CentsLike, numerator: bigint, denominator: bigin
 }
 
 /**
+ * The share of a monthly amount that belongs to days `firstDay` to `lastDay` of a month with
+ * `daysInMonth` days (4.9). It is the rounded running total through `lastDay` less the rounded
+ * running total through the day before `firstDay`, so the parts of a month always add back to
+ * the whole month to the cent, and a whole month is the amount itself.
+ * Example: $70,500.00 for days 1 to 18 of 30 is `divRound(7050000 * 18, 30) = 4230000`.
+ */
+export function prorateDays(monthCents: CentsLike, firstDay: number, lastDay: number, daysInMonth: number): Cents {
+  if (!Number.isInteger(firstDay) || !Number.isInteger(lastDay) || !Number.isInteger(daysInMonth) || daysInMonth < 1 || firstDay < 1 || lastDay > daysInMonth || lastDay < firstDay) {
+    throw new RangeError('prorateDays needs whole days inside the month');
+  }
+  const cents = toCents(monthCents);
+  const days = BigInt(daysInMonth);
+  return divRound(cents * BigInt(lastDay), days) - divRound(cents * BigInt(firstDay - 1), days);
+}
+
+/**
  * A ratio in basis points for people to read (4.2): `divRound(part * 10000, whole)`.
  * `null` when the whole is 0 or less, or when the answer is outside plus or minus 1,000,000 bp.
  */

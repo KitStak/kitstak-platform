@@ -45,12 +45,14 @@ export async function AlertsPage() {
 export async function AlertRulesPage() {
   const page = await pulsePage(routes.alertRules(), 'alerts');
   if (page.blocked) return <PageBlocked title="Alert rules" role={page.access.role} />;
-  const [rules, clients, jobTypes, sites] = await Promise.all([listAlertRules(page.ctx), listClients(page.ctx, {}), listJobTypes(page.ctx), listSites(page.ctx)]);
+  const [rules, clients, jobTypes, sites, settings] = await Promise.all([listAlertRules(page.ctx), listClients(page.ctx, {}), listJobTypes(page.ctx), listSites(page.ctx), getSettings(page.ctx)]);
   return (
     <Frame view="rules">
       <RulesView
         initialRules={rules}
         canManage={page.can('alert:manage')}
+        // A count of days is not money: every reader sees how long "nothing logged" waits.
+        facts={{ noEntryDays: settings.noEntryDays }}
         options={{
           clients: clients.map((client) => ({ id: client.id, name: client.name })),
           jobTypes: jobTypes.map((type) => ({ id: type.id, name: type.name })),

@@ -11,6 +11,7 @@ import 'server-only';
 import { jobChartLabel } from '@/lib/job-label';
 import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { reportRuns, reportSchedules } from '@/server/db/schema';
 import { forbidden, invalid, notFound } from '@/server/errors';
 import { reportCellText, reportToCsv, reportToHtml } from '@/features/reports/report-format';
@@ -181,7 +182,7 @@ const cellOf = (row: ProfitRowDTO): PivotCellDTO => ({ revenueCents: row.revenue
  * same `toProfitRow` as the explorer, and the row totals, column totals and grand total are sums
  * of the cells, so the grid always adds up to the Profit page.
  */
-export async function getProfitPivot(ctx: DomainContext, rowBy: ProfitGroup, colBy: ProfitGroup, filters: ProfitFilters): Promise<ProfitPivotDTO> {
+export const getProfitPivot = scoped(async function getProfitPivot(ctx: DomainContext, rowBy: ProfitGroup, colBy: ProfitGroup, filters: ProfitFilters): Promise<ProfitPivotDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   for (const by of [rowBy, colBy]) if (!(PROFIT_GROUPS as readonly string[]).includes(by)) throw invalid('Pick how to group the numbers.');
   if (rowBy === colBy) throw invalid('Pick two different things to compare.');
@@ -250,7 +251,7 @@ export async function getProfitPivot(ctx: DomainContext, rowBy: ProfitGroup, col
     total: cellOf(toProfitRow(grand, access)),
     moneyHidden: !access.seesMoney,
   };
-}
+});
 
 const SOURCE_LABELS: Readonly<Record<string, string>> = {
   production_entries: 'Work log',
@@ -264,7 +265,7 @@ const SOURCE_LABELS: Readonly<Record<string, string>> = {
  * The stamped rows behind a profit number, with job, client and service names and the note that
  * was typed with the row. This is the last stop of every drill down. Reads `v_facts`.
  */
-export async function listProfitEntries(ctx: DomainContext, filters: ProfitFilters & { kinds?: readonly FactKind[]; limit?: number }): Promise<ProfitEntriesDTO> {
+export const listProfitEntries = scoped(async function listProfitEntries(ctx: DomainContext, filters: ProfitFilters & { kinds?: readonly FactKind[]; limit?: number }): Promise<ProfitEntriesDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   checkProfitFilters(filters);
   const limit = Math.min(Math.max(filters.limit ?? 500, 1), 2000);
@@ -309,7 +310,7 @@ export async function listProfitEntries(ctx: DomainContext, filters: ProfitFilte
     truncated: found.length > limit,
     moneyHidden: !access.seesMoney,
   };
-}
+});
 
 /* ================================================================== report building blocks */
 
@@ -535,7 +536,11 @@ async function monthlyProfitAndLoss(ctx: DomainContext, filters: ReportFilters):
         : null,
     notes: narrowed
       ? ['Company profit is left out because a client, job type or status filter is on. It only makes sense for the whole company or a whole site.']
-      : ['Company profit is profit on jobs, less time not on a job that no job carried, less paid time not on any job, less overhead your hourly rate did not cover.'],
+      : [
+          'Company profit is profit on jobs, less time not on a job that no job carried, less paid time not on any job, less overhead your hourly rate did not cover.',
+          'Company costs are monthly. A part month counts its share by day, and a month with no company costs trusts the overhead in your hourly rates.',
+          ...(whole.companyCostNote ? [whole.companyCostNote] : []),
+        ],
   };
 }
 
@@ -1117,7 +1122,7 @@ export interface BuildReportOptions {
  * Builds one report of the library. Reports that show money answer FORBIDDEN to a reader without
  * `money:read`; reports open to everyone come back with their money columns blank for them.
  */
-export async function buildReport(ctx: DomainContext, slug: string, filters: ReportFilters, options: BuildReportOptions = {}): Promise<ReportDTO> {
+export const buildReport = scoped(async function buildReport(ctx: DomainContext, slug: string, filters: ReportFilters, options: BuildReportOptions = {}): Promise<ReportDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const info = reportInfo(slug);
   const builder = BUILDERS[slug];
@@ -1151,13 +1156,13 @@ export async function buildReport(ctx: DomainContext, slug: string, filters: Rep
     truncated: built.rows.length >= ROW_CAP,
     moneyHidden: hide,
   };
-}
+});
 
 /** The reports this reader may open. */
-export async function listReportsFor(ctx: DomainContext): Promise<ReportInfo[]> {
+export const listReportsFor = scoped(async function listReportsFor(ctx: DomainContext): Promise<ReportInfo[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   return REPORTS.filter((report) => access.seesMoney || !report.needsMoney);
-}
+});
 
 /* ================================================================== schedules and builds */
 
@@ -1204,12 +1209,12 @@ function toScheduleDTO(row: ScheduleRow, ctx: DomainContext, canManageAll: boole
 }
 
 /** Schedules of the workspace. People without money rights do not see schedules that build money. */
-export async function listReportSchedules(ctx: DomainContext): Promise<ReportScheduleDTO[]> {
+export const listReportSchedules = scoped(async function listReportSchedules(ctx: DomainContext): Promise<ReportScheduleDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const found = await db.select().from(reportSchedules).where(and(eq(reportSchedules.orgId, ctx.orgId), isNull(reportSchedules.deletedAt))).orderBy(reportSchedules.name);
   const manage = canPulse(access.role, 'job:manage');
   return found.filter((row) => access.seesMoney || !row.includeMoney).map((row) => toScheduleDTO(row, ctx, manage));
-}
+});
 
 async function siteZone(ctx: DomainContext, siteId: string | null | undefined): Promise<string> {
   try {
@@ -1220,7 +1225,7 @@ async function siteZone(ctx: DomainContext, siteId: string | null | undefined): 
 }
 
 /** Creates or edits a schedule. A report that shows money can only be scheduled by someone who sees money. */
-export async function saveReportSchedule(ctx: DomainContext, input: ReportScheduleInput): Promise<ReportScheduleDTO> {
+export const saveReportSchedule = scoped(async function saveReportSchedule(ctx: DomainContext, input: ReportScheduleInput): Promise<ReportScheduleDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const name = cleanText(input.name);
   const fields: Record<string, string> = {};
@@ -1268,7 +1273,7 @@ export async function saveReportSchedule(ctx: DomainContext, input: ReportSchedu
     await logActivity(tx, ctx, { verb: 'schedule.created', entityType: 'report_schedule', entityId: row!.id, after: { name: values.name, report: values.report, cadence: values.cadence } });
     return toScheduleDTO(row!, ctx, manage);
   });
-}
+});
 
 async function ownScheduleRow(ctx: DomainContext, scheduleId: string, deleted: boolean): Promise<{ row: ScheduleRow; manage: boolean }> {
   const access = await requirePulse(ctx, 'pulse:read');
@@ -1280,26 +1285,26 @@ async function ownScheduleRow(ctx: DomainContext, scheduleId: string, deleted: b
   return { row, manage };
 }
 
-export async function deleteReportSchedule(ctx: DomainContext, scheduleId: string): Promise<void> {
+export const deleteReportSchedule = scoped(async function deleteReportSchedule(ctx: DomainContext, scheduleId: string): Promise<void> {
   const { row } = await ownScheduleRow(ctx, scheduleId, false);
   await inTx(async (tx) => {
     await tx.update(reportSchedules).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(reportSchedules.id, row.id));
     await logActivity(tx, ctx, { verb: 'schedule.deleted', entityType: 'report_schedule', entityId: row.id, before: { name: row.name, report: row.report } });
   });
-}
+});
 
 /** Undo of a delete. */
-export async function restoreReportSchedule(ctx: DomainContext, scheduleId: string): Promise<ReportScheduleDTO> {
+export const restoreReportSchedule = scoped(async function restoreReportSchedule(ctx: DomainContext, scheduleId: string): Promise<ReportScheduleDTO> {
   const { row, manage } = await ownScheduleRow(ctx, scheduleId, true);
   return inTx(async (tx) => {
     const [restored] = await tx.update(reportSchedules).set({ deletedAt: null, updatedAt: new Date() }).where(eq(reportSchedules.id, row.id)).returning();
     await logActivity(tx, ctx, { verb: 'schedule.restored', entityType: 'report_schedule', entityId: row.id });
     return toScheduleDTO(restored!, ctx, manage);
   });
-}
+});
 
 /** Turns a schedule on or off without opening the editor. */
-export async function setReportScheduleEnabled(ctx: DomainContext, scheduleId: string, enabled: boolean): Promise<ReportScheduleDTO> {
+export const setReportScheduleEnabled = scoped(async function setReportScheduleEnabled(ctx: DomainContext, scheduleId: string, enabled: boolean): Promise<ReportScheduleDTO> {
   const { row, manage } = await ownScheduleRow(ctx, scheduleId, false);
   const config = (row.config ?? {}) as { siteId?: string | null };
   const zone = await siteZone(ctx, config.siteId);
@@ -1312,7 +1317,7 @@ export async function setReportScheduleEnabled(ctx: DomainContext, scheduleId: s
     await logActivity(tx, ctx, { verb: enabled ? 'schedule.turned_on' : 'schedule.turned_off', entityType: 'report_schedule', entityId: row.id });
     return toScheduleDTO(updated!, ctx, manage);
   });
-}
+});
 
 function toRunDTO(row: RunRow & { scheduleName?: string | null }, seesMoney: boolean): ReportRunDTO {
   return {
@@ -1374,15 +1379,15 @@ async function buildForSchedule(ctx: DomainContext, row: ScheduleRow): Promise<R
 }
 
 /** "Build now": runs a schedule right away, whatever its clock says. */
-export async function runReportSchedule(ctx: DomainContext, scheduleId: string): Promise<ReportRunDTO> {
+export const runReportSchedule = scoped(async function runReportSchedule(ctx: DomainContext, scheduleId: string): Promise<ReportRunDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const { row } = await ownScheduleRow(ctx, scheduleId, false);
   const run = await buildForSchedule(ctx, row);
   return toRunDTO({ ...run, scheduleName: row.name }, access.seesMoney);
-}
+});
 
 /** Past builds, newest first. Kept 90 days. */
-export async function listReportRuns(ctx: DomainContext, options: { limit?: number } = {}): Promise<ReportRunDTO[]> {
+export const listReportRuns = scoped(async function listReportRuns(ctx: DomainContext, options: { limit?: number } = {}): Promise<ReportRunDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const found = await db
     .select({ run: reportRuns, scheduleName: reportSchedules.name })
@@ -1392,10 +1397,10 @@ export async function listReportRuns(ctx: DomainContext, options: { limit?: numb
     .orderBy(desc(reportRuns.createdAt))
     .limit(Math.min(options.limit ?? 50, 200));
   return found.filter((item) => access.seesMoney || !item.run.includeMoney).map((item) => toRunDTO({ ...item.run, scheduleName: item.scheduleName }, access.seesMoney));
-}
+});
 
 /** One build's file. A build that holds money needs `money:read`. */
-export async function getReportRunFile(ctx: DomainContext, runId: string, format: 'csv' | 'html'): Promise<{ fileName: string; body: string }> {
+export const getReportRunFile = scoped(async function getReportRunFile(ctx: DomainContext, runId: string, format: 'csv' | 'html'): Promise<{ fileName: string; body: string }> {
   const access = await requirePulse(ctx, 'pulse:read');
   const [row] = isUuid(runId) ? await db.select().from(reportRuns).where(and(eq(reportRuns.orgId, ctx.orgId), eq(reportRuns.id, runId))) : [];
   if (!row) throw notFound('That build');
@@ -1404,13 +1409,13 @@ export async function getReportRunFile(ctx: DomainContext, runId: string, format
   if (row.status === 'failed' || !body) throw notFound('That file');
   await logActivity(db, ctx, { verb: 'report.downloaded', entityType: 'report_run', entityId: row.id, meta: { report: row.report, format } });
   return { fileName: `${row.report}-${isoRequired(row.createdAt).slice(0, 10)}.${format}`, body };
-}
+});
 
 /**
  * Builds every schedule of an org whose time has come. Called by the scheduler; each schedule
  * runs in its own try and catch so one bad report never blocks the rest.
  */
-export async function runDueReportSchedules(ctx: DomainContext, now: Date = new Date()): Promise<{ built: number; failed: number }> {
+export const runDueReportSchedules = scoped(async function runDueReportSchedules(ctx: DomainContext, now: Date = new Date()): Promise<{ built: number; failed: number }> {
   const due = await db.select().from(reportSchedules).where(and(eq(reportSchedules.orgId, ctx.orgId), isNull(reportSchedules.deletedAt), eq(reportSchedules.enabled, true), sql`${reportSchedules.nextRunAt} IS NOT NULL AND ${reportSchedules.nextRunAt} <= ${now.toISOString()}::timestamptz`));
   let built = 0;
   let failed = 0;
@@ -1425,7 +1430,7 @@ export async function runDueReportSchedules(ctx: DomainContext, now: Date = new 
     }
   }
   return { built, failed };
-}
+});
 
 /** Text of one summary value, for sentences built on the server (search hits, notifications). */
 export function reportSummaryText(report: ReportDTO): string {

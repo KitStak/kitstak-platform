@@ -119,6 +119,28 @@ describe('stream definitions', () => {
       expect(hasMoney, `${stream.id} hasMoney`).toBe(stream.hasMoney || stream.id === 'goals' ? hasMoney : false);
     }
   });
+  it('flags every money looking column, so an export for a no money reader drops it', () => {
+    // Round three: target_margin_pct was a plain percent column, so three exports showed it to no money roles.
+    // cost_date and revenue_date are days, not money.
+    const moneyKey = /^(?!.*_date$).*(^|_)(price|cost|amount|margin|revenue|wage|pay|rate|burden|overhead|tax|benefits|cents)(_|$)/;
+    const unflagged: string[] = [];
+    for (const id of STREAM_IDS) {
+      for (const layout of layoutsOf(id)) {
+        for (const column of streamColumns(id, { layout })) {
+          const looksLikeMoney = column.type === 'money' || column.type === 'price' || moneyKey.test(column.key);
+          if (looksLikeMoney && !column.money && !column.wage) unflagged.push(`${id}.${column.key}`);
+        }
+        for (const header of templateHeaders(id, { canSeeMoney: false, canSeeWages: false, layout })) {
+          if (moneyKey.test(header)) unflagged.push(`${id}.${header} is still in the no money file`);
+        }
+      }
+    }
+    expect(unflagged).toEqual([]);
+    for (const id of ['clients', 'job_types', 'jobs'] as const) {
+      expect(templateHeaders(id), id).toContain('target_margin_pct');
+      expect(templateHeaders(id, { canSeeMoney: false }), id).not.toContain('target_margin_pct');
+    }
+  });
   it('turns column keys into record fields', () => {
     expect(recordKey('units_good')).toBe('unitsGood');
     expect(recordKey('units_per_labor_hour_standard')).toBe('unitsPerLaborHourStandard');

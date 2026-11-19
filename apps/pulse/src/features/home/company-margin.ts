@@ -9,3 +9,14 @@ export function companyMarginBp(companyProfitCents: number | null | undefined, r
   if (companyProfitCents === null || companyProfitCents === undefined || revenueCents === null || revenueCents === undefined) return null;
   return marginBp(Math.round(companyProfitCents), Math.round(revenueCents));
 }
+
+/**
+ * The words that sit beside a company number. Overhead is only named when company costs were
+ * counted for these days (SPEC 4.9), so a screen never says "after overhead" with no overhead step.
+ */
+export function companyWords(bridge: { readonly hasCompanyCosts: boolean; readonly companyCostNote: string | null }): { readonly lead: string; readonly tile: string; readonly note: string | null } {
+  if (bridge.hasCompanyCosts) {
+    return { lead: 'After time not on a job and overhead', tile: 'After overhead and paid time not on any job', note: bridge.companyCostNote };
+  }
+  return { lead: 'After time not on a job', tile: 'After paid time not on any job', note: null };
+}

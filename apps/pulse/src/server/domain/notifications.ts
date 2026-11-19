@@ -6,6 +6,7 @@
 import 'server-only';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { notifications } from '@/server/db/schema';
 import type { NotificationDTO } from '@/lib/types';
 import { iso, isoRequired, isUuid, type DomainContext } from './_shared';
@@ -22,7 +23,7 @@ export interface NotifyInput {
 }
 
 /** Fans one notification out to `userIds`, minus the actor. Call inside the write transaction. */
-export async function notify(executor: Executor, ctx: DomainContext, userIds: readonly string[], input: NotifyInput): Promise<number> {
+export const notify = scoped(async function notify(executor: Executor, ctx: DomainContext, userIds: readonly string[], input: NotifyInput): Promise<number> {
   const wanted = [...new Set(userIds)].filter((id) => id !== ctx.userId || ctx.actorKind !== 'user');
   if (wanted.length === 0) return 0;
   // People can turn a kind of notification off for themselves (Settings, Notifications).
@@ -42,9 +43,9 @@ export async function notify(executor: Executor, ctx: DomainContext, userIds: re
   const url = input.url && input.url.startsWith('/') && !input.url.startsWith('//') ? input.url : null;
   await executor.insert(notifications).values(targets.map((userId) => ({ orgId: ctx.orgId, userId, kind: input.kind, params: input.params ?? {}, url, alertId: input.alertId ?? null, jobId: input.jobId ?? null })));
   return targets.length;
-}
+}, 1);
 
-export async function listNotifications(ctx: DomainContext, options: { unreadOnly?: boolean; limit?: number } = {}): Promise<NotificationDTO[]> {
+export const listNotifications = scoped(async function listNotifications(ctx: DomainContext, options: { unreadOnly?: boolean; limit?: number } = {}): Promise<NotificationDTO[]> {
   const access = await pulseAccessFor(ctx);
   if (access.role === 'none') return [];
   const found = await db
@@ -57,15 +58,15 @@ export async function listNotifications(ctx: DomainContext, options: { unreadOnl
     const words = renderAlertWords(row.kind.replace(/^alert:/, ''), row.params ?? {}, access.seesMoney);
     return { id: row.id, kind: row.kind, title: words.title, body: words.body, url: row.url, alertId: row.alertId, jobId: row.jobId, readAt: iso(row.readAt), createdAt: isoRequired(row.createdAt) };
   });
-}
+});
 
-export async function countUnreadNotifications(ctx: DomainContext): Promise<number> {
+export const countUnreadNotifications = scoped(async function countUnreadNotifications(ctx: DomainContext): Promise<number> {
   const [row] = await db.select({ n: sql<number>`count(*)::int` }).from(notifications).where(and(eq(notifications.orgId, ctx.orgId), eq(notifications.userId, ctx.userId), isNull(notifications.readAt), isNull(notifications.archivedAt)));
   return row?.n ?? 0;
-}
+});
 
 /** Marks the caller's notifications read: the given ids, or all of them. Returns how many changed. */
-export async function markNotificationsRead(ctx: DomainContext, ids?: readonly string[]): Promise<number> {
+export const markNotificationsRead = scoped(async function markNotificationsRead(ctx: DomainContext, ids?: readonly string[]): Promise<number> {
   const list = ids?.filter(isUuid);
   if (ids && (!list || list.length === 0)) return 0;
   const changed = await db
@@ -74,9 +75,9 @@ export async function markNotificationsRead(ctx: DomainContext, ids?: readonly s
     .where(and(eq(notifications.orgId, ctx.orgId), eq(notifications.userId, ctx.userId), isNull(notifications.readAt), list ? inArray(notifications.id, list) : undefined))
     .returning({ id: notifications.id });
   return changed.length;
-}
+});
 
-export async function archiveNotifications(ctx: DomainContext, ids: readonly string[]): Promise<number> {
+export const archiveNotifications = scoped(async function archiveNotifications(ctx: DomainContext, ids: readonly string[]): Promise<number> {
   const list = ids.filter(isUuid);
   if (list.length === 0) return 0;
   const changed = await db
@@ -85,4 +86,4 @@ export async function archiveNotifications(ctx: DomainContext, ids: readonly str
     .where(and(eq(notifications.orgId, ctx.orgId), eq(notifications.userId, ctx.userId), inArray(notifications.id, list)))
     .returning({ id: notifications.id });
   return changed.length;
-}
+});

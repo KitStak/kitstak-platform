@@ -4,10 +4,11 @@
  * unit should cost, the clients using it, and every entry behind the numbers, with the entries
  * that still have no price on top.
  */
+import { ScrollX } from '@/components/ui/scroll-x';
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Download, Pencil, Power, TriangleAlert } from 'lucide-react';
+import { CircleHelp, Download, Pencil, Power, TriangleAlert } from 'lucide-react';
 import { ComboChart } from '@/components/charts/cartesian';
 import { formatDateLong } from '@/components/charts/scale';
 import { KpiTile, MarginPill, marginHealth } from '@/components/charts/stats';
@@ -34,7 +35,9 @@ import { PeriodPicker, type PeriodChange } from '@/features/profit/period-picker
 import { LoadError, Section, TableSkeleton } from '@/features/profit/profit-ui';
 import { useQueryState } from '@/features/profit/use-query-state';
 import { ServiceFormDialog } from './service-form';
-import { BILLING_LABELS, SERVICE_FLAG_WORDS, flagSentence, serviceLine, serviceRateCents, unitWord } from './services-model';
+import { SetEntryPrice, WarehouseContractLink, WarehouseSourceLink } from '@/features/revenue/entry-price-fix';
+import { useShell } from '@/features/shell/shell-context';
+import { BILLING_LABELS, NO_COST_REASON, NO_COST_WORDS, SERVICE_FLAG_WORDS, flagSentence, serviceLine, serviceRateCents, unitWord } from './services-model';
 
 const DEFAULTS = { preset: 'last_90' } as const;
 /** Money for a CSV cell: a plain number, marked so a negative amount is not mistaken for a formula. */
@@ -42,6 +45,8 @@ const money = (cents: number | null) => (cents === null ? '' : rawCell(formatMon
 
 export function ServiceView({ service: initialService, today, weekStart, targetMarginBp, canManage, orgSlug }: { readonly service: VasServiceDTO; readonly today: string; readonly weekStart: number; readonly targetMarginBp: number; readonly canManage: boolean; readonly orgSlug: string }) {
   const queryClient = useQueryClient();
+  const shell = useShell();
+  const canFixEntries = shell.can('vas:manage');
   const { get, set } = useQueryState();
   const service = useVasService(initialService.id, { initialData: initialService }).data ?? initialService;
   const period = useMemo(() => parsePeriod(get, today, weekStart, DEFAULTS), [get, today, weekStart]);
@@ -119,8 +124,8 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
       ) : null}
 
       {line.flag && sentence ? (
-        <div role="status" className={cn('flex items-start gap-3 rounded-lg border px-4 py-3 text-sm', line.flag === 'under_target' || line.flag === 'standard_under_target' ? 'border-warning/30 bg-warning-subtle text-warning-text' : 'border-danger/30 bg-danger-subtle text-danger-text')} data-testid="service-flag-banner">
-          <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+        <div role="status" className={cn('flex items-start gap-3 rounded-lg border px-4 py-3 text-sm', line.flag === 'no_cost' ? 'border-border-subtle bg-sunken text-fg-secondary' : line.flag === 'under_target' || line.flag === 'standard_under_target' ? 'border-warning/30 bg-warning-subtle text-warning-text' : 'border-danger/30 bg-danger-subtle text-danger-text')} data-testid="service-flag-banner" data-flag={line.flag}>
+          {line.flag === 'no_cost' ? <CircleHelp aria-hidden className="mt-0.5 size-4 shrink-0" /> : <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />}
           <p>
             <strong className="font-semibold">{SERVICE_FLAG_WORDS[line.flag]}.</strong> {sentence}
           </p>
@@ -132,9 +137,23 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
       ) : (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6" data-testid="service-tiles">
           <KpiTile label="Revenue" loading={!total} value={total ? formatMoneyWhole(total.revenueCents) : null} sparkline={points.length > 1 ? { values: points.map((row) => row.revenueCents) } : undefined} explain={<ExplainNumber metric="revenue" scope={scope} />} />
-          <KpiTile label="Cost" loading={!total} value={total ? formatMoneyWhole(total.costCents) : null} sparkline={points.length > 1 ? { values: points.map((row) => row.costCents) } : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
+          <KpiTile label="Cost" loading={!total} value={total ? (total.costMissing ? 'Not known' : formatMoneyWhole(total.costCents)) : null} footer={total?.costMissing ? <span className="text-xs text-fg-muted">No hours or parts logged</span> : undefined} sparkline={points.length > 1 ? { values: points.map((row) => row.costCents) } : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
           <KpiTile label="Profit" loading={!total} value={total ? formatMoneyWhole(total.profitCents) : null} explain={<ExplainNumber metric="profit" scope={scope} />} />
-          <KpiTile label="Margin" loading={!total} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null} explain={<ExplainNumber metric="margin" scope={scope} />} footer={total && total.marginBp !== null ? <MarginPill health={marginHealth(total.marginBp, targetMarginBp)} size="sm" /> : undefined} />
+          <KpiTile
+            label="Margin"
+            loading={!total}
+            value={total ? (total.costMissing ? NO_COST_WORDS : formatPercentBp(total.marginBp, { empty: 'No revenue yet' })) : null}
+            explain={<ExplainNumber metric="margin" scope={scope} />}
+            footer={
+              total?.costMissing ? (
+                <span className="text-xs text-fg-muted" data-testid="service-no-cost">
+                  {NO_COST_REASON}
+                </span>
+              ) : total && total.marginBp !== null ? (
+                <MarginPill health={marginHealth(total.marginBp, targetMarginBp)} size="sm" />
+              ) : undefined
+            }
+          />
           <KpiTile label={`Volume, ${service.unitLabel}`} explain={<ExplainStatic title={`Volume, ${service.unitLabel}`} rule="How many, added up over every entry of this service in the period." rows={[{ label: 'Entries', value: formatNumber(entries.data?.length ?? 0) }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 0 }), kind: 'total' }]} />} loading={!entries.data} value={entries.data ? formatNumber(volume, { maxDigits: 0 }) : null} footer={entries.data ? <span className="text-xs text-fg-muted">{entries.data.length} {entries.data.length === 1 ? 'entry' : 'entries'}</span> : undefined} />
           <KpiTile label={`Earned for one ${unit}`} explain={<ExplainStatic title={`Earned for one ${unit}`} rule="Revenue from this service in the period divided by its volume. The cost to do one is its cost divided the same way." rows={[{ label: 'Revenue', value: total ? formatMoney(total.revenueCents, { empty: 'Hidden' }) : 'None' }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 0 }) }, { label: 'Earned for one', value: line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : 'No volume yet', kind: 'total' }]} />} loading={!total || !entries.data} value={line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : null} emptyText="No volume yet" footer={line.costPerUnit ? <span className="text-xs text-fg-muted tabular-nums">{formatUnitPrice(line.costPerUnit)} to do one</span> : undefined} />
         </div>
@@ -250,7 +269,7 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
 
         <Section
           title={`Entries${entries.data ? `, ${shownEntries.length}` : ''}`}
-          hint={noPrice.length > 0 ? `${noPrice.length} ${noPrice.length === 1 ? 'entry has' : 'entries have'} no price and earn nothing yet.` : rangeLabel(period)}
+          hint={noPrice.length > 0 ? (noPrice.length === 1 ? '1 entry has no price and earns nothing yet.' : `${noPrice.length} entries have no price and earn nothing yet.`) : rangeLabel(period)}
           bodyClassName="p-0"
           testId="service-entries"
           action={
@@ -282,8 +301,8 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
               {onlyNoPrice ? 'Every entry has a price. Nothing to fix here.' : 'No entries for this service in this period. Log it from a job, under Money in, and it shows up here.'}
             </p>
           ) : (
-            <div className="max-h-[480px] overflow-auto">
-              <Table className="min-w-[620px]">
+            <ScrollX label="Entries of this service" scrollerClassName="max-h-[480px] overflow-y-auto">
+              <Table scroll={false} className="min-w-[620px]">
                 <TableHead className="sticky top-0 z-[1]">
                   <tr>
                     <TableHeaderCell>Day</TableHeaderCell>
@@ -314,26 +333,32 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
                             <span className="text-xs text-fg-muted">No job, billed to the client</span>
                           )}
                           {entry.source === 'wms' ? (
-                            entry.sourceUrl ? (
-                              <a href={entry.sourceUrl} target="_blank" rel="noreferrer" className="block rounded-sm text-xs text-fg-muted underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-                                From the warehouse<span className="sr-only"> (opens in a new tab)</span>
-                              </a>
-                            ) : (
-                              <span className="block text-xs text-fg-muted">From the warehouse</span>
-                            )
+                            <span className="mt-0.5 flex">
+                              <WarehouseSourceLink entry={entry} testId={`entry-source-${entry.id}`} />
+                            </span>
                           ) : null}
                         </TableCell>
                         <TableCell numeric>{formatNumber(entry.quantity, { maxDigits: 2 })}</TableCell>
-                        <TableCell numeric>{entry.noPrice ? <span className="font-medium text-danger-text">No price</span> : formatUnitPrice(entry.unitPrice, { empty: 'List price' })}</TableCell>
+                        <TableCell numeric>
+                          {entry.noPrice ? (
+                            <span className="flex flex-col items-end gap-1" data-testid="entry-no-price">
+                              <span className="font-medium text-danger-text">No price</span>
+                              <SetEntryPrice entry={entry} serviceName={service.name} unitWord={unit} canEdit={canFixEntries} perHour={service.billing === 'per_hour'} />
+                              <WarehouseContractLink entry={entry} testId={`entry-contract-${entry.id}`} />
+                            </span>
+                          ) : (
+                            formatUnitPrice(entry.unitPrice, { empty: 'List price' })
+                          )}
+                        </TableCell>
                         <TableCell numeric>{formatMoney(entry.amountCents)}</TableCell>
-                        <TableCell numeric>{Number(entry.hours) > 0 ? formatHours(entry.hours, { maxDigits: 1 }) : ''}</TableCell>
+                        <TableCell numeric>{Number(entry.hours) > 0 ? formatHours(entry.hours, { maxDigits: 1 }) : <span className="text-fg-muted">None</span>}</TableCell>
                       </TableRow>
                     );
                   })}
                 </TableBody>
               </Table>
               {shownEntries.length > 200 ? <p className="border-t border-border-subtle px-4 py-2 text-xs text-fg-muted">Showing the newest 200 of {shownEntries.length}. The export has them all.</p> : null}
-            </div>
+            </ScrollX>
           )}
         </Section>
       </div>

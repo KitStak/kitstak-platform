@@ -34,10 +34,10 @@ const clientFields = {
   coreCustomerId: uuid.nullable().optional(),
   crmAccountItemId: uuid.nullable().optional(),
 };
-const createClientSchema = z.object(clientFields);
+const createClientSchema = z.object({ ...clientFields, confirmNew: z.boolean().optional() });
 export type CreateClientActionInput = z.input<typeof createClientSchema>;
 export async function createClientAction(input: CreateClientActionInput) {
-  return runAction(createClientSchema, input, (data, ctx) => createClient(ctx, data));
+  return runAction(createClientSchema, input, (data, ctx) => createClient(ctx, data, { guardLookAlike: true }));
 }
 
 const updateClientSchema = z.object({ clientId: uuid, patch: z.object(clientFields).partial(), version });

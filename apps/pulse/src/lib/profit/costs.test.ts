@@ -34,6 +34,7 @@ import {
   sharedGap,
   sharedPercentNeeded,
   sortFixedEntries,
+  spreadCompanyCosts,
   spreadSharedCost,
   standardMaterial,
   suggestOverheadPerHour,
@@ -470,6 +471,54 @@ describe('cost, profit, margin and the company bridge (4.9)', () => {
     const full = companyBridge({ workProfitCents: 4821000, sharedGapCents: 0, missingCents: 236000, companyCostCents: 0, overheadAbsorbedCents: 0, rule: 'full' });
     expect(full.missingCents).toBe(b(0));
     expect(full.companyProfitCents).toBe(b(4821000));
+  });
+  it('gives a part month its share of company costs by day, and the parts add back to the month', () => {
+    const month = [{ month: '2026-11-01', monthCostCents: 7050000, overheadAbsorbedCents: 2000000 }];
+    const toDate = spreadCompanyCosts(month, '2026-11-01', '2026-11-18');
+    expect(toDate.companyCostCents).toBe(b(4230000));
+    expect(toDate.note).toBe('Company costs for 18 of 30 days.');
+    expect(toDate.partial).toBe(true);
+    const rest = spreadCompanyCosts(month, '2026-11-19', '2026-11-30');
+    expect(toDate.companyCostCents + rest.companyCostCents).toBe(b(7050000));
+    const whole = spreadCompanyCosts(month, '2026-11-01', '2026-11-30');
+    expect(whole).toMatchObject({ companyCostCents: b(7050000), partial: false, note: null, countsOverhead: true });
+    // An amount that does not divide: every split of a 31 day month still adds back to the cent.
+    for (let day = 1; day < 31; day += 1) {
+      const odd = [{ month: '2026-10-01', monthCostCents: 1000001, overheadAbsorbedCents: 0 }];
+      const a = spreadCompanyCosts(odd, '2026-10-01', `2026-10-${String(day).padStart(2, '0')}`);
+      const z = spreadCompanyCosts(odd, `2026-10-${String(day + 1).padStart(2, '0')}`, '2026-10-31');
+      expect(a.companyCostCents + z.companyCostCents).toBe(b(1000001));
+    }
+  });
+  it('names each month in a range across months, and leaves out a month with no company costs', () => {
+    const across = spreadCompanyCosts(
+      [
+        { month: '2026-10-01', monthCostCents: 7050000, overheadAbsorbedCents: 300000 },
+        { month: '2026-11-01', monthCostCents: 7050000, overheadAbsorbedCents: 400000 },
+      ],
+      '2026-10-20',
+      '2026-11-18',
+    );
+    // 12 of 31 days of October: 7050000 - divRound(7050000 * 19, 31) = 7050000 - 4320968 = 2729032.
+    expect(across.parts.map((part) => part.countedCents)).toEqual([b(2729032), b(4230000)]);
+    expect(across.overheadAbsorbedCents).toBe(b(700000));
+    expect(across.note).toBe('Company costs for 12 of 31 days in October and 18 of 30 days in November.');
+    const oneSided = spreadCompanyCosts([{ month: '2026-10-01', monthCostCents: 7050000, overheadAbsorbedCents: 300000 }, { month: '2026-11-01', monthCostCents: 0, overheadAbsorbedCents: 400000 }], '2026-10-01', '2026-11-30');
+    expect(oneSided.companyCostCents).toBe(b(7050000));
+    expect(oneSided.overheadAbsorbedCents).toBe(b(300000));
+    expect(oneSided.note).toBe('No company costs are typed in for November, so that month trusts the overhead in your hourly rates.');
+    const none = spreadCompanyCosts([], '2026-11-10', '2026-11-16');
+    expect(none).toMatchObject({ countsOverhead: false, partial: false, note: null, companyCostCents: b(0) });
+    const acrossYears = spreadCompanyCosts([{ month: '2026-12-01', monthCostCents: 3100, overheadAbsorbedCents: 0 }, { month: '2027-01-01', monthCostCents: 3100, overheadAbsorbedCents: 0 }], '2026-12-22', '2027-01-31');
+    expect(acrossYears.note).toBe('Company costs for 10 of 31 days in December 2026 and all of January 2027.');
+    expect(acrossYears.companyCostCents).toBe(b(1000 + 3100));
+  });
+  it('keeps the overhead step when a counted share rounds to zero', () => {
+    const spread = spreadCompanyCosts([{ month: '2026-11-01', monthCostCents: 1, overheadAbsorbedCents: 500 }], '2026-11-01', '2026-11-01');
+    expect(spread.companyCostCents).toBe(b(0));
+    const bridge = companyBridge({ workProfitCents: 1000, sharedGapCents: 0, missingCents: 0, companyCostCents: spread.companyCostCents, overheadAbsorbedCents: spread.overheadAbsorbedCents, countsOverhead: spread.countsOverhead, rule: 'none' });
+    expect(bridge.showsOverheadGap).toBe(true);
+    expect(bridge.overheadGapCents).toBe(b(-500));
   });
   it('adds to profit when the hourly rate covered more overhead than was spent', () => {
     const bridge = companyBridge({ workProfitCents: 1000000, sharedGapCents: 0, missingCents: 0, companyCostCents: 1500000, overheadAbsorbedCents: 1620000, rule: 'none' });

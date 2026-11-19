@@ -307,6 +307,20 @@ describe('the live readout', () => {
       rateCents: 2176,
     });
     expect(money?.laborPerUnitCents).toBe(53);
+    expect(money).toMatchObject({ jobsNoHours: 0, marginProfitCents: 231616 });
+  });
+
+  it('shows no margin for a job with units and no labor hours, and leaves it out of the day', () => {
+    // 100 units at $1.25 with people typed and no hours: $125.00 earned, no labor cost yet.
+    const noHours = entry({ id: 'e2', jobId: 'j2', unitsGood: '100.000', headcount: '4.00', hours: '0.00', overtimeHours: '0.00', laborCostCents: 0, sharedCents: 0, baseRevenueCents: 12500, stdMaterialCents: 0 });
+    const alone = moneyReadout([noHours]);
+    expect(alone).toMatchObject({ revenueCents: 12500, laborCents: 0, marginBp: null, jobsNoHours: 1 });
+    // The day: earned goes up by $125.00, and the margin stays the margin of the job that has hours.
+    const day = moneyReadout([entry(), noHours]);
+    expect(day).toMatchObject({ revenueCents: 516500, marginBp: 4596, jobsNoHours: 1, marginProfitCents: 231616 });
+    // A second crew line with no hours on a job that has hours is still one whole job.
+    const twoLines = moneyReadout([entry(), entry({ id: 'e3', unitsGood: '0.000', hours: '0.00', laborCostCents: 0, sharedCents: 0, baseRevenueCents: 0, stdMaterialCents: 0 })]);
+    expect(twoLines).toMatchObject({ jobsNoHours: 0, marginBp: 4596 });
   });
 
   it('never shows money to a reader who may not see it', () => {

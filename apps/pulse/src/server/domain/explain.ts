@@ -10,6 +10,7 @@
 import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { invalid, notFound } from '@/server/errors';
 import { EXPLAIN_METRICS, type ExplainMetric } from '@/lib/constants';
 import { perHourCents, subCents } from '@/lib/money';
@@ -206,7 +207,7 @@ function moneyLines(metric: ExplainMetric, total: ProfitRowDTO): Line[] {
  * Explains one number for a scope (a job, a client, a job type, a service, a site, or everything)
  * and a date range. `metric` is one of `EXPLAIN_METRICS`.
  */
-export async function explain(ctx: DomainContext, metric: string, scope: ExplainScope): Promise<ExplainDTO> {
+export const explain = scoped(async function explain(ctx: DomainContext, metric: string, scope: ExplainScope): Promise<ExplainDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   if (!(EXPLAIN_METRICS as readonly string[]).includes(metric)) throw invalid('Pick a number to explain: revenue, cost, profit, margin, labor, units or hours.');
   for (const id of [scope.siteId, scope.clientId, scope.jobTypeId, scope.jobId, scope.vasServiceId]) if (id && !isUuid(id)) throw invalid('One of the filters is not valid.');
@@ -244,15 +245,26 @@ export async function explain(ctx: DomainContext, metric: string, scope: Explain
     links.push({ label: 'See the time not on a job', href: routes.labor('time') });
   } else if (key === 'company_profit') {
     const bridge = await getCompanyBridge(ctx, { from: filters.from, to: filters.to, siteId: filters.siteId ?? null });
+    // A step below zero adds to profit. It reads "plus" with the amount above zero, never "less" with a minus sign.
+    const step = (takes: string, adds: string, cents: number | null): Line => (cents !== null && cents < 0 ? line(adds, -cents, 'money', 'plus') : line(takes, cents, 'money', 'minus'));
     lines = [
       line('Profit on jobs', bridge.workProfitCents, 'money', 'start'),
-      line('Time not on a job that no job carried', bridge.sharedGapCents, 'money', 'minus'),
-      line('Paid time not on any job', bridge.missingCostCents, 'money', 'minus'),
-      ...(bridge.hasCompanyCosts ? [line('Overhead your hourly rate did not cover', bridge.overheadGapCents, 'money', 'minus'), line('Company costs you typed in', bridge.companyCostCents, 'money', 'note'), line('Overhead your hourly rates already covered', bridge.overheadAbsorbedCents, 'money', 'note')] : []),
+      step('Time not on a job that no job carried', 'Jobs carried more time not on a job than was logged', bridge.sharedGapCents),
+      step('Paid time not on any job', 'Paid time not on any job', bridge.missingCostCents),
+      ...(bridge.hasCompanyCosts
+        ? [
+            step('Overhead your hourly rate did not cover', 'Your hourly rate covered more overhead than you spent', bridge.overheadGapCents),
+            line(bridge.companyCostPartial ? 'Company costs counted for these days' : 'Company costs you typed in', bridge.companyCostCents, 'money', 'note'),
+            line(bridge.companyCostPartial ? 'Overhead your hourly rates covered on those days' : 'Overhead your hourly rates already covered', bridge.overheadAbsorbedCents, 'money', 'note'),
+          ]
+        : []),
       line('Company profit', bridge.companyProfitCents, 'money', 'total'),
     ];
     if (!bridge.hasCompanyCosts) formula = `${FORMULAS.company_profit} No company costs were typed in for these days, so Pulse trusts the overhead inside your hourly rates.`;
     else if ((bridge.overheadGapCents ?? 0) < 0) formula = `${FORMULAS.company_profit} Your hourly rate covered more overhead than you spent, which adds to profit.`;
+    // Company costs are monthly. A part month counts its share by day, and the popover says so.
+    if (bridge.hasCompanyCosts && bridge.companyCostPartial) formula = `${formula} Company costs are monthly, so part of a month counts its share by day.`;
+    if (bridge.companyCostNote) quality.push(bridge.companyCostNote);
     if (bridge.overLoggedDays > 0) quality.push(`${bridge.overLoggedDays} ${bridge.overLoggedDays === 1 ? 'day has' : 'days have'} more hours logged than paid.`);
     links.push({ label: 'See where paid time went', href: routes.labor('time') });
   } else if (key === 'material' || key === 'other' || key === 'revenue') {
@@ -261,6 +273,11 @@ export async function explain(ctx: DomainContext, metric: string, scope: Explain
     links.push({ label: 'See the entries', href: entriesHref(filters) });
   }
 
+  // An extra service with revenue and no cost of any kind: the margin is not known, so it never reads 100%.
+  if (money && total.costMissing) {
+    lines = lines.map((item) => (item.unit === 'percent' && item.value === null ? { ...item, unit: 'text' as const, text: 'No cost yet' } : item));
+    quality.push('No labor hours or parts are logged for this work, so Pulse does not know what it cost. The margin shows once a cost is logged.');
+  }
   if (!money) lines = lines.map((item) => (item.unit === 'money' || item.unit === 'money_per_hour' || item.unit === 'money_per_unit' || item.unit === 'percent' ? { ...item, value: null } : item));
   // Pace, units and hours do not depend on prices, so a missing price is not their problem.
   const neutral = key === 'units' || key === 'hours' || key === 'uph';
@@ -278,7 +295,7 @@ export async function explain(ctx: DomainContext, metric: string, scope: Explain
     to: filters.to,
     moneyHidden: !money && lines.some((item) => item.value === null),
   };
-}
+});
 
 /** Money and unit safe label for a metric (tooltips, search). */
 export function explainTitle(metric: ExplainMetric): string {

@@ -7,8 +7,9 @@
 import 'server-only';
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { clients, dayReviews, jobStats, jobs, productionEntries } from '@/server/db/schema';
-import { conflict, forbidden, invalid, notFound } from '@/server/errors';
+import { conflict, DomainError, forbidden, invalid, notFound } from '@/server/errors';
 import { SUPERVISOR_EDIT_DAYS, type JobStatusValue, type StreamSource } from '@/lib/constants';
 import { canPulse } from '@/lib/permissions';
 import { addDays } from '@/lib/profit';
@@ -72,23 +73,23 @@ export function toProductionDTO(row: EntryRow, job: { number: string; name: stri
  * Who may change a day (SPEC section 3). Managers and up: any open day. Supervisors: the last
  * 7 days at the site, and only while the day is not marked complete.
  */
-export async function assertCanLogDay(executor: Executor, ctx: DomainContext, access: Pick<PulseAccess, 'role'>, siteId: string, timezone: string, date: string): Promise<void> {
+export const assertCanLogDay = scoped(async function assertCanLogDay(executor: Executor, ctx: DomainContext, access: Pick<PulseAccess, 'role'>, siteId: string, timezone: string, date: string): Promise<void> {
   if (canPulse(access.role, 'production:edit_any')) return;
   const reason = await dayLockReason(executor, ctx, access, siteId, timezone, date);
   if (reason) throw forbidden(reason);
-}
+}, 1);
 
 /** The reason this reader may not change the day, or null when they may. */
-export async function dayLockReason(executor: Executor, ctx: DomainContext, access: Pick<PulseAccess, 'role'>, siteId: string, timezone: string, date: string): Promise<string | null> {
+export const dayLockReason = scoped(async function dayLockReason(executor: Executor, ctx: DomainContext, access: Pick<PulseAccess, 'role'>, siteId: string, timezone: string, date: string): Promise<string | null> {
   if (!canPulse(access.role, 'production:log')) return 'Your Pulse role cannot log work. Ask an admin of your workspace if you need it.';
   if (canPulse(access.role, 'production:edit_any')) return null;
   const today = todayInZone(timezone);
-  if (date > today) return 'You can log work for today or earlier. Ask a manager to plan ahead.';
+  if (date > today) return FUTURE_DAY;
   if (date < addDays(today, -SUPERVISOR_EDIT_DAYS)) return `You can change the last ${SUPERVISOR_EDIT_DAYS} days. Ask a manager to fix an older day.`;
   const [review] = await executor.select({ status: dayReviews.status }).from(dayReviews).where(and(eq(dayReviews.orgId, ctx.orgId), eq(dayReviews.siteId, siteId), eq(dayReviews.workDate, date)));
   if (review && review.status !== 'sent_back') return 'This day is marked complete. Ask a manager to send it back if it needs a fix.';
   return null;
-}
+}, 1);
 
 export interface ProductionInput {
   /** Edit this row. Without it the row is matched on job, day, shift and labor class, else created. */
@@ -118,13 +119,31 @@ export interface ProductionInput {
 
 export interface SaveOptions {
   /**
-   * Autosave of an open editor (PUT /api/v1/log/rows): changing a row that already exists needs
-   * the version the editor read. A missing or old version is a CONFLICT, never an overwrite.
+   * A save a person makes from a screen (PUT /api/v1/log/rows, the bulk save action): changing a
+   * row that already exists needs the version the editor read. A missing or old version is a
+   * CONFLICT, never an overwrite.
    */
   readonly requireVersion?: boolean;
 }
 
 const STALE_ROW = 'Someone else changed this row. Here is the new one.';
+export const FUTURE_DAY = 'Work cannot be dated after today. Pick today or an earlier day.';
+const ZERO_PEOPLE = 'Hours need people. Type how many people worked, or leave People empty.';
+const SAME_LINE_TWICE = 'This labor class is already on this day. Put its people and hours on one line.';
+
+/** Sources that copy a fact from another KitStak app. Their dates are not typed, so the future day rule skips them. */
+const SYNCED_SOURCES: ReadonlySet<string> = new Set(['wms', 'projects', 'punch']);
+
+/**
+ * Work that was done cannot be dated after today at the site (SPEC 5.3). Every typed write path
+ * ends here: the day form, the log grid, the bulk page and the API. Imports mark the row instead.
+ */
+export function assertNotFutureDay(timezone: string, workDate: string, field = 'workDate'): void {
+  if (workDate > todayInZone(timezone)) throw invalid(FUTURE_DAY, { [field]: 'This day is after today.' });
+}
+
+/** One row per job, day, shift and labor type: the key two lines of one save may not share. */
+const lineKey = (jobId: string, workDate: string, shift: string, laborClassId: string | null): string => `${jobId}|${workDate}|${shift}|${laborClassId ?? ''}`;
 
 const num = (value: string | null | undefined): number => Number(value ?? 0);
 
@@ -147,7 +166,8 @@ interface Saved {
 }
 
 /** Writes one entry inside `tx` and records what it touched. Stamps and rollups run in `finishProduction`. */
-async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess, input: ProductionInput, touched: Touched, fixedJobs: Set<string>, ids: string[], options: SaveOptions = {}): Promise<Saved> {
+async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess, input: ProductionInput, touched: Touched, fixedJobs: Set<string>, ids: string[], options: SaveOptions = {}, seen?: Map<string, number>, index = 0): Promise<Saved> {
+  const at = (field: string): string => (seen ? `entries.${index}.${field}` : field);
   let existing: EntryRow | undefined;
   // Rows are read FOR UPDATE: a second save of the same row waits here, then sees the new version.
   if (input.id) {
@@ -175,6 +195,16 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
       )
       .for('update');
   }
+  if (seen) {
+    // Two lines of one save for the same job, day, shift and labor type would land on one row and
+    // the first line's hours would be lost. Refuse, and say which line.
+    const key = existing ? `id:${existing.id}` : lineKey(job.id, input.workDate, shift, laborClassId);
+    const target = lineKey(job.id, input.workDate, shift, laborClassId);
+    if (seen.has(key) || seen.has(target)) throw invalid(`Line ${index + 1}: ${SAME_LINE_TWICE}`, { [at('laborClassId')]: SAME_LINE_TWICE });
+    seen.set(key, index);
+    seen.set(target, index);
+  }
+  if (!SYNCED_SOURCES.has(input.source ?? existing?.source ?? 'manual')) assertNotFutureDay(site.timezone, input.workDate, at('workDate'));
   await assertCanLogDay(tx, ctx, access, site.id, site.timezone, input.workDate);
   if (existing && existing.workDate !== input.workDate) await assertCanLogDay(tx, ctx, access, site.id, site.timezone, existing.workDate);
   await assertOpen(tx, ctx.orgId, [input.workDate, existing?.workDate]);
@@ -184,6 +214,11 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
   const overtimeHours = input.overtimeHours ?? existing?.overtimeHours ?? '0';
   const setupHours = input.setupHours ?? existing?.setupHours ?? '0';
   checkHours(hours, overtimeHours, setupHours);
+  const people = input.headcount === undefined ? (existing?.headcount ?? null) : input.headcount;
+  // "0 people" with hours is a typing slip that still costs money. Old rows can be edited on other fields.
+  const wasZeroPeople = Boolean(existing && existing.headcount !== null && num(existing.headcount) === 0 && num(existing.hours) === num(hours));
+  if (people !== null && num(people) === 0 && num(hours) > 0 && !wasZeroPeople)
+    throw invalid(ZERO_PEOPLE, { [at('headcount')]: 'Type how many people worked.' });
   const values = {
     jobId: job.id,
     siteId: site.id,
@@ -193,7 +228,7 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
     unitsGood: input.unitsGood ?? existing?.unitsGood ?? '0',
     unitsScrap: input.unitsScrap ?? existing?.unitsScrap ?? '0',
     unitsRework: input.unitsRework ?? existing?.unitsRework ?? '0',
-    headcount: input.headcount === undefined ? (existing?.headcount ?? null) : input.headcount,
+    headcount: people,
     hours,
     overtimeHours,
     setupHours,
@@ -277,7 +312,7 @@ async function reload(tx: Executor, ctx: DomainContext, id: string, access: Acce
 }
 
 /** Saves one entry (the autosave of one grid row, the Work log form, the kiosk). */
-export async function saveProductionEntry(ctx: DomainContext, input: ProductionInput, options: SaveOptions = {}): Promise<SaveProductionResult> {
+export const saveProductionEntry = scoped(async function saveProductionEntry(ctx: DomainContext, input: ProductionInput, options: SaveOptions = {}): Promise<SaveProductionResult> {
   const access = await requirePulse(ctx, 'production:log');
   return inTx(async (tx) => {
     const touched = newTouched();
@@ -287,10 +322,10 @@ export async function saveProductionEntry(ctx: DomainContext, input: ProductionI
     await finishProduction(tx, ctx, ids, fixedJobs, touched);
     return { entry: await reload(tx, ctx, saved.row.id, access), created: saved.created };
   });
-}
+});
 
 /** Saves many entries in one transaction (paste from a spreadsheet, "Copy yesterday's crew", imports). All or nothing. */
-export async function saveProductionBulk(ctx: DomainContext, inputs: readonly ProductionInput[]): Promise<{ entries: ProductionEntryDTO[]; created: number; updated: number }> {
+export const saveProductionBulk = scoped(async function saveProductionBulk(ctx: DomainContext, inputs: readonly ProductionInput[], options: SaveOptions = {}): Promise<{ entries: ProductionEntryDTO[]; created: number; updated: number }> {
   const access = await requirePulse(ctx, 'production:log');
   if (inputs.length > 5000) throw invalid('That is more than 5,000 rows at once. Split the paste, or use Import.');
   return inTx(async (tx) => {
@@ -299,8 +334,9 @@ export async function saveProductionBulk(ctx: DomainContext, inputs: readonly Pr
     const ids: string[] = [];
     let created = 0;
     const saved: string[] = [];
-    for (const input of inputs) {
-      const result = await writeEntry(tx, ctx, access, input, touched, fixedJobs, ids);
+    const seen = new Map<string, number>();
+    for (const [index, input] of inputs.entries()) {
+      const result = await writeEntry(tx, ctx, access, input, touched, fixedJobs, ids, options, seen, index);
       if (result.created) created += 1;
       saved.push(result.row.id);
     }
@@ -308,7 +344,185 @@ export async function saveProductionBulk(ctx: DomainContext, inputs: readonly Pr
     const entries = await listByIds(tx, ctx, saved, access);
     return { entries, created, updated: ids.length - created };
   });
+});
+
+/** One labor type line of a day of work on a job. */
+export interface ProductionDayLine {
+  /** A row the editor read. Without it the line is new. */
+  id?: string | null;
+  laborClassId: string | null;
+  /** Kept from the row when left out. New lines go on the day shift. */
+  shift?: string | null;
+  unitsGood?: string;
+  unitsScrap?: string;
+  unitsRework?: string;
+  headcount?: string | null;
+  hours?: string;
+  overtimeHours?: string;
+  setupHours?: string;
+  hoursConfirmed?: boolean;
+  note?: string | null;
 }
+
+export interface ProductionDayInput {
+  jobId: string;
+  /** The day the lines are saved on. */
+  workDate: string;
+  /**
+   * `create`: the job must have no work on that day yet. `edit`: replace the day that was read,
+   * and `read` must list every row of it with the version the editor saw.
+   */
+  mode: 'create' | 'edit';
+  /** Edit only: the day that was opened. Differs from `workDate` when the day is moved. */
+  fromDate?: string | null;
+  /** Edit only: every row of the day as the editor read it. */
+  read?: readonly { id: string; version: number }[];
+  lines: readonly ProductionDayLine[];
+}
+
+/** Thrown inside the day save when the day is not what the editor thinks it is. Carries the day as it is now. */
+export class DayConflict extends Error {
+  constructor(
+    readonly reason: 'day_exists' | 'stale',
+    readonly workDate: string,
+    readonly fresh: ProductionEntryDTO[],
+  ) {
+    super(reason);
+  }
+}
+
+export const DAY_EXISTS = 'This day already has work on this job. Open that day to change it.';
+export const DAY_STALE = 'Someone else changed this day. Here is the day as it is now.';
+
+export interface SaveProductionDayResult {
+  /** The day as it is now. */
+  readonly entries: ProductionEntryDTO[];
+  readonly created: number;
+  readonly updated: number;
+  /** Rows that were on the day and are gone now (soft deleted). */
+  readonly removed: ProductionEntryDTO[];
+}
+
+async function dayRows(tx: Executor, ctx: DomainContext, jobId: string, workDate: string): Promise<EntryRow[]> {
+  return tx
+    .select()
+    .from(productionEntries)
+    .where(and(eq(productionEntries.orgId, ctx.orgId), eq(productionEntries.jobId, jobId), eq(productionEntries.workDate, workDate), isNull(productionEntries.deletedAt)))
+    .orderBy(asc(productionEntries.shift), asc(productionEntries.createdAt))
+    .for('update');
+}
+
+/**
+ * Saves a whole day of work on one job (the Work log form): every labor type line, the lines that
+ * were taken off, all in one transaction. It never overwrites a day by accident:
+ *
+ * - `create` is refused when the job already has work that day (`DayConflict` "day_exists").
+ * - `edit` is refused when the rows are not the ones the editor read, by id and version
+ *   (`DayConflict` "stale").
+ *
+ * Both carry the day as it is now, so the screen can show it (PUT /api/v1/log/days answers 409).
+ * Two saves of one job and day wait on each other, so the second one always sees the first.
+ */
+export const saveProductionDay = scoped(async function saveProductionDay(ctx: DomainContext, input: ProductionDayInput): Promise<SaveProductionDayResult> {
+  const access = await requirePulse(ctx, 'production:log');
+  if (input.lines.length === 0) throw invalid('Add at least one labor type.', { lines: 'Add at least one labor type.' });
+  if (input.lines.length > 50) throw invalid('That is more than 50 labor types on one day.', { lines: 'Keep a day to 50 labor types or fewer.' });
+  const fromDate = input.mode === 'edit' ? (input.fromDate ?? input.workDate) : input.workDate;
+  {
+    return inTx(async (tx) => {
+      const job = await getJobRow(ctx, input.jobId, tx);
+      // One writer at a time for this job and day (and the day it moves from).
+      for (const date of [...new Set([fromDate, input.workDate])].sort()) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`pulse:day:${job.id}:${date}`}, 0))`);
+      const closed = await closedMonths(tx, ctx.orgId);
+      const dto = (list: readonly EntryRow[]): ProductionEntryDTO[] => list.map((row) => toProductionDTO(row, job, access, closed));
+      const current = await dayRows(tx, ctx, job.id, fromDate);
+      if (input.mode === 'create') {
+        if (current.length > 0) throw new DayConflict('day_exists', input.workDate, dto(current));
+        if (input.lines.some((line) => line.id)) throw invalid('A new day cannot change a row that already exists.');
+      } else {
+        const read = new Map((input.read ?? []).map((item) => [item.id, item.version]));
+        const same = current.length === read.size && current.every((row) => read.get(row.id) === row.version);
+        if (!same) throw new DayConflict('stale', fromDate, dto(current));
+        if (fromDate !== input.workDate) {
+          const target = await dayRows(tx, ctx, job.id, input.workDate);
+          if (target.length > 0) throw new DayConflict('day_exists', input.workDate, dto(target));
+        }
+        const known = new Set(current.map((row) => row.id));
+        if (input.lines.some((line) => line.id && !known.has(line.id))) throw new DayConflict('stale', fromDate, dto(current));
+      }
+      const touched = newTouched();
+      const fixedJobs = new Set<string>();
+      const ids: string[] = [];
+      const seen = new Map<string, number>();
+      const byId = new Map(current.map((row) => [row.id, row]));
+      let created = 0;
+      // Rows taken off the day go first, so a line may take over the labor type of a removed row.
+      const kept = new Set(input.lines.map((line) => line.id).filter((id): id is string => Boolean(id)));
+      const gone = current.filter((row) => !kept.has(row.id));
+      if (gone.length > 0) {
+        await assertOpen(tx, ctx.orgId, gone.map((row) => row.workDate));
+        for (const row of gone) {
+          const site = await getSiteRow(ctx, row.siteId, tx);
+          await assertCanLogDay(tx, ctx, access, site.id, site.timezone, row.workDate);
+          touched.jobIds.add(row.jobId);
+          touchDay(touched, row.siteId, row.workDate);
+        }
+        if (job.pricingModel === 'fixed') fixedJobs.add(job.id);
+        await tx.update(productionEntries).set({ deletedAt: new Date(), version: sql`version + 1`, updatedBy: ctx.userId, updatedAt: new Date() }).where(inArray(productionEntries.id, gone.map((row) => row.id)));
+        await logActivity(
+          tx,
+          ctx,
+          gone.map((row) => ({ verb: 'production.deleted', entityType: 'production', entityId: row.id, jobId: row.jobId, clientId: job.clientId, before: { workDate: row.workDate, shift: row.shift, laborClassId: row.laborClassId, unitsGood: row.unitsGood, hours: row.hours }, meta: { workDate: row.workDate, via: 'day_edit' } })),
+        );
+      }
+      for (const [index, line] of input.lines.entries()) {
+        const row = line.id ? byId.get(line.id) : undefined;
+        try {
+          const saved = await writeEntry(
+            tx,
+            ctx,
+            access,
+            {
+              id: row?.id ?? null,
+              jobId: job.id,
+              workDate: input.workDate,
+              shift: line.shift ?? row?.shift ?? 'day',
+              laborClassId: line.laborClassId,
+              unitsGood: line.unitsGood,
+              unitsScrap: line.unitsScrap,
+              unitsRework: line.unitsRework,
+              headcount: line.headcount,
+              hours: line.hours,
+              overtimeHours: line.overtimeHours,
+              setupHours: line.setupHours,
+              hoursConfirmed: line.hoursConfirmed,
+              note: line.note,
+              version: row?.version ?? null,
+            },
+            touched,
+            fixedJobs,
+            ids,
+            { requireVersion: true },
+            seen,
+            index,
+          );
+          if (saved.created) created += 1;
+        } catch (error) {
+          // A labor type that another row of the day holds (another shift aside) hits the unique key.
+          if ((error as { code?: string; cause?: { code?: string } }).code === '23505' || (error as { cause?: { code?: string } }).cause?.code === '23505')
+            throw invalid(`Line ${index + 1}: ${SAME_LINE_TWICE}`, { [`entries.${index}.laborClassId`]: SAME_LINE_TWICE });
+          // A row found by its key that the editor did not send: the day is not what the editor read.
+          if (error instanceof DomainError && error.code === 'CONFLICT' && error.message === STALE_ROW) throw new DayConflict('stale', fromDate, dto(await dayRows(tx, ctx, job.id, fromDate)));
+          throw error;
+        }
+      }
+      await finishProduction(tx, ctx, ids, fixedJobs, touched);
+      const after = await dayRows(tx, ctx, job.id, input.workDate);
+      const removed = gone.length > 0 ? await listByIds(tx, ctx, gone.map((row) => row.id), access) : [];
+      return { entries: dto(after), created, updated: ids.length - created, removed };
+    });
+  }
+});
 
 async function listByIds(executor: Executor, ctx: DomainContext, ids: readonly string[], access: Access): Promise<ProductionEntryDTO[]> {
   if (ids.length === 0) return [];
@@ -357,14 +571,14 @@ async function removeEntries(ctx: DomainContext, ids: readonly string[], restore
 }
 
 /** Soft deletes entries. The returned rows carry what `restoreProductionEntries` needs for undo. */
-export async function deleteProductionEntries(ctx: DomainContext, ids: readonly string[]): Promise<ProductionEntryDTO[]> {
+export const deleteProductionEntries = scoped(async function deleteProductionEntries(ctx: DomainContext, ids: readonly string[]): Promise<ProductionEntryDTO[]> {
   return removeEntries(ctx, ids, false);
-}
+});
 
 /** Undo of a delete. Fails with CONFLICT when a new entry took the same job, day, shift and labor class. */
-export async function restoreProductionEntries(ctx: DomainContext, ids: readonly string[]): Promise<ProductionEntryDTO[]> {
+export const restoreProductionEntries = scoped(async function restoreProductionEntries(ctx: DomainContext, ids: readonly string[]): Promise<ProductionEntryDTO[]> {
   return removeEntries(ctx, ids, true);
-}
+});
 
 export interface ProductionFilters {
   readonly jobId?: string | null;
@@ -395,19 +609,19 @@ export interface ProductionPage {
 }
 
 /** Entries across days, newest first, with a flag when the page stopped before the end. */
-export async function listProductionPage(ctx: DomainContext, filters: ProductionFilters = {}): Promise<ProductionPage> {
+export const listProductionPage = scoped(async function listProductionPage(ctx: DomainContext, filters: ProductionFilters = {}): Promise<ProductionPage> {
   const limit = Math.max(1, Math.min(filters.limit ?? PRODUCTION_PAGE_DEFAULT, PRODUCTION_PAGE_MAX));
   const offset = Math.max(filters.offset ?? 0, 0);
   // One extra row tells us whether there is a next page.
   const found = await queryProduction(ctx, filters, limit + 1, offset);
   const truncated = found.length > limit;
   return { rows: truncated ? found.slice(0, limit) : found, truncated, limit, offset, nextOffset: truncated ? offset + limit : null };
-}
+});
 
 /** Entries across days, newest first (`/log/entries`, a job's Work log, exports). */
-export async function listProduction(ctx: DomainContext, filters: ProductionFilters = {}): Promise<ProductionEntryDTO[]> {
+export const listProduction = scoped(async function listProduction(ctx: DomainContext, filters: ProductionFilters = {}): Promise<ProductionEntryDTO[]> {
   return queryProduction(ctx, filters, Math.min(filters.limit ?? PRODUCTION_PAGE_DEFAULT, PRODUCTION_PAGE_MAX), Math.max(filters.offset ?? 0, 0));
-}
+});
 
 async function queryProduction(ctx: DomainContext, filters: ProductionFilters, limit: number, offset: number): Promise<ProductionEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
@@ -439,7 +653,7 @@ async function queryProduction(ctx: DomainContext, filters: ProductionFilters, l
  * The Log work day grid: one row per active job at the site (plus any job that already has an
  * entry that day), the day's other time and paid hours, the review state and the day totals.
  */
-export async function getLogGrid(ctx: DomainContext, options: { date?: string | null; siteId?: string | null } = {}): Promise<LogGridDTO> {
+export const getLogGrid = scoped(async function getLogGrid(ctx: DomainContext, options: { date?: string | null; siteId?: string | null } = {}): Promise<LogGridDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const settings = await loadSettings(ctx.orgId);
   const site = await resolveSite(ctx, options.siteId);
@@ -489,7 +703,8 @@ export async function getLogGrid(ctx: DomainContext, options: { date?: string | 
     db.select().from(dayReviews).where(and(eq(dayReviews.orgId, ctx.orgId), eq(dayReviews.siteId, site.id), eq(dayReviews.workDate, date))),
   ]);
   const monthClosed = closed.has(monthStart(date));
-  const lockedReason = monthClosed ? 'This month is closed.' : await dayLockReason(db, ctx, access, site.id, site.timezone, date);
+  // A day after today is read only for everyone: work that was done cannot be dated ahead.
+  const lockedReason = monthClosed ? 'This month is closed.' : date > today ? FUTURE_DAY : await dayLockReason(db, ctx, access, site.id, site.timezone, date);
   const sum = (values: readonly string[]): string => values.reduce((total, value) => total + Number(value), 0).toFixed(2);
   return {
     date,
@@ -510,10 +725,10 @@ export async function getLogGrid(ctx: DomainContext, options: { date?: string | 
       paidHours: sum(paid.map((item) => item.paidHours)),
     },
   };
-}
+});
 
 /** The crew lines of the most recent earlier day for each job at the site ("Copy yesterday's crew"). */
-export async function getPreviousCrew(ctx: DomainContext, options: { date: string; siteId?: string | null }): Promise<PreviousCrewDTO[]> {
+export const getPreviousCrew = scoped(async function getPreviousCrew(ctx: DomainContext, options: { date: string; siteId?: string | null }): Promise<PreviousCrewDTO[]> {
   await requirePulse(ctx, 'production:log');
   const site = await resolveSite(ctx, options.siteId);
   const found = await rows<{ job_id: string; work_date: string; labor_class_id: string | null; shift: string; headcount: string | null; hours: string }>(
@@ -536,4 +751,4 @@ export async function getPreviousCrew(ctx: DomainContext, options: { date: strin
     out.set(row.job_id, entry);
   }
   return [...out.values()];
-}
+});

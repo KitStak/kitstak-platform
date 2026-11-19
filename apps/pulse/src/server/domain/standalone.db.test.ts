@@ -15,6 +15,7 @@ import { parseCsv } from '@/lib/csv/parse';
 import type { StreamId } from '@/lib/streams';
 import type { ImportBatchDTO, ImportOptions } from '@/features/imports/types';
 import { db } from '@/server/db';
+import { asSystem } from '@/server/db/scope';
 import { orgHasPulseModule, orgModuleFlags } from '@/server/entitlements';
 import { integrationAvailability } from '@/server/integrations';
 import { createTestOrg, databaseReady, type TestOrg } from '@/test/db';
@@ -62,7 +63,7 @@ describe.skipIf(!ready)('a workspace that licenses only Pulse', () => {
   it('turns every sibling app off when entitlements are enforced', async () => {
     vi.stubEnv('ENTITLEMENTS_DEV_ALLOW_ALL', '0');
     expect(await orgHasPulseModule(org.orgId)).toBe(false);
-    await grantModule(db as never, org.orgId, 'pulse', 'manual');
+    await asSystem('test setup: grant the module in core.entitlements', () => grantModule(db as never, org.orgId, 'pulse', 'manual'));
     expect(await orgHasPulseModule(org.orgId)).toBe(true);
     expect(await orgModuleFlags(org.orgId)).toEqual({ crm: false, wms: false, projects: false, pulse: true });
     expect(await integrationAvailability(owner)).toEqual({ crm: false, wms: false, projects: false });
@@ -99,11 +100,12 @@ describe.skipIf(!ready)('a workspace that licenses only Pulse', () => {
     expect(report.csv).toContain('There is no job J-404');
   });
 
-  it('flags a future work day and more than 24 hours for one person', async () => {
+  it('refuses a future work day and flags more than 24 hours for one person', async () => {
     const checked = await upload(owner, 'production', 'work_date,job_number,labor_class,units_good,people,hours_each\n2099-01-05,J-1,PACK,10,1,8\n2026-11-04,J-1,PACK,10,1,30');
-    expect(checked.counts).toMatchObject({ error: 0, create: 2 });
+    // A work day after today is a problem row: it is never saved, the same as on every screen.
+    expect(checked.counts).toMatchObject({ error: 1, create: 1 });
     const page = await listImportRows(owner, checked.id, { action: 'all' });
-    expect(page.rows[0]?.messages).toEqual([{ level: 'warning', column: 'work_date', text: 'This day is in the future. Check the date.' }]);
+    expect(page.rows[0]?.messages).toEqual([{ level: 'error', column: 'work_date', text: 'Work cannot be dated after today. Fix the date, or skip this row.' }]);
     expect(page.rows[1]?.messages).toEqual([{ level: 'warning', column: 'hours_each', text: 'One person cannot work more than 24 hours in a day. Check the hours each.' }]);
   });
 

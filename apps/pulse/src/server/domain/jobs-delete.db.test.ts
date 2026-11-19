@@ -5,13 +5,13 @@
  *  - Quick add never makes a client whose name is close to one you have unless the caller says so.
  *  - A deleted job shows in the Deleted list with who deleted it and when, and leaves the job lists.
  *  - Restore puts the job, its entries and its revenue back.
- *  - Only people who may manage jobs can read the Deleted list.
+ *  - Only people who may manage jobs can read the Deleted list, or list or read a deleted job any other way.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestOrg, databaseReady, type TestOrg } from '@/test/db';
 import type { DomainContext } from './_shared';
 import { listClients } from './catalog';
-import { deleteJob, getJob, listDeletedJobs, listJobs, quickAddJob, restoreJob } from './jobs';
+import { deleteJob, getJob, getJobRowForReader, listDeletedJobs, listJobPrices, listJobs, quickAddJob, restoreJob } from './jobs';
 import { saveProductionEntry } from './production';
 import { setMemberRole } from './test-exports';
 
@@ -91,5 +91,31 @@ describe.skipIf(!ready)('job delete, restore and quick add clients', () => {
 
   it('keeps the Deleted list to people who may manage jobs', async () => {
     await expect(listDeletedJobs(supervisor)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('gives a supervisor no other way to list or read a deleted job', async () => {
+    const job = await quickAddJob(owner, { clientName: 'Summit Supply', name: 'Gone kits', plannedUnits: '50', unitPrice: '1.0000' });
+    // Before the delete the supervisor reads it like any job.
+    expect((await getJob(supervisor, job.id)).id).toBe(job.id);
+    expect((await listJobs(supervisor, { tab: 'all' })).some((item) => item.id === job.id)).toBe(true);
+    await deleteJob(owner, job.id);
+
+    // The list flag that used to let anyone in (GET /api/v1/jobs?deleted=1).
+    await expect(listJobs(supervisor, { tab: 'all', includeDeleted: true })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect((await listJobs(supervisor, { tab: 'all' })).some((item) => item.id === job.id)).toBe(false);
+    // The job by id and by number (GET /api/v1/jobs/J-1045), and the routes that hang off it.
+    await expect(getJob(supervisor, job.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(getJob(supervisor, job.number)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(listJobPrices(supervisor, job.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(getJobRowForReader(supervisor, job.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(getJobRowForReader(supervisor, job.number)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    // A person who may manage jobs still reads it, so the job page can offer Restore.
+    expect((await getJob(owner, job.id)).deletedAt).toEqual(expect.any(String));
+    expect((await listJobs(owner, { tab: 'all', includeDeleted: true })).some((item) => item.id === job.id)).toBe(true);
+    expect((await getJobRowForReader(owner, job.number)).id).toBe(job.id);
+
+    await restoreJob(owner, job.id);
+    expect((await getJob(supervisor, job.id)).deletedAt).toBeNull();
   });
 });

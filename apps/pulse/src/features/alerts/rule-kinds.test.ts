@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ALERT_KINDS } from '@/lib/constants';
-import { RULE_KINDS, hideLinesInText, readThreshold, ruleHasLine, ruleNameWithoutMoney, ruleSentence, storedRuleName, tellSentence, thresholdText, tidyThreshold } from './rule-kinds';
+import { RULE_KINDS, hideLinesInText, readThreshold, ruleHasLine, ruleNameWithoutMoney, ruleSentence, storedRuleName, tellSentence, thresholdText, tidyThreshold, workDaysText } from './rule-kinds';
 
 describe('rule sentences', () => {
   it('has words for every kind, with no dashes', () => {
@@ -54,6 +54,19 @@ describe('rule lines and readers without money', () => {
     expect(ruleSentence('job_losing', null, { moneyHidden: true })).toBe('Tell me when a job is losing money.');
   });
 
+  it('shows a count of days to every reader, because days are not money', () => {
+    // Round three: a supervisor who gets this alert could not see how many days trigger it.
+    for (const moneyHidden of [true, false]) {
+      expect(ruleSentence('no_entry_days', null, { moneyHidden, facts: { noEntryDays: 3 } })).toBe('Tell me when an active job has nothing logged for 3 work days.');
+      expect(ruleSentence('no_entry_days', null, { moneyHidden, facts: { noEntryDays: 1 } })).toBe('Tell me when an active job has nothing logged for 1 work day.');
+    }
+    // With no count in hand the words stay true.
+    expect(ruleSentence('no_entry_days', null, { moneyHidden: true })).toBe('Tell me when an active job has nothing logged for a few work days.');
+    expect(workDaysText(null)).toBe('a few work days');
+    expect(workDaysText(0)).toBe('a few work days');
+    // A money line stays hidden next to the facts.
+    expect(ruleSentence('margin_below', '15', { moneyHidden: true, facts: { noEntryDays: 3 } })).not.toMatch(/15|%/);
+  });
   it('never stores a line in the name of a rule', () => {
     for (const kind of ALERT_KINDS) {
       const name = storedRuleName(kind);

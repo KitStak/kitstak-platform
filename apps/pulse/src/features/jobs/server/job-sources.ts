@@ -9,9 +9,9 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
 import { wmsTable } from '@kitstak/db/wms-tenants';
-import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { findJobsByLink, type DomainContext } from '@/server/domain';
-import { integrationAvailability, tableExists, wmsSchemaFor } from '@/server/integrations';
+import { integrationAvailability, siblingDb, tableExists, wmsSchemaFor } from '@/server/integrations';
 
 export interface WonDealSource {
   readonly id: string;
@@ -73,7 +73,7 @@ async function wonDeals(ctx: DomainContext): Promise<WonDealSource[]> {
     ? sql`(select cl.core_customer_id::text from crm.customer_links cl where cl.item_id = a.id limit 1)`
     : sql`null::text`;
   // Won means the deal's stage label is marked done on its own board: the rule CRM itself uses.
-  const result = await db.execute<{
+  const result = await siblingDb.execute<{
     id: string;
     name: string;
     value_cents: string | null;
@@ -115,7 +115,7 @@ async function wonDeals(ctx: DomainContext): Promise<WonDealSource[]> {
 async function openWorkOrders(ctx: DomainContext): Promise<WorkOrderSource[]> {
   const schema = await wmsSchemaFor(ctx);
   if (!schema) return [];
-  const result = await db.execute<{
+  const result = await siblingDb.execute<{
     id: string;
     code: string;
     status: string;
@@ -153,7 +153,7 @@ async function openWorkOrders(ctx: DomainContext): Promise<WorkOrderSource[]> {
 }
 
 /** Won deals and open work orders with no Pulse job yet. Never throws. */
-export async function listJobSources(ctx: DomainContext): Promise<JobSources> {
+export const listJobSources = scoped(async function listJobSources(ctx: DomainContext): Promise<JobSources> {
   let available = { crm: false, wms: false, projects: false };
   try {
     available = await integrationAvailability(ctx);
@@ -165,4 +165,4 @@ export async function listJobSources(ctx: DomainContext): Promise<JobSources> {
     available.wms ? openWorkOrders(ctx).catch(() => []) : Promise.resolve([]),
   ]);
   return { deals, workOrders };
-}
+});

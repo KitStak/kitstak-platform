@@ -20,6 +20,7 @@ import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { PersonAvatar } from '@/components/pulse/person';
 import { Teach } from '@/components/pulse/teach';
+import { formatHours, formatMoneyWhole, formatNumber } from '@/lib/format';
 import { useDeletedJobs } from '@/lib/hooks/use-data';
 import { routes } from '@/lib/routes';
 import type { DeletedJobDTO } from '@/lib/types';
@@ -42,6 +43,24 @@ function DeletedWhen({ iso }: { readonly iso: string | null }) {
     <time dateTime={iso} suppressHydrationWarning className="whitespace-nowrap tabular-nums">
       {WHEN.format(new Date(iso))}
     </time>
+  );
+}
+
+/** What a restore brings back into the reports: the job's revenue (when the reader sees money), labor hours and units. */
+function ComesBack({ job }: { readonly job: DeletedJobDTO }) {
+  const hours = Number(job.stats.hours);
+  const units = Number(job.stats.unitsGood);
+  const revenue = job.stats.revenueCents;
+  const parts = [
+    ...(revenue !== null && revenue !== 0 ? [`${formatMoneyWhole(revenue)} revenue`] : []),
+    ...(hours > 0 ? [`${formatHours(hours, { maxDigits: 1 })} labor ${hours === 1 ? 'hour' : 'hours'}`] : []),
+    ...(units > 0 ? [`${formatNumber(units, { maxDigits: 0 })} ${units === 1 ? 'unit' : 'units'}`] : []),
+  ];
+  if (parts.length === 0) return <span className="text-fg-muted">Nothing logged</span>;
+  return (
+    <span className="tabular-nums" data-testid={`deleted-comes-back-${job.number}`}>
+      {parts.join(', ')}
+    </span>
   );
 }
 
@@ -135,6 +154,7 @@ export function DeletedJobsView({ initialJobs }: { readonly initialJobs: readonl
             <TableRow className="hover:bg-transparent">
               <TableHeaderCell>Job</TableHeaderCell>
               <TableHeaderCell>Client</TableHeaderCell>
+              <TableHeaderCell>A restore brings back</TableHeaderCell>
               <TableHeaderCell>Deleted by</TableHeaderCell>
               <TableHeaderCell>Deleted on</TableHeaderCell>
               <TableHeaderCell>
@@ -150,6 +170,9 @@ export function DeletedJobsView({ initialJobs }: { readonly initialJobs: readonl
                   <span className="block text-xs text-fg-muted">{job.number}</span>
                 </TableCell>
                 <TableCell>{job.clientName}</TableCell>
+                <TableCell>
+                  <ComesBack job={job} />
+                </TableCell>
                 <TableCell>
                   <DeletedBy job={job} />
                 </TableCell>
@@ -180,6 +203,9 @@ export function DeletedJobsView({ initialJobs }: { readonly initialJobs: readonl
               <span>on</span>
               <DeletedWhen iso={job.deletedAt} />
             </div>
+            <p className="mt-1 text-xs text-fg-secondary">
+              A restore brings back: <ComesBack job={job} />
+            </p>
           </li>
         ))}
       </ul>

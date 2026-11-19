@@ -208,7 +208,7 @@ const clients = defineStream({
     col('contact_name', 'text', { label: 'Contact name', help: 'Your main contact at the client.', aliases: ['contact', 'primary contact'], examples: ['Dana Reyes', 'Sam Okafor'] }),
     col('contact_email', 'email', { label: 'Contact email', help: 'The email address of your main contact.', aliases: ['email', 'e mail', 'email address'], examples: ['dana@acme-outdoor.example', 'sam@birchbloom.example'] }),
     col('phone', 'text', { label: 'Phone', help: 'A phone number for the client.', aliases: ['phone number', 'telephone', 'tel', 'contact phone'], examples: ['+1 555 0100', '555 0142'] }),
-    col('target_margin_pct', 'percent', { label: 'Target margin %', help: 'The margin you want on this client, as a percent. 28 and 28% both mean 28 percent.', aliases: ['target margin', 'margin target', 'goal margin', 'margin goal'], maxBp: 10000, examples: ['30', '28'] }),
+    col('target_margin_pct', 'percent', { money: true, label: 'Target margin %', help: 'The margin you want on this client, as a percent. 28 and 28% both mean 28 percent.', aliases: ['target margin', 'margin target', 'goal margin', 'margin goal'], maxBp: 10000, examples: ['30', '28'] }),
     col('payment_terms_days', 'integer', { label: 'Payment terms (days)', help: 'How many days the client has to pay an invoice.', aliases: ['payment terms', 'terms', 'net days', 'terms days'], examples: ['30', '45'] }),
     col('parts_owner', 'choice', { label: 'Who buys the parts', help: 'us if you buy the parts, client if the client sends them. Blank follows your workspace setting.', values: ['us', 'client'], valueAliases: PARTS_OWNER_ALIASES, aliases: ['parts owner', 'who buys parts', 'materials owner', 'supplied by'], examples: ['client', 'us'] }),
     col('notes', 'text', { label: 'Notes', help: 'Anything worth remembering about this client.', aliases: ['note', 'comment', 'comments', 'memo'], examples: ['Ships on Fridays', ''] }),
@@ -227,7 +227,7 @@ const jobTypes = defineStream({
     col('default_pricing_model', 'choice', { label: 'Usual pricing', help: 'How jobs of this type are usually priced: per_unit, fixed or hourly.', values: ['per_unit', 'fixed', 'hourly'], valueAliases: PRICING_ALIASES, aliases: ['pricing model', 'pricing', 'price type'], examples: ['per_unit', 'per_unit'] }),
     col('default_labor_class', 'code', { label: 'Usual labor class', help: 'The labor class that usually does this work.', aliases: ['labor class', 'class', 'role'], examples: ['PACK', 'PACK'] }),
     col('default_units_per_labor_hour', 'pace', { label: 'Usual target pace', help: 'How many units one person should finish in an hour.', positive: true, aliases: ['units per labor hour', 'units per hour', 'uph', 'target pace', 'standard', 'standard rate', 'standard uph', 'pace'], examples: ['40', '120'] }),
-    col('target_margin_pct', 'percent', { label: 'Target margin %', help: 'The margin you want on this kind of work, as a percent.', aliases: ['target margin', 'margin target', 'goal margin'], maxBp: 10000, examples: ['30', '35'] }),
+    col('target_margin_pct', 'percent', { money: true, label: 'Target margin %', help: 'The margin you want on this kind of work, as a percent.', aliases: ['target margin', 'margin target', 'goal margin'], maxBp: 10000, examples: ['30', '35'] }),
   ],
 });
 
@@ -255,7 +255,7 @@ const jobs = defineStream({
     col('parts_owner', 'choice', { label: 'Who buys the parts', help: 'us or client. Blank follows the client.', values: ['us', 'client'], valueAliases: PARTS_OWNER_ALIASES, aliases: ['parts owner', 'who buys parts', 'supplied by'], examples: ['', 'client'] }),
     laborClass(),
     col('units_per_labor_hour_standard', 'pace', { label: 'Target pace', help: 'How many units one person should finish in an hour on this job.', positive: true, aliases: ['units per labor hour', 'units per hour', 'uph', 'standard uph', 'target pace', 'standard', 'standard rate', 'pace'], examples: ['40', '120'] }),
-    col('target_margin_pct', 'percent', { label: 'Target margin %', help: 'The margin you want on this job, as a percent. Blank follows the job type or the client.', aliases: ['target margin', 'margin target', 'goal margin'], maxBp: 10000, examples: ['30', ''] }),
+    col('target_margin_pct', 'percent', { money: true, label: 'Target margin %', help: 'The margin you want on this job, as a percent. Blank follows the job type or the client.', aliases: ['target margin', 'margin target', 'goal margin'], maxBp: 10000, examples: ['30', ''] }),
     col('start_date', 'date', { label: 'Start date', help: 'The day work starts.', aliases: ['start', 'starts', 'begin date', 'start on'], examples: ['2026-11-02', '2026-12-01'] }),
     col('due_date', 'date', { label: 'Due date', help: 'The day the job is due.', aliases: ['due', 'due on', 'deadline', 'ship date', 'need by', 'end date'], examples: ['2026-12-04', '2026-12-18'] }),
     col('completed_date', 'date', { label: 'Completed date', help: 'The day the job was finished. Only for completed jobs.', aliases: ['completed', 'completed on', 'finish date', 'finished', 'date completed', 'closed date'], examples: ['', ''] }),

@@ -412,7 +412,15 @@ export interface MoneyReadout {
   readonly sharedCents: number;
   readonly costCents: number;
   readonly profitCents: number;
+  /**
+   * Margin of the jobs that have labor hours. A job with units and no hours has no labor cost yet,
+   * so it is left out: it would read 100% and lift the margin of the day.
+   */
   readonly marginBp: number | null;
+  /** Profit of the same jobs the margin counts (the sign colors the margin). */
+  readonly marginProfitCents: number;
+  /** How many jobs have units and no labor hours, and so are left out of the margin. */
+  readonly jobsNoHours: number;
   readonly laborPerUnitCents: number | null;
   readonly rateCents: number | null;
 }
@@ -428,6 +436,8 @@ export function moneyReadout(entries: readonly ProductionEntryDTO[]): MoneyReado
       costCents: 0,
       profitCents: 0,
       marginBp: null,
+      marginProfitCents: 0,
+      jobsNoHours: 0,
       laborPerUnitCents: null,
       rateCents: null,
     };
@@ -437,19 +447,32 @@ export function moneyReadout(entries: readonly ProductionEntryDTO[]): MoneyReado
     )
   )
     return null;
-  const sum = (pick: (entry: ProductionEntryDTO) => number | null): bigint =>
-    entries.reduce((total, entry) => total + toCents(pick(entry) ?? 0), BigInt(0));
-  const units = entries.reduce((total, entry) => total + Number(entry.unitsGood), 0);
-  const summary = profitSummary(
-    {
-      revenueCents: sum((e) => e.baseRevenueCents),
-      laborCents: sum((e) => e.laborCostCents),
-      materialCents: sum((e) => e.stdMaterialCents),
-      otherCents: BigInt(0),
-      sharedCents: sum((e) => e.sharedCents),
-    },
-    units.toFixed(3),
-  );
+  const summarize = (list: readonly ProductionEntryDTO[]) => {
+    const sum = (pick: (entry: ProductionEntryDTO) => number | null): bigint =>
+      list.reduce((total, entry) => total + toCents(pick(entry) ?? 0), BigInt(0));
+    const units = list.reduce((total, entry) => total + Number(entry.unitsGood), 0);
+    return profitSummary(
+      {
+        revenueCents: sum((e) => e.baseRevenueCents),
+        laborCents: sum((e) => e.laborCostCents),
+        materialCents: sum((e) => e.stdMaterialCents),
+        otherCents: BigInt(0),
+        sharedCents: sum((e) => e.sharedCents),
+      },
+      units.toFixed(3),
+    );
+  };
+  const summary = summarize(entries);
+  // Per job: units with no labor hours means the labor cost is not in yet, so there is no margin to show.
+  const byJob = new Map<string, { hours: number; units: number }>();
+  for (const entry of entries) {
+    const job = byJob.get(entry.jobId) ?? { hours: 0, units: 0 };
+    job.hours += Number(entry.hours);
+    job.units += Number(entry.unitsGood);
+    byJob.set(entry.jobId, job);
+  }
+  const noHours = new Set([...byJob.entries()].filter(([, job]) => job.units > 0 && job.hours <= 0).map(([jobId]) => jobId));
+  const counted = noHours.size === 0 ? summary : summarize(entries.filter((entry) => !noHours.has(entry.jobId)));
   return {
     revenueCents: centsToNumber(summary.revenueCents),
     laborCents: centsToNumber(summary.laborCents),
@@ -457,7 +480,9 @@ export function moneyReadout(entries: readonly ProductionEntryDTO[]): MoneyReado
     sharedCents: centsToNumber(summary.sharedCents),
     costCents: centsToNumber(summary.costCents),
     profitCents: centsToNumber(summary.profitCents),
-    marginBp: summary.marginBp,
+    marginBp: counted.marginBp,
+    marginProfitCents: centsToNumber(counted.profitCents),
+    jobsNoHours: noHours.size,
     laborPerUnitCents:
       summary.laborCostPerUnitCents === null ? null : centsToNumber(summary.laborCostPerUnitCents),
     rateCents: entries.find((entry) => entry.rateCents !== null)?.rateCents ?? null,

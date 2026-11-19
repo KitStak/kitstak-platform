@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import { Clock, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Button, IconButton, toast } from '@/components/ui';
+import { Button, IconButton, Select, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { INDIRECT_REASONS, INDIRECT_REASON_LABELS, type IndirectReason } from '@/lib/constants';
 import { formatHours, formatMoney } from '@/lib/format';
@@ -206,36 +206,27 @@ export function OtherTimeStrip({
             void submit();
           }}
         >
-          <label className="flex flex-col gap-1 text-xs text-fg-muted">
-            Reason
-            <select
+          <div className="flex flex-col gap-1 text-xs text-fg-muted">
+            <span>Reason</span>
+            <Select
               autoFocus
-              className={cn(field, 'cursor-pointer')}
+              aria-label="Reason"
+              className="h-10 px-2 sm:h-8"
               value={draft.reason}
-              onChange={(event) => setDraft({ ...draft, reason: event.target.value as IndirectReason })}
-            >
-              {INDIRECT_REASONS.map((reason) => (
-                <option key={reason} value={reason}>
-                  {INDIRECT_REASON_LABELS[reason]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-fg-muted">
-            Labor class
-            <select
-              className={cn(field, 'cursor-pointer')}
-              value={draft.laborClassId}
-              onChange={(event) => setDraft({ ...draft, laborClassId: event.target.value })}
-            >
-              <option value="">Default class</option>
-              {classes.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              onValueChange={(value) => setDraft({ ...draft, reason: value as IndirectReason })}
+              options={INDIRECT_REASONS.map((reason) => ({ value: reason, label: INDIRECT_REASON_LABELS[reason] }))}
+            />
+          </div>
+          <div className="flex flex-col gap-1 text-xs text-fg-muted">
+            <span>Labor class</span>
+            <Select
+              aria-label="Labor class"
+              className="h-10 px-2 sm:h-8"
+              value={draft.laborClassId || 'default'}
+              onValueChange={(value) => setDraft({ ...draft, laborClassId: value === 'default' ? '' : value })}
+              options={[{ value: 'default', label: 'Default class' }, ...classes.map((item) => ({ value: item.id, label: item.name }))]}
+            />
+          </div>
           <label className="flex flex-col gap-1 text-xs text-fg-muted">
             People
             <input
@@ -279,7 +270,7 @@ export function OtherTimeStrip({
           >
             {error ??
               ((parseTyped(draft.people) ?? 0) > 0 && (parseTyped(draft.hours) ?? 0) > 0
-                ? `That is ${formatHours((parseTyped(draft.hours) ?? 0) / (parseTyped(draft.people) ?? 1), { style: 'unit' })} for each of ${tidy(draft.people)} people. A full shift for them would be ${formatHours(laborHoursFromCrew(parseTyped(draft.people) ?? 0, shiftHours), { style: 'unit' })}.`
+                ? `That is ${formatHours((parseTyped(draft.hours) ?? 0) / (parseTyped(draft.people) ?? 1), { style: 'unit' })} for ${(parseTyped(draft.people) ?? 0) === 1 ? 'the 1 person' : `each of ${tidy(draft.people)} people`}. A full shift for them would be ${formatHours(laborHoursFromCrew(parseTyped(draft.people) ?? 0, shiftHours), { style: 'unit' })}.`
                 : 'Labor hours are people times hours each. 6 people in a 30 minute meeting is 3 labor hours.')}
           </p>
         </form>
