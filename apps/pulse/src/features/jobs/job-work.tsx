@@ -45,7 +45,7 @@ import { useDeleteWithUndo, useJobProduction, useRefreshJob } from './job-data';
 import { rowPace, shiftDate, singularUnit } from './job-math';
 import type { JobTabProps } from './job-overview';
 import { Explain, LoadError } from './job-ui';
-import { groupWorkDays, isEmptyEntry, restoreDayLines, saveDay, type WorkDay } from './work-days';
+import { groupWorkDays, hasShifts, isEmptyEntry, laborLineWords, restoreDayLines, saveDay, shiftWords, type WorkDay } from './work-days';
 
 const SOURCE_WORDS: Readonly<Record<string, string>> = {
   manual: 'Typed in',
@@ -106,6 +106,20 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
   const editingDay = days.find((day) => day.workDate === editingId) ?? null;
   const className = (id: string | null) => (id ? (classNames.get(id) ?? 'Labor class') : 'Not set');
   const crewNames = (day: WorkDay) => day.laborClassIds.map(className).join(', ');
+  /** "Machine operator, night shift" when the day has lines on more than one shift. */
+  const lineName = (day: WorkDay, row: WorkDay['rows'][number]) => {
+    const shift = hasShifts(day.rows) ? (shiftWords(row.shift) ?? 'Day shift').toLowerCase() : null;
+    return shift ? `${className(row.laborClassId)}, ${shift}` : className(row.laborClassId);
+  };
+  /**
+   * After a save or a Cancel, the keyboard goes back to the Edit button of that day in the list
+   * (the table on a wide screen, the card below 1024px), the control that opened the edit.
+   */
+  const focusDay = (workDate: string) =>
+    requestAnimationFrame(() => {
+      const target = [...document.querySelectorAll<HTMLElement>(`[data-testid="work-edit-${workDate}"], [data-testid="work-card-edit-${workDate}"]`)].find((element) => element.getClientRects().length > 0);
+      target?.focus();
+    });
   const openDay = (workDate: string) => {
     setEditingId(workDate);
     // The one form sits at the top of the tab: bring it into view and put the keyboard in it.
@@ -198,6 +212,7 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
   const saved = async (result: DaySaved) => {
     setEditingId(null);
     await refresh();
+    if (result.mode === 'edit') focusDay(result.workDate);
     const label = dayLabel(result.workDate, today);
     const ids = result.entries.map((row) => row.id);
     if (result.mode === 'create') {
@@ -386,11 +401,20 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
               day={editingDay}
               days={days}
               today={today}
+              startDate={job.startDate}
               shiftHours={settings.defaultShiftHours}
               laborClasses={laborClasses}
               defaultLaborClassId={job.defaultLaborClassId}
               onSaved={saved}
-              onCancel={editingDay ? () => setEditingId(null) : undefined}
+              onCancel={
+                editingDay
+                  ? () => {
+                      const workDate = editingDay.workDate;
+                      setEditingId(null);
+                      focusDay(workDate);
+                    }
+                  : undefined
+              }
               onOpenDay={openDay}
               onStale={refresh}
             />
@@ -403,7 +427,16 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
         </p>
       ) : null}
 
-      {rows.length > 0 ? (
+      {rows.length > 0 && chart.labels.length === 1 ? (
+        // One day draws one bar in a tall empty box. Say it in a line until there are two days to compare.
+        <Panel title="Units and pace by day" bodyClassName="px-4 py-3 min-w-0">
+          <p className="text-sm text-fg-secondary" data-testid="work-one-day">
+            One day so far: {formatNumber(chart.units[0], { maxDigits: 0 })} good {job.unitLabel} on {chart.labels[0]}
+            {chart.pace[0] !== null && chart.pace[0] !== undefined ? `, a pace of ${formatPace(chart.pace[0])} per person per hour` : ''}. The
+            chart shows once there are two days to compare.
+          </p>
+        </Panel>
+      ) : rows.length > 0 ? (
         <Panel title="Units and pace by day" bodyClassName="p-4 min-w-0">
           <ComboChart
             title={`Good ${job.unitLabel} each day, with the pace`}
@@ -505,7 +538,7 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
                           <ul className="flex flex-col">
                             {day.rows.map((row) => (
                               <li key={row.id} className="whitespace-nowrap">
-                                {className(row.laborClassId)}{' '}
+                                {lineName(day, row)}{' '}
                                 <span className="text-2xs text-fg-muted tabular-nums">
                                   {formatHours(row.hours)}
                                   {row.headcount ? `, ${people(row.headcount)}` : ''}
@@ -634,7 +667,7 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
                         {day.rows
                           .map(
                             (row) =>
-                              `${className(row.laborClassId)} ${formatHours(row.hours)}${row.headcount ? `, ${people(row.headcount)}` : ''}`,
+                              `${lineName(day, row)} ${formatHours(row.hours)}${row.headcount ? `, ${people(row.headcount)}` : ''}`,
                           )
                           .join(' · ')}
                       </p>
@@ -721,7 +754,7 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
                 .filter(Boolean)
                 .join(', ')}
               . Labor classes:{' '}
-              {deleting.rows.map((row) => `${className(row.laborClassId)} ${formatHours(row.hours)}`).join(', ')}. You
+              {deleting.rows.map((row) => laborLineWords(row, className(row.laborClassId), hasShifts(deleting.rows), (hours) => formatHours(hours))).join('; ')}. You
               can undo it right after. Later, find it under Log work, All entries, Removed.
             </span>
           ) : undefined
