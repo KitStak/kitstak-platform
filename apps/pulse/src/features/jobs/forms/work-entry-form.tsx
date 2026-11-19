@@ -78,6 +78,7 @@ export function WorkEntryForm({
   day,
   days,
   today,
+  startDate = null,
   shiftHours,
   laborClasses,
   defaultLaborClassId,
@@ -93,6 +94,8 @@ export function WorkEntryForm({
   /** Every day that already has work on this job, so the form can say so before it saves. */
   readonly days: readonly WorkDay[];
   readonly today: string;
+  /** The job's start day: a day before it is asked about first. */
+  readonly startDate?: string | null;
   /** Hours in a full shift, for the "is that right" check on labor hours. */
   readonly shiftHours: string;
   readonly laborClasses: readonly LaborClassDTO[];
@@ -170,14 +173,22 @@ export function WorkEntryForm({
   );
   const setupTotal = lines.reduce((total, line) => total + (parseTyped(line.setup) ?? 0), 0);
   const pace = goodNumber && goodNumber > 0 && paceHours > 0 ? unitsPerHour(String(goodNumber), paceHours.toFixed(2)) : null;
-  const questions = lines
-    .map((line) =>
-      crewQuestion(
-        { ...line, unitsGood: '', unitsScrap: '', unitsRework: '', note: '' },
-        shiftHours,
-      ),
-    )
-    .filter((question): question is string => question !== null);
+  // The Log work grid leaves a job off the days before it starts. The form says so, and asks.
+  const beforeStart =
+    date && startDate && date < startDate && !(day && day.workDate === date)
+      ? `This job starts on ${shortDate(startDate)}, so ${shortDate(date)} is before it starts. Is that the right day?`
+      : null;
+  const questions = [
+    ...(beforeStart ? [beforeStart] : []),
+    ...lines
+      .map((line) =>
+        crewQuestion(
+          { ...line, unitsGood: '', unitsScrap: '', unitsRework: '', note: '' },
+          shiftHours,
+        ),
+      )
+      .filter((question): question is string => question !== null),
+  ];
 
   const check = (): Record<string, string> => {
     const next: Record<string, string> = {};
@@ -219,6 +230,7 @@ export function WorkEntryForm({
   // Unusual hours ask first: the first press shows the question, the second press saves.
   const questionKey = questions.join('|');
   const asking = questions.length > 0 && confirmed !== questionKey;
+  const awaitingYes = questions.length > 0 && confirmed === questionKey;
   const save = async () => {
     if (clash) return;
     const next = check();
@@ -509,7 +521,7 @@ export function WorkEntryForm({
           leadingIcon={<Check aria-hidden />}
           data-testid="work-save"
         >
-          {asking ? (editing ? 'Yes, save the day' : 'Yes, add the day') : editing ? 'Save the day' : 'Add the day'}
+          {awaitingYes ? (editing ? 'Yes, save the day' : 'Yes, add the day') : editing ? 'Save the day' : 'Add the day'}
         </Button>
         {onCancel ? (
           <Button type="button" variant="ghost" className={TOUCH} leadingIcon={<X aria-hidden />} onClick={onCancel}>
@@ -528,7 +540,7 @@ export function WorkEntryForm({
             {question}
           </p>
         ))}
-        {questions.length > 0 && confirmed === questionKey ? (
+        {awaitingYes ? (
           <p role="alert" className="font-medium text-fg" data-testid="work-crew-confirm">
             Check the hours above. If they are right, press {editing ? 'Yes, save the day' : 'Yes, add the day'}.
           </p>

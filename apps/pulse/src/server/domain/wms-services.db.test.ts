@@ -415,4 +415,70 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     expect((await getJobProfit(owner, kitJobId)).baseRevenueCents).toBe(4500);
     expect(await sync()).toMatchObject({ created: 0, updated: 0 });
   }, 60_000);
+
+  it('reads a flat tier, and leaves volume tiers and fees with conditions to the warehouse bill', async () => {
+    const q = (text: string, values?: unknown[]) => org.query(text.replaceAll('$S', `"${schema}"`), values);
+    const WO_TIER = '11111111-1111-4111-8111-0000000000a5';
+    await q(`insert into $S.work_orders values ($1, 'WO000505', 'In Process', 'Work Order with Picking', null, $2, $3, 'kit-1', 300, 0, null, null, null)`, [WO_TIER, customerId, WAREHOUSE]);
+    const tiered = await createJob(owner, { name: 'Tiered build', clientId, status: 'active', plannedUnits: '300', unitPrice: '2.0000' });
+    await addJobLink(owner, tiered.id, { targetType: 'wms_work_order', targetId: WO_TIER, title: 'WO000505' });
+    await q(`delete from $S.billing_fees where operation_type = 'Work Order'`);
+    const counts = async () => (await org.query<{ counts: Record<string, number> }>(`select counts from pulse.sync_state where org_id = $1 and source = 'wms'`, [org.orgId]))[0]?.counts ?? {};
+    const tieredLink = async () => (await getJob(owner, tiered.id)).links[0];
+    const price = async () => (await listJobPrices(owner, tiered.id))[0]?.unitPrice;
+
+    // One tier: every unit at its rate, the way the warehouse bill charges it (the tier wins over the standard rate).
+    await q(`insert into $S.billing_fees values ('fee-tier', 'contract-1', 'Work Order', 'Per Kit', null, 3, '[]', '2026-11-03T00:00:00.000Z')`);
+    await q(`insert into $S.billing_fee_tiers values ('t-1', 'fee-tier', 1, null, 3.4, null)`);
+    await sync();
+    expect(await price()).toBe('3.4000');
+    expect((await tieredLink())?.priceFromContract?.contractName).toBe('Service Client 2026');
+
+    // Two tiers with different rates: the rate depends on the whole month of work orders. Pulse keeps
+    // the job's price and says the warehouse bill prices it.
+    await q(`update $S.billing_fee_tiers set to_qty = 100 where id = 't-1'`);
+    await q(`insert into $S.billing_fee_tiers values ('t-2', 'fee-tier', 101, null, 3.1, null)`);
+    await sync();
+    expect(await price()).toBe('3.4000');
+    expect(await tieredLink()).toMatchObject({ priceFromContract: null, contract: { billedBy: 'tiers', inEffect: false, unitPrice: null } });
+    expect(await counts()).toMatchObject({ contractWarehouseBill: expect.any(Number) });
+    expect((await counts()).contractWarehouseBill).toBeGreaterThanOrEqual(1);
+    // A second sync does not touch it again.
+    expect(await sync()).toMatchObject({ updated: 0 });
+
+    // Two tiers at the same rate, from the first unit with no gap: one rate for every unit again.
+    await q(`update $S.billing_fee_tiers set rate = 3.4 where id = 't-2'`);
+    await sync();
+    expect(await price()).toBe('3.4000');
+    expect(await tieredLink()).toMatchObject({ priceFromContract: { contractName: 'Service Client 2026' }, contract: { billedBy: null, inEffect: true } });
+
+    // "From quantity" that skips the first 50 units of each billing period: only the bill knows.
+    await q(`delete from $S.billing_fee_tiers where id = 't-2'`);
+    await q(`update $S.billing_fee_tiers set from_qty = 51, to_qty = null, rate = 3.9 where id = 't-1'`);
+    await q(`update $S.billing_fees set conditions = '[{"field":"__pricingMode","value":"fromQuantity"}]' where id = 'fee-tier'`);
+    await sync();
+    expect(await price()).toBe('3.4000');
+    expect((await tieredLink())?.contract?.billedBy).toBe('tiers');
+    // "For each unit" uses the first tier's rate for every unit, whatever its start.
+    await q(`update $S.billing_fees set conditions = '[{"field":"__pricingMode","value":"perUnit"}]' where id = 'fee-tier'`);
+    await sync();
+    expect(await price()).toBe('3.9000');
+
+    // A fee for some products only ("Charge if"): Pulse cannot tell whether this job is one of them.
+    await q(`insert into $S.billing_fees values ('fee-cond', 'contract-1', 'Work Order', 'Per Component', null, 0.1, '[{"field":"productType","comparator":"in","value":["Gift"]}]', '2026-11-03T00:00:00.000Z')`);
+    await sync();
+    expect(await price()).toBe('3.9000');
+    expect((await tieredLink())?.contract?.billedBy).toBe('conditions');
+
+    // An extra service whose contract fee has volume tiers gets no price: only the bill can price it.
+    await q(`insert into $S.billing_fee_tiers values ('t-vas-1', 'fee-program', 1, 5, 60, null), ('t-vas-2', 'fee-program', 6, null, 50, null)`);
+    const records = (await listVasRecords(owner)) ?? [];
+    expect(records.find((record) => record.id === VAS_RATE)).toMatchObject({ priceFrom: 'warehouse_bill', billedBy: 'tiers', unitPrice: null, contractName: 'Service Client 2026' });
+    expect(records.find((record) => record.id === VAS_OWN)).toMatchObject({ priceFrom: 'record' });
+    await sync();
+    expect((await entry(VAS_RATE))?.amount_cents).toBeNull();
+    expect(await counts()).toMatchObject({ vasWarehouseBill: expect.any(Number) });
+    expect((await counts()).vasWarehouseBill).toBeGreaterThanOrEqual(1);
+    await q(`delete from $S.billing_fee_tiers where fee_id = 'fee-program'`);
+  }, 120_000);
 });
