@@ -326,7 +326,12 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     await setJobPrice(owner, kitJobId, { effectiveFrom: '0001-01-01', unitPrice: '6.0000' });
     expect(await sync()).toMatchObject({ created: 0, updated: 0 });
     expect((await getJobProfit(owner, kitJobId)).baseRevenueCents).toBe(6000);
-    // ...and the job stops saying its price came from the contract, and Connected apps counts it apart.
+    // That price was for the days behind the contract: the contract rate is still the one in force.
+    expect((await getJob(owner, kitJobId)).links[0]?.contract).toMatchObject({ inEffect: true });
+    // A price typed from today replaces it, so the job stops saying its price came from the contract,
+    // and Connected apps counts it apart.
+    await setJobPrice(owner, kitJobId, { unitPrice: '6.5000' });
+    expect(await sync()).toMatchObject({ created: 0, updated: 0 });
     const [typed] = (await getJob(owner, kitJobId)).links;
     expect(typed?.priceFromContract).toBeNull();
     expect(typed?.contract).toMatchObject({ inEffect: false, billedBy: null });
@@ -476,7 +481,9 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     expect(records.find((record) => record.id === VAS_RATE)).toMatchObject({ priceFrom: 'warehouse_bill', billedBy: 'tiers', unitPrice: null, contractName: 'Service Client 2026' });
     expect(records.find((record) => record.id === VAS_OWN)).toMatchObject({ priceFrom: 'record' });
     await sync();
-    expect((await entry(VAS_RATE))?.amount_cents).toBeNull();
+    // A price a person typed on a pulled entry stays; the others lose the price only the bill can set.
+    expect((await entry(VAS_RATE))?.amount_cents).toBe('28000');
+    expect((await entry(VAS_JOB))?.amount_cents).toBeNull();
     expect(await counts()).toMatchObject({ vasWarehouseBill: expect.any(Number) });
     expect((await counts()).vasWarehouseBill).toBeGreaterThanOrEqual(1);
     await q(`delete from $S.billing_fee_tiers where fee_id = 'fee-program'`);
