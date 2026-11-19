@@ -21,7 +21,33 @@ type Cookie = Awaited<ReturnType<BrowserContext['cookies']>>[number];
 const AUTH_DIR = path.join(__dirname, '..', 'test-results', '.auth');
 const memory = new Map<Login, Cookie[]>();
 
+/**
+ * A dev server that is busy rebuilding can tell an open page to reload ("HMR hash mismatch") many
+ * times a second, so no click lands. The suite drops those reload orders and the live code updates
+ * on the dev socket, and passes everything else (the page needs the rest of it to start).
+ */
+async function holdDevReloads(context: BrowserContext): Promise<void> {
+  const marked = context as BrowserContext & { __holdDevReloads?: boolean };
+  if (marked.__holdDevReloads) return;
+  marked.__holdDevReloads = true;
+  await context.routeWebSocket(/_next\/webpack-hmr/, (socket) => {
+    const server = socket.connectToServer();
+    const seen = new Set<string>();
+    server.onMessage((message) => {
+      const kind = /"type":"([^"]+)"/.exec(String(message))?.[1];
+      if (kind === 'reloadPage' || kind === 'turbopack-message' || kind === 'serverComponentChanges') return;
+      if (kind === 'built' || kind === 'building' || kind === 'sync') {
+        if (seen.has(kind)) return;
+        seen.add(kind);
+      }
+      socket.send(message);
+    });
+    socket.onMessage((message) => server.send(message));
+  });
+}
+
 export async function signIn(page: Page, who: Login = 'admin'): Promise<void> {
+  await holdDevReloads(page.context());
   let cookies = memory.get(who) ?? null;
   const file = path.join(AUTH_DIR, `${who}-${new URL(ORIGIN()).port || 'default'}.json`);
   if (!cookies && who === 'admin' && process.env.E2E_COOKIES) cookies = JSON.parse(readFileSync(process.env.E2E_COOKIES, 'utf8')) as Cookie[];
