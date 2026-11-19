@@ -110,6 +110,8 @@ export function isEmptyEntry(row: ProductionEntryDTO): boolean {
 export interface LaborLineInput {
   readonly id: string | null;
   readonly laborClassId: string | null;
+  /** The shift of a line read from the day ("day", "night"). New lines are on the day shift. */
+  readonly shift?: string | null;
   readonly headcount: string | null;
   readonly hours: string;
   readonly setupHours: string;
@@ -148,6 +150,7 @@ export function planDayLines(input: {
   return input.lines.map((line, index) => ({
     id: line.id,
     laborClassId: line.laborClassId,
+    ...(line.shift ? { shift: line.shift } : {}),
     unitsGood: index === 0 ? input.unitsGood : '0',
     unitsScrap: index === 0 ? input.unitsScrap : '0',
     unitsRework: index === 0 ? (input.unitsRework ?? '0') : '0',
@@ -178,11 +181,38 @@ export function restoreDayLines(before: readonly ProductionEntryDTO[], liveIds: 
   }));
 }
 
-/** The index of every line whose labor class is on more than one line. One day holds one entry per labor class. */
-export function repeatedLaborLines(lines: readonly Pick<LaborLineInput, 'laborClassId'>[]): number[] {
+const lineSlot = (line: Pick<LaborLineInput, 'laborClassId' | 'shift'>): string => `${line.laborClassId ?? ''}|${line.shift || 'day'}`;
+
+/**
+ * The index of every line whose labor class is on more than one line of the same shift. One day
+ * holds one entry per labor class and shift, so a day line and a night line of one class are fine.
+ */
+export function repeatedLaborLines(lines: readonly Pick<LaborLineInput, 'laborClassId' | 'shift'>[]): number[] {
   const count = new Map<string, number>();
-  for (const line of lines) count.set(line.laborClassId ?? '', (count.get(line.laborClassId ?? '') ?? 0) + 1);
-  return lines.flatMap((line, index) => ((count.get(line.laborClassId ?? '') ?? 0) > 1 ? [index] : []));
+  for (const line of lines) count.set(lineSlot(line), (count.get(lineSlot(line)) ?? 0) + 1);
+  return lines.flatMap((line, index) => ((count.get(lineSlot(line)) ?? 0) > 1 ? [index] : []));
+}
+
+/** "Night shift" for a line that is not on the usual day shift, else null. */
+export function shiftWords(shift: string | null | undefined): string | null {
+  const name = (shift ?? '').trim().toLowerCase();
+  if (!name || name === 'day') return null;
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)} shift`;
+}
+
+/**
+ * One labor class line of a day in words, for the delete question and the lists: the class, the
+ * shift when the day has more than one, and the hours. "Machine operator, night shift, 8 hours".
+ */
+export function laborLineWords(row: Pick<ProductionEntryDTO, 'shift' | 'hours'>, className: string, dayHasShifts: boolean, formatHours: (hours: string) => string): string {
+  const shift = dayHasShifts ? (shiftWords(row.shift) ?? 'Day shift').toLowerCase() : null;
+  const hours = `${formatHours(row.hours)} ${Number(row.hours) === 1 ? 'hour' : 'hours'}`;
+  return [className, shift, hours].filter(Boolean).join(', ');
+}
+
+/** True when the rows of a day are on more than one shift, so each line has to say which. */
+export function hasShifts(rows: readonly Pick<ProductionEntryDTO, 'shift'>[]): boolean {
+  return new Set(rows.map((row) => (row.shift || 'day').toLowerCase())).size > 1;
 }
 
 export interface DaySaveBody {

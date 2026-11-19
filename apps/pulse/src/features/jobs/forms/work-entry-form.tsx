@@ -7,8 +7,8 @@
  * A day is never overwritten by accident. When the job already has work on the picked day the
  * form says so before anything is saved and offers to open that day. The server checks again.
  */
-import { useMemo, useState } from 'react';
-import { Check, Info, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { Check, Pencil, Plus, Trash2, TriangleAlert, X } from 'lucide-react';
 import { Button, Field, IconButton, Input, IsoDatePicker, Select, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { applyField, crewQuestion, hoursEachFrom, parseTyped, tidy } from '@/features/log/log-math';
@@ -21,17 +21,23 @@ import {
   planDayLines,
   repeatedLaborLines,
   saveDay,
+  shiftWords,
   type DaySaveBody,
   type WorkDay,
 } from '../work-days';
 
-/** A taller box on a tablet or a touch screen, where a 32px box is hard to hit. */
-const TOUCH = 'max-lg:h-10 pointer-coarse:h-10';
+/**
+ * Every box and button on the form is 40px tall with a mouse, and 44px on a tablet or a touch
+ * screen (the text field inside is then 42px), so a gloved thumb hits the box it means.
+ */
+const TOUCH = 'h-10 max-lg:h-11 pointer-coarse:h-11';
 
 interface LineState {
   readonly key: number;
   readonly id: string | null;
   readonly laborClassId: string;
+  /** "day" for a new line; a line read from the day keeps its shift. */
+  readonly shift: string;
   readonly people: string;
   readonly hoursEach: string;
   readonly hours: string;
@@ -46,6 +52,7 @@ const blankLine = (laborClassId: string): LineState => ({
   key: nextKey++,
   id: null,
   laborClassId,
+  shift: 'day',
   people: '',
   hoursEach: '',
   hours: '',
@@ -109,6 +116,7 @@ export function WorkEntryForm({
           key: nextKey++,
           id: row.id,
           laborClassId: row.laborClassId ?? '',
+          shift: row.shift || 'day',
           people: tidy(row.headcount),
           hoursEach: hoursEachFrom(row.hours, row.headcount),
           hours: tidy(row.hours),
@@ -121,6 +129,9 @@ export function WorkEntryForm({
   const [saving, setSaving] = useState(false);
   /** A day the server said already has work, before the list on screen knew about it. */
   const [serverDay, setServerDay] = useState<WorkDay | null>(null);
+  /** The "Is that right?" questions the person already said yes to, so the second press saves. */
+  const [confirmed, setConfirmed] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const updateLine = (key: number, field: LineField, text: string) =>
     setLines((current) =>
@@ -200,16 +211,23 @@ export function WorkEntryForm({
     if (lines.length === 0) next.lines = 'Add at least one labor class.';
     if (!(goodNumber && goodNumber > 0) && !lines.some((line) => (parseTyped(line.hours) ?? 0) > 0))
       next.unitsGood ??= 'Type the units made, the hours worked, or both.';
-    for (const index of repeatedLaborLines(lines.map((line) => ({ laborClassId: line.laborClassId || null }))))
+    for (const index of repeatedLaborLines(lines.map((line) => ({ laborClassId: line.laborClassId || null, shift: line.shift }))))
       next[`laborClassId.${index}`] = 'Each labor class can only be on the day once. Put its people and hours on one line.';
     return next;
   };
 
+  // Unusual hours ask first: the first press shows the question, the second press saves.
+  const questionKey = questions.join('|');
+  const asking = questions.length > 0 && confirmed !== questionKey;
   const save = async () => {
     if (clash) return;
     const next = check();
     setErrors(next);
     if (Object.keys(next).length > 0 || !date) return;
+    if (asking) {
+      setConfirmed(questionKey);
+      return;
+    }
     const body: DaySaveBody = {
       jobId,
       workDate: date,
@@ -223,6 +241,7 @@ export function WorkEntryForm({
         lines: lines.map((line) => ({
           id: line.id,
           laborClassId: line.laborClassId || null,
+          shift: line.shift,
           headcount: (parseTyped(line.people) ?? 0) > 0 ? fixed(line.people, 2) : null,
           hours: fixed(line.hours, 2),
           setupHours: fixed(line.setup, 2),
@@ -262,15 +281,27 @@ export function WorkEntryForm({
         setNote('');
         setLines([blankLine(firstClass)]);
         setErrors({});
+        setConfirmed(null);
+        // The day just saved has work now. Start the next one on today when today is still free,
+        // else on no day, so a good save never ends on the "already has work" notice.
+        const taken = new Set([...days.map((item) => item.workDate), date]);
+        setDate(taken.has(today) ? null : today);
       }
       await onSaved({ mode: day ? 'edit' : 'create', before: day ?? null, entries: result.entries, workDate: date });
+      // The keyboard goes back to the top of the form, ready for the next day.
+      if (!editing) requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[data-testid="work-date"]')?.focus());
     } finally {
       setSaving(false);
     }
   };
 
   const firstError = Object.values(errors).find(Boolean);
-  const options = laborClasses.map((item) => ({ value: item.id, label: item.name }));
+  // A class already on another line of the same shift is shown, marked and not offered again.
+  const optionsFor = (line: LineState) =>
+    laborClasses.map((item) => {
+      const other = lines.findIndex((each) => each.key !== line.key && each.laborClassId === item.id && each.shift === line.shift);
+      return other < 0 ? { value: item.id, label: item.name } : { value: item.id, label: item.name, description: `Already on line ${other + 1}`, disabled: true };
+    });
   const classNames = new Map(laborClasses.map((item) => [item.id, item.name]));
   const clashWords = clash
     ? [
@@ -282,6 +313,7 @@ export function WorkEntryForm({
 
   return (
     <form
+      ref={formRef}
       noValidate
       data-testid={editing ? 'work-edit-form' : 'work-add-form'}
       aria-label={editing ? 'Edit this day' : 'Add a day of work'}
@@ -317,6 +349,7 @@ export function WorkEntryForm({
               id={inputId}
               value={good}
               invalid={Boolean(errors.unitsGood)}
+              disabled={Boolean(clash)}
               onChange={(event) => setGood(event.target.value)}
               inputMode="decimal"
               containerClassName={TOUCH}
@@ -330,6 +363,7 @@ export function WorkEntryForm({
               id={inputId}
               value={scrap}
               invalid={Boolean(errors.unitsScrap)}
+              disabled={Boolean(clash)}
               onChange={(event) => setScrap(event.target.value)}
               inputMode="decimal"
               containerClassName={TOUCH}
@@ -344,20 +378,19 @@ export function WorkEntryForm({
           id="work-day-exists"
           role="status"
           data-testid="work-day-exists"
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border-default bg-sunken px-3 py-2.5"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-[var(--warning)] bg-warning-subtle px-3 py-2.5"
         >
-          <Info aria-hidden className="size-4 shrink-0 text-icon" />
+          <TriangleAlert aria-hidden className="size-5 shrink-0 text-warning-text" />
           <p className="min-w-0 flex-1 basis-64 text-sm text-fg">
             <span className="font-medium">{shortDate(clash.workDate)} already has work on this job:</span>{' '}
             <span className="tabular-nums">{clashWords}.</span>{' '}
             {editing
               ? 'Pick another day, or open that day to change it.'
-              : 'A day is saved once, so nothing here is saved over it. Open that day to change its numbers or add a labor class.'}
+              : 'A day is saved once, so the boxes below are off. Pick another day, or open that day to change its numbers or add a labor class.'}
           </p>
           <Button
             type="button"
-            variant="secondary"
-            size="sm"
+            variant="primary"
             className={TOUCH}
             leadingIcon={<Pencil aria-hidden />}
             onClick={() => onOpenDay(clash.workDate)}
@@ -368,6 +401,8 @@ export function WorkEntryForm({
         </div>
       ) : null}
 
+      {/* While the picked day already has work, nothing typed here could be saved: the boxes are off. */}
+      <fieldset disabled={Boolean(clash)} className="m-0 min-w-0 border-0 p-0">
       <div className="flex flex-col gap-2" data-testid="work-lines">
         {lines.map((line, index) => {
           const error = (field: string) => errors[`${field}.${index}`];
@@ -399,11 +434,15 @@ export function WorkEntryForm({
               )}
               data-testid={`work-line-${index}`}
             >
-              <Field label="Labor class" className="col-span-2 sm:col-span-3 md:col-span-1">
+              <Field
+                label="Labor class"
+                labelAside={shiftWords(line.shift) ? <span className="text-xs font-medium text-fg-secondary">{shiftWords(line.shift)}</span> : undefined}
+                className="col-span-2 sm:col-span-3 md:col-span-1"
+              >
                 {({ inputId }) => (
                   <Select
                     id={inputId}
-                    aria-label={`Labor class, line ${index + 1}`}
+                    aria-label={`Labor class, line ${index + 1}${shiftWords(line.shift) ? `, ${shiftWords(line.shift)?.toLowerCase()}` : ''}`}
                     value={line.laborClassId || undefined}
                     placeholder="Pick one"
                     invalid={Boolean(error('laborClassId'))}
@@ -413,7 +452,7 @@ export function WorkEntryForm({
                         current.map((item) => (item.key === line.key ? { ...item, laborClassId: value } : item)),
                       )
                     }
-                    options={options}
+                    options={optionsFor(line)}
                   />
                 )}
               </Field>
@@ -427,7 +466,7 @@ export function WorkEntryForm({
                   label={`Remove labor class, line ${index + 1}`}
                   icon={<Trash2 aria-hidden />}
                   size="lg"
-                  className="justify-self-end"
+                  className="justify-self-end max-lg:size-11 pointer-coarse:size-11"
                   onClick={() => removeLine(line.key)}
                   data-testid={`work-line-remove-${index}`}
                 />
@@ -441,7 +480,6 @@ export function WorkEntryForm({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
             className={TOUCH}
             leadingIcon={<Plus aria-hidden />}
             onClick={addLine}
@@ -451,10 +489,12 @@ export function WorkEntryForm({
           </Button>
         </div>
       </div>
+      </fieldset>
 
       <div className="flex flex-wrap items-center gap-2">
         <Input
           aria-label="Note"
+          disabled={Boolean(clash)}
           value={note}
           onChange={(event) => setNote(event.target.value)}
           maxLength={1000}
@@ -469,7 +509,7 @@ export function WorkEntryForm({
           leadingIcon={<Check aria-hidden />}
           data-testid="work-save"
         >
-          {editing ? 'Save the day' : 'Add the day'}
+          {asking ? (editing ? 'Yes, save the day' : 'Yes, add the day') : editing ? 'Save the day' : 'Add the day'}
         </Button>
         {onCancel ? (
           <Button type="button" variant="ghost" className={TOUCH} leadingIcon={<X aria-hidden />} onClick={onCancel}>
@@ -488,6 +528,11 @@ export function WorkEntryForm({
             {question}
           </p>
         ))}
+        {questions.length > 0 && confirmed === questionKey ? (
+          <p role="alert" className="font-medium text-fg" data-testid="work-crew-confirm">
+            Check the hours above. If they are right, press {editing ? 'Yes, save the day' : 'Yes, add the day'}.
+          </p>
+        ) : null}
         {firstError ? null : pace !== null ? (
           <p>
             That is <span className="font-medium text-fg tabular-nums">{formatPace(pace)}</span> {unit} per person

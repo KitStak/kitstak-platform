@@ -96,6 +96,8 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
       `create table $S.billing_fees (id text primary key, contract_id text, operation_type text, fee_by text, vas_type_id text, standard_rate double precision,
          conditions jsonb not null default '[]'::jsonb, updated_at text)`,
     );
+    // Volume tiers of a fee (empty until the tier test). Made here: Pulse keeps whether a table exists for a minute.
+    await q(`create table $S.billing_fee_tiers (id text primary key, fee_id text, from_qty double precision, to_qty double precision, rate double precision, percentage double precision)`);
     await q(`insert into $S.warehouses values ($1, 'America/Chicago')`, [WAREHOUSE]);
     await q(`insert into $S.clients values ($1, 'Service Client')`, [customerId]);
     await q(`insert into $S.products values ('kit-1', 'KIT-1', 'Kit', 0), ('part-1', 'PART-1', 'Part', 0)`);
@@ -293,9 +295,8 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     expect((await getJobProfit(owner, kitJobId)).baseRevenueCents).toBe(5000);
     await org.query(
       `insert into "${schema}".billing_fees values
-         ('fee-kit', 'contract-1', 'Work Order', 'Per Kit', null, 4.25, '[]', '2026-11-01T00:00:00.000Z'),
-         ('fee-part', 'contract-1', 'Work Order', 'Per Component', null, 0.25, '[]', '2026-11-01T00:00:00.000Z'),
-         ('fee-some-products', 'contract-1', 'Work Order', 'Per Kit', null, 99, '[{"field":"Product","value":"x"}]', '2026-11-01T00:00:00.000Z')`,
+         ('fee-kit', 'contract-1', 'Work Order', 'Per Kit', null, 4.25, '[{"field":"__pricingMode","value":"perUnit"}]', '2026-11-01T00:00:00.000Z'),
+         ('fee-part', 'contract-1', 'Work Order', 'Per Component', null, 0.25, '[]', '2026-11-01T00:00:00.000Z')`,
     );
     // A contract that has not started yet is not read, even though it is the newest one.
     await org.query(`insert into "${schema}".billing_contracts values ('contract-next', 'Service Client next year', $1, $2, '2999-01-01', 'Approved')`, [customerId, WAREHOUSE]);
@@ -305,7 +306,8 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     expect(result).toMatchObject({ status: 'ok', updated: 2 });
     // The work order with no parts list earns the kit rate alone.
     expect((await listJobPrices(owner, flatJobId))[0]).toMatchObject({ unitPrice: '4.2500' });
-    // $4.25 a kit plus $0.25 a part times 4 parts = $5.25. The fee with conditions is left out.
+    // $4.25 a kit plus $0.25 a part times 4 parts = $5.25. The pricing mode the warehouse keeps with the
+    // conditions ("__pricingMode") is not a condition: the fee counts.
     // The job already had a price, so the contract rate starts today and the first price row stays.
     const prices = await listJobPrices(owner, kitJobId);
     expect(prices).toHaveLength(2);
@@ -319,10 +321,17 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     expect(link?.priceFromContract).toMatchObject({ contractName: 'Service Client 2026', at: expect.any(String) });
     // A second sync changes nothing.
     expect(await sync()).toMatchObject({ created: 0, updated: 0 });
+    expect(link?.contract).toMatchObject({ contractName: 'Service Client 2026', inEffect: true, billedBy: null, unitPrice: '5.2500' });
     // A price typed in Pulse afterwards is not fought over.
     await setJobPrice(owner, kitJobId, { effectiveFrom: '0001-01-01', unitPrice: '6.0000' });
     expect(await sync()).toMatchObject({ created: 0, updated: 0 });
     expect((await getJobProfit(owner, kitJobId)).baseRevenueCents).toBe(6000);
+    // ...and the job stops saying its price came from the contract, and Connected apps counts it apart.
+    const [typed] = (await getJob(owner, kitJobId)).links;
+    expect(typed?.priceFromContract).toBeNull();
+    expect(typed?.contract).toMatchObject({ inEffect: false, billedBy: null });
+    const [typedState] = await org.query<{ counts: Record<string, number> }>(`select counts from pulse.sync_state where org_id = $1 and source = 'wms'`, [org.orgId]);
+    expect(typedState?.counts).toMatchObject({ contractJobs: 1, contractTyped: 1, contractWarehouseBill: 0 });
     // When the contract rate changes, the contract wins again, from today on.
     await org.query(`update "${schema}".billing_fees set standard_rate = 4.5 where id = 'fee-kit'`);
     expect(await sync()).toMatchObject({ updated: 2 });
@@ -365,7 +374,8 @@ describe.skipIf(!ready)('warehouse extra services and contract rates', () => {
     expect((await getJobProfit(owner, done.id)).baseRevenueCents).toBe(4000);
     expect((await getJob(owner, done.id)).links[0]?.priceFromContract).toBeNull();
     const [state] = await org.query<{ counts: Record<string, number> }>(`select counts from pulse.sync_state where org_id = $1 and source = 'wms'`, [org.orgId]);
-    expect(state?.counts).toMatchObject({ contractJobs: 4, contractNotApplied: 1 });
+    // Three jobs follow the contract. The finished job keeps its own price and is counted apart.
+    expect(state?.counts).toMatchObject({ contractJobs: 3, contractNotApplied: 1, contractTyped: 0 });
     // A reader with no money still sees where the price came from: a name and a day, no amount.
     expect(Object.keys((await getJob(owner, fresh.id)).links[0]?.priceFromContract ?? {}).sort()).toEqual(['at', 'contractName']);
   }, 120_000);
