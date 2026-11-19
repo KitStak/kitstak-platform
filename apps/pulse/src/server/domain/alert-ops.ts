@@ -12,16 +12,18 @@
 import 'server-only';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { alertRules } from '@/server/db/schema';
-import { invalid, notFound } from '@/server/errors';
-import { ALERT_KINDS, type AlertKind, type AlertSeverity, type AlertStatus } from '@/lib/constants';
+import { forbidden, invalid, notFound } from '@/server/errors';
+import { ALERT_KINDS, type AlertKind, type AlertStatus } from '@/lib/constants';
 import { formatMoneyWhole } from '@/lib/format';
 import { addDays, isWorkDay, startOfMonth, workDaysBetween } from '@/lib/profit';
 import { isClockTime, type QuietHours } from '@/features/alerts/quiet-hours';
+import { ruleHasLine } from '@/features/alerts/rule-kinds';
 import type { AlertDTO, AlertRuleDTO } from '@/lib/types';
 import { isUuid, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse } from './access';
-import { createAlertRule, updateAlert, updateAlertRule, type AlertChange, type AlertRuleInput } from './alerts';
+import { createAlertRule, toRuleDTO, updateAlert, updateAlertRule, type AlertChange, type AlertRuleInput } from './alerts';
 import { loadSettings } from './settings';
 
 /* ---------------------------------------------------------------- rules with quiet hours */
@@ -39,7 +41,7 @@ function cleanQuiet(quiet: QuietHours | null | undefined): QuietHours | null {
 }
 
 /** Writes the whole scope (filters plus quiet hours) of a rule. The stock update only knows the three filters. */
-async function writeScope(ctx: DomainContext, ruleId: string, scope: AlertRuleInput['scope'], quiet: QuietHours | null): Promise<AlertRuleDTO> {
+async function writeScope(ctx: DomainContext, ruleId: string, scope: AlertRuleInput['scope'], quiet: QuietHours | null, canSeeMoney: boolean): Promise<AlertRuleDTO> {
   const next: Record<string, unknown> = {};
   for (const key of ['clientId', 'jobTypeId', 'siteId'] as const) {
     const value = scope?.[key];
@@ -48,23 +50,23 @@ async function writeScope(ctx: DomainContext, ruleId: string, scope: AlertRuleIn
   if (quiet) next.quiet = quiet;
   const [row] = await db.update(alertRules).set({ scope: next, updatedAt: new Date() }).where(and(eq(alertRules.orgId, ctx.orgId), eq(alertRules.id, ruleId), isNull(alertRules.deletedAt))).returning();
   if (!row) throw notFound('That rule');
-  return { id: row.id, name: row.name, kind: row.kind as AlertKind, threshold: row.threshold, scope: row.scope ?? {}, severity: row.severity as AlertSeverity, notifyRoles: row.notifyRoles, notifyUserIds: row.notifyUserIds, enabled: row.enabled, isSystem: row.isSystem };
+  return toRuleDTO(row, canSeeMoney);
 }
 
 /** Creates or changes a rule, quiet hours included. One call for the rule editor. */
-export async function saveAlertRuleFull(ctx: DomainContext, input: AlertRuleFullInput & { id?: string | null }): Promise<AlertRuleDTO> {
-  await requirePulse(ctx, 'alert:manage');
+export const saveAlertRuleFull = scoped(async function saveAlertRuleFull(ctx: DomainContext, input: AlertRuleFullInput & { id?: string | null }): Promise<AlertRuleDTO> {
+  const access = await requirePulse(ctx, 'alert:manage');
   const quiet = cleanQuiet(input.quiet);
   const { id, quiet: _quiet, ...rule } = input;
   void _quiet;
   const saved = id ? await updateAlertRule(ctx, id, rule) : await createAlertRule(ctx, rule);
-  return writeScope(ctx, saved.id, input.scope ?? (saved.scope as AlertRuleInput['scope']), quiet);
-}
+  return writeScope(ctx, saved.id, input.scope ?? (saved.scope as AlertRuleInput['scope']), quiet, access.seesMoney);
+});
 
 /* ---------------------------------------------------------------- inbox */
 
 /** How many alerts sit in each inbox tab. */
-export async function countAlertsByStatus(ctx: DomainContext): Promise<Readonly<Record<AlertStatus, number>> & { readonly mine: number }> {
+export const countAlertsByStatus = scoped(async function countAlertsByStatus(ctx: DomainContext): Promise<Readonly<Record<AlertStatus, number>> & { readonly mine: number }> {
   await requirePulse(ctx, 'pulse:read');
   const found = await rows<{ status: AlertStatus; n: number; mine: number }>(
     db,
@@ -76,10 +78,10 @@ export async function countAlertsByStatus(ctx: DomainContext): Promise<Readonly<
     out.mine += row.mine;
   }
   return out;
-}
+});
 
 /** The same change on many alerts. Each one is its own small transaction, so one stale row never blocks the rest. */
-export async function bulkUpdateAlerts(ctx: DomainContext, alertIds: readonly string[], change: AlertChange): Promise<{ updated: AlertDTO[]; failed: number }> {
+export const bulkUpdateAlerts = scoped(async function bulkUpdateAlerts(ctx: DomainContext, alertIds: readonly string[], change: AlertChange): Promise<{ updated: AlertDTO[]; failed: number }> {
   await requirePulse(ctx, change.action === 'assign' || change.action === 'link_task' ? 'alert:manage' : 'production:log');
   const ids = [...new Set(alertIds)].filter(isUuid).slice(0, 500);
   if (ids.length === 0) throw invalid('Pick at least one alert.');
@@ -94,7 +96,7 @@ export async function bulkUpdateAlerts(ctx: DomainContext, alertIds: readonly st
   }
   if (updated.length === 0) throw invalid('None of those alerts could be changed. Refresh the page and try again.');
   return { updated, failed };
-}
+});
 
 /* ---------------------------------------------------------------- preview */
 
@@ -174,7 +176,7 @@ const REPLAYED: readonly string[] = ['job_losing', 'job_at_risk', 'margin_below'
  * turns true (not on every day it stays true), the same way a live alert is one alert while its
  * condition lasts.
  */
-export async function previewAlertRule(ctx: DomainContext, input: RulePreviewInput): Promise<RulePreviewDTO> {
+export const previewAlertRule = scoped(async function previewAlertRule(ctx: DomainContext, input: RulePreviewInput): Promise<RulePreviewDTO> {
   const access = await requirePulse(ctx, 'alert:manage');
   if (!(ALERT_KINDS as readonly string[]).includes(input.kind)) throw invalid('Pick what the rule watches.');
   const settings = await loadSettings(ctx.orgId);
@@ -182,9 +184,18 @@ export async function previewAlertRule(ctx: DomainContext, input: RulePreviewInp
   const from = addDays(today, -29);
   const days: string[] = Array.from({ length: 30 }, (_, index) => addDays(from, index));
   const dayIndex = new Map(days.map((day, index) => [day, index]));
-  const threshold = input.threshold === null || input.threshold === undefined || input.threshold === '' ? null : Number(input.threshold);
-  const scope = input.scope ?? {};
   const money = access.seesMoney;
+  let typedLine = input.threshold === null || input.threshold === undefined || input.threshold === '' ? null : input.threshold;
+  if (!money && ruleHasLine(input.kind)) {
+    // A reader without money cannot try out a line. For a saved rule the preview uses the stored
+    // line, which stays on the server; the answer below never names it.
+    if (typedLine !== null) throw forbidden('Your Pulse role does not include money, so you cannot set the line of this rule. Ask an admin of your workspace.');
+    const ruleId = input.ruleId && isUuid(input.ruleId) ? input.ruleId : null;
+    const [saved] = ruleId ? await db.select({ threshold: alertRules.threshold, kind: alertRules.kind }).from(alertRules).where(and(eq(alertRules.orgId, ctx.orgId), eq(alertRules.id, ruleId), isNull(alertRules.deletedAt))) : [];
+    typedLine = saved && saved.kind === input.kind ? saved.threshold : null;
+  }
+  const threshold = typedLine === null ? null : Number(typedLine);
+  const scope = input.scope ?? {};
   const hits: RulePreviewHit[] = [];
   const perDay = days.map(() => 0);
   let activeToday = 0;
@@ -417,4 +428,4 @@ export async function previewAlertRule(ctx: DomainContext, input: RulePreviewInp
     hits.sort((a, b) => (a.date === b.date ? a.label.localeCompare(b.label) : a.date < b.date ? 1 : -1));
     return { from, to: today, basis: 'replay', total: hits.length, activeToday, hits: hits.slice(0, 60), perDay, note };
   }
-}
+});

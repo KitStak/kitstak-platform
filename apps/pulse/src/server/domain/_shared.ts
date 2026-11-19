@@ -7,9 +7,11 @@ import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import type { PulseContext } from '@/server/session';
 import { db, type Executor, type Transaction } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { conflict, DomainError, invalid } from '@/server/errors';
 import type { ActorKind } from '@/lib/constants';
 import type { OrgRole } from '@/lib/permissions';
+import { entryDateProblem, isTypedSource, type EntryDateKind } from '@/lib/entry-dates';
 
 /** Who is acting, in which org. Built from the request (`toDomainContext`) or by scripts. */
 export interface DomainContext {
@@ -53,11 +55,26 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 export function monthName(month: string): string {
   return MONTHS[Number(month.slice(5, 7)) - 1] ?? month;
 }
+
+/**
+ * The plain note for a month that is not over yet on month close and the month close pack (round
+ * five, decision B): they count the whole month of company costs against the work so far, while
+ * Home and Profit count only the days so far. Holds a month name, never money.
+ */
+export function fullMonthViewWords(month: string, hasCompanyCosts: boolean): string {
+  const name = monthName(month);
+  return hasCompanyCosts ? `Full month view: all of ${name}'s company costs, set against the work so far.` : `Full month view: ${name} is not over yet, so these are the numbers so far.`;
+}
+
+/** "October 2026" for 2026-10 or 2026-10-01: a month named with its year, so two Octobers never look alike. */
+export function monthYear(month: string): string {
+  return /^\d{4}-\d{2}/.test(month) ? `${monthName(month)} ${month.slice(0, 4)}` : monthName(month);
+}
 export const monthStart = (date: string): string => `${date.slice(0, 7)}-01`;
 
 /** The words every closed month refusal uses (SPEC 4.16). */
 export function monthClosedError(month: string): DomainError {
-  return conflict(`${monthName(month)} is closed. Ask the owner to reopen it.`);
+  return conflict(`${monthYear(month)} is closed. Ask the owner to reopen it.`);
 }
 
 interface PgErrorLike {
@@ -254,4 +271,41 @@ export function singular(unitLabel: string | null | undefined): string {
   if (/(xes|ses|zes|ches|shes)$/i.test(word)) return word.slice(0, -2);
   if (/s$/i.test(word) && !/ss$/i.test(word) && word.length > 2) return word.slice(0, -1);
   return word;
+}
+
+/**
+ * Extra service entries with no price: work that earned nothing on paper. This is the one count
+ * behind Home "Things to fix" and the month close checklist, so the two never disagree. It counts
+ * entries on a job and entries put on a client with no job (most warehouse entries), and leaves
+ * out deleted entries and the entries of a deleted job. With `from` and `to` it counts those days.
+ * Without them it counts every month that is still open, because a closed month cannot be fixed.
+ */
+export const countServiceEntriesNoPrice = scoped(async function countServiceEntriesNoPrice(executor: Executor, orgId: string, scope: { readonly from?: string; readonly to?: string; readonly siteId?: string | null } = {}): Promise<number> {
+  const dated = scope.from && scope.to;
+  const [row] = await rows<{ n: number }>(
+    executor,
+    sql`SELECT count(*)::int AS n
+          FROM pulse.vas_entries v LEFT JOIN pulse.jobs j ON j.id = v.job_id
+         WHERE v.org_id = ${orgId} AND v.deleted_at IS NULL AND v.amount_cents IS NULL AND (v.job_id IS NULL OR j.deleted_at IS NULL)
+           ${scope.siteId ? sql`AND v.site_id = ${scope.siteId}` : sql``}
+           ${
+             dated
+               ? sql`AND v.work_date BETWEEN ${scope.from}::date AND ${scope.to}::date`
+               : sql`AND NOT EXISTS (SELECT 1 FROM pulse.periods p WHERE p.org_id = v.org_id AND p.status = 'closed' AND p.period_month = date_trunc('month', v.work_date)::date)`
+           }`,
+  );
+  return row?.n ?? 0;
+}, 1);
+
+/**
+ * The one date rule for typed entries (`@/lib/entry-dates`): not after today at the site and not
+ * more than 10 years before it. Checked when a row is new or its date changes (`before` is the
+ * date the row has now), so an old row can still be fixed. Rows from another app keep their dates.
+ * Throws VALIDATION with the note on `field`.
+ */
+export function assertEntryDate(kind: EntryDateKind, timezone: string, date: string, options: { readonly field?: string; readonly source?: string | null; readonly before?: string | null } = {}): void {
+  if (!isTypedSource(options.source)) return;
+  if (options.before && options.before === date) return;
+  const problem = entryDateProblem(kind, date, todayInZone(timezone));
+  if (problem) throw invalid(problem.message, { [options.field ?? 'workDate']: problem.field });
 }

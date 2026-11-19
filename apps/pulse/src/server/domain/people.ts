@@ -3,11 +3,12 @@ import 'server-only';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { member, user } from '@kitstak/db/schema';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { parseOrgRole } from '@/lib/permissions';
 import type { OrgPerson, PersonRef } from '@/lib/types';
 import type { DomainContext } from './_shared';
 import { wmsTable } from '@kitstak/db/wms-tenants';
-import { wmsTableExists, wmsTenantSchemaFor } from '@/server/integrations/detect';
+import { siblingDb, wmsTableExists, wmsTenantSchemaFor } from '@/server/integrations/detect';
 
 /**
  * Emails of system accounts (API / integration users) that must never show up as teammates in
@@ -20,7 +21,7 @@ async function serviceAccountEmails(orgId: string): Promise<Set<string>> {
     const schema = await wmsTenantSchemaFor(orgId);
     if (!schema || !(await wmsTableExists(schema, 'users'))) return new Set();
     // Always on the pool (never inside a caller's transaction, so a failure can't abort it).
-    const result = await db.execute<{ email: string }>(
+    const result = await siblingDb.execute<{ email: string }>(
       sql`select lower(email) as email from ${wmsTable(schema, 'users')} where is_api_user = true`,
     );
     return new Set(result.rows.map((row) => row.email));
@@ -30,7 +31,7 @@ async function serviceAccountEmails(orgId: string): Promise<Set<string>> {
 }
 
 /** Every active human member of the org, alphabetical (service accounts are left out of pickers). */
-export async function listOrgPeople(ctx: DomainContext, executor: Executor = db): Promise<OrgPerson[]> {
+export const listOrgPeople = scoped(async function listOrgPeople(ctx: DomainContext, executor: Executor = db): Promise<OrgPerson[]> {
   const [rows, serviceEmails] = await Promise.all([
     executor
     .select({
@@ -55,19 +56,19 @@ export async function listOrgPeople(ctx: DomainContext, executor: Executor = db)
     out.push({ id: row.id, name: row.name, email: row.email, image: row.image, title: row.title, orgRole });
   }
   return out;
-}
+});
 
 /** True when the user is an active member of the actor's org. */
-export async function isOrgMember(ctx: DomainContext, userId: string, executor: Executor = db): Promise<boolean> {
+export const isOrgMember = scoped(async function isOrgMember(ctx: DomainContext, userId: string, executor: Executor = db): Promise<boolean> {
   const [row] = await executor
     .select({ role: member.role })
     .from(member)
     .where(and(eq(member.organizationId, ctx.orgId), eq(member.userId, userId)));
   return Boolean(row && parseOrgRole(row.role));
-}
+});
 
 /** Filters ids down to active org members (owner and assignee validation). */
-export async function filterOrgMembers(
+export const filterOrgMembers = scoped(async function filterOrgMembers(
   ctx: DomainContext,
   userIds: readonly string[],
   executor: Executor = db,
@@ -78,7 +79,7 @@ export async function filterOrgMembers(
     .from(member)
     .where(and(eq(member.organizationId, ctx.orgId), inArray(member.userId, [...new Set(userIds)])));
   return rows.filter((row) => parseOrgRole(row.role)).map((row) => row.userId);
-}
+});
 
 export async function getPeople(ids: readonly string[], executor: Executor = db): Promise<Map<string, PersonRef>> {
   const unique = [...new Set(ids.filter(Boolean))];

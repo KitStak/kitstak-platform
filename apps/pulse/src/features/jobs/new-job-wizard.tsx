@@ -5,7 +5,7 @@
  * or as a copy of a past job. Everything typed here becomes the job's quote.
  */
 import { useRouter } from 'next/navigation';
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -26,6 +26,7 @@ import {
   Field,
   IconButton,
   Input,
+  IsoDatePicker,
   Select,
   Textarea,
   ToggleGroup,
@@ -65,6 +66,8 @@ import type {
   VasServiceDTO,
 } from '@/lib/types';
 import { createJobAction, type CreateJobActionInput } from '@/server/actions/jobs';
+import { clientBoxProblem } from '@/lib/client-names';
+import { ClientCombo } from './client-combo';
 import { singularUnit } from './job-math';
 import { Explain } from './job-ui';
 import {
@@ -185,7 +188,9 @@ export function NewJobWizard(props: NewJobWizardProps) {
   } = props;
   const router = useRouter();
   const formId = useId();
-  const clientListId = useId();
+  const [clientNew, setClientNew] = useState(false);
+  const [clientOpen, setClientOpen] = useState(false);
+  const clientRef = useRef<HTMLInputElement>(null);
   const general = jobTypes.find((type) => type.code === 'GENERAL') ?? jobTypes[0];
   const defaultSite = sites.find((site) => site.isDefault) ?? sites[0];
   const classFor = (type: JobTypeDTO | undefined) =>
@@ -432,7 +437,12 @@ export function NewJobWizard(props: NewJobWizardProps) {
 
   const validate = (upTo: number): Record<string, string> => {
     const next: Record<string, string> = {};
-    if (!form.client.trim()) next.client = 'Pick a client or type a new name.';
+    // Two clients for one company split its profit in two. A new client is only made from the Create row.
+    const clientProblem = clientBoxProblem(
+      { text: form.client, clientId: matchedClient?.id ?? null, createNew: clientNew },
+      clients,
+    );
+    if (clientProblem) next.client = clientProblem;
     if (!form.name.trim()) next.name = 'Give the job a name.';
     if (form.units.trim() && readDecimal(form.units, 3) === null) next.units = 'Type a number, like 5000.';
     if (form.kind === 'one_time' && form.pricingModel === 'per_unit' && !form.units.trim())
@@ -482,7 +492,9 @@ export function NewJobWizard(props: NewJobWizardProps) {
       const found = validate(step);
       setErrors(found);
       if (Object.keys(found).length > 0) {
-        toast.error('Something needs a second look', Object.values(found)[0]);
+        // A client slip is said under the Client box, with the keyboard in the box, the same as quick add.
+        if (found.client) clientRef.current?.focus();
+        else toast.error('Something needs a second look', Object.values(found)[0]);
         return;
       }
     }
@@ -505,6 +517,7 @@ export function NewJobWizard(props: NewJobWizardProps) {
       name: form.name.trim(),
       clientId: matchedClient?.id ?? null,
       clientName: matchedClient ? null : form.client.trim(),
+      createClient: !matchedClient && clientNew,
       jobTypeId: form.jobTypeId || null,
       siteId: form.siteId || null,
       kind: form.kind,
@@ -557,7 +570,10 @@ export function NewJobWizard(props: NewJobWizardProps) {
       return;
     }
     if (!result.ok) {
-      setErrors(result.error.fields ?? {});
+      const fields = result.error.fields ?? {};
+      setErrors(fields);
+      // A client name the server refused is fixed on the first step, in the Client box.
+      if (fields.clientId ?? fields.clientName) setStep(0);
       toast.error("Couldn't save the job", result.error.message);
       return;
     }
@@ -623,7 +639,7 @@ export function NewJobWizard(props: NewJobWizardProps) {
         <div className="flex flex-col gap-3 p-4">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <p className="text-xs text-fg-muted">Margin after all costs</p>
+              <p className="text-xs text-fg-muted">Job margin</p>
               <p
                 className={cn(
                   'text-xl font-semibold tracking-tight tabular-nums',
@@ -818,36 +834,27 @@ export function NewJobWizard(props: NewJobWizardProps) {
                   goTo(1);
                 }}
               >
-                <Field
-                  label="Client"
-                  required
-                  error={errors.client || errors.clientId}
-                  hint={
-                    form.client.trim() && !matchedClient
-                      ? `"${form.client.trim()}" is new. Pulse adds it as a client when you save.`
-                      : 'Who the work is for.'
-                  }
-                >
-                  {({ inputId, describedBy, invalid }) => (
-                    <>
-                      <Input
-                        id={inputId}
-                        aria-describedby={describedBy}
-                        invalid={invalid}
-                        list={clientListId}
-                        value={form.client}
-                        onChange={(event) => set('client', event.target.value)}
-                        placeholder="Pick or type a client"
-                        autoComplete="off"
-                        size="lg"
-                        data-testid="wizard-client"
-                      />
-                      <datalist id={clientListId}>
-                        {clients.map((item) => (
-                          <option key={item.id} value={item.name} />
-                        ))}
-                      </datalist>
-                    </>
+                <Field label="Client" required>
+                  {({ inputId }) => (
+                    <ClientCombo
+                      id={inputId}
+                      inputRef={clientRef}
+                      error={errors.client || errors.clientId || errors.clientName || null}
+                      hint={
+                        form.client.trim() && !matchedClient && clientNew
+                          ? `"${form.client.trim()}" is new. Pulse adds it as a client when you save.`
+                          : 'Who the work is for.'
+                      }
+                      clients={clients}
+                      value={{ text: form.client, clientId: matchedClient?.id ?? null, createNew: clientNew && !matchedClient }}
+                      onChange={(next) => {
+                        set('client', next.text);
+                        setClientNew(next.createNew);
+                      }}
+                      open={clientOpen}
+                      onOpenChange={setClientOpen}
+                      testId="wizard-client"
+                    />
                   )}
                 </Field>
                 <Field
@@ -912,7 +919,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                       invalid={invalid}
                       value={form.units}
                       onChange={(event) => set('units', event.target.value)}
-                      placeholder="5000"
                       inputMode="decimal"
                       size="lg"
                       data-testid="wizard-units"
@@ -936,12 +942,13 @@ export function NewJobWizard(props: NewJobWizardProps) {
                 </Field>
                 <Field label="Start date">
                   {({ inputId }) => (
-                    <Input
+                    <IsoDatePicker
                       id={inputId}
-                      type="date"
-                      value={form.startDate}
-                      onChange={(event) => set('startDate', event.target.value)}
+                      aria-label="Start date"
+                      value={form.startDate || null}
+                      onChange={(value) => set('startDate', value ?? '')}
                       size="lg"
+                      data-testid="wizard-start"
                     />
                   )}
                 </Field>
@@ -951,13 +958,13 @@ export function NewJobWizard(props: NewJobWizardProps) {
                   hint="Pulse warns you when the pace will miss it."
                 >
                   {({ inputId, describedBy, invalid }) => (
-                    <Input
+                    <IsoDatePicker
                       id={inputId}
+                      aria-label="Due date"
                       aria-describedby={describedBy}
                       invalid={invalid}
-                      type="date"
-                      value={form.dueDate}
-                      onChange={(event) => set('dueDate', event.target.value)}
+                      value={form.dueDate || null}
+                      onChange={(value) => set('dueDate', value ?? '')}
                       size="lg"
                       data-testid="wizard-due"
                     />
@@ -1040,7 +1047,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                         invalid={invalid}
                         value={form.unitPrice}
                         onChange={(event) => set('unitPrice', event.target.value)}
-                        placeholder="1.25"
                         inputMode="decimal"
                         size="lg"
                         leadingIcon={<span className="text-fg-muted">$</span>}
@@ -1066,7 +1072,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                         invalid={invalid}
                         value={form.fixedPrice}
                         onChange={(event) => set('fixedPrice', event.target.value)}
-                        placeholder="12500"
                         inputMode="decimal"
                         size="lg"
                         leadingIcon={<span className="text-fg-muted">$</span>}
@@ -1088,7 +1093,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                         invalid={invalid}
                         value={form.billRate}
                         onChange={(event) => set('billRate', event.target.value)}
-                        placeholder="38"
                         inputMode="decimal"
                         size="lg"
                         leadingIcon={<span className="text-fg-muted">$</span>}
@@ -1147,7 +1151,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                         invalid={invalid}
                         value={form.laborHours}
                         onChange={(event) => set('laborHours', event.target.value)}
-                        placeholder="120"
                         inputMode="decimal"
                         size="lg"
                         data-testid="wizard-hours"
@@ -1185,7 +1188,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                         invalid={invalid}
                         value={form.pace}
                         onChange={(event) => set('pace', event.target.value)}
-                        placeholder="40"
                         inputMode="decimal"
                         size="lg"
                         data-testid="wizard-pace"
@@ -1209,7 +1211,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                       invalid={invalid}
                       value={form.setupHours}
                       onChange={(event) => set('setupHours', event.target.value)}
-                      placeholder="0"
                       inputMode="decimal"
                       size="lg"
                       data-testid="wizard-setup"
@@ -1250,7 +1251,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                       invalid={invalid}
                       value={form.rate}
                       onChange={(event) => set('rate', event.target.value)}
-                      placeholder="22.50"
                       inputMode="decimal"
                       size="lg"
                       leadingIcon={<span className="text-fg-muted">$</span>}
@@ -1290,7 +1290,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                           invalid={invalid}
                           value={form.materialPerUnit}
                           onChange={(event) => set('materialPerUnit', event.target.value)}
-                          placeholder="0.45"
                           inputMode="decimal"
                           size="lg"
                           leadingIcon={<span className="text-fg-muted">$</span>}
@@ -1345,7 +1344,6 @@ export function NewJobWizard(props: NewJobWizardProps) {
                               ),
                             )
                           }
-                          placeholder="250"
                           inputMode="decimal"
                           leadingIcon={<span className="text-fg-muted">$</span>}
                           data-testid={`wizard-other-amount-${index}`}

@@ -91,13 +91,13 @@ export function renderAlertWords(kind: string, params: Params, seesMoney: boolea
     case 'deal_won_no_job':
       return { title: `${text(params, 'dealName') || 'A won deal'} has no job yet`, body: 'This deal was won in the CRM and Pulse has no job for it.', nextStep: 'Create the job' };
     case 'daily_digest':
-      return { title: `${number(params, 'count')} things need you today`, body: 'Open your alerts to see them, worst first.', nextStep: 'Open alerts' };
+      return { title: number(params, 'count') === 1 ? '1 thing needs you today' : `${number(params, 'count')} things need you today`, body: 'Open your alerts to see them, worst first.', nextStep: 'Open alerts' };
     case 'report_ready':
       return { title: `${text(params, 'reportName') || 'Your report'} is ready`, body: 'Open it to download the file.', nextStep: 'Open the report' };
     case 'day_sent_back':
       return { title: `${text(params, 'date')} was sent back`, body: text(params, 'note') || 'A manager asked for a fix on this day.', nextStep: 'Open the day' };
     case 'day_completed':
-      return { title: `${text(params, 'date')} is ready for review`, body: number(params, 'flags') > 0 ? `${number(params, 'flags')} rows look odd.` : 'Nothing looks odd.', nextStep: 'Review the day' };
+      return { title: `${text(params, 'date')} is ready for review`, body: number(params, 'flags') > 0 ? number(params, 'flags') === 1 ? '1 row looks odd.' : `${number(params, 'flags')} rows look odd.` : 'Nothing looks odd.', nextStep: 'Review the day' };
     case 'role_changed':
       return { title: 'Your Pulse role changed', body: 'Open Pulse to see what you can do now.', nextStep: null };
     default:

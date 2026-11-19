@@ -10,6 +10,7 @@
 import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { invalid, notFound } from '@/server/errors';
 import { EXPLAIN_METRICS, type ExplainMetric } from '@/lib/constants';
 import { perHourCents, subCents } from '@/lib/money';
@@ -33,8 +34,8 @@ const TITLES: Readonly<Record<ExplainMetric, string>> = {
   shared: 'Time not on a job',
   cost: 'Cost',
   profit: 'Profit',
-  margin: 'Margin on jobs',
-  margin_before_shared: 'Margin before shared costs',
+  margin: 'Job margin',
+  margin_before_shared: 'Job margin before time not on a job',
   labor_pct: 'Labor as % of revenue',
   uph: 'Units per person per hour',
   cost_per_unit: 'Cost per unit',
@@ -52,8 +53,8 @@ const FORMULAS: Readonly<Record<ExplainMetric, string>> = {
   shared: 'Time not on a job is paid time for meetings, cleanup and waiting. Pulse spreads it over the jobs that ran in the same period.',
   cost: 'Cost is labor, plus material, plus other costs, plus the time not on a job these jobs carry.',
   profit: 'Profit is revenue less cost.',
-  margin: 'Margin on jobs is profit on jobs as a share of revenue. Overhead and paid time on no job are not in it. The company margin takes those out too.',
-  margin_before_shared: 'Margin before shared costs leaves out time not on a job. It shows what the work itself made.',
+  margin: 'Job margin is profit on jobs as a share of revenue. Overhead and paid time on no job are not in it. The company margin takes those out too.',
+  margin_before_shared: 'This is the job margin with time not on a job left out. It shows what the work itself made.',
   labor_pct: 'Labor as % of revenue is labor cost as a share of revenue. Lower is better.',
   uph: 'Units per person per hour is good units over all labor hours.',
   cost_per_unit: 'Cost per unit is all cost over good units.',
@@ -175,11 +176,11 @@ function moneyLines(metric: ExplainMetric, total: ProfitRowDTO): Line[] {
     case 'profit':
       return [line('Revenue', t.revenueCents, 'money', 'start'), line('Labor', t.laborCents, 'money', 'minus'), line('Material', t.materialCents, 'money', 'minus'), line('Other costs', t.otherCents, 'money', 'minus'), line('Time not on a job', t.sharedCents, 'money', 'minus'), line('Profit', t.profitCents, 'money', 'total')];
     case 'margin':
-      return [line('Profit', t.profitCents, 'money', 'start'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Margin on jobs', t.marginBp, 'percent', 'total')];
+      return [line('Profit', t.profitCents, 'money', 'start'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Job margin', t.marginBp, 'percent', 'total'), line('Before time not on a job', t.marginBeforeSharedBp, 'percent', 'note')];
     case 'margin_before_shared': {
       // The same pure summary the profit rows use, so "before shared costs" is one rule everywhere.
       const before = t.revenueCents === null ? null : centsOut(profitSummary({ revenueCents: BigInt(t.revenueCents), laborCents: BigInt(t.laborCents ?? 0), materialCents: BigInt(t.materialCents ?? 0), otherCents: BigInt(t.otherCents ?? 0), sharedCents: BigInt(t.sharedCents ?? 0) }).profitBeforeSharedCents);
-      return [line('Revenue', t.revenueCents, 'money', 'start'), line('Labor', t.laborCents, 'money', 'minus'), line('Material', t.materialCents, 'money', 'minus'), line('Other costs', t.otherCents, 'money', 'minus'), line('Profit before shared costs', before, 'money', 'total'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Margin before shared costs', t.marginBeforeSharedBp, 'percent', 'total')];
+      return [line('Revenue', t.revenueCents, 'money', 'start'), line('Labor', t.laborCents, 'money', 'minus'), line('Material', t.materialCents, 'money', 'minus'), line('Other costs', t.otherCents, 'money', 'minus'), line('Profit before time not on a job', before, 'money', 'total'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Job margin before time not on a job', t.marginBeforeSharedBp, 'percent', 'total')];
     }
     case 'labor_pct':
       return [line('Labor', t.laborCents, 'money', 'start'), line('Revenue', t.revenueCents, 'money', 'divide'), line('Labor as % of revenue', t.laborPctBp, 'percent', 'total')];
@@ -206,7 +207,7 @@ function moneyLines(metric: ExplainMetric, total: ProfitRowDTO): Line[] {
  * Explains one number for a scope (a job, a client, a job type, a service, a site, or everything)
  * and a date range. `metric` is one of `EXPLAIN_METRICS`.
  */
-export async function explain(ctx: DomainContext, metric: string, scope: ExplainScope): Promise<ExplainDTO> {
+export const explain = scoped(async function explain(ctx: DomainContext, metric: string, scope: ExplainScope): Promise<ExplainDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   if (!(EXPLAIN_METRICS as readonly string[]).includes(metric)) throw invalid('Pick a number to explain: revenue, cost, profit, margin, labor, units or hours.');
   for (const id of [scope.siteId, scope.clientId, scope.jobTypeId, scope.jobId, scope.vasServiceId]) if (id && !isUuid(id)) throw invalid('One of the filters is not valid.');
@@ -218,7 +219,7 @@ export async function explain(ctx: DomainContext, metric: string, scope: Explain
   }
   const key = metric as ExplainMetric;
   const money = access.seesMoney;
-  const filters: ProfitFilters = { from: scope.from, to: scope.to, siteId: scope.siteId ?? null, clientId: scope.clientId ?? null, jobTypeId: scope.jobTypeId ?? null, jobId: scope.jobId ?? null, vasServiceId: scope.vasServiceId ?? null, status: scope.status ?? null };
+  const filters: ProfitFilters = { from: scope.from, to: scope.to, siteId: scope.siteId ?? null, clientId: scope.clientId ?? null, jobTypeId: scope.jobTypeId ?? null, jobId: scope.jobId ?? null, vasServiceId: scope.vasServiceId ?? null, status: scope.status ?? null, companyCostSpread: scope.companyCostSpread ?? null };
   const [profit, words, quality, settings] = await Promise.all([getProfit(ctx, 'month', filters), scopeWords(ctx, filters), qualityLines(ctx, filters), loadSettings(ctx.orgId)]);
   const total = profit.total;
   let lines: Line[] = moneyLines(key, total);
@@ -243,16 +244,33 @@ export async function explain(ctx: DomainContext, metric: string, scope: Explain
     formula = `${FORMULAS.shared} ${SHARED_RULE_WORDS[settings.sharedCostRule] ?? ''}`.trim();
     links.push({ label: 'See the time not on a job', href: routes.labor('time') });
   } else if (key === 'company_profit') {
-    const bridge = await getCompanyBridge(ctx, { from: filters.from, to: filters.to, siteId: filters.siteId ?? null });
+    const bridge = await getCompanyBridge(ctx, { from: filters.from, to: filters.to, siteId: filters.siteId ?? null, spread: filters.companyCostSpread ?? null });
+    // A step below zero adds to profit. It reads "plus" with the amount above zero, never "less" with a minus sign.
+    const step = (takes: string, adds: string, cents: number | null): Line => (cents !== null && cents < 0 ? line(adds, -cents, 'money', 'plus') : line(takes, cents, 'money', 'minus'));
     lines = [
       line('Profit on jobs', bridge.workProfitCents, 'money', 'start'),
-      line('Time not on a job that no job carried', bridge.sharedGapCents, 'money', 'minus'),
-      line('Paid time not on any job', bridge.missingCostCents, 'money', 'minus'),
-      ...(bridge.hasCompanyCosts ? [line('Overhead your hourly rate did not cover', bridge.overheadGapCents, 'money', 'minus'), line('Company costs you typed in', bridge.companyCostCents, 'money', 'note'), line('Overhead your hourly rates already covered', bridge.overheadAbsorbedCents, 'money', 'note')] : []),
+      // Left out at zero, so it does not sit as an empty twin above "Paid time not on any job".
+      ...(bridge.sharedGapCents === 0 ? [] : [step('Time not on a job that no job carried', 'Jobs carried more time not on a job than was logged', bridge.sharedGapCents)]),
+      step('Paid time not on any job', 'Paid time not on any job', bridge.missingCostCents),
+      ...(bridge.hasCompanyCosts
+        ? [
+            step('Overhead your hourly rate did not cover', 'Your hourly rate covered more overhead than you spent', bridge.overheadGapCents),
+            line(bridge.companyCostPartial ? 'Company costs counted for these days' : 'Company costs you typed in', bridge.companyCostCents, 'money', 'note'),
+            line(bridge.companyCostPartial ? 'Overhead your hourly rates covered on those days' : 'Overhead your hourly rates already covered', bridge.overheadAbsorbedCents, 'money', 'note'),
+          ]
+        : []),
       line('Company profit', bridge.companyProfitCents, 'money', 'total'),
     ];
     if (!bridge.hasCompanyCosts) formula = `${FORMULAS.company_profit} No company costs were typed in for these days, so Pulse trusts the overhead inside your hourly rates.`;
     else if ((bridge.overheadGapCents ?? 0) < 0) formula = `${FORMULAS.company_profit} Your hourly rate covered more overhead than you spent, which adds to profit.`;
+    // Company costs are monthly. A part month counts its share by day, and the popover says so.
+    if (bridge.hasCompanyCosts && bridge.companyCostPartial) {
+      formula =
+        bridge.companyCostSpread === 'work_days'
+          ? `${formula} Company costs are monthly, so part of a month counts its share by work day. A day that is not a working day gets no share, even if work was logged on it.`
+          : `${formula} Company costs are monthly, so part of a month counts its share by calendar day. Every day of the month carries the same share, days off too.`;
+    }
+    if (bridge.companyCostNote) quality.push(bridge.companyCostNote);
     if (bridge.overLoggedDays > 0) quality.push(`${bridge.overLoggedDays} ${bridge.overLoggedDays === 1 ? 'day has' : 'days have'} more hours logged than paid.`);
     links.push({ label: 'See where paid time went', href: routes.labor('time') });
   } else if (key === 'material' || key === 'other' || key === 'revenue') {
@@ -261,6 +279,19 @@ export async function explain(ctx: DomainContext, metric: string, scope: Explain
     links.push({ label: 'See the entries', href: entriesHref(filters) });
   }
 
+  // An extra service with revenue and no cost of any kind: the margin is not known, so it never reads 100%.
+  if (money && total.costMissing) {
+    // Cost and profit are not known either: never $0.00, never the revenue (round four, designer issue 4).
+    const unknown = new Set(['Cost', 'Profit', 'Cost per unit', 'Profit before time not on a job']);
+    lines = lines.map((item) =>
+      item.unit === 'percent' && item.value === null
+        ? { ...item, unit: 'text' as const, value: null, text: 'No cost yet' }
+        : unknown.has(item.label) && item.unit === 'money'
+          ? { ...item, unit: 'text' as const, value: null, text: 'Not known' }
+          : item,
+    );
+    quality.push('No labor hours or parts are logged for this work, so Pulse does not know what it cost. The margin shows once a cost is logged.');
+  }
   if (!money) lines = lines.map((item) => (item.unit === 'money' || item.unit === 'money_per_hour' || item.unit === 'money_per_unit' || item.unit === 'percent' ? { ...item, value: null } : item));
   // Pace, units and hours do not depend on prices, so a missing price is not their problem.
   const neutral = key === 'units' || key === 'hours' || key === 'uph';
@@ -278,7 +309,7 @@ export async function explain(ctx: DomainContext, metric: string, scope: Explain
     to: filters.to,
     moneyHidden: !money && lines.some((item) => item.value === null),
   };
-}
+});
 
 /** Money and unit safe label for a metric (tooltips, search). */
 export function explainTitle(metric: ExplainMetric): string {

@@ -37,7 +37,7 @@ test.describe('profit', () => {
   test('Home answers in two lines and lists the jobs that need you', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('home-answer')).toContainText('Your jobs made');
-    await expect(page.getByTestId('home-answer')).toContainText('the company made');
+    await expect(page.getByTestId('home-answer')).toContainText(/the company made/i);
     await expect(page.getByTestId('home-tiles').locator('section')).toHaveCount(6);
     await expect(page.getByTestId('home-logged')).toContainText('logged today');
     await page.getByTestId('explain-company_profit').click();

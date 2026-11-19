@@ -24,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Field,
+  IsoDatePicker,
   IconButton,
   SearchInput,
   Skeleton,
@@ -34,6 +35,7 @@ import {
   toast,
 } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
+import { ScrollX } from '@/components/ui/scroll-x';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { PersonAvatar } from '@/components/pulse/person';
 import { Teach } from '@/components/pulse/teach';
@@ -43,7 +45,8 @@ import { useShell } from '@/features/shell/shell-context';
 import { SavedViewsBar } from '@/features/views/saved-views-bar';
 import { useUrlState, useUrlText } from '@/features/views/use-url-state';
 import { apiGet, apiPath } from '@/lib/api-client';
-import { formatRelative } from '@/lib/dates';
+import { RelativeTime } from '@/components/pulse/local-time';
+import { addDaysIso, formatRelative } from '@/lib/dates';
 import { formatMoney, formatMoneyPlain } from '@/lib/format';
 import { usePeople } from '@/lib/hooks/use-data';
 import { shortDate } from '@/lib/profit/calendar';
@@ -233,13 +236,15 @@ export function AlertsView({ initialOpen, initialSnoozed, today, canManageRules 
     <div className="flex flex-col gap-4" data-testid="alerts">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Tabs value={tab} onValueChange={(value) => (setTab(value as InboxTab), setSelected(new Set()))}>
-          <TabsList variant="pill" aria-label="Alert lists" className="max-w-full overflow-x-auto">
+          <ScrollX label="Alert lists" tabStop={false} fade="app" className="max-w-full">
+          <TabsList variant="pill" aria-label="Alert lists">
             {INBOX_TABS.map((item) => (
               <TabsTrigger key={item.id} value={item.id} variant="pill" count={counts[item.id]} className="shrink-0 whitespace-nowrap" aria-controls="alerts-panel" data-testid={`alerts-tab-${item.id}`}>
                 {item.label}
               </TabsTrigger>
             ))}
           </TabsList>
+          </ScrollX>
         </Tabs>
         <div className="flex flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none">
           <SearchInput value={search} onValueChange={setSearch} placeholder="Search alerts" aria-label="Search alerts" containerClassName="min-w-0 flex-1 sm:w-56 sm:flex-none" />
@@ -497,11 +502,13 @@ function AlertRow({
                     ) : undefined
                   }
                   align="start"
-                  className="size-5"
+                  className="size-5 pointer-coarse:size-6"
                 />
               </span>
             ) : null}
-            <span>First seen {formatRelative(alert.firstSeenAt)}</span>
+            <span>
+              First seen <RelativeTime iso={alert.firstSeenAt} />
+            </span>
             {alert.assignedTo ? (
               <span className="inline-flex items-center gap-1" data-testid="alert-assignee">
                 <PersonAvatar userId={alert.assignedTo} size="xs" showName />
@@ -596,15 +603,16 @@ function PickDayDialog({ today, count, onCancel, onPick }: { readonly today: str
           <DialogBody>
             <Field label="Bring it back on" error={error} required>
               {({ inputId, describedBy, invalid }) => (
-                <input
+                <IsoDatePicker
                   id={inputId}
-                  type="date"
-                  min={today}
-                  value={day}
+                  min={addDaysIso(today, 1)}
+                  value={day || null}
                   aria-describedby={describedBy}
-                  aria-invalid={invalid || undefined}
-                  onChange={(event) => (setDay(event.target.value), setError(null))}
-                  className={cn('h-9 w-full rounded-md border bg-panel px-2.5 text-sm text-fg outline-none focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]', invalid ? 'border-danger' : 'border-border-input')}
+                  invalid={invalid}
+                  clearable={false}
+                  size="lg"
+                  placeholder="Pick a day"
+                  onChange={(value) => (setDay(value ?? ''), setError(null))}
                   data-testid="snooze-day"
                 />
               )}

@@ -15,6 +15,8 @@ export interface ChartSeries {
   readonly label: string;
   /** One value per x position. `null` is a gap ("no data"), never zero. */
   readonly values: readonly (number | null)[];
+  /** Words for a gap at that position in the tooltip and the table ("Not known"). Left out, a gap reads "No data". */
+  readonly gapText?: readonly (string | null)[];
   /** A CSS color. Leave it out to take the next palette slot. */
   readonly color?: string;
 }
@@ -44,7 +46,7 @@ function toCategories({ labels, dates, bucket = 'day' }: ChartXProps): { categor
 }
 
 function withColors(series: readonly ChartSeries[], offset = 0): XYSeries[] {
-  return series.map((item, index) => ({ id: item.id, label: item.label, values: item.values, color: item.color ?? seriesColor(index + offset) }));
+  return series.map((item, index) => ({ id: item.id, label: item.label, values: item.values, gapText: item.gapText, color: item.color ?? seriesColor(index + offset) }));
 }
 
 // --- Line and area ------------------------------------------------------------------------

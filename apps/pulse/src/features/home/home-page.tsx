@@ -4,10 +4,12 @@ import { Page } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { parsePeriod, searchGetter } from '@/features/profit/period';
+import { HOME_ATTENTION_LIMIT } from '@/lib/constants';
 import { landingPath } from '@/lib/nav';
 import { suggestBucket } from '@/lib/profit/trends';
+import { compareRange } from '@/lib/reports';
 import { routes } from '@/lib/routes';
-import { getProfit, getSettings, getSummary, listSites, todayInZone } from '@/server/domain';
+import { getProfit, getSettings, getSummary, listJobsNeedingAttention, listSites, todayInZone } from '@/server/domain';
 import { pulsePage } from '@/server/page';
 import { HomeView } from './home-view';
 
@@ -41,7 +43,15 @@ export async function HomePage({ searchParams }: { readonly searchParams?: Promi
   const weekStart = settings?.weekStart ?? 1;
   const period = parsePeriod(searchGetter(query), today, weekStart);
   const range = { from: period.from, to: period.to };
-  const [summary, trend] = await Promise.all([soft(getSummary(page.ctx, range)), soft(getProfit(page.ctx, suggestBucket(range), range))]);
+  // Everything above the fold is read here, so the first screen arrives whole: the "vs before"
+  // chips and the jobs that need you do not pop in later and push the page down.
+  const prior = compareRange('prior', range) as { from: string; to: string };
+  const [summary, trend, before, attention] = await Promise.all([
+    soft(getSummary(page.ctx, range)),
+    soft(getProfit(page.ctx, suggestBucket(range), range)),
+    soft(getProfit(page.ctx, 'month', prior)),
+    soft(listJobsNeedingAttention(page.ctx, HOME_ATTENTION_LIMIT)),
+  ]);
   const name = firstName(page.context.user.name);
   return (
     <Page
@@ -56,7 +66,7 @@ export async function HomePage({ searchParams }: { readonly searchParams?: Promi
         ) : null
       }
     >
-      <HomeView today={today} weekStart={weekStart} targetMarginBp={settings?.defaultTargetMarginBp ?? 3000} initialSummary={summary} initialTrend={trend} initialRange={range} />
+      <HomeView today={today} weekStart={weekStart} targetMarginBp={page.access.seesMoney ? (settings?.defaultTargetMarginBp ?? 3000) : null} initialSummary={summary} initialTrend={trend} initialBefore={before} initialAttention={attention} initialRange={range} />
     </Page>
   );
 }

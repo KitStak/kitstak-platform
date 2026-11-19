@@ -29,6 +29,14 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 export const SHARED_COST_RULES = ['by_labor_hours', 'full', 'percent_of_labor', 'none'] as const;
 export type SharedCostRule = (typeof SHARED_COST_RULES)[number];
 
+/**
+ * How company costs (monthly) are shared out over a range that is part of a month (4.9):
+ * `calendar` gives every day of the month the same share, `work_days` gives the share only to
+ * working days (`settings.working_days`). A whole month is the same either way.
+ */
+export const COMPANY_COST_SPREADS = ['calendar', 'work_days'] as const;
+export type CompanyCostSpreadMode = (typeof COMPANY_COST_SPREADS)[number];
+
 export const SHARED_SPREADS = ['day', 'week', 'month'] as const;
 export type SharedSpread = (typeof SHARED_SPREADS)[number];
 

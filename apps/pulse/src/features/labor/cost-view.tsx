@@ -32,6 +32,7 @@ import { centsToNumber, perHourCents, ratioBp, sumCents } from '@/lib/money';
 import { routes } from '@/lib/routes';
 import type { ProfitRowDTO, SiteDTO } from '@/lib/types';
 import { RangeBar, useRange } from './range-bar';
+import { cn } from '@/components/ui/cn';
 
 const perHour = (cents: number | null, hours: string | number): number | null => {
   if (cents === null) return null;
@@ -257,7 +258,29 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
                 },
               ]}
             />
-            <div className="mt-4 overflow-x-auto">
+            {/* Phones: one card per labor class, with the cost as label and value. */}
+            <ul className="mt-4 flex flex-col divide-y divide-border-subtle border-t border-border-subtle sm:hidden" aria-label="Labor cost by labor class" data-testid="labor-class-cards">
+              {data.byClass.map((row) => {
+                const hours = Number(row.directHours) + Number(row.indirectHours);
+                const overtime = hours > 0 && Number(row.overtimeHours) > 0 ? formatPercentBp(hoursShareBp(Number(row.overtimeHours), hours)) : null;
+                return (
+                  <li key={row.laborClassId ?? 'none'} className="flex flex-col gap-2 py-3">
+                    <p className="text-sm font-medium text-fg">
+                      {row.name}
+                      {row.needsRate > 0 ? <span className="ml-2 text-xs font-normal text-warning-text">{row.needsRate} with no rate</span> : null}
+                    </p>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm tabular-nums">
+                      <StatPair label="Labor cost" value={formatMoney(row.laborCents)} strong />
+                      <StatPair label="Cost of an hour" value={formatMoney(perHour(row.laborCents, row.directHours), { empty: 'None' })} strong />
+                      <StatPair label="Labor hours" value={formatHours(row.directHours)} />
+                      <StatPair label="Not on a job" value={row.indirectCents ? formatMoney(row.indirectCents) : 'None'} />
+                      {overtime ? <StatPair label="Overtime share" value={overtime} /> : null}
+                    </dl>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-4 hidden overflow-x-auto sm:block">
               <Table className="min-w-[620px]">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
@@ -358,7 +381,21 @@ function GroupTable({
       ) : sorted.length === 0 ? (
         <p className="px-4 py-6 text-sm text-fg-muted">No labor cost in these days.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <ul className="flex flex-col divide-y divide-border-subtle sm:hidden" aria-label={title} data-testid="labor-group-cards">
+          {sorted.map((row) => (
+            <li key={row.key} className="flex flex-col gap-2 px-4 py-3">
+              <p className="truncate text-sm font-medium text-fg">{row.label}</p>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm tabular-nums">
+                <StatPair label="Labor cost" value={formatMoney(row.laborCents)} strong />
+                <StatPair label="Cost of an hour" value={formatMoney(perHour(row.laborCents, row.hours), { empty: 'None' })} strong />
+                <StatPair label="Labor hours" value={formatHours(row.hours)} />
+                {row.laborPctBp === null ? null : <StatPair label="Share of revenue" value={formatPercentBp(row.laborPctBp)} />}
+              </dl>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto sm:block">
           <Table className="min-w-[520px]">
             <TableHead>
               <TableRow className="hover:bg-transparent">
@@ -388,7 +425,18 @@ function GroupTable({
             </TableBody>
           </Table>
         </div>
+        </>
       )}
     </Panel>
+  );
+}
+
+/** One label and value of a phone card. */
+function StatPair({ label, value, strong }: { readonly label: string; readonly value: string; readonly strong?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-fg-muted">{label}</dt>
+      <dd className={cn('text-fg', strong && 'font-medium')}>{value}</dd>
+    </div>
   );
 }

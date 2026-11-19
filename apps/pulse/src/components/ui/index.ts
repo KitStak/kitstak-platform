@@ -26,6 +26,7 @@ export * from './empty-state';
 export * from './illustrations';
 export * from './kbd';
 export * from './scroll-area';
+export * from './scroll-x';
 export * from './color-picker';
 export * from './date-picker';
 export * from './toggle-group';

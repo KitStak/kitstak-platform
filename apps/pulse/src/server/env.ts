@@ -40,6 +40,26 @@ const envSchema = z.object({
   /** Bearer token for scheduled routes (Vercel Cron sends `Authorization: Bearer $CRON_SECRET`). */
   CRON_SECRET: z.string().min(16).optional(),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(5),
+  /**
+   * `1` turns the database guard on: every query runs as the plain role `pulse_app` with the
+   * workspace set, so row level security applies to the app (CONTRACTS section 12, rule 13).
+   * Off when unset. Needs migrations 0009 and 0012. `GET /api/health` with the health token shows
+   * `guard: { on, active, ready, reason }`. If the login cannot use the role, the app keeps
+   * running as the login role and logs a loud error (see `src/server/db.ts`).
+   * Read straight from `process.env` in `src/server/db/scope.ts`; listed here so it is documented.
+   */
+  PULSE_DB_GUARD: z.string().optional(),
+  /**
+   * Optional, for the two login setup (CONTRACTS section 12, rule 13): the owner login. When set,
+   * `DATABASE_URL` is a login that owns nothing and may only become `pulse_app`, and the work that
+   * runs as the owner (`asSystem`, better auth, the guard off) uses this URL. Unset: one login.
+   */
+  PULSE_OWNER_DATABASE_URL: z
+    .string()
+    .refine((value) => /^postgres(ql)?:\/\//.test(value), 'PULSE_OWNER_DATABASE_URL must be a postgres:// URL')
+    .optional(),
+  /** Optional token that unlocks the detailed `GET /api/health` answer (header `x-health-token`). Same rule as CRM. */
+  HEALTH_TOKEN: z.string().min(24, 'HEALTH_TOKEN must be at least 24 characters').optional(),
 });
 
 export type ServerEnv = z.infer<typeof envSchema>;

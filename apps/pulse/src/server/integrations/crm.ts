@@ -8,9 +8,9 @@
  */
 import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
-import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { rows, type DomainContext } from '@/server/domain/_shared';
-import { integrationAvailability, tableExists } from './detect';
+import { integrationAvailability, tableExists, siblingDb } from './detect';
 import { logSoftFail } from './log';
 
 export interface CrmDeal {
@@ -44,7 +44,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LOST = /\blost\b|closed[\s_-]?lost|\bdead\b|\bdisqualified\b/i;
 
 /** CRM is licensed and its tables are here. */
-export async function crmReady(ctx: DomainContext): Promise<boolean> {
+export const crmReady = scoped(async function crmReady(ctx: DomainContext): Promise<boolean> {
   try {
     if (!(await integrationAvailability(ctx)).crm) return false;
     return (await tableExists('crm.items')) && (await tableExists('crm.boards')) && (await tableExists('crm.columns'));
@@ -52,7 +52,7 @@ export async function crmReady(ctx: DomainContext): Promise<boolean> {
     logSoftFail(ctx.orgId, 'crm.crmReady', error);
     return false;
   }
-}
+});
 
 interface DealRow {
   id: string;
@@ -77,7 +77,7 @@ const STAGE_LABEL = sql`(select l from crm.columns c,
 async function dealRows(ctx: DomainContext, where: SQL, order: SQL, limit: number): Promise<CrmDeal[]> {
   const customer = (await tableExists('crm.customer_links')) ? sql`(select cl.core_customer_id::text from crm.customer_links cl where cl.item_id = a.id limit 1)` : sql`null::text`;
   const found = await rows<DealRow>(
-    db,
+    siblingDb,
     sql`select d.*, d.label ->> 'name' as stage_name, coalesce(d.label ->> 'isDone', 'false') = 'true' as won
           from (
             select i.id::text as id, i.name, i.board_id::text as board_id, i.values #>> '{stage,labelId}' as stage_id, ${STAGE_LABEL} as label,
@@ -129,7 +129,7 @@ export const SEARCH_ORDER = sql`(coalesce(d.label ->> 'isDone', 'false') = 'true
 const idList = (ids: readonly string[]): SQL => sql`(${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`;
 
 /** Deals by id. Ids that are not uuids are ignored, so one odd id cannot break a read. */
-export async function getDeals(ctx: DomainContext, ids: readonly string[]): Promise<CrmDeal[]> {
+export const getDeals = scoped(async function getDeals(ctx: DomainContext, ids: readonly string[]): Promise<CrmDeal[]> {
   const clean = [...new Set(ids.filter((id) => UUID.test(id)))];
   if (clean.length === 0 || !(await crmReady(ctx))) return [];
   try {
@@ -138,10 +138,10 @@ export async function getDeals(ctx: DomainContext, ids: readonly string[]): Prom
     logSoftFail(ctx.orgId, 'crm.getDeals', error);
     return [];
   }
-}
+});
 
 /** Won deals, newest close date first. */
-export async function listWonDeals(ctx: DomainContext, options: { limit?: number; sinceDays?: number } = {}): Promise<CrmDeal[]> {
+export const listWonDeals = scoped(async function listWonDeals(ctx: DomainContext, options: { limit?: number; sinceDays?: number } = {}): Promise<CrmDeal[]> {
   if (!(await crmReady(ctx))) return [];
   try {
     const since = options.sinceDays
@@ -152,10 +152,10 @@ export async function listWonDeals(ctx: DomainContext, options: { limit?: number
     logSoftFail(ctx.orgId, 'crm.listWonDeals', error);
     return [];
   }
-}
+});
 
 /** Deals whose name or account matches the text, won deals first. */
-export async function searchDeals(ctx: DomainContext, query: string, limit = 12): Promise<CrmDeal[]> {
+export const searchDeals = scoped(async function searchDeals(ctx: DomainContext, query: string, limit = 12): Promise<CrmDeal[]> {
   if (!(await crmReady(ctx))) return [];
   try {
     const text = query.trim().slice(0, 80);
@@ -165,16 +165,16 @@ export async function searchDeals(ctx: DomainContext, query: string, limit = 12)
     logSoftFail(ctx.orgId, 'crm.searchDeals', error);
     return [];
   }
-}
+});
 
 /** Accounts by id, with the health label and the shared customer id when the account has one. */
-export async function getAccounts(ctx: DomainContext, ids: readonly string[]): Promise<CrmAccount[]> {
+export const getAccounts = scoped(async function getAccounts(ctx: DomainContext, ids: readonly string[]): Promise<CrmAccount[]> {
   const clean = [...new Set(ids.filter((id) => UUID.test(id)))];
   if (clean.length === 0 || !(await crmReady(ctx))) return [];
   try {
     const customer = (await tableExists('crm.customer_links')) ? sql`(select cl.core_customer_id::text from crm.customer_links cl where cl.item_id = i.id limit 1)` : sql`null::text`;
     const found = await rows<{ id: string; name: string; board_id: string; health: string | null; core_customer_id: string | null }>(
-      db,
+      siblingDb,
       sql`select i.id::text as id, i.name, i.board_id::text as board_id, ${customer} as core_customer_id,
                  (select l ->> 'name' from crm.columns c,
                     jsonb_array_elements(case when jsonb_typeof(c.settings -> 'labels') = 'array' then c.settings -> 'labels' else '[]'::jsonb end) l
@@ -187,4 +187,4 @@ export async function getAccounts(ctx: DomainContext, ids: readonly string[]): P
     logSoftFail(ctx.orgId, 'crm.getAccounts', error);
     return [];
   }
-}
+});

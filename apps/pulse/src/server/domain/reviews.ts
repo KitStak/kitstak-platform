@@ -5,6 +5,7 @@
 import 'server-only';
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { dayReviews } from '@/server/db/schema';
 import { conflict, invalid } from '@/server/errors';
 import type { DayReviewStatus } from '@/lib/constants';
@@ -35,7 +36,7 @@ export function toDayReviewDTO(row: ReviewRow): DayReviewDTO {
  * The odd rows of a day: units with no hours, pace under 50% or over 200% of the target pace,
  * and more hours logged than paid. Numbers and ids only.
  */
-export async function dayFlags(ctx: DomainContext, siteId: string, date: string): Promise<Record<string, unknown>[]> {
+export const dayFlags = scoped(async function dayFlags(ctx: DomainContext, siteId: string, date: string): Promise<Record<string, unknown>[]> {
   const flags: Record<string, unknown>[] = [];
   const jobs = await rows<{ job_id: string; number: string; units: string; pace_hours: string; unconfirmed: boolean; target: string | null }>(
     db,
@@ -64,10 +65,10 @@ export async function dayFlags(ctx: DomainContext, siteId: string, date: string)
   );
   if (day?.over_logged) flags.push({ kind: 'more_hours_than_paid', loggedHours: Number(day.direct_hours) + Number(day.indirect_hours), paidHours: Number(day.paid_hours) });
   return flags;
-}
+});
 
 /** "Mark day complete": locks the day for supervisors and stores its odd rows for the manager. */
-export async function markDayComplete(ctx: DomainContext, input: { siteId?: string | null; date: string }): Promise<DayReviewDTO> {
+export const markDayComplete = scoped(async function markDayComplete(ctx: DomainContext, input: { siteId?: string | null; date: string }): Promise<DayReviewDTO> {
   await requirePulse(ctx, 'production:log');
   const site = await resolveSite(ctx, input.siteId);
   await assertOpen(db, ctx.orgId, [input.date]);
@@ -84,10 +85,10 @@ export async function markDayComplete(ctx: DomainContext, input: { siteId?: stri
     await logActivity(tx, ctx, { verb: 'day.completed', entityType: 'day', after: { status: 'complete', flags: flags.length }, meta: { siteId: site.id, workDate: input.date } });
     return toDayReviewDTO(row!);
   });
-}
+});
 
 /** A manager approves a completed day, or sends it back with a note (which unlocks it for the floor). */
-export async function reviewDay(ctx: DomainContext, input: { siteId: string; date: string; decision: 'approve' | 'send_back' | 'reopen'; note?: string | null }): Promise<DayReviewDTO | null> {
+export const reviewDay = scoped(async function reviewDay(ctx: DomainContext, input: { siteId: string; date: string; decision: 'approve' | 'send_back' | 'reopen'; note?: string | null }): Promise<DayReviewDTO | null> {
   await requirePulse(ctx, 'day:review');
   const site = await getSiteRow(ctx, input.siteId);
   const note = cleanText(input.note);
@@ -110,10 +111,10 @@ export async function reviewDay(ctx: DomainContext, input: { siteId: string; dat
     await logActivity(tx, ctx, { verb: status === 'approved' ? 'day.approved' : 'day.sent_back', entityType: 'day', before: { status: existing?.status ?? null }, after: { status, note }, meta: { siteId: site.id, workDate: input.date } });
     return toDayReviewDTO(row!);
   });
-}
+});
 
 /** The manager queue (`/log/review`): days by status, newest first. */
-export async function listDayReviews(ctx: DomainContext, filters: { siteId?: string | null; from?: string | null; to?: string | null; status?: DayReviewStatus | null } = {}): Promise<DayReviewDTO[]> {
+export const listDayReviews = scoped(async function listDayReviews(ctx: DomainContext, filters: { siteId?: string | null; from?: string | null; to?: string | null; status?: DayReviewStatus | null } = {}): Promise<DayReviewDTO[]> {
   await requirePulse(ctx, 'pulse:read');
   const found = await db
     .select()
@@ -130,4 +131,4 @@ export async function listDayReviews(ctx: DomainContext, filters: { siteId?: str
     .orderBy(desc(dayReviews.workDate))
     .limit(400);
   return found.map(toDayReviewDTO);
-}
+});

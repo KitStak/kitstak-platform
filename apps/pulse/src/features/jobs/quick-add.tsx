@@ -3,15 +3,18 @@
  * Quick add: client, job name, units, price per unit, Enter. The job starts at once with the
  * General job type and a quote made from the price. "More options" opens the full wizard.
  */
-import { useId, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { CornerDownLeft, Plus } from 'lucide-react';
 import { Button, Input, toast } from '@/components/ui';
 import { ButtonLink } from '@/components/pulse/button-link';
+import { clientBoxProblem, matchClientName } from '@/lib/client-names';
 import { formatMoney } from '@/lib/format';
 import { mulQuantityPrice } from '@/lib/money';
 import { routes } from '@/lib/routes';
 import type { ClientDTO, JobDetailDTO } from '@/lib/types';
+import { deleteClientAction } from '@/server/actions/catalog';
 import { deleteJobAction, quickAddJobAction } from '@/server/actions/jobs';
+import { ClientCombo, NO_CLIENT, type ClientChoice } from './client-combo';
 
 const NUMBER = /^\d+(\.\d{1,3})?$/;
 const PRICE = /^\d+(\.\d{1,4})?$/;
@@ -27,9 +30,10 @@ export function QuickAddJob({
   readonly clients: readonly ClientDTO[];
   readonly onAdded: (job: JobDetailDTO) => void;
 }) {
-  const listId = useId();
   const clientRef = useRef<HTMLInputElement>(null);
-  const [client, setClient] = useState('');
+  const nameRef = useRef<HTMLInputElement>(null);
+  const [client, setClient] = useState<ClientChoice>(NO_CLIENT);
+  const [clientOpen, setClientOpen] = useState(false);
   const [name, setName] = useState('');
   const [units, setUnits] = useState('');
   const [price, setPrice] = useState('');
@@ -43,17 +47,30 @@ export function QuickAddJob({
 
   const submit = async () => {
     const next: Record<string, string> = {};
-    if (!client.trim()) next.client = 'Pick a client or type a new name.';
+    // The client must be one from the list, or a new one the person chose to create. Loose text
+    // that is the exact name of a client counts as that client; anything else has to be picked.
+    const typedClient = client.text.trim();
+    const found = matchClientName(typedClient, clients);
+    const clientId = client.clientId ?? found.exact?.id ?? null;
+    const makeClient = clientId === null && client.createNew;
+    const clientProblem = clientBoxProblem(client, clients);
+    if (clientProblem) next.client = clientProblem;
     if (!name.trim()) next.name = 'Give the job a name.';
     if (unitsText && !NUMBER.test(unitsText)) next.units = 'Type a number, like 5000.';
     if (priceText && !PRICE.test(priceText)) next.price = 'Type a price, like 1.25.';
     setErrors(next);
-    if (Object.keys(next).length > 0) return;
-    const match = clients.find((item) => item.name.toLowerCase() === client.trim().toLowerCase());
+    if (Object.keys(next).length > 0) {
+      if (next.client) {
+        clientRef.current?.focus();
+        setClientOpen(true);
+      }
+      return;
+    }
     setSaving(true);
     const result = await quickAddJobAction({
-      clientId: match?.id ?? null,
-      clientName: match ? null : client.trim(),
+      clientId,
+      clientName: clientId ? null : typedClient,
+      createClient: makeClient,
       name: name.trim(),
       plannedUnits: unitsText || null,
       unitPrice: priceText || null,
@@ -61,29 +78,42 @@ export function QuickAddJob({
     setSaving(false);
     if (!result.ok) {
       setErrors(result.error.fields ?? {});
-      toast.error("Couldn't add the job", result.error.message);
+      if (result.error.fields?.clientId ?? result.error.fields?.clientName) clientRef.current?.focus();
+      else toast.error("Couldn't add the job", result.error.message);
       return;
     }
     const job = result.data;
+    // The new client is a client like any other from here on, so the next job can reuse it.
+    setClient({ text: job.clientName, clientId: job.clientId, createNew: false });
     setName('');
     setUnits('');
     setPrice('');
     onAdded(job);
-    clientRef.current?.focus();
+    nameRef.current?.focus();
     toast.undo(`Added ${job.number}: ${job.name}`, {
       id: `job-add:${job.id}`,
-      description: 'It is active from today. Open it to add a plan and see the margin.',
+      description: makeClient
+        ? `Also made the new client ${job.clientName}. The job is active from today.`
+        : 'It is active from today. Open it to add a plan and see the margin.',
       onUndo: async () => {
         const gone = await deleteJobAction({ jobId: job.id });
-        if (!gone.ok) toast.error("Couldn't undo", gone.error.message);
+        if (!gone.ok) {
+          toast.error("Couldn't undo", gone.error.message);
+          return;
+        }
+        // Undo takes back the client this add made too, so no empty client is left behind.
+        if (makeClient) {
+          const clientGone = await deleteClientAction({ clientId: job.clientId });
+          if (clientGone.ok) setClient(NO_CLIENT);
+        }
         onAdded(job);
       },
     });
   };
 
+  const clientError = errors.client ?? errors.clientId ?? errors.clientName ?? null;
+  // The client box shows its own message, right under the box.
   const firstError =
-    errors.client ??
-    errors.clientId ??
     errors.name ??
     errors.units ??
     errors.plannedUnits ??
@@ -102,27 +132,31 @@ export function QuickAddJob({
       }}
       noValidate
     >
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(100px,1.1fr)_minmax(110px,1.6fr)_84px_104px_auto_auto] lg:grid-cols-[minmax(140px,1.1fr)_minmax(160px,1.6fr)_110px_120px_auto_auto] md:items-center">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(100px,1.1fr)_minmax(110px,1.6fr)_84px_104px_auto_auto] lg:grid-cols-[minmax(140px,1.1fr)_minmax(160px,1.6fr)_110px_120px_auto_auto] md:items-start">
         <div className="col-span-2 md:col-span-1">
-          <Input
-            ref={clientRef}
-            list={listId}
+          <ClientCombo
+            clients={clients}
             value={client}
-            onChange={(event) => setClient(event.target.value)}
-            placeholder="Client"
-            aria-label="Client"
-            invalid={Boolean(errors.client ?? errors.clientId)}
-            autoComplete="off"
-            data-testid="quick-client"
+            onChange={(next) => {
+              setClient(next);
+              if (errors.client ?? errors.clientId ?? errors.clientName)
+                setErrors((current) =>
+                  Object.fromEntries(
+                    Object.entries(current).filter(([key]) => !['client', 'clientId', 'clientName'].includes(key)),
+                  ),
+                );
+            }}
+            onPicked={() => nameRef.current?.focus()}
+            open={clientOpen}
+            onOpenChange={setClientOpen}
+            error={clientError}
+            inputRef={clientRef}
+            testId="quick-client"
           />
-          <datalist id={listId}>
-            {clients.map((item) => (
-              <option key={item.id} value={item.name} />
-            ))}
-          </datalist>
         </div>
         <div className="col-span-2 md:col-span-1">
           <Input
+            ref={nameRef}
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Job name, like Holiday gift kits"
@@ -175,7 +209,7 @@ export function QuickAddJob({
             revenue. Open the job after to add a plan and see the margin.
           </>
         ) : (
-          'Fast way in: type the four boxes and press Enter. The job starts today.'
+          'Fast way in: pick the client, type the other three boxes and press Enter. The job starts today.'
         )}
       </p>
     </form>

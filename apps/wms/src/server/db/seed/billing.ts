@@ -1,7 +1,8 @@
 /**
  * 3PL billing: five contracts with four fees (one tiered). Each has a September bill (Approved,
  * exported) and an October bill (Draft; Approved for HRB) whose consolidated and detailed lines are
- * computed from the replayed activity, and twelve VAS operations.
+ * computed from the replayed activity, twelve VAS operations, and the contract rates for extra
+ * services and kitting that KitStak Pulse reads (`ensureContractRates`).
  */
 import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import * as schema from '@/server/db/schema';
@@ -372,6 +373,110 @@ async function seedVas(w: World, tx: Tx): Promise<number> {
   return VAS_PLAN.length;
 }
 
+/**
+ * Contract rates for the work Pulse turns into money: extra services billed by quantity (VAS fees)
+ * and kitting (Work Order fees). They sit on the approved contracts next to the four activity
+ * fees and are not part of the seeded September and October bills.
+ *
+ *  - VAS: a rate per quantity service the client buys. Cycle counts stay unpriced on purpose, and
+ *    Voltbyte and Summit Trail have no contract, so a few records still show "no price".
+ *  - Work Order: a rate per kit, and for Copperline a kit rate plus a rate per part.
+ */
+const CONTRACT_RATES: readonly {
+  readonly client: string;
+  readonly name: string;
+  readonly operationType: 'VAS' | 'Work Order';
+  readonly feeBy: 'Operation' | 'Per Kit' | 'Per Component';
+  readonly chargeBy: string;
+  readonly vasType?: string;
+  readonly rate: number;
+}[] = [
+  { client: 'NVF', name: 'Programming (per hour)', operationType: 'VAS', feeBy: 'Operation', chargeBy: 'Operation Value', vasType: 'Programming (hours)', rate: 65 },
+  { client: 'NVF', name: 'Return Additional Item (each)', operationType: 'VAS', feeBy: 'Operation', chargeBy: 'Operation Value', vasType: 'Return Additional Item', rate: 1.75 },
+  { client: 'BLB', name: 'Return Additional Item (each)', operationType: 'VAS', feeBy: 'Operation', chargeBy: 'Operation Value', vasType: 'Return Additional Item', rate: 1.5 },
+  { client: 'CPL', name: 'Grade B Pallet (each)', operationType: 'VAS', feeBy: 'Operation', chargeBy: 'Operation Value', vasType: 'Grade B Pallet', rate: 14.5 },
+  { client: 'HRB', name: 'Grade B Pallet (each)', operationType: 'VAS', feeBy: 'Operation', chargeBy: 'Operation Value', vasType: 'Grade B Pallet', rate: 14.5 },
+  { client: 'APX', name: 'Kitting (per kit)', operationType: 'Work Order', feeBy: 'Per Kit', chargeBy: 'Kit (UOM Quantity)', rate: 2.75 },
+  { client: 'HRB', name: 'Kitting (per kit)', operationType: 'Work Order', feeBy: 'Per Kit', chargeBy: 'Kit (UOM Quantity)', rate: 6.25 },
+  { client: 'NVF', name: 'Kitting (per kit)', operationType: 'Work Order', feeBy: 'Per Kit', chargeBy: 'Kit (UOM Quantity)', rate: 9.5 },
+  { client: 'CPL', name: 'Kitting (per kit)', operationType: 'Work Order', feeBy: 'Per Kit', chargeBy: 'Kit (UOM Quantity)', rate: 4.25 },
+  { client: 'CPL', name: 'Kitting (per part)', operationType: 'Work Order', feeBy: 'Per Component', chargeBy: 'Component (UOM Quantity)', rate: 0.25 },
+];
+
+/**
+ * Adds the contract rates above to each client's approved contract. Idempotent on (contract,
+ * fee name): safe on a live database, and a rate someone edited is never overwritten. Returns
+ * what it added and what was already there.
+ */
+export async function ensureContractRates(tx: Tx): Promise<{ created: string[]; skipped: string[] }> {
+  const created: string[] = [];
+  const skipped: string[] = [];
+  await forEachSeq(CONTRACT_RATES, async (def) => {
+    const label = `contract rate ${def.client} ${def.name}`;
+    const contract = await dbGet<{ id: string }>(
+      tx,
+      sql`SELECT bc.id FROM billing_contracts bc JOIN clients c ON c.id = bc.client_id
+          WHERE c.code = ${def.client} AND bc.approval_status = 'Approved' ORDER BY bc.calc_start_date DESC, bc.id LIMIT 1`,
+    );
+    if (!contract) return;
+    const vasTypeId = def.vasType
+      ? ((await dbGet<{ id: string }>(tx, sql`SELECT id FROM lookup_values WHERE type = 'vas_type' AND name = ${def.vasType} ORDER BY created_at LIMIT 1`))?.id ?? null)
+      : null;
+    if (def.vasType && !vasTypeId) return;
+    const existing = await dbGet<{ id: string }>(tx, sql`SELECT id FROM billing_fees WHERE contract_id = ${contract.id} AND name = ${def.name} LIMIT 1`);
+    if (existing) {
+      skipped.push(label);
+      return;
+    }
+    await tx.insert(schema.billingFees).values({
+      contractId: contract.id,
+      name: def.name,
+      operationType: def.operationType,
+      feeBy: def.feeBy,
+      chargeBy: def.chargeBy,
+      vasTypeId,
+      standardRate: def.rate,
+      pricingMode: 'perUnit',
+    });
+    created.push(label);
+  });
+  return { created, skipped };
+}
+
+const KITTING_VAS = { client: 'HRB', vasType: 'Grade B Pallet', value: 2, note: 'Two pallets built for the gift box work order' } as const;
+
+/**
+ * One extra service done for a work order: pallets for the client's newest completed work order,
+ * logged on the day it finished and pointing at it ("Work Order" reference). KitStak Pulse puts
+ * this record on the job linked to that work order. Idempotent on (client, note).
+ */
+export async function ensureKittingVas(tx: Tx): Promise<{ created: string[]; skipped: string[] }> {
+  const label = `VAS operation ${KITTING_VAS.client} ${KITTING_VAS.vasType} for a work order`;
+  const order = await dbGet<{ code: string; clientId: string; warehouseId: string; finishedAt: string }>(
+    tx,
+    sql`SELECT wo.code, wo.client_id AS "clientId", wo.warehouse_id AS "warehouseId", wo.actual_finish_at AS "finishedAt"
+        FROM work_orders wo JOIN clients c ON c.id = wo.client_id
+        WHERE c.code = ${KITTING_VAS.client} AND wo.status = 'Completed' AND wo.actual_finish_at IS NOT NULL
+        ORDER BY wo.actual_finish_at DESC LIMIT 1`,
+  );
+  const vasType = await dbGet<{ id: string }>(tx, sql`SELECT id FROM lookup_values WHERE type = 'vas_type' AND name = ${KITTING_VAS.vasType} ORDER BY created_at LIMIT 1`);
+  if (!order || !vasType) return { created: [], skipped: [] };
+  const existing = await dbGet<{ id: string }>(tx, sql`SELECT id FROM vas_operations WHERE client_id = ${order.clientId} AND note = ${KITTING_VAS.note} LIMIT 1`);
+  if (existing) return { created: [], skipped: [label] };
+  await tx.insert(schema.vasOperations).values({
+    clientId: order.clientId,
+    warehouseId: order.warehouseId,
+    vasTypeId: vasType.id,
+    operationAt: order.finishedAt,
+    calculationType: 'Vas Quantity',
+    value: KITTING_VAS.value,
+    note: KITTING_VAS.note,
+    referenceOrderType: 'Work Order',
+    referenceNumber: order.code,
+  });
+  return { created: [label], skipped: [] };
+}
+
 export async function seedBilling(w: World, tx: Tx): Promise<void> {
   await seedContract(w, tx, 'APX', 'Monthly', 'Apparel 3PL 2026', false);
   await seedContract(w, tx, 'NVF', 'SemiMonthly', 'Electronics 3PL 2026', false);
@@ -379,4 +484,6 @@ export async function seedBilling(w: World, tx: Tx): Promise<void> {
   await seedContract(w, tx, 'BLB', 'Monthly', 'Retail + DTC 2026', false);
   await seedContract(w, tx, 'HRB', 'Monthly', 'Wholesale 2026', true);
   await seedVas(w, tx);
+  await ensureContractRates(tx);
+  await ensureKittingVas(tx);
 }

@@ -27,7 +27,7 @@ import { deleteAlertRuleAction } from '@/server/actions/alerts';
 import { saveAlertRuleFullAction, type SaveAlertRuleFullActionInput } from '@/server/actions/money-ops';
 import type { RulePreviewDTO } from '@/server/domain/alert-ops';
 import { clockLabel, quietOf, quietSentence, type QuietHours } from './quiet-hours';
-import { RULE_GROUPS, RULE_KINDS, readThreshold, ruleSentence, tellSentence, thresholdText, tidyThreshold } from './rule-kinds';
+import { RULE_GROUPS, RULE_KINDS, readThreshold, ruleSentence, storedRuleName, tellSentence, thresholdText, tidyThreshold, type RuleFacts } from './rule-kinds';
 
 interface Named {
   readonly id: string;
@@ -120,7 +120,8 @@ function toInput(draft: Draft, stored: string | null): SaveAlertRuleFullActionIn
   const scope = info.scoped && draft.scopeKind !== 'all' && draft.scopeId ? { [SCOPE_KEY[draft.scopeKind]]: draft.scopeId } : {};
   return {
     id: draft.id,
-    name: ruleSentence(draft.kind, stored).replace(/\.$/, ''),
+    // The stored name never holds the line (no dollars, no percent): readers without money see it too.
+    name: storedRuleName(draft.kind),
     kind: draft.kind,
     threshold: stored,
     scope,
@@ -132,8 +133,12 @@ function toInput(draft: Draft, stored: string | null): SaveAlertRuleFullActionIn
   };
 }
 
-export function RulesView({ initialRules, canManage, options }: { readonly initialRules: readonly AlertRuleDTO[]; readonly canManage: boolean; readonly options: RuleOptions }) {
+/** The rule as this reader may see it: the full sentence, or the one with the line left out. */
+const sentenceWith = (rule: AlertRuleDTO, facts: RuleFacts): string => ((ALERT_KINDS as readonly string[]).includes(rule.kind) ? ruleSentence(rule.kind, rule.threshold, { moneyHidden: rule.moneyHidden, facts }) : rule.name);
+
+export function RulesView({ initialRules, canManage, options, facts = {} }: { readonly initialRules: readonly AlertRuleDTO[]; readonly canManage: boolean; readonly options: RuleOptions; readonly facts?: RuleFacts }) {
   const queryClient = useQueryClient();
+  const sentenceOf = (rule: AlertRuleDTO): string => sentenceWith(rule, facts);
   const rulesQuery = useAlertRules({ initialData: [...initialRules] });
   const rules = rulesQuery.data ?? [];
   const people = usePeople();
@@ -159,7 +164,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
       return;
     }
     await refresh();
-    if (!quiet) toast.undo(enabled ? 'Rule turned on' : 'Rule turned off', { description: ruleSentence(rule.kind, rule.threshold), onUndo: () => setEnabled(rule, !enabled, true) });
+    if (!quiet) toast.undo(enabled ? 'Rule turned on' : 'Rule turned off', { description: sentenceOf(rule), onUndo: () => setEnabled(rule, !enabled, true) });
   };
 
   const remove = async (rule: AlertRuleDTO) => {
@@ -172,7 +177,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
       return;
     }
     toast.undo('Rule deleted', {
-      description: ruleSentence(rule.kind, rule.threshold),
+      description: sentenceOf(rule),
       onUndo: async () => {
         const back = await saveAlertRuleFullAction({ ...toInput(toDraft(rule), rule.threshold === null ? null : tidyThreshold(rule.threshold)), id: null, name: rule.name });
         if (!back.ok) throw new Error(back.error.message);
@@ -192,10 +197,10 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
     const known = (ALERT_KINDS as readonly string[]).includes(rule.kind);
     return (
       <li key={rule.id} className="flex flex-wrap items-start gap-3 px-4 py-3.5" data-testid="rule-row" data-kind={rule.kind} data-enabled={rule.enabled}>
-        {canManage ? <Switch size="sm" className="mt-0.5" checked={rule.enabled} onCheckedChange={(value) => void setEnabled(rule, value)} aria-label={`${rule.enabled ? 'Turn off' : 'Turn on'}: ${rule.name}`} data-testid="rule-toggle" /> : null}
+        {canManage ? <Switch size="sm" className="mt-0.5" checked={rule.enabled} onCheckedChange={(value) => void setEnabled(rule, value)} aria-label={`${rule.enabled ? 'Turn off' : 'Turn on'}: ${sentenceOf(rule)}`} data-testid="rule-toggle" /> : null}
         <div className={cn('min-w-0 flex-1 basis-[240px]', !rule.enabled && 'opacity-60')}>
           <p className="text-sm font-semibold text-fg" data-testid="rule-sentence">
-            {known ? ruleSentence(rule.kind, rule.threshold) : rule.name}
+            {sentenceOf(rule)}
           </p>
           <p className="mt-0.5 text-sm text-fg-secondary">
             {[scope, tellSentence(rule.notifyRoles, names)].filter(Boolean).join(' · ')}
@@ -209,11 +214,11 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
                 {quietSentence(quiet)}
               </Badge>
             ) : null}
-            {!rule.enabled ? (
-              <Badge tone="neutral" size="sm">
-                Off
+            <span data-testid="rule-state">
+              <Badge tone={rule.enabled ? 'success' : 'neutral'} size="sm">
+                {rule.enabled ? 'On' : 'Off'}
               </Badge>
-            ) : null}
+            </span>
           </div>
         </div>
         {canManage && known ? (
@@ -221,7 +226,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
             <Button size="sm" variant="secondary" leadingIcon={<Pencil aria-hidden />} onClick={() => setDraft(toDraft(rule))} data-testid="rule-edit">
               Change
             </Button>
-            {!rule.isSystem ? <IconButton label={`Delete the rule: ${rule.name}`} icon={<Trash2 aria-hidden />} variant="ghost" size="sm" onClick={() => void remove(rule)} data-testid="rule-delete" /> : null}
+            {!rule.isSystem ? <IconButton label={`Delete the rule: ${sentenceOf(rule)}`} icon={<Trash2 aria-hidden />} variant="ghost" size="sm" onClick={() => void remove(rule)} data-testid="rule-delete" /> : null}
           </div>
         ) : null}
       </li>
@@ -231,7 +236,11 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
   return (
     <div className="flex flex-col gap-5" data-testid="rules">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-2xl text-sm text-fg-secondary">A rule is one plain sentence. When it comes true, an alert lands in the inbox and the people you picked get a message.</p>
+        <p className="max-w-2xl text-sm text-fg-secondary" data-testid="rules-intro">
+          {canManage
+            ? 'A rule is one plain sentence. When it comes true, an alert lands in the inbox and the people you picked get a message.'
+            : 'These are the rules that watch the work. When one comes true, an alert lands in the inbox and the people it names get a message. You can read them here. A manager or an admin can change them.'}
+        </p>
         {canManage ? (
           <Button leadingIcon={<Plus aria-hidden />} onClick={() => setDraft(NEW_DRAFT)} data-testid="rule-add">
             New rule
@@ -281,7 +290,9 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
             <h2 id="rules-stock" className="text-base font-semibold text-fg">
               Rules that come with Pulse
             </h2>
-            <p className="mt-0.5 text-sm text-fg-muted">You can change who gets told and turn one off. They cannot be deleted.</p>
+            <p className="mt-0.5 text-sm text-fg-muted" data-testid="rules-stock-note">
+              {canManage ? 'You can change who gets told and turn one off. They cannot be deleted.' : 'Each one shows if it is on or off and who it tells. A manager or an admin can change that.'}
+            </p>
           </header>
           <ul className="divide-y divide-border-subtle" data-testid="rules-stock-list">
             {stock.map(row)}
@@ -294,6 +305,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
           key={draft.id ?? 'new'}
           start={draft}
           options={options}
+          facts={facts}
           people={people.data ?? []}
           onClose={() => setDraft(null)}
           onSaved={async (saved, before) => {
@@ -301,7 +313,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
             await refresh();
             if (!before) {
               toast.undo('Rule added', {
-                description: ruleSentence(saved.kind, saved.threshold),
+                description: sentenceOf(saved),
                 onUndo: async () => {
                   const undone = await deleteAlertRuleAction({ ruleId: saved.id });
                   if (!undone.ok) throw new Error(undone.error.message);
@@ -312,7 +324,7 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
             }
             const old = rules.find((rule) => rule.id === before.id);
             toast.undo('Rule changed', {
-              description: ruleSentence(saved.kind, saved.threshold),
+              description: sentenceOf(saved),
               onUndo: async () => {
                 if (!old) return;
                 const undone = await saveAlertRuleFullAction({ ...toInput(toDraft(old), old.threshold === null ? null : tidyThreshold(old.threshold)), name: old.name });
@@ -332,12 +344,14 @@ export function RulesView({ initialRules, canManage, options }: { readonly initi
 function RuleBuilder({
   start,
   options,
+  facts,
   people,
   onClose,
   onSaved,
 }: {
   readonly start: Draft;
   readonly options: RuleOptions;
+  readonly facts: RuleFacts;
   readonly people: readonly { readonly id: string; readonly name: string; readonly email: string; readonly image?: string | null }[];
   readonly onClose: () => void;
   readonly onSaved: (saved: AlertRuleDTO, before: Draft | null) => Promise<void>;
@@ -353,7 +367,7 @@ function RuleBuilder({
   const scopeLists = { client: options.clients, jobType: options.jobTypes, site: options.sites } as const;
   const scopeError = info.scoped && draft.scopeKind !== 'all' && !draft.scopeId ? `Pick a ${SCOPE_WORD[draft.scopeKind]}.` : null;
   const quietError = draft.quietOn && draft.quietFrom === draft.quietTo && !draft.weekends ? 'Pick two different times, or tick weekends.' : null;
-  const sentence = ruleSentence(draft.kind, line.stored);
+  const sentence = ruleSentence(draft.kind, line.stored, { facts });
   const scopeName = draft.scopeKind === 'all' ? null : (scopeLists[draft.scopeKind].find((item) => item.id === draft.scopeId)?.name ?? null);
 
   const kindOptions = useMemo(
@@ -530,7 +544,7 @@ function TimeField({ label, value, onChange, testId }: { readonly label: string;
           step={900}
           value={value}
           onChange={(event) => onChange(event.target.value || value)}
-          className="h-8 w-32 rounded-md border border-border-input bg-panel px-2 text-sm text-fg outline-none focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]"
+          className="h-8 w-32 rounded-md border border-border-input bg-panel px-2 text-sm text-fg outline-none focus:border-focus focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]"
           data-testid={testId}
         />
       )}

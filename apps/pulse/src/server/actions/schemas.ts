@@ -148,3 +148,31 @@ export const productionInput = z.object({
   note: text(1000).nullable().optional(),
   version,
 });
+
+/** One labor type line of a day of work (PUT /api/v1/log/days). */
+export const productionDayLine = z.object({
+  id: uuid.nullable().optional(),
+  laborClassId: uuid.nullable(),
+  shift: z.string().trim().min(1).max(24).nullable().optional(),
+  unitsGood: quantity.optional(),
+  unitsScrap: quantity.optional(),
+  unitsRework: quantity.optional(),
+  headcount: headcount.nullable().optional(),
+  hours: hours.optional(),
+  overtimeHours: hours.optional(),
+  setupHours: hours.optional(),
+  hoursConfirmed: z.boolean().optional(),
+  note: text(1000).nullable().optional(),
+});
+
+/** A whole day of work on one job: a new day, or an edit of the day that was read. */
+export const productionDayInput = z
+  .object({
+    jobId: uuid,
+    workDate: isoDate,
+    mode: z.enum(['create', 'edit']),
+    fromDate: isoDate.nullable().optional(),
+    read: z.array(z.object({ id: uuid, version: z.number().int().positive() })).max(200).optional(),
+    lines: z.array(productionDayLine).min(1, 'Add at least one labor type.').max(50, 'Keep a day to 50 labor types or fewer.'),
+  })
+  .refine((value) => value.mode === 'create' || value.read !== undefined, { path: ['read'], message: 'An edit must say which rows it read.' });

@@ -6,13 +6,16 @@
 import 'server-only';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { clients, items, jobTypes, sites, vasServices } from '@/server/db/schema';
 import { conflict, invalid, notFound } from '@/server/errors';
+import { clientLookAlikeMessage, matchClientName, nameList } from '@/lib/client-names';
 import type { PartsOwnerValue, PricingModelValue, StreamSource, VasBilling } from '@/lib/constants';
 import type { ClientDTO, ItemDTO, JobTypeDTO, SiteDTO, VasServiceDTO } from '@/lib/types';
 import { assertVersion, cleanText, defined, diff, hideUnless, inTx, iso, isoRequired, isUuid, isValidTimezone, rows, todayInZone, type DomainContext } from './_shared';
 import { codeFromName, freeCode, restoreRow, softDeleteRow } from './_crud';
 import { requirePulse, type PulseAccess } from './access';
+import { seesDeleted } from './deleted';
 import { logActivity } from './activity';
 import { recomputeJobs } from './job-stats';
 import { finishWrite, newTouched, restampUsage } from './recalc';
@@ -28,27 +31,27 @@ export function toSiteDTO(row: SiteRow): SiteDTO {
   return { id: row.id, code: row.code, name: row.name, timezone: row.timezone, isDefault: row.isDefault, wmsWarehouseId: row.wmsWarehouseId, archivedAt: iso(row.archivedAt), today: todayInZone(row.timezone) };
 }
 
-export async function listSites(ctx: DomainContext, executor: Executor = db): Promise<SiteDTO[]> {
+export const listSites = scoped(async function listSites(ctx: DomainContext, executor: Executor = db): Promise<SiteDTO[]> {
   await requirePulse(ctx, 'pulse:read');
   await loadSettings(ctx.orgId, executor);
   const found = await executor.select().from(sites).where(and(eq(sites.orgId, ctx.orgId), isNull(sites.deletedAt))).orderBy(sql`${sites.isDefault} desc`, asc(sites.name));
   return found.map(toSiteDTO);
-}
+});
 
-export async function getSiteRow(ctx: DomainContext, siteId: string, executor: Executor = db): Promise<SiteRow> {
+export const getSiteRow = scoped(async function getSiteRow(ctx: DomainContext, siteId: string, executor: Executor = db): Promise<SiteRow> {
   const [row] = isUuid(siteId) ? await executor.select().from(sites).where(and(eq(sites.orgId, ctx.orgId), eq(sites.id, siteId), isNull(sites.deletedAt))) : [];
   if (!row) throw notFound('That site');
   return row;
-}
+});
 
 /** The site to use when none is given: the person's pick when valid, else the default site. */
-export async function resolveSite(ctx: DomainContext, siteId: string | null | undefined, executor: Executor = db): Promise<SiteRow> {
+export const resolveSite = scoped(async function resolveSite(ctx: DomainContext, siteId: string | null | undefined, executor: Executor = db): Promise<SiteRow> {
   await loadSettings(ctx.orgId, executor);
   if (siteId) return getSiteRow(ctx, siteId, executor);
   const found = await executor.select().from(sites).where(and(eq(sites.orgId, ctx.orgId), isNull(sites.deletedAt))).orderBy(sql`${sites.isDefault} desc`, asc(sites.createdAt)).limit(1);
   if (!found[0]) throw invalid('This workspace has no site yet. Add one in Settings.');
   return found[0];
-}
+});
 
 export interface SiteInput {
   code?: string | null;
@@ -57,7 +60,7 @@ export interface SiteInput {
   isDefault?: boolean;
 }
 
-export async function createSite(ctx: DomainContext, input: SiteInput): Promise<SiteDTO> {
+export const createSite = scoped(async function createSite(ctx: DomainContext, input: SiteInput): Promise<SiteDTO> {
   await requirePulse(ctx, 'settings:manage');
   const name = cleanText(input.name);
   if (!name) throw invalid('Give the site a name.', { name: 'Give the site a name.' });
@@ -70,9 +73,9 @@ export async function createSite(ctx: DomainContext, input: SiteInput): Promise<
     await logActivity(tx, ctx, { verb: 'site.created', entityType: 'site', entityId: row!.id, after: { code, name, timezone: input.timezone } });
     return toSiteDTO(row!);
   });
-}
+});
 
-export async function updateSite(ctx: DomainContext, siteId: string, patch: Partial<SiteInput> & { archived?: boolean }): Promise<SiteDTO> {
+export const updateSite = scoped(async function updateSite(ctx: DomainContext, siteId: string, patch: Partial<SiteInput> & { archived?: boolean }): Promise<SiteDTO> {
   await requirePulse(ctx, 'settings:manage');
   if (patch.timezone !== undefined && !isValidTimezone(patch.timezone)) throw invalid('Pick a time zone from the list.', { timezone: 'Pick a time zone from the list.' });
   return inTx(async (tx) => {
@@ -97,9 +100,9 @@ export async function updateSite(ctx: DomainContext, siteId: string, patch: Part
     }
     return toSiteDTO(row!);
   });
-}
+});
 
-export async function deleteSite(ctx: DomainContext, siteId: string): Promise<void> {
+export const deleteSite = scoped(async function deleteSite(ctx: DomainContext, siteId: string): Promise<void> {
   await requirePulse(ctx, 'settings:manage');
   await inTx(async (tx) => {
     const before = await getSiteRow(ctx, siteId, tx);
@@ -109,7 +112,7 @@ export async function deleteSite(ctx: DomainContext, siteId: string): Promise<vo
     await softDeleteRow(tx, ctx.orgId, 'sites', siteId, 'That site');
     await logActivity(tx, ctx, { verb: 'site.deleted', entityType: 'site', entityId: siteId, before: { code: before.code, name: before.name } });
   });
-}
+});
 
 /* ---------------------------------------------------------------- clients */
 
@@ -140,8 +143,10 @@ export function toClientDTO(row: ClientRow, access: Money, counts?: { jobCount: 
   };
 }
 
-export async function listClients(ctx: DomainContext, options: { q?: string | null; includeInactive?: boolean; includeDeleted?: boolean } = {}): Promise<ClientDTO[]> {
+export const listClients = scoped(async function listClients(ctx: DomainContext, options: { q?: string | null; includeInactive?: boolean; includeDeleted?: boolean } = {}): Promise<ClientDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  // Deleted clients are for people who may manage jobs and clients, the same right as deleted jobs (deleted.ts).
+  if (options.includeDeleted) await requirePulse(ctx, 'job:manage');
   const q = cleanText(options.q)?.toLowerCase().replace(/[%_\\]/g, '');
   const found = await db
     .select()
@@ -162,30 +167,31 @@ export async function listClients(ctx: DomainContext, options: { q?: string | nu
   );
   const byClient = new Map(counts.map((row) => [row.client_id, row]));
   return found.map((row) => toClientDTO(row, access, { jobCount: byClient.get(row.id)?.n ?? 0, openJobCount: byClient.get(row.id)?.open ?? 0 }));
-}
+});
 
-export async function getClientRow(ctx: DomainContext, clientId: string, executor: Executor = db, includeDeleted = false): Promise<ClientRow> {
+export const getClientRow = scoped(async function getClientRow(ctx: DomainContext, clientId: string, executor: Executor = db, includeDeleted = false): Promise<ClientRow> {
   const [row] = isUuid(clientId) ? await executor.select().from(clients).where(and(eq(clients.orgId, ctx.orgId), eq(clients.id, clientId), includeDeleted ? undefined : isNull(clients.deletedAt))) : [];
   if (!row) throw notFound('That client');
   return row;
-}
+});
 
-export async function getClient(ctx: DomainContext, clientId: string): Promise<ClientDTO> {
+export const getClient = scoped(async function getClient(ctx: DomainContext, clientId: string): Promise<ClientDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
-  const row = await getClientRow(ctx, clientId, db, true);
+  // A deleted client is found only for a person who may manage clients (deleted.ts).
+  const row = await getClientRow(ctx, clientId, db, seesDeleted(access));
   const [counts] = await rows<{ n: number; open: number }>(
     db,
     sql`SELECT count(*)::int AS n, count(*) FILTER (WHERE status IN ('active', 'on_hold'))::int AS open
           FROM pulse.jobs WHERE org_id = ${ctx.orgId} AND client_id = ${row.id} AND deleted_at IS NULL`,
   );
   return toClientDTO(row, access, { jobCount: counts?.n ?? 0, openJobCount: counts?.open ?? 0 });
-}
+});
 
 /**
  * A client can be found three ways (SPEC 5.1): its Pulse id, the `core.customers` id (equal to
  * the WMS client id), or the CRM account item id. Returns null when nothing matches.
  */
-export async function findClientByRef(ctx: DomainContext, ref: { pulseClientId?: string | null; coreCustomerId?: string | null; crmAccountItemId?: string | null }): Promise<ClientDTO | null> {
+export const findClientByRef = scoped(async function findClientByRef(ctx: DomainContext, ref: { pulseClientId?: string | null; coreCustomerId?: string | null; crmAccountItemId?: string | null }): Promise<ClientDTO | null> {
   const access = await requirePulse(ctx, 'pulse:read');
   const tries: [typeof clients.id | typeof clients.coreCustomerId | typeof clients.crmAccountItemId, string | null | undefined][] = [
     [clients.id, ref.pulseClientId],
@@ -198,7 +204,7 @@ export async function findClientByRef(ctx: DomainContext, ref: { pulseClientId?:
     if (row) return toClientDTO(row, access);
   }
   return null;
-}
+});
 
 export interface ClientInput {
   code?: string | null;
@@ -217,9 +223,32 @@ export interface ClientInput {
   source?: StreamSource;
   sourceRef?: string | null;
   isSample?: boolean;
+  /** Say yes to a new client whose name is close to one you have (only read when the guard is on). */
+  confirmNew?: boolean;
 }
 
-export async function insertClient(tx: Executor, ctx: DomainContext, input: ClientInput): Promise<ClientRow> {
+/**
+ * Options for the paths where a person types a client name (server actions and API routes). They
+ * turn the look alike guard on. Imports, sync, seed and sample data call without it: their names
+ * come from a file or another app, and a person has already had the chance to check them.
+ */
+export interface ClientGuardOptions {
+  readonly guardLookAlike?: boolean;
+}
+
+/**
+ * The one look alike guard of the server. Refuses `name` when it is close to a client that exists
+ * without being its exact name or code. `fields` are the form boxes that get the message.
+ */
+export const assertClientNameNotLookAlike = scoped(async function assertClientNameNotLookAlike(tx: Executor, ctx: DomainContext, name: string | null | undefined, fields: readonly string[], message: (typed: string, names: readonly string[]) => string = clientLookAlikeMessage): Promise<void> {
+  const typed = cleanText(name) ?? '';
+  const close = await findClientLookAlikes(tx, ctx, typed);
+  if (close.length === 0) return;
+  const text = message(typed, close.map((client) => client.name));
+  throw invalid(text, { ...Object.fromEntries(fields.map((field) => [field, text])), clientLookAlike: nameList(close.map((client) => client.name)) });
+}, 1);
+
+export const insertClient = scoped(async function insertClient(tx: Executor, ctx: DomainContext, input: ClientInput): Promise<ClientRow> {
   const name = cleanText(input.name);
   if (!name) throw invalid('Give the client a name.', { name: 'Give the client a name.' });
   await loadSettings(ctx.orgId, tx);
@@ -251,9 +280,9 @@ export async function insertClient(tx: Executor, ctx: DomainContext, input: Clie
     .returning();
   await logActivity(tx, ctx, { verb: 'client.created', entityType: 'client', entityId: row!.id, clientId: row!.id, after: { code, name } });
   return row!;
-}
+}, 1);
 
-export async function createClient(ctx: DomainContext, input: ClientInput): Promise<ClientDTO> {
+export const createClient = scoped(async function createClient(ctx: DomainContext, input: ClientInput, options: ClientGuardOptions = {}): Promise<ClientDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     // Two clients with one name split the profit of that client in two, and a file could not tell them apart.
@@ -262,23 +291,56 @@ export async function createClient(ctx: DomainContext, input: ClientInput): Prom
       const [same] = await tx.select({ id: clients.id }).from(clients).where(and(eq(clients.orgId, ctx.orgId), isNull(clients.deletedAt), sql`lower(${clients.name}) = ${name.toLowerCase()}`));
       if (same) throw invalid(`You already have a client called ${name}. Use that one, or give this one another name.`, { name: `You already have a client called ${name}.` });
     }
+    // A name close to a client you have needs a clear yes, the same as on quick add.
+    if (options.guardLookAlike && !input.confirmNew)
+      await assertClientNameNotLookAlike(tx, ctx, name, ['name'], (typed, names) => `${typed} looks like ${nameList(names)}, a client you already have. Use that client, or choose Add as a new client.`);
     return toClientDTO(await insertClient(tx, ctx, input), access);
   });
-}
+});
 
 /** Finds a live client by exact name (no case), or makes one. Used by quick add and imports. */
-export async function ensureClientByName(tx: Executor, ctx: DomainContext, name: string): Promise<ClientRow> {
+export const ensureClientByName = scoped(async function ensureClientByName(tx: Executor, ctx: DomainContext, name: string): Promise<ClientRow> {
   const clean = cleanText(name);
   if (!clean) throw invalid('Pick a client or type a new client name.', { clientName: 'Pick a client or type a new client name.' });
   const [found] = await tx.select().from(clients).where(and(eq(clients.orgId, ctx.orgId), isNull(clients.deletedAt), sql`(lower(${clients.name}) = ${clean.toLowerCase()} or lower(${clients.code}) = ${clean.toLowerCase()})`)).limit(1);
   return found ?? insertClient(tx, ctx, { name: clean });
-}
+}, 1);
 
-export async function updateClient(ctx: DomainContext, clientId: string, patch: Partial<ClientInput>, version?: number | null): Promise<ClientDTO> {
+/**
+ * Live clients whose name is close to `name` without being it ("Harbor" next to "Harbor Roast
+ * Collective"). Empty when `name` is the exact name or code of a client, since that one is used.
+ */
+export const findClientLookAlikes = scoped(async function findClientLookAlikes(tx: Executor, ctx: DomainContext, name: string): Promise<{ id: string; name: string; code: string }[]> {
+  const clean = cleanText(name);
+  if (!clean) return [];
+  const live = await tx.select({ id: clients.id, name: clients.name, code: clients.code }).from(clients).where(and(eq(clients.orgId, ctx.orgId), isNull(clients.deletedAt)));
+  return [...matchClientName(clean, live).lookAlikes];
+}, 1);
+
+/**
+ * A rename is a typed client name too, so it gets the same two checks as a new client: never the
+ * exact name of another client, and (with the guard on) a clear yes for a name close to another
+ * client. The client's own old name does not count, so fixing a slip in a name is never asked about.
+ */
+export const updateClient = scoped(async function updateClient(ctx: DomainContext, clientId: string, patch: Partial<ClientInput>, version?: number | null, options: ClientGuardOptions = {}): Promise<ClientDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     const before = await getClientRow(ctx, clientId, tx);
     assertVersion(before.version, version);
+    const renamed = cleanText(patch.name);
+    if (renamed && renamed.toLowerCase() !== before.name.toLowerCase()) {
+      const others = (await tx.select({ id: clients.id, name: clients.name, code: clients.code }).from(clients).where(and(eq(clients.orgId, ctx.orgId), isNull(clients.deletedAt)))).filter((client) => client.id !== before.id);
+      if (others.some((client) => client.name.trim().toLowerCase() === renamed.toLowerCase()))
+        throw invalid(`You already have a client called ${renamed}. Give this one another name.`, { name: `You already have a client called ${renamed}.` });
+      if (options.guardLookAlike && !patch.confirmNew) {
+        const close = matchClientName(renamed, others.map((client) => ({ ...client, code: null }))).lookAlikes;
+        if (close.length > 0) {
+          const names = nameList(close.map((client) => client.name));
+          const text = `${renamed} looks like ${names}, a client you already have. Keep the old name, or choose Rename anyway.`;
+          throw invalid(text, { name: text, clientLookAlike: names });
+        }
+      }
+    }
     const values = defined({
       code: patch.code === undefined ? undefined : (cleanText(patch.code) ?? before.code),
       name: patch.name === undefined ? undefined : (cleanText(patch.name) ?? before.name),
@@ -308,9 +370,9 @@ export async function updateClient(ctx: DomainContext, clientId: string, patch: 
     }
     return toClientDTO(row!, access);
   });
-}
+});
 
-export async function deleteClient(ctx: DomainContext, clientId: string): Promise<void> {
+export const deleteClient = scoped(async function deleteClient(ctx: DomainContext, clientId: string): Promise<void> {
   await requirePulse(ctx, 'job:manage');
   await inTx(async (tx) => {
     const before = await getClientRow(ctx, clientId, tx);
@@ -319,16 +381,16 @@ export async function deleteClient(ctx: DomainContext, clientId: string): Promis
     await softDeleteRow(tx, ctx.orgId, 'clients', clientId, 'That client');
     await logActivity(tx, ctx, { verb: 'client.deleted', entityType: 'client', entityId: clientId, clientId, before: { code: before.code, name: before.name } });
   });
-}
+});
 
-export async function restoreClient(ctx: DomainContext, clientId: string): Promise<ClientDTO> {
+export const restoreClient = scoped(async function restoreClient(ctx: DomainContext, clientId: string): Promise<ClientDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     await restoreRow(tx, ctx.orgId, 'clients', clientId, 'That client');
     await logActivity(tx, ctx, { verb: 'client.restored', entityType: 'client', entityId: clientId, clientId });
     return toClientDTO(await getClientRow(ctx, clientId, tx), access);
   });
-}
+});
 
 /* ---------------------------------------------------------------- job types */
 
@@ -351,7 +413,7 @@ export function toJobTypeDTO(row: JobTypeRow, access: Money): JobTypeDTO {
   };
 }
 
-export async function listJobTypes(ctx: DomainContext, options: { includeArchived?: boolean } = {}): Promise<JobTypeDTO[]> {
+export const listJobTypes = scoped(async function listJobTypes(ctx: DomainContext, options: { includeArchived?: boolean } = {}): Promise<JobTypeDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   await loadSettings(ctx.orgId);
   const found = await db
@@ -360,13 +422,13 @@ export async function listJobTypes(ctx: DomainContext, options: { includeArchive
     .where(and(eq(jobTypes.orgId, ctx.orgId), isNull(jobTypes.deletedAt), options.includeArchived ? undefined : isNull(jobTypes.archivedAt)))
     .orderBy(asc(jobTypes.position), sql`lower(${jobTypes.name})`);
   return found.map((row) => toJobTypeDTO(row, access));
-}
+});
 
-export async function getJobTypeRow(ctx: DomainContext, jobTypeId: string, executor: Executor = db): Promise<JobTypeRow> {
+export const getJobTypeRow = scoped(async function getJobTypeRow(ctx: DomainContext, jobTypeId: string, executor: Executor = db): Promise<JobTypeRow> {
   const [row] = isUuid(jobTypeId) ? await executor.select().from(jobTypes).where(and(eq(jobTypes.orgId, ctx.orgId), eq(jobTypes.id, jobTypeId), isNull(jobTypes.deletedAt))) : [];
   if (!row) throw notFound('That job type');
   return row;
-}
+});
 
 export interface JobTypeInput {
   code?: string | null;
@@ -381,7 +443,7 @@ export interface JobTypeInput {
   position?: number;
 }
 
-export async function insertJobType(tx: Executor, ctx: DomainContext, input: JobTypeInput): Promise<JobTypeRow> {
+export const insertJobType = scoped(async function insertJobType(tx: Executor, ctx: DomainContext, input: JobTypeInput): Promise<JobTypeRow> {
   const name = cleanText(input.name);
   if (!name) throw invalid('Give the job type a name.', { name: 'Give the job type a name.' });
   await loadSettings(ctx.orgId, tx);
@@ -404,14 +466,14 @@ export async function insertJobType(tx: Executor, ctx: DomainContext, input: Job
     .returning();
   await logActivity(tx, ctx, { verb: 'job_type.created', entityType: 'job_type', entityId: row!.id, after: { code, name } });
   return row!;
-}
+}, 1);
 
-export async function createJobType(ctx: DomainContext, input: JobTypeInput): Promise<JobTypeDTO> {
+export const createJobType = scoped(async function createJobType(ctx: DomainContext, input: JobTypeInput): Promise<JobTypeDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => toJobTypeDTO(await insertJobType(tx, ctx, input), access));
-}
+});
 
-export async function updateJobType(ctx: DomainContext, jobTypeId: string, patch: Partial<JobTypeInput> & { archived?: boolean }): Promise<JobTypeDTO> {
+export const updateJobType = scoped(async function updateJobType(ctx: DomainContext, jobTypeId: string, patch: Partial<JobTypeInput> & { archived?: boolean }): Promise<JobTypeDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     const before = await getJobTypeRow(ctx, jobTypeId, tx);
@@ -441,9 +503,9 @@ export async function updateJobType(ctx: DomainContext, jobTypeId: string, patch
     }
     return toJobTypeDTO(row!, access);
   });
-}
+});
 
-export async function deleteJobType(ctx: DomainContext, jobTypeId: string): Promise<void> {
+export const deleteJobType = scoped(async function deleteJobType(ctx: DomainContext, jobTypeId: string): Promise<void> {
   await requirePulse(ctx, 'job:manage');
   await inTx(async (tx) => {
     const before = await getJobTypeRow(ctx, jobTypeId, tx);
@@ -453,7 +515,7 @@ export async function deleteJobType(ctx: DomainContext, jobTypeId: string): Prom
     await softDeleteRow(tx, ctx.orgId, 'job_types', jobTypeId, 'That job type');
     await logActivity(tx, ctx, { verb: 'job_type.deleted', entityType: 'job_type', entityId: jobTypeId, before: { code: before.code, name: before.name } });
   });
-}
+});
 
 /* ---------------------------------------------------------------- items */
 
@@ -473,7 +535,7 @@ export function toItemDTO(row: ItemRow, access: Money): ItemDTO {
   };
 }
 
-export async function listItems(ctx: DomainContext, options: { q?: string | null; clientId?: string | null; limit?: number } = {}): Promise<ItemDTO[]> {
+export const listItems = scoped(async function listItems(ctx: DomainContext, options: { q?: string | null; clientId?: string | null; limit?: number } = {}): Promise<ItemDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const q = cleanText(options.q)?.toLowerCase().replace(/[%_\\]/g, '');
   const found = await db
@@ -490,7 +552,7 @@ export async function listItems(ctx: DomainContext, options: { q?: string | null
     .orderBy(sql`lower(${items.sku})`)
     .limit(Math.min(options.limit ?? 500, 2000));
   return found.map((row) => toItemDTO(row, access));
-}
+});
 
 export interface ItemInput {
   sku: string;
@@ -501,13 +563,13 @@ export interface ItemInput {
   clientId?: string | null;
 }
 
-export async function getItemRow(ctx: DomainContext, itemId: string, executor: Executor = db): Promise<ItemRow> {
+export const getItemRow = scoped(async function getItemRow(ctx: DomainContext, itemId: string, executor: Executor = db): Promise<ItemRow> {
   const [row] = isUuid(itemId) ? await executor.select().from(items).where(and(eq(items.orgId, ctx.orgId), eq(items.id, itemId), isNull(items.deletedAt))) : [];
   if (!row) throw notFound('That item');
   return row;
-}
+});
 
-export async function insertItem(tx: Executor, ctx: DomainContext, input: ItemInput): Promise<ItemRow> {
+export const insertItem = scoped(async function insertItem(tx: Executor, ctx: DomainContext, input: ItemInput): Promise<ItemRow> {
   const sku = cleanText(input.sku);
   const name = cleanText(input.name) ?? sku;
   if (!sku || !name) throw invalid('Give the item a SKU.', { sku: 'Give the item a SKU.' });
@@ -517,14 +579,14 @@ export async function insertItem(tx: Executor, ctx: DomainContext, input: ItemIn
     .returning();
   await logActivity(tx, ctx, { verb: 'item.created', entityType: 'item', entityId: row!.id, after: { sku, name } });
   return row!;
-}
+}, 1);
 
-export async function createItem(ctx: DomainContext, input: ItemInput): Promise<ItemDTO> {
+export const createItem = scoped(async function createItem(ctx: DomainContext, input: ItemInput): Promise<ItemDTO> {
   const access = await requirePulse(ctx, 'cost:manage');
   return inTx(async (tx) => toItemDTO(await insertItem(tx, ctx, input), access));
-}
+});
 
-export async function updateItem(ctx: DomainContext, itemId: string, patch: Partial<ItemInput>, version?: number | null): Promise<ItemDTO> {
+export const updateItem = scoped(async function updateItem(ctx: DomainContext, itemId: string, patch: Partial<ItemInput>, version?: number | null): Promise<ItemDTO> {
   const access = await requirePulse(ctx, 'cost:manage');
   return inTx(async (tx) => {
     const before = await getItemRow(ctx, itemId, tx);
@@ -557,16 +619,16 @@ export async function updateItem(ctx: DomainContext, itemId: string, patch: Part
     }
     return toItemDTO(row!, access);
   });
-}
+});
 
-export async function deleteItem(ctx: DomainContext, itemId: string): Promise<void> {
+export const deleteItem = scoped(async function deleteItem(ctx: DomainContext, itemId: string): Promise<void> {
   await requirePulse(ctx, 'cost:manage');
   await inTx(async (tx) => {
     const before = await getItemRow(ctx, itemId, tx);
     await softDeleteRow(tx, ctx.orgId, 'items', itemId, 'That item');
     await logActivity(tx, ctx, { verb: 'item.deleted', entityType: 'item', entityId: itemId, before: { sku: before.sku, name: before.name } });
   });
-}
+});
 
 /* ---------------------------------------------------------------- extra services (VAS catalog) */
 
@@ -590,7 +652,7 @@ export function toVasServiceDTO(row: ServiceRow, access: Money): VasServiceDTO {
   };
 }
 
-export async function listVasServices(ctx: DomainContext, options: { includeInactive?: boolean } = {}): Promise<VasServiceDTO[]> {
+export const listVasServices = scoped(async function listVasServices(ctx: DomainContext, options: { includeInactive?: boolean } = {}): Promise<VasServiceDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const found = await db
     .select()
@@ -598,18 +660,18 @@ export async function listVasServices(ctx: DomainContext, options: { includeInac
     .where(and(eq(vasServices.orgId, ctx.orgId), isNull(vasServices.deletedAt), options.includeInactive ? undefined : eq(vasServices.active, true)))
     .orderBy(sql`lower(${vasServices.name})`);
   return found.map((row) => toVasServiceDTO(row, access));
-}
+});
 
-export async function getVasServiceRow(ctx: DomainContext, serviceId: string, executor: Executor = db): Promise<ServiceRow> {
+export const getVasServiceRow = scoped(async function getVasServiceRow(ctx: DomainContext, serviceId: string, executor: Executor = db): Promise<ServiceRow> {
   const [row] = isUuid(serviceId) ? await executor.select().from(vasServices).where(and(eq(vasServices.orgId, ctx.orgId), eq(vasServices.id, serviceId), isNull(vasServices.deletedAt))) : [];
   if (!row) throw notFound('That service');
   return row;
-}
+});
 
-export async function getVasService(ctx: DomainContext, serviceId: string): Promise<VasServiceDTO> {
+export const getVasService = scoped(async function getVasService(ctx: DomainContext, serviceId: string): Promise<VasServiceDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   return toVasServiceDTO(await getVasServiceRow(ctx, serviceId), access);
-}
+});
 
 export interface VasServiceInput {
   code?: string | null;
@@ -624,7 +686,7 @@ export interface VasServiceInput {
   active?: boolean;
 }
 
-export async function insertVasService(tx: Executor, ctx: DomainContext, input: VasServiceInput): Promise<ServiceRow> {
+export const insertVasService = scoped(async function insertVasService(tx: Executor, ctx: DomainContext, input: VasServiceInput): Promise<ServiceRow> {
   const name = cleanText(input.name);
   if (!name) throw invalid('Give the service a name.', { name: 'Give the service a name.' });
   const code = cleanText(input.code) ?? (await freeCode(tx, ctx.orgId, 'vas_services', codeFromName(name)));
@@ -648,14 +710,14 @@ export async function insertVasService(tx: Executor, ctx: DomainContext, input: 
     .returning();
   await logActivity(tx, ctx, { verb: 'service.created', entityType: 'service', entityId: row!.id, after: { code, name } });
   return row!;
-}
+}, 1);
 
-export async function createVasService(ctx: DomainContext, input: VasServiceInput): Promise<VasServiceDTO> {
+export const createVasService = scoped(async function createVasService(ctx: DomainContext, input: VasServiceInput): Promise<VasServiceDTO> {
   const access = await requirePulse(ctx, 'vas:manage');
   return inTx(async (tx) => toVasServiceDTO(await insertVasService(tx, ctx, input), access));
-}
+});
 
-export async function updateVasService(ctx: DomainContext, serviceId: string, patch: Partial<VasServiceInput>, version?: number | null): Promise<VasServiceDTO> {
+export const updateVasService = scoped(async function updateVasService(ctx: DomainContext, serviceId: string, patch: Partial<VasServiceInput>, version?: number | null): Promise<VasServiceDTO> {
   const access = await requirePulse(ctx, 'vas:manage');
   return inTx(async (tx) => {
     const before = await getVasServiceRow(ctx, serviceId, tx);
@@ -678,9 +740,9 @@ export async function updateVasService(ctx: DomainContext, serviceId: string, pa
     await logActivity(tx, ctx, { verb: 'service.updated', entityType: 'service', entityId: before.id, ...change });
     return toVasServiceDTO(row!, access);
   });
-}
+});
 
-export async function deleteVasService(ctx: DomainContext, serviceId: string): Promise<void> {
+export const deleteVasService = scoped(async function deleteVasService(ctx: DomainContext, serviceId: string): Promise<void> {
   await requirePulse(ctx, 'vas:manage');
   await inTx(async (tx) => {
     const before = await getVasServiceRow(ctx, serviceId, tx);
@@ -689,14 +751,14 @@ export async function deleteVasService(ctx: DomainContext, serviceId: string): P
     await softDeleteRow(tx, ctx.orgId, 'vas_services', serviceId, 'That service');
     await logActivity(tx, ctx, { verb: 'service.deleted', entityType: 'service', entityId: serviceId, before: { code: before.code, name: before.name } });
   });
-}
+});
 
 /** Brings a deleted extra service back (the Undo of a delete). Added by the profit team. */
-export async function restoreVasService(ctx: DomainContext, serviceId: string): Promise<VasServiceDTO> {
+export const restoreVasService = scoped(async function restoreVasService(ctx: DomainContext, serviceId: string): Promise<VasServiceDTO> {
   const access = await requirePulse(ctx, 'vas:manage');
   return inTx(async (tx) => {
     await restoreRow(tx, ctx.orgId, 'vas_services', serviceId, 'That service');
     await logActivity(tx, ctx, { verb: 'service.restored', entityType: 'service', entityId: serviceId });
     return toVasServiceDTO(await getVasServiceRow(ctx, serviceId, tx), access);
   });
-}
+});

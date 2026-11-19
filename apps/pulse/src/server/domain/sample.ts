@@ -13,10 +13,11 @@
 import 'server-only';
 import { eq, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { settings } from '@/server/db/schema';
 import { conflict, invalid } from '@/server/errors';
 import { addDays, isWorkDay } from '@/lib/profit/calendar';
-import { inTx, iso, rows, uuidArray, type DomainContext } from './_shared';
+import { inTx, iso, rows, todayInZone, uuidArray, type DomainContext } from './_shared';
 import { requirePulse } from './access';
 import { logActivity } from './activity';
 import { evaluateAlerts } from './alerts';
@@ -40,7 +41,7 @@ export interface SampleStateDTO {
   readonly entries: number;
 }
 
-export async function getSampleState(ctx: DomainContext): Promise<SampleStateDTO> {
+export const getSampleState = scoped(async function getSampleState(ctx: DomainContext): Promise<SampleStateDTO> {
   await requirePulse(ctx, 'pulse:read');
   const row = await loadSettings(ctx.orgId);
   const [counts] = await rows<{ jobs: number; clients: number; entries: number }>(
@@ -51,7 +52,7 @@ export async function getSampleState(ctx: DomainContext): Promise<SampleStateDTO
   );
   const jobs = counts?.jobs ?? 0;
   return { loaded: row.sampleLoadedAt !== null || jobs > 0, loadedAt: iso(row.sampleLoadedAt), jobs, clients: counts?.clients ?? 0, entries: counts?.entries ?? 0 };
-}
+});
 
 /** The last `count` work days that end yesterday, oldest first. */
 function recentWorkDays(today: string, count: number): string[] {
@@ -216,7 +217,7 @@ async function buildSampleShop(ctx: DomainContext): Promise<{ jobs: number; entr
 }
 
 /** Loads the made up shop. Refuses when sample data is already there. */
-export async function loadSampleData(ctx: DomainContext): Promise<SampleStateDTO> {
+export const loadSampleData = scoped(async function loadSampleData(ctx: DomainContext): Promise<SampleStateDTO> {
   await requirePulse(ctx, 'sample:manage');
   const state = await getSampleState(ctx);
   if (state.loaded) throw conflict('Sample data is already loaded. Remove it first if you want a fresh copy.');
@@ -247,7 +248,7 @@ export async function loadSampleData(ctx: DomainContext): Promise<SampleStateDTO
   await logActivity(db, ctx, { verb: 'sample.loaded', entityType: 'sample', after: { jobs: built.jobs, entries: built.entries } });
   await evaluateAlerts(ctx).catch(() => undefined);
   return getSampleState(ctx);
-}
+});
 
 /** Remembers which labor classes and job types the sample made (they have no sample mark of their own) and marks the items and services. */
 async function markSample(ctx: DomainContext, before: { labor_classes: Set<string>; job_types: Set<string>; vas_services: Set<string>; items: Set<string> }): Promise<void> {
@@ -271,7 +272,7 @@ async function deleteIfFree(tx: Executor, table: string, id: string): Promise<bo
 }
 
 /** Takes every sample row out again. Work somebody logged on a sample job goes with the job. */
-export async function clearSampleData(ctx: DomainContext): Promise<SampleStateDTO> {
+export const clearSampleData = scoped(async function clearSampleData(ctx: DomainContext): Promise<SampleStateDTO> {
   await requirePulse(ctx, 'sample:manage');
   await inTx(async (tx) => {
     await tx.execute(sql`SET LOCAL pulse.allow_purge = 'on'`);
@@ -319,7 +320,7 @@ export async function clearSampleData(ctx: DomainContext): Promise<SampleStateDT
   });
   await evaluateAlerts(ctx).catch(() => undefined);
   return getSampleState(ctx);
-}
+});
 
 /** Tables emptied by "Delete all Pulse data", children before parents. Settings, sites, people, alert rules and the audit log stay. */
 const PURGE_ORDER = [
@@ -366,7 +367,7 @@ const PURGE_ORDER = [
  * workspace, closed months included. Settings, sites, people and their roles, alert rules and the
  * audit log are kept. `confirm` must be the workspace slug, typed by the person.
  */
-export async function purgeAllData(ctx: DomainContext, confirm: string): Promise<{ deleted: number }> {
+export const purgeAllData = scoped(async function purgeAllData(ctx: DomainContext, confirm: string): Promise<{ deleted: number }> {
   await requirePulse(ctx, 'data:purge');
   if (confirm.trim().toLowerCase() !== ctx.orgSlug.toLowerCase()) throw invalid(`Type ${ctx.orgSlug} to confirm.`, { confirm: `Type ${ctx.orgSlug} to confirm.` });
   return inTx(async (tx) => {
@@ -383,7 +384,7 @@ export async function purgeAllData(ctx: DomainContext, confirm: string): Promise
     await logActivity(tx, ctx, { verb: 'data.purged', entityType: 'data', after: { rows: deleted } });
     return { deleted };
   });
-}
+});
 
 /* ------------------------------------------------------------------------------------------ */
 /* Getting started: the five steps                                                             */
@@ -393,12 +394,12 @@ export interface OnboardingStateDTO {
   /** The five steps to a first profit number, each true once real data shows it is done. */
   readonly steps: { readonly rate: boolean; readonly client: boolean; readonly job: boolean; readonly day: boolean; readonly profit: boolean };
   readonly done: number;
-  /** The first labor class and its real cost of an hour (null when hidden or not set). */
+  /** The first labor class and its real cost of an hour in effect today (null when hidden or not set). */
   readonly rate: { readonly name: string; readonly loadedRateCents: number | null } | null;
   readonly client: { readonly id: string; readonly name: string } | null;
   /** The job the guided steps use: the newest job that is not sample data. */
   readonly job: { readonly id: string; readonly number: string; readonly name: string; readonly unitLabel: string } | null;
-  /** The first profit number: null money when the reader may not see it. */
+  /** The first profit number, for the whole job so far: null money when the reader may not see it. */
   readonly profit: { readonly jobId: string; readonly jobNumber: string; readonly revenueCents: number | null; readonly costCents: number | null; readonly profitCents: number | null; readonly marginBp: number | null; readonly unitsGood: string; readonly hours: string } | null;
   readonly site: { readonly id: string; readonly name: string; readonly timezone: string; readonly today: string } | null;
   readonly sample: SampleStateDTO;
@@ -406,15 +407,23 @@ export interface OnboardingStateDTO {
 }
 
 /** Where a workspace is on the way to its first profit number. Sample rows do not count as your own steps. */
-export async function getOnboardingState(ctx: DomainContext): Promise<OnboardingStateDTO> {
+export const getOnboardingState = scoped(async function getOnboardingState(ctx: DomainContext): Promise<OnboardingStateDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const row = await loadSettings(ctx.orgId);
   const org = ctx.orgId;
   const [site] = await listSites(ctx);
+  // The first labor class that got a rate, with the rate in effect today: an old rate that a newer
+  // one replaced is never quoted. A class whose only rates start later shows the first of those.
+  const today = site?.today ?? todayInZone(row.timezone);
   const [rate] = await rows<{ name: string; loaded: number }>(
     db,
     sql`SELECT lc.name, r.loaded_rate_cents AS loaded FROM pulse.labor_rates r JOIN pulse.labor_classes lc ON lc.id = r.labor_class_id
-         WHERE r.org_id = ${org} AND r.deleted_at IS NULL AND NOT r.is_sample ORDER BY r.created_at LIMIT 1`,
+         WHERE r.org_id = ${org} AND r.deleted_at IS NULL AND NOT r.is_sample
+           AND r.labor_class_id = (SELECT f.labor_class_id FROM pulse.labor_rates f
+                                    WHERE f.org_id = ${org} AND f.deleted_at IS NULL AND NOT f.is_sample ORDER BY f.created_at, f.effective_from, f.id LIMIT 1)
+         ORDER BY (r.effective_from <= ${today}::date) DESC, (r.site_id IS NULL) DESC,
+                  CASE WHEN r.effective_from <= ${today}::date THEN r.effective_from END DESC NULLS LAST, r.effective_from
+         LIMIT 1`,
   );
   const [client] = await rows<{ id: string; name: string }>(db, sql`SELECT id, name FROM pulse.clients WHERE org_id = ${org} AND deleted_at IS NULL AND NOT is_sample ORDER BY created_at LIMIT 1`);
   const [job] = await rows<{ id: string; number: string; name: string; unit_label: string }>(
@@ -444,4 +453,4 @@ export async function getOnboardingState(ctx: DomainContext): Promise<Onboarding
     sample: await getSampleState(ctx),
     moneyHidden: !money,
   };
-}
+});

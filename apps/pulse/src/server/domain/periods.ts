@@ -1,16 +1,18 @@
 /**
  * Month close (SPEC 4.16). Closing a month stores a snapshot of its totals and locks every
  * stream row dated in it: the database trigger `pulse.guard_closed_month` refuses the write and
- * the domain layer says "October is closed. Ask the owner to reopen it." first.
+ * the domain layer says "October 2026 is closed. Ask the owner to reopen it." first.
  */
 import 'server-only';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { periods } from '@/server/db/schema';
 import { conflict, invalid } from '@/server/errors';
+import { marginBp } from '@/lib/money';
 import { endOfMonth } from '@/lib/profit';
 import type { CloseChecklistDTO, PeriodDTO } from '@/lib/types';
-import { cleanText, inTx, iso, jsonSafe, moneyOut, monthName, rows, type DomainContext } from './_shared';
+import { cleanText, countServiceEntriesNoPrice, inTx, iso, jsonSafe, moneyOut, monthYear, rows, type DomainContext } from './_shared';
 import { requirePulse } from './access';
 import { logActivity } from './activity';
 import { getCompanyBridge, getProfit } from './profit';
@@ -43,7 +45,7 @@ function toDTO(row: PeriodRow, money: boolean): PeriodDTO {
 }
 
 /** Every month that has data or a period row, newest first, with its open or closed state. */
-export async function listPeriods(ctx: DomainContext): Promise<PeriodDTO[]> {
+export const listPeriods = scoped(async function listPeriods(ctx: DomainContext): Promise<PeriodDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const stored = await db.select().from(periods).where(eq(periods.orgId, ctx.orgId)).orderBy(desc(periods.periodMonth));
   const months = await rows<{ m: string }>(db, sql`SELECT DISTINCT to_char(date_trunc('month', work_date), 'YYYY-MM-DD') AS m FROM pulse.fact_days WHERE org_id = ${ctx.orgId}`);
@@ -52,58 +54,80 @@ export async function listPeriods(ctx: DomainContext): Promise<PeriodDTO[]> {
     if (!byMonth.has(m)) byMonth.set(m, { periodMonth: m, status: 'open', closedAt: null, closedBy: null, reopenedAt: null, reopenedBy: null, reopenReason: null, snapshot: null, checklist: null });
   }
   return [...byMonth.values()].sort((a, b) => (a.periodMonth < b.periodMonth ? 1 : -1));
-}
+});
 
 /** True when the month that holds `date` is closed. */
-export async function isMonthClosed(ctx: DomainContext, date: string): Promise<boolean> {
+export const isMonthClosed = scoped(async function isMonthClosed(ctx: DomainContext, date: string): Promise<boolean> {
   const [row] = await db.select({ status: periods.status }).from(periods).where(and(eq(periods.orgId, ctx.orgId), eq(periods.periodMonth, firstOfMonth(date))));
   return row?.status === 'closed';
+});
+
+/** The counts behind the close checklist for one month. `toFix` is how many checklist steps are in the "fix" state. */
+export interface CloseFixCounts {
+  readonly needsRate: number;
+  readonly noHours: number;
+  readonly noPrice: number;
+  readonly notReviewed: number;
+  readonly toFix: number;
 }
 
+/**
+ * One place for the "fix this first" counts of a month, so the month list, the month card and the
+ * checklist always show the same status.
+ */
+export const closeFixCounts = scoped(async function closeFixCounts(ctx: DomainContext, month: string): Promise<CloseFixCounts> {
+  await requirePulse(ctx, 'pulse:read');
+  const orgId = ctx.orgId;
+  const start = firstOfMonth(month);
+  const end = endOfMonth(start);
+  const [row] = await rows<{ needs_rate: number; no_hours: number; not_reviewed: number }>(
+    db,
+    sql`SELECT
+          ((SELECT count(*) FROM pulse.production_entries WHERE org_id = ${orgId} AND deleted_at IS NULL AND needs_rate AND work_date BETWEEN ${start}::date AND ${end}::date)
+         + (SELECT count(*) FROM pulse.indirect_entries WHERE org_id = ${orgId} AND deleted_at IS NULL AND needs_rate AND work_date BETWEEN ${start}::date AND ${end}::date)
+         + (SELECT count(*) FROM pulse.vas_entries WHERE org_id = ${orgId} AND deleted_at IS NULL AND needs_rate AND work_date BETWEEN ${start}::date AND ${end}::date))::int AS needs_rate,
+          (SELECT count(*) FROM (SELECT job_id, work_date FROM pulse.production_entries
+             WHERE org_id = ${orgId} AND deleted_at IS NULL AND work_date BETWEEN ${start}::date AND ${end}::date
+             GROUP BY job_id, work_date HAVING sum(units_good) > 0 AND COALESCE(sum(hours) FILTER (WHERE hours_confirmed), 0) = 0) d)::int AS no_hours,
+          (SELECT count(*) FROM (SELECT DISTINCT p.site_id, p.work_date FROM pulse.production_entries p
+             WHERE p.org_id = ${orgId} AND p.deleted_at IS NULL AND p.work_date BETWEEN ${start}::date AND ${end}::date
+               AND NOT EXISTS (SELECT 1 FROM pulse.day_reviews r WHERE r.org_id = p.org_id AND r.site_id = p.site_id AND r.work_date = p.work_date AND r.status = 'approved')) d)::int AS not_reviewed`,
+  );
+  const needsRate = row?.needs_rate ?? 0;
+  const noHours = row?.no_hours ?? 0;
+  // The same count Home shows under "Things to fix", for the days of this month.
+  const noPrice = await countServiceEntriesNoPrice(db, orgId, { from: start, to: end });
+  return { needsRate, noHours, noPrice, notReviewed: row?.not_reviewed ?? 0, toFix: [needsRate, noHours, noPrice].filter((count) => count > 0).length };
+});
+
 /** What the month close list checks: Things to fix, days not reviewed and the payroll check. */
-export async function getCloseChecklist(ctx: DomainContext, month: string): Promise<CloseChecklistDTO> {
+export const getCloseChecklist = scoped(async function getCloseChecklist(ctx: DomainContext, month: string): Promise<CloseChecklistDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const start = firstOfMonth(month);
   const end = endOfMonth(start);
-  const [row] = await rows<{ needs_rate: number; no_hours: number; no_price: number; not_reviewed: number }>(
-    db,
-    sql`SELECT
-          ((SELECT count(*) FROM pulse.production_entries WHERE org_id = ${ctx.orgId} AND deleted_at IS NULL AND needs_rate AND work_date BETWEEN ${start}::date AND ${end}::date)
-         + (SELECT count(*) FROM pulse.indirect_entries WHERE org_id = ${ctx.orgId} AND deleted_at IS NULL AND needs_rate AND work_date BETWEEN ${start}::date AND ${end}::date)
-         + (SELECT count(*) FROM pulse.vas_entries WHERE org_id = ${ctx.orgId} AND deleted_at IS NULL AND needs_rate AND work_date BETWEEN ${start}::date AND ${end}::date))::int AS needs_rate,
-          (SELECT count(*) FROM (SELECT job_id, work_date FROM pulse.production_entries
-             WHERE org_id = ${ctx.orgId} AND deleted_at IS NULL AND work_date BETWEEN ${start}::date AND ${end}::date
-             GROUP BY job_id, work_date HAVING sum(units_good) > 0 AND COALESCE(sum(hours) FILTER (WHERE hours_confirmed), 0) = 0) d)::int AS no_hours,
-          (SELECT count(*) FROM pulse.vas_entries WHERE org_id = ${ctx.orgId} AND deleted_at IS NULL AND amount_cents IS NULL AND work_date BETWEEN ${start}::date AND ${end}::date)::int AS no_price,
-          (SELECT count(*) FROM (SELECT DISTINCT p.site_id, p.work_date FROM pulse.production_entries p
-             WHERE p.org_id = ${ctx.orgId} AND p.deleted_at IS NULL AND p.work_date BETWEEN ${start}::date AND ${end}::date
-               AND NOT EXISTS (SELECT 1 FROM pulse.day_reviews r WHERE r.org_id = p.org_id AND r.site_id = p.site_id AND r.work_date = p.work_date AND r.status = 'approved')) d)::int AS not_reviewed`,
-  );
+  const counts = await closeFixCounts(ctx, start);
   const bridge = await getCompanyBridge(ctx, { from: start, to: end });
-  const needsRate = row?.needs_rate ?? 0;
-  const noHours = row?.no_hours ?? 0;
-  const noPrice = row?.no_price ?? 0;
   return {
     periodMonth: start,
-    entriesNeedingRate: needsRate,
-    daysWithUnitsNoHours: noHours,
-    servicesNoPrice: noPrice,
-    daysNotReviewed: row?.not_reviewed ?? 0,
+    entriesNeedingRate: counts.needsRate,
+    daysWithUnitsNoHours: counts.noHours,
+    servicesNoPrice: counts.noPrice,
+    daysNotReviewed: counts.notReviewed,
     payrollGapCents: moneyOut(access.seesMoney, bridge.payrollGapCents),
-    ready: needsRate === 0 && noHours === 0 && noPrice === 0,
+    ready: counts.toFix === 0,
   };
-}
+});
 
 /**
  * Closes a month: stores the checklist and a snapshot of totals by client, job type and service
  * plus the company profit bridge, then locks every stream row dated in it.
  */
-export async function closePeriod(ctx: DomainContext, month: string): Promise<PeriodDTO> {
+export const closePeriod = scoped(async function closePeriod(ctx: DomainContext, month: string): Promise<PeriodDTO> {
   const access = await requirePulse(ctx, 'period:close');
   const start = firstOfMonth(month);
   const end = endOfMonth(start);
   const [existing] = await db.select().from(periods).where(and(eq(periods.orgId, ctx.orgId), eq(periods.periodMonth, start)));
-  if (existing?.status === 'closed') throw conflict(`${monthName(start)} is already closed.`);
+  if (existing?.status === 'closed') throw conflict(`${monthYear(start)} is already closed.`);
   const system = { ...ctx, actorKind: 'system' as const };
   const [checklist, byClient, byType, byService, bridge] = await Promise.all([
     getCloseChecklist(system, start),
@@ -112,7 +136,14 @@ export async function closePeriod(ctx: DomainContext, month: string): Promise<Pe
     getProfit(system, 'service', { from: start, to: end }),
     getCompanyBridge(system, { from: start, to: end }),
   ]);
-  const snapshot = jsonSafe({ total: byClient.total, byClient: byClient.rows, byJobType: byType.rows, byService: byService.rows, bridge }) as Record<string, unknown>;
+  // The company figures are saved with the job figures, so a closed month always shows what the company kept.
+  const company = {
+    jobProfitCents: bridge.workProfitCents,
+    jobMarginBp: byClient.total.marginBp,
+    companyProfitCents: bridge.companyProfitCents,
+    companyMarginBp: bridge.companyProfitCents === null || byClient.total.revenueCents === null ? null : marginBp(bridge.companyProfitCents, byClient.total.revenueCents),
+  };
+  const snapshot = jsonSafe({ total: byClient.total, byClient: byClient.rows, byJobType: byType.rows, byService: byService.rows, bridge, company }) as Record<string, unknown>;
   return inTx(async (tx) => {
     const values = { status: 'closed', closedAt: new Date(), closedBy: ctx.userId, snapshot, checklist: jsonSafe(checklist) as Record<string, unknown>, updatedAt: new Date() };
     const [row] = await tx
@@ -120,22 +151,22 @@ export async function closePeriod(ctx: DomainContext, month: string): Promise<Pe
       .values({ orgId: ctx.orgId, periodMonth: start, ...values })
       .onConflictDoUpdate({ target: [periods.orgId, periods.periodMonth], set: values })
       .returning();
-    await logActivity(tx, ctx, { verb: 'period.closed', entityType: 'period', entityId: row!.id, before: { status: 'open' }, after: { status: 'closed' }, meta: { periodMonth: start, profitCents: byClient.total.profitCents } });
+    await logActivity(tx, ctx, { verb: 'period.closed', entityType: 'period', entityId: row!.id, before: { status: 'open' }, after: { status: 'closed' }, meta: { periodMonth: start, profitCents: byClient.total.profitCents, companyProfitCents: bridge.companyProfitCents } });
     return toDTO(row!, access.seesMoney);
   });
-}
+});
 
 /** Reopens a closed month. Needs the Pulse owner and a reason, and is logged. */
-export async function reopenPeriod(ctx: DomainContext, month: string, reason: string): Promise<PeriodDTO> {
+export const reopenPeriod = scoped(async function reopenPeriod(ctx: DomainContext, month: string, reason: string): Promise<PeriodDTO> {
   const access = await requirePulse(ctx, 'period:reopen');
   const start = firstOfMonth(month);
   const why = cleanText(reason);
   if (!why) throw invalid('Say why the month is being reopened.', { reason: 'Add a short reason.' });
   return inTx(async (tx) => {
     const [existing] = await tx.select().from(periods).where(and(eq(periods.orgId, ctx.orgId), eq(periods.periodMonth, start)));
-    if (!existing || existing.status !== 'closed') throw conflict(`${monthName(start)} is not closed.`);
+    if (!existing || existing.status !== 'closed') throw conflict(`${monthYear(start)} is not closed.`);
     const [row] = await tx.update(periods).set({ status: 'open', reopenedAt: new Date(), reopenedBy: ctx.userId, reopenReason: why, updatedAt: new Date() }).where(eq(periods.id, existing.id)).returning();
     await logActivity(tx, ctx, { verb: 'period.reopened', entityType: 'period', entityId: existing.id, before: { status: 'closed' }, after: { status: 'open', reopenReason: why }, meta: { periodMonth: start } });
     return toDTO(row!, access.seesMoney);
   });
-}
+});

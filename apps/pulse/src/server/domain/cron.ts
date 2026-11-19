@@ -6,13 +6,14 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { asSystem, scoped } from '@/server/db/scope';
 import { orgHasPulseModule } from '@/server/entitlements';
 import { rows, type DomainContext } from './_shared';
 import { evaluateAlerts } from './alerts';
 import { recomputeJobs } from './job-stats';
 
 /** Acts for an org as "KitStak" (a system actor, treated as the workspace owner). */
-export async function systemContext(orgId: string): Promise<DomainContext | null> {
+export const systemContext = scoped(async function systemContext(orgId: string): Promise<DomainContext | null> {
   const [org] = await rows<{ slug: string; user_id: string | null }>(
     db,
     sql`SELECT o.slug, (SELECT m.user_id FROM core.member m WHERE m.organization_id = o.id ORDER BY (m.role LIKE '%owner%') DESC, m.created_at LIMIT 1) AS user_id
@@ -20,11 +21,11 @@ export async function systemContext(orgId: string): Promise<DomainContext | null
   );
   if (!org?.user_id) return null;
   return { orgId, orgSlug: org.slug, userId: org.user_id, userName: 'KitStak', orgRole: 'owner', actorKind: 'system' };
-}
+});
 
 /** Orgs that use Pulse (they have a settings row), least recently ticked first. */
 export async function orgsUsingPulse(): Promise<string[]> {
-  const found = await rows<{ org_id: string }>(db, sql`SELECT s.org_id FROM pulse.settings s ORDER BY (SELECT max(st.computed_at) FROM pulse.job_stats st WHERE st.org_id = s.org_id) NULLS FIRST`);
+  const found = await asSystem('cron: list every workspace that uses Pulse', () => rows<{ org_id: string }>(db, sql`SELECT s.org_id FROM pulse.settings s ORDER BY (SELECT max(st.computed_at) FROM pulse.job_stats st WHERE st.org_id = s.org_id) NULLS FIRST`));
   return found.map((row) => row.org_id);
 }
 
@@ -32,7 +33,7 @@ export async function orgsUsingPulse(): Promise<string[]> {
  * One org's tick: rebuilds the numbers of open jobs so the date based rules (nothing logged for
  * days, due soon, finish after the due date) follow the calendar, then checks the alert rules.
  */
-export async function tickOrg(orgId: string): Promise<{ jobs: number; alerts: { created: number; updated: number; resolved: number } } | null> {
+export const tickOrg = scoped(async function tickOrg(orgId: string): Promise<{ jobs: number; alerts: { created: number; updated: number; resolved: number } } | null> {
   if (!(await orgHasPulseModule(orgId))) return null;
   const ctx = await systemContext(orgId);
   if (!ctx) return null;
@@ -42,7 +43,7 @@ export async function tickOrg(orgId: string): Promise<{ jobs: number; alerts: { 
   await syncIfStale(ctx, 'cron');
   if (jobs.length > 0) await db.transaction((tx) => recomputeJobs(tx, ctx, jobs.map((job) => job.id)));
   return { jobs: jobs.length, alerts: await evaluateAlerts(ctx) };
-}
+});
 
 /** The 15 minute tick over every org, inside a time budget. */
 export async function runTick(budgetMs = 240_000): Promise<{ orgs: number; jobs: number; alertsCreated: number; failed: number }> {
@@ -69,7 +70,7 @@ export async function runTick(budgetMs = 240_000): Promise<{ orgs: number; jobs:
 
 /** Daily retention (SPEC 5.4): old import row bodies, report builds, read notifications, sync runs, bridge events, activity past 7 years. */
 export async function runCleanup(): Promise<Record<string, number>> {
-  const count = async (query: ReturnType<typeof sql>): Promise<number> => (await db.execute(query)).rowCount ?? 0;
+  const count = async (query: ReturnType<typeof sql>): Promise<number> => (await asSystem('cron: daily cleanup across workspaces', () => db.execute(query))).rowCount ?? 0;
   return {
     importRows: await count(sql`UPDATE pulse.import_rows r SET raw = NULL, parsed = NULL, "before" = NULL
                                  FROM pulse.import_batches b WHERE b.id = r.batch_id AND b.undo_until < now() AND (r.raw IS NOT NULL OR r.parsed IS NOT NULL OR r."before" IS NOT NULL)`),

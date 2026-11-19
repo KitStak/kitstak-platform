@@ -125,6 +125,16 @@ const COST_FIELDS: readonly SettingsField[] = [
   },
   { kind: 'percent', key: 'sharedPctBp', max: 1000, label: 'Percent on top of labor', hint: 'Each job carries this share of its own labor cost.', when: (draft) => draft.sharedCostRule === 'percent_of_labor' },
   { kind: 'select', key: 'sharedSpread', label: 'Spread it over', hint: 'A slow day is shared with the busy days of the same period.', when: (draft) => draft.sharedCostRule === 'by_labor_hours' || draft.sharedCostRule === 'full', options: [{ value: 'day', label: 'Each day' }, { value: 'week', label: 'Each week' }, { value: 'month', label: 'Each month' }] },
+  {
+    kind: 'select',
+    key: 'companyCostSpread',
+    label: 'Spread company costs by',
+    hint: 'Company costs are typed in by month. This says how a week or part of a month gets its share. A whole month is the same either way, so month close does not change.',
+    options: [
+      { value: 'calendar', label: 'Calendar days', description: 'Every day of the month carries the same share, weekends too.' },
+      { value: 'work_days', label: 'Work days', description: 'Only your working days carry a share. A day off gets none, even if work was logged on it.' },
+    ],
+  },
   { kind: 'percent', key: 'marginFloorBp', label: 'Losing money when margin is heading under', hint: 'A job whose projected margin falls below this is marked losing money. Most shops use 0 to 10.' },
   { kind: 'percent', key: 'atRiskGapBp', label: 'At risk when this far under the target', hint: 'Points of margin below the target that make a job at risk.' },
   { kind: 'percent', key: 'laborWatchOverBp', max: 1000, label: 'Heads up when labor runs over plan by', hint: 'Labor hours over the plan, for the work done so far.' },

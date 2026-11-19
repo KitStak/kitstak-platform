@@ -18,10 +18,10 @@ import { SampleDataCard } from '@/features/settings/sections/more';
 import { useShell } from '@/features/shell/shell-context';
 import { apiGet, apiPath } from '@/lib/api-client';
 import { formatMoney, formatMoneyPerHour, formatNumber, formatPercentBp } from '@/lib/format';
-import { useRunState } from '@/lib/hooks/use-data';
+import { useProduction, useRunState } from '@/lib/hooks/use-data';
 import { loadedRate } from '@/lib/profit/rates';
 import { routes } from '@/lib/routes';
-import type { SettingsDTO } from '@/lib/types';
+import type { ProductionEntryDTO, SettingsDTO } from '@/lib/types';
 import type { ActionResult } from '@/server/actions/_action';
 import { createClientAction } from '@/server/actions/catalog';
 import { quickAddJobAction } from '@/server/actions/jobs';
@@ -78,6 +78,14 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
   const canLog = shell.can('production:log');
   const steps = state.steps;
   const current = ORDER.find((id) => !steps[id]) ?? null;
+  // The first day step writes the plain line of today (day shift, no labor type). When the job
+  // already has that line, the step reads it and saves over it with the version it read.
+  const todayRows = useProduction(
+    { jobId: state.job?.id, from: state.site?.today, to: state.site?.today },
+    { enabled: current === 'day' && canLog && Boolean(state.job && state.site), placeholderData: undefined },
+  );
+  const sameLine = (rows: readonly ProductionEntryDTO[] | undefined) => rows?.find((row) => row.deletedAt === null && row.shift === 'day' && row.laborClassId === null) ?? null;
+  const lineToday = sameLine(todayRows.data);
 
   // When a step is done, the cursor moves into the next one, so the five steps can be typed straight through.
   const lastStep = useRef(current);
@@ -157,12 +165,12 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
     await finish('rate', () => createLaborRateAction({ laborClassId: made.data.id, effectiveFrom: `${(state.site?.today ?? new Date().toISOString().slice(0, 10)).slice(0, 4)}-01-01`, wageCents: Math.round(Number(wage) * 100) }), 'Labor rate set');
   };
 
-  const saveClient = async (): Promise<void> => {
+  const saveClient = async (confirmNew = false): Promise<void> => {
     if (clientName.trim() === '') {
       setErrors({ name: 'Type the client name.' });
       return;
     }
-    await finish('client', () => createClientAction({ name: clientName.trim() }), 'Client added');
+    await finish('client', () => createClientAction({ name: clientName.trim(), confirmNew }), 'Client added');
   };
 
   const saveJob = async (): Promise<void> => {
@@ -183,7 +191,20 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
     setErrors(problems);
     if (Object.keys(problems).length > 0 || !state.job || !state.site) return;
     const hours = (Number(day.people) * Number(day.hours)).toFixed(2);
-    const saved = await finish('day', () => saveProductionEntryAction({ jobId: state.job?.id ?? '', workDate: state.site?.today ?? '', unitsGood: day.units.trim(), headcount: day.people.trim(), hours }), '');
+    const jobId = state.job.id;
+    const workDate = state.site.today;
+    const saved = await finish(
+      'day',
+      async () => {
+        // The job may already have a row today (from the warehouse, or typed on Log work). Read it
+        // right now and send its version, so the save changes that row and is never a conflict.
+        const fresh = await todayRows.refetch();
+        if (fresh.isError) throw fresh.error;
+        const row = sameLine(fresh.data);
+        return saveProductionEntryAction({ ...(row ? { id: row.id, version: row.version } : {}), jobId, workDate, unitsGood: day.units.trim(), headcount: day.people.trim(), hours });
+      },
+      '',
+    );
     if (saved) router.refresh();
   };
 
@@ -241,7 +262,7 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
             done={steps.rate}
             active={current === 'rate'}
             link={{ href: routes.labor('rates'), label: 'Labor rates' }}
-            summary={steps.rate ? (state.rate ? `${state.rate.name}: one hour really costs ${state.rate.loadedRateCents !== null ? formatMoney(state.rate.loadedRateCents) : 'an amount your role cannot see'}.` : 'Done.') : 'What an hour of work really costs you: the wage plus taxes, benefits and overhead.'}
+            summary={steps.rate ? (state.rate ? `${state.rate.name}: one hour really costs ${state.rate.loadedRateCents !== null ? formatMoney(state.rate.loadedRateCents) : 'an amount your role cannot see'} today.` : 'Done.') : 'What an hour of work really costs you: the wage plus taxes, benefits and overhead.'}
           >
             {canRate ? (
               <form
@@ -291,6 +312,11 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
                 <Button type="submit" loading={busy === 'client'} data-testid="step-client-save">
                   Add the client
                 </Button>
+                {errors.clientLookAlike ? (
+                  <Button type="button" variant="secondary" loading={busy === 'client'} onClick={() => void saveClient(true)} data-testid="step-client-save-new">
+                    Add as a new client
+                  </Button>
+                ) : null}
               </form>
             ) : (
               <p className="text-sm text-fg-muted">Your role cannot add clients. Ask a manager to do this step.</p>
@@ -339,7 +365,7 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
             done={steps.day}
             active={current === 'day'}
             link={{ href: routes.log(), label: 'Log work' }}
-            summary={steps.day && profit ? `${formatNumber(profit.unitsGood, { maxDigits: 0 })} units in ${formatNumber(profit.hours, { maxDigits: 1 })} labor hours on ${profit.jobNumber}.` : 'Units finished, how many people, and the hours each.'}
+            summary={steps.day && profit ? `Logged so far on ${profit.jobNumber}, over all its days: ${formatNumber(profit.unitsGood, { maxDigits: 0 })} units in ${formatNumber(profit.hours, { maxDigits: 1 })} labor hours.` : 'Units finished, how many people, and the hours each.'}
           >
             {canLog ? (
               <form
@@ -361,6 +387,11 @@ export function WelcomeView({ initial, settings, firstName, connected }: { reado
                 <Button type="submit" loading={busy === 'day'} data-testid="step-day-save">
                   Log the day
                 </Button>
+                {lineToday ? (
+                  <p className="text-sm text-fg-secondary sm:col-span-4" data-testid="step-day-existing">
+                    {state.job?.number ?? 'This job'} already has work logged today: {formatNumber(lineToday.unitsGood, { maxDigits: 0 })} units in {formatNumber(lineToday.hours, { maxDigits: 2 })} labor hours. Logging the day here changes that row to the numbers above.
+                  </p>
+                ) : null}
                 <p className="text-sm text-fg-muted sm:col-span-4">{laborHours !== null ? `That is ${formatNumber(laborHours, { maxDigits: 2 })} labor hours on ${state.job?.number ?? 'the job'}.` : 'People times hours each gives the labor hours.'}</p>
               </form>
             ) : (

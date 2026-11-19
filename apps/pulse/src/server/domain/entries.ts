@@ -7,16 +7,20 @@
 import 'server-only';
 import { and, asc, desc, eq, gte, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { costEntries, items, materialUsage, revenueEntries, vasEntries } from '@/server/db/schema';
+import { appUrls } from '@/server/env';
+import { orgModuleFlags } from '@/server/entitlements';
 import { conflict, invalid, notFound } from '@/server/errors';
 import type { CostCategory, CostScope, PartsOwnerValue, RevenueKind, StoredRevenueKind, StreamSource } from '@/lib/constants';
 import { mulQuantityPrice } from '@/lib/money';
 import type { CostEntryDTO, MaterialUsageDTO, RevenueEntryDTO, VasEntryDTO } from '@/lib/types';
-import { assertVersion, cleanText, diff, hideUnless, inTx, iso, isoRequired, isUuid, moneyOut, monthStart, type DomainContext } from './_shared';
+import { assertEntryDate, assertVersion, cleanText, diff, hideUnless, inTx, iso, isoRequired, isUuid, moneyOut, monthStart, type DomainContext } from './_shared';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
 import { getClientRow, getSiteRow, getVasServiceRow, insertItem, resolveSite } from './catalog';
 import { getJobRow } from './jobs';
+import { assertReadableRefs, liveRefsOnly } from './deleted';
 import { assertOpen, closedMonths, finishWrite, newTouched, restampUsage, restampVas, touchDay, touchJob } from './recalc';
 import { defaultSiteId } from './settings';
 
@@ -92,8 +96,14 @@ function toUsageDTO(row: UsageRow, access: Access, closed: ReadonlySet<string>):
   };
 }
 
-export async function listMaterialUsage(ctx: DomainContext, filters: EntryFilters = {}): Promise<MaterialUsageDTO[]> {
+/** The time zone that sets "today" for an entry (the date rule): its site, else the default site. */
+async function zoneOf(ctx: DomainContext, executor: Executor, siteId: string | null | undefined): Promise<string> {
+  return (siteId ? await getSiteRow(ctx, siteId, executor) : await resolveSite(ctx, null, executor)).timezone;
+}
+
+export const listMaterialUsage = scoped(async function listMaterialUsage(ctx: DomainContext, filters: EntryFilters = {}): Promise<MaterialUsageDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  const seesDeletedRows = await assertReadableRefs(ctx, { jobId: filters.jobId }, access);
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
     .select()
@@ -103,6 +113,7 @@ export async function listMaterialUsage(ctx: DomainContext, filters: EntryFilter
         eq(materialUsage.orgId, ctx.orgId),
         filters.includeDeleted ? undefined : isNull(materialUsage.deletedAt),
         filters.jobId ? eq(materialUsage.jobId, filters.jobId) : undefined,
+        seesDeletedRows ? undefined : liveRefsOnly({ job: materialUsage.jobId }),
         filters.siteId ? eq(materialUsage.siteId, filters.siteId) : undefined,
         filters.from ? gte(materialUsage.usageDate, filters.from) : undefined,
         filters.to ? lte(materialUsage.usageDate, filters.to) : undefined,
@@ -111,7 +122,7 @@ export async function listMaterialUsage(ctx: DomainContext, filters: EntryFilter
     .orderBy(desc(materialUsage.usageDate), asc(materialUsage.createdAt))
     .limit(cap(filters.limit));
   return found.map((row) => toUsageDTO(row, access, closed));
-}
+});
 
 export interface MaterialUsageInput {
   id?: string | null;
@@ -136,7 +147,7 @@ export interface MaterialUsageInput {
   isSample?: boolean;
 }
 
-export async function saveMaterialUsage(ctx: DomainContext, input: MaterialUsageInput): Promise<MaterialUsageDTO> {
+export const saveMaterialUsage = scoped(async function saveMaterialUsage(ctx: DomainContext, input: MaterialUsageInput): Promise<MaterialUsageDTO> {
   const access = await requirePulse(ctx, 'material:log');
   return inTx(async (tx) => {
     let existing: UsageRow | undefined;
@@ -146,6 +157,7 @@ export async function saveMaterialUsage(ctx: DomainContext, input: MaterialUsage
       assertVersion(existing.version, input.version);
     }
     const job = await getJobRow(ctx, input.jobId, tx);
+    assertEntryDate('material', await zoneOf(ctx, tx, job.siteId), input.usageDate, { field: 'usageDate', source: input.source ?? existing?.source, before: existing?.usageDate });
     await assertOpen(tx, ctx.orgId, [input.usageDate, existing?.usageDate]);
     let item: typeof items.$inferSelect | undefined;
     if (input.itemId) [item] = await tx.select().from(items).where(and(eq(items.orgId, ctx.orgId), eq(items.id, input.itemId), isNull(items.deletedAt)));
@@ -193,7 +205,7 @@ export async function saveMaterialUsage(ctx: DomainContext, input: MaterialUsage
     const [fresh] = await tx.select().from(materialUsage).where(eq(materialUsage.id, row.id));
     return toUsageDTO(fresh!, access, await closedMonths(tx, ctx.orgId));
   });
-}
+});
 
 async function toggleUsage(ctx: DomainContext, id: string, restore: boolean): Promise<MaterialUsageDTO> {
   const access = await requirePulse(ctx, 'material:log');
@@ -211,8 +223,8 @@ async function toggleUsage(ctx: DomainContext, id: string, restore: boolean): Pr
   });
 }
 
-export const deleteMaterialUsage = (ctx: DomainContext, id: string): Promise<MaterialUsageDTO> => toggleUsage(ctx, id, false);
-export const restoreMaterialUsage = (ctx: DomainContext, id: string): Promise<MaterialUsageDTO> => toggleUsage(ctx, id, true);
+export const deleteMaterialUsage = scoped((ctx: DomainContext, id: string): Promise<MaterialUsageDTO> => toggleUsage(ctx, id, false));
+export const restoreMaterialUsage = scoped((ctx: DomainContext, id: string): Promise<MaterialUsageDTO> => toggleUsage(ctx, id, true));
 
 /* ---------------------------------------------------------------- other costs */
 
@@ -231,8 +243,9 @@ function toCostDTO(row: CostRow, access: Access, closed: ReadonlySet<string>): C
   };
 }
 
-export async function listCosts(ctx: DomainContext, filters: EntryFilters & { scope?: CostScope | null } = {}): Promise<CostEntryDTO[]> {
+export const listCosts = scoped(async function listCosts(ctx: DomainContext, filters: EntryFilters & { scope?: CostScope | null } = {}): Promise<CostEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  const seesDeletedRows = await assertReadableRefs(ctx, { jobId: filters.jobId, clientId: filters.clientId }, access);
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
     .select()
@@ -244,6 +257,7 @@ export async function listCosts(ctx: DomainContext, filters: EntryFilters & { sc
         filters.scope ? eq(costEntries.scope, filters.scope) : undefined,
         filters.jobId ? eq(costEntries.jobId, filters.jobId) : undefined,
         filters.clientId ? eq(costEntries.clientId, filters.clientId) : undefined,
+        seesDeletedRows ? undefined : liveRefsOnly({ job: costEntries.jobId, client: costEntries.clientId }),
         filters.siteId ? eq(costEntries.siteId, filters.siteId) : undefined,
         filters.from ? gte(costEntries.costDate, filters.from) : undefined,
         filters.to ? lte(costEntries.costDate, filters.to) : undefined,
@@ -252,7 +266,7 @@ export async function listCosts(ctx: DomainContext, filters: EntryFilters & { sc
     .orderBy(desc(costEntries.costDate), asc(costEntries.createdAt))
     .limit(cap(filters.limit));
   return found.map((row) => toCostDTO(row, access, closed));
-}
+});
 
 export interface CostInput {
   id?: string | null;
@@ -278,7 +292,7 @@ async function touchCost(tx: Executor, ctx: DomainContext, touched: ReturnType<t
   else touchJob(touched, row.jobId, row.clientId);
 }
 
-export async function saveCost(ctx: DomainContext, input: CostInput): Promise<CostEntryDTO> {
+export const saveCost = scoped(async function saveCost(ctx: DomainContext, input: CostInput): Promise<CostEntryDTO> {
   const access = await requirePulse(ctx, 'cost:manage');
   return inTx(async (tx) => {
     let existing: CostRow | undefined;
@@ -292,6 +306,7 @@ export async function saveCost(ctx: DomainContext, input: CostInput): Promise<Co
     const client = job ? null : input.clientId ? await getClientRow(ctx, input.clientId, tx) : null;
     const scope: CostScope = job ? 'job' : client ? 'client' : 'company';
     const siteId = job ? job.siteId : input.siteId ? (await getSiteRow(ctx, input.siteId, tx)).id : scope === 'client' ? await defaultSiteId(ctx.orgId, tx) : null;
+    assertEntryDate('cost', await zoneOf(ctx, tx, siteId), input.costDate, { field: 'costDate', source: input.source ?? existing?.source, before: existing?.costDate });
     const values = {
       scope,
       jobId: job?.id ?? null,
@@ -323,7 +338,7 @@ export async function saveCost(ctx: DomainContext, input: CostInput): Promise<Co
     await finishWrite(tx, ctx, touched);
     return toCostDTO(row, access, await closedMonths(tx, ctx.orgId));
   });
-}
+});
 
 async function toggleCost(ctx: DomainContext, id: string, restore: boolean): Promise<CostEntryDTO> {
   const access = await requirePulse(ctx, 'cost:manage');
@@ -340,8 +355,8 @@ async function toggleCost(ctx: DomainContext, id: string, restore: boolean): Pro
   });
 }
 
-export const deleteCost = (ctx: DomainContext, id: string): Promise<CostEntryDTO> => toggleCost(ctx, id, false);
-export const restoreCost = (ctx: DomainContext, id: string): Promise<CostEntryDTO> => toggleCost(ctx, id, true);
+export const deleteCost = scoped((ctx: DomainContext, id: string): Promise<CostEntryDTO> => toggleCost(ctx, id, false));
+export const restoreCost = scoped((ctx: DomainContext, id: string): Promise<CostEntryDTO> => toggleCost(ctx, id, true));
 
 /* ---------------------------------------------------------------- revenue entries */
 
@@ -366,8 +381,9 @@ function toRevenueDTO(row: RevenueRow, access: Access, closed: ReadonlySet<strin
   };
 }
 
-export async function listRevenue(ctx: DomainContext, filters: EntryFilters & { kind?: StoredRevenueKind | null } = {}): Promise<RevenueEntryDTO[]> {
+export const listRevenue = scoped(async function listRevenue(ctx: DomainContext, filters: EntryFilters & { kind?: StoredRevenueKind | null } = {}): Promise<RevenueEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  const seesDeletedRows = await assertReadableRefs(ctx, { jobId: filters.jobId, clientId: filters.clientId }, access);
   const closed = await closedMonths(db, ctx.orgId);
   const found = await db
     .select()
@@ -379,6 +395,7 @@ export async function listRevenue(ctx: DomainContext, filters: EntryFilters & { 
         filters.kind ? eq(revenueEntries.kind, filters.kind) : undefined,
         filters.jobId ? eq(revenueEntries.jobId, filters.jobId) : undefined,
         filters.clientId ? eq(revenueEntries.clientId, filters.clientId) : undefined,
+        seesDeletedRows ? undefined : liveRefsOnly({ job: revenueEntries.jobId, client: revenueEntries.clientId }),
         filters.from ? gte(revenueEntries.revenueDate, filters.from) : undefined,
         filters.to ? lte(revenueEntries.revenueDate, filters.to) : undefined,
       ),
@@ -386,7 +403,7 @@ export async function listRevenue(ctx: DomainContext, filters: EntryFilters & { 
     .orderBy(desc(revenueEntries.revenueDate), asc(revenueEntries.createdAt))
     .limit(cap(filters.limit));
   return found.map((row) => toRevenueDTO(row, access, closed));
-}
+});
 
 export interface RevenueInput {
   id?: string | null;
@@ -411,7 +428,7 @@ export interface RevenueInput {
   isSample?: boolean;
 }
 
-export async function saveRevenue(ctx: DomainContext, input: RevenueInput): Promise<RevenueEntryDTO> {
+export const saveRevenue = scoped(async function saveRevenue(ctx: DomainContext, input: RevenueInput): Promise<RevenueEntryDTO> {
   const access = await requirePulse(ctx, 'revenue:manage');
   return inTx(async (tx) => {
     let existing: RevenueRow | undefined;
@@ -431,6 +448,7 @@ export async function saveRevenue(ctx: DomainContext, input: RevenueInput): Prom
     else if (input.quantity && input.unitPrice) amount = mulQuantityPrice(input.quantity, input.unitPrice);
     else throw invalid('Type an amount, or a quantity and a price.', { amountCents: 'Type an amount.' });
     if (input.kind === 'credit' && amount > BigInt(0)) amount = -amount;
+    assertEntryDate('revenue', await zoneOf(ctx, tx, job?.siteId ?? existing?.siteId), input.revenueDate, { field: 'revenueDate', source: input.source ?? existing?.source, before: existing?.revenueDate });
     const values = {
       siteId: job?.siteId ?? existing?.siteId ?? (await defaultSiteId(ctx.orgId, tx)),
       jobId: job?.id ?? null,
@@ -466,7 +484,7 @@ export async function saveRevenue(ctx: DomainContext, input: RevenueInput): Prom
     await finishWrite(tx, ctx, touched);
     return toRevenueDTO(row, access, await closedMonths(tx, ctx.orgId));
   });
-}
+});
 
 async function toggleRevenue(ctx: DomainContext, id: string, restore: boolean): Promise<RevenueEntryDTO> {
   const access = await requirePulse(ctx, 'revenue:manage');
@@ -484,15 +502,39 @@ async function toggleRevenue(ctx: DomainContext, id: string, restore: boolean): 
   });
 }
 
-export const deleteRevenue = (ctx: DomainContext, id: string): Promise<RevenueEntryDTO> => toggleRevenue(ctx, id, false);
-export const restoreRevenue = (ctx: DomainContext, id: string): Promise<RevenueEntryDTO> => toggleRevenue(ctx, id, true);
+export const deleteRevenue = scoped((ctx: DomainContext, id: string): Promise<RevenueEntryDTO> => toggleRevenue(ctx, id, false));
+export const restoreRevenue = scoped((ctx: DomainContext, id: string): Promise<RevenueEntryDTO> => toggleRevenue(ctx, id, true));
 
 /* ---------------------------------------------------------------- extra service entries */
 
-function toVasEntryDTO(row: VasRow, access: Access, closed: ReadonlySet<string>): VasEntryDTO {
+/** The WMS app's address when the workspace still has the warehouse on its plan, else null (so a link is never dead). */
+async function warehouseBase(ctx: DomainContext): Promise<string | null> {
+  try {
+    return (await orgModuleFlags(ctx.orgId)).wms ? appUrls().wms : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Link back to the warehouse record a pulled entry came from. Only a path is stored on the row. */
+function warehouseUrl(row: VasRow, wmsBase: string | null): string | null {
+  if (!wmsBase || row.source !== 'wms') return null;
+  const path = (row.meta as { wms?: { path?: unknown } } | null)?.wms?.path;
+  return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//') ? `${wmsBase}${path}` : null;
+}
+
+/** Fields a person changed on an entry pulled from another app. The next sync leaves them alone. */
+function lockedMeta(row: VasRow, changed: readonly string[]): Record<string, unknown> {
+  const meta = (row.meta ?? {}) as Record<string, unknown>;
+  const prior = Array.isArray(meta.locked_fields) ? (meta.locked_fields as string[]) : [];
+  return { ...meta, locked_fields: [...new Set([...prior, ...changed])] };
+}
+
+function toVasEntryDTO(row: VasRow, access: Access, closed: ReadonlySet<string>, wmsBase: string | null): VasEntryDTO {
   const money = access.seesMoney;
   return {
     ...base(row, access, closed, row.workDate),
+    sourceUrl: warehouseUrl(row, wmsBase),
     siteId: row.siteId,
     note: row.note,
     vasServiceId: row.vasServiceId,
@@ -514,8 +556,13 @@ function toVasEntryDTO(row: VasRow, access: Access, closed: ReadonlySet<string>)
   };
 }
 
-export async function listVasEntries(ctx: DomainContext, filters: EntryFilters & { vasServiceId?: string | null; noPrice?: boolean } = {}): Promise<VasEntryDTO[]> {
+/**
+ * `openMonths` keeps only entries dated in a month that is not closed, the same rule as the count of
+ * unpriced entries on Home (`countServiceEntriesNoPrice`), so "Fix this first" lists exactly those.
+ */
+export const listVasEntries = scoped(async function listVasEntries(ctx: DomainContext, filters: EntryFilters & { vasServiceId?: string | null; noPrice?: boolean; openMonths?: boolean } = {}): Promise<VasEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  const seesDeletedRows = await assertReadableRefs(ctx, { jobId: filters.jobId, clientId: filters.clientId }, access);
   const closed = await closedMonths(db, ctx.orgId);
   const where: (SQL | undefined)[] = [
     eq(vasEntries.orgId, ctx.orgId),
@@ -523,14 +570,19 @@ export async function listVasEntries(ctx: DomainContext, filters: EntryFilters &
     filters.vasServiceId ? eq(vasEntries.vasServiceId, filters.vasServiceId) : undefined,
     filters.jobId ? eq(vasEntries.jobId, filters.jobId) : undefined,
     filters.clientId ? eq(vasEntries.clientId, filters.clientId) : undefined,
+    seesDeletedRows ? undefined : liveRefsOnly({ job: vasEntries.jobId, client: vasEntries.clientId }),
     filters.siteId ? eq(vasEntries.siteId, filters.siteId) : undefined,
     filters.from ? gte(vasEntries.workDate, filters.from) : undefined,
     filters.to ? lte(vasEntries.workDate, filters.to) : undefined,
     filters.noPrice ? isNull(vasEntries.amountCents) : undefined,
+    filters.openMonths
+      ? sql`NOT EXISTS (SELECT 1 FROM pulse.periods p WHERE p.org_id = ${vasEntries.orgId} AND p.status = 'closed' AND p.period_month = date_trunc('month', ${vasEntries.workDate})::date)`
+      : undefined,
   ];
   const found = await db.select().from(vasEntries).where(and(...where)).orderBy(desc(vasEntries.workDate), asc(vasEntries.createdAt)).limit(cap(filters.limit));
-  return found.map((row) => toVasEntryDTO(row, access, closed));
-}
+  const wmsBase = found.some((row) => row.source === 'wms') ? await warehouseBase(ctx) : null;
+  return found.map((row) => toVasEntryDTO(row, access, closed, wmsBase));
+});
 
 export interface VasEntryInput {
   id?: string | null;
@@ -556,10 +608,13 @@ export interface VasEntryInput {
   source?: StreamSource;
   sourceRef?: string | null;
   isSample?: boolean;
+  /** Extra facts kept on the row (a sync stores the path back to its record here). Merged over what is there. */
+  meta?: Record<string, unknown>;
 }
 
-export async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Promise<VasEntryDTO> {
+export const saveVasEntry = scoped(async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Promise<VasEntryDTO> {
   const access = await requirePulse(ctx, 'vas:manage');
+  const wmsBase = await warehouseBase(ctx);
   const hours = input.hours ?? '0';
   if (Number(input.overtimeHours ?? 0) > Number(hours)) throw invalid('Overtime hours cannot be more than the labor hours.', { overtimeHours: 'More than the labor hours.' });
   return inTx(async (tx) => {
@@ -575,9 +630,16 @@ export async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Pr
     const client = job ? await getClientRow(ctx, job.clientId, tx, true) : input.clientId ? await getClientRow(ctx, input.clientId, tx) : null;
     if (!client) throw invalid('Pick a job or a client for this service.', { jobId: 'Pick a job or a client.' });
     const site = job ? await getSiteRow(ctx, job.siteId, tx) : await resolveSite(ctx, input.siteId ?? existing?.siteId, tx);
+    assertEntryDate('vas', site.timezone, input.workDate, { field: 'workDate', source: input.source ?? existing?.source, before: existing?.workDate });
     const unitPrice = input.unitPrice === undefined ? (existing?.unitPrice ?? service.defaultPrice) : input.unitPrice;
+    // An entry pulled from the warehouse carries the warehouse's amount. Typing labor hours or a note on it
+    // must not work the amount out again from the Pulse service: it changes only with the price or the count.
+    const keepsPulledAmount =
+      existing !== undefined && existing.source === 'wms' && ctx.actorKind !== 'integration' && input.amountCents === undefined &&
+      Number(input.quantity) === Number(existing.quantity) && (unitPrice === null ? existing.unitPrice === null : existing.unitPrice !== null && Number(unitPrice) === Number(existing.unitPrice));
     let amount: bigint | null;
     if (input.amountCents !== null && input.amountCents !== undefined) amount = BigInt(input.amountCents);
+    else if (keepsPulledAmount) amount = existing?.amountCents ?? null;
     else if (unitPrice === null) amount = null;
     else if (service.billing === 'flat') amount = mulQuantityPrice('1', unitPrice);
     else amount = mulQuantityPrice(service.billing === 'per_hour' ? hours : input.quantity, unitPrice);
@@ -602,15 +664,19 @@ export async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Pr
     let row: VasRow;
     if (existing) {
       const change = diff(existing as unknown as Record<string, unknown>, values as Record<string, unknown>);
-      if (!change) return toVasEntryDTO(existing, access, await closedMonths(tx, ctx.orgId));
-      [row] = (await tx.update(vasEntries).set({ ...values, version: sql`version + 1`, updatedBy: ctx.userId, updatedAt: new Date() }).where(eq(vasEntries.id, existing.id)).returning()) as [VasRow];
+      if (!change) return toVasEntryDTO(existing, access, await closedMonths(tx, ctx.orgId), wmsBase);
+      // A person's change to a pulled entry is remembered, so the next sync does not undo it.
+      const pulled = existing.source !== 'manual' && existing.source !== 'csv' && existing.source !== 'sample';
+      const kept = pulled && ctx.actorKind !== 'integration' ? lockedMeta(existing, Object.keys(change.after)) : ((existing.meta ?? {}) as Record<string, unknown>);
+      const meta = { ...kept, ...(input.meta ?? {}) };
+      [row] = (await tx.update(vasEntries).set({ ...values, meta, version: sql`version + 1`, updatedBy: ctx.userId, updatedAt: new Date() }).where(eq(vasEntries.id, existing.id)).returning()) as [VasRow];
       await logActivity(tx, ctx, { verb: 'service_entry.edited', entityType: 'service_entry', entityId: row.id, jobId: row.jobId, clientId: row.clientId, ...change });
       touchJob(touched, existing.jobId, existing.clientId);
       touchDay(touched, existing.siteId, existing.workDate);
     } else {
       [row] = (await tx
         .insert(vasEntries)
-        .values({ orgId: ctx.orgId, ...values, source: input.source ?? 'manual', sourceRef: input.sourceRef ?? null, isSample: Boolean(input.isSample), createdBy: ctx.userId, updatedBy: ctx.userId })
+        .values({ orgId: ctx.orgId, ...values, source: input.source ?? 'manual', sourceRef: input.sourceRef ?? null, isSample: Boolean(input.isSample), meta: input.meta ?? {}, createdBy: ctx.userId, updatedBy: ctx.userId })
         .returning()) as [VasRow];
       await logActivity(tx, ctx, { verb: 'service_entry.logged', entityType: 'service_entry', entityId: row.id, jobId: row.jobId, clientId: row.clientId, after: { vasServiceId: row.vasServiceId, workDate: row.workDate, quantity: row.quantity, hours: row.hours } });
     }
@@ -619,9 +685,9 @@ export async function saveVasEntry(ctx: DomainContext, input: VasEntryInput): Pr
     touchDay(touched, row.siteId, row.workDate);
     await finishWrite(tx, ctx, touched);
     const [fresh] = await tx.select().from(vasEntries).where(eq(vasEntries.id, row.id));
-    return toVasEntryDTO(fresh!, access, await closedMonths(tx, ctx.orgId));
+    return toVasEntryDTO(fresh!, access, await closedMonths(tx, ctx.orgId), wmsBase);
   });
-}
+});
 
 async function toggleVasEntry(ctx: DomainContext, id: string, restore: boolean): Promise<VasEntryDTO> {
   const access = await requirePulse(ctx, 'vas:manage');
@@ -636,9 +702,9 @@ async function toggleVasEntry(ctx: DomainContext, id: string, restore: boolean):
     touchJob(touched, row.jobId, row.clientId);
     touchDay(touched, row.siteId, row.workDate);
     await finishWrite(tx, ctx, touched);
-    return toVasEntryDTO(after!, access, await closedMonths(tx, ctx.orgId));
+    return toVasEntryDTO(after!, access, await closedMonths(tx, ctx.orgId), await warehouseBase(ctx));
   });
 }
 
-export const deleteVasEntry = (ctx: DomainContext, id: string): Promise<VasEntryDTO> => toggleVasEntry(ctx, id, false);
-export const restoreVasEntry = (ctx: DomainContext, id: string): Promise<VasEntryDTO> => toggleVasEntry(ctx, id, true);
+export const deleteVasEntry = scoped((ctx: DomainContext, id: string): Promise<VasEntryDTO> => toggleVasEntry(ctx, id, false));
+export const restoreVasEntry = scoped((ctx: DomainContext, id: string): Promise<VasEntryDTO> => toggleVasEntry(ctx, id, true));

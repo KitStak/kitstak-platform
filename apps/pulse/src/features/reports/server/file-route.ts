@@ -6,9 +6,11 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
 import { toDomainContext } from '@/server/domain/_shared';
+import { assertAddressRefsReadable } from '@/server/domain/deleted';
 import { orgHasPulseModule } from '@/server/entitlements';
 import { DomainError } from '@/server/errors';
 import { errorResponse, type ApiArgs } from '@/server/http/api';
+import { PRINT_PAGE_CONTENT_SECURITY_POLICY } from '@/server/http/csp';
 import { getApiContext } from '@/server/session';
 
 export function fileRoute<P = Record<string, never>>(handler: (args: ApiArgs<P>) => Promise<unknown>) {
@@ -18,7 +20,11 @@ export function fileRoute<P = Record<string, never>>(handler: (args: ApiArgs<P>)
       if (!context) throw new DomainError('UNAUTHENTICATED', 'Sign in to KitStak to continue.');
       if (!(await orgHasPulseModule(context.org.id))) throw new DomainError('NOT_ENTITLED', 'KitStak Pulse is not turned on for this organization.');
       const params = route?.params ? await route.params : ({} as P);
-      const result = await handler({ ctx: toDomainContext(context), context, request, params, searchParams: new URL(request.url).searchParams });
+      const ctx = toDomainContext(context);
+      const searchParams = new URL(request.url).searchParams;
+      // A deleted job or client named in the address is not there for most readers (domain/deleted.ts).
+      await assertAddressRefsReadable(ctx, searchParams);
+      const result = await handler({ ctx, context, request, params, searchParams });
       if (result instanceof Response) return result;
       return NextResponse.json({ data: result ?? null }, { headers: { 'Cache-Control': 'no-store' } });
     } catch (error) {
@@ -36,7 +42,7 @@ export function htmlResponse(body: string): NextResponse {
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'no-referrer',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
+      'Content-Security-Policy': PRINT_PAGE_CONTENT_SECURITY_POLICY,
     },
   });
 }

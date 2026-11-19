@@ -33,6 +33,7 @@ import {
   ToggleGroup,
   toast,
 } from '@/components/ui';
+import { PINNED_CELL_SURFACE } from '@/components/ui/table';
 import { cn } from '@/components/ui/cn';
 import { BulletChart } from '@/components/charts/bullet';
 import { LineChart } from '@/components/charts/cartesian';
@@ -60,6 +61,9 @@ import type {
 } from '@/lib/types';
 import { updateJobAction } from '@/server/actions/jobs';
 import { deleteStandardAction, saveStandardAction } from '@/server/actions/planning';
+
+/** The row action cell stays at the right edge so it is on screen at tablet and phone width. */
+const PINNED_ACTION_CELL = `sticky right-0 z-[1] ${PINNED_CELL_SURFACE}`;
 
 const INVALIDATE = [
   qk.standards(),
@@ -103,6 +107,8 @@ export function TargetPaceView({
   sites,
   today,
   thresholds,
+  initialSuggestions,
+  initialBoard,
 }: {
   readonly initialStandards: StandardDTO[];
   readonly jobTypes: readonly JobTypeDTO[];
@@ -110,11 +116,14 @@ export function TargetPaceView({
   readonly sites: readonly SiteDTO[];
   readonly today: string;
   readonly thresholds: PaceThresholds;
+  /** Read on the server so the first paint is whole (no cards that load later and push the page down). */
+  readonly initialSuggestions?: PaceSuggestionRowDTO[];
+  readonly initialBoard?: InitialBoard;
 }) {
   const shell = useShell();
   const canManage = shell.can('standard:manage');
   const standards = useStandards({}, { initialData: initialStandards });
-  const suggestions = usePaceSuggestions();
+  const suggestions = usePaceSuggestions({ initialData: initialSuggestions });
   const clients = useClients({});
   const services = useVasServices({});
   const [form, setForm] = useState<StandardForm | null>(null);
@@ -152,7 +161,7 @@ export function TargetPaceView({
       unitsPerLaborHour: pace,
       effectiveFrom: today,
       basis: 'history',
-      note: `Median of the last ${row.days} days with units and hours`,
+      note: row.days === 1 ? 'The 1 day with units and hours' : `Median of the last ${row.days} days with units and hours`,
     });
     if (!saved) return;
     toast.undo(`Target pace for ${row.jobTypeName} is now ${formatPace(pace)}`, {
@@ -319,8 +328,8 @@ export function TargetPaceView({
                 );
               })}
             </ul>
-            <div className="mt-3 hidden overflow-x-auto border-t border-border-subtle lg:block">
-              <Table className="min-w-[680px]">
+            <div className="mt-3 hidden border-t border-border-subtle lg:block">
+              <Table className="min-w-[680px]" aria-label="Suggested target pace by job type">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
                     <TableHeaderCell>Job type</TableHeaderCell>
@@ -328,7 +337,7 @@ export function TargetPaceView({
                     <TableHeaderCell numeric>History says</TableHeaderCell>
                     <TableHeaderCell>Slowest to fastest day</TableHeaderCell>
                     <TableHeaderCell>Based on</TableHeaderCell>
-                    <TableHeaderCell className="w-36">
+                    <TableHeaderCell className="sticky right-0 z-[1] w-36 bg-panel">
                       <span className="sr-only">Use it</span>
                     </TableHeaderCell>
                   </TableRow>
@@ -340,7 +349,7 @@ export function TargetPaceView({
                         ? Math.abs(Number(row.median) - Number(row.current)) / Number(row.current) < 0.02
                         : false;
                     return (
-                      <TableRow key={row.jobTypeId} data-testid="suggestion-row">
+                      <TableRow key={row.jobTypeId} className="group" data-testid="suggestion-row">
                         <TableCell>
                           {row.jobTypeName}
                           <span className="ml-1.5 text-xs text-fg-muted">
@@ -386,7 +395,7 @@ export function TargetPaceView({
                             'Log units and hours for this job type'
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className={PINNED_ACTION_CELL}>
                           {canManage && row.median ? (
                             same ? (
                               <span className="text-xs text-success-text">Matches your target</span>
@@ -426,8 +435,8 @@ export function TargetPaceView({
             one.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <Table className="min-w-[720px]">
+          <div>
+            <Table className="min-w-[720px]" aria-label="Targets with a start day">
               <TableHead>
                 <TableRow className="hover:bg-transparent">
                   <TableHeaderCell>For</TableHeaderCell>
@@ -436,14 +445,14 @@ export function TargetPaceView({
                   <TableHeaderCell numeric>Units per person per hour</TableHeaderCell>
                   <TableHeaderCell>Starts</TableHeaderCell>
                   <TableHeaderCell>Where it came from</TableHeaderCell>
-                  <TableHeaderCell className="w-20">
+                  <TableHeaderCell className="sticky right-0 z-[1] w-20 bg-panel">
                     <span className="sr-only">Actions</span>
                   </TableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {rows.map((row) => (
-                  <TableRow key={row.id} data-testid="standard-row">
+                  <TableRow key={row.id} className="group" data-testid="standard-row">
                     <TableCell>
                       {row.jobTypeId ? typeName(row.jobTypeId) : serviceName(row.vasServiceId)}
                       {row.vasServiceId ? (
@@ -472,7 +481,7 @@ export function TargetPaceView({
                       {BASIS_LABELS[row.basis]}
                       {row.note ? `. ${row.note}` : ''}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className={PINNED_ACTION_CELL}>
                       {canManage ? (
                         <span className="flex items-center justify-end gap-0.5">
                           <IconButton
@@ -514,7 +523,7 @@ export function TargetPaceView({
         )}
       </Panel>
 
-      <PaceBoard sites={sites} today={today} thresholds={thresholds} canManage={shell.can('job:manage')} />
+      <PaceBoard sites={sites} today={today} thresholds={thresholds} canManage={shell.can('job:manage')} initial={initialBoard} />
 
       {form ? (
         <StandardDialog
@@ -780,20 +789,30 @@ function StandardDialog({
 
 type BoardTab = 'job' | 'class' | 'day';
 
+/** The pace board the server read for the days the page opens on. */
+export interface InitialBoard {
+  readonly from: string;
+  readonly to: string;
+  readonly board: PaceBoardDTO;
+}
+
 function PaceBoard({
   sites,
   today,
   thresholds,
   canManage,
+  initial,
 }: {
   readonly sites: readonly SiteDTO[];
   readonly today: string;
   readonly thresholds: PaceThresholds;
   readonly canManage: boolean;
+  readonly initial?: InitialBoard;
 }) {
   const { state, setState } = useRange(today, 'last_30');
   const [tab, setTab] = useState<BoardTab>('job');
-  const board = usePaceBoard({ from: state.from, to: state.to, siteId: state.siteId });
+  const fromServer = Boolean(initial) && state.from === initial?.from && state.to === initial?.to && !state.siteId;
+  const board = usePaceBoard({ from: state.from, to: state.to, siteId: state.siteId }, { initialData: fromServer ? initial?.board : undefined });
   const [jobTarget, setJobTarget] = useState<PaceBoardDTO['byJob'][number] | null>(null);
   const data = board.data;
   const rows: readonly PaceBoardRowDTO[] = data
@@ -868,8 +887,17 @@ function PaceBoard({
               />
             </div>
           ) : null}
-          <div className="overflow-x-auto">
-            <Table className="min-w-[760px]">
+          {/* Below 1024px each row is a card, so the name and every number are on screen at once. */}
+          <PaceCards
+            tab={tab}
+            rows={rows}
+            jobs={data?.byJob ?? []}
+            thresholds={thresholds}
+            canManage={canManage}
+            onSetTarget={setJobTarget}
+          />
+          <div className="hidden lg:block">
+            <Table className="min-w-[760px]" aria-label="Pace against target by job">
               <TableHead>
                 <TableRow className="hover:bg-transparent">
                   <TableHeaderCell>
@@ -881,33 +909,7 @@ function PaceBoard({
                   <TableHeaderCell numeric>
                     <span className="inline-flex items-center gap-1">
                       Target
-                      {tab !== 'job' ? (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <IconButton
-                              label="How the target of a mix of jobs is made"
-                              icon={<Info aria-hidden />}
-                              size="sm"
-                              variant="ghost"
-                            />
-                          </PopoverTrigger>
-                          <PopoverContent
-                            align="end"
-                            className="w-80 max-w-[calc(100vw-32px)] text-left text-sm font-normal text-fg-secondary"
-                          >
-                            <h3 className="mb-1 text-sm font-semibold text-fg">How we got this</h3>
-                            <p>
-                              A {tab === 'class' ? 'labor class' : 'day'} covers many jobs, each with its own
-                              target. Pulse works out the hours those units should have taken at each job’s
-                              target, then divides the units by those hours.
-                            </p>
-                            <p className="mt-1">
-                              The share of target is those hours divided by the labor hours that were logged.
-                              Jobs with no target are left out of it.
-                            </p>
-                          </PopoverContent>
-                        </Popover>
-                      ) : null}
+                      {tab !== 'job' ? <MixedTargetHelp tab={tab} /> : null}
                     </span>
                   </TableHeaderCell>
                   <TableHeaderCell className="w-52">Share of target</TableHeaderCell>
@@ -1008,6 +1010,128 @@ function PaceBoard({
         <JobTargetDialog key={jobTarget.jobId} job={jobTarget} onClose={() => setJobTarget(null)} />
       ) : null}
     </Panel>
+  );
+}
+
+/** How the target of a labor class or a day is made. Shared by the table header and the cards. */
+function MixedTargetHelp({ tab }: { readonly tab: BoardTab }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <IconButton label="How the target of a mix of jobs is made" icon={<Info aria-hidden />} size="sm" variant="ghost" />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 max-w-[calc(100vw-32px)] text-left text-sm font-normal text-fg-secondary">
+        <h3 className="mb-1 text-sm font-semibold text-fg">How we got this</h3>
+        <p>
+          A {tab === 'class' ? 'labor class' : 'day'} covers many jobs, each with its own target. Pulse works out the
+          hours those units should have taken at each job’s target, then divides the units by those hours.
+        </p>
+        <p className="mt-1">
+          The share of target is those hours divided by the labor hours that were logged. Jobs with no target are left
+          out of it.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Pace against target as cards, for a phone and a tablet: the name, the share of target and every number. */
+function PaceCards({
+  tab,
+  rows,
+  jobs,
+  thresholds,
+  canManage,
+  onSetTarget,
+}: {
+  readonly tab: BoardTab;
+  readonly rows: readonly PaceBoardRowDTO[];
+  readonly jobs: PaceBoardDTO['byJob'];
+  readonly thresholds: PaceThresholds;
+  readonly canManage: boolean;
+  readonly onSetTarget: (job: PaceBoardDTO['byJob'][number]) => void;
+}) {
+  return (
+    <div className="lg:hidden">
+      {tab !== 'job' ? (
+        <p className="flex items-center gap-1 border-b border-border-subtle px-4 py-2 text-xs text-fg-muted">
+          The target of a {tab === 'class' ? 'labor class' : 'day'} is made from the target of each job in it.
+          <MixedTargetHelp tab={tab} />
+        </p>
+      ) : null}
+      <ul
+        className="divide-y divide-border-subtle"
+        aria-label={`Pace against target by ${tab === 'job' ? 'job' : tab === 'class' ? 'labor class' : 'day'}`}
+        data-testid="pace-cards"
+      >
+        {rows.map((row) => {
+          const tone = paceTone(row.productivityBp, thresholds);
+          const job = tab === 'job' ? jobs.find((item) => item.key === row.key) : undefined;
+          const compared = Boolean(row.uph && row.targetUph);
+          return (
+            <li key={row.key} className="flex flex-col gap-2 px-4 py-3" data-testid="pace-card">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  {job ? (
+                    <Link href={routes.job(job.jobId)} className="block text-sm font-medium text-fg hover:text-fg-link hover:underline">
+                      {row.label}
+                    </Link>
+                  ) : (
+                    <p className="text-sm font-medium text-fg">{row.label}</p>
+                  )}
+                  {row.sublabel ? <p className="text-xs text-fg-muted">{row.sublabel}</p> : null}
+                </div>
+                <span className={cn('shrink-0 text-base font-semibold tabular-nums', compared ? TONE_TEXT[tone] : 'text-fg-muted')}>
+                  {compared ? formatPercentBp(row.productivityBp, { digits: 0 }) : null}
+                </span>
+                {tab === 'job' && canManage && job ? (
+                  <IconButton
+                    label={`Set a target pace for ${row.label}`}
+                    icon={<Target aria-hidden />}
+                    size="lg"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => onSetTarget(job)}
+                  />
+                ) : null}
+              </div>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm tabular-nums sm:grid-cols-4">
+                <div>
+                  <dt className="text-2xs text-fg-muted">Units good</dt>
+                  <dd>{formatNumber(row.unitsGood, { maxDigits: 0 })}</dd>
+                </div>
+                <div>
+                  <dt className="text-2xs text-fg-muted">Labor hours</dt>
+                  <dd>{formatHours(row.paceHours)}</dd>
+                </div>
+                <div>
+                  <dt className="text-2xs text-fg-muted">Pace</dt>
+                  <dd className="font-medium text-fg">{row.uph ? formatPace(row.uph) : 'No pace yet'}</dd>
+                </div>
+                <div>
+                  <dt className="text-2xs text-fg-muted">Target</dt>
+                  <dd>
+                    {row.targetUph ? formatPace(row.targetUph) : <span className="text-fg-muted">None</span>}
+                    {job?.jobTargetUph ? <span className="block text-xs text-fg-muted">Set on the job</span> : null}
+                  </dd>
+                </div>
+              </dl>
+              {compared ? (
+                <BulletChart
+                  label={`Pace of ${row.label}`}
+                  value={Number(row.uph)}
+                  target={Number(row.targetUph)}
+                  size="sm"
+                  format="number"
+                />
+              ) : (
+                <p className="text-xs text-fg-muted">{row.targetUph ? 'No units yet' : 'No target to compare'}</p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

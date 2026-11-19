@@ -4,6 +4,7 @@
  * empty and error states, the hover and focus tooltip, the live region that reads the focused
  * point, and the data table for screen readers (which a "Show table" button can also show).
  */
+import { ScrollX } from '@/components/ui/scroll-x';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { BarChart3, CircleAlert, Table2 } from 'lucide-react';
 import { cn } from '@/components/ui/cn';
@@ -182,8 +183,7 @@ export interface ChartTableModel {
 }
 
 export function ChartDataTable({ caption, table, visible }: { readonly caption: string; readonly table: ChartTableModel; readonly visible: boolean }) {
-  return (
-    <div className={visible ? 'mt-3 max-h-72 overflow-auto rounded-md border border-border-subtle' : 'sr-only'}>
+  const body = (
       <table className="w-full border-collapse text-left text-xs">
         <caption className="sr-only">{caption}</caption>
         <thead>
@@ -213,7 +213,14 @@ export function ChartDataTable({ caption, table, visible }: { readonly caption: 
           ))}
         </tbody>
       </table>
-    </div>
+  );
+  // Shown: a region that scrolls both ways, with a tab stop and a name when it does. Hidden: for screen readers only.
+  return visible ? (
+    <ScrollX label={caption} className="mt-3 overflow-hidden rounded-md border border-border-subtle" scrollerClassName="max-h-72 overflow-y-auto">
+      {body}
+    </ScrollX>
+  ) : (
+    <div className="sr-only">{body}</div>
   );
 }
 

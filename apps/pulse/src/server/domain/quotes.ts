@@ -11,6 +11,7 @@
 import 'server-only';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { quoteScenarios } from '@/server/db/schema';
 import { conflict, invalid, notFound } from '@/server/errors';
 import { ratioBp } from '@/lib/money';
@@ -20,6 +21,7 @@ import { centsToDecimal } from '@/lib/money';
 import { cleanText, inTx, isUuid, isoRequired, jsonSafe, rows, type DomainContext } from './_shared';
 import { requireMoney, requirePulse } from './access';
 import { logActivity } from './activity';
+import type { ClientGuardOptions } from './catalog';
 import { createJob, getJob } from './jobs';
 import { loadSettings } from './settings';
 
@@ -87,7 +89,7 @@ async function namesFor(ctx: DomainContext, found: readonly ScenarioRow[]): Prom
 }
 
 /** Saved scenarios, newest first. `jobId` narrows to the what ifs of one job. */
-export async function listQuoteScenarios(ctx: DomainContext, filters: { jobId?: string | null } = {}): Promise<QuoteScenarioDTO[]> {
+export const listQuoteScenarios = scoped(async function listQuoteScenarios(ctx: DomainContext, filters: { jobId?: string | null } = {}): Promise<QuoteScenarioDTO[]> {
   await requireMoney(ctx);
   const found = await db
     .select()
@@ -97,7 +99,7 @@ export async function listQuoteScenarios(ctx: DomainContext, filters: { jobId?: 
     .limit(200);
   const names = await namesFor(ctx, found);
   return found.map((row) => toDTO(row, names.get(row.id)));
-}
+});
 
 async function scenarioRow(ctx: DomainContext, id: string, includeDeleted = false): Promise<ScenarioRow> {
   const [row] = isUuid(id) ? await db.select().from(quoteScenarios).where(and(eq(quoteScenarios.orgId, ctx.orgId), eq(quoteScenarios.id, id), includeDeleted ? undefined : isNull(quoteScenarios.deletedAt))) : [];
@@ -105,11 +107,11 @@ async function scenarioRow(ctx: DomainContext, id: string, includeDeleted = fals
   return row;
 }
 
-export async function getQuoteScenario(ctx: DomainContext, id: string): Promise<QuoteScenarioDTO> {
+export const getQuoteScenario = scoped(async function getQuoteScenario(ctx: DomainContext, id: string): Promise<QuoteScenarioDTO> {
   await requireMoney(ctx);
   const row = await scenarioRow(ctx, id);
   return toDTO(row, (await namesFor(ctx, [row])).get(row.id));
-}
+});
 
 export interface QuoteScenarioInput {
   id?: string | null;
@@ -119,7 +121,7 @@ export interface QuoteScenarioInput {
 }
 
 /** Saves a scenario (new, or over an existing one). The answer is worked out here, never taken from the browser. */
-export async function saveQuoteScenario(ctx: DomainContext, input: QuoteScenarioInput): Promise<QuoteScenarioDTO> {
+export const saveQuoteScenario = scoped(async function saveQuoteScenario(ctx: DomainContext, input: QuoteScenarioInput): Promise<QuoteScenarioDTO> {
   await requireMoney(ctx);
   await requirePulse(ctx, 'plan:manage');
   const name = cleanText(input.name);
@@ -152,9 +154,9 @@ export async function saveQuoteScenario(ctx: DomainContext, input: QuoteScenario
     return row!;
   });
   return toDTO(saved, (await namesFor(ctx, [saved])).get(saved.id));
-}
+});
 
-export async function setQuoteScenarioStatus(ctx: DomainContext, id: string, status: QuoteStatus): Promise<QuoteScenarioDTO> {
+export const setQuoteScenarioStatus = scoped(async function setQuoteScenarioStatus(ctx: DomainContext, id: string, status: QuoteStatus): Promise<QuoteScenarioDTO> {
   await requireMoney(ctx);
   await requirePulse(ctx, 'plan:manage');
   if (!(QUOTE_STATUSES as readonly string[]).includes(status)) throw invalid('Pick draft, sent, won or lost.');
@@ -165,7 +167,7 @@ export async function setQuoteScenarioStatus(ctx: DomainContext, id: string, sta
     return row!;
   });
   return toDTO(saved, (await namesFor(ctx, [saved])).get(saved.id));
-}
+});
 
 async function toggleScenario(ctx: DomainContext, id: string, restore: boolean): Promise<QuoteScenarioDTO> {
   await requireMoney(ctx);
@@ -180,8 +182,8 @@ async function toggleScenario(ctx: DomainContext, id: string, restore: boolean):
   return toDTO(saved, (await namesFor(ctx, [saved])).get(saved.id));
 }
 
-export const deleteQuoteScenario = (ctx: DomainContext, id: string): Promise<QuoteScenarioDTO> => toggleScenario(ctx, id, false);
-export const restoreQuoteScenario = (ctx: DomainContext, id: string): Promise<QuoteScenarioDTO> => toggleScenario(ctx, id, true);
+export const deleteQuoteScenario = scoped((ctx: DomainContext, id: string): Promise<QuoteScenarioDTO> => toggleScenario(ctx, id, false));
+export const restoreQuoteScenario = scoped((ctx: DomainContext, id: string): Promise<QuoteScenarioDTO> => toggleScenario(ctx, id, true));
 
 /* ---------------------------------------------------------------- what the form needs */
 
@@ -210,7 +212,7 @@ export interface CalculatorSetupDTO {
 }
 
 /** Lists, rates and defaults the calculator form starts from. */
-export async function getCalculatorSetup(ctx: DomainContext): Promise<CalculatorSetupDTO> {
+export const getCalculatorSetup = scoped(async function getCalculatorSetup(ctx: DomainContext): Promise<CalculatorSetupDTO> {
   const access = await requireMoney(ctx);
   const settings = await loadSettings(ctx.orgId);
   const [clients, jobTypes, classes, services, paces, recent, today] = await Promise.all([
@@ -264,7 +266,7 @@ export async function getCalculatorSetup(ctx: DomainContext): Promise<Calculator
     canCreateJob: canPulse(access.role, 'job:manage') && canPulse(access.role, 'plan:manage'),
     canManageRates: canPulse(access.role, 'rate:manage'),
   };
-}
+});
 
 /* ---------------------------------------------------------------- what happened last time */
 
@@ -291,7 +293,7 @@ export interface SimilarJobDTO {
 }
 
 /** Jobs like this one that already ran: same job type, the same client first. Jobs with missing labor are marked. */
-export async function listSimilarJobs(ctx: DomainContext, filters: { jobTypeId?: string | null; clientId?: string | null; excludeJobId?: string | null; limit?: number }): Promise<SimilarJobDTO[]> {
+export const listSimilarJobs = scoped(async function listSimilarJobs(ctx: DomainContext, filters: { jobTypeId?: string | null; clientId?: string | null; excludeJobId?: string | null; limit?: number }): Promise<SimilarJobDTO[]> {
   await requireMoney(ctx);
   if (!filters.jobTypeId || !isUuid(filters.jobTypeId)) return [];
   const clientId = filters.clientId && isUuid(filters.clientId) ? filters.clientId : null;
@@ -346,7 +348,7 @@ export async function listSimilarJobs(ctx: DomainContext, filters: { jobTypeId?:
     lastEntryDate: row.last_entry_date,
     laborMissing: row.labor_missing,
   }));
-}
+});
 
 /* ---------------------------------------------------------------- start from a real job */
 
@@ -368,7 +370,7 @@ const per = (cents: number | null, units: number): string => (cents === null || 
  * material per unit and actual other costs are used where the job has them; the job's own
  * settings fill the rest.
  */
-export async function quoteFromJob(ctx: DomainContext, ref: string): Promise<QuoteFromJobDTO> {
+export const quoteFromJob = scoped(async function quoteFromJob(ctx: DomainContext, ref: string): Promise<QuoteFromJobDTO> {
   await requireMoney(ctx);
   const job = await getJob(ctx, ref);
   const setup = await getCalculatorSetup(ctx);
@@ -452,7 +454,7 @@ export async function quoteFromJob(ctx: DomainContext, ref: string): Promise<Quo
     notes,
     actual: { unitsGood: stats.unitsGood, hours: stats.hours, uph: stats.uph, marginBp: stats.marginBp, revenueCents: stats.revenueCents, costCents: stats.costCents, status: job.status },
   };
-}
+});
 
 /* ---------------------------------------------------------------- scenario to job */
 
@@ -462,6 +464,8 @@ export interface JobFromScenarioInput {
   /** Needed when the scenario has no client. */
   clientId?: string | null;
   clientName?: string | null;
+  /** Say yes to a new client whose name is close to one you have (only read when the guard is on). */
+  createClient?: boolean;
   startDate?: string | null;
   dueDate?: string | null;
 }
@@ -471,7 +475,7 @@ export interface JobFromScenarioInput {
  * pace the target pace, its crew the usual crew, and its totals the job's quote (origin
  * "calculator"), so plan vs actual starts from exactly what was quoted. The scenario is marked won.
  */
-export async function createJobFromScenario(ctx: DomainContext, input: JobFromScenarioInput): Promise<{ jobId: string; jobNumber: string }> {
+export const createJobFromScenario = scoped(async function createJobFromScenario(ctx: DomainContext, input: JobFromScenarioInput, options: ClientGuardOptions = {}): Promise<{ jobId: string; jobNumber: string }> {
   await requireMoney(ctx);
   await requirePulse(ctx, 'job:manage');
   await requirePulse(ctx, 'plan:manage');
@@ -494,6 +498,7 @@ export async function createJobFromScenario(ctx: DomainContext, input: JobFromSc
     name,
     clientId,
     clientName: clientId ? null : clientName,
+    createClient: input.createClient,
     jobTypeId: row.jobTypeId,
     status: 'planned',
     pricingModel: 'per_unit',
@@ -524,10 +529,10 @@ export async function createJobFromScenario(ctx: DomainContext, input: JobFromSc
       originRef: row.id,
       note: `From the scenario "${row.name}".`,
     },
-  });
+  }, options);
   await inTx(async (tx) => {
     await tx.update(quoteScenarios).set({ jobId: job.id, clientId: job.clientId, status: 'won', updatedAt: new Date() }).where(eq(quoteScenarios.id, row.id));
     await logActivity(tx, ctx, { verb: 'scenario.became_job', entityType: 'quote_scenario', entityId: row.id, jobId: job.id, clientId: job.clientId, after: { jobNumber: job.number, name } });
   });
   return { jobId: job.id, jobNumber: job.number };
-}
+});

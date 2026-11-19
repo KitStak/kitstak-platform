@@ -1,14 +1,40 @@
 import type { HTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from './cn';
+import { ScrollX } from './scroll-x';
 
 /**
  * Plain data table shared with KitStak WMS. One density and one header style everywhere:
  * 36px rows, sentence-case 12px medium muted headers, 1px row dividers, tabular numerals.
  */
-export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
-  return <table className={cn('w-full border-collapse text-left text-sm text-fg tabular-nums', className)} {...props} />;
+export interface TableProps extends HTMLAttributes<HTMLTableElement> {
+  /**
+   * Every table sits in a `ScrollX` region: when it is wider than its card it scrolls sideways
+   * with a tab stop, a name and a fade cue (CONTRACTS 19.8). Pass false for a table that is
+   * already inside a `ScrollX` of its own.
+   */
+  readonly scroll?: boolean;
+  /** Extra classes for the scroll region around the table. */
+  readonly scrollClassName?: string;
 }
+
+export function Table({ className, scroll = true, scrollClassName, ...props }: TableProps) {
+  const table = <table className={cn('w-full border-collapse text-left text-sm text-fg tabular-nums', className)} {...props} />;
+  if (!scroll) return table;
+  return (
+    <ScrollX label={props['aria-label'] ?? 'Table'} className={scrollClassName}>
+      {table}
+    </ScrollX>
+  );
+}
+
+/**
+ * Surface classes for a body cell pinned to an edge with `position: sticky`. The row hover color is
+ * see through, so a pinned cell keeps its solid panel color and lays the hover tint over it: the
+ * columns that scroll under it never show through. The row needs the `group` class.
+ */
+export const PINNED_CELL_SURFACE =
+  'bg-panel group-hover:bg-[image:linear-gradient(var(--surface-hover),var(--surface-hover))] group-data-[selected=true]:bg-selected';
 
 export function TableHead({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
   return <thead className={cn('bg-panel shadow-[inset_0_-1px_0_var(--border-default)]', className)} {...props} />;
@@ -71,7 +97,7 @@ export function TablePagination({ page, pageCount, total, onPageChange, children
       <div className="flex min-w-0 items-center gap-3">
         {children}
         <span className="whitespace-nowrap">
-          Total: <span className="font-medium text-fg tabular-nums">{total.toLocaleString()}</span>
+          Total: <span className="font-medium text-fg tabular-nums">{total.toLocaleString('en-US')}</span>
         </span>
       </div>
       <nav aria-label="Pagination" className="flex shrink-0 items-center gap-1">
@@ -79,7 +105,7 @@ export function TablePagination({ page, pageCount, total, onPageChange, children
           <ChevronLeft aria-hidden className="size-4" />
         </button>
         <span className="px-1 tabular-nums">
-          <span className="font-medium text-fg">{page.toLocaleString()}</span> / {pages.toLocaleString()}
+          <span className="font-medium text-fg">{page.toLocaleString('en-US')}</span> / {pages.toLocaleString('en-US')}
         </span>
         <button type="button" aria-label="Next page" className={pagerButton} disabled={page >= pages} onClick={() => onPageChange(page + 1)}>
           <ChevronRight aria-hidden className="size-4" />

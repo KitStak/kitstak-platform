@@ -6,7 +6,8 @@ import { RouteTabs } from '@/components/pulse/route-tabs';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { LABOR_TABS, routes, type LaborTab } from '@/lib/routes';
 import { todayIso } from '@/lib/dates';
-import { getSettings, listLaborClasses, listLaborRates, listSites } from '@/server/domain';
+import { addDays } from '@/lib/profit';
+import { getLaborSummary, getSettings, listLaborClasses, listLaborRates, listSites } from '@/server/domain';
 import { pulsePage } from '@/server/page';
 import { CostView } from './cost-view';
 import { RatesView } from './rates-view';
@@ -42,6 +43,10 @@ export async function LaborPage({
   ]);
   const today = sites.find((site) => site.isDefault)?.today ?? sites[0]?.today ?? todayIso();
   const rates = tab === 'rates' ? await listLaborRates(page.ctx) : [];
+  // Time opens on the last 30 days. Its numbers are read here, so the first paint has the tiles
+  // and the cards under them at their real size (nothing loads in later and moves the page).
+  const timeRange = { from: addDays(today, -29), to: today };
+  const timeSummary = tab === 'time' ? await getLaborSummary(page.ctx, timeRange).catch(() => undefined) : undefined;
   const importStream = tab === 'rates' ? 'labor_rates' : 'paid_hours';
   const canImport = tab === 'rates' ? page.can('rate:manage') : page.can('import:run');
   return (
@@ -79,7 +84,7 @@ export async function LaborPage({
           today={today}
         />
       ) : tab === 'time' ? (
-        <TimeView sites={sites} laborClasses={laborClasses} settings={settings} today={today} />
+        <TimeView sites={sites} laborClasses={laborClasses} settings={settings} today={today} initialSummary={timeSummary ? { ...timeRange, summary: timeSummary } : undefined} />
       ) : (
         <CostView sites={sites} today={today} />
       )}

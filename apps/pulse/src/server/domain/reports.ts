@@ -11,6 +11,7 @@ import 'server-only';
 import { jobChartLabel } from '@/lib/job-label';
 import { and, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { reportRuns, reportSchedules } from '@/server/db/schema';
 import { forbidden, invalid, notFound } from '@/server/errors';
 import { reportCellText, reportToCsv, reportToHtml } from '@/features/reports/report-format';
@@ -57,6 +58,7 @@ import type {
   ProfitRowDTO,
   ReportCell,
   ReportCellKind,
+  ReportAsideDTO,
   ReportChartDTO,
   ReportColumnDTO,
   ReportDTO,
@@ -64,7 +66,7 @@ import type {
   ReportRunDTO,
   ReportScheduleDTO,
 } from '@/lib/types';
-import { centsOut, cleanText, inTx, iso, isoRequired, isUuid, moneyOut, rows, todayInZone, type DomainContext } from './_shared';
+import { centsOut, cleanText, fullMonthViewWords, inTx, iso, isoRequired, isUuid, moneyOut, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse } from './access';
 import { listActivity, logActivity } from './activity';
 import { resolveSite } from './catalog';
@@ -133,7 +135,11 @@ const PIVOT_JOINS = sql`
   LEFT JOIN pulse.vas_services vs ON vs.id = f.vas_service_id
   LEFT JOIN pulse.sites s ON s.id = f.site_id`;
 
-const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = { job: 'Client level, no job', client: 'No client', type: 'No job type', service: 'Core job work', site: 'No site', month: '', week: '', day: '' };
+/** The row for revenue and costs typed in against a client with no job. It is not a job, so rankings leave it out. */
+const CLIENT_LEVEL_LABEL = 'Put on a client, not on a job';
+const CLIENT_LEVEL_TEXT = 'Chargebacks, freight, fees, credits and extra services typed in against a client with no job. They count in the total, but they are not a job, so the ranking leaves them out.';
+
+const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = { job: CLIENT_LEVEL_LABEL, client: 'No client', type: 'No job type', service: 'Core job work', site: 'No site', month: '', week: '', day: '' };
 
 function factWhere(orgId: string, filters: ProfitFilters): SQL {
   const parts: SQL[] = [sql`f.org_id = ${orgId}`, sql`f.work_date BETWEEN ${filters.from}::date AND ${filters.to}::date`];
@@ -141,6 +147,7 @@ function factWhere(orgId: string, filters: ProfitFilters): SQL {
   if (filters.clientId) parts.push(sql`f.client_id = ${filters.clientId}`);
   if (filters.jobTypeId) parts.push(sql`f.job_type_id = ${filters.jobTypeId}`);
   if (filters.jobId) parts.push(sql`f.job_id = ${filters.jobId}`);
+  if (filters.noJob) parts.push(sql`f.job_id IS NULL`);
   if (filters.vasServiceId) parts.push(sql`f.vas_service_id = ${filters.vasServiceId}`);
   if (filters.status) parts.push(sql`j.status = ${filters.status}`);
   return sql.join(parts, sql` AND `);
@@ -168,14 +175,15 @@ function addInto(target: Bucket, source: Bucket): void {
   target.hours += source.hours;
 }
 
-const cellOf = (row: ProfitRowDTO): PivotCellDTO => ({ revenueCents: row.revenueCents, costCents: row.costCents, profitCents: row.profitCents, marginBp: row.marginBp, unitsGood: row.unitsGood, hours: row.hours });
+const cellOf = (row: ProfitRowDTO): PivotCellDTO => ({ revenueCents: row.revenueCents, costCents: row.costCents, profitCents: row.profitCents, marginBp: row.marginBp, unitsGood: row.unitsGood, hours: row.hours, costMissing: row.costMissing });
 
 /**
  * Profit grouped by two things at once (clients by month, job types by site). Every cell uses the
  * same `toProfitRow` as the explorer, and the row totals, column totals and grand total are sums
- * of the cells, so the grid always adds up to the Profit page.
+ * of the cells, so the grid always adds up to the Profit page. Extra service cells follow the same
+ * "No cost yet" rule as `getProfit`: revenue with no cost of any kind has no margin.
  */
-export async function getProfitPivot(ctx: DomainContext, rowBy: ProfitGroup, colBy: ProfitGroup, filters: ProfitFilters): Promise<ProfitPivotDTO> {
+export const getProfitPivot = scoped(async function getProfitPivot(ctx: DomainContext, rowBy: ProfitGroup, colBy: ProfitGroup, filters: ProfitFilters): Promise<ProfitPivotDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   for (const by of [rowBy, colBy]) if (!(PROFIT_GROUPS as readonly string[]).includes(by)) throw invalid('Pick how to group the numbers.');
   if (rowBy === colBy) throw invalid('Pick two different things to compare.');
@@ -206,13 +214,16 @@ export async function getProfitPivot(ctx: DomainContext, rowBy: ProfitGroup, col
   const colTotals = new Map<string, Bucket>();
   const grand = emptyBucket('total', 'Total');
   const cells: Record<string, Record<string, PivotCellDTO>> = {};
+  // The same test `getProfit` uses: one service picked in the filters, or a group that is a service.
+  const oneService = Boolean(filters.vasServiceId);
+  const serviceGroup = (by: ProfitGroup, key: string): boolean => oneService || (by === 'service' && key !== 'none');
   for (const item of found) {
     const rk = item.rk ?? 'none';
     const ck = item.ck ?? 'none';
     if (!rowHeads.has(rk)) rowHeads.set(rk, { key: rk, label: item.rl ?? (NULL_LABELS[rowBy] || rk), sublabel: item.rs });
     if (!colHeads.has(ck)) colHeads.set(ck, { key: ck, label: item.cl ?? (NULL_LABELS[colBy] || ck), sublabel: item.cs });
     const bucket: Bucket = { ...emptyBucket(`${rk}|${ck}`, ''), base: BigInt(item.base), vas: BigInt(item.vas), otherRev: BigInt(item.other_rev), labor: BigInt(item.labor), material: BigInt(item.material), other: BigInt(item.other), shared: BigInt(item.shared), units: Number(item.units), hours: Number(item.hours) };
-    (cells[rk] ??= {})[ck] = cellOf(toProfitRow(bucket, access));
+    (cells[rk] ??= {})[ck] = cellOf(toProfitRow(bucket, access, { costCheck: serviceGroup(rowBy, rk) || serviceGroup(colBy, ck) }));
     if (!rowTotals.has(rk)) rowTotals.set(rk, emptyBucket(rk, ''));
     if (!colTotals.has(ck)) colTotals.set(ck, emptyBucket(ck, ''));
     addInto(rowTotals.get(rk)!, bucket);
@@ -230,7 +241,7 @@ export async function getProfitPivot(ctx: DomainContext, rowBy: ProfitGroup, col
     };
     return list.sort((a, b) => (revenue(a.key) === revenue(b.key) ? a.label.localeCompare(b.label) : revenue(a.key) > revenue(b.key) ? -1 : 1));
   };
-  const totalsOut = (totals: Map<string, Bucket>): Record<string, PivotCellDTO> => Object.fromEntries([...totals.entries()].map(([key, bucket]) => [key, cellOf(toProfitRow(bucket, access))]));
+  const totalsOut = (totals: Map<string, Bucket>, by: ProfitGroup): Record<string, PivotCellDTO> => Object.fromEntries([...totals.entries()].map(([key, bucket]) => [key, cellOf(toProfitRow(bucket, access, { costCheck: serviceGroup(by, key) }))]));
   return {
     rowBy,
     colBy,
@@ -239,12 +250,12 @@ export async function getProfitPivot(ctx: DomainContext, rowBy: ProfitGroup, col
     rows: sortHeads(rowHeads, rowBy, rowTotals),
     cols: sortHeads(colHeads, colBy, colTotals),
     cells,
-    rowTotals: totalsOut(rowTotals),
-    colTotals: totalsOut(colTotals),
-    total: cellOf(toProfitRow(grand, access)),
+    rowTotals: totalsOut(rowTotals, rowBy),
+    colTotals: totalsOut(colTotals, colBy),
+    total: cellOf(toProfitRow(grand, access, { costCheck: oneService })),
     moneyHidden: !access.seesMoney,
   };
-}
+});
 
 const SOURCE_LABELS: Readonly<Record<string, string>> = {
   production_entries: 'Work log',
@@ -258,7 +269,7 @@ const SOURCE_LABELS: Readonly<Record<string, string>> = {
  * The stamped rows behind a profit number, with job, client and service names and the note that
  * was typed with the row. This is the last stop of every drill down. Reads `v_facts`.
  */
-export async function listProfitEntries(ctx: DomainContext, filters: ProfitFilters & { kinds?: readonly FactKind[]; limit?: number }): Promise<ProfitEntriesDTO> {
+export const listProfitEntries = scoped(async function listProfitEntries(ctx: DomainContext, filters: ProfitFilters & { kinds?: readonly FactKind[]; limit?: number }): Promise<ProfitEntriesDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   checkProfitFilters(filters);
   const limit = Math.min(Math.max(filters.limit ?? 500, 1), 2000);
@@ -303,7 +314,7 @@ export async function listProfitEntries(ctx: DomainContext, filters: ProfitFilte
     truncated: found.length > limit,
     moneyHidden: !access.seesMoney,
   };
-}
+});
 
 /* ================================================================== report building blocks */
 
@@ -325,8 +336,8 @@ const PROFIT_COLUMNS: readonly ReportColumnDTO[] = [
   col('shared', 'Time not on a job', 'money'),
   col('cost', 'Cost', 'money'),
   col('profit', 'Profit', 'money'),
-  col('margin', 'Margin after all costs', 'percent', { money: true }),
-  col('margin_before', 'Margin before shared costs', 'percent', { money: true }),
+  col('margin', 'Job margin', 'percent', { money: true }),
+  col('margin_before', 'Contribution %', 'percent', { money: true }),
   col('units', 'Units', 'number'),
   col('hours', 'Labor hours', 'hours'),
   col('uph', 'Units per person per hour', 'pace'),
@@ -355,6 +366,7 @@ interface Built {
   readonly total?: Cells | null;
   readonly summary?: ReportDTO['summary'];
   readonly chart?: ReportChartDTO | null;
+  readonly aside?: ReportAsideDTO | null;
   readonly notes?: string[];
   /** False for reports about right now, which ignore the date range. */
   readonly usesDates?: boolean;
@@ -366,7 +378,7 @@ const headline = (total: ProfitRowDTO): ReportDTO['summary'] => [
   { label: 'Revenue', value: total.revenueCents, kind: 'money' },
   { label: 'Cost', value: total.costCents, kind: 'money' },
   { label: 'Profit', value: total.profitCents, kind: 'money' },
-  { label: 'Margin after all costs', value: total.marginBp, kind: 'percent' },
+  { label: 'Job margin', value: total.marginBp, kind: 'percent' },
 ];
 
 /** Best and worst by profit, at most `limit` bars, for a ranking chart. */
@@ -424,31 +436,66 @@ function jobScope(filters: ReportFilters): SQL {
 async function jobProfit(ctx: DomainContext, filters: ReportFilters): Promise<Built> {
   const profit = await getProfit(ctx, 'job', profitFilters(filters));
   const meta = await jobMeta(ctx.orgId, profit.rows.map((row) => row.key));
-  const sorted = [...profit.rows].sort((a, b) => (b.profitCents ?? 0) - (a.profitCents ?? 0));
+  // Costs and fees put on a client with no job are in the total, but they are not a job: they
+  // get their own row under the jobs and stay out of the best and worst ranking.
+  const clientLevel = profit.rows.find((row) => row.key === 'none') ?? null;
+  const sorted = profit.rows.filter((row) => row.key !== 'none').sort((a, b) => (b.profitCents ?? 0) - (a.profitCents ?? 0));
+  const entryCount = clientLevel ? await countNoJobEntries(ctx.orgId, profitFilters(filters)) : 0;
   return {
     columns: [col('job', 'Job', 'text'), col('name', 'Name', 'text'), col('client', 'Client', 'text'), col('type', 'Job type', 'text'), col('status', 'Job status', 'job_status'), col('risk', 'Health', 'status'), ...PROFIT_COLUMNS],
-    rows: sorted.map((row) => {
-      const job = meta.get(row.key);
-      return { id: row.key, href: job ? routes.job(job.number) : null, cells: { job: job?.number ?? row.label, name: job?.name ?? row.sublabel, client: job?.client ?? null, type: job?.type ?? null, status: job?.status ?? null, risk: job?.risk ?? null, ...profitCells(row) } };
-    }),
+    rows: [
+      ...sorted.map((row) => {
+        const job = meta.get(row.key);
+        return { id: row.key, href: job ? routes.job(job.number) : null, cells: { job: job?.number ?? row.label, name: job?.name ?? row.sublabel, client: job?.client ?? null, type: job?.type ?? null, status: job?.status ?? null, risk: job?.risk ?? null, ...profitCells(row) } };
+      }),
+      ...(clientLevel ? [{ id: 'none', href: null, cells: { job: CLIENT_LEVEL_LABEL, name: 'Not a job', client: null, type: null, status: null, risk: null, ...profitCells(clientLevel) } }] : []),
+    ],
+    aside: clientLevel ? { key: 'client_level' as const, label: CLIENT_LEVEL_LABEL, valueCents: clientLevel.profitCents, text: CLIENT_LEVEL_TEXT, entryCount } : null,
     total: { job: 'Total', ...profitCells(profit.total) },
     summary: headline(profit.total),
     chart: rankingChart('Profit by job', sorted.map((row) => ({ label: ((job) => (job ? jobChartLabel(job.number, job.name) : row.label))(meta.get(row.key)), profit: row.profitCents }))),
-    notes: ['Each job counts only the work and costs dated inside these days.'],
+    notes: ['Each job counts only the work and costs dated inside these days.', ...(clientLevel ? [`${CLIENT_LEVEL_LABEL}: ${CLIENT_LEVEL_TEXT}`] : [])],
   };
+}
+
+/** How many stamped rows sit on a client with no job, for the same filters as the report. */
+async function countNoJobEntries(orgId: string, filters: ProfitFilters): Promise<number> {
+  const [found] = await rows<{ n: number }>(
+    db,
+    sql`SELECT count(DISTINCT (f.source_table, f.source_id))::int AS n
+          FROM pulse.v_facts f LEFT JOIN pulse.jobs j ON j.id = f.job_id
+         WHERE ${factWhere(orgId, { ...filters, noJob: true })} AND f.kind <> 'billed_memo'`,
+  );
+  return found?.n ?? 0;
 }
 
 async function profitBy(ctx: DomainContext, filters: ReportFilters, by: 'client' | 'type' | 'service', first: string): Promise<Built> {
   const profit = await getProfit(ctx, by, profitFilters(filters));
   const sorted = [...profit.rows].sort((a, b) => (b.profitCents ?? 0) - (a.profitCents ?? 0));
   const href = (row: ProfitRowDTO): string | null => (row.key === 'none' ? null : by === 'client' ? routes.client(row.key) : by === 'service' ? routes.service(row.key) : null);
+  // An extra service with no known cost: its cost, profit and margins are empty, never $0.00 and the
+  // revenue, and "Cost known" says No. The total still counts it, with no cost against it.
+  const services = by === 'service';
+  const unknown = sorted.filter((row) => row.costMissing);
+  const cellsOf = (row: ProfitRowDTO): Cells => {
+    const cells: Cells = { ...profitCells(row), labor_pct: row.laborPctBp, cost_per_unit: row.costPerUnitCents };
+    if (row.costMissing) for (const key of ['cost', 'profit', 'margin', 'margin_before', 'cost_per_unit']) cells[key] = null;
+    return services ? { ...cells, cost_known: row.key === 'none' ? null : row.costMissing ? 'No' : 'Yes' } : cells;
+  };
   return {
-    columns: [col('name', first, 'text'), col('code', 'Code', 'text'), col('jobs', 'Jobs', 'number'), ...PROFIT_COLUMNS, col('labor_pct', 'Labor as % of revenue', 'percent', { money: true }), col('cost_per_unit', 'Cost per unit', 'money')],
-    rows: sorted.map((row) => ({ id: row.key, href: href(row), cells: { name: row.label, code: row.sublabel, jobs: row.jobCount, ...profitCells(row), labor_pct: row.laborPctBp, cost_per_unit: row.costPerUnitCents } })),
+    columns: [col('name', first, 'text'), col('code', 'Code', 'text'), col('jobs', 'Jobs', 'number'), ...PROFIT_COLUMNS, col('labor_pct', 'Labor as % of revenue', 'percent', { money: true }), col('cost_per_unit', 'Cost per unit', 'money'), ...(services ? [col('cost_known', 'Cost known', 'text', { money: true })] : [])],
+    rows: sorted.map((row) => ({ id: row.key, href: href(row), cells: { name: row.label, code: row.sublabel, jobs: row.jobCount, ...cellsOf(row) } })),
     total: { name: 'Total', jobs: profit.total.jobCount, ...profitCells(profit.total), labor_pct: profit.total.laborPctBp, cost_per_unit: profit.total.costPerUnitCents },
     summary: headline(profit.total),
-    chart: rankingChart(`Profit by ${first.toLowerCase()}`, sorted.map((row) => ({ label: row.label, profit: row.profitCents }))),
-    notes: by === 'service' ? ['Core job work is everything that is not an extra service, so the total matches the Profit page.'] : [],
+    chart: rankingChart(`Profit by ${first.toLowerCase()}`, sorted.filter((row) => !row.costMissing).map((row) => ({ label: row.label, profit: row.profitCents }))),
+    notes: services
+      ? [
+          'Core job work is everything that is not an extra service, so the total matches the Profit page.',
+          ...(unknown.length > 0
+            ? [`${unknown.length} ${unknown.length === 1 ? 'service has' : 'services have'} no labor hours or parts logged, so Pulse does not know what that work cost. Their cost and profit are empty and Cost known says No. The total counts them with no cost against them, so it still adds up, and its profit is too high by what that work really cost.`]
+            : []),
+        ]
+      : [],
   };
 }
 
@@ -463,7 +510,7 @@ async function profitBySite(ctx: DomainContext, filters: ReportFilters): Promise
     }),
     total: { name: 'Total', jobs: profit.total.jobCount, ...profitCells(profit.total) },
     summary: headline(profit.total),
-    chart: profit.rows.length > 0 ? { type: 'bar', title: 'Margin by site', description: 'Margin after all costs for each site.', labels: profit.rows.map((row) => row.label), series: [{ id: 'margin', label: 'Margin after all costs', values: profit.rows.map((row) => row.marginBp) }], format: 'percent', signColors: true } : null,
+    chart: profit.rows.length > 0 ? { type: 'bar', title: 'Margin by site', description: 'Job margin for each site: profit on jobs as a share of revenue.', labels: profit.rows.map((row) => row.label), series: [{ id: 'margin', label: 'Job margin', values: profit.rows.map((row) => row.marginBp) }], format: 'percent', signColors: true } : null,
   };
 }
 
@@ -490,7 +537,7 @@ async function monthlyProfitAndLoss(ctx: DomainContext, filters: ReportFilters):
       col('other', 'Other costs', 'money'),
       col('shared', 'Time not on a job', 'money'),
       col('profit', 'Profit on jobs', 'money'),
-      col('margin', 'Margin after all costs', 'percent', { money: true }),
+      col('margin', 'Job margin', 'percent', { money: true }),
       ...(narrowed ? [] : [col('shared_gap', 'Time not on a job that no job carried', 'money'), col('missing', 'Paid time not on any job', 'money'), col('overhead_gap', 'Overhead your hourly rate did not cover', 'money'), col('company_profit', 'Company profit', 'money')]),
     ],
     rows: months.map(({ row, bridge }) => ({ id: row.key, cells: { month: monthWords(row.key), ...profitCells(row), ...(narrowed ? {} : bridgeCells(bridge)) } })),
@@ -509,7 +556,11 @@ async function monthlyProfitAndLoss(ctx: DomainContext, filters: ReportFilters):
         : null,
     notes: narrowed
       ? ['Company profit is left out because a client, job type or status filter is on. It only makes sense for the whole company or a whole site.']
-      : ['Company profit is profit on jobs, less time not on a job that no job carried, less paid time not on any job, less overhead your hourly rate did not cover.'],
+      : [
+          'Company profit is profit on jobs, less time not on a job that no job carried, less paid time not on any job, less overhead your hourly rate did not cover.',
+          'Company costs are monthly. A part month counts its share by day, and a month with no company costs trusts the overhead in your hourly rates.',
+          ...(whole.companyCostNote ? [whole.companyCostNote] : []),
+        ],
   };
 }
 
@@ -574,7 +625,7 @@ async function costToServeReport(ctx: DomainContext, filters: ReportFilters): Pr
       col('per_job', 'Cost to serve per job', 'money'),
       col('pct', 'Cost to serve as % of revenue', 'percent', { money: true }),
       col('profit', 'Profit', 'money'),
-      col('margin', 'Margin after all costs', 'percent', { money: true }),
+      col('margin', 'Job margin', 'percent', { money: true }),
     ],
     rows: list.map((item) => ({ id: item.id, href: routes.client(item.id), cells: { client: item.name, ...cells(item.serve) } })),
     total: { client: 'Total', ...cells(all) },
@@ -955,8 +1006,13 @@ async function monthClosePack(ctx: DomainContext, filters: ReportFilters): Promi
   const from = startOfMonth(filters.to);
   const to = endOfMonth(from);
   const scope = { from, to, siteId: filters.siteId ?? null };
-  const [profit, bridge, checklist] = await Promise.all([getProfit(ctx, 'month', scope, { comparePrior: false }), getCompanyBridge(ctx, scope), getCloseChecklist(ctx, from.slice(0, 7))]);
+  const [profit, bridge, checklist, settings] = await Promise.all([getProfit(ctx, 'month', scope, { comparePrior: false }), getCompanyBridge(ctx, scope), getCloseChecklist(ctx, from.slice(0, 7)), loadSettings(ctx.orgId)]);
   const total = profit.total;
+  // A month that is not over yet still counts all of its company costs (round five, decision B), so
+  // the pack says plainly that it is a full month view and where month to date lives.
+  const today = todayInZone(settings.timezone);
+  const inProgress = from <= today && today <= to;
+  const fullMonth = inProgress ? fullMonthViewWords(from, bridge.hasCompanyCosts) : null;
   const line = (section: string, name: string, amount: number | null, note: string | null = null): ReportRowDTO => ({ id: `${section}:${name}`, cells: { section, line: name, amount, count: null, note } });
   const count = (section: string, name: string, value: number, note: string): ReportRowDTO => ({ id: `${section}:${name}`, cells: { section, line: name, amount: null, count: value, note } });
   const list: ReportRowDTO[] = [
@@ -970,7 +1026,7 @@ async function monthClosePack(ctx: DomainContext, filters: ReportFilters): Promi
     line('Company profit', 'Time not on a job that no job carried', bridge.sharedGapCents, 'Taken away.'),
     line('Company profit', 'Paid time not on any job', bridge.missingCostCents, 'Taken away.'),
     ...(bridge.hasCompanyCosts ? [line('Company profit', 'Overhead your hourly rate did not cover', bridge.overheadGapCents, 'Taken away. Below zero means the rate covered more than you spent.')] : []),
-    line('Company profit', 'Company profit', bridge.companyProfitCents),
+    line('Company profit', 'Company profit', bridge.companyProfitCents, fullMonth ? 'Full month view.' : null),
     line('Payroll check', 'Pay from the hours logged', bridge.grossPayCents),
     line('Payroll check', 'Pay you typed in', bridge.paidCents, bridge.paidCents === null && !bridge.moneyHidden ? 'No payroll total was typed in for this month.' : null),
     line('Payroll check', 'Gap', bridge.payrollGapCents ?? checklist.payrollGapCents),
@@ -1005,7 +1061,7 @@ async function monthClosePack(ctx: DomainContext, filters: ReportFilters): Promi
             endLabel: 'Company profit',
           }
         : null,
-    notes: [`This pack always covers one whole month: ${monthWords}, the month of the end day you picked.`, ...(filters.clientId || filters.jobTypeId || filters.status ? ['It is a company report, so the client, job type and status filters do not change it.'] : [])],
+    notes: [`This pack always covers one whole month: ${monthWords}, the month of the end day you picked.`, ...(fullMonth ? [`${fullMonth} For month to date, open Home or Profit.`] : []), ...(filters.clientId || filters.jobTypeId || filters.status ? ['It is a company report, so the client, job type and status filters do not change it.'] : [])],
   };
 }
 
@@ -1091,7 +1147,7 @@ export interface BuildReportOptions {
  * Builds one report of the library. Reports that show money answer FORBIDDEN to a reader without
  * `money:read`; reports open to everyone come back with their money columns blank for them.
  */
-export async function buildReport(ctx: DomainContext, slug: string, filters: ReportFilters, options: BuildReportOptions = {}): Promise<ReportDTO> {
+export const buildReport = scoped(async function buildReport(ctx: DomainContext, slug: string, filters: ReportFilters, options: BuildReportOptions = {}): Promise<ReportDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const info = reportInfo(slug);
   const builder = BUILDERS[slug];
@@ -1120,17 +1176,18 @@ export async function buildReport(ctx: DomainContext, slug: string, filters: Rep
     total: built.total ? strip(built.total) : null,
     summary: (built.summary ?? []).map((item) => (hide && item.kind === 'money' ? { ...item, value: null } : item)),
     chart: hide && built.chart?.format === 'money' ? null : (built.chart ?? null),
+    aside: built.aside ? (hide ? { ...built.aside, valueCents: null } : built.aside) : null,
     notes: built.notes ?? [],
     truncated: built.rows.length >= ROW_CAP,
     moneyHidden: hide,
   };
-}
+});
 
 /** The reports this reader may open. */
-export async function listReportsFor(ctx: DomainContext): Promise<ReportInfo[]> {
+export const listReportsFor = scoped(async function listReportsFor(ctx: DomainContext): Promise<ReportInfo[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   return REPORTS.filter((report) => access.seesMoney || !report.needsMoney);
-}
+});
 
 /* ================================================================== schedules and builds */
 
@@ -1177,12 +1234,12 @@ function toScheduleDTO(row: ScheduleRow, ctx: DomainContext, canManageAll: boole
 }
 
 /** Schedules of the workspace. People without money rights do not see schedules that build money. */
-export async function listReportSchedules(ctx: DomainContext): Promise<ReportScheduleDTO[]> {
+export const listReportSchedules = scoped(async function listReportSchedules(ctx: DomainContext): Promise<ReportScheduleDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const found = await db.select().from(reportSchedules).where(and(eq(reportSchedules.orgId, ctx.orgId), isNull(reportSchedules.deletedAt))).orderBy(reportSchedules.name);
   const manage = canPulse(access.role, 'job:manage');
   return found.filter((row) => access.seesMoney || !row.includeMoney).map((row) => toScheduleDTO(row, ctx, manage));
-}
+});
 
 async function siteZone(ctx: DomainContext, siteId: string | null | undefined): Promise<string> {
   try {
@@ -1193,7 +1250,7 @@ async function siteZone(ctx: DomainContext, siteId: string | null | undefined): 
 }
 
 /** Creates or edits a schedule. A report that shows money can only be scheduled by someone who sees money. */
-export async function saveReportSchedule(ctx: DomainContext, input: ReportScheduleInput): Promise<ReportScheduleDTO> {
+export const saveReportSchedule = scoped(async function saveReportSchedule(ctx: DomainContext, input: ReportScheduleInput): Promise<ReportScheduleDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const name = cleanText(input.name);
   const fields: Record<string, string> = {};
@@ -1241,7 +1298,7 @@ export async function saveReportSchedule(ctx: DomainContext, input: ReportSchedu
     await logActivity(tx, ctx, { verb: 'schedule.created', entityType: 'report_schedule', entityId: row!.id, after: { name: values.name, report: values.report, cadence: values.cadence } });
     return toScheduleDTO(row!, ctx, manage);
   });
-}
+});
 
 async function ownScheduleRow(ctx: DomainContext, scheduleId: string, deleted: boolean): Promise<{ row: ScheduleRow; manage: boolean }> {
   const access = await requirePulse(ctx, 'pulse:read');
@@ -1253,26 +1310,26 @@ async function ownScheduleRow(ctx: DomainContext, scheduleId: string, deleted: b
   return { row, manage };
 }
 
-export async function deleteReportSchedule(ctx: DomainContext, scheduleId: string): Promise<void> {
+export const deleteReportSchedule = scoped(async function deleteReportSchedule(ctx: DomainContext, scheduleId: string): Promise<void> {
   const { row } = await ownScheduleRow(ctx, scheduleId, false);
   await inTx(async (tx) => {
     await tx.update(reportSchedules).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(reportSchedules.id, row.id));
     await logActivity(tx, ctx, { verb: 'schedule.deleted', entityType: 'report_schedule', entityId: row.id, before: { name: row.name, report: row.report } });
   });
-}
+});
 
 /** Undo of a delete. */
-export async function restoreReportSchedule(ctx: DomainContext, scheduleId: string): Promise<ReportScheduleDTO> {
+export const restoreReportSchedule = scoped(async function restoreReportSchedule(ctx: DomainContext, scheduleId: string): Promise<ReportScheduleDTO> {
   const { row, manage } = await ownScheduleRow(ctx, scheduleId, true);
   return inTx(async (tx) => {
     const [restored] = await tx.update(reportSchedules).set({ deletedAt: null, updatedAt: new Date() }).where(eq(reportSchedules.id, row.id)).returning();
     await logActivity(tx, ctx, { verb: 'schedule.restored', entityType: 'report_schedule', entityId: row.id });
     return toScheduleDTO(restored!, ctx, manage);
   });
-}
+});
 
 /** Turns a schedule on or off without opening the editor. */
-export async function setReportScheduleEnabled(ctx: DomainContext, scheduleId: string, enabled: boolean): Promise<ReportScheduleDTO> {
+export const setReportScheduleEnabled = scoped(async function setReportScheduleEnabled(ctx: DomainContext, scheduleId: string, enabled: boolean): Promise<ReportScheduleDTO> {
   const { row, manage } = await ownScheduleRow(ctx, scheduleId, false);
   const config = (row.config ?? {}) as { siteId?: string | null };
   const zone = await siteZone(ctx, config.siteId);
@@ -1285,7 +1342,7 @@ export async function setReportScheduleEnabled(ctx: DomainContext, scheduleId: s
     await logActivity(tx, ctx, { verb: enabled ? 'schedule.turned_on' : 'schedule.turned_off', entityType: 'report_schedule', entityId: row.id });
     return toScheduleDTO(updated!, ctx, manage);
   });
-}
+});
 
 function toRunDTO(row: RunRow & { scheduleName?: string | null }, seesMoney: boolean): ReportRunDTO {
   return {
@@ -1347,15 +1404,15 @@ async function buildForSchedule(ctx: DomainContext, row: ScheduleRow): Promise<R
 }
 
 /** "Build now": runs a schedule right away, whatever its clock says. */
-export async function runReportSchedule(ctx: DomainContext, scheduleId: string): Promise<ReportRunDTO> {
+export const runReportSchedule = scoped(async function runReportSchedule(ctx: DomainContext, scheduleId: string): Promise<ReportRunDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const { row } = await ownScheduleRow(ctx, scheduleId, false);
   const run = await buildForSchedule(ctx, row);
   return toRunDTO({ ...run, scheduleName: row.name }, access.seesMoney);
-}
+});
 
 /** Past builds, newest first. Kept 90 days. */
-export async function listReportRuns(ctx: DomainContext, options: { limit?: number } = {}): Promise<ReportRunDTO[]> {
+export const listReportRuns = scoped(async function listReportRuns(ctx: DomainContext, options: { limit?: number } = {}): Promise<ReportRunDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const found = await db
     .select({ run: reportRuns, scheduleName: reportSchedules.name })
@@ -1365,10 +1422,10 @@ export async function listReportRuns(ctx: DomainContext, options: { limit?: numb
     .orderBy(desc(reportRuns.createdAt))
     .limit(Math.min(options.limit ?? 50, 200));
   return found.filter((item) => access.seesMoney || !item.run.includeMoney).map((item) => toRunDTO({ ...item.run, scheduleName: item.scheduleName }, access.seesMoney));
-}
+});
 
 /** One build's file. A build that holds money needs `money:read`. */
-export async function getReportRunFile(ctx: DomainContext, runId: string, format: 'csv' | 'html'): Promise<{ fileName: string; body: string }> {
+export const getReportRunFile = scoped(async function getReportRunFile(ctx: DomainContext, runId: string, format: 'csv' | 'html'): Promise<{ fileName: string; body: string }> {
   const access = await requirePulse(ctx, 'pulse:read');
   const [row] = isUuid(runId) ? await db.select().from(reportRuns).where(and(eq(reportRuns.orgId, ctx.orgId), eq(reportRuns.id, runId))) : [];
   if (!row) throw notFound('That build');
@@ -1377,13 +1434,13 @@ export async function getReportRunFile(ctx: DomainContext, runId: string, format
   if (row.status === 'failed' || !body) throw notFound('That file');
   await logActivity(db, ctx, { verb: 'report.downloaded', entityType: 'report_run', entityId: row.id, meta: { report: row.report, format } });
   return { fileName: `${row.report}-${isoRequired(row.createdAt).slice(0, 10)}.${format}`, body };
-}
+});
 
 /**
  * Builds every schedule of an org whose time has come. Called by the scheduler; each schedule
  * runs in its own try and catch so one bad report never blocks the rest.
  */
-export async function runDueReportSchedules(ctx: DomainContext, now: Date = new Date()): Promise<{ built: number; failed: number }> {
+export const runDueReportSchedules = scoped(async function runDueReportSchedules(ctx: DomainContext, now: Date = new Date()): Promise<{ built: number; failed: number }> {
   const due = await db.select().from(reportSchedules).where(and(eq(reportSchedules.orgId, ctx.orgId), isNull(reportSchedules.deletedAt), eq(reportSchedules.enabled, true), sql`${reportSchedules.nextRunAt} IS NOT NULL AND ${reportSchedules.nextRunAt} <= ${now.toISOString()}::timestamptz`));
   let built = 0;
   let failed = 0;
@@ -1398,7 +1455,7 @@ export async function runDueReportSchedules(ctx: DomainContext, now: Date = new 
     }
   }
   return { built, failed };
-}
+});
 
 /** Text of one summary value, for sentences built on the server (search hits, notifications). */
 export function reportSummaryText(report: ReportDTO): string {

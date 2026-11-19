@@ -29,7 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   IconButton,
-  Input,
+  IsoDatePicker,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -46,6 +46,7 @@ import { JOB_TABS, JOB_TAB_LABELS, routes, type JobTab } from '@/lib/routes';
 import type { JobDetailDTO, JobTypeDTO, LaborClassDTO, SettingsDTO, VasServiceDTO } from '@/lib/types';
 import { updateJobAction } from '@/server/actions/jobs';
 import { recordRecentJobAction } from '@/server/actions/views';
+import { DeleteJobDialog } from './delete-job-dialog';
 import { EditJobDialog } from './forms/job-dialogs';
 import { JobActivity } from './job-activity';
 import { useRefreshJob } from './job-data';
@@ -119,11 +120,6 @@ export function JobFrame({
     });
   };
 
-  const remove = async () => {
-    const gone = await actions.remove(job);
-    if (gone) router.push(routes.jobs());
-  };
-
   const tabs = JOB_TABS.filter((id) => shell.seesMoney || !MONEY_TABS.includes(id));
   const tabProps = { job, today, settings, laborClasses, services };
   const ownerName = people.data?.find((person) => person.id === job.ownerId)?.name;
@@ -189,7 +185,7 @@ export function JobFrame({
                 <DropdownMenuItem
                   variant="danger"
                   icon={<Trash2 aria-hidden />}
-                  onSelect={() => void remove()}
+                  onSelect={() => actions.askRemove(job)}
                   data-testid="job-delete"
                 >
                   Delete
@@ -201,6 +197,7 @@ export function JobFrame({
       }
       tabs={
         <div className="flex flex-col gap-3">
+          {/* On a touch screen every chip here is 44px tall, so a thumb hits the one it means. */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-2" data-testid="job-meta">
             {canManage ? (
               <DropdownMenu>
@@ -209,7 +206,7 @@ export function JobFrame({
                     type="button"
                     aria-label={`Stage: ${job.status.replace('_', ' ')}. Change it`}
                     data-testid="job-stage"
-                    className="inline-flex items-center gap-1 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    className="inline-flex items-center gap-1 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus pointer-coarse:h-11 pointer-coarse:px-1"
                   >
                     <JobStatusBadge status={job.status} />
                     <ChevronDown aria-hidden className="size-3.5 text-fg-muted" />
@@ -245,7 +242,7 @@ export function JobFrame({
                     type="button"
                     data-testid="job-owner"
                     aria-label={`Owner: ${ownerName ?? 'nobody'}. Change it`}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-subtle bg-panel px-2 text-sm text-fg hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-subtle bg-panel px-2 text-sm text-fg hover:bg-hover pointer-coarse:h-11 pointer-coarse:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                   >
                     {job.ownerId ? (
                       <PersonAvatar userId={job.ownerId} size="xs" decorative />
@@ -303,7 +300,7 @@ export function JobFrame({
                     type="button"
                     data-testid="job-due"
                     aria-label={`Due date: ${job.dueDate ? shortDate(job.dueDate) : 'not set'}. Change it`}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-subtle bg-panel px-2 text-sm text-fg hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-subtle bg-panel px-2 text-sm text-fg hover:bg-hover pointer-coarse:h-11 pointer-coarse:px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                   >
                     <CalendarDays aria-hidden className="size-3.5 text-fg-muted" />
                     {job.dueDate ? `Due ${shortDate(job.dueDate)}` : 'No due date'}
@@ -326,12 +323,12 @@ export function JobFrame({
                     <label htmlFor="job-due-input" className="text-xs font-medium text-fg-secondary">
                       Due date
                     </label>
-                    <Input
+                    <IsoDatePicker
                       id="job-due-input"
-                      type="date"
-                      value={due}
-                      onChange={(event) => setDue(event.target.value)}
-                      autoFocus
+                      value={due || null}
+                      onChange={(value) => setDue(value ?? '')}
+                      clearable={false}
+                      placeholder="No due date"
                       data-testid="job-due-input"
                     />
                     <div className="flex justify-between gap-2">
@@ -354,26 +351,38 @@ export function JobFrame({
 
             <Link
               href={routes.client(job.clientId)}
-              className="inline-flex h-7 items-center rounded-md px-1.5 text-sm text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              className="inline-flex h-7 items-center rounded-md px-1.5 text-sm text-primary-text hover:underline pointer-coarse:h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
               {job.clientName}
             </Link>
             {job.links
-              .filter((link) => link.url)
+              .filter((link) => link.url || link.title)
               .slice(0, 3)
-              .map((link) => (
-                <a
-                  key={link.id}
-                  href={link.url ?? '#'}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-7 max-w-[220px] items-center gap-1 rounded-md border border-border-subtle bg-panel px-2 text-xs text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                >
-                  <span className="truncate">{link.title ?? 'Linked record'}</span>
-                  <ExternalLink aria-hidden className="size-3 shrink-0" />
-                  <span className="sr-only">(opens in a new tab)</span>
-                </a>
-              ))}
+              .map((link) =>
+                link.url ? (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="job-link-chip"
+                    className="inline-flex h-7 max-w-[220px] items-center gap-1 rounded-md border border-border-subtle bg-panel px-2 text-xs text-fg-secondary hover:bg-hover pointer-coarse:h-11 hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                  >
+                    <span className="truncate">{link.title ?? 'Linked record'}</span>
+                    <ExternalLink aria-hidden className="size-3 shrink-0" />
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </a>
+                ) : (
+                  // No address: the app is not on the plan, or no path was saved. Plain words, never a dead link.
+                  <span
+                    key={link.id}
+                    data-testid="job-link-chip"
+                    className="inline-flex h-7 max-w-[220px] items-center rounded-md border border-border-subtle bg-panel px-2 text-xs text-fg-muted"
+                  >
+                    <span className="truncate">{link.title}</span>
+                  </span>
+                ),
+              )}
           </div>
           <RouteTabs
             label="Job sections"
@@ -399,6 +408,7 @@ export function JobFrame({
           onSaved={refresh}
         />
       ) : null}
+      <DeleteJobDialog actions={actions} />
     </Page>
   );
 }

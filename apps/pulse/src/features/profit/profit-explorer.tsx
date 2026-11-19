@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ToggleGroup } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/cn';
+import { ScrollX } from '@/components/ui/scroll-x';
 import { PROFIT_GROUPS, type ProfitGroup } from '@/lib/constants';
 import type { CsvCell } from '@/lib/csv/write';
 import { formatMoney, formatMoneyWhole, formatPace, formatPercentBp, formatPercentWhole } from '@/lib/format';
@@ -36,17 +37,20 @@ import {
   PROFIT_COLUMNS,
   VIEW_LABELS,
   VIEW_NOUN,
+  withArticle,
   compareOne,
   compareRows,
   contribution,
   csvHeader,
   csvValue,
+  COST_KNOWN_HEADER,
   defaultPivotBy,
   defaultSort,
   modesFor,
   paretoView,
   parseSort,
   pivotCsv,
+  rowNoCost,
   rowLabel,
   sortParam,
   sortRows,
@@ -59,7 +63,7 @@ import {
 import { LoadError, Section, TableSkeleton, comparable, moneyDelta, numberDelta, pointsDelta } from './profit-ui';
 import { CHART_MEASURES, ChartView, ContributionView, ParetoView, PivotView, ServeView, TableView, type ChartMeasure } from './profit-views';
 import { useQueryState } from './use-query-state';
-import { companyMarginBp } from '@/features/home/company-margin';
+import { companyMarginBp, companySentence, companyWords } from '@/features/home/company-margin';
 import { ViewsMenu } from './views-menu';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -92,7 +96,28 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
   const { get, set } = url;
 
   const period = useMemo(() => parsePeriod(get, today, weekStart), [get, today, weekStart]);
-  const filters = useMemo(() => parseFilters(get), [get]);
+  // A filter in the address that names no client, job type or site of this workspace is dropped, and
+  // the page says so (round four, ops buyer issue 5), never a silent "all clients".
+  const parsed = useMemo(() => parseFilters(get), [get]);
+  const unknownFilters = useMemo(() => {
+    const out: { key: 'client' | 'jobType' | 'site'; noun: string; nouns: string }[] = [];
+    const check = (key: 'client' | 'jobType' | 'site', id: string | null, list: readonly { id: string }[], noun: string, nouns: string) => {
+      if (get(key) && (!id || (list.length > 0 && !list.some((item) => item.id === id)))) out.push({ key, noun, nouns });
+    };
+    check('client', parsed.clientId, clients, 'client', 'clients');
+    check('jobType', parsed.jobTypeId, jobTypes, 'job type', 'job types');
+    check('site', parsed.siteId, sites, 'site', 'sites');
+    return out;
+  }, [get, parsed, clients, jobTypes, sites]);
+  const filters = useMemo(
+    () => ({
+      ...parsed,
+      clientId: unknownFilters.some((item) => item.key === 'client') ? null : parsed.clientId,
+      jobTypeId: unknownFilters.some((item) => item.key === 'jobType') ? null : parsed.jobTypeId,
+      siteId: unknownFilters.some((item) => item.key === 'site') ? null : parsed.siteId,
+    }),
+    [parsed, unknownFilters],
+  );
   const jobId = UUID.test(get('job') ?? '') ? get('job') : null;
   const serviceId = UUID.test(get('service') ?? '') ? get('service') : null;
   const modes = modesFor(by);
@@ -113,7 +138,11 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
   const main = useProfit(by, { ...scope, trend: true });
   const before = useProfit(by, { ...scope, from: period.compareTo?.from, to: period.compareTo?.to }, { enabled: period.compareTo !== null });
   const wholeCompany = !filters.clientId && !filters.jobTypeId && !filters.status && !jobId && !serviceId;
-  const bridge = useCompanyBridge({ from: period.from, to: period.to, siteId: filters.siteId }, { enabled: wholeCompany && seesMoney });
+  // `?spread=work_days` or `?spread=calendar` shares company costs another way for this view only.
+  const spreadParam = get('spread');
+  const spread = spreadParam === 'work_days' || spreadParam === 'calendar' ? spreadParam : null;
+  const bridge = useCompanyBridge({ from: period.from, to: period.to, siteId: filters.siteId, spread }, { enabled: wholeCompany && seesMoney });
+  const sentence = bridge.data ? companySentence(bridge.data) : null;
   const pivot = useProfitPivot(by, pivotBy, scope, { enabled: mode === 'pivot' });
   const services = useVasServices({}, { enabled: serviceId !== null });
   const job = useJob(jobId, { enabled: jobId !== null });
@@ -128,6 +157,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
   const rows = useMemo(() => sortRows(by, data?.rows ?? [], { column: sortColumn, direction: sortDirection }, compared), [by, data, sortColumn, sortDirection, compared]);
   const total = data?.total ?? null;
   const prior = comparing ? comparable(before.data) : null;
+  const companyMargin = total && bridge.data ? companyMarginBp(bridge.data.companyProfitCents, total.revenueCents) : null;
 
   const setPeriod = useCallback(
     (change: PeriodChange) => {
@@ -157,6 +187,8 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
     if (!data || !total) return;
     const stamp = `${period.from}-to-${period.to}`;
     const nameHeader = VIEW_LABELS[by].replace(/s$/, '');
+    // Extra service rows can have no known cost: those files get a "Cost known" column.
+    const costFlag = seesMoney && (by === 'service' || serviceId !== null);
     if (mode === 'serve') {
       // Cost to serve is a report: its CSV comes from the same build the view shows.
       window.location.assign(apiPath('reports/cost-to-serve.csv', reportQuery({ from: period.from, to: period.to, siteId: filters.siteId, clientId: filters.clientId, jobTypeId: filters.jobTypeId, status: filters.status })));
@@ -180,14 +212,23 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
     if (mode === 'contribution') {
       const line = (name: string, row: typeof total): CsvCell[] => {
         const parts = contribution(row);
-        return [name, csvValue(row.revenueCents, 'money'), csvValue(parts?.directCents, 'money'), csvValue(parts?.contributionCents, 'money'), csvValue(row.marginBeforeSharedBp, 'percent'), csvValue(row.sharedCents, 'money'), csvValue(row.profitCents, 'money'), csvValue(row.marginBp, 'percent')];
+        // Number columns stay numbers: a cost Pulse does not know is an empty cell, and "Cost known" says so.
+        const unknown = row.costMissing;
+        return [name, csvValue(row.revenueCents, 'money'), csvValue(parts?.directCents, 'money'), unknown ? '' : csvValue(parts?.contributionCents, 'money'), unknown ? '' : csvValue(row.marginBeforeSharedBp, 'percent'), csvValue(row.sharedCents, 'money'), unknown ? '' : csvValue(row.profitCents, 'money'), unknown ? '' : csvValue(row.marginBp, 'percent'), ...(costFlag ? [unknown ? 'No' : 'Yes'] : [])];
       };
-      downloadCsv(`${orgSlug}-profit-contribution-${by}-${stamp}.csv`, [nameHeader, 'Revenue', 'Direct costs', 'Contribution', 'Margin before shared costs (%)', 'Time not on a job', 'Profit', 'Margin after all costs (%)'], [...rows.map((row) => line(rowLabel(by, row), row)), line('Total', total)]);
+      downloadCsv(`${orgSlug}-profit-contribution-${by}-${stamp}.csv`, [nameHeader, 'Revenue', 'Direct costs', 'Contribution', 'Contribution (%)', 'Time not on a job', 'Profit', 'Job margin (%)', ...(costFlag ? [COST_KNOWN_HEADER] : [])], [...rows.map((row) => line(rowLabel(by, row), row)), line('Total', total)]);
       return;
     }
     const withName = by === 'job';
-    const headers = [nameHeader, ...(withName ? ['Name'] : []), ...columns.map(csvHeader), ...(comparing ? ['Profit change', 'Margin change (points)'] : [])];
-    const line = (name: string, sub: string | null, row: typeof total, change: { profitDelta: number | null; marginDelta: number | null } | null | undefined): CsvCell[] => [name, ...(withName ? [sub ?? ''] : []), ...columns.map((column) => csvValue(column.get(row), column.kind)), ...(comparing ? [csvValue(change?.profitDelta ?? null, 'money'), csvValue(change?.marginDelta ?? null, 'percent')] : [])];
+    const headers = [nameHeader, ...(withName ? ['Name'] : []), ...columns.map(csvHeader), ...(comparing ? ['Profit change', 'Margin change (points)'] : []), ...(costFlag ? [COST_KNOWN_HEADER] : [])];
+    // Number columns stay numbers: a cost Pulse does not know is an empty cell, and "Cost known" says so.
+    const line = (name: string, sub: string | null, row: typeof total, change: { profitDelta: number | null; marginDelta: number | null } | null | undefined): CsvCell[] => [
+      name,
+      ...(withName ? [sub ?? ''] : []),
+      ...columns.map((column) => (rowNoCost(row, column.id) ? '' : csvValue(column.get(row), column.kind))),
+      ...(comparing ? [row.costMissing ? '' : csvValue(change?.profitDelta ?? null, 'money'), row.costMissing ? '' : csvValue(change?.marginDelta ?? null, 'percent')] : []),
+      ...(costFlag ? [row.costMissing ? 'No' : 'Yes'] : []),
+    ];
     downloadCsv(`${orgSlug}-profit-by-${by}-${stamp}.csv`, headers, [...rows.map((row) => line(rowLabel(by, row), row.sublabel, row, compared.get(row.key))), line('Total', null, total, totalCompared)]);
   };
 
@@ -210,6 +251,17 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
         </div>
         <FilterBar values={filters} onChange={(patch) => set({ ...('siteId' in patch ? { site: patch.siteId } : {}), ...('clientId' in patch ? { client: patch.clientId } : {}), ...('jobTypeId' in patch ? { jobType: patch.jobTypeId } : {}), ...('status' in patch ? { status: patch.status } : {}) })} sites={sites} clients={clients} jobTypes={jobTypes} />
       </div>
+
+      {unknownFilters.length > 0 ? (
+        <p role="status" className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-warning/30 bg-warning-subtle px-4 py-2.5 text-sm text-warning-text" data-testid="profit-unknown-filter">
+          <span>
+            {unknownFilters.map((item) => `The ${item.noun} in this link is not one of your ${item.nouns}, so the page shows every ${item.noun}.`).join(' ')}
+          </span>
+          <button type="button" onClick={() => set(Object.fromEntries(unknownFilters.map((item) => [item.key, null])))} className="rounded-sm font-medium underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="profit-unknown-filter-clear">
+            Take it out of the link
+          </button>
+        </p>
+      ) : null}
 
       {/* The drill path */}
       {crumbs.length > 0 ? (
@@ -289,8 +341,20 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
                 <KpiTile label="Revenue" loading={!total} value={total ? formatMoneyWhole(total.revenueCents) : null} delta={total ? moneyDelta(total.revenueCents, prior?.revenueCents, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="revenue" scope={scope} />} />
                 <KpiTile label="Cost" loading={!total} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, prior?.costCents, 'down', compareLabel) : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
                 <KpiTile label="Profit" loading={!total} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, prior?.profitCents, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />
-                <KpiTile label="Margin on jobs" loading={!total} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue' }) : null} delta={total ? pointsDelta(total.marginBp, prior?.marginBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin" scope={scope} />} footer={!comparing && total?.marginBp !== null && total ? <span className="text-xs text-fg-muted">Target {formatPercentWhole(targetMarginBp)}{wholeCompany && bridge.data && companyMarginBp(bridge.data.companyProfitCents, total.revenueCents) !== null ? <>. Company margin, after overhead: <span className="font-medium text-fg tabular-nums" data-testid="profit-company-margin">{formatPercentBp(companyMarginBp(bridge.data.companyProfitCents, total.revenueCents))}</span></> : null}</span> : undefined} />
-                <KpiTile label="Margin before shared costs" loading={!total} value={total ? formatPercentBp(total.marginBeforeSharedBp, { empty: 'No revenue' }) : null} delta={total ? pointsDelta(total.marginBeforeSharedBp, prior?.marginBeforeSharedBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin_before_shared" scope={scope} />} />
+                <KpiTile label="Job margin" loading={!total} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue' }) : null} delta={total ? pointsDelta(total.marginBp, prior?.marginBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin" scope={scope} />} footer={!comparing && total?.marginBp !== null && total ? <span className="text-xs text-fg-muted">Target {formatPercentWhole(targetMarginBp)}</span> : undefined} />
+                {/* The company margin only exists for the whole company: a client or a job type has no overhead of its own. */}
+                {wholeCompany ? (
+                  <div className="contents" data-testid="profit-company-margin">
+                    <KpiTile
+                      label="Company margin"
+                      loading={!total || bridge.isLoading}
+                      value={total && bridge.data ? (companyMargin === null ? null : formatPercentBp(companyMargin)) : null}
+                      emptyText={bridge.isError ? 'Could not load' : 'No revenue'}
+                      explain={<ExplainNumber metric="company_profit" scope={{ from: period.from, to: period.to, siteId: filters.siteId, spread }} label="How we got company profit" />}
+                      footer={companyMargin !== null && bridge.data ? <span className="text-xs text-fg-muted" data-testid="profit-company-margin-words">{companyWords(bridge.data).tile}</span> : undefined}
+                    />
+                  </div>
+                ) : null}
               </>
             ) : null}
             <KpiTile label="Units per person per hour" loading={!total} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(total.uph === null ? null : Number(total.uph), prior ? (prior.uph === null ? null : Number(prior.uph)) : undefined, 'up', compareLabel, 1) : undefined} explain={<ExplainNumber metric="uph" scope={scope} />} />
@@ -300,10 +364,22 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
           {wholeCompany && seesMoney && bridge.data && total && bridge.data.companyProfitCents !== null ? (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border-subtle bg-sunken px-4 py-2.5 text-sm text-fg-secondary" data-testid="company-bridge">
               <span>
-                Your jobs made <strong className="font-semibold text-fg tabular-nums">{formatMoneyWhole(total.profitCents)}</strong>. After time not on a job and overhead, the company made{' '}
+                Your jobs made <strong className="font-semibold text-fg tabular-nums">{formatMoneyWhole(total.profitCents)}</strong>. {sentence?.lead}{' '}
                 <strong className={cn('font-semibold tabular-nums', bridge.data.companyProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatMoneyWhole(bridge.data.companyProfitCents)}</strong>.
+                {sentence?.reason ? <span data-testid="company-bridge-reason"> {sentence.reason}</span> : null}
+                {sentence?.note ? <span data-testid="company-cost-note"> {sentence.note}</span> : null}
               </span>
-              <ExplainNumber metric="company_profit" scope={{ from: period.from, to: period.to, siteId: filters.siteId }} label="How we got company profit" align="start" />
+              <ExplainNumber metric="company_profit" scope={{ from: period.from, to: period.to, siteId: filters.siteId, spread }} label="How we got company profit" align="start" />
+              {bridge.data.hasCompanyCosts && bridge.data.companyCostPartial ? (
+                <button
+                  type="button"
+                  className="text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus print:hidden"
+                  onClick={() => set({ spread: bridge.data!.companyCostSpread === 'work_days' ? 'calendar' : 'work_days' })}
+                  data-testid="company-cost-spread-switch"
+                >
+                  {bridge.data.companyCostSpread === 'work_days' ? 'Share company costs by calendar day' : 'Share company costs by work day'}
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -346,9 +422,9 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
                     </DropdownMenuContent>
                   </DropdownMenu>
                 ) : null}
-                <div className="max-w-full overflow-x-auto">
+                <ScrollX label="How to show the numbers" tabStop={false} className="max-w-full">
                   <ToggleGroup label="How to show the numbers" size="sm" value={mode} onValueChange={(value) => set({ view: value === 'table' ? null : value })} options={modes.filter((value) => seesMoney || value === 'table' || value === 'chart' || value === 'pivot').map((value) => ({ value, label: MODE_LABELS[value] }))} />
-                </div>
+                </ScrollX>
               </div>
             }
           >
@@ -373,7 +449,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
           {comparing && before.isError ? <p className="text-sm text-danger-text">We could not load the period to compare with. The change columns are blank.</p> : null}
           {data && mode === 'table' ? (
             <p className="text-xs text-fg-muted">
-              Click a {VIEW_NOUN[by]} to go one level down. The total of each level matches the row you clicked. {seesMoney ? `Profit on this page is ${formatMoney(total?.profitCents ?? null)}.` : ''}
+              Click {withArticle(VIEW_NOUN[by])} to go one level down. The total of each level matches the row you clicked. {seesMoney ? `Profit on this page is ${formatMoney(total?.profitCents ?? null)}.` : ''}
             </p>
           ) : null}
         </>

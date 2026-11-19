@@ -4,6 +4,7 @@ import {
   EMPTY_VALUES,
   applyField,
   crewQuestion,
+  missingLaborWords,
   dailyGoal,
   hoursEachFrom,
   isBlank,
@@ -165,11 +166,33 @@ describe('line checks', () => {
   it('asks "Is that right?" for labor hours typed as hours each (SPEC 4.4)', () => {
     const typo = { ...EMPTY_VALUES, people: '12', hours: '9.6' };
     expect(crewQuestion(typo, '8.00')).toBe(
-      '12 people for 8 hours is 96 labor hours. You typed 9.6. Is that right?',
+      '9.6 labor hours for 12 people is 0.8 hours each. A full shift of 8 hours each would be 96 labor hours. Is that right?',
     );
     expect(crewQuestion({ ...EMPTY_VALUES, people: '12', hours: '96' }, '8.00')).toBeNull();
     // A short run with an honest hours each is normal and is not questioned.
     expect(crewQuestion({ ...EMPTY_VALUES, people: '3', hours: '6' }, '8.00')).toBeNull();
+  });
+
+  it('asks with the numbers that are on screen after labor hours is typed over', () => {
+    // People 4, hours each 8, then labor hours 3.2: the grid works hours each back out to 0.8.
+    let values = applyField(applyField(EMPTY_VALUES, 'people', '4'), 'hoursEach', '8');
+    expect(values.hours).toBe('32');
+    values = applyField(values, 'hours', '3.2');
+    expect(values.hoursEach).toBe('0.8');
+    const question = crewQuestion(values, '8.00');
+    expect(question).toBe('3.2 labor hours for 4 people is 0.8 hours each. A full shift of 8 hours each would be 32 labor hours. Is that right?');
+    // Every number of the row is in the question, and the hours each that was replaced is not called typed.
+    expect(question).toContain(`${values.hoursEach} hours each`);
+    expect(question).not.toContain('You typed');
+    expect(crewQuestion({ ...EMPTY_VALUES, people: '1', hours: '20' }, '8.00')).toBe('20 labor hours for 1 person is 20 hours each. A full shift of 8 hours each would be 8 labor hours. Is that right?');
+  });
+
+  it('names the empty field on a job with units and no labor hours', () => {
+    expect(missingLaborWords([{ people: '4', hoursEach: '' }])).toBe('Add the hours each');
+    expect(missingLaborWords([{ people: '', hoursEach: '8' }])).toBe('Add people');
+    expect(missingLaborWords([{ people: '', hoursEach: '' }])).toBe('Add people and the hours each');
+    expect(missingLaborWords([{ people: '0', hoursEach: '' }, { people: '', hoursEach: '' }])).toBe('Add people and the hours each');
+    expect(missingLaborWords([])).toBe('Add people and the hours each');
   });
 });
 
@@ -284,6 +307,20 @@ describe('the live readout', () => {
       rateCents: 2176,
     });
     expect(money?.laborPerUnitCents).toBe(53);
+    expect(money).toMatchObject({ jobsNoHours: 0, marginProfitCents: 231616 });
+  });
+
+  it('shows no margin for a job with units and no labor hours, and leaves it out of the day', () => {
+    // 100 units at $1.25 with people typed and no hours: $125.00 earned, no labor cost yet.
+    const noHours = entry({ id: 'e2', jobId: 'j2', unitsGood: '100.000', headcount: '4.00', hours: '0.00', overtimeHours: '0.00', laborCostCents: 0, sharedCents: 0, baseRevenueCents: 12500, stdMaterialCents: 0 });
+    const alone = moneyReadout([noHours]);
+    expect(alone).toMatchObject({ revenueCents: 12500, laborCents: 0, marginBp: null, jobsNoHours: 1 });
+    // The day: earned goes up by $125.00, and the margin stays the margin of the job that has hours.
+    const day = moneyReadout([entry(), noHours]);
+    expect(day).toMatchObject({ revenueCents: 516500, marginBp: 4596, jobsNoHours: 1, marginProfitCents: 231616 });
+    // A second crew line with no hours on a job that has hours is still one whole job.
+    const twoLines = moneyReadout([entry(), entry({ id: 'e3', unitsGood: '0.000', hours: '0.00', laborCostCents: 0, sharedCents: 0, baseRevenueCents: 0, stdMaterialCents: 0 })]);
+    expect(twoLines).toMatchObject({ jobsNoHours: 0, marginBp: 4596 });
   });
 
   it('never shows money to a reader who may not see it', () => {

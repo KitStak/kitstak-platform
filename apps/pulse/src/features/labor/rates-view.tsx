@@ -1112,7 +1112,7 @@ function PreviewWords({ preview, from }: { readonly preview: RateChangePreviewDT
         </p>
       ) : (
         <p>
-          This changes <span className="font-medium text-fg">{preview.entries.toLocaleString()}</span> logged{' '}
+          This changes <span className="font-medium text-fg">{preview.entries.toLocaleString('en-US')}</span> logged{' '}
           {preview.entries === 1 ? 'entry' : 'entries'}
           {preview.jobs > 0 ? (
             <>
@@ -1137,7 +1137,7 @@ function PreviewWords({ preview, from }: { readonly preview: RateChangePreviewDT
       )}
       {preview.closedEntries > 0 ? (
         <p>
-          {preview.closedEntries.toLocaleString()} {preview.closedEntries === 1 ? 'entry is' : 'entries are'}{' '}
+          {preview.closedEntries.toLocaleString('en-US')} {preview.closedEntries === 1 ? 'entry is' : 'entries are'}{' '}
           in a closed month and keep their old cost.
         </p>
       ) : null}

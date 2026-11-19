@@ -13,6 +13,7 @@ import {
   DialogHeader,
   Field,
   Input,
+  IsoDatePicker,
   Select,
   Textarea,
   ToggleGroup,
@@ -259,23 +260,23 @@ export function EditJobDialog({
       </Field>
       <Field label="Start date">
         {({ inputId }) => (
-          <Input
+          <IsoDatePicker
             id={inputId}
-            type="date"
-            value={startDate}
-            onChange={(event) => setStartDate(event.target.value)}
+            aria-label="Start date"
+            value={startDate || null}
+            onChange={(value) => setStartDate(value ?? '')}
           />
         )}
       </Field>
       <Field label="Due date" error={errors.dueDate}>
         {({ inputId, describedBy, invalid }) => (
-          <Input
+          <IsoDatePicker
             id={inputId}
+            aria-label="Due date"
             aria-describedby={describedBy}
             invalid={invalid}
-            type="date"
-            value={dueDate}
-            onChange={(event) => setDueDate(event.target.value)}
+            value={dueDate || null}
+            onChange={(value) => setDueDate(value ?? '')}
             data-testid="edit-job-due"
           />
         )}
@@ -661,6 +662,20 @@ export function PlanDialog({
 
 /* ------------------------------------------------------------------ price from a day */
 
+type ContractInfo = NonNullable<JobDetailDTO['links'][number]['contract']>;
+
+/** What a typed price does to a job whose price comes from the warehouse contract (wms-services.ts). */
+export function contractPriceNote(contract: ContractInfo): string {
+  if (contract.billedBy) {
+    const why = contract.billedBy === 'tiers' ? 'its rate changes with volume' : 'its rate is for some products only';
+    return `The warehouse contract ${contract.contractName} prices this job on its own bill, because ${why}. Pulse does not set this price from the contract, so the price you type here is the one Pulse uses.`;
+  }
+  if (contract.inEffect) {
+    return `This price came from the warehouse contract ${contract.contractName}. A price you type here is used from the day you pick, and the job stops following the contract. Pulse puts the contract rate back only when the contract's rates change in the warehouse.`;
+  }
+  return `This job does not follow the warehouse contract ${contract.contractName} right now, because a price was typed in Pulse. Pulse puts the contract rate back when the contract's rates change in the warehouse.`;
+}
+
 export function PriceDialog({
   job,
   today,
@@ -685,6 +700,8 @@ export function PriceDialog({
   const [fixed, setFixed] = useState(dollars(job.fixedPriceCents));
   const [note, setNote] = useState('');
   const isFixed = mode === 'price' && job.pricingModel === 'fixed';
+  // A job linked to a warehouse work order may take its price from the contract: say what a typed price does.
+  const contract = mode === 'price' ? (job.links.find((link) => link.contract)?.contract ?? null) : null;
   const [errors, setErrors] = useState<Errors>({});
   const [saving, setSaving] = useState(false);
 
@@ -756,6 +773,15 @@ export function PriceDialog({
       submitLabel="Save"
       testId="price-dialog"
     >
+      {contract ? (
+        <p
+          role="note"
+          className="rounded-lg border border-border-subtle bg-sunken p-3 text-sm text-fg-secondary sm:col-span-2"
+          data-testid="price-contract-note"
+        >
+          {contractPriceNote(contract)}
+        </p>
+      ) : null}
       {mode === 'price' && job.pricingModel === 'per_unit' ? (
         <Field label={`New price for one ${unit}`} required error={errors.unitPrice}>
           {({ inputId, describedBy, invalid }) => (
@@ -847,13 +873,14 @@ export function PriceDialog({
       {!isFixed && whole === 'day' ? (
         <Field label="Starts on" error={errors.effectiveFrom}>
           {({ inputId, describedBy, invalid }) => (
-            <Input
+            <IsoDatePicker
               id={inputId}
+              aria-label="Starts on"
               aria-describedby={describedBy}
               invalid={invalid}
-              type="date"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
+              clearable={false}
+              value={from || null}
+              onChange={(value) => setFrom(value ?? '')}
               data-testid="price-from"
             />
           )}

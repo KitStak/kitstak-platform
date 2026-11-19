@@ -24,7 +24,7 @@ import { usePeopleMap } from '@/lib/hooks/use-people';
 import { qk } from '@/lib/query-keys';
 import { SCHEDULE_RANGE_LABELS, scheduleSentence, type ScheduleRange } from '@/lib/reports';
 import { routes } from '@/lib/routes';
-import type { ReportScheduleDTO } from '@/lib/types';
+import type { ReportRunDTO, ReportScheduleDTO } from '@/lib/types';
 import { deleteReportScheduleAction, restoreReportScheduleAction, runReportScheduleAction, setReportScheduleEnabledAction } from '@/server/actions/reports';
 import { LoadError, Section, TableSkeleton, runDelete } from '@/features/profit/profit-ui';
 import { ScheduleDialog } from './schedule-dialog';
@@ -82,6 +82,65 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
     setOpen(true);
   };
   const list = schedules.data ?? [];
+  const toldWords = (schedule: ReportScheduleDTO): string => {
+    const told = schedule.recipientUserIds.map((id) => people.get(id)?.name ?? null).filter(Boolean) as string[];
+    return told.length === 0 ? `${schedule.recipientUserIds.length} ${schedule.recipientUserIds.length === 1 ? 'person' : 'people'}` : told.length <= 2 ? told.join(' and ') : `${told[0]} and ${told.length - 1} more`;
+  };
+  const coversWords = (schedule: ReportScheduleDTO): string => {
+    const range = (schedule.config as { range?: string }).range as ScheduleRange | undefined;
+    return range ? SCHEDULE_RANGE_LABELS[range] : 'Last week';
+  };
+  /** Build now and the row menu. The table and the cards share them (the cards add a suffix to the test ids). */
+  const scheduleActions = (schedule: ReportScheduleDTO, suffix: string) => (
+    <div className="flex items-center justify-end gap-1">
+      <Button variant="secondary" size="sm" leadingIcon={<Play aria-hidden />} loading={building === schedule.id} disabled={!schedule.canEdit || building !== null} onClick={() => void buildNow(schedule)} data-testid={`schedule${suffix}-build`}>
+        Build now
+      </Button>
+      {schedule.canEdit ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton label={`Actions for ${schedule.name}`} icon={<MoreHorizontal aria-hidden />} size="sm" data-testid={`schedule${suffix}-actions`} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              icon={<Pencil aria-hidden />}
+              onSelect={() => {
+                setEditing(schedule);
+                setOpen(true);
+              }}
+            >
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="danger" icon={<Trash2 aria-hidden />} onSelect={() => void deleteSchedule(schedule)}>
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
+  );
+  const runFiles = (item: ReportRunDTO, suffix: string) =>
+    item.status === 'failed' ? (
+      <span className="inline-flex items-center gap-1.5 text-sm text-danger-text">
+        <CircleAlert aria-hidden className="size-4" />
+        {item.error ?? 'This build failed.'}
+      </span>
+    ) : item.canOpen ? (
+      <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <a href={apiPath(`reports/runs/${item.id}`, { format: 'csv' })} download className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid={`run${suffix}-csv`}>
+          <Download aria-hidden className="size-3.5" />
+          CSV
+        </a>
+        <a href={apiPath(`reports/runs/${item.id}`, { format: 'html' })} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid={`run${suffix}-html`}>
+          <FileText aria-hidden className="size-3.5" />
+          Page to print
+        </a>
+      </span>
+    ) : (
+      <span className="text-sm text-fg-muted">Holds money. Ask an admin if you need it.</span>
+    );
+
 
   return (
     <div className="flex flex-col gap-4" data-testid="reports-scheduled">
@@ -117,7 +176,47 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
             </Button>
           }
         >
-          <div className="overflow-x-auto">
+          {/* Below 1024 px: one card per schedule, so the switch, Build now and the row menu are on screen. */}
+          <ul className="flex flex-col divide-y divide-border-subtle lg:hidden" aria-label="Schedules" data-testid="schedules-cards">
+            {list.map((schedule) => (
+              <li key={schedule.id} className="flex flex-col gap-2.5 px-4 py-3" data-testid="schedule-card">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-fg">{schedule.name}</span>
+                    <Link href={routes.report(schedule.report)} className="rounded-sm text-xs text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                      {schedule.reportName}
+                    </Link>
+                    {schedule.includeMoney ? <span className="ml-2 text-xs text-fg-muted">with money</span> : null}
+                  </div>
+                  <Switch checked={schedule.enabled} disabled={!schedule.canEdit} onCheckedChange={(value) => void toggle(schedule, value)} aria-label={`${schedule.name} is ${schedule.enabled ? 'on' : 'off'}`} />
+                </div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+                  <div className="min-w-0">
+                    <dt className="text-xs text-fg-muted">When</dt>
+                    <dd className="text-fg">{scheduleSentence(schedule)}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-xs text-fg-muted">Covers</dt>
+                    <dd className="text-fg">{coversWords(schedule)}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-xs text-fg-muted">Who is told</dt>
+                    <dd className="truncate text-fg">{toldWords(schedule)}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-xs text-fg-muted">Next build</dt>
+                    <dd className="text-fg">{schedule.enabled ? when(schedule.nextRunAt) : <span className="text-fg-muted">Turned off</span>}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-xs text-fg-muted">Last build</dt>
+                    <dd className="text-fg-secondary">{schedule.lastRunAt ? formatRelative(schedule.lastRunAt) : 'Not yet'}</dd>
+                  </div>
+                </dl>
+                <div className="flex justify-start">{scheduleActions(schedule, '-card')}</div>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto lg:block">
             <Table className="min-w-[860px]" data-testid="schedules-table">
               <TableHead>
                 <tr>
@@ -135,8 +234,6 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
               </TableHead>
               <TableBody>
                 {list.map((schedule) => {
-                  const range = (schedule.config as { range?: string }).range as ScheduleRange | undefined;
-                  const told = schedule.recipientUserIds.map((id) => people.get(id)?.name ?? null).filter(Boolean) as string[];
                   return (
                     <TableRow key={schedule.id} data-testid="schedule-row">
                       <TableCell className="max-w-[260px]">
@@ -147,9 +244,9 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
                         {schedule.includeMoney ? <span className="ml-2 text-xs text-fg-muted">with money</span> : null}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">{scheduleSentence(schedule)}</TableCell>
-                      <TableCell className="whitespace-nowrap">{range ? SCHEDULE_RANGE_LABELS[range] : 'Last week'}</TableCell>
-                      <TableCell className="max-w-[200px] truncate" title={told.join(', ')}>
-                        {told.length === 0 ? `${schedule.recipientUserIds.length} ${schedule.recipientUserIds.length === 1 ? 'person' : 'people'}` : told.length <= 2 ? told.join(' and ') : `${told[0]} and ${told.length - 1} more`}
+                      <TableCell className="whitespace-nowrap">{coversWords(schedule)}</TableCell>
+                      <TableCell className="max-w-[200px] truncate" title={toldWords(schedule)}>
+                        {toldWords(schedule)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">{schedule.enabled ? when(schedule.nextRunAt) : <span className="text-fg-muted">Turned off</span>}</TableCell>
                       <TableCell className="whitespace-nowrap text-fg-secondary">{schedule.lastRunAt ? formatRelative(schedule.lastRunAt) : 'Not yet'}</TableCell>
@@ -157,33 +254,7 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
                         <Switch checked={schedule.enabled} disabled={!schedule.canEdit} onCheckedChange={(value) => void toggle(schedule, value)} aria-label={`${schedule.name} is ${schedule.enabled ? 'on' : 'off'}`} data-testid="schedule-switch" />
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="secondary" size="sm" leadingIcon={<Play aria-hidden />} loading={building === schedule.id} disabled={!schedule.canEdit || building !== null} onClick={() => void buildNow(schedule)} data-testid="schedule-build">
-                            Build now
-                          </Button>
-                          {schedule.canEdit ? (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <IconButton label={`Actions for ${schedule.name}`} icon={<MoreHorizontal aria-hidden />} size="sm" data-testid="schedule-actions" />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  icon={<Pencil aria-hidden />}
-                                  onSelect={() => {
-                                    setEditing(schedule);
-                                    setOpen(true);
-                                  }}
-                                >
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem variant="danger" icon={<Trash2 aria-hidden />} onSelect={() => void deleteSchedule(schedule)}>
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          ) : null}
-                        </div>
+                        {scheduleActions(schedule, '')}
                       </TableCell>
                     </TableRow>
                   );
@@ -206,8 +277,27 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
             No builds yet. A build shows up here each time a schedule runs, or when you press Build now.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <Table className="min-w-[720px]" data-testid="runs-table">
+          <>
+          {/* Phones: one card per build, so the CSV and the page to print are on screen. */}
+          <ul className="flex flex-col divide-y divide-border-subtle md:hidden" aria-label="Past builds" data-testid="runs-cards">
+            {runs.data.map((item) => (
+              <li key={item.id} className={cn('flex flex-col gap-1.5 px-4 py-3', item.id === highlightRun && 'bg-selected')} data-testid="run-card">
+                <div className="min-w-0">
+                  <span className="block truncate font-medium text-fg">{item.scheduleName ?? item.reportName}</span>
+                  <span className="block truncate text-xs text-fg-muted">
+                    {item.reportName} · built {when(item.createdAt)}
+                  </span>
+                </div>
+                <p className="text-sm text-fg-secondary">
+                  {item.periodLabel}
+                  {item.status === 'failed' ? '' : `${item.periodLabel ? ', ' : ''}${item.rowCount} ${item.rowCount === 1 ? 'row' : 'rows'}`}
+                </p>
+                <div>{runFiles(item, '-card')}</div>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
+            <Table className="min-w-[680px]" data-testid="runs-table">
               <TableHead>
                 <tr>
                   <TableHeaderCell>Built</TableHeaderCell>
@@ -230,31 +320,14 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
                     </TableCell>
                     <TableCell numeric>{item.status === 'failed' ? '' : item.rowCount}</TableCell>
                     <TableCell>
-                      {item.status === 'failed' ? (
-                        <span className="inline-flex items-center gap-1.5 text-sm text-danger-text">
-                          <CircleAlert aria-hidden className="size-4" />
-                          {item.error ?? 'This build failed.'}
-                        </span>
-                      ) : item.canOpen ? (
-                        <span className="flex items-center gap-3">
-                          <a href={apiPath(`reports/runs/${item.id}`, { format: 'csv' })} download className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="run-csv">
-                            <Download aria-hidden className="size-3.5" />
-                            CSV
-                          </a>
-                          <a href={apiPath(`reports/runs/${item.id}`, { format: 'html' })} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="run-html">
-                            <FileText aria-hidden className="size-3.5" />
-                            Page to print
-                          </a>
-                        </span>
-                      ) : (
-                        <span className="text-sm text-fg-muted">Holds money. Ask an admin if you need it.</span>
-                      )}
+                      {runFiles(item, '')}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
+          </>
         )}
       </Section>
       <ScheduleDialog open={open} onOpenChange={setOpen} schedule={editing} />

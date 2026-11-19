@@ -10,6 +10,7 @@
  * Cells edit in place, rows can be added many at a time (paste works), every change has Undo,
  * and when the job is linked to a warehouse work order one click pulls the parts it used.
  */
+import { ScrollX } from '@/components/ui/scroll-x';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -348,7 +349,7 @@ function PullDialog({ preview, loading, onCancel, onConfirm }: { readonly previe
           ) : preview.lines.length === 0 ? (
             <p className="text-sm text-fg-secondary">The work order has no parts on it yet.</p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-border-subtle">
+            <ScrollX label="Parts on the work order" className="rounded-lg border border-border-subtle">
               <table className="w-full border-collapse text-left text-sm tabular-nums">
                 <caption className="sr-only">Parts on the work order</caption>
                 <thead>
@@ -375,7 +376,7 @@ function PullDialog({ preview, loading, onCancel, onConfirm }: { readonly previe
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollX>
           )}
           <p className="text-sm text-fg-secondary" data-testid="usage-pull-summary">
             {preview.rowsToAdd === 0 ? 'Pulse is up to date with the warehouse. There is nothing to add.' : `${preview.rowsToAdd} ${preview.rowsToAdd === 1 ? 'row' : 'rows'} will be added, dated today${preview.addCents !== null ? `, worth ${formatMoney(preview.addCents)}` : ''}.`}

@@ -5,7 +5,8 @@
  * (refetch on focus). Query keys live in `@/lib/query-keys`; invalidate by prefix after a write.
  */
 import { keepPreviousData, useQuery, type UseQueryOptions } from '@tanstack/react-query';
-import { apiGet, apiPath } from '@/lib/api-client';
+import { apiGet, apiGetPage, apiPath } from '@/lib/api-client';
+import { collectPages, type AllRows, type PageMeta } from '@/lib/paging';
 import type { AlertEntityType, AlertStatus, CostScope, DayReviewStatus, FactKind, JobStatusValue, JobTab, ProfitGroup, PulseStatus, SavedViewPage, StoredRevenueKind, StreamSource, TargetScope } from '@/lib/constants';
 import { qk } from '@/lib/query-keys';
 import type {
@@ -22,6 +23,7 @@ import type {
   IndirectEntryDTO,
   ItemDTO,
   JobDetailDTO,
+  DeletedJobDTO,
   JobListItemDTO,
   JobPlansDTO,
   JobPriceDTO,
@@ -149,7 +151,7 @@ export const useJobCounts = (params: { clientId?: string | null; jobTypeId?: str
   useQuery({ queryKey: qk.jobCounts(params), queryFn: get<JobRiskCounts>('jobs/counts', { client: params.clientId, jobType: params.jobTypeId, site: params.siteId }), staleTime: SHORT, ...opts });
 export const useJobsByLink = (type: string | null | undefined, id: string | null | undefined, opts?: Opts<JobListItemDTO[]>) =>
   useQuery({ queryKey: qk.jobsByLink(type ?? '', id ?? ''), queryFn: get<JobListItemDTO[]>('jobs/by-link', { type, id }), enabled: Boolean(type && id), staleTime: SHORT, ...opts });
-export const useDeletedJobs = (opts?: Opts<JobListItemDTO[]>) => useQuery({ queryKey: qk.deletedJobs(), queryFn: get<JobListItemDTO[]>('jobs/deleted'), staleTime: SHORT, ...opts });
+export const useDeletedJobs = (opts?: Opts<DeletedJobDTO[]>) => useQuery({ queryKey: qk.deletedJobs(), queryFn: get<DeletedJobDTO[]>('jobs/deleted'), staleTime: SHORT, ...opts });
 /** One job by id or job number. */
 export const useJob = (ref: string | null | undefined, opts?: Opts<JobDetailDTO>) =>
   useQuery({ queryKey: qk.job(ref ?? ''), queryFn: get<JobDetailDTO>(`jobs/${encodeURIComponent(ref ?? '')}`), enabled: Boolean(ref), staleTime: SHORT, ...opts });
@@ -203,8 +205,8 @@ export const useRevenue = (params: EntryListParams & { kind?: StoredRevenueKind 
   const query = { ...entryQuery(params), kind: params.kind };
   return useQuery({ queryKey: qk.revenue(query), queryFn: get<RevenueEntryDTO[]>('revenue', query), staleTime: SHORT, ...opts });
 };
-export const useVasEntries = (params: EntryListParams & { serviceId?: string | null; noPrice?: boolean } = {}, opts?: Opts<VasEntryDTO[]>) => {
-  const query = { ...entryQuery(params), service: params.serviceId, noPrice: params.noPrice };
+export const useVasEntries = (params: EntryListParams & { serviceId?: string | null; noPrice?: boolean; openMonths?: boolean } = {}, opts?: Opts<VasEntryDTO[]>) => {
+  const query = { ...entryQuery(params), service: params.serviceId, noPrice: params.noPrice, open: params.openMonths };
   return useQuery({ queryKey: qk.serviceEntries(query), queryFn: get<VasEntryDTO[]>('service-entries', query), staleTime: SHORT, ...opts });
 };
 export const useDayReviews = (params: { siteId?: string | null; from?: string | null; to?: string | null; status?: DayReviewStatus | null } = {}, opts?: Opts<DayReviewDTO[]>) => {
@@ -223,8 +225,12 @@ export interface ProfitParams {
   jobId?: string | null;
   serviceId?: string | null;
   status?: JobStatusValue | null;
+  /** Only rows put on a client with no job. Read by the entries drill down. */
+  noJob?: boolean;
+  /** How company costs are shared over part of a month, for this view only. Read by company profit. */
+  spread?: 'calendar' | 'work_days' | null;
 }
-const profitQuery = (params: ProfitParams): Query => ({ from: params.from, to: params.to, site: params.siteId, client: params.clientId, jobType: params.jobTypeId, job: params.jobId, service: params.serviceId, status: params.status });
+const profitQuery = (params: ProfitParams): Query => ({ from: params.from, to: params.to, site: params.siteId, client: params.clientId, jobType: params.jobTypeId, job: params.noJob ? 'none' : params.jobId, service: params.serviceId, status: params.status, spread: params.spread });
 
 export const useSummary = (params: { from?: string | null; to?: string | null; siteId?: string | null } = {}, opts?: Opts<SummaryDTO>) => {
   const query = { from: params.from, to: params.to, site: params.siteId };
@@ -239,13 +245,23 @@ export const useProfitTrend = (params: ProfitParams & { bucket?: 'day' | 'week' 
   const query = { ...profitQuery(params), bucket: params.bucket };
   return useQuery({ queryKey: qk.profitTrend(query), queryFn: get<TrendPointDTO[]>('profit/trend', query), staleTime: SHORT, placeholderData: keepPreviousData, ...opts });
 };
-/** The stamped rows behind a number (drill down). */
-export const useProfitFacts = (params: ProfitParams & { kinds?: readonly FactKind[]; limit?: number } = {}, opts?: Opts<FactRowDTO[]>) => {
-  const query = { ...profitQuery(params), kinds: list(params.kinds), limit: params.limit };
-  return useQuery({ queryKey: qk.profitFacts(query), queryFn: get<FactRowDTO[]>('profit/facts', query), staleTime: SHORT, ...opts });
+/**
+ * The stamped rows behind a number (drill down): all of them. The route answers one page at a
+ * time, so this reads every page before it hands the rows over, and a total over `rows` is the
+ * whole total. `truncated` is true only when it stopped at `maxRows`: then say the list is cut.
+ * `limit` is the page size, not a cap on the rows.
+ */
+export const useProfitFacts = (params: ProfitParams & { kinds?: readonly FactKind[]; limit?: number; maxRows?: number } = {}, opts?: Opts<AllRows<FactRowDTO>>) => {
+  const query = { ...profitQuery(params), kinds: list(params.kinds), limit: params.limit ?? 5000 };
+  return useQuery({
+    queryKey: qk.profitFacts({ ...query, maxRows: params.maxRows }),
+    queryFn: () => collectPages<FactRowDTO>((offset) => apiGetPage<FactRowDTO[], PageMeta>(apiPath('profit/facts', { ...query, offset })), { maxRows: params.maxRows }),
+    staleTime: SHORT,
+    ...opts,
+  });
 };
-export const useCompanyBridge = (params: { from?: string | null; to?: string | null; siteId?: string | null } = {}, opts?: Opts<CompanyBridgeDTO>) => {
-  const query = { from: params.from, to: params.to, site: params.siteId };
+export const useCompanyBridge = (params: { from?: string | null; to?: string | null; siteId?: string | null; spread?: 'calendar' | 'work_days' | null } = {}, opts?: Opts<CompanyBridgeDTO>) => {
+  const query = { from: params.from, to: params.to, site: params.siteId, spread: params.spread };
   return useQuery({ queryKey: qk.companyBridge(query), queryFn: get<CompanyBridgeDTO>('company-bridge', query), staleTime: SHORT, placeholderData: keepPreviousData, ...opts });
 };
 

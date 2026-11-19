@@ -194,6 +194,9 @@ export function toPayload(values: LineValues): {
  * from people times a full shift. A short run with an honest hours each (3 people for 2 hours) is
  * normal, so the question is only asked when the hours each that comes out is under 1 or over 16:
  * the mark of labor hours typed where hours each was meant, or the other way around.
+ *
+ * The words use the numbers that are in the row right now. Typing labor hours works hours each
+ * back out, so the question names that hours each, never one the grid has already replaced.
  */
 export function crewQuestion(values: LineValues, shiftHours: string): string | null {
   const hours = parseTyped(values.hours);
@@ -201,7 +204,24 @@ export function crewQuestion(values: LineValues, shiftHours: string): string | n
   if (hours === null || people === null || hours === 0 || people === 0) return null;
   const each = hours / people;
   if (each >= 1 && each <= 16) return null;
-  return crewHoursCheck({ hours, people, shiftHours })?.message ?? null;
+  const check = crewHoursCheck({ hours, people, shiftHours });
+  if (!check) return null;
+  const count = (value: number, one: string, many: string): string => `${tidy(value) || '0'} ${value === 1 ? one : many}`;
+  const eachText = hoursEachFrom(hours, people) || '0';
+  return `${count(hours, 'labor hour', 'labor hours')} for ${count(people, 'person', 'people')} is ${eachText} ${eachText === '1' ? 'hour' : 'hours'} each. A full shift of ${count(check.shiftHours, 'hour', 'hours')} each would be ${count(check.expectedHours, 'labor hour', 'labor hours')}. Is that right?`;
+}
+
+/**
+ * What to say on a job that has units and no labor hours: the field that is still empty, by name.
+ * People typed and no hours each asks for the hours each, and the other way around.
+ */
+export function missingLaborWords(lines: readonly Pick<LineValues, 'people' | 'hoursEach'>[]): string {
+  const has = (field: 'people' | 'hoursEach'): boolean => lines.some((line) => (parseTyped(line[field]) ?? 0) > 0);
+  const people = has('people');
+  const each = has('hoursEach');
+  if (people && !each) return 'Add the hours each';
+  if (each && !people) return 'Add people';
+  return 'Add people and the hours each';
 }
 
 /* ---------------------------------------------------------------- paste */
@@ -392,7 +412,15 @@ export interface MoneyReadout {
   readonly sharedCents: number;
   readonly costCents: number;
   readonly profitCents: number;
+  /**
+   * Margin of the jobs that have labor hours. A job with units and no hours has no labor cost yet,
+   * so it is left out: it would read 100% and lift the margin of the day.
+   */
   readonly marginBp: number | null;
+  /** Profit of the same jobs the margin counts (the sign colors the margin). */
+  readonly marginProfitCents: number;
+  /** How many jobs have units and no labor hours, and so are left out of the margin. */
+  readonly jobsNoHours: number;
   readonly laborPerUnitCents: number | null;
   readonly rateCents: number | null;
 }
@@ -408,6 +436,8 @@ export function moneyReadout(entries: readonly ProductionEntryDTO[]): MoneyReado
       costCents: 0,
       profitCents: 0,
       marginBp: null,
+      marginProfitCents: 0,
+      jobsNoHours: 0,
       laborPerUnitCents: null,
       rateCents: null,
     };
@@ -417,19 +447,32 @@ export function moneyReadout(entries: readonly ProductionEntryDTO[]): MoneyReado
     )
   )
     return null;
-  const sum = (pick: (entry: ProductionEntryDTO) => number | null): bigint =>
-    entries.reduce((total, entry) => total + toCents(pick(entry) ?? 0), BigInt(0));
-  const units = entries.reduce((total, entry) => total + Number(entry.unitsGood), 0);
-  const summary = profitSummary(
-    {
-      revenueCents: sum((e) => e.baseRevenueCents),
-      laborCents: sum((e) => e.laborCostCents),
-      materialCents: sum((e) => e.stdMaterialCents),
-      otherCents: BigInt(0),
-      sharedCents: sum((e) => e.sharedCents),
-    },
-    units.toFixed(3),
-  );
+  const summarize = (list: readonly ProductionEntryDTO[]) => {
+    const sum = (pick: (entry: ProductionEntryDTO) => number | null): bigint =>
+      list.reduce((total, entry) => total + toCents(pick(entry) ?? 0), BigInt(0));
+    const units = list.reduce((total, entry) => total + Number(entry.unitsGood), 0);
+    return profitSummary(
+      {
+        revenueCents: sum((e) => e.baseRevenueCents),
+        laborCents: sum((e) => e.laborCostCents),
+        materialCents: sum((e) => e.stdMaterialCents),
+        otherCents: BigInt(0),
+        sharedCents: sum((e) => e.sharedCents),
+      },
+      units.toFixed(3),
+    );
+  };
+  const summary = summarize(entries);
+  // Per job: units with no labor hours means the labor cost is not in yet, so there is no margin to show.
+  const byJob = new Map<string, { hours: number; units: number }>();
+  for (const entry of entries) {
+    const job = byJob.get(entry.jobId) ?? { hours: 0, units: 0 };
+    job.hours += Number(entry.hours);
+    job.units += Number(entry.unitsGood);
+    byJob.set(entry.jobId, job);
+  }
+  const noHours = new Set([...byJob.entries()].filter(([, job]) => job.units > 0 && job.hours <= 0).map(([jobId]) => jobId));
+  const counted = noHours.size === 0 ? summary : summarize(entries.filter((entry) => !noHours.has(entry.jobId)));
   return {
     revenueCents: centsToNumber(summary.revenueCents),
     laborCents: centsToNumber(summary.laborCents),
@@ -437,7 +480,9 @@ export function moneyReadout(entries: readonly ProductionEntryDTO[]): MoneyReado
     sharedCents: centsToNumber(summary.sharedCents),
     costCents: centsToNumber(summary.costCents),
     profitCents: centsToNumber(summary.profitCents),
-    marginBp: summary.marginBp,
+    marginBp: counted.marginBp,
+    marginProfitCents: centsToNumber(counted.profitCents),
+    jobsNoHours: noHours.size,
     laborPerUnitCents:
       summary.laborCostPerUnitCents === null ? null : centsToNumber(summary.laborCostPerUnitCents),
     rateCents: entries.find((entry) => entry.rateCents !== null)?.rateCents ?? null,

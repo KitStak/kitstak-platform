@@ -7,12 +7,13 @@
 import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { invalid } from '@/server/errors';
 import { PROFIT_GROUPS, type FactKind, type ProfitGroup, type PulseStatus } from '@/lib/constants';
 import { marginBp } from '@/lib/money';
-import { addDays, companyBridge, daysBetween, payrollGap, profitSummary, sharedGap as sharedGapOf, utilizationBp } from '@/lib/profit';
+import { addDays, companyBridge, daysBetween, payrollGap, profitSummary, sharedGap as sharedGapOf, spreadCompanyCosts, utilizationBp, type CompanyCostSpreadMode } from '@/lib/profit';
 import type { BadgesDTO, CompanyBridgeDTO, FactRowDTO, LaborSummaryDTO, ProfitFilters, ProfitResponse, ProfitRowDTO, SummaryDTO, TrendPointDTO } from '@/lib/types';
-import { centsOut, isUuid, moneyOut, rows, todayInZone, type DomainContext } from './_shared';
+import { centsOut, countServiceEntriesNoPrice, isUuid, moneyOut, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse, type PulseAccess } from './access';
 import { resolveSite } from './catalog';
 import { loadSettings } from './settings';
@@ -108,7 +109,7 @@ function groupSql(by: ProfitGroup, weekStart: number): { key: SQL; label: SQL; s
 }
 
 const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = {
-  job: 'Client level, no job',
+  job: 'Put on a client, not on a job',
   client: 'No client',
   type: 'No job type',
   service: 'Core job work',
@@ -195,7 +196,11 @@ function totalOf(buckets: readonly Bucket[], label: string): Bucket {
 const revenueOf = (bucket: Bucket): bigint => bucket.base + bucket.vas + bucket.otherRev;
 const costOf = (bucket: Bucket): bigint => bucket.labor + bucket.material + bucket.other + bucket.shared;
 
-export function toProfitRow(bucket: Bucket, access: Access, extra: { prior?: Bucket | null; trend?: number[] | null } = {}): ProfitRowDTO {
+/**
+ * `costCheck` is for extra service rows: revenue with no cost of any kind is "No cost yet", never a
+ * 100% margin. Warehouse entries come in with a price and no hours, so Pulse does not know the cost.
+ */
+export function toProfitRow(bucket: Bucket, access: Access, extra: { prior?: Bucket | null; trend?: number[] | null; costCheck?: boolean } = {}): ProfitRowDTO {
   const money = access.seesMoney;
   const revenue = revenueOf(bucket);
   // One formula for every headline number: the same pure function the job page and the tests use.
@@ -206,6 +211,7 @@ export function toProfitRow(bucket: Bucket, access: Access, extra: { prior?: Buc
   const cost = summary.costCents;
   const profit = summary.profitCents;
   const prior = extra.prior;
+  const costMissing = money && Boolean(extra.costCheck) && revenue > ZERO && cost === ZERO;
   return {
     key: bucket.key,
     label: bucket.label,
@@ -220,8 +226,8 @@ export function toProfitRow(bucket: Bucket, access: Access, extra: { prior?: Buc
     sharedCents: moneyOut(money, bucket.shared),
     costCents: moneyOut(money, cost),
     profitCents: moneyOut(money, profit),
-    marginBp: money ? summary.marginBp : null,
-    marginBeforeSharedBp: money ? summary.marginBeforeSharedBp : null,
+    marginBp: money && !costMissing ? summary.marginBp : null,
+    marginBeforeSharedBp: money && !costMissing ? summary.marginBeforeSharedBp : null,
     laborPctBp: money ? summary.laborPctOfRevenueBp : null,
     billedCents: moneyOut(money, bucket.billed),
     unitsGood: bucket.units.toFixed(3),
@@ -242,6 +248,7 @@ export function toProfitRow(bucket: Bucket, access: Access, extra: { prior?: Buc
           },
     trend: extra.trend ?? null,
     laborMissing: bucket.laborMissing,
+    costMissing,
     riskStatus: bucket.risk,
   };
 }
@@ -295,7 +302,7 @@ export interface ProfitOptions {
  * grouped by job, client, job type, service, site, month, week or day. The total always equals
  * the sum of the rows, and the sum of the level below.
  */
-export async function getProfit(ctx: DomainContext, by: ProfitGroup, filters: ProfitFilters, options: ProfitOptions = {}): Promise<ProfitResponse> {
+export const getProfit = scoped(async function getProfit(ctx: DomainContext, by: ProfitGroup, filters: ProfitFilters, options: ProfitOptions = {}): Promise<ProfitResponse> {
   const access = await requirePulse(ctx, 'pulse:read');
   if (!(PROFIT_GROUPS as readonly string[]).includes(by)) throw invalid('Pick how to group the numbers.');
   checkRange(filters);
@@ -307,40 +314,58 @@ export async function getProfit(ctx: DomainContext, by: ProfitGroup, filters: Pr
   const total = totalOf(buckets, 'Total');
   const [jobCount] = await rows<{ n: number }>(db, sql`SELECT count(DISTINCT f.job_id)::int AS n FROM pulse.fact_days f LEFT JOIN pulse.jobs j ON j.id = f.job_id WHERE ${whereOf(ctx.orgId, filters)}`);
   total.jobs = jobCount?.n ?? 0;
+  // Extra service rows (the services view, or any view of one service) get the "No cost yet" check.
+  const oneService = Boolean(filters.vasServiceId);
   return {
     by,
     from: filters.from,
     to: filters.to,
-    rows: buckets.map((bucket) => toProfitRow(bucket, access, { prior: priorByKey ? (priorByKey.get(bucket.key) ?? null) : undefined, trend: trend?.get(bucket.key) ?? null })),
-    total: toProfitRow(total, access, { prior: prior ? totalOf(prior, 'Total') : undefined }),
+    rows: buckets.map((bucket) => toProfitRow(bucket, access, { prior: priorByKey ? (priorByKey.get(bucket.key) ?? null) : undefined, trend: trend?.get(bucket.key) ?? null, costCheck: oneService || (by === 'service' && bucket.key !== 'none') })),
+    total: toProfitRow(total, access, { prior: prior ? totalOf(prior, 'Total') : undefined, costCheck: oneService }),
     moneyHidden: !access.seesMoney,
   };
-}
+});
 
 /** Profit summary of one job over all time (the totals row of its fact days). */
-export async function getJobProfit(ctx: DomainContext, jobId: string): Promise<ProfitRowDTO> {
+export const getJobProfit = scoped(async function getJobProfit(ctx: DomainContext, jobId: string): Promise<ProfitRowDTO> {
   const result = await getProfit(ctx, 'job', { from: '0001-01-01', to: '9999-12-31', jobId });
   return result.rows[0] ?? result.total;
-}
+});
 
 /** Revenue, cost, profit, units and hours per day, week or month (trend charts). */
-export async function getProfitTrend(ctx: DomainContext, filters: ProfitFilters, bucket?: 'day' | 'week' | 'month'): Promise<TrendPointDTO[]> {
+export const getProfitTrend = scoped(async function getProfitTrend(ctx: DomainContext, filters: ProfitFilters, bucket?: 'day' | 'week' | 'month'): Promise<TrendPointDTO[]> {
   const result = await getProfit(ctx, bucket ?? autoBucket(filters.from, filters.to), filters);
   return result.rows.map((row) => ({ bucket: row.key, revenueCents: row.revenueCents, costCents: row.costCents, profitCents: row.profitCents, marginBp: row.marginBp, unitsGood: row.unitsGood, hours: row.hours }));
+});
+
+export const FACTS_PAGE_DEFAULT = 500;
+export const FACTS_PAGE_MAX = 5000;
+
+/** One page of stamped rows and whether more are waiting (`GET /api/v1/profit/facts`). */
+export interface FactsPage {
+  readonly rows: FactRowDTO[];
+  /** True when more rows match than this page holds. */
+  readonly truncated: boolean;
+  readonly limit: number;
+  readonly offset: number;
+  /** The `offset` of the next page, or null on the last page. */
+  readonly nextOffset: number | null;
 }
 
-/** The stamped rows behind a number (drill down and "See 14 entries"). Reads `v_facts`. */
-export async function listFacts(ctx: DomainContext, filters: ProfitFilters & { kinds?: readonly FactKind[]; limit?: number }): Promise<FactRowDTO[]> {
+type FactFilters = ProfitFilters & { kinds?: readonly FactKind[]; limit?: number; offset?: number };
+
+async function queryFacts(ctx: DomainContext, filters: FactFilters, limit: number, offset: number): Promise<FactRowDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   checkRange(filters);
   const kinds = filters.kinds && filters.kinds.length > 0 ? sql`AND f.kind = ANY(${sql`ARRAY[${sql.join(filters.kinds.map((kind) => sql`${kind}`), sql`, `)}]::text[]`})` : sql``;
   const found = await rows<{ work_date: string; kind: FactKind; amount_cents: string; units_good: string; hours: string; job_id: string | null; client_id: string; vas_service_id: string | null; source_table: string; source_id: string }>(
     db,
+    // One source row can give several kinds (an extra service entry earns, costs labor and parts), so the kind is part of the order: pages never overlap.
     sql`SELECT to_char(f.work_date, 'YYYY-MM-DD') AS work_date, f.kind, f.amount_cents::text, f.units_good::text, f.hours::text, f.job_id, f.client_id, f.vas_service_id, f.source_table, f.source_id
           FROM pulse.v_facts f LEFT JOIN pulse.jobs j ON j.id = f.job_id
          WHERE ${whereOf(ctx.orgId, filters)} ${kinds}
-         ORDER BY f.work_date DESC, f.source_table, f.source_id
-         LIMIT ${Math.min(filters.limit ?? 500, 5000)}`,
+         ORDER BY f.work_date DESC, f.source_table, f.source_id, f.kind
+         LIMIT ${limit} OFFSET ${offset}`,
   );
   return found.map((row) => ({
     workDate: row.work_date,
@@ -356,12 +381,27 @@ export async function listFacts(ctx: DomainContext, filters: ProfitFilters & { k
   }));
 }
 
+/** The stamped rows behind a number (drill down and "See 14 entries"). Reads `v_facts`. One page: use `listFactsPage` to know whether it is all of them. */
+export const listFacts = scoped(async function listFacts(ctx: DomainContext, filters: FactFilters): Promise<FactRowDTO[]> {
+  return queryFacts(ctx, filters, Math.max(1, Math.min(filters.limit ?? FACTS_PAGE_DEFAULT, FACTS_PAGE_MAX)), Math.max(filters.offset ?? 0, 0));
+});
+
+/** The stamped rows behind a number, one page at a time, with a flag when the page stopped before the end. */
+export const listFactsPage = scoped(async function listFactsPage(ctx: DomainContext, filters: FactFilters): Promise<FactsPage> {
+  const limit = Math.max(1, Math.min(filters.limit ?? FACTS_PAGE_DEFAULT, FACTS_PAGE_MAX));
+  const offset = Math.max(filters.offset ?? 0, 0);
+  // One extra row tells us whether there is a next page.
+  const found = await queryFacts(ctx, filters, limit + 1, offset);
+  const truncated = found.length > limit;
+  return { rows: truncated ? found.slice(0, limit) : found, truncated, limit, offset, nextOffset: truncated ? offset + limit : null };
+});
+
 /**
  * The walk from profit on jobs to company profit (SPEC 4.9):
  * company profit = profit on jobs, less time not on a job that no job carried, less paid time
  * not on any job, less the overhead the hourly rate did not cover.
  */
-export async function getCompanyBridge(ctx: DomainContext, filters: { from: string; to: string; siteId?: string | null }): Promise<CompanyBridgeDTO> {
+export const getCompanyBridge = scoped(async function getCompanyBridge(ctx: DomainContext, filters: { from: string; to: string; siteId?: string | null; spread?: CompanyCostSpreadMode | null }): Promise<CompanyBridgeDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   checkRange(filters);
   const settings = await loadSettings(ctx.orgId);
@@ -396,16 +436,30 @@ export async function getCompanyBridge(ctx: DomainContext, filters: { from: stri
                COALESCE(sum(CASE WHEN paid_hours > 0 THEN paid_hours ELSE direct_hours + indirect_hours END), 0)::text AS base_hours
           FROM pulse.company_days WHERE org_id = ${ctx.orgId} AND work_date BETWEEN ${filters.from}::date AND ${filters.to}::date ${site}`,
   );
+  // Company costs are monthly (4.9): read each calendar month the range touches as a whole, and the
+  // overhead the hourly rates covered on the days in the range. `spreadCompanyCosts` gives a part
+  // month its share by day, so every screen and the API get the same company number for any days.
+  const months = await rows<{ month: string; cost: string; absorbed: string }>(
+    db,
+    sql`SELECT to_char(date_trunc('month', work_date), 'YYYY-MM-DD') AS month, COALESCE(sum(company_cost_cents), 0)::text AS cost,
+               COALESCE(sum(overhead_absorbed_cents) FILTER (WHERE work_date BETWEEN ${filters.from}::date AND ${filters.to}::date), 0)::text AS absorbed
+          FROM pulse.company_days
+         WHERE org_id = ${ctx.orgId} AND work_date >= date_trunc('month', ${filters.from}::date)::date AND work_date < (date_trunc('month', ${filters.to}::date) + interval '1 month')::date ${site}
+         GROUP BY 1 HAVING sum(company_cost_cents) > 0`,
+  );
+  // By calendar day (the default) or by work day: the workspace setting, unless the view asks for one.
+  const mode: CompanyCostSpreadMode = filters.spread ?? (settings.companyCostSpread === 'work_days' ? 'work_days' : 'calendar');
+  const spread = spreadCompanyCosts(months.map((row) => ({ month: row.month, monthCostCents: row.cost, overheadAbsorbedCents: row.absorbed })), filters.from, filters.to, { spread: mode, workingDays: settings.workingDays });
   const workProfit = BigInt(work?.profit ?? 0);
   const indirect = BigInt(day?.indirect ?? 0);
   const applied = BigInt(day?.applied ?? 0);
   const missing = BigInt(day?.missing ?? 0);
-  const company = BigInt(day?.company ?? 0);
-  const overhead = BigInt(day?.overhead ?? 0);
+  const company = spread.companyCostCents;
+  const overhead = spread.countsOverhead ? spread.overheadAbsorbedCents : BigInt(day?.overhead ?? 0);
   // The walk itself is the pure `companyBridge` of src/lib/profit, so the page, the report and the tests agree.
   const rule = settings.sharedCostRule as 'by_labor_hours' | 'full' | 'percent_of_labor' | 'none';
   const sharedGap = sharedGapOf({ rule, indirectCents: indirect, missingCents: missing, sharedAppliedCents: applied });
-  const bridge = companyBridge({ workProfitCents: workProfit, sharedGapCents: sharedGap, missingCents: missing, companyCostCents: company, overheadAbsorbedCents: overhead, rule });
+  const bridge = companyBridge({ workProfitCents: workProfit, sharedGapCents: sharedGap, missingCents: missing, companyCostCents: company, overheadAbsorbedCents: overhead, countsOverhead: spread.countsOverhead, rule });
   const missingCost = bridge.missingCents;
   const hasCompanyCosts = bridge.showsOverheadGap;
   const overheadGap = bridge.overheadGapCents;
@@ -439,12 +493,25 @@ export async function getCompanyBridge(ctx: DomainContext, filters: { from: stri
     payrollGapCents: paid === null ? null : moneyOut(money, payrollGap(paid, day?.gross_paid_days ?? 0)),
     overLoggedDays: day?.over_logged ?? 0,
     hasCompanyCosts,
+    companyCostPartial: spread.partial,
+    companyCostNote: spread.note,
+    companyCostSpread: spread.spread,
+    companyCostParts: spread.parts.map((part) => ({
+      month: part.month,
+      daysCounted: part.daysCounted,
+      daysInMonth: part.daysInMonth,
+      workDaysCounted: part.workDaysCounted,
+      workDaysInMonth: part.workDaysInMonth,
+      spread: part.spread,
+      monthCostCents: moneyOut(money, part.monthCostCents),
+      countedCents: moneyOut(money, part.countedCents),
+    })),
     moneyHidden: !money,
   };
-}
+});
 
 /** Counts for the sidebar and the bell. Cheap: three index reads. */
-export async function getBadges(ctx: DomainContext): Promise<BadgesDTO> {
+export const getBadges = scoped(async function getBadges(ctx: DomainContext): Promise<BadgesDTO> {
   const access = await requirePulse(ctx, 'pulse:read').catch(() => null);
   if (!access) return { jobsAtRisk: 0, openAlerts: 0, unreadNotifications: 0 };
   const [row] = await rows<{ risk: number; alerts: number; unread: number }>(
@@ -456,17 +523,17 @@ export async function getBadges(ctx: DomainContext): Promise<BadgesDTO> {
           (SELECT count(*) FROM pulse.notifications n WHERE n.org_id = ${ctx.orgId} AND n.user_id = ${ctx.userId} AND n.read_at IS NULL AND n.archived_at IS NULL)::int AS unread`,
   );
   return { jobsAtRisk: row?.risk ?? 0, openAlerts: row?.alerts ?? 0, unreadNotifications: row?.unread ?? 0 };
-}
+});
 
 /** Home: counts by status, the period totals with the prior period, the bridge, entry progress and things to fix. */
-export async function getSummary(ctx: DomainContext, filters: { from: string; to: string; siteId?: string | null }): Promise<SummaryDTO> {
+export const getSummary = scoped(async function getSummary(ctx: DomainContext, filters: { from: string; to: string; siteId?: string | null }): Promise<SummaryDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   checkRange(filters);
   const settings = await loadSettings(ctx.orgId);
   const site = await resolveSite(ctx, filters.siteId);
   const today = todayInZone(site.timezone);
   const siteFilter = filters.siteId ? sql`AND j.site_id = ${filters.siteId}` : sql``;
-  const [profit, bridge, counts, progress, fix, alerts] = await Promise.all([
+  const [profit, bridge, counts, progress, fix, alerts, serviceNoPrice] = await Promise.all([
     getProfit(ctx, 'month', filters, { comparePrior: true }),
     getCompanyBridge(ctx, filters),
     rows<{ risk: string | null; n: number }>(
@@ -486,17 +553,18 @@ export async function getSummary(ctx: DomainContext, filters: { from: string; to
             (SELECT COALESCE(sum(st.revenue_cents - st.billed_cents), 0) FROM pulse.job_stats st JOIN pulse.jobs j ON j.id = st.job_id
               WHERE st.org_id = ${ctx.orgId} AND j.deleted_at IS NULL AND j.status <> 'cancelled' ${siteFilter})::text AS unbilled`,
     ),
-    rows<{ needs_rate: number; no_price: number; units_no_hours: number; service_no_price: number }>(
+    rows<{ needs_rate: number; no_price: number; units_no_hours: number }>(
       db,
       sql`SELECT
             COALESCE(sum((st.needs ->> 'needsRate')::int), 0)::int AS needs_rate,
             count(*) FILTER (WHERE (st.needs ->> 'noPrice')::boolean)::int AS no_price,
-            COALESCE(sum((st.needs ->> 'daysMissingHours')::int), 0)::int AS units_no_hours,
-            COALESCE(sum((st.needs ->> 'serviceNoPrice')::int), 0)::int AS service_no_price
+            COALESCE(sum((st.needs ->> 'daysMissingHours')::int), 0)::int AS units_no_hours
           FROM pulse.job_stats st JOIN pulse.jobs j ON j.id = st.job_id
          WHERE st.org_id = ${ctx.orgId} AND j.deleted_at IS NULL AND j.status IN ('active', 'on_hold', 'completed') ${siteFilter}`,
     ),
     rows<{ n: number }>(db, sql`SELECT count(*)::int AS n FROM pulse.alerts WHERE org_id = ${ctx.orgId} AND status = 'open'`),
+    // Every unpriced extra service entry in an open month, on a job or on a client: the count month close uses.
+    countServiceEntriesNoPrice(db, ctx.orgId, { siteId: filters.siteId ?? null }),
   ]);
   const byRisk = new Map(counts.map((row) => [row.risk ?? 'none', row.n]));
   const weekStartDay = addDays(today, -((new Date(`${today}T00:00:00Z`).getUTCDay() - settings.weekStart + 7) % 7));
@@ -518,10 +586,10 @@ export async function getSummary(ctx: DomainContext, filters: { from: string; to
     entryProgress: { activeJobs: progress[0]?.active ?? 0, loggedToday: progress[0]?.logged ?? 0, date: today, daysReviewedThisWeek: progress[0]?.reviewed ?? 0, workDaysThisWeek: workDays },
     notBilledYetCents: moneyOut(access.seesMoney, progress[0]?.unbilled ?? 0),
     openAlerts: alerts[0]?.n ?? 0,
-    thingsToFix: { needsRate: fix[0]?.needs_rate ?? 0, noPrice: fix[0]?.no_price ?? 0, unitsNoHours: fix[0]?.units_no_hours ?? 0, serviceNoPrice: fix[0]?.service_no_price ?? 0 },
+    thingsToFix: { needsRate: fix[0]?.needs_rate ?? 0, noPrice: fix[0]?.no_price ?? 0, unitsNoHours: fix[0]?.units_no_hours ?? 0, serviceNoPrice },
     moneyHidden: !access.seesMoney,
   };
-}
+});
 
 
 /**
@@ -529,7 +597,7 @@ export async function getSummary(ctx: DomainContext, filters: { from: string; to
  * time not on a job by reason, the day by day split of paid time, and the bridge numbers
  * (share of paid time spent on jobs, payroll check).
  */
-export async function getLaborSummary(ctx: DomainContext, filters: { from: string; to: string; siteId?: string | null }): Promise<LaborSummaryDTO> {
+export const getLaborSummary = scoped(async function getLaborSummary(ctx: DomainContext, filters: { from: string; to: string; siteId?: string | null }): Promise<LaborSummaryDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   checkRange(filters);
   const money = access.seesMoney;
@@ -580,4 +648,4 @@ export async function getLaborSummary(ctx: DomainContext, filters: { from: strin
     bridge: await getCompanyBridge(ctx, filters),
     moneyHidden: !money,
   };
-}
+});

@@ -4,7 +4,7 @@
  * Each has add and edit in a dialog, delete with a confirm (or an Undo toast where the row can be
  * brought back), a teaching empty state and a retry when loading fails.
  */
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, Boxes, Building2, Pencil, Plus, Shapes, Star, Trash2, Users } from 'lucide-react';
 import { Badge, Button, ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Field, IconButton, Input, SearchInput, Select, Skeleton, Textarea, toast } from '@/components/ui';
@@ -13,6 +13,7 @@ import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { Teach } from '@/components/pulse/teach';
 import { PRICING_MODEL_LABELS, PRICING_MODEL_VALUES } from '@/lib/constants';
+import { matchClientName } from '@/lib/client-names';
 import { formatUnitPrice } from '@/lib/format';
 import { useClients, useItems, useJobTypes, useLaborClasses, useSites } from '@/lib/hooks/use-data';
 import { qk } from '@/lib/query-keys';
@@ -25,16 +26,19 @@ import { timeZoneOptions } from './forms';
 
 const NONE = '__none__';
 
-/** Runs a server action, toasts a failure in plain words and refreshes the lists it touched. */
+/**
+ * Runs a server action, toasts a failure in plain words and refreshes the lists it touched. With
+ * `inline`, a failure that names its fields is left to the form, so the message shows once.
+ */
 function useRun(invalidate: readonly QueryKey[]) {
   const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
-  const run = async <T,>(call: () => Promise<ActionResult<T>>, failed: string): Promise<{ data: T } | { fields: Readonly<Record<string, string>>; message: string }> => {
+  const run = async <T,>(call: () => Promise<ActionResult<T>>, failed: string, options: { readonly inline?: boolean } = {}): Promise<{ data: T } | { fields: Readonly<Record<string, string>>; message: string }> => {
     setPending(true);
     try {
       const result = await call();
       if (!result.ok) {
-        toast.error(failed, result.error.message);
+        if (!(options.inline && Object.keys(result.error.fields ?? {}).length > 0)) toast.error(failed, result.error.message);
         return { fields: result.error.fields ?? {}, message: result.error.message };
       }
       for (const key of invalidate) await queryClient.invalidateQueries({ queryKey: key });
@@ -408,8 +412,16 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
   const [editing, setEditing] = useState<ClientDTO | 'new' | null>(null);
   const [form, setForm] = useState({ name: '', code: '', contactName: '', contactEmail: '', phone: '', margin: '', terms: '', partsOwner: NONE, status: 'active', notes: '' });
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
+  /** The typed name the server said looks like a client you have. While it stands, "Add as a new client" shows. */
+  const [lookAlike, setLookAlike] = useState<string | null>(null);
+  /** Every client, to name the look alike on its button (the list on screen may be filtered). */
+  const everyClient = useClients({});
+  const nameInput = useRef<HTMLInputElement>(null);
+  const lookAlikeStands = editing !== null && lookAlike !== null && lookAlike === form.name.trim();
+  const closest = lookAlikeStands ? (matchClientName(lookAlike, (everyClient.data ?? []).filter((client) => editing === 'new' || client.id !== editing.id)).lookAlikes[0] ?? null) : null;
 
   const open = (client: ClientDTO | 'new'): void => {
+    setLookAlike(null);
     setForm(
       client === 'new'
         ? { name: '', code: '', contactName: '', contactEmail: '', phone: '', margin: '', terms: '', partsOwner: NONE, status: 'active', notes: '' }
@@ -419,7 +431,7 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
     setEditing(client);
   };
 
-  const save = async (): Promise<void> => {
+  const save = async (confirmNew = false): Promise<void> => {
     const problems: Record<string, string> = {};
     if (form.name.trim() === '') problems.name = 'Give the client a name.';
     const margin = percentBp(form.margin);
@@ -439,11 +451,30 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
       partsOwner: form.partsOwner === NONE ? null : (form.partsOwner as 'us' | 'client'),
       notes: form.notes.trim() || null,
     };
-    const result = editing === 'new' ? await run(() => createClientAction(input), 'Could not add the client') : await run(() => updateClientAction({ clientId: (editing as ClientDTO).id, patch: input, version: (editing as ClientDTO).version }), 'Could not save the client');
+    // A refusal that names a box shows once, under that box: no toast on top of it.
+    const result = editing === 'new' ? await run(() => createClientAction({ ...input, confirmNew }), 'Could not add the client', { inline: true }) : await run(() => updateClientAction({ clientId: (editing as ClientDTO).id, patch: input, version: (editing as ClientDTO).version, confirmNew }), 'Could not save the client', { inline: true });
     if ('data' in result) {
       toast.success(editing === 'new' ? 'Client added' : 'Client saved');
       setEditing(null);
-    } else setErrors(result.fields);
+    } else {
+      setErrors(result.fields);
+      setLookAlike(result.fields.clientLookAlike ? form.name.trim() : null);
+      // The button that was pressed went quiet while it saved. Put the keyboard back on the name.
+      if (result.fields.name) requestAnimationFrame(() => nameInput.current?.focus());
+    }
+  };
+
+  /** "Use that client": add nothing, close, and show the client you already have in the list. */
+  const pickExisting = (client: ClientDTO): void => {
+    setEditing(null);
+    setQ(client.name);
+  };
+  /** A rename that looks like another client: put the old name back. */
+  const keepOldName = (client: ClientDTO): void => {
+    setForm({ ...form, name: client.name });
+    setLookAlike(null);
+    setErrors((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== 'name' && key !== 'clientLookAlike')));
+    requestAnimationFrame(() => nameInput.current?.focus());
   };
 
   const remove = async (client: ClientDTO): Promise<void> => {
@@ -518,10 +549,10 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
               }}
             >
               <Field label="Name" required error={errors.name ?? null}>
-                {({ inputId, invalid }) => <Input id={inputId} invalid={invalid} autoFocus value={form.name} maxLength={200} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Acme Outdoor Co" data-testid="client-name" />}
+                {({ inputId, invalid, describedBy }) => <Input ref={nameInput} id={inputId} invalid={invalid} aria-describedby={describedBy} autoFocus value={form.name} maxLength={200} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Acme Outdoor Co" data-testid="client-name" />}
               </Field>
               <Field label="Short code" hint="Leave it empty and Pulse makes one." error={errors.code ?? null}>
-                {({ inputId, invalid }) => <Input id={inputId} invalid={invalid} value={form.code} maxLength={40} onChange={(event) => setForm({ ...form, code: event.target.value })} placeholder="ACME" data-testid="client-code" />}
+                {({ inputId, invalid, describedBy }) => <Input id={inputId} invalid={invalid} aria-describedby={describedBy} value={form.code} maxLength={40} onChange={(event) => setForm({ ...form, code: event.target.value })} placeholder="ACME" data-testid="client-code" />}
               </Field>
               <Field label="Contact name" error={errors.contactName ?? null}>
                 {({ inputId }) => <Input id={inputId} value={form.contactName} maxLength={200} onChange={(event) => setForm({ ...form, contactName: event.target.value })} />}
@@ -551,13 +582,34 @@ function ClientsCatalog({ canEdit }: { readonly canEdit: boolean }) {
               </Field>
             </form>
           </DialogBody>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setEditing(null)}>
+          <DialogFooter className="flex-wrap">
+            {/* While a look alike stands there are two ways on: the client you have (the main
+                button) or a new one on purpose. The plain Add button would only be refused again. */}
+            <Button variant="ghost" onClick={() => setEditing(null)}>
               Cancel
             </Button>
-            <Button type="submit" form="client-form" loading={pending} data-testid="client-save">
-              {editing === 'new' ? 'Add client' : 'Save'}
-            </Button>
+            {lookAlikeStands ? (
+              <>
+                <Button variant="secondary" loading={pending} onClick={() => void save(true)} data-testid="client-save-new">
+                  {editing === 'new' ? 'Add as a new client' : 'Rename anyway'}
+                </Button>
+                {editing === 'new' ? (
+                  closest ? (
+                    <Button onClick={() => pickExisting(closest)} data-testid="client-use-existing">
+                      Use {closest.name}
+                    </Button>
+                  ) : null
+                ) : (
+                  <Button onClick={() => keepOldName(editing)} data-testid="client-keep-name">
+                    Keep the old name
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Button type="submit" form="client-form" loading={pending} data-testid="client-save">
+                {editing === 'new' ? 'Add client' : 'Save'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { LaborClassDTO, ProfitRowDTO, VasServiceDTO } from '@/lib/types';
-import { flagSentence, serviceLine, serviceRateCents, unitWord } from './services-model';
+import { flagSentence, isUnderpriced, serviceLine, serviceRateCents, unitWord } from './services-model';
 
 const service = (patch: Partial<VasServiceDTO> = {}): VasServiceDTO => ({ id: 's1', code: 'LABEL', name: 'Labeling', unitLabel: 'labels', billing: 'per_unit', defaultPrice: '0.1200', defaultCostPerUnit: '0.0150', standardUph: '420.000', defaultLaborClassId: null, wmsVasTypeId: null, color: null, active: true, version: 1, moneyHidden: false, ...patch });
 
 const actual = (patch: Partial<ProfitRowDTO>): ProfitRowDTO =>
-  ({ key: 's1', label: 'Labeling', sublabel: 'LABEL', revenueCents: 0, baseRevenueCents: 0, vasRevenueCents: 0, otherRevenueCents: 0, laborCents: 0, materialCents: 0, otherCents: 0, sharedCents: 0, costCents: 0, profitCents: 0, marginBp: null, marginBeforeSharedBp: null, laborPctBp: null, billedCents: 0, unitsGood: '0.000', unitsScrap: '0.000', hours: '0.00', uph: null, costPerUnitCents: null, profitPerUnitCents: null, jobCount: 0, prior: null, trend: null, laborMissing: false, riskStatus: null, ...patch }) as ProfitRowDTO;
+  ({ key: 's1', label: 'Labeling', sublabel: 'LABEL', revenueCents: 0, baseRevenueCents: 0, vasRevenueCents: 0, otherRevenueCents: 0, laborCents: 0, materialCents: 0, otherCents: 0, sharedCents: 0, costCents: 0, profitCents: 0, marginBp: null, marginBeforeSharedBp: null, laborPctBp: null, billedCents: 0, unitsGood: '0.000', unitsScrap: '0.000', hours: '0.00', uph: null, costPerUnitCents: null, profitPerUnitCents: null, jobCount: 0, prior: null, trend: null, laborMissing: false, costMissing: false, riskStatus: null, ...patch }) as ProfitRowDTO;
 
 describe('serviceLine', () => {
   it('works out the standard cost and margin of the worked example', () => {
@@ -43,6 +43,25 @@ describe('serviceLine', () => {
     expect(thin.flag).toBe('under_target');
     const fine = serviceLine(service(), actual({ unitsGood: '1000.000', revenueCents: 12000, costCents: 6000, profitCents: 6000, marginBp: 5000 }), 2700, 3000);
     expect(fine.flag).toBeNull();
+  });
+
+  it('says "No cost yet" for revenue with no cost logged, and never calls it healthy', () => {
+    // A warehouse entry: $195.00 for 3 hours of work, with no hours and no parts logged in Pulse.
+    const line = serviceLine(service({ defaultPrice: '65.0000', defaultCostPerUnit: null, standardUph: null }), actual({ unitsGood: '3.000', revenueCents: 19500, costCents: 0, profitCents: 19500, marginBp: null, costMissing: true }), 2700, 3000);
+    expect(line.costMissing).toBe(true);
+    expect(line.marginBp).toBeNull();
+    expect(line.flag).toBe('no_cost');
+    expect(line.costPerUnit).toBeNull();
+    expect(isUnderpriced(line.flag)).toBe(false);
+    expect(flagSentence(line, 3000, (price) => `$${price}`, (bp) => `${(bp ?? 0) / 100}%`)).toBe('No labor hours or parts are logged for this work, so Pulse does not know what it cost. Add the labor hours on its entries to see a real margin.');
+  });
+
+  it('flags a service with no list price even when some entries carry their own price', () => {
+    const line = serviceLine(service({ defaultPrice: null, defaultCostPerUnit: null, standardUph: null }), actual({ unitsGood: '5.000', revenueCents: 19500, costCents: 0, profitCents: 19500, marginBp: null, costMissing: true }), 2700, 3000);
+    expect(line.flag).toBe('no_price');
+    expect(line.costMissing).toBe(true);
+    // Turned off, the price flag goes and the cost gap still shows.
+    expect(serviceLine(service({ defaultPrice: null, active: false }), actual({ unitsGood: '5.000', revenueCents: 19500, costCents: 0, profitCents: 19500, marginBp: null, costMissing: true }), 2700, 3000).flag).toBe('no_cost');
   });
 
   it('has no standard cost when nothing is known about it', () => {

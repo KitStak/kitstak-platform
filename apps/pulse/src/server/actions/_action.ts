@@ -12,6 +12,7 @@
 import 'server-only';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { withOrg } from '@/server/db/scope';
 import { toDomainContext, type DomainContext } from '@/server/domain/_shared';
 import { orgHasPulseModule } from '@/server/entitlements';
 import { DomainError, isDomainError, type ErrorCode } from '@/server/errors';
@@ -63,7 +64,7 @@ export async function runAction<S extends z.ZodType, T>(
     if (!(await orgHasPulseModule(context.org.id))) {
       throw new DomainError('NOT_ENTITLED', 'KitStak Pulse is not turned on for this organization. Ask an admin to enable it in the Portal.');
     }
-    const data = await handler(parsed.data, toDomainContext(context));
+    const data = await withOrg(context.org.id, () => handler(parsed.data, toDomainContext(context)));
     if (options.revalidate !== false) revalidatePath('/', 'layout');
     return { ok: true, data };
   } catch (error) {

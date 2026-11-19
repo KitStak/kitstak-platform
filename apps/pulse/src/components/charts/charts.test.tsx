@@ -238,6 +238,11 @@ describe('stat helpers', () => {
     expect(tile).toContain('How we got this');
     expect(html(<KpiTile label="Profit" value={null} emptyText="No profit yet" />)).toContain('No profit yet');
     expect(html(<KpiTile label="Profit" value={null} loading />)).toContain('Loading Profit');
+    // While the number to compare with loads, the tile keeps room for the change so it does not grow later.
+    const pending = html(<KpiTile label="Profit" value="$1,200" deltaPending />);
+    expect(pending).toContain('data-testid="kpi-delta-pending"');
+    expect(html(<KpiTile label="Profit" value="$1,200" deltaPending delta={{ delta: 3, text: '+3%', label: 'vs before' }} />)).not.toContain('kpi-delta-pending');
+    expect(html(<KpiTile label="Profit" value={null} deltaPending />)).not.toContain('kpi-delta-pending');
     expect(html(<KpiTile label="Profit" value={null} error="Could not load." />)).toContain('role="alert"');
   });
 });

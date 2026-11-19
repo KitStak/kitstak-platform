@@ -4,8 +4,9 @@ import { ButtonLink } from '@/components/pulse/button-link';
 import { ExportStreamLink } from '@/components/pulse/export-link';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { todayIso } from '@/lib/dates';
+import { addDays } from '@/lib/profit';
 import { routes } from '@/lib/routes';
-import { getSettings, listJobTypes, listLaborClasses, listSites, listStandards } from '@/server/domain';
+import { getPaceBoard, getSettings, listJobTypes, listLaborClasses, listSites, listStandards, suggestAllStandards } from '@/server/domain';
 import { pulsePage } from '@/server/page';
 import { TargetPaceView } from './target-pace-view';
 
@@ -22,6 +23,13 @@ export async function TargetPacePage() {
     getSettings(page.ctx),
   ]);
   const today = sites.find((site) => site.isDefault)?.today ?? sites[0]?.today ?? todayIso();
+  // The suggestions and the pace board are read here too, so the first paint is the whole page:
+  // nothing loads in later and pushes the cards under it down. The board opens on the last 30 days.
+  const boardRange = { from: addDays(today, -29), to: today };
+  const [suggestions, board] = await Promise.all([
+    suggestAllStandards(page.ctx).catch(() => undefined),
+    getPaceBoard(page.ctx, boardRange).catch(() => undefined),
+  ]);
   return (
     <Page
       title="Target pace"
@@ -43,6 +51,8 @@ export async function TargetPacePage() {
     >
       <TargetPaceView
         initialStandards={standards}
+        initialSuggestions={suggestions}
+        initialBoard={board ? { ...boardRange, board } : undefined}
         jobTypes={jobTypes}
         laborClasses={laborClasses}
         sites={sites}

@@ -35,6 +35,7 @@ import { DonutChart } from '@/components/charts/radial';
 import { DeltaBadge, KpiTile, MarginPill, marginHealth } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
+import { LocalTime } from '@/components/pulse/local-time';
 import { useShell } from '@/features/shell/shell-context';
 import { PULSE_STATUS_LABELS } from '@/lib/constants';
 import {
@@ -480,30 +481,26 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
               }
             />
             <KpiTile
-              label="Margin after all costs"
+              label="Job margin"
               value={stats.marginBp === null ? null : formatPercentBp(stats.marginBp)}
               emptyText="No revenue yet"
               footer={
                 <>
                   {health ? <MarginPill health={health} size="sm" /> : null}
-                  <span className="text-xs text-fg-muted">
-                    {stats.targetMarginBp !== null
-                      ? `Target ${formatPercentBp(stats.targetMarginBp, { digits: 0 })}. `
-                      : ''}
-                    Before time not on a job:{' '}
-                    {formatPercentBp(stats.marginBeforeSharedBp, { empty: 'none yet' })}
-                  </span>
+                  {stats.targetMarginBp !== null ? (
+                    <span className="text-xs text-fg-muted">Target {formatPercentBp(stats.targetMarginBp, { digits: 0 })}</span>
+                  ) : null}
                 </>
               }
               explain={
                 <Explain
-                  title="Margin after all costs"
-                  rule="Margin is profit as a share of revenue. The second number leaves out time not on a job, to show what the job earns on its own."
+                  title="Job margin"
+                  rule="Job margin is profit as a share of revenue, after labor, material, other costs and this job's share of time not on a job. The last line leaves out time not on a job, to show what the job earns on its own."
                   rows={[
                     { label: 'Profit so far', value: formatMoney(stats.profitCents) },
                     { label: 'Revenue earned', value: formatMoney(stats.revenueCents) },
                     {
-                      label: 'Margin',
+                      label: 'Job margin',
                       value: formatPercentBp(stats.marginBp, { empty: 'No revenue yet' }),
                       kind: 'total',
                     },
@@ -704,7 +701,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
               }
               value={stats.lastEntryDate ? shortDate(stats.lastEntryDate) : null}
               emptyText="None yet"
-              footer={<span className="text-xs text-fg-muted">{stats.entryCount} entries</span>}
+              footer={<span className="text-xs text-fg-muted">{stats.entryCount} {stats.entryCount === 1 ? 'entry' : 'entries'}</span>}
             />
           </>
         )}
@@ -813,19 +810,17 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                 : 'No work logged yet. The first day you log shows up here.'}
             </p>
           ) : (
-            <div
-              role="region"
-              aria-label="Latest work, one row per day"
-              tabIndex={0}
-              className="overflow-x-auto rounded-b-xl focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
-            >
+            <div className="overflow-hidden rounded-b-xl">
               <Table aria-label="Latest work, one row per day">
                 <TableHead>
                   <TableRow className="hover:bg-transparent">
                     <TableHeaderCell>Day</TableHeaderCell>
                     <TableHeaderCell numeric>Good {job.unitLabel}</TableHeaderCell>
                     <TableHeaderCell numeric>Labor hours</TableHeaderCell>
-                    <TableHeaderCell numeric>Pace</TableHeaderCell>
+                    {/* On a phone the pace gives way so the labor cost stays on screen. The Work log has both. */}
+                    <TableHeaderCell numeric className={seesMoney ? 'hidden sm:table-cell' : undefined}>
+                      Pace
+                    </TableHeaderCell>
                     {seesMoney ? <TableHeaderCell numeric>Labor cost</TableHeaderCell> : null}
                   </TableRow>
                 </TableHead>
@@ -842,7 +837,9 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                             <span className="text-[var(--label-yellow-text)]">Add hours</span>
                           )}
                         </TableCell>
-                        <TableCell numeric>{formatPace(rowPace(row), { empty: '' })}</TableCell>
+                        <TableCell numeric className={seesMoney ? 'hidden sm:table-cell' : undefined}>
+                          {formatPace(rowPace(row), { empty: '' })}
+                        </TableCell>
                         {seesMoney ? (
                           <TableCell numeric>
                             {formatMoney(row.laborCostCents, { empty: 'Hidden' })}
@@ -981,6 +978,29 @@ function LinkedRecords({
                   {LINK_WORDS[link.targetType] ?? 'Record'}
                   {link.status ? ` · ${link.status}` : ''}
                 </p>
+                {link.priceFromContract ? (
+                  <p className="mt-0.5 text-xs text-fg-secondary" data-testid="job-link-contract-price">
+                    The price of this job came from the warehouse contract {link.priceFromContract.contractName}
+                    {link.priceFromContract.at ? (
+                      <>
+                        {' on '}
+                        <LocalTime iso={link.priceFromContract.at} style="day" />
+                      </>
+                    ) : null}
+                    .
+                  </p>
+                ) : link.contract?.billedBy ? (
+                  <p className="mt-0.5 text-xs text-fg-secondary" data-testid="job-link-contract-bill">
+                    The warehouse contract {link.contract.contractName} prices this job on its own bill, because its rate{' '}
+                    {link.contract.billedBy === 'tiers' ? 'changes with volume' : 'is for some products only'}. Pulse keeps the
+                    job&apos;s own price.
+                  </p>
+                ) : link.contract && !link.contract.inEffect ? (
+                  <p className="mt-0.5 text-xs text-fg-secondary" data-testid="job-link-contract-typed">
+                    A price typed in Pulse is used instead of the warehouse contract {link.contract.contractName} until the
+                    contract&apos;s rates change.
+                  </p>
+                ) : null}
               </div>
               {link.url ? (
                 <a

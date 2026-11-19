@@ -10,8 +10,9 @@
 import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { DomainError, invalid, isDomainError } from '@/server/errors';
-import { wmsSchemaFor, wmsTableExists } from '@/server/integrations';
+import { siblingDb, wmsSchemaFor, wmsTableExists } from '@/server/integrations';
 import { logSoftFail } from '@/server/integrations/log';
 import { fromScaled, mulQuantityPrice, PRICE_SCALE, priceToScaled, QUANTITY_SCALE, quantityToScaled } from '@/lib/money';
 import type { CostEntryDTO, MaterialUsageDTO, RevenueEntryDTO, VasEntryDTO } from '@/lib/types';
@@ -62,10 +63,10 @@ async function bulk<I, T extends { id: string }>(ctx: DomainContext, inputs: rea
   return saved;
 }
 
-export const saveCostsBulk = (ctx: DomainContext, inputs: readonly CostInput[]): Promise<CostEntryDTO[]> => bulk(ctx, inputs.map((input) => ({ ...input, id: null })), saveCost, deleteCost);
-export const saveMaterialUsageBulk = (ctx: DomainContext, inputs: readonly MaterialUsageInput[]): Promise<MaterialUsageDTO[]> => bulk(ctx, inputs.map((input) => ({ ...input, id: null })), saveMaterialUsage, deleteMaterialUsage);
-export const saveRevenueBulk = (ctx: DomainContext, inputs: readonly RevenueInput[]): Promise<RevenueEntryDTO[]> => bulk(ctx, inputs.map((input) => ({ ...input, id: null })), saveRevenue, deleteRevenue);
-export const saveVasEntriesBulk = (ctx: DomainContext, inputs: readonly VasEntryInput[]): Promise<VasEntryDTO[]> => bulk(ctx, inputs.map((input) => ({ ...input, id: null })), saveVasEntry, deleteVasEntry);
+export const saveCostsBulk = scoped((ctx: DomainContext, inputs: readonly CostInput[]): Promise<CostEntryDTO[]> => bulk(ctx, inputs.map((input) => ({ ...input, id: null })), saveCost, deleteCost));
+export const saveMaterialUsageBulk = scoped((ctx: DomainContext, inputs: readonly MaterialUsageInput[]): Promise<MaterialUsageDTO[]> => bulk(ctx, inputs.map((input) => ({ ...input, id: null })), saveMaterialUsage, deleteMaterialUsage));
+export const saveRevenueBulk = scoped((ctx: DomainContext, inputs: readonly RevenueInput[]): Promise<RevenueEntryDTO[]> => bulk(ctx, inputs.map((input) => ({ ...input, id: null })), saveRevenue, deleteRevenue));
+export const saveVasEntriesBulk = scoped((ctx: DomainContext, inputs: readonly VasEntryInput[]): Promise<VasEntryDTO[]> => bulk(ctx, inputs.map((input) => ({ ...input, id: null })), saveVasEntry, deleteVasEntry));
 
 /* ---------------------------------------------------------------- parts used, from the warehouse */
 
@@ -152,7 +153,7 @@ async function wmsLines(ctx: DomainContext, jobId: string, timezone: string): Pr
       ? sql`(SELECT max(${localDay(sql`it.at`)}) FROM ${table('inventory_transactions')} it WHERE it.work_order_id = w.id AND it.type = 'Kitting' AND it.product_id = w.kit_product_id)`
       : sql`NULL::text`;
     const found = await rows<WmsLine>(
-      db,
+      siblingDb,
       sql`SELECT wc.id::text AS id, p.sku, p.name, COALESCE(wc.consumed_qty, 0)::text AS consumed, p.purchase_price::text AS unit_cost, w.code,
                  COALESCE(${lastBuild}, ${localDay(sql`w.actual_finish_at`)}, ${localDay(sql`w.actual_start_at`)}) AS build_date
             FROM ${table('work_order_components')} wc
@@ -165,7 +166,7 @@ async function wmsLines(ctx: DomainContext, jobId: string, timezone: string): Pr
     // work order. A part leaving a location was used; a part coming back (taking a kit apart) was not.
     const ledger = hasLedger
       ? await rows<WmsLedgerDay>(
-          db,
+          siblingDb,
           sql`SELECT wc.id::text AS component_id, ${localDay(sql`it.at`)} AS work_date,
                      sum(CASE WHEN it.from_location_id IS NOT NULL THEN it.uom_qty ELSE -it.uom_qty END)::text AS qty
                 FROM ${table('work_order_components')} wc
@@ -224,9 +225,9 @@ async function plan(ctx: DomainContext, jobRef: string): Promise<Plan> {
 }
 
 /** What a pull from the warehouse would add to a job's material usage right now. Reads only. */
-export async function previewWmsUsage(ctx: DomainContext, jobRef: string): Promise<WmsUsagePreviewDTO> {
+export const previewWmsUsage = scoped(async function previewWmsUsage(ctx: DomainContext, jobRef: string): Promise<WmsUsagePreviewDTO> {
   return (await plan(ctx, jobRef)).preview;
-}
+});
 
 export interface WmsPullResult {
   readonly added: MaterialUsageDTO[];
@@ -256,7 +257,7 @@ const isClosedError = (error: unknown): boolean => isDomainError(error) && /clos
  * dated on the sync day are moved to the right day. Parts that came in another way (an import)
  * are counted and never added twice. Closed months are left alone.
  */
-export async function pullWmsUsage(ctx: DomainContext, jobRef: string): Promise<WmsPullResult> {
+export const pullWmsUsage = scoped(async function pullWmsUsage(ctx: DomainContext, jobRef: string): Promise<WmsPullResult> {
   const access = await requirePulse(ctx, 'material:log');
   const { jobId, timezone, lines, ledger, preview } = await plan(ctx, jobRef);
   if (!preview.available) throw invalid(preview.reason === 'no_work_order' ? 'This job is not linked to a warehouse work order.' : 'The warehouse app is not connected for this workspace.');
@@ -312,4 +313,4 @@ export async function pullWmsUsage(ctx: DomainContext, jobRef: string): Promise<
   }
   const added = access.seesMoney ? saved : saved.map((row) => ({ ...row, unitCost: null, costCents: null, scrapCents: null, moneyHidden: true }));
   return { added, updated, removed, skippedClosed, preview: (await plan(ctx, jobRef)).preview };
-}
+});

@@ -48,6 +48,8 @@ import {
   updateSettings,
 } from './test-exports';
 import * as domain from './test-exports';
+import { ruleSentence } from '@/features/alerts/rule-kinds';
+import { STREAM_IDS } from '@/lib/streams';
 
 const ready = await databaseReady();
 
@@ -253,10 +255,10 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
       const period = await closePeriod(owner, '2026-02');
       expect(period).toMatchObject({ periodMonth: '2026-02-01', status: 'closed' });
       expect(period.snapshot).toHaveProperty('bridge');
-      await expectError(() => saveProductionEntry(owner, { id: entry.id, jobId: job.id, workDate: '2026-02-10', unitsGood: '60' }), 'CONFLICT', /^February is closed\. Ask the owner to reopen it\.$/);
-      await expectError(() => saveProductionEntry(owner, { jobId: job.id, workDate: '2026-02-11', laborClassId: packer, unitsGood: '5', hours: '1' }), 'CONFLICT', /February is closed/);
-      await expectError(() => deleteProductionEntries(owner, [entry.id]), 'CONFLICT', /February is closed/);
-      await expectError(() => createLaborRate(owner, { laborClassId: packer, effectiveFrom: '2026-02-01', wageCents: 1700 }), 'CONFLICT', /February is closed/);
+      await expectError(() => saveProductionEntry(owner, { id: entry.id, jobId: job.id, workDate: '2026-02-10', unitsGood: '60' }), 'CONFLICT', /^February 2026 is closed\. Ask the owner to reopen it\.$/);
+      await expectError(() => saveProductionEntry(owner, { jobId: job.id, workDate: '2026-02-11', laborClassId: packer, unitsGood: '5', hours: '1' }), 'CONFLICT', /February 2026 is closed/);
+      await expectError(() => deleteProductionEntries(owner, [entry.id]), 'CONFLICT', /February 2026 is closed/);
+      await expectError(() => createLaborRate(owner, { laborClassId: packer, effectiveFrom: '2026-02-01', wageCents: 1700 }), 'CONFLICT', /February 2026 is closed/);
       // The trigger refuses a write that skips the domain layer, stamp only updates included.
       await expect(org.query('update pulse.production_entries set shared_cents = 1 where id = $1', [entry.id])).rejects.toMatchObject({ code: 'KP001' });
       await expect(org.query("insert into pulse.cost_entries (org_id, scope, cost_date, category, amount_cents) values ($1, 'company', '2026-02-05', 'rent', 100)", [org.orgId])).rejects.toMatchObject({ code: 'KP001' });
@@ -280,6 +282,48 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
       await closePeriod(admin, '2025-12');
       await expectError(() => reopenPeriod(admin, '2025-12', 'oops'), 'FORBIDDEN');
       await reopenPeriod(owner, '2025-12', 'Closed by mistake');
+    });
+
+    it('shows company profit beside job profit on the close screen, and saves both with the close', async () => {
+      const crew = (await createLaborClass(owner, { code: 'CLOSE', name: 'Close crew' })).id;
+      await createLaborRate(owner, { laborClassId: crew, effectiveFrom: '2025-08-01', wageCents: 2000, payrollTaxBp: 0, benefitsBp: 0, otherBurdenBp: 0, overheadPerHourCents: 500, overtimeMultiplier: '1.50' });
+      const job = await createJob(owner, { name: 'August work', clientId, status: 'active', unitPrice: '10.0000' });
+      // $1,000.00 of revenue and 10 hours at $25.00 (of which $5.00 is overhead): job profit $750.00.
+      await saveProductionEntry(owner, { jobId: job.id, workDate: '2025-08-12', laborClassId: crew, unitsGood: '100', hours: '10' });
+      // 12 hours were paid, so 2 paid hours are on no job. Rent of $200.00 is more than the $50.00 the rate covered.
+      await domain.savePaidHours(owner, { siteId, workDate: '2025-08-12', laborClassId: crew, paidHours: '12', paidCents: 24000 });
+      await domain.saveCost(owner, { costDate: '2025-08-05', category: 'rent', amountCents: 20000 });
+      const range = { from: '2025-08-01', to: '2025-08-31' };
+      const bridge = await getCompanyBridge(owner, range);
+      expect(bridge).toMatchObject({ workProfitCents: 75000, missingCostCents: 4000, overheadGapCents: 15000, hasCompanyCosts: true });
+      expect(bridge.companyProfitCents).toBe(75000 - (bridge.sharedGapCents ?? 0) - 4000 - 15000);
+
+      // Open month: the screen shows live numbers, and never job profit as the month's profit.
+      const live = await domain.getCloseDetail(owner, '2025-08');
+      expect(live).toMatchObject({ saved: false, revenueCents: 100000, costCents: 25000, profitCents: 75000, marginBp: 7500, companyProfitCents: bridge.companyProfitCents });
+      expect(live.companyProfitCents).toBeLessThan(live.profitCents!);
+      expect(live.companyMarginBp).toBe(Math.round((bridge.companyProfitCents! * 10000) / 100000));
+      expect(live.bridge).toMatchObject({ jobProfitCents: 75000, missingCostCents: 4000, overheadGapCents: 15000, companyCostCents: 20000, overheadAbsorbedCents: 5000, hasCompanyCosts: true, companyProfitCents: bridge.companyProfitCents });
+      const row = async (who: DomainContext) => (await domain.getCloseBoard(who)).months.find((month) => month.periodMonth === '2025-08-01')!;
+      expect(await row(owner)).toMatchObject({ status: 'open', profitCents: 75000, companyProfitCents: bridge.companyProfitCents, companyMarginBp: live.companyMarginBp });
+
+      // Closing saves the company figures with the job figures.
+      const closed = await closePeriod(owner, '2025-08');
+      expect(closed.snapshot).toMatchObject({ company: { jobProfitCents: 75000, jobMarginBp: 7500, companyProfitCents: bridge.companyProfitCents, companyMarginBp: live.companyMarginBp }, bridge: { companyProfitCents: bridge.companyProfitCents } });
+      const saved = await domain.getCloseDetail(owner, '2025-08');
+      expect(saved).toMatchObject({ saved: true, profitCents: 75000, companyProfitCents: bridge.companyProfitCents, companyMarginBp: live.companyMarginBp });
+      expect(await row(owner)).toMatchObject({ status: 'closed', companyProfitCents: bridge.companyProfitCents, companyMarginBp: live.companyMarginBp });
+
+      // A reader without money gets the checklist and the lock counts, and no figure, open or closed.
+      const floor = await org.member('member', 'Flo Floor');
+      await setMemberRole(owner, floor.userId, { role: 'viewer', seesMoney: false });
+      const hidden = await domain.getCloseDetail(floor, '2025-08');
+      expect(hidden).toMatchObject({ moneyHidden: true, saved: false, revenueCents: null, costCents: null, profitCents: null, marginBp: null, companyProfitCents: null, companyMarginBp: null });
+      expect(Object.entries(hidden.bridge).filter(([key, value]) => key.endsWith('Cents') && value !== null)).toEqual([]);
+      expect(await row(floor)).toMatchObject({ profitCents: null, marginBp: null, companyProfitCents: null, companyMarginBp: null });
+      expect(moneyLeaks(hidden, 'closeDetail')).toEqual([]);
+      await reopenPeriod(owner, '2025-08', 'Test is done');
+      expect((await domain.getCloseDetail(owner, '2025-08')).saved).toBe(false);
     });
   });
 
@@ -349,6 +393,29 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
         walk(await listSites(who), 'sites');
         walk(await getOnboardingState(who), 'welcome');
       }
+      // CSV out: no money column, target margin included, reaches a reader who cannot see money.
+      // The JSON walk above never saw these files, which is how a target margin got out in round three.
+      // cost_date and revenue_date are days, not money.
+      const moneyHeader = /^(?!.*_date$).*(^|_)(price|cost|amount|margin|revenue|wage|pay|rate|burden|overhead|tax|benefits|cents)(_|$)/;
+      const headersOf = (csv: string): string[] => (csv.replace(/^\uFEFF/, '').split(/\r?\n/)[0] ?? '').split(',');
+      for (const who of [viewer, supervisor]) {
+        for (const stream of STREAM_IDS) {
+          if (stream === 'labor_rates') {
+            await expectError(() => domain.exportStream(who, stream), 'FORBIDDEN');
+            continue;
+          }
+          const file = await domain.exportStream(who, stream, stream === 'job_plans' ? { layout: 'lines' } : {});
+          expect(file.withMoney, stream).toBe(false);
+          for (const header of headersOf(file.csv)) if (moneyHeader.test(header)) leaks.push(`${stream}.csv has the column ${header}`);
+        }
+        for (const file of await domain.exportEverything(who, {})) {
+          for (const header of headersOf(file.csv)) if (moneyHeader.test(header)) leaks.push(`everything.zip ${file.fileName} has the column ${header}`);
+        }
+      }
+      // The check itself works: the same files for the owner do carry those columns.
+      expect(headersOf((await domain.exportStream(owner, 'clients')).csv)).toContain('target_margin_pct');
+      expect(headersOf((await domain.exportStream(owner, 'job_types')).csv)).toContain('target_margin_pct');
+      expect(headersOf((await domain.exportStream(owner, 'jobs')).csv).filter((header) => moneyHeader.test(header)).length).toBeGreaterThan(5);
       expect(leaks).toEqual([]);
       expect((await getSettings(viewer)).moneyHidden).toBe(true);
       // Units, hours and pace are still there.
@@ -422,6 +489,60 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
       expect(leaks).toEqual([]);
     });
 
+    it('alert rules keep their line (dollars or a margin percent) from readers without money', async () => {
+      // A dollar rule, a margin rule, and an old style row whose stored name holds the amount.
+      const dollars = await domain.createAlertRule(manager, { name: 'Tell me when finished work worth more than a set amount is not billed', kind: 'unbilled_above', threshold: '5000' });
+      const margin = await domain.createAlertRule(manager, { name: "Tell me when a job's margin is heading under a set line", kind: 'margin_below', threshold: '17' });
+      const old = await domain.createAlertRule(manager, { name: 'Tell me when more than $2,000 of paid time this month is not on any job', kind: 'missing_time_above', threshold: '2000' });
+      const oldPlain = await domain.createAlertRule(manager, { name: 'Tell me when a job is losing more than $750 or 12% of its price', kind: 'job_losing' });
+      // A money reader gets the line.
+      const full = await domain.listAlertRules(manager);
+      expect(full.find((rule) => rule.id === dollars.id)).toMatchObject({ threshold: '5000.0000', moneyHidden: false });
+      expect(full.find((rule) => rule.id === old.id)?.name).toContain('$2,000');
+      expect(ruleSentence('unbilled_above', '5000.0000')).toBe('Tell me when finished work worth more than $5,000 is not billed.');
+
+      for (const [who, label] of [[viewer, 'viewer'], [supervisor, 'supervisor']] as const) {
+        const rules = await domain.listAlertRules(who);
+        expect(rules.length, label).toBe(full.length);
+        const leaks: string[] = [];
+        for (const rule of rules) {
+          expect(rule.moneyHidden, `${label} ${rule.kind}`).toBe(true);
+          if (rule.threshold !== null) leaks.push(`${label}.${rule.kind}.threshold = ${rule.threshold}`);
+          // What the page prints for this reader: the name and the sentence built from the DTO.
+          for (const text of [rule.name, ruleSentence(rule.kind, rule.threshold, { moneyHidden: rule.moneyHidden })]) {
+            if (/[$€£]\s?\d/.test(text) || /\d\s?%/.test(text) || /\b\d{3,}\b/.test(text)) leaks.push(`${label}.${rule.kind}: "${text}"`);
+          }
+        }
+        moneyLeaks(rules, `${label}.alertRules`, leaks);
+        // The whole payload as the browser gets it holds none of the lines.
+        const payload = JSON.stringify(rules);
+        for (const line of ['5000.0000', '2000.0000', '1000.0000', '17.0000', '2,000', '$750', '12%']) if (payload.includes(line)) leaks.push(`${label} payload holds ${line}`);
+        expect(leaks, label).toEqual([]);
+        // The rules are still listed, with the amount left out.
+        expect(ruleSentence('unbilled_above', null, { moneyHidden: true })).toBe('Tell me when finished work worth more than a set amount is not billed.');
+        expect(rules.find((rule) => rule.id === old.id)?.name).toBe('Tell me when more than a set amount of paid time this month is not on any job');
+        expect(rules.find((rule) => rule.id === margin.id)?.name).toBe("Tell me when a job's margin is heading under a set line");
+        expect(rules.find((rule) => rule.id === oldPlain.id)?.name).toBe('Tell me when a job is losing more than a set amount or a set line of its price');
+        // The activity log names the rules with no amount either.
+        const log = (await listActivity(who, { entityType: 'alert_rule', limit: 200 })).items;
+        expect(log.length, label).toBeGreaterThanOrEqual(4);
+        expect(moneyLeaks(log, `${label}.ruleActivity`), label).toEqual([]);
+        expect(JSON.stringify(log), label).not.toMatch(/\$\s?\d|\d\s?%|threshold/);
+        // No money, no way to set or change a line, try one out, or remove a rule.
+        await expectError(() => domain.updateAlertRule(who, dollars.id, { threshold: '1' }), 'FORBIDDEN');
+        await expectError(() => domain.saveAlertRuleFull(who, { id: old.id, name: 'x', kind: 'missing_time_above', threshold: '1' }), 'FORBIDDEN');
+        await expectError(() => domain.createAlertRule(who, { name: 'x', kind: 'unbilled_above', threshold: '1' }), 'FORBIDDEN');
+        await expectError(() => domain.previewAlertRule(who, { kind: 'unbilled_above', threshold: '1' }), 'FORBIDDEN');
+        await expectError(() => domain.deleteAlertRule(who, dollars.id), 'FORBIDDEN');
+      }
+      // Nothing changed on the way.
+      const after = await org.query<{ id: string; threshold: string | null; name: string }>('select id, threshold, name from pulse.alert_rules where id = any($1::uuid[])', [[dollars.id, margin.id, old.id]]);
+      expect(after.find((row) => row.id === dollars.id)?.threshold).toBe('5000.0000');
+      expect(after.find((row) => row.id === margin.id)?.threshold).toBe('17.0000');
+      expect(after.find((row) => row.id === old.id)?.threshold).toBe('2000.0000');
+      for (const rule of [dollars, margin, old, oldPlain]) await domain.deleteAlertRule(manager, rule.id);
+    });
+
     it('the sees money switch shows money but never the wage, and a manager never receives the wage either', async () => {
       const jobs = await listJobs(moneyViewer);
       expect(jobs.some((job) => job.stats.revenueCents !== null && job.stats.revenueCents > 0)).toBe(true);
@@ -443,7 +564,9 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
       const saved = await saveProductionEntry(supervisor, { jobId: job.id, workDate: today, laborClassId: packer, unitsGood: '10', hours: '1' });
       expect(saved.entry).toMatchObject({ moneyHidden: true, laborCostCents: null, baseRevenueCents: null });
       await expectError(() => saveProductionEntry(supervisor, { jobId: job.id, workDate: addDaysForTest(today, -10), laborClassId: packer, unitsGood: '10', hours: '1' }), 'FORBIDDEN', /last 7 days/);
-      await expectError(() => saveProductionEntry(supervisor, { jobId: job.id, workDate: addDaysForTest(today, 1), laborClassId: packer, unitsGood: '10', hours: '1' }), 'FORBIDDEN');
+      // Nobody dates work after today, whatever the role.
+      await expectError(() => saveProductionEntry(supervisor, { jobId: job.id, workDate: addDaysForTest(today, 1), laborClassId: packer, unitsGood: '10', hours: '1' }), 'VALIDATION', /after today/);
+      await expectError(() => saveProductionEntry(owner, { jobId: job.id, workDate: addDaysForTest(today, 1), laborClassId: packer, unitsGood: '10', hours: '1' }), 'VALIDATION', /after today/);
       await expectError(() => createJob(supervisor, { name: 'Not mine to make', clientId }), 'FORBIDDEN');
       await markDayComplete(supervisor, { date: today });
       await expectError(() => saveProductionEntry(supervisor, { id: saved.entry.id, jobId: job.id, workDate: today, unitsGood: '12' }), 'FORBIDDEN', /marked complete/);
@@ -542,4 +665,26 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
     const left = await org.query<{ n: number }>('select (select count(*) from pulse.production_entries where org_id = $1)::int + (select count(*) from pulse.settings where org_id = $1)::int + (select count(*) from pulse.activity where org_id = $1)::int as n', [gone.orgId]);
     expect(left[0]!.n).toBe(0);
   });
+});
+
+describe.skipIf(!ready)('getting started (database)', () => {
+  it('quotes the labor rate in effect today, never an old one that a newer rate replaced', async () => {
+    const org = await createTestOrg('pulse-welcome');
+    try {
+      const owner = await org.member('owner', 'Wendy Welcome');
+      const today = (await listSites(owner))[0]!.today;
+      const plain = { payrollTaxBp: 0, benefitsBp: 0, otherBurdenBp: 0, overheadPerHourCents: 0, overtimeMultiplier: '1.50' };
+      const packer = (await createLaborClass(owner, { code: 'PACK', name: 'Packer' })).id;
+      await createLaborRate(owner, { laborClassId: packer, effectiveFrom: addDaysForTest(today, -400), wageCents: 2000, ...plain });
+      expect((await getOnboardingState(owner)).rate).toEqual({ name: 'Packer', loadedRateCents: 2000 });
+      // A raise that started last month, a raise that starts next month, and a second class.
+      await createLaborRate(owner, { laborClassId: packer, effectiveFrom: addDaysForTest(today, -30), wageCents: 2100, ...plain });
+      await createLaborRate(owner, { laborClassId: packer, effectiveFrom: addDaysForTest(today, 30), wageCents: 2300, ...plain });
+      const lead = (await createLaborClass(owner, { code: 'LEAD', name: 'Line lead' })).id;
+      await createLaborRate(owner, { laborClassId: lead, effectiveFrom: addDaysForTest(today, -10), wageCents: 3000, ...plain });
+      expect((await getOnboardingState(owner)).rate).toEqual({ name: 'Packer', loadedRateCents: 2100 });
+    } finally {
+      await org.destroy();
+    }
+  }, 120_000);
 });

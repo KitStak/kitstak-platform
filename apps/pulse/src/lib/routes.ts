@@ -56,6 +56,8 @@ export const routes = {
   home: () => '/',
   welcome: () => '/welcome',
   jobs: (opts?: { tab?: 'open' | 'all' | 'completed' | 'planned'; risk?: string; view?: string; q?: string }) => withQuery('/jobs', { tab: opts?.tab, risk: opts?.risk, view: opts?.view, q: opts?.q }),
+  /** Jobs that were deleted, with Restore. Managers and up. */
+  deletedJobs: () => '/jobs/deleted',
   newJob: (prefill: NewJobPrefill = {}) => withQuery('/jobs/new', { ...prefill }),
   job: (ref: string) => `/jobs/${encodeURIComponent(ref)}`,
   jobTab: (ref: string, tab: JobTab) => (tab === 'overview' ? `/jobs/${encodeURIComponent(ref)}` : `/jobs/${encodeURIComponent(ref)}/${tab}`),
@@ -68,6 +70,12 @@ export const routes = {
     withQuery('/profit', { by: opts?.by, client: opts?.client, jobType: opts?.jobType, from: opts?.from, to: opts?.to }),
   client: (id: string) => `/clients/${encodeURIComponent(id)}`,
   services: () => '/services',
+  /**
+   * The extra service entries with no price, with "Set the price" on each row. With a month
+   * (`2026-10`) it lists that month, the month close count. Without one it lists every month that
+   * is still open, the Home count.
+   */
+  servicesNoPrice: (month?: string) => withQuery('/services', { show: 'no-price', month: month ? month.slice(0, 7) : undefined }),
   service: (id: string) => `/services/${encodeURIComponent(id)}`,
   labor: (tab?: LaborTab) => withQuery('/labor', { tab }),
   targetPace: () => '/target-pace',

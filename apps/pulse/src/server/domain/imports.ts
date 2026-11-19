@@ -20,6 +20,7 @@ import 'server-only';
 import { and, desc, eq, getTableColumns, getTableName, sql, type SQL } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import {
   clients,
   costEntries,
@@ -58,7 +59,8 @@ import { loadedRate } from '@/lib/profit/rates';
 import { shortDate } from '@/lib/profit/calendar';
 import { routes } from '@/lib/routes';
 import { STREAM_IDS, isStreamId, streamInfo, type StreamId } from '@/lib/streams';
-import { cleanText, inTx, iso, isoRequired, isUuid, monthName, monthStart, rows, todayInZone, uuidArray, type DomainContext } from './_shared';
+import { cleanText, inTx, iso, isoRequired, isUuid, monthStart, monthYear, rows, todayInZone, uuidArray, type DomainContext } from './_shared';
+import { entryDateProblem, type EntryDateKind } from '@/lib/entry-dates';
 import { pulseAccessFor, type PulseAccess } from './access';
 import { logActivity } from './activity';
 import { insertClient, insertItem, insertJobType } from './catalog';
@@ -302,6 +304,18 @@ function codeRef(env: Env, kind: RefKind, rec: Rec, field: string, column: strin
 function jobSite(env: Env, job: Ent | null): Ent | null {
   return job ? env.lookups.site.id(job.data.siteId as string) : null;
 }
+
+/** Dated streams that hold typed entries, and the kind the date rule names in its message (@/lib/entry-dates). */
+const ENTRY_KIND_OF_STREAM: Partial<Record<StreamId, EntryDateKind>> = {
+  production: 'work',
+  indirect_time: 'indirect',
+  paid_hours: 'paid_hours',
+  time_punches: 'punch',
+  materials: 'material',
+  costs: 'cost',
+  revenue: 'revenue',
+  services_done: 'vas',
+};
 
 const HANDLERS: Readonly<Record<StreamId, Handler>> = {
   clients: {
@@ -835,7 +849,7 @@ function toMessages(issues: readonly RowIssue[]): ImportMessage[] {
 }
 
 function closedMessage(month: string): string {
-  return `${monthName(month)} is closed. Ask the owner to reopen it.`;
+  return `${monthYear(month)} is closed. Ask the owner to reopen it.`;
 }
 
 async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAccess, batch: BatchRow, raw: readonly RawRow[], mapping: readonly (string | null)[], options: ImportOptions): Promise<Plan> {
@@ -1083,11 +1097,20 @@ async function planBatch(executor: Executor, ctx: DomainContext, access: PulseAc
         continue;
       }
     }
-    // Work that was done cannot be dated after today. Managers may still save it, so it is a note, not a stop.
-    if (handler.floor && dateField && typeof rec[dateField] === 'string') {
+    // The one date rule for typed entries (@/lib/entry-dates): not after today at the site and not
+    // more than 10 years back. A row that breaks it is a problem row, the same rule as the forms,
+    // the grid and the API. A row whose date did not change is left alone, so an old row can be fixed.
+    const entryKind = ENTRY_KIND_OF_STREAM[stream];
+    if (entryKind && dateField && typeof rec[dateField] === 'string' && rec[dateField] !== plan.existing?.record[dateField]) {
       const site = (plan.planned as Planned).refs.site ?? env.defaultSite;
-      const today = todayInZone(String(site.data.timezone ?? env.settings.timezone));
-      if (String(rec[dateField]) > today) plan.messages.push({ level: 'warning', column: dateField.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), text: 'This day is in the future. Check the date.' });
+      const today = todayInZone(String(site?.data.timezone ?? env.settings.timezone));
+      const column = dateField.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+      const problem = entryDateProblem(entryKind, String(rec[dateField]), today);
+      if (problem) {
+        plan.action = 'error';
+        plan.messages.push({ level: 'error', column, text: `${problem.message.replace(/ (Pick today or an earlier day|Check the year)\.$/, '')} Fix the date, or skip this row.` });
+        continue;
+      }
     }
   }
 
@@ -1141,7 +1164,7 @@ async function planPlanLines(executor: Executor, ctx: DomainContext, plans: RowP
       plan.existing = row;
       plan.entityId = row?.id ?? null;
       plan.action = same ? 'unchanged' : row ? 'update' : 'create';
-      if (!same && row && before.length > 0 && plan === list[0]) plan.messages.push({ level: 'info', column: null, text: `The ${before.length} lines this plan has now will be replaced by the ${after.length} lines in this file.` });
+      if (!same && row && before.length > 0 && plan === list[0]) plan.messages.push({ level: 'info', column: null, text: `The ${before.length === 1 ? '1 line' : `${before.length} lines`} this plan has now will be replaced by the ${after.length === 1 ? '1 line' : `${after.length} lines`} in this file.` });
     }
   }
 }
@@ -1266,7 +1289,7 @@ function presetDTO(row: typeof importPresets.$inferSelect, signature?: string): 
 }
 
 /** Opens a batch for a file. Returns the first column mapping (a saved preset when the headers are known). */
-export async function createImportBatch(ctx: DomainContext, input: CreateImportInput): Promise<ImportStartDTO> {
+export const createImportBatch = scoped(async function createImportBatch(ctx: DomainContext, input: CreateImportInput): Promise<ImportStartDTO> {
   const access = await accessFor(ctx, input.stream);
   void access;
   const stream = input.stream as StreamId;
@@ -1313,7 +1336,7 @@ export async function createImportBatch(ctx: DomainContext, input: CreateImportI
     if (applied) await tx.update(importPresets).set({ lastUsedAt: new Date() }).where(eq(importPresets.id, applied.id));
     return { batch: await toBatchDTO(tx, batch as BatchRow), presets: presets.map((preset) => presetDTO(preset, signature)), appliedPresetId: applied?.id ?? null };
   });
-}
+});
 
 function uploadsPerHour(): number {
   const override = Number(process.env.PULSE_IMPORT_UPLOADS_PER_HOUR);
@@ -1327,7 +1350,7 @@ export interface ImportRowInput {
 }
 
 /** Stores one chunk of raw rows. Only strings are kept: everything else happens on the server later. */
-export async function appendImportRows(ctx: DomainContext, batchId: string, chunk: readonly ImportRowInput[], options: { done?: boolean } = {}): Promise<{ totalRows: number; status: ImportStatus }> {
+export const appendImportRows = scoped(async function appendImportRows(ctx: DomainContext, batchId: string, chunk: readonly ImportRowInput[], options: { done?: boolean } = {}): Promise<{ totalRows: number; status: ImportStatus }> {
   if (chunk.length === 0 && !options.done) throw invalid('There are no rows in this part of the file.');
   if (chunk.length > 1000) throw invalid('Send at most 1,000 rows at a time.');
   return inTx(async (tx) => {
@@ -1360,7 +1383,7 @@ export async function appendImportRows(ctx: DomainContext, batchId: string, chun
     await tx.update(importBatches).set({ totalRows, status, options: { ...(batch.options ?? {}), bytes: stored }, updatedAt: new Date() }).where(eq(importBatches.id, batch.id));
     return { totalRows, status };
   });
-}
+});
 
 async function loadRaw(executor: Executor, batchId: string): Promise<RawRow[]> {
   const found = await rows<{ n: number; raw: { c?: unknown; s?: unknown } | null; messages: unknown }>(executor, sql`SELECT row_number AS n, raw, messages FROM pulse.import_rows WHERE batch_id = ${batchId} ORDER BY row_number`);
@@ -1394,10 +1417,10 @@ function countsOf(plan: Plan): ImportCounts {
 const PROGRESS: Map<string, ImportProgressDTO> = ((globalThis as unknown as { __pulseImportProgress?: Map<string, ImportProgressDTO> }).__pulseImportProgress ??= new Map());
 
 /** Where a running check or save is. Kept in memory on the server that runs it. */
-export async function getImportProgress(ctx: DomainContext, batchId: string): Promise<ImportProgressDTO> {
+export const getImportProgress = scoped(async function getImportProgress(ctx: DomainContext, batchId: string): Promise<ImportProgressDTO> {
   await getBatchRow(db, ctx, batchId);
   return PROGRESS.get(batchId) ?? { phase: 'idle', done: 0, total: 0 };
-}
+});
 
 export interface CheckImportInput {
   /** For each header of the file: the stream column it feeds, or null to ignore it. */
@@ -1408,7 +1431,7 @@ export interface CheckImportInput {
 }
 
 /** The dry run. Reads every row, gives it an action and saves nothing but the check results. */
-export async function checkImportBatch(ctx: DomainContext, batchId: string, input: CheckImportInput = {}): Promise<ImportBatchDTO> {
+export const checkImportBatch = scoped(async function checkImportBatch(ctx: DomainContext, batchId: string, input: CheckImportInput = {}): Promise<ImportBatchDTO> {
   return inTx(async (tx) => {
     const batch = await getBatchRow(tx, ctx, batchId, true);
     const access = await accessFor(ctx, batch.stream);
@@ -1447,7 +1470,7 @@ export async function checkImportBatch(ctx: DomainContext, batchId: string, inpu
       PROGRESS.delete(batch.id);
     }
   });
-}
+});
 
 async function upsertPreset(tx: Executor, ctx: DomainContext, stream: StreamId, name: string, headers: readonly string[], mapping: readonly (string | null)[], options: ImportOptions): Promise<void> {
   const values = { headerSignature: headerSignature(headers), mapping: mappingToPreset(headers, mapping), options: { mode: options.mode, dateOrder: options.dateOrder, createMissing: options.createMissing, createLaborClasses: options.createLaborClasses, lookalikes: options.lookalikes }, lastUsedAt: new Date(), updatedAt: new Date() };
@@ -1457,18 +1480,18 @@ async function upsertPreset(tx: Executor, ctx: DomainContext, stream: StreamId, 
     .onConflictDoUpdate({ target: [importPresets.orgId, importPresets.stream, importPresets.name], set: values });
 }
 
-export async function getImportBatch(ctx: DomainContext, batchId: string): Promise<ImportBatchDTO> {
+export const getImportBatch = scoped(async function getImportBatch(ctx: DomainContext, batchId: string): Promise<ImportBatchDTO> {
   const batch = await getBatchRow(db, ctx, batchId);
   await accessFor(ctx, batch.stream);
   return toBatchDTO(db, batch);
-}
+});
 
 /** True when the batch exists in this workspace (for the real 404 of the batch page). */
-export async function importBatchExists(ctx: DomainContext, batchId: string): Promise<boolean> {
+export const importBatchExists = scoped(async function importBatchExists(ctx: DomainContext, batchId: string): Promise<boolean> {
   if (!isUuid(batchId)) return false;
   const [row] = await db.select({ id: importBatches.id }).from(importBatches).where(and(eq(importBatches.orgId, ctx.orgId), eq(importBatches.id, batchId)));
   return Boolean(row);
-}
+});
 
 export interface ImportRowFilters {
   readonly action?: ImportAction | 'problems' | 'all' | null;
@@ -1477,7 +1500,7 @@ export interface ImportRowFilters {
 }
 
 /** The preview rows of a batch, with every message on its cell. */
-export async function listImportRows(ctx: DomainContext, batchId: string, filters: ImportRowFilters = {}): Promise<ImportRowsPage> {
+export const listImportRows = scoped(async function listImportRows(ctx: DomainContext, batchId: string, filters: ImportRowFilters = {}): Promise<ImportRowsPage> {
   const batch = await getBatchRow(db, ctx, batchId);
   await accessFor(ctx, batch.stream);
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 500);
@@ -1509,7 +1532,7 @@ export async function listImportRows(ctx: DomainContext, batchId: string, filter
       }),
     ),
   };
-}
+});
 
 export interface EditImportRowInput {
   readonly rowNumber: number;
@@ -1520,7 +1543,7 @@ export interface EditImportRowInput {
 }
 
 /** Fixes one row in place (or leaves it out) and runs the check again. */
-export async function editImportRows(ctx: DomainContext, batchId: string, edits: readonly EditImportRowInput[]): Promise<ImportBatchDTO> {
+export const editImportRows = scoped(async function editImportRows(ctx: DomainContext, batchId: string, edits: readonly EditImportRowInput[]): Promise<ImportBatchDTO> {
   if (edits.length === 0 || edits.length > 500) throw invalid('Change between 1 and 500 rows at a time.');
   await inTx(async (tx) => {
     const batch = await getBatchRow(tx, ctx, batchId, true);
@@ -1544,10 +1567,10 @@ export async function editImportRows(ctx: DomainContext, batchId: string, edits:
     }
   });
   return checkImportBatch(ctx, batchId);
-}
+});
 
 /** Throws away a batch that was never saved. */
-export async function discardImportBatch(ctx: DomainContext, batchId: string): Promise<void> {
+export const discardImportBatch = scoped(async function discardImportBatch(ctx: DomainContext, batchId: string): Promise<void> {
   await inTx(async (tx) => {
     const batch = await getBatchRow(tx, ctx, batchId, true);
     await accessFor(ctx, batch.stream);
@@ -1555,7 +1578,7 @@ export async function discardImportBatch(ctx: DomainContext, batchId: string): P
     await tx.delete(importRows).where(eq(importRows.batchId, batch.id));
     await tx.delete(importBatches).where(eq(importBatches.id, batch.id));
   });
-}
+});
 
 /* ------------------------------------------------------------------------------------------ */
 /* Commit                                                                                      */
@@ -1673,7 +1696,7 @@ async function recalcAfter(tx: Executor, ctx: DomainContext, batchId: string, st
 }
 
 /** Saves the batch in one transaction: either every row that should be saved is saved, or nothing is. */
-export async function commitImportBatch(ctx: DomainContext, batchId: string): Promise<ImportBatchDTO> {
+export const commitImportBatch = scoped(async function commitImportBatch(ctx: DomainContext, batchId: string): Promise<ImportBatchDTO> {
   try {
     return await inTx(async (tx) => {
       const batch = await getBatchRow(tx, ctx, batchId, true);
@@ -1818,7 +1841,7 @@ export async function commitImportBatch(ctx: DomainContext, batchId: string): Pr
   } finally {
     PROGRESS.delete(batchId);
   }
-}
+});
 
 /* ------------------------------------------------------------------------------------------ */
 /* Undo                                                                                        */
@@ -1862,7 +1885,7 @@ const USED_BY: Readonly<Record<string, readonly [string, string, boolean][]>> = 
 const KIND_TABLES: Readonly<Record<string, string>> = { client: 'clients', job_type: 'job_types', labor_class: 'labor_classes', item: 'items' };
 
 /** Takes a saved batch back out: changed rows get their old values, new rows are removed. */
-export async function undoImportBatch(ctx: DomainContext, batchId: string): Promise<ImportBatchDTO> {
+export const undoImportBatch = scoped(async function undoImportBatch(ctx: DomainContext, batchId: string): Promise<ImportBatchDTO> {
   return inTx(async (tx) => {
     const batch = await getBatchRow(tx, ctx, batchId, true);
     await accessFor(ctx, batch.stream);
@@ -1957,14 +1980,14 @@ export async function undoImportBatch(ctx: DomainContext, batchId: string): Prom
     await logActivity(tx, ctx, { verb: 'import.undone', entityType: 'import', entityId: batch.id, after: { stream, fileName: batch.fileName, leftAlone: left?.n ?? 0 }, meta: { stream } });
     return toBatchDTO(tx, updated as BatchRow);
   });
-}
+});
 
 /* ------------------------------------------------------------------------------------------ */
 /* Error report, history, presets                                                              */
 /* ------------------------------------------------------------------------------------------ */
 
 /** The rows that did not pass, with the file's own headers and a `problem` column, ready to fix and upload again. */
-export async function importErrorReport(ctx: DomainContext, batchId: string): Promise<{ fileName: string; csv: string; rows: number }> {
+export const importErrorReport = scoped(async function importErrorReport(ctx: DomainContext, batchId: string): Promise<{ fileName: string; csv: string; rows: number }> {
   const batch = await getBatchRow(db, ctx, batchId);
   await accessFor(ctx, batch.stream);
   const headers = batch.header ?? [];
@@ -1983,10 +2006,10 @@ export async function importErrorReport(ctx: DomainContext, batchId: string): Pr
   await logActivity(db, ctx, { verb: 'export.run', entityType: 'export', meta: { stream: batch.stream, report: 'import_errors', rows: found.length, batchId: batch.id } });
   const base = (batch.fileName ?? `${batch.stream}.csv`).replace(/\.[A-Za-z0-9]+$/, '');
   return { fileName: `${base}-problems.csv`, csv: body, rows: found.length };
-}
+});
 
 /** Past imports, newest first. */
-export async function listImportBatches(ctx: DomainContext, filters: { limit?: number; stream?: string | null } = {}): Promise<ImportBatchDTO[]> {
+export const listImportBatches = scoped(async function listImportBatches(ctx: DomainContext, filters: { limit?: number; stream?: string | null } = {}): Promise<ImportBatchDTO[]> {
   const access = await pulseAccessFor(ctx);
   if (!STREAM_IDS.some((stream) => canImportStream(access.role, stream))) throw forbidden('Your Pulse role cannot see imports.');
   const found = await db
@@ -2000,10 +2023,10 @@ export async function listImportBatches(ctx: DomainContext, filters: { limit?: n
   const out: ImportBatchDTO[] = [];
   for (const batch of visible) out.push(await toBatchDTO(db, batch, people));
   return out;
-}
+});
 
 /** One line per stream for the import center cards: rows in Pulse and the last saved import. */
-export async function listImportStreams(ctx: DomainContext): Promise<ImportStreamSummaryDTO[]> {
+export const listImportStreams = scoped(async function listImportStreams(ctx: DomainContext): Promise<ImportStreamSummaryDTO[]> {
   const counts = await countStreamRows(ctx);
   const last = await rows<{ stream: string; id: string; at: Date; n: number }>(
     db,
@@ -2015,24 +2038,24 @@ export async function listImportStreams(ctx: DomainContext): Promise<ImportStrea
     const row = byStream.get(count.stream);
     return { stream: count.stream, rows: count.rows, lastImportAt: row ? iso(row.at) : null, lastImportRows: row?.n ?? null, lastBatchId: row?.id ?? null };
   });
-}
+});
 
-export async function listImportPresets(ctx: DomainContext, stream: string): Promise<ImportPresetDTO[]> {
+export const listImportPresets = scoped(async function listImportPresets(ctx: DomainContext, stream: string): Promise<ImportPresetDTO[]> {
   await accessFor(ctx, stream);
   const found = await db.select().from(importPresets).where(and(eq(importPresets.orgId, ctx.orgId), eq(importPresets.stream, stream))).orderBy(sql`${importPresets.lastUsedAt} DESC NULLS LAST`);
   return found.map((row) => presetDTO(row));
-}
+});
 
 /** Saves a column mapping under a name. The same name saves over the old one. */
-export async function saveImportPreset(ctx: DomainContext, input: { stream: string; name: string; headers: readonly string[]; mapping: readonly (string | null)[]; options?: Partial<ImportOptions> }): Promise<ImportPresetDTO[]> {
+export const saveImportPreset = scoped(async function saveImportPreset(ctx: DomainContext, input: { stream: string; name: string; headers: readonly string[]; mapping: readonly (string | null)[]; options?: Partial<ImportOptions> }): Promise<ImportPresetDTO[]> {
   await accessFor(ctx, input.stream);
   const name = cleanText(input.name);
   if (!name) throw invalid('Give the saved mapping a name.', { name: 'Give the saved mapping a name.' });
   await inTx((tx) => upsertPreset(tx, ctx, input.stream as StreamId, name.slice(0, 80), input.headers, input.mapping, { ...DEFAULT_IMPORT_OPTIONS, ...(input.options ?? {}) }));
   return listImportPresets(ctx, input.stream);
-}
+});
 
-export async function renameImportPreset(ctx: DomainContext, presetId: string, name: string): Promise<void> {
+export const renameImportPreset = scoped(async function renameImportPreset(ctx: DomainContext, presetId: string, name: string): Promise<void> {
   const clean = cleanText(name);
   if (!clean) throw invalid('Give the saved mapping a name.', { name: 'Give the saved mapping a name.' });
   await inTx(async (tx) => {
@@ -2041,11 +2064,11 @@ export async function renameImportPreset(ctx: DomainContext, presetId: string, n
     await accessFor(ctx, row.stream);
     await tx.update(importPresets).set({ name: clean.slice(0, 80), updatedAt: new Date() }).where(eq(importPresets.id, row.id));
   });
-}
+});
 
-export async function deleteImportPreset(ctx: DomainContext, presetId: string): Promise<void> {
+export const deleteImportPreset = scoped(async function deleteImportPreset(ctx: DomainContext, presetId: string): Promise<void> {
   const [row] = isUuid(presetId) ? await db.select().from(importPresets).where(and(eq(importPresets.orgId, ctx.orgId), eq(importPresets.id, presetId))) : [];
   if (!row) throw notFound('That saved mapping');
   await accessFor(ctx, row.stream);
   await db.delete(importPresets).where(eq(importPresets.id, row.id));
-}
+});

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { cn } from '@/components/ui/cn';
+import { ScrollX } from '@/components/ui/scroll-x';
 
 export interface RouteTab {
   readonly id: string;
@@ -15,8 +16,10 @@ export interface RouteTab {
  */
 export function RouteTabs({ tabs, active, label }: { readonly tabs: readonly RouteTab[]; readonly active: string; readonly label: string }) {
   return (
-    <nav aria-label={label} className="-mb-px overflow-x-auto">
-      <ul className="flex min-w-max items-end gap-6 border-b border-border-subtle">
+    <nav aria-label={label} className="-mb-px min-w-0">
+      {/* On a phone the tabs scroll sideways: the fade says there are more, and each tab is its own tab stop. */}
+      <ScrollX label={label} tabStop={false} fade="app" className="-mx-1 -my-1" scrollerClassName="px-1 py-1">
+        <ul className="flex min-w-max items-end gap-6 border-b border-border-subtle">
         {tabs.map((tab) => {
           const current = tab.id === active;
           return (
@@ -38,7 +41,8 @@ export function RouteTabs({ tabs, active, label }: { readonly tabs: readonly Rou
             </li>
           );
         })}
-      </ul>
+        </ul>
+      </ScrollX>
     </nav>
   );
 }

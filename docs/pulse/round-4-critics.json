@@ -1,0 +1,590 @@
+[
+ {
+  "lens": "VP of Operations at a mid size 3PL and kitting company with three years on Easy Metrics Profit Management, deciding whether to sign a purchase order. Round four. Tested hands on at http://localhost:3500 (production build, database guard on) with Playwright as admin@kitstak.io and j.okafor@kitstak.io (supervisor, money off), with /api/v1 calls on the same sessions, and with read only SQL to check the app against raw rows. Each user signed in once. Easy Metrics scores are the public evidence estimates from competitors.md section 5, not hands on. Two other critics wrote to the same org at the same time, so every reconciliation compares numbers from one snapshot. Not tested: Portal, CRM and Projects screens, a brand new empty org, the calculator and welcome paths of the client guard, a real change of a warehouse contract rate (that needs a write in the warehouse app, so the 'rate from today' rule and the per order contract case were read in code only and are not scored as proven), the time zone edge of the 'after today' rule, and email (deferred by the owner, noted once). CI is also deferred. Cleanup: my test job J-1054 (VP4 round four test) is soft deleted and sits in Jobs, Deleted with its 4 work entries. J-1042 from round three is still there too. I added a $7.00 price change to WO000092 and removed it, so it is back to one price of $6.25. I turned the contract rate switch off and back on. I pressed Sync now once. 18 dry run import batches named vp4-roundtrip.csv and vp4-future.csv were all discarded. A client rename and a client add were refused by the guard and saved nothing. No repo file was edited and no SQL write was made.",
+  "overall_score_0_100": 92,
+  "easy_metrics_baseline_0_100": 52,
+  "pulse_is_better_product": true,
+  "wowed": false,
+  "category_scores": [
+   {
+    "category": "Profit visibility",
+    "pulse_0_10": 9.5,
+    "easy_metrics_0_10": 7,
+    "note": "For Oct 1 to Oct 31, Nov 10 to Nov 16, Oct 20 to Nov 18, Nov 1 to Nov 19 and Jan 1 to Nov 19, the rows by job, client, type, extra service, site, month, week and day each sum to the summary total to the cent on 10 money fields and hours. October: revenue 66,351,571 cents, cost 49,697,147, profit 16,654,424, hours 11,179.75 in all 8 cuts, equal to the sums of pulse.fact_days. The week and the two month range also equal the raw database sums. Company profit now works for any days and the parts add up: 30 of 30 two way splits of October, the 31 single days of October, and August plus September plus October all equal the whole with 0 cents off on 7 fields. Home, Profit, the popover, the monthly profit and loss report and the API showed the same number. Not a 10 because the share is by calendar day, so work weeks read high (see blocking issues)."
+   },
+   {
+    "category": "Job costing and budget vs actual",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 3,
+    "note": "Not changed this round and not retested in depth. My test job showed plan and actual side by side: plan 40 hours, 48 logged, labor cost for one unit $2.41, and the wizard told me before I saved that $1.00 a unit loses money and that $1.6093 reaches my 30% target. Labor math is still exact: Packer 30 regular hours at $26.25 plus 2 overtime at $35.60 is $858.70, Line lead 8 hours at $33.21 is $265.68, day total $1,124.38."
+   },
+   {
+    "category": "Daily production entry",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 3,
+    "note": "A day can no longer be lost. A second 'new day' on Nov 17 got 409 'This day already has work on this job', and the form showed 'Nov 17 already has work on this job: 500 good units, 40 labor hours, Packer, Line lead' with an Edit Nov 17 button before any save. Edits with a missing row, an empty read list, a wrong version or a repeat of old versions all got 409 with the fresh day. Work dated Nov 20 or 2027 was refused on the day form, the grid row API and the import (a problem row), and the calendar greys out days after today. Delete asks first and names 50 units, 8 hours and $265.68. Undo worked after delete and after edit. Grey sample numbers are gone. Inputs are still 30 px tall on a tablet."
+   },
+   {
+    "category": "Cost model depth",
+    "pulse_0_10": 8.5,
+    "easy_metrics_0_10": 7,
+    "note": "Company costs are now spread by day: 7,050,000 cents for October gives 6,822,581 for 30 of 31 days and 227,419 for 1 day, which add back to 7,050,000. A range over two months takes 12 of 31 days of October (2,729,032) and 18 of 30 of November (4,230,000). A month with no company costs says it trusts the hourly rate. The share is by calendar day, not by work day or hours, so a weekend carries cost with no work and a Monday to Friday week carries too little."
+   },
+   {
+    "category": "Risk and alerts",
+    "pulse_0_10": 8.5,
+    "easy_metrics_0_10": 4,
+    "note": "Home 'Things to fix' now lists '3 extra service entries have no price', the same 3 that month close flags for October (summary serviceNoPrice 3, checklist servicesNoPrice 3). Worst first list with dollars and reasons is unchanged and good. Nothing leaves the app by email yet (deferred by the owner, noted once)."
+   },
+   {
+    "category": "Data in and out",
+    "pulse_0_10": 9.5,
+    "easy_metrics_0_10": 4,
+    "note": "I exported 17 streams and ran 16 with rows back through a dry run import: clients 11, job types 7, jobs 47, job plans 48, production 983, labor rates 10, other time 147, paid hours 130, materials 281, items 23, costs 50, revenue 90, services 18, service entries 269, target pace 18, goals 14. Every row came back 'unchanged', 0 new, 0 changed, 0 problems. Time punches had 0 rows. A work row dated Nov 25 came back as an error row 'Work cannot be dated after today. Fix the date, or skip this row.' The profit by service CSV says 'No cost yet' in the margin column for the 4 services with no cost. The supervisor exports have no money columns and no target margin."
+   },
+   {
+    "category": "Integration depth",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 6,
+    "note": "Warehouse services with revenue and no cost now show 'No cost yet' and 'Not known' in place of 100% on the services list, the service page, the profit explorer, the pivot API (marginBp null, costMissing true) and the CSV. Unpriced warehouse entries have 'Set the price' and 'Open the warehouse contract' on the row. The contract rate switch on Connected apps turns off and on with an Undo toast. A job with no price took the contract rate from its first day (WO000095, $9.50 from the start). Gap: the job page keeps saying the price came from the contract after I typed a different price (see blocking issues)."
+   },
+   {
+    "category": "Ease of use",
+    "pulse_0_10": 9.5,
+    "easy_metrics_0_10": 5,
+    "note": "Every wording slip I named in round three is fixed: month close shows one status ('1 thing to fix'), the crew cell says '1 person', the popover says 'plus Jobs carried more time not on a job than was logged' in place of a minus on a 'less' line, the grid says 'Labor $0.00, no margin yet: add the hours', the closed month error says 'September 2026', and the Deleted tab says '$400 revenue, 8 labor hours, 200 units' for what a restore brings back. A few small new slips are listed in blocking issues."
+   },
+   {
+    "category": "Visual and interaction quality",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 6,
+    "note": "The job Work log fits a 768 px tablet with no sideways scroll (page width 768 of 768). The edit and delete icons on a day are now 32 by 32 px, up from 28. No console or page errors on the pages I loaded. Form inputs are still 30 px tall, small for a floor tablet."
+   },
+   {
+    "category": "Enterprise readiness",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 7,
+    "note": "The database guard is on in this build (GET /api/health: guard on true, ready true). I checked it in the database read only: all 46 pulse tables have row level security and a policy, the plain role pulse_app sees 0 jobs with no workspace set, and with the second org set it sees 28 jobs of 1 org and 0 of mine. In production the guard starts off until the owner sets a flag. That is a choice I would want turned on before go live, and it is not tried through a transaction pooler. The supervisor gets 403 on the deleted jobs list, 404 on a deleted job, and null for every money field in the bridge, summary, pivot, services and the 409 'fresh day' body. Month close did not move: October 15,271,316 and September 9,269,059 cents, same as round three. No email and no CI yet, both deferred."
+   }
+  ],
+  "round_three_issues_rechecked": [
+   {
+    "title": "Company profit and company margin are only right for whole calendar months, but Home and Profit show them for any days",
+    "fixed": true,
+    "evidence": "GET /api/v1/company-bridge now counts company costs by day. Whole October: costs 7,050,000 cents, overhead gap 507,580, company profit 15,271,316, the same as round three and the same as the saved close snapshot. Oct 2 to Oct 31: costs 6,822,581 (my math: 7,050,000 times 30 over 31 is 6,822,580.6), company profit 14,214,154, note 'Company costs for 30 of 31 days.' Oct 1 alone: 227,419. The two add to 7,050,000. All 30 two way splits of October, the sum of its 31 single days, the 27 splits of February, and August plus September plus October against the three month range were 0 cents off on job profit, time gaps, costs, overhead covered, overhead gap and company profit. Nov 10 to Nov 16: costs 1,645,000 (7 of 30), company profit 5,411,575. Oct 20 to Nov 18: 2,729,032 plus 4,230,000 is 6,959,032, note 'Company costs for 12 of 31 days in October and 18 of 30 days in November.' Month to date Nov 1 to Nov 19: 4,465,000 (19 of 30). In every range job profit less the three steps equals company profit with 0 off. Home said 'Company costs for 19 of 30 days.' and Home, /profit, the popover and the monthly profit and loss report showed the same company profit in one snapshot (17,820,196 cents for Oct 20 to Nov 18). With the KS2 site filter, where no company costs exist, the tile says 'After paid time not on any job' and no longer says 'after overhead'. September closed is still 9,269,059."
+   },
+   {
+    "title": "Warehouse extra services come in as revenue with no hours and no cost, so they show a 100% margin with no warning",
+    "fixed": true,
+    "evidence": "/services now shows Programming (hours) $195.00, cost 'Not known', margin 'No cost yet', and the same for Grade B Pallet $72.50, Customer Pickup $50.00 and Return Additional Item $16.00. The service page says 'No labor hours or parts are logged for this work, so Pulse does not know what it cost.' GET /api/v1/profit?by=service gives marginBp null and costMissing true for those 4 rows. The pivot API gives the same in cells, row totals and column totals, and its cells still sum to the total (29,855,358 cents). The profit explorer CSV has 'No cost yet' in the margin column. The profit is still counted in the totals ($333.50), so rollups reconcile."
+   },
+   {
+    "title": "One tap deletes a whole day of work on the job Work log, with no question",
+    "fixed": true,
+    "evidence": "/jobs/J-1054/work, trash icon on Nov 16 opens 'Delete the work for Nov 16? This takes the whole day off the job: 50 good units, 8 labor hours, $265.68 of labor cost. Labor classes: Line lead 8. You can undo it right after. Later, find it under Log work, All entries, Removed.' Focus starts on Cancel. Escape deleted nothing. 'Delete the day' soft deleted the row and showed a toast with Undo, and Undo brought it back. The icons are now 32 by 32 px."
+   },
+   {
+    "title": "Grey numbers 4 and 32 in the new day form look like typed values",
+    "fixed": true,
+    "evidence": "On /jobs/J-1054/work the People, Hours each, Labor hours, Setup hours and Overtime boxes all have an empty placeholder. With two lines and no hours, Add the day marked both 'Labor hours, line 1' and 'Labor hours, line 2' as invalid and said 'Type the hours for each labor class, or take the empty line off.'"
+   },
+   {
+    "title": "Home 'Things to fix' misses unpriced extra services that sit on a client",
+    "fixed": true,
+    "evidence": "GET /api/v1/summary now returns thingsToFix.serviceNoPrice 3 and Home lists '3 extra service entries have no price, Open services'. Month close for October says '3 extra service entries have no price, so that work earned nothing on paper' and its checklist API says servicesNoPrice 3. Connected apps says the same 3. Note: the Home list is for all dates, so it shows the same 3 when Home is on November."
+   },
+   {
+    "title": "Small wording and label slips",
+    "fixed": true,
+    "evidence": "All 6 are fixed. 1. October shows one status, '1 thing to fix', and the text '1 step needs fixing before these numbers can be trusted'. 'Ready to close' is gone. 2. The crew cell reads 'Packer 32, 4 people, Line lead 8, 1 person'. 3. The popover for Nov 10 to Nov 16 reads 'plus Jobs carried more time not on a job than was logged $50.75'. 4. /log?date=2026-11-16, J-1036 with units and no hours reads 'Labor $0.00, no margin yet: add the hours' and Margin today says '1 job has units and no hours, so it is left out'. 5. The closed month error reads 'September 2026 is closed. Ask the owner to reopen it.' 6. The Deleted tab has a column 'A restore brings back' with '$400 revenue, 8 labor hours, 200 units'."
+   }
+  ],
+  "pr_37_review": {
+   "works": true,
+   "evidence": "Rechecked on my test job J-1054. A new day for Nov 17 with Packer 4 people 32 hours 1 setup 2 overtime, 400 good, 10 scrap, and Line lead 1 person 8 hours saved two rows at once: 85,870 and 26,568 cents, 112,438 in total, the same math as round three. The Entries table showed one line for the day with $1,124.38. The whole day now saves through PUT /api/v1/log/days. A second create on the same day got 409 day_exists. An edit needs every row with its version: one row missing, an empty list, a wrong version and a replay of old versions each got 409 'Someone else changed this day. Here is the day as it is now.' In the browser, when another save changed the day while my edit form was open, my save was refused with that message and the other change (77 units) stayed. Two lines with the same labor class got 'Line 2: This labor class is already on this day.' Moving a day onto a day with work got 409. Moving it to Nov 25 got 'Work cannot be dated after today.' The supervisor got null for rateCents, laborCostCents and baseRevenueCents in the list and in the 409 body. The CSV round trip of 983 work rows, my day with two labor classes included, came back all 'unchanged'.",
+   "problems": [
+    "FIXED: one tap delete of a day. It now asks first, names the units, hours and labor cost, and says where to find it later.",
+    "FIXED: grey 4 and 32. No placeholder is left in the day form.",
+    "FIXED: with hours missing on two lines, both hours boxes are now marked.",
+    "FIXED: the crew cell says '1 person'.",
+    "FIXED: the day form now gives the same check as the grid: '3.2 labor hours for 4 people is 0.8 hours each. A full shift of 8 hours each would be 32 labor hours. Is that right?'. Left over: Add the day still saved it on the first click, with no second step.",
+    "NOT FIXED: inputs are still 30 px tall on a tablet. The edit and delete icons grew to 32 by 32 px."
+   ]
+  },
+  "blocking_issues": [
+   {
+    "title": "Company costs are shared out by calendar day, so every work week shows a company margin above the job margin and the month to date number drops over a weekend",
+    "where": "Home (This month), /profit with a week or a part month, GET /api/v1/company-bridge",
+    "repro": "1. /profit?from=2026-10-05&to=2026-10-09 (Monday to Friday): job margin 26.2%, company margin 28.1%, popover 'plus Your hourly rate covered more overhead than you spent'. 2. Same for Oct 12 to Oct 16 (23.9% and 26.0%) and Oct 19 to Oct 23 (26.5% and 27.1%). The four work weeks of October show overhead gaps of -623,597, -581,660, -216,737 and 23,201 cents, a net $13,988 added to profit, while the whole month was short $5,076. 3. Month to date: Oct 1 to Oct 9 (a Friday) company margin 27.7%. Oct 1 to Oct 11 (the Sunday) 25.9%, with $25 of new revenue. Oct 1 to Oct 2 reads 33.0% and Oct 1 to Oct 4 reads 26.4% on the same revenue of 6,933,696 cents. 4. /profit?from=2026-11-14&to=2026-11-15 (a weekend): company margin -199.5%. 5. Today Home says job margin 25.9% and company margin 26.5% for Nov 1 to Nov 19.",
+    "why_it_matters": "The parts add up to the month to the cent and the screen says 'Company costs for 5 of 31 days', so this is honest. But the range I use most is the work week, and there the company number always looks better than the jobs, because the weekend carries 2 of every 7 days of rent with no work. A supervisor who reads 'your rate covered more overhead than you spent' four weeks in a row will be surprised at month close. Share the month by work days or by hours worked, or say on the tile that a work week carries less than its share.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "For the month in progress, Month close and the month close pack charge the whole month of company costs, so they show a different company margin than Home on the same day",
+    "where": "/settings/close?month=2026-11, GET /api/v1/reports/month-close-pack, Home",
+    "repro": "Today is Nov 19. Home, This month: 'the company made $135,753', Company margin 26.5%, 'Company costs for 19 of 30 days.' /settings/close, November 2026, In progress: 'Overhead your hourly rate did not cover less $14,744.86', Company profit $110,123, Company margin 21.5%. The month list on the left shows 'Company profit $110,123, 21.5%' with no note that 30 days of cost sit against 19 days of work. The month close pack report shows the same whole month step (1,451,826 cents).",
+    "why_it_matters": "Two screens give me 26.5% and 21.5% for November on the same morning. Each is right by its own rule, and the close page does say 'November 2026 is not over yet'. But the list line does not say which rule it used. One short note on the in progress month would stop the phone call from finance.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "A job keeps saying its price came from the warehouse contract after someone types a different price in Pulse",
+    "where": "/jobs/WO000092/money-in (Change the price), /jobs/WO000092, /settings/apps",
+    "repro": "WO000092 follows the contract 'Harbor Roast Collective, Wholesale 2026' at $6.25 a set. 1. Money in, Change the price, type 7.00 from Nov 19, Save. The dialog gave no hint that the job follows a warehouse contract. Toast: 'Price saved'. 2. Connected apps, Sync now. Sync ran (status ok). 3. The job now shows 'Price for one set $7.00'. The contract rate did not come back. 4. The job page still says 'The price of this job came from the warehouse contract Harbor Roast Collective, Wholesale 2026.' and Connected apps still says '5 linked jobs follow a warehouse contract rate for work orders'. 5. In the price table the Why column is empty for the contract price, so the table never says which price came from the contract. I removed my price change after the test.",
+    "why_it_matters": "The contract is supposed to be the source of truth when the switch is on. Here a typed price quietly wins until the contract itself changes, and the screens still say the contract set the price. Billing will trust that line. Warn in the Change the price dialog, write the contract name in the Why column, and stop saying 'came from the contract' when the live price is a typed one.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "The look alike client guard misses plurals and names with two typos",
+    "where": "Jobs, Add job (quick add client box). The same rule is used on the server.",
+    "repro": "Typed in the quick add Client box, with the client 'Orchard Pet Supply' in the list: 'Orchard Pets' offers only 'Create Orchard Pets, A new client'. 'Orchard Pet Supplies LLC' offers only 'Create, A new client'. 'Sumit Trial Gear' (for Summit Trail Gear) offers only 'Create, A new client'. For contrast, these were all caught with 'Did you mean': Sumit Trail Gear, Nova Forge Electronics, Copper Line Coffee, Copperline Cofee, Apex Thread, APEX THREADS CO, Lumen Skin-care, Volt Byte Labs, Bluebird and Main, Voltbite Labs. Rename is covered: renaming Pixel & Pine to 'Lumen Skin Care Inc' was refused with 'looks like Lumen Skincare, a client you already have. Keep the old name, or choose Rename anyway.' Adding 'Voltbyte Lab' in Settings was refused the same way. Nothing was saved.",
+    "why_it_matters": "Supply and Supplies is the most common way one client becomes two in my shop, and a split client splits its profit. The guard is good on spacing, case, one typo and company words. It should also treat a plural as the same word.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Small slips left in the new round four screens",
+    "where": "/services and /services/<id>, /profit?by=service and its CSV, /jobs/new, /jobs/<job>/work, /log",
+    "repro": "1. Cycle Count (hours) has two entries of 2 and 1.5 hours. The service page and the profit table show Volume 4. The CSV says 3.5. 2. The service page for Programming (hours) shows Volume 5 and also says 'The target price uses the standard cost, because there is no volume in this period.' 3. Its trend table says 'No data' for margin in the week with $195.00 of revenue, where the tile says 'No cost yet'. 4. The profit CSV puts the words 'No cost yet' in the number column 'Job margin (%)', which breaks a sum or a sort in a spreadsheet. 5. The new job wizard still has grey sample numbers that look typed: 5000 in Units to make, 1.25 in Price for one unit, 120 in Labor hours. 6. On the day form, 3.2 hours for 4 people shows 'Is that right?' and then saves on the first click. 7. The grid says 'J-1054 starts on Nov 19, so it is not on this day yet' for Nov 18, but the day form on the job let me save Nov 16 and Nov 17 with no word about the start date. 8. A client filter with a bad id in the /profit address is dropped with no message and the page shows all clients.",
+    "why_it_matters": "None of these moves a dollar. They are the kind of thing my controller circles in a demo, and items 1 and 4 touch files that go to finance.",
+    "severity": "minor",
+    "verified_in_browser": true
+   }
+  ],
+  "best_things": [
+   "Company profit for any days is now right and it adds up. 30 of 30 splits of October, its 31 single days and three whole months all summed to the whole with 0 cents off, and month close did not move by a cent.",
+   "Everything still reconciles. Five date ranges, 8 cuts each, 10 money fields and hours, 0 difference, and three of those ranges also match the raw database sums.",
+   "A day of work cannot be overwritten by accident. Create on a day with work, a stale edit, a missing row, a wrong version and a move onto a busy day were all refused with the day as it is now, in the API and in the browser.",
+   "Delete of a day asks first and names the units, hours and dollars. Undo works after delete and after edit.",
+   "Work dated after today is refused on every path I tried: day form, grid row, moving a row, and the import, where it is a clear problem row.",
+   "Services with no cost say 'No cost yet' on every screen and in the files, and no longer look like my best sellers.",
+   "CSV round trips are still the best I have used: 16 streams, 2,146 rows, every row 'unchanged'.",
+   "The look alike client guard is on the server and covers add and rename, with a plain way to say 'this really is a new client'.",
+   "Row level security is real in the database: 46 of 46 tables, and the app role sees nothing without a workspace.",
+   "All six of my round three issues and five of six PR 37 problems are fixed, each one proven by hand."
+  ],
+  "what_would_wow_me": "I would sign this. To be wowed I need five things. (1) Share company costs by work day or by hours worked, so a Monday to Friday week does not always beat the job margin and the month to date number does not drop on a Sunday. (2) Put one note on the month in progress in Month close so 21.5% there and 26.5% on Home do not look like a bug. (3) Make the contract price story complete: warn before a typed price overrides a contract rate, show the contract name in the price history, and let me see a real contract rate change flow through in a demo. (4) Send scheduled reports and urgent alerts by email, and turn the database guard on by default in production. (5) Show me a brand new empty org reach a first job profit number in 10 minutes. Catch plurals in the client guard and clean up the small slips along the way.",
+  "verdict_paragraph": "Round four fixed all six of my round three issues, and I proved each one by hand. The big one was the company number for part months. It now takes each month's company costs by the day, the screen says 'Company costs for 19 of 30 days', and the parts add back to the month to the cent in every split I tried. Month close did not move. Warehouse services with no cost now say 'No cost yet' in place of a 100% margin, on the screens, in the pivot and in the CSV. A day of work can no longer be deleted with one tap or overwritten by a second save, and stale edits are refused with the fresh day. Work cannot be dated after today. Home and month close agree on unpriced services. Every wording slip is gone. All rollups still reconcile with 0 difference over five date ranges, and 16 CSV streams came back unchanged. I score Pulse 92 against an estimated 52 for Easy Metrics, with every category at 8.5 or higher. It is clearly the better product and I would sign the purchase order. I am still not wowed, and the reasons are small but real. The by day share uses calendar days, so every work week shows a company margin above the job margin and the month to date number falls over a weekend. Month close shows 21.5% for November while Home shows 26.5%. A typed price can quietly override a warehouse contract rate while the page still credits the contract. The client guard misses plurals. Email is still deferred, and the database guard is off in production until someone sets a flag. I found no major problem this round."
+ },
+ {
+  "lens": "Staff engineer and solutions architect, technical due diligence: integration depth with Portal, CRM, WMS and Projects in both directions, standalone mode, math against raw rows, data integrity under concurrency, money hiding for no money roles on every route, page payload and export, security and operations. How I tested: Node scripts against the production build on port 3500 (guard on) with one fresh session per user (admin, j.okafor, cs.team, maya), my own SQL on the local database, Playwright for 50 pages for each no money user and for the day form at 768, 1366 and 390 px, direct calls to server actions, a sampler on pg_stat_activity while pages loaded, my own probe roles, and vitest once with the guard on and once with PULSE_DB_GUARD=0. I walked 290 GET URLs under /api/v1 for each no money user, all 18 export streams and the everything zip. I read src/server/db.ts, db/scope.ts, db/system.ts, drizzle/0009_db_guard_role.sql, db-guard.test.ts and every asSystem caller. What I could not test: the guard through a transaction pooler, the guard on a hosted database such as Supabase, standalone mode and the off plan link chip (the server runs with ENTITLEMENTS_DEV_ALLOW_ALL=1 and I may not restart it), a real month close, and changes made in the WMS and Projects screens (I changed one wms.billing_fees row by SQL and put it back). Known and deferred by the owner, noted once and not scored: email delivery of reports and alerts, and a CI workflow. Easy Metrics scores are the section 5 estimates from public evidence, not hands on. Cleanup: my probe roles se_mig4 and se_app4 were dropped. The Apex warehouse fee is back at 2.75, the price row it made on WO000094 was removed in the app, and my 3 work rows on WO000094 were deleted. The contract switch is on again. Left behind, all soft deleted: job J-1055 (SE4 probe job) with its work rows, client SE4 Probe Zq Client, and one test row each in time not on a job, extra services and materials dated 2030-01-01. Also left: audit log rows, sync run rows, and 4 alerts made by one cron tick I ran. git status is clean.",
+  "overall_score_0_100": 88,
+  "easy_metrics_baseline_0_100": 52,
+  "pulse_is_better_product": true,
+  "wowed": false,
+  "category_scores": [
+   {
+    "category": "1 Profit visibility",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 7,
+    "note": "All 74 live jobs (46 kitstak, 28 northwind) match my own SQL over the raw entry tables with 0 mismatches: kitstak revenue 175,327,452 and profit 52,945,311 cents, northwind 158,278,720 and 53,544,441. The new part month company bridge matched my own arithmetic on 12 ranges in both orgs, to the cent. Kitstak Nov 1 to 18 counts 4,230,000 of 7,050,000 (18 of 30 days). Oct 1 to 10 plus Oct 11 to 31 gives 2,274,194 plus 4,775,806, which is 7,050,000 again, and a three way split also adds back. Sep plus Oct profit 24,540,375 equals the two months added."
+   },
+   {
+    "category": "2 Job costing and budget vs actual",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 3,
+    "note": "Contract rates now have a switch and a safe rule. With the switch off and the Apex fee at 3.10, a sync changed nothing. With it on, WO000094 got one new price from 2026-11-19, my Nov 17 and Nov 18 rows stayed at 27,500 cents and the Nov 19 row was 31,000. Volume tiers and fees with conditions are still not read."
+   },
+   {
+    "category": "3 Daily production entry",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 3,
+    "note": "The server side is now solid. PUT /api/v1/log/days saves a day in one call, refuses a second new day with 409 and the fresh day, and refuses an edit that does not name every row with its version. 10 parallel edits gave one 200 and nine 409. 10 parallel new days gave one 200. Work after today is refused on 5 write paths. Held at 8 because Undo in the save toast cannot be tapped on a touch screen."
+   },
+   {
+    "category": "4 Cost model depth",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 7,
+    "note": "All 1,590 live work rows have labor cost equal to hours times the stamped rate plus overtime. Raw rows, v_facts, fact_days and job_stats agree for every job and for all 8 kinds in both orgs, checked twice, once right after 6 syncs."
+   },
+   {
+    "category": "5 Risk and alerts",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 4,
+    "note": "No change in my lens. Alert lines stay hidden from no money roles, which the owner confirmed is intended. One cron tick under the guard handled 2 orgs and 41 jobs in 0.22 seconds with 0 failures."
+   },
+   {
+    "category": "6 Data in and out",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 4,
+    "note": "The target margin leak is gone. As j.okafor and cs.team, clients.csv, job_types.csv, jobs.csv and the 15 files in everything.zip have no target margin column, labor_rates.csv answers 403, and costs.csv and revenue.csv come with no amount column. The audit export of 4,503 rows has no money in before or after. 290 URLs for each user: 0 server errors."
+   },
+   {
+    "category": "7 Integration depth",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 6,
+    "note": "Three full syncs in a row made 0 new rows and 0 updates: 13 warehouse service entries (75,350 cents), 80 material rows, 26 revenue rows, 0 repeats by source_ref. Sibling reads work under the guard through the named owner door. Tiers and conditional fees are still left to the warehouse bill."
+   },
+   {
+    "category": "8 Ease of use",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 5,
+    "note": "Refusals read well: 'Work cannot be dated after today. Pick today or an earlier day.' and 'This labor class is already on this day. Put its people and hours on one line.' The day form warns about a day with work before you save. Delete now asks first and lists what will go."
+   },
+   {
+    "category": "9 Visual and interaction quality",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 6,
+    "note": "50 pages for each no money user loaded with 0 console errors, 0 server errors and 0 CSP violations. At 768 px the day form has no side scroll, row buttons are 40 by 40 and fields are 38 to 40 px tall. The touch hit area rule breaks toasts. Not my main lens."
+   },
+   {
+    "category": "10 Enterprise readiness",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 7,
+    "note": "The guard is real in the build I tested: statements open with SET LOCAL ROLE pulse_app and the org setting, and the server log shows 0 refused statements after my whole sweep. 847 of 847 tests pass with the guard on and with it off. Held at 8: the guard is off by default in production, the login is still the table owner so the role can be reset inside a session, the readiness check can say ready when it is not, and there is no CI (deferred)."
+   }
+  ],
+  "round_three_issues_rechecked": [
+   {
+    "title": "The database guard is built but the app does not use it, and there is still no CI",
+    "fixed": false,
+    "evidence": "Partly fixed, and the big half is done. In the running build /api/health says guard on true and ready true. I sampled pg_stat_activity 1,152 times while loading 10 URLs 3 times as admin: 1,116 hits were 'BEGIN; SET LOCAL ROLE \"pulse_app\"; SELECT set_config('pulse.org_id', ...)', every pulse table query I saw was inside a transaction, and the only statements outside one were core.organization and wms.users reads, which go through the named owner door. Acting as pulse_app with the kitstak setting I saw 1 org in pulse.jobs (58 rows), 1 org in v_facts (4,333 rows), 1 row in core.organization and 10 in core.user. core.session, core.account, core.customers, core.entitlements, crm, wms, pm and drizzle all gave permission denied. An insert for the other org and a move of a row to the other org both failed on the policy, update and delete of the other org touched 0 rows, and create table, truncate, drop policy and disable row level security were refused. As maya, 44 routes with kitstak ids gave 404 or empty lists, 16 injection strings in query parameters gave 422, 404 or empty lists, and set-active for the kitstak org gave 403. The only code outside the guard is asSystem in 8 files, systemDb for sign in, and siblingDb, and I read every caller: each is cross org by design. The server log has 0 refused statements. What is left: it is off by default in production, the login role is still the owner so 'reset role' in the same session saw 2 orgs again, the readiness check has a false green (see blocking issues), and there is no .github folder, which the owner has deferred."
+   },
+   {
+    "title": "Target margin leaks to no money roles in three CSV exports and in the viewer home page",
+    "fixed": true,
+    "evidence": "As j.okafor and cs.team: clients.csv header is client_code, name, status, contact_name, contact_email, phone, payment_terms_days, parts_owner, notes. job_types.csv and jobs.csv have no target margin column either, and the same is true for the 15 files inside everything.zip. The home page HTML for cs.team has targetMarginBp null 13 times and no number. 50 pages for each user had no dollar text and no money key. The one hit, '15% margin' on /welcome, is fixed help text."
+   },
+   {
+    "title": "The look alike client guard is only on quick add, not on the other server paths",
+    "fixed": true,
+    "evidence": "Direct calls as admin: createJobAction with client name 'Harbor Roast Collectiv' was refused with 'looks like Harbor Roast Collective or Harbor, a client you already have'. createClientAction with 'Harbr Roast Collective' was refused. quickAddJobAction was refused. updateClientAction renaming my test client to 'Harbor Roast Colective' was refused with 'Keep the old name, or choose Rename anyway'. There is no POST route for jobs or clients under /api/v1. Imports and sync still do not check, as the notes say."
+   },
+   {
+    "title": "The day save can lose hours: no version needed, and same labor type lines are merged",
+    "fixed": true,
+    "evidence": "saveProductionBulkAction with a real row id and no version now answers CONFLICT, and so does a line with no id aimed at a line that exists. Two lines for the same job, day, shift and labor class answer VALIDATION 'Line 2: This labor class is already on this day.' On PUT /api/v1/log/days: a second create on the same day gave 409 day_exists with the fresh rows, an edit with no read list gave 422, an edit naming 1 of 2 rows gave 409 stale, a wrong version gave 409 stale. 10 parallel edits with the same read gave 200 once and 409 nine times, each 409 carrying the fresh day. PUT /api/v1/log/rows: 10 parallel creates gave one 200, 10 parallel updates gave one 200, and missing, null and future versions all gave 409."
+   },
+   {
+    "title": "Work can be dated years ahead",
+    "fixed": true,
+    "evidence": "2030-01-01 and 2026-11-20 (tomorrow at the site) were refused with 422 on PUT /api/v1/log/rows, PUT /api/v1/log/days, saveProductionBulkAction and saveProductionEntryAction. Moving an old day to 2031 by an edit and by a row PUT was refused too. 2026-11-19, today at the New York site, was saved. A row with 0 people and 5 hours is now refused. Not covered, see blocking issues: extra services, time not on a job and materials still take 2030, and work dated 1990 is saved."
+   },
+   {
+    "title": "The contract rate rule is narrow and has no off switch",
+    "fixed": false,
+    "evidence": "Partly fixed. The switch exists and works: with wmsContractPrices off and the Apex fee raised from 2.75 to 3.10, a sync changed 0 rows and WO000094 kept one price. With it on, the sync added one price '2026-11-19: 3.1000' with the note 'Warehouse contract rate: Apex Threads Co. Apparel 3PL 2026', a second sync changed nothing, my Nov 17 and Nov 18 rows kept 27,500 cents and the Nov 19 row became 31,000. Putting the fee back restamped today to 27,500. A supervisor cannot flip the switch (FORBIDDEN). What is left, and the notes admit it: work order fees still read standard_rate only, so volume tiers and fees with conditions do not reach Pulse. I did not retest how fast a new warehouse service record shows up without pressing Sync now."
+   },
+   {
+    "title": "Deleted jobs are open to a supervisor through the jobs list flag",
+    "fixed": true,
+    "evidence": "After I deleted J-1055, as j.okafor and as cs.team: GET /api/v1/jobs?deleted=1 gave 403, /api/v1/jobs/deleted gave 403, /api/v1/jobs/J-1055 and the same by id gave 404, /api/v1/jobs/J-1045 gave 404, /jobs/J-1055 gave 404. As admin all of these gave 200. A small leftover is listed in blocking issues: the work rows of a deleted job can still be read by its id."
+   }
+  ],
+  "pr_37_review": {
+   "works": true,
+   "evidence": "On my test job J-1055 I saved a day with Packer (4 people, 32 hours, 1 setup, 2 overtime, 500 good, 20 scrap) and Line lead (1 person, 8 hours) in one PUT /api/v1/log/days. Labor cost was 85,870 plus 26,568 cents, the same as round three for the same lines. In the browser at 768 px: the form shows 'Nov 19 already has work on this job... nothing here is saved over it' with an Edit Nov 19 button before any save. Edit of Nov 12 with one labor class removed sent exactly one request, PUT /api/v1/log/days, and the removed row was soft deleted in the same save. Delete opened a dialog 'Delete the work for Nov 19? This takes the whole day off the job: 1 good units, 2 labor hours, $58.80 of labor cost' and sent nothing until confirmed. As j.okafor the 200 and the 409 answers carry rateCents, laborCostCents, baseRevenueCents and sharedCents as null with moneyHidden true, and a day older than 7 days is refused with 'Ask a manager to fix an older day'. cs.team gets 403, maya gets 404, a wrong Origin gets 403. Round three problems: 1 fixed (version needed), 2 fixed (same labor class refused), 3 fixed (one call, all or nothing), 4 fixed (asks first, buttons are 40 by 40), 5 mostly fixed (fields are 38 to 40 px tall, row buttons 40 by 40), 6 fixed (no example numbers, only a Note hint), 7 fixed (0 people with hours is refused).",
+   "problems": [
+    "Undo cannot be tapped on a touch screen. After 'Saved the work for Nov 13', the point in the middle of the Undo button belongs to the 'Close toast' button. A tap on Undo sent no request, closed the toast, and the day kept the new units (13, then 15). With a mouse the same tap sent PUT /api/v1/log/days and put the day back. Seen at 768, 1366 and 390 px with touch on.",
+    "Text fields in the form are 38 px tall on a tablet, just under the 40 px the buttons now have. Header chips on the job page are 20 to 36 px tall.",
+    "A new day can still be reached line by line through PUT /api/v1/log/rows while the day form refuses a second create. Both are safe, but a day made by the form and a line added by the grid at the same moment end as one day with both, with no word to either person.",
+    "The delete dialog lists 'Machine operator 1, Machine operator 1' for a day and a night line of the same labor class, with no shift named."
+   ]
+  },
+  "blocking_issues": [
+   {
+    "title": "The guard readiness check can say ready when the app cannot use the plain role",
+    "where": "apps/pulse/drizzle/0009_db_guard_role.sql step 2, and dbGuardStatus in src/server/db/system.ts (GET /api/health)",
+    "repro": "On this PostgreSQL 16.15, as postgres: create role se_mig4 nosuperuser createrole; set session authorization se_mig4; create role se_app4 nologin noinherit. Then select pg_has_role(current_user,'se_app4','MEMBER') gives true, because the creator gets a membership with admin only (pg_auth_members shows admin_option t, set_option f). The step 2 test from the migration, 'if not pg_has_role(current_user, role, MEMBER) then grant', is skipped. Then 'begin; set local role se_app4' fails with 'permission denied to set role'. After an explicit 'grant se_app4 to se_mig4' the same SET ROLE works. The health check uses the same MEMBER test and never tries SET ROLE.",
+    "why_it_matters": "On PostgreSQL 16 or newer with a migration role that is not a superuser, which is the normal case on a hosted database, the migration passes, /api/health says guard ready true, and the moment PULSE_DB_GUARD=1 is set every guarded statement fails. The runbook tells the owner to trust ready true before turning the flag on. Fix: test for the SET right (pg_has_role with 'SET', or a real SET LOCAL ROLE in the health check) and always run the grant.",
+    "severity": "major",
+    "verified_in_browser": false
+   },
+   {
+    "title": "Undo in a toast cannot be tapped on touch screens",
+    "where": "src/styles/globals.css, the pointer coarse hit area rule, with the toast close button. Seen on /jobs/J-1055/work after saving a day",
+    "repro": "Playwright with hasTouch on, viewport 768 by 1024: open /jobs/J-1055/work, tap 'Edit the work for Nov 13', change Good units from 12 to 13, tap Save the day. The toast 'Saved the work for Nov 13. Undo puts the day back the way it was.' shows. document.elementFromPoint at the left, middle and right of the Undo button returns the 'Close toast' button. A tap on Undo sends no request and the toast goes away. The database row stays at 13. With hasTouch off, the same tap sends PUT /api/v1/log/days and the row goes back. Same result at 1366 and 390 px with touch on. The close button is forced to position static, so its 44 px hit area is sized from the whole toast.",
+    "why_it_matters": "Round four leans on Undo as the safety net for saving and deleting a day, and shop floor people use tablets. On a tablet the net is not there: the tap that should undo only hides the offer. It likely hits every toast with an action in the app.",
+    "severity": "major",
+    "verified_in_browser": true
+   },
+   {
+    "title": "The guard is off by default in production and the login role can still step out of it",
+    "where": "PULSE_DB_GUARD, src/server/db.ts, CONTRACTS section 12 rule 13, GET /api/health",
+    "repro": "As the app login (postgres) in one transaction: set local role pulse_app; set_config('pulse.org_id', kitstak id) gives 1 org. Then 'reset role' gives current_user postgres and 2 orgs. 'set local role postgres' also works. set_config with the northwind id in the same transaction reads 28 northwind jobs. select rolsuper, rolbypassrls for postgres gives true, true. GET /api/health with no login answers 200 and shows the guard state and the migration name.",
+    "why_it_matters": "The notes say all of this, so it is honest, but it is still open. The guard catches a forgotten org filter or a wrong id, which is the common bug, and I proved that. It does not hold against injected SQL or code that uses the raw pool, because the session still belongs to the owner. And none of it is in force in production until someone sets a flag. A security review will ask for the flag on by default, a login role that owns nothing, and a test through the pooler.",
+    "severity": "minor",
+    "verified_in_browser": false
+   },
+   {
+    "title": "Rows of a deleted job and deleted clients can still be read by any role",
+    "where": "GET /api/v1/production?job=, GET /api/v1/activity?job=, GET /api/v1/clients?deleted=1",
+    "repro": "After deleting J-1055, as j.okafor and as cs.team: GET /api/v1/production?job=<id of J-1055> answers 200 with its 8 work rows, job number and job name. GET /api/v1/activity?job=<id> answers 200 with its history. GET /api/v1/clients?deleted=1 answers 200 and lists 10 deleted clients such as 'Harbor Roast Collectiv'. The job itself answers 404 and the deleted list 403 for the same users.",
+    "why_it_matters": "The rule 'only a person who may manage jobs can see deleted jobs' is kept on the two routes named in round three, not on the routes around them. No money is shown, so it is small, but the guard is again not in one place.",
+    "severity": "minor",
+    "verified_in_browser": false
+   },
+   {
+    "title": "Other entries can still be dated years ahead, and work can be dated decades back",
+    "where": "saveVasEntryAction, saveIndirectEntryAction, saveMaterialUsageAction, saveProductionEntryAction",
+    "repro": "As admin: an extra service entry, a time not on a job entry and a material entry, each dated 2030-01-01, all answered ok. A work row dated 1990-01-01 answered ok. I deleted all four. Work dated 2030 is refused on the same job.",
+    "why_it_matters": "An extra service carries revenue. A typed 2062 on one puts money in a month nobody opens, the same slip round four closed for work rows. A day in 1990 is almost surely a typo too.",
+    "severity": "minor",
+    "verified_in_browser": false
+   },
+   {
+    "title": "Contract rates still skip volume tiers and fees with conditions",
+    "where": "src/server/integrations/wms.ts listContractPrices, src/server/domain/wms-services.ts",
+    "repro": "The header of wms-services.ts and section 19.9 say tiers and conditional fees stay with the warehouse bill. The 5 Work Order fees in wms.billing_fees are read by standard_rate only. I changed standard_rate and saw the job price follow. There is no tier data in this demo to show a wrong price.",
+    "why_it_matters": "For a client with volume breaks, the Pulse price will not match the warehouse invoice, and the job page will still say the price came from the contract. The new switch lets a shop turn the rule off, which lowers the risk.",
+    "severity": "minor",
+    "verified_in_browser": false
+   }
+  ],
+  "best_things": [
+   "The database guard works in the running build. Queries run as pulse_app with the org set, the plain role cannot read auth tables or sibling schemas, cannot write another org, and my whole sweep left 0 refused statements in the server log.",
+   "The escape hatch is small and named. asSystem is used in 8 files, each with a reason, and a test fails when a new caller appears. I read every caller and found none that reads one org's pulse data for another.",
+   "The numbers still tie out to the cent for all 74 jobs in both orgs, across raw rows, v_facts, fact_days, job_stats and the API.",
+   "The part month company bridge is exact. 12 ranges in 2 orgs matched my own arithmetic, and the parts of a month always add back to the month.",
+   "The day save is now safe by design: one call, all or nothing, a version on every row, 409 with the fresh day, and one winner out of 10 parallel writers every time.",
+   "Money hiding held on 290 API URLs, 50 pages, 18 export streams and the zip for both no money roles, with the round three leak closed.",
+   "Sync is safe to run again and again: 0 new rows and 0 repeats after 6 runs, and the contract switch does what it says.",
+   "Tests are steady in both modes: 847 of 847 in 85 files with the guard on, and the same with it off.",
+   "The round four notes are honest about limits. Each limit I tested was exactly as written."
+  ],
+  "what_would_wow_me": "Four things, all small next to what was built. First, make the guard the default: on in production, a login role that owns nothing so SET ROLE cannot be undone, a health check that really tries SET LOCAL ROLE, a grant that always runs, and one test through the transaction pooler. Second, fix the touch hit area on toasts so Undo works on a tablet, and add a touch test for it. Third, put the last guards in one place: the deleted job rule on every route that takes a job id, and the 'not after today' rule on extra services, materials and time not on a job. Fourth, a CI workflow that runs typecheck, lint and the 847 tests with the guard on. With the first two done I would sign the security review.",
+  "verdict_paragraph": "Round four fixed five of my seven round three issues in full and the two biggest ones in their main part, and I proved each on the running system. The database guard is real: the app now runs its queries as a plain role with the workspace set, I watched it in pg_stat_activity, I could not get another org's rows as maya on any route, and the plain role cannot touch auth tables or sibling schemas. The day save went from the weakest write path to the strongest. Target margin no longer leaks, deleted jobs are closed on the named routes, future work dates are refused, the look alike guard is on every action, and contract rates have a switch and a fair 'from today' rule. The math is still exact, now with part month company costs too. I am not wowed yet for three reasons. The guard is off in production until someone sets a flag, and its readiness check gave a false green in my test with a non superuser role on PostgreSQL 16, which would turn that flag into an outage. The session still belongs to the table owner, so the guard stops honest bugs, not injected SQL. And Undo, the new safety net for saves and deletes, cannot be tapped on a touch screen. Pulse is a clearly better engineered product than Easy Metrics for a kitting shop, 88 against an estimated 52, and it is now close to what I would sign."
+ },
+ {
+  "lens": "Principal product designer, enterprise UX, round four. I judged visual quality, match with the sibling KitStak apps, hierarchy, navigation, the daily entry flow, responsive behavior at 1440, 1024, 768 and 390, dark mode, accessibility, console errors, layout shift and 8th grade copy. I tested the production build at localhost:3500 (health says guard on true, ready true, migration 0011) with Playwright and @axe-core/playwright (wcag2a, wcag2aa, wcag21aa) from my round three scratch folder. Sweep: 35 routes at 1440 and 390 in light and dark and at 768 in light, as admin@kitstak.io and again as the supervisor j.okafor@kitstak.io. That is 350 page loads, one page at a time, each with axe, console capture, a page overflow check, a scroll box check and a layout shift observer. Then I drove by hand in scripts: the day form with two labor classes, the day already has work state, edit, Undo, the delete day confirm, the Work tab at 1024, 768 and 390 for both roles, the date picker on a phone, the labor class picker in the Log work grid with keyboard only, units with no hours on the grid, clearing a row, the client box error in quick add, the Log work dialog, the new job wizard and Settings, Extra services and a service with no cost, Set the price, the part month note on Profit for four date ranges, month close, the contract rate switch, alert rules as the supervisor, pinned columns and cards on Profit, Job profit, Services, client jobs, Labor and Target pace, and focus return after dialogs. I signed in to CRM once and compared header height (56 px), font (Inter), page color and the red button with Pulse: they match. Easy Metrics scores are the public evidence estimates from competitors.md section 5. I did not test Easy Metrics hands on. Not tested: a real screen reader, real touch devices, the import round trip, the calculator Create a job dialog (it did not open with an empty quote), the welcome step, Portal, WMS and Projects screens this round, and email (deferred by the owner, noted once, as is CI). The database guard is on here and off in production until the owner sets a flag: I can only see the flag in the health check, not test it from the screen. CLEANUP: I made job J-1053 UXR4 temp job A and, by a slip of my own script, a new client named Harbor. I logged, edited, deleted and restored test days on J-1053 for Nov 18 and Nov 19. I then deleted the job in the app: it sits soft deleted in Jobs, Deleted, with 2 live entries under it and 1 removed one. I deleted the client Harbor in Settings, Catalogs: it is soft deleted in the database. I turned the contract rate switch off and back on: it is on. I made no client in the Settings test. Scripts, logs and screenshots are in /tmp/claude-0/-home-user-kitstak-platform/ce6bf3e7-8fe5-5b33-baf8-b66b85d8f93e/scratchpad/critics/r4/ux/",
+  "overall_score_0_100": 92,
+  "easy_metrics_baseline_0_100": 52,
+  "pulse_is_better_product": true,
+  "wowed": false,
+  "category_scores": [
+   {
+    "category": "1. Profit visibility",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 7,
+    "note": "Profit at 768 keeps Job, Profit and Job margin pinned and on screen. At 390 each job is a card with Revenue, Profit and Job margin. The part month line reads 'Company costs for 19 of 30 days.' and for Oct 20 to Nov 10 it reads '12 of 31 days in October and 10 of 30 days in November'. A whole October shows no such line. The popover math adds up: 132,009.34 less 7,001.71 plus 10,841.14 equals 135,848.77. Held back by the sentence 'After time not on a job and overhead, the company made $135,849', which is more than the jobs made and does not say why on the page."
+   },
+   {
+    "category": "2. Job costing and budget vs actual",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 3,
+    "note": "Unchanged strength. Plan vs actual and the job Work tab passed axe on all 10 loads each. The Work tab cards show Good units 500, Labor hours 52, Pace 9.8 and Labor cost for one unit $2.79 for my test day, and the Entries line says '52, 1 setup' and '9.8 without setup'."
+   },
+   {
+    "category": "3. Daily production entry",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 3,
+    "note": "The biggest gain. Picking a day with work shows 'Nov 18 already has work on this job: 500 good units, 52 labor hours, Packer, Line lead' and 'Add the day' is disabled. Edit turns the same form into 'Edit the work for Nov 18'. Save has Undo and Undo put Line lead back from 6 hours to 4. Delete asks first and lists 500 good units, 5 scrapped, 52 labor hours and $1,392.84. Days after today are disabled in the picker. The grid picker takes type ahead while closed. Not a 10 because focus is lost after save and after the delete confirm, and the dead boxes stay live in the already has work state."
+   },
+   {
+    "category": "4. Cost model depth",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 7,
+    "note": "A service with revenue and no cost now reads Cost 'Not known' and Margin 'No cost yet' with a plain reason, and the list says '4 services show No cost yet in place of a margin'. Company costs are shared by day for part months. Held back by Profit $195 still shown as a number on a service whose cost is not known."
+   },
+   {
+    "category": "5. Risk and alerts",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 4,
+    "note": "Alert rules as the supervisor: the page says 'You can read them here. A manager or an admin can change them.', every rule shows On, and the day rule says '3 work days'. Dollar and percent lines stay hidden, which the owner confirmed. 0 controls on the page, which now matches the text."
+   },
+   {
+    "category": "6. Data in and out",
+    "pulse_0_10": 8,
+    "easy_metrics_0_10": 4,
+    "note": "Not retested in depth this round. Export CSV buttons are present on Entries, Services, Profit and Company costs. No change to the score."
+   },
+   {
+    "category": "7. Integration depth",
+    "pulse_0_10": 8.5,
+    "easy_metrics_0_10": 6,
+    "note": "Connected apps has the new switch 'Let warehouse contract rates set job prices'. It works from the keyboard, gives a toast with Undo, and the matching line under COMES INTO PULSE is struck through while it is off. Header, font, page color and red button match CRM. Held back because the off state does not say what happens to the 5 jobs that already follow a rate."
+   },
+   {
+    "category": "8. Ease of use (8th grade)",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 5,
+    "note": "One name per thing now: 'Labor class' in the day form, the Entries table and the grid, 'Units to make' and 'Price per unit' in the strip and the dialog. Month close says '1 thing to fix' and 'Close it anyway'. Copy is short and plain. Small misses: two near twin lines in the profit popover, 'Tell me when' on rules that tell other people, and a 'Fix this first' link that lands on a list of 18 services with no filter."
+   },
+   {
+    "category": "9. Visual and interaction quality",
+    "pulse_0_10": 9,
+    "easy_metrics_0_10": 6,
+    "note": "350 of 350 loads pass axe with 0 rules. 0 console errors, 0 hydration warnings, 0 CSP reports, 0 failed requests, 0 pages wider than the screen. Layout shift over 0.1 on 2 of 350 loads, down from 26. No native select, date or time box is visible on 31 routes. Tables have a tab stop, a name and a fade. Not higher because of lost focus after four dialogs, the Target pace table on a phone, 14 and 16 px checkboxes and 28 by 16 px switches on a phone, and a red focus ring that looks like the red error border."
+   },
+   {
+    "category": "10. Enterprise readiness",
+    "pulse_0_10": 8.5,
+    "easy_metrics_0_10": 7,
+    "note": "Health shows the database guard on and ready here. In production it stays off until the owner sets a flag, so the extra wall is a choice, not a default. CI and email reports are deferred by the owner. Money stays hidden from the supervisor: 0 dollar signs on 175 supervisor loads. Deleting and restoring a day and a job both leave a clear trail."
+   }
+  ],
+  "round_three_issues_rechecked": [
+   {
+    "title": "Adding a day that already exists on the job Work tab overwrites it without asking",
+    "fixed": true,
+    "evidence": "On /jobs/J-1053/work I saved Nov 18 with 500 good, 5 scrap, Packer 6 people 48 hours and Line lead 1 person 4 hours. The form then showed 'Nov 18 already has work on this job: 500 good units, 52 labor hours, Packer, Line lead. A day is saved once, so nothing here is saved over it.' with an 'Edit Nov 18' button. 'Add the day' was disabled and a forced click timed out. The database rows did not change. Edit then Save gave the toast 'Saved the work for Nov 18, Undo puts the day back the way it was' and Undo set Line lead from 6 hours back to 4."
+   },
+   {
+    "title": "Wide tables still hide key columns and row actions with no scroll cue",
+    "fixed": true,
+    "evidence": "1. /jobs/J-1053/work at 768 and 390: Entries is a card with Good 500, Scrap 5, People 7, Labor hours 52, Pace 9.8 and Labor cost $1,392.84, and the Edit and Delete buttons sit at x 641 and 687 at 768, 40 by 40 px. 2. /reports/job-profit at 1440: the box is 2440 wide in 1390, has tabindex 0, the name 'Report rows, scrolls sideways' and a fade, and Job, Cost, Profit and Job margin are pinned and on screen. Same at 1024 and 768. One table still fails the idea on a phone: see the new Target pace issue."
+   },
+   {
+    "title": "Month close card and Target pace fail axe",
+    "fixed": true,
+    "evidence": "/settings/close and /target-pace passed axe with 0 rules on all 10 loads each, both roles, 1440, 768 and 390. All 5 month close tabs point to ids that exist."
+   },
+   {
+    "title": "Month close says 'Ready to close' and 'needs fixing' at the same time",
+    "fixed": true,
+    "evidence": "October 2026 now shows one chip, '1 thing to fix', the line '1 step needs fixing before these numbers can be trusted. You can still close the month, and the saved numbers will carry the gap.' and the button 'Close it anyway'."
+   },
+   {
+    "title": "Content jumps on first paint on about one page load in thirteen",
+    "fixed": true,
+    "evidence": "2 of 350 loads scored over 0.1, down from 26. The seven routes I named are all under 0.06: /services 0, /target-pace 0.01, /labor 0, /log/entries 0, /reports/job-profit 0, /settings/audit 0, /alerts 0. The 2 that are left are a new route, a single service page at 390, filed below."
+   },
+   {
+    "title": "Native selects and native date boxes are still mixed with KitStak pickers",
+    "fixed": true,
+    "evidence": "I counted visible native select, date and time boxes on 31 routes at 390: 0 on every one. /log has 22 KitStak comboboxes, /jobs/new has 0 date inputs, and the Day box on the Work tab is a KitStak date button."
+   },
+   {
+    "title": "A row with units and no hours shows 'margin 100%' and lifts the day's margin",
+    "fixed": true,
+    "evidence": "On /log I typed Units good 100 and People 4 on J-1053. The row said 'Add the hours each' and 'Labor $0.00, no margin yet: add the hours'. The footer kept Margin today the same and added '1 job has units and no hours, so it is left out'."
+   },
+   {
+    "title": "Client picker error feedback is clumsy and differs by screen",
+    "fixed": true,
+    "evidence": "Strip, Log work dialog and wizard now give the same words: 'Lumen Skin looks like Lumen Skincare, a client you already have. Pick it from the list, or choose Create \"Lumen Skin\" to add a new client.' In all three the box has aria-invalid true, aria-describedby, a red border (179, 17, 44), focus on Client, and the list opens under the message, not on top of it (message bottom at 449, list top at 456 in the dialog). Labels match: 'Units to make' and 'Price per unit'."
+   },
+   {
+    "title": "Extra service with no cost and a missing price shows 'Margin 100%, Healthy'",
+    "fixed": true,
+    "evidence": "/services/3f84e62a... now reads Cost 'Not known, No hours or parts logged' and Margin 'No cost yet'. The Oct 22 row has a 'Set the price' button that opens a dialog, and 'Open the warehouse contract'. 'From the warehouse' is underlined. One thing is left and filed below: the Profit card still says $195."
+   },
+   {
+    "title": "Alert rules page tells a no money reader to do things the page does not offer",
+    "fixed": true,
+    "evidence": "As j.okafor the page says 'You can read them here. A manager or an admin can change them.' Each of the 14 rules shows 'On'. The quiet job rule says 'nothing logged for 3 work days'. Dollar and percent lines say 'a set line' or 'a set amount', as the owner wants."
+   }
+  ],
+  "pr_37_review": {
+   "works": true,
+   "evidence": "All 12 round three problems are fixed. 1 fixed: a day with work cannot be added again, see above. 2 fixed: Entries is a card at 768 and 390 with Edit and Delete on screen. 3 fixed: the form, the Entries table and the grid all say 'Labor class'. 4 fixed: the form has People, Hours each and Labor hours, and 6 people times 8 filled 48. 5 fixed: the number boxes have no grey sample numbers. 6 fixed: Line lead with 8 hours and no people is refused with 'Add people: how many worked these hours.' 7 fixed: Pace 9.8 sits over 'without setup' and the hours cell says '52, 1 setup'. 500 over 51 is 9.8. 8 fixed: 'Line lead 4, 1 person'. 9 fixed: Edit turns the one form into 'Edit the work for Nov 18' with Save the day and Cancel. 10 fixed: at 768 each line sits in its own box on one row and the boxes are 38 to 40 px high. 11 fixed: Day is a KitStak date button, and days after today are disabled. 12 fixed: clearing the row on /log soft deleted the entry, gave 'Cleared J-1053, Undo', and the Work tab did not list an empty day. The supervisor sees the same form and cards with 0 dollar signs. Axe passed on the form, the edit form in dark mode at 768, the phone date picker and the delete confirm.",
+   "problems": [
+    "After 'Save the day' on an edit, keyboard focus drops to the page body. After Escape or Cancel on the delete confirm it also drops to the body, not back to the Delete button.",
+    "In the already has work state the Good units, Scrapped and every labor box still take typing, but 'Add the day' is disabled, so what you type goes nowhere.",
+    "Right after a good save the form stays on the day you just saved and shows the already has work notice. A clean save ends on what looks like a problem.",
+    "The notice is plain grey with a small info icon (text 10, 22, 40 on 248, 246, 240). It reads like a hint, not like the reason the main button is off.",
+    "The labor class picker on line 2 still offers the class used on line 1 with no mark that it is taken.",
+    "At 1024 and wider the number boxes are 30 px high and 'Add a labor class' is 28 px high. They grow to 38 and 40 px only under 1024.",
+    "With one day logged, 'Units and pace by day' draws a chart about 340 px tall for one bar and one dot."
+   ]
+  },
+  "blocking_issues": [
+   {
+    "title": "Target pace by job shows no numbers on a phone",
+    "where": "/target-pace, 'Pace against target', By job, at 390 and 768, admin and supervisor",
+    "repro": "Sign in as j.okafor and open /target-pace at 390 by 844. Scroll to 'Pace against target'. The table is 760 px wide in a 340 px box. The Job column is 100% on screen, Units good 23%, and Labor hours, Pace, Target and Share of target 0%. No column is pinned, so after you scroll right the Job column is 0% on screen and you cannot tell whose pace you are reading. At 768 Share of target is 71% on screen and, as admin, the 'Set a target for the job' column is off screen. The box does have a tab stop, a name and a fade.",
+    "why_it_matters": "Round four says key numbers stay on screen. This is the supervisor's own page and the phone is the floor device. Profit, Services, client jobs and Entries became cards. This one table was left behind.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Keyboard focus is lost after four dialogs and one save",
+    "where": "/settings?section=catalogs Add a client, /jobs/<number>/work delete day confirm and Save the day, /services/<id> Set the price",
+    "repro": "Keyboard only. 1. Settings, Catalogs: focus 'Add a client', press Enter, press Escape once. document.activeElement is BODY. 2. Job Work tab: focus 'Delete the work for Nov 18', press Enter, then Escape or Enter on Cancel. Focus is BODY both times. 3. Service page: open 'Set the price', press Escape. Focus is BODY. 4. Edit a day, press 'Save the day'. Focus is BODY. For contrast, the Log work 'Add a job' dialog, the date picker and the job More menu all put focus back on their button.",
+    "why_it_matters": "A keyboard or screen reader user is thrown to the top of the page and must tab back through the header and the whole page. This is WCAG 2.4.3, level A, and axe cannot see it.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "'Fix this first' for unpriced extra service entries leads to a list with no way to find them",
+    "where": "/settings/close October 2026 checklist, Home 'Things to fix', then /services",
+    "repro": "Open /settings/close and pick October 2026. The row 'Every extra service has a price' says '3 extra service entries have no price' with a red 'Fix this first' chip and the link 'Open extra services'. The link goes to /services. Home 'Open services' goes to the same place. That page lists 18 services with tabs Active, Underpriced (14) and Turned off. No row says it holds an entry with no price, and 'No price set' on a row means the service has no list price, which is a different thing. I had to open service pages one by one to find the Oct 22 entry.",
+    "why_it_matters": "The one red step that blocks trust in the month has no direct path. The month close card and Home found the count, so they could link straight to the entries.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "A service with no known cost still shows Profit equal to its revenue",
+    "where": "/services/3f84e62a-be5c-477b-a410-ddaa974dfd90 (Programming (hours)) as admin",
+    "repro": "Open the page. Cards read Revenue $195, Cost 'Not known', Profit $195, Margin 'No cost yet'. In the Trend chart, 'Show table' lists Cost $0.00 for the week of Oct 12, next to Margin 'No data'.",
+    "why_it_matters": "The page says it does not know the cost and then prints a profit that takes the cost as zero. It is the old 'margin 100%' claim in dollars. Profit should say 'Not known' too, and the table should not print $0.00.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "A single service page still jumps on first paint on a phone",
+    "where": "/services/04a1533e-66e9-4790-93fb-3455e46b50f0 (Labeling) as admin at 390",
+    "repro": "Load the page at 390 by 844 with a layout shift observer. Score 0.1451 in light and 0.1451 in dark, one shift at about 350 to 430 ms, on the card grid and the two column block under it. At 768 it scores 0.083. All other 348 loads are at or under 0.054.",
+    "why_it_matters": "Round four says loads over 0.1 went to 0. Two of 350 are still over, both on this page.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Pinned columns leave a thin slit for the other columns on a tablet",
+    "where": "/profit and /reports/job-profit at 768",
+    "repro": "Open /profit at 768 by 1024. Job is pinned at 304 px and Profit and Job margin at 116 px each. That is 536 of 718 px, 75% of the box, so the 9 other columns pass through a 182 px gap, about one column at a time, and the fade sits on top of the digits ('$15,29' with the end washed out). On /reports/job-profit at 768 the pinned set is 516 of 718 px, 72%, and 14 other columns share about 200 px. The pinned Job column on the report is 168 to 192 px wide and holds only 'J-1005'.",
+    "why_it_matters": "The key numbers are on screen, which is the win. But a tablet user cannot compare Revenue with Labor without scrolling one column at a time. A narrower Job column under 1024, or cards as on the phone, would fix it.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Touch targets on a phone are too small in several places",
+    "where": "/log/entries, /alerts, /settings/apps, Work tab date picker, at 390",
+    "repro": "At 390: /log/entries has 50 row checkboxes at 16 by 16 px. /alerts has row checkboxes at 14 by 14 px and 8 info buttons at 20 by 20 px. /settings/apps has 14 switches at 28 by 16 px, the new contract rate switch among them. The phone date picker has day cells of 36 by 36 px and 'Today' and 'Yesterday' buttons 28 px high.",
+    "why_it_matters": "These are under the 24 px floor in WCAG 2.2 and far under the 44 px that floor tablets and gloved hands need. The form boxes grow to 40 px on small screens, but these controls do not.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Settings on a phone hides 15 sections in one sideways strip",
+    "where": "/settings at 390",
+    "repro": "Open /settings at 390. Under the Workspace tab the section list (General, Sites, Job types, Labor defaults and 11 more) is one row 1,887 px wide in a 342 px box. About 3 and a half names show. Catalogs, Sample data and Danger zone are 4 to 5 screen widths to the right.",
+    "why_it_matters": "The fade says there is more, but nobody guesses there are 15. A list or a picker would show the whole map.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "The company profit sentence does not say why the company made more than its jobs",
+    "where": "/profit, the line under the cards, Nov 1 to Nov 19",
+    "repro": "Open /profit as admin. The line reads 'Your jobs made $132,009. After time not on a job and overhead, the company made $135,849. Company costs for 19 of 30 days.' The second number is larger though the words say costs came off. The reason is only in the popover: 'plus Your hourly rate covered more overhead than you spent, $10,841.14'. The popover also lists 'less Time not on a job that no job carried, $0.00' right above 'less Paid time not on any job, $7,001.71', two lines a reader cannot tell apart.",
+    "why_it_matters": "An owner reads this line first. A number that goes up after costs looks like a bug. Five more words on the page would settle it.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "Add a client in Settings repeats the look alike warning and offers two confusing buttons",
+    "where": "/settings?section=catalogs, Add a client",
+    "repro": "Click 'Add a client', type 'Lumen Skin', press 'Add client'. A red line appears under Name and the same text also pops as a toast, 'Could not add the client'. The footer now has 'Cancel', 'Add as a new client' and 'Add client' side by side. 'Add client' only fails again. The text says 'Use that client' but there is no button for it. Focus moves to the dialog box, not to Name, and the Name input has aria-invalid true but no aria-describedby.",
+    "why_it_matters": "The guard works and nothing was saved. But the other three screens show one message with focus in the box, and this one shows two messages and two near twin buttons.",
+    "severity": "minor",
+    "verified_in_browser": true
+   },
+   {
+    "title": "The focus ring and the error border are almost the same red",
+    "where": "Any form, for example the Log work 'Add a job' dialog",
+    "repro": "Open 'Add a job' on /log. The focused Client box has a border of rgb(200, 16, 46). Submit with a look alike name: the invalid border is rgb(179, 17, 44). Side by side they look the same. On the Work tab in dark mode a box that only has focus looks like a box with an error.",
+    "why_it_matters": "Color is how most people spot the wrong field. Here a healthy focused field and a wrong field differ only by the text under them.",
+    "severity": "minor",
+    "verified_in_browser": true
+   }
+  ],
+  "best_things": [
+   "350 of 350 page loads pass axe with 0 rules, with 0 console errors, 0 hydration warnings, 0 CSP reports and 0 pages wider than the screen, for both roles, both themes and three widths.",
+   "The day already has work state is the right design: it shows what the day holds before anything is saved, turns the main button off, and gives one button to open that day.",
+   "The delete day confirm lists what will go (500 good units, 5 scrapped, 52 labor hours, $1,392.84, Packer 48, Line lead 4) and says where to find it later. Undo works for delete, edit and clear.",
+   "Cards on a phone are well chosen: a job on Profit shows Revenue, Profit and Job margin, a client job shows Revenue, Cost, Profit, Margin and Units with its health chip, and an Entries day shows six numbers and two 40 px buttons.",
+   "Pinned Job, Cost, Profit and Job margin on the 18 column Job profit report, with a solid background in dark mode and a fade that stops beside the pinned columns.",
+   "One set of pickers. The labor class picker takes type ahead while closed ('m' gives Machine operator), opens with Enter, Space or Arrow down, and returns focus to itself on Enter and Escape.",
+   "The client box now behaves the same in the strip, the dialog and the wizard, with one message, a red border and focus in the box.",
+   "'No cost yet' and 'Not known' in place of a fake 100% margin, with a plain reason, and 'Set the price' right on the entry.",
+   "The contract rate switch strikes through its own promise line when it is off. That is a small touch that tells the truth.",
+   "The part month note names the days: '12 of 31 days in October and 10 of 30 days in November'.",
+   "Alert rules for a reader: says who can change them, shows On for each, and keeps money hidden.",
+   "The supervisor saw 0 dollar signs on 175 loads."
+  ],
+  "what_would_wow_me": "I am close, and this is a one or two day list, not a redesign. One: put focus back on the button that opened the dialog after Add a client, the delete day confirm, Set the price, and after Save the day. Two: make 'Pace against target, By job' a card list under 768 like Profit, or pin Job and show Pace and Share of target first. Three: link 'Fix this first' and Home 'Open services' straight to the entries with no price. Four: do not print Profit $195 or Cost $0.00 for a service whose cost is not known. Five: get the Labeling service page under 0.1 at 390 so the count is 350 of 350. Six: in the already has work state, lock the boxes or hide them, and after a good save move the form on to a clean state. Seven: give phone checkboxes and switches a 24 px hit area at least, and 40 px on the floor screens. Eight: add a few words to the company profit line when the company made more than its jobs. Nine: make the error border differ from the focus ring by more than a shade. Do one through five and I sign.",
+  "verdict_paragraph": "Round four fixed all ten of my round three blocking issues and all twelve of my PR 37 problems, and I saw each one work. The day form no longer overwrites a day, it shows what is there and sends you to edit it, with Undo on every write. Tables keep their money columns on screen or turn into cards, every scroll box has a name, a tab stop and a fade, no native picker is left, month close says one thing, and a service with no cost says so. My sweep of 350 loads came back with 0 axe rules and 0 console errors, and layout shift over 0.1 fell from 26 loads to 2. Pulse is far ahead of the Easy Metrics baseline, which I score from public evidence only, 52 against 92. I am not wowed yet, by a small margin, because fresh code left a short list of misses a designer would not sign: focus drops to the top of the page after four dialogs, the Target pace table shows no numbers on a phone, the red 'Fix this first' step links to a list with no filter, a service with unknown cost still prints a profit, and one page still jumps on a phone. None of these stops daily work and none is major. The database guard is on here and off in production until the owner flips it, and CI and email are deferred by the owner: I note those once and do not count them. Fix items one through five in my list and my answer becomes yes."
+ }
+]

@@ -17,14 +17,15 @@ import { ExplainStatic } from '@/components/pulse/explain';
 import { StepList, Teach } from '@/components/pulse/teach';
 import { ProgressBar } from '@/components/ui/feedback';
 import { cn } from '@/components/ui/cn';
+import { HOME_ATTENTION_LIMIT } from '@/lib/constants';
 import { formatHours, formatMoney, formatMoneyWhole, formatNumber, formatPace, formatPercentBp } from '@/lib/format';
 import { useAlerts, useJobsNeedingAttention, useProfit, useSummary } from '@/lib/hooks/use-data';
 import { CONFIDENCE_LABELS } from '@/lib/profit/types';
-import { companyMarginBp } from './company-margin';
+import { companyMarginBp, companySentence, companyWords } from './company-margin';
 import { suggestBucket } from '@/lib/profit/trends';
 import { compareRange, rangeLabel, type RangePreset } from '@/lib/reports';
 import { routes } from '@/lib/routes';
-import type { ProfitResponse, ProfitRowDTO, SummaryDTO } from '@/lib/types';
+import type { JobListItemDTO, ProfitResponse, ProfitRowDTO, SummaryDTO } from '@/lib/types';
 import { parsePeriod, periodQuery } from '@/features/profit/period';
 import { PeriodPicker, type PeriodChange } from '@/features/profit/period-picker';
 import { rowLabel } from '@/features/profit/profit-model';
@@ -66,14 +67,18 @@ function ranking(rows: readonly ProfitRowDTO[], pick: (row: ProfitRowDTO) => num
 export interface HomeViewProps {
   readonly today: string;
   readonly weekStart: number;
-  readonly targetMarginBp: number;
+  /** The margin the company aims for. Null for a reader who cannot see money: it is never sent to them. */
+  readonly targetMarginBp: number | null;
   readonly initialSummary?: SummaryDTO;
   readonly initialTrend?: ProfitResponse;
+  /** The period right before, for the "vs before" chips. */
+  readonly initialBefore?: ProfitResponse;
+  readonly initialAttention?: JobListItemDTO[];
   /** The period the server read, so its data is only used for that period. */
   readonly initialRange: { readonly from: string; readonly to: string };
 }
 
-export function HomeView({ today, weekStart, targetMarginBp, initialSummary, initialTrend, initialRange }: HomeViewProps) {
+export function HomeView({ today, weekStart, targetMarginBp, initialSummary, initialTrend, initialBefore, initialAttention, initialRange }: HomeViewProps) {
   const { seesMoney, can } = useShell();
   const { get, set } = useQueryState();
   const period = useMemo(() => parsePeriod(get, today, weekStart), [get, today, weekStart]);
@@ -84,10 +89,10 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
 
   const summary = useSummary(scope, { initialData: fromServer ? initialSummary : undefined });
   const trend = useProfit(bucket, scope, { initialData: fromServer ? initialTrend : undefined });
-  const before = useProfit('month', prior);
+  const before = useProfit('month', prior, { initialData: fromServer ? initialBefore : undefined });
   const byClient = useProfit('client', scope);
   const byType = useProfit('type', scope);
-  const attention = useJobsNeedingAttention(6);
+  const attention = useJobsNeedingAttention(HOME_ATTENTION_LIMIT, { initialData: initialAttention });
   const alerts = useAlerts({ status: 'open', limit: 4 });
 
   const setPeriod = useCallback(
@@ -97,6 +102,8 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
 
   const total = trend.data?.total ?? summary.data?.total ?? null;
   const previous = comparable(before.data);
+  // While the period before is still loading, each tile keeps room for its "vs before" chip.
+  const deltaPending = before.isPending;
   const points = useMemo(() => [...(trend.data?.rows ?? [])].sort((a, b) => a.key.localeCompare(b.key)), [trend.data]);
   const dates = points.map((row) => row.key);
   const spark = (pick: (row: ProfitRowDTO) => number | null) => (points.length > 1 ? { values: points.map(pick) } : undefined);
@@ -154,7 +161,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
         { count: fix.unitsNoHours, one: 'day has units and no hours', many: 'days have units and no hours', href: routes.logEntries(), action: 'Add the hours' },
         { count: fix.needsRate, one: 'entry has no labor rate', many: 'entries have no labor rate', href: routes.labor('rates'), action: 'Set a rate' },
         { count: fix.noPrice, one: 'job has no price', many: 'jobs have no price', href: routes.jobs({ tab: 'open' }), action: 'Open jobs' },
-        { count: fix.serviceNoPrice, one: 'extra service entry has no price', many: 'extra service entries have no price', href: routes.services(), action: 'Open services' },
+        { count: fix.serviceNoPrice, one: 'extra service entry has no price', many: 'extra service entries have no price', href: routes.servicesNoPrice(), action: fix.serviceNoPrice === 1 ? 'Price the entry' : 'Price the entries' },
       ].filter((item) => item.count > 0 && (seesMoney || item.one.includes('hours')))
     : [];
   const loadingTiles = !total;
@@ -191,9 +198,15 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                 {bridge && bridge.companyProfitCents !== null ? (
                   <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
                     <span>
-                      After time not on a job and overhead, the company made <strong className={cn('font-semibold tabular-nums', bridge.companyProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatMoneyWhole(bridge.companyProfitCents)}</strong>.
+                      {companySentence(bridge).lead} <strong className={cn('font-semibold tabular-nums', bridge.companyProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatMoneyWhole(bridge.companyProfitCents)}</strong>.
+                      {companySentence(bridge).reason ? <span data-testid="home-company-reason"> {companySentence(bridge).reason}</span> : null}
                     </span>
                     <ExplainNumber metric="company_profit" scope={scope} label="How we got company profit" align="start" />
+                  </p>
+                ) : null}
+                {bridge && bridge.companyProfitCents !== null && companyWords(bridge).note ? (
+                  <p className="mt-1 text-sm text-fg-muted" data-testid="home-company-cost-note">
+                    {companyWords(bridge).note}
                   </p>
                 ) : null}
               </>
@@ -230,18 +243,18 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
       {/* Headline numbers against the period before */}
       {seesMoney ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 min-[1680px]:grid-cols-6" data-testid="home-tiles">
-          <KpiTile label="Revenue" loading={loadingTiles} value={total ? formatMoneyWhole(total.revenueCents) : null} delta={total ? moneyDelta(total.revenueCents, previous?.revenueCents, 'up', vs) : undefined} sparkline={spark((row) => row.revenueCents)} explain={<ExplainNumber metric="revenue" scope={scope} />} />
-          <KpiTile label="Cost" loading={loadingTiles} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, previous?.costCents, 'down', vs) : undefined} sparkline={spark((row) => row.costCents)} explain={<ExplainNumber metric="cost" scope={scope} />} />
-          <KpiTile label="Profit on jobs" loading={loadingTiles} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, previous?.profitCents, 'up', vs) : undefined} sparkline={spark((row) => row.profitCents)} explain={<ExplainNumber metric="profit" scope={scope} />} />
-          <KpiTile label="Margin on jobs" loading={loadingTiles} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined} sparkline={spark((row) => row.marginBp)} explain={<ExplainNumber metric="margin" scope={scope} />} footer={companyMargin !== null ? <span className="text-xs text-fg-muted" data-testid="home-company-margin">Company margin, after overhead: <span className="font-medium text-fg tabular-nums">{formatPercentBp(companyMargin)}</span></span> : undefined} />
-          <KpiTile label="Labor as % of revenue" loading={loadingTiles} value={total ? formatPercentBp(total.laborPctBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.laborPctBp, previous?.laborPctBp, 'down', vs) : undefined} sparkline={spark((row) => row.laborPctBp)} explain={<ExplainNumber metric="labor_pct" scope={scope} />} />
-          <KpiTile label="Units per person per hour" loading={loadingTiles} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
+          <KpiTile label="Revenue" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatMoneyWhole(total.revenueCents) : null} delta={total ? moneyDelta(total.revenueCents, previous?.revenueCents, 'up', vs) : undefined} sparkline={spark((row) => row.revenueCents)} explain={<ExplainNumber metric="revenue" scope={scope} />} />
+          <KpiTile label="Cost" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, previous?.costCents, 'down', vs) : undefined} sparkline={spark((row) => row.costCents)} explain={<ExplainNumber metric="cost" scope={scope} />} />
+          <KpiTile label="Profit on jobs" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, previous?.profitCents, 'up', vs) : undefined} sparkline={spark((row) => row.profitCents)} explain={<ExplainNumber metric="profit" scope={scope} />} />
+          <KpiTile label="Job margin" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined} sparkline={spark((row) => row.marginBp)} explain={<ExplainNumber metric="margin" scope={scope} />} footer={companyMargin !== null ? <span className="text-xs text-fg-muted" data-testid="home-company-margin">Company margin: <span className="font-medium text-fg tabular-nums">{formatPercentBp(companyMargin)}</span></span> : undefined} />
+          <KpiTile label="Labor as % of revenue" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPercentBp(total.laborPctBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.laborPctBp, previous?.laborPctBp, 'down', vs) : undefined} sparkline={spark((row) => row.laborPctBp)} explain={<ExplainNumber metric="labor_pct" scope={scope} />} />
+          <KpiTile label="Units per person per hour" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="home-tiles-floor">
-          <KpiTile label="Units finished" loading={loadingTiles} value={total ? formatNumber(total.unitsGood, { maxDigits: 0 }) : null} delta={total ? numberDelta(num(total.unitsGood), previous ? num(previous.unitsGood) : undefined, 'up', vs) : undefined} sparkline={spark((row) => num(row.unitsGood))} explain={<ExplainNumber metric="units" scope={scope} />} />
-          <KpiTile label="Labor hours" loading={loadingTiles} value={total ? formatHours(total.hours, { maxDigits: 0 }) : null} sparkline={spark((row) => num(row.hours))} explain={<ExplainNumber metric="hours" scope={scope} />} />
-          <KpiTile label="Units per person per hour" loading={loadingTiles} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
+          <KpiTile label="Units finished" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatNumber(total.unitsGood, { maxDigits: 0 }) : null} delta={total ? numberDelta(num(total.unitsGood), previous ? num(previous.unitsGood) : undefined, 'up', vs) : undefined} sparkline={spark((row) => num(row.unitsGood))} explain={<ExplainNumber metric="units" scope={scope} />} />
+          <KpiTile label="Labor hours" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatHours(total.hours, { maxDigits: 0 }) : null} sparkline={spark((row) => num(row.hours))} explain={<ExplainNumber metric="hours" scope={scope} />} />
+          <KpiTile label="Units per person per hour" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
           <KpiTile label="Share of paid time spent on jobs" explain={<ExplainStatic title="Share of paid time spent on jobs" rule="Hours on jobs divided by paid hours. When no paid hours are typed for these days, it is hours on jobs divided by hours on jobs plus time not on a job." rows={bridge ? [{ label: 'Hours on jobs', value: formatHours(bridge.directHours) }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours) }, { label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Share on jobs', value: formatPercentBp(bridge.utilizationBp, { empty: 'No hours yet' }), kind: 'total' }] : []} />} loading={!data} value={data ? formatPercentBp(bridge?.utilizationBp ?? null, { empty: 'No hours yet' }) : null} footer={bridge ? <span className="text-xs text-fg-muted">{formatHours(bridge.indirectHours, { maxDigits: 0 })} hours not on a job</span> : undefined} />
         </div>
       )}
@@ -388,7 +401,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
           ) : seesMoney ? (
             <ComboChart
               title="Revenue, cost and margin over time"
-              description="Bars show revenue and cost. The line on top is the margin on jobs, next to your target margin."
+              description="Bars show revenue and cost. The line on top is the job margin, next to your target margin."
               loading={!trend.data}
               refreshing={trend.isFetching && Boolean(trend.data)}
               dates={dates}
@@ -397,10 +410,10 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                 { id: 'revenue', label: 'Revenue', values: points.map((row) => row.revenueCents) },
                 { id: 'cost', label: 'Cost', values: points.map((row) => row.costCents) },
               ]}
-              lines={[{ id: 'margin', label: 'Margin on jobs', values: points.map((row) => row.marginBp) }]}
+              lines={[{ id: 'margin', label: 'Job margin', values: points.map((row) => row.marginBp) }]}
               barFormat="money"
               lineFormat="percent"
-              lineTarget={{ value: targetMarginBp, label: 'Target margin' }}
+              lineTarget={targetMarginBp === null ? undefined : { value: targetMarginBp, label: 'Target margin' }}
               height={300}
               tableToggle
               emptyTitle="No work in this period yet"

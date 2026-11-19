@@ -6,6 +6,7 @@
 import 'server-only';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { alertRules, jobTypes, settings, sites } from '@/server/db/schema';
 import { invalid } from '@/server/errors';
 import type { AlertKind, AlertSeverity } from '@/lib/constants';
@@ -37,7 +38,7 @@ export const SYSTEM_ALERT_RULES: readonly { kind: AlertKind; name: string; sever
  * The org's settings row. The first call for an org inserts it and, for the winner of that
  * insert only, the default site, the General job type and the system alert rules.
  */
-export async function loadSettings(orgId: string, executor: Executor = db): Promise<SettingsRow> {
+export const loadSettings = scoped(async function loadSettings(orgId: string, executor: Executor = db): Promise<SettingsRow> {
   const [existing] = await executor.select().from(settings).where(eq(settings.orgId, orgId));
   if (existing) return existing;
   return inTx(async (tx) => {
@@ -68,10 +69,10 @@ export async function loadSettings(orgId: string, executor: Executor = db): Prom
     );
     return created;
   }, executor);
-}
+});
 
 /** The org's default site id (created with the settings row). */
-export async function defaultSiteId(orgId: string, executor: Executor = db): Promise<string> {
+export const defaultSiteId = scoped(async function defaultSiteId(orgId: string, executor: Executor = db): Promise<string> {
   await loadSettings(orgId, executor);
   const [row] = await executor
     .select({ id: sites.id })
@@ -81,10 +82,10 @@ export async function defaultSiteId(orgId: string, executor: Executor = db): Pro
   const [any] = await executor.select({ id: sites.id }).from(sites).where(and(eq(sites.orgId, orgId), isNull(sites.deletedAt))).limit(1);
   if (!any) throw invalid('This workspace has no site yet. Add one in Settings.');
   return any.id;
-}
+});
 
 /** The built in "General" job type id. */
-export async function generalJobTypeId(orgId: string, executor: Executor = db): Promise<string> {
+export const generalJobTypeId = scoped(async function generalJobTypeId(orgId: string, executor: Executor = db): Promise<string> {
   await loadSettings(orgId, executor);
   const [row] = await executor
     .select({ id: jobTypes.id })
@@ -93,7 +94,7 @@ export async function generalJobTypeId(orgId: string, executor: Executor = db): 
   if (row) return row.id;
   const [created] = await executor.insert(jobTypes).values({ orgId, code: 'GENERAL', name: 'General', isBuiltin: true }).returning({ id: jobTypes.id });
   return created!.id;
-}
+});
 
 /**
  * Money hiding (SPEC section 3): money targets and dollar defaults need `money:read`; the wage
@@ -130,6 +131,7 @@ export function toSettingsDTO(row: SettingsRow, access: Pick<PulseAccess, 'seesM
     sharedCostRule: row.sharedCostRule as SettingsDTO['sharedCostRule'],
     sharedPctBp: row.sharedPctBp,
     sharedSpread: row.sharedSpread as SettingsDTO['sharedSpread'],
+    companyCostSpread: row.companyCostSpread === 'work_days' ? 'work_days' : 'calendar',
     defaultPartsOwner: row.defaultPartsOwner as SettingsDTO['defaultPartsOwner'],
     defaultMemberRole: (isPulseRole(row.defaultMemberRole) ? row.defaultMemberRole : 'none') as PulseRole,
     jobNumberPrefix: row.jobNumberPrefix,
@@ -138,6 +140,7 @@ export function toSettingsDTO(row: SettingsRow, access: Pick<PulseAccess, 'seesM
     wmsSyncMaterials: row.wmsSyncMaterials,
     wmsSyncVas: row.wmsSyncVas,
     wmsSyncBilling: row.wmsSyncBilling,
+    wmsContractPrices: row.wmsContractPrices,
     wmsBillingOpsInProfit: row.wmsBillingOpsInProfit,
     crmSuggestJobs: row.crmSuggestJobs,
     projectsTimeImport: row.projectsTimeImport,
@@ -149,10 +152,10 @@ export function toSettingsDTO(row: SettingsRow, access: Pick<PulseAccess, 'seesM
   };
 }
 
-export async function getSettings(ctx: DomainContext): Promise<SettingsDTO> {
+export const getSettings = scoped(async function getSettings(ctx: DomainContext): Promise<SettingsDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   return toSettingsDTO(await loadSettings(ctx.orgId), access);
-}
+});
 
 export interface SettingsPatch {
   currency?: string;
@@ -181,6 +184,7 @@ export interface SettingsPatch {
   sharedCostRule?: SettingsDTO['sharedCostRule'];
   sharedPctBp?: number;
   sharedSpread?: SettingsDTO['sharedSpread'];
+  companyCostSpread?: SettingsDTO['companyCostSpread'];
   defaultPartsOwner?: 'us' | 'client';
   defaultMemberRole?: 'manager' | 'supervisor' | 'viewer' | 'none';
   jobNumberPrefix?: string;
@@ -189,6 +193,7 @@ export interface SettingsPatch {
   wmsSyncMaterials?: boolean;
   wmsSyncVas?: boolean;
   wmsSyncBilling?: boolean;
+  wmsContractPrices?: boolean;
   wmsBillingOpsInProfit?: string[];
   crmSuggestJobs?: boolean;
   projectsTimeImport?: boolean;
@@ -215,7 +220,7 @@ const RECALC_KEYS: readonly (keyof SettingsPatch)[] = [
   'workingDays',
 ];
 
-export async function updateSettings(ctx: DomainContext, patch: SettingsPatch): Promise<SettingsDTO> {
+export const updateSettings = scoped(async function updateSettings(ctx: DomainContext, patch: SettingsPatch): Promise<SettingsDTO> {
   const access = await requirePulse(ctx, 'settings:manage');
   if (patch.timezone !== undefined && !isValidTimezone(patch.timezone)) throw invalid('Pick a time zone from the list.', { timezone: 'Pick a time zone from the list.' });
   if (patch.workingDays !== undefined && patch.workingDays.length === 0) throw invalid('Pick at least one working day.', { workingDays: 'Pick at least one working day.' });
@@ -240,10 +245,10 @@ export async function updateSettings(ctx: DomainContext, patch: SettingsPatch): 
     }
     return toSettingsDTO(after!, access);
   });
-}
+});
 
 /** Marks an onboarding step done or stores a small onboarding value (welcome flow, checklist). */
-export async function setOnboarding(ctx: DomainContext, key: string, value: unknown): Promise<SettingsDTO> {
+export const setOnboarding = scoped(async function setOnboarding(ctx: DomainContext, key: string, value: unknown): Promise<SettingsDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   await loadSettings(ctx.orgId);
   const [after] = await db
@@ -252,4 +257,4 @@ export async function setOnboarding(ctx: DomainContext, key: string, value: unkn
     .where(eq(settings.orgId, ctx.orgId))
     .returning();
   return toSettingsDTO(after!, access);
-}
+});

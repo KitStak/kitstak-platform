@@ -6,8 +6,10 @@
 import 'server-only';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
-import { clients, jobLinks, jobPlanLines, jobPlans, jobPrices, jobStats, jobTypes, jobs, sites, type UsualCrewLine } from '@/server/db/schema';
+import { scoped } from '@/server/db/scope';
+import { activity, clients, jobLinks, jobPlanLines, jobPlans, jobPrices, jobStats, jobTypes, jobs, sites, type UsualCrewLine } from '@/server/db/schema';
 import { appUrls } from '@/server/env';
+import { orgModuleFlags, type ModuleFlags } from '@/server/entitlements';
 import { conflict, invalid, notFound } from '@/server/errors';
 import {
   PULSE_STATUSES,
@@ -23,12 +25,13 @@ import {
   type StreamSource,
 } from '@/lib/constants';
 import { NEXT_STEP_LABELS, riskHeadline, riskSentence, type NextStep, type RiskRule } from '@/lib/profit';
-import type { JobDetailDTO, JobDTO, JobLinkDTO, JobListFilters, JobListItemDTO, JobPriceDTO, JobStatsDTO, RiskReasonDTO } from '@/lib/types';
-import { assertVersion, cleanText, defined, diff, hideUnless, inTx, iso, isoRequired, isUuid, moneyOut, monthName, rows, singular, todayInZone, type DomainContext } from './_shared';
+import type { DeletedJobDTO, JobDetailDTO, JobDTO, JobLinkDTO, JobListFilters, JobListItemDTO, JobPriceDTO, JobStatsDTO, RiskReasonDTO } from '@/lib/types';
+import { assertVersion, cleanText, defined, diff, hideUnless, inTx, iso, isoRequired, isUuid, moneyOut, monthYear, rows, singular, todayInZone, type DomainContext } from './_shared';
 import { restoreRow, softDeleteRow } from './_crud';
+import { canPulse } from '@/lib/permissions';
 import { requirePulse, type PulseAccess } from './access';
 import { logActivity } from './activity';
-import { ensureClientByName, getClientRow, getJobTypeRow, resolveSite } from './catalog';
+import { assertClientNameNotLookAlike, type ClientGuardOptions, ensureClientByName, getClientRow, getJobTypeRow, resolveSite } from './catalog';
 import { getDeals } from '@/server/integrations/crm';
 import { recomputeJobs } from './job-stats';
 import { filterOrgMembers, getPeople } from './people';
@@ -202,8 +205,10 @@ async function planHours(executor: Executor, orgId: string, jobIds: readonly str
 }
 
 /** Jobs for the Jobs page. The Open tab is the at risk list: worst status first, then lowest projected profit. */
-export async function listJobs(ctx: DomainContext, filters: JobListFilters = {}): Promise<JobListItemDTO[]> {
+export const listJobs = scoped(async function listJobs(ctx: DomainContext, filters: JobListFilters = {}): Promise<JobListItemDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
+  // Deleted jobs are for people who may manage jobs, the same right as the Deleted jobs list.
+  if (filters.includeDeleted) await requirePulse(ctx, 'job:manage');
   const where: (SQL | undefined)[] = [eq(jobs.orgId, ctx.orgId)];
   if (!filters.includeDeleted) where.push(isNull(jobs.deletedAt));
   const tab = filters.tab ?? 'all';
@@ -226,16 +231,16 @@ export async function listJobs(ctx: DomainContext, filters: JobListFilters = {})
     .limit(Math.min(filters.limit ?? 1000, 5000));
   const hours = await planHours(db, ctx.orgId, found.map((row) => row.job.id));
   return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: hours.get(row.job.id) ?? null }));
-}
+});
 
 /** Losing and at risk jobs, worst first (Home "Jobs that need you", the bridge, the wall). */
-export async function listJobsNeedingAttention(ctx: DomainContext, limit = 10): Promise<JobListItemDTO[]> {
+export const listJobsNeedingAttention = scoped(async function listJobsNeedingAttention(ctx: DomainContext, limit = 10): Promise<JobListItemDTO[]> {
   const all = await listJobs(ctx, { tab: 'open', risk: ['losing', 'at_risk', 'no_data'], limit: Math.min(Math.max(limit, 1), 100) });
   return all;
-}
+});
 
 /** Counts per status for the filter chips on the Jobs page. */
-export async function countJobsByRisk(ctx: DomainContext, filters: Pick<JobListFilters, 'clientId' | 'jobTypeId' | 'siteId'> = {}): Promise<Record<PulseStatus | 'none', number>> {
+export const countJobsByRisk = scoped(async function countJobsByRisk(ctx: DomainContext, filters: Pick<JobListFilters, 'clientId' | 'jobTypeId' | 'siteId'> = {}): Promise<Record<PulseStatus | 'none', number>> {
   await requirePulse(ctx, 'pulse:read');
   const found = await rows<{ risk: string | null; n: number }>(
     db,
@@ -248,13 +253,14 @@ export async function countJobsByRisk(ctx: DomainContext, filters: Pick<JobListF
   const out: Record<PulseStatus | 'none', number> = { losing: 0, at_risk: 0, heads_up: 0, on_track: 0, no_data: 0, none: 0 };
   for (const row of found) out[(row.risk as PulseStatus | null) ?? 'none'] += row.n;
   return out;
-}
+});
 
 /**
  * `/jobs/[ref]`: a uuid that is a job id wins, else the job number without case (SPEC 5.2).
- * Deleted jobs are found only with `includeDeleted`.
+ * Deleted jobs are found only with `includeDeleted`. That flag is for writes that already checked
+ * `job:manage` (delete, restore, copy). A read goes through `getJobRowForReader`.
  */
-export async function getJobRow(ctx: DomainContext, ref: string, executor: Executor = db, includeDeleted = false): Promise<JobRow> {
+export const getJobRow = scoped(async function getJobRow(ctx: DomainContext, ref: string, executor: Executor = db, includeDeleted = false): Promise<JobRow> {
   const live = includeDeleted ? undefined : isNull(jobs.deletedAt);
   if (isUuid(ref)) {
     const [row] = await executor.select().from(jobs).where(and(eq(jobs.orgId, ctx.orgId), eq(jobs.id, ref), live));
@@ -268,17 +274,82 @@ export async function getJobRow(ctx: DomainContext, ref: string, executor: Execu
     .limit(1);
   if (!row) throw notFound('That job');
   return row;
-}
+});
 
-function linkUrl(type: LinkTargetType, path: string | null): string | null {
+/**
+ * Full URL of a linked record in its own app, or null. Null when no path is stored, and null when
+ * the workspace's plan no longer includes that app: the link then shows as plain words, never as
+ * a link to an app the person cannot open.
+ */
+export function siblingLinkUrl(type: LinkTargetType, path: string | null, modules: Pick<ModuleFlags, 'crm' | 'wms' | 'projects'>, hosts: { crm: string; wms: string; projects: string } = appUrls()): string | null {
   if (!path || !path.startsWith('/') || path.startsWith('//')) return null;
-  const urls = appUrls();
-  const host = type.startsWith('crm_') ? urls.crm : type.startsWith('wms_') ? urls.wms : urls.projects;
-  return `${host.replace(/\/+$/, '')}${path}`;
+  const app = type.startsWith('crm_') ? 'crm' : type.startsWith('wms_') ? 'wms' : 'projects';
+  if (!modules[app]) return null;
+  return `${hosts[app].replace(/\/+$/, '')}${path}`;
 }
 
-function toLinkDTO(row: typeof jobLinks.$inferSelect): JobLinkDTO {
-  return { id: row.id, jobId: row.jobId, targetType: row.targetType as LinkTargetType, targetId: row.targetId, importsTime: row.importsTime, title: row.cachedTitle, status: row.cachedStatus, url: linkUrl(row.targetType as LinkTargetType, row.cachedUrl) };
+/** Which sibling apps the workspace may open. On any error: none, so no link is ever dead. */
+async function linkModules(ctx: DomainContext): Promise<Pick<ModuleFlags, 'crm' | 'wms' | 'projects'>> {
+  try {
+    return await orgModuleFlags(ctx.orgId);
+  } catch {
+    return { crm: false, wms: false, projects: false };
+  }
+}
+
+type PricedJob = Pick<JobRow, 'pricingModel' | 'unitPrice' | 'fixedPriceCents'>;
+
+/**
+ * Is the price in force on the job the one the contract set? The link keeps the contract's rate
+ * (`meta.contractUnitPrice` or `meta.contractFixedCents`); the job's price is its newest price.
+ * A link from before those were kept counts as in force.
+ */
+function contractInEffect(meta: Record<string, unknown>, job: PricedJob): boolean {
+  if (typeof meta.contractUnitPrice === 'string') return job.pricingModel === 'per_unit' && job.unitPrice !== null && Number(job.unitPrice) === Number(meta.contractUnitPrice);
+  if (typeof meta.contractFixedCents === 'number') return job.pricingModel === 'fixed' && job.fixedPriceCents !== null && Number(job.fixedPriceCents) === meta.contractFixedCents;
+  return true;
+}
+
+/**
+ * What the contract rate rule left on the link (wms-services.ts). Names and a day only. Set only
+ * while the price in force is still the contract's: once someone types another price in Pulse,
+ * or the warehouse bill prices the job, the job page stops saying the price came from the contract.
+ */
+function contractNote(meta: Record<string, unknown> | null | undefined, job: PricedJob | null): JobLinkDTO['priceFromContract'] {
+  if (typeof meta?.contractPrice !== 'string' || typeof meta.contractName !== 'string' || meta.contractName === '') return null;
+  if (typeof meta.contractBilledBy === 'string' || (job && !contractInEffect(meta, job))) return null;
+  return { contractName: meta.contractName, at: typeof meta.contractPriceAt === 'string' ? meta.contractPriceAt : null };
+}
+
+/** The contract behind the link, for the price dialog. Null when the rule never touched this link. */
+function contractOf(meta: Record<string, unknown> | null | undefined, job: PricedJob | null, access: Access | null): JobLinkDTO['contract'] {
+  if (!meta || typeof meta.contractName !== 'string' || meta.contractName === '') return null;
+  const billedBy = meta.contractBilledBy === 'tiers' || meta.contractBilledBy === 'conditions' ? meta.contractBilledBy : null;
+  if (!billedBy && typeof meta.contractPrice !== 'string') return null;
+  const money = access?.seesMoney ?? false;
+  return {
+    contractName: meta.contractName,
+    inEffect: !billedBy && (job ? contractInEffect(meta, job) : true),
+    billedBy,
+    unitPrice: money && !billedBy && typeof meta.contractUnitPrice === 'string' ? meta.contractUnitPrice : null,
+    fixedPriceCents: money && !billedBy && typeof meta.contractFixedCents === 'number' ? meta.contractFixedCents : null,
+    moneyHidden: !money,
+  };
+}
+
+function toLinkDTO(row: typeof jobLinks.$inferSelect, modules: Pick<ModuleFlags, 'crm' | 'wms' | 'projects'>, job: PricedJob | null = null, access: Access | null = null): JobLinkDTO {
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    targetType: row.targetType as LinkTargetType,
+    targetId: row.targetId,
+    importsTime: row.importsTime,
+    title: row.cachedTitle,
+    status: row.cachedStatus,
+    url: siblingLinkUrl(row.targetType as LinkTargetType, row.cachedUrl, modules),
+    priceFromContract: contractNote(row.meta, job),
+    contract: contractOf(row.meta, job, access),
+  };
 }
 
 function toPriceDTO(row: typeof jobPrices.$inferSelect, access: Access): JobPriceDTO {
@@ -293,6 +364,7 @@ async function detail(ctx: DomainContext, jobId: string, access: Access, executo
   const prices = await executor.select().from(jobPrices).where(and(eq(jobPrices.orgId, ctx.orgId), eq(jobPrices.jobId, jobId))).orderBy(desc(jobPrices.effectiveFrom));
   const plans = await loadPlans(ctx, jobId, access, executor);
   const links = await executor.select().from(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, jobId))).orderBy(asc(jobLinks.createdAt));
+  const modules = links.length > 0 ? await linkModules(ctx) : { crm: false, wms: false, projects: false };
   const people = await getPeople(row.job.ownerId ? [row.job.ownerId] : [], executor);
   const plan = plans.budget ?? plans.quote;
   const [inherited] = await rows<{ owner: string }>(
@@ -309,19 +381,31 @@ async function detail(ctx: DomainContext, jobId: string, access: Access, executo
     prices: prices.map((price) => toPriceDTO(price, access)),
     quote: plans.quote,
     budget: plans.budget,
-    links: links.map(toLinkDTO),
+    links: links.map((link) => toLinkDTO(link, modules, row.job, access)),
     owner: row.job.ownerId ? (people.get(row.job.ownerId) ?? null) : null,
   };
 }
 
-export async function getJob(ctx: DomainContext, ref: string): Promise<JobDetailDTO> {
+/**
+ * The one rule for deleted jobs: only a person who may manage jobs can list or read one. For
+ * everyone else a deleted job is not there (NOT_FOUND), the same as a job that never was.
+ */
+export const seesDeletedJobs = (access: Pick<PulseAccess, 'role'>): boolean => canPulse(access.role, 'job:manage');
+
+/** A job row for a reader: a deleted job is found only for a person who may manage jobs. */
+export const getJobRowForReader = scoped(async function getJobRowForReader(ctx: DomainContext, ref: string, access?: Pick<PulseAccess, 'role'>, executor: Executor = db): Promise<JobRow> {
+  const reader = access ?? (await requirePulse(ctx, 'pulse:read'));
+  return getJobRow(ctx, ref, executor, seesDeletedJobs(reader));
+});
+
+export const getJob = scoped(async function getJob(ctx: DomainContext, ref: string): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
-  const row = await getJobRow(ctx, ref, db, true);
+  const row = await getJobRowForReader(ctx, ref, access);
   return detail(ctx, row.id, access);
-}
+});
 
 /** One `UPDATE ... RETURNING` per try, repeated while the number is taken by an imported or warehouse coded job. */
-export async function nextJobNumber(tx: Executor, orgId: string): Promise<string> {
+export const nextJobNumber = scoped(async function nextJobNumber(tx: Executor, orgId: string): Promise<string> {
   await loadSettings(orgId, tx);
   for (let attempt = 0; attempt < 1000; attempt += 1) {
     const [row] = await rows<{ seq: number; prefix: string }>(tx, sql`UPDATE pulse.settings SET job_seq = job_seq + 1 WHERE org_id = ${orgId} RETURNING job_seq AS seq, job_number_prefix AS prefix`);
@@ -331,7 +415,7 @@ export async function nextJobNumber(tx: Executor, orgId: string): Promise<string
     if (taken.length === 0) return candidate;
   }
   throw conflict('Pulse could not find a free job number. Type one by hand.');
-}
+}, 1);
 
 export interface JobLinkInput {
   targetType: LinkTargetType;
@@ -349,6 +433,8 @@ export interface JobInput {
   clientId?: string | null;
   /** Used when `clientId` is not given: finds the client by name or makes it. */
   clientName?: string | null;
+  /** Say yes to a new client whose name is close to one you have (only read when the guard is on). */
+  createClient?: boolean;
   jobTypeId?: string | null;
   siteId?: string | null;
   kind?: JobKindValue;
@@ -421,7 +507,7 @@ async function ownerOrNull(tx: Executor, ctx: DomainContext, ownerId: string | n
 }
 
 /** Inserts a job with its first price row, optional plans and links, inside `tx`. Returns the row. */
-export async function insertJob(tx: Executor, ctx: DomainContext, input: JobInput): Promise<JobRow> {
+export const insertJob = scoped(async function insertJob(tx: Executor, ctx: DomainContext, input: JobInput): Promise<JobRow> {
   const name = cleanText(input.name);
   if (!name) throw invalid('Give the job a name.', { name: 'Give the job a name.' });
   await loadSettings(ctx.orgId, tx);
@@ -483,18 +569,20 @@ export async function insertJob(tx: Executor, ctx: DomainContext, input: JobInpu
   if (input.budget) await upsertPlan(tx, ctx, job.id, 'budget', input.budget);
   if (input.links && input.links.length > 0) await insertLinks(tx, ctx, job.id, input.links);
   return job;
-}
+}, 1);
 
-export async function createJob(ctx: DomainContext, input: JobInput): Promise<JobDetailDTO> {
+export const createJob = scoped(async function createJob(ctx: DomainContext, input: JobInput, options: ClientGuardOptions = {}): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   const account = await dealAccountFor(ctx, input);
   return inTx(async (tx) => {
+    // A typed client name close to a client you have is refused, never made quietly (the wizard, the calculator).
+    if (options.guardLookAlike && !input.clientId && !input.createClient) await assertClientNameNotLookAlike(tx, ctx, input.clientName, ['clientId', 'clientName']);
     const job = await insertJob(tx, ctx, input);
     if (account) await adoptCrmAccount(tx, ctx, job.clientId, account);
     await recomputeJobs(tx, ctx, [job.id]);
     return detail(ctx, job.id, access, tx);
   });
-}
+});
 
 /**
  * A job made from a won deal: when the job's client carries the same name as the deal's CRM account
@@ -534,9 +622,23 @@ async function adoptCrmAccount(tx: Executor, ctx: DomainContext, clientId: strin
  * The quick add row on the Jobs page and the log grid: client, job name, units, price per unit.
  * Uses the General job type, starts today, is active at once and makes the quote from the price.
  */
-export async function quickAddJob(ctx: DomainContext, input: { clientId?: string | null; clientName?: string | null; name: string; plannedUnits?: string | null; unitPrice?: string | null; siteId?: string | null }): Promise<JobDetailDTO> {
+export const quickAddJob = scoped(async function quickAddJob(
+  ctx: DomainContext,
+  input: {
+    clientId?: string | null;
+    clientName?: string | null;
+    /** Say yes to a new client whose name is close to one you have. Without it such a name is refused, never made quietly. */
+    createClient?: boolean;
+    name: string;
+    plannedUnits?: string | null;
+    unitPrice?: string | null;
+    siteId?: string | null;
+  },
+): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
+    // Two clients for one company split its profit in two. A close name needs a clear yes.
+    if (!input.clientId && !input.createClient) await assertClientNameNotLookAlike(tx, ctx, input.clientName, ['clientId', 'clientName']);
     const site = await resolveSite(ctx, input.siteId, tx);
     const units = input.plannedUnits ?? '0';
     const [revenue] = await rows<{ cents: string }>(tx, sql`SELECT round(${units}::numeric * ${input.unitPrice ?? '0'}::numeric * 100)::bigint::text AS cents`);
@@ -555,9 +657,9 @@ export async function quickAddJob(ctx: DomainContext, input: { clientId?: string
     await recomputeJobs(tx, ctx, [job.id]);
     return detail(ctx, job.id, access, tx);
   });
-}
+});
 
-export type JobPatch = Partial<Omit<JobInput, 'clientName' | 'quote' | 'budget' | 'links' | 'status' | 'unitPrice' | 'billRateCents' | 'materialCostPerUnit' | 'source' | 'sourceRef' | 'isSample' | 'completedDate'>>;
+export type JobPatch = Partial<Omit<JobInput, 'clientName' | 'createClient' | 'quote' | 'budget' | 'links' | 'status' | 'unitPrice' | 'billRateCents' | 'materialCostPerUnit' | 'source' | 'sourceRef' | 'isSample' | 'completedDate'>>;
 
 /** Fields whose change moves stamps on the job's open entries (SPEC 4.17). */
 const RESTAMP_FIELDS = ['plannedUnits', 'fixedPriceCents', 'pricingModel', 'materialMethod', 'partsOwner', 'siteId'] as const;
@@ -579,7 +681,7 @@ async function touchWholeJob(tx: Executor, ctx: DomainContext, jobId: string): P
  * `setJobStatus`. Planned units, fixed price, pricing model, material method and parts owner
  * restamp the job's open entries in the same transaction.
  */
-export async function updateJob(ctx: DomainContext, jobId: string, patch: JobPatch, version?: number | null): Promise<JobDetailDTO> {
+export const updateJob = scoped(async function updateJob(ctx: DomainContext, jobId: string, patch: JobPatch, version?: number | null): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     const before = await getJobRow(ctx, jobId, tx);
@@ -638,7 +740,7 @@ export async function updateJob(ctx: DomainContext, jobId: string, patch: JobPat
     }
     return detail(ctx, before.id, access, tx);
   });
-}
+});
 
 const STATUS_MOVES: Readonly<Record<JobStatusValue, readonly JobStatusValue[]>> = {
   planned: ['active', 'on_hold', 'cancelled', 'completed'],
@@ -652,7 +754,7 @@ const STATUS_MOVES: Readonly<Record<JobStatusValue, readonly JobStatusValue[]>> 
  * Changes a job's status. Completing stamps the completed date (today at the job's site unless
  * given) and, for a fixed price job, writes the true up; that date may not sit in a closed month.
  */
-export async function setJobStatus(ctx: DomainContext, jobId: string, status: JobStatusValue, options: { completedDate?: string | null; version?: number | null } = {}): Promise<JobDetailDTO> {
+export const setJobStatus = scoped(async function setJobStatus(ctx: DomainContext, jobId: string, status: JobStatusValue, options: { completedDate?: string | null; version?: number | null } = {}): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     const before = await getJobRow(ctx, jobId, tx);
@@ -665,12 +767,12 @@ export async function setJobStatus(ctx: DomainContext, jobId: string, status: Jo
     if (completedDate && before.pricingModel === 'fixed') {
       const closed = await closedMonths(tx, ctx.orgId);
       const month = `${completedDate.slice(0, 7)}-01`;
-      if (closed.has(month)) throw conflict(`Reopen ${monthName(month)} first.`);
+      if (closed.has(month)) throw conflict(`Reopen ${monthYear(month)} first.`);
     }
     if (from === 'completed' && before.completedDate && before.pricingModel === 'fixed') {
       const closed = await closedMonths(tx, ctx.orgId);
       const month = `${before.completedDate.slice(0, 7)}-01`;
-      if (closed.has(month)) throw conflict(`Reopen ${monthName(month)} first.`);
+      if (closed.has(month)) throw conflict(`Reopen ${monthYear(month)} first.`);
     }
     await tx
       .update(jobs)
@@ -683,13 +785,13 @@ export async function setJobStatus(ctx: DomainContext, jobId: string, status: Jo
     await finishWrite(tx, ctx, touched);
     return detail(ctx, before.id, access, tx);
   });
-}
+});
 
 /**
  * "Log work" on a job that is not on the day yet (a link from CRM or WMS): makes it active and, when
  * its start day is later, moves the start day back to the day being logged, so it gets a row.
  */
-export async function startJobForDay(ctx: DomainContext, jobId: string, date: string): Promise<JobDetailDTO> {
+export const startJobForDay = scoped(async function startJobForDay(ctx: DomainContext, jobId: string, date: string): Promise<JobDetailDTO> {
   await requirePulse(ctx, 'job:manage');
   const row = await getJobRow(ctx, jobId);
   if (row.status === 'completed') throw conflict('This job is completed. Reopen it on the job page to log more work.');
@@ -697,10 +799,10 @@ export async function startJobForDay(ctx: DomainContext, jobId: string, date: st
   if (row.startDate && row.startDate > date) version = (await updateJob(ctx, row.id, { startDate: date }, version)).version;
   if (row.status !== 'active') return setJobStatus(ctx, row.id, 'active', { version });
   return getJob(ctx, row.id);
-}
+});
 
 /** Bulk actions on the Jobs page: set status or owner on many jobs. Returns how many changed. */
-export async function bulkUpdateJobs(ctx: DomainContext, jobIds: readonly string[], patch: { status?: JobStatusValue; ownerId?: string | null; archived?: boolean }): Promise<{ changed: number; failed: { jobId: string; message: string }[] }> {
+export const bulkUpdateJobs = scoped(async function bulkUpdateJobs(ctx: DomainContext, jobIds: readonly string[], patch: { status?: JobStatusValue; ownerId?: string | null; archived?: boolean }): Promise<{ changed: number; failed: { jobId: string; message: string }[] }> {
   await requirePulse(ctx, 'job:manage');
   let changed = 0;
   const failed: { jobId: string; message: string }[] = [];
@@ -715,10 +817,10 @@ export async function bulkUpdateJobs(ctx: DomainContext, jobIds: readonly string
     }
   }
   return { changed, failed };
-}
+});
 
 /** "Copy this job": same setup, new number, planned, no entries. Plans come along unless `withPlans` is false. */
-export async function duplicateJob(ctx: DomainContext, jobId: string, options: { name?: string | null; withPlans?: boolean; startDate?: string | null; dueDate?: string | null } = {}): Promise<JobDetailDTO> {
+export const duplicateJob = scoped(async function duplicateJob(ctx: DomainContext, jobId: string, options: { name?: string | null; withPlans?: boolean; startDate?: string | null; dueDate?: string | null } = {}): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     const source = await getJobRow(ctx, jobId, tx, true);
@@ -777,9 +879,9 @@ export async function duplicateJob(ctx: DomainContext, jobId: string, options: {
     await recomputeJobs(tx, ctx, [copy.id]);
     return detail(ctx, copy.id, access, tx);
   });
-}
+});
 
-export async function archiveJob(ctx: DomainContext, jobId: string, archived = true): Promise<JobDetailDTO> {
+export const archiveJob = scoped(async function archiveJob(ctx: DomainContext, jobId: string, archived = true): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     const before = await getJobRow(ctx, jobId, tx);
@@ -790,10 +892,10 @@ export async function archiveJob(ctx: DomainContext, jobId: string, archived = t
     }
     return detail(ctx, before.id, access, tx);
   });
-}
+});
 
 /** Soft delete: the job and its numbers leave every screen and rollup. `restoreJob` undoes it. */
-export async function deleteJob(ctx: DomainContext, jobId: string): Promise<void> {
+export const deleteJob = scoped(async function deleteJob(ctx: DomainContext, jobId: string): Promise<void> {
   await requirePulse(ctx, 'job:manage');
   await inTx(async (tx) => {
     const before = await getJobRow(ctx, jobId, tx);
@@ -809,15 +911,15 @@ export async function deleteJob(ctx: DomainContext, jobId: string): Promise<void
               UNION ALL SELECT work_date FROM pulse.vas_entries WHERE org_id = ${ctx.orgId} AND job_id = ${before.id} AND deleted_at IS NULL
             ) u WHERE date_trunc('month', d)::date = ANY(${sql`ARRAY[${sql.join([...closed].map((month) => sql`${month}`), sql`, `)}]::date[]`})`,
       );
-      if (hit?.m) throw conflict(`This job has rows in ${monthName(hit.m)}, which is closed. Ask the owner to reopen it, or archive the job instead.`);
+      if (hit?.m) throw conflict(`This job has rows in ${monthYear(hit.m)}, which is closed. Ask the owner to reopen it, or archive the job instead.`);
     }
     await softDeleteRow(tx, ctx.orgId, 'jobs', before.id, 'That job');
     await logActivity(tx, ctx, { verb: 'job.deleted', entityType: 'job', entityId: before.id, jobId: before.id, clientId: before.clientId, before: { number: before.number, name: before.name } });
     await touchWholeJob(tx, ctx, before.id);
   });
-}
+});
 
-export async function restoreJob(ctx: DomainContext, jobId: string): Promise<JobDetailDTO> {
+export const restoreJob = scoped(async function restoreJob(ctx: DomainContext, jobId: string): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     const before = await getJobRow(ctx, jobId, tx, true);
@@ -831,16 +933,16 @@ export async function restoreJob(ctx: DomainContext, jobId: string): Promise<Job
     await touchWholeJob(tx, ctx, before.id);
     return detail(ctx, before.id, access, tx);
   });
-}
+});
 
 /* ---------------------------------------------------------------- dated prices */
 
-export async function listJobPrices(ctx: DomainContext, jobId: string): Promise<JobPriceDTO[]> {
+export const listJobPrices = scoped(async function listJobPrices(ctx: DomainContext, jobId: string): Promise<JobPriceDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
-  const job = await getJobRow(ctx, jobId, db, true);
+  const job = await getJobRowForReader(ctx, jobId, access);
   const found = await db.select().from(jobPrices).where(and(eq(jobPrices.orgId, ctx.orgId), eq(jobPrices.jobId, job.id))).orderBy(desc(jobPrices.effectiveFrom));
   return found.map((row) => toPriceDTO(row, access));
-}
+});
 
 export interface JobPriceInput {
   /** "From which day?" Left out means today at the job's site. Moved up to the first open day when it falls in a closed month. */
@@ -867,7 +969,7 @@ function firstOpenDay(date: string, closed: Set<string>): string {
  * restamps the job's open production entries dated on or after it. Fields left out keep the
  * value of the row in force on that day. Returns the day the price really starts.
  */
-export async function setJobPrice(ctx: DomainContext, jobId: string, input: JobPriceInput): Promise<{ effectiveFrom: string; moved: boolean; job: JobDetailDTO }> {
+export const setJobPrice = scoped(async function setJobPrice(ctx: DomainContext, jobId: string, input: JobPriceInput): Promise<{ effectiveFrom: string; moved: boolean; job: JobDetailDTO }> {
   const access = await requirePulse(ctx, 'revenue:manage');
   return inTx(async (tx) => {
     const job = await getJobRow(ctx, jobId, tx);
@@ -905,10 +1007,10 @@ export async function setJobPrice(ctx: DomainContext, jobId: string, input: JobP
     await finishWrite(tx, ctx, touched);
     return { effectiveFrom, moved: effectiveFrom !== wanted, job: await detail(ctx, job.id, access, tx) };
   });
-}
+});
 
 /** Removes a dated price row (never the first one) and restamps from that day. */
-export async function deleteJobPrice(ctx: DomainContext, priceId: string): Promise<JobDetailDTO> {
+export const deleteJobPrice = scoped(async function deleteJobPrice(ctx: DomainContext, priceId: string): Promise<JobDetailDTO> {
   const access = await requirePulse(ctx, 'revenue:manage');
   return inTx(async (tx) => {
     const [price] = isUuid(priceId) ? await tx.select().from(jobPrices).where(and(eq(jobPrices.orgId, ctx.orgId), eq(jobPrices.id, priceId))) : [];
@@ -926,34 +1028,35 @@ export async function deleteJobPrice(ctx: DomainContext, priceId: string): Promi
     await finishWrite(tx, ctx, touched);
     return detail(ctx, price.jobId, access, tx);
   });
-}
+});
 
 /* ---------------------------------------------------------------- links to sibling records */
 
-export async function addJobLink(ctx: DomainContext, jobId: string, link: JobLinkInput): Promise<JobLinkDTO[]> {
+export const addJobLink = scoped(async function addJobLink(ctx: DomainContext, jobId: string, link: JobLinkInput): Promise<JobLinkDTO[]> {
   await requirePulse(ctx, 'job:manage');
   return inTx(async (tx) => {
     const job = await getJobRow(ctx, jobId, tx);
     await insertLinks(tx, ctx, job.id, [link]);
     const found = await tx.select().from(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, job.id))).orderBy(asc(jobLinks.createdAt));
-    return found.map(toLinkDTO);
+    const modules = await linkModules(ctx);
+    return found.map((link) => toLinkDTO(link, modules, job));
   });
-}
+});
 
-export async function removeJobLink(ctx: DomainContext, linkId: string): Promise<void> {
+export const removeJobLink = scoped(async function removeJobLink(ctx: DomainContext, linkId: string): Promise<void> {
   await requirePulse(ctx, 'job:manage');
   await inTx(async (tx) => {
     const [row] = isUuid(linkId) ? await tx.delete(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.id, linkId))).returning() : [];
     if (!row) throw notFound('That link');
     await logActivity(tx, ctx, { verb: 'link.removed', entityType: 'link', entityId: row.id, jobId: row.jobId, before: { targetType: row.targetType, targetId: row.targetId } });
   });
-}
+});
 
 /**
  * Jobs linked to a sibling record (`/jobs/by-link`, the bridge). `core_customer` and `crm_account`
  * also match through the job's client. Newest first.
  */
-export async function findJobsByLink(ctx: DomainContext, type: LinkTargetType | 'core_customer', targetId: string): Promise<JobListItemDTO[]> {
+export const findJobsByLink = scoped(async function findJobsByLink(ctx: DomainContext, type: LinkTargetType | 'core_customer', targetId: string): Promise<JobListItemDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const id = targetId.trim();
   if (!id) return [];
@@ -968,11 +1071,22 @@ export async function findJobsByLink(ctx: DomainContext, type: LinkTargetType | 
   const found = await joined(db).where(and(eq(jobs.orgId, ctx.orgId), inArray(jobs.id, [...ids]), isNull(jobs.deletedAt))).orderBy(desc(jobs.createdAt));
   const hours = await planHours(db, ctx.orgId, found.map((row) => row.job.id));
   return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: hours.get(row.job.id) ?? null }));
-}
+});
 
 /** Deleted jobs, newest first, for the "Recently deleted" list. */
-export async function listDeletedJobs(ctx: DomainContext): Promise<JobListItemDTO[]> {
+export const listDeletedJobs = scoped(async function listDeletedJobs(ctx: DomainContext): Promise<DeletedJobDTO[]> {
   const access = await requirePulse(ctx, 'job:manage');
   const found = await joined(db).where(and(eq(jobs.orgId, ctx.orgId), isNotNull(jobs.deletedAt))).orderBy(desc(jobs.deletedAt)).limit(200);
-  return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: null }));
-}
+  // Who deleted each one comes from the activity log: the newest "job.deleted" line of the job.
+  const ids = found.map((row) => row.job.id);
+  const who = new Map<string, string | null>();
+  if (ids.length > 0) {
+    const lines = await db
+      .select({ jobId: activity.entityId, actorId: activity.actorId })
+      .from(activity)
+      .where(and(eq(activity.orgId, ctx.orgId), eq(activity.verb, 'job.deleted'), inArray(activity.entityId, ids)))
+      .orderBy(desc(activity.createdAt));
+    for (const line of lines) if (line.jobId && !who.has(line.jobId)) who.set(line.jobId, line.actorId);
+  }
+  return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: null, deletedById: who.get(row.job.id) ?? null }));
+});

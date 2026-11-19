@@ -34,6 +34,7 @@ import {
   sharedGap,
   sharedPercentNeeded,
   sortFixedEntries,
+  spreadCompanyCosts,
   spreadSharedCost,
   standardMaterial,
   suggestOverheadPerHour,
@@ -43,6 +44,8 @@ import {
 } from './index';
 
 const b = (n: number | string): bigint => BigInt(n);
+/** Half away from zero, like `divRound`, for expected values written as plain numbers. */
+const divRoundNumber = (n: number, d: number): bigint => BigInt(Math.sign(n) * Math.floor((2 * Math.abs(n) + d) / (2 * d)));
 const PACKER = { wageCents: 1600, payrollTaxBp: 900, benefitsBp: 1200, otherBurdenBp: 0, overheadPerHourCents: 240, overtimeMultiplier: '1.50' };
 
 describe('real cost of an hour (4.3)', () => {
@@ -470,6 +473,102 @@ describe('cost, profit, margin and the company bridge (4.9)', () => {
     const full = companyBridge({ workProfitCents: 4821000, sharedGapCents: 0, missingCents: 236000, companyCostCents: 0, overheadAbsorbedCents: 0, rule: 'full' });
     expect(full.missingCents).toBe(b(0));
     expect(full.companyProfitCents).toBe(b(4821000));
+  });
+  it('gives a part month its share of company costs by day, and the parts add back to the month', () => {
+    const month = [{ month: '2026-11-01', monthCostCents: 7050000, overheadAbsorbedCents: 2000000 }];
+    const toDate = spreadCompanyCosts(month, '2026-11-01', '2026-11-18');
+    expect(toDate.companyCostCents).toBe(b(4230000));
+    expect(toDate.note).toBe('Company costs for 18 of 30 days.');
+    expect(toDate.partial).toBe(true);
+    const rest = spreadCompanyCosts(month, '2026-11-19', '2026-11-30');
+    expect(toDate.companyCostCents + rest.companyCostCents).toBe(b(7050000));
+    const whole = spreadCompanyCosts(month, '2026-11-01', '2026-11-30');
+    expect(whole).toMatchObject({ companyCostCents: b(7050000), partial: false, note: null, countsOverhead: true });
+    // An amount that does not divide: every split of a 31 day month still adds back to the cent.
+    for (let day = 1; day < 31; day += 1) {
+      const odd = [{ month: '2026-10-01', monthCostCents: 1000001, overheadAbsorbedCents: 0 }];
+      const a = spreadCompanyCosts(odd, '2026-10-01', `2026-10-${String(day).padStart(2, '0')}`);
+      const z = spreadCompanyCosts(odd, `2026-10-${String(day + 1).padStart(2, '0')}`, '2026-10-31');
+      expect(a.companyCostCents + z.companyCostCents).toBe(b(1000001));
+    }
+  });
+  it('names each month in a range across months, and leaves out a month with no company costs', () => {
+    const across = spreadCompanyCosts(
+      [
+        { month: '2026-10-01', monthCostCents: 7050000, overheadAbsorbedCents: 300000 },
+        { month: '2026-11-01', monthCostCents: 7050000, overheadAbsorbedCents: 400000 },
+      ],
+      '2026-10-20',
+      '2026-11-18',
+    );
+    // 12 of 31 days of October: 7050000 - divRound(7050000 * 19, 31) = 7050000 - 4320968 = 2729032.
+    expect(across.parts.map((part) => part.countedCents)).toEqual([b(2729032), b(4230000)]);
+    expect(across.overheadAbsorbedCents).toBe(b(700000));
+    expect(across.note).toBe('Company costs for 12 of 31 days in October and 18 of 30 days in November.');
+    const oneSided = spreadCompanyCosts([{ month: '2026-10-01', monthCostCents: 7050000, overheadAbsorbedCents: 300000 }, { month: '2026-11-01', monthCostCents: 0, overheadAbsorbedCents: 400000 }], '2026-10-01', '2026-11-30');
+    expect(oneSided.companyCostCents).toBe(b(7050000));
+    expect(oneSided.overheadAbsorbedCents).toBe(b(300000));
+    expect(oneSided.note).toBe('No company costs are typed in for November, so that month trusts the overhead in your hourly rates.');
+    const none = spreadCompanyCosts([], '2026-11-10', '2026-11-16');
+    expect(none).toMatchObject({ countsOverhead: false, partial: false, note: null, companyCostCents: b(0) });
+    const acrossYears = spreadCompanyCosts([{ month: '2026-12-01', monthCostCents: 3100, overheadAbsorbedCents: 0 }, { month: '2027-01-01', monthCostCents: 3100, overheadAbsorbedCents: 0 }], '2026-12-22', '2027-01-31');
+    expect(acrossYears.note).toBe('Company costs for 10 of 31 days in December 2026 and all of January 2027.');
+    expect(acrossYears.companyCostCents).toBe(b(1000 + 3100));
+  });
+  it('can share a part month by work day, and a whole month is the same both ways (round five, decision A)', () => {
+    // November 2026 starts on a Sunday and has 21 work days, Monday to Friday. $70,500.00 of company costs.
+    const month = [{ month: '2026-11-01', monthCostCents: 7050000, overheadAbsorbedCents: 2000000 }];
+    const work = { spread: 'work_days' as const, workingDays: [1, 2, 3, 4, 5] };
+    const whole = spreadCompanyCosts(month, '2026-11-01', '2026-11-30', work);
+    expect(whole).toMatchObject({ spread: 'work_days', companyCostCents: b(7050000), partial: false, note: null });
+    expect(whole.companyCostCents).toBe(spreadCompanyCosts(month, '2026-11-01', '2026-11-30').companyCostCents);
+    // Nov 1 to Nov 18: 13 of 21 work days. divRound(7050000 * 13, 21) = 4364286.
+    const toDate = spreadCompanyCosts(month, '2026-11-01', '2026-11-18', work);
+    expect(toDate.companyCostCents).toBe(b(4364286));
+    expect(toDate.note).toBe('Company costs for 13 of 21 work days.');
+    expect(toDate.parts[0]).toMatchObject({ daysCounted: 18, daysInMonth: 30, workDaysCounted: 13, workDaysInMonth: 21, spread: 'work_days' });
+    // A work week, Monday Nov 9 to Friday Nov 13, carries 5 of 21 parts of the month, more than 5 of 30 by calendar day.
+    const week = spreadCompanyCosts(month, '2026-11-09', '2026-11-13', work);
+    expect(week.companyCostCents).toBe(divRoundNumber(7050000 * 10, 21) - divRoundNumber(7050000 * 5, 21));
+    expect(week.companyCostCents > spreadCompanyCosts(month, '2026-11-09', '2026-11-13').companyCostCents).toBe(true);
+    // The weekend after it gets nothing, even if work was logged on it, and the overhead step stays.
+    const weekend = spreadCompanyCosts(month, '2026-11-14', '2026-11-15', work);
+    expect(weekend).toMatchObject({ companyCostCents: b(0), countsOverhead: true, note: 'Company costs for 0 of 21 work days.' });
+    // Every cut adds back to the month to the cent, with an amount that does not divide.
+    for (let day = 1; day < 30; day += 1) {
+      const odd = [{ month: '2026-11-01', monthCostCents: 1000001, overheadAbsorbedCents: 0 }];
+      const a = spreadCompanyCosts(odd, '2026-11-01', `2026-11-${String(day).padStart(2, '0')}`, work);
+      const z = spreadCompanyCosts(odd, `2026-11-${String(day + 1).padStart(2, '0')}`, '2026-11-30', work);
+      expect(a.companyCostCents + z.companyCostCents).toBe(b(1000001));
+    }
+    // A range that holds every work day of the month is the whole month, with nothing to say.
+    expect(spreadCompanyCosts(month, '2026-11-02', '2026-11-30', work)).toMatchObject({ companyCostCents: b(7050000), partial: false, note: null });
+  });
+  it('counts each month by its own work days across two months, and other working days', () => {
+    const months = [
+      { month: '2026-10-01', monthCostCents: 7050000, overheadAbsorbedCents: 0 },
+      { month: '2026-11-01', monthCostCents: 7050000, overheadAbsorbedCents: 0 },
+    ];
+    // October 2026 has 22 work days, Oct 20 to 31 holds 9 of them (13 come before). November 1 to 18 holds 13 of 21.
+    const across = spreadCompanyCosts(months, '2026-10-20', '2026-11-18', { spread: 'work_days' });
+    expect(across.parts.map((part) => [part.workDaysCounted, part.workDaysInMonth])).toEqual([
+      [9, 22],
+      [13, 21],
+    ]);
+    expect(across.parts[0]!.countedCents).toBe(b(7050000 - Number(divRoundNumber(7050000 * 13, 22))));
+    expect(across.note).toBe('Company costs for 9 of 22 work days in October and 13 of 21 work days in November.');
+    // A six day week (Monday to Saturday): November has 25 work days.
+    const sixDays = spreadCompanyCosts(months.slice(1), '2026-11-01', '2026-11-07', { spread: 'work_days', workingDays: [1, 2, 3, 4, 5, 6] });
+    expect(sixDays.note).toBe('Company costs for 6 of 25 work days.');
+    // Calendar days stay the default.
+    expect(spreadCompanyCosts(months.slice(1), '2026-11-01', '2026-11-18').note).toBe('Company costs for 18 of 30 days.');
+  });
+  it('keeps the overhead step when a counted share rounds to zero', () => {
+    const spread = spreadCompanyCosts([{ month: '2026-11-01', monthCostCents: 1, overheadAbsorbedCents: 500 }], '2026-11-01', '2026-11-01');
+    expect(spread.companyCostCents).toBe(b(0));
+    const bridge = companyBridge({ workProfitCents: 1000, sharedGapCents: 0, missingCents: 0, companyCostCents: spread.companyCostCents, overheadAbsorbedCents: spread.overheadAbsorbedCents, countsOverhead: spread.countsOverhead, rule: 'none' });
+    expect(bridge.showsOverheadGap).toBe(true);
+    expect(bridge.overheadGapCents).toBe(b(-500));
   });
   it('adds to profit when the hourly rate covered more overhead than was spent', () => {
     const bridge = companyBridge({ workProfitCents: 1000000, sharedGapCents: 0, missingCents: 0, companyCostCents: 1500000, overheadAbsorbedCents: 1620000, rule: 'none' });

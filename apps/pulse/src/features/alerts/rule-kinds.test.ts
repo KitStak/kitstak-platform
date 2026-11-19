@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ALERT_KINDS } from '@/lib/constants';
-import { RULE_KINDS, readThreshold, ruleSentence, tellSentence, thresholdText, tidyThreshold } from './rule-kinds';
+import { RULE_KINDS, hideLinesInText, readThreshold, ruleHasLine, ruleNameWithoutMoney, ruleSentence, storedRuleName, tellSentence, thresholdText, tidyThreshold, workDaysText } from './rule-kinds';
 
 describe('rule sentences', () => {
   it('has words for every kind, with no dashes', () => {
@@ -43,5 +43,45 @@ describe('tellSentence', () => {
     expect(tellSentence(['owner', 'admin'], ['Dana Ortiz'])).toBe('Tells owners, admins and Dana Ortiz.');
     expect(tellSentence(['manager'], [])).toBe('Tells managers.');
     expect(tellSentence([], [])).toContain('Nobody gets a message');
+  });
+});
+
+describe('rule lines and readers without money', () => {
+  it('leaves the line out of the sentence when money is hidden', () => {
+    expect(ruleSentence('missing_time_above', '2000.0000', { moneyHidden: true })).toBe('Tell me when more than a set amount of paid time this month is not on any job.');
+    expect(ruleSentence('overhead_rate_off', '1000.0000', { moneyHidden: true })).toBe('Tell me when my overhead rate is off by more than a set amount over 3 months.');
+    expect(ruleSentence('margin_below', '15.0000', { moneyHidden: true })).toBe("Tell me when a job's margin is heading under a set line.");
+    expect(ruleSentence('job_losing', null, { moneyHidden: true })).toBe('Tell me when a job is losing money.');
+  });
+
+  it('shows a count of days to every reader, because days are not money', () => {
+    // Round three: a supervisor who gets this alert could not see how many days trigger it.
+    for (const moneyHidden of [true, false]) {
+      expect(ruleSentence('no_entry_days', null, { moneyHidden, facts: { noEntryDays: 3 } })).toBe('Tell me when an active job has nothing logged for 3 work days.');
+      expect(ruleSentence('no_entry_days', null, { moneyHidden, facts: { noEntryDays: 1 } })).toBe('Tell me when an active job has nothing logged for 1 work day.');
+    }
+    // With no count in hand the words stay true.
+    expect(ruleSentence('no_entry_days', null, { moneyHidden: true })).toBe('Tell me when an active job has nothing logged for a few work days.');
+    expect(workDaysText(null)).toBe('a few work days');
+    expect(workDaysText(0)).toBe('a few work days');
+    // A money line stays hidden next to the facts.
+    expect(ruleSentence('margin_below', '15', { moneyHidden: true, facts: { noEntryDays: 3 } })).not.toMatch(/15|%/);
+  });
+  it('never stores a line in the name of a rule', () => {
+    for (const kind of ALERT_KINDS) {
+      const name = storedRuleName(kind);
+      expect(name, kind).not.toMatch(/[$%]|\d{3,}/);
+      expect(name.endsWith('.'), kind).toBe(false);
+    }
+  });
+
+  it('takes dollars and percents out of free text', () => {
+    expect(hideLinesInText('Tell me when more than $2,000 is lost')).toBe('Tell me when more than a set amount is lost');
+    expect(hideLinesInText('under 12.5% or $1.5k')).toBe('under a set line or a set amount');
+    expect(hideLinesInText('nothing logged for 3 work days')).toBe('nothing logged for 3 work days');
+    expect(ruleNameWithoutMoney('unbilled_above', 'Tell me when finished work worth more than $5,000 is not billed')).toBe('Tell me when finished work worth more than a set amount is not billed');
+    expect(ruleNameWithoutMoney('made_up_kind', 'Over $90')).toBe('Over a set amount');
+    expect(ruleHasLine('margin_below')).toBe(true);
+    expect(ruleHasLine('job_losing')).toBe(false);
   });
 });

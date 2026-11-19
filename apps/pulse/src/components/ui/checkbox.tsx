@@ -28,6 +28,8 @@ export const Checkbox = forwardRef<ElementRef<typeof CheckboxPrimitive.Root>, Ch
         'data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary',
         'data-[state=checked]:hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-[0.38]',
         size === 'sm' ? 'size-3.5' : 'size-4',
+        // A touch screen gets a 24px box (and a 44px hit area from globals.css), a mouse keeps the small one.
+        'pointer-coarse:size-6 pointer-coarse:[&_svg]:size-4',
         className,
       )}
       {...props}
@@ -44,7 +46,7 @@ export const Checkbox = forwardRef<ElementRef<typeof CheckboxPrimitive.Root>, Ch
   if (!label) return box;
   return (
     <div className="flex items-start gap-2">
-      <span className="flex h-5 items-center">{box}</span>
+      <span className="flex h-5 items-center pointer-coarse:h-6">{box}</span>
       <label htmlFor={inputId} className="cursor-pointer text-base text-fg peer-disabled:cursor-not-allowed peer-disabled:opacity-60">
         {label}
         {description ? <span className="block text-sm text-fg-muted">{description}</span> : null}
@@ -74,6 +76,8 @@ export const Switch = forwardRef<ElementRef<typeof SwitchPrimitive.Root>, Switch
         'bg-border-strong hover:bg-[var(--neutral-500)] data-[state=checked]:bg-primary data-[state=checked]:hover:bg-primary-hover',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-[0.38]',
         size === 'sm' ? 'h-4 w-7' : 'h-5 w-9',
+        // On a touch screen every switch is 28 by 48px, with a 44px tall hit area (globals.css).
+        'pointer-coarse:h-7 pointer-coarse:w-12',
         className,
       )}
       {...props}
@@ -82,6 +86,7 @@ export const Switch = forwardRef<ElementRef<typeof SwitchPrimitive.Root>, Switch
         className={cn(
           'block rounded-full bg-white shadow-sm transition-transform duration-[var(--duration-normal)] ease-[var(--ease-emphasized)]',
           size === 'sm' ? 'size-3 data-[state=checked]:translate-x-3' : 'size-4 data-[state=checked]:translate-x-4',
+          'pointer-coarse:size-6 pointer-coarse:data-[state=checked]:translate-x-5',
         )}
       />
     </SwitchPrimitive.Root>
@@ -93,7 +98,7 @@ export const Switch = forwardRef<ElementRef<typeof SwitchPrimitive.Root>, Switch
         {label}
         {description ? <span className="block text-sm text-fg-muted">{description}</span> : null}
       </label>
-      <span className="flex h-5 items-center">{control}</span>
+      <span className="flex h-5 items-center pointer-coarse:h-7">{control}</span>
     </div>
   );
 });

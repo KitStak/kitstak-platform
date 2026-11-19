@@ -61,7 +61,7 @@ import {
   type PlanInput,
   type ProductionInput,
 } from '@/server/domain';
-import { ensureDemoLogin, orgMembers } from '../context';
+import { asSeed, ensureDemoLogin, orgMembers } from '../context';
 import type { ClassSpec, JobSpec, OrgPlan } from './types';
 
 /* ------------------------------------------------------------------ small helpers */
@@ -154,7 +154,7 @@ export interface RichSummary {
 
 /* ------------------------------------------------------------------ the engine */
 
-export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichSummary> {
+export const seedRich = asSeed(async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichSummary> {
   const started = Date.now();
   const log = (text: string): void => void process.stdout.write(`  [${ctx.orgSlug}] ${text}\n`);
   for (const role of plan.roles) if (role.login) await ensureDemoLogin(ctx.orgId, { email: role.email, ...role.login });
@@ -746,7 +746,7 @@ export async function seedRich(ctx: DomainContext, plan: OrgPlan): Promise<RichS
   await backdate(ctx.orgId, today, dayAt(cut), ctx.userId, [userId(manager?.email), userId(supervisor?.email)].filter((id): id is string => Boolean(id)));
 
   return summarize(ctx, plan, sims, { started, closedMonths, alertsRaised: firstPass.created + secondPass.created, corrections, notes, reviews });
-}
+});
 
 /**
  * Seed housekeeping: rows written a moment ago get the timestamp of the day they are about.

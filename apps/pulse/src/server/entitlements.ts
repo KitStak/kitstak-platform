@@ -7,6 +7,7 @@
 import 'server-only';
 import { getEntitlements, hasModule, isDevAllowAll, isEntitled, type EntitlementsDb, type Module } from '@kitstak/entitlements';
 import { db } from '@/server/db';
+import { asSystem } from '@/server/db/scope';
 
 export function entitlementsAllowAll(env: NodeJS.ProcessEnv = process.env): boolean {
   const explicit = env.ENTITLEMENTS_DEV_ALLOW_ALL?.trim();
@@ -19,7 +20,7 @@ const entitlementsDb = (): EntitlementsDb => db as unknown as EntitlementsDb;
 /** Whether the org may use KitStak Pulse. */
 export async function orgHasPulseModule(orgId: string): Promise<boolean> {
   if (entitlementsAllowAll()) return true;
-  return hasModule(entitlementsDb(), orgId, 'pulse');
+  return asSystem('entitlement check (core.entitlements)', () => hasModule(entitlementsDb(), orgId, 'pulse'));
 }
 
 export type ModuleFlags = Readonly<Record<Module, boolean>>;
@@ -27,7 +28,7 @@ export type ModuleFlags = Readonly<Record<Module, boolean>>;
 /** Every module's entitlement for the org (app switcher + integration UI gating). */
 export async function orgModuleFlags(orgId: string): Promise<ModuleFlags> {
   if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true, pulse: true };
-  const snapshot = await getEntitlements(entitlementsDb(), orgId);
+  const snapshot = await asSystem('entitlement check (core.entitlements)', () => getEntitlements(entitlementsDb(), orgId));
   return {
     crm: isEntitled(snapshot.crm),
     wms: isEntitled(snapshot.wms),

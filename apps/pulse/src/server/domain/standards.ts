@@ -2,6 +2,7 @@
 import 'server-only';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { standards, targets } from '@/server/db/schema';
 import { invalid, notFound } from '@/server/errors';
 import type { StandardBasis, StreamSource, TargetMetric, TargetScope } from '@/lib/constants';
@@ -19,7 +20,7 @@ function toStandardDTO(row: StandardRow): StandardDTO {
   return { id: row.id, jobTypeId: row.jobTypeId, clientId: row.clientId, vasServiceId: row.vasServiceId, laborClassId: row.laborClassId, unitsPerLaborHour: row.unitsPerLaborHour, effectiveFrom: row.effectiveFrom, basis: row.basis as StandardBasis, note: row.note, version: row.version };
 }
 
-export async function listStandards(ctx: DomainContext, filters: { jobTypeId?: string | null; vasServiceId?: string | null; clientId?: string | null } = {}): Promise<StandardDTO[]> {
+export const listStandards = scoped(async function listStandards(ctx: DomainContext, filters: { jobTypeId?: string | null; vasServiceId?: string | null; clientId?: string | null } = {}): Promise<StandardDTO[]> {
   await requirePulse(ctx, 'pulse:read');
   const found = await db
     .select()
@@ -35,7 +36,7 @@ export async function listStandards(ctx: DomainContext, filters: { jobTypeId?: s
     )
     .orderBy(desc(standards.effectiveFrom), desc(standards.createdAt));
   return found.map(toStandardDTO);
-}
+});
 
 export interface StandardInput {
   id?: string | null;
@@ -60,7 +61,7 @@ async function recomputeForType(tx: Executor, ctx: DomainContext, jobTypeIds: re
   await recomputeJobs(tx, ctx, jobs.map((job) => job.id));
 }
 
-export async function saveStandard(ctx: DomainContext, input: StandardInput): Promise<StandardDTO> {
+export const saveStandard = scoped(async function saveStandard(ctx: DomainContext, input: StandardInput): Promise<StandardDTO> {
   await requirePulse(ctx, 'standard:manage');
   if (Boolean(input.jobTypeId) === Boolean(input.vasServiceId)) throw invalid('A target pace is for a job type or for a service. Pick one.', { jobTypeId: 'Pick a job type or a service.' });
   if (!(Number(input.unitsPerLaborHour) > 0)) throw invalid('The target pace must be above zero.', { unitsPerLaborHour: 'Type a number above zero.' });
@@ -93,9 +94,9 @@ export async function saveStandard(ctx: DomainContext, input: StandardInput): Pr
     await recomputeForType(tx, ctx, [row.jobTypeId, beforeType]);
     return toStandardDTO(row);
   });
-}
+});
 
-export async function deleteStandard(ctx: DomainContext, standardId: string): Promise<void> {
+export const deleteStandard = scoped(async function deleteStandard(ctx: DomainContext, standardId: string): Promise<void> {
   await requirePulse(ctx, 'standard:manage');
   await inTx(async (tx) => {
     const [existing] = isUuid(standardId) ? await tx.select().from(standards).where(and(eq(standards.orgId, ctx.orgId), eq(standards.id, standardId), isNull(standards.deletedAt))) : [];
@@ -104,13 +105,13 @@ export async function deleteStandard(ctx: DomainContext, standardId: string): Pr
     await logActivity(tx, ctx, { verb: 'standard.deleted', entityType: 'standard', entityId: standardId, before: { jobTypeId: existing.jobTypeId, vasServiceId: existing.vasServiceId, unitsPerLaborHour: existing.unitsPerLaborHour, effectiveFrom: existing.effectiveFrom } });
     await recomputeForType(tx, ctx, [existing.jobTypeId]);
   });
-}
+});
 
 /**
  * "Suggest from history": the median pace of the last 20 evidence days (days with units and
  * confirmed hours) of a job type, optionally for one client, with the spread.
  */
-export async function suggestStandard(ctx: DomainContext, input: { jobTypeId: string; clientId?: string | null; laborClassId?: string | null }): Promise<PaceSuggestionDTO> {
+export const suggestStandard = scoped(async function suggestStandard(ctx: DomainContext, input: { jobTypeId: string; clientId?: string | null; laborClassId?: string | null }): Promise<PaceSuggestionDTO> {
   await requirePulse(ctx, 'pulse:read');
   const [row] = await rows<{ median: string | null; low: string | null; high: string | null; days: number; jobs: number }>(
     db,
@@ -130,7 +131,7 @@ export async function suggestStandard(ctx: DomainContext, input: { jobTypeId: st
           FROM days`,
   );
   return { median: row?.median ?? null, low: row?.low ?? null, high: row?.high ?? null, days: row?.days ?? 0, jobs: row?.jobs ?? 0 };
-}
+});
 
 /* ---------------------------------------------------------------- goals */
 
@@ -142,7 +143,7 @@ function toTargetDTO(row: TargetRow, access: Pick<PulseAccess, 'seesMoney'>): Ta
   return { id: row.id, scope: row.scope as TargetScope, scopeId: row.scopeId, metric, periodMonth: row.periodMonth, value: !access.seesMoney && MONEY_METRICS.includes(metric) ? null : row.value, version: row.version };
 }
 
-export async function listTargets(ctx: DomainContext, filters: { scope?: TargetScope | null; scopeId?: string | null; month?: string | null } = {}): Promise<TargetDTO[]> {
+export const listTargets = scoped(async function listTargets(ctx: DomainContext, filters: { scope?: TargetScope | null; scopeId?: string | null; month?: string | null } = {}): Promise<TargetDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const found = await db
     .select()
@@ -158,7 +159,7 @@ export async function listTargets(ctx: DomainContext, filters: { scope?: TargetS
     )
     .orderBy(targets.scope, targets.metric, sql`${targets.periodMonth} nulls first`);
   return found.map((row) => toTargetDTO(row, access));
-}
+});
 
 export interface TargetInput {
   scope: TargetScope;
@@ -172,7 +173,7 @@ export interface TargetInput {
 }
 
 /** Sets a goal. One goal per scope, measure and month, so this is an upsert. */
-export async function saveTarget(ctx: DomainContext, input: TargetInput): Promise<TargetDTO> {
+export const saveTarget = scoped(async function saveTarget(ctx: DomainContext, input: TargetInput): Promise<TargetDTO> {
   const access = await requirePulse(ctx, 'target:manage');
   if ((input.scope === 'org') !== !input.scopeId) throw invalid(input.scope === 'org' ? 'A company goal has no site, client, job type or service.' : 'Pick what this goal is for.', { scopeId: 'Pick what this goal is for.' });
   const month = input.periodMonth ? `${input.periodMonth.slice(0, 7)}-01` : null;
@@ -203,12 +204,12 @@ export async function saveTarget(ctx: DomainContext, input: TargetInput): Promis
     await logActivity(tx, ctx, { verb: 'target.created', entityType: 'target', entityId: row!.id, after: { scope: input.scope, scopeId: input.scopeId ?? null, metric: input.metric, periodMonth: month, value: input.value } });
     return toTargetDTO(row!, access);
   });
-}
+});
 
-export async function deleteTarget(ctx: DomainContext, targetId: string): Promise<void> {
+export const deleteTarget = scoped(async function deleteTarget(ctx: DomainContext, targetId: string): Promise<void> {
   await requirePulse(ctx, 'target:manage');
   await inTx(async (tx) => {
     await softDeleteRow(tx, ctx.orgId, 'targets', targetId, 'That goal');
     await logActivity(tx, ctx, { verb: 'target.deleted', entityType: 'target', entityId: targetId });
   });
-}
+});

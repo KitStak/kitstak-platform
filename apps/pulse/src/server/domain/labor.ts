@@ -6,6 +6,7 @@
 import 'server-only';
 import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { laborClasses, laborRates } from '@/server/db/schema';
 import { conflict, invalid, notFound } from '@/server/errors';
 import type { LaborClassKind, StreamSource } from '@/lib/constants';
@@ -21,7 +22,7 @@ import { loadSettings } from './settings';
 type ClassRow = typeof laborClasses.$inferSelect;
 type RateRow = typeof laborRates.$inferSelect;
 
-export async function listLaborClasses(ctx: DomainContext, options: { includeArchived?: boolean } = {}): Promise<LaborClassDTO[]> {
+export const listLaborClasses = scoped(async function listLaborClasses(ctx: DomainContext, options: { includeArchived?: boolean } = {}): Promise<LaborClassDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
   const found = await rows<ClassRow & { current: number | null; has_rate: boolean; is_default: boolean; archived_at: Date | null }>(
     db,
@@ -45,13 +46,13 @@ export async function listLaborClasses(ctx: DomainContext, options: { includeArc
     currentLoadedRateCents: moneyOut(access.seesMoney, row.current),
     hasRate: row.has_rate,
   }));
-}
+});
 
-export async function getLaborClassRow(ctx: DomainContext, classId: string, executor: Executor = db): Promise<ClassRow> {
+export const getLaborClassRow = scoped(async function getLaborClassRow(ctx: DomainContext, classId: string, executor: Executor = db): Promise<ClassRow> {
   const [row] = isUuid(classId) ? await executor.select().from(laborClasses).where(and(eq(laborClasses.orgId, ctx.orgId), eq(laborClasses.id, classId), isNull(laborClasses.deletedAt))) : [];
   if (!row) throw notFound('That labor class');
   return row;
-}
+});
 
 export interface LaborClassInput {
   code?: string | null;
@@ -90,7 +91,7 @@ async function finishTouched(tx: Executor, ctx: DomainContext, where: SQL): Prom
   await finishWrite(tx, ctx, touched);
 }
 
-export async function insertLaborClass(tx: Executor, ctx: DomainContext, input: LaborClassInput): Promise<ClassRow> {
+export const insertLaborClass = scoped(async function insertLaborClass(tx: Executor, ctx: DomainContext, input: LaborClassInput): Promise<ClassRow> {
   const name = cleanText(input.name);
   if (!name) throw invalid('Give the labor class a name.', { name: 'Give the labor class a name.' });
   await loadSettings(ctx.orgId, tx);
@@ -102,14 +103,14 @@ export async function insertLaborClass(tx: Executor, ctx: DomainContext, input: 
   const [row] = await tx.insert(laborClasses).values({ orgId: ctx.orgId, code, name, kind: input.kind ?? 'employee', isDefault: makeDefault, color: input.color ?? null }).returning();
   await logActivity(tx, ctx, { verb: 'labor_class.created', entityType: 'labor_class', entityId: row!.id, after: { code, name, kind: row!.kind, isDefault: makeDefault } });
   return row!;
-}
+}, 1);
 
-export async function createLaborClass(ctx: DomainContext, input: LaborClassInput): Promise<LaborClassDTO> {
+export const createLaborClass = scoped(async function createLaborClass(ctx: DomainContext, input: LaborClassInput): Promise<LaborClassDTO> {
   await requirePulse(ctx, 'rate:manage');
   return inTx(async (tx) => classDTO(await insertLaborClass(tx, ctx, input)));
-}
+});
 
-export async function updateLaborClass(ctx: DomainContext, classId: string, patch: Partial<LaborClassInput> & { archived?: boolean }): Promise<LaborClassDTO> {
+export const updateLaborClass = scoped(async function updateLaborClass(ctx: DomainContext, classId: string, patch: Partial<LaborClassInput> & { archived?: boolean }): Promise<LaborClassDTO> {
   await requirePulse(ctx, 'rate:manage');
   return inTx(async (tx) => {
     const before = await getLaborClassRow(ctx, classId, tx);
@@ -131,9 +132,9 @@ export async function updateLaborClass(ctx: DomainContext, classId: string, patc
     if ('isDefault' in change.after) await restampDefaultless(tx, ctx);
     return classDTO(row!);
   });
-}
+});
 
-export async function deleteLaborClass(ctx: DomainContext, classId: string): Promise<void> {
+export const deleteLaborClass = scoped(async function deleteLaborClass(ctx: DomainContext, classId: string): Promise<void> {
   await requirePulse(ctx, 'rate:manage');
   await inTx(async (tx) => {
     const before = await getLaborClassRow(ctx, classId, tx);
@@ -149,7 +150,7 @@ export async function deleteLaborClass(ctx: DomainContext, classId: string): Pro
     await tx.update(laborRates).set({ deletedAt: new Date() }).where(and(eq(laborRates.orgId, ctx.orgId), eq(laborRates.laborClassId, classId), isNull(laborRates.deletedAt)));
     await logActivity(tx, ctx, { verb: 'labor_class.deleted', entityType: 'labor_class', entityId: classId, before: { code: before.code, name: before.name } });
   });
-}
+});
 
 /* ---------------------------------------------------------------- rates */
 
@@ -178,7 +179,7 @@ export function toLaborRateDTO(row: RateRow, access: Pick<PulseAccess, 'seesMone
 }
 
 /** Rate rows, newest first. Refused with 403 for readers without `money:read` (SPEC section 3). */
-export async function listLaborRates(ctx: DomainContext, options: { laborClassId?: string | null } = {}): Promise<LaborRateDTO[]> {
+export const listLaborRates = scoped(async function listLaborRates(ctx: DomainContext, options: { laborClassId?: string | null } = {}): Promise<LaborRateDTO[]> {
   const access = await requireMoney(ctx);
   const found = await db
     .select()
@@ -186,7 +187,7 @@ export async function listLaborRates(ctx: DomainContext, options: { laborClassId
     .where(and(eq(laborRates.orgId, ctx.orgId), isNull(laborRates.deletedAt), options.laborClassId ? eq(laborRates.laborClassId, options.laborClassId) : undefined))
     .orderBy(asc(laborRates.laborClassId), desc(laborRates.effectiveFrom));
   return found.map((row) => toLaborRateDTO(row, access));
-}
+});
 
 export interface LaborRateInput {
   laborClassId: string;
@@ -236,7 +237,7 @@ async function restampForRate(tx: Executor, ctx: DomainContext, row: { laborClas
   await finishTouched(tx, ctx, classScope(row, cls.isDefault, from, ''));
 }
 
-export async function insertLaborRate(tx: Executor, ctx: DomainContext, input: LaborRateInput, options: { restamp?: boolean } = {}): Promise<RateRow> {
+export const insertLaborRate = scoped(async function insertLaborRate(tx: Executor, ctx: DomainContext, input: LaborRateInput, options: { restamp?: boolean } = {}): Promise<RateRow> {
   const settings = await loadSettings(ctx.orgId, tx);
   await getLaborClassRow(ctx, input.laborClassId, tx);
   await assertOpen(tx, ctx.orgId, [input.effectiveFrom]);
@@ -269,12 +270,12 @@ export async function insertLaborRate(tx: Executor, ctx: DomainContext, input: L
   await logActivity(tx, ctx, { verb: 'rate.changed', entityType: 'labor_rate', entityId: row!.id, after: { laborClassId: row!.laborClassId, siteId: row!.siteId, effectiveFrom: row!.effectiveFrom, loadedRateCents: row!.loadedRateCents }, meta: { change: 'added' } });
   if (options.restamp !== false) await restampForRate(tx, ctx, row!, row!.effectiveFrom);
   return row!;
-}
+}, 1);
 
-export async function createLaborRate(ctx: DomainContext, input: LaborRateInput): Promise<LaborRateDTO> {
+export const createLaborRate = scoped(async function createLaborRate(ctx: DomainContext, input: LaborRateInput): Promise<LaborRateDTO> {
   const access = await requirePulse(ctx, 'rate:manage');
   return inTx(async (tx) => toLaborRateDTO(await insertLaborRate(tx, ctx, input), access));
-}
+});
 
 async function getRateRow(ctx: DomainContext, rateId: string, executor: Executor): Promise<RateRow> {
   const [row] = isUuid(rateId) ? await executor.select().from(laborRates).where(and(eq(laborRates.orgId, ctx.orgId), eq(laborRates.id, rateId), isNull(laborRates.deletedAt))) : [];
@@ -282,7 +283,7 @@ async function getRateRow(ctx: DomainContext, rateId: string, executor: Executor
   return row;
 }
 
-export async function updateLaborRate(ctx: DomainContext, rateId: string, patch: Partial<Omit<LaborRateInput, 'laborClassId'>>, version?: number | null): Promise<LaborRateDTO> {
+export const updateLaborRate = scoped(async function updateLaborRate(ctx: DomainContext, rateId: string, patch: Partial<Omit<LaborRateInput, 'laborClassId'>>, version?: number | null): Promise<LaborRateDTO> {
   const access = await requirePulse(ctx, 'rate:manage');
   return inTx(async (tx) => {
     const before = await getRateRow(ctx, rateId, tx);
@@ -312,9 +313,9 @@ export async function updateLaborRate(ctx: DomainContext, rateId: string, patch:
     await restampForRate(tx, ctx, { laborClassId: before.laborClassId, siteId: before.siteId === row!.siteId ? before.siteId : null }, from);
     return toLaborRateDTO(row!, access);
   });
-}
+});
 
-export async function deleteLaborRate(ctx: DomainContext, rateId: string): Promise<void> {
+export const deleteLaborRate = scoped(async function deleteLaborRate(ctx: DomainContext, rateId: string): Promise<void> {
   await requirePulse(ctx, 'rate:manage');
   await inTx(async (tx) => {
     const before = await getRateRow(ctx, rateId, tx);
@@ -323,13 +324,13 @@ export async function deleteLaborRate(ctx: DomainContext, rateId: string): Promi
     await logActivity(tx, ctx, { verb: 'rate.changed', entityType: 'labor_rate', entityId: rateId, before: { laborClassId: before.laborClassId, effectiveFrom: before.effectiveFrom, loadedRateCents: before.loadedRateCents }, meta: { change: 'deleted' } });
     await restampForRate(tx, ctx, before, before.effectiveFrom);
   });
-}
+});
 
 /**
  * "This changes 212 entries and lowers profit by $1,430 across 9 jobs." Counts the open entries a
  * new or edited rate would restamp and the labor cost difference, without saving anything.
  */
-export async function previewLaborRate(ctx: DomainContext, input: LaborRateInput & { rateId?: string | null }): Promise<RateChangePreviewDTO> {
+export const previewLaborRate = scoped(async function previewLaborRate(ctx: DomainContext, input: LaborRateInput & { rateId?: string | null }): Promise<RateChangePreviewDTO> {
   const access = await requirePulse(ctx, 'rate:manage');
   const settings = await loadSettings(ctx.orgId);
   const cls = await getLaborClassRow(ctx, input.laborClassId);
@@ -363,13 +364,13 @@ export async function previewLaborRate(ctx: DomainContext, input: LaborRateInput
           FROM hit`,
   );
   return { entries: row?.entries ?? 0, jobs: row?.jobs ?? 0, closedEntries: row?.closed_entries ?? 0, laborDeltaCents: moneyOut(access.seesMoney, row?.delta ?? '0') };
-}
+});
 
 /**
  * The rate that applies to an entry today, in words the "How we got this" popover can use.
  * `source` is `class`, `default` or `none`.
  */
-export async function rateForEntry(ctx: DomainContext, input: { laborClassId: string | null; siteId: string; workDate: string }): Promise<RateForEntryDTO> {
+export const rateForEntry = scoped(async function rateForEntry(ctx: DomainContext, input: { laborClassId: string | null; siteId: string; workDate: string }): Promise<RateForEntryDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const [row] = await rows<{ found: boolean; source: string; rate_cents: number; overtime_rate_cents: number; labor_class_id: string | null; rate_id: string | null }>(
     db,
@@ -383,4 +384,4 @@ export async function rateForEntry(ctx: DomainContext, input: { laborClassId: st
     laborClassId: row?.labor_class_id ?? null,
     rateId: row?.rate_id ?? null,
   };
-}
+});

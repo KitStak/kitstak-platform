@@ -9,6 +9,8 @@
  *   <ServiceLedger serviceId={service.id} today={today} />
  *
  * Cells edit in place, rows can be added many at a time (paste works), and every change has Undo.
+ * An entry pulled from the warehouse says so and links back to its record. Its date, service and
+ * count belong to the warehouse and cannot be typed over here. The price and the labor hours can.
  */
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
@@ -21,6 +23,7 @@ import { Teach } from '@/components/pulse/teach';
 import { How } from '@/features/calculator/how';
 import { BulkAddDialog, Ledger, bulkProblem, isDate, readNumber, refreshAfterEntry, useLedgerActions, useLedgerRows, type BulkCells, type BulkColumn, type BulkRowResult, type LedgerColumn } from '@/features/costs/ledger-kit';
 import { readTarget, useEntryTargets } from '@/features/costs/targets';
+import { WarehouseContractLink, WarehouseSourceLink } from './entry-price-fix';
 import { useShell } from '@/features/shell/shell-context';
 import { formatHours, formatMoney, formatNumber, formatUnitPrice } from '@/lib/format';
 import { useVasEntries, useVasServices } from '@/lib/hooks/use-data';
@@ -47,6 +50,16 @@ export interface ServiceLedgerProps {
 type RowInput = SaveVasEntryActionInput;
 type BulkRow = SaveVasEntriesBulkActionInput['rows'][number];
 const qty = (value: string | null): string => formatNumber(value ?? '0', { maxDigits: 3 });
+/** The warehouse owns these facts of a pulled entry. */
+const fromWarehouse = (row: VasEntryDTO): boolean => row.source === 'wms';
+
+/** Where a row came from, when it was not typed in: a link back to the warehouse record when there is one. */
+function SourceMark({ row }: { readonly row: VasEntryDTO }) {
+  if (row.source === 'manual') return null;
+  if (row.source !== 'wms') return <Badge size="sm" tone="neutral">{row.source === 'csv' ? 'Imported' : 'Synced'}</Badge>;
+  if (!row.sourceUrl) return <Badge size="sm" tone="neutral">From the warehouse</Badge>;
+  return <WarehouseSourceLink entry={row} testId={`service-source-${row.id}`} />;
+}
 
 export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, title = 'Extra services done', className }: ServiceLedgerProps) {
   const shell = useShell();
@@ -68,7 +81,7 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
 
   const columns = useMemo<LedgerColumn<VasEntryDTO>[]>(
     () => [
-      { id: 'workDate', header: 'Date', render: (row) => shortDate(row.workDate), editor: (row) => ({ kind: 'date', value: row.workDate }) },
+      { id: 'workDate', header: 'Date', render: (row) => shortDate(row.workDate), editor: (row) => (fromWarehouse(row) ? null : { kind: 'date', value: row.workDate }) },
       ...(showFor
         ? [
             {
@@ -85,18 +98,33 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
             } satisfies LedgerColumn<VasEntryDTO>,
           ]
         : []),
-      ...(serviceId ? [] : [{ id: 'service', header: 'Service', primary: true, render: (row: VasEntryDTO) => serviceById.get(row.vasServiceId)?.name ?? 'A service', editor: (row: VasEntryDTO) => ({ kind: 'select' as const, value: row.vasServiceId, options: (services.data ?? []).filter((service) => service.active || service.id === row.vasServiceId).map((service) => ({ value: service.id, label: service.name })) }) } satisfies LedgerColumn<VasEntryDTO>]),
-      { id: 'quantity', header: 'How many', numeric: true, primary: Boolean(serviceId), render: (row) => `${qty(row.quantity)} ${serviceById.get(row.vasServiceId)?.unitLabel ?? ''}`.trim(), editor: (row) => ({ kind: 'number', value: String(Number(row.quantity)) }) },
+      ...(serviceId ? [] : [{ id: 'service', header: 'Service', primary: true, render: (row: VasEntryDTO) => serviceById.get(row.vasServiceId)?.name ?? 'A service', editor: (row: VasEntryDTO) => (fromWarehouse(row) ? null : { kind: 'select' as const, value: row.vasServiceId, options: (services.data ?? []).filter((service) => service.active || service.id === row.vasServiceId).map((service) => ({ value: service.id, label: service.name })) }) } satisfies LedgerColumn<VasEntryDTO>]),
+      { id: 'quantity', header: 'How many', numeric: true, primary: Boolean(serviceId), render: (row) => `${qty(row.quantity)} ${serviceById.get(row.vasServiceId)?.unitLabel ?? ''}`.trim(), editor: (row) => (fromWarehouse(row) ? null : { kind: 'number', value: String(Number(row.quantity)) }) },
       { id: 'hours', header: 'Labor hours', numeric: true, render: (row) => (Number(row.hours) > 0 ? formatHours(row.hours) : <span className="text-fg-muted" data-empty-cell>None</span>), editor: (row) => ({ kind: 'number', value: String(Number(row.hours)) }) },
       ...(shell.seesMoney
         ? ([
-            { id: 'unitPrice', header: 'Price of one', numeric: true, render: (row) => (row.noPrice ? <Badge size="sm" tone="warning">No price yet</Badge> : formatUnitPrice(row.unitPrice, { empty: 'Hidden' })), editor: (row) => (row.moneyHidden ? null : { kind: 'number', value: row.unitPrice === null ? '' : String(Number(row.unitPrice)), placeholder: '0.00' }) },
+            { id: 'unitPrice', header: 'Price of one', numeric: true, render: (row) =>
+                row.noPrice ? (
+                  <span className="inline-flex items-center gap-1.5" data-testid={`service-no-price-${row.id}`}>
+                    <Badge size="sm" tone="warning">No price yet</Badge>
+                    {/* The cell itself is the edit button: say what a click does. */}
+                    {canEdit && !row.locked && !row.moneyHidden ? <span className="text-xs font-medium text-fg-link underline underline-offset-2">Set the price</span> : null}
+                  </span>
+                ) : (
+                  formatUnitPrice(row.unitPrice, { empty: 'Hidden' })
+                ), editor: (row) => (row.moneyHidden ? null : { kind: 'number', value: row.unitPrice === null ? '' : String(Number(row.unitPrice)), placeholder: '0.00' }) },
             {
               id: 'amount',
               header: 'Earned',
               numeric: true,
               render: (row) => (
-                <span className="inline-flex items-center justify-end gap-0.5">
+                <span className="inline-flex flex-wrap items-center justify-end gap-x-0.5 gap-y-0.5">
+                  {/* An unpriced warehouse entry: the other fix is a rate on the client's warehouse contract. */}
+                  {row.noPrice && canEdit ? (
+                    <span className="mr-2 inline-flex">
+                      <WarehouseContractLink entry={row} testId={`service-contract-${row.id}`} />
+                    </span>
+                  ) : null}
                   {row.noPrice ? formatMoney(0) : formatMoney(row.amountCents, { empty: 'Hidden' })}
                   {row.amountCents !== null || row.noPrice ? (
                     <How
@@ -120,7 +148,7 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
         : []),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `services.data` feeds `serviceById`
-    [showFor, targets, serviceById, serviceId, shell.seesMoney],
+    [showFor, targets, serviceById, serviceId, shell.seesMoney, canEdit],
   );
 
   const onCommit = async (row: VasEntryDTO, columnId: string, value: string): Promise<string | null> => {
@@ -253,7 +281,7 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
         rowName={(row) => `${serviceById.get(row.vasServiceId)?.name ?? 'the service'} on ${shortDate(row.workDate)}`}
         onCommit={onCommit}
         onDelete={(picked) => void actions.removeRows(picked)}
-        rowBadges={(row) => (row.source !== 'manual' ? <Badge size="sm" tone="neutral">{row.source === 'csv' ? 'Imported' : row.source === 'wms' ? 'Warehouse' : 'Synced'}</Badge> : null)}
+        rowBadges={(row) => <SourceMark row={row} />}
       />
       <BulkAddDialog<BulkRow>
         open={bulk}

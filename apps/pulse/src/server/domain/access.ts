@@ -15,8 +15,9 @@ import { eq, sql } from 'drizzle-orm';
 import { user } from '@kitstak/db/schema';
 import { wmsTable } from '@kitstak/db/wms-tenants';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { forbidden } from '@/server/errors';
-import { wmsTableExists, wmsTenantSchemaFor } from '@/server/integrations/detect';
+import { siblingDb, wmsTableExists, wmsTenantSchemaFor } from '@/server/integrations/detect';
 import {
   canPulse,
   canSeeMoney,
@@ -91,7 +92,7 @@ async function wmsRole(orgId: string, userId: string): Promise<PulseRole | null>
     if (!schema || !(await wmsTableExists(schema, 'users'))) return null;
     const [person] = await db.select({ email: user.email }).from(user).where(eq(user.id, userId));
     if (!person) return null;
-    const result = await db.execute<{ user_type: string | null; role: string | null; is_api_user: boolean }>(
+    const result = await siblingDb.execute<{ user_type: string | null; role: string | null; is_api_user: boolean }>(
       sql`select user_type, role, is_api_user from ${wmsTable(schema, 'users')} where lower(email) = ${person.email.toLowerCase()} and is_active = true limit 1`,
     );
     const row = result.rows[0];
@@ -103,12 +104,12 @@ async function wmsRole(orgId: string, userId: string): Promise<PulseRole | null>
 }
 
 /** Warehouse roles of everyone in the org, by lowercased email (People and roles). Fails soft to empty. */
-export async function wmsRolesByEmail(orgId: string): Promise<Map<string, PulseRole>> {
+export const wmsRolesByEmail = scoped(async function wmsRolesByEmail(orgId: string): Promise<Map<string, PulseRole>> {
   const out = new Map<string, PulseRole>();
   try {
     const schema = await wmsTenantSchemaFor(orgId);
     if (!schema || !(await wmsTableExists(schema, 'users'))) return out;
-    const result = await db.execute<{ email: string; user_type: string | null; role: string | null; is_api_user: boolean }>(
+    const result = await siblingDb.execute<{ email: string; user_type: string | null; role: string | null; is_api_user: boolean }>(
       sql`select lower(email) as email, user_type, role, is_api_user from ${wmsTable(schema, 'users')} where is_active = true`,
     );
     for (const row of result.rows) {
@@ -119,7 +120,7 @@ export async function wmsRolesByEmail(orgId: string): Promise<Map<string, PulseR
     return out;
   }
   return out;
-}
+});
 
 async function explicitRow(orgId: string, userId: string): Promise<{ explicit: AccessInputs['explicit']; defaultMemberRole: PulseRole }> {
   const result = await db.execute<{ role: string | null; sees_money: boolean | null; default_member_role: string | null }>(
@@ -145,16 +146,16 @@ async function resolveNow(orgId: string, userId: string, orgRole: OrgRole): Prom
 
 const resolve = cache(resolveNow);
 
-export async function pulseAccessFor(ctx: DomainContext): Promise<PulseAccess> {
+export const pulseAccessFor = scoped(async function pulseAccessFor(ctx: DomainContext): Promise<PulseAccess> {
   if (ctx.actorKind !== 'user') return SYSTEM_ACCESS;
   return resolve(ctx.orgId, ctx.userId, ctx.orgRole);
-}
+});
 
 /** Same as `pulseAccessFor` with no per request memo (right after a role change). */
-export async function freshPulseAccess(ctx: DomainContext): Promise<PulseAccess> {
+export const freshPulseAccess = scoped(async function freshPulseAccess(ctx: DomainContext): Promise<PulseAccess> {
   if (ctx.actorKind !== 'user') return SYSTEM_ACCESS;
   return resolveNow(ctx.orgId, ctx.userId, ctx.orgRole);
-}
+});
 
 export function accessDenied(role: PulseRole): Error {
   return forbidden(
@@ -165,15 +166,15 @@ export function accessDenied(role: PulseRole): Error {
 }
 
 /** Throws FORBIDDEN unless the actor may perform `action`. Returns the resolved access. */
-export async function requirePulse(ctx: DomainContext, action: PulseAction): Promise<PulseAccess> {
+export const requirePulse = scoped(async function requirePulse(ctx: DomainContext, action: PulseAction): Promise<PulseAccess> {
   const access = await pulseAccessFor(ctx);
   if (!canPulse(access.role, action)) throw accessDenied(access.role);
   return access;
-}
+});
 
 /** Throws FORBIDDEN unless the actor may read money (rate endpoints, money reports). */
-export async function requireMoney(ctx: DomainContext): Promise<PulseAccess> {
+export const requireMoney = scoped(async function requireMoney(ctx: DomainContext): Promise<PulseAccess> {
   const access = await requirePulse(ctx, 'pulse:read');
   if (!access.seesMoney) throw forbidden('Your Pulse role does not include money. Ask an admin of your workspace if you need it.');
   return access;
-}
+});

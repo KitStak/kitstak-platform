@@ -26,7 +26,10 @@ or a double dash. Use commas, periods or colons. Ranges read "to". Enforced by E
 | needs flags | Things to fix |
 | flexed plan | Plan for the work done so far |
 | variance waterfall | Why profit changed |
-| contribution margin | Margin before shared costs |
+| margin | Exactly two names for a headline margin, on every screen: **Job margin** (profit on jobs / revenue) and **Company margin** (company profit / revenue). No other margin name is a visible label. |
+| contribution margin, margin before shared costs | Only inside "How we got this", as the line "Before time not on a job". As a table column next to Contribution it reads "Contribution %". |
+| job cost | Job cost (never "All cost": overhead and paid time on no job are not in it) |
+| rows with a client and no job | Put on a client, not on a job |
 | utilization | Share of paid time spent on jobs |
 | earned, billed | Earned (work done), Billed (invoiced), Not billed yet |
 | basis points, cents | never shown |
@@ -57,10 +60,10 @@ two warehouses, no CRM boards) and `maya@northwind-robotics.example` / `Northwin
 
 Env (`src/server/env.ts`, lazy): `DATABASE_URL`, `DIRECT_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`,
 `NEXT_PUBLIC_PORTAL_URL`, `NEXT_PUBLIC_CRM_URL`, `NEXT_PUBLIC_WMS_URL`, `NEXT_PUBLIC_PROJECTS_URL`, `TRUSTED_ORIGINS`,
-`AUTH_COOKIE_DOMAIN`, `ENTITLEMENTS_DEV_ALLOW_ALL`, `CRON_SECRET`. `appUrls()` returns `{portal, crm, wms, projects, pulse}`.
+`AUTH_COOKIE_DOMAIN`, `ENTITLEMENTS_DEV_ALLOW_ALL`, `CRON_SECRET`, `PULSE_DB_GUARD` (1 turns the database guard on: the app runs its queries as the plain role `pulse_app` with the workspace set, CONTRACTS section 12 rule 13; off in production until it is set there, on in tests and in local dev), `HEALTH_TOKEN` (unlocks the detail of `GET /api/health`), `PULSE_OWNER_DATABASE_URL` (optional, the two login setup of rule 13). `appUrls()` returns `{portal, crm, wms, projects, pulse}`.
 `trustedOrigins()` adds the four sibling URLs, and dev ports 3500 to 3520 only when `NODE_ENV !== 'production'`.
 
-Ops surface, same as the siblings: `GET /api/health` (database ping, migration version), structured error logs with org id and
+Ops surface, same as the siblings: `GET /api/health` (database ping; the migration version and the guard state only with the health token), structured error logs with org id and
 request id, `error.tsx`, `not-found.tsx`, `global-error.tsx`, security headers and CSP in `next.config.ts` matching the sibling
 policy (including `connect-src 'self'`), and `robots` disallow all.
 
@@ -245,6 +248,9 @@ same, but do not count in pace (4.12), so a setup day does not make the job look
 
 Entry check shown inline: if `abs(hours - headcount * hours_each_default) > 0.5 * headcount * hours_each_default` (default shift length from
 settings) Pulse asks "12 people for 8 hours is 96 labor hours. You typed 9.6. Is that right?" It is a warning, not a block.
+The Log work grid works hours each back out when labor hours are typed, so its question uses the numbers in the row: "9.6 labor hours for
+12 people is 0.8 hours each. A full shift of 8 hours each would be 96 labor hours. Is that right?" The hours each cell has no grey example
+number. A job with units and no labor hours names the empty field: "Add the hours each", "Add people", or "Add people and the hours each".
 
 ### 4.5 Time not on a job, paid hours and the payroll check
 
@@ -272,7 +278,9 @@ settings) Pulse asks "12 people for 8 hours is 96 labor hours. You typed 9.6. Is
   `percent_of_labor` (shown as "Your 8% covered $3,100. Real time not on a job cost $3,640." so the percent can be tuned).
 - **Share of paid time spent on jobs** = direct hours / paid hours (or / (direct + indirect) when paid hours are not entered).
 - **Payroll check** (shown on Labor and in the month close list when `paid_cents` exists): over the days that have `paid_cents`,
-  `payroll_gap = sum(paid_cents) - sum(gross_pay_cents of direct and indirect entries)`. "Payroll paid $41,200. The hours in Pulse add up to $39,350 of pay. $1,850 is not on any job or reason."
+  `payroll_gap = sum(paid_cents) - sum(gross_pay_cents of direct and indirect entries)`. "Payroll paid $41,200. The hours in Pulse add up to $39,350 of pay. The payroll gap is $1,850: pay that no logged hour explains."
+  The payroll gap is its own name on screen. It is not the cost of "Paid time not on any job" (`missing_cents`, which prices each day's missing
+  hours at that day's average pay and feeds company profit). The two can differ by a few dollars, and the info popover on the Labor tile says why.
 
 Worked example (largest remainder). Pool $100.00 (10000 cents). Three takers with 96.00, 40.00 and 24.50 hours: weights 9600, 4000, 2450, `W = 16050`.
 Bases `floor(96000000 / 16050) = 5981`, `floor(40000000 / 16050) = 2492`, `floor(24500000 / 16050) = 1526`, sum 9999, 1 cent left.
@@ -359,17 +367,19 @@ that type is also booked as a client level `fee`.
 
 ```
 cost     = labor + material + other + shared
-profit   = revenue - cost                         margin = profit / revenue                 ("Margin on jobs"; company margin after overhead is the bridge's company profit / revenue)
+profit   = revenue - cost                         margin = profit / revenue                 ("Job margin"; "Company margin" is the bridge's company profit / revenue)
 profit_before_shared = revenue - labor - material - other
-margin_before_shared = profit_before_shared / revenue                                       ("Margin before shared costs")
+margin_before_shared = profit_before_shared / revenue                                       (a line inside "How we got this": "Before time not on a job")
 labor_pct_of_revenue = labor / revenue
 cost_per_unit   = cost / units_good               profit_per_unit = profit / units_good
 should_cost_per_unit = plan cost for the work done so far / units_good                      (4.10; replaces a typed goal when a plan exists)
 cost_to_serve (client, range) = all cost of the client's jobs + client level costs, also per unit and per job
 ```
 
-A job page, the Profit explorer and the calculator show both margins. A job can sit under target after all costs and still help pay the rent:
-the calculator uses margin before shared costs for the lowest price worth taking, and margin after all costs for the target price.
+Every screen uses two names for a headline margin and no others: **Job margin** and **Company margin**. The job page, the Profit explorer and
+the calculator show the job margin; its "How we got this" also gives the margin before time not on a job. A job can sit under target and still
+help pay the rent: the calculator uses the margin before time not on a job for the lowest price worth taking, and the job margin for the target price.
+Home, Profit and Month close show the company margin beside the job margin.
 
 **Facts.** One SQL view, **`pulse.v_facts`**, is the row level source for every profit number on jobs and clients. It is a `UNION ALL` of stamped rows:
 `(org_id, site_id, client_id, job_id, job_type_id, vas_service_id, work_date, kind, amount_cents, units_good, units_scrap, hours, source_table, source_id)`
@@ -387,13 +397,63 @@ for the touched `(job, date)` pairs. Every date range screen reads `fact_days`; 
 work_profit       = sum of PROFIT_KINDS facts (jobs and client level rows)          "Profit on jobs"
 shared_gap        = 4.5                                                             "Time not on a job that no job carried"
 missing_cost      = sum(missing_cents), or 0 under the full rule (it is in the pool) "Paid time not on any job"
-overhead_absorbed = sum(overhead_cents) on production, service and indirect entries
-overhead_gap      = company_costs - overhead_absorbed when company_costs > 0 in the range, else 0   "Overhead your hourly rate did not cover"
+company_costs     = for each calendar month the range touches that has company costs above 0:
+                    by calendar day (the default):
+                    prorateDays(costs dated in that whole month, first day in range, last day in range, days in the month)
+                    by work day (settings.company_cost_spread = 'work_days'):
+                    prorateCounted(costs dated in that whole month, work days before the range, work days through its end, work days in the month)
+overhead_absorbed = sum(overhead_cents) on production, service and indirect entries, on the days in the range of those same months
+overhead_gap      = company_costs - overhead_absorbed when at least one month counted, else 0      "Overhead your hourly rate did not cover"
 company_profit    = work_profit - shared_gap - missing_cost - overhead_gap
 ```
 
 With no company costs entered, Pulse trusts the hourly overhead rate and the last line is hidden. A negative `overhead_gap` reads
 "Your hourly rate covered more overhead than you spent" and adds to profit.
+
+**Company costs are monthly, so a part month counts its share by day.** Rent is dated on one day and pays for the whole month. The
+bridge never charges a whole month against part of one, and never drops the step because the cost is dated on a day outside the range.
+For each calendar month, the share for days `a` to `b` of a month with `N` days is
+`prorateDays(C, a, b, N) = divRound(C * b, N) - divRound(C * (a - 1), N)` in `BigInt` cents with the rounding rule of 4.2. The two
+running totals telescope, so the parts of a month always add back to the whole month to the cent, and a whole month is `C` itself: a
+whole month, and so month close, is unchanged. Each month stands alone: a month with no company costs (or a net credit) counts nothing
+and trusts the hourly overhead rate, so a range of whole months equals the sum of its months. The rule lives in one place,
+`getCompanyBridge` (through the pure `spreadCompanyCosts`), so Home, Profit, the reports, "How we got this", month close and
+`GET /api/v1/company-bridge` agree for any days. When the figure covers part of a month the screen says so in plain words beside the
+number: "Company costs for 18 of 30 days." A range across months names each one: "Company costs for 12 of 31 days in October and
+18 of 30 days in November." A month in the range with none typed in is named too. The words "after overhead" only show when company
+costs were counted: with none, the tile reads "After paid time not on any job".
+
+Worked example (part month). November company costs $70,500.00, range Nov 1 to Nov 18: `divRound(7050000 * 18, 30) = 4230000`
+($42,300.00). The hourly rates covered $38,000.00 of overhead on those 18 days, so the overhead gap is $4,300.00. Nov 19 to Nov 30 gets
+the other $28,200.00.
+
+**Spread company costs by calendar days or by work days.** By calendar day every day of the month carries the same share, weekends too,
+so a work week carries less than its part of the month and month to date drops over a weekend. A workspace can pick
+**Work days** instead (Settings, Cost rules, "Spread company costs by", stored as `settings.company_cost_spread`, migration 0013). Then only
+the working days in Settings (`settings.working_days`) carry a share: the share for a range is
+`prorateCounted(C, w0, w1, W) = divRound(C * w1, W) - divRound(C * w0, W)`, where `W` is the work days in the month, `w0` the work days
+of the month before the range and `w1` the work days through its last day. It is the same rounding rule, so the parts of a month add
+back to the month to the cent, and a whole month is `C` in both ways: month close and closed months never change when someone switches.
+A day that is not a working day gets no share, even if work was logged on it, and "How we got this" says so. A month with no working
+day at all (not possible with the Settings check, which needs one) falls back to calendar days. The default is **Calendar days**, so
+nothing changes for a workspace until someone picks work days. The Profit page can show the other way for one view with
+`?spread=work_days` or `?spread=calendar` (the "Share company costs by work day" link beside the company sentence), and
+`GET /api/v1/company-bridge` and `GET /api/v1/explain` take the same `spread`. The note beside the number names the way in use:
+"Company costs for 13 of 21 work days." Worked example: November 2026 has 21 work days, Monday to Friday. Nov 1 to Nov 18 holds 13 of
+them: `divRound(7050000 * 13, 21) = 4364286` ($43,642.86). The working days are read as they are set today for every month: a month whose
+working days were different when it happened is not shared by its old working days (an assumption, since Pulse keeps no history of that
+setting; it only moves part months, never a whole one).
+
+**The month in progress on month close.** Month close and the month close pack are about whole months, so for a month that is not over
+yet they set all of the month's company costs against the work so far, while Home and Profit count only the days so far. Each place that
+shows it says so in plain words: the month card ("Full month view: all of November's company costs, set against the work so far. For month
+to date, open Home or Profit."), the month list ("Full month view, not month to date") and the close pack (a note, and "Full month view."
+on its Company profit line).
+
+**Why the company number moved.** The line under the cards says which bridge step moved the company number most: "The company made more
+than its jobs: $135,849. Your hourly rates covered more overhead than the company costs for these days, so overhead added to profit." When
+the company made less it names the biggest step down. A step of $0.00 for time not on a job that no job carried is left out of "How we got
+this", so it does not sit beside "Paid time not on any job" as an empty twin.
 
 Worked example. Profit on jobs $48,210.00. Shared gap $1,150.00. Paid time not on any job $2,360.00. Company costs $21,000.00, overhead absorbed
 $16,200.00, so overhead gap $4,800.00. `company_profit = 48210 - 1150 - 2360 - 4800 = $39,900.00`. Home says: "Your jobs made $48,210 this month.
@@ -626,8 +686,14 @@ an hour. See 14 entries." Only readers with `wage:read` get the next line: "$26.
 
 `pulse.periods` holds one row per calendar month. Closing a month (admin) checks Things to fix and the payroll check, stores a snapshot of totals, and
 locks every stream row dated in that month: edits, deletes, imports, sync writes and restamps that would touch it are refused with
-"October is closed. Ask the owner to reopen it." Reopen needs a reason and is logged. Reports mark closed months with a lock. Week based reports follow
+"October 2026 is closed. Ask the owner to reopen it." Reopen needs a reason and is logged. Reports mark closed months with a lock. Week based reports follow
 `settings.week_start`. Sync and cron treat "closed month" as a counted skip listed under "Came in after the month was closed", never as an error.
+
+The close screen and the month list show what the company kept, never job profit alone. The month card reads: Revenue, Job cost, Job profit
+with the job margin, then the bridge steps of 4.9 (time not on a job that no job carried, paid time not on any job, overhead the hourly rate did
+not cover), then Company profit with the company margin. Each month in the list shows company profit and company margin. The snapshot stored
+with the close holds the totals, the whole bridge and `company: { jobProfitCents, jobMarginBp, companyProfitCents, companyMarginBp }`, and a
+closed month shows those saved figures. A reader without `money:read` gets the checklist and the lock counts with every figure null.
 
 ### 4.17 What gets restamped, and when
 
@@ -976,7 +1042,7 @@ lives in the URL query string on every list, chart and report, so any view can b
 | `/log/review` **Review the day** | Manager queue of days marked complete, each with its odd rows (units with no hours, pace under 50% or over 200% of target, more hours than paid), fix in place, Approve or Send back with a note. |
 | `/log/entries` | Every entry across days with filters, bulk edit, bulk delete with undo, export. |
 | `/kiosk/t/[token]` **Floor tablet** | Opened from a kiosk device link, never from a personal login, so a shared tablet holds no suite session. Pick your name, type your 4 digit PIN (5 wrong tries lock that name for 5 minutes), then: pick a job card, number pad for units, steppers for people and hours each, Save. One job at a time, big confirmation, next job. Locks after 2 minutes idle. Entries are saved under the person who unlocked. When wifi drops, entries wait on the tablet ("Saved on this tablet. Will send when online.") and send with a stable key, so nothing is logged twice. One site only, no money anywhere, portrait and landscape. |
-| `/profit` **Profit** | Tabs `?by=` job, client, type, service, site, month, week or day. Ranking bar chart (profit or margin, best and worst switch) above a table: revenue, labor, material, other, time not on a job, cost, profit, margin after all costs, margin before shared costs, units, units per person per hour, labor as % of revenue, should cost vs actual cost per unit, change vs prior period, trend sparkline. Click a row to drill: client to its jobs to its daily entries. A breadcrumb shows the path and totals always match the level above. Compare to prior period or plan. The **Company** row opens the company profit bridge. The Sites tab is a site against site table: margin, pace against target pace, time not on a job, cost per unit by job type. Export. |
+| `/profit` **Profit** | Tabs `?by=` job, client, type, service, site, month, week or day. Ranking bar chart (profit or margin, best and worst switch) above a table: revenue, labor, material, other, time not on a job, cost, profit, job margin, contribution % (optional column), units, units per person per hour, labor as % of revenue, should cost vs actual cost per unit, change vs prior period, trend sparkline. Click a row to drill: client to its jobs to its daily entries. A breadcrumb shows the path and totals always match the level above. Compare to prior period or plan. The **Company** row opens the company profit bridge. The Sites tab is a site against site table: margin, pace against target pace, time not on a job, cost per unit by job type. Export. |
 | `/clients/[id]` | Reached from the Clients tab of Profit. Tiles, trend, plan vs actual profit for the period, labor as % of revenue, cost to serve per unit and per job, Earned, Billed and Not billed yet, jobs table, services table, client level revenue and costs with the "revenue with no cost tracked" note, warehouse billing outside profit, who buys the parts, contact, links to the CRM account and WMS client, target margin, activity. |
 | `/services`, `/services/[id]` **Extra services** | Service catalog (price, unit, target pace) and profit by service: revenue per unit, cost per unit, margin, volume, trend, clients using it. Service page: entries, add entry, entries with no price to fix, WMS operations pulled. |
 | `/labor` | Tabs **Rates** (labor classes and the rate builder: wage, payroll taxes and workers comp %, benefits and paid time off %, other %, overhead per hour with the overhead helper, overtime multiplier, live "one hour really costs $21.76" readout, effective date timeline, history, change preview), **Time** (on jobs vs not on a job vs paid time not on any job by day, share of paid time spent on jobs, time not on a job by reason, paid hours entry, payroll check, "covered vs real" when the percent rule is on), **Cost** (labor cost by class, job type and client, overtime share). The Rates tab needs `rate:manage`. |
@@ -1203,7 +1269,7 @@ no route sends CORS headers. Every write checks the session, entitlement, role, 
 
 | Endpoint | Returns |
 |---|---|
-| `GET /api/health` | status, database ping, migration version (public) |
+| `GET /api/health` | status and database ping (public); migration version and guard state with the `x-health-token` header (`HEALTH_TOKEN`) |
 | `GET /api/v1/me` | user, org, Pulse role, `seesMoney`, `seesWages`, modules, integration availability |
 | `GET /api/v1/summary?from&to` | open jobs, at risk, losing, revenue, cost, profit on jobs, company profit and its bridge, margin, entry progress today |
 | `GET /api/v1/jobs`, `/jobs/[ref]`, `/jobs/attention?limit=` | lists and job detail DTOs with status, reasons (rendered for the reader), totals, projection |

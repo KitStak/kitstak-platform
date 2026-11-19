@@ -9,6 +9,7 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { GOAL_METRICS, goalToNatural, readGoal, type GoalStatus } from '@/features/goals/goal-math';
 import type { TargetMetric, TargetScope } from '@/lib/constants';
 import { canPulse } from '@/lib/permissions';
@@ -91,7 +92,7 @@ function workDaysIn(from: string, to: string, workingDays: readonly number[]): n
 }
 
 /** Goals against actuals for one month (default: this month). */
-export async function getGoalsBoard(ctx: DomainContext, options: { month?: string | null } = {}): Promise<GoalsBoardDTO> {
+export const getGoalsBoard = scoped(async function getGoalsBoard(ctx: DomainContext, options: { month?: string | null } = {}): Promise<GoalsBoardDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const settings = await loadSettings(ctx.orgId);
   const today = todayInZone(settings.timezone);
@@ -184,4 +185,4 @@ export async function getGoalsBoard(ctx: DomainContext, options: { month?: strin
     canManage: canPulse(access.role, 'target:manage'),
     moneyHidden: !access.seesMoney,
   };
-}
+});

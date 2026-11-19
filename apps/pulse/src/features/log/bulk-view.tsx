@@ -6,7 +6,7 @@
  */
 import { useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { AlertTriangle, CalendarRange, ClipboardPaste, Copy, Plus, Save, Trash2 } from 'lucide-react';
-import { Badge, Button, IconButton, IsoDatePicker, Skeleton, toast } from '@/components/ui';
+import { Badge, Button, Combobox, IconButton, IsoDatePicker, Skeleton, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { Panel } from '@/components/layout/page';
 import { parseDate } from '@/lib/csv';
@@ -87,6 +87,10 @@ export function BulkView({
   const jobById = useMemo(() => new Map(jobList.map((job) => [job.id, job])), [jobList]);
   const jobByNumber = useMemo(
     () => new Map(jobList.map((job) => [job.number.toLowerCase(), job])),
+    [jobList],
+  );
+  const jobOptions = useMemo(
+    () => jobList.map((job) => ({ value: job.id, label: `${job.number} ${job.name}`, description: job.clientName, keywords: [job.clientName] })),
     [jobList],
   );
   const dates = rows.map((row) => row.date).sort();
@@ -387,19 +391,16 @@ export function BulkView({
           </div>
           <label className="flex min-w-0 basis-64 flex-col gap-1 text-xs text-fg-muted">
             Job
-            <select
-              className={cn(cell, 'cursor-pointer')}
-              value={fillJob}
-              onChange={(event) => setFillJob(event.target.value)}
+            <Combobox
+              className="h-10 lg:h-8"
+              value={fillJob || null}
+              onValueChange={(value) => setFillJob(value ?? '')}
               aria-label="Job to fill"
-            >
-              <option value="">{jobs.isLoading ? 'Loading jobs' : 'Pick a job'}</option>
-              {jobList.map((job) => (
-                <option key={job.id} value={job.id}>
-                  {job.number} {job.name}
-                </option>
-              ))}
-            </select>
+              options={jobOptions}
+              placeholder={jobs.isLoading ? 'Loading jobs' : 'Pick a job'}
+              searchPlaceholder="Find a job"
+              emptyMessage="No job matches"
+            />
           </label>
           <label className="flex flex-col gap-1 text-xs text-fg-muted">
             From
@@ -499,19 +500,16 @@ export function BulkView({
                     </label>
                     <label className="col-span-1 flex min-w-0 flex-col gap-1 sm:col-span-3 lg:col-span-1">
                       <span className="text-xs text-fg-muted lg:sr-only">Job</span>
-                      <select
+                      <Combobox
+                        className="h-10 lg:h-8"
                         aria-label={`Job for the row on ${shortDate(row.date)}`}
-                        value={row.jobId}
-                        onChange={(event) => change(row.key, { jobId: event.target.value })}
-                        className={cn(cell, 'cursor-pointer truncate')}
-                      >
-                        <option value="">Pick a job</option>
-                        {jobList.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.number} {item.name}
-                          </option>
-                        ))}
-                      </select>
+                        value={row.jobId || null}
+                        onValueChange={(value) => change(row.key, { jobId: value ?? '' })}
+                        options={jobOptions}
+                        placeholder="Pick a job"
+                        searchPlaceholder="Find a job"
+                        emptyMessage="No job matches"
+                      />
                     </label>
                     {input('unitsGood')}
                     {input('unitsScrap')}

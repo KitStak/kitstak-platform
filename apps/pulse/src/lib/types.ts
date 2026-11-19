@@ -127,6 +127,8 @@ export interface SettingsDTO {
   readonly sharedCostRule: SharedCostRuleValue;
   readonly sharedPctBp: number;
   readonly sharedSpread: SharedSpreadValue;
+  /** How company costs are shared out over part of a month: by calendar day (the default) or by work day (4.9). */
+  readonly companyCostSpread: 'calendar' | 'work_days';
   readonly defaultPartsOwner: PartsOwnerValue;
   readonly defaultMemberRole: PulseRole;
   readonly jobNumberPrefix: string;
@@ -135,6 +137,8 @@ export interface SettingsDTO {
   readonly wmsSyncMaterials: boolean;
   readonly wmsSyncVas: boolean;
   readonly wmsSyncBilling: boolean;
+  /** "Let warehouse contract rates set job prices" (Connected apps). On by default. */
+  readonly wmsContractPrices: boolean;
   readonly wmsBillingOpsInProfit: readonly string[];
   readonly crmSuggestJobs: boolean;
   readonly projectsTimeImport: boolean;
@@ -440,6 +444,12 @@ export interface JobListItemDTO extends JobDTO {
   readonly planLaborHours: DecimalString | null;
 }
 
+/** A job in the Deleted list: the job as it was, and who deleted it (`deletedAt` says when). */
+export interface DeletedJobDTO extends JobListItemDTO {
+  /** The person who deleted it, from the activity log. Null when the log has no name for it. */
+  readonly deletedById: string | null;
+}
+
 export interface JobPriceDTO {
   readonly id: string;
   readonly jobId: string;
@@ -499,6 +509,25 @@ export interface JobLinkDTO {
   readonly status: string | null;
   /** Full URL into the sibling app (host added at read time), or null. */
   readonly url: string | null;
+  /**
+   * Set when the price of this job came from the client's warehouse contract through this work
+   * order: the contract's name and the day Pulse took the rate. No amounts, so every reader sees it.
+   */
+  readonly priceFromContract: { readonly contractName: string; readonly at: string | null } | null;
+  /**
+   * The warehouse contract behind this work order link, for the price dialog. `inEffect`: the price
+   * in force on the job is the contract's (else a price typed in Pulse wins until the contract's
+   * rates change). `billedBy`: only the warehouse bill can price the job (`tiers` or `conditions`).
+   * `unitPrice` and `fixedPriceCents` are the contract's, null when money is hidden.
+   */
+  readonly contract?: {
+    readonly contractName: string;
+    readonly inEffect: boolean;
+    readonly billedBy: 'tiers' | 'conditions' | null;
+    readonly unitPrice: string | null;
+    readonly fixedPriceCents: number | null;
+    readonly moneyHidden: boolean;
+  } | null;
 }
 
 export interface JobDetailDTO extends JobListItemDTO {
@@ -627,6 +656,11 @@ export interface RevenueEntryDTO extends StreamRowBase {
 }
 
 export interface VasEntryDTO extends StreamRowBase {
+  /**
+   * Where a pulled entry came from: the warehouse record's page. Null for a typed entry, and null
+   * when the workspace no longer has that app on its plan (show plain words, never a dead link).
+   */
+  readonly sourceUrl: string | null;
   readonly siteId: string;
   readonly vasServiceId: string;
   readonly clientId: string;
@@ -732,6 +766,12 @@ export interface ProfitRowDTO {
   readonly trend: readonly number[] | null;
   /** A job in the group has units with no hours or hours with no rate. */
   readonly laborMissing: boolean;
+  /**
+   * An extra service row with revenue and no cost of any kind (no hours, no parts). Pulse does not know
+   * what the work cost, so `marginBp` is null and the screen says "No cost yet", never 100%.
+   * Always false for a reader without money, and for rows that are not about an extra service.
+   */
+  readonly costMissing: boolean;
   readonly riskStatus: PulseStatus | null;
 }
 
@@ -753,6 +793,10 @@ export interface ProfitFilters {
   readonly jobId?: string | null;
   readonly vasServiceId?: string | null;
   readonly status?: JobStatusValue | null;
+  /** Only rows put on a client with no job (the drill down behind "Put on a client, not on a job"). */
+  readonly noJob?: boolean;
+  /** Company profit only: share company costs by calendar day or by work day for this view. Left out: the workspace setting. */
+  readonly companyCostSpread?: 'calendar' | 'work_days' | null;
 }
 
 /** The walk from profit on jobs to company profit (SPEC 4.9). */
@@ -762,9 +806,14 @@ export interface CompanyBridgeDTO {
   readonly workProfitCents: MoneyCents;
   readonly sharedGapCents: MoneyCents;
   readonly missingCostCents: MoneyCents;
+  /**
+   * Company costs counted for these days (SPEC 4.9). Company costs are monthly, so a part month counts
+   * its share by calendar day or by work day (`companyCostSpread`) and a whole month counts all of it. Months with no company costs count nothing.
+   */
   readonly companyCostCents: MoneyCents;
+  /** Overhead the hourly rates covered on the days of the months that count company costs (all days when none do). */
   readonly overheadAbsorbedCents: MoneyCents;
-  /** Null when no company costs were entered (the line is hidden). */
+  /** Null when no company costs were counted (the line is hidden). */
   readonly overheadGapCents: MoneyCents;
   readonly companyProfitCents: MoneyCents;
   readonly indirectCents: MoneyCents;
@@ -778,7 +827,29 @@ export interface CompanyBridgeDTO {
   readonly grossPayCents: MoneyCents;
   readonly payrollGapCents: MoneyCents;
   readonly overLoggedDays: number;
+  /** True when company costs were counted, so the walk has the overhead step and the company number is "after overhead". */
   readonly hasCompanyCosts: boolean;
+  /** True when the range is not whole calendar months of company costs: a part month, or a month with none typed in. */
+  readonly companyCostPartial: boolean;
+  /** Plain words to show beside the company number when it is partial, like "Company costs for 18 of 30 days." Never holds money. */
+  readonly companyCostNote: string | null;
+  /**
+   * How a part month was shared out: `calendar` (every day carries a share, the default) or
+   * `work_days` (only working days do). From `settings.companyCostSpread`, or the view's `spread`.
+   */
+  readonly companyCostSpread: 'calendar' | 'work_days';
+  /** One row per calendar month that counted company costs, oldest first. */
+  readonly companyCostParts: readonly {
+    readonly month: string;
+    readonly daysCounted: number;
+    readonly daysInMonth: number;
+    readonly workDaysCounted: number;
+    readonly workDaysInMonth: number;
+    /** `calendar` when the month was counted by calendar day, `work_days` by work day. */
+    readonly spread: 'calendar' | 'work_days';
+    readonly monthCostCents: MoneyCents;
+    readonly countedCents: MoneyCents;
+  }[];
   readonly moneyHidden: boolean;
 }
 
@@ -839,7 +910,10 @@ export interface AlertRuleDTO {
   readonly id: string;
   readonly name: string;
   readonly kind: AlertKind;
+  /** The line of the rule (dollars or a margin percent). Null when the rule has none, and for a reader without money. */
   readonly threshold: DecimalString | null;
+  /** True when the reader may not see money: `threshold` is null and `name` holds no numbers. */
+  readonly moneyHidden: boolean;
   readonly scope: Readonly<Record<string, unknown>>;
   readonly severity: AlertSeverity;
   readonly notifyRoles: readonly string[];
@@ -1257,6 +1331,8 @@ export interface PivotCellDTO {
   readonly marginBp: number | null;
   readonly unitsGood: DecimalString;
   readonly hours: DecimalString;
+  /** An extra service cell with revenue and no cost of any kind: `marginBp` is null and the screen says "No cost yet". */
+  readonly costMissing: boolean;
 }
 
 /** `GET /api/v1/profit/pivot`: profit grouped by two things at once. */
@@ -1321,6 +1397,18 @@ export interface ReportChartDTO {
 }
 
 /** `GET /api/v1/reports/<slug>`: one built report. The page, the CSV and the print view all read this. */
+/** Money in a report's total that belongs to no row of the ranking: costs and fees put on a client with no job. */
+export interface ReportAsideDTO {
+  readonly key: 'client_level';
+  readonly label: string;
+  /** Profit of these rows in cents: under zero when they cost more than they earned. Null when hidden. */
+  readonly valueCents: number | null;
+  /** One plain sentence on what the number is. */
+  readonly text: string;
+  /** How many entries are behind it. */
+  readonly entryCount: number;
+}
+
 export interface ReportDTO {
   readonly slug: string;
   readonly name: string;
@@ -1337,6 +1425,8 @@ export interface ReportDTO {
   readonly total: Readonly<Record<string, ReportCell>> | null;
   readonly summary: readonly { readonly label: string; readonly value: ReportCell; readonly kind: ReportCellKind }[];
   readonly chart: ReportChartDTO | null;
+  /** A number that is in the total but is not one of the ranked rows, said in words under the chart. */
+  readonly aside: ReportAsideDTO | null;
   /** Plain sentences on how to read the report or what is missing. */
   readonly notes: readonly string[];
   readonly truncated: boolean;

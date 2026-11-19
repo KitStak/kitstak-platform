@@ -29,6 +29,7 @@ import {
   type DomainContext,
   type ProductionInput,
 } from '@/server/domain';
+import { asSeed } from './context';
 
 /** The last `count` work days that end yesterday, oldest first. */
 function recentWorkDays(today: string, count: number): string[] {
@@ -44,7 +45,7 @@ export interface SeedSummary {
   readonly alerts: number;
 }
 
-export async function seedMinimal(ctx: DomainContext): Promise<SeedSummary> {
+export const seedMinimal = asSeed(async function seedMinimal(ctx: DomainContext): Promise<SeedSummary> {
   const [site] = await listSites(ctx);
   if (!site) throw new Error('Seed: the org has no site.');
   const today = site.today;
@@ -202,4 +203,4 @@ export async function seedMinimal(ctx: DomainContext): Promise<SeedSummary> {
 
   const alerts = await evaluateAlerts(ctx);
   return { clients: 3, jobs: 5, entries: entries.length, alerts: alerts.created };
-}
+});

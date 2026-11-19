@@ -4,6 +4,7 @@ import { Building2 } from 'lucide-react';
 import { Logo } from '@/features/shell/logo';
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { asSystem } from '@/server/db/scope';
 import { appUrls } from '@/server/env';
 import { getContext, getSession } from '@/server/session';
 import { JoinInvitations, type PendingInvitation } from './join-invitations';
@@ -13,14 +14,15 @@ export const metadata: Metadata = { title: 'Join an organization' };
 /** Invitations sent to this email that can still be accepted. Fails soft: no list, no card. */
 async function pendingInvitations(email: string): Promise<PendingInvitation[]> {
   try {
-    const result = await db.execute<{ id: string; org_name: string; inviter_name: string | null }>(
+    // A person with no workspace yet: there is no org to scope to, and the tables are in core.
+    const result = await asSystem('invitations for a person with no workspace (core tables)', () => db.execute<{ id: string; org_name: string; inviter_name: string | null }>(
       sql`SELECT i.id, o.name AS org_name, u.name AS inviter_name
             FROM core.invitation i
             JOIN core.organization o ON o.id = i.organization_id
             LEFT JOIN core."user" u ON u.id = i.inviter_id
            WHERE lower(i.email) = lower(${email}) AND i.status = 'pending' AND i.expires_at > now()
            ORDER BY i.expires_at DESC LIMIT 5`,
-    );
+    ));
     return result.rows.map((row) => ({ id: row.id, orgName: row.org_name, inviterName: row.inviter_name }));
   } catch {
     return [];

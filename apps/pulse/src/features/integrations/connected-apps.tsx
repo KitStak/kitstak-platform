@@ -74,6 +74,10 @@ const INTO_PULSE: Readonly<Record<SiblingApp, readonly Flow[]>> = {
       text: 'Warehouse bills come in as billed amounts for each client. They show what was invoiced and never change profit.',
       toggle: 'wmsSyncBilling',
     },
+    {
+      text: 'Warehouse contract rates set job prices: the work order rate on the client\'s approved warehouse contract becomes the price of a linked job.',
+      toggle: 'wmsContractPrices',
+    },
     { text: 'A work order that is short of parts marks its job, so it shows up as at risk.' },
   ],
   projects: [
@@ -95,6 +99,7 @@ const TOGGLE_LABEL: Readonly<Record<SwitchKey, string>> = {
   crmSuggestJobs: 'Suggest jobs from won deals',
   wmsSyncMaterials: 'Pull parts used',
   wmsSyncBilling: 'Pull warehouse bills',
+  wmsContractPrices: 'Let warehouse contract rates set job prices',
   projectsTimeImport: 'Pull project time',
 };
 
@@ -121,7 +126,23 @@ function seenLines(app: AppConnectionDTO): string[] {
     if (has('billLines')) lines.push(`${plural(c.billLines ?? 0, 'bill line', 'bill lines')} read`);
     if (has('vasRecords') && (c.vasRecords ?? 0) > 0)
       lines.push(
-        `${plural(c.vasRecords ?? 0, 'extra service record', 'extra service records')}, ${c.vasNoPrice ?? 0} with no price set in the warehouse`,
+        has('vasInPulse')
+          ? `${plural(c.vasRecords ?? 0, 'extra service record', 'extra service records')} in the warehouse, ${c.vasInPulse ?? 0} in Pulse as extra service entries, ${c.vasContractPriced ?? 0} priced by a contract rate`
+          : `${plural(c.vasRecords ?? 0, 'extra service record', 'extra service records')} in the warehouse`,
+      );
+    if (has('contractJobs') && (c.contractJobs ?? 0) > 0)
+      lines.push(`${plural(c.contractJobs ?? 0, 'linked job follows', 'linked jobs follow')} a warehouse contract rate for work orders`);
+    if (has('contractTyped') && (c.contractTyped ?? 0) > 0)
+      lines.push(
+        `${plural(c.contractTyped ?? 0, 'linked job has', 'linked jobs have')} a price typed in Pulse instead of the contract rate. The contract rate comes back when its rates change in the warehouse.`,
+      );
+    if (has('contractWarehouseBill') && (c.contractWarehouseBill ?? 0) > 0)
+      lines.push(
+        `${plural(c.contractWarehouseBill ?? 0, 'linked job is', 'linked jobs are')} priced by the warehouse bill, because the contract rate changes with volume or is for some products only. Pulse keeps the job's own price.`,
+      );
+    if (has('vasWarehouseBill') && (c.vasWarehouseBill ?? 0) > 0)
+      lines.push(
+        `${plural(c.vasWarehouseBill ?? 0, 'extra service record is', 'extra service records are')} priced by the warehouse bill, for the same reason, so Pulse shows no price for them yet.`,
       );
   }
   if (app.app === 'projects' && has('linkedProjects')) {
@@ -361,6 +382,36 @@ function AppCard({
             </ul>
           ) : null}
           {last ? <p className={cn('text-fg-muted', seen.length > 0 && 'mt-1')}>{last}</p> : null}
+          {app.app === 'wms' && (app.counts.vasNoPrice ?? 0) > 0 ? (
+            <p className="mt-2 border-t border-border-subtle pt-2 text-fg" data-testid="vas-no-price">
+              <strong className="font-semibold">
+                {plural(app.counts.vasNoPrice ?? 0, 'extra service entry has', 'extra service entries have')} no price yet
+              </strong>
+              , so that work earns nothing on paper. Add a rate for the service to the client&apos;s contract in the{' '}
+              <a
+                href={`${app.url}/billing`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-sm text-fg-link underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              >
+                warehouse<span className="sr-only"> (opens in a new tab)</span>
+              </a>{' '}
+              and sync again. Or type a price on the entry in Pulse: on the job, under Money in, or in{' '}
+              <Link
+                href={routes.settingsClose()}
+                className="rounded-sm text-fg-link underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              >
+                Close a month
+              </Link>
+              , under Extra services.
+            </p>
+          ) : null}
+          {app.app === 'wms' && (app.counts.vasNoClient ?? 0) > 0 ? (
+            <p className="mt-1 text-fg-muted" data-testid="vas-no-client">
+              {plural(app.counts.vasNoClient ?? 0, 'record was', 'records were')} left out because the client is not in Pulse yet. Add the
+              client, then sync again.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </li>

@@ -49,8 +49,8 @@ export const STREAM_GROUP_LABELS: Readonly<Record<StreamGroup, string>> = {
 };
 
 export const STREAMS: readonly StreamInfo[] = [
-  { id: 'clients', file: 'clients.csv', name: 'Clients', description: 'One row per client you do work for.', group: 'setup', needed: ['client_code', 'name'], hasMoney: false },
-  { id: 'job_types', file: 'job_types.csv', name: 'Job types', description: 'One row per kind of work, like kitting or relabeling.', group: 'setup', needed: ['job_type_code', 'name'], hasMoney: false },
+  { id: 'clients', file: 'clients.csv', name: 'Clients', description: 'One row per client you do work for.', group: 'setup', needed: ['client_code', 'name'], hasMoney: true },
+  { id: 'job_types', file: 'job_types.csv', name: 'Job types', description: 'One row per kind of work, like kitting or relabeling.', group: 'setup', needed: ['job_type_code', 'name'], hasMoney: true },
   { id: 'jobs', file: 'jobs.csv', name: 'Jobs', description: 'One row per job, with its client, price and planned units.', group: 'setup', needed: ['job_number', 'name', 'client_code'], hasMoney: true },
   { id: 'job_plans', file: 'job_plans.csv', name: 'Quotes and budgets', description: 'What you quoted or budgeted for a job, as totals or line by line.', group: 'setup', needed: ['job_number', 'plan'], hasMoney: true },
   { id: 'labor_rates', file: 'labor_rates.csv', name: 'Labor rates', description: 'The wage and extra costs behind the real cost of an hour, by labor class and start date.', group: 'setup', needed: ['labor_class_code', 'effective_from', 'wage_per_hour'], hasMoney: true },

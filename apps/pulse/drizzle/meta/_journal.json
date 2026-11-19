@@ -3,6 +3,11 @@
   "dialect": "postgresql",
   "entries": [
     { "idx": 0, "version": "7", "when": 1794873600000, "tag": "0000_pulse_init", "breakpoints": true },
-    { "idx": 5, "version": "7", "when": 1795046400000, "tag": "0005_saved_view_pages", "breakpoints": true }
+    { "idx": 5, "version": "7", "when": 1795046400000, "tag": "0005_saved_view_pages", "breakpoints": true },
+    { "idx": 7, "version": "7", "when": 1795132800000, "tag": "0007_rls_policies", "breakpoints": true },
+    { "idx": 9, "version": "7", "when": 1795305600000, "tag": "0009_db_guard_role", "breakpoints": true },
+    { "idx": 11, "version": "7", "when": 1795478400000, "tag": "0011_wms_contract_prices_switch", "breakpoints": true },
+    { "idx": 12, "version": "7", "when": 1795564800000, "tag": "0012_db_guard_set_grant", "breakpoints": true },
+    { "idx": 13, "version": "7", "when": 1795651200000, "tag": "0013_company_cost_spread", "breakpoints": true }
   ]
 }

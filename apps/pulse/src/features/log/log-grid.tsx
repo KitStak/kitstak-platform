@@ -10,6 +10,7 @@
  */
 import {
   forwardRef,
+  memo,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -46,6 +47,7 @@ import {
   IconButton,
   Popover,
   PopoverContent,
+  GridSelect,
   PopoverTrigger,
   toast,
 } from '@/components/ui';
@@ -77,6 +79,7 @@ import {
   LINE_FIELDS,
   applyField,
   crewQuestion,
+  missingLaborWords,
   isBlank,
   isBlockPaste,
   lineProblem,
@@ -205,6 +208,11 @@ function mergeLines(previous: readonly Line[], grid: LogGridDTO): Line[] {
   return out;
 }
 
+/** The ids of the saved lines of one job on the grid: what a new line tells the server it saw. */
+function seenLines(lines: readonly Line[], jobId: string): string[] {
+  return lines.flatMap((line) => (line.jobId === jobId && line.entry ? [line.entry.id] : []));
+}
+
 interface SaveResponse {
   data?: { entry: ProductionEntryDTO; created: boolean };
   error?: { code: string; message: string; fresh?: ProductionEntryDTO | null; fields?: Record<string, string> };
@@ -303,6 +311,53 @@ const COLS =
 const cellInput =
   'h-10 w-full min-w-0 rounded-md border border-border-input bg-panel px-2 text-right text-sm tabular-nums text-fg placeholder:text-fg-placeholder transition-colors hover:border-border-input-hover focus-visible:border-focus focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-focus disabled:cursor-not-allowed disabled:bg-sunken disabled:text-fg-disabled xl:h-8';
 
+const DEFAULT_CLASS = 'default';
+
+/**
+ * The labor class of one line: the app's own Select (type a letter to jump, Enter or Space opens,
+ * arrows move, Tab goes on to People). `GridSelect` draws a plain trigger until a person reaches
+ * it, so 30 pickers cost no more to draw than the old browser boxes. Kept apart and memoized so
+ * typing in a number box does not draw every picker of the grid again.
+ */
+const ClassSelect = memo(function ClassSelect({
+  label,
+  value,
+  laborClasses,
+  taken,
+  disabled,
+  lineKey,
+  onChange,
+}: {
+  readonly label: string;
+  readonly value: string | null;
+  readonly laborClasses: readonly LaborClassDTO[];
+  /** Labor class ids the other lines of this job hold, joined with commas: a class can be on one line only. */
+  readonly taken: string;
+  readonly disabled: boolean;
+  readonly lineKey: string;
+  readonly onChange: (key: string, laborClassId: string | null) => void;
+}) {
+  const options = useMemo(() => {
+    const used = new Set(taken.split(',').filter(Boolean));
+    return [
+      { value: DEFAULT_CLASS, label: 'Default class' },
+      ...laborClasses
+        .filter((item) => !item.archivedAt || item.id === value)
+        .map((item) => ({ value: item.id, label: item.name, disabled: used.has(item.id) })),
+    ];
+  }, [laborClasses, taken, value]);
+  return (
+    <GridSelect
+      aria-label={label}
+      disabled={disabled}
+      value={value ?? DEFAULT_CLASS}
+      onValueChange={(next) => onChange(lineKey, next === DEFAULT_CLASS ? null : next)}
+      options={options}
+      className="h-10 px-2 xl:h-8"
+    />
+  );
+});
+
 const FIELD_LABELS: Readonly<Record<LineField | 'setup', string>> = {
   unitsGood: 'Units good',
   unitsScrap: 'Scrap',
@@ -363,6 +418,9 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
     }, 1200);
   }, [queryClient]);
 
+  /** Set below, once `clearLine` exists: the save of a row that was emptied hands over to it. */
+  const clearLineRef = useRef<((line: Line) => Promise<void>) | null>(null);
+
   const saveLine = useCallback(
     async (key: string): Promise<void> => {
       const pending = timers.current.get(key);
@@ -382,6 +440,11 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
       }
       if (!line.entry && isBlank(line.values)) {
         update(key, (item) => ({ ...item, status: 'idle', message: null }));
+        return;
+      }
+      // Every box cleared on a saved row: take the entry off (with Undo) so no empty day is left on the job.
+      if (line.entry && isBlank(line.values)) {
+        void clearLineRef.current?.(line);
         return;
       }
       // One line for each labor class: a second line with the same class would write over the first.
@@ -411,6 +474,9 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
         workDate: grid.date,
         shift: line.shift,
         version: line.entry?.version ?? null,
+        // A new line names the lines of this job the grid shows, so the server can tell when
+        // someone else added work to the day in the meantime (the day form follows the same rule).
+        seen: seenLines(linesRef.current, line.jobId),
         ...toPayload(sent),
       });
       if (result.ok) {
@@ -451,6 +517,8 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
         return;
       }
       if (result.code === 'NETWORK_ERROR') offlineKeys.current.add(key);
+      // The day gained work this grid did not show: load it, and keep this line for the person to check.
+      if (result.code === 'CONFLICT') scheduleRefresh();
       update(key, (item) => ({ ...item, status: 'error', message: result.message }));
     },
     [canEdit, classById, grid.date, rowById, scheduleRefresh, update],
@@ -512,6 +580,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
             workDate: grid.date,
             shift: line.shift,
             version: line.entry?.version ?? null,
+            seen: seenLines(linesRef.current, line.jobId),
             ...toPayload(line.values),
           }),
         }).catch(() => undefined);
@@ -934,6 +1003,10 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
     [queryClient, rowById, scheduleRefresh, setLines],
   );
 
+  useEffect(() => {
+    clearLineRef.current = clearLine;
+  }, [clearLine]);
+
   const undoLine = useCallback(
     (line: Line) => {
       if (!line.undo) return;
@@ -1063,7 +1136,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
         <span className="pr-2 text-right">Units good</span>
         <span className="pr-2 text-right">Scrap</span>
         <span className="pr-2 text-right">Rework</span>
-        <span className="pl-2">Crew</span>
+        <span className="pl-2">Labor class</span>
         <span className="pr-2 text-right">People</span>
         <span className="pr-2 text-right">Hours each</span>
         <span className="pr-2 text-right">Labor hours</span>
@@ -1174,36 +1247,23 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                     {showUnits ? input('unitsScrap') : <span className="hidden xl:block" />}
                     {showUnits ? input('unitsRework') : <span className="hidden xl:block" />}
                     <label className="flex min-w-0 flex-col gap-1 md:col-span-2 xl:col-span-1">
-                      <span className="text-xs text-fg-muted xl:sr-only">Crew</span>
-                      <select
-                        aria-label={`Labor class for ${row.jobNumber}, line ${index + 1}`}
+                      <span className="text-xs text-fg-muted xl:sr-only">Labor class</span>
+                      <ClassSelect
+                        label={`Labor class for ${row.jobNumber}, line ${index + 1}`}
                         disabled={disabled}
-                        value={line.values.laborClassId ?? ''}
-                        onChange={(event) => setClass(line.key, event.target.value || null)}
-                        className={cn(cellInput, 'cursor-pointer truncate pr-1 text-left')}
-                      >
-                        <option value="">Default class</option>
-                        {laborClasses
-                          .filter((item) => !item.archivedAt || item.id === line.values.laborClassId)
-                          .map((item) => (
-                            <option
-                              key={item.id}
-                              value={item.id}
-                              disabled={lines.some(
-                                (other) =>
-                                  other.key !== line.key &&
-                                  other.jobId === line.jobId &&
-                                  other.shift === line.shift &&
-                                  (other.values.laborClassId ?? row.defaultLaborClassId) === item.id,
-                              )}
-                            >
-                              {item.name}
-                            </option>
-                          ))}
-                      </select>
+                        value={line.values.laborClassId}
+                        laborClasses={laborClasses}
+                        taken={lines
+                          .filter((other) => other.key !== line.key && other.jobId === line.jobId && other.shift === line.shift)
+                          .map((other) => other.values.laborClassId ?? row.defaultLaborClassId ?? '')
+                          .join(',')}
+                        lineKey={line.key}
+                        onChange={setClass}
+                      />
                     </label>
                     {input('people')}
-                    {input('hoursEach', { placeholder: tidy(grid.shiftHours) })}
+                    {/* No grey number here: a placeholder that looks like 8 reads as 8 hours typed in. */}
+                    {input('hoursEach')}
                     {input('hours', { className: 'font-medium' })}
                     {input('overtime')}
                     <div
@@ -1432,11 +1492,11 @@ function Readout({
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {missingHours ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-warning-subtle px-2 py-0.5 text-xs font-medium text-warning-text">
-              <AlertTriangle aria-hidden className="size-3" /> Add people and hours
+              <AlertTriangle aria-hidden className="size-3" /> {missingLaborWords(lines.map((line) => line.values))}
             </span>
           ) : readout.uph === null ? (
             <span className="text-xs text-fg-muted">
-              {formatHours(readout.hours, { empty: '' })} logged, no units yet
+              {formatHours(readout.hours, { empty: '', style: 'unit' })} logged, no units yet
             </span>
           ) : (
             <span
@@ -1465,7 +1525,9 @@ function Readout({
             )}
           >
             Labor {formatMoney(money.laborCents)}
-            {money.marginBp !== null ? (
+            {money.jobsNoHours > 0 ? (
+              <span data-testid="row-no-margin">, no margin yet: add the hours</span>
+            ) : money.marginBp !== null ? (
               <>
                 , margin{' '}
                 <span className={cn('font-medium', money.profitCents < 0 ? 'text-danger-text' : 'text-fg')}>
@@ -1618,8 +1680,8 @@ function HowWeGotThis({
             />
             <Step
               label="Margin today"
-              value={money.marginBp === null ? 'No revenue yet' : formatPercentBp(money.marginBp)}
-              hint="Profit divided by earned"
+              value={money.jobsNoHours > 0 ? 'No margin yet' : money.marginBp === null ? 'No revenue yet' : formatPercentBp(money.marginBp)}
+              hint={money.jobsNoHours > 0 ? 'There are units and no labor hours, so the labor cost is not in yet' : 'Profit divided by earned'}
               strong
             />
           </dl>

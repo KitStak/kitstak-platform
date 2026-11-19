@@ -3,6 +3,26 @@
 /* The shared logo component uses Tailwind utilities; include its source in the scan. */
 @source '../../../../packages/ui/src/logo';
 
+/*
+ * Focus is blue in Pulse. The shared crimson focus ring sat next to the red of an error (200,16,46
+ * against 179,17,44), so a field that only had focus looked like a field with a mistake. Blue keeps
+ * at least 5:1 against every surface in both themes, and an error keeps its red double edge.
+ */
+:root {
+  --focus-ring: #2d5c94;
+  --focus-ring-soft: rgb(45 92 148 / 0.3);
+}
+:root[data-theme='dark'] {
+  --focus-ring: #6b9ddc;
+  --focus-ring-soft: rgb(107 157 220 / 0.38);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --focus-ring: #6b9ddc;
+    --focus-ring-soft: rgb(107 157 220 / 0.38);
+  }
+}
+
 /* Dark variant follows the resolved theme attribute (set before paint by the theme script). */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
@@ -395,7 +415,8 @@
  * Touch targets. The house controls are compact (24 to 36px tall), which is right for a mouse and
  * too small for a thumb. On touch screens every button, tab, checkbox and button-like link gets an
  * invisible hit area of at least 44 by 44px, centered on the control, so nothing moves on screen.
- * Menu rows and list options are left alone: they already fill their row.
+ * Menu rows and list options fill their row, so they get the height only (below, outside the layer
+ * so it beats the 32px row in the components layer).
  */
 @layer base {
   @media (pointer: coarse) {
@@ -416,6 +437,12 @@
     [class*='overflow-x-auto']:where(:not([class*='overflow-y-'])) {
       overflow-y: hidden;
     }
+  }
+}
+
+@media (pointer: coarse) {
+  .ks-menu-item {
+    min-height: 44px;
   }
 }
 

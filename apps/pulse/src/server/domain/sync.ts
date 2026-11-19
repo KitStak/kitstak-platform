@@ -5,7 +5,9 @@
  *
  *  - Each pulled stream row carries a `source_ref` that names the thing it came from
  *    (`wms:built:<workOrderId>:<date>`, `wms:bill:<reportId>:<operation>`,
- *    `pm:<projectId>:<date>`). A run looks the ref up first and only adds what is missing.
+ *    `wms:vas:<recordId>`, `pm:<projectId>:<date>`). A run looks the ref up first and only adds
+ *    what is missing.
+ *  - Warehouse extra services and contract rates are in `wms-services.ts`.
  *  - A day a person already typed is adopted (it gets the ref), not added a second time.
  *  - A field a person changed on a pulled row is listed in `meta.locked_fields` and is left alone.
  *  - A project's time feeds one job only, even when two jobs link the same project.
@@ -18,12 +20,14 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { appUrls } from '@/server/env';
 import { orgModuleFlags } from '@/server/entitlements';
 import { integrationAvailability } from '@/server/integrations/detect';
 import { getAccounts, getDeals, listWonDeals } from '@/server/integrations/crm';
 import { getProjects, projectTimeByDay } from '@/server/integrations/projects';
-import { listBilledRevenue, listVasRevenue, listWorkOrders, workOrderBuildsByDay } from '@/server/integrations/wms';
+import { listBilledRevenue, listWorkOrders, workOrderBuildsByDay } from '@/server/integrations/wms';
+import { logSoftFail } from '@/server/integrations/log';
 import { isDomainError } from '@/server/errors';
 import type { LinkTargetType } from '@/lib/constants';
 import type { AppConnectionDTO, ConnectedAppsDTO, LinkedJobDTO, SiblingApp, SyncResultDTO, SyncRunDTO } from '@/features/integrations/types';
@@ -37,6 +41,7 @@ import { pullWmsUsage } from './ledger';
 import { deleteProductionEntries, saveProductionEntry } from './production';
 import { assertOpen, closedMonths, finishWrite, newTouched, restampFixedJob, restampProduction, touchDay, touchJob } from './recalc';
 import { loadSettings } from './settings';
+import { applyWmsContractPrices, pullWmsServices } from './wms-services';
 
 const SOURCES: readonly SiblingApp[] = ['crm', 'wms', 'projects'];
 type Trigger = 'manual' | 'page' | 'event' | 'cron';
@@ -338,10 +343,43 @@ async function syncWms(ctx: DomainContext, tally: Tally): Promise<void> {
     }
   }
 
-  // 5. Extra services in the warehouse: counted here so "No price set yet" can be fixed at the source.
-  const vas = await listVasRevenue(ctx);
-  tally.counts.vasRecords = vas.length;
-  tally.counts.vasNoPrice = vas.filter((line) => line.revenueCents === null).length;
+  // 5. The warehouse contract's work order rates set the price of each linked job, unless the
+  //    workspace turned that off ("Let warehouse contract rates set job prices", Connected apps).
+  try {
+    const priced = settings.wmsContractPrices
+      ? await applyWmsContractPrices(ctx, links.filter((link) => orderById.has(link.target_id)))
+      : { updated: 0, skipped: 0, skippedClosed: 0, jobs: 0, notApplied: 0, typed: 0, warehouseBill: 0 };
+    tally.updated += priced.updated;
+    tally.skipped += priced.skipped;
+    tally.skippedClosed += priced.skippedClosed;
+    tally.counts.contractJobs = priced.jobs;
+    tally.counts.contractNotApplied = priced.notApplied;
+    tally.counts.contractTyped = priced.typed;
+    tally.counts.contractWarehouseBill = priced.warehouseBill;
+  } catch (error) {
+    tally.skipped += 1;
+    logSoftFail(ctx.orgId, 'sync.contractPrices', error);
+  }
+
+  // 6. Extra services done in the warehouse become extra service entries, on the job or the client.
+  try {
+    const services = await pullWmsServices(ctx);
+    if (services.read) {
+      tally.created += services.created;
+      tally.updated += services.updated + services.removed;
+      tally.skipped += services.skipped;
+      tally.skippedClosed += services.skippedClosed;
+      tally.counts.vasRecords = services.records;
+      tally.counts.vasInPulse = services.inPulse;
+      tally.counts.vasNoPrice = services.noPrice;
+      tally.counts.vasContractPriced = services.contractPriced;
+      tally.counts.vasWarehouseBill = services.warehouseBill;
+      tally.counts.vasNoClient = services.noClient;
+    }
+  } catch (error) {
+    tally.skipped += 1;
+    logSoftFail(ctx.orgId, 'sync.wmsServices', error);
+  }
 }
 
 /* -------------------------------------------------------------------- CRM */
@@ -538,19 +576,19 @@ async function runOne(ctx: DomainContext, source: SiblingApp, trigger: Trigger):
 }
 
 /** "Sync now": a manager pulls one app, or all the connected ones. */
-export async function runSync(ctx: DomainContext, source: SiblingApp | 'all'): Promise<SyncResultDTO[]> {
+export const runSync = scoped(async function runSync(ctx: DomainContext, source: SiblingApp | 'all'): Promise<SyncResultDTO[]> {
   await requirePulse(ctx, 'job:manage');
   const results: SyncResultDTO[] = [];
   for (const app of source === 'all' ? SOURCES : [source]) results.push(await runOne(ctx, app, 'manual'));
   return results;
-}
+});
 
 /**
  * Background refresh: pulls each connected app whose last sync is older than ten minutes, and
  * first answers any change notes the sibling apps left in `bridge_events`. Never throws. Call it
  * from `after()` on a page load, and from the cron tick.
  */
-export async function syncIfStale(ctx: DomainContext, trigger: 'page' | 'cron' = 'page'): Promise<void> {
+export const syncIfStale = scoped(async function syncIfStale(ctx: DomainContext, trigger: 'page' | 'cron' = 'page'): Promise<void> {
   try {
     const claimed = await claimBridgeEvents(ctx);
     const state = await rows<{ source: SiblingApp; stale: boolean }>(
@@ -575,7 +613,7 @@ export async function syncIfStale(ctx: DomainContext, trigger: 'page' | 'cron' =
   } catch (error) {
     console.error('[pulse] background sync skipped', { orgId: ctx.orgId, error: error instanceof Error ? error.message : String(error) });
   }
-}
+});
 
 const EVENT_SOURCE: Readonly<Record<string, SiblingApp>> = { wms_work_order_changed: 'wms', crm_deal_stage_changed: 'crm', pm_time_logged: 'projects' };
 
@@ -596,7 +634,7 @@ interface ClaimedEvents {
  * can be taken again. A note that already used its five tries is parked: `processed_at` is set
  * and `last_error` says why, so it stops blocking newer notes for the same record.
  */
-export async function claimBridgeEvents(ctx: DomainContext): Promise<ClaimedEvents> {
+export const claimBridgeEvents = scoped(async function claimBridgeEvents(ctx: DomainContext): Promise<ClaimedEvents> {
   const out: ClaimedEvents = { bySource: new Map(), unknown: [] };
   try {
     await db.execute(
@@ -622,7 +660,7 @@ export async function claimBridgeEvents(ctx: DomainContext): Promise<ClaimedEven
     console.error('[pulse] change notes not claimed', { orgId: ctx.orgId, message: error instanceof Error ? error.message : String(error) });
   }
   return out;
-}
+});
 
 /**
  * Settles claimed notes. `done`: handled, `processed_at` set. `failed`: keeps the lease so the
@@ -630,7 +668,7 @@ export async function claimBridgeEvents(ctx: DomainContext): Promise<ClaimedEven
  * another sync held the app, so the lease and the try are given back and the next page load
  * takes the note again.
  */
-export async function finishBridgeEvents(ctx: DomainContext, ids: readonly string[], result: { outcome: 'done' | 'busy' } | { outcome: 'failed'; error: string }): Promise<void> {
+export const finishBridgeEvents = scoped(async function finishBridgeEvents(ctx: DomainContext, ids: readonly string[], result: { outcome: 'done' | 'busy' } | { outcome: 'failed'; error: string }): Promise<void> {
   if (ids.length === 0) return;
   const list = sql`ARRAY[${sql.join(ids.map((id) => sql`${id}`), sql`, `)}]::uuid[]`;
   try {
@@ -648,7 +686,7 @@ export async function finishBridgeEvents(ctx: DomainContext, ids: readonly strin
   } catch (error) {
     console.error('[pulse] change notes not settled', { orgId: ctx.orgId, outcome: result.outcome, message: error instanceof Error ? error.message : String(error) });
   }
-}
+});
 
 function toRun(row: Record<string, unknown>): SyncRunDTO {
   return {
@@ -667,7 +705,7 @@ function toRun(row: Record<string, unknown>): SyncRunDTO {
 }
 
 /** The Connected apps page: each sibling app's state, when it last synced and what it saw. */
-export async function getConnectedApps(ctx: DomainContext): Promise<ConnectedAppsDTO> {
+export const getConnectedApps = scoped(async function getConnectedApps(ctx: DomainContext): Promise<ConnectedAppsDTO> {
   const access = await requirePulse(ctx, 'pulse:read');
   const [modules, available, settings] = await Promise.all([orgModuleFlags(ctx.orgId), integrationAvailability(ctx), loadSettings(ctx.orgId)]);
   const [state, runs, linked] = await Promise.all([
@@ -709,12 +747,12 @@ export async function getConnectedApps(ctx: DomainContext): Promise<ConnectedApp
   return {
     apps,
     canManage: access.role === 'owner' || access.role === 'admin' || access.role === 'manager',
-    switches: { wmsSyncMaterials: settings.wmsSyncMaterials, wmsSyncBilling: settings.wmsSyncBilling, crmSuggestJobs: settings.crmSuggestJobs, projectsTimeImport: settings.projectsTimeImport },
+    switches: { wmsSyncMaterials: settings.wmsSyncMaterials, wmsSyncBilling: settings.wmsSyncBilling, wmsContractPrices: settings.wmsContractPrices, crmSuggestJobs: settings.crmSuggestJobs, projectsTimeImport: settings.projectsTimeImport },
   };
-}
+});
 
 /** Every link between a job and a sibling record, newest first. */
-export async function listLinkedJobs(ctx: DomainContext, options: { limit?: number } = {}): Promise<LinkedJobDTO[]> {
+export const listLinkedJobs = scoped(async function listLinkedJobs(ctx: DomainContext, options: { limit?: number } = {}): Promise<LinkedJobDTO[]> {
   await requirePulse(ctx, 'pulse:read');
   const found = await rows<{ link_id: string; job_id: string; number: string; name: string; target_type: LinkTargetType; target_id: string; imports_time: boolean; cached_title: string | null; cached_status: string | null; cached_url: string | null }>(
     db,
@@ -736,10 +774,10 @@ export async function listLinkedJobs(ctx: DomainContext, options: { limit?: numb
     status: row.cached_status,
     path: row.cached_url,
   }));
-}
+});
 
 /** Turns "count this project's time as labor hours" on or off for one link. */
-export async function setLinkImportsTime(ctx: DomainContext, linkId: string, importsTime: boolean): Promise<void> {
+export const setLinkImportsTime = scoped(async function setLinkImportsTime(ctx: DomainContext, linkId: string, importsTime: boolean): Promise<void> {
   await requirePulse(ctx, 'job:manage');
   await inTx(async (tx) => {
     const [row] = await rows<{ id: string; job_id: string; imports_time: boolean }>(
@@ -749,4 +787,4 @@ export async function setLinkImportsTime(ctx: DomainContext, linkId: string, imp
     if (!row) return;
     await logActivity(tx, ctx, { verb: 'link.changed', entityType: 'link', entityId: row.id, jobId: row.job_id, field: 'importsTime', before: !importsTime, after: importsTime });
   });
-}
+});

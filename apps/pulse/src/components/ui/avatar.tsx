@@ -120,7 +120,7 @@ export function AvatarGroup({ people, max = 4, size = 'sm', className, renderOve
   const visible = people.slice(0, max);
   const hidden = people.slice(max);
   return (
-    <div className={cn('flex items-center -space-x-1.5', className)} role="group" aria-label={`${people.length} people`}>
+    <div className={cn('flex items-center -space-x-1.5', className)} role="group" aria-label={people.length === 1 ? '1 person' : `${people.length} people`}>
       {visible.map((person) => (
         <span key={person.id} className="inline-flex rounded-full ring-2 ring-[var(--surface-panel)]">
           <Avatar name={person.name} src={person.src} colorKey={person.id} size={size} showTooltip />

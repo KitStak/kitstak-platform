@@ -3,6 +3,6 @@ import { ServicesPage } from '@/features/services';
 
 export const metadata: Metadata = { title: 'Extra services' };
 
-export default function Page() {
-  return <ServicesPage />;
+export default function Page({ searchParams }: { readonly searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  return <ServicesPage searchParams={searchParams} />;
 }

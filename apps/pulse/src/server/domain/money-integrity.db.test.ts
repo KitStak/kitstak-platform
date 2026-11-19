@@ -7,6 +7,7 @@
  * The suite makes its own organization and removes it at the end. Skipped when no database answers.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { withOrg } from '@/server/db/scope';
 import { createTestOrg, databaseReady, type TestOrg } from '@/test/db';
 import { isDomainError } from '@/server/errors';
 import type { DomainContext } from './_shared';
@@ -113,7 +114,7 @@ describe.skipIf(!ready)('pulse money integrity (database)', () => {
 
       // Rows that leaked before this fix (job marked deleted with no rollup) are cleaned by a recalc.
       await org.query('update pulse.jobs set deleted_at = now() where id = $1', [jobB]);
-      await inTx((tx) => recalcOrg(tx, owner));
+      await withOrg(owner.orgId, () => inTx((tx) => recalcOrg(tx, owner)));
       expect(await snapshot()).toEqual(before);
     }, 60_000);
   });

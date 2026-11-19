@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '@/components/ui/table';
 import { toast } from '@/components/ui/toast';
 import { cn } from '@/components/ui/cn';
-import { formatRelative } from '@/lib/dates';
+import { RelativeTime } from '@/components/pulse/local-time';
 import { formatHours, formatMoney, formatMoneyWhole, formatNumber, formatPercentBp, formatPercentWhole } from '@/lib/format';
 import { useServerAction } from '@/lib/hooks/use-action';
 import { centsToNumber, subCents } from '@/lib/money';
@@ -181,7 +181,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
         <KpiTile label="Cost to serve" loading={!total} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, previous?.costCents, 'down', vs) : undefined} sparkline={points.length > 1 ? { values: points.map((row) => row.costCents) } : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
         <KpiTile label="Profit" loading={!total} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, previous?.profitCents, 'up', vs) : undefined} sparkline={points.length > 1 ? { values: points.map((row) => row.profitCents), tone: (total?.profitCents ?? 0) < 0 ? 'bad' : 'accent' } : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />
         <KpiTile
-          label="Margin after all costs"
+          label="Job margin"
           loading={!total}
           value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null}
           delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined}
@@ -196,7 +196,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
         <Section title="Trend" hint={`${rangeLabel(period)}, by ${bucket}`} testId="client-trend">
           <ComboChart
             title={`Revenue, cost and margin for ${client.name}`}
-            description={`Bars show revenue and cost. The line on top is the margin after all costs, next to this client’s target margin.${marginLine.skipped > 0 ? ` ${marginLine.skipped === 1 ? `One ${bucket}` : `${marginLine.skipped} ${bucket}s`} with very little revenue ${marginLine.skipped === 1 ? 'is' : 'are'} left off the margin line so the rest stay readable.` : ''}`}
+            description={`Bars show revenue and cost. The line on top is the job margin, next to this client’s target margin.${marginLine.skipped > 0 ? ` ${marginLine.skipped === 1 ? `One ${bucket}` : `${marginLine.skipped} ${bucket}s`} with very little revenue ${marginLine.skipped === 1 ? 'is' : 'are'} left off the margin line so the rest stay readable.` : ''}`}
             loading={!trend.data}
             refreshing={trend.isFetching && Boolean(trend.data)}
             dates={points.map((row) => row.key)}
@@ -205,7 +205,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
               { id: 'revenue', label: 'Revenue', values: points.map((row) => row.revenueCents) },
               { id: 'cost', label: 'Cost', values: points.map((row) => row.costCents) },
             ]}
-            lines={[{ id: 'margin', label: 'Margin after all costs', values: marginLine.values }]}
+            lines={[{ id: 'margin', label: 'Job margin', values: marginLine.values }]}
             barFormat="money"
             lineFormat="percent"
             lineTarget={{ value: targetBp, label: 'Target margin' }}
@@ -270,7 +270,75 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
           ) : jobRows.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-fg-secondary">No job of this client has work in this period.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Below 1024 px: one card per job with the money as label and value, so nothing starts off screen. */}
+            <ul className="flex flex-col divide-y divide-border-subtle lg:hidden" aria-label="Jobs of this client" data-testid="client-jobs-cards">
+              {jobRows.map((row: ProfitRowDTO) => (
+                <li key={row.key} className="flex flex-col gap-2 px-4 py-3" data-testid="client-job-card">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    {row.key === 'none' ? (
+                      <span className="font-medium text-fg-secondary">Put on the client, no job</span>
+                    ) : (
+                      <Link href={routes.job(row.label)} className="rounded-sm font-medium text-fg underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                        {row.label}
+                      </Link>
+                    )}
+                    {row.riskStatus ? <MarginPill status={row.riskStatus} size="sm" /> : null}
+                    {row.sublabel ? <span className="w-full truncate text-xs text-fg-muted">{row.sublabel}</span> : null}
+                  </div>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm tabular-nums sm:grid-cols-5">
+                    <div>
+                      <dt className="text-xs text-fg-muted">Revenue</dt>
+                      <dd className="font-medium text-fg">{formatMoney(row.revenueCents)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-fg-muted">Cost</dt>
+                      <dd className="font-medium text-fg">{formatMoney(row.costCents)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-fg-muted">Profit</dt>
+                      <dd className={cn('font-medium text-fg', (row.profitCents ?? 0) < 0 && 'text-danger-text')}>{formatMoney(row.profitCents)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-fg-muted">Margin</dt>
+                      <dd className={cn('font-medium text-fg', (row.marginBp ?? 0) < 0 && 'text-danger-text')}>{formatPercentBp(row.marginBp)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-fg-muted">Units</dt>
+                      <dd className="text-fg">{formatNumber(row.unitsGood, { maxDigits: 0 })}</dd>
+                    </div>
+                  </dl>
+                </li>
+              ))}
+              {jobs.data ? (
+                <li className="flex flex-col gap-2 bg-sunken px-4 py-3" data-testid="client-jobs-cards-total">
+                  <span className="text-sm font-semibold text-fg">Total</span>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm font-semibold tabular-nums sm:grid-cols-5">
+                    <div>
+                      <dt className="text-xs font-normal text-fg-muted">Revenue</dt>
+                      <dd>{formatMoney(jobs.data.total.revenueCents)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-normal text-fg-muted">Cost</dt>
+                      <dd>{formatMoney(jobs.data.total.costCents)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-normal text-fg-muted">Profit</dt>
+                      <dd>{formatMoney(jobs.data.total.profitCents)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-normal text-fg-muted">Margin</dt>
+                      <dd>{formatPercentBp(jobs.data.total.marginBp)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-normal text-fg-muted">Units</dt>
+                      <dd>{formatNumber(jobs.data.total.unitsGood, { maxDigits: 0 })}</dd>
+                    </div>
+                  </dl>
+                </li>
+              ) : null}
+            </ul>
+            <div className="hidden overflow-x-auto lg:block">
               <Table className="min-w-[640px]">
                 <TableHead>
                   <tr>
@@ -324,6 +392,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
                 ) : null}
               </Table>
             </div>
+            </>
           )}
         </Section>
 
@@ -348,7 +417,9 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
                   <TableHead>
                     <tr>
                       <TableHeaderCell>Service</TableHeaderCell>
-                      <TableHeaderCell numeric>Units</TableHeaderCell>
+                      <TableHeaderCell numeric className="hidden sm:table-cell">
+                        Units
+                      </TableHeaderCell>
                       <TableHeaderCell numeric>Revenue</TableHeaderCell>
                       <TableHeaderCell numeric>Margin</TableHeaderCell>
                     </tr>
@@ -356,12 +427,14 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
                   <TableBody>
                     {serviceRows.map((row) => (
                       <TableRow key={row.key}>
-                        <TableCell className="max-w-[200px] truncate">
+                        <TableCell className="max-w-[112px] truncate sm:max-w-[200px]">
                           <Link href={routes.service(row.key)} className="rounded-sm font-medium text-fg underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                             {row.label}
                           </Link>
                         </TableCell>
-                        <TableCell numeric>{formatNumber(row.unitsGood, { maxDigits: 0 })}</TableCell>
+                        <TableCell numeric className="hidden sm:table-cell">
+                          {formatNumber(row.unitsGood, { maxDigits: 0 })}
+                        </TableCell>
                         <TableCell numeric>{formatMoney(row.revenueCents)}</TableCell>
                         <TableCell numeric className={cn((row.marginBp ?? 0) < 0 && 'text-danger-text')}>
                           {formatPercentBp(row.marginBp)}
@@ -389,7 +462,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
               {client.paymentTermsDays !== null ? (
                 <div className="flex items-start justify-between gap-3">
                   <dt className="text-fg-secondary">Payment terms</dt>
-                  <dd className="text-fg">{client.paymentTermsDays} days</dd>
+                  <dd className="text-fg">{client.paymentTermsDays} {client.paymentTermsDays === 1 ? 'day' : 'days'}</dd>
                 </div>
               ) : null}
               {client.contactName || client.contactEmail || client.phone ? (
@@ -445,7 +518,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
                 <span className="min-w-0 text-fg">
                   <span className="font-medium">{item.actor?.name ?? 'KitStak'}</span> <span className="text-fg-secondary">{activityWords(item.verb, item.field)}</span>
                 </span>
-                <span className="shrink-0 text-xs text-fg-muted">{formatRelative(item.createdAt)}</span>
+                <RelativeTime iso={item.createdAt} className="shrink-0 text-xs text-fg-muted" />
               </li>
             ))}
           </ul>

@@ -35,7 +35,8 @@ test('1. create a job with the wizard', async ({ page }) => {
   const clients = await apiData<{ name: string }[]>(page, 'clients');
   await open(page, '/jobs/new');
   await page.getByTestId('wizard-next').click();
-  await expect(page.getByText('Pick a client or type a new name.').first()).toBeVisible();
+  // The client box says what is wrong right under itself, in the same words as quick add.
+  await expect(page.getByTestId('wizard-client-error')).toHaveText('Pick a client, or type a new client name.');
   await page.getByTestId('wizard-client').fill(clients[0]!.name);
   await page.getByTestId('wizard-name').fill(JOB_NAME);
   await page.getByTestId('wizard-units').fill('1000');

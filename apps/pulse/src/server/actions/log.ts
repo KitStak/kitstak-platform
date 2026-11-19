@@ -19,15 +19,21 @@ import { runAction } from './_action';
 import { headcount, hours, indirectReason, isoDate, positiveCents, productionInput, text, uuid, version } from './schemas';
 
 export type SaveProductionActionInput = z.input<typeof productionInput>;
-/** Saves one production row (autosave of a grid row). Does not revalidate the page: the grid keeps its own state. */
+/**
+ * Saves one production row. A row that already exists needs the version the editor read, or the answer
+ * is CONFLICT. Does not revalidate the page: the caller keeps its own state.
+ */
 export async function saveProductionEntryAction(input: SaveProductionActionInput) {
-  return runAction(productionInput, input, (data, ctx) => saveProductionEntry(ctx, data), { revalidate: false });
+  return runAction(productionInput, input, (data, ctx) => saveProductionEntry(ctx, data, { requireVersion: true }), { revalidate: false });
 }
 
 const bulkSchema = z.object({ entries: z.array(productionInput).min(1).max(5000) });
-/** Saves many rows at once, all or nothing (paste, "Copy yesterday's crew"). */
+/**
+ * Saves many rows at once, all or nothing (paste, "Copy yesterday's crew"). A row that already exists needs
+ * the version the editor read, and two lines for one job, day, shift and labor type are refused.
+ */
 export async function saveProductionBulkAction(input: z.input<typeof bulkSchema>) {
-  return runAction(bulkSchema, input, (data, ctx) => saveProductionBulk(ctx, data.entries));
+  return runAction(bulkSchema, input, (data, ctx) => saveProductionBulk(ctx, data.entries, { requireVersion: true }));
 }
 
 const idsSchema = z.object({ ids: z.array(uuid).min(1).max(2000) });

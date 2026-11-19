@@ -103,8 +103,8 @@ export function Combobox(props: ComboboxProps) {
           className={cn(
             'inline-flex h-8 w-full items-center justify-between gap-2 rounded-md border border-border-input bg-panel px-2.5 text-left text-sm',
             'transition-[border-color,box-shadow] duration-[var(--duration-fast)] outline-none hover:border-border-input-hover',
-            'focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)] data-[state=open]:border-primary',
-            'disabled:cursor-not-allowed disabled:opacity-60 aria-invalid:border-danger',
+            'focus-visible:border-focus focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)] data-[state=open]:border-focus',
+            'disabled:cursor-not-allowed disabled:opacity-60 aria-invalid:border-danger aria-invalid:shadow-[inset_0_0_0_1px_var(--danger)] aria-invalid:focus-visible:border-danger aria-invalid:focus-visible:shadow-[inset_0_0_0_1px_var(--danger),0_0_0_3px_var(--focus-ring-soft)]',
             selectedLabels.length === 0 ? 'text-fg-placeholder' : 'text-fg',
             className,
           )}

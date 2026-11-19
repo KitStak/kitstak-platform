@@ -7,6 +7,7 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
+import { scoped } from '@/server/db/scope';
 import { addDays, earnedHours, productivityBp, shortDate, unitsPerHour, weekdayName } from '@/lib/profit';
 import type { DayQueueDTO, PaceBoardDTO, PaceBoardRowDTO, PaceSuggestionRowDTO } from '@/lib/types';
 import { monthStart, rows, todayInZone, type DomainContext } from './_shared';
@@ -20,7 +21,7 @@ import { listStandards, suggestStandard } from './standards';
  * The manager queue: every site day of the last `days` days that has work logged or a review
  * state, newest first, with its odd rows computed fresh and the jobs that look forgotten.
  */
-export async function getReviewQueue(
+export const getReviewQueue = scoped(async function getReviewQueue(
   ctx: DomainContext,
   options: { siteId?: string | null; days?: number } = {},
 ): Promise<DayQueueDTO[]> {
@@ -121,7 +122,7 @@ export async function getReviewQueue(
       };
     }),
   );
-}
+});
 
 interface PaceAgg {
   units: number;
@@ -166,7 +167,7 @@ function paceRow(
  * Pace against target pace for a date range: by job, by labor class and by day. Only counted
  * hours are used (confirmed hours minus setup hours, SPEC 4.12).
  */
-export async function getPaceBoard(
+export const getPaceBoard = scoped(async function getPaceBoard(
   ctx: DomainContext,
   filters: { from: string; to: string; siteId?: string | null },
 ): Promise<PaceBoardDTO> {
@@ -272,10 +273,10 @@ export async function getPaceBoard(
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, agg]) => paceRow(date, shortDate(date), weekdayName(date), agg)),
   };
-}
+});
 
 /** "Suggest from history" for every job type at once, next to the target in force today. */
-export async function suggestAllStandards(ctx: DomainContext): Promise<PaceSuggestionRowDTO[]> {
+export const suggestAllStandards = scoped(async function suggestAllStandards(ctx: DomainContext): Promise<PaceSuggestionRowDTO[]> {
   await requirePulse(ctx, 'pulse:read');
   const [types, standards, sites] = await Promise.all([
     listJobTypes(ctx),
@@ -301,4 +302,4 @@ export async function suggestAllStandards(ctx: DomainContext): Promise<PaceSugge
     });
   }
   return out;
-}
+});

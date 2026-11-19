@@ -6,12 +6,27 @@ import type { AlertKind, AlertSeverity } from '@/lib/constants';
 
 export type ThresholdUnit = 'percent' | 'dollars';
 
+/** Workspace settings a rule sentence can name. None of them is money, so every reader sees them. */
+export interface RuleFacts {
+  /** Settings, "Nothing logged for": how many work days with no entry before the rule fires. */
+  readonly noEntryDays?: number | null;
+}
+
+/** "3 work days", "1 work day", or "a few work days" when the count is not known. */
+export function workDaysText(days: number | null | undefined): string {
+  if (typeof days !== 'number' || !Number.isInteger(days) || days < 1) return 'a few work days';
+  return `${days} work ${days === 1 ? 'day' : 'days'}`;
+}
+
 export interface RuleKindInfo {
   /** Short name for the picker. */
   readonly label: string;
   readonly group: 'Jobs' | 'Clients and services' | 'Company' | 'Connected apps';
-  /** The rest of "Tell me when ...". `number` is the typed line, already formatted ("15%", "$2,000"). */
-  readonly sentence: (number: string | null) => string;
+  /**
+   * The rest of "Tell me when ...". `number` is the typed line, already formatted ("15%", "$2,000").
+   * `facts` are workspace settings a rule reads that are not money, like a count of days.
+   */
+  readonly sentence: (number: string | null, facts?: RuleFacts) => string;
   readonly threshold: null | { readonly unit: ThresholdUnit; readonly required: boolean; readonly fallback: string; readonly label: string; readonly hint: string };
   /** Job rules can be narrowed to one client, job type or site. */
   readonly scoped: boolean;
@@ -34,7 +49,7 @@ export const RULE_KINDS: Readonly<Record<AlertKind, RuleKindInfo>> = {
   labor_over_budget: { label: 'Labor over plan', group: 'Jobs', sentence: () => 'a job goes over its labor plan', threshold: null, scoped: true, severity: 'warning', help: 'Labor cost so far is more than the plan allows for the units done.' },
   material_over_budget: { label: 'Materials over plan', group: 'Jobs', sentence: () => 'a job goes over its material plan', threshold: null, scoped: true, severity: 'warning', help: 'Material cost so far is more than the plan allows for the units done.' },
   productivity_below: { label: 'Pace under target', group: 'Jobs', sentence: () => 'a crew is under the target pace', threshold: null, scoped: true, severity: 'warning', help: 'Units per person per hour are under the target pace of the job.' },
-  no_entry_days: { label: 'Nothing logged', group: 'Jobs', sentence: () => 'an active job has nothing logged for a few work days', threshold: null, scoped: true, severity: 'warning', help: 'An active job with no work log entries for several work days in a row.' },
+  no_entry_days: { label: 'Nothing logged', group: 'Jobs', sentence: (_line, facts) => `an active job has nothing logged for ${workDaysText(facts?.noEntryDays)}`, threshold: null, scoped: true, severity: 'warning', help: 'An active job with no work log entries for several work days in a row.' },
   due_soon_behind: { label: 'Due soon and behind', group: 'Jobs', sentence: () => 'a job is due soon and behind', threshold: null, scoped: true, severity: 'warning', help: 'At the pace so far the job will finish after its due date.' },
   missing_rate: { label: 'Hours with no labor rate', group: 'Jobs', sentence: () => 'hours have no labor rate', threshold: null, scoped: true, severity: 'warning', help: 'Hours with no rate have no cost, so the job looks better than it is.' },
   missing_price: { label: 'Job with no price', group: 'Jobs', sentence: () => 'a job has no price', threshold: null, scoped: true, severity: 'warning', help: 'A job with no price earns nothing on paper.' },
@@ -112,11 +127,45 @@ export function thresholdText(unit: ThresholdUnit, stored: string | null | undef
   return `$${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
-/** The whole rule as one sentence: "Tell me when a job's margin is heading under 15%." */
-export function ruleSentence(kind: AlertKind, threshold: string | null | undefined): string {
+/** What stands in for the line when the reader may not see money: "a set amount", "a set line". */
+export const HIDDEN_LINE: Readonly<Record<ThresholdUnit, string>> = { dollars: 'a set amount', percent: 'a set line' };
+
+/** True when the rule has a line (dollars or a margin percent). Lines are money: hidden from readers without money. */
+export function ruleHasLine(kind: string): boolean {
+  return Boolean((RULE_KINDS as Readonly<Record<string, RuleKindInfo | undefined>>)[kind]?.threshold);
+}
+
+/**
+ * The whole rule as one sentence: "Tell me when a job's margin is heading under 15%."
+ * With `moneyHidden` the line is left out: "Tell me when more than a set amount of paid time this
+ * month is not on any job." A count of days is not money, so `facts` show for every reader:
+ * "Tell me when an active job has nothing logged for 3 work days."
+ */
+export function ruleSentence(kind: AlertKind, threshold: string | null | undefined, options: { readonly moneyHidden?: boolean; readonly facts?: RuleFacts } = {}): string {
   const info = RULE_KINDS[kind];
+  if (info.threshold && options.moneyHidden) return `Tell me when ${info.sentence(HIDDEN_LINE[info.threshold.unit], options.facts)}.`;
   const number = info.threshold ? thresholdText(info.threshold.unit, threshold) : null;
-  return `Tell me when ${info.sentence(number)}.`;
+  return `Tell me when ${info.sentence(number, options.facts)}.`;
+}
+
+/**
+ * The name kept in the database for a rule. It never holds the line itself (no dollars, no
+ * percent), so the stored words are safe for every reader. Screens build the full sentence from
+ * the kind and the line, for readers who may see money.
+ */
+export function storedRuleName(kind: AlertKind): string {
+  return ruleSentence(kind, null, { moneyHidden: true }).replace(/\.$/, '');
+}
+
+/** Takes dollar amounts and percents out of free text ("under $2,000" reads "under a set amount"). */
+export function hideLinesInText(text: string): string {
+  return text.replace(/-?\$\s?\d[\d,]*(?:\.\d+)?[kKmM]?/g, HIDDEN_LINE.dollars).replace(/-?\d+(?:\.\d+)?\s?%/g, HIDDEN_LINE.percent);
+}
+
+/** A rule's name for a reader without money: the sentence with no line, or the stored name with its numbers taken out. */
+export function ruleNameWithoutMoney(kind: string, name: string): string {
+  if (ruleHasLine(kind)) return storedRuleName(kind as AlertKind);
+  return hideLinesInText(name);
 }
 
 /** A stored line as a person would type it: "15" not "15.0000". */

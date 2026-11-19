@@ -15,14 +15,14 @@ vi.mock('@/features/shell/shell-context', () => ({ useShell: () => ({ seesMoney:
 
 const row = (key: string, label: string, money: boolean, patch: Partial<ProfitRowDTO> = {}): ProfitRowDTO => {
   const m = <T,>(value: T): T | null => (money ? value : null);
-  return { key, label, sublabel: null, revenueCents: m(4821000), baseRevenueCents: m(4821000), vasRevenueCents: m(0), otherRevenueCents: m(0), laborCents: m(2000000), materialCents: m(900000), otherCents: m(100000), sharedCents: m(326500), costCents: m(3326500), profitCents: m(1494500), marginBp: m(3100), marginBeforeSharedBp: m(3777), laborPctBp: m(4149), billedCents: m(1000000), unitsGood: '12480.000', unitsScrap: '10.000', hours: '312.00', uph: '40.000', costPerUnitCents: m(267), profitPerUnitCents: m(120), jobCount: 3, prior: null, trend: null, laborMissing: false, riskStatus: null, ...patch } as ProfitRowDTO;
+  return { key, label, sublabel: null, revenueCents: m(4821000), baseRevenueCents: m(4821000), vasRevenueCents: m(0), otherRevenueCents: m(0), laborCents: m(2000000), materialCents: m(900000), otherCents: m(100000), sharedCents: m(326500), costCents: m(3326500), profitCents: m(1494500), marginBp: m(3100), marginBeforeSharedBp: m(3777), laborPctBp: m(4149), billedCents: m(1000000), unitsGood: '12480.000', unitsScrap: '10.000', hours: '312.00', uph: '40.000', costPerUnitCents: m(267), profitPerUnitCents: m(120), jobCount: 3, prior: null, trend: null, laborMissing: false, costMissing: false, riskStatus: null, ...patch } as ProfitRowDTO;
 };
 
 function fixtures(money: boolean) {
   const m = <T,>(value: T): T | null => (money ? value : null);
   const total = row('total', 'Total', money);
   const trend: ProfitResponse = { by: 'day', from: '2026-11-01', to: '2026-11-17', rows: [row('2026-11-16', '', money), row('2026-11-17', '', money)], total, moneyHidden: !money };
-  const bridge: CompanyBridgeDTO = { from: '2026-11-01', to: '2026-11-17', workProfitCents: m(1494500), sharedGapCents: m(115000), missingCostCents: m(236000), companyCostCents: m(0), overheadAbsorbedCents: m(0), overheadGapCents: null, companyProfitCents: m(1143500), indirectCents: m(0), sharedAppliedCents: m(0), directHours: '312.00', indirectHours: '20.00', paidHours: '340.00', missingHours: '8.00', utilizationBp: 9176, paidCents: null, grossPayCents: m(0), payrollGapCents: null, overLoggedDays: 0, hasCompanyCosts: false, moneyHidden: !money };
+  const bridge: CompanyBridgeDTO = { from: '2026-11-01', to: '2026-11-17', workProfitCents: m(1494500), sharedGapCents: m(115000), missingCostCents: m(236000), companyCostCents: m(0), overheadAbsorbedCents: m(0), overheadGapCents: null, companyProfitCents: m(1143500), indirectCents: m(0), sharedAppliedCents: m(0), directHours: '312.00', indirectHours: '20.00', paidHours: '340.00', missingHours: '8.00', utilizationBp: 9176, paidCents: null, grossPayCents: m(0), payrollGapCents: null, overLoggedDays: 0, hasCompanyCosts: false, companyCostPartial: false, companyCostNote: null, companyCostSpread: 'calendar', companyCostParts: [], moneyHidden: !money };
   const summary: SummaryDTO = { from: '2026-11-01', to: '2026-11-17', openJobs: 9, atRisk: 2, losing: 1, headsUp: 1, onTrack: 5, noData: 0, total, prior: null, bridge, entryProgress: { activeJobs: 9, loggedToday: 7, date: '2026-11-17', daysReviewedThisWeek: 1, workDaysThisWeek: 1 }, notBilledYetCents: m(2500000), openAlerts: 0, thingsToFix: { needsRate: 2, noPrice: 1, unitsNoHours: 3, serviceNoPrice: 0 }, moneyHidden: !money };
   const job = { id: 'j1', number: 'J-1026', name: 'Chew toy 3 pack', clientName: 'Orchard Pet Supply', stats: { riskStatus: 'losing', headline: money ? 'At this pace the job ends in the red.' : 'The crew is running behind the target pace.', projectedProfitCents: m(-463200), confidence: 'solid' } } as unknown as JobListItemDTO;
   const byClient: ProfitResponse = { ...trend, by: 'client', rows: [row('c1', 'Lumen Skincare', money), row('c2', 'Orchard Pet Supply', money, { profitCents: m(-212400) })] };
@@ -54,16 +54,38 @@ describe('Home', () => {
     expect(html).toContain('Your jobs made');
     expect(html).toContain('$14,945');
     expect(html).toContain('31%');
-    expect(html).toContain('After time not on a job and overhead, the company made');
+    // No company costs in the fixture: the sentence must not claim overhead was checked.
+    expect(html).toContain('After time not on a job, the company made');
+    expect(html).not.toContain('and overhead, the company made');
+    expect(html).not.toContain('home-company-cost-note');
     expect(html).toContain('$11,435');
     expect(html).toContain('3 jobs need you.');
     expect(html).toContain('data-testid="home-tiles"');
-    for (const label of ['Revenue', 'Cost', 'Profit on jobs', 'Margin on jobs', 'Labor as % of revenue', 'Units per person per hour', 'Not billed yet']) expect(html, label).toContain(label);
+    for (const label of ['Revenue', 'Cost', 'Profit on jobs', 'Job margin', 'Labor as % of revenue', 'Units per person per hour', 'Not billed yet']) expect(html, label).toContain(label);
     expect(html).toContain('7 of 9 active jobs logged today');
     expect(html).toContain('J-1026');
     expect(html).toContain('-$4,632');
     expect(html).not.toContain('NaN');
     expect(html).not.toContain('undefined');
+  });
+
+  it('names overhead only when company costs were counted, and says when they cover part of a month', () => {
+    data = fixtures(true);
+    data.summary = { ...data.summary, bridge: { ...data.summary.bridge, hasCompanyCosts: true, companyCostCents: 4230000, overheadAbsorbedCents: 4000000, overheadGapCents: 230000, companyCostPartial: true, companyCostNote: 'Company costs for 18 of 30 days.' } };
+    const html = render();
+    expect(html).toContain('After time not on a job and overhead, the company made');
+    expect(html).toContain('data-testid="home-company-cost-note"');
+    expect(html).toContain('Company costs for 18 of 30 days.');
+    // The step that moved the company number most, in plain words (round four, designer issue 9).
+    expect(html).toContain('The biggest step down is paid time not on any job.');
+  });
+
+  it('says why the company made more than its jobs', () => {
+    data = fixtures(true);
+    data.summary = { ...data.summary, bridge: { ...data.summary.bridge, hasCompanyCosts: true, companyCostCents: 4000000, overheadAbsorbedCents: 4800000, overheadGapCents: -800000, companyProfitCents: 1494500 - 115000 - 236000 + 800000, companyCostPartial: true, companyCostNote: 'Company costs for 17 of 30 days.' } };
+    const html = render();
+    expect(html).toContain('The company made more than its jobs:');
+    expect(html).toContain('Your hourly rates covered more overhead than the company costs for these days, so overhead added to profit.');
   });
 
   it('gives a reader without money units, hours and pace, and no money anywhere', () => {
@@ -91,7 +113,8 @@ describe('Home', () => {
     const html = render();
     // "Margin after all costs" was the margin on jobs only, before overhead and paid time on no job.
     expect(html).not.toContain('Margin after all costs');
-    expect(html).toContain('Margin on jobs');
+    expect(html).not.toContain('Margin on jobs');
+    expect(html).toContain('Job margin');
     // Company profit $11,435 on revenue $48,210 is 23.7%.
     expect(html).toContain('Company margin');
     expect(html).toContain('23.7%');
