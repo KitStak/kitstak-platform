@@ -4,7 +4,8 @@ import { apiData, open, signIn, toast, watchPage } from './support';
 /**
  * The Work log form takes several labor classes for one day and shows the day as one line.
  * Logs a day a year back on an active job, checks the one line, tries to add the same day again
- * (refused before anything is saved), edits it, undoes the edit, then deletes it after the question.
+ * (refused before anything is saved), edits it, undoes the edit, checks All entries shows it as one
+ * line, then deletes it after the question.
  */
 
 /** Picks a day in the KitStak date picker: back one month at a time until the day is on the grid. */
@@ -70,6 +71,18 @@ test('add two labor types to one day and see one line', async ({ page }) => {
   // Undo puts both labor classes and their hours back.
   await toast(page, 'Saved the work for').getByRole('button', { name: 'Undo' }).click();
   await expect(row).toContainText('96');
+
+  // All entries shows the same day as one line, with both labor types inside it.
+  await open(page, `/log/entries?from=${day}&to=${day}&job=${job!.number}`);
+  const entryRows = page.getByTestId('entry-row');
+  await expect(entryRows).toHaveCount(1);
+  await expect(entryRows.first()).toContainText('243');
+  await expect(entryRows.first()).toContainText('96');
+  await expect(entryRows.first().getByTestId('entry-crew')).toContainText('hours');
+  // Choosing the day chooses every labor type on it.
+  await entryRows.first().getByRole('checkbox').click();
+  await expect(page.getByTestId('bulk-bar')).toContainText('2 chosen');
+  await open(page, `/jobs/${job!.number}/work`);
 
   // Delete asks first and says what will go.
   await page.getByTestId(`work-delete-${day}`).click();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProductionEntryDTO } from '@/lib/types';
-import { groupWorkDays, hasShifts, isEmptyEntry, laborLineWords, planDayLines, repeatedLaborLines, restoreDayLines, shiftWords } from './work-days';
+import { groupJobDays, groupWorkDays, hasShifts, isEmptyEntry, laborLineWords, planDayLines, repeatedLaborLines, restoreDayLines, shiftWords } from './work-days';
 
 const entry = (over: Partial<ProductionEntryDTO>): ProductionEntryDTO =>
   ({
@@ -123,5 +123,22 @@ describe('isEmptyEntry', () => {
     expect(isEmptyEntry({ ...row, unitsGood: '1.000' })).toBe(false);
     expect(isEmptyEntry({ ...row, note: 'waiting on parts' })).toBe(false);
     expect(isEmptyEntry({ ...row, headcount: '2.00' })).toBe(false);
+  });
+});
+
+describe('groupJobDays', () => {
+  it('keeps two jobs on one date apart and rolls each job day up', () => {
+    const days = groupJobDays([
+      entry({ id: 'a', jobId: 'j1', laborClassId: 'team', headcount: '4', hours: '32', laborCostCents: 64000 }),
+      entry({ id: 'b', jobId: 'j1', laborClassId: 'temp', unitsGood: '243', headcount: '8', hours: '64', laborCostCents: 108800 }),
+      entry({ id: 'c', jobId: 'j2', unitsGood: '50', headcount: '2', hours: '16' }),
+    ]);
+    expect(days).toHaveLength(2);
+    expect(days[0]?.jobId).toBe('j1');
+    expect(days[0]?.day.rows.map((row) => row.id)).toEqual(['b', 'a']);
+    expect(Number(days[0]?.day.unitsGood)).toBe(243);
+    expect(Number(days[0]?.day.headcount)).toBe(12);
+    expect(days[0]?.day.laborCostCents).toBe(172800);
+    expect(days[1]?.day.rows).toHaveLength(1);
   });
 });
