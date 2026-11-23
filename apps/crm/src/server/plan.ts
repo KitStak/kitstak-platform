@@ -40,7 +40,7 @@ const QUIET_VIEW: AppPlanView = {
   notice: null,
   lock: null,
   badges: { crm: 'included', wms: 'included', projects: 'included', pulse: 'included' },
-  usage: { seatsUsed: 0, seatsPaid: null, seatLimit: null, pendingInvites: 0, warehousesUsed: null, warehousesPaid: null },
+  usage: { seatsUsed: 0, seatsPaid: null, seatLimit: null, pendingInvites: 0, seatFloor: 0, warehousesUsed: null, warehousesPaid: null },
 };
 
 /** Access level, banner, lock screen and badges for this person in the CRM. */

@@ -65,6 +65,7 @@ export type ActivityTone = 'success' | 'danger' | 'warning' | 'info' | 'neutral'
 export function toneOf(action: string): ActivityTone {
   switch (action) {
     case 'payment.succeeded':
+    case 'payment.credit_used':
     case 'payment.retried':
     case 'plan.started':
     case 'plan.resumed':

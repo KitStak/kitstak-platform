@@ -108,15 +108,20 @@ describe.skipIf(!available)('app plan view, organization hooks, intents and prof
     const crm = await view(org, 'crm', owner!);
     expect(crm.access).toBe('full');
     expect(crm.lock).toBeNull();
-    expect(crm.notice).toMatchObject({ kind: 'trial', tone: 'info', action: { label: 'Pick a plan', href: 'http://localhost:3300/billing/plan?from=crm' } });
-    expect(crm.notice?.text).toMatch(/^Free trial\. 14 days left\. Ends [A-Z][a-z]{2} \d{1,2}\.$/);
+    // Day one has no banner (nobody is asked to pick a plan in their first session). The badges
+    // already say "Trial", so the new trial does show at once.
+    expect(crm.notice).toBeNull();
     expect(crm.badges).toEqual({ crm: 'trial', wms: 'trial', projects: 'not_in_plan', pulse: 'not_in_plan' });
+    const dayTwo = await view(org, 'crm', owner!, false, new Date(Date.now() + 25 * 60 * 60 * 1000));
+    expect(dayTwo.notice).toMatchObject({ kind: 'trial', tone: 'info', action: { label: 'Pick a plan', href: 'http://localhost:3300/billing/plan?from=crm' } });
+    expect(dayTwo.notice?.text).toMatch(/^Free trial\. 13 days left\. Ends [A-Z][a-z]{2} \d{1,2}\.$/);
     expect(crm.usage).toMatchObject({ seatsUsed: 3, seatLimit: null });
 
     // Every app says the same words for the same plan.
-    expect((await view(org, 'wms', owner!)).notice?.text).toBe(crm.notice?.text);
-    expect((await view(org, 'crm', admin!)).notice?.kind).toBe('trial');
-    expect((await view(org, 'crm', member!)).notice).toBeNull();
+    const later = new Date(Date.now() + 25 * 60 * 60 * 1000);
+    expect((await view(org, 'wms', owner!, false, later)).notice?.text).toBe(dayTwo.notice?.text);
+    expect((await view(org, 'crm', admin!, false, later)).notice?.kind).toBe('trial');
+    expect((await view(org, 'crm', member!, false, later)).notice).toBeNull();
 
     const projects = await view(org, 'projects', owner!);
     expect(projects.access).toBe('locked');

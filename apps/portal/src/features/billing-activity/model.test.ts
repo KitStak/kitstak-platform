@@ -39,7 +39,14 @@ describe('billing activity model', () => {
     expect(grouped.sort()).toEqual([...all].sort());
     expect(actionsFor('all')).toBeNull();
     expect(actionsFor('emails')).toEqual(['email.sent']);
-    expect(actionsFor('payments')).toEqual(['payment.succeeded', 'payment.failed', 'payment.retried', 'card.updated']);
+    expect(actionsFor('payments')).toEqual([
+      'payment.succeeded',
+      'payment.failed',
+      'payment.retried',
+      'card.updated',
+      'payment.credit_used',
+      'checkout.duplicate_refunded',
+    ]);
     // An action from a newer writer still shows.
     expect(kindOf('something.new')).toBe('plan');
     expect(toneOf('something.new')).toBe('info');
