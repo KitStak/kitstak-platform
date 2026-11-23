@@ -42,6 +42,7 @@ export const qk = {
   jobPlans: (ref: string) => ['jobs', 'one', ref, 'plans'] as const,
   jobPrices: (ref: string) => ['jobs', 'one', ref, 'prices'] as const,
   jobDays: (ref: string, by?: string) => ['jobs', 'one', ref, 'days', by ?? 'day'] as const,
+  jobTaskCosts: (ref: string) => ['jobs', 'one', ref, 'task-costs'] as const,
 
   streams: () => ['streams'] as const,
   logGrid: (date?: string | null, siteId?: string | null) => ['streams', 'log', date ?? 'today', siteId ?? 'default'] as const,

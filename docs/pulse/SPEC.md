@@ -882,6 +882,7 @@ All quantity, hour and headcount columns have `CHECK (>= 0)`.
 `units_rework numeric(14,3) NOT NULL DEFAULT 0`, `headcount numeric(6,2)`, `hours numeric(10,2) NOT NULL DEFAULT 0`,
 `overtime_hours numeric(10,2) NOT NULL DEFAULT 0 CHECK (overtime_hours <= hours)`, `setup_hours numeric(10,2) NOT NULL DEFAULT 0 CHECK (setup_hours <= hours)`,
 `hours_confirmed boolean NOT NULL DEFAULT true` (false for warehouse rows that still need crew hours), `note text`,
+`pm_task_id uuid` (the Projects task the hours were for, 8.4 "Tasks on a job"; no foreign key), `task_units numeric(14,3)` (optional count of that task's output, never part of `units_good`),
 stamps: `rate_cents int`, `overtime_rate_cents int`, `labor_cost_cents bigint DEFAULT 0`, `overhead_cents bigint DEFAULT 0`, `gross_pay_cents bigint DEFAULT 0`,
 `shared_cents bigint DEFAULT 0`, `base_revenue_cents bigint DEFAULT 0`, `std_material_cents bigint DEFAULT 0`, `std_scrap_cents bigint DEFAULT 0`,
 `needs_rate boolean DEFAULT false`, `entered_by uuid`.
@@ -1233,6 +1234,21 @@ fee and bill rows there, runs the sync and drops it. Pulse never writes to a rea
   hours. A Projects read that fails marks the sync run failed and keeps every row, so a bad read never removes time.
   The job Work log shows planned time (`sum(estimate_minutes)`) against logged time.
 - Project status, health, due date and progress show on the job header chip.
+
+**Tasks on a job** (migration `0014_entry_tasks.sql`). One priced program stays one job, and its steps live as tasks in the linked project:
+- A production entry can carry `pm_task_id`, a task of a project linked to the job (checked on save; a task from any other project is refused with
+  "That task is not in a project linked to this job. Pick a task from the list."). The line key and the unique index `production_entries_key` widen to
+  job, day, shift, labor class **and task**, so temps on puzzles and temps on kit pack the same day are two lines. Kiosk and time punch rows keep landing on the untagged line.
+- `task_units` counts the task's own output (puzzles built, labels applied). It needs a task, and it never counts toward the job's units, progress, revenue or pace.
+  With task units, the task gets its own units per labor hour.
+- **Log work**: a job with a linked project shows a Task picker and a Task units box under each line. A new line starts on the job's last tagged task.
+  Tasks deleted in Projects are not offered, but a line that already points at one still shows its name.
+- **Work log**: a "Cost by task" panel (labor hours, labor cost, share of labor cost, task units, units per labor hour), untagged lines last. Routes `GET jobs/[ref]/tasks`
+  (`{ hasProject, tasks }`) and `GET jobs/[ref]/tasks/costs` (`JobTaskCostsDTO`).
+- **Things to fix**: `job_stats.needs.untaggedLines` counts lines with hours and no task on a job with a linked project (Projects time rows excluded, they come in untagged).
+- **Import and export**: the production file gains `task` (task number like ADV-12, title, or id; part of the match key) and `task_units`. Like every column, a blank
+  or missing task leaves the row's task as it is. Exports write the task id.
+- Labor that serves no single job stays in **Time not on a job** (4.5), spread across that week's jobs.
 
 **Pulse writes** (through `@kitstak/pm-bridge`, only when Projects is licensed): "Create a task" from an alert or a job (`createTaskFromExternal` with a `pulse_job` link, text with no money),
 and "Start a project for this job" (deep link to the Projects app `/projects/new?name=<text>`, plus `&customer=<coreCustomerId>` when the client has one).

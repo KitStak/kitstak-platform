@@ -21,6 +21,7 @@ import { and, desc, eq, getTableColumns, getTableName, sql, type SQL } from 'dri
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { db, type Executor } from '@/server/db';
 import { scoped } from '@/server/db/scope';
+import { tasksOfProjects } from '@/server/integrations/projects';
 import {
   clients,
   costEntries,
@@ -131,6 +132,8 @@ interface Env {
   /** The stream being read: the labor rates file always adds the classes it names. */
   readonly stream: StreamId | null;
   readonly batchId: string;
+  /** Production files: the Projects tasks each job may be tagged with (0014), by job id. */
+  readonly tasksByJob: ReadonlyMap<string, Lookup>;
 }
 
 async function loadEnv(executor: Executor, ctx: DomainContext, access: PulseAccess, options: ImportOptions, batchId: string, stream: StreamId | null = null): Promise<Env> {
@@ -164,7 +167,50 @@ async function loadEnv(executor: Executor, ctx: DomainContext, access: PulseAcce
   const members = new Map(
     (await rows<{ id: string; email: string }>(executor, sql`SELECT u.id, lower(u.email) AS email FROM core.member m JOIN core."user" u ON u.id = m.user_id WHERE m.organization_id = ${org}`)).map((row) => [row.email, row.id]),
   );
-  return { ctx, access, settings, options, lookups, defaultSite, members, closed: await closedMonths(executor, org), pending: [], missingLaborClasses: new Set(), stream, batchId };
+  // Production files may name a Projects task per row: load the tasks of every job's linked projects once.
+  const tasksByJob = new Map<string, Lookup>();
+  if (stream === 'production' || stream === null) {
+    const links = await rows<{ job_id: string; project_id: string }>(executor, sql`SELECT job_id::text AS job_id, target_id AS project_id FROM pulse.job_links WHERE org_id = ${org} AND target_type = 'pm_project'`);
+    if (links.length > 0) {
+      const tasks = await tasksOfProjects(ctx, [...new Set(links.map((link) => link.project_id))]);
+      for (const link of links) {
+        const lookup = tasksByJob.get(link.job_id) ?? new Lookup();
+        for (const task of tasks) {
+          if (task.projectId !== link.project_id) continue;
+          // Found by its number (ADV-12), its exact title, or its id.
+          lookup.add({ id: task.id, code: `${task.projectKey}-${task.number}`, name: task.title, data: {} });
+          lookup.add({ id: task.id, code: task.id, name: '', data: {} });
+        }
+        tasksByJob.set(link.job_id, lookup);
+      }
+    }
+  }
+  return { ctx, access, settings, options, lookups, defaultSite, members, closed: await closedMonths(executor, org), pending: [], missingLaborClasses: new Set(), stream, batchId, tasksByJob };
+}
+
+/**
+ * The task of a production row, as the task id. Blank stays blank. A task the job's projects do not
+ * hold is an error in plain words, so a typo never lands hours on no step.
+ */
+function taskRef(env: Env, job: Ent | null, rec: Rec, issues: RowIssue[]): void {
+  if (rec.task === undefined || rec.task === null) return;
+  const text = String(rec.task).trim();
+  if (text === '') {
+    rec.task = null;
+    return;
+  }
+  if (!job) return;
+  const lookup = job.id ? env.tasksByJob.get(job.id) : undefined;
+  if (!lookup) {
+    issues.push({ level: 'error', column: 'task', message: `Job ${job.code} is not linked to a project in Projects, so its rows cannot have a task. Link the project on the job first.` });
+    return;
+  }
+  const found = lookup.find(text);
+  if (!found?.id) {
+    issues.push({ level: 'error', column: 'task', message: `There is no task ${text} in the project linked to job ${job.code}. Use the task name or number, like ADV-12.` });
+    return;
+  }
+  rec.task = found.id;
 }
 
 /**
@@ -506,16 +552,18 @@ const HANDLERS: Readonly<Record<StreamId, Handler>> = {
     dateKey: 'workDate',
     floor: true,
     virtual: ['hours_each'],
-    keying: { cols: ['job_number', 'work_date', 'shift', 'labor_class'] },
+    keying: { cols: ['job_number', 'work_date', 'shift', 'labor_class', 'task'] },
     recalc: 'days',
     canon: (rec, env, issues) => {
       const job = codeRef(env, 'job', rec, 'jobNumber', 'job_number', issues);
       if (rec.shift === null) rec.shift = 'day';
       else rec.shift = String(rec.shift).toLowerCase();
+      taskRef(env, job, rec, issues);
       return { job, site: jobSite(env, job), laborClass: codeRef(env, 'labor_class', rec, 'laborClass', 'labor_class', issues) };
     },
+    // Like every other column, a blank or missing task leaves the row's task as it is: a file never clears one by leaving it out.
     values: ({ rec, refs }) =>
-      drop({ jobId: refs.job?.id, siteId: refs.job?.data.siteId, workDate: rec.workDate, shift: rec.shift, laborClassId: refs.laborClass?.id, unitsGood: rec.unitsGood, unitsScrap: rec.unitsScrap, unitsRework: rec.unitsRework, headcount: rec.people, hours: rec.laborHours, overtimeHours: rec.overtimeHours, setupHours: rec.setupHours, note: rec.note }),
+      drop({ jobId: refs.job?.id, siteId: refs.job?.data.siteId, workDate: rec.workDate, shift: rec.shift, laborClassId: refs.laborClass?.id, unitsGood: rec.unitsGood, unitsScrap: rec.unitsScrap, unitsRework: rec.unitsRework, headcount: rec.people, hours: rec.laborHours, overtimeHours: rec.overtimeHours, setupHours: rec.setupHours, note: rec.note, pmTaskId: rec.task, taskUnits: rec.taskUnits }),
     defaults: (_planned, env) => ({ enteredBy: env.ctx.userId }),
   },
   labor_rates: {

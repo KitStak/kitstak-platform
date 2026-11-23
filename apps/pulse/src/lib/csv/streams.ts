@@ -330,15 +330,16 @@ const jobPlans = defineStream({
 
 const production = defineStream({
   id: 'production',
-  matchRule: 'entry_id, else job_number, work_date, shift and labor_class',
-  keyColumns: ['job_number', 'work_date', 'shift', 'labor_class'],
+  matchRule: 'entry_id, else job_number, work_date, shift, labor_class and task',
+  keyColumns: ['job_number', 'work_date', 'shift', 'labor_class', 'task'],
   lookAlikeColumns: [],
   columns: [
-    entryId('Leave blank and a row with the same job, day, shift and labor class updates that entry. No match adds a new one.'),
+    entryId('Leave blank and a row with the same job, day, shift, labor class and task updates that entry. No match adds a new one.'),
     col('work_date', 'date', { required: true, label: 'Work date', help: 'The day the work was done.', aliases: ['date', 'day', 'production date', 'shift date', 'entry date'], examples: ['2026-11-02', '2026-11-03'] }),
     col('job_number', 'code', { required: true, label: 'Job number', help: 'The job the work was for.', aliases: ['job', 'job no', 'job id', 'work order', 'wo', 'wo number', 'order number'], examples: ['J-1042', 'J-1042'] }),
     col('shift', 'code', { label: 'Shift', help: 'The shift, like day or night. Blank means day.', aliases: ['shift name'], examples: ['day', 'day'] }),
     laborClass(),
+    col('task', 'code', { label: 'Task', help: 'The Projects task the hours were for, by its name or number (like ADV-12). The job must be linked to that project. Blank means no task.', aliases: ['project task', 'step', 'task name', 'task number'], examples: ['', ''] }),
     col('units_good', 'quantity', { required: true, label: 'Good units', help: 'How many good units were finished.', aliases: ['good units', 'units', 'units finished', 'qty finished', 'quantity finished', 'units completed', 'qty completed', 'kits finished', 'kits', 'units produced', 'qty produced', 'output', 'good qty', 'quantity good', 'qty good', 'finished units', 'completed'], examples: ['600', '720'] }),
     col('units_scrap', 'quantity', { label: 'Scrap units', help: 'Units that were thrown away.', aliases: ['scrap', 'scrapped', 'scrap qty', 'rejects', 'rejected', 'bad units', 'defects', 'waste'], examples: ['12', '5'] }),
     col('units_rework', 'quantity', { label: 'Rework units', help: 'Units that had to be done again.', aliases: ['rework', 'reworked', 'rework qty', 'redo'], examples: ['', '8'] }),
@@ -347,6 +348,7 @@ const production = defineStream({
     col('labor_hours', 'hours', { label: 'Labor hours', help: 'Total labor hours: people times hours each. Leave blank and Pulse works it out. Type it for an uneven crew.', aliases: ['hours', 'total hours', 'man hours', 'person hours', 'total labor hours', 'labor hrs', 'hrs', 'hours worked'], examples: ['', '24'] }),
     overtimeHours(),
     col('setup_hours', 'hours', { label: 'Setup hours', help: 'The part of the labor hours spent on setup with no finished units. They cost the same and stay out of pace.', aliases: ['setup', 'setup hrs', 'changeover hours', 'changeover', 'prep hours'], examples: ['', ''] }),
+    col('task_units', 'quantity', { label: 'Task units', help: 'How much of the task got done, like puzzles built. Needs a task. Never counts as good units.', aliases: ['step units', 'task qty', 'task quantity'], examples: ['', ''] }),
     note(['First day of the run', '']),
   ],
   check: (record) => {
@@ -360,6 +362,7 @@ const production = defineStream({
     if ((asNumber(record.hoursEach) ?? 0) > 24) issues.push({ level: 'warning', column: 'hours_each', message: 'One person cannot work more than 24 hours in a day. Check the hours each.' });
     const setup = asNumber(record.setupHours);
     if (setup !== null && setup > (asNumber(record.laborHours) ?? 0)) issues.push({ level: 'error', column: 'setup_hours', message: 'Setup hours cannot be more than the labor hours.' });
+    if (asNumber(record.taskUnits) !== null && (record.task === null || record.task === undefined)) issues.push({ level: 'error', column: 'task_units', message: 'Task units need a task. Fill in the task, or leave Task units empty.' });
     if (asNumber(record.unitsGood) !== null && (asNumber(record.unitsGood) ?? 0) > 0 && record.laborHours === null) {
       issues.push({ level: 'warning', column: 'labor_hours', message: 'This row has units and no hours, so its labor cost is missing. Add people and hours each, or the labor hours.' });
     }

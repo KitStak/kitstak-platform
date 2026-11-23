@@ -95,7 +95,7 @@ function pgError(error: unknown): PgErrorLike | null {
 }
 
 const UNIQUE_MESSAGES: Readonly<Record<string, string>> = {
-  production_entries_key: 'There is already an entry for this job, day, shift and labor class. Edit that one instead.',
+  production_entries_key: 'There is already an entry for this job, day, shift, labor class and task. Edit that one instead.',
   jobs_number_key: 'Another job already uses that number.',
   clients_code_key: 'Another client already uses that code.',
   clients_core_customer_key: 'Another client is already linked to that customer.',

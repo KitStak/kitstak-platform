@@ -146,7 +146,7 @@ function streamQuery(stream: StreamId, orgId: string, scope: StreamScope): SQL {
       return sql`
         SELECT ${head('p')}, p.id::text AS entry_id, ${day('p.work_date')} AS work_date, j.number AS job_number, p.shift, lc.code AS labor_class,
                p.units_good, p.units_scrap, p.units_rework, p.headcount AS people, NULL::text AS hours_each, p.hours AS labor_hours,
-               p.overtime_hours, p.setup_hours, p.note
+               p.overtime_hours, p.setup_hours, p.pm_task_id::text AS task, p.task_units, p.note
           FROM pulse.production_entries p
           JOIN pulse.jobs j ON j.id = p.job_id
           LEFT JOIN pulse.labor_classes lc ON lc.id = p.labor_class_id

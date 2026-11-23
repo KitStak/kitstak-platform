@@ -218,6 +218,7 @@ export const rollupPunches = scoped(async function rollupPunches(
             group.labor_class_id
               ? eq(productionEntries.laborClassId, group.labor_class_id)
               : isNull(productionEntries.laborClassId),
+            isNull(productionEntries.pmTaskId),
             isNull(productionEntries.deletedAt),
           ),
         );

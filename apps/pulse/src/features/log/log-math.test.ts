@@ -39,6 +39,8 @@ const entry = (patch: Partial<ProductionEntryDTO> = {}): ProductionEntryDTO => (
   overtimeHours: '4.00',
   setupHours: '0.00',
   hoursConfirmed: true,
+  pmTaskId: null,
+  taskUnits: null,
   note: null,
   rateCents: 2176,
   overtimeRateCents: 3048,
@@ -119,7 +121,28 @@ describe('the people times hours each helper', () => {
       setupHours: '0.00',
       note: 'first run',
       laborClassId: null,
+      pmTaskId: null,
+      taskUnits: null,
     });
+  });
+
+  it('sends the task and its units, and leaves task units out when blank', () => {
+    const tagged = { ...EMPTY_VALUES, hours: '8', people: '1', pmTaskId: 't-1', taskUnits: '1,080' };
+    expect(toPayload(tagged)).toMatchObject({ pmTaskId: 't-1', taskUnits: '1080.000' });
+    expect(toPayload({ ...tagged, taskUnits: '' })).toMatchObject({ pmTaskId: 't-1', taskUnits: null });
+  });
+
+  it('asks for a task before it takes task units', () => {
+    expect(lineProblem({ ...EMPTY_VALUES, taskUnits: '40' })).toBe('Task units need a task. Pick the task, or clear Task units.');
+    expect(lineProblem({ ...EMPTY_VALUES, taskUnits: '40', pmTaskId: 't-1' })).toBeNull();
+    expect(lineProblem({ ...EMPTY_VALUES, taskUnits: 'many', pmTaskId: 't-1' })).toBe('Task units must be a number of 0 or more.');
+  });
+
+  it('counts a task change and task units as a change, and task units as not blank', () => {
+    const base = { ...EMPTY_VALUES, hours: '8' };
+    expect(sameValues(base, { ...base, pmTaskId: 't-1' })).toBe(false);
+    expect(sameValues({ ...base, pmTaskId: 't-1' }, { ...base, pmTaskId: 't-1', taskUnits: '5' })).toBe(false);
+    expect(isBlank({ ...EMPTY_VALUES, taskUnits: '5' })).toBe(false);
   });
 
   it('round trips a saved entry', () => {

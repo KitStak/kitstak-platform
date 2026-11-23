@@ -614,6 +614,7 @@ async function saveKioskProductionAs(actor: KioskActor, input: KioskProductionIn
       laborClassId
         ? eq(productionEntries.laborClassId, laborClassId)
         : isNull(productionEntries.laborClassId),
+      isNull(productionEntries.pmTaskId),
       isNull(productionEntries.deletedAt),
     );
     const [existing] = await tx.select().from(productionEntries).where(key).for('update');

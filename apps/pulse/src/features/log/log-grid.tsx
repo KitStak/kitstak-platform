@@ -66,6 +66,7 @@ import type {
   LaborClassDTO,
   LogGridDTO,
   LogGridRowDTO,
+  LogGridTaskDTO,
   PreviousCrewDTO,
   ProductionEntryDTO,
 } from '@/lib/types';
@@ -126,14 +127,16 @@ function draftLine(
   values: Partial<LineValues> = {},
   key = addedKey(),
 ): Line {
-  const base = { ...EMPTY_VALUES, laborClassId, ...values };
+  // A job with a Projects project starts a new line on the task it was last logged on (0014).
+  const pmTaskId = row.hasProject ? (row.lastTaskId ?? null) : null;
+  const base = { ...EMPTY_VALUES, laborClassId, pmTaskId, ...values };
   return {
     key,
     jobId: row.jobId,
     shift: 'day',
     entry: null,
     values: base,
-    saved: { ...EMPTY_VALUES, laborClassId },
+    saved: { ...EMPTY_VALUES, laborClassId, pmTaskId: base.pmTaskId },
     undo: null,
     status: 'idle',
     message: null,
@@ -355,6 +358,78 @@ const ClassSelect = memo(function ClassSelect({
       options={options}
       className="h-10 px-2 xl:h-8"
     />
+  );
+});
+
+const NO_TASK = 'none';
+
+/**
+ * The Projects task of one line (0014), shown only for a job linked to a project. A program stays
+ * one job and its steps (prebuild, labels, kit pack) are tasks: tagging a line puts its hours on
+ * that step. Task units count the step's own output (puzzles built), apart from the job's units.
+ */
+const TaskStrip = memo(function TaskStrip({
+  label,
+  lineKey,
+  tasks,
+  value,
+  taskUnits,
+  disabled,
+  onTask,
+  onUnits,
+  onBlur,
+}: {
+  readonly label: string;
+  readonly lineKey: string;
+  readonly tasks: readonly LogGridTaskDTO[];
+  readonly value: string | null;
+  readonly taskUnits: string;
+  readonly disabled: boolean;
+  readonly onTask: (key: string, pmTaskId: string | null) => void;
+  readonly onUnits: (key: string, field: 'taskUnits', text: string) => void;
+  readonly onBlur: (event: React.FocusEvent<HTMLInputElement>) => void;
+}) {
+  const options = useMemo(
+    () => [
+      { value: NO_TASK, label: 'No task' },
+      ...tasks
+        .filter((task) => !task.gone || task.id === value)
+        .map((task) => ({ value: task.id, label: `${task.title}${task.gone ? ' (removed in Projects)' : task.done ? ' (done)' : ''}` })),
+    ],
+    [tasks, value],
+  );
+  return (
+    <div className="col-span-full flex flex-wrap items-end gap-2 xl:pl-[calc(200px+0.25rem)]">
+      <label className="flex min-w-0 flex-col gap-1">
+        <span className="text-xs text-fg-muted">Task</span>
+        <GridSelect
+          aria-label={`Task ${label}`}
+          disabled={disabled}
+          value={value ?? NO_TASK}
+          onValueChange={(next) => onTask(lineKey, next === NO_TASK ? null : next)}
+          options={options}
+          className="h-10 w-56 px-2 xl:h-8"
+        />
+      </label>
+      <label className="flex w-28 min-w-0 flex-col gap-1">
+        <span className="text-xs text-fg-muted">Task units</span>
+        <input
+          data-line={lineKey}
+          data-field="taskUnits"
+          aria-label={`Task units ${label}`}
+          inputMode="decimal"
+          autoComplete="off"
+          disabled={disabled || !value}
+          value={taskUnits}
+          placeholder={value ? 'Optional' : ''}
+          onChange={(event) => onUnits(lineKey, 'taskUnits', event.target.value)}
+          onFocus={(event) => event.currentTarget.select()}
+          onBlur={onBlur}
+          className={cellInput}
+        />
+      </label>
+      {!value ? <span className="pb-2 text-xs text-fg-muted xl:pb-1.5">Pick the task these hours were for.</span> : null}
+    </div>
   );
 });
 
@@ -589,7 +664,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
   }, [grid.date]);
 
   const setField = useCallback(
-    (key: string, field: LineField | 'setup', text: string) => {
+    (key: string, field: LineField | 'setup' | 'taskUnits', text: string) => {
       update(key, (line) => ({
         ...line,
         values: applyField(line.values, field, text),
@@ -606,6 +681,19 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
       update(key, (line) => ({
         ...line,
         values: { ...line.values, laborClassId },
+        status: 'dirty',
+        message: null,
+      }));
+      schedule(key, 200);
+    },
+    [schedule, update],
+  );
+
+  const setTask = useCallback(
+    (key: string, pmTaskId: string | null) => {
+      update(key, (line) => ({
+        ...line,
+        values: { ...line.values, pmTaskId, taskUnits: pmTaskId ? line.values.taskUnits : '' },
         status: 'dirty',
         message: null,
       }));
@@ -1254,7 +1342,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                         value={line.values.laborClassId}
                         laborClasses={laborClasses}
                         taken={lines
-                          .filter((other) => other.key !== line.key && other.jobId === line.jobId && other.shift === line.shift)
+                          .filter((other) => other.key !== line.key && other.jobId === line.jobId && other.shift === line.shift && (other.values.pmTaskId ?? null) === (line.values.pmTaskId ?? null))
                           .map((other) => other.values.laborClassId ?? row.defaultLaborClassId ?? '')
                           .join(',')}
                         lineKey={line.key}
@@ -1288,6 +1376,22 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                         />
                       ) : null}
                     </div>
+                    {row.hasProject ? (
+                      <TaskStrip
+                        label={`for ${row.jobNumber}, line ${index + 1}`}
+                        lineKey={line.key}
+                        tasks={row.tasks}
+                        value={line.values.pmTaskId}
+                        taskUnits={line.values.taskUnits}
+                        disabled={disabled}
+                        onTask={setTask}
+                        onUnits={setField}
+                        onBlur={(event) => {
+                          const next = event.relatedTarget as HTMLElement | null;
+                          if (next?.getAttribute('data-line') !== line.key) void saveLine(line.key);
+                        }}
+                      />
+                    ) : null}
                     <div
                       className={cn(
                         'flex items-center justify-end gap-1 xl:col-span-1',
