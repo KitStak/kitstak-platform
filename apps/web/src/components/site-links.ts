@@ -8,13 +8,12 @@ export const LINKS = {
 } as const;
 
 /**
- * Whether customers can open the Pulse app yet. It is still being built, so the site does not send
- * anyone toward an account for it. While this is false, every Pulse start button becomes "Book a
- * walkthrough", start links leave Pulse out, the setup wizard will not take it, and the site labels
- * Pulse "Coming soon". Set this to true on the day pulse.kitstak.app opens. That one line brings
- * "Start with Pulse", the wizard row and the sign in link back.
+ * Whether customers can open the Pulse app. Pulse is live at pulse.kitstak.app, so this is true and
+ * Pulse gets "Start with Pulse", the wizard row and the sign in link like the other apps. Setting it
+ * back to false turns every Pulse start button into "Book a walkthrough", leaves Pulse out of start
+ * links and the setup wizard, and labels Pulse "Coming soon" across the site.
  */
-export const PULSE_IS_LIVE: boolean = false;
+export const PULSE_IS_LIVE: boolean = true;
 
 /** False for a product whose app customers cannot open yet. Such a product gets no start button. */
 export function isAppLive(product: 'crm' | 'wms' | 'projects' | 'pulse'): boolean {

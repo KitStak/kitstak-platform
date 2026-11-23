@@ -104,10 +104,11 @@ organization, not a price per user. The owner confirmed it and it is final.
 - The owner gave no price above 5 seats, so the site quotes none. It says "Need more than 5 seats? Talk
   to us." and links to `/contact`. Do not add a higher tier without the owner.
 
-### Pulse is "Coming soon"
+### Pulse availability (`PULSE_IS_LIVE`)
 
-`PULSE_IS_LIVE` in `src/components/site-links.ts` is false until customers can open the Pulse app. While
-it is false:
+Pulse is live. `PULSE_IS_LIVE` in `src/components/site-links.ts` is true, so Pulse has "Start with Pulse",
+a wizard row, the footer links and no "Coming soon" label, like the other three apps. The flag stays so
+the site can be switched back if the Pulse app ever has to close to new customers. If it is set to false:
 
 - The site says exactly "Coming soon" (`COMING_SOON`) on the `/products` Pulse card, in the Products menu
   and the mobile drawer, on the calculator switch, over the Pulse heading and on the Pulse switch of the
