@@ -91,9 +91,10 @@ export function narrowScope(scope: Scope, warehouseId?: string | null, clientId?
   return { warehouseIds, clientIds };
 }
 
+/** A column, or a SQL expression standing in for one (e.g. a column of a derived table). */
 export interface ScopeColumns {
-  readonly warehouseId?: PgColumn;
-  readonly clientId?: PgColumn;
+  readonly warehouseId?: PgColumn | SQL;
+  readonly clientId?: PgColumn | SQL;
 }
 
 const FALSE_SQL: SQL = sql`false`;
