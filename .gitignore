@@ -41,3 +41,6 @@ deploy/.cloud-url
 
 .vercel
 .env*
+
+# Reviewer scratch (screenshots, session state). Never commit.
+docs/billing/.review/
