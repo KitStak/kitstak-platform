@@ -312,6 +312,35 @@ describe('task grids', () => {
     expect(rows.every((r) => !String(r.client).includes(','))).toBe(true);
   });
 
+  it('keeps the count grid inside the warehouse and client scope', async () => {
+    await ledger.add(w.db, w.ctx, {
+      warehouseId: w.warehouseId,
+      clientId: w.clientId,
+      productId: w.productId,
+      locationId: w.loc.storageA,
+      qty: 7,
+    });
+    await w.db
+      .insert(schema.tasks)
+      .values({
+        taskNo: 1,
+        jobId: await bareJob('Count'),
+        warehouseId: w.warehouseId,
+        taskType: 'Count',
+        status: 'Pending',
+        priority: 'None',
+        plannedQty: 10,
+        sourceLocationId: w.loc.storageA,
+      });
+    const totalFor = async (viewScope: AuthContext['viewScope']): Promise<number> =>
+      (await listTasks(w.db, { ...auth, viewScope }, 'count', { ...EMPTY_GRID_QUERY, pageSize: 50 })).total;
+    expect(await totalFor({ warehouseIds: [w.warehouseId], clientIds: 'all' })).toBe(1);
+    expect(await totalFor({ warehouseIds: [crypto.randomUUID()], clientIds: 'all' })).toBe(0);
+    expect(await totalFor({ warehouseIds: [], clientIds: 'all' })).toBe(0);
+    expect(await totalFor({ warehouseIds: [w.warehouseId], clientIds: [w.clientId] })).toBe(1);
+    expect(await totalFor({ warehouseIds: [w.warehouseId], clientIds: [w.otherClientId] })).toBe(0);
+  });
+
   it("shows the order's client on a task of a multi-client job", async () => {
     const beta = (
       await w.db

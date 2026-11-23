@@ -41,7 +41,10 @@
   --neutral-soft: var(--surface-sunken);
 
   --ring: color-mix(in srgb, var(--focus-ring) 40%, transparent);
+}
 
+/* WMS overrides of shared tokens. Kept out of the alias block above, which holds aliases only. */
+:root {
   /* Skeleton contrast (WMS): the shared light token (#ece8de) all but vanishes on the cream
      app canvas (#f4f1e9), so loading pages read as blank. Deepen the base toward the
      border-default step; the shine stays near-white so the shimmer sweep reads. */
