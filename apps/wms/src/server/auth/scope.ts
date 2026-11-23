@@ -16,7 +16,7 @@
  *   - clients: `users.all_clients` → "all"; otherwise `user_clients` rows (possibly none).
  *   - context cookies (`ks_ctx_wh`, `ks_ctx_client`) only ever NARROW the scope.
  */
-import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, is, SQL, sql } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import { userProfiles } from '@kitstak/db/schema';
 import { userClients, userWarehouses, warehouses } from '@/server/db/schema';
@@ -99,6 +99,9 @@ export interface ScopeColumns {
 
 const FALSE_SQL: SQL = sql`false`;
 
+const inIds = (col: PgColumn | SQL, ids: readonly string[]): SQL =>
+  is(col, SQL) ? inArray(col, [...ids]) : inArray(col, [...ids]);
+
 function columnsOf(table: object, explicit?: ScopeColumns): ScopeColumns {
   if (explicit) return explicit;
   const t = table as { warehouseId?: PgColumn; clientId?: PgColumn };
@@ -115,15 +118,13 @@ export function scopedWhere(table: object, scope: Scope, columns?: ScopeColumns)
   const cols = columnsOf(table, columns);
   const parts: SQL[] = [];
   if (cols.warehouseId) {
-    parts.push(
-      scope.warehouseIds.length === 0 ? FALSE_SQL : inArray(cols.warehouseId, [...scope.warehouseIds]),
-    );
+    parts.push(scope.warehouseIds.length === 0 ? FALSE_SQL : inIds(cols.warehouseId, scope.warehouseIds));
   }
   if (cols.clientId && scope.clientIds !== 'all') {
     parts.push(
       scope.clientIds.length === 0
         ? sql`${cols.clientId} IS NULL`
-        : sql`(${cols.clientId} IS NULL OR ${inArray(cols.clientId, [...scope.clientIds])})`,
+        : sql`(${cols.clientId} IS NULL OR ${inIds(cols.clientId, scope.clientIds)})`,
     );
   }
   if (parts.length === 0) return undefined;
