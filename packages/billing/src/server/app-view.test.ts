@@ -132,7 +132,7 @@ describe.skipIf(!available)('app plan view, organization hooks, intents and prof
     // Under the dev switch the real banner still shows, and access is full everywhere.
     const dev = await view(org, 'projects', owner!, true);
     expect(dev).toMatchObject({ access: 'full', lock: null });
-    expect((await view(org, 'crm', owner!, true)).notice?.kind).toBe('trial');
+    expect((await view(org, 'crm', owner!, true, later)).notice?.kind).toBe('trial');
   });
 
   it('after the trial: view only with a danger banner for everyone; a manual grant stays full', async () => {
