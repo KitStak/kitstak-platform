@@ -14,6 +14,45 @@ Three rules for the whole day:
    then, so every organization can open every app the whole time.
 3. **The old webhook stays on until step 10.** Do not disable the Supabase endpoint earlier.
 
+## Open item 1: real Stripe has never been run end to end
+
+This is the first thing to close. It is written first so nobody can miss it.
+
+Every payment in the tests and in the reviews used the built in test gateway or a fake Stripe client. No
+Stripe test key exists in this repo, in the dev container or with the team that built this (checked on
+2026-11-23: no `STRIPE_*` variable is set anywhere, and keys never go in the repo). So hosted Checkout,
+wallets, the Billing Portal, live signed webhooks, Stripe's invoice PDF and how Stripe's invoice lines look
+on our invoice page are all **unseen**. The adapter is proven only against the Stripe SDK types and a fake
+client (`packages/billing/src/gateway/stripe.test.ts`, 39 tests).
+
+**What the owner must do:** make a Stripe account in test mode (or a sandbox) and hand over two values,
+`sk_test_...` and the `whsec_...` that `stripe listen` prints. Nothing else is needed.
+
+**The run, one hour, in this order.** Record the screen. Each line is pass or fail.
+
+- [ ] `STRIPE_SECRET_KEY=sk_test_... pnpm -F @kitstak/billing stripe:setup apply`, then `stripe:setup check`
+      prints every product and price as `ok`.
+- [ ] Portal started with the two keys (`DEV.md`, "To try real Stripe test mode"). Billing shows "Test mode".
+- [ ] Three carts: Pulse monthly ($29.00), CRM 5 seats and WMS 1 warehouse monthly ($395.20), the same cart
+      yearly ($4,031.04). For each, the total on the Stripe pay page equals our review page to the cent.
+- [ ] Checkout with `4242 4242 4242 4242`: back on the success page, billing home is active within seconds.
+- [ ] Checkout with `4000 0000 0000 0002` (declined): the message shows, nothing is granted.
+- [ ] Checkout with `4000 0027 6000 3184` (bank approval): approve finishes it, fail grants nothing.
+- [ ] A promo code made in the Stripe dashboard, during a trial: the success page and billing home show the
+      reduced first charge with the line "Promo code", and the first invoice equals it.
+- [ ] Open two pay pages in two tabs: the first one says it is closed. Only one can be paid.
+- [ ] Add 1 seat on a paid plan: the confirm panel amount equals the new Stripe invoice to the cent, and the
+      words say "for the N days left".
+- [ ] Remove 1 seat: credit shows on billing home, and "Next charge" is the plan price less the credit. The
+      server prorates a credit from a date up to one day ahead (full days only). **Watch the portal log
+      here.** If Stripe refuses a proration date in the future, the adapter logs one line and counts credits
+      from the start of the hour instead. Both are safe. Write down which one Stripe does.
+- [ ] Card update in the Billing Portal: the new last 4 shows on billing home and in the activity list.
+- [ ] `stripe events resend <id>` for a processed event: the route answers 200 `duplicate`.
+- [ ] Download an invoice PDF from the invoice page.
+
+Until every line passes, the honest state is: **built and unit tested, not proven against Stripe.**
+
 ## What is and is not proven
 
 Say this out loud before go live, so nobody assumes more than is true.
@@ -23,7 +62,8 @@ Say this out loud before go live, so nobody assumes more than is true.
 | Prices, quotes, discounts | Proven by unit tests to the cent, for 9 reference carts. |
 | Test gateway, webhooks, sync, access rows | Proven by unit tests and by the browser tests in `TESTING.md`. |
 | Emails, reminders, the one minute job | Proven by unit tests and the browser tests, with the dev outbox. |
-| Stripe adapter | Checked against the Stripe SDK types and a mocked SDK only. **It has never talked to Stripe.** Step 9 is its first real test. |
+| Stripe adapter | Checked against the Stripe SDK types and a mocked SDK only. **It has never talked to Stripe.** Open item 1 above is its first real test. |
+| Credit, the real next charge, the one plan rule, whole day proration | Proven on the test gateway by database tests (`round1.test.ts`) and browser tests. On Stripe they rest on `invoices.createPreview`, `checkout.sessions.expire`, `creditNotes.create` and `proration_date`, which are only checked against a fake client. |
 | Stripe setup script | Proven against a fake account in unit tests. **It has never talked to Stripe.** Step 1 is its first real test. |
 | Sending with Resend | Proven with a fake HTTP layer only. Step 3 is its first real test. |
 
@@ -142,6 +182,34 @@ In the Stripe dashboard:
       starting point and has not been tried against Stripe: if a call in step 9 is refused, the error
       names the missing permission. The setup script in step 1 needs write access to Products, Prices and
       Customer portal configurations instead, so run it with a separate key.
+
+### Microsoft sign in (only if you set `MICROSOFT_CLIENT_ID`)
+
+Skip this if you do not offer "Continue with Microsoft". If you do, the app registration needs one extra
+claim, or Microsoft sign in will never join an account that already exists.
+
+Why: with the multi tenant endpoint (`MICROSOFT_TENANT_ID` not set, so `common`) anyone can make their own
+Microsoft tenant and put a customer's address in a user's `email`. So KitStak does not trust that field by
+itself. Microsoft is not a trusted provider for joining accounts (`TRUSTED_LINK_PROVIDERS` in
+`packages/auth/src/create-auth.ts`). A Microsoft sign in joins an existing KitStak account only when the
+token carries `xms_edov: true`, which Microsoft itself sets when the email's domain is verified in that
+tenant. Without the claim the person sees "This email already has a KitStak account. Sign in with your
+email and password." A brand new account made with Microsoft starts unverified and gets the 6 digit code.
+
+In the Microsoft Entra admin center, on the app registration:
+
+- [ ] **Authentication:** platform Web, redirect URI `https://<portal host>/api/auth/callback/microsoft`.
+- [ ] **Supported account types:** pick on purpose. "Accounts in any organizational directory and personal
+      Microsoft accounts" matches `common`. For one company only, set `MICROSOFT_TENANT_ID` to that tenant.
+- [ ] **Token configuration, Add optional claim, token type ID:** add `email` and `xms_edov`. Say yes when
+      it asks to turn on the Microsoft Graph `email` permission.
+- [ ] **API permissions:** `openid`, `profile`, `email`, `User.Read`, `offline_access` (delegated).
+- [ ] In the **manifest**, leave `acceptMappedClaims` unset. It must not be `true`.
+- [ ] Test with two accounts: one whose domain is verified in its tenant (joins the existing account), and
+      one from a throwaway tenant with a made up email (must be refused with the sentence above).
+
+Personal Microsoft accounts carry no `xms_edov`. They can make a new KitStak account but are not joined to an
+existing password account by email. That is on purpose.
 
 ## Step 3. Mail
 
@@ -406,6 +474,18 @@ The short form, for the day itself.
 - [ ] 11. Enforcement on. Existing and new organizations checked in every app.
 - [ ] 12. Watch queries saved. Someone owns them for two weeks.
 - [ ] 13. Roll back steps are understood by both people.
+
+## Dates and limits set in code in review round 1
+
+- [ ] `INVITE_NEEDS_VERIFIED_EMAIL_SINCE` in `packages/billing/src/server/auth-hooks.ts` is `2026-11-23`.
+      Accounts made before that day were never asked to verify an email and may keep inviting people (the
+      CRM has no verify screen). Every account made on or after it must verify first, in every app. **If
+      the launch is later than that day, set the date to the launch day** so nobody who signed up in the
+      CRM before launch is blocked from inviting.
+- [ ] `INVITES_PER_DAY` in the same file: 50 invite emails a day for an organization with no paid plan, 500
+      with one. Raise it for a customer by hand only after you know who they are.
+- [ ] Migration `0008_core_billing_credit.sql` must be applied (step 4). It adds the credit columns and the
+      trigger that removes a billing manager's role when the person leaves.
 
 ## Questions the owner still has to answer
 
