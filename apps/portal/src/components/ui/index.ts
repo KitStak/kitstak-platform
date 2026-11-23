@@ -19,3 +19,4 @@ export * from './skeleton';
 export * from './notice';
 export * from './select';
 export * from './link-button';
+export * from './scroll-row';

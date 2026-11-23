@@ -1,9 +1,17 @@
 /**
  * Changing a paid plan (docs/billing/CONTRACTS.md section 11.6, SPEC P9). One rule for every change:
- * it starts right away, an increase is charged now for the time left, a decrease becomes credit on
- * the next bill. The person always sees the amount first, and the change is confirmed only if a
- * fresh preview still shows that amount.
+ * it starts right away, an increase is charged now for the days left, a decrease becomes credit on
+ * the next bill. The person always sees the amount first.
+ *
+ * Three rules keep the money honest (review round 1, CONTRACTS section 24):
+ *  - The server picks the date a change is prorated from (`proration.ts`): whole days, charges
+ *    rounded up, credits rounded down. A date from the browser is never used for money.
+ *  - A preview carries a `basis`: a fingerprint of the plan it was worked out for. Confirming with a
+ *    basis that no longer matches is refused with "The amount changed while you were looking", even
+ *    when the dollars happen to match. So a stale panel can never apply to a plan it did not show.
+ *  - The amount due today must equal a fresh preview to the cent.
  */
+import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { billingSubscriptions, type BillingSubscription } from '@kitstak/db/schema';
 import {
@@ -15,8 +23,9 @@ import {
   productListLabel,
 } from '../catalog';
 import { type BillingResult, billingError, billingOk } from '../errors';
-import { type ChangePreview, GatewayCardError } from '../gateway/types';
+import { type BillingGateway, type ChangePreview, GatewayCardError, type GatewaySubscription } from '../gateway/types';
 import { isLiveSubscriptionStatus, type PlanState } from '../plan-state';
+import { prorationDateFor, prorationDaysLeft, prorationDirection, type ProrationDirection } from '../proration';
 import { quote } from '../quote';
 import { recordAudit } from './audit';
 import { writeCart } from './cart';
@@ -24,9 +33,17 @@ import { belowUsageMessage } from './checkout';
 import { type BillingActor, type BillingRuntime, errorText, logBilling } from './db';
 import { enforceRateLimit } from './rate-limit';
 import { getPlanState } from './state';
-import { applyInvoiceSnapshot, applySubscriptionSnapshot, clearBillingCaches, withCardFallback } from './sync';
+import { applyInvoiceSnapshot, applySubscriptionSnapshot, clearBillingCaches, lockOrgBilling, withCardFallback } from './sync';
 
-const HOUR_MS = 60 * 60 * 1000;
+/** What the confirm panel gets: the gateway's preview plus what it was based on. */
+export interface PlanChangePreview extends ChangePreview {
+  /** A fingerprint of the plan this preview was worked out for. Pass it back unchanged to confirm. */
+  readonly basis: string;
+  /** Whole days the prorated amount is for. null when nothing is prorated (free trial, no change). */
+  readonly daysLeft: number | null;
+  /** Credit the organization holds before this change. */
+  readonly creditBalanceCents: number;
+}
 
 interface Ready {
   readonly row: BillingSubscription;
@@ -69,41 +86,96 @@ function sameSelection(a: PlanSelection, b: PlanSelection): boolean {
   );
 }
 
-/** The preview for the same plan: nothing to pay, nothing changes. */
-function emptyPreview(row: BillingSubscription, now: Date): ChangePreview {
-  return {
-    dueTodayCents: 0,
-    creditCents: 0,
-    newRecurringCents: row.recurringCents,
-    recurringDeltaCents: 0,
-    nextChargeAt: row.trialEnd && row.status === 'trialing' ? row.trialEnd : (row.currentPeriodEnd ?? now),
-    prorationDate: now,
-    lines: [],
-    taxCents: 0,
-  };
+/**
+ * The fingerprint of a plan as the gateway has it now: which subscription, what is on it, the paid
+ * period, and the credit. Any change that lands (seats, apps, billing period, a renewal, credit
+ * used) gives a new value.
+ */
+export function planBasis(subscription: GatewaySubscription): string {
+  const items = subscription.items
+    .map((item) => `${item.product}:${item.quantity}:${item.unitCents}`)
+    .sort()
+    .join(',');
+  const parts = [
+    subscription.id,
+    subscription.status,
+    subscription.interval,
+    items,
+    subscription.currentPeriodStart.getTime(),
+    subscription.currentPeriodEnd.getTime(),
+    subscription.trialEnd ? subscription.trialEnd.getTime() : 0,
+    subscription.creditBalanceCents,
+    subscription.cancelAtPeriodEnd ? 1 : 0,
+    subscription.pauseResumesAt ? subscription.pauseResumesAt.getTime() : 0,
+  ];
+  return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 32);
 }
 
-/** Whole seconds: gateways keep proration dates to the second, so the preview and the change match. */
-function toWholeSecond(date: Date): Date {
-  return new Date(Math.floor(date.getTime() / 1000) * 1000);
+interface Pricing {
+  readonly subscription: GatewaySubscription;
+  readonly basis: string;
+  readonly direction: ProrationDirection;
+  readonly prorationDate: Date;
+  readonly daysLeft: number | null;
+}
+
+/** Reads the plan from the gateway and picks the date this change is prorated from. Nothing from the caller but the cart. */
+async function pricingFor(gateway: BillingGateway, row: BillingSubscription, selection: PlanSelection, now: Date): Promise<Pricing | null> {
+  const subscription = await gateway.getSubscription(row.gatewaySubscriptionId);
+  if (!subscription || !isLiveSubscriptionStatus(subscription.status)) return null;
+  const oldRecurringCents = subscription.items.reduce((sum, item) => sum + item.unitCents * item.quantity, 0);
+  const direction = prorationDirection({
+    oldRecurringCents,
+    newRecurringCents: quote(selection).totalCents,
+    intervalChanged: selection.interval !== subscription.interval,
+  });
+  const window = { periodStart: subscription.currentPeriodStart, periodEnd: subscription.currentPeriodEnd, now, direction };
+  const trialing = subscription.status === 'trialing' && subscription.trialEnd !== null;
+  return {
+    subscription,
+    basis: planBasis(subscription),
+    direction,
+    prorationDate: prorationDateFor(window),
+    // Inside a free trial nothing has been paid, so nothing is prorated.
+    daysLeft: trialing ? null : prorationDaysLeft(window),
+  };
 }
 
 export async function previewPlanChange(
   rt: BillingRuntime,
   input: { orgId: string; selection: PlanSelection },
-): Promise<BillingResult<ChangePreview>> {
+): Promise<BillingResult<PlanChangePreview>> {
   const prepared = await prepare(rt, input);
   if (!prepared.ok) return prepared.error;
   const { row, state, selection } = prepared.ready;
-  const prorationDate = toWholeSecond(rt.now());
-  if (sameSelection(state.selection, selection)) return billingOk(emptyPreview(row, prorationDate));
+  const gateway = rt.gateway!;
   try {
-    const preview = await rt.gateway!.previewChange({
+    const pricing = await pricingFor(gateway, row, selection, rt.now());
+    if (!pricing) return billingError('no_subscription');
+    const extra = { basis: pricing.basis, creditBalanceCents: pricing.subscription.creditBalanceCents };
+    if (sameSelection(state.selection, selection)) {
+      // The same plan: nothing to pay, nothing changes.
+      return billingOk({
+        dueTodayCents: 0,
+        creditCents: 0,
+        newRecurringCents: row.recurringCents,
+        recurringDeltaCents: 0,
+        nextChargeAt: row.trialEnd && row.status === 'trialing' ? row.trialEnd : (row.currentPeriodEnd ?? rt.now()),
+        prorationDate: pricing.prorationDate,
+        lines: [],
+        taxCents: 0,
+        proratedCents: 0,
+        creditAppliedCents: 0,
+        daysLeft: null,
+        ...extra,
+      });
+    }
+    const preview = await gateway.previewChange({
       subscriptionId: row.gatewaySubscriptionId,
       selection,
-      prorationDate,
+      prorationDate: pricing.prorationDate,
     });
-    return billingOk(preview);
+    return billingOk({ ...preview, daysLeft: pricing.daysLeft, ...extra });
   } catch (error) {
     logBilling('error', 'preview plan change failed', { orgId: input.orgId, error: errorText(error) });
     return billingError('gateway_error');
@@ -141,14 +213,33 @@ export function describePlanChange(actor: string, before: PlanSelection, after: 
   return `${actor} ${list}.${tail}`;
 }
 
+/** What the change did to money, as one plain sentence for the activity page. Empty when nothing moved. */
+export function describeChangeMoney(preview: Pick<ChangePreview, 'dueTodayCents' | 'creditCents' | 'creditAppliedCents'>): string {
+  if (preview.creditCents > 0) return ` ${formatMoney(preview.creditCents)} credit was added. It comes off the next bills.`;
+  if (preview.creditAppliedCents > 0 && preview.dueTodayCents === 0) {
+    return ` ${formatMoney(preview.creditAppliedCents)} was paid from credit. Nothing was charged.`;
+  }
+  if (preview.creditAppliedCents > 0) {
+    return ` ${formatMoney(preview.creditAppliedCents)} was paid from credit and ${formatMoney(preview.dueTodayCents)} was charged.`;
+  }
+  if (preview.dueTodayCents > 0) return ` ${formatMoney(preview.dueTodayCents)} was charged for the days left.`;
+  return '';
+}
+
 export async function applyPlanChange(
   rt: BillingRuntime,
   input: {
     orgId: string;
     selection: PlanSelection;
-    prorationDate: Date;
+    /** The `basis` of the preview the person confirmed. */
+    basis: string;
     expectedDueTodayCents: number;
     actor: BillingActor;
+    /**
+     * Ignored. Older callers sent the date of their preview; the server now picks the date itself,
+     * so a date from the browser can never move money.
+     */
+    prorationDate?: unknown;
   },
 ): Promise<BillingResult<PlanState>> {
   const prepared = await prepare(rt, input);
@@ -157,30 +248,34 @@ export async function applyPlanChange(
   const gateway = rt.gateway!;
   if (sameSelection(state.selection, selection)) return billingOk(state);
 
-  const now = rt.now();
-  const prorationDate = toWholeSecond(input.prorationDate);
-  // A preview that is old, or dated in the future, is not a promise any more. Ask again.
-  if (
-    !Number.isFinite(prorationDate.getTime()) ||
-    prorationDate.getTime() > now.getTime() + 60_000 ||
-    prorationDate.getTime() < now.getTime() - HOUR_MS
-  ) {
-    return billingError('price_changed');
-  }
-
   const allowed = await enforceRateLimit(rt.db, { key: `plan-change:${input.orgId}`, windowSeconds: 3600, max: 20 });
   if (!allowed) return billingError('rate_limited');
 
   try {
-    const fresh = await gateway.previewChange({ subscriptionId: row.gatewaySubscriptionId, selection, prorationDate });
-    const tolerance = Math.max(1, fresh.lines.length);
-    if (Math.abs(fresh.dueTodayCents - Math.round(input.expectedDueTodayCents)) > tolerance) {
+    const pricing = await pricingFor(gateway, row, selection, rt.now());
+    if (!pricing) return billingError('no_subscription');
+    // Another change landed since the preview (another tab, another person, a renewal). The panel the
+    // person confirmed described a plan that no longer exists, so it is shown again with new numbers.
+    if (typeof input.basis !== 'string' || input.basis.length === 0 || input.basis !== pricing.basis) {
+      return billingError('price_changed');
+    }
+    const fresh = await gateway.previewChange({
+      subscriptionId: row.gatewaySubscriptionId,
+      selection,
+      prorationDate: pricing.prorationDate,
+    });
+    if (!Number.isFinite(input.expectedDueTodayCents) || fresh.dueTodayCents !== Math.round(input.expectedDueTodayCents)) {
       return billingError('price_changed');
     }
 
-    const subscription = await gateway.applyChange({ subscriptionId: row.gatewaySubscriptionId, selection, prorationDate });
+    const subscription = await gateway.applyChange({
+      subscriptionId: row.gatewaySubscriptionId,
+      selection,
+      prorationDate: fresh.prorationDate,
+    });
     const latestInvoice = subscription.latestInvoiceId ? await gateway.getInvoice(subscription.latestInvoiceId) : null;
     await rt.db.transaction(async (tx) => {
+      await lockOrgBilling(tx, input.orgId);
       if (latestInvoice) {
         await applyInvoiceSnapshot(tx, {
           orgId: input.orgId,
@@ -203,12 +298,15 @@ export async function applyPlanChange(
         orgId: input.orgId,
         actor: input.actor,
         action: 'plan.changed',
-        summary: describePlanChange(input.actor.label, state.selection, selection),
+        summary: `${describePlanChange(input.actor.label, state.selection, selection)}${describeChangeMoney(fresh)}`,
         data: {
           before: state.selection,
           after: selection,
           dueTodayCents: fresh.dueTodayCents,
           creditCents: fresh.creditCents,
+          creditAppliedCents: fresh.creditAppliedCents,
+          creditBalanceCents: subscription.creditBalanceCents,
+          daysLeft: pricing.daysLeft,
           newRecurringCents: after.totalCents,
           newRecurring: formatMoney(after.totalCents),
         },

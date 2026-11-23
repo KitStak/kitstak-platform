@@ -9,7 +9,7 @@ import { Checkbox, Field } from '@/components/ui';
 import { hasHandoff, readHandoff, withHandoff } from '@/features/signup/cart';
 import { emailIssue } from '@/features/signup/fields';
 import type { SocialProviderId } from '@/features/signup/social';
-import { signIn } from '@/lib/auth-client';
+import { signInAction } from '@/server/auth-relay-actions';
 import { resumeAfterSignInAction } from '@/server/signup-actions';
 import {
   AuthHeading,
@@ -81,7 +81,9 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
     submitting.current = true;
     setPending(true);
     try {
-      const result = await signIn.email({ email: email.trim(), password, rememberMe: remember });
+      // A server action, not a browser call to the auth endpoint: a wrong password is an answer the
+      // form shows, not a failed request in the console.
+      const result = await signInAction({ email: email.trim(), password, rememberMe: remember });
       if (result.error) {
         setError(authErrorMessage(result.error));
         submitting.current = false;

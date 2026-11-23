@@ -399,8 +399,8 @@ function billingPlanDescription(signals: SetupSignals): string {
   if (billing?.state === 'done') return 'Your plan is set.';
   if (billing?.state === 'trial_ended') return 'Your free trial has ended. Pick a plan to keep working.';
   return billing?.trialEndsLabel
-    ? `Add a card any time before ${billing.trialEndsLabel}. No charge until then.`
-    : 'Add a card any time during your free trial. No charge until it ends.';
+    ? `Pick a plan any time before ${billing.trialEndsLabel}. No charge until then.`
+    : 'Pick a plan any time during your free trial. No charge until it ends.';
 }
 
 /** Steps that always come last, whatever the scope order. */
@@ -548,21 +548,26 @@ export function summarizeSetup(steps: readonly SetupStep[]): SetupSummary {
   };
 }
 
-/** The welcome screen never lists fewer or more next steps than this (docs/billing/SPEC.md 5.7). */
-export const WELCOME_STEPS_MIN = 3;
-export const WELCOME_STEPS_MAX = 5;
+/** The quick start never lists fewer or more steps than this (docs/billing/SPEC.md 5.7, must have 27). */
+export const GUIDE_STEPS_MIN = 3;
+export const GUIDE_STEPS_MAX = 5;
 
 /**
- * The short list of next steps on the welcome screen: 3 to 5 of them, tied to the apps the team
- * picked. It takes the first step of each area in turn (team, then each app), then the second of
- * each, until the list is full. "Pick your plan" always closes the list when the team is in a free
- * trial. The full plan, with every step, lives in the setup guide on the launcher.
+ * The quick start: the 3 to 5 steps the welcome screen promises and the launcher guide then shows,
+ * tied to the apps the team picked. The same list in both places, so the count and the minutes
+ * never change between the two screens.
+ *
+ * It is "Tell us about your business", then the first step of each area in turn (team, then each
+ * app), then the second of each, until the list is full. "Pick your plan" always closes the list
+ * when the team is in a free trial. The pick looks at what the plan contains, never at what is
+ * done, so the list does not reshuffle as steps are ticked off. Every other step is one of the
+ * "more steps" the guide folds away; each app's own guide carries those too.
  */
-export function pickWelcomeSteps(steps: readonly SetupStep[], max: number = WELCOME_STEPS_MAX): readonly SetupStep[] {
-  const open = steps.filter((step) => step.key !== 'profile' && step.status === 'todo');
-  const closing = open.filter((step) => LAST_STEPS.includes(step.key));
-  const rest = open.filter((step) => !LAST_STEPS.includes(step.key));
-  const room = Math.max(0, max - closing.length);
+export function pickGuideSteps(steps: readonly SetupStep[], max: number = GUIDE_STEPS_MAX): readonly SetupStep[] {
+  const opening = steps.filter((step) => step.key === 'profile');
+  const closing = steps.filter((step) => LAST_STEPS.includes(step.key));
+  const rest = steps.filter((step) => step.key !== 'profile' && !LAST_STEPS.includes(step.key));
+  const room = Math.max(0, max - opening.length - closing.length);
 
   // One queue per area, in plan order.
   const queues: SetupStep[][] = [];
@@ -584,5 +589,11 @@ export function pickWelcomeSteps(steps: readonly SetupStep[], max: number = WELC
     if (!took) break;
   }
   // Back in plan order, so a step never shows above the one that unlocks it.
-  return [...rest.filter((step) => chosen.has(step.key)), ...closing];
+  return [...opening, ...rest.filter((step) => chosen.has(step.key)), ...closing];
+}
+
+/** The steps the quick start leaves out, in plan order. */
+export function moreGuideSteps(steps: readonly SetupStep[], max: number = GUIDE_STEPS_MAX): readonly SetupStep[] {
+  const picked = new Set(pickGuideSteps(steps, max).map((step) => step.key));
+  return steps.filter((step) => !picked.has(step.key));
 }

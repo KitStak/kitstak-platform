@@ -64,7 +64,7 @@ export function CardFields({
                 aria-pressed={on}
                 onClick={() => onChange({ cardNumber: formatCardNumber(card.number), expiry: '12 / 34', cvc: '123' })}
                 className={cn(
-                  'inline-flex min-h-11 items-center rounded-full border px-3.5 text-sm font-medium text-fg sm:min-h-9',
+                  'inline-flex min-h-11 items-center rounded-full border px-3.5 text-sm font-medium text-fg sm:min-h-9 sm:pointer-coarse:min-h-11',
                   'transition-colors duration-[var(--duration-fast)] motion-reduce:transition-none',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50',
                   on ? 'border-primary bg-primary-subtle/50' : 'border-border-input bg-panel hover:border-border-input-hover hover:bg-muted',

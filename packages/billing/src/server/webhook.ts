@@ -19,7 +19,15 @@ import { recordAudit } from './audit';
 import { applyCheckoutSession } from './checkout';
 import { type BillingDb, type BillingRuntime, errorText, isUuid, logBilling, SYSTEM_ACTOR } from './db';
 import { enqueueForBillingRecipients } from './outbox';
-import { applyInvoiceSnapshot, clearBillingCaches, customerIdForOrg, fetchAndApplySubscription, withCardFallback } from './sync';
+import {
+  applyInvoiceSnapshot,
+  clearBillingCaches,
+  customerIdForOrg,
+  fetchAndApplySubscription,
+  isForeignSubscription,
+  lockOrgBilling,
+  withCardFallback,
+} from './sync';
 
 export type WebhookOutcome =
   | { readonly status: 400; readonly result: 'bad_signature' }
@@ -80,6 +88,21 @@ async function fetchInvoice(rt: BillingRuntime, db: BillingDb, orgId: string, ev
 async function handleEvent(rt: BillingRuntime, db: BillingDb, orgId: string, event: GatewayEvent): Promise<Handled> {
   const gateway = rt.gateway;
   if (!gateway) return 'ignored';
+  // One writer per organization: events of two subscriptions, or an event and a return page, are
+  // applied one after the other.
+  await lockOrgBilling(db, orgId);
+
+  /**
+   * An invoice of a subscription that is not the organization's plan (a second checkout that was
+   * canceled and refunded). It is kept in the invoice list as the gateway has it now, and no receipt
+   * and no "payment failed" mail goes out for it.
+   */
+  const storeForeignInvoice = async (invoice: GatewayInvoice): Promise<boolean> => {
+    if (!invoice.subscriptionId || !(await isForeignSubscription(db, orgId, invoice.subscriptionId))) return false;
+    const current = (await gateway.getInvoice(invoice.id)) ?? invoice;
+    await applyInvoiceSnapshot(db, { orgId, gateway: gateway.kind, invoice: current });
+    return true;
+  };
 
   switch (event.type) {
     case 'checkout.session.completed': {
@@ -130,8 +153,24 @@ async function handleEvent(rt: BillingRuntime, db: BillingDb, orgId: string, eve
       const subscription = invoice.subscriptionId
         ? await fetchAndApplySubscription(rt, db, { orgId, subscriptionId: invoice.subscriptionId, eventId: event.id })
         : null;
+      if (!subscription && (await storeForeignInvoice(invoice))) return 'processed';
       const stored = withCardFallback(invoice, subscription);
       await applyInvoiceSnapshot(db, { orgId, gateway: gateway.kind, invoice: stored });
+      if (invoice.creditAppliedCents > 0) {
+        const kept = subscription ? subscription.creditBalanceCents : null;
+        const left = kept === null ? '' : kept > 0 ? ` ${formatMoney(kept)} credit is left.` : ' Your credit is used up.';
+        await recordAudit(db, {
+          orgId,
+          actor: SYSTEM_ACTOR,
+          action: 'payment.credit_used',
+          summary:
+            invoice.amountPaidCents > 0
+              ? `${formatMoney(invoice.creditAppliedCents)} of this bill was paid from your credit.${left}`
+              : `This bill was paid in full from your credit (${formatMoney(invoice.creditAppliedCents)}). Nothing was charged.${left}`,
+          data: { invoiceId: invoice.id, creditAppliedCents: invoice.creditAppliedCents, creditLeftCents: kept },
+          eventId: event.id,
+        });
+      }
       if (invoice.amountPaidCents > 0) {
         await recordAudit(db, {
           orgId,
@@ -174,6 +213,7 @@ async function handleEvent(rt: BillingRuntime, db: BillingDb, orgId: string, eve
       const subscription = invoice.subscriptionId
         ? await fetchAndApplySubscription(rt, db, { orgId, subscriptionId: invoice.subscriptionId, eventId: event.id })
         : null;
+      if (!subscription && (await storeForeignInvoice(invoice))) return 'processed';
       const stored = withCardFallback(invoice, subscription);
       await applyInvoiceSnapshot(db, { orgId, gateway: gateway.kind, invoice: stored });
       await recordAudit(db, {

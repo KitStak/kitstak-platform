@@ -10,6 +10,7 @@ import type { BillingInterval, ProductId, ProductPricing } from '@kitstak/billin
 
 export {
   BILLING_INTERVALS,
+  BILLING_POLICY,
   CATALOG,
   MAX_SEATS,
   MAX_WAREHOUSES,

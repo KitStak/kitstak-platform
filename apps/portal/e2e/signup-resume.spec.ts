@@ -41,7 +41,9 @@ test.describe('signup: resume where you left off', () => {
     await page.getByTestId('signup-submit').click();
     await expect(page.getByText('Enter your full name.')).toBeVisible();
     await expect(page.getByText('Enter a valid work email.')).toBeVisible();
-    await expect(page.getByText('Use at least 10 characters.')).toBeVisible();
+    // The checklist names every missing rule at once, in red, and the error is not printed twice.
+    await expect(page.locator('[data-testid="password-rules"] [data-state="missing"]')).toHaveCount(4);
+    await expect(page.getByText('Use at least 10 characters.')).toHaveCount(0);
     await expect(page.getByText('Enter your company or team name.')).toBeVisible();
     // Focus moves to the first field with a problem, and each error is tied to its field.
     await expect(page.getByTestId('signup-name')).toBeFocused();

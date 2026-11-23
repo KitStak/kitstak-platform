@@ -15,6 +15,7 @@ import { normalizeSelection, toStack, type PlanSelection } from '@kitstak/billin
 import { billingError, billingOk, type BillingResult } from '@kitstak/billing/errors';
 import type { PlanState } from '@kitstak/billing/plan-state';
 import {
+  applyTestPromo,
   completeTestCardUpdate,
   completeTestCheckout,
   cancelTestCheckout,
@@ -31,6 +32,7 @@ import {
   createCheckout,
   createPaymentUpdateSession,
   getOpenSignupIntent,
+  getPlanState,
   pausePlan,
   previewPlanChange,
   removeBillingManager,
@@ -42,6 +44,7 @@ import {
   undoPause,
   updateBillingProfile,
   upsertSignupIntent,
+  writeCart,
   type BillingProfile,
   type CancelReason,
   type ChangePreview,
@@ -147,6 +150,29 @@ export async function saveCartAction(input: { selection: PlanSelection }): Promi
   return guarded('save cart', () => saveCart(ctx.rt, { orgId: ctx.org.id, selection, actor: ctx.actor }));
 }
 
+/**
+ * Keeps the plan a person is picking while they pick it, so a refresh or a closed tab loses nothing
+ * (docs/billing/SPEC.md 5.6). It writes the same cart `saveCartAction` writes, but quietly: no
+ * activity entry for every key press and no page reload under the person's hands. Only for a plan
+ * that is not paid yet. A paid plan changes through preview and confirm, never through here.
+ */
+export async function saveCartDraftAction(input: { selection: PlanSelection }): Promise<BillingResult<null>> {
+  const found = await contextFor('manage');
+  if (!found.ok) return found.error;
+  const { ctx } = found;
+  const selection = readSelection(input);
+  if (!selection) return billingError('invalid_selection');
+  try {
+    const state = await getPlanState(ctx.rt, ctx.org.id);
+    if (state.hasSubscription) return billingOk(null);
+    await writeCart(ctx.rt.db, ctx.org.id, selection);
+    return billingOk(null);
+  } catch (error) {
+    console.error('[billing] save cart draft failed', error instanceof Error ? error.message : error);
+    return billingError('gateway_error');
+  }
+}
+
 /* ===== checkout and plan changes ===== */
 
 export async function startCheckoutAction(input: { selection: PlanSelection }): Promise<BillingResult<{ url: string }>> {
@@ -185,27 +211,36 @@ export async function previewPlanChangeAction(input: { selection: PlanSelection 
 
 const confirmInput = z.object({
   selection: z.unknown(),
-  prorationDate: z.coerce.date(),
+  // What the preview was based on. The server compares it with the plan as it is now.
+  basis: z.string().min(8).max(128),
   expectedDueTodayCents: z.number().int().min(0).max(100_000_000),
 });
 
+/**
+ * Confirms the change a person just looked at. `basis` and `expectedDueTodayCents` come from that
+ * preview and are only compared, never used: the server picks the proration date itself and prices
+ * the change again. A date from the browser is not accepted at all.
+ */
 export async function confirmPlanChangeAction(input: {
   selection: PlanSelection;
-  prorationDate: Date | string;
+  basis: string;
   expectedDueTodayCents: number;
 }): Promise<BillingResult<PlanState>> {
   const found = await contextFor('manage');
   if (!found.ok) return found.error;
   const { ctx } = found;
   if (!ctx.emailVerified) return billingError('email_unverified');
-  const parsed = confirmInput.safeParse(input);
   const selection = readSelection(input);
-  if (!parsed.success || !selection) return billingError('invalid_selection');
+  if (!selection) return billingError('invalid_selection');
+  const parsed = confirmInput.safeParse(input);
+  // A confirm with no basis (a tab left open across a release) is treated like a stale panel: look
+  // again, then confirm. Nothing is charged.
+  if (!parsed.success) return billingError('price_changed');
   return guarded('confirm plan change', () =>
     applyPlanChange(ctx.rt, {
       orgId: ctx.org.id,
       selection,
-      prorationDate: parsed.data.prorationDate,
+      basis: parsed.data.basis,
       expectedDueTodayCents: parsed.data.expectedDueTodayCents,
       actor: ctx.actor,
     }),
@@ -384,6 +419,28 @@ export async function testCompleteCheckoutAction(input: {
   const allowed = await testSessionUser(async () => (await getTestCheckout(rt.db, parsed.data.sessionId))?.orgId ?? null);
   if (!allowed.ok) return allowed.error;
   return guarded('test checkout', () => completeTestCheckout(rt, parsed.data));
+}
+
+/**
+ * The promo code box on the test pay page. The gateway checks the code and keeps it on the checkout
+ * session, so the summary shows the promo line and the real first charge before the person pays.
+ * An empty code takes the promo off again. A wrong code is an answer, not a crash.
+ */
+export async function testApplyPromoAction(input: {
+  sessionId: string;
+  promoCode: string;
+}): Promise<BillingResult<{ promo: { code: string; label: string; discountCents: number } | null; firstChargeCents: number }>> {
+  const parsed = z.object({ sessionId, promoCode: z.string().max(40) }).safeParse(input);
+  if (!parsed.success) return billingError('invalid_input', 'That promo code is not valid.');
+  const rt = billingRuntime();
+  const allowed = await testSessionUser(async () => (await getTestCheckout(rt.db, parsed.data.sessionId))?.orgId ?? null);
+  if (!allowed.ok) return allowed.error;
+  try {
+    return await applyTestPromo(rt, parsed.data);
+  } catch (error) {
+    console.error('[billing] test promo failed', error instanceof Error ? error.message : error);
+    return billingError('gateway_error');
+  }
 }
 
 export async function testCancelCheckoutAction(input: { sessionId: string }): Promise<BillingResult<{ redirectUrl: string }>> {

@@ -25,13 +25,15 @@ export function planStarted(raw: unknown): EmailContent {
   const total = cents(payload, 'totalCents');
   const dueToday = cents(payload, 'dueTodayCents');
   const firstChargeAt = date(payload, 'firstChargeAt');
+  // What the first bill really charges, when it differs from the plan price (a promo code, credit).
+  const firstCharge = typeof payload.firstChargeCents === 'number' ? cents(payload, 'firstChargeCents') : total;
   const period = perPeriod(interval(payload, 'interval'));
   const chargeRows =
     dueToday > 0
       ? [{ label: 'Paid today', value: money(dueToday) }]
       : [
           { label: 'Due today', value: money(0) },
-          { label: 'First charge', value: `${money(total)} on ${day(firstChargeAt)}` },
+          { label: 'First charge', value: `${money(firstCharge)} on ${day(firstChargeAt)}` },
         ];
   return {
     subject: 'Your KitStak plan is set',

@@ -2,8 +2,10 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { AppSwitcher, type AppSwitcherPlanBadge } from '@kitstak/ui/app-switcher';
 import { PlanBanner, type PlanBannerNotice } from '@kitstak/ui/plan-banner';
+import { ViewOnlyGuard } from '@kitstak/ui/view-only';
 import { PRODUCT_NAME } from '@/config/brand';
 import { BrandLogo } from './brand-logo';
 import { DASHBOARD_ITEM, HEADER_ITEMS, NAV_MENUS, USER_MENU_ITEMS } from '@/config/nav-config';
@@ -88,6 +90,24 @@ export interface ShellPlan {
   readonly badges: Readonly<Record<ProductId, AppSwitcherPlanBadge>>;
   /** Where a row that is not in the plan goes: the Portal plan picker with that app turned on. */
   readonly addHrefs: Readonly<Record<ProductId, string>>;
+  /** Set when the plan has no room for one more warehouse: the sentence with the price, and the link. */
+  readonly warehouseLimit?: { readonly message: string; readonly planUrl: string } | null;
+}
+
+const ShellPlanContext = React.createContext<ShellPlan | null>(null);
+
+/** The organization's plan, for pages that must say "view only" or "at your limit" before a form opens. null in tests and harnesses. */
+export function useShellPlan(): ShellPlan | null {
+  return React.useContext(ShellPlanContext);
+}
+
+/**
+ * View only is told before a form opens (docs/billing/SPEC.md 9.4): any control marked
+ * `data-plan-write` opens one small dialog with the banner's words and button.
+ */
+function PlanViewOnly({ plan }: { readonly plan?: ShellPlan }) {
+  const pathname = usePathname();
+  return <ViewOnlyGuard active={plan?.access === 'read_only'} notice={plan?.notice ?? null} pathname={pathname ?? '/'} homeHref="/" />;
 }
 
 function TopBar({
@@ -198,6 +218,7 @@ export function AppShell({
       activeApps={activeApps}
       entitledApps={entitledApps}
     >
+      <ShellPlanContext.Provider value={plan ?? null}>
       <PreferencesBoundary>
         <div className="flex min-h-screen flex-col">
           <a
@@ -209,6 +230,7 @@ export function AppShell({
           <TopBar org={org} orgs={orgs} plan={plan} />
           {/* Trial, payment and view only notices: above the page, never over content. */}
           <PlanBanner notice={plan?.notice ?? null} dismissible className="print:hidden" />
+          <PlanViewOnly plan={plan} />
           {/* lg:pr-6 reserves a gutter as wide as the fixed (w-6) "Feedback" side tab so it never covers grid action columns. */}
           <main id="main-content" className="flex min-h-0 flex-1 flex-col lg:pr-6 print:pr-0">
             <SetupCallout />
@@ -217,6 +239,7 @@ export function AppShell({
           <IdleSignOut minutes={idleMinutes} />
         </div>
       </PreferencesBoundary>
+      </ShellPlanContext.Provider>
     </ShellProvider>
   );
 }

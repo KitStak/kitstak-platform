@@ -233,6 +233,8 @@ function buildAuth(db: AppDb): KitstakAuth {
       db: db as unknown as BillingDb,
       portalUrl: (process.env.NEXT_PUBLIC_PORTAL_URL?.trim() || 'http://localhost:3300').replace(/\/+$/, ''),
       allowAll: entitlementsAllowAll,
+      // Lets the invite link prove the mailbox, so an invited person is not asked for a code.
+      inviteSecret: betterAuthSecret(),
     }),
     passwordPolicy: {
       loadPolicy: async () => await getPasswordPolicy(db),

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { getPlanState } from '@kitstak/billing/server';
 import { requireBillingContext } from '@/server/billing/context';
-import { Card, LinkButton, cn } from '@/components/ui';
+import { Card, LinkButton, cn, ScrollRow } from '@/components/ui';
 import { BillingHeader, TestModeBadge } from '@/features/billing/billing-chrome';
 import {
   ACTIVITY_FILTERS,
@@ -125,7 +125,7 @@ export default async function BillingActivityPage({
         }
       />
 
-      <nav aria-label="Show" className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
+      <ScrollRow as="nav" aria-label="Show" className="-mx-4 px-4 sm:mx-0 sm:px-0">
         <ul className="flex min-w-max gap-2">
           {ACTIVITY_FILTERS.map((entry) => {
             const active = entry.id === filter;
@@ -161,7 +161,7 @@ export default async function BillingActivityPage({
             );
           })}
         </ul>
-      </nav>
+      </ScrollRow>
 
       {items.length === 0 ? (
         <Card className="flex flex-col items-center px-6 py-14 text-center">
@@ -191,7 +191,9 @@ export default async function BillingActivityPage({
                         key={item.id}
                         data-testid="activity-row"
                         data-action={item.action}
-                        className="flex items-start gap-3 px-4 py-3.5 sm:gap-4 sm:px-5"
+                        // On phones the invoice link sits under the words, so the sentence keeps the full
+                        // width and never breaks in the middle of a word.
+                        className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 px-4 py-3.5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-4 sm:px-5"
                       >
                         <span
                           aria-hidden
@@ -199,8 +201,8 @@ export default async function BillingActivityPage({
                         >
                           <Icon className="size-4" />
                         </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-md font-medium break-words text-fg">{item.summary}</p>
+                        <div className="min-w-0">
+                          <p className="text-md font-medium [overflow-wrap:anywhere] text-fg">{item.summary}</p>
                           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-fg-secondary">
                             <span className="sr-only">{KIND_WORDS[kindOf(item.action)]}. </span>
                             <time dateTime={item.at.toISOString()}>{timeLabel(item.at, timeZone)}</time>
@@ -213,7 +215,7 @@ export default async function BillingActivityPage({
                             href={`/billing/invoices/${invoiceId}`}
                             aria-label={`View the invoice for: ${item.summary}`}
                             className={cn(
-                              'inline-flex min-h-9 shrink-0 items-center rounded-md px-2 text-sm font-medium text-fg underline decoration-border-strong underline-offset-4',
+                              'col-start-2 inline-flex min-h-9 items-center justify-self-start rounded-md text-sm font-medium text-fg underline decoration-border-strong underline-offset-4 sm:col-start-3 sm:justify-self-end sm:px-2 pointer-coarse:min-h-11',
                               'hover:decoration-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
                             )}
                           >
@@ -241,7 +243,7 @@ export default async function BillingActivityPage({
         <div className="flex justify-center">
           <Link
             href={hrefFor(filter)}
-            className="inline-flex min-h-9 items-center rounded-md text-sm font-medium text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            className="inline-flex min-h-9 pointer-coarse:min-h-11 items-center rounded-md text-sm font-medium text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
             Back to the newest
           </Link>

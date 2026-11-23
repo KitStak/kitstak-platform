@@ -5,6 +5,7 @@
  * quick add, task drawer (`?task=KEY`) and the shortcuts sheet.
  */
 import { useState, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CommandPalette } from '@/features/command/command-palette';
 import { OnboardingHost } from '@/features/onboarding/onboarding-host';
@@ -17,6 +18,7 @@ import { ShellProvider, type ShellContextValue } from './shell-context';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { Sidebar } from './sidebar';
 import { PlanBanner } from '@kitstak/ui/plan-banner';
+import { ViewOnlyGuard } from '@kitstak/ui/view-only';
 import { TopBar } from './top-bar';
 import { useShellHotkeys } from './use-shell-hotkeys';
 
@@ -51,6 +53,19 @@ function LockedQueries({ locked, children }: { readonly locked: boolean; readonl
   const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { enabled: false, retry: false } } }));
   if (!locked) return <>{children}</>;
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+/** Projects screens that start a change: the new project wizard. */
+const PROJECTS_WRITE_PATHS: readonly (string | RegExp)[] = [/^\/projects\/new$/];
+
+/**
+ * View only is told before a form opens (docs/billing/SPEC.md 9.4): "New project" and any control
+ * marked `data-plan-write` open one small dialog with the banner's words and button, so nobody
+ * fills in the three step wizard and hears "no" at the last click.
+ */
+function PlanViewOnly({ plan }: { readonly plan: ShellContextValue['plan'] }) {
+  const pathname = usePathname();
+  return <ViewOnlyGuard active={plan?.access === 'read_only'} notice={plan?.notice ?? null} pathname={pathname} writePaths={PROJECTS_WRITE_PATHS} homeHref="/" />;
 }
 
 export function AppShell(props: AppShellProps) {
@@ -91,6 +106,7 @@ function ShellBody({ context, initialProjects, initialSpaces, initialUnread, ini
       <TaskDrawerHost />
       <ShortcutsDialog />
       <OnboardingHost />
+      <PlanViewOnly plan={context.plan} />
     </ShellProvider>
   );
 }

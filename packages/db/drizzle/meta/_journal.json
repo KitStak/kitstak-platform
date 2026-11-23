@@ -57,6 +57,13 @@
       "when": 1795046400000,
       "tag": "0007_core_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795132800000,
+      "tag": "0008_core_billing_credit",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import { DEFAULT_PASSWORD_POLICY, validatePassword } from '@kitstak/auth/password-policy';
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordIssue, passwordRules, passwordStrength } from './password-rules';
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  isRulesIssue,
+  missingRuleWords,
+  passwordIssue,
+  passwordRules,
+  passwordStrength,
+} from './password-rules';
 
 const SAMPLES = [
   '',
@@ -32,23 +40,37 @@ describe('passwordIssue', () => {
     }
   });
 
-  test('uses the exact length messages from the spec', () => {
-    expect(passwordIssue('Aa1!')).toBe('Use at least 10 characters.');
+  test('uses plain length messages', () => {
+    expect(passwordIssue('Aa1!')).toBe('Your password still needs 10 or more characters.');
     expect(passwordIssue(`Aa1!${'x'.repeat(80)}`)).toBe('Use 72 characters or fewer.');
     expect(PASSWORD_MIN_LENGTH).toBe(10);
     expect(PASSWORD_MAX_LENGTH).toBe(72);
   });
 
-  test('names one problem at a time, in plain words', () => {
+  test('names every missing rule at once, in one plain sentence', () => {
     expect(passwordIssue('')).toBe('Enter a password.');
-    expect(passwordIssue('alllowercase1!')).toBe('Include a capital letter.');
-    expect(passwordIssue('ALLUPPERCASE1!')).toBe('Include a small letter.');
-    expect(passwordIssue('NoNumberHere!')).toBe('Include a number.');
-    expect(passwordIssue('NoSymbol12345')).toBe('Include a symbol, like ! or #.');
+    expect(passwordIssue('alllowercase1!')).toBe('Your password still needs a capital letter.');
+    expect(passwordIssue('ALLUPPERCASE1!')).toBe('Your password still needs a small letter.');
+    expect(passwordIssue('NoNumberHere!')).toBe('Your password still needs a number.');
+    expect(passwordIssue('NoSymbol12345')).toBe('Your password still needs a symbol, like ! or #.');
+    // A long passphrase with no capital, number or symbol hears all three, not one at a time.
+    expect(passwordIssue('correct horse battery staple')).toBe('Your password still needs a capital letter and a number.');
+    expect(passwordIssue('correcthorsebatterystaple')).toBe('Your password still needs a capital letter, a number and a symbol, like ! or #.');
+    expect(passwordIssue('abc')).toBe('Your password still needs 10 or more characters, a capital letter, a number and a symbol, like ! or #.');
+    expect(passwordIssue('1234')).toBe('Your password still needs 10 or more characters, a capital and a small letter and a symbol, like ! or #.');
     expect(passwordIssue('Maya-Secret-12!', { email: 'maya@northwind.example' })).toBe(
       'Do not use your email name in your password.',
     );
     expect(passwordIssue('Good-Password-1')).toBeNull();
+  });
+
+  test('the missing words match the checklist: a rule is named exactly when its tick is off', () => {
+    for (const sample of SAMPLES) {
+      const unmet = passwordRules(sample).filter((rule) => !rule.met).length;
+      expect({ sample, missing: missingRuleWords(sample).length }).toEqual({ sample, missing: unmet });
+      if (sample !== '' && sample.length <= PASSWORD_MAX_LENGTH) expect(isRulesIssue(sample)).toBe(unmet > 0);
+    }
+    expect(isRulesIssue('')).toBe(false);
   });
 
   test('counts bytes, so a long password with accents is caught before the server refuses it', () => {

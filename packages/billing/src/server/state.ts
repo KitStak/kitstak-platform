@@ -71,6 +71,11 @@ export function subscriptionInput(row: BillingSubscription): PlanSubscriptionInp
       row.pmLast4 && row.pmBrand
         ? { brand: row.pmBrand, last4: row.pmLast4, expMonth: row.pmExpMonth ?? 0, expYear: row.pmExpYear ?? 0 }
         : null,
+    creditCents: row.creditCents,
+    nextChargeCents: row.nextChargeCents,
+    nextDiscountCents: row.nextDiscountCents,
+    nextDiscountLabel: row.nextDiscountLabel,
+    nextCreditCents: row.nextCreditCents,
   };
 }
 

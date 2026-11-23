@@ -12,6 +12,8 @@ const PAGES: readonly { readonly path: string; readonly priority: number }[] = [
   { path: '/pricing', priority: 0.9 },
   { path: '/get-started', priority: 0.8 },
   { path: '/contact', priority: 0.6 },
+  { path: '/terms', priority: 0.3 },
+  { path: '/privacy', priority: 0.3 },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

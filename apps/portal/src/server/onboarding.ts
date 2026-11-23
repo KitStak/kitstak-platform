@@ -18,6 +18,8 @@ import { db } from '@/server/db';
 import { env } from '@/server/env';
 import {
   buildSetupSteps,
+  moreGuideSteps,
+  pickGuideSteps,
   summarizeSetup,
   SETUP_PRODUCTS,
   type SetupBillingSignal,
@@ -206,8 +208,17 @@ export interface SetupStepView extends SetupStep {
 
 export interface SetupState {
   readonly profile: SetupProfile | null;
+  /** Every step of the plan, in order. */
   readonly steps: readonly SetupStepView[];
+  /** Counts over every step. */
   readonly summary: SetupSummary;
+  /**
+   * The quick start: the 3 to 5 steps the welcome screen promised (docs/billing/SPEC.md 5.7). The
+   * launcher guide shows these, counts these and celebrates these.
+   */
+  readonly quick: { readonly steps: readonly SetupStepView[]; readonly summary: SetupSummary };
+  /** The steps the quick start leaves out. The guide folds them behind "Show more steps". */
+  readonly more: readonly SetupStepView[];
   readonly dismissed: boolean;
   /** An org-level 'guide' row exists (seen or dismissed) — the rollout guard marker. */
   readonly seen: boolean;
@@ -310,20 +321,32 @@ export async function getSetupState(
     readonly id: string;
     readonly slug: string;
   },
-  options: { readonly timeZone?: string } = {},
+  options: {
+    readonly timeZone?: string;
+    /**
+     * False for a person who cannot pay or change the plan (not an owner, not a billing manager).
+     * Their guide has no "Pick your plan" step: it would be a button they cannot use.
+     */
+    readonly canManageBilling?: boolean;
+  } = {},
 ): Promise<SetupState> {
-  const [{ signals, products, plan }, progress] = await Promise.all([
+  const [{ signals: liveSignals, products, plan }, progress] = await Promise.all([
     getSetupSignals(org.id, org.slug, options.timeZone),
     getProgressRows(org.id),
   ]);
+  const signals: SetupSignals = options.canManageBilling === false ? { ...liveSignals, billing: null } : liveSignals;
   const steps = buildSetupSteps(signals, progress.profile, progress.overrides);
+  const view = (step: SetupStep): SetupStepView => {
+    const link = stepHref(step.key, org.slug, progress.profile);
+    return { ...step, cta: link.cta ?? step.cta, href: link.href, external: link.external };
+  };
+  const quickSteps = pickGuideSteps(steps);
   return {
     profile: progress.profile,
-    steps: steps.map((step) => {
-      const link = stepHref(step.key, org.slug, progress.profile);
-      return { ...step, cta: link.cta ?? step.cta, href: link.href, external: link.external };
-    }),
+    steps: steps.map(view),
     summary: summarizeSetup(steps),
+    quick: { steps: quickSteps.map(view), summary: summarizeSetup(quickSteps) },
+    more: moreGuideSteps(steps).map(view),
     dismissed: progress.dismissed,
     seen: progress.seen,
     guideEntitlements: { crm: signals.crmEntitled, wms: signals.wmsEntitled },

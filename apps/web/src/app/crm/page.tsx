@@ -27,7 +27,7 @@ import { IntegrationWall } from '@/components/product/integrations';
 import { PriceBand } from '@/components/product/price-band';
 import { ProductHero } from '@/components/product/product-hero';
 import { SubNav } from '@/components/product/sub-nav';
-import { ROUTES, getStartedHref } from '@/components/site-links';
+import { ROUTES, startFreeHref } from '@/components/site-links';
 
 export const metadata: Metadata = {
   title: 'KitStak CRM - pipelines, boards and automations your team shapes',
@@ -54,12 +54,12 @@ export default function CrmPage() {
           app="crm"
           lines={['Track it.', 'Chase it.', 'Close it.']}
           lead="KitStak CRM keeps leads, deals, accounts and follow-ups on boards your team shapes for itself. Automations do the chasing, dashboards do the reporting, and nobody asks where a deal stands."
-          primary={{ href: getStartedHref('crm'), label: 'Start with the CRM' }}
+          primary={{ href: startFreeHref('crm', 'product'), label: 'Start with the CRM' }}
           secondary={{ href: ROUTES.demo, label: 'Book a walkthrough' }}
           visual={<BoardMorph />}
           facts={HERO_FACTS}
         />
-        <SubNav current="crm" sections={SECTIONS} cta={{ href: getStartedHref('crm'), label: 'Start with the CRM' }} />
+        <SubNav current="crm" sections={SECTIONS} cta={{ href: startFreeHref('crm', 'product'), label: 'Start with the CRM' }} />
 
         <Chapter
           id="boards"
@@ -155,7 +155,7 @@ export default function CrmPage() {
         <FounderBand />
         <ClosingSection
           title="Know where every deal stands."
-          startHref={getStartedHref('crm')}
+          startHref={startFreeHref('crm', 'product')}
           startLabel="Start with the CRM"
         />
       </main>

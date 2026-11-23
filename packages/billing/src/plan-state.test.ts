@@ -149,7 +149,7 @@ describe('derivePlanState: details', () => {
     expect(state.hasSubscription).toBe(false);
     expect(state.trialEligible).toBe(false);
     expect(state.nextCharge).toBeNull();
-    expect(state.usage).toEqual({ seatsUsed: 4, seatsPaid: null, seatLimit: null, pendingInvites: 1, warehousesUsed: 1, warehousesPaid: null });
+    expect(state.usage).toEqual({ seatsUsed: 4, seatsPaid: null, seatLimit: null, pendingInvites: 1, seatFloor: 5, warehousesUsed: 1, warehousesPaid: null });
     expect(state.selection).toEqual(CART);
     expect(state.quote.totalCents).toBe(39520);
     expect(state.modules.crm).toEqual({ product: 'crm', access: 'full', inPlan: true, source: 'trial', quantity: 5 });
@@ -171,7 +171,8 @@ describe('derivePlanState: details', () => {
     expect(state.selection).toEqual(CART);
     expect(state.hasSubscription).toBe(true);
     expect(state.trial).toBeNull();
-    expect(state.nextCharge).toEqual({ amountCents: 39520, at: at(25) });
+    expect(state.nextCharge).toEqual({ amountCents: 39520, at: at(25), planCents: 39520, discountCents: 0, discountLabel: null, creditAppliedCents: 0 });
+    expect(state.creditCents).toBe(0);
     expect(state.usage.seatLimit).toBe(5);
     expect(state.usage.seatsPaid).toBe(5);
     expect(state.usage.warehousesPaid).toBe(1);
@@ -185,7 +186,7 @@ describe('derivePlanState: details', () => {
     );
     expect(state.phase).toBe('active');
     expect(state.trial?.endsAt).toEqual(at(9));
-    expect(state.nextCharge).toEqual({ amountCents: 39520, at: at(9) });
+    expect(state.nextCharge).toMatchObject({ amountCents: 39520, at: at(9), planCents: 39520 });
   });
 
   it('a late payment has the amount, the retry date and the day access changes (7 days after the invoice)', () => {
@@ -287,6 +288,17 @@ describe('planNoticeFor: the words in SPEC 9.2', () => {
         for (const sentence of sentences(notice.text)) expect(sentence.split(/\s+/).length, sentence).toBeLessThanOrEqual(20);
       }
     }
+  });
+
+  it('shows no trial banner on the first day of a trial, and shows it from the second day', () => {
+    const firstHour = derivePlanState(input({ account: trialAccount(13.97), entitlements: trialRows(13.97) }));
+    const secondDay = derivePlanState(input({ account: trialAccount(12.9), entitlements: trialRows(12.9) }));
+    expect(firstHour.phase).toBe('trial');
+    for (const module of [null, 'crm', 'wms'] as const) {
+      expect(planNoticeFor(firstHour, context(MANAGER, module))).toBeNull();
+      expect(planNoticeFor(firstHour, context(ADMIN, module))).toBeNull();
+    }
+    expect(planNoticeFor(secondDay, context(MANAGER))?.kind).toBe('trial');
   });
 
   it('shows nothing for a plan in good standing or for no plan', () => {

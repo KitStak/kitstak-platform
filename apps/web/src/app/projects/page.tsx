@@ -24,10 +24,10 @@ import {
 import { CrossRecipes, CustomerCard, TemplateGrid } from '@/components/projects/projects-static-visuals';
 import { QuickAdd } from '@/components/projects/quick-add';
 import { RecipeBrowser } from '@/components/projects/recipe-browser';
-import { LINKS, getStartedHref } from '@/components/site-links';
+import { LINKS, startFreeHref } from '@/components/site-links';
 import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
 
-const START = getStartedHref('projects');
+const START = startFreeHref('projects', 'product');
 
 export const metadata: Metadata = {
   title: 'KitStak Projects - plans, tasks and timelines on the same stack',

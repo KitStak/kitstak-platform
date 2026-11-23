@@ -128,7 +128,7 @@ describe.skipIf(!available)('test gateway: checkout', () => {
     expect(state.phase).toBe('active');
     expect(state.hasSubscription).toBe(true);
     expect(state.paymentMethod).toEqual({ brand: 'visa', last4: '4242', expMonth: 12, expYear: 2031 });
-    expect(state.nextCharge).toEqual({ amountCents: 39520, at: new Date('2026-12-01T00:00:00.000Z') });
+    expect(state.nextCharge).toMatchObject({ amountCents: 39520, planCents: 39520, at: new Date('2026-12-01T00:00:00.000Z') });
     expect(await entitlementsOf(s.org.orgId)).toEqual([
       { module: 'crm', status: 'active', source: 'stripe' },
       { module: 'wms', status: 'active', source: 'stripe' },
@@ -225,7 +225,7 @@ describe.skipIf(!available)('test gateway: checkout', () => {
     const state = await getPlanState(s.rt, s.org.orgId);
     expect(state.phase).toBe('active');
     expect(state.trial).toEqual({ startedAt: new Date('2026-11-01T00:00:00.000Z'), endsAt: trialEnd, daysLeft: 9 });
-    expect(state.nextCharge).toEqual({ amountCents: 39520, at: trialEnd });
+    expect(state.nextCharge).toMatchObject({ amountCents: 39520, planCents: 39520, at: trialEnd });
     expect(await entitlementsOf(s.org.orgId)).toEqual([
       { module: 'crm', status: 'active', source: 'stripe' },
       { module: 'wms', status: 'active', source: 'stripe' },
@@ -294,27 +294,27 @@ describe.skipIf(!available)('test gateway: one rule for every plan change', () =
     ]);
 
     // A changed amount is never confirmed.
-    const stale = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: more, prorationDate: preview.data.prorationDate, expectedDueTodayCents: 900, actor: s.actor });
+    const stale = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: more, basis: preview.data.basis, expectedDueTodayCents: 900, actor: s.actor });
     expect(stale).toMatchObject({ ok: false, error: { code: 'price_changed' } });
     expect((await getPlanState(s.rt, s.org.orgId)).selection.seats).toBe(5);
 
-    const applied = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: more, prorationDate: preview.data.prorationDate, expectedDueTodayCents: 1450, actor: s.actor });
+    const applied = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: more, basis: preview.data.basis, expectedDueTodayCents: 1450, actor: s.actor });
     expect(applied.ok).toBe(true);
     if (!applied.ok) return;
     expect(applied.data.selection.seats).toBe(6);
-    expect(applied.data.nextCharge).toEqual({ amountCents: 17400, at: new Date('2026-12-01T00:00:00.000Z') });
+    expect(applied.data.nextCharge).toMatchObject({ amountCents: 17400, planCents: 17400, creditAppliedCents: 0, at: new Date('2026-12-01T00:00:00.000Z') });
     expect(applied.data.usage.seatLimit).toBe(6);
 
     const invoices = await listInvoices(db, { orgId: s.org.orgId });
     expect(invoices[0]).toMatchObject({ number: 'TEST-0002', status: 'paid', totalCents: 1450 });
     expect(invoices[0]!.lines).toEqual(preview.data.lines);
-    expect((await auditsOf(s.org.orgId)).find((row) => row.action === 'plan.changed')?.summary).toBe('Maya Chen added 1 seat. The plan is now 6 seats.');
+    expect((await auditsOf(s.org.orgId)).find((row) => row.action === 'plan.changed')?.summary).toBe('Maya Chen added 1 seat. The plan is now 6 seats. $14.50 was charged for the days left.');
 
     // Giving the seat back becomes credit, and the credit comes off the next bill.
     const less = await previewPlanChange(s.rt, { orgId: s.org.orgId, selection: CRM5 });
     expect(less).toMatchObject({ ok: true, data: { dueTodayCents: 0, creditCents: 1450, recurringDeltaCents: -2900 } });
     if (!less.ok) return;
-    const removed = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: CRM5, prorationDate: less.data.prorationDate, expectedDueTodayCents: 0, actor: s.actor });
+    const removed = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: CRM5, basis: less.data.basis, expectedDueTodayCents: 0, actor: s.actor });
     expect(removed).toMatchObject({ ok: true, data: { selection: { seats: 5 } } });
     expect(await listInvoices(db, { orgId: s.org.orgId })).toHaveLength(2);
 
@@ -336,25 +336,27 @@ describe.skipIf(!available)('test gateway: one rule for every plan change', () =
     expect(preview.data.lines.map((line) => line.amountCents)).toEqual([-7250, 5800, 13960]);
     expect(preview.data).toMatchObject({ dueTodayCents: 12510, newRecurringCents: 39520, recurringDeltaCents: 25020 });
 
-    const applied = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: CRM_WMS, prorationDate: preview.data.prorationDate, expectedDueTodayCents: 12510, actor: s.actor });
+    const applied = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: CRM_WMS, basis: preview.data.basis, expectedDueTodayCents: 12510, actor: s.actor });
     expect(applied.ok).toBe(true);
     const rows = (await pool.query(`select module, status, stripe_price_id from core.entitlements where org_id = $1 order by module`, [s.org.orgId])).rows;
     expect(rows).toEqual([
       { module: 'crm', status: 'active', stripe_price_id: 'price_test_kitstak_crm_monthly_bundle' },
       { module: 'wms', status: 'active', stripe_price_id: 'price_test_kitstak_wms_monthly_bundle' },
     ]);
-    expect((await auditsOf(s.org.orgId)).find((row) => row.action === 'plan.changed')?.summary).toBe('Maya Chen added WMS.');
+    expect((await auditsOf(s.org.orgId)).find((row) => row.action === 'plan.changed')?.summary).toBe('Maya Chen added WMS. $125.10 was charged for the days left.');
 
     // Removing it again starts right away, with credit, and CRM goes back to its list price.
     const back = await previewPlanChange(s.rt, { orgId: s.org.orgId, selection: CRM5 });
     expect(back).toMatchObject({ ok: true, data: { dueTodayCents: 0, creditCents: 12510 } });
     if (!back.ok) return;
-    const removed = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: CRM5, prorationDate: back.data.prorationDate, expectedDueTodayCents: 0, actor: s.actor });
+    const removed = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: CRM5, basis: back.data.basis, expectedDueTodayCents: 0, actor: s.actor });
     expect(removed.ok).toBe(true);
     if (!removed.ok) return;
     expect(removed.data.modules.wms).toMatchObject({ access: 'read_only', inPlan: false });
     expect(removed.data.modules.crm).toMatchObject({ access: 'full', inPlan: true });
-    expect(removed.data.nextCharge?.amountCents).toBe(14500);
+    // The credit is on the account and comes off the next bill: $145.00 less $125.10.
+    expect(removed.data.creditCents).toBe(12510);
+    expect(removed.data.nextCharge).toMatchObject({ amountCents: 1990, planCents: 14500, creditAppliedCents: 12510 });
   });
 
   it('monthly to yearly starts a new period today, with credit for the unused part of the month', async () => {
@@ -367,11 +369,11 @@ describe.skipIf(!available)('test gateway: one rule for every plan change', () =
     if (!preview.ok) return;
     // 5 x $295.80 for the year, less $72.50 for the 15 unused days of the month.
     expect(preview.data).toMatchObject({ dueTodayCents: 147900 - 7250, newRecurringCents: 147900, nextChargeAt: new Date('2027-11-16T00:00:00.000Z') });
-    const applied = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: yearly, prorationDate: preview.data.prorationDate, expectedDueTodayCents: 140650, actor: s.actor });
+    const applied = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: yearly, basis: preview.data.basis, expectedDueTodayCents: 140650, actor: s.actor });
     expect(applied.ok).toBe(true);
     if (!applied.ok) return;
     expect(applied.data.selection.interval).toBe('yearly');
-    expect(applied.data.nextCharge).toEqual({ amountCents: 147900, at: new Date('2027-11-16T00:00:00.000Z') });
+    expect(applied.data.nextCharge).toMatchObject({ amountCents: 147900, at: new Date('2027-11-16T00:00:00.000Z') });
     // Yearly plans cannot be paused.
     const paused = await pausePlan(s.rt, { orgId: s.org.orgId, months: 1, reason: null, actor: s.actor });
     expect(paused).toMatchObject({ ok: false, error: { code: 'yearly_no_pause' } });
@@ -385,7 +387,7 @@ describe.skipIf(!available)('test gateway: one rule for every plan change', () =
     const more = { ...CRM5, seats: 8 };
     const preview = await previewPlanChange(s.rt, { orgId: s.org.orgId, selection: more });
     if (!preview.ok) throw new Error(preview.error.message);
-    const declined = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: more, prorationDate: preview.data.prorationDate, expectedDueTodayCents: preview.data.dueTodayCents, actor: s.actor });
+    const declined = await applyPlanChange(s.rt, { orgId: s.org.orgId, selection: more, basis: preview.data.basis, expectedDueTodayCents: preview.data.dueTodayCents, actor: s.actor });
     expect(declined).toEqual({ ok: false, error: { code: 'card_declined', message: 'That card was declined. Try another card or call your bank.' } });
     const state = await getPlanState(s.rt, s.org.orgId);
     expect(state.selection.seats).toBe(5);

@@ -7,7 +7,7 @@
  * mapping use, so the picker never does its own math and updates on every key with no page load.
  * The browser only ever sends the selection. The server prices it again.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { RadioGroup } from 'radix-ui';
@@ -38,9 +38,12 @@ import {
   openCardUpdateAction,
   previewPlanChangeAction,
   saveCartAction,
+  saveCartDraftAction,
   startTrialAction,
 } from '@/server/billing-actions';
-import { describeChange, perPeriod, sameSelection, showsSeats, unitPriceWords, usesSeats, usesWarehouses, listPriceWords } from '../format';
+import { saveSignupSelectionAction } from '@/server/signup-actions';
+import { cardLabel, describeChange, perPeriod, sameSelection, showsSeats, unitPriceWords, usesSeats, usesWarehouses, listPriceWords } from '../format';
+import { clearPlanDraft, readPlanDraft, writePlanDraft } from './plan-draft';
 import { QuoteSummary, SummaryRow } from '../quote-summary';
 import { ChangeConfirm } from './change-confirm';
 import { QuantityStepper } from './quantity-stepper';
@@ -84,15 +87,18 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
     [planState],
   );
   const seatsUsed = planState?.usage.seatsUsed ?? 1;
+  // People plus open invites: an open invite holds a seat, so the plan cannot go below this.
+  const seatMin = planState?.usage.seatFloor ?? seatsUsed;
+  const openInvites = planState?.usage.pendingInvites ?? 0;
   const warehousesUsed = planState?.usage.warehousesUsed ?? 0;
 
   const [selection, setSelection] = useState<PlanSelection>(() => ({
     ...initialSelection,
     products: toStack(initialSelection.products.filter((id) => !included.includes(id))),
-    seats: Math.min(Math.max(initialSelection.seats, seatsUsed, 1), MAX_SEATS),
+    seats: Math.min(Math.max(initialSelection.seats, seatMin, 1), MAX_SEATS),
     warehouses: Math.min(Math.max(initialSelection.warehouses, warehousesUsed, 1), MAX_WAREHOUSES),
   }));
-  const [busy, setBusy] = useState<null | 'primary' | 'secondary' | 'confirm' | 'card'>(null);
+  const [busy, setBusy] = useState<null | 'primary' | 'confirm' | 'card'>(null);
   const [error, setError] = useState<BillingError | null>(null);
   const [trialUsed, setTrialUsed] = useState(false);
   const [preview, setPreview] = useState<ChangePreview | null>(null);
@@ -108,19 +114,78 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
   const current = planState?.selection ?? null;
   const currentQuote = planState?.quote ?? null;
   const unchanged = activeMode === 'change' && current !== null && sameSelection(current, selection);
-  const trialUnchanged = activeMode === 'trial_change' && current !== null && sameSelection(current, selection);
+  // "Unchanged" means the same apps as the trial has now. The saved cart can differ from the trial
+  // (a plan the person started to pick), so the trial is read from the plan, not from the cart.
+  const trialProducts = useMemo(() => (planState ? PRODUCT_IDS.filter((id) => planState.modules[id].inPlan) : []), [planState]);
+  const trialUnchanged =
+    activeMode === 'trial_change' &&
+    current !== null &&
+    sameSelection({ ...current, products: trialProducts.length > 0 ? trialProducts : current.products }, selection);
   const billingOff = planState?.mode === 'unavailable' && (activeMode === 'checkout' || activeMode === 'change');
   const empty = selection.products.length === 0;
   const trialRunning = planState?.phase === 'trial' && planState.trial !== null;
   const trialEndsAt = activeMode === 'trial' ? newTrialEnd : (planState?.trial?.endsAt ?? null);
   const noChargeToday = activeMode === 'trial' || activeMode === 'trial_change' || (activeMode === 'checkout' && trialRunning);
 
-  const seatFloor = usesSeats(selection) ? Math.max(1, seatsUsed) : 1;
+  const seatFloor = usesSeats(selection) ? Math.max(1, seatMin) : 1;
   const warehouseFloor = Math.max(1, warehousesUsed);
   const pulseSeats = CATALOG.products.pulse.includedSeats ?? 0;
-  const pulseOver = selection.products.includes('pulse') && Math.max(selection.seats, seatsUsed) > pulseSeats;
+  const pulsePeople = Math.max(selection.seats, seatsUsed);
+  const pulseOver = selection.products.includes('pulse') && pulsePeople > pulseSeats;
+
+  /*
+   * Nothing a person picks here is lost by a refresh or a closed tab (docs/billing/SPEC.md 5.6):
+   *   - at signup, every change is saved to the signup intent on the server;
+   *   - when picking a plan to pay for, every change is saved to the cart on the server (the same
+   *     cart the review step reads), quietly, with no activity entry;
+   *   - a change that needs a confirm step (trial apps, a paid plan) is kept in this browser until
+   *     it is saved or confirmed, and only while the plan it started from is still the same.
+   */
+  const draftKind: 'intent' | 'cart' | 'local' | null =
+    activeMode === 'trial' ? (layout === 'signup' ? 'intent' : null) : activeMode === 'checkout' ? (canPay ? 'cart' : null) : 'local';
+  const draftKey = planState ? `${planState.orgId}:${activeMode}` : null;
+  const draftBase = `${trialProducts.join(',')}|${current ? `${current.products.join(',')}:${current.seats}:${current.warehouses}:${current.interval}` : ''}`;
+  const touched = useRef(false);
+
+  // A local draft is read after the first paint (the browser's storage is not there on the server).
+  // A link that names an app, a seat count or a field wins over an old draft.
+  useEffect(() => {
+    if (draftKind !== 'local' || draftKey === null || focus !== undefined) return;
+    const draft = readPlanDraft(draftKey, draftBase);
+    if (!draft) return;
+    const frame = requestAnimationFrame(() => {
+      if (touched.current) return;
+      setSelection((now) => ({
+        ...now,
+        products: toStack(draft.products.filter((id) => !included.includes(id))),
+        seats: Math.min(Math.max(draft.seats, seatMin, 1), MAX_SEATS),
+        warehouses: Math.min(Math.max(draft.warehouses, warehousesUsed, 1), MAX_WAREHOUSES),
+        interval: draft.interval,
+      }));
+    });
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the picker that was opened
+  }, []);
+
+  useEffect(() => {
+    if (!touched.current || draftKind === null) return;
+    if (draftKind === 'local') {
+      if (draftKey !== null) writePlanDraft(draftKey, draftBase, selection);
+      return;
+    }
+    if (selection.products.length === 0) return;
+    // Wait for a pause in the typing, then save. A failed save is retried by the next change, and
+    // the button the person presses next saves the same selection again anyway.
+    const timer = setTimeout(() => {
+      const save = draftKind === 'intent' ? saveSignupSelectionAction({ selection }) : saveCartDraftAction({ selection });
+      void save.catch(() => undefined);
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- saves follow the selection only
+  }, [selection]);
 
   const update = (next: PlanSelection) => {
+    touched.current = true;
     setSelection(next);
     setError(null);
   };
@@ -128,7 +193,7 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
     const products = toggleProduct(selection.products, id);
     const next = { ...selection, products };
     // Turning on the first per user app must not leave fewer seats than people.
-    if (usesSeats(next) && next.seats < seatsUsed) next.seats = Math.min(seatsUsed, MAX_SEATS);
+    if (usesSeats(next) && next.seats < seatMin) next.seats = Math.min(seatMin, MAX_SEATS);
     update(next);
   };
 
@@ -138,7 +203,7 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
     setBusy(null);
   };
 
-  const goCheckout = async (which: 'primary' | 'secondary') => {
+  const goCheckout = async (which: 'primary') => {
     setBusy(which);
     setError(null);
     const saved = await saveCartAction({ selection });
@@ -165,6 +230,7 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
       if (!saved.ok && saved.error.code !== 'forbidden') return fail(saved.error);
       const changed = await changeTrialProductsAction({ products: selection.products });
       if (!changed.ok) return fail(changed.error);
+      if (draftKey !== null) clearPlanDraft(draftKey);
       router.push(doneHref ?? '/billing?notice=apps_saved');
       return;
     }
@@ -186,10 +252,11 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
     setConfirmError(null);
     const result = await confirmPlanChangeAction({
       selection,
-      prorationDate: preview.prorationDate,
+      basis: preview.basis,
       expectedDueTodayCents: preview.dueTodayCents,
     });
     if (result.ok) {
+      if (draftKey !== null) clearPlanDraft(draftKey);
       router.push(doneHref ?? '/billing?notice=plan_updated');
       return;
     }
@@ -302,8 +369,10 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
                         <span className="font-semibold">{listPriceWords(id)}</span>
                         {pricing.includedSeats !== null ? <span className="text-fg-muted">. Up to {pricing.includedSeats} seats.</span> : null}
                         {discounted ? (
-                          <span className="mt-0.5 block text-xs font-medium text-success-text">
-                            Your price: {unitPriceWords(id, selection.interval, bundleIfOn)}.
+                          // "Your price" is only said about an app that is switched on. An app that is
+                          // off shows what it would cost, and says why it is lower.
+                          <span className={cn('mt-0.5 block text-xs font-medium', on ? 'text-success-text' : 'text-fg-muted')}>
+                            {on ? 'Your price' : bundleIfOn ? 'With the bundle discount' : 'Paying yearly'}: {unitPriceWords(id, selection.interval, bundleIfOn)}.
                           </span>
                         ) : null}
                       </span>
@@ -349,7 +418,13 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
                       ? 'One seat for each person who signs in. Guests are free.'
                       : `Pulse covers up to ${pulseSeats} people for one price.`
                   }
-                  floorHint={seatFloor > 1 ? `You have ${seatsUsed} people. Remove someone first to go lower.` : null}
+                  floorHint={
+                    seatFloor <= 1
+                      ? null
+                      : openInvites > 0
+                        ? `You have ${seatsUsed} ${seatsUsed === 1 ? 'person' : 'people'} and ${openInvites} open ${openInvites === 1 ? 'invite' : 'invites'}. Each open invite holds a seat. Remove someone or cancel an invite to go lower.`
+                        : `You have ${seatsUsed} people. Remove someone first to go lower.`
+                  }
                 />
               ) : null}
               {usesWarehouses(selection) ? (
@@ -372,11 +447,16 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
           ) : null}
 
           {pulseOver ? (
-            <p role="status" className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning-subtle px-3 py-2 text-sm font-medium text-warning-text">
+            <p role="status" data-testid="plan-pulse-note" className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning-subtle px-3 py-2 text-sm font-medium text-warning-text">
               <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
               <span>
-                The Pulse price covers up to {pulseSeats} seats. For a bigger team,{' '}
-                <a href={`${SITE_URL}/contact`} className="underline underline-offset-2">
+                {usesSeats(selection)
+                  ? // With a per user app in the plan, Pulse follows the team: every seat can open it.
+                    `The Pulse price is made for teams of up to ${pulseSeats} people. You picked ${pulsePeople} seats. All ${pulsePeople} people can use Pulse, at the price shown here.`
+                  : // Pulse alone stops at its included seats: the next person cannot be added.
+                    `Pulse alone covers a team of up to ${pulseSeats} people, and you have ${pulsePeople}. Add CRM or Projects to cover everyone.`}{' '}
+                For a bigger team,{' '}
+                <a href={`${SITE_URL}/contact?topic=sales`} className="underline underline-offset-2">
                   talk to us
                 </a>
                 .
@@ -502,19 +582,6 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
                 >
                   {primaryLabel}
                 </Button>
-                {activeMode === 'trial_change' && canPay ? (
-                  <Button
-                    size="xl"
-                    fullWidth
-                    variant="secondary"
-                    data-testid="plan-add-card"
-                    loading={busy === 'secondary'}
-                    disabled={empty || planState?.mode === 'unavailable' || (busy !== null && busy !== 'secondary')}
-                    onClick={() => goCheckout('secondary')}
-                  >
-                    Add a card
-                  </Button>
-                ) : null}
               </div>
               {primaryHint ? (
                 <p id="plan-submit-hint" className="mt-2 text-center text-xs text-fg-muted">
@@ -531,6 +598,23 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
                 </li>
               ))}
             </ul>
+            {/* One filled button per screen. The other job of this picker is a quiet link. */}
+            {activeMode === 'trial_change' && canPay && planState?.mode !== 'unavailable' ? (
+              <p className="mt-4 border-t border-border-subtle pt-3 text-sm text-fg-secondary">
+                Ready to pay?{' '}
+                <Link href="/billing/plan" data-testid="plan-pick-plan" className="font-semibold text-fg underline decoration-border-strong underline-offset-4 hover:decoration-fg">
+                  Pick a plan
+                </Link>
+              </p>
+            ) : null}
+            {activeMode === 'checkout' && trialRunning && layout === 'billing' ? (
+              <p className="mt-4 border-t border-border-subtle pt-3 text-sm text-fg-secondary">
+                Not ready to pay?{' '}
+                <Link href="/billing/plan?apps=1" data-testid="plan-change-trial-apps" className="font-semibold text-fg underline decoration-border-strong underline-offset-4 hover:decoration-fg">
+                  Change your trial apps
+                </Link>
+              </p>
+            ) : null}
           </Card>
 
           {activeMode === 'trial' || activeMode === 'trial_change' ? (
@@ -558,6 +642,7 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
         interval={selection.interval}
         daysLeftInPeriod={daysLeftInPeriod}
         timeZone={timeZone}
+        cardLabel={planState?.paymentMethod ? cardLabel(planState.paymentMethod) : null}
         error={confirmError}
         confirming={busy === 'confirm'}
         updatingCard={busy === 'card'}

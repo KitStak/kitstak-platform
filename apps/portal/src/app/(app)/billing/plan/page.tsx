@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { Lock } from 'lucide-react';
-import { CATALOG, isProductId, normalizeSelection, toStack, type PlanSelection, type ProductId } from '@kitstak/billing/catalog';
+import { CATALOG, PRODUCT_IDS, formatDay, isProductId, normalizeSelection, toStack, type PlanSelection, type ProductId } from '@kitstak/billing/catalog';
 import { canStartTrial, getPlanState } from '@kitstak/billing/server';
+import { appReturnPath } from '@/lib/routes';
 import { requireBillingContext } from '@/server/billing/context';
 import { LinkButton, Notice } from '@/components/ui';
 import { BackLink, BillingHeader, BillingMessage, TestModeBadge } from '@/features/billing/billing-chrome';
@@ -34,9 +35,15 @@ export default async function PlanPage({
 
   const state = await getPlanState(rt, org.id);
 
+  // During a free trial the picker has two jobs, and each gets its own screen with one filled button:
+  //   "Pick a plan" (the banner, billing home, the emails, the setup guide) opens it to pay: apps,
+  //   seats, pay period, then "Continue to review".
+  //   "Change trial apps" and "Add <app>" open it to change what is in the trial: "Save my apps".
+  // A person who may change trial apps but may not pay (an admin) always gets the second one.
+  const wantsApps = first(params.apps) === '1' || first(params.add) !== undefined;
   let mode: PlanPickerProps['mode'];
   if (state.hasSubscription) mode = 'change';
-  else if (state.phase === 'trial') mode = 'trial_change';
+  else if (state.phase === 'trial') mode = wantsApps || !access.canManage ? 'trial_change' : 'checkout';
   else if (state.phase === 'none') {
     const eligible = await canStartTrial(rt.db, { orgId: org.id, userId: session.user.id });
     mode = eligible.ok ? 'trial' : 'checkout';
@@ -64,7 +71,11 @@ export default async function PlanPage({
   const focusParam = first(params.focus);
   const from = first(params.from);
   const base = state.selection;
-  const products = add && isProductId(add) && state.modules[add].source !== 'manual' ? toStack([...base.products, add]) : base.products;
+  // Changing trial apps starts from the apps the trial has now. The saved cart (a plan the person
+  // started to pick) only lends its seats and pay period.
+  const inTrial = PRODUCT_IDS.filter((id) => state.modules[id].inPlan);
+  const baseProducts = mode === 'trial_change' && inTrial.length > 0 ? inTrial : base.products;
+  const products = add && isProductId(add) && state.modules[add].source !== 'manual' ? toStack([...baseProducts, add]) : baseProducts;
   const prefilled: PlanSelection = normalizeSelection({
     products: [...products],
     seats: first(params.seats) ?? base.seats,
@@ -78,15 +89,29 @@ export default async function PlanPage({
   else if (add && isProductId(add)) focus = add as ProductId;
 
   const cameFrom = from && isProductId(from) ? from : null;
+  // The app can name the page to come back to (the WMS warehouses page). Only a plain path is kept.
+  const returnPath = cameFrom ? appReturnPath(first(params.return)) : null;
   const doneNotice = mode === 'change' ? 'plan_updated' : mode === 'trial_change' ? 'apps_saved' : mode === 'trial' ? 'trial_started' : null;
-  const doneHref = cameFrom && doneNotice ? `/billing?notice=${doneNotice}&from=${cameFrom}` : undefined;
+  const doneHref =
+    cameFrom && doneNotice
+      ? `/billing?notice=${doneNotice}&from=${cameFrom}${returnPath ? `&return=${encodeURIComponent(returnPath)}` : ''}`
+      : undefined;
   const heading = HEADING[mode];
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <BackLink href="/billing">Billing</BackLink>
-        <BillingHeader orgName={org.name} title={heading.title} description={heading.description} badges={<TestModeBadge mode={state.mode} />} />
+        <BillingHeader
+          orgName={org.name}
+          title={heading.title}
+          description={
+            mode === 'checkout' && state.phase === 'trial' && state.trial
+              ? `Choose your apps, seats and how often you pay. No charge until your free trial ends on ${formatDay(state.trial.endsAt, timeZone)}.`
+              : heading.description
+          }
+          badges={<TestModeBadge mode={state.mode} />}
+        />
       </div>
       {!context.emailVerified && (mode === 'change' || mode === 'checkout') ? (
         <Notice

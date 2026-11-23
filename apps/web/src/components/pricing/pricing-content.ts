@@ -5,6 +5,7 @@
  */
 import type { FaqItem } from '@/components/product/cta';
 import {
+  BILLING_POLICY,
   BUNDLE_OFF,
   CATALOG,
   TRIAL_DAYS,
@@ -113,7 +114,11 @@ export const PRICING_FAQ: readonly FaqItem[] = [
     answer: 'No. If sales tax applies to you, it is added at checkout and shown as its own line.',
   },
   {
+    question: 'Can I get a refund?',
+    answer: BILLING_POLICY.refund,
+  },
+  {
     question: 'How do I pay?',
-    answer: 'By card, on a secure checkout page run by Stripe. KitStak never sees your full card number.',
+    answer: `By card, on a secure checkout page. ${BILLING_POLICY.payments}`,
   },
 ];

@@ -133,13 +133,16 @@ export const env: Readonly<ServerEnv> = new Proxy({} as ServerEnv, {
 
 export const isProduction = (): boolean => getEnv().NODE_ENV === 'production';
 
-/** Terms and Privacy links. Default: the pages the CRM already serves. */
+/**
+ * Terms and Privacy links. Default: the pages on the marketing site, which carry the billing rules
+ * (renewal, canceling, refunds, tax) and the site's own header, not an app's navigation.
+ */
 export function legalUrls(): { terms: string; privacy: string } {
   const current = getEnv();
-  const crm = current.NEXT_PUBLIC_CRM_URL.replace(/\/+$/, '');
+  const site = current.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, '');
   return {
-    terms: current.NEXT_PUBLIC_TERMS_URL ?? `${crm}/terms`,
-    privacy: current.NEXT_PUBLIC_PRIVACY_URL ?? `${crm}/privacy`,
+    terms: current.NEXT_PUBLIC_TERMS_URL ?? `${site}/terms`,
+    privacy: current.NEXT_PUBLIC_PRIVACY_URL ?? `${site}/privacy`,
   };
 }
 

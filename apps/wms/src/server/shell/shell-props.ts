@@ -9,7 +9,7 @@ import type { InitialShellContext } from '@/lib/context-label';
 import { getAppDb, getPlatformDb, type AppDb } from '@/server/api/db';
 import { getAuthContext } from '@/server/auth/context';
 import { entitlementsAllowAll } from '@/server/auth/entitlements';
-import { getPlanView, wmsPlanLink } from '@/server/auth/plan';
+import { getPlanView, warehouseLimitNotice, wmsPlanLink, type WarehouseLimitNotice } from '@/server/auth/plan';
 import { hasModule, type EntitlementsDb } from '@kitstak/entitlements';
 import { accessibleWmsOrgs } from '@/server/auth/session-store';
 import { getPasswordPolicy, isPasswordExpired } from '@/server/auth/password-policy';
@@ -60,6 +60,8 @@ export interface ShellPlan {
   readonly badges: AppPlanView['badges'];
   /** Where a row that is not in the plan goes: the Portal plan picker with that app turned on. */
   readonly addHrefs: Readonly<Record<ProductId, string>>;
+  /** Set when the plan has no room for one more warehouse: the sentence with the price, and the link. */
+  readonly warehouseLimit: WarehouseLimitNotice | null;
 }
 
 /** Sibling modules the org holds (allow-all outside production, like the WMS gate). */
@@ -143,6 +145,7 @@ export async function loadShellProps(): Promise<ShellProps | null> {
         projects: wmsPlanLink({ to: 'add', product: 'projects' }),
         pulse: wmsPlanLink({ to: 'add', product: 'pulse' }),
       },
+      warehouseLimit: planView.access === 'read_only' ? null : await warehouseLimitNotice(platformDb, auth.user.orgId),
     },
   };
 }

@@ -7,7 +7,7 @@ import { QuoteSummary } from '../quote-summary';
 export function MathDialog({ quote, totalLabel }: { readonly quote: Quote; readonly totalLabel?: string }) {
   return (
     <Dialog>
-      <DialogTrigger className="inline-flex min-h-9 items-center rounded-md text-sm font-semibold text-fg underline decoration-border-strong underline-offset-4 hover:decoration-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+      <DialogTrigger className="inline-flex min-h-9 pointer-coarse:min-h-11 items-center rounded-md text-sm font-semibold text-fg underline decoration-border-strong underline-offset-4 hover:decoration-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
         See the math
       </DialogTrigger>
       <DialogContent size="sm">

@@ -78,7 +78,14 @@ describe.skipIf(!available)('seats, warehouses and billing roles (database)', ()
       actor: { userId: org.owner.id, label: org.owner.name },
       actorEmail: org.owner.email,
     });
-    expect(small).toEqual({ ok: false, error: { code: 'below_usage', message: 'You have 4 people. Pick 4 seats or more.' } });
+    // The org has 4 people and 1 open invite. The invite holds a seat, so 5 is the lowest.
+    expect(small).toEqual({
+      ok: false,
+      error: {
+        code: 'below_usage',
+        message: 'You have 4 people and 1 open invite. Each open invite holds a seat. Pick 5 seats or more, or cancel an invite first.',
+      },
+    });
   });
 
   it('on a paid plan the seat limit holds; guests stay free', async () => {

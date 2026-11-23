@@ -12,7 +12,14 @@ import {
 } from '@/lib/pricing';
 import type { ProductId } from '@/lib/pricing';
 import { trialUrl } from '@/lib/stak';
-import { ROUTES, availabilityLabel, isAppLive, pricingHref, startLink } from '../site-links';
+import {
+  ROUTES,
+  availabilityLabel,
+  isAppLive,
+  pricingHref,
+  startLink,
+  START_LABEL,
+} from '../site-links';
 import styles from './price-band.module.css';
 
 interface PriceBandProps {
@@ -79,7 +86,7 @@ export function PriceBand({ product, included }: PriceBandProps) {
               href={trialUrl({ products: [product], seats: 1, warehouses: 1, interval: 'monthly' }, 'product')}
               className="btn btn-primary btn-lg btn-block"
             >
-              Start my free trial{' '}
+              {START_LABEL}{' '}
               <span className="btn-arrow" aria-hidden>
                 →
               </span>

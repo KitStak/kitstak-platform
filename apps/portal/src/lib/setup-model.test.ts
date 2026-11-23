@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  WELCOME_STEPS_MAX,
-  WELCOME_STEPS_MIN,
+  GUIDE_STEPS_MAX,
+  GUIDE_STEPS_MIN,
   buildSetupSteps,
   focusFromProducts,
   parseSetupProfile,
-  pickWelcomeSteps,
+  moreGuideSteps,
+  pickGuideSteps,
   readProgressRows,
   summarizeSetup,
   toSetupProducts,
@@ -383,7 +384,7 @@ describe('the "Pick your plan" step', () => {
     expect(last?.title).toBe('Pick your plan');
     expect(last?.status).toBe('todo');
     expect(last?.cta).toBe('Pick a plan');
-    expect(last?.description).toBe('Add a card any time before Dec 7. No charge until then.');
+    expect(last?.description).toBe('Pick a plan any time before Dec 7. No charge until then.');
   });
 
   it('stays last when the warehouse steps come first', () => {
@@ -428,48 +429,43 @@ describe('the "Pick your plan" step', () => {
   });
 });
 
-describe('pickWelcomeSteps (must have 27: 3 to 5 next steps tied to the chosen apps)', () => {
+describe('pickGuideSteps (must have 27: a quick start of 3 to 5 steps tied to the chosen apps)', () => {
   it('lists 3 to 5 steps for every mix of apps and every team size, in a free trial', () => {
     for (const products of everyStack()) {
       for (const teamSize of ['solo', 'small', 'medium', 'large'] as const) {
         for (const businessType of ['3pl', 'brand'] as const) {
-          const profile = profileFor(products, { teamSize, businessType });
-          const picked = pickWelcomeSteps(buildSetupSteps(trialSignals(products), profile, {}));
-          const label = `${products.join('+')} ${teamSize} ${businessType}`;
-          expect(picked.length, label).toBeGreaterThanOrEqual(WELCOME_STEPS_MIN);
-          expect(picked.length, label).toBeLessThanOrEqual(WELCOME_STEPS_MAX);
+          for (const profile of [profileFor(products, { teamSize, businessType }), null]) {
+            const picked = pickGuideSteps(buildSetupSteps(trialSignals(products), profile, {}));
+            const label = `${products.join('+')} ${teamSize} ${businessType} ${profile ? 'answered' : 'skipped'}`;
+            expect(picked.length, label).toBeGreaterThanOrEqual(GUIDE_STEPS_MIN);
+            expect(picked.length, label).toBeLessThanOrEqual(GUIDE_STEPS_MAX);
+          }
         }
       }
     }
   });
 
-  it('only lists steps for the apps the team picked, and always ends on the plan', () => {
+  it('starts on the business answers, only lists steps for the apps the team picked, and ends on the plan', () => {
     for (const products of everyStack()) {
-      const picked = pickWelcomeSteps(buildSetupSteps(trialSignals(products), profileFor(products), {}));
+      const picked = pickGuideSteps(buildSetupSteps(trialSignals(products), profileFor(products), {}));
+      expect(picked[0]?.key).toBe('profile');
       expect(picked[picked.length - 1]?.key).toBe('billing_plan');
       for (const step of picked) {
         if (step.scope === 'portal') continue;
         expect(products, `${step.key} for ${products.join('+')}`).toContain(step.scope);
       }
-      expect(picked.some((step) => step.key === 'profile')).toBe(false);
     }
   });
 
   it('gives every picked app its first step before any app gets a second one', () => {
-    const picked = pickWelcomeSteps(buildSetupSteps(trialSignals(ALL_PRODUCTS), profileFor(ALL_PRODUCTS, { teamSize: 'solo' }), {}));
-    expect(picked.map((step) => step.key)).toEqual([
-      'crm_workspace',
-      'wms_warehouse',
-      'projects_first_project',
-      'pulse_labor_rate',
-      'billing_plan',
-    ]);
+    const picked = pickGuideSteps(buildSetupSteps(trialSignals(ALL_PRODUCTS), profileFor(ALL_PRODUCTS, { teamSize: 'solo' }), {}));
+    expect(picked.map((step) => step.key)).toEqual(['profile', 'crm_workspace', 'wms_warehouse', 'projects_first_project', 'billing_plan']);
   });
 
   it('never shows a step above the one that unlocks it', () => {
     for (const products of everyStack()) {
       const all = buildSetupSteps(trialSignals(products), profileFor(products), {});
-      const picked = pickWelcomeSteps(all);
+      const picked = pickGuideSteps(all);
       const order = all.map((step) => step.key);
       const positions = picked.map((step) => order.indexOf(step.key));
       expect(positions).toEqual([...positions].sort((a, b) => a - b));
@@ -481,15 +477,43 @@ describe('pickWelcomeSteps (must have 27: 3 to 5 next steps tied to the chosen a
     }
   });
 
-  it('the reference cart (CRM and WMS, a 3PL team) reads as the welcome screen shows it', () => {
+  it('the reference cart (CRM and WMS, a 3PL team) reads the same on the welcome screen and on the launcher', () => {
     const profile = profileFor(['crm', 'wms'], { businessType: '3pl' });
-    const picked = pickWelcomeSteps(buildSetupSteps(trialSignals(['crm', 'wms']), profile, {}));
+    const picked = pickGuideSteps(buildSetupSteps(trialSignals(['crm', 'wms']), profile, {}));
     expect(picked.map((step) => step.title)).toEqual([
+      'Tell us about your business',
       'Invite your team',
       'Create your warehouse',
-      'Build your product catalog',
       'Create your CRM workspace',
       'Pick your plan',
     ]);
+    // The answers were just given, so the first step is already done and adds no minutes.
+    expect(picked[0]?.status).toBe('done');
+    expect(summarizeSetup(picked)).toMatchObject({ doneCount: 1, totalCount: 5, remainingMinutes: 9 });
+  });
+
+  it('does not reshuffle as steps are done: the same five keys before and after', () => {
+    const profile = profileFor(['crm', 'pulse']);
+    const before = pickGuideSteps(buildSetupSteps(trialSignals(['crm', 'pulse']), profile, {}));
+    const after = pickGuideSteps(
+      buildSetupSteps({ ...trialSignals(['crm', 'pulse']), memberCount: 3, crmBoards: 2, crmDeals: 4, pulseLaborRates: 1 }, profile, {}),
+    );
+    expect(after.map((step) => step.key)).toEqual(before.map((step) => step.key));
+    expect(before).toHaveLength(5);
+  });
+
+  it('every step is in the quick start or in "more steps", never in both and never lost', () => {
+    for (const products of everyStack()) {
+      const all = buildSetupSteps(trialSignals(products), profileFor(products), {});
+      const picked = pickGuideSteps(all).map((step) => step.key);
+      const more = moreGuideSteps(all).map((step) => step.key);
+      expect([...picked, ...more].sort()).toEqual(all.map((step) => step.key).sort());
+      expect(picked.filter((key) => more.includes(key))).toEqual([]);
+    }
+  });
+
+  it('a team with no trial (a manual grant) has no plan step in the quick start', () => {
+    const all = buildSetupSteps({ ...trialSignals(['crm']), billing: null }, profileFor(['crm']), {});
+    expect(pickGuideSteps(all).some((step) => step.key === 'billing_plan')).toBe(false);
   });
 });

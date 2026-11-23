@@ -7,7 +7,7 @@ import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
 import { mustChangePassword } from '@/server/password-change';
 import { CommandPalette } from '@/features/shell/command-palette';
-import { Logo } from '@/features/shell/logo';
+import { Logo, LogoMark } from '@/features/shell/logo';
 import { OrgSwitcher } from '@/features/shell/org-switcher';
 import { ShellNotices } from '@/features/shell/shell-notices';
 import { ThemeToggle } from '@/features/shell/theme-toggle';
@@ -41,14 +41,21 @@ export default async function AppLayout({ children }: { readonly children: React
   return (
     <div className="flex min-h-dvh flex-col bg-app">
       <header className="sticky top-0 z-40 border-b border-border-subtle bg-panel/90 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-[1120px] items-center gap-2 px-4 sm:gap-4 sm:px-6">
+        {/*
+          The bar must fit every width from 320 px up with a 40 character organization name:
+          the text links wait for 1024 px (the account menu carries them below that), the Ctrl K
+          hint waits for 1280 px, the organization name is capped and can shrink, and under
+          360 px the lockup becomes the mark alone.
+        */}
+        <div className="mx-auto flex h-14 w-full max-w-[1120px] min-w-0 items-center gap-2 px-4 sm:gap-4 sm:px-6">
           <Link
             href="/"
             aria-label="KitStak Portal home"
-            className="inline-flex shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+            className="inline-flex shrink-0 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus pointer-coarse:min-w-11"
           >
             {/* The "Portal" tag is dropped under 640 px so the top bar fits a 360 px phone. */}
-            <Logo size={26} className="max-sm:[&_.ks-logo-product]:hidden" />
+            <Logo size={26} className="max-[359px]:hidden max-sm:[&_.ks-logo-product]:hidden" />
+            <LogoMark size={26} className="min-[360px]:hidden" />
           </Link>
           {activeOrg ? (
             <>
@@ -56,7 +63,7 @@ export default async function AppLayout({ children }: { readonly children: React
               <OrgSwitcher orgs={orgs} activeOrgId={activeOrg.id} />
             </>
           ) : null}
-          <nav aria-label="Portal" className="ml-auto hidden items-center gap-1 sm:flex">
+          <nav aria-label="Portal" className="ml-auto hidden shrink-0 items-center gap-1 lg:flex">
             <Link
               href="/"
               className="rounded-md px-2.5 py-1.5 text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg"
@@ -76,7 +83,7 @@ export default async function AppLayout({ children }: { readonly children: React
               Organization
             </Link>
           </nav>
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:ml-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 lg:ml-2 pointer-coarse:gap-0">
             <CommandPalette
               orgs={orgs}
               activeOrgId={activeOrg?.id ?? null}
@@ -92,7 +99,8 @@ export default async function AppLayout({ children }: { readonly children: React
               entitled={entitled}
               planBadges={planBadges}
             />
-            <ThemeToggle />
+            {/* On phones the theme switch lives in the account menu, so the bar keeps 44 px targets. */}
+            <ThemeToggle className="max-sm:hidden" />
             <UserMenu name={session.user.name} email={session.user.email} />
           </div>
         </div>

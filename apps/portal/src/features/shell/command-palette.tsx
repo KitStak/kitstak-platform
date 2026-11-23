@@ -200,7 +200,7 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl,
         )}
       >
         <Search aria-hidden className="size-4" />
-        <span className="hidden items-center gap-1 md:inline-flex">
+        <span className="hidden items-center gap-1 xl:inline-flex">
           <Kbd>Ctrl</Kbd>
           <Kbd>K</Kbd>
         </span>

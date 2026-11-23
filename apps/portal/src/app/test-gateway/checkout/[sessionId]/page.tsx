@@ -64,8 +64,15 @@ export default async function TestCheckoutPage({
 
   const inTrial = view.trialEnd !== null;
   const total = formatMoney(view.quote.totalCents);
+  // What the card is really charged first: the plan price, minus a promo code, minus credit. It is
+  // the gateway's own number, the same one the first invoice is made with.
+  const firstCharge = formatMoney(view.firstChargeCents);
+  const reduced = view.firstChargeCents !== view.quote.totalCents;
   const timeZone = typeof (session.user as { timezone?: unknown }).timezone === 'string' ? ((session.user as { timezone?: string }).timezone ?? 'UTC') : 'UTC';
   const startAtBank = view.needsBankApproval && query.step === 'bank';
+  const promoLine = view.promo
+    ? `${view.promo.code}: 10% off your first charge. You save ${formatMoney(view.promo.discountCents)}. Your first charge is ${firstCharge}.`
+    : null;
 
   return (
     <div data-testid="test-checkout" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
@@ -76,15 +83,25 @@ export default async function TestCheckoutPage({
         </h1>
         <Card as="div" className="mt-5 p-5">
           <QuoteSummary quote={view.quote} totalLabel={inTrial ? 'After your trial' : undefined}>
+            {view.promo ? (
+              <SummaryRow label={view.promo.label} tone="success" hint="On your first charge only.">
+                <span data-testid="test-promo-line">-{formatMoney(view.promo.discountCents)}</span>
+              </SummaryRow>
+            ) : null}
+            {view.creditAppliedCents > 0 ? (
+              <SummaryRow label="Credit on your account" tone="success">
+                <span data-testid="test-credit-line">-{formatMoney(view.creditAppliedCents)}</span>
+              </SummaryRow>
+            ) : null}
             <SummaryRow label="Due today" strong>
-              {formatMoney(view.dueTodayCents)}
+              <span data-testid="test-due-today">{formatMoney(view.dueTodayCents)}</span>
             </SummaryRow>
             <SummaryRow label={inTrial ? 'First charge' : 'Charged'}>
-              {inTrial ? `${total} on ${formatDay(view.firstChargeAt, timeZone)}` : 'Today'}
+              <span data-testid="test-first-charge">{inTrial ? `${firstCharge} on ${formatDay(view.firstChargeAt, timeZone)}` : 'Today'}</span>
             </SummaryRow>
           </QuoteSummary>
           <p className="mt-4 border-t border-border-subtle pt-4 text-sm text-fg-secondary">
-            Then {total} {eachPeriod(view.quote.interval)} until you change or cancel. Cancel any time in Billing. Your data stays yours.
+            {reduced ? `After that first charge, ${total}` : `Then ${total}`} {eachPeriod(view.quote.interval)} until you change or cancel. Cancel any time in Billing. Your data stays yours.
           </p>
         </Card>
       </section>
@@ -95,6 +112,7 @@ export default async function TestCheckoutPage({
           cards={TEST_CARDS.map((card) => ({ number: card.number, label: card.label.replace('Works now, fails at the next renewal', 'Fails at next renewal'), outcome: card.outcome }))}
           payLabel={inTrial ? 'Save card and keep my trial' : `Pay ${formatMoney(view.dueTodayCents)}`}
           promoCode={TEST_PROMO_CODE}
+          appliedPromo={view.promo && promoLine ? { code: view.promo.code, line: promoLine } : null}
           startAtBank={startAtBank}
           defaultName={session.user.name ?? ''}
         />

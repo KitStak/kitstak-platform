@@ -6,7 +6,7 @@ import { CircleAlert, Mail } from 'lucide-react';
 import { encodeHandoffIdentity } from '@kitstak/billing/handoff';
 import { Badge, Field } from '@/components/ui';
 import { emailIssue } from '@/features/signup/fields';
-import { passwordIssue } from '@/features/signup/password-rules';
+import { isRulesIssue, passwordIssue } from '@/features/signup/password-rules';
 import { requestPasswordResetAction, resetPasswordAction } from '@/server/signup-actions';
 import { CodeInput } from '../_components/code-input';
 import { prefersAutoFocus, useHashIdentity } from '../_components/use-hash-identity';
@@ -206,7 +206,7 @@ export function ResetPasswordForm({ justSent, minutes, devOutbox }: ResetPasswor
             </p>
           ) : null}
         </div>
-        <Field label="New password" error={errors.password} hint={password ? undefined : 'At least 10 characters.'}>
+        <Field label="New password" error={errors.password} errorHidden={Boolean(errors.password) && isRulesIssue(password)}>
           {({ inputId, describedBy, invalid }) => (
             <div className="flex flex-col gap-2">
               <PasswordInput
@@ -227,7 +227,7 @@ export function ResetPasswordForm({ justSent, minutes, devOutbox }: ResetPasswor
                 invalid={invalid}
               />
               <StrengthMeter password={password} />
-              <PasswordRules password={password} id={`${inputId}-rules`} />
+              <PasswordRules password={password} id={`${inputId}-rules`} showMissing={Boolean(errors.password)} />
             </div>
           )}
         </Field>

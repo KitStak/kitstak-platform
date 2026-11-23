@@ -20,6 +20,8 @@ export interface ChangeConfirmProps {
   /** Whole days left in the paid period, for the "days left" words. */
   readonly daysLeftInPeriod: number | null;
   readonly timeZone: string;
+  /** "Visa ending 4242": the card on file, named so nobody wonders what will be charged. null when unknown. */
+  readonly cardLabel: string | null;
   readonly error: BillingError | null;
   readonly confirming: boolean;
   readonly updatingCard: boolean;
@@ -36,6 +38,7 @@ export function ChangeConfirm({
   interval,
   daysLeftInPeriod,
   timeZone,
+  cardLabel,
   error,
   confirming,
   updatingCard,
@@ -82,12 +85,21 @@ export function ChangeConfirm({
               <dt className="text-sm font-semibold text-fg">
                 Due today
                 <span className="block text-xs font-normal text-fg-muted">
-                  {preview.dueTodayCents > 0
+                  {preview.creditAppliedCents > 0
+                    ? preview.dueTodayCents > 0
+                      ? `${formatMoney(preview.proratedCents)} ${daysWords}, less ${formatMoney(preview.creditAppliedCents)} paid from your credit.`
+                      : `${formatMoney(preview.proratedCents)} ${daysWords}. Paid from your credit.`
+                    : preview.dueTodayCents > 0
                     ? unusedCents > 0
                       ? `After ${formatMoney(unusedCents)} credit for the part you did not use.`
                       : daysWords.charAt(0).toUpperCase() + daysWords.slice(1) + '.'
                     : 'Nothing to pay now.'}
                 </span>
+                {preview.dueTodayCents > 0 && cardLabel ? (
+                  <span data-testid="change-card" className="block text-xs font-normal text-fg-muted">
+                    Charged to your {cardLabel}.
+                  </span>
+                ) : null}
               </dt>
               <dd data-testid="change-due-today" className="shrink-0 text-lg font-semibold text-fg tabular-nums">
                 {formatMoney(preview.dueTodayCents)}
@@ -102,7 +114,10 @@ export function ChangeConfirm({
             <div className="flex items-baseline justify-between gap-4 px-4 py-3">
               <dt className="text-sm font-semibold text-fg">
                 Then
-                <span className="block text-xs font-normal text-fg-muted">Starting {formatDay(preview.nextChargeAt, timeZone)}.</span>
+                <span className="block text-xs font-normal text-fg-muted">
+                  Starting {formatDay(preview.nextChargeAt, timeZone)}
+                  {preview.dueTodayCents === 0 && cardLabel ? `, to your ${cardLabel}` : ''}.
+                </span>
               </dt>
               <dd className="shrink-0 text-sm text-fg">
                 <span data-testid="change-new-total" className="text-md font-semibold tabular-nums">

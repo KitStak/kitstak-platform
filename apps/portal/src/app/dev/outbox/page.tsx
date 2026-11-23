@@ -199,7 +199,7 @@ export default async function OutboxPage({
                 {openId ? (
                   <Link
                     href={hrefFor(null, to)}
-                    className="mb-3 inline-flex min-h-9 items-center gap-1.5 rounded-md text-sm font-medium text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus lg:hidden"
+                    className="mb-3 inline-flex min-h-9 pointer-coarse:min-h-11 items-center gap-1.5 rounded-md text-sm font-medium text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus lg:hidden"
                   >
                     <ArrowLeft aria-hidden className="size-4" />
                     All emails

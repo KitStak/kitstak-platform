@@ -61,6 +61,11 @@ export interface PlanUsage {
   readonly seatLimit: number | null;
   /** Open invites that would use a seat. */
   readonly pendingInvites: number;
+  /**
+   * The lowest seat count the plan can have: people plus open invites. An open invite holds a seat,
+   * so the plan cannot be made smaller than this until someone is removed or an invite is canceled.
+   */
+  readonly seatFloor: number;
   /** null when the org has no warehouse schema yet. */
   readonly warehousesUsed: number | null;
   readonly warehousesPaid: number | null;
@@ -88,7 +93,23 @@ export interface PlanState {
   readonly trialEligible: boolean;
   readonly hasSubscription: boolean;
   readonly paymentMethod: PaymentMethodSummary | null;
-  readonly nextCharge: { readonly amountCents: number; readonly at: Date } | null;
+  /**
+   * The next bill. `amountCents` is what the card will really be charged: the plan price, minus a
+   * promo code, minus credit. It comes from the gateway's own preview of the next invoice.
+   */
+  readonly nextCharge: {
+    readonly amountCents: number;
+    readonly at: Date;
+    /** The plan price for the period, before a promo code and before credit. */
+    readonly planCents: number;
+    readonly discountCents: number;
+    /** 'Promo code TEST10 (10% off)'. null when there is no discount. */
+    readonly discountLabel: string | null;
+    /** Credit that comes off this bill. */
+    readonly creditAppliedCents: number;
+  } | null;
+  /** Credit the organization holds from plan changes. 0 when there is none. */
+  readonly creditCents: number;
   readonly currentPeriodEnd: Date | null;
   readonly pastDue: {
     readonly since: Date;
@@ -133,6 +154,13 @@ export interface PlanSubscriptionInput {
   readonly amountDueCents: number | null;
   readonly nextPaymentAttempt: Date | null;
   readonly paymentMethod: PaymentMethodSummary | null;
+  /** Credit balance at the gateway. Missing means 0. */
+  readonly creditCents?: number;
+  /** What the next bill charges the card. Missing or null means the plan price. */
+  readonly nextChargeCents?: number | null;
+  readonly nextDiscountCents?: number;
+  readonly nextDiscountLabel?: string | null;
+  readonly nextCreditCents?: number;
 }
 
 /** One `core.entitlements` row plus the answer of `moduleAccess` for it. */
@@ -240,6 +268,7 @@ export function derivePlanState(input: PlanStateInput): PlanState {
     seatsPaid: seatLimit,
     seatLimit,
     pendingInvites: input.usage.pendingInvites,
+    seatFloor: input.usage.seatsUsed + input.usage.pendingInvites,
     warehousesUsed: input.usage.warehousesUsed,
     warehousesPaid: live && planProducts.has('wms') ? live.warehouses : null,
   };
@@ -262,7 +291,16 @@ export function derivePlanState(input: PlanStateInput): PlanState {
   let nextCharge: PlanState['nextCharge'] = null;
   if (live && phase === 'active') {
     const at = live.status === 'trialing' ? (live.trialEnd ?? live.currentPeriodEnd) : live.currentPeriodEnd;
-    if (at) nextCharge = { amountCents: live.recurringCents, at };
+    if (at) {
+      nextCharge = {
+        amountCents: Math.max(0, live.nextChargeCents ?? live.recurringCents),
+        at,
+        planCents: live.recurringCents,
+        discountCents: Math.max(0, live.nextDiscountCents ?? 0),
+        discountLabel: live.nextDiscountLabel ?? null,
+        creditAppliedCents: Math.max(0, live.nextCreditCents ?? 0),
+      };
+    }
   }
 
   let pastDue: PlanState['pastDue'] = null;
@@ -294,6 +332,7 @@ export function derivePlanState(input: PlanStateInput): PlanState {
     hasSubscription: live !== null,
     paymentMethod: counted?.paymentMethod ?? null,
     nextCharge,
+    creditCents: Math.max(0, counted?.creditCents ?? 0),
     currentPeriodEnd: live?.currentPeriodEnd ?? null,
     pastDue,
     cancelAt: phase === 'cancel_scheduled' && live ? (live.cancelAt ?? live.currentPeriodEnd) : null,
@@ -368,6 +407,41 @@ function cardLabel(method: PaymentMethodSummary | null): string {
   if (!method || !method.last4) return 'card';
   const brand = method.brand ? method.brand.charAt(0).toUpperCase() + method.brand.slice(1) : 'card';
   return `${brand} ending ${method.last4}`;
+}
+
+/**
+ * The words under the date on the Next charge card: what the card will be charged and why it is not
+ * the plan price. '$325.61 to your Visa ending 3184, after $46.39 credit.' null when no charge is
+ * coming.
+ */
+export function nextChargeLine(state: PlanState): string | null {
+  const charge = state.nextCharge;
+  if (!charge) return null;
+  const parts: string[] = [];
+  if (charge.amountCents === 0 && charge.creditAppliedCents > 0) {
+    parts.push(`${formatMoney(0)}. Your credit pays this bill in full.`);
+  } else if (charge.creditAppliedCents > 0) {
+    parts.push(
+      `${formatMoney(charge.amountCents)} to your ${cardLabel(state.paymentMethod)}, after ${formatMoney(charge.creditAppliedCents)} credit.`,
+    );
+  } else {
+    parts.push(`${formatMoney(charge.amountCents)} to your ${cardLabel(state.paymentMethod)}.`);
+  }
+  if (charge.discountCents > 0) {
+    parts.push(`${charge.discountLabel ?? 'Promo code'}: ${formatMoney(charge.discountCents)} off.`);
+  }
+  return parts.join(' ');
+}
+
+/** 'Credit: $713.40. It comes off your next bills.' null when the organization has no credit. */
+export function creditLine(state: PlanState): string | null {
+  if (state.creditCents <= 0) return null;
+  const onNext = state.nextCharge?.creditAppliedCents ?? 0;
+  if (state.phase === 'cancel_scheduled' || state.phase === 'ended') {
+    return `Credit: ${formatMoney(state.creditCents)}. It stays on your account. If you come back, it comes off your first bill.`;
+  }
+  const bills = onNext >= state.creditCents ? 'next bill' : 'next bills';
+  return `Credit: ${formatMoney(state.creditCents)}. It comes off your ${bills}.`;
 }
 
 function sameCalendarDay(a: Date, b: Date, timeZone?: string): boolean {
@@ -456,6 +530,10 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
     case 'trial': {
       const trial = state.trial;
       if (!trial) return null;
+      // No banner on the first day. A person who started a "no card needed" trial a minute ago is
+      // not asked to pick a plan in their first session. The launcher tiles and billing home still
+      // show the days left.
+      if (context.now.getTime() - trial.startedAt.getTime() < DAY_MS) return null;
       return notice(
         'trial',
         'info',

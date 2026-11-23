@@ -4,6 +4,7 @@
  * that talks to a gateway, so this is the only place the Stripe adapter is passed in.
  */
 import 'server-only';
+import { GATEWAY_CONTRACT_VERSION } from '@kitstak/billing/gateway';
 import { createStripeGateway } from '@kitstak/billing/gateway/stripe';
 import { createBillingRuntime, type BillingRuntime } from '@kitstak/billing/server';
 import { db } from '@/server/db';
@@ -11,6 +12,8 @@ import { env } from '@/server/env';
 
 interface RuntimeGlobal {
   __kitstakPortalBillingRuntime?: BillingRuntime;
+  /** The gateway contract the cached runtime was built for. */
+  __kitstakPortalBillingRuntimeVersion?: number;
 }
 
 const globalSlot = globalThis as typeof globalThis & RuntimeGlobal;
@@ -22,6 +25,11 @@ export function portalUrl(): string {
 
 /** Cached per process (and across dev hot reloads), built from env and db. */
 export function billingRuntime(): BillingRuntime {
+  // A dev hot reload keeps this object. When the gateway contract moved, build it again.
+  if (globalSlot.__kitstakPortalBillingRuntimeVersion !== GATEWAY_CONTRACT_VERSION) {
+    globalSlot.__kitstakPortalBillingRuntime = undefined;
+    globalSlot.__kitstakPortalBillingRuntimeVersion = GATEWAY_CONTRACT_VERSION;
+  }
   globalSlot.__kitstakPortalBillingRuntime ??= createBillingRuntime({
     db,
     // Read through the validated env, so a blank line in an env file never counts as a key.

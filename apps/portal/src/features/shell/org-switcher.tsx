@@ -57,7 +57,8 @@ export function OrgSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          'inline-flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border-input bg-panel px-2 text-sm font-medium text-fg sm:max-w-[260px] sm:gap-2 sm:px-2.5',
+          // The name is capped and may shrink, so a long organization name never pushes the bar wider than the screen.
+          'inline-flex h-8 min-w-0 shrink items-center gap-1.5 rounded-md border border-border-input bg-panel px-2 text-sm font-medium text-fg sm:max-w-[200px] sm:gap-2 sm:px-2.5 xl:max-w-[260px]',
           'hover:border-border-input-hover hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
           'data-[state=open]:bg-selected',
         )}
@@ -72,7 +73,7 @@ export function OrgSwitcher({
           {orgInitials(active.name)}
         </span>
         <span className="sr-only sm:hidden">{active.name}</span>
-        <span className="hidden truncate sm:block">{active.name}</span>
+        <span className="hidden truncate sm:block" title={active.name}>{active.name}</span>
         <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-icon" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">

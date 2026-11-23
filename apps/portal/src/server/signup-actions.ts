@@ -8,8 +8,10 @@
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { after } from 'next/server';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { APIError } from 'better-auth/api';
+import { normalizeSelection } from '@kitstak/billing/catalog';
 import { parseHandoff } from '@kitstak/billing/handoff';
 import {
   completeSignupIntent,
@@ -18,21 +20,26 @@ import {
   recordAudit,
   upsertSignupIntent,
 } from '@kitstak/billing/server';
-import { cleanCode, companyIssue, emailIssue } from '@/features/signup/fields';
+import { account, billingAccounts, member, user, verification } from '@kitstak/db/schema';
+import { cleanCode, companyIssue, emailIssue, nameIssue } from '@/features/signup/fields';
 import { passwordIssue } from '@/features/signup/password-rules';
 import { safeNextPath } from '@/lib/routes';
 import { slugWithSuffix, slugify } from '@/lib/slug';
-import { auth, emailCodeApi } from '@/server/auth';
+import { auth, emailCodeApi, withoutSignupCode } from '@/server/auth';
 import { db } from '@/server/db';
 import { env } from '@/server/env';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getSession } from '@/server/session';
-import { getInviteView, getSignupResumeHref } from '@/server/signup';
+import { getInviteView, getSignupResumeHref, inviteProofValid } from '@/server/signup';
 
 export interface SignupActionResult {
   readonly ok: boolean;
   readonly error?: string;
   readonly next?: string;
+  /** Which field the error belongs to, when it belongs to one. */
+  readonly field?: 'name' | 'password' | 'email';
+  /** A short machine word for the cases a form treats in a special way. */
+  readonly code?: 'account_exists' | 'no_seat';
 }
 
 const SIGN_IN_AGAIN = 'Please sign in again.';
@@ -161,6 +168,32 @@ export async function createWorkspaceAction(input: unknown): Promise<SignupActio
 
   revalidatePath('/', 'layout');
   return { ok: true, next: '/signup/plan' };
+}
+
+const selectionSchema = z.object({ selection: z.unknown() });
+
+/**
+ * Keeps the apps, seats and pay period a person is picking at signup, as they pick them, in their
+ * open signup intent (docs/billing/SPEC.md 5.6). A refresh or a closed tab then shows the picker
+ * exactly as they left it. Only the cleaned selection is stored. No price ever comes from the browser.
+ */
+export async function saveSignupSelectionAction(input: unknown): Promise<SignupActionResult> {
+  const session = await getSession();
+  if (!session) return fail(SIGN_IN_AGAIN);
+  const parsed = selectionSchema.safeParse(input);
+  if (!parsed.success) return fail('Pick at least one app.');
+  const selection = normalizeSelection(parsed.data.selection);
+  if (selection.products.length === 0) return fail('Pick at least one app.');
+  try {
+    // Only a signup that is still open has a cart to keep. Nothing is created here.
+    const intent = await getOpenSignupIntent(db, session.user.id);
+    if (!intent) return { ok: true };
+    await upsertSignupIntent(db, { userId: session.user.id, handoff: { selection, profile: {}, source: 'direct' } });
+    return { ok: true };
+  } catch (error: unknown) {
+    console.error('[portal] saveSignupSelectionAction failed', error);
+    return fail(NO_NETWORK);
+  }
 }
 
 /** Sends a new 6 digit code to the signed in person's address. */
@@ -324,6 +357,289 @@ export async function resetPasswordAction(input: unknown): Promise<SignupActionR
 
 const inviteSchema = z.object({ invitationId: z.string().uuid() });
 
+type InviteFacts = NonNullable<Awaited<ReturnType<typeof getInviteView>>>;
+
+function noSeatMessage(inviterName: string): string {
+  return `The team has no free seat right now. Ask ${inviterName} to add one, then open this link again.`;
+}
+
+/** Marks an address as verified. Only called after the invite proof checked out. */
+async function markEmailVerified(userId: string): Promise<void> {
+  await db.update(user).set({ emailVerified: true, updatedAt: new Date() }).where(eq(user.id, userId));
+}
+
+/**
+ * The same request headers without the cached copy of the session. The session token stays, so the
+ * auth layer reads the person fresh from the database and writes a fresh cached copy back.
+ */
+function withoutSessionCache(source: Headers): Headers {
+  const out = new Headers(source);
+  const cookie = source.get('cookie');
+  if (cookie) {
+    const kept = cookie
+      .split(';')
+      .map((part) => part.trim())
+      .filter((part) => part !== '' && !/^(__Secure-)?[^=]*session_data(\.\d+)?=/.test(part));
+    out.set('cookie', kept.join('; '));
+  }
+  return out;
+}
+
+/** Accepts the invitation. Returns the failure to show, or null when the person is in. */
+async function acceptInvitation(view: InviteFacts, requestHeaders: Headers): Promise<SignupActionResult | null> {
+  const inactive = `This invite is no longer active. Ask ${view.inviterName} to send a new one.`;
+  try {
+    await auth.api.acceptInvitation({ body: { invitationId: view.id }, headers: requestHeaders });
+    return null;
+  } catch (error: unknown) {
+    const code = errorCode(error);
+    if (code === 'SEAT_LIMIT_REACHED') return { ...fail(noSeatMessage(view.inviterName)), code: 'no_seat' };
+    if (code === 'INVITATION_NOT_FOUND') return fail(inactive);
+    if (code === 'YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION') {
+      return fail(`This invite is for ${view.email}. Sign out and open the link again.`);
+    }
+    if (code === 'ORGANIZATION_MEMBERSHIP_LIMIT_REACHED') {
+      return fail(`The team is full. Ask ${view.inviterName} to make room.`);
+    }
+    console.error('[portal] accepting an invitation failed', code ?? error);
+    return fail(error instanceof APIError ? inactive : NO_NETWORK);
+  }
+}
+
+const joinSchema = z.object({
+  invitationId: z.string().uuid(),
+  name: z.string().max(200),
+  password: z.string().max(200),
+  timezone: z.string().max(80).optional(),
+});
+
+/** The session cookie a sign up answered with, as a `cookie` header for the calls that follow it. */
+function sessionCookieFrom(responseHeaders: Headers): string | null {
+  for (const line of responseHeaders.getSetCookie()) {
+    const pair = line.split(';')[0]?.trim() ?? '';
+    if (/^(__Secure-)?[^=]*session_token=/.test(pair)) return pair;
+  }
+  return null;
+}
+
+/**
+ * New to KitStak and invited: makes the account and joins the team in one step, on the server.
+ *
+ * Order matters. The seat is checked BEFORE the account is made, so a join that would be refused
+ * never leaves an account behind. If the join still fails after the account exists (the plan shrank
+ * in that very second), the account that was just made is removed again.
+ *
+ * A person who came from the link in the invite email owns that mailbox, so their email is marked
+ * verified and no code email is sent.
+ */
+export async function joinInviteAction(input: unknown): Promise<SignupActionResult> {
+  const parsed = joinSchema.safeParse(input);
+  if (!parsed.success) return fail('Check what you entered and try again.');
+  const view = await getInviteView(parsed.data.invitationId);
+  if (!view) return fail('This invite is no longer active.');
+  if (view.status !== 'pending') return fail(`This invite is no longer active. Ask ${view.inviterName} to send a new one.`);
+  if (view.accountExists) {
+    return { ...fail('An account with this email already exists. Sign in to accept the invite.'), code: 'account_exists' };
+  }
+  if (await getSession()) return fail('You are signed in with another account. Sign out and open the link again.');
+
+  const name = parsed.data.name.trim();
+  const nameProblem = nameIssue(name);
+  if (nameProblem) return { ...fail(nameProblem), field: 'name' };
+  const passwordProblem = passwordIssue(parsed.data.password, { email: view.email });
+  if (passwordProblem) return { ...fail(passwordProblem), field: 'password' };
+
+  const requestHeaders = await headers();
+  if (!(await allowAnonymous('invite-join', requestHeaders, 5))) return fail(TOO_MANY_TRIES);
+  if (!(await enforceRateLimit(db, { key: `billing:signup:invite-join:${view.id}`, windowSeconds: 600, max: 10 }))) {
+    return fail(TOO_MANY_TRIES);
+  }
+
+  // Before any account exists: is there room on the team?
+  if (!view.seatAvailable) return { ...fail(noSeatMessage(view.inviterName)), code: 'no_seat' };
+
+  const proven = await inviteProofValid(view.id, view.email);
+  const signUp = () =>
+    auth.api.signUpEmail({
+      body: {
+        name,
+        email: view.email,
+        password: parsed.data.password,
+        ...(parsed.data.timezone ? { timezone: parsed.data.timezone } : {}),
+      },
+      headers: requestHeaders,
+      returnHeaders: true,
+    });
+  let created: Awaited<ReturnType<typeof signUp>>;
+  try {
+    // With the proof, the address is already known to be theirs: no code email goes out.
+    created = proven ? await withoutSignupCode(view.email, signUp) : await signUp();
+  } catch (error: unknown) {
+    const code = errorCode(error);
+    if (code?.startsWith('PASSWORD_')) {
+      return { ...fail(errorMessage(error) ?? 'Pick a stronger password.'), field: 'password' };
+    }
+    if (code === 'USER_ALREADY_EXISTS' || code === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL') {
+      return { ...fail('An account with this email already exists. Sign in to accept the invite.'), code: 'account_exists' };
+    }
+    console.error('[portal] joinInviteAction could not make the account', code ?? error);
+    return fail(error instanceof APIError ? 'We could not create your account. Try again.' : NO_NETWORK);
+  }
+
+  const userId = created.response.user.id;
+  const sessionCookie = sessionCookieFrom(created.headers);
+  if (!sessionCookie) {
+    console.error('[portal] joinInviteAction got no session after sign up');
+    return { ok: true, next: `/login?next=${encodeURIComponent(`/invite/${view.id}`)}` };
+  }
+  // The calls below act as the new person. Only the session token is passed on, so each one reads
+  // the person fresh from the database and the cookie they write back is up to date.
+  const asNewUser = new Headers(requestHeaders);
+  asNewUser.set('cookie', sessionCookie);
+
+  if (proven) await markEmailVerified(userId);
+
+  const failure = await acceptInvitation(view, asNewUser);
+  if (failure) {
+    // The join was refused after all. Leave nothing behind: no session, no account.
+    try {
+      await auth.api.signOut({ headers: asNewUser });
+    } catch (error: unknown) {
+      console.error('[portal] could not sign out after a refused join', errorCode(error) ?? error);
+    }
+    try {
+      const memberships = await db.select({ id: member.id }).from(member).where(eq(member.userId, userId)).limit(1);
+      if (memberships.length === 0) await db.delete(user).where(eq(user.id, userId));
+    } catch (error: unknown) {
+      console.error('[portal] could not remove the account of a refused join', error);
+    }
+    return failure;
+  }
+
+  try {
+    await auth.api.setActiveOrganization({ body: { organizationId: view.orgId }, headers: asNewUser });
+  } catch (error: unknown) {
+    console.error('[portal] could not make the joined organization active', errorCode(error) ?? error);
+  }
+  revalidatePath('/', 'layout');
+  return { ok: true, next: '/' };
+}
+
+const changeEmailSchema = z.object({ email: z.string().max(320) });
+
+/**
+ * Fixes a typo in the email of an account that was never verified. The account, the organization
+ * and the free trial stay as they are; only the address changes, and a new code goes to it. Not
+ * possible once the email is verified, and held to a few tries an hour.
+ */
+export async function changeUnverifiedEmailAction(input: unknown): Promise<SignupActionResult> {
+  const session = await getSession();
+  if (!session) return fail(SIGN_IN_AGAIN);
+  const parsed = changeEmailSchema.safeParse(input);
+  const email = parsed.success ? parsed.data.email.trim().toLowerCase() : '';
+  const issue = emailIssue(email, 'Enter a valid email.');
+  if (issue) return { ...fail(issue), field: 'email' };
+  const userId = session.user.id;
+
+  // Read fresh: the cached session can be a few minutes behind.
+  const [current] = await db
+    .select({ email: user.email, emailVerified: user.emailVerified, name: user.name })
+    .from(user)
+    .where(eq(user.id, userId));
+  if (!current) return fail(SIGN_IN_AGAIN);
+  if (current.emailVerified) return fail('This email is already verified, so it cannot be changed here.');
+  const oldEmail = current.email.trim().toLowerCase();
+  if (email === oldEmail) return { ...fail('That is the address we already have. Type the right one.'), field: 'email' };
+
+  if (!(await enforceRateLimit(db, { key: `billing:signup:change-email:${userId}`, windowSeconds: 3600, max: 3 }))) {
+    return fail('You changed your email a few times already. Wait an hour and try again.');
+  }
+  const requestHeaders = await headers();
+  if (!(await allowAnonymous('change-email', requestHeaders, 10))) return fail(TOO_MANY_TRIES);
+
+  // An account made with Google or Microsoft takes its address from that provider.
+  const logins = await db.select({ providerId: account.providerId }).from(account).where(eq(account.userId, userId));
+  if (logins.some((login) => login.providerId !== 'credential')) {
+    return fail('This account signs in with Google or Microsoft, so its email comes from there.');
+  }
+  const [taken] = await db.select({ id: user.id }).from(user).where(sql`lower(${user.email}) = ${email}`).limit(1);
+  if (taken) return { ...fail('That email already has a KitStak account. Sign in with it instead.'), field: 'email' };
+
+  try {
+    const changed = await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(user)
+        .set({ email, updatedAt: new Date() })
+        // The guard is in the statement itself: a verified address can never be changed here.
+        .where(and(eq(user.id, userId), eq(user.emailVerified, false)))
+        .returning({ id: user.id });
+      if (updated.length === 0) return false;
+      // Codes for the old address are of no use now.
+      await tx.delete(verification).where(sql`${verification.identifier} LIKE ${`%${oldEmail}`}`);
+      // Receipts went to the old address by default. Move them along, only where this person set it.
+      const orgs = await tx.select({ orgId: member.organizationId }).from(member).where(eq(member.userId, userId));
+      if (orgs.length > 0) {
+        await tx
+          .update(billingAccounts)
+          .set({ billingEmail: email, updatedAt: new Date() })
+          .where(
+            and(
+              inArray(
+                billingAccounts.orgId,
+                orgs.map((row) => row.orgId),
+              ),
+              sql`lower(${billingAccounts.billingEmail}) = ${oldEmail}`,
+            ),
+          );
+      }
+      return true;
+    });
+    if (!changed) return fail('This email is already verified, so it cannot be changed here.');
+  } catch (error: unknown) {
+    // Someone took the address between the check and the write.
+    if ((error as { code?: string } | null)?.code === '23505') {
+      return { ...fail('That email already has a KitStak account. Sign in with it instead.'), field: 'email' };
+    }
+    console.error('[portal] changeUnverifiedEmailAction failed', error);
+    return fail('We could not change your email. Try again.');
+  }
+
+  try {
+    const org = await resolveActiveOrg(session);
+    if (org) {
+      const label = current.name?.trim() || email;
+      await recordAudit(db, {
+        orgId: org.id,
+        actor: { userId, label },
+        action: 'account.email_changed',
+        summary: `${label} changed their sign in email before it was verified.`,
+        data: { userId },
+      });
+    }
+  } catch (error: unknown) {
+    console.error('[portal] could not write the activity line for an email change', error);
+  }
+
+  // A fresh cached session (with the new address), then a new code to the new address.
+  const fresh = withoutSessionCache(requestHeaders);
+  try {
+    await auth.api.getSession({ headers: fresh, query: { disableCookieCache: true } });
+  } catch (error: unknown) {
+    console.error('[portal] could not refresh the session after an email change', errorCode(error) ?? error);
+  }
+  try {
+    await emailCodeApi().sendVerificationOTP({ body: { email, type: 'email-verification' }, headers: fresh });
+  } catch (error: unknown) {
+    if (errorStatus(error) === 429) {
+      revalidatePath('/', 'layout');
+      return { ok: true, error: 'Your email is changed. We sent many codes already, so wait a few minutes, then press Send a new code.' };
+    }
+    console.error('[portal] could not send a code to the new address', error);
+  }
+  revalidatePath('/', 'layout');
+  return { ok: true };
+}
+
 /** Accepts an invitation for the signed in person and makes that organization the active one. */
 export async function acceptInviteAction(input: unknown): Promise<SignupActionResult> {
   const session = await getSession();
@@ -341,22 +657,18 @@ export async function acceptInviteAction(input: unknown): Promise<SignupActionRe
     return fail(TOO_MANY_TRIES);
   }
 
-  const requestHeaders = await headers();
-  try {
-    await auth.api.acceptInvitation({ body: { invitationId: view.id }, headers: requestHeaders });
-  } catch (error: unknown) {
-    const code = errorCode(error);
-    if (code === 'SEAT_LIMIT_REACHED') return fail(`The team has no free seat. Ask ${view.inviterName} to add one.`);
-    if (code === 'INVITATION_NOT_FOUND') return fail(inactive);
-    if (code === 'YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION') {
-      return fail(`This invite is for ${view.email}. Sign out and open the link again.`);
-    }
-    if (code === 'ORGANIZATION_MEMBERSHIP_LIMIT_REACHED') {
-      return fail(`The team is full. Ask ${view.inviterName} to make room.`);
-    }
-    console.error('[portal] acceptInviteAction failed', code ?? error);
-    return fail(error instanceof APIError ? inactive : NO_NETWORK);
+  if (!view.seatAvailable) return { ...fail(noSeatMessage(view.inviterName)), code: 'no_seat' };
+
+  // The person came from the link in the invite email, which only the invited mailbox has. That
+  // proves the address, so it is marked verified and no 6 digit code is ever asked for.
+  let requestHeaders = await headers();
+  if (!session.user.emailVerified && (await inviteProofValid(view.id, view.email))) {
+    await markEmailVerified(session.user.id);
+    // Read the person fresh from the database from here on, so the new cookie says "verified".
+    requestHeaders = withoutSessionCache(requestHeaders);
   }
+  const failure = await acceptInvitation(view, requestHeaders);
+  if (failure) return failure;
 
   try {
     await auth.api.setActiveOrganization({ body: { organizationId: view.orgId }, headers: requestHeaders });

@@ -82,6 +82,29 @@ export default async function InvitePage({
     );
   }
 
+  // The team's plan has no room for this person. Say so before anyone types a name or a password,
+  // so nobody makes an account they cannot use. Nothing is created on this screen.
+  if (!view.seatAvailable) {
+    const alreadyIn = session ? await isMember(view.orgId, session.user.id) : false;
+    if (!alreadyIn) {
+      return (
+        <>
+          <Icon tone="muted" />
+          <AuthHeading
+            title={`${view.orgName} has no free seat right now`}
+            subtitle={`Ask ${view.inviterName} to add a seat. Then open this link again. Your invite works until ${formatDay(view.expiresAt)}.`}
+          />
+          <p className="text-base text-fg-secondary" data-testid="invite-no-seat">
+            Nothing was created and nothing was charged.
+          </p>
+          <LinkButton href={session ? '/' : '/login'} size="lg" fullWidth className="mt-5 h-12 sm:h-11" variant="secondary">
+            {session ? 'Open KitStak' : 'Go to sign in'}
+          </LinkButton>
+        </>
+      );
+    }
+  }
+
   const heading = (
     <>
       <Icon tone="info" />

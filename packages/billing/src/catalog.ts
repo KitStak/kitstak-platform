@@ -45,6 +45,18 @@ export interface ProductPricing {
  */
 export const PRICING_IS_PLACEHOLDER = false;
 
+/**
+ * The money rules people ask about before they buy, in plain words. One place, so the pricing page,
+ * sign-up, the cancel page and billing home always say the same thing. The refund sentence states
+ * what the product does today (a canceled plan runs to the end of the paid period and nothing is
+ * paid back for the time left). The owner confirms or changes it here before go-live.
+ */
+export const BILLING_POLICY = {
+  payments: 'Card payments run on Stripe. KitStak never sees your full card number.',
+  refund:
+    'When you cancel, your plan stays on until the end of the month or year you paid for. We do not refund the time left. Charged by mistake? Tell us and we will fix it.',
+} as const;
+
 export const CATALOG: {
   readonly version: '2026-11';
   readonly currency: 'usd';

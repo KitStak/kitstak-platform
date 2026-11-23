@@ -118,7 +118,7 @@ export function socialErrorMessage(code: string | null | undefined): string | nu
   switch (code) {
     case 'account_not_linked':
     case 'unable_to_link_account':
-      return 'This email already has a KitStak account with a password. Sign in with your password, verify your email, then try again.';
+      return 'This email already has a KitStak account. Sign in with your email and password.';
     case 'access_denied':
       return 'You closed the sign in window. Try again, or use your email.';
     case 'signup_disabled':

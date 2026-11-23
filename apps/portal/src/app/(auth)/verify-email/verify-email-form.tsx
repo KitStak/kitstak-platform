@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { CircleAlert, MailCheck } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import { signOut } from '@/lib/auth-client';
-import { resendVerificationAction, skipVerifyAction, verifyEmailAction } from '@/server/signup-actions';
+import { changeUnverifiedEmailAction, resendVerificationAction, skipVerifyAction, verifyEmailAction } from '@/server/signup-actions';
 import { CodeInput } from '../_components/code-input';
 import { AuthHeading, FormAlert, NO_NETWORK_MESSAGE, SubmitButton, TAP_BUTTON, TAP_LINK } from '../_components/form-parts';
 
@@ -38,6 +38,12 @@ export function VerifyEmailForm({
   const [notice, setNotice] = useState<string | null>(null);
   const [state, setState] = useState<'idle' | 'checking' | 'done' | 'sending' | 'skipping'>('idle');
   const [wait, setWait] = useState(initialWaitSeconds);
+  // "Change email": fixes a typo without losing the account, the organization or the free trial.
+  const [changing, setChanging] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [changeError, setChangeError] = useState<string | null>(null);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const newEmailId = `${codeId}-new-email`;
   const working = useRef(false);
   const input = useRef<HTMLInputElement | null>(null);
 
@@ -124,6 +130,39 @@ export function VerifyEmailForm({
       working.current = false;
       setState('idle');
     }
+  };
+
+  const changeEmail = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (working.current) return;
+    const wanted = newEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(wanted)) {
+      setChangeError('Enter a valid email.');
+      return;
+    }
+    working.current = true;
+    setSavingEmail(true);
+    setChangeError(null);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await changeUnverifiedEmailAction({ email: wanted });
+      if (result.ok) {
+        setChanging(false);
+        setNewEmail('');
+        setCode('');
+        setNotice(result.error ?? `Your email is now ${wanted.toLowerCase()}. We sent a new code there.`);
+        setWait(resendWaitSeconds);
+        router.refresh();
+        requestAnimationFrame(() => input.current?.focus());
+      } else {
+        setChangeError(result.error ?? 'We could not change your email. Try again.');
+      }
+    } catch {
+      setChangeError(NO_NETWORK_MESSAGE);
+    }
+    working.current = false;
+    setSavingEmail(false);
   };
 
   const startOver = async () => {
@@ -216,8 +255,77 @@ export function VerifyEmailForm({
           I will do this later
         </button>
       </div>
-      <p className="mt-6 text-center text-sm text-fg-muted">
-        Not your address?{' '}
+      {changing ? (
+        <form noValidate onSubmit={changeEmail} className="mt-6 flex flex-col gap-3 rounded-lg border border-border-default bg-sunken/60 p-4" data-testid="change-email-form">
+          <label htmlFor={newEmailId} className="text-xs font-medium text-fg-secondary">
+            Your right email
+          </label>
+          <input
+            id={newEmailId}
+            name="email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoFocus
+            required
+            value={newEmail}
+            onChange={(event) => {
+              setNewEmail(event.target.value);
+              if (changeError) setChangeError(null);
+            }}
+            aria-invalid={changeError ? true : undefined}
+            aria-describedby={changeError ? `${newEmailId}-error` : `${newEmailId}-hint`}
+            data-testid="change-email-input"
+            className="h-12 w-full rounded-md border border-border-strong bg-surface px-3 text-base text-fg outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:h-11"
+          />
+          {changeError ? (
+            <p id={`${newEmailId}-error`} role="alert" className="flex items-center gap-1 text-xs font-medium text-danger-text">
+              <CircleAlert aria-hidden className="size-3.5 shrink-0" />
+              {changeError}
+            </p>
+          ) : (
+            <p id={`${newEmailId}-hint`} className="text-xs text-fg-muted">
+              We send a new code there. Your account, your organization and your free trial stay as they are.
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <button type="submit" data-testid="change-email-save" disabled={savingEmail} className={LINK_BUTTON}>
+              {savingEmail ? 'Saving…' : 'Save and send a new code'}
+            </button>
+            <button
+              type="button"
+              disabled={savingEmail}
+              onClick={() => {
+                setChanging(false);
+                setChangeError(null);
+              }}
+              className={`${LINK_BUTTON} font-medium text-fg-secondary`}
+            >
+              Go back
+            </button>
+          </div>
+        </form>
+      ) : (
+        <p className="mt-6 text-center text-sm text-fg-muted">
+          Typed the wrong address?{' '}
+          <button
+            type="button"
+            data-testid="change-email"
+            onClick={() => {
+              setChanging(true);
+              setChangeError(null);
+            }}
+            disabled={busy}
+            className={`${TAP_BUTTON} rounded-sm font-medium text-fg-link underline underline-offset-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`}
+          >
+            Change email
+          </button>
+        </p>
+      )}
+      <p className="mt-2 text-center text-sm text-fg-muted">
+        Not your account?{' '}
         <button
           type="button"
           onClick={() => void startOver()}

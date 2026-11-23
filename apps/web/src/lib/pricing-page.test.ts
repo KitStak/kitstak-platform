@@ -66,7 +66,9 @@ describe('pricing page: the parts SPEC 4.2 lists', () => {
     expect(all).toContain('$349 per warehouse each month');
     expect(all).toContain('$12 per user each month');
     expect(all).toContain('$29 each month for your whole team. Up to 5 seats.');
-    expect(explorer.match(/>Start free</g)).toHaveLength(PRODUCT_IDS.length);
+    // One label for one action: the four cards and the calculator's bar all say "Start free".
+    expect(explorer.match(/>Start free</g)).toHaveLength(PRODUCT_IDS.length + 1);
+    expect(text(explorer)).not.toMatch(/Start my free trial|Start free trial|Set up your Stak/);
   });
 
   test('each start button goes straight to portal sign-up with that app, from the pricing page', () => {
@@ -87,7 +89,7 @@ describe('pricing page: the parts SPEC 4.2 lists', () => {
 
     expect(testIdText(html, 'quote-total')).toBe('$395.20');
     expect(text(html)).toContain('14 days free. No card needed.');
-    expect(text(html)).toContain('Start my free trial');
+    expect(text(html)).toContain('Start free');
     const start = hrefs(html).find((href) => href.startsWith(`${LINKS.portal}/signup`));
     expect(parseHandoff(new URL(start ?? '').searchParams)).toEqual({
       selection: CALCULATOR_START,
@@ -213,7 +215,7 @@ describe('product pages', () => {
     const start = hrefs(html).find((href) => href.startsWith(`${LINKS.portal}/signup`));
 
     expect(text(html)).toContain(listPrice(id));
-    expect(text(html)).toContain('Start my free trial');
+    expect(text(html)).toContain('Start free');
     expect(text(html)).toContain('14 days free. No card needed.');
     expect(parseHandoff(new URL(start ?? '').searchParams)).toEqual({
       selection: { products: [id], seats: 1, warehouses: 1, interval: 'monthly' },

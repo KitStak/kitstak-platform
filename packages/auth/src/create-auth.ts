@@ -55,6 +55,12 @@ type DrizzleSchema = Parameters<typeof drizzleAdapter>[1]['schema'];
 
 const CREDENTIAL_PROVIDER = 'credential';
 
+/**
+ * Providers whose sign in is linked to an existing account by email without further proof. Keep
+ * this list to providers that always state whether the email is verified. Never add Microsoft.
+ */
+export const TRUSTED_LINK_PROVIDERS = ['google'] as const;
+
 /** Better Auth's own `advanced.ipAddress` shape (better-auth 1.7.21), passed through verbatim. */
 export type AuthIpAddressOptions = NonNullable<
   NonNullable<BetterAuthOptions['advanced']>['ipAddress']
@@ -254,8 +260,16 @@ export function createAuth(options: CreateAuthOptions) {
       ? {
           socialProviders: options.socialProviders,
           // A person who signs in with Google or Microsoft joins the account that has the same
-          // verified email, instead of getting a second one.
-          account: { accountLinking: { enabled: true, trustedProviders: ['google', 'microsoft'] } },
+          // email, instead of getting a second one, but only when the provider PROVED the address.
+          //
+          // Google is trusted: it always says whether the address is verified. Microsoft is NOT in
+          // the trusted list on purpose (security review round 1). With the multi tenant `common`
+          // endpoint anyone can make their own Entra tenant and set a user's `email` to a customer's
+          // address. A trusted provider is linked even when it did not confirm the email, so that
+          // would be an account takeover. Left out of the list, a Microsoft sign in links only when
+          // its profile reports a verified email, and the portal reports that only for the `xms_edov`
+          // claim (`microsoftEmailVerified` in apps/portal/src/features/signup/social.ts).
+          account: { accountLinking: { enabled: true, trustedProviders: [...TRUSTED_LINK_PROVIDERS] } },
         }
       : {}),
     ...(options.hooks ? { hooks: options.hooks } : {}),

@@ -6,6 +6,7 @@ import { CATALOG, PRODUCT_IDS, isProductId, type ProductId } from '@kitstak/bill
 import { planBadgeFor, type PlanBadge, type PlanState } from '@kitstak/billing/plan-state';
 import { getBillingProfile, getPlanState, listBillingHolders, listInvoices, retryPayment } from '@kitstak/billing/server';
 import { isDevAllowAll } from '@kitstak/entitlements';
+import { appReturnPath } from '@/lib/routes';
 import { requireBillingContext } from '@/server/billing/context';
 import { env } from '@/server/env';
 import { Badge, Card, Notice } from '@/components/ui';
@@ -75,7 +76,7 @@ export default async function BillingPage({
             <p className="mt-1 text-sm text-fg-secondary">
               {access.ownerName ? `Ask ${access.ownerName} to manage billing.` : 'Ask your organization owner to manage billing.'}
             </p>
-            <Link href="/" className="mt-4 inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-fg hover:underline">
+            <Link href="/" className="mt-4 inline-flex min-h-9 pointer-coarse:min-h-11 items-center gap-1 text-sm font-semibold text-fg hover:underline">
               Back to my apps
               <ArrowRight aria-hidden className="size-4" />
             </Link>
@@ -87,7 +88,7 @@ export default async function BillingPage({
 
   /* ----- back from the card page: pay the open invoice at once (CONTRACTS 11.7) ----- */
   let flash: FlashMessage | null = null;
-  const flashKeys = ['notice', 'updated', 'from'];
+  const flashKeys = ['notice', 'updated', 'from', 'return'];
   if (first(params.updated) === 'card') {
     if (access.canManage && (state.phase === 'past_due' || state.phase === 'unpaid')) {
       const retried = await retryPayment(rt, { orgId: org.id, actor: context.actor });
@@ -103,7 +104,12 @@ export default async function BillingPage({
   const noticeKey = first(params.notice);
   if (!flash && noticeKey && NOTICES[noticeKey]) {
     const from = first(params.from);
-    const back = from && isProductId(from) ? { label: `Back to ${CATALOG.products[from].shortName}`, href: APP_URL[from]() } : null;
+    // The way back goes to the page the person left (when the app named one), not to the app's front door.
+    const returnPath = appReturnPath(first(params.return));
+    const back =
+      from && isProductId(from)
+        ? { label: `Back to ${CATALOG.products[from].shortName}`, href: `${APP_URL[from]().replace(/\/+$/, '')}${returnPath ?? ''}` }
+        : null;
     flash = { ...NOTICES[noticeKey], back };
   }
 
@@ -174,7 +180,7 @@ export default async function BillingPage({
           ) : null}
         </div>
         <div className="flex min-w-0 flex-col gap-6">
-          <InvoicesPreview invoices={invoices} timeZone={timeZone} phase={state.phase} />
+          <InvoicesPreview invoices={invoices} timeZone={timeZone} />
           <DetailsCard profile={profile} orgName={org.name} canManage={access.canManage} />
           <TeamCard holders={holders} canAssign={access.canAssignManagers} />
           <Link

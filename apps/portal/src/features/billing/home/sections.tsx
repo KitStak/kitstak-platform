@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { ArrowRight, CalendarClock, CreditCard, FileText, Layers, Receipt, UsersRound, Wallet } from 'lucide-react';
 import { AppIcon } from '@kitstak/ui/app-icon';
 import { CATALOG, PRODUCT_IDS, formatDay, formatMoney, percentLabel, type ProductId } from '@kitstak/billing/catalog';
-import { PLAN_BADGE_LABELS, type PlanBadge, type PlanState } from '@kitstak/billing/plan-state';
+import { PLAN_BADGE_LABELS, creditLine, type PlanBadge, type PlanState } from '@kitstak/billing/plan-state';
 import type { BillingManagerRow, BillingProfile, InvoiceRow } from '@kitstak/billing/server';
 import { Badge, Card, Eyebrow, LinkButton, cn } from '@/components/ui';
 import {
@@ -112,7 +112,6 @@ export function PlanCards({ state, copy, nextCharge, canManage, canStartTrial, b
   const showCost = hasPlanShape && quote.lines.length > 0;
   const costLabel = state.phase === 'trial' || (state.phase === 'active' && state.trial) ? 'After your trial' : undefined;
   const method = state.paymentMethod;
-  const trialNoCard = state.phase === 'trial';
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -131,8 +130,8 @@ export function PlanCards({ state, copy, nextCharge, canManage, canStartTrial, b
             <HomeActionButton action={copy.primary} variant="primary" size="xl" fullWidth withTestId billingOff={billingOff} />
           ) : !trialStep ? (
             <p className="text-xs text-fg-muted">
-              {copy.primary.id === 'add_card'
-                ? 'Only an owner or a billing manager can add a card.'
+              {copy.primary.id === 'pick_plan'
+                ? 'Only an owner or a billing manager can pick a plan and pay.'
                 : 'Only an owner or a billing manager can change the plan.'}
             </p>
           ) : null}
@@ -190,10 +189,10 @@ export function PlanCards({ state, copy, nextCharge, canManage, canStartTrial, b
       <CardShell title="Next charge" icon={<CalendarClock aria-hidden />} testId="billing-next-charge">
         <p className="mt-3 text-xl font-semibold tracking-[-0.02em] text-fg">{nextCharge.headline}</p>
         <p className="mt-2 text-sm text-fg-secondary">{nextCharge.detail}</p>
-        {trialNoCard && canManage ? (
-          <div className="mt-auto pt-4">
-            <HomeActionButton action={{ id: 'add_card', label: 'Add a card' }} variant="secondary" size="lg" billingOff={billingOff} />
-          </div>
+        {creditLine(state) ? (
+          <p data-testid="billing-credit" className="mt-2 text-sm font-medium text-success-text">
+            {creditLine(state)}
+          </p>
         ) : null}
       </CardShell>
 
@@ -207,21 +206,15 @@ export function PlanCards({ state, copy, nextCharge, canManage, canStartTrial, b
           <>
             <p className="mt-3 text-lg font-semibold text-fg">No card yet</p>
             <p className="mt-1 text-sm text-fg-secondary">
-              {state.phase === 'trial' ? 'You do not need one during your free trial.' : 'Add one when you pick a plan.'}
+              {state.phase === 'trial' ? 'You do not need one during your free trial. You add it when you pick a plan.' : 'You add one when you pick a plan.'}
             </p>
           </>
         )}
         {canManage ? (
           <div className="mt-auto pt-4">
+            {/* The Plan card holds the one filled "Pick a plan" button of this row. No second button here. */}
             {method && state.hasSubscription ? (
               <HomeActionButton action={{ id: 'update_card', label: 'Update card' }} variant="secondary" size="lg" billingOff={billingOff} />
-            ) : state.phase === 'trial' || state.phase === 'trial_ended' || state.phase === 'ended' ? (
-              <HomeActionButton
-                action={state.phase === 'trial' ? { id: 'add_card', label: 'Add a card' } : { id: 'pick_plan', label: 'Pick a plan' }}
-                variant="secondary"
-                size="lg"
-                billingOff={billingOff}
-              />
             ) : null}
           </div>
         ) : null}
@@ -399,7 +392,7 @@ export function AppsSection({ state, badges, canAdd }: AppsSectionProps) {
 
 /* ===== right column ===== */
 
-export function InvoicesPreview({ invoices, timeZone, phase }: { readonly invoices: readonly InvoiceRow[]; readonly timeZone: string; readonly phase: PlanState['phase'] }) {
+export function InvoicesPreview({ invoices, timeZone }: { readonly invoices: readonly InvoiceRow[]; readonly timeZone: string }) {
   return (
     <Card data-testid="billing-invoices-preview" aria-labelledby="billing-invoices-heading" className="p-5">
       <div className="flex items-center gap-2">
@@ -409,7 +402,8 @@ export function InvoicesPreview({ invoices, timeZone, phase }: { readonly invoic
       {invoices.length === 0 ? (
         <p className="mt-3 text-sm text-fg-secondary">
           No invoices yet.{' '}
-          {phase === 'trial' || phase === 'none' ? 'Your first one arrives when your trial ends.' : 'Your first one arrives with your first payment.'}
+          {/* No invoice is made without a payment, so a trial with no card never promises one. */}
+          Your first one arrives with your first payment.
         </p>
       ) : (
         <ul className="mt-2 divide-y divide-border-subtle">
@@ -434,7 +428,7 @@ export function InvoicesPreview({ invoices, timeZone, phase }: { readonly invoic
                   target="_blank"
                   rel="noopener"
                   aria-label={`PDF of the invoice from ${formatDay(invoice.issuedAt, timeZone)}`}
-                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-icon hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-icon pointer-coarse:size-11 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                 >
                   <FileText aria-hidden className="size-4" />
                 </a>
@@ -443,7 +437,7 @@ export function InvoicesPreview({ invoices, timeZone, phase }: { readonly invoic
           })}
         </ul>
       )}
-      <Link href="/billing/invoices" className="mt-3 inline-flex min-h-9 items-center gap-1 text-sm font-semibold text-fg hover:underline">
+      <Link href="/billing/invoices" className="mt-3 inline-flex min-h-9 pointer-coarse:min-h-11 items-center gap-1 text-sm font-semibold text-fg hover:underline">
         See all invoices
         <ArrowRight aria-hidden className="size-4" />
       </Link>
@@ -461,7 +455,7 @@ export function DetailsCard({ profile, orgName, canManage }: { readonly profile:
     <Card aria-labelledby="billing-details-heading" className="p-5">
       <div className="flex items-center justify-between gap-3">
         <Eyebrow id="billing-details-heading">Billing details</Eyebrow>
-        <Link href="/billing/details" className="inline-flex min-h-9 items-center text-sm font-semibold text-fg underline decoration-border-strong underline-offset-4 hover:decoration-fg">
+        <Link href="/billing/details" className="inline-flex min-h-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:justify-end items-center text-sm font-semibold text-fg underline decoration-border-strong underline-offset-4 hover:decoration-fg">
           {canManage ? 'Edit' : 'View'}
         </Link>
       </div>
@@ -492,7 +486,7 @@ export function TeamCard({ holders, canAssign }: { readonly holders: readonly Bi
           <UsersRound aria-hidden className="size-4 text-icon" />
           <Eyebrow id="billing-team-heading">Billing team</Eyebrow>
         </div>
-        <Link href="/billing/team" className="inline-flex min-h-9 items-center text-sm font-semibold text-fg underline decoration-border-strong underline-offset-4 hover:decoration-fg">
+        <Link href="/billing/team" className="inline-flex min-h-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:justify-end items-center text-sm font-semibold text-fg underline decoration-border-strong underline-offset-4 hover:decoration-fg">
           {canAssign ? 'Manage' : 'View'}
         </Link>
       </div>

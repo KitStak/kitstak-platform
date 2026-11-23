@@ -29,7 +29,7 @@ import {
   SETUP_PRODUCTS,
   buildSetupSteps,
   focusFromProducts,
-  pickWelcomeSteps,
+  pickGuideSteps,
   summarizeSetup,
   type BusinessType,
   type SetupBillingSignal,
@@ -151,7 +151,7 @@ export function WelcomeWizard({ firstName, orgName, products, billing, trialEnds
 
   const planSteps = useMemo(() => {
     if (planProfile === null) return [];
-    return pickWelcomeSteps(
+    return pickGuideSteps(
       buildSetupSteps(
         {
           memberCount: 1,
@@ -181,7 +181,8 @@ export function WelcomeWizard({ firstName, orgName, products, billing, trialEnds
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessType, teamSize, startMode, products, billing]);
 
-  const planMinutes = summarizeSetup(planSteps).remainingMinutes;
+  const planSummary = summarizeSetup(planSteps);
+  const planMinutes = planSummary.remainingMinutes;
 
   const goNext = () => setStepIndex((index) => Math.min(index + 1, STEP_ORDER.length - 1));
   const goBack = () => setStepIndex((index) => Math.max(index - 1, 0));
@@ -213,7 +214,10 @@ export function WelcomeWizard({ firstName, orgName, products, billing, trialEnds
     working.current = true;
     setSkipping(true);
     try {
-      await skipWelcome();
+      // A person who already answered these questions on the website is not asked again, and the
+      // answers are not thrown away because they skipped a confirm screen: they count as done.
+      if (prefilled && planProfile !== null) await saveSetupProfile(planProfile);
+      else await skipWelcome();
     } catch {
       // Skipping must never trap anyone on this screen. The launcher still opens.
     }
@@ -362,23 +366,37 @@ export function WelcomeWizard({ firstName, orgName, products, billing, trialEnds
         {step === 'plan' ? (
           <div className="overflow-hidden rounded-2xl border border-border-default bg-panel shadow-xs">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border-subtle bg-sunken/60 px-5 py-3.5">
-              <p className="text-sm font-semibold text-fg">Next steps for {orgName}</p>
-              <p className="text-xs text-fg-muted tabular-nums">about {planMinutes} min in all</p>
+              <p className="text-sm font-semibold text-fg">First steps for {orgName}</p>
+              {/* The same count and minutes the launcher shows next. */}
+              <p className="text-xs text-fg-muted tabular-nums" data-testid="welcome-plan-summary">
+                {planSummary.doneCount} of {planSummary.totalCount} done · about {planMinutes} min left
+              </p>
             </div>
             {planSteps.length > 0 ? (
               <ol className="divide-y divide-border-subtle" data-testid="welcome-steps">
-                {planSteps.map((planStep, index) => (
-                  <li key={planStep.key} className="flex items-center gap-3 px-5 py-3">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border-strong text-xs font-semibold text-fg-muted tabular-nums">
-                      {index + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-fg">{planStep.title}</p>
-                      <p className="mt-0.5 text-xs text-fg-muted">{planStep.description}</p>
-                    </div>
-                    <span className="shrink-0 text-2xs text-fg-muted tabular-nums">{planStep.minutes} min</span>
-                  </li>
-                ))}
+                {planSteps.map((planStep, index) => {
+                  const done = planStep.status === 'done';
+                  return (
+                    <li key={planStep.key} className="flex items-center gap-3 px-5 py-3">
+                      {done ? (
+                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-success text-fg-inverse">
+                          <Check aria-hidden className="size-3.5" strokeWidth={3} />
+                        </span>
+                      ) : (
+                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border-strong text-xs font-semibold text-fg-muted tabular-nums">
+                          {index + 1}
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className={cn('text-sm font-medium', done ? 'text-fg-muted' : 'text-fg')}>{planStep.title}</p>
+                        {done ? null : <p className="mt-0.5 text-xs text-fg-muted">{planStep.description}</p>}
+                      </div>
+                      <span className={cn('shrink-0 text-2xs tabular-nums', done ? 'font-medium text-success-text' : 'text-fg-muted')}>
+                        {done ? 'Done' : `${planStep.minutes} min`}
+                      </span>
+                    </li>
+                  );
+                })}
               </ol>
             ) : (
               <p className="px-5 py-4 text-sm text-fg-secondary">

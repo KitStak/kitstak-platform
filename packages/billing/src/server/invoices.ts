@@ -27,6 +27,10 @@ export interface InvoiceRow {
   readonly paidAt: Date | null;
   readonly billingReason: string | null;
   readonly paymentMethodLast4: string | null;
+  /** How much of this invoice was paid from credit (added in review round 1). */
+  readonly creditAppliedCents: number;
+  /** How much of what was paid was sent back. Above 0 only for a second checkout that was canceled. */
+  readonly refundedCents: number;
 }
 
 function toRow(row: BillingInvoice): InvoiceRow {
@@ -54,12 +58,15 @@ function toRow(row: BillingInvoice): InvoiceRow {
     paidAt: row.paidAt,
     billingReason: row.billingReason,
     paymentMethodLast4: row.pmLast4,
+    creditAppliedCents: row.creditAppliedCents,
+    refundedCents: row.refundedCents,
   };
 }
 
 /**
  * Newest first. The $0.00 invoice a gateway makes when a card is saved during the free trial is left
- * out: it is not a bill, and the first real one arrives when the trial ends.
+ * out: it is not a bill, and the first real one arrives when the trial ends. A first invoice that is
+ * $0.00 because credit paid it is a real bill and stays in the list.
  */
 export async function listInvoices(
   db: BillingReadDb,
@@ -69,6 +76,7 @@ export async function listInvoices(
   const notTrialStart = or(
     ne(billingInvoices.totalCents, 0),
     sql`${billingInvoices.billingReason} IS DISTINCT FROM 'subscription_create'`,
+    ne(billingInvoices.creditAppliedCents, 0),
   );
   const found = await db
     .select()

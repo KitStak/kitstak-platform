@@ -61,6 +61,8 @@ export interface EmailPayloads {
     readonly interval: BillingInterval;
     readonly firstChargeAt: string;
     readonly dueTodayCents: number;
+    /** What the first bill really charges when a trial is still running. Missing means `totalCents`. */
+    readonly firstChargeCents?: number;
   };
   receipt: Base & {
     readonly invoiceId: string;

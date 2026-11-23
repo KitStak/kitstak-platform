@@ -106,10 +106,9 @@ export default async function OrganizationSettingsPage() {
       (row) => row.userId !== session.user.id && MANAGER_ROLES.has(row.role.split(',')[0]?.trim() ?? ''),
     )?.name ?? null;
 
-  const setup = await getSetupState(activeOrg);
-
   // Seat facts for the invite form (docs/billing/SPEC.md 6.9). Limits apply on paid plans only.
   const [billing, plan] = await Promise.all([getBillingContext(), getOrgPlan(activeOrg.id)]);
+  const setup = await getSetupState(activeOrg, { timeZone: billing?.timeZone, canManageBilling: billing?.access.canManage ?? false });
   const inviteSeats = {
     canManageBilling: billing?.access.canManage ?? false,
     paidSelection: plan.state.hasSubscription && usesSeats(plan.state.selection) ? plan.state.selection : null,

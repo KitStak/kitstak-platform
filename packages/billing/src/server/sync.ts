@@ -7,7 +7,7 @@
  * A snapshot is the gateway's current object, never an event body. Applying the same snapshot twice
  * changes nothing, and an old object of a replaced subscription cannot move state backward.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import {
   billingAccounts,
   billingInvoices,
@@ -72,6 +72,8 @@ export async function applyInvoiceSnapshot(
     attemptCount: invoice.attemptCount,
     nextPaymentAttempt: invoice.nextPaymentAttempt,
     pmLast4: invoice.paymentMethodLast4,
+    creditAppliedCents: invoice.creditAppliedCents,
+    refundedCents: invoice.refundedCents,
   };
   await db
     .insert(billingInvoices)
@@ -114,9 +116,16 @@ export async function applySubscriptionSnapshot(
   const [prev] = await db.select().from(billingSubscriptions).where(eq(billingSubscriptions.orgId, orgId));
   const live = isLiveSubscriptionStatus(sub.status);
 
-  // An old object of a subscription that was replaced must not undo the live one.
-  if (prev && prev.gatewaySubscriptionId !== sub.id && isLiveSubscriptionStatus(prev.status) && !live) {
-    logBilling('info', 'skipped a snapshot of an older subscription', { orgId, subscriptionId: sub.id });
+  // One plan per organization. While the plan we know is live, no other subscription of the same
+  // gateway may write the row: not an old object of a replaced one (it would undo the live plan), and
+  // not a second live one (it would overwrite it and flip seats back and forth at every renewal). A
+  // second live one is canceled and refunded by `rejectSecondSubscription` before it gets here.
+  if (prev && prev.gatewaySubscriptionId !== sub.id && prev.gateway === input.gateway && isLiveSubscriptionStatus(prev.status)) {
+    logBilling(live ? 'warn' : 'info', live ? 'refused a second live subscription' : 'skipped a snapshot of an older subscription', {
+      orgId,
+      subscriptionId: sub.id,
+      current: prev.gatewaySubscriptionId,
+    });
     return;
   }
   const samePrev = prev && prev.gatewaySubscriptionId === sub.id ? prev : null;
@@ -178,6 +187,13 @@ export async function applySubscriptionSnapshot(
     pmExpMonth: sub.paymentMethod?.expMonth ?? null,
     pmExpYear: sub.paymentMethod?.expYear ?? null,
     latestInvoiceId: sub.latestInvoiceId,
+    // The credit balance and the gateway's own answer for the next bill. Screens show these numbers,
+    // so what a person reads is what the next invoice charges.
+    creditCents: Math.max(0, Math.round(sub.creditBalanceCents)),
+    nextChargeCents: live && sub.upcoming ? Math.max(0, Math.round(sub.upcoming.amountDueCents)) : null,
+    nextDiscountCents: live && sub.upcoming ? Math.max(0, Math.round(sub.upcoming.discountCents)) : 0,
+    nextDiscountLabel: live && sub.upcoming ? sub.upcoming.discountLabel : null,
+    nextCreditCents: live && sub.upcoming ? Math.max(0, Math.round(sub.upcoming.creditAppliedCents)) : 0,
     gatewaySyncedAt: now,
   };
   await db
@@ -272,6 +288,8 @@ export async function applySubscriptionSnapshot(
           interval: sub.interval,
           firstChargeAt: (trialing && sub.trialEnd ? sub.trialEnd : sub.currentPeriodStart).toISOString(),
           dueTodayCents: trialing ? 0 : (latestInvoice?.totalCents ?? recurringCents),
+          // With a trial still running: what the first bill really charges (after a promo code and credit).
+          ...(trialing && sub.upcoming ? { firstChargeCents: sub.upcoming.amountDueCents } : {}),
         },
         dedupeKey: `plan_started:${sub.id}`,
       });
@@ -326,8 +344,98 @@ export async function applySubscriptionSnapshot(
 }
 
 /**
- * Fetches one subscription and its latest invoice from the gateway and applies both. Returns false
- * when the gateway does not know the subscription or it belongs to another customer.
+ * One writer per organization until the transaction ends. Two webhooks, or a webhook and a return
+ * page, then apply their snapshots one after the other, never at the same moment. Outside a
+ * transaction this does nothing useful, so every caller that applies a snapshot runs in one.
+ */
+export async function lockOrgBilling(db: Pick<BillingDb, 'execute'>, orgId: string): Promise<void> {
+  await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`kitstak-billing-org:${orgId}`}, 0))`);
+}
+
+/** True when the org's plan row is live and belongs to another subscription than the one given. */
+export async function isForeignSubscription(db: Pick<BillingDb, 'select'>, orgId: string, subscriptionId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: billingSubscriptions.gatewaySubscriptionId, status: billingSubscriptions.status })
+    .from(billingSubscriptions)
+    .where(eq(billingSubscriptions.orgId, orgId));
+  return row !== undefined && row.id !== subscriptionId && isLiveSubscriptionStatus(row.status);
+}
+
+/**
+ * The guard against paying twice. An organization has one plan. When a live subscription arrives
+ * for an organization whose own plan is live under another id (two checkout pages were both paid),
+ * the newcomer is canceled, its payment is sent back, and an activity line says so. Returns true
+ * when the newcomer was rejected; the caller then applies nothing.
+ *
+ * If the plan we know turns out to be gone at the gateway (an event was lost), that is recorded
+ * first and the newcomer is let in.
+ */
+export async function rejectSecondSubscription(
+  rt: BillingRuntime,
+  db: BillingDb,
+  input: { orgId: string; subscription: GatewaySubscription; eventId?: string },
+): Promise<boolean> {
+  const gateway = rt.gateway;
+  const { orgId, subscription } = input;
+  if (!gateway) return false;
+  await lockOrgBilling(db, orgId);
+  const [prev] = await db.select().from(billingSubscriptions).where(eq(billingSubscriptions.orgId, orgId));
+  if (!prev || prev.gatewaySubscriptionId === subscription.id || prev.gateway !== gateway.kind) return false;
+  if (!isLiveSubscriptionStatus(prev.status)) return false;
+  // `incomplete` counts too: a second first payment that is still being tried must not stay open.
+  if (subscription.status === 'canceled') return false;
+
+  const current = await gateway.getSubscription(prev.gatewaySubscriptionId);
+  if (!current || !isLiveSubscriptionStatus(current.status)) {
+    if (current) {
+      await applySubscriptionSnapshot(db, {
+        orgId,
+        gateway: gateway.kind,
+        subscription: current,
+        latestInvoice: null,
+        now: rt.now(),
+        portalUrl: rt.portalUrl,
+        ...(input.eventId ? { eventId: input.eventId } : {}),
+      });
+    } else {
+      // The gateway no longer knows the old plan at all. Close our row so the new one can take over.
+      await db
+        .update(billingSubscriptions)
+        .set({ status: 'canceled', endedAt: rt.now(), canceledAt: rt.now(), updatedAt: rt.now() })
+        .where(eq(billingSubscriptions.orgId, orgId));
+    }
+    return false;
+  }
+
+  const { refundedCents } = await gateway.cancelAndRefund(subscription.id);
+  const invoice = subscription.latestInvoiceId ? await gateway.getInvoice(subscription.latestInvoiceId) : null;
+  if (invoice) {
+    await applyInvoiceSnapshot(db, { orgId, gateway: gateway.kind, invoice: withCardFallback(invoice, subscription) });
+  }
+  await recordAudit(db, {
+    orgId,
+    actor: SYSTEM_ACTOR,
+    action: 'checkout.duplicate_refunded',
+    summary:
+      refundedCents > 0
+        ? `A second payment of ${formatMoney(refundedCents)} came in for a plan you already have. We canceled it and sent the money back.`
+        : 'A second checkout finished for a plan you already have. We canceled it. Nothing was charged for it.',
+    data: { subscriptionId: subscription.id, keptSubscriptionId: prev.gatewaySubscriptionId, refundedCents },
+    ...(input.eventId ? { eventId: input.eventId } : {}),
+  });
+  logBilling('warn', 'canceled and refunded a second subscription', {
+    orgId,
+    subscriptionId: subscription.id,
+    kept: prev.gatewaySubscriptionId,
+    refundedCents,
+  });
+  return true;
+}
+
+/**
+ * Fetches one subscription and its latest invoice from the gateway and applies both. Returns null
+ * when the gateway does not know the subscription, it belongs to another customer, or it was a second
+ * subscription for an organization that already has a plan (then it was canceled and refunded).
  */
 export async function fetchAndApplySubscription(
   rt: BillingRuntime,
@@ -342,6 +450,9 @@ export async function fetchAndApplySubscription(
   const ownedByCustomer = customerId !== null && subscription.customerId === customerId;
   if (!ownedByCustomer && !(ownedByMetadata && customerId === null)) {
     logBilling('warn', 'subscription does not belong to the org', { orgId: input.orgId, subscriptionId: subscription.id });
+    return null;
+  }
+  if (await rejectSecondSubscription(rt, db, { orgId: input.orgId, subscription, ...(input.eventId ? { eventId: input.eventId } : {}) })) {
     return null;
   }
   const latestInvoice = subscription.latestInvoiceId ? await rt.gateway.getInvoice(subscription.latestInvoiceId) : null;

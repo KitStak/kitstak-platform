@@ -1,17 +1,19 @@
 'use client';
 /**
  * Create your account (docs/billing/SPEC.md section 5.1): four fields, then straight to the app
- * picker. The account is made by Better Auth in the browser, so password managers offer to save.
+ * picker. The account is made by a server action that runs the shared auth handler. The form is a
+ * real form with the right autocomplete names, so password managers offer to save.
  * The workspace is then made by a server action together with the signup intent.
  */
 import Link from 'next/link';
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Mail, UserRound } from 'lucide-react';
+import { Building2, Mail, ShieldCheck, UserRound } from 'lucide-react';
 import { encodeHandoffIdentity } from '@kitstak/billing/handoff';
-import { CATALOG } from '@kitstak/billing/catalog';
+import { BILLING_POLICY, CATALOG } from '@kitstak/billing/catalog';
 import { Field } from '@/components/ui';
 import { readHandoff, trialSummary, withHandoff } from '@/features/signup/cart';
+import { clearSignupDraft, readSignupDraft, writeSignupDraft } from '@/features/signup/draft';
 import {
   SIGNUP_FIELDS,
   companyIssue,
@@ -20,8 +22,9 @@ import {
   type SignupField,
   type SignupValues,
 } from '@/features/signup/fields';
+import { isRulesIssue } from '@/features/signup/password-rules';
 import type { SocialProviderId } from '@/features/signup/social';
-import { signUp } from '@/lib/auth-client';
+import { signUpAction } from '@/server/auth-relay-actions';
 import { createWorkspaceAction } from '@/server/signup-actions';
 import {
   AuthHeading,
@@ -109,6 +112,28 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
     }
   });
 
+  // Name, email and company are kept in this tab until the account exists, so a refresh does not
+  // empty the form (docs/billing/SPEC.md 5.6). The password is never stored anywhere.
+  const restored = useRef(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const draft = readSignupDraft();
+      restored.current = true;
+      if (!draft) return;
+      setValues((current) => ({
+        name: current.name || draft.name,
+        email: current.email || draft.email,
+        password: current.password,
+        company: current.company || draft.company,
+      }));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  useEffect(() => {
+    if (!restored.current) return;
+    writeSignupDraft({ name: values.name, email: values.email, company: values.company });
+  }, [values.name, values.email, values.company]);
+
   const set = (field: SignupField) => (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setValues((current) => ({ ...current, [field]: value }));
@@ -136,6 +161,8 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
     try {
       const result = await createWorkspaceAction({ company, handoff });
       if (result.ok) {
+        // The account and the workspace exist. Nothing is left to keep in the browser.
+        clearSignupDraft();
         router.replace(result.next ?? '/signup/plan');
         return true;
       }
@@ -181,7 +208,9 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
     setStage('account');
     try {
       const timezone = browserTimeZone();
-      const result = await signUp.email({
+      // A server action, not a browser call to the auth endpoint: "this email already has an
+      // account" is an answer the form shows, not a failed request in the console.
+      const result = await signUpAction({
         name: values.name.trim(),
         email: values.email.trim(),
         password: values.password,
@@ -296,7 +325,8 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
                   />
                 )}
               </Field>
-              <Field label="Password" error={errors.password} hint={values.password ? undefined : 'At least 10 characters.'}>
+              {/* The checklist under the field states every rule up front and marks what is missing, so the error is not printed twice. */}
+              <Field label="Password" error={errors.password} errorHidden={Boolean(errors.password) && isRulesIssue(values.password)}>
                 {({ inputId, describedBy, invalid }) => (
                   <div className="flex flex-col gap-2">
                     <PasswordInput
@@ -316,7 +346,7 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
                       invalid={invalid}
                     />
                     <StrengthMeter password={values.password} />
-                    <PasswordRules password={values.password} id={`${inputId}-rules`} />
+                    <PasswordRules password={values.password} id={`${inputId}-rules`} showMissing={Boolean(errors.password)} />
                   </div>
                 )}
               </Field>
@@ -351,6 +381,13 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
           <p className="sr-only" role="status" aria-live="polite">
             {busy ? BUSY_LABEL[stage] : ''}
           </p>
+          {/* Quiet facts, nothing invented: no card to start, and who handles cards later. */}
+          {!companyOnly ? (
+            <p data-testid="signup-trust" className="flex items-start gap-2 text-xs text-fg-muted">
+              <ShieldCheck aria-hidden className="mt-px size-3.5 shrink-0" />
+              <span>No card needed to start. {BILLING_POLICY.payments}</span>
+            </p>
+          ) : null}
         </form>
         {!companyOnly ? <LegalLine urls={legal} lead="By creating an account" /> : null}
       </div>

@@ -1,17 +1,18 @@
 'use client';
 /**
  * New to KitStak and invited: full name and a password. The email is the invited one, fixed and
- * shown. The account is made in the browser (so password managers offer to save), then the invite
- * is accepted and the person lands on their team's launcher.
+ * shown. One server action makes the account and joins the team. It checks for a free seat first,
+ * so a join that would be refused never leaves an account behind, and a person who came from the
+ * invite email is not asked to verify that same address again. The form is a normal form with
+ * `autocomplete="new-password"`, so password managers still offer to save.
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Mail, UserRound } from 'lucide-react';
 import { Field } from '@/components/ui';
 import { nameIssue } from '@/features/signup/fields';
-import { passwordIssue } from '@/features/signup/password-rules';
-import { signUp } from '@/lib/auth-client';
-import { acceptInviteAction } from '@/server/signup-actions';
+import { isRulesIssue, passwordIssue } from '@/features/signup/password-rules';
+import { joinInviteAction } from '@/server/signup-actions';
 import {
   AuthInput,
   FormAlert,
@@ -20,11 +21,9 @@ import {
   PasswordRules,
   StrengthMeter,
   SubmitButton,
-  authErrorMessage,
-  isEmailTaken,
 } from '../../_components/form-parts';
 
-type Stage = 'idle' | 'account' | 'joining';
+type Stage = 'idle' | 'joining';
 
 function browserTimeZone(): string | undefined {
   try {
@@ -49,8 +48,6 @@ export function InviteJoinForm({
   const [errors, setErrors] = useState<{ name?: string; password?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>('idle');
-  /** The account was made but joining failed: the next press only retries the join. */
-  const accountMade = useRef(false);
   const submitting = useRef(false);
   const nameInput = useRef<HTMLInputElement | null>(null);
   const passwordInput = useRef<HTMLInputElement | null>(null);
@@ -58,22 +55,6 @@ export function InviteJoinForm({
   useEffect(() => {
     if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) nameInput.current?.focus({ preventScroll: true });
   }, []);
-
-  const join = async (): Promise<boolean> => {
-    setStage('joining');
-    try {
-      const result = await acceptInviteAction({ invitationId });
-      if (result.ok) {
-        router.replace(result.next ?? '/');
-        router.refresh();
-        return true;
-      }
-      setFormError(result.error ?? 'This invite is no longer active.');
-    } catch {
-      setFormError(NO_NETWORK_MESSAGE);
-    }
-    return false;
-  };
 
   const finish = () => {
     submitting.current = false;
@@ -85,12 +66,6 @@ export function InviteJoinForm({
     if (submitting.current) return;
     setFormError(null);
 
-    if (accountMade.current) {
-      submitting.current = true;
-      if (!(await join())) finish();
-      return;
-    }
-
     const issues = {
       name: nameIssue(name) ?? undefined,
       password: passwordIssue(password, { email }) ?? undefined,
@@ -100,35 +75,34 @@ export function InviteJoinForm({
     if (issues.password) return passwordInput.current?.focus();
 
     submitting.current = true;
-    setStage('account');
+    setStage('joining');
     try {
       const timezone = browserTimeZone();
-      const result = await signUp.email({ name: name.trim(), email, password, ...(timezone ? { timezone } : {}) });
-      if (result.error) {
-        if (isEmailTaken(result.error)) {
-          // Someone made this account a moment ago. A reload shows "Sign in to accept".
-          router.refresh();
-          setFormError('An account with this email already exists. Sign in to accept the invite.');
-        } else if (result.error.code?.startsWith('PASSWORD_')) {
-          setErrors({ password: authErrorMessage(result.error) });
-          passwordInput.current?.focus();
-        } else {
-          setFormError(authErrorMessage(result.error));
-        }
-        finish();
+      const result = await joinInviteAction({ invitationId, name: name.trim(), password, ...(timezone ? { timezone } : {}) });
+      if (result.ok) {
+        router.replace(result.next ?? '/');
+        router.refresh();
         return;
+      }
+      if (result.field === 'name') {
+        setErrors({ name: result.error });
+        nameInput.current?.focus();
+      } else if (result.field === 'password') {
+        setErrors({ password: result.error });
+        passwordInput.current?.focus();
+      } else {
+        setFormError(result.error ?? 'This invite is no longer active.');
+        // The page itself has the right screen for these two: "Sign in to accept" and "no free seat".
+        if (result.code === 'account_exists' || result.code === 'no_seat') router.refresh();
       }
     } catch {
       setFormError(NO_NETWORK_MESSAGE);
-      finish();
-      return;
     }
-    accountMade.current = true;
-    if (!(await join())) finish();
+    finish();
   };
 
   const busy = stage !== 'idle';
-  const busyLabel = stage === 'account' ? 'Creating your account…' : stage === 'joining' ? `Joining ${orgName}…` : null;
+  const busyLabel = stage === 'joining' ? `Joining ${orgName}…` : null;
 
   return (
     <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5" aria-busy={busy}>
@@ -172,7 +146,7 @@ export function InviteJoinForm({
           />
         )}
       </Field>
-      <Field label="Password" error={errors.password} hint={password ? undefined : 'At least 10 characters.'}>
+      <Field label="Password" error={errors.password} errorHidden={Boolean(errors.password) && isRulesIssue(password)}>
         {({ inputId, describedBy, invalid }) => (
           <div className="flex flex-col gap-2">
             <PasswordInput
@@ -194,7 +168,7 @@ export function InviteJoinForm({
               invalid={invalid}
             />
             <StrengthMeter password={password} />
-            <PasswordRules password={password} id={`${inputId}-rules`} />
+            <PasswordRules password={password} id={`${inputId}-rules`} showMissing={Boolean(errors.password)} />
           </div>
         )}
       </Field>

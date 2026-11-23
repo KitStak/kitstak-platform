@@ -15,7 +15,13 @@ import type { BillingInterval, PlanSelection } from '@/lib/pricing';
 import { CALCULATOR_START, selectionFromSearch } from '@/lib/calculator';
 import { trialUrl } from '@/lib/stak';
 import { AppIcon } from '../app-icon';
-import { PRODUCT_IDS, ROUTES, isAppLive, startLink } from '../site-links';
+import {
+  PRODUCT_IDS,
+  ROUTES,
+  isAppLive,
+  startLink,
+  START_LABEL,
+} from '../site-links';
 import type { ProductId } from '../site-links';
 import { PriceCalculator } from '../stak/bundle-calculator';
 import { BillingToggle } from '../stak/stak-parts';
@@ -72,7 +78,7 @@ function PriceCard({ product, interval }: PriceCardProps) {
           className={`btn btn-primary btn-block ${styles.cardStart}`}
           aria-label={`Start free with ${price.name}`}
         >
-          Start free
+          {START_LABEL}
         </a>
       ) : (
         <Link href={walkthrough.href} className={`btn btn-primary btn-block ${styles.cardStart}`}>

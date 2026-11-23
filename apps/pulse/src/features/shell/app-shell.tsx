@@ -5,12 +5,14 @@
  * open: the command palette and the shortcuts sheet.
  */
 import type { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { CommandPalette } from '@/features/command/command-palette';
 import type { OrgPerson } from '@/lib/types';
 import { usePeople } from '@/lib/hooks/use-data';
 import { ShellProvider, type ShellContextValue } from './shell-context';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { PlanBanner } from '@kitstak/ui/plan-banner';
+import { ViewOnlyGuard } from '@kitstak/ui/view-only';
 import { TopBar } from './top-bar';
 import { useShellHotkeys } from './use-shell-hotkeys';
 
@@ -31,6 +33,18 @@ function SeedPeople({ people, loadedAt }: { readonly people?: readonly OrgPerson
 function Hotkeys() {
   useShellHotkeys();
   return null;
+}
+
+/** Pulse screens that start a change: the new job wizard and the day grid where work is logged. */
+const PULSE_WRITE_PATHS: readonly (string | RegExp)[] = [/^\/jobs\/new$/, /^\/log$/];
+
+/**
+ * View only is told before a form opens (docs/billing/SPEC.md 9.4): "New job", "Log work" and any
+ * control marked `data-plan-write` open one small dialog with the banner's words and button.
+ */
+function PlanViewOnly({ plan }: { readonly plan: ShellContextValue['plan'] }) {
+  const pathname = usePathname();
+  return <ViewOnlyGuard active={plan?.access === 'read_only'} notice={plan?.notice ?? null} pathname={pathname} writePaths={PULSE_WRITE_PATHS} homeHref="/" />;
 }
 
 export function AppShell({ context, initialPeople, peopleLoadedAt, children }: AppShellProps) {
@@ -54,6 +68,7 @@ export function AppShell({ context, initialPeople, peopleLoadedAt, children }: A
       </div>
       <CommandPalette />
       <ShortcutsDialog />
+      <PlanViewOnly plan={context.plan} />
     </ShellProvider>
   );
 }

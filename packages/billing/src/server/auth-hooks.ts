@@ -7,10 +7,12 @@
 import type { OrganizationPluginExtras } from '@kitstak/auth/options';
 import { APIError } from 'better-auth/api';
 import { eq } from 'drizzle-orm';
-import { billingSubscriptions } from '@kitstak/db/schema';
+import { billingSubscriptions, user } from '@kitstak/db/schema';
 import { isLiveSubscriptionStatus } from '../plan-state';
 import type { BillingDb } from './db';
+import { signInviteProof } from './invite-proof';
 import { enqueueEmail } from './outbox';
+import { enforceRateLimit } from './rate-limit';
 import { isFreeRole, usesSeat } from './roles';
 import { checkSeatAvailable } from './usage';
 
@@ -20,13 +22,64 @@ function seatError(message: string): APIError {
   return new APIError('FORBIDDEN', { code: 'SEAT_LIMIT_REACHED', message });
 }
 
+/**
+ * Inviting needs a verified email (SPEC 5.4), and the rule sits here so it holds at every door, not
+ * only in the Portal form. Without it anyone could make an account with a made up address and have
+ * KitStak send branded mail to strangers.
+ *
+ * Decision for older accounts: people who joined before email codes existed were never asked to
+ * verify, and the CRM has no screen for it. Accounts made before this day may keep inviting. Every
+ * account made on or after it must verify first. If the launch is later than this day, move the
+ * date to the launch day (docs/billing/GO-LIVE.md).
+ */
+export const INVITE_NEEDS_VERIFIED_EMAIL_SINCE = new Date('2026-11-23T00:00:00.000Z');
+
+/** Invite emails one organization may send in a day. A paid plan is also held by its seat count. */
+export const INVITES_PER_DAY = { withoutPlan: 50, withPlan: 500 } as const;
+
 export function billingOrganizationOptions(input: {
   db: BillingDb;
   portalUrl: string;
   allowAll: () => boolean;
+  /**
+   * The shared auth secret (`BETTER_AUTH_SECRET`). With it, the invite link carries a proof that
+   * only the invited mailbox has, and accepting from that link marks the email verified. Without it
+   * invites still work; the person verifies with a code like anyone else.
+   */
+  inviteSecret?: string;
+  /** Overrides `INVITE_NEEDS_VERIFIED_EMAIL_SINCE` (tests). */
+  verifiedEmailSince?: Date;
 }): OrganizationPluginExtras {
   const { db } = input;
   const portalUrl = input.portalUrl.replace(/\/+$/, '');
+  const verifiedSince = input.verifiedEmailSince ?? INVITE_NEEDS_VERIFIED_EMAIL_SINCE;
+
+  /** Throws EMAIL_NOT_VERIFIED when the inviter must verify first. Read fresh, never from a cached session. */
+  async function requireVerifiedInviter(inviterId: string): Promise<void> {
+    const [person] = await db
+      .select({ emailVerified: user.emailVerified, createdAt: user.createdAt })
+      .from(user)
+      .where(eq(user.id, inviterId));
+    if (!person) throw new APIError('FORBIDDEN', { code: 'EMAIL_NOT_VERIFIED', message: 'Verify your email first. Then you can invite people.' });
+    if (person.emailVerified) return;
+    if (person.createdAt.getTime() < verifiedSince.getTime()) return;
+    throw new APIError('FORBIDDEN', {
+      code: 'EMAIL_NOT_VERIFIED',
+      message: 'Verify your email first. Then you can invite people. Open the KitStak Portal to enter your code.',
+    });
+  }
+
+  /** Throws INVITE_LIMIT_REACHED when the organization sent too many invites today. */
+  async function countInvite(orgId: string): Promise<void> {
+    const max = (await hasPaidPlan(orgId)) ? INVITES_PER_DAY.withPlan : INVITES_PER_DAY.withoutPlan;
+    const allowed = await enforceRateLimit(db, { key: `billing:invite-day:${orgId}`, windowSeconds: 86_400, max });
+    if (!allowed) {
+      throw new APIError('TOO_MANY_REQUESTS', {
+        code: 'INVITE_LIMIT_REACHED',
+        message: `Your team sent ${max} invites today. That is the most for one day. Try again tomorrow, or talk to us if you need more.`,
+      });
+    }
+  }
 
   async function hasPaidPlan(orgId: string): Promise<boolean> {
     const [row] = await db
@@ -55,9 +108,12 @@ export function billingOrganizationOptions(input: {
   }
 
   const organizationHooks: Hooks = {
-    beforeCreateInvitation: async ({ invitation, organization }) => {
+    beforeCreateInvitation: async ({ invitation, inviter, organization }) => {
+      await requireVerifiedInviter(inviter.id);
       // Inviting the same address again replaces the open invite, so that one is not counted twice.
       await requireSeat(organization.id, invitation.role, { inviteEmail: invitation.email });
+      // Last, so a refused invite does not use up the day's count.
+      await countInvite(organization.id);
     },
 
     beforeAddMember: async ({ member: adding, user: person, organization }) => {
@@ -98,7 +154,9 @@ export function billingOrganizationOptions(input: {
           orgName: data.organization.name,
           portalUrl,
           inviterName: data.inviter.user.name,
-          acceptUrl: `${portalUrl}/invite/${data.id}`,
+          acceptUrl: input.inviteSecret
+            ? `${portalUrl}/invite/${data.id}?t=${signInviteProof(input.inviteSecret, data.id, data.email)}`
+            : `${portalUrl}/invite/${data.id}`,
           expiresAt: expiresAt.toISOString(),
         },
         dedupeKey: `invite:${data.id}`,

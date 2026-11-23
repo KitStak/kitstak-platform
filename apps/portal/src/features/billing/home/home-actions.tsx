@@ -15,7 +15,8 @@ import type { HomeAction, HomeActionId } from '../phase-copy';
 const LINKS: Partial<Record<HomeActionId, string>> = {
   start_trial: '/billing/plan',
   add_card: '/billing/checkout',
-  change_apps: '/billing/plan',
+  // The picker opens to pay by default during a trial. `apps=1` opens it to change the trial apps.
+  change_apps: '/billing/plan?apps=1',
   change_plan: '/billing/plan',
   cancel: '/billing/cancel',
   pick_plan: '/billing/plan',

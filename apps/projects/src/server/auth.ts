@@ -95,7 +95,13 @@ function buildAuth(): KitstakAuth {
     hooks: kitstakOrgMetadataHooks,
     // Billing rules for the shared organization endpoints (docs/billing/CONTRACTS.md section
     // 15.2): the seat limit on invites and joins, and no deleting an org with a running plan.
-    organization: billingOrganizationOptions({ db, portalUrl: appUrls().portal, allowAll: entitlementsAllowAll }),
+    organization: billingOrganizationOptions({
+      db,
+      portalUrl: appUrls().portal,
+      allowAll: entitlementsAllowAll,
+      // Lets the invite link prove the mailbox, so an invited person is not asked for a code.
+      inviteSecret: env.BETTER_AUTH_SECRET,
+    }),
   });
 }
 

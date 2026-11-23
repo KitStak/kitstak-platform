@@ -127,30 +127,33 @@
   }
 }
 
-/* Phones: the words get their own row, the action sits under them. */
+/*
+ * Phones: still one row. The words wrap inside their own column and the action stays beside them,
+ * so a short notice is 48 px tall (a 44 px button plus 2 px above and below), not two rows.
+ */
 @media (max-width: 479px) {
   .ks-planbanner-inner {
-    align-items: flex-start;
-    padding: var(--space-2) var(--ks-planbanner-pad-x, var(--space-3));
-  }
-
-  .ks-planbanner-icon {
-    margin-top: 1px;
+    flex-wrap: nowrap;
+    gap: var(--space-2);
+    min-height: 48px;
+    padding: 2px var(--ks-planbanner-pad-x, var(--space-3));
   }
 
   .ks-planbanner-text {
-    flex-basis: calc(100% - 18px - var(--space-3));
+    flex: 1 1 0;
+    font-size: var(--type-sm);
+    line-height: var(--type-sm-lh);
   }
 
   .ks-planbanner-action {
     min-height: 44px;
-    margin-left: calc(18px + var(--space-3));
+    padding: 0 10px;
   }
 
   .ks-planbanner-close {
     width: 44px;
     height: 44px;
-    margin-left: auto;
+    margin-right: calc(var(--space-2) * -1);
   }
 }
 

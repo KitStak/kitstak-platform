@@ -5,11 +5,19 @@
  */
 import 'server-only';
 import { and, eq, isNull } from 'drizzle-orm';
-import { getOpenSignupIntent, getPlanState, type SignupIntent } from '@kitstak/billing/server';
+import { cookies } from 'next/headers';
+import {
+  checkSeatAvailable,
+  getOpenSignupIntent,
+  getPlanState,
+  verifyInviteProof,
+  type SignupIntent,
+} from '@kitstak/billing/server';
 import { canStartTrial } from '@kitstak/billing/server';
 import type { PlanState } from '@kitstak/billing/plan-state';
 import { invitation, onboardingProgress, organization, user } from '@kitstak/db/schema';
 import { enabledSocialProviders, type SocialProviderId } from '@/features/signup/social';
+import { INVITE_PROOF_COOKIE, proofFromCookie } from '@/lib/invite-proof';
 import { resolveSignupStep, stepHref, type SignupStep } from '@/features/signup/resume';
 import { getBillingContext } from '@/server/billing/context';
 import { billingRuntime } from '@/server/billing/runtime';
@@ -125,6 +133,11 @@ export interface InviteView {
   readonly expiresAt: Date;
   /** An account with the invited address already exists. */
   readonly accountExists: boolean;
+  /**
+   * The team's plan has room for this person. false means joining would be refused, so the page
+   * says so before anyone types a name or a password, and no account is made.
+   */
+  readonly seatAvailable: boolean;
 }
 
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -171,6 +184,12 @@ export async function getInviteView(invitationId: string, now: Date = new Date()
   const [account] = await db.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1);
   const status: InviteStatus =
     row.status !== 'pending' ? 'used' : row.expiresAt.getTime() <= now.getTime() ? 'expired' : 'pending';
+  // The invite itself holds a seat, so it is left out of the count. This only fails when the plan
+  // was made smaller after the invite went out.
+  const seat =
+    status === 'pending'
+      ? await checkSeatAvailable(db, { orgId: row.orgId, adding: 1, role: row.role ?? 'member', ignoreInvitationId: row.id })
+      : { ok: true as const };
   return {
     id: row.id,
     status,
@@ -181,5 +200,16 @@ export async function getInviteView(invitationId: string, now: Date = new Date()
     inviterName: row.inviterName.trim() || 'the person who invited you',
     expiresAt: row.expiresAt,
     accountExists: account !== undefined,
+    seatAvailable: seat.ok,
   };
+}
+
+/**
+ * True when this browser came from the link in the invite email for this invitation: the proof the
+ * proxy stored checks out against the server secret. Then the person owns the invited mailbox.
+ */
+export async function inviteProofValid(invitationId: string, email: string): Promise<boolean> {
+  const stored = (await cookies()).get(INVITE_PROOF_COOKIE)?.value;
+  const proof = proofFromCookie(stored, invitationId);
+  return proof !== null && verifyInviteProof(env.BETTER_AUTH_SECRET, invitationId, email, proof);
 }

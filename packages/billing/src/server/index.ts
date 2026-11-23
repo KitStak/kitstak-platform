@@ -24,9 +24,9 @@ export {
   type BillingManagerRow,
 } from './access';
 export { canStartTrial, changeTrialProducts, startTrial } from './trial';
-export { getCart, saveCart } from './cart';
+export { getCart, saveCart, writeCart } from './cart';
 export { checkoutPreview, createCheckout, syncCheckoutSession } from './checkout';
-export { applyPlanChange, previewPlanChange } from './changes';
+export { applyPlanChange, planBasis, previewPlanChange, type PlanChangePreview } from './changes';
 export { pausePlan, resumePlan, scheduleCancel, undoCancel, undoPause, type CancelReason } from './cancel';
 export { createPaymentUpdateSession, retryPayment } from './payment';
 export { getInvoice, getInvoicePdf, listInvoices, type InvoiceRow } from './invoices';
@@ -44,7 +44,10 @@ export { enforceRateLimit } from './rate-limit';
 export { completeSignupIntent, getOpenSignupIntent, upsertSignupIntent, type SignupIntent } from './intents';
 export { processWebhook, type WebhookOutcome } from './webhook';
 export { applyInvoiceSnapshot, applySubscriptionSnapshot, clearBillingCaches, refreshFromGateway } from './sync';
-export { billingOrganizationOptions } from './auth-hooks';
-export type { ChangePreview, GatewayInvoice, GatewayInvoiceLine, GatewaySubscription } from '../gateway/types';
+export { billingOrganizationOptions, INVITE_NEEDS_VERIFIED_EMAIL_SINCE, INVITES_PER_DAY } from './auth-hooks';
+export { signInviteProof, verifyInviteProof } from './invite-proof';
+export type { GatewayInvoice, GatewayInvoiceLine, GatewaySubscription, GatewayUpcoming } from '../gateway/types';
+/** What the confirm panel works with: the gateway's preview plus the `basis` the server checks on confirm. */
+export type { PlanChangePreview as ChangePreview } from './changes';
 export type { PlanState } from '../plan-state';
 export type { BillingResult } from '../errors';

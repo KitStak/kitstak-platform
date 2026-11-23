@@ -7,7 +7,7 @@ import { Logo } from './logo';
 import { MobileMenu } from './nav/mobile-menu';
 import { PRIMARY_NAV, PRODUCT_PATHS, isCurrentPath } from './nav/nav-data';
 import { ProductsMenu } from './nav/products-menu';
-import { LINKS, ROUTES } from './site-links';
+import { LINKS, ROUTES, START_LABEL, startFreeHref } from './site-links';
 import styles from './header.module.css';
 
 const HEADER_HEIGHT = 72;
@@ -156,9 +156,10 @@ export function Header() {
           <a href={LINKS.portal} className={styles.signIn}>
             Sign in
           </a>
-          <Link href={ROUTES.getStarted} className={`btn btn-primary ${styles.cta}`} onClick={closeAll}>
-            Set up your Stak
-          </Link>
+          {/* The short road: four fields on portal sign-up. The wizard is "Help me choose" in the hero and the footer. */}
+          <a href={startFreeHref()} className={`btn btn-primary ${styles.cta}`} data-testid="header-start">
+            {START_LABEL}
+          </a>
           <button
             type="button"
             className={styles.burger}

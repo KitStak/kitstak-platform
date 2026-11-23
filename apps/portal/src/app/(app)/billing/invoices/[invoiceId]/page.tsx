@@ -33,7 +33,7 @@ export default async function InvoicePage({ params }: { readonly params: Promise
   const day = (date: Date) => formatDay(date, timeZone);
 
   return (
-    <div className="mx-auto flex max-w-[760px] flex-col gap-6">
+    <div className="flex max-w-[760px] flex-col gap-6">
       <div className="flex flex-col gap-3">
         <BackLink href="/billing/invoices">Invoices</BackLink>
         <BillingHeader

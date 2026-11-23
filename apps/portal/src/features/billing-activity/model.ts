@@ -20,6 +20,8 @@ export const ACTION_KIND: Readonly<Record<AuditAction, ActivityKind>> = {
   'payment.failed': 'payments',
   'payment.retried': 'payments',
   'card.updated': 'payments',
+  'payment.credit_used': 'payments',
+  'checkout.duplicate_refunded': 'payments',
   'trial.started': 'plan',
   'trial.products_changed': 'plan',
   'cart.saved': 'plan',
@@ -38,6 +40,7 @@ export const ACTION_KIND: Readonly<Record<AuditAction, ActivityKind>> = {
   'manager.added': 'plan',
   'manager.removed': 'plan',
   'signup.guided_requested': 'plan',
+  'account.email_changed': 'plan',
   'test.tool': 'plan',
   'email.sent': 'emails',
 };

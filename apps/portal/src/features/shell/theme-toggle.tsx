@@ -14,13 +14,16 @@ function currentTheme(): ResolvedTheme {
  * Stateless on purpose: the icon pair swaps via the `dark:` variant, so the component
  * never needs to read the theme during render (keeps SSR markup stable).
  */
+/** Flips the theme and saves the choice. Shared by the top bar button and the account menu row. */
+export function toggleTheme(): void {
+  const next: ResolvedTheme = currentTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  document.documentElement.style.colorScheme = next;
+  persistTheme(next);
+}
+
 export function ThemeToggle({ className }: { readonly className?: string }) {
-  const toggle = () => {
-    const next: ResolvedTheme = currentTheme() === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    document.documentElement.style.colorScheme = next;
-    persistTheme(next);
-  };
+  const toggle = toggleTheme;
 
   return (
     <button

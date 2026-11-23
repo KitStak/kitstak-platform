@@ -28,6 +28,8 @@ import {
   startableStack,
   toggleProduct,
   walkthroughHref,
+  START_LABEL,
+  HELP_LABEL,
 } from '../site-links';
 import type { ProductId } from '../site-links';
 import { BillingToggle, QuoteSummary, StakVisual, Stepper, perPeriod } from './stak-parts';
@@ -65,7 +67,7 @@ export function PriceCalculator({ selection, onChange, source }: PriceCalculator
   const isEmpty = stack.length === 0;
 
   const startHref = canStart ? trialUrl(selection, source) : walkthroughHref(stack);
-  const startLabel = canStart || isEmpty ? 'Start my free trial' : WALKTHROUGH_LABEL;
+  const startLabel = canStart || isEmpty ? START_LABEL : WALKTHROUGH_LABEL;
 
   return (
     <div className={styles.calc} data-testid="plan-picker">
@@ -173,7 +175,7 @@ export function PriceCalculator({ selection, onChange, source }: PriceCalculator
           </p>
           {isEmpty ? null : (
             <a href={startHref} className="btn btn-primary" data-testid="plan-submit-bar">
-              {canStart ? 'Start free trial' : WALKTHROUGH_LABEL}
+              {canStart ? START_LABEL : WALKTHROUGH_LABEL}
             </a>
           )}
         </div>
@@ -222,7 +224,7 @@ export function PriceCalculator({ selection, onChange, source }: PriceCalculator
             href={isEmpty ? ROUTES.getStarted : wizardHref({ stack, seats, warehouses, billing: interval })}
             className={styles.talk}
           >
-            Help me choose
+            {HELP_LABEL}
           </Link>
           <Link href={ROUTES.founder} className={styles.talk}>
             Talk to the founder

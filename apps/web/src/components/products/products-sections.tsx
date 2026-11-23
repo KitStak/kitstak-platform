@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
 import { BUNDLE_OFF, TRIAL_DAYS, priceInWords } from '@/lib/pricing';
-import { ROUTES, availabilityLabel, isAppLive, startLink } from '../site-links';
+import { ROUTES, availabilityLabel, isAppLive, startLink, START_LABEL, HELP_LABEL, startFreeHref } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import styles from './products-sections.module.css';
@@ -52,12 +52,12 @@ export function StackHero() {
             {isAppLive('pulse') ? null : ' Pulse is coming soon.'}
           </p>
           <div className={styles.heroActions}>
-            <Link href={ROUTES.getStarted} className="btn btn-primary btn-lg">
-              Set up your Stak{' '}
+            <a href={startFreeHref()} className="btn btn-primary btn-lg">
+              {START_LABEL}{' '}
               <span className="btn-arrow" aria-hidden>
                 →
               </span>
-            </Link>
+            </a>
             <Link href={ROUTES.pricing} className="btn btn-ghost-inverse btn-lg">
               Price your stack
             </Link>
@@ -423,12 +423,12 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
 
 const STEPS = [
   {
-    title: 'Set up your Stak',
-    body: 'Five short questions: which products, what kind of business, how big, and how you want to begin.',
+    title: 'Create your account',
+    body: 'Four fields: your name, your work email, a password and your company.',
   },
   {
-    title: 'Create your account',
-    body: `Your name, your work email and your company, then a password. Your ${TRIAL_DAYS} day free trial starts right away. No card needed.`,
+    title: 'Pick your apps',
+    body: `Switch on the apps you want. Your ${TRIAL_DAYS} day free trial starts right away. No card needed.`,
   },
   {
     title: 'Follow your setup plan',
@@ -448,14 +448,17 @@ export function StartSteps() {
             Set it up yourself.
           </h2>
           <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-            No sales call and no setup project. Answer a few questions and KitStak builds the plan.
+            No sales call and no setup project. Create an account, pick your apps and KitStak builds the plan.
           </p>
           <div className={styles.startActions} data-reveal>
-            <Link href={ROUTES.getStarted} className="btn btn-primary btn-lg">
-              Set up your Stak{' '}
+            <a href={startFreeHref()} className="btn btn-primary btn-lg">
+              {START_LABEL}{' '}
               <span className="btn-arrow" aria-hidden>
                 →
               </span>
+            </a>
+            <Link href={ROUTES.getStarted} className="btn btn-ghost btn-lg">
+              {HELP_LABEL}
             </Link>
           </div>
         </div>

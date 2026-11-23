@@ -231,6 +231,34 @@
     scrollbar-width: thin;
     scrollbar-color: var(--border-strong) transparent;
   }
+
+  /*
+   * Touch screens (docs/billing/SPEC.md section 13): every control is at least 44 px tall, and a
+   * button is at least 44 px wide. One rule for the whole Portal, so a new button cannot miss it.
+   * `:where` keeps the weight at zero: any utility class still wins. Links inside a sentence are
+   * `display: inline` and are not touched. Checkboxes, radios and switches keep their drawn size
+   * and get the room from their row or label instead.
+   */
+  @media (pointer: coarse) {
+    :where(
+        button:not([role='checkbox'], [role='radio'], [role='switch']),
+        [role='button'],
+        [role='tab'],
+        [role='menuitem'],
+        [role='option'],
+        select,
+        summary,
+        a[href]
+      ) {
+      min-height: 44px;
+      /* Centers the words of a block level link in its taller box. Flex rows center themselves. */
+      align-content: center;
+    }
+
+    :where(button:not([role='checkbox'], [role='radio'], [role='switch']), [role='button']) {
+      min-width: 44px;
+    }
+  }
 }
 
 /* The KitStak lockup (.ks-logo/.ks-wordtype/...) is shared: packages/ui/src/logo/logo.css,

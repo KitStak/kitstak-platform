@@ -6,6 +6,13 @@
 import type { BillingInterval, PlanSelection, PriceKey, ProductId } from '../catalog';
 import type { PaymentMethodSummary } from '../plan-state';
 
+/**
+ * Raise this number whenever `BillingGateway` gains or changes a method. A dev server keeps its
+ * gateway object across hot reloads; the portal rebuilds it when this number moved, so new code never
+ * calls a method an old object does not have.
+ */
+export const GATEWAY_CONTRACT_VERSION = 2;
+
 export type GatewayKind = 'stripe' | 'test';
 export type GatewaySubscriptionStatus = 'incomplete' | 'trialing' | 'active' | 'past_due' | 'unpaid' | 'canceled';
 
@@ -28,6 +35,22 @@ export interface GatewayItem {
   readonly unitCents: number;
 }
 
+/**
+ * What the next bill will really charge (added in review round 1, CONTRACTS section 24). The
+ * gateway works it out: Stripe from its invoice preview, the test gateway from the same math it
+ * bills with. So the number on a screen is the number on the next invoice.
+ */
+export interface GatewayUpcoming {
+  /** What the card will be charged, after a promo code and after credit. Never below 0. */
+  readonly amountDueCents: number;
+  /** A discount on the next bill (a promo code). 0 when there is none. */
+  readonly discountCents: number;
+  /** 'Promo code TEST10 (10% off)'. null when there is no discount. */
+  readonly discountLabel: string | null;
+  /** Credit that comes off the next bill. */
+  readonly creditAppliedCents: number;
+}
+
 export interface GatewaySubscription {
   readonly id: string;
   readonly customerId: string;
@@ -46,6 +69,10 @@ export interface GatewaySubscription {
   readonly pauseResumesAt: Date | null;
   readonly paymentMethod: PaymentMethodSummary | null;
   readonly latestInvoiceId: string | null;
+  /** Credit the customer holds (from plan changes). 0 or more. It comes off the next bills. */
+  readonly creditBalanceCents: number;
+  /** null when no bill is coming (canceled, set to end, paused) or the gateway could not say. */
+  readonly upcoming: GatewayUpcoming | null;
 }
 
 export interface GatewayInvoiceLine {
@@ -79,6 +106,10 @@ export interface GatewayInvoice {
   readonly nextPaymentAttempt: Date | null;
   readonly lastErrorCode: string | null;
   readonly paymentMethodLast4: string | null;
+  /** How much of this invoice was paid from the customer's credit. */
+  readonly creditAppliedCents: number;
+  /** How much of what was paid has been sent back. */
+  readonly refundedCents: number;
 }
 
 export interface GatewayCheckoutSession {
@@ -113,10 +144,17 @@ export interface ChangePreview {
   /** Signed. */
   readonly recurringDeltaCents: number;
   readonly nextChargeAt: Date;
-  /** Pass back unchanged to applyPlanChange. */
+  /**
+   * The moment the amounts were worked out for. The server picks it (whole days, see
+   * `prorationDateFor`); nothing from the browser is ever used as a date for money.
+   */
   readonly prorationDate: Date;
   readonly lines: readonly GatewayInvoiceLine[];
   readonly taxCents: number;
+  /** The price of the change for the days left, before credit. 0 when the change is a decrease. */
+  readonly proratedCents: number;
+  /** Credit the customer already had that pays for this change. `proratedCents` minus this is due today. */
+  readonly creditAppliedCents: number;
 }
 
 export interface ProfileInput {
@@ -147,6 +185,16 @@ export interface BillingGateway {
     cancelUrl: string;
   }): Promise<{ id: string; url: string }>;
   getCheckoutSession(id: string): Promise<GatewayCheckoutSession | null>;
+  /**
+   * Closes every open checkout page of this customer, so only one can ever be paid. Returns how
+   * many were closed. Called before a new session is made.
+   */
+  expireOpenCheckoutSessions(customerId: string): Promise<number>;
+  /**
+   * Ends a subscription right now and sends back what its latest invoice charged. Only used for a
+   * second subscription that slipped in for an organization that already has a plan.
+   */
+  cancelAndRefund(subscriptionId: string): Promise<{ refundedCents: number }>;
   createPaymentUpdateSession(input: { customerId: string; returnUrl: string }): Promise<{ url: string }>;
   getSubscription(id: string): Promise<GatewaySubscription | null>;
   findSubscriptionForCustomer(customerId: string): Promise<GatewaySubscription | null>;

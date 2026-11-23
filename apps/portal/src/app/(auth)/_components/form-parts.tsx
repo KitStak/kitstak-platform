@@ -4,7 +4,7 @@
  * types at 16 px on phones, so a thumb can hit it and iOS never zooms the page on focus.
  */
 import { forwardRef, useState } from 'react';
-import { Check, Eye, EyeOff } from 'lucide-react';
+import { Check, Eye, EyeOff, X } from 'lucide-react';
 import { Button, Input, Spinner, cn, type ButtonProps, type InputProps } from '@/components/ui';
 import {
   PASSWORD_MAX_LENGTH,
@@ -103,35 +103,48 @@ export function StrengthMeter({ password }: { readonly password: string }) {
 }
 
 /**
- * The four password rules, each with a tick that turns green as it is met. A person sees what is
- * left to do while they type, so the form never has to say no after they press the button.
+ * The four password rules. They are on screen before the first key press, so nobody has to guess
+ * what a password needs. Each one turns green as it is met. After the form said no (`showMissing`),
+ * the rules that are still missing turn red, all at once, and the form adds no second sentence.
  */
-export function PasswordRules({ password, id }: { readonly password: string; readonly id?: string }) {
-  if (!password) return null;
+export function PasswordRules({
+  password,
+  id,
+  showMissing = false,
+}: {
+  readonly password: string;
+  readonly id?: string;
+  readonly showMissing?: boolean;
+}) {
   const rules = passwordRules(password);
   return (
-    <ul id={id} className="grid gap-x-4 gap-y-1 sm:grid-cols-2" aria-label="Password rules">
-      {rules.map((rule) => (
-        <li
-          key={rule.id}
-          className={cn(
-            'flex items-center gap-1.5 text-xs transition-colors duration-[var(--duration-fast)] motion-reduce:transition-none',
-            rule.met ? 'text-success-text' : 'text-fg-muted',
-          )}
-        >
-          <span
-            aria-hidden
+    <ul id={id} className="grid gap-x-4 gap-y-1 sm:grid-cols-2" aria-label="Your password needs" data-testid="password-rules">
+      {rules.map((rule) => {
+        const missing = showMissing && !rule.met;
+        return (
+          <li
+            key={rule.id}
+            data-rule={rule.id}
+            data-state={rule.met ? 'met' : missing ? 'missing' : 'open'}
             className={cn(
-              'flex size-3.5 shrink-0 items-center justify-center rounded-full border',
-              rule.met ? 'border-success bg-success text-fg-inverse' : 'border-border-strong',
+              'flex items-center gap-1.5 text-xs transition-colors duration-[var(--duration-fast)] motion-reduce:transition-none',
+              rule.met ? 'text-success-text' : missing ? 'font-medium text-danger-text' : 'text-fg-muted',
             )}
           >
-            {rule.met ? <Check className="size-2.5" strokeWidth={3.5} /> : null}
-          </span>
-          {rule.label}
-          <span className="sr-only">{rule.met ? ', done' : ', still needed'}</span>
-        </li>
-      ))}
+            <span
+              aria-hidden
+              className={cn(
+                'flex size-3.5 shrink-0 items-center justify-center rounded-full border',
+                rule.met ? 'border-success bg-success text-fg-inverse' : missing ? 'border-danger text-danger-text' : 'border-border-strong',
+              )}
+            >
+              {rule.met ? <Check className="size-2.5" strokeWidth={3.5} /> : missing ? <X className="size-2.5" strokeWidth={3.5} /> : null}
+            </span>
+            {rule.label}
+            <span className="sr-only">{rule.met ? ', done' : ', still needed'}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

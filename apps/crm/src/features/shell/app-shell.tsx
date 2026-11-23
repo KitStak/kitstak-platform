@@ -1,14 +1,15 @@
 'use client';
 import { Suspense, useEffect, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { PlanBanner } from '@kitstak/ui/plan-banner';
+import { ViewOnlyGuard, askViewOnly } from '@kitstak/ui/view-only';
 import { CommandPalette } from './command-palette';
 import { CreateBoardDialog } from './dialogs/create-board-dialog';
 import { CreateSimpleDialog } from './dialogs/create-simple-dialog';
 import { InviteDialog } from './dialogs/invite-dialog';
 import { MobileNav } from './mobile-nav';
 import { ShortcutsDialog } from './dialogs/shortcuts-dialog';
-import { OrgProvider, type OrgContextValue } from './org-context';
+import { OrgProvider, usePlanReadOnly, type OrgContextValue } from './org-context';
 import { routes } from './routes';
 import { SetupCallout } from './setup-callout';
 import { useShellStore, type CreateRequest } from './store';
@@ -42,10 +43,22 @@ export interface AppShellProps {
   readonly children: ReactNode;
 }
 
+/** CRM screens that start a change: the import wizard. Create dialogs are caught in the shell store. */
+const CRM_WRITE_PATHS: readonly (string | RegExp)[] = [/^\/[^/]+\/import$/];
+
 function CreateDialogs({ slots }: { readonly slots?: AppShellSlots }) {
   const request = useShellStore((state) => state.createRequest);
   const clear = useShellStore((state) => state.clearCreateRequest);
-  if (!request) return null;
+  // View only: every way to start a board, workspace or folder (the home button, the sidebar, the
+  // command palette, the setup card) asks through this store. The form never opens. The person
+  // sees why, and the banner's button, before they type anything.
+  const readOnly = usePlanReadOnly();
+  useEffect(() => {
+    if (!readOnly || !request) return;
+    clear();
+    askViewOnly();
+  }, [readOnly, request, clear]);
+  if (!request || readOnly) return null;
   const onOpenChange = (open: boolean) => {
     if (!open) clear();
   };
@@ -89,13 +102,22 @@ function Panels({ slots, orgSlug }: { readonly slots?: AppShellSlots; readonly o
     }
   }, [panel, hasNotificationsPanel, closePanel, router, orgSlug]);
 
+  // View only: "Invite" opens the view only dialog, not the invite form.
+  const readOnly = usePlanReadOnly();
+  const inviteBlocked = readOnly && panel === 'invite';
+  useEffect(() => {
+    if (!inviteBlocked) return;
+    closePanel();
+    askViewOnly();
+  }, [inviteBlocked, closePanel]);
+
   const onOpenChange = (open: boolean) => {
     if (!open) closePanel();
   };
   return (
     <>
       <CommandPalette extraGroups={slots?.searchGroups} />
-      {slots?.invite ? (
+      {inviteBlocked ? null : slots?.invite ? (
         panel === 'invite' ? slots.invite(closePanel) : null
       ) : (
         <InviteDialog open={panel === 'invite'} onOpenChange={onOpenChange} />
@@ -116,6 +138,7 @@ export function AppShell({ context, slots, children }: AppShellProps) {
   useShellRealtime(context.org.id);
   useShellPrefetch(context.org.id);
   const layout = useShellLayout();
+  const pathname = usePathname();
   return (
     <OrgProvider value={context}>
       <a
@@ -138,6 +161,13 @@ export function AppShell({ context, slots, children }: AppShellProps) {
       </div>
       {layout === 'drawer' ? <MobileNav /> : null}
       <Panels slots={slots} orgSlug={context.org.slug} />
+      <ViewOnlyGuard
+        active={context.plan?.access === 'read_only'}
+        notice={context.plan?.notice ?? null}
+        pathname={pathname}
+        writePaths={CRM_WRITE_PATHS}
+        homeHref={`/${context.org.slug}`}
+      />
       <CreateDialogs slots={slots} />
     </OrgProvider>
   );

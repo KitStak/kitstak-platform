@@ -97,7 +97,13 @@ function buildAuth(): KitstakAuth {
     // Billing rules for the shared organization endpoints (docs/billing/CONTRACTS.md section
     // 15.2): the seat limit on invites and joins (Pulse alone covers up to 5 seats), and no
     // deleting an org with a running plan. These read `core` tables, like the rest of sign in.
-    organization: billingOrganizationOptions({ db: systemDb, portalUrl: appUrls().portal, allowAll: entitlementsAllowAll }),
+    organization: billingOrganizationOptions({
+      db: systemDb,
+      portalUrl: appUrls().portal,
+      allowAll: entitlementsAllowAll,
+      // Lets the invite link prove the mailbox, so an invited person is not asked for a code.
+      inviteSecret: env.BETTER_AUTH_SECRET,
+    }),
   });
 }
 

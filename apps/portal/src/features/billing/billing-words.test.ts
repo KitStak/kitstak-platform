@@ -119,8 +119,8 @@ describe('phaseCopy', () => {
     expect(copy('none').line).toBe('You have no plan yet. Try any app free for 14 days.');
     expect(copy('none').primary.label).toBe('Start free trial');
     expect(copy('trial').line).toBe('Free trial. 9 days left. Ends Dec 2, 2026.');
-    expect(copy('trial').primary.label).toBe('Add a card');
-    expect(copy('trial').others.map((action) => action.label)).toEqual(['Change apps']);
+    expect(copy('trial').primary.label).toBe('Pick a plan');
+    expect(copy('trial').others.map((action) => action.label)).toEqual(['Change trial apps']);
     expect(copy('trial_ended').line).toBe('Your free trial ended on Nov 22, 2026. Your apps are view only. Your data is safe.');
     expect(copy('trial_ended').primary.label).toBe('Pick a plan');
     expect(copy('active').line).toBe('Your plan is active.');
@@ -180,7 +180,7 @@ describe('memberLine', () => {
 
 describe('nextChargeCopy', () => {
   it('matches the phase', () => {
-    expect(nextChargeCopy(STATES.trial, 'UTC')).toEqual({ headline: 'No charge planned', detail: 'Add a card to keep your apps after Dec 2.' });
+    expect(nextChargeCopy(STATES.trial, 'UTC')).toEqual({ headline: 'No charge planned', detail: 'Pick a plan to keep your apps after Dec 2.' });
     expect(nextChargeCopy(STATES.active, 'UTC')).toEqual({ headline: 'Dec 23, 2026', detail: '$395.20 to your Visa ending 4242.' });
     expect(nextChargeCopy(STATES.past_due, 'UTC').headline).toBe('Nov 25, 2026');
     expect(nextChargeCopy(STATES.past_due, 'UTC').detail).toBe('We will try $395.20 again. Your apps stay open until Nov 29.');

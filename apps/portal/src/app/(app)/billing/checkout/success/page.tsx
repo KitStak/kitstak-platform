@@ -94,10 +94,26 @@ export default async function CheckoutSuccessPage({
               {formatMoney(quote.totalCents)} <span className="font-normal text-fg-secondary">{perPeriod(quote.interval)}</span>
             </dd>
           </div>
+          {/* The promo code and credit are their own lines, so the charge below adds up on the page. */}
+          {state.nextCharge && state.nextCharge.discountCents > 0 ? (
+            <div className="flex items-baseline justify-between gap-4 py-2.5">
+              <dt className="text-fg-secondary">
+                {state.nextCharge.discountLabel ?? 'Promo code'}
+                <span className="block text-xs text-fg-muted">On this charge only.</span>
+              </dt>
+              <dd data-testid="success-discount" className="font-semibold text-success-text tabular-nums">-{formatMoney(state.nextCharge.discountCents)}</dd>
+            </div>
+          ) : null}
+          {state.nextCharge && state.nextCharge.creditAppliedCents > 0 ? (
+            <div className="flex items-baseline justify-between gap-4 py-2.5">
+              <dt className="text-fg-secondary">Credit on your account</dt>
+              <dd data-testid="success-credit" className="font-semibold text-success-text tabular-nums">-{formatMoney(state.nextCharge.creditAppliedCents)}</dd>
+            </div>
+          ) : null}
           {state.nextCharge ? (
             <div className="flex items-baseline justify-between gap-4 py-2.5">
               <dt className="text-fg-secondary">{inTrial ? 'First charge' : 'Next charge'}</dt>
-              <dd className="font-semibold text-fg tabular-nums">
+              <dd data-testid="success-next-charge" className="font-semibold text-fg tabular-nums">
                 {formatMoney(state.nextCharge.amountCents)} on {formatDay(state.nextCharge.at, timeZone)}
               </dd>
             </div>

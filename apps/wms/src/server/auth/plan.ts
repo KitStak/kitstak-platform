@@ -143,6 +143,39 @@ async function hasBillingTables(db: AppDb): Promise<boolean> {
   return billingTablesSeen;
 }
 
+/** Where the person comes back to in the WMS after they changed the plan in the Portal. */
+const WAREHOUSES_PAGE = '/settings/warehouses';
+
+/** Adds the WMS page to return to. The Portal only accepts a plain path on the calling app. */
+function withReturn(link: string, path: string): string {
+  return `${link}${link.includes('?') ? '&' : '?'}return=${encodeURIComponent(path)}`;
+}
+
+export interface WarehouseLimitNotice {
+  /** "Your plan covers 1 warehouse. Add one more for $279.20 more per month." */
+  readonly message: string;
+  /** The Portal plan picker with one more warehouse, and the way back to the warehouses page. */
+  readonly planUrl: string;
+}
+
+/**
+ * The warehouse limit, known BEFORE the form opens (SPEC 6.9): null while one more warehouse fits
+ * the plan (or there is no limit), else the sentence with the price and the link. The shell hands it
+ * to the warehouses page, so "Create warehouse" at the limit shows the price first, not after a
+ * person filled in the whole form.
+ */
+export async function warehouseLimitNotice(platformDb: AppDb, orgId: string): Promise<WarehouseLimitNotice | null> {
+  try {
+    if (!(await hasBillingTables(platformDb))) return null;
+    const check = await checkWarehouseAvailable(billingDb(platformDb), { orgId, adding: 1 });
+    if (check.ok) return null;
+    return { message: check.message, planUrl: withReturn(wmsPlanLink({ to: 'warehouses', warehouses: check.used + 1 }), WAREHOUSES_PAGE) };
+  } catch {
+    // The limit is checked again on save. A failed read here never blocks the page.
+    return null;
+  }
+}
+
 /**
  * The warehouse limit of the paid plan (SPEC P7, section 6.9): throws PLAN_WAREHOUSE_LIMIT with
  * the plain sentence and the price when `adding` more active warehouses would pass what the plan
@@ -159,7 +192,7 @@ export async function assertWarehouseAvailable(platformDb: AppDb, orgId: string,
       paid: check.paid,
       used: check.used,
       // The picker opens with the new count; the person confirms the price there, then comes back.
-      planUrl: wmsPlanLink({ to: 'warehouses', warehouses: check.used + adding }),
+      planUrl: withReturn(wmsPlanLink({ to: 'warehouses', warehouses: check.used + adding }), WAREHOUSES_PAGE),
     },
   });
 }

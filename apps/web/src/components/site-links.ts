@@ -6,7 +6,10 @@ import {
   toStack,
   toggleProduct,
 } from '@kitstak/billing/catalog';
+import { normalizeSelection } from '@kitstak/billing/catalog';
 import type { ProductId, Stack } from '@kitstak/billing/catalog';
+import { signupUrl } from '@kitstak/billing/handoff';
+import type { HandoffSource } from '@kitstak/billing/handoff';
 
 export interface AppOrigins {
   readonly portal: string;
@@ -109,6 +112,8 @@ export const ROUTES = {
   bundle: '/products#bundle',
   getStarted: '/get-started',
   contact: '/contact',
+  terms: '/terms',
+  privacy: '/privacy',
   founder: '/contact?topic=founder',
   demo: '/contact?topic=demo',
 } as const;
@@ -170,6 +175,29 @@ export function pricingHref(stack?: Stack | ProductId): string {
   return products.length === 0 ? ROUTES.calculator : `${ROUTES.pricing}?stack=${stackParam(products)}#calculator`;
 }
 
+/** The one label on every button that starts a free trial. The same words on every page. */
+export const START_LABEL = 'Start free';
+
+/** The label on every link to the five question wizard, for a visitor who wants help picking apps. */
+export const HELP_LABEL = 'Help me choose';
+
+/**
+ * The short road: straight to portal sign-up. Four fields, then the app picker, and the trial is
+ * running. With products, the picker opens with them switched on. A product whose app is not open
+ * yet never rides along; if none of the named products is open, the link books a walkthrough.
+ * The wizard (`ROUTES.getStarted`) is the long road and is always offered as "Help me choose".
+ */
+export function startFreeHref(stack?: Stack | ProductId, source: HandoffSource = 'direct'): string {
+  const named = toStack(typeof stack === 'string' ? [stack] : (stack ?? []));
+  const open = startableStack(named);
+  if (named.length > 0 && open.length === 0) return walkthroughHref(named);
+  return signupUrl(LINKS.portal, {
+    selection: open.length > 0 ? normalizeSelection({ products: [...open], seats: 1, warehouses: 1, interval: 'monthly' }) : null,
+    profile: {},
+    source,
+  });
+}
+
 export interface StartLink {
   readonly href: string;
   readonly label: string;
@@ -178,7 +206,7 @@ export interface StartLink {
 /** The start button for one product: "Start with ..." when its app is open, a walkthrough when it is not. */
 export function startLink(product: ProductId): StartLink {
   return isAppLive(product)
-    ? { href: getStartedHref(product), label: `Start with ${START_NAME[product]}` }
+    ? { href: startFreeHref(product, 'product'), label: `Start with ${START_NAME[product]}` }
     : { href: walkthroughHref(product), label: WALKTHROUGH_LABEL };
 }
 

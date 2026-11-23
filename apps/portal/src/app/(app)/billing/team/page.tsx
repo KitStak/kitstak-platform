@@ -23,7 +23,7 @@ export default async function BillingTeamPage() {
   const candidates = members.filter((person) => !holderIds.has(person.userId));
 
   return (
-    <div className="mx-auto flex max-w-[760px] flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <BillingHeader
         orgName={org.name}
         title="Billing team"
@@ -39,6 +39,8 @@ export default async function BillingTeamPage() {
         </Notice>
       ) : null}
 
+      {/* One left edge with the tabs and the title. The list keeps a readable width; the help card sits beside it from 1024 px. */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
       <Card className="overflow-hidden" aria-label="People who can manage billing">
         <TeamManager
           holders={holders.map((holder) => ({
@@ -68,6 +70,7 @@ export default async function BillingTeamPage() {
           ))}
         </ul>
       </Card>
+      </div>
     </div>
   );
 }

@@ -6,33 +6,70 @@
  */
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, CircleAlert, Landmark, Lock } from 'lucide-react';
+import { ArrowLeft, CircleAlert, CircleCheck, Landmark, Lock } from 'lucide-react';
 import { Button, Field, Input } from '@/components/ui';
-import { testCancelCheckoutAction, testCompleteCheckoutAction } from '@/server/billing-actions';
+import { testApplyPromoAction, testCancelCheckoutAction, testCompleteCheckoutAction } from '@/server/billing-actions';
 import { CardFields, parseExpiry, type CardValues, type TestCardChoice } from './card-fields';
 
 export interface TestCheckoutProps {
   readonly sessionId: string;
   readonly cards: readonly TestCardChoice[];
   readonly payLabel: string;
+  /** The one code the test gateway knows, named in the hint. */
   readonly promoCode: string;
+  /** The code already applied to this checkout, with the words the summary shows. null when none. */
+  readonly appliedPromo: { readonly code: string; readonly line: string } | null;
   /** True when the page loads while a card still waits for the pretend bank step. */
   readonly startAtBank: boolean;
   readonly defaultName: string;
 }
 
-export function TestCheckout({ sessionId, cards, payLabel, promoCode, startAtBank, defaultName }: TestCheckoutProps) {
+export function TestCheckout({ sessionId, cards, payLabel, promoCode, appliedPromo, startAtBank, defaultName }: TestCheckoutProps) {
   const router = useRouter();
   const [card, setCard] = useState<CardValues>({ cardNumber: '', expiry: '', cvc: '' });
   const [name, setName] = useState(defaultName);
   const [postalCode, setPostalCode] = useState('');
-  const [promo, setPromo] = useState('');
+  const [promo, setPromo] = useState(appliedPromo?.code ?? '');
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
   const [step, setStep] = useState<'card' | 'bank'>(startAtBank ? 'bank' : 'card');
   const [busy, setBusy] = useState<'pay' | 'back' | 'approve' | 'fail' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Checks the code with the gateway the moment it is entered (Apply, Enter, or leaving the field).
+   * A code that works is kept on the checkout, and the page loads its summary again, so the promo
+   * line and the new first charge show before the person pays. A wrong code says so at once.
+   */
+  const applyPromo = async (): Promise<boolean> => {
+    const code = promo.trim();
+    if (code === (appliedPromo?.code ?? '')) {
+      setPromoError(null);
+      return true;
+    }
+    if (promoBusy) return false;
+    setPromoBusy(true);
+    setPromoError(null);
+    try {
+      const result = await testApplyPromoAction({ sessionId, promoCode: code });
+      if (result.ok) {
+        router.refresh();
+        setPromoBusy(false);
+        return true;
+      }
+      setPromoError(result.error.message);
+    } catch {
+      setPromoError('We could not check that code. Check your connection and try again.');
+    }
+    setPromoBusy(false);
+    return false;
+  };
+
   const send = async (kind: 'pay' | 'approve' | 'fail') => {
     if (busy) return;
+    // A code typed but not yet checked is checked first. A wrong code stops here: nobody pays an
+    // amount the page did not show.
+    if (kind === 'pay' && !(await applyPromo())) return;
     setBusy(kind);
     setError(null);
     try {
@@ -118,25 +155,49 @@ export function TestCheckout({ sessionId, cards, payLabel, promoCode, startAtBan
           )}
         </Field>
       </div>
-      <Field label="Promo code" hint={`Optional. In test mode, ${promoCode} gives 10% off your first charge.`}>
-        {({ inputId, describedBy }) => (
-          <Input
-            id={inputId}
-            size="lg"
-            data-testid="test-promo"
-            autoComplete="off"
-            autoCapitalize="characters"
-            spellCheck={false}
-            value={promo}
-            onChange={(event) => { setPromo(event.target.value.toUpperCase()); setError(null); }}
-            maxLength={40}
-            aria-describedby={describedBy}
-          />
+      <Field label="Promo code" error={promoError} hint={appliedPromo ? undefined : `Optional. In test mode, ${promoCode} gives 10% off your first charge.`}>
+        {({ inputId, describedBy, invalid }) => (
+          <div className="flex gap-2">
+            <Input
+              id={inputId}
+              size="lg"
+              data-testid="test-promo"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              value={promo}
+              onChange={(event) => { setPromo(event.target.value.toUpperCase()); setPromoError(null); setError(null); }}
+              onBlur={() => void applyPromo()}
+              onKeyDown={(event) => {
+                // Enter in this field checks the code. It never pays.
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void applyPromo();
+                }
+              }}
+              maxLength={40}
+              aria-describedby={describedBy}
+              invalid={invalid}
+              containerClassName="min-w-0 flex-1"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              data-testid="test-promo-apply"
+              loading={promoBusy}
+              disabled={busy !== null || promo.trim() === (appliedPromo?.code ?? '')}
+              onClick={() => void applyPromo()}
+            >
+              {appliedPromo && promo.trim() === '' ? 'Remove' : 'Apply'}
+            </Button>
+          </div>
         )}
       </Field>
-      {promo.trim() === promoCode ? (
-        <p role="status" className="rounded-lg bg-success-subtle px-3 py-2 text-sm font-medium text-success-text">
-          Promo code {promoCode}: 10% off your first charge. It shows as its own line on that invoice.
+      {appliedPromo && promo.trim() === appliedPromo.code ? (
+        <p role="status" data-testid="test-promo-applied" className="flex items-start gap-2 rounded-lg bg-success-subtle px-3 py-2 text-sm font-medium text-success-text">
+          <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0" />
+          {appliedPromo.line}
         </p>
       ) : null}
 
@@ -147,7 +208,7 @@ export function TestCheckout({ sessionId, cards, payLabel, promoCode, startAtBan
         </p>
       ) : null}
 
-      <Button type="submit" size="xl" fullWidth data-testid="test-pay" loading={busy === 'pay'} disabled={busy !== null && busy !== 'pay'} leadingIcon={<Lock aria-hidden />}>
+      <Button type="submit" size="xl" fullWidth data-testid="test-pay" loading={busy === 'pay'} disabled={promoBusy || (busy !== null && busy !== 'pay')} leadingIcon={<Lock aria-hidden />}>
         {payLabel}
       </Button>
       <Button type="button" variant="ghost" size="xl" fullWidth data-testid="test-back" loading={busy === 'back'} disabled={busy !== null && busy !== 'back'} leadingIcon={<ArrowLeft aria-hidden />} onClick={back}>

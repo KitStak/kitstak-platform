@@ -68,7 +68,13 @@ export function AuthShell({ children, hero, legal, year }: AuthShellProps) {
     <div className="grid min-h-dvh bg-panel lg:grid-cols-[minmax(480px,1fr)_minmax(0,1.1fr)]">
       <div className="flex min-w-0 flex-col px-5 py-5 sm:px-12 sm:py-6">
         <Header />
-        <main className="flex flex-1 items-center justify-center py-8 sm:py-10">
+        {/*
+          Every auth screen starts at the same height under the logo, so a short form (sign in,
+          forgot password) sits where a long one (signup) starts, above the phone keyboard, and
+          moving between them never makes the page jump. Centering is only for wide and tall
+          desktop screens, where the brand panel sits beside the form.
+        */}
+        <main className="flex flex-1 items-start justify-center py-8 sm:py-10 [@media(min-width:1024px)_and_(min-height:800px)]:items-center">
           <div className="w-full max-w-[400px] animate-fade-in motion-reduce:animate-none">{children}</div>
         </main>
         <Footer legal={legal} year={year} />

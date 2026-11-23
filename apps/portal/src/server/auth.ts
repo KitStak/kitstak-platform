@@ -13,6 +13,7 @@
  *  - Google and Microsoft sign in, only for the providers whose keys are set.
  */
 import 'server-only';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { after } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { createAuth, ipAddressFromTrustProxy, type KitstakAuth } from '@kitstak/auth';
@@ -135,6 +136,18 @@ async function clearLockoutAfterReset(body: unknown): Promise<void> {
 }
 
 /**
+ * A person who makes their account from the link in an invite email has already shown they own that
+ * mailbox (the link carries a proof only that mailbox has). Their signup runs inside this scope, and
+ * the signup code for that one address is not mailed. Nothing else is switched off.
+ */
+const signupCodeOff = new AsyncLocalStorage<{ readonly email: string }>();
+
+/** Runs `run` with the signup verification email for `email` switched off. */
+export function withoutSignupCode<T>(email: string, run: () => Promise<T>): Promise<T> {
+  return signupCodeOff.run({ email: email.trim().toLowerCase() }, run);
+}
+
+/**
  * Sends the 6 digit code. Only two kinds of code are ever mailed: verify an address, reset a
  * password. The send runs after the response when it can, so the answer takes the same time
  * whether or not the address has an account.
@@ -143,6 +156,7 @@ async function sendVerificationOTP(data: { email: string; otp: string; type: str
   const template =
     data.type === 'email-verification' ? 'verify_email' : data.type === 'forget-password' ? 'reset_password' : null;
   if (template === null) return;
+  if (template === 'verify_email' && signupCodeOff.getStore()?.email === data.email.trim().toLowerCase()) return;
   const send = async (): Promise<void> => {
     try {
       // A code a person is waiting for goes out at once (CONTRACTS 13.2), not with the one minute
@@ -250,7 +264,13 @@ function buildAuth(): KitstakAuth {
     ...(ipAddress ? { ipAddress } : {}),
     hooks: kitstakOrgMetadataHooks,
     // Seat checks, the invite email and the delete guard, the same as in every other app.
-    organization: billingOrganizationOptions({ db, portalUrl: portalUrl(), allowAll: isDevAllowAll }),
+    organization: billingOrganizationOptions({
+      db,
+      portalUrl: portalUrl(),
+      allowAll: isDevAllowAll,
+      // Lets the invite link prove the mailbox, so an invited person is not asked for a code.
+      inviteSecret: env.BETTER_AUTH_SECRET,
+    }),
     extraPlugins: [emailCodePlugin()],
     ...(socialProviders ? { socialProviders } : {}),
   });

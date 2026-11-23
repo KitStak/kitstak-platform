@@ -17,8 +17,10 @@ export const inputSurface = cva(
   {
     variants: {
       size: {
-        md: 'h-8 px-2.5 text-sm [&_svg]:size-4',
-        lg: 'h-10 px-3 text-sm [&_svg]:size-4',
+        // Touch screens: the field itself is 44 px tall (46 px with the border), and the text is
+        // 16 px so iOS Safari does not zoom the page when the field takes focus.
+        md: 'h-8 px-2.5 text-sm pointer-coarse:h-[46px] pointer-coarse:text-md [&_svg]:size-4',
+        lg: 'h-10 px-3 text-sm pointer-coarse:h-[46px] pointer-coarse:text-md [&_svg]:size-4',
       },
     },
     defaultVariants: { size: 'md' },
@@ -69,11 +71,16 @@ export interface FieldProps {
   readonly required?: boolean;
   /** Content aligned to the right of the label (e.g. "Forgot password?"). */
   readonly labelAside?: ReactNode;
+  /**
+   * The control already shows what is wrong (a checklist that marks the missing rules), so the
+   * error sentence is not printed a second time. Screen readers still hear it.
+   */
+  readonly errorHidden?: boolean;
   readonly className?: string;
 }
 
 /** Label + control + hint/error, wiring ids and aria-describedby. */
-export function Field({ label, children, hint, error, required, labelAside, className }: FieldProps) {
+export function Field({ label, children, hint, error, required, labelAside, errorHidden = false, className }: FieldProps) {
   const inputId = useId();
   const hintId = `${inputId}-hint`;
   const errorId = `${inputId}-error`;
@@ -92,7 +99,11 @@ export function Field({ label, children, hint, error, required, labelAside, clas
         {labelAside}
       </div>
       {children({ inputId, describedBy, invalid: Boolean(error) })}
-      {error ? (
+      {error && errorHidden ? (
+        <p id={errorId} role="alert" className="sr-only">
+          {error}
+        </p>
+      ) : error ? (
         <p
           id={errorId}
           role="alert"

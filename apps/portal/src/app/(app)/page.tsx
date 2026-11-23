@@ -156,23 +156,25 @@ export default async function LauncherPage({
     );
   }
 
-  const [{ devAllowAll, modules, state: plan }, billing, stats, customerWork, pulseAttention, glance, setup, params] = await Promise.all([
+  // The billing context is cached per request: the setup guide needs it to know who may pay.
+  const billing = await getBillingContext();
+  const [{ devAllowAll, modules, state: plan }, stats, customerWork, pulseAttention, glance, setup, params] = await Promise.all([
     getOrgPlan(activeOrg.id),
-    getBillingContext(),
     getLauncherStats(activeOrg.id, session.user.id),
     getCustomerWork(activeOrg.id),
     getPulseAttention(activeOrg.id, session.user.id),
     getOrgGlance(activeOrg.id),
-    getSetupState(activeOrg),
+    getSetupState(activeOrg, { timeZone: billing?.timeZone, canManageBilling: billing?.access.canManage ?? false }),
     searchParams,
   ]);
   const canManageSetup = activeOrg.role === 'owner' || activeOrg.role === 'admin';
   const forceSetupGuide = params.setup === '1';
   // Rollout guard (ONBOARDING.md): an org that was already fully set up before ever
-  // seeing the guide never gets a surprise card or celebration.
+  // seeing the guide never gets a surprise card or celebration. The guide on the launcher is the
+  // quick start (3 to 5 steps), so "set up" means those steps.
   const showSetupGuide =
-    forceSetupGuide || (!setup.dismissed && (!setup.summary.allDone || setup.seen));
-  if (showSetupGuide && !setup.summary.allDone && !setup.seen) {
+    forceSetupGuide || (!setup.dismissed && (!setup.quick.summary.allDone || setup.seen));
+  if (showSetupGuide && !setup.quick.summary.allDone && !setup.seen) {
     after(() => markGuideSeen(activeOrg.id));
   }
   const entitledFor = (module: Module): boolean =>

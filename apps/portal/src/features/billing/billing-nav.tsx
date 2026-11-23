@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { cn } from '@/components/ui';
+import { ScrollRow, cn } from '@/components/ui';
 
 const TABS: readonly { href: string; label: string; match: (path: string) => boolean }[] = [
   { href: '/billing', label: 'Overview', match: (path) => path === '/billing' },
@@ -15,12 +15,12 @@ const TABS: readonly { href: string; label: string; match: (path: string) => boo
 /** Focused steps (review, return pages, cancel) show no tabs: one thing to do, one way back. */
 const FOCUSED = ['/billing/checkout', '/billing/cancel'];
 
-/** The tabs across the billing area. Shown to people who can see billing. Scrolls sideways on phones. */
+/** The tabs across the billing area. Shown to people who can see billing. On phones the row scrolls sideways and fades at the edge that hides more. */
 export function BillingNav() {
   const pathname = usePathname();
   if (FOCUSED.some((prefix) => pathname.startsWith(prefix))) return null;
   return (
-    <nav aria-label="Billing" className="-mx-4 mb-6 overflow-x-auto border-b border-border-subtle px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
+    <ScrollRow as="nav" aria-label="Billing" className="-mx-4 mb-6 border-b border-border-subtle px-4 sm:mx-0 sm:px-0">
       <ul className="flex min-w-max gap-1">
         {TABS.map((tab) => {
           const active = tab.match(pathname);
@@ -42,6 +42,6 @@ export function BillingNav() {
           );
         })}
       </ul>
-    </nav>
+    </ScrollRow>
   );
 }

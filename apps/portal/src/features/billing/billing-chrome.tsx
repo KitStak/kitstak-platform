@@ -28,7 +28,7 @@ export function BackLink({ href, children }: { readonly href: string; readonly c
   return (
     <Link
       href={href}
-      className="inline-flex min-h-9 items-center gap-1.5 rounded-md text-sm font-medium text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      className="inline-flex min-h-9 pointer-coarse:min-h-11 items-center gap-1.5 rounded-md text-sm font-medium text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
     >
       <ArrowLeft aria-hidden className="size-4" />
       {children}

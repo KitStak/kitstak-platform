@@ -102,6 +102,12 @@ interface CustomerDoc {
   taxId: ProfileInput['taxId'];
   defaultPaymentMethodId: string | null;
   invoiceSeq: number;
+  /**
+   * Credit from plan changes, kept on the customer the way Stripe keeps a customer balance. It
+   * comes off the next bills and stays when a plan ends. Older documents kept it on the
+   * subscription; `creditOf` counts both and `setCredit` moves it here.
+   */
+  creditCents?: number;
 }
 
 interface PaymentMethodDoc {
@@ -142,7 +148,7 @@ interface SubscriptionDoc {
   endedAt: string | null;
   pauseResumesAt: string | null;
   latestInvoiceId: string | null;
-  /** Credit from decreases, used on the next bill. */
+  /** Old place for credit. Always 0 on new documents; see `CustomerDoc.creditCents`. */
   creditCents: number;
   /** Set by the "Make the next payment fail" test tool. Used up by the next charge. */
   failNextPayment: boolean;
@@ -176,6 +182,10 @@ interface InvoiceDoc {
   nextPaymentAttempt: string | null;
   lastErrorCode: string | null;
   paymentMethodLast4: string | null;
+  /** How much credit paid this invoice. Older documents only have the credit line. */
+  creditAppliedCents?: number;
+  /** Money sent back for this invoice (a second subscription that was canceled at once). */
+  refundedCents?: number;
 }
 
 interface PendingCard {
@@ -197,6 +207,8 @@ interface CheckoutSessionDoc {
   subscriptionId: string | null;
   /** A card waiting for the pretend bank step. Test card numbers only; never a real card. */
   pending: PendingCard | null;
+  /** A promo code the person applied on the page, so the summary shows the real first charge. */
+  promoCode?: string | null;
   createdAt: string;
 }
 
@@ -252,6 +264,50 @@ const dateOrNull = (value: string | null | undefined): Date | null => (value ? n
 /** Rounds half away from zero, like money on a credit and a charge of the same size. */
 function roundCents(value: number): number {
   return value < 0 ? -Math.round(-value) : Math.round(value);
+}
+
+/* ===== credit and bill math ===== */
+
+const CREDIT_LINE = 'Credit from plan changes';
+
+/** The customer's credit. Counts the old place (the subscription) and the new one, once each. */
+function creditOf(customer: CustomerDoc | null, sub: Pick<SubscriptionDoc, 'creditCents'> | null): number {
+  return Math.max(0, (customer?.creditCents ?? 0) + (sub?.creditCents ?? 0));
+}
+
+/** Stores the balance on the customer and clears the old place. The caller saves both documents. */
+function setCredit(customer: CustomerDoc, sub: SubscriptionDoc | null, cents: number): void {
+  customer.creditCents = Math.max(0, Math.round(cents));
+  if (sub) sub.creditCents = 0;
+}
+
+function promoLabel(code: string): string {
+  return `Promo code ${code} (${TEST_PROMO_PERCENT}% off)`;
+}
+
+interface BillMath {
+  readonly subtotalCents: number;
+  readonly discountCents: number;
+  readonly discountLabel: string | null;
+  readonly creditUsedCents: number;
+  /** What the card is charged. */
+  readonly totalCents: number;
+}
+
+/**
+ * One bill: the lines, then the promo code, then credit. Invoices, the "next charge" on billing home
+ * and the summary on the test checkout page all come from this one function, so they cannot differ.
+ */
+function billMath(subtotalCents: number, promoCode: string | null, creditCents: number): BillMath {
+  let discountCents = 0;
+  let discountLabel: string | null = null;
+  if (promoCode === TEST_PROMO_CODE && subtotalCents > 0) {
+    discountCents = Math.round((subtotalCents * TEST_PROMO_PERCENT) / 100);
+    discountLabel = promoLabel(TEST_PROMO_CODE);
+  }
+  const afterDiscount = subtotalCents - discountCents;
+  const creditUsedCents = creditCents > 0 && afterDiscount > 0 ? Math.min(creditCents, afterDiscount) : 0;
+  return { subtotalCents, discountCents, discountLabel, creditUsedCents, totalCents: afterDiscount - creditUsedCents };
 }
 
 /* ===== signing ===== */
@@ -359,7 +415,22 @@ function cardSummary(card: PaymentMethodDoc | null): PaymentMethodSummary | null
   return card ? { brand: card.brand, last4: card.last4, expMonth: card.expMonth, expYear: card.expYear } : null;
 }
 
+/** What the next bill of a subscription will charge, or null when no bill is coming. */
+function upcomingOf(doc: SubscriptionDoc, creditCents: number): GatewaySubscription['upcoming'] {
+  const billable = doc.status === 'trialing' || doc.status === 'active' || doc.status === 'past_due';
+  if (!billable || doc.cancelAtPeriodEnd || doc.pauseResumesAt) return null;
+  const bill = billMath(recurringOf(doc.items), doc.promoCode, creditCents);
+  return {
+    amountDueCents: bill.totalCents,
+    discountCents: bill.discountCents,
+    discountLabel: bill.discountLabel,
+    creditAppliedCents: bill.creditUsedCents,
+  };
+}
+
 async function toGatewaySubscription(db: BillingDb, doc: SubscriptionDoc): Promise<GatewaySubscription> {
+  const customer = await load<CustomerDoc>(db, doc.customerId, 'customer');
+  const creditBalanceCents = creditOf(customer, doc);
   return {
     id: doc.id,
     customerId: doc.customerId,
@@ -377,6 +448,8 @@ async function toGatewaySubscription(db: BillingDb, doc: SubscriptionDoc): Promi
     pauseResumesAt: dateOrNull(doc.pauseResumesAt),
     paymentMethod: cardSummary(await cardOf(db, doc.customerId)),
     latestInvoiceId: doc.latestInvoiceId,
+    creditBalanceCents,
+    upcoming: upcomingOf(doc, creditBalanceCents),
   };
 }
 
@@ -403,6 +476,10 @@ function toGatewayInvoice(doc: InvoiceDoc): GatewayInvoice {
     nextPaymentAttempt: dateOrNull(doc.nextPaymentAttempt),
     lastErrorCode: doc.lastErrorCode,
     paymentMethodLast4: doc.paymentMethodLast4,
+    creditAppliedCents:
+      doc.creditAppliedCents ??
+      doc.lines.filter((line) => line.description === CREDIT_LINE).reduce((sum, line) => sum - line.amountCents, 0),
+    refundedCents: doc.refundedCents ?? 0,
   };
 }
 
@@ -501,14 +578,12 @@ async function draftInvoice(
   if (!customer) throw new Error('Test customer is missing.');
   const lines = [...input.lines];
   const subtotal = lines.reduce((sum, line) => sum + line.amountCents, 0);
-
-  let discount = 0;
-  let promoUsed = false;
-  if (input.usePromo && sub.promoCode === TEST_PROMO_CODE && subtotal > 0) {
-    discount = Math.round((subtotal * TEST_PROMO_PERCENT) / 100);
-    promoUsed = true;
+  const bill = billMath(subtotal, input.usePromo ? sub.promoCode : null, input.useCredit ? creditOf(customer, sub) : 0);
+  const discount = bill.discountCents;
+  const promoUsed = discount > 0;
+  if (bill.discountLabel) {
     lines.push({
-      description: `Promo code ${TEST_PROMO_CODE} (${TEST_PROMO_PERCENT}% off)`,
+      description: bill.discountLabel,
       product: null,
       quantity: 1,
       unitCents: -discount,
@@ -516,12 +591,10 @@ async function draftInvoice(
       proration: false,
     });
   }
-
-  let creditUsed = 0;
-  if (input.useCredit && sub.creditCents > 0 && subtotal - discount > 0) {
-    creditUsed = Math.min(sub.creditCents, subtotal - discount);
+  const creditUsed = bill.creditUsedCents;
+  if (creditUsed > 0) {
     lines.push({
-      description: 'Credit from plan changes',
+      description: CREDIT_LINE,
       product: null,
       quantity: 1,
       unitCents: -creditUsed,
@@ -556,6 +629,8 @@ async function draftInvoice(
     nextPaymentAttempt: null,
     lastErrorCode: null,
     paymentMethodLast4: null,
+    creditAppliedCents: creditUsed,
+    refundedCents: 0,
   };
   return { invoice, customer, creditUsed, promoUsed };
 }
@@ -605,7 +680,13 @@ function daysLeftWords(from: Date, to: Date): string {
  * The proration rule, the same one Stripe uses: `round(unit x quantity change x seconds left /
  * seconds in period)`. An increase is due now. A decrease becomes credit on the next bill.
  */
-function changeMath(sub: SubscriptionDoc, selection: PlanSelection, prorationDate: Date): ChangeMath {
+function changeMath(
+  sub: SubscriptionDoc,
+  creditCents: number,
+  selection: PlanSelection,
+  prorationDate: Date,
+  now: Date,
+): ChangeMath {
   const normalized = normalizeSelection(selection);
   const fresh = itemsFor(normalized);
   // Keep the item id of an app that stays in the plan.
@@ -649,7 +730,9 @@ function changeMath(sub: SubscriptionDoc, selection: PlanSelection, prorationDat
           proration: false,
         });
       }
-      nextChargeAt = addInterval(prorationDate, normalized.interval);
+      // The new period starts at the moment of the change. The proration date only sets how much
+      // unused time comes back.
+      nextChargeAt = addInterval(now, normalized.interval);
     } else {
       const products = new Set<ProductId>([...sub.items.map((item) => item.product), ...newItems.map((item) => item.product)]);
       for (const product of products) {
@@ -677,11 +760,11 @@ function changeMath(sub: SubscriptionDoc, selection: PlanSelection, prorationDat
   }
 
   const netCents = lines.reduce((sum, line) => sum + line.amountCents, 0);
-  const creditApplied = netCents > 0 ? Math.min(sub.creditCents, netCents) : 0;
+  const creditApplied = netCents > 0 ? Math.min(creditCents, netCents) : 0;
   const shown = [...lines];
   if (creditApplied > 0) {
     shown.push({
-      description: 'Credit from plan changes',
+      description: CREDIT_LINE,
       product: null,
       quantity: 1,
       unitCents: -creditApplied,
@@ -704,6 +787,8 @@ function changeMath(sub: SubscriptionDoc, selection: PlanSelection, prorationDat
       prorationDate,
       lines: shown,
       taxCents: 0,
+      proratedCents: netCents > 0 ? netCents : 0,
+      creditAppliedCents: creditApplied,
     },
   };
 }
@@ -797,6 +882,44 @@ export function createTestGateway(input: {
       };
     },
 
+    async expireOpenCheckoutSessions(customerId) {
+      const customer = await load<CustomerDoc>(db, customerId, 'customer');
+      if (!customer) return 0;
+      const open = (await listKind<CheckoutSessionDoc>(db, 'checkout_session', customer.orgId)).filter(
+        (session) => session.customerId === customerId && session.status === 'open',
+      );
+      for (const session of open) {
+        session.status = 'expired';
+        session.pending = null;
+        await save(db, 'checkout_session', session.orgId, session);
+      }
+      return open.length;
+    },
+
+    async cancelAndRefund(subscriptionId) {
+      const sub = await requireSubscription(subscriptionId);
+      const now = ctx.now();
+      let refundedCents = 0;
+      const invoice = sub.latestInvoiceId ? await load<InvoiceDoc>(db, sub.latestInvoiceId, 'invoice') : null;
+      if (invoice && invoice.status === 'paid') {
+        refundedCents = Math.max(0, invoice.amountPaidCents - (invoice.refundedCents ?? 0));
+        invoice.refundedCents = (invoice.refundedCents ?? 0) + refundedCents;
+        await save(db, 'invoice', sub.orgId, invoice);
+      } else if (invoice && invoice.status === 'open') {
+        invoice.status = 'void';
+        invoice.amountDueCents = 0;
+        invoice.nextPaymentAttempt = null;
+        await save(db, 'invoice', sub.orgId, invoice);
+      }
+      if (sub.status !== 'canceled') {
+        sub.status = 'canceled';
+        sub.canceledAt = iso(now);
+        sub.endedAt = iso(now);
+        await save(db, 'subscription', sub.orgId, sub);
+      }
+      return { refundedCents };
+    },
+
     async createPaymentUpdateSession({ customerId, returnUrl }) {
       const customer = await load<CustomerDoc>(db, customerId, 'customer');
       if (!customer) throw new Error('Test customer not found.');
@@ -827,22 +950,27 @@ export function createTestGateway(input: {
 
     async previewChange({ subscriptionId, selection, prorationDate }) {
       const sub = await requireSubscription(subscriptionId);
-      return changeMath(sub, selection, prorationDate).preview;
+      const customer = await load<CustomerDoc>(db, sub.customerId, 'customer');
+      return changeMath(sub, creditOf(customer, sub), selection, prorationDate, ctx.now()).preview;
     },
 
     async applyChange({ subscriptionId, selection, prorationDate }) {
       const sub = await requireSubscription(subscriptionId);
       const normalized = normalizeSelection(selection);
-      const math = changeMath(sub, normalized, prorationDate);
+      const now = ctx.now();
+      let customer = await load<CustomerDoc>(db, sub.customerId, 'customer');
+      if (!customer) throw new Error('Test customer is missing.');
+      const credit = creditOf(customer, sub);
+      const math = changeMath(sub, credit, normalized, prorationDate, now);
       let paidInvoice: InvoiceDoc | null = null;
 
       if (math.preview.dueTodayCents > 0) {
         const drafted = await draftInvoice(ctx, sub, {
           reason: 'subscription_update',
           lines: math.lines,
-          periodStart: prorationDate,
-          periodEnd: math.intervalChanged ? addInterval(prorationDate, normalized.interval) : new Date(sub.currentPeriodEnd),
-          issuedAt: prorationDate,
+          periodStart: now,
+          periodEnd: math.intervalChanged ? addInterval(now, normalized.interval) : new Date(sub.currentPeriodEnd),
+          issuedAt: now,
           usePromo: false,
           useCredit: true,
         });
@@ -852,18 +980,19 @@ export function createTestGateway(input: {
           await save(db, 'subscription', sub.orgId, sub);
           throw new GatewayCardError('The test card was declined.', charge.code);
         }
-        markPaid(drafted.invoice, charge.last4, ctx.now());
-        sub.creditCents -= drafted.creditUsed;
+        markPaid(drafted.invoice, charge.last4, now);
+        customer = drafted.customer;
+        setCredit(customer, sub, credit - drafted.creditUsed);
         sub.latestInvoiceId = drafted.invoice.id;
-        await save(db, 'customer', sub.orgId, drafted.customer);
         await save(db, 'invoice', sub.orgId, drafted.invoice);
         paidInvoice = drafted.invoice;
       } else if (math.netCents > 0) {
         // Fully covered by credit from an earlier decrease.
-        sub.creditCents -= math.creditApplied;
-      } else if (math.netCents < 0) {
-        sub.creditCents += -math.netCents;
+        setCredit(customer, sub, credit - math.creditApplied);
+      } else {
+        setCredit(customer, sub, credit - math.netCents);
       }
+      await save(db, 'customer', sub.orgId, customer);
 
       sub.items = math.newItems;
       sub.seats = normalized.seats;
@@ -871,8 +1000,8 @@ export function createTestGateway(input: {
       if (math.intervalChanged) {
         sub.interval = normalized.interval;
         if (sub.status !== 'trialing') {
-          sub.currentPeriodStart = iso(prorationDate);
-          sub.currentPeriodEnd = iso(addInterval(prorationDate, normalized.interval));
+          sub.currentPeriodStart = iso(now);
+          sub.currentPeriodEnd = iso(addInterval(now, normalized.interval));
         }
       }
       if (sub.cancelAtPeriodEnd) sub.cancelAt = sub.currentPeriodEnd;
@@ -1013,7 +1142,7 @@ async function billPeriod(
   sub.currentPeriodEnd = iso(end);
   sub.trialEnd = null;
   sub.latestInvoiceId = invoice.id;
-  sub.creditCents -= drafted.creditUsed;
+  setCredit(drafted.customer, sub, creditOf(drafted.customer, sub) - drafted.creditUsed);
   if (drafted.promoUsed) sub.promoCode = null;
   if (sub.cancelAtPeriodEnd) sub.cancelAt = sub.currentPeriodEnd;
 
@@ -1047,6 +1176,12 @@ export interface TestCheckoutView {
   readonly cancelUrl: string;
   /** True while a card waits for the pretend bank step. */
   readonly needsBankApproval: boolean;
+  /** The promo code applied on this page, with its own line for the summary. null when none. */
+  readonly promo: { readonly code: string; readonly label: string; readonly discountCents: number } | null;
+  /** Credit on the account that comes off the first charge. */
+  readonly creditAppliedCents: number;
+  /** What the card is charged at the first charge: the price, minus the promo code, minus credit. */
+  readonly firstChargeCents: number;
 }
 
 export interface TestCardUpdateView {
@@ -1060,6 +1195,13 @@ export interface TestCardUpdateView {
 async function orgNameOf(db: BillingDb, orgId: string): Promise<string> {
   const [org] = await db.select({ name: organization.name }).from(organization).where(eq(organization.id, orgId));
   return org?.name ?? 'your organization';
+}
+
+const LIVE_TEST_STATUSES: readonly GatewaySubscriptionStatus[] = ['trialing', 'active', 'past_due', 'unpaid'];
+
+/** One writer per organization until the transaction ends. */
+async function lockOrg(db: BillingDb, orgId: string): Promise<void> {
+  await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`kitstak-billing-org:${orgId}`}, 0))`);
 }
 
 function ctxOf(rt: BillingRuntime): Ctx {
@@ -1076,18 +1218,54 @@ export async function getTestCheckout(db: BillingDb, sessionId: string, now: Dat
   const priced = quote(session.selection);
   const trialEnd = dateOrNull(session.trialEnd);
   const inTrial = trialEnd !== null && trialEnd.getTime() > now.getTime();
+  const customer = await load<CustomerDoc>(db, session.customerId, 'customer');
+  const promoCode = session.pending?.promoCode ?? session.promoCode ?? null;
+  // The same function the first invoice is made with, so this is the amount that will be charged.
+  const bill = billMath(priced.totalCents, promoCode, creditOf(customer, null));
   return {
     sessionId: session.id,
     orgId: session.orgId,
     orgName: await orgNameOf(db, session.orgId),
     status: session.status,
     quote: priced,
-    dueTodayCents: inTrial ? 0 : priced.totalCents,
+    dueTodayCents: inTrial ? 0 : bill.totalCents,
     firstChargeAt: inTrial && trialEnd ? trialEnd : now,
     trialEnd: inTrial ? trialEnd : null,
     cancelUrl: session.cancelUrl,
     needsBankApproval: session.pending !== null,
+    promo:
+      promoCode && bill.discountLabel
+        ? { code: promoCode, label: bill.discountLabel, discountCents: bill.discountCents }
+        : null,
+    creditAppliedCents: bill.creditUsedCents,
+    firstChargeCents: bill.totalCents,
   };
+}
+
+/**
+ * The promo code box on the test checkout page. A code that works is saved on the session, so the
+ * summary shows the promo line and the real first charge before the person pays. An empty code
+ * takes the promo off again.
+ */
+export async function applyTestPromo(
+  rt: BillingRuntime,
+  input: { sessionId: string; promoCode: string },
+): Promise<BillingResult<{ promo: TestCheckoutView['promo']; firstChargeCents: number }>> {
+  if (!isTestRuntime(rt)) return billingError('billing_unavailable');
+  const session = await load<CheckoutSessionDoc>(rt.db, input.sessionId, 'checkout_session');
+  if (!session) return billingError('not_found');
+  if (session.status !== 'open') {
+    return billingError('not_found', 'This checkout page has closed. Go back to Billing and start again.');
+  }
+  const code = input.promoCode.trim().toUpperCase();
+  if (code !== '' && code !== TEST_PROMO_CODE) {
+    return billingError('invalid_input', `That promo code is not valid. In test mode, try ${TEST_PROMO_CODE}.`);
+  }
+  session.promoCode = code === '' ? null : code;
+  await save(rt.db, 'checkout_session', session.orgId, session);
+  const view = await getTestCheckout(rt.db, session.id, rt.now());
+  if (!view) return billingError('not_found');
+  return billingOk({ promo: view.promo, firstChargeCents: view.firstChargeCents });
 }
 
 function cardExpired(expMonth: number, expYear: number, now: Date): boolean {
@@ -1152,7 +1330,8 @@ export async function completeTestCheckout(
         cardNumber: input.cardNumber,
         expMonth: input.expMonth,
         expYear: input.expYear,
-        promoCode: input.promoCode?.trim() ? input.promoCode.trim().toUpperCase() : null,
+        // The box on the form wins; with nothing typed, the code applied on the page counts.
+        promoCode: input.promoCode?.trim() ? input.promoCode.trim().toUpperCase() : (session.promoCode ?? null),
       };
 
   const known = findTestCard(entered.cardNumber);
@@ -1188,56 +1367,85 @@ export async function completeTestCheckout(
     }
   }
 
-  const customer = await load<CustomerDoc>(ctx.db, session.customerId, 'customer');
-  if (!customer) return billingError('not_found');
-  await attachCard(ctx, customer, { ...entered, outcome: known.outcome });
+  // Everything from here to the saved subscription happens under one lock per organization and in one
+  // transaction. Two pay pages pressed at the same moment cannot both make a subscription, and a
+  // declined first payment leaves nothing behind: no card, no invoice, no used up credit.
+  type Created =
+    | { ok: true; sub: SubscriptionDoc; customer: CustomerDoc; firstInvoice: InvoiceDoc | null }
+    | { ok: false; error: ReturnType<typeof billingError> };
+  const DECLINED = Symbol('declined');
+  let created: Created;
+  try {
+    created = await ctx.db.transaction(async (tx): Promise<Created> => {
+      const locked: Ctx = { ...ctx, db: tx as unknown as BillingDb };
+      await lockOrg(locked.db, session.orgId);
+      const fresh = await load<CheckoutSessionDoc>(locked.db, session.id, 'checkout_session');
+      if (!fresh || fresh.status !== 'open') {
+        return { ok: false, error: billingError('not_found', 'This checkout page has closed. Go back to Billing and start again.') };
+      }
+      const live = (await listKind<SubscriptionDoc>(locked.db, 'subscription', session.orgId)).find((doc) =>
+        LIVE_TEST_STATUSES.includes(doc.status),
+      );
+      if (live) {
+        // The organization already has a plan (another pay page finished first). Close this page.
+        fresh.status = 'expired';
+        fresh.pending = null;
+        await save(locked.db, 'checkout_session', fresh.orgId, fresh);
+        return { ok: false, error: billingError('already_subscribed', 'You already have a plan. Nothing was charged here.') };
+      }
 
-  const now = ctx.now();
-  const trialEnd = dateOrNull(session.trialEnd);
-  const trialing = trialEnd !== null && trialEnd.getTime() > now.getTime();
-  const sub: SubscriptionDoc = {
-    id: newId('sub_test_'),
-    customerId: customer.id,
-    orgId: session.orgId,
-    status: trialing ? 'trialing' : 'incomplete',
-    interval: session.selection.interval,
-    seats: session.selection.seats,
-    warehouses: session.selection.warehouses,
-    items: itemsFor(session.selection),
-    currentPeriodStart: iso(now),
-    currentPeriodEnd: iso(trialing && trialEnd ? trialEnd : addInterval(now, session.selection.interval)),
-    trialEnd: trialing && trialEnd ? iso(trialEnd) : null,
-    cancelAtPeriodEnd: false,
-    cancelAt: null,
-    canceledAt: null,
-    endedAt: null,
-    pauseResumesAt: null,
-    latestInvoiceId: null,
-    creditCents: 0,
-    failNextPayment: false,
-    promoCode: entered.promoCode,
-    createdAt: iso(now),
-  };
+      const customer = await load<CustomerDoc>(locked.db, session.customerId, 'customer');
+      if (!customer) return { ok: false, error: billingError('not_found') };
+      await attachCard(locked, customer, { ...entered, outcome: known.outcome });
 
-  let firstInvoice: InvoiceDoc | null = null;
-  if (!trialing) {
-    const billed = await billPeriod(ctx, sub, now, 'subscription_create');
-    if (!billed.paid) {
-      // The first payment failed: no subscription is kept, the invoice is voided, the page stays open.
-      billed.invoice.status = 'void';
-      billed.invoice.amountDueCents = 0;
-      billed.invoice.nextPaymentAttempt = null;
-      await save(ctx.db, 'invoice', session.orgId, billed.invoice);
-      return billingError('card_declined');
-    }
-    firstInvoice = billed.invoice;
+      const now = locked.now();
+      const trialEnd = dateOrNull(session.trialEnd);
+      const trialing = trialEnd !== null && trialEnd.getTime() > now.getTime();
+      const sub: SubscriptionDoc = {
+        id: newId('sub_test_'),
+        customerId: customer.id,
+        orgId: session.orgId,
+        status: trialing ? 'trialing' : 'incomplete',
+        interval: session.selection.interval,
+        seats: session.selection.seats,
+        warehouses: session.selection.warehouses,
+        items: itemsFor(session.selection),
+        currentPeriodStart: iso(now),
+        currentPeriodEnd: iso(trialing && trialEnd ? trialEnd : addInterval(now, session.selection.interval)),
+        trialEnd: trialing && trialEnd ? iso(trialEnd) : null,
+        cancelAtPeriodEnd: false,
+        cancelAt: null,
+        canceledAt: null,
+        endedAt: null,
+        pauseResumesAt: null,
+        latestInvoiceId: null,
+        creditCents: 0,
+        failNextPayment: false,
+        promoCode: entered.promoCode,
+        createdAt: iso(now),
+      };
+
+      let firstInvoice: InvoiceDoc | null = null;
+      if (!trialing) {
+        const billed = await billPeriod(locked, sub, now, 'subscription_create');
+        // Roll everything back: the page stays open and can be tried again with another card.
+        if (!billed.paid) throw DECLINED;
+        firstInvoice = billed.invoice;
+      }
+      await save(locked.db, 'subscription', session.orgId, sub);
+
+      fresh.status = 'complete';
+      fresh.subscriptionId = sub.id;
+      fresh.pending = null;
+      await save(locked.db, 'checkout_session', fresh.orgId, fresh);
+      return { ok: true, sub, customer, firstInvoice };
+    });
+  } catch (error) {
+    if (error === DECLINED) return billingError('card_declined');
+    throw error;
   }
-  await save(ctx.db, 'subscription', session.orgId, sub);
-
-  session.status = 'complete';
-  session.subscriptionId = sub.id;
-  session.pending = null;
-  await save(ctx.db, 'checkout_session', session.orgId, session);
+  if (!created.ok) return created.error;
+  const { sub, customer, firstInvoice } = created;
 
   await deliver(ctx, rt.gateway, 'checkout.session.completed', {
     id: session.id,

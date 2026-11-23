@@ -1,7 +1,7 @@
 'use client';
 /** Test tools (SPEC 6.1). Only rendered in test gateway mode, only for billing managers. */
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { FlaskConical } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
 import { testFailNextPaymentAction, testRunDueAction, testShiftTimeAction } from '@/server/billing-actions';
@@ -11,6 +11,7 @@ const SHIFTS = [1, 7, 14, 30] as const;
 
 export function TestTools({ trialDaysLeft, hasSubscription }: { readonly trialDaysLeft: number | null; readonly hasSubscription: boolean }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -20,6 +21,10 @@ export function TestTools({ trialDaysLeft, hasSubscription }: { readonly trialDa
     setResult(null);
     try {
       setResult(await work());
+      // The plan just moved on, so an older "Your plan is set to end" line no longer fits. The
+      // router still remembers `?notice=` (the flash only cleaned the address bar), and a plain
+      // refresh would bring that line back next to the new state. Load the page without it.
+      router.replace(pathname);
       router.refresh();
     } catch {
       setResult({ ok: false, text: 'We could not reach KitStak. Check your connection and try again.' });

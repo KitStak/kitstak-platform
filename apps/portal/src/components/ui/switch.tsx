@@ -12,9 +12,12 @@ export const Switch = forwardRef<
     <SwitchPrimitive.Root
       ref={ref}
       className={cn(
-        'peer relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-transparent',
-        'bg-border-strong transition-colors duration-[var(--duration-fast)] ease-out motion-reduce:transition-none',
-        'data-[state=checked]:bg-primary',
+        // The button is the touch target; the track is drawn inside it (`before`). With a mouse the
+        // two are the same size. On touch screens the button is 44 px tall and the track stays 24 px.
+        'peer group/switch relative inline-flex h-6 w-11 shrink-0 items-center rounded-full pointer-coarse:h-11',
+        'before:absolute before:inset-x-0 before:top-1/2 before:h-6 before:-translate-y-1/2 before:rounded-full before:bg-border-strong',
+        'before:transition-colors before:duration-[var(--duration-fast)] before:ease-out motion-reduce:before:transition-none',
+        'data-[state=checked]:before:bg-primary',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         'disabled:cursor-not-allowed disabled:opacity-[0.38]',
         className,
@@ -23,7 +26,7 @@ export const Switch = forwardRef<
     >
       <SwitchPrimitive.Thumb
         className={cn(
-          'pointer-events-none block size-5 translate-x-0.5 rounded-full bg-panel shadow-sm',
+          'pointer-events-none relative block size-5 translate-x-0.5 rounded-full bg-panel shadow-sm',
           'transition-transform duration-[var(--duration-fast)] ease-out motion-reduce:transition-none',
           'data-[state=checked]:translate-x-[22px]',
         )}

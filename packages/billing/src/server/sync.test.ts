@@ -44,6 +44,8 @@ function snapshot(selection: PlanSelection, overrides: Partial<GatewaySubscripti
     pauseResumesAt: null,
     paymentMethod: { brand: 'visa', last4: '4242', expMonth: 8, expYear: 2028 },
     latestInvoiceId: null,
+    creditBalanceCents: 0,
+    upcoming: null,
     ...overrides,
   };
 }
@@ -71,6 +73,8 @@ function invoice(overrides: Partial<GatewayInvoice> = {}): GatewayInvoice {
     nextPaymentAttempt: at(1),
     lastErrorCode: 'card_declined',
     paymentMethodLast4: '4242',
+    creditAppliedCents: 0,
+    refundedCents: 0,
     ...overrides,
   };
 }
@@ -120,7 +124,7 @@ describe.skipIf(!available)('applySubscriptionSnapshot (database)', () => {
 
     const state = await getPlanState(rt, org.orgId);
     expect(state.phase).toBe('active');
-    expect(state.nextCharge).toEqual({ amountCents: 39520, at: at(25) });
+    expect(state.nextCharge).toMatchObject({ amountCents: 39520, planCents: 39520, at: at(25) });
   });
 
   it('trialing in the gateway (card saved): rows are active, and trial rows are replaced', async () => {

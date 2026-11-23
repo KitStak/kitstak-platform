@@ -189,6 +189,10 @@ function toInvoice(invoice: unknown): GatewayInvoice {
   const transitions = loose(record.status_transitions);
   const subscriptionDetails = loose(loose(record.parent).subscription_details);
   const status = str(record.status);
+  const total = num(record.total) ?? 0;
+  // `amount_due` is what the card is asked for. When it is below the total, credit paid the rest.
+  const chargeAsked = num(record.amount_due);
+  const creditAppliedCents = total > 0 && chargeAsked !== null ? Math.min(total, Math.max(0, total - chargeAsked)) : 0;
   return {
     id: str(record.id) ?? '',
     customerId: idOf(record.customer) ?? '',
@@ -211,10 +215,45 @@ function toInvoice(invoice: unknown): GatewayInvoice {
     nextPaymentAttempt: fromUnix(record.next_payment_attempt),
     lastErrorCode: null,
     paymentMethodLast4: cardSummary(record.default_payment_method)?.last4 ?? null,
+    creditAppliedCents,
+    refundedCents: Math.max(0, num(record.post_payment_credit_notes_amount) ?? 0),
   };
 }
 
-function toSubscription(subscription: unknown): GatewaySubscription {
+/** The next bill and the credit that is still waiting as unused time, read from an invoice preview. */
+interface UpcomingFacts {
+  readonly upcoming: NonNullable<GatewaySubscription['upcoming']>;
+  /** Credit from decreases that Stripe holds as pending lines until the next invoice. */
+  readonly pendingCreditCents: number;
+}
+
+/**
+ * Reads Stripe's preview of the next invoice. A decrease made with `create_prorations` does not move
+ * the customer balance at once: the unused time waits as negative lines on the next invoice. So the
+ * credit a person has is the customer balance plus those waiting lines, and the next charge is the
+ * preview's `amount_due`.
+ */
+export function upcomingFromPreview(preview: unknown): UpcomingFacts {
+  const record = loose(preview);
+  const invoice = toInvoice(preview);
+  const total = num(record.total) ?? 0;
+  const amountDue = Math.max(0, num(record.amount_due) ?? total);
+  const prorationNet = invoice.lines.filter((line) => line.proration).reduce((sum, line) => sum + line.amountCents, 0);
+  const pendingCreditCents = Math.max(0, -prorationNet);
+  // The bill without the waiting credit lines: the plan price, minus a promo code, plus tax.
+  const regular = total + pendingCreditCents;
+  return {
+    upcoming: {
+      amountDueCents: amountDue,
+      discountCents: invoice.discountCents,
+      discountLabel: invoice.discountCents > 0 ? 'Promo code' : null,
+      creditAppliedCents: Math.min(Math.max(0, regular), Math.max(0, regular - amountDue)),
+    },
+    pendingCreditCents,
+  };
+}
+
+function toSubscription(subscription: unknown, facts: UpcomingFacts | null = null): GatewaySubscription {
   const record = loose(subscription);
   const itemList = loose(record.items).data;
   const rawItems: unknown[] = Array.isArray(itemList) ? itemList : [];
@@ -274,6 +313,9 @@ function toSubscription(subscription: unknown): GatewaySubscription {
     pauseResumesAt,
     paymentMethod,
     latestInvoiceId: idOf(record.latest_invoice),
+    // A negative Stripe customer balance is credit. Unused time that waits for the next invoice counts too.
+    creditBalanceCents: Math.max(0, -(num(customer.balance) ?? 0)) + (facts?.pendingCreditCents ?? 0),
+    upcoming: facts?.upcoming ?? null,
   };
 }
 
@@ -381,6 +423,35 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
     }
   }
 
+  /**
+   * Asks Stripe what the next invoice will charge. null when no invoice is coming (the plan ended, is
+   * set to end, or is paused) or when Stripe cannot say; screens then fall back to the plan price.
+   */
+  async function upcomingFor(subscription: Stripe.Subscription): Promise<UpcomingFacts | null> {
+    const record = loose(subscription);
+    const status = str(record.status);
+    const billable = status === 'trialing' || status === 'active' || status === 'past_due';
+    if (!billable || record.cancel_at_period_end === true || record.cancel_at || record.pause_collection) return null;
+    const customerId = idOf(record.customer);
+    if (!customerId) return null;
+    try {
+      const preview = await stripe().invoices.createPreview({ customer: customerId, subscription: subscription.id });
+      // No amount, no answer. A missing number must never be shown as "$0.00".
+      if (num(loose(preview).amount_due) === null && num(loose(preview).total) === null) return null;
+      return upcomingFromPreview(preview);
+    } catch (error) {
+      process.stderr.write(
+        `[kitstak-billing] could not preview the next invoice of ${subscription.id}: ${str(loose(error).code) ?? 'error'}\n`,
+      );
+      return null;
+    }
+  }
+
+  /** The normalized subscription with its credit and its next bill. */
+  async function full(subscription: Stripe.Subscription): Promise<GatewaySubscription> {
+    return toSubscription(subscription, await upcomingFor(subscription));
+  }
+
   /** The full item list for an update: swaps, quantity changes, new items and removed items. */
   async function itemParams(
     subscription: Stripe.Subscription,
@@ -410,37 +481,81 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
     return out;
   }
 
-  async function preview(subscription: Stripe.Subscription, selection: PlanSelection, prorationDate: Date): Promise<ChangePreview> {
+  /**
+   * The server prorates a credit from a date up to one day ahead (full days left only, see
+   * `proration.ts`). If Stripe refuses a proration date in the future, the adapter uses a date in the
+   * past that keeps the two rules that matter: it is the same for a preview and for the change that
+   * follows it, and it never hands back more than a charge at the same moment would have billed. That
+   * date is the start of the current hour, but never before the whole day date a charge would use.
+   */
+  let futureProrationRefused = false;
+
+  function pastDateFor(date: Date): Date {
+    const at = now().getTime();
+    if (date.getTime() <= at) return date;
+    const hour = Math.floor(at / HOUR_MS) * HOUR_MS;
+    return new Date(Math.max(hour, date.getTime() - 24 * HOUR_MS));
+  }
+
+  function isProrationDateError(error: unknown): boolean {
+    const record = loose(error);
+    const param = str(record.param) ?? '';
+    return param.includes('proration_date') || /proration[ _]date/i.test(str(record.message) ?? '');
+  }
+
+  async function withProrationDate<T>(date: Date, run: (used: Date) => Promise<T>): Promise<T> {
+    const future = date.getTime() > now().getTime();
+    if (!future) return run(date);
+    if (futureProrationRefused) return run(pastDateFor(date));
+    try {
+      return await run(date);
+    } catch (error) {
+      if (!isProrationDateError(error)) throw error;
+      futureProrationRefused = true;
+      process.stderr.write('[kitstak-billing] Stripe refused a proration date in the future. Credits now count from the start of the hour.\n');
+      return run(pastDateFor(date));
+    }
+  }
+
+  async function preview(subscription: Stripe.Subscription, selection: PlanSelection, askedDate: Date): Promise<ChangePreview> {
     const current = toSubscription(subscription);
     const items = await itemParams(subscription, selection);
-    const upcoming = await stripe().invoices.createPreview({
-      customer: current.customerId,
-      subscription: subscription.id,
-      subscription_details: {
-        items,
-        proration_date: unix(prorationDate),
-        proration_behavior: 'always_invoice',
-      },
+    let prorationDate = askedDate;
+    const upcoming = await withProrationDate(askedDate, (used) => {
+      prorationDate = used;
+      return stripe().invoices.createPreview({
+        customer: current.customerId,
+        subscription: subscription.id,
+        subscription_details: {
+          items,
+          proration_date: unix(used),
+          proration_behavior: 'always_invoice',
+        },
+      });
     });
     const invoice = toInvoice(upcoming);
     const total = invoice.totalCents;
+    const dueToday = total > 0 ? Math.max(0, num(loose(upcoming).amount_due) ?? total) : 0;
     const oldRecurring = current.items.reduce((sum, item) => sum + item.unitCents * item.quantity, 0);
     const newRecurring = quote(selection).totalCents;
     const intervalChanged = selection.interval !== current.interval;
     const trialing = current.status === 'trialing' && current.trialEnd !== null;
     return {
-      dueTodayCents: total > 0 ? Math.max(0, num(loose(upcoming).amount_due) ?? total) : 0,
+      dueTodayCents: dueToday,
       creditCents: total < 0 ? -total : 0,
       newRecurringCents: newRecurring,
       recurringDeltaCents: newRecurring - oldRecurring,
       nextChargeAt: trialing && current.trialEnd
         ? current.trialEnd
         : intervalChanged
-          ? addInterval(prorationDate, selection.interval)
+          ? // A new period starts at the moment of the change, whatever date the unused time is counted from.
+            addInterval(now(), selection.interval)
           : current.currentPeriodEnd,
       prorationDate,
       lines: invoice.lines,
       taxCents: invoice.taxCents,
+      proratedCents: total > 0 ? total : 0,
+      creditAppliedCents: total > 0 ? total - dueToday : 0,
     };
   }
 
@@ -558,6 +673,43 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
       }
     },
 
+    async expireOpenCheckoutSessions(customerId) {
+      const open = await stripe().checkout.sessions.list({ customer: customerId, status: 'open', limit: 100 });
+      let closed = 0;
+      for (const session of open.data) {
+        try {
+          await stripe().checkout.sessions.expire(session.id);
+          closed += 1;
+        } catch {
+          // It was paid or it closed a moment ago. The second subscription guard in sync handles a paid one.
+        }
+      }
+      return closed;
+    },
+
+    async cancelAndRefund(subscriptionId) {
+      const subscription = await retrieveSubscription(subscriptionId);
+      if (!subscription) return { refundedCents: 0 };
+      const record = loose(subscription);
+      const invoiceId = idOf(record.latest_invoice);
+      const status = str(record.status);
+      if (status !== 'canceled' && status !== 'incomplete_expired') {
+        // No final invoice and no proration: the whole payment goes back below.
+        await stripe().subscriptions.cancel(subscriptionId, { invoice_now: false, prorate: false });
+      }
+      if (!invoiceId) return { refundedCents: 0 };
+      const invoice = loose(await stripe().invoices.retrieve(invoiceId));
+      if (invoice.status === 'open') {
+        await stripe().invoices.voidInvoice(invoiceId);
+        return { refundedCents: 0 };
+      }
+      const paid = (num(invoice.amount_paid) ?? 0) - (num(invoice.post_payment_credit_notes_amount) ?? 0);
+      if (invoice.status !== 'paid' || paid <= 0) return { refundedCents: 0 };
+      // A credit note with a refund sends the money back to the card and shows on the invoice.
+      await stripe().creditNotes.create({ invoice: invoiceId, amount: paid, refund_amount: paid, reason: 'duplicate' });
+      return { refundedCents: paid };
+    },
+
     async createPaymentUpdateSession({ customerId, returnUrl }) {
       const session = await stripe().billingPortal.sessions.create({
         customer: customerId,
@@ -573,7 +725,7 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
 
     async getSubscription(id) {
       const subscription = await retrieveSubscription(id);
-      return subscription ? toSubscription(await adoptCustomerCard(subscription)) : null;
+      return subscription ? full(await adoptCustomerCard(subscription)) : null;
     },
 
     async findSubscriptionForCustomer(customerId) {
@@ -584,7 +736,7 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
         expand: ['data.default_payment_method'],
       });
       // Only subscriptions KitStak made carry the org id. Anything else on the customer is not ours.
-      const ours = page.data.map(toSubscription).filter((subscription) => subscription.orgId !== null);
+      const ours = page.data.map((entry) => toSubscription(entry)).filter((subscription) => subscription.orgId !== null);
       return ours.find((subscription) => subscription.status !== 'canceled') ?? ours[0] ?? null;
     },
 
@@ -607,7 +759,8 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
       try {
         updated = await stripe().subscriptions.update(subscriptionId, {
           items,
-          proration_date: unix(prorationDate),
+          // The date the preview above really used, so the invoice equals the preview to the cent.
+          proration_date: unix(planned.prorationDate),
           proration_behavior: invoiceNow ? 'always_invoice' : 'create_prorations',
           // With this, a declined card changes nothing: the update waits and is then dropped.
           ...(invoiceNow ? { payment_behavior: 'pending_if_incomplete' as const } : {}),
@@ -630,7 +783,7 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
         }
         throw new GatewayCardError('The card was declined.', null);
       }
-      return toSubscription(updated);
+      return full(updated);
     },
 
     async setCancelAtPeriodEnd(subscriptionId, cancel) {
@@ -638,7 +791,7 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
         cancel_at_period_end: cancel,
         expand: SUBSCRIPTION_EXPAND,
       });
-      return toSubscription(updated);
+      return full(updated);
     },
 
     async pause(subscriptionId, resumesAt) {
@@ -646,7 +799,7 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
         pause_collection: { behavior: 'void', resumes_at: unix(resumesAt) },
         expand: SUBSCRIPTION_EXPAND,
       });
-      return toSubscription(updated);
+      return full(updated);
     },
 
     async resume(subscriptionId, options) {
@@ -656,7 +809,7 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
         ...(options?.billNow ? { billing_cycle_anchor: { type: 'now' as const }, proration_behavior: 'none' as const } : {}),
         expand: SUBSCRIPTION_EXPAND,
       });
-      return toSubscription(updated);
+      return full(updated);
     },
 
     async payLatestInvoice(subscriptionId) {

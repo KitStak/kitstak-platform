@@ -7,7 +7,7 @@ import { Mail } from 'lucide-react';
 import { formatMoney, type PlanSelection } from '@kitstak/billing/catalog';
 import type { ChangePreview } from '@kitstak/billing/server';
 import { Button, Field, Input, Notice, Select } from '@/components/ui';
-import { organization } from '@/lib/auth-client';
+import { inviteMemberAction } from '@/server/auth-relay-actions';
 import { confirmPlanChangeAction, previewPlanChangeAction } from '@/server/billing-actions';
 
 const INVITE_ROLES = ['admin', 'member', 'viewer'] as const;
@@ -61,7 +61,9 @@ export function InviteMemberForm({
 
   /** Sends the invite. Returns 'seat_limit' when the plan has no free seat. */
   const sendInvite = async (to: string, as: InviteRole): Promise<'sent' | 'seat_limit' | 'failed'> => {
-    const result = await organization.inviteMember({ email: to, role: as, organizationId: orgId });
+    // A server action: "all seats are in use" is the answer that opens the seat offer, not a failed
+    // request in the console.
+    const result = await inviteMemberAction({ email: to, role: as, organizationId: orgId });
     if (!result.error) {
       setEmail('');
       setSent(`Invite sent to ${to}.`);
@@ -111,7 +113,7 @@ export function InviteMemberForm({
     try {
       const changed = await confirmPlanChangeAction({
         selection: offer.selection,
-        prorationDate: offer.preview.prorationDate,
+        basis: offer.preview.basis,
         expectedDueTodayCents: offer.preview.dueTodayCents,
       });
       if (!changed.ok) {
@@ -212,7 +214,9 @@ export function InviteMemberForm({
           {seatsInUse(paid.seats)} Add 1 seat for {formatMoney(offer.preview.recurringDeltaCents)} more {period}.{' '}
           {offer.preview.dueTodayCents > 0
             ? `You pay ${formatMoney(offer.preview.dueTodayCents)} today for the days left.`
-            : `You pay ${formatMoney(0)} today.`}
+            : offer.preview.creditAppliedCents > 0
+              ? `You pay ${formatMoney(0)} today. Your credit pays the ${formatMoney(offer.preview.creditAppliedCents)} for the days left.`
+              : `You pay ${formatMoney(0)} today.`}
         </Notice>
       ) : seatMessage ? (
         <Notice

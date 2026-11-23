@@ -15,7 +15,14 @@ import { type BillingActor, type BillingDb, type BillingRuntime, errorText, logB
 import { getBillingProfile, profileInput } from './profile';
 import { enforceRateLimit } from './rate-limit';
 import { getPlanState } from './state';
-import { applyInvoiceSnapshot, applySubscriptionSnapshot, clearBillingCaches, withCardFallback } from './sync';
+import {
+  applyInvoiceSnapshot,
+  applySubscriptionSnapshot,
+  clearBillingCaches,
+  fetchAndApplySubscription,
+  rejectSecondSubscription,
+  withCardFallback,
+} from './sync';
 
 const HOUR_MS = 60 * 60 * 1000;
 /** A gateway rule: a trial end must be at least 48 hours ahead. Five minutes of slack on top. */
@@ -31,12 +38,21 @@ export function belowUsageMessage(selection: PlanSelection, state: PlanState): s
   );
   const perUser = selection.products.some((id) => CATALOG.products[id].quantityFrom === 'seats');
   const used = state.usage.seatsUsed;
-  if (seatsMatter && perUser && selection.seats < used) {
-    return `You have ${used} people. Pick ${used} seats or more.`;
+  // An open invite holds a seat, so it counts toward the lowest number the plan can have.
+  const invites = state.usage.pendingInvites;
+  const floor = used + invites;
+  const people = `${used} ${used === 1 ? 'person' : 'people'}`;
+  if (seatsMatter && perUser && selection.seats < floor) {
+    if (invites === 0) return `You have ${used} people. Pick ${used} seats or more.`;
+    const open = `${invites} open ${invites === 1 ? 'invite' : 'invites'}`;
+    return `You have ${people} and ${open}. Each open invite holds a seat. Pick ${floor} seats or more, or cancel an invite first.`;
   }
   if (seatsMatter && !perUser) {
     const included = CATALOG.products.pulse.includedSeats ?? 0;
     if (used > included) return `Pulse covers up to ${included} seats and you have ${used} people. For a bigger team, talk to us.`;
+    if (floor > included) {
+      return `Pulse covers up to ${included} seats. You have ${people} and open invites for more. Cancel an invite first, or talk to us for a bigger team.`;
+    }
   }
   const warehouses = state.usage.warehousesUsed ?? 0;
   if (selection.products.includes('wms') && selection.warehouses < warehouses) {
@@ -129,6 +145,19 @@ export async function createCheckout(
       .set({ gateway: gateway.kind, updatedAt: rt.now() })
       .where(eq(billingAccounts.orgId, input.orgId));
 
+    // One plan per organization, checked at the gateway too. A plan that was paid a moment ago in
+    // another tab may not be in our tables yet (its event is still on the way). Take it in now and
+    // send the person to their plan instead of to a second pay page.
+    const atGateway = existingCustomerId ? await gateway.findSubscriptionForCustomer(customerId) : null;
+    if (atGateway && isLiveSubscriptionStatus(atGateway.status)) {
+      await rt.db.transaction(async (tx) => fetchAndApplySubscription(rt, tx, { orgId: input.orgId, subscriptionId: atGateway.id }));
+      clearBillingCaches(input.orgId);
+      return billingError('already_subscribed');
+    }
+    // Only one pay page can be open. Any older one (another tab, the back button) is closed first, so
+    // two pages can never both be paid.
+    await gateway.expireOpenCheckoutSessions(customerId);
+
     const session = await gateway.createCheckoutSession({
       orgId: input.orgId,
       customerId,
@@ -158,14 +187,14 @@ export async function createCheckout(
 
 /**
  * Applies a finished checkout session with the given database handle (a transaction in the webhook).
- * Returns true when the session is complete and was applied. A session that is not paid, or that
- * belongs to another org, applies nothing.
+ * A session that is not paid, or that belongs to another org, applies nothing. `duplicate` means the
+ * organization already had a plan: the second subscription was canceled and its payment sent back.
  */
 export async function applyCheckoutSession(
   rt: BillingRuntime,
   db: BillingDb,
   input: { orgId: string; sessionId: string; eventId?: string },
-): Promise<'applied' | 'not_complete' | 'not_found'> {
+): Promise<'applied' | 'not_complete' | 'not_found' | 'duplicate'> {
   if (!rt.gateway) return 'not_found';
   const session = await rt.gateway.getCheckoutSession(input.sessionId);
   if (!session || session.orgId !== input.orgId) return 'not_found';
@@ -174,6 +203,10 @@ export async function applyCheckoutSession(
   if (!subscription) return 'not_complete';
   if (subscription.orgId !== null && subscription.orgId !== input.orgId) return 'not_found';
   if (session.customerId !== null && subscription.customerId !== session.customerId) return 'not_found';
+  // A second paid session for an organization that already has a plan: canceled and refunded, never applied.
+  if (await rejectSecondSubscription(rt, db, { orgId: input.orgId, subscription, ...(input.eventId ? { eventId: input.eventId } : {}) })) {
+    return 'duplicate';
+  }
 
   const latestInvoice = subscription.latestInvoiceId ? await rt.gateway.getInvoice(subscription.latestInvoiceId) : null;
   if (latestInvoice) {

@@ -3,7 +3,7 @@
  * say"). PURE, so the words are unit tested and the page only lays them out.
  */
 import { formatDay, formatDayShort, formatMoney } from '@kitstak/billing/catalog';
-import type { PlanPhase, PlanState } from '@kitstak/billing/plan-state';
+import { nextChargeLine, type PlanPhase, type PlanState } from '@kitstak/billing/plan-state';
 import { cardLabel, plural } from './format';
 
 export type HomeActionId =
@@ -35,7 +35,7 @@ export interface PhaseCopy {
 const ACTION: Readonly<Record<HomeActionId, string>> = {
   start_trial: 'Start free trial',
   add_card: 'Add a card',
-  change_apps: 'Change apps',
+  change_apps: 'Change trial apps',
   change_plan: 'Change plan',
   update_card: 'Update card',
   pay_now: 'Pay now',
@@ -84,7 +84,9 @@ export function phaseCopy(state: PlanState, timeZone: string): PhaseCopy {
       return {
         badge: BADGE.trial,
         line: `Free trial. ${left}`.trim(),
-        primary: action('add_card'),
+        // One name for the paying step everywhere: the banner, the emails, the setup guide and this
+        // button all say "Pick a plan" and all open the plan picker.
+        primary: action('pick_plan'),
         others: [action('change_apps')],
       };
     }
@@ -204,11 +206,13 @@ export function nextChargeCopy(state: PlanState, timeZone: string): { readonly h
     case 'trial':
       return {
         headline: 'No charge planned',
-        detail: state.trial ? `Add a card to keep your apps after ${short(state.trial.endsAt)}.` : 'Add a card to keep your apps.',
+        detail: state.trial ? `Pick a plan to keep your apps after ${short(state.trial.endsAt)}.` : 'Pick a plan to keep your apps.',
       };
     case 'active':
+      // `nextChargeLine` names what the card will really be charged: the price, less a promo code,
+      // less credit. The same sentence in every place that states the next charge.
       return state.nextCharge
-        ? { headline: day(state.nextCharge.at), detail: `${formatMoney(state.nextCharge.amountCents)} to your ${cardLabel(state.paymentMethod)}.` }
+        ? { headline: day(state.nextCharge.at), detail: nextChargeLine(state) ?? `${formatMoney(state.nextCharge.amountCents)} to your ${cardLabel(state.paymentMethod)}.` }
         : { headline: 'No charge planned', detail: 'Your plan has no charge coming up.' };
     case 'past_due':
       return {

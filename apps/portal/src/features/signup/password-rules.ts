@@ -2,8 +2,8 @@
  * The password rules, as the browser shows them (docs/billing/SPEC.md section 5.1). PURE.
  *
  * The server is the judge: `passwordPolicyPlugin` in `@kitstak/auth` checks every new password.
- * This file mirrors its default policy so a person sees each rule turn green while they type and
- * never has to guess. `password-rules.test.ts` proves the two agree.
+ * This file mirrors its default policy. The four rules are on screen before the first key press,
+ * each turns green as it is met, and a refusal names every missing rule at once. `password-rules.test.ts` proves the two agree.
  */
 
 export const PASSWORD_MIN_LENGTH = 10;
@@ -37,20 +37,44 @@ function byteLength(value: string): number {
   return new TextEncoder().encode(value).length;
 }
 
+function joinWords(words: readonly string[]): string {
+  if (words.length <= 1) return words[0] ?? '';
+  return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+}
+
 /**
- * The first thing wrong with a password, as a full sentence, or null when it is fine. The wording
- * for length follows the spec; the rest matches the shared policy so both say the same thing.
+ * Every checklist rule the password does not meet yet, in the words of one sentence:
+ * ['10 or more characters', 'a number', 'a symbol, like ! or #']. Empty when all four are met.
+ */
+export function missingRuleWords(password: string): readonly string[] {
+  const words: string[] = [];
+  if (password.length < PASSWORD_MIN_LENGTH) words.push(`${PASSWORD_MIN_LENGTH} or more characters`);
+  const upper = /[A-Z]/.test(password);
+  const lower = /[a-z]/.test(password);
+  if (!upper && !lower) words.push('a capital and a small letter');
+  else if (!upper) words.push('a capital letter');
+  else if (!lower) words.push('a small letter');
+  if (!/[0-9]/.test(password)) words.push('a number');
+  if (!/[^A-Za-z0-9]/.test(password)) words.push('a symbol, like ! or #');
+  return words;
+}
+
+/** True when what is wrong is on the checklist: the form marks the rules instead of adding a line. */
+export function isRulesIssue(password: string): boolean {
+  return password.length > 0 && password.length <= PASSWORD_MAX_LENGTH && missingRuleWords(password).length > 0;
+}
+
+/**
+ * What is wrong with a password, as one full sentence, or null when it is fine. Every rule that is
+ * still missing is named at once, so nobody fixes one thing only to be told about the next.
  */
 export function passwordIssue(password: string, context: PasswordContext = {}): string | null {
   if (password.length === 0) return 'Enter a password.';
-  if (password.length < PASSWORD_MIN_LENGTH) return `Use at least ${PASSWORD_MIN_LENGTH} characters.`;
   if (password.length > PASSWORD_MAX_LENGTH || byteLength(password) > PASSWORD_MAX_LENGTH) {
     return `Use ${PASSWORD_MAX_LENGTH} characters or fewer.`;
   }
-  if (!/[A-Z]/.test(password)) return 'Include a capital letter.';
-  if (!/[a-z]/.test(password)) return 'Include a small letter.';
-  if (!/[0-9]/.test(password)) return 'Include a number.';
-  if (!/[^A-Za-z0-9]/.test(password)) return 'Include a symbol, like ! or #.';
+  const missing = missingRuleWords(password);
+  if (missing.length > 0) return `Your password still needs ${joinWords(missing)}.`;
   const localPart = context.email?.split('@')[0]?.trim().toLowerCase();
   if (localPart && localPart.length >= 3 && password.toLowerCase().includes(localPart)) {
     return 'Do not use your email name in your password.';

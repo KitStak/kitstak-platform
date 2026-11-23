@@ -48,7 +48,7 @@ function QuickActions({ workspaceId }: { readonly workspaceId: string | null }) 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="home-quick-actions">
       {canInvite ? (
-        <Button variant="secondary" leadingIcon={<UserPlus aria-hidden />} onClick={() => openPanel('invite')}>
+        <Button variant="secondary" leadingIcon={<UserPlus aria-hidden />} data-plan-write onClick={() => openPanel('invite')}>
           Invite
         </Button>
       ) : null}
@@ -56,6 +56,8 @@ function QuickActions({ workspaceId }: { readonly workspaceId: string | null }) 
         <Button
           variant="secondary"
           leadingIcon={<Upload aria-hidden />}
+          // In view only this press opens the "view only" dialog instead (see ViewOnlyGuard).
+          data-plan-write
           onClick={() => {
             startRouteProgress();
             router.push(routes.importData(org.slug));
@@ -68,6 +70,8 @@ function QuickActions({ workspaceId }: { readonly workspaceId: string | null }) 
         <Button
           leadingIcon={<Plus aria-hidden />}
           data-testid="home-new-board"
+          // In view only this press opens the "view only" dialog instead (see ViewOnlyGuard).
+          data-plan-write
           loading={pendingCreate}
           onClick={() => {
             if (workspaceId) requestCreate({ kind: 'board', workspaceId });

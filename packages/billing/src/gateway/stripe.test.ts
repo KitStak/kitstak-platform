@@ -62,6 +62,10 @@ function fakeStripe() {
     })),
     checkoutCreate: vi.fn(async (_params: Record<string, unknown>) => ({ id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' })),
     checkoutRetrieve: vi.fn(),
+    checkoutList: vi.fn(async (_params: Record<string, unknown>) => ({ data: [] as { id: string }[] })),
+    checkoutExpire: vi.fn(async (_id: string) => ({})),
+    subCancel: vi.fn(async (_id: string, _params: Record<string, unknown>) => ({})),
+    creditNoteCreate: vi.fn(async (_params: Record<string, unknown>) => ({ id: 'cn_1' })),
     portalCreate: vi.fn(async (_params: Record<string, unknown>) => ({ url: 'https://billing.stripe.test/session' })),
     subRetrieve: vi.fn(async (_id: string, _params?: unknown) => subscription()),
     subUpdate: vi.fn(async (_id: string, _params: Record<string, unknown>) => subscription()),
@@ -81,9 +85,12 @@ function fakeStripe() {
   };
   const client = {
     prices: { list: calls.pricesList },
-    checkout: { sessions: { create: calls.checkoutCreate, retrieve: calls.checkoutRetrieve } },
+    checkout: {
+      sessions: { create: calls.checkoutCreate, retrieve: calls.checkoutRetrieve, list: calls.checkoutList, expire: calls.checkoutExpire },
+    },
     billingPortal: { sessions: { create: calls.portalCreate } },
-    subscriptions: { retrieve: calls.subRetrieve, update: calls.subUpdate, list: calls.subList },
+    subscriptions: { retrieve: calls.subRetrieve, update: calls.subUpdate, list: calls.subList, cancel: calls.subCancel },
+    creditNotes: { create: calls.creditNoteCreate },
     invoices: {
       createPreview: calls.invoicePreview,
       retrieve: calls.invoiceRetrieve,
@@ -232,7 +239,64 @@ describe('Stripe adapter: reading a subscription', () => {
       pauseResumesAt: null,
       paymentMethod: { brand: 'visa', last4: '4242', expMonth: 8, expYear: 2028 },
       latestInvoiceId: 'in_1',
+      // Stripe gave no preview of the next invoice here: no credit known, no next bill claimed.
+      creditBalanceCents: 0,
+      upcoming: null,
     });
+  });
+
+  it('reads the credit and the real next charge from the preview of the next invoice', async () => {
+    const { gateway, calls } = fakeStripe();
+    // $50.00 of customer balance, and $14.50 of unused time still waiting as a line on the next invoice.
+    calls.subRetrieve.mockResolvedValue(subscription({ customer: { id: 'cus_1', balance: -5000, invoice_settings: {} } }));
+    calls.invoicePreview.mockResolvedValue({
+      id: 'upcoming',
+      customer: 'cus_1',
+      status: 'draft',
+      subtotal: 13050,
+      total: 13050,
+      amount_due: 8050,
+      starting_balance: -5000,
+      lines: {
+        data: [
+          { description: 'Unused time on KitStak CRM', amount: -1450, quantity: 1, proration: true },
+          { description: '5 x KitStak CRM', amount: 14500, quantity: 5 },
+        ],
+      },
+    });
+    const read = await gateway.getSubscription('sub_1');
+    expect(read?.creditBalanceCents).toBe(6450);
+    // The card is charged $80.50: the $145.00 plan less all $64.50 of credit.
+    expect(read?.upcoming).toEqual({ amountDueCents: 8050, discountCents: 0, discountLabel: null, creditAppliedCents: 6450 });
+    expect(calls.invoicePreview.mock.calls[0]![0]).toEqual({ customer: 'cus_1', subscription: 'sub_1' });
+  });
+
+  it('a promo code on the next invoice shows as a discount, so the first charge shown is the first charge made', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.subRetrieve.mockResolvedValue(subscription({ status: 'trialing', trial_end: unix(NOW) + 10 * DAY }));
+    calls.invoicePreview.mockResolvedValue({
+      customer: 'cus_1',
+      subtotal: 39520,
+      total: 35568,
+      amount_due: 35568,
+      total_discount_amounts: [{ amount: 3952 }],
+      lines: { data: [{ description: 'KitStak CRM', amount: 39520, quantity: 5 }] },
+    });
+    const read = await gateway.getSubscription('sub_1');
+    expect(read?.upcoming).toEqual({ amountDueCents: 35568, discountCents: 3952, discountLabel: 'Promo code', creditAppliedCents: 0 });
+  });
+
+  it('claims no next bill for a plan that is set to end, is paused, or when Stripe cannot say', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoicePreview.mockResolvedValue({ total: 14500, amount_due: 14500, lines: { data: [] } });
+    calls.subRetrieve.mockResolvedValue(subscription({ cancel_at_period_end: true }));
+    expect((await gateway.getSubscription('sub_1'))?.upcoming).toBeNull();
+    calls.subRetrieve.mockResolvedValue(subscription({ pause_collection: { behavior: 'void', resumes_at: unix(NOW) + 40 * DAY } }));
+    expect((await gateway.getSubscription('sub_1'))?.upcoming).toBeNull();
+    expect(calls.invoicePreview).not.toHaveBeenCalled();
+    calls.subRetrieve.mockResolvedValue(subscription());
+    calls.invoicePreview.mockRejectedValue({ code: 'invoice_upcoming_none' });
+    expect((await gateway.getSubscription('sub_1'))?.upcoming).toBeNull();
   });
 
   it('still reads top level period fields when an older API version sends them', async () => {
@@ -651,5 +715,85 @@ describe('Stripe adapter: webhooks', () => {
     expect(event('customer.updated', { id: 'cus_1', object: 'customer', metadata: {} })).toMatchObject({ orgId: null, customerId: 'cus_1', subscriptionId: null });
     // The old test subscription has `org_id`, never `kitstak_org_id`: no org, so it will be ignored.
     expect(event('customer.subscription.updated', { id: 'sub_old', object: 'subscription', customer: 'cus_old', metadata: { org_id: ORG, plan_key: 'starter' } }).orgId).toBeNull();
+  });
+});
+
+describe('Stripe adapter: one plan per organization', () => {
+  it('closes every open checkout page of the customer before a new one is made', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.checkoutList.mockResolvedValue({ data: [{ id: 'cs_old_1' }, { id: 'cs_old_2' }] });
+    // One of them was paid a moment ago: Stripe refuses to expire it. That must not stop the rest.
+    calls.checkoutExpire.mockImplementation(async (id: string) => {
+      if (id === 'cs_old_1') throw new Error('This session is complete.');
+      return {};
+    });
+    await expect(gateway.expireOpenCheckoutSessions('cus_1')).resolves.toBe(1);
+    expect(calls.checkoutList.mock.calls[0]![0]).toEqual({ customer: 'cus_1', status: 'open', limit: 100 });
+    expect(calls.checkoutExpire.mock.calls.map((call) => call[0])).toEqual(['cs_old_1', 'cs_old_2']);
+  });
+
+  it('cancels a second subscription with no final invoice and sends its payment back', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.subRetrieve.mockResolvedValue(subscription({ id: 'sub_2', latest_invoice: 'in_2' }));
+    calls.invoiceRetrieve.mockResolvedValue({ id: 'in_2', status: 'paid', amount_paid: 2900, post_payment_credit_notes_amount: 0 });
+    await expect(gateway.cancelAndRefund('sub_2')).resolves.toEqual({ refundedCents: 2900 });
+    expect(calls.subCancel.mock.calls[0]).toEqual(['sub_2', { invoice_now: false, prorate: false }]);
+    expect(calls.creditNoteCreate.mock.calls[0]![0]).toEqual({ invoice: 'in_2', amount: 2900, refund_amount: 2900, reason: 'duplicate' });
+  });
+
+  it('never refunds the same invoice twice, and voids one that was not paid yet', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.subRetrieve.mockResolvedValue(subscription({ id: 'sub_2', status: 'canceled', latest_invoice: 'in_2' }));
+    calls.invoiceRetrieve.mockResolvedValue({ id: 'in_2', status: 'paid', amount_paid: 2900, post_payment_credit_notes_amount: 2900 });
+    await expect(gateway.cancelAndRefund('sub_2')).resolves.toEqual({ refundedCents: 0 });
+    expect(calls.subCancel).not.toHaveBeenCalled();
+    expect(calls.creditNoteCreate).not.toHaveBeenCalled();
+
+    calls.subRetrieve.mockResolvedValue(subscription({ id: 'sub_3', status: 'incomplete', latest_invoice: 'in_3' }));
+    calls.invoiceRetrieve.mockResolvedValue({ id: 'in_3', status: 'open', amount_paid: 0 });
+    await expect(gateway.cancelAndRefund('sub_3')).resolves.toEqual({ refundedCents: 0 });
+    expect(calls.invoiceVoid).toHaveBeenCalledWith('in_3');
+    expect(calls.creditNoteCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('Stripe adapter: the proration date comes from the server', () => {
+  const previewInvoice = { total: -1000, amount_due: 0, lines: { data: [{ description: 'Unused time', amount: -1000, quantity: 1, proration: true }] } };
+
+  it('uses a date up to a day ahead for a credit as it is', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoicePreview.mockResolvedValue(previewInvoice);
+    const ahead = new Date(NOW.getTime() + 5 * 60 * 60 * 1000);
+    const preview = await gateway.previewChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 4 }, prorationDate: ahead });
+    expect(preview.prorationDate).toEqual(ahead);
+    expect(preview).toMatchObject({ dueTodayCents: 0, creditCents: 1000, proratedCents: 0, creditAppliedCents: 0 });
+    const details = calls.invoicePreview.mock.calls[0]![0].subscription_details;
+    expect(details.proration_date).toBe(unix(ahead));
+  });
+
+  it('falls back to a date in the past when Stripe refuses a date ahead, and never before the whole day date', async () => {
+    const { gateway, calls } = fakeStripe();
+    const refused = { type: 'StripeInvalidRequestError', param: 'subscription_details[proration_date]', message: 'Invalid proration_date' };
+    calls.invoicePreview.mockRejectedValueOnce(refused).mockResolvedValue(previewInvoice);
+    const hour = 60 * 60 * 1000;
+    const ahead = new Date(NOW.getTime() + 5 * hour);
+    const preview = await gateway.previewChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 4 }, prorationDate: ahead });
+    const startOfHour = Math.floor(NOW.getTime() / hour) * hour;
+    expect(preview.prorationDate.getTime()).toBe(Math.max(startOfHour, ahead.getTime() - 24 * hour));
+    expect(preview.prorationDate.getTime()).toBeLessThanOrEqual(NOW.getTime());
+    // It remembers: the next call does not try the refused date again.
+    await gateway.previewChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 4 }, prorationDate: ahead });
+    expect(calls.invoicePreview).toHaveBeenCalledTimes(3);
+    // Any other error is not swallowed.
+    calls.invoicePreview.mockRejectedValue(new Error('Stripe is down'));
+    await expect(gateway.previewChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 4 }, prorationDate: ahead })).rejects.toThrow('Stripe is down');
+  });
+
+  it('the change itself uses the very date its preview used', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoicePreview.mockResolvedValue({ total: 2900, amount_due: 2900, lines: { data: [{ description: '1 more', amount: 2900, quantity: 1, proration: true }] } });
+    const day = new Date((unix(NOW) - 10 * DAY) * 1000);
+    await gateway.applyChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 6 }, prorationDate: day });
+    expect(calls.subUpdate.mock.calls[0]![1]).toMatchObject({ proration_date: unix(day), proration_behavior: 'always_invoice' });
   });
 });

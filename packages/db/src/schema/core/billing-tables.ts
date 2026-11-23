@@ -1,6 +1,6 @@
 /**
- * Signup and billing tables added by drizzle/0007_core_billing.sql (docs/billing/CONTRACTS.md
- * section 9): core.billing_accounts, billing_subscriptions, billing_invoices, billing_audit_log,
+ * Signup and billing tables added by drizzle/0007_core_billing.sql and widened by
+ * drizzle/0008_core_billing_credit.sql (docs/billing/CONTRACTS.md section 9): core.billing_accounts, billing_subscriptions, billing_invoices, billing_audit_log,
  * billing_managers, billing_cancel_feedback, billing_emails, billing_test_objects,
  * billing_trial_uses and core.signup_intents.
  *
@@ -119,6 +119,15 @@ export const billingSubscriptions = coreSchema.table(
     pmExpMonth: integer('pm_exp_month'),
     pmExpYear: integer('pm_exp_year'),
     latestInvoiceId: text('latest_invoice_id'),
+    /** Added by 0008. Credit the customer holds at the gateway. It comes off the next bills. */
+    creditCents: integer('credit_cents').notNull().default(0),
+    /** What the card will really be charged at the next bill. null when the gateway did not say. */
+    nextChargeCents: integer('next_charge_cents'),
+    /** A discount on the next bill (a promo code), with the words to show for it. */
+    nextDiscountCents: integer('next_discount_cents').notNull().default(0),
+    nextDiscountLabel: text('next_discount_label'),
+    /** Credit that comes off the next bill. */
+    nextCreditCents: integer('next_credit_cents').notNull().default(0),
     gatewaySyncedAt: timestamptz('gateway_synced_at').notNull().defaultNow(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -173,6 +182,9 @@ export const billingInvoices = coreSchema.table(
     attemptCount: integer('attempt_count').notNull().default(0),
     nextPaymentAttempt: timestamptz('next_payment_attempt'),
     pmLast4: text('pm_last4'),
+    /** Added by 0008. How much of this invoice was paid from credit, and how much was sent back. */
+    creditAppliedCents: integer('credit_applied_cents').notNull().default(0),
+    refundedCents: integer('refunded_cents').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

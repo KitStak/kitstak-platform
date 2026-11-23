@@ -12,6 +12,12 @@ export type AuditAction =
   | 'cart.saved'
   | 'checkout.started'
   | 'checkout.expired'
+  /** A second subscription slipped in for an organization that already had a plan. It was canceled and refunded. */
+  | 'checkout.duplicate_refunded'
+  /** A bill was paid in full or in part from credit. */
+  | 'payment.credit_used'
+  /** A person fixed a typo in an email address that was never verified. */
+  | 'account.email_changed'
   | 'plan.started'
   | 'plan.changed'
   | 'payment.succeeded'

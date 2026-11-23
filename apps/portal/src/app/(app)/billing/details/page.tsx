@@ -17,7 +17,7 @@ export default async function BillingDetailsPage() {
   const [profile, state] = await Promise.all([getBillingProfile(rt.db, org.id), getPlanState(rt, org.id)]);
 
   return (
-    <div className="mx-auto flex max-w-[720px] flex-col gap-6">
+    <div className="flex max-w-[720px] flex-col gap-6">
       <BillingHeader
         orgName={org.name}
         title="Billing details"
