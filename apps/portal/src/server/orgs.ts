@@ -99,3 +99,33 @@ export async function resolveActiveOrg(
   const activeId = session.session.activeOrganizationId;
   return memberships.find((org) => org.id === activeId) ?? memberships[0];
 }
+
+export interface OrgMemberSummary {
+  readonly userId: string;
+  readonly name: string;
+  readonly email: string;
+  /** First role of the membership. */
+  readonly role: string;
+}
+
+/** Active members of an org by name. Used by the billing team page to pick a billing manager. */
+export async function listOrgMembers(orgId: string): Promise<OrgMemberSummary[]> {
+  const rows = await db
+    .select({ userId: user.id, name: user.name, email: user.email, role: member.role })
+    .from(member)
+    .innerJoin(user, eq(member.userId, user.id))
+    .where(eq(member.organizationId, orgId))
+    .orderBy(asc(user.name));
+  return rows
+    .filter((row) => !row.role.startsWith(DEACTIVATED_PREFIX))
+    .map((row) => ({ ...row, role: row.role.split(',')[0]?.trim() || 'member' }));
+}
+
+/** True when the user is an active member of the org. The test gateway pages check this themselves. */
+export async function isActiveOrgMember(userId: string, orgId: string): Promise<boolean> {
+  const rows = await db
+    .select({ role: member.role, userId: member.userId })
+    .from(member)
+    .where(eq(member.organizationId, orgId));
+  return rows.some((row) => row.userId === userId && !row.role.startsWith(DEACTIVATED_PREFIX));
+}

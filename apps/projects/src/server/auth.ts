@@ -9,10 +9,12 @@
  */
 import 'server-only';
 import { createAuth, ipAddressFromTrustProxy, type KitstakAuth } from '@kitstak/auth';
+import { billingOrganizationOptions } from '@kitstak/billing/server';
 import * as schema from '@kitstak/db/schema';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { db } from '@/server/db';
-import { env, isProduction, trustedOrigins } from '@/server/env';
+import { entitlementsAllowAll } from '@/server/entitlements';
+import { appUrls, env, isProduction, trustedOrigins } from '@/server/env';
 
 const KITSTAK_METADATA_KEY = 'kitstak';
 
@@ -91,6 +93,9 @@ function buildAuth(): KitstakAuth {
     // Accounts are created on the portal; Projects only signs people in.
     disableSignUp: true,
     hooks: kitstakOrgMetadataHooks,
+    // Billing rules for the shared organization endpoints (docs/billing/CONTRACTS.md section
+    // 15.2): the seat limit on invites and joins, and no deleting an org with a running plan.
+    organization: billingOrganizationOptions({ db, portalUrl: appUrls().portal, allowAll: entitlementsAllowAll }),
   });
 }
 

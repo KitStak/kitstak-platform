@@ -21,6 +21,9 @@ async function SetupContent() {
   if (!state.signedIn) redirect('/login?next=/setup-warehouse');
   if (state.offers.length === 0) {
     if (state.hasWarehouse) redirect('/');
+    // None of their organizations has the WMS in its plan: the lock screen says what it costs and
+    // how to add it (docs/billing/SPEC.md section 9.3), instead of a dead end here.
+    if (state.waitingOn.length === 0) redirect('/locked');
     return (
       <div className="text-center">
         <h1 className="text-lg font-semibold">No warehouse yet</h1>

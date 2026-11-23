@@ -19,6 +19,7 @@ import { assertWmsSchemaName, wmsSchemaNameForOrg } from '@kitstak/db/wms-tenant
 import type { AppDb } from '@/server/api/db';
 import { AppError } from '@/server/api/errors';
 import { wmsModuleEntitledForOrg } from '@/server/auth/entitlements';
+import { assertWarehouseAvailable } from '@/server/auth/plan';
 import { dbRun, withWriteTx } from '@/server/db/sql';
 import { log } from '@/server/log';
 import { cloneWmsSchema, type CloneReport } from './clone-schema';
@@ -101,10 +102,13 @@ export async function provisionWarehouse(
   const now = deps.now ?? (() => new Date());
   const caller = await loadCaller(platformDb, input.orgId, input.userId);
   if (!(await wmsModuleEntitledForOrg(platformDb, input.orgId))) {
-    throw new AppError('ENTITLEMENT_MISSING', 'WMS is not enabled for this organization', {
+    throw new AppError('ENTITLEMENT_MISSING', 'WMS is not in your plan yet. Add it in the Portal to use it.', {
       details: { module: 'wms' },
     });
   }
+  // The first warehouse of a paid plan counts toward the plan's warehouse limit (always covered:
+  // a plan with WMS pays for at least one). No limit during a free trial.
+  await assertWarehouseAvailable(platformDb, input.orgId, 1);
 
   const schemaName = wmsSchemaNameForOrg(input.orgId);
   const existing = (

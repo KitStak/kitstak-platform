@@ -15,6 +15,7 @@ export { rateLimit as rate_limit } from './core/rate-limit';
 export * from './core/customers';
 export * from './core/items';
 export * from './core/billing';
+export * from './core/billing-tables';
 export * from './core/onboarding';
 export * from './core/password-change';
 export * from './core/links';

@@ -30,6 +30,7 @@ async function AuthedShell({ children }: Readonly<{ children: React.ReactNode }>
         idleMinutes={shell.idleMinutes}
         org={shell.org}
         orgs={shell.orgs}
+        plan={shell.plan}
       >
         {children}
       </AppShell>

@@ -10,6 +10,7 @@ import { AppError, BadRequestError, ForbiddenError, NotFoundError } from '@/serv
 import { canManageRole, primaryRole, type OrgRole } from '@/server/rbac';
 import { inTransaction, type ServiceContext } from './context';
 import { createInvitation, updateMemberRole } from './members';
+import { assertSeatAvailable } from './seat-limit';
 import type {
   AdminInvitationDto,
   AdminUserDto,
@@ -132,6 +133,8 @@ export async function setMemberActive(ctx: ServiceContext, memberId: string, act
     if (!active && target.decoded.role === 'owner' && (await activeOwnerCount(tx)) <= 1) {
       throw new BadRequestError('An organization must keep at least one active owner');
     }
+    // A deactivated member uses no seat. Turning them back on needs a free seat on the plan.
+    if (active) await assertSeatAvailable(tx, { role: target.decoded.role });
     const role = active ? target.decoded.role : encodeDeactivatedRole(target.decoded.role);
     await tx.db.update(member).set({ role }).where(eq(member.id, memberId));
   });

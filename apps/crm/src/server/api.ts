@@ -28,7 +28,8 @@ import {
 } from '@/server/auth/session';
 import { mustChangePassword } from '@/server/auth/password-change';
 import { db, type Database } from '@/server/db';
-import { orgHasCrmModule } from '@/server/entitlements';
+import { orgCrmAccess } from '@/server/entitlements';
+import { isPlanSafeMethod, PLAN_LOCKED_MESSAGE, PLAN_READ_ONLY_MESSAGE } from '@/server/plan-gate';
 import { trustedOrigins } from '@/server/env';
 import { ORG_HEADER, REQUEST_ID_HEADER, type ApiMeta } from '@/server/http/envelope';
 import {
@@ -71,6 +72,12 @@ export interface ApiOptions {
   readonly query?: AnySchema;
   readonly body?: AnySchema;
   readonly maxBodyBytes?: number;
+  /**
+   * Marks a route that is not GET or HEAD but changes no business data (an export, a query sent
+   * as POST, a "seen" marker). It keeps working while the plan is view only (docs/billing/SPEC.md
+   * section 9.4). Every other POST, PATCH, PUT and DELETE is refused in view only.
+   */
+  readonly planRead?: boolean;
   /** Audit a successful call (security-relevant actions only). */
   readonly audit?: {
     readonly action: string;
@@ -216,15 +223,26 @@ export function withApi<const O extends ApiOptions, T>(
       // Org IP allow-list (admin center → Security). Cached per org; no-op when disabled.
       if (membership) await enforceNetworkPolicy(membership.organization.id, ip);
 
-      // Module entitlement gate (BLUEPRINT.md §3.3), after org resolution and before RBAC:
-      // org-scoped calls require the `crm` module (dev/test default to allow-all — see
-      // @/server/entitlements). Routes without an org in play (org: 'none', or optional
-      // with none named) skip. The 402 envelope is fixed shape, outside the AppError map.
-      if (membership && !(await orgHasCrmModule(membership.organization.id))) {
-        return NextResponse.json(
-          { ok: false, error: { code: 'entitlement.missing', module: 'crm' } },
-          { status: 402, headers: { ...BASE_HEADERS, [REQUEST_ID_HEADER]: requestId } },
-        );
+      // Plan gate (docs/billing/CONTRACTS.md section 18), after org resolution and before RBAC.
+      // Org-scoped calls need the `crm` module (dev/test default to allow-all, see
+      // @/server/entitlements). Routes without an org in play (org: 'none', or optional with
+      // none named) skip. Not in the plan: every call is refused. View only: reads pass, every
+      // write is refused with one plain sentence. The 402 envelopes are fixed shape, outside
+      // the AppError map.
+      if (membership) {
+        const access = await orgCrmAccess(membership.organization.id);
+        if (access === 'locked') {
+          return NextResponse.json(
+            { ok: false, error: { code: 'entitlement.missing', module: 'crm', message: PLAN_LOCKED_MESSAGE } },
+            { status: 402, headers: { ...BASE_HEADERS, [REQUEST_ID_HEADER]: requestId } },
+          );
+        }
+        if (access === 'read_only' && !isPlanSafeMethod(method) && options.planRead !== true) {
+          return NextResponse.json(
+            { ok: false, error: { code: 'plan.read_only', module: 'crm', message: PLAN_READ_ONLY_MESSAGE } },
+            { status: 402, headers: { ...BASE_HEADERS, [REQUEST_ID_HEADER]: requestId } },
+          );
+        }
       }
 
       const tokenDenied =

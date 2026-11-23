@@ -72,58 +72,88 @@
 }
 
 /* ------------------------------------------------------------ Quote (on navy) */
+/* One math line per app: "CRM: 5 users x $29 = $145 per month". */
 .lines {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 14px;
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid var(--on-brand-rule);
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+  line-height: 1.45;
 }
-.lines li {
+/* List price, then each discount as its own dollar line. */
+.sums {
+  margin: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--on-brand-rule);
+}
+.sums div {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--on-brand-rule);
+  padding: 4px 0;
   font-size: var(--type-base);
-  font-weight: var(--weight-semibold);
-}
-.lineBasis {
-  display: block;
-  font-size: var(--type-sm);
-  font-weight: var(--weight-regular);
   color: var(--on-brand-muted);
 }
-.lineAmount {
+.sums dt,
+.sums dd {
+  margin: 0;
+}
+.sums dd {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.lines .saving {
-  font-weight: var(--weight-regular);
-  color: var(--on-brand-muted);
+.sums [data-kind='discount'] {
+  color: var(--brand-cream);
+}
+.sums [data-kind='discount'] dd {
+  font-weight: var(--weight-semibold);
 }
 .total {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
-  gap: 14px;
-  margin-top: 22px;
+  gap: 4px 12px;
+  margin-top: 20px;
 }
+/* Sized so the largest total the calculator can reach still fits the panel on one line. */
 .totalFigure {
-  font-size: clamp(64px, 7vw, 96px);
+  font-size: clamp(52px, 5.4vw, 80px);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .totalPer {
   padding-bottom: 6px;
-  font-size: var(--type-sm);
-  line-height: 1.4;
+  font-size: var(--type-base);
   color: var(--on-brand-muted);
+}
+.monthly {
+  margin-top: 8px;
+  font-size: var(--type-base);
+  color: var(--on-brand-muted);
+}
+.monthly span {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--brand-cream);
 }
 .saved {
   margin-top: 14px;
   font-size: var(--type-base);
   font-weight: var(--weight-semibold);
 }
+.emptyQuote {
+  padding: 28px 0;
+  font-size: var(--type-base);
+  color: var(--on-brand-muted);
+}
 .fine {
   margin-top: 10px;
-  font-size: var(--type-xs);
+  font-size: var(--type-sm);
   color: var(--on-brand-muted);
 }
 /* The team is over a flat price's seat limit. Louder than the fine print, with a rule beside it. */
@@ -207,7 +237,7 @@
 .billing label {
   display: inline-flex;
   align-items: center;
-  height: 38px;
+  height: 44px;
   padding: 0 14px;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -228,4 +258,20 @@
 .billing label:has(:focus-visible) {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+/* The same switch on the navy brand surface (the pricing page hero). */
+.billing[data-inverse] {
+  background: var(--on-brand-rule);
+}
+.billing[data-inverse] label {
+  color: var(--on-brand-muted);
+}
+.billing[data-inverse] label[data-checked] {
+  background: var(--brand-cream);
+  color: var(--brand-navy);
+  box-shadow: none;
+}
+.billing[data-inverse] label:has(:focus-visible) {
+  outline-color: var(--brand-cream);
 }

@@ -7,7 +7,6 @@ import { profitRecordMissing } from '@/features/profit/server/record-exists';
 import { loadShell } from '@/features/shell/shell-frame';
 import { listOrgPeople } from '@/server/domain';
 import { requirePageContext } from '@/server/session';
-import { ORG_ROLES } from '@/lib/permissions';
 import { reportInfo } from '@/lib/reports';
 
 /** Org people for the shell's people cache, stamped with when they were read (undefined on failure). */
@@ -28,11 +27,10 @@ export default async function AppLayout({ children }: { readonly children: React
   const path = (await headers()).get('x-ks-path') ?? '/';
   const context = await requirePageContext(path);
   const shell = await loadShell(context);
-  if (!shell.entitled) {
-    const canManage = ORG_ROLES.indexOf(context.orgRole) <= ORG_ROLES.indexOf('admin');
+  if (shell.plan.lock) {
     return (
       <AppShell context={shell.shellContext}>
-        <LockedScreen orgName={context.org.name} portalUrl={shell.urls.portal} canManage={canManage} />
+        <LockedScreen lock={shell.plan.lock} />
       </AppShell>
     );
   }

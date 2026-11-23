@@ -12,7 +12,9 @@
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { getPlatformDb, getTenantDbFor } from '@/server/api/db';
+import { entitlementsAllowAll, wmsAccessForOrg } from '@/server/auth/entitlements';
 import { listTenantSchemas } from '@/server/tenancy/migrations';
+import { orgIdForDb } from '@/server/tenancy/registry';
 import { SCHEDULER_TASKS } from './registry';
 import {
   createSchedulerRunner,
@@ -41,9 +43,20 @@ function createRunner(): SchedulerRunner {
     listDbs: async () => {
       const platform = await getPlatformDb();
       const schemas = await listTenantSchemas(platform, { activeOnly: true });
-      return await Promise.all(
+      const dbs = await Promise.all(
         schemas.map(async (schema) => ({ schema, db: schema === 'wms' ? platform : await getTenantDbFor(schema) })),
       );
+      // Scheduled tasks change warehouse data. A warehouse whose org is view only or has no WMS
+      // in its plan gets no background writes (docs/billing/SPEC.md section 9.4); its tasks run
+      // again once the plan is back to full access. Skipped while the gate is off (allow-all).
+      if (entitlementsAllowAll()) return dbs;
+      const open: typeof dbs = [];
+      for (const entry of dbs) {
+        const orgId = await orgIdForDb(entry.db);
+        // The platform schema before its org is registered: nothing to check against.
+        if (orgId === null || (await wmsAccessForOrg(platform, orgId)) === 'full') open.push(entry);
+      }
+      return open;
     },
     tasks: SCHEDULER_TASKS,
     ownerId: `${os.hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`,

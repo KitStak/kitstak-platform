@@ -11,7 +11,7 @@ import { asc, eq, sql } from 'drizzle-orm';
 import { member, organization, wmsTenants } from '@kitstak/db/schema';
 import { assertWmsSchemaName, isWmsSchemaName, WMS_PLATFORM_SCHEMA } from '@kitstak/db/wms-tenants';
 import type { AppDb } from '@/server/api/db';
-import { wmsModuleEntitledForOrg } from '@/server/auth/entitlements';
+import { wmsAccessForOrg } from '@/server/auth/entitlements';
 import { dbGet } from '@/server/db/sql';
 import { currentWmsSchema } from '@/server/db/tenant';
 
@@ -32,7 +32,13 @@ export interface WmsOrgChoice {
   readonly memberRole: string;
   /** Active warehouse schema, or null when the org has no warehouse yet. */
   readonly schemaName: string | null;
+  /** WMS is in the org's plan: full access or view only. False = not in the plan (locked). */
   readonly entitled: boolean;
+  /**
+   * True while the org's plan is view only (trial over, payment late, paused, plan ended): the
+   * warehouse opens and reads, every change is refused. Omitted means false.
+   */
+  readonly viewOnly?: boolean;
 }
 
 export const isSetupRole = (memberRole: string): boolean =>
@@ -60,13 +66,16 @@ export async function listWmsOrgs(platformDb: AppDb, userId: string): Promise<Wm
     const registered =
       r.status === 'active' && r.schemaName && isWmsSchemaName(r.schemaName) ? r.schemaName : null;
     const schemaName = registered ?? (r.slug === PLATFORM_ORG_SLUG && !r.status ? WMS_PLATFORM_SCHEMA : null);
+    const access = await wmsAccessForOrg(platformDb, r.orgId);
     choices.push({
       orgId: r.orgId,
       name: r.name,
       slug: r.slug,
       memberRole: r.memberRole,
       schemaName,
-      entitled: await wmsModuleEntitledForOrg(platformDb, r.orgId),
+      entitled: access !== 'locked',
+      // Only set when true, so callers that compare choices exactly keep working.
+      ...(access === 'read_only' ? { viewOnly: true } : {}),
     });
   }
   return choices;
@@ -104,9 +113,12 @@ export function pickWmsOrg(
   return rankWmsOrgs(choices, prefs)[0] ?? null;
 }
 
-/** Entitled orgs without a warehouse that this user may set up (org owner/admin). */
+/**
+ * Entitled orgs without a warehouse that this user may set up (org owner/admin). Setting up a
+ * warehouse is a change, so a view only org is not offered one.
+ */
 export const setupCandidates = (choices: readonly WmsOrgChoice[]): WmsOrgChoice[] =>
-  choices.filter((c) => c.entitled && c.schemaName === null && isSetupRole(c.memberRole));
+  choices.filter((c) => c.entitled && !c.viewOnly && c.schemaName === null && isSetupRole(c.memberRole));
 
 /** Records the platform org as the owner of the original `wms` schema (idempotent). */
 export async function registerPlatformTenant(db: AppDb, orgId: string): Promise<void> {

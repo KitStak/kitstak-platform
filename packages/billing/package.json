@@ -1,0 +1,49 @@
+{
+  "name": "@kitstak/billing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KitStak signup and billing: the one pricing catalog, quotes, plan state, the Stripe and test gateways, webhook sync into core.entitlements, emails and jobs. Pure subpaths (catalog, quote, handoff, links, plan-state, errors, email-types) are safe for the browser and the marketing site. TypeScript source-shipped (consumers transpile via Next transpilePackages).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./catalog": "./src/catalog.ts",
+    "./quote": "./src/quote.ts",
+    "./handoff": "./src/handoff.ts",
+    "./links": "./src/links.ts",
+    "./plan-state": "./src/plan-state.ts",
+    "./errors": "./src/errors.ts",
+    "./email-types": "./src/email-types.ts",
+    "./server": "./src/server/index.ts",
+    "./gateway": "./src/gateway/types.ts",
+    "./gateway/stripe": "./src/gateway/stripe.ts",
+    "./gateway/test": "./src/gateway/test.ts",
+    "./emails": "./src/emails/index.ts",
+    "./jobs": "./src/jobs/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "stripe:setup": "tsx scripts/stripe-setup.ts",
+    "backfill": "tsx scripts/backfill-entitlements.ts"
+  },
+  "dependencies": {
+    "@kitstak/auth": "workspace:*",
+    "@kitstak/db": "workspace:*",
+    "@kitstak/entitlements": "workspace:*",
+    "better-auth": "^1.7.18",
+    "stripe": "23.2.0"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "^0.45.4"
+  },
+  "devDependencies": {
+    "@kitstak/config": "workspace:*",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
+  }
+}

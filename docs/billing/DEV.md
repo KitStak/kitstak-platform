@@ -1,0 +1,344 @@
+# Local dev for signup and billing
+
+How to run the whole KitStak platform on your machine (or in the dev container), sign in,
+and take screenshots. Every command here was run for real in the dev container.
+
+All commands run from the repo root.
+
+## Quick start
+
+```bash
+pnpm install                       # once
+deploy/dev/db-setup.sh             # start Postgres, migrate, load demo data
+deploy/dev/app-start.sh portal     # Portal on http://localhost:3300
+deploy/dev/status.sh               # what is up, on which port, where the logs are
+```
+
+That is all you need for signup and billing work. Start the other apps when you need them:
+
+```bash
+deploy/dev/app-start.sh crm wms projects pulse web
+deploy/dev/app-start.sh all        # same as naming all six
+```
+
+Stop things:
+
+```bash
+deploy/dev/stop.sh crm wms         # only these apps
+deploy/dev/stop.sh apps            # every app, keep the database
+deploy/dev/stop.sh                 # every app and the database
+```
+
+## The scripts
+
+All live in `deploy/dev/`. All are safe to run again.
+
+| Script | What it does |
+| --- | --- |
+| `db-start.sh` | Starts local Postgres on port 5544. First run creates the cluster and the `kitstak` database. Does nothing if it is already running. |
+| `db-setup.sh` | Runs `db-start.sh`, then every migration in the right order, then the demo seeds if the demo orgs are missing. |
+| `db-setup.sh --migrate` | Migrations only. Use it after you add a migration. |
+| `db-setup.sh --reseed` | Migrations, then reload all demo data. Only the two demo orgs are rebuilt. Orgs you made by signing up stay. |
+| `env-init.sh` | Writes an untracked `.env.local` into each app that has none. Never overwrites one. `--print` shows what it would write. |
+| `app-start.sh <app> ...` | Starts each named app in the background and waits until it answers a real page. An app that is already listening is reused. |
+| `stop.sh [apps or db]` | Stops apps, the database, or both. |
+| `status.sh` | One line per service: up or down, URL, log file. |
+| `shot.mjs` | Signs in and takes screenshots in light and dark, desktop and phone. See below. |
+| `rate-limit-reset.sh` | Clears the sign in and sign up rate limit counters in the local database. |
+| `billing-tick.sh` | Runs the billing job once on the local portal: sends waiting emails to the dev outbox, queues trial and late payment reminders, runs what is due for test subscriptions. With the word `watch` it runs every 15 seconds. |
+| `billing-reset.sh <org-slug>` | Shows the billing rows of one organization. With the word `yes` after the slug it removes them, so the organization is back to "never had a trial". Keeps the organization, its people, its data and manual grants. Refuses any database that is not on this machine. |
+
+Runtime files (logs, pid files, saved sessions, screenshots, the generated sign-in secret)
+go to `deploy/dev/.run/`, which is gitignored.
+
+## Ports and logs
+
+| App | URL | Log |
+| --- | --- | --- |
+| Portal | http://localhost:3300 | `deploy/dev/.run/logs/portal.log` |
+| CRM | http://localhost:3100 | `deploy/dev/.run/logs/crm.log` |
+| WMS | http://localhost:3000 | `deploy/dev/.run/logs/wms.log` |
+| Projects | http://localhost:3400 | `deploy/dev/.run/logs/projects.log` |
+| Pulse | http://localhost:3500 | `deploy/dev/.run/logs/pulse.log` |
+| Web (marketing) | http://localhost:3600 | `deploy/dev/.run/logs/web.log` |
+| Postgres | `postgres://postgres:postgres@127.0.0.1:5544/kitstak` | `apps/crm/.data/pg.log` |
+
+Follow a log with `tail -f deploy/dev/.run/logs/portal.log`.
+
+The marketing site runs on 3600, both from its own `dev` script and from the dev scripts, so
+it never collides with Projects on 3400.
+
+## The database
+
+One Postgres holds every app. Each app has its own schema: `core` (users, orgs, sessions,
+entitlements, billing), `crm`, `wms`, `pm` (Projects) and `pulse`.
+
+- The server is PostgreSQL 18 from the `embedded-postgres` npm package. No Docker needed.
+- Data lives in `apps/crm/.data/pg`. This is the same place, port and login that
+  `pnpm --filter kitstak-crm db:start` uses, so both ways share one database.
+- Migration order (from `docs/DEPLOYMENT.md`): CRM, WMS, core (`@kitstak/db`), Projects,
+  Pulse. `db-setup.sh` does this for you. Each runner keeps its own bookkeeping table, so
+  running them again applies nothing new.
+- A new core migration goes in `packages/db/drizzle/` and must be added to
+  `packages/db/drizzle/meta/_journal.json`. Only files in the journal are applied. Then run
+  `deploy/dev/db-setup.sh --migrate`.
+- Never edit a migration that has been applied. The runner checks a hash and stops.
+- Never run `drizzle-kit push` in this repo.
+
+Look inside the database:
+
+```bash
+psql postgres://postgres:postgres@127.0.0.1:5544/kitstak
+```
+
+Useful billing queries:
+
+```sql
+select o.slug, e.module, e.status, e.source, e.current_period_end
+  from core.entitlements e join core.organization o on o.id = e.org_id order by 1, 2;
+select id, type, processed_at from core.billing_events order by processed_at desc limit 20;
+select * from core.stripe_customers;
+```
+
+Start over from nothing (this deletes all local data):
+
+```bash
+deploy/dev/stop.sh
+rm -rf apps/crm/.data/pg apps/crm/.data/pg.log
+deploy/dev/db-setup.sh
+```
+
+## Env files
+
+`deploy/dev/env-init.sh` writes `apps/<app>/.env.local` for portal, crm, wms, projects and
+pulse. These files are gitignored. Never commit them. The marketing site needs none.
+
+| Variable | Value in local dev | Why |
+| --- | --- | --- |
+| `DATABASE_URL`, `DIRECT_URL` | `postgres://postgres:postgres@127.0.0.1:5544/kitstak` | The shared local database. |
+| `BETTER_AUTH_SECRET` | random, made on your machine | Must be the same in every app. One sign in then works in all of them. Kept in `deploy/dev/.run/auth-secret`. |
+| `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL` | the app's own URL | Each app needs to know its own address. |
+| `TRUSTED_ORIGINS` | the five app URLs | Lets the apps call each other's sign in routes. |
+| `NEXT_PUBLIC_PORTAL_URL`, `NEXT_PUBLIC_CRM_URL`, `NEXT_PUBLIC_WMS_URL`, `NEXT_PUBLIC_PROJECTS_URL`, `NEXT_PUBLIC_PULSE_URL` | the five app URLs | App switcher and links between apps. |
+| `ENTITLEMENTS_DEV_ALLOW_ALL` | `1` | Every org can open every app. See the next section. |
+| `DEMO_MODE` (WMS only) | `1` | Shows the demo login on the WMS sign in page. |
+
+The file for Portal also lists the billing, mail and sign in variables, all commented out. With none of them
+set and `NODE_ENV` not set to `production`:
+
+- billing uses the built-in **test gateway**, and every billing screen says "Test mode",
+- every email goes to the **dev outbox** at http://localhost:3300/dev/outbox instead of a real inbox,
+- the billing job needs no secret.
+
+`NEXT_PUBLIC_SITE_URL` points at the local marketing site (port 3600), so "Talk to us" stays local. The full
+list of variables and what each one does is in `GO-LIVE.md`. Keys never go in the repo.
+
+To try real Stripe test mode, put your own **test** keys in `apps/portal/.env.local`
+(`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`), then:
+
+```bash
+STRIPE_SECRET_KEY=sk_test_yours pnpm -F @kitstak/billing stripe:setup apply   # products, prices, portal configuration
+stripe listen -f localhost:3300/api/billing/webhooks/stripe                   # prints the whsec_ value to use
+deploy/dev/stop.sh portal && deploy/dev/app-start.sh portal
+```
+
+After you change an env file, restart that app:
+
+```bash
+deploy/dev/stop.sh portal && deploy/dev/app-start.sh portal
+```
+
+### Testing real plans, trials and locked screens
+
+With `ENTITLEMENTS_DEV_ALLOW_ALL=1` every app is open to every org and the Billing page
+shows "Dev override". That hides the thing you want to test. To see real trial and paid
+states, set `ENTITLEMENTS_DEV_ALLOW_ALL=0` in the `.env.local` of the Portal and of each
+app you want to check, then restart those apps. Now access comes only from rows in
+`core.entitlements`.
+
+You do not have to edit a file for that. A variable on the command line wins over `.env.local`:
+
+```bash
+deploy/dev/stop.sh portal crm projects pulse
+ENTITLEMENTS_DEV_ALLOW_ALL=0 deploy/dev/app-start.sh portal crm projects pulse
+```
+
+What the switch changes in the Portal: launcher tiles and the app switcher show "Included" for everything.
+Trials, checkout, plan changes, the seat limit on invites, emails and the billing pages work the same either
+way, so most billing work does not need it off. In the product apps the switch decides whether an app that
+is not in the plan shows its lock screen, so those need it off to test plans.
+
+Grant a module by hand (the existing manual path, which must keep working):
+
+```bash
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5544/kitstak \
+  pnpm --filter @kitstak/entitlements grant grant northwind-robotics crm
+
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5544/kitstak \
+  pnpm --filter @kitstak/entitlements grant list northwind-robotics
+```
+
+Right after `db-setup.sh` no org has any entitlement row, so `list` shows every module as
+blocked. That is the true starting state for trial and checkout testing.
+
+## Emails, the billing job and test time
+
+**The dev outbox.** http://localhost:3300/dev/outbox lists every email the platform would send, newest first:
+the subject, the email as a mail client shows it (light and dark), and the plain text. A code email shows its
+code at the top with a copy button. Use the search box to see one address. Opening the page also delivers
+anything still waiting, so a signup code is there at once. You do not have to be signed in, because a person
+who forgot a password is not. The page does not exist in production.
+
+**All templates.** http://localhost:3300/dev/outbox/templates renders all 14 emails with sample data. Nothing
+is sent or saved. Use it to read copy and check the look.
+
+**The billing job.** In production Vercel Cron calls `/api/billing/jobs/tick` once a minute. Locally nothing
+calls it by itself:
+
+```bash
+deploy/dev/billing-tick.sh          # once. Prints what it did.
+deploy/dev/billing-tick.sh watch    # every 15 seconds, until Ctrl C
+```
+
+It sends queued emails, queues the trial reminders (7, 3 and 1 days left, and "trial ended") and the last day
+reminder for a late payment, asks the gateway again about plans a lost event could have left behind, and in
+test gateway mode runs renewals that are due.
+
+**Test time.** On billing home, in test gateway mode, owners and billing managers see a "Test tools" panel:
+skip ahead 1, 7, 14 or 30 days, skip to the end of the trial, run renewals now, make the next payment fail.
+The tools move one organization's dates back, so the rest of the database is not touched. After a skip, run
+`deploy/dev/billing-tick.sh` to send the reminder emails that are now due.
+
+**Test cards** on the test checkout page: 4242 4242 4242 4242 works, 4000 0000 0000 0002 is declined,
+4000 0000 0000 9995 has not enough money, 4000 0027 6000 3184 needs bank approval, and
+4000 0000 0000 0341 works now and fails at the next renewal. The promo code `TEST10` takes 10% off.
+
+**Start over for one organization.** `deploy/dev/billing-reset.sh <org-slug>` shows its billing rows. Add the
+word `yes` to remove them.
+
+**Tests.** `TESTING.md` lists every test and how to run the browser tests (`pnpm -F kitstak-portal e2e`).
+
+## Seeded logins
+
+| Org | Email | Password | Org role |
+| --- | --- | --- | --- |
+| Northwind Robotics (`northwind-robotics`) | `maya@northwind-robotics.example` | `Northwind-Demo-2026!` | owner |
+| Northwind Robotics | `daniel@northwind-robotics.example` | `Northwind-Demo-2026!` | admin |
+| Northwind Robotics | `sofia@northwind-robotics.example` | `Northwind-Demo-2026!` | member |
+| Northwind Robotics | `aisha@northwind-robotics.example` | `Northwind-Demo-2026!` | viewer |
+| KitStak (`kitstak`) | `admin@kitstak.io` | `KitStak!demo2026` | member in `core.member`, admin inside WMS |
+
+- Use Maya for billing work. She is the only seeded org owner.
+- The `kitstak` org owns the WMS install. Sign in to WMS as `admin@kitstak.io`.
+- Northwind has four more users (liam, hannah, ethan as members, lucas as guest). The
+  `kitstak` org has ten users. Full lists: `apps/crm/src/server/db/seed/README.md` and
+  `apps/wms/src/server/db/seed/access.ts`.
+- The Projects and Pulse READMEs give `KitStak-Demo-2026!` for `admin@kitstak.io`. In a
+  database built by `db-setup.sh` the password that works is `KitStak!demo2026`, because
+  the WMS seed creates that user.
+- Signing up at http://localhost:3300/signup makes a new user and a new org. That is the
+  best way to test the first run. Reseeding does not remove these.
+
+Because all apps run on `localhost`, the browser shares the session cookie across ports.
+Sign in once at the Portal and the other apps know you.
+
+## Screenshots with Playwright
+
+Chromium and Playwright are preinstalled in the dev container. Do not install browsers.
+`require('playwright')` works from any folder.
+
+```bash
+# Billing page as Maya: light and dark, desktop (1440x900) and phone (390x844). Four files.
+node deploy/dev/shot.mjs /billing
+
+# Public pages, not signed in
+node deploy/dev/shot.mjs --anon /signup /login
+
+# One theme, one size, whole page
+node deploy/dev/shot.mjs --theme dark --size phone --full /billing
+
+# Another app, another user
+node deploy/dev/shot.mjs --app crm /northwind-robotics
+node deploy/dev/shot.mjs --app wms --user admin@kitstak.io --password 'KitStak!demo2026' /dashboard
+
+# Open something first, or test reduced motion
+node deploy/dev/shot.mjs --click '<css selector>' --prefix menu /
+node deploy/dev/shot.mjs --reduced-motion /billing
+```
+
+Files go to `deploy/dev/.run/shots/` as `<path>-<size>-<theme>.png`, for example
+`billing-phone-dark.png`. Change the folder with `--out <dir>`. Sizes are `desktop`,
+`phone`, `tablet`, or any `WIDTHxHEIGHT` such as `--size 320x568`. The script prints the
+HTTP status of each page, where a redirect ended, and any browser console errors. It exits
+with 1 when a page answers 500 or above. Run `node deploy/dev/shot.mjs --help` for all
+options.
+
+How it works, in case you write your own Playwright script:
+
+1. Sign in with a real request: `POST /api/auth/sign-in/email` on the app's origin, JSON
+   body `{ "email", "password", "rememberMe": true }`, with an `origin` header equal to the
+   app's origin. Use `context.request.post(...)` so the cookie lands in the browser context.
+2. Pick the theme with a cookie named `kitstak-theme` set to `light` or `dark` on host
+   `localhost`. Also set `colorScheme` on the context so "follow the system" pages match.
+3. Phone: viewport 390x844 with `isMobile: true` and `hasTouch: true`.
+4. Wait for `networkidle`, then a short pause, before the capture.
+
+A minimal script:
+
+```js
+const { chromium } = require('playwright');
+(async () => {
+  const base = 'http://localhost:3300';
+  const browser = await chromium.launch();
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: 'dark' });
+  await context.request.post(`${base}/api/auth/sign-in/email`, {
+    data: { email: 'maya@northwind-robotics.example', password: 'Northwind-Demo-2026!', rememberMe: true },
+    headers: { origin: base, 'content-type': 'application/json' },
+  });
+  await context.addCookies([{ name: 'kitstak-theme', value: 'dark', domain: 'localhost', path: '/' }]);
+  const page = await context.newPage();
+  await page.goto(`${base}/billing`, { waitUntil: 'networkidle' });
+  await page.screenshot({ path: 'billing-phone-dark.png', fullPage: true });
+  await browser.close();
+})();
+```
+
+## Known pitfalls
+
+- **Root container and Postgres.** Postgres will not run as root. In the dev container the
+  scripts run it as the `postgres` system user, and that user owns `apps/crm/.data/pg`.
+  So in the container use `deploy/dev/db-start.sh` and `deploy/dev/stop.sh db`. The CRM
+  scripts `pnpm --filter kitstak-crm db:start`, `db:stop` and `db:status` fail there
+  ("cannot be run as root" or "Permission denied"). On a normal machine, where you are not
+  root, both ways work.
+- **Rate limits.** Sign in allows 10 tries a minute and sign up allows 5 tries per 10
+  minutes, per address. Counters live in `core.rate_limit`. When a test gets a 429, run
+  `deploy/dev/rate-limit-reset.sh`. `shot.mjs` saves its session and reuses it for this
+  reason. If a saved session goes stale, delete `deploy/dev/.run/sessions/`.
+- **First load is slow.** Next compiles each route the first time you open it. The first
+  hit on a page can take 5 to 20 seconds. Later hits are fast. `app-start.sh` waits for
+  the first page, so READY means the server really answers.
+- **Env changes need a restart.** Next reads `.env.local` at start.
+- **Use `localhost`, not `127.0.0.1`,** in the browser. The apps trust the `localhost`
+  origins, and the shared cookie is tied to the host name.
+- **Memory.** All six apps together use about 6 GB, and a dev server that has compiled many routes can
+  grow past 4 GB by itself. When the machine runs short, the system stops the biggest one without a word:
+  pages stop loading and `deploy/dev/status.sh` shows it as DOWN. Start it again with `app-start.sh`.
+  Start only what you need.
+- **No email arrives.** There is no real email locally. Look in http://localhost:3300/dev/outbox. Reminder
+  emails are only queued when the billing job runs: `deploy/dev/billing-tick.sh`.
+- **Playwright cannot find its browser.** The dev container ships one Chromium build. `shot.mjs` and the
+  portal's `playwright.config.ts` find it by themselves. Do not download another.
+- **`next-env.d.ts` changes by itself.** `next dev` rewrites this tracked file in some
+  apps (seen in `apps/pulse`). Do not commit that change.
+- **Do not run `pnpm build` in an app while its dev server is up.** Stop the app first.
+- **Shared working tree.** If several people or agents share this checkout, they share
+  these servers too. `app-start.sh` takes a lock per app, so two starts at once are safe.
+  Ask before you run `deploy/dev/stop.sh` with no arguments or `db-setup.sh --reseed`.
+- **Port already in use.** `app-start.sh` treats a listening port as "already running" and
+  reuses it. If the wrong thing holds the port, run `deploy/dev/stop.sh <app>` first.
+- **WMS log shows `NEXT_REDIRECT` on `/`.** That is the signed out redirect to the login
+  page in dev mode. It is not a failure.
+- **Production stays strict.** None of this applies when `NODE_ENV=production`. There the
+  test gateway is off, and billing without Stripe keys must fail closed with an honest
+  message.

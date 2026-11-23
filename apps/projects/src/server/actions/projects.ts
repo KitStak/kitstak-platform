@@ -141,5 +141,5 @@ export async function saveProjectAsTemplateAction(input: z.input<typeof template
 const suggestSchema = z.object({ name: z.string().max(120) });
 /** Suggested free project key for a name ("Warehouse go-live" → "WGL"). */
 export async function suggestProjectKeyAction(input: z.input<typeof suggestSchema>) {
-  return runAction(suggestSchema, input, (data, ctx) => suggestKey(ctx, data.name), { revalidate: false });
+  return runAction(suggestSchema, input, (data, ctx) => suggestKey(ctx, data.name), { revalidate: false, read: true });
 }

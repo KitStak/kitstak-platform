@@ -9,12 +9,19 @@ import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import { invitation, member, onboardingProgress } from '@kitstak/db/schema';
 import { findWmsTenantSchema, wmsTable } from '@kitstak/db/wms-tenants';
 import { getSetupSignals as getPulseSetupSignals, type BridgeExecutor } from '@kitstak/pulse-bridge';
+import { formatDayShort } from '@kitstak/billing/catalog';
+import type { PlanState } from '@kitstak/billing/plan-state';
+import { getPlanState } from '@kitstak/billing/server';
+import { isDevAllowAll } from '@kitstak/entitlements';
+import { billingRuntime } from '@/server/billing/runtime';
 import { db } from '@/server/db';
 import { env } from '@/server/env';
-import { getOrgModuleStates } from '@/server/entitlements';
 import {
   buildSetupSteps,
   summarizeSetup,
+  SETUP_PRODUCTS,
+  type SetupBillingSignal,
+  type SetupProduct,
   type SetupProfile,
   type SetupStep,
   type SetupStepKey,
@@ -62,30 +69,60 @@ async function teamSignals(orgId: string): Promise<{ memberCount: number; pendin
 }
 
 /**
- * WMS is single-tenant: its tables describe one install, not the active org. Only the
- * platform org (or an org with a REAL entitlement row — the dev allow-all switch alone
- * does not count) gets WMS steps, so install state never leaks into unrelated guides.
+ * Which apps this team has, for the guide. A team that started a free trial or has a plan gets the
+ * steps of the apps in it (and of any app KitStak granted by hand), so the guide is tied to what
+ * they picked. A team with neither falls back to the dev switch, as before.
+ *
+ * WMS is one install per organization: its steps show only for the platform org or for a team with
+ * a REAL WMS row. The dev switch alone never brings WMS steps into another team's guide.
  */
-function wmsStepsEligible(
-  orgSlug: string,
-  access: 'active' | 'trial' | 'grace' | 'locked' | 'dev',
-): boolean {
-  // The platform org owns the install outright — no entitlement row required.
-  if (orgSlug === env.WMS_PLATFORM_ORG_SLUG) return true;
-  return access === 'active' || access === 'trial' || access === 'grace';
+export function chosenProducts(state: PlanState | null, orgSlug: string, devAllowAll: boolean): readonly SetupProduct[] {
+  const touched = state !== null && (state.trial !== null || state.hasSubscription);
+  return SETUP_PRODUCTS.filter((product) => {
+    const plan = state?.modules[product];
+    const real = plan !== undefined && (plan.inPlan || plan.source === 'manual');
+    if (product === 'wms') return orgSlug === env.WMS_PLATFORM_ORG_SLUG || real;
+    return touched ? real : real || devAllowAll;
+  });
 }
 
-async function getSetupSignals(orgId: string, orgSlug: string): Promise<SetupSignals> {
+/** The "Pick your plan" step. null for teams on a manual grant only and teams with no trial. */
+export function billingSignal(state: PlanState | null, timeZone?: string): SetupBillingSignal | null {
+  if (state === null) return null;
+  if (state.trial === null && !state.hasSubscription) return null;
+  const paid =
+    state.paymentMethod !== null ||
+    (state.hasSubscription && state.phase !== 'trial' && state.phase !== 'trial_ended' && state.phase !== 'ended');
+  const trialEndsLabel = state.trial ? formatDayShort(state.trial.endsAt, timeZone) : null;
+  if (paid) return { state: 'done', trialEndsLabel };
+  if (state.phase === 'trial_ended' || state.phase === 'ended') return { state: 'trial_ended', trialEndsLabel };
+  return { state: 'trial', trialEndsLabel };
+}
+
+async function planStateOrNull(orgId: string): Promise<PlanState | null> {
+  try {
+    return await getPlanState(billingRuntime(), orgId);
+  } catch (error: unknown) {
+    console.error('[portal] setup signal read failed (plan state)', error);
+    return null;
+  }
+}
+
+async function getSetupSignals(
+  orgId: string,
+  orgSlug: string,
+  timeZone?: string,
+): Promise<{ signals: SetupSignals; products: readonly SetupProduct[]; plan: PlanState | null }> {
   // One separate warehouse per organization: count THIS org's warehouse (none yet → 0).
   const wmsSchema = await findWmsTenantSchema(db, orgId).catch(() => null);
   const wmsCount = (table: string, label: string): Promise<number | null> =>
     wmsSchema
       ? countOrNull(sql`select count(*) as n from ${wmsTable(wmsSchema, table)}`, label)
       : Promise.resolve(0);
-  const [team, moduleStates, crmBoards, crmDeals, wmsWarehouses, wmsProducts, wmsOrders, pm, pulse] =
+  const [team, plan, crmBoards, crmDeals, wmsWarehouses, wmsProducts, wmsOrders, pm, pulse] =
     await Promise.all([
       teamSignals(orgId),
-      getOrgModuleStates(orgId),
+      planStateOrNull(orgId),
       countOrNull(
         sql`select count(*) as n from crm.boards b
             where b.org_id = ${orgId} and b.deleted_at is null and b.archived_at is null`,
@@ -106,33 +143,30 @@ async function getSetupSignals(orgId: string, orgSlug: string): Promise<SetupSig
       // to_regclass guarded inside the bridge: null when Pulse is not installed here.
       getPulseSetupSignals(db as unknown as BridgeExecutor, orgId),
     ]);
-  const moduleState = (module: 'crm' | 'wms') =>
-    moduleStates.modules.find((state) => state.module === module);
-  const wms = moduleState('wms');
-  return {
+  const products = chosenProducts(plan, orgSlug, isDevAllowAll());
+  const has = (product: SetupProduct): boolean => products.includes(product);
+  const signals: SetupSignals = {
     memberCount: team.memberCount,
     pendingInvites: team.pendingInvites,
-    crmEntitled: moduleState('crm')?.entitled ?? false,
-    // Platform org OR a real entitlement row (ONBOARDING.md) — the slug match alone wins
-    // for the install's own org even with the dev switch off and no row.
-    wmsEntitled:
-      orgSlug === env.WMS_PLATFORM_ORG_SLUG ||
-      ((wms?.entitled ?? false) && wmsStepsEligible(orgSlug, wms?.access ?? 'locked')),
+    crmEntitled: has('crm'),
+    wmsEntitled: has('wms'),
     crmBoards,
     crmDeals,
     wmsWarehouses,
     wmsProducts,
     wmsOrders,
-    projectsEntitled: moduleStates.modules.find((state) => state.module === 'projects')?.entitled ?? false,
+    projectsEntitled: has('projects'),
     pmProjects: pm?.projects ?? null,
     pmAssignedTasks: pm?.assigned ?? null,
     pmLinks: pm?.links ?? null,
-    pulseEntitled: moduleStates.modules.find((state) => state.module === 'pulse')?.entitled ?? false,
+    pulseEntitled: has('pulse'),
     pulseLaborRates: pulse?.laborRates ?? null,
     pulseJobs: pulse?.jobs ?? null,
     pulseEntries: pulse?.entries ?? null,
     pulseLinks: pulse?.links ?? null,
+    billing: billingSignal(plan, timeZone),
   };
+  return { signals, products, plan };
 }
 
 /**
@@ -179,6 +213,12 @@ export interface SetupState {
   readonly seen: boolean;
   /** Guide-eligible modules (WMS gated to the install's org — ONBOARDING.md). */
   readonly guideEntitlements: { readonly crm: boolean; readonly wms: boolean };
+  /** The apps the guide covers: the ones in the trial or plan, or granted by hand. */
+  readonly products: readonly SetupProduct[];
+  /** The "Pick your plan" step's facts. null when the team never sees that step. */
+  readonly billing: SetupBillingSignal | null;
+  /** The last day of the free trial, when one is running. */
+  readonly trialEndsAt: Date | null;
 }
 
 interface StepLink {
@@ -231,6 +271,8 @@ function stepHref(key: SetupStepKey, orgSlug: string, profile: SetupProfile | nu
       return { href: pulse('/log?setup=pulse_first_entry'), external: true };
     case 'pulse_connect':
       return { href: pulse('/jobs?setup=pulse_connect'), external: true };
+    case 'billing_plan':
+      return { href: '/billing/plan', external: false };
   }
 }
 
@@ -263,12 +305,15 @@ export async function markGuideSeen(orgId: string): Promise<void> {
 }
 
 /** The org's full guided-setup state for the launcher and the welcome wizard. */
-export async function getSetupState(org: {
-  readonly id: string;
-  readonly slug: string;
-}): Promise<SetupState> {
-  const [signals, progress] = await Promise.all([
-    getSetupSignals(org.id, org.slug),
+export async function getSetupState(
+  org: {
+    readonly id: string;
+    readonly slug: string;
+  },
+  options: { readonly timeZone?: string } = {},
+): Promise<SetupState> {
+  const [{ signals, products, plan }, progress] = await Promise.all([
+    getSetupSignals(org.id, org.slug, options.timeZone),
     getProgressRows(org.id),
   ]);
   const steps = buildSetupSteps(signals, progress.profile, progress.overrides);
@@ -282,5 +327,8 @@ export async function getSetupState(org: {
     dismissed: progress.dismissed,
     seen: progress.seen,
     guideEntitlements: { crm: signals.crmEntitled, wms: signals.wmsEntitled },
+    products,
+    billing: signals.billing ?? null,
+    trialEndsAt: plan?.phase === 'trial' && plan.trial ? plan.trial.endsAt : null,
   };
 }

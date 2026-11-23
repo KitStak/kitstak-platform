@@ -1,16 +1,18 @@
 import Link from 'next/link';
 import {
+  BUNDLE_OFF,
   MORE_SEATS_ACTION,
-  PRICING,
-  formatUsd,
+  TRIAL_LINE,
+  YEARLY_OFF,
   includedSeatsLabel,
+  listPrice,
+  monthlyTerms,
   moreSeatsPrompt,
-  percentLabel,
-  preliminaryPriceNote,
   priceOf,
 } from '@/lib/pricing';
 import type { ProductId } from '@/lib/pricing';
-import { ROUTES, availabilityLabel, startLink } from '../site-links';
+import { trialUrl } from '@/lib/stak';
+import { ROUTES, availabilityLabel, isAppLive, pricingHref, startLink } from '../site-links';
 import styles from './price-band.module.css';
 
 interface PriceBandProps {
@@ -18,14 +20,18 @@ interface PriceBandProps {
   readonly included: readonly string[];
 }
 
-/** Starting price for one product, with the bundle saving beside it. */
+/**
+ * The price of one product, with the bundle saving beside it and a button that starts the free
+ * trial. The button goes straight to portal sign-up with this app in the cart. The price comes
+ * from the shared catalog, so it is the price sign-up and billing show.
+ */
 export function PriceBand({ product, included }: PriceBandProps) {
   const price = priceOf(product);
-  const start = startLink(product);
+  const isOpen = isAppLive(product);
+  const walkthrough = startLink(product);
   const availability = availabilityLabel(product);
   const seats = includedSeatsLabel(product);
   const moreSeats = moreSeatsPrompt(product);
-  const preliminary = preliminaryPriceNote([product]);
   return (
     <section id="pricing" className={`section ${styles.band}`} aria-labelledby="pricing-heading">
       <div className={`container ${styles.grid}`}>
@@ -55,12 +61,8 @@ export function PriceBand({ product, included }: PriceBandProps) {
             {availability ? <span className={styles.soon}>{availability}</span> : null}
           </p>
           <p className={styles.amount}>
-            <span className={`numeral ${styles.figure}`}>{formatUsd(price.monthlyCents)}</span>
-            <span className={styles.per}>
-              per {price.unit}
-              <br />
-              per month
-            </span>
+            <span className={`numeral ${styles.figure}`}>{listPrice(product)}</span>
+            <span className={styles.per}>{monthlyTerms(product)}</span>
           </p>
           {seats && moreSeats ? (
             <p className={styles.seats}>
@@ -68,23 +70,35 @@ export function PriceBand({ product, included }: PriceBandProps) {
             </p>
           ) : null}
           <p className={styles.bundleLine}>
-            <strong>{percentLabel(PRICING.bundleDiscount)} off</strong> each product when you stack two or
-            more, and {percentLabel(PRICING.annualDiscount)} off again billed yearly.
+            <strong>Save {BUNDLE_OFF}</strong> on every app when you have two or more. Save {YEARLY_OFF} more
+            when you pay yearly.
           </p>
           {/* A product whose app is not open yet gets a walkthrough, not a start button. */}
-          <Link href={start.href} className="btn btn-primary btn-lg btn-block">
-            {start.label}{' '}
-            <span className="btn-arrow" aria-hidden>
-              →
-            </span>
-          </Link>
-          <Link href={ROUTES.pricing} className={`text-link ${styles.calc}`}>
+          {isOpen ? (
+            <a
+              href={trialUrl({ products: [product], seats: 1, warehouses: 1, interval: 'monthly' }, 'product')}
+              className="btn btn-primary btn-lg btn-block"
+            >
+              Start my free trial{' '}
+              <span className="btn-arrow" aria-hidden>
+                →
+              </span>
+            </a>
+          ) : (
+            <Link href={walkthrough.href} className="btn btn-primary btn-lg btn-block">
+              {walkthrough.label}{' '}
+              <span className="btn-arrow" aria-hidden>
+                →
+              </span>
+            </Link>
+          )}
+          {isOpen ? <p className={styles.trust}>{TRIAL_LINE}</p> : null}
+          <Link href={pricingHref(product)} className={`text-link ${styles.calc}`}>
             Price your stack{' '}
             <span className="btn-arrow" aria-hidden>
               →
             </span>
           </Link>
-          {preliminary ? <p className={styles.fine}>{preliminary}</p> : null}
         </div>
       </div>
     </section>

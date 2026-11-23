@@ -10,6 +10,7 @@ import type { OrgPerson } from '@/lib/types';
 import { usePeople } from '@/lib/hooks/use-data';
 import { ShellProvider, type ShellContextValue } from './shell-context';
 import { ShortcutsDialog } from './shortcuts-dialog';
+import { PlanBanner } from '@kitstak/ui/plan-banner';
 import { TopBar } from './top-bar';
 import { useShellHotkeys } from './use-shell-hotkeys';
 
@@ -45,6 +46,8 @@ export function AppShell({ context, initialPeople, peopleLoadedAt, children }: A
       </a>
       <div data-testid="app-shell" className="flex h-dvh min-h-[480px] flex-col overflow-hidden bg-app">
         <TopBar />
+        {/* Trial, payment and view only notices: above the page, never over content. */}
+        <PlanBanner notice={context.plan?.notice ?? null} dismissible />
         <main id="main-content" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-app outline-none">
           <div className="h-full overflow-auto">{children}</div>
         </main>

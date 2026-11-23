@@ -62,7 +62,7 @@ function HelpMenu() {
  * the right search, org switcher, Log work, alerts, help, apps, theme and account.
  */
 export function TopBar() {
-  const { appUrls, modules, notInPlan, badges, pulseRole, can } = useShell();
+  const { appUrls, modules, notInPlan, planBadges, addHrefs, badges, pulseRole, can } = useShell();
   const mod = useModKey();
   const openPalette = useShellStore((state) => state.openPalette);
   const alerts = badges?.openAlerts ?? 0;
@@ -161,6 +161,8 @@ export function TopBar() {
           urls={appUrls}
           entitled={{ crm: modules.crm, wms: modules.wms, projects: modules.projects, pulse: modules.pulse }}
           notInPlan={notInPlan}
+          planBadges={planBadges}
+          addHref={addHrefs ? (app) => (app === 'portal' ? undefined : addHrefs[app]) ?? `${appUrls.portal}/billing/plan?add=${app}` : undefined}
         />
         <ThemeToggle className="hidden sm:inline-flex" />
         <UserMenu />

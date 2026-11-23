@@ -2,7 +2,7 @@
 /**
  * Portal ⌘/Ctrl+K command palette ('/' works too). A deliberate small sibling of the CRM
  * palette (apps/crm/src/features/shell/command-palette.tsx) sharing its visual language:
- * same dialog frame, group headings, row anatomy and footer hint bar — but portal-scoped
+ * same dialog frame, group headings, row anatomy and footer hint bar, but portal-scoped
  * commands only: open the apps, portal pages, switch org, sign out.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';

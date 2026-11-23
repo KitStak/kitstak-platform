@@ -1,9 +1,10 @@
 /**
  * core.stripe_customers / core.entitlements / core.billing_events —
- * billing & per-module entitlements (BLUEPRINT.md §2.3, §3).
+ * billing & per-module entitlements (BLUEPRINT.md §2.3, §3). The rest of the billing tables
+ * (accounts, subscriptions, invoices, audit log and so on) live in ./billing-tables.ts.
  */
 import { sql } from 'drizzle-orm';
-import { check, integer, jsonb, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { check, index, integer, jsonb, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { coreSchema, createdAt, id, orgId, updatedAt } from '../_shared';
 
 export const ENTITLEMENT_MODULES = ['crm', 'wms', 'projects', 'pulse'] as const;
@@ -43,7 +44,7 @@ export const entitlements = coreSchema.table(
   },
   (t) => [
     unique('entitlements_org_id_module_unique').on(t.orgId, t.module),
-    check('entitlements_module_check', sql`${t.module} IN ('crm', 'wms', 'projects')`),
+    check('entitlements_module_check', sql`${t.module} IN ('crm', 'wms', 'projects', 'pulse')`),
     check(
       'entitlements_status_check',
       sql`${t.status} IN ('active', 'trialing', 'past_due', 'canceled')`,
@@ -52,16 +53,39 @@ export const entitlements = coreSchema.table(
   ],
 );
 
-/** Webhook idempotency ledger. */
-export const billingEvents = coreSchema.table('billing_events', {
-  /** Stripe event id (evt_...). */
-  id: text('id').primaryKey(),
-  type: text('type').notNull(),
-  payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
-  processedAt: timestamp('processed_at', { withTimezone: true, mode: 'date' })
-    .notNull()
-    .defaultNow(),
-});
+export const BILLING_GATEWAYS = ['stripe', 'test'] as const;
+export type BillingGatewayKind = (typeof BILLING_GATEWAYS)[number];
+
+export const BILLING_EVENT_STATUSES = ['processed', 'ignored', 'failed'] as const;
+export type BillingEventStatus = (typeof BILLING_EVENT_STATUSES)[number];
+
+/**
+ * Webhook idempotency ledger (widened by drizzle/0007_core_billing.sql): one row per gateway event
+ * id, with the organization, the gateway, how processing ended and the error text of a failed run.
+ */
+export const billingEvents = coreSchema.table(
+  'billing_events',
+  {
+    /** Gateway event id (evt_..., test gateway evt_test_...). */
+    id: text('id').primaryKey(),
+    type: text('type').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    orgId: uuid('org_id'),
+    gateway: text('gateway', { enum: BILLING_GATEWAYS }).notNull().default('stripe'),
+    status: text('status', { enum: BILLING_EVENT_STATUSES }).notNull().default('processed'),
+    error: text('error'),
+    attempts: integer('attempts').notNull().default(1),
+    receivedAt: timestamp('received_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('billing_events_status_check', sql`${t.status} IN ('processed', 'ignored', 'failed')`),
+    check('billing_events_gateway_check', sql`${t.gateway} IN ('stripe', 'test')`),
+    index('billing_events_org_idx').on(t.orgId, t.receivedAt.desc()),
+  ],
+);
 
 export type StripeCustomer = typeof stripeCustomers.$inferSelect;
 export type Entitlement = typeof entitlements.$inferSelect;

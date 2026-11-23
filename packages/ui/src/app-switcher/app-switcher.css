@@ -133,6 +133,47 @@
   gap: 1px;
 }
 
+.ks-appswitcher-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Plan badge next to the name: words first, the color only supports them. */
+.ks-appswitcher-badge {
+  flex-shrink: 0;
+  padding: 1px var(--space-1-5);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-size: var(--type-2xs);
+  line-height: var(--type-2xs-lh);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.ks-appswitcher-badge[data-badge='trial'] {
+  background: var(--info-subtle);
+  color: var(--info-text);
+}
+
+.ks-appswitcher-badge[data-badge='active'],
+.ks-appswitcher-badge[data-badge='included'] {
+  background: var(--success-subtle);
+  color: var(--success-text);
+}
+
+.ks-appswitcher-badge[data-badge='past_due'] {
+  background: var(--warning-subtle);
+  color: var(--warning-text);
+}
+
+.ks-appswitcher-badge[data-badge='view_only'] {
+  background: var(--danger-subtle);
+  color: var(--danger-text);
+}
+
 .ks-appswitcher-name {
   overflow: hidden;
   font-size: var(--type-sm);

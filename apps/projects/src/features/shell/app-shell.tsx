@@ -4,7 +4,8 @@
  * scrollable main area. Hosts the global surfaces every page can open: command palette,
  * quick add, task drawer (`?task=KEY`) and the shortcuts sheet.
  */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CommandPalette } from '@/features/command/command-palette';
 import { OnboardingHost } from '@/features/onboarding/onboarding-host';
 import { QuickAddDialog } from '@/features/quick-add/quick-add-dialog';
@@ -15,6 +16,7 @@ import { MobileNav } from './mobile-nav';
 import { ShellProvider, type ShellContextValue } from './shell-context';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { Sidebar } from './sidebar';
+import { PlanBanner } from '@kitstak/ui/plan-banner';
 import { TopBar } from './top-bar';
 import { useShellHotkeys } from './use-shell-hotkeys';
 
@@ -40,7 +42,26 @@ function Hotkeys() {
   return null;
 }
 
-export function AppShell({ context, initialProjects, initialSpaces, initialUnread, initialPeople, peopleLoadedAt, children }: AppShellProps) {
+/**
+ * When Projects is not in the plan the server answers 402 to every data call. The shell still
+ * renders (the lock screen sits inside the app frame), so its data hooks are switched off here
+ * instead of asking for data that cannot come.
+ */
+function LockedQueries({ locked, children }: { readonly locked: boolean; readonly children: ReactNode }) {
+  const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { enabled: false, retry: false } } }));
+  if (!locked) return <>{children}</>;
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+export function AppShell(props: AppShellProps) {
+  return (
+    <LockedQueries locked={props.context.modules.projects === false}>
+      <ShellBody {...props} />
+    </LockedQueries>
+  );
+}
+
+function ShellBody({ context, initialProjects, initialSpaces, initialUnread, initialPeople, peopleLoadedAt, children }: AppShellProps) {
   return (
     <ShellProvider value={context}>
       <SeedPeople people={initialPeople} loadedAt={peopleLoadedAt} />
@@ -53,6 +74,8 @@ export function AppShell({ context, initialProjects, initialSpaces, initialUnrea
       </a>
       <div data-testid="app-shell" className="flex h-dvh min-h-[480px] flex-col overflow-hidden bg-app">
         <TopBar />
+        {/* Trial, payment and view only notices: above the page, never over content. */}
+        <PlanBanner notice={context.plan?.notice ?? null} dismissible />
         <div className="flex min-h-0 flex-1">
           <div className="hidden md:flex">
             <Sidebar initialProjects={initialProjects} initialSpaces={initialSpaces} initialUnread={initialUnread} />

@@ -5,6 +5,7 @@ import { passwordChangeRedirect } from '@/server/auth/password-change';
 import type { OrgContextValue } from '@/features/shell/org-context';
 import { orgModuleFlags } from '@/server/entitlements';
 import { env } from '@/server/env';
+import { crmBillingLink, getPlanView, portalUrl } from '@/server/plan';
 import { ShellClient } from './shell-client';
 
 interface OrgLayoutProps {
@@ -35,7 +36,10 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   // An administrator-set password has to be replaced first; the portal hosts that screen.
   const changePasswordUrl = await passwordChangeRedirect(session.user.id, membership.organization.slug);
   if (changePasswordUrl) redirect(changePasswordUrl);
-  const entitled = await orgModuleFlags(membership.organization.id);
+  const [entitled, plan] = await Promise.all([
+    orgModuleFlags(membership.organization.id),
+    getPlanView({ orgId: membership.organization.id, userId: session.user.id, role: membership.roleString }),
+  ]);
   const context: OrgContextValue = {
     org: {
       id: membership.organization.id,
@@ -53,16 +57,24 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
     permissions: membership.permissions,
     apps: {
       urls: {
-        portal: process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3300',
+        portal: portalUrl(),
         crm: env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3100',
         wms: process.env.NEXT_PUBLIC_WMS_URL || 'http://localhost:3000',
         projects: env.NEXT_PUBLIC_PROJECTS_URL,
         pulse: env.NEXT_PUBLIC_PULSE_URL,
       },
       entitled,
-      // WMS is single-tenant: only the platform org can use it (apps/wms PLATFORM_ORG_SLUG).
-      notInPlan: membership.organization.slug === (process.env.WMS_PLATFORM_ORG_SLUG || 'kitstak') ? [] : ['wms'],
+      // Plan state per app (Trial, Active, Payment due, View only, Not in your plan, Included).
+      // A row that is not in the plan opens the plan picker with that app turned on.
+      planBadges: plan.badges,
+      addHrefs: {
+        crm: crmBillingLink({ to: 'add', product: 'crm' }),
+        wms: crmBillingLink({ to: 'add', product: 'wms' }),
+        projects: crmBillingLink({ to: 'add', product: 'projects' }),
+        pulse: crmBillingLink({ to: 'add', product: 'pulse' }),
+      },
     },
+    plan: { access: plan.access === 'read_only' ? 'read_only' : 'full', notice: plan.notice },
   };
 
   return <ShellClient context={context}>{children}</ShellClient>;

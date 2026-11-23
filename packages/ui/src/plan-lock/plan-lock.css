@@ -1,0 +1,219 @@
+/*
+ * PlanLockScreen (docs/billing/CONTRACTS.md section 17). tokens.css custom properties ONLY, so the
+ * screen inherits each app's light and dark theme. No app Tailwind utilities here; this file ships
+ * with @kitstak/ui.
+ */
+
+.ks-planlock {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  padding: var(--space-8) var(--space-4);
+  background: var(--surface-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+.ks-planlock-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 440px;
+  padding: var(--space-8) var(--space-6) var(--space-6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-panel);
+  box-shadow: var(--elevation-md);
+  text-align: center;
+  animation: ks-planlock-in var(--duration-slow, 240ms) var(--ease-standard, ease-out) both;
+}
+
+.ks-planlock-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-sunken);
+}
+
+.ks-planlock-badge {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--surface-panel);
+  color: var(--icon-default);
+  box-shadow: var(--elevation-xs);
+}
+
+.ks-planlock-eyebrow {
+  margin: var(--space-5) 0 0;
+  font-size: var(--type-2xs);
+  line-height: var(--type-2xs-lh);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ks-planlock-title {
+  margin: var(--space-1-5) 0 0;
+  font-size: var(--type-xl);
+  line-height: var(--type-xl-lh);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+.ks-planlock-body {
+  margin: var(--space-2) 0 0;
+  font-size: var(--type-md);
+  line-height: var(--type-md-lh);
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.ks-planlock-price {
+  margin: var(--space-1) 0 0;
+  font-size: var(--type-base);
+  line-height: var(--type-base-lh);
+  color: var(--text-muted);
+  text-wrap: pretty;
+}
+
+.ks-planlock-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-6);
+}
+
+.ks-planlock-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--type-base);
+  line-height: var(--type-base-lh);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.ks-planlock-button-primary {
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+
+.ks-planlock-button-primary:hover {
+  background: var(--primary-hover);
+}
+
+.ks-planlock-button-primary:active {
+  background: var(--primary-active);
+}
+
+.ks-planlock-button-quiet {
+  border-color: var(--border-default);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+}
+
+.ks-planlock-button-quiet:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
+.ks-planlock-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ks-planlock-points {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  margin: var(--space-6) 0 0;
+  padding: var(--space-5) 0 0;
+  border-top: 1px solid var(--border-subtle);
+  list-style: none;
+  text-align: left;
+}
+
+.ks-planlock-point {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--type-sm);
+  line-height: var(--type-sm-lh);
+  color: var(--text-secondary);
+}
+
+.ks-planlock-point-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--success);
+}
+
+@keyframes ks-planlock-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 479px) {
+  .ks-planlock {
+    align-items: flex-start;
+    padding: var(--space-5) var(--space-3);
+  }
+
+  .ks-planlock-card {
+    padding: var(--space-6) var(--space-4) var(--space-5);
+  }
+
+  .ks-planlock-title {
+    font-size: var(--type-lg);
+    line-height: var(--type-lg-lh);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-planlock-card {
+    animation: none;
+  }
+
+  .ks-planlock-button {
+    transition: none;
+  }
+}

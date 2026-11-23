@@ -6,8 +6,10 @@
  */
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { BellRing, BookOpen, Boxes, Building2, CalendarCheck2, HandCoins, History, MonitorSmartphone, Plug, Scale, Settings2, Shapes, TestTubeDiagonal, TriangleAlert, UsersRound, type LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { BellRing, BookOpen, Boxes, Building2, CalendarCheck2, CreditCard, HandCoins, History, MonitorSmartphone, Plug, Scale, Settings2, Shapes, TestTubeDiagonal, TriangleAlert, UsersRound, type LucideIcon } from 'lucide-react';
 import { Select } from '@/components/ui';
+import { CATALOG } from '@kitstak/billing/catalog';
 import { cn } from '@/components/ui/cn';
 import { ScrollX } from '@/components/ui/scroll-x';
 import { Panel } from '@/components/layout/page';
@@ -30,6 +32,9 @@ interface SectionInfo {
   readonly href?: string;
 }
 
+/** Seats the flat Pulse price covers (docs/billing/SPEC.md P8). From the one pricing catalog. */
+const PULSE_SEATS = CATALOG.products.pulse.includedSeats;
+
 export const SETTINGS_SECTIONS: readonly SectionInfo[] = [
   { id: 'general', icon: Settings2, title: 'General', detail: 'Currency, week, working days, job numbers' },
   { id: 'sites', icon: Building2, title: 'Sites', detail: 'Buildings and their time zones' },
@@ -37,6 +42,7 @@ export const SETTINGS_SECTIONS: readonly SectionInfo[] = [
   { id: 'labor', icon: HandCoins, title: 'Labor defaults', detail: 'Taxes, benefits, overhead, overtime' },
   { id: 'cost-rules', icon: Scale, title: 'Cost rules', detail: 'Parts, shared time, margin and risk limits' },
   { id: 'people', icon: UsersRound, title: 'People and roles', detail: 'Who can do what, who sees money' },
+  { id: 'plan', icon: CreditCard, title: 'Plan and payment', detail: 'Your plan, seats and next payment' },
   { id: 'catalogs', icon: Boxes, title: 'Catalogs', detail: 'Clients and items' },
   { id: 'notifications', icon: BellRing, title: 'Notifications', detail: 'What lands under your bell' },
   { id: 'devices', icon: MonitorSmartphone, title: 'Device links', detail: 'Floor tablets and wall TVs' },
@@ -48,7 +54,16 @@ export const SETTINGS_SECTIONS: readonly SectionInfo[] = [
   { id: 'math', icon: BookOpen, title: 'How Pulse does the math', detail: 'The cost model in plain words' },
 ];
 
-export function SettingsView({ initialSettings, initialSample }: { readonly initialSettings: SettingsDTO; readonly initialSample: SampleStateDTO }) {
+export function SettingsView({
+  initialSettings,
+  initialSample,
+  planCard = null,
+}: {
+  readonly initialSettings: SettingsDTO;
+  readonly initialSample: SampleStateDTO;
+  /** The "Plan and payment" card, rendered on the server from `@kitstak/billing`. */
+  readonly planCard?: ReactNode;
+}) {
   const shell = useShell();
   const params = useSearchParams();
   const router = useRouter();
@@ -112,11 +127,30 @@ export function SettingsView({ initialSettings, initialSample }: { readonly init
         {active === 'cost-rules' ? <CostRulesSection settings={settings} canEdit={canEdit} /> : null}
         {active === 'people' ? (
           canRoles ? (
-            <PeopleSection settings={settings} canEdit={canRoles} />
+            <div className="flex flex-col gap-4">
+              {PULSE_SEATS ? (
+                <p className="rounded-lg border border-border-subtle bg-sunken px-4 py-3 text-sm text-fg-secondary" data-testid="pulse-seat-rule">
+                  Pulse is one flat price for up to {PULSE_SEATS} seats. A seat is one person on your team who can sign in.{' '}
+                  <Link href={routes.settings('plan')} className="font-medium text-fg underline underline-offset-2 hover:text-primary">
+                    See your plan
+                  </Link>
+                </p>
+              ) : null}
+              <PeopleSection settings={settings} canEdit={canRoles} />
+            </div>
           ) : (
             <Panel title="People and roles">
               <p className="text-sm text-fg-secondary" data-testid="people-admin-only">
                 Only an admin or the owner of this workspace can see who uses Pulse and change roles. Ask one of them if you need a different role or need to see money.
+              </p>
+            </Panel>
+          )
+        ) : null}
+        {active === 'plan' ? (
+          planCard ?? (
+            <Panel title="Plan and payment">
+              <p className="text-sm text-fg-secondary" data-testid="plan-unavailable">
+                We could not load your plan right now. Open Billing in the Portal to see it.
               </p>
             </Panel>
           )

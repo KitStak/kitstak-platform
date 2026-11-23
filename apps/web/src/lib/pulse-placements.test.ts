@@ -10,7 +10,7 @@ import { PRODUCT_NAV, PRODUCT_PATHS, isCurrentPath } from '@/components/nav/nav-
 import { SECTIONS } from '@/components/pulse/pulse-content';
 import { FULL_STACK, LINKS, PRODUCT_IDS, ROUTES, START_NAME, toStack } from '@/components/site-links';
 import type { Stack } from '@/components/site-links';
-import { PRICING, PRICING_IS_PLACEHOLDER } from './pricing';
+import { CATALOG, PRICING_IS_PLACEHOLDER } from './pricing';
 import { PULSE_NEEDS } from './stak';
 
 /** Every non-empty set of products, in stack order. */
@@ -36,17 +36,16 @@ describe('Pulse in the shared site data', () => {
     expect(START_NAME.pulse).toBe('Pulse');
   });
 
-  test('carries its confirmed price beside the placeholder prices of the other products', () => {
-    expect(PRICING_IS_PLACEHOLDER).toBe(true);
-    // Pulse is the one confirmed price: $29 flat per organization, covering up to 5 seats.
-    expect(PRICING.pulse).toMatchObject({
+  test('carries its price from the shared catalog, a live price like the other three', () => {
+    expect(PRICING_IS_PLACEHOLDER).toBe(false);
+    // Pulse is $29 flat per organization, covering up to 5 seats.
+    expect(CATALOG.products.pulse).toMatchObject({
       name: 'KitStak Pulse',
-      basis: 'flat_per_org',
+      quantityFrom: 'flat',
       unit: 'organization',
-      monthlyCents: 2900,
       includedSeats: 5,
-      isConfirmed: true,
     });
+    expect(CATALOG.products.pulse.cents.monthly).toBe(2900);
   });
 });
 

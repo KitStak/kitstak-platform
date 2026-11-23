@@ -1,6 +1,7 @@
 'use client';
 import { Suspense, useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { PlanBanner } from '@kitstak/ui/plan-banner';
 import { CommandPalette } from './command-palette';
 import { CreateBoardDialog } from './dialogs/create-board-dialog';
 import { CreateSimpleDialog } from './dialogs/create-simple-dialog';
@@ -125,6 +126,8 @@ export function AppShell({ context, slots, children }: AppShellProps) {
       </a>
       <div data-testid="app-shell" className="flex h-dvh min-h-[560px] flex-col overflow-hidden bg-app">
         <TopBar />
+        {/* Trial, payment and view only notices: above the page, never over content. */}
+        <PlanBanner notice={context.plan?.notice ?? null} dismissible />
         {/* In-context setup arrival (?setup=<step_key>); Suspense: useSearchParams. */}
         <Suspense fallback={null}>
           <SetupCallout />

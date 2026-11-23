@@ -547,7 +547,11 @@ function Body({
       }
       if (formRef.current) applyServerFieldErrors(formRef.current, error);
       if (needsRetryPanel(error)) setFailure({ message, values });
-      toast.error("Couldn't save the user", message);
+      // A full plan: the toast carries the next step, "Add a seat" in the Portal.
+      const planUrl = isApiError(error) && error.code === 'PLAN_SEAT_LIMIT' ? error.planUrl : undefined;
+      toast.error("Couldn't save the user", message, {
+        action: planUrl ? { label: 'Add a seat', onClick: () => window.location.assign(planUrl) } : undefined,
+      });
       throw error;
     } finally {
       window.clearTimeout(timer);

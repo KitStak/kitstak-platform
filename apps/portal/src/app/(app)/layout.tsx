@@ -9,6 +9,7 @@ import { mustChangePassword } from '@/server/password-change';
 import { CommandPalette } from '@/features/shell/command-palette';
 import { Logo } from '@/features/shell/logo';
 import { OrgSwitcher } from '@/features/shell/org-switcher';
+import { ShellNotices } from '@/features/shell/shell-notices';
 import { ThemeToggle } from '@/features/shell/theme-toggle';
 import { UserMenu } from '@/features/shell/user-menu';
 
@@ -20,7 +21,7 @@ export default async function AppLayout({ children }: { readonly children: React
   const orgs = await listUserOrgs(session.user.id);
   const activeOrg = await resolveActiveOrg(session, orgs);
 
-  // Real entitlement reads for the shared AppSwitcher (BLUEPRINT.md §6); no org → both locked.
+  // The plan decides what the shared AppSwitcher shows (docs/billing/SPEC.md 9.5). No org: all locked.
   const moduleStates = activeOrg ? await getOrgModuleStates(activeOrg.id) : null;
   const entitledFor = (module: 'crm' | 'wms' | 'projects' | 'pulse'): boolean =>
     moduleStates?.modules.find((state) => state.module === module)?.entitled ?? false;
@@ -32,6 +33,10 @@ export default async function AppLayout({ children }: { readonly children: React
     pulse: env.NEXT_PUBLIC_PULSE_URL,
   };
   const entitled = { crm: entitledFor('crm'), wms: entitledFor('wms'), projects: entitledFor('projects'), pulse: entitledFor('pulse') };
+  // The same plan words per app as in CRM, WMS, Projects and Pulse (Trial, Active, Payment due,
+  // View only, Not in your plan, Included). A row that is not in the plan opens the plan picker
+  // with that app turned on.
+  const planBadges = moduleStates ? Object.fromEntries(moduleStates.modules.map((state) => [state.module, state.badge])) : undefined;
 
   return (
     <div className="flex min-h-dvh flex-col bg-app">
@@ -42,7 +47,8 @@ export default async function AppLayout({ children }: { readonly children: React
             aria-label="KitStak Portal home"
             className="inline-flex shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
           >
-            <Logo size={26} />
+            {/* The "Portal" tag is dropped under 640 px so the top bar fits a 360 px phone. */}
+            <Logo size={26} className="max-sm:[&_.ks-logo-product]:hidden" />
           </Link>
           {activeOrg ? (
             <>
@@ -84,13 +90,16 @@ export default async function AppLayout({ children }: { readonly children: React
               current="portal"
               urls={appUrls}
               entitled={entitled}
+              planBadges={planBadges}
             />
             <ThemeToggle />
             <UserMenu name={session.user.name} email={session.user.email} />
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 py-10 sm:px-6">{children}</main>
+      {/* Test mode, the plan notice and the verify email notice. Above the page, never over content. */}
+      <ShellNotices />
+      <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 py-8 sm:px-6 sm:py-10">{children}</main>
       <footer className="border-t border-border-subtle">
         <div className="mx-auto flex w-full max-w-[1120px] items-center justify-between px-4 py-4 text-xs text-fg-muted sm:px-6">
           <span>© {new Date().getFullYear()} KitStak</span>

@@ -6,7 +6,10 @@ import type { Module } from '@kitstak/entitlements';
 import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
 import { getOrgGlance, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
-import { getOrgModuleStates } from '@/server/entitlements';
+import { CATALOG, formatDayShort } from '@kitstak/billing/catalog';
+import { getBillingContext } from '@/server/billing/context';
+import { getOrgPlan, type ModuleState } from '@/server/entitlements';
+import { addAppPriceNote, plural } from '@/features/billing/format';
 import { getCustomerWork, getLauncherStats, getPulseAttention } from '@/server/product-stats';
 import { CustomerWorkPanel } from '@/features/launcher/customer-work';
 import { PulseAttentionPanel } from '@/features/launcher/pulse-attention';
@@ -153,8 +156,9 @@ export default async function LauncherPage({
     );
   }
 
-  const [{ devAllowAll, modules }, stats, customerWork, pulseAttention, glance, setup, params] = await Promise.all([
-    getOrgModuleStates(activeOrg.id),
+  const [{ devAllowAll, modules, state: plan }, billing, stats, customerWork, pulseAttention, glance, setup, params] = await Promise.all([
+    getOrgPlan(activeOrg.id),
+    getBillingContext(),
     getLauncherStats(activeOrg.id, session.user.id),
     getCustomerWork(activeOrg.id),
     getPulseAttention(activeOrg.id, session.user.id),
@@ -173,6 +177,38 @@ export default async function LauncherPage({
   }
   const entitledFor = (module: Module): boolean =>
     modules.find((state) => state.module === module)?.entitled ?? false;
+
+  // Plan words on each tile (docs/billing/SPEC.md 9.5). The same PlanState drives billing home.
+  const access = billing?.access ?? null;
+  const timeZone = billing?.timeZone ?? 'UTC';
+  const mayAdd =
+    access !== null && (access.canManage || (access.canStartTrial && (plan.phase === 'trial' || plan.phase === 'none')));
+  const askWho = access?.ownerName ?? 'your organization owner';
+  const planNoteFor = (state: ModuleState): string | null => {
+    switch (state.badge) {
+      case 'trial':
+        if (!plan.trial) return null;
+        return plan.phase === 'active'
+          ? `Free trial. First payment on ${formatDayShort(plan.nextCharge?.at ?? plan.trial.endsAt, timeZone)}.`
+          : `${plural(plan.trial.daysLeft, 'day', 'days')} left in your free trial`;
+      case 'past_due':
+        return plan.pastDue ? `Payment due. Open until ${formatDayShort(plan.pastDue.accessChangesAt, timeZone)}.` : 'Payment due';
+      case 'view_only':
+        return access?.canView ? 'View only. Pick a plan to make changes.' : `View only. Ask ${askWho} to pick a plan.`;
+      case 'not_in_plan':
+        return mayAdd ? addAppPriceNote(plan, state.module) : `Ask ${askWho} to add it.`;
+      case 'included':
+      case 'active':
+        return null;
+    }
+  };
+  const addActionFor = (state: ModuleState) =>
+    state.badge === 'not_in_plan' && mayAdd
+      ? {
+          label: plan.phase === 'none' && plan.trialEligible ? 'Start free trial' : plan.phase === 'trial' ? `Add ${CATALOG.products[state.module].shortName}` : 'Add to plan',
+          href: `/billing/plan?add=${state.module}`,
+        }
+      : null;
 
   const quickLinks: readonly QuickLink[] = [
     ...(entitledFor('crm')
@@ -231,8 +267,9 @@ export default async function LauncherPage({
               tagline={copy.tagline}
               href={productUrl(state.module)}
               entitled={state.entitled}
-              access={state.access}
-              periodEnd={state.entitlement?.periodEnd ?? null}
+              badge={state.badge}
+              planNote={planNoteFor(state)}
+              addAction={addActionFor(state)}
               stats={stats[state.module]}
               emptyStateHref={emptyStateUrl(state.module, activeOrg.slug)}
             />
@@ -292,7 +329,7 @@ export default async function LauncherPage({
       {devAllowAll ? (
         <p className="flex items-center gap-2 text-xs text-fg-muted">
           <Badge tone="info">Dev</Badge>
-          Every module is unlocked on this environment. In production, access follows your plan.
+          Every app is open on this environment. In production, access follows your plan.
         </p>
       ) : null}
     </div>

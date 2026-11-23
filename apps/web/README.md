@@ -4,7 +4,8 @@ Marketing site for the KitStak platform, served at **https://kitstak.com**
 (`www.kitstak.com` redirects to the apex). The portal is at `kitstak.app` and the product apps are on
 `crm.` / `wms.` / `projects.` / `pulse.kitstak.app`. See `src/components/site-links.ts`.
 
-- Next.js 16 (App Router), fully static, no runtime dependencies beyond React.
+- Next.js 16 (App Router), fully static. Beyond React it depends only on two workspace packages:
+  `@kitstak/ui` (design tokens) and `@kitstak/billing` (the pure price catalog, quote and sign-up link).
 - Design tokens come from `@kitstak/ui/styles/tokens.css` (shared with the apps).
 - Logos in `public/brand` are the supplied artwork, with transparent padding trimmed by
   `scripts/prepare-brand.mjs`. Do not redraw them.
@@ -18,30 +19,51 @@ Marketing site for the KitStak platform, served at **https://kitstak.com**
 | Route          | What it is                                                                                                             |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `/`            | Home                                                                                                                   |
-| `/products`    | All four products, the comparison, and the bundle price calculator (`#pricing`)                                        |
+| `/products`    | All four products, the comparison, and the price calculator (`#pricing`), with a link to `/pricing`                    |
+| `/pricing`     | Prices: the monthly and yearly switch, one card per app, the calculator, "How billing works" and the price questions   |
 | `/wms`, `/crm` | In-depth product pages. Copy lives in `src/components/{wms,crm}/*-content.ts`                                          |
 | `/projects`    | KitStak Projects. Copy in `src/components/projects/projects-content.ts`; lists and counts come from the app (below)    |
 | `/pulse`       | KitStak Pulse. Copy in `src/components/pulse/pulse-content.ts`, visuals in `src/components/pulse/` (see "Pulse" below) |
-| `/get-started` | The "Set up your Stak" wizard (`src/components/wizard`, model in `src/lib/stak.ts`)                                    |
+| `/get-started` | The "Set up your Stak" wizard (`src/components/wizard`, model in `src/lib/stak.ts`). Its last step opens portal sign-up |
 | `/contact`     | Contact and "talk to the founder" (`?topic=founder\|demo\|projects\|pulse\|sales`). `&product=pulse` on a walkthrough link starts the message with that product (`walkthroughHref`)                                     |
 
 Every internal link goes through `ROUTES` in `src/components/site-links.ts`; the header menu, the
 mobile drawer and the footer all read `src/components/nav/nav-data.ts`.
 
+## Prices, sign-up and the free trial
+
+Read `docs/billing/SPEC.md` section 4 and `docs/billing/CONTRACTS.md` sections 4, 6 and 19 first.
+
+- **One catalog.** The site holds no price. `src/lib/pricing.ts` re-exports the shared catalog and quote
+  from `@kitstak/billing` (`packages/billing/src/catalog.ts` and `quote.ts`), the same ones portal sign-up,
+  billing and the payment gateway read. It adds only phrases built from them ("$29 per user each month").
+  To change a price, change the catalog. `src/lib/pricing.test.ts` fails if a price is written anywhere in
+  `src`, and it checks the nine reference carts to the cent.
+- **Same lines as the portal.** The calculator (`src/components/stak/bundle-calculator.tsx`) and the wizard
+  summary show what the portal picker shows: one math line per app, each discount as its own dollar line,
+  the total, and for yearly the per month view. Money always shows its cents. Nothing is rounded.
+- **Straight to sign-up.** "Start my free trial" on the calculator, "Start free" on a pricing card and the
+  button on each product page's price band open the portal's `/signup` with the cart in the link
+  (`trialUrl` in `src/lib/stak.ts`). "Help me choose" opens the wizard with the same cart.
+- **The wizard hand-off.** The last wizard step asks for name, work email and company. "Create my account"
+  opens `signupUrl(LINKS.portal, handoff, identity)` from `@kitstak/billing/handoff` (`handoffUrl` in
+  `src/lib/stak.ts`): apps, seats, warehouses, period, business type, team size, start mode and the guided
+  setup flag in the query, and name, email and company after the `#`, where no server and no log sees
+  them. The link holds no price. The portal checks every value and prices the cart itself.
+- **Where the portal is.** `LINKS` in `src/components/site-links.ts` reads `NEXT_PUBLIC_PORTAL_URL` (and
+  `NEXT_PUBLIC_CRM_URL`, `NEXT_PUBLIC_WMS_URL`, `NEXT_PUBLIC_PROJECTS_URL`, `NEXT_PUBLIC_PULSE_URL`). With
+  none set, a production build uses the real domains and `next dev` uses the local dev ports from
+  `docs/billing/DEV.md`, so a wizard run on a local site lands on the local portal with no setup.
+- **Words.** On the pricing surfaces a product is an "app", and the rules in `docs/billing/SPEC.md`
+  section 0 apply: plain words, sentences of 20 words at most, no em dash, no double dash.
+  `src/lib/pricing-page.test.ts` checks them.
+
 ## Placeholders to replace before launch
 
-- **Pricing**. `src/lib/pricing.ts` (`PRICING`, `PRICING_IS_PLACEHOLDER`). Every page and the wizard read
-  from here. The CRM, WMS and Projects numbers are stand-ins and print "Preliminary pricing, shown for
-  planning." Beside the Pulse price the line names them ("Preliminary pricing for CRM, shown for
-  planning.") and says nothing about Pulse. The Pulse price is confirmed by the owner and carries `isConfirmed: true`, so it is never
-  called preliminary (see "Pulse price" below).
 - **Contact details**. `CONTACT` in `src/components/site-links.ts`. The contact form has no backend:
   it opens the visitor's email app (`buildMailto`).
-- **Account creation**. The wizard's last step collects name, email and company in memory only, then
-  links to the portal's `/signup` with the non-personal answers (`focus`, `products`, `businessType`,
-  `teamSize`, `startMode`) in the query string. `focus` keeps the portal's `crm | wms | both` shape;
-  `products` carries the full set, including `projects`, and `pulse` only once `PULSE_IS_LIVE` is true. The
-  portal does not read them yet.
+- **Guided setup**. The wizard's "Guided setup with the founder" box rides to the portal as `guided=1`.
+  Nothing books a time yet, so the copy sends the visitor to the contact page to pick one.
 
 - **Pulse screenshots**. The `/pulse` page shows real product screenshots: Home in the hero, then Profit
   by job, Jobs, a "How we got this" panel, Log work, Plan vs actual, the rate builder, the import Check
@@ -97,45 +119,25 @@ Product page copy describes only what `apps/wms`, `apps/crm` and `apps/projects`
 Pulse costs $29 per organization per month, and that covers up to 5 seats. It is one flat price for the
 organization, not a price per user. The owner confirmed it and it is final.
 
-- In `PRICING` each product has a billing basis. The CRM, WMS and Projects are `per_unit` (multiplied by
-  seats or warehouses, see `quantityFrom`). Pulse is `flat_per_org`: one quote line, quantity 1, never
-  multiplied by seats or warehouses.
+- The price lives in the shared catalog (`CATALOG.products.pulse`), like the other three. Its
+  `quantityFrom` is `flat`: one quote line, quantity 1, never multiplied by seats or warehouses.
 - The bundle discount and the yearly discount apply to the Pulse line the same way as to every other line.
 - The owner gave no price above 5 seats, so the site quotes none. It says "Need more than 5 seats? Talk
-  to us." and links to `/contact`. Do not add a higher tier without the owner.
+  to us." and links to `/contact`. With Pulse on and a bigger team, the quote says "The Pulse price covers
+  up to 5 seats. For a bigger team, talk to us." (`pulseSeatNote` on the shared quote), so the total never
+  reads as a Pulse price for a bigger team. Do not add a higher tier without the owner.
 
-### Pulse is "Coming soon"
+### Pulse is open
 
-`PULSE_IS_LIVE` in `src/components/site-links.ts` is false until customers can open the Pulse app. While
-it is false:
+`PULSE_IS_LIVE` in `src/components/site-links.ts` is true: Pulse is sold through the same sign-up as the
+other three apps (docs/billing/DECISIONS.md, CONTRACTS.md section 19). Every Pulse button starts a trial or
+opens the wizard, and the footer links to the Pulse sign-in.
 
-- The site says exactly "Coming soon" (`COMING_SOON`) on the `/products` Pulse card, in the Products menu
-  and the mobile drawer, on the calculator switch, over the Pulse heading and on the Pulse switch of the
-  home page, beside the product name at the top of `/pulse`, on the `/pulse` price card, in the wizard's
-  Pulse row, and in the `/pulse` FAQ "How do I start?" answer and closing note. The `/products` hero, two
-  of its FAQ answers, the Products menu and the site description say "Pulse is coming soon" in a
-  sentence. The `/get-started` page description leaves Pulse out of the choices.
-- On `/pulse` the main button of the "On its own. Or on the stack." band is "Book a walkthrough". The
-  second one, "Set up the other apps today", opens the wizard, which leaves Pulse out.
-- The `/products` calculator still prices Pulse into a stack, with the bundle discount. While Pulse is
-  coming soon and switched on there, a second total sits under the main one: "Today, without Pulse: $123
-  per month, billed yearly. The bundle saving starts when Pulse opens." (`todayPriceNote` in
-  `src/lib/pricing.ts`). It is the same `quote` with Pulse left out, so it matches the wizard the button
-  opens.
-- No link leads toward an account for Pulse. `startLink('pulse')` gives "Book a walkthrough" to
-  `ROUTES.demo`. `getStartedHref` and `wizardHref` leave Pulse out of the stack they carry, and send a
-  Pulse only stack to the walkthrough form. The wizard shows Pulse as a labeled row with no box to tick,
-  drops it from links and saved answers, and never hands it to sign-up.
-- The calculator on `/products` still prices Pulse. When Pulse is switched on, a line under the button
-  says it is coming soon and that the button sets up the rest of the stack.
-
-The calculator opens at 5 users, the seats the Pulse price covers. With Pulse on and more users than
-that, the quote says "The Pulse price covers up to 5 seats. For more, talk to us." (`overSeatsNote` in
-`src/lib/pricing.ts`), so the total never reads as a Pulse price for a bigger team. The wizard summary
-does the same.
-
-Set `PULSE_IS_LIVE` to true and all of this goes back to the normal start flow with no other change.
-`src/lib/pulse-availability.test.ts` fails if a Pulse start link is live while the flag is false.
+The flag stays as the one switch for a product whose app is closed. Set it to false and the site labels
+Pulse as not open, every start link leaves Pulse out (`startLink`, `getStartedHref`, `pricingHref`,
+`wizardHref`, `trialUrl`, `handoffUrl`), a Pulse only stack goes to the walkthrough form, and the wizard
+shows Pulse as a labeled row with no box to tick. `src/lib/pulse-availability.test.ts` holds the checks for
+both positions of the switch. The checks for the closed position are skipped while the flag is true.
 
 The Pulse app is built on its own branch, so `apps/pulse` may not be in this tree. Until it is, every
 claim about Pulse on this site follows `docs/pulse/SPEC.md` and `docs/pulse/CONTRACTS.md`: if the spec
@@ -146,8 +148,8 @@ does not say the product does it, the site does not say it either. No customer n
 - Pulse is the fourth bar of the stack. Its bar color is `--stak-pulse` in `src/styles/globals.css`, with
   navy ink on it (`--stak-pulse-ink`).
 - Placements read shared data, so most follow on their own: `PRODUCT_NAV` (header menu, mobile drawer,
-  footer, 404), `PRODUCT_IDS` and `PRICING` (calculator, wizard, home "Run all four" switches, price
-  band). `src/lib/pulse-placements.test.ts` fails if one falls out of step.
+  footer, 404), `PRODUCT_IDS` and the shared `CATALOG` (calculator, pricing cards, wizard, home "Run all
+  four" switches, price band). `src/lib/pulse-placements.test.ts` fails if one falls out of step.
 - Home "Run all four" plans: the plans without Pulse are written out in
   `src/components/licensing/licensing-plans.ts`; the plans with Pulse are composed from them.
 
@@ -174,7 +176,9 @@ ticked. Each one is a click through on the Pulse demo workspace, signed off by t
 - [ ] Settings: change a risk limit and see "this would flag N jobs" before saving.
 - [ ] `https://pulse.kitstak.app` answers and shows the sign-in page.
 - [x] The owner has confirmed the Pulse price and unit: $29 per organization per month, up to 5 seats.
-- [ ] `PULSE_IS_LIVE` is set to true in `src/components/site-links.ts` on the day the app opens.
+- [x] `PULSE_IS_LIVE` is set to true in `src/components/site-links.ts`. Done on 2026-11-23, when the owner
+      opened self serve sign-up for all four apps (docs/billing/DECISIONS.md). The open lines above still
+      need their sign off from the Pulse team.
 
 If a feature is cut or changes, change the copy in `src/components/pulse/pulse-content.ts` to match
 before the page ships.
@@ -201,9 +205,9 @@ so dev and tests work without it, and `src/lib/projects-sync.test.ts` fails when
 fails the typecheck here until it has copy. Never edit `src/generated/` by hand.
 
 ```bash
-pnpm --filter kitstak-web dev     # http://localhost:3400
+pnpm --filter kitstak-web dev     # http://localhost:3600 (Projects owns 3400)
 pnpm --filter kitstak-web build
-pnpm --filter kitstak-web test    # pricing, wizard, contact, quick-add demo, Projects snapshot, Pulse placements and start links
+pnpm --filter kitstak-web test    # shared catalog and reference carts, pricing page, calculator, wizard hand-off, contact, quick-add demo, Projects snapshot, Pulse placements and start links
 pnpm --filter kitstak-web sync:projects   # refresh src/generated/projects from apps/projects
 ```
 

@@ -1,0 +1,151 @@
+import type { Metadata } from 'next';
+import { and, eq } from 'drizzle-orm';
+import { MailX, UsersRound } from 'lucide-react';
+import { formatDay } from '@kitstak/billing/catalog';
+import { member } from '@kitstak/db/schema';
+import { LinkButton } from '@/components/ui';
+import { db } from '@/server/db';
+import { getSession } from '@/server/session';
+import { getInviteView } from '@/server/signup';
+import { AuthHeading } from '../../_components/heading';
+import { InviteAccept } from './invite-accept';
+import { InviteJoinForm } from './invite-join-form';
+import { InviteWrongAccount } from './invite-wrong-account';
+
+export const metadata: Metadata = { title: 'Join your team' };
+
+function Icon({ tone }: { readonly tone: 'info' | 'muted' }) {
+  return tone === 'info' ? (
+    <span className="mb-5 flex size-11 items-center justify-center rounded-full bg-info-subtle text-info-text">
+      <UsersRound aria-hidden className="size-5" />
+    </span>
+  ) : (
+    <span className="mb-5 flex size-11 items-center justify-center rounded-full bg-sunken text-fg-muted">
+      <MailX aria-hidden className="size-5" />
+    </span>
+  );
+}
+
+async function isMember(orgId: string, userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ role: member.role })
+    .from(member)
+    .where(and(eq(member.organizationId, orgId), eq(member.userId, userId)))
+    .limit(1);
+  return rows[0] !== undefined && !rows[0].role.startsWith('deactivated:');
+}
+
+/**
+ * Accept an invitation (docs/billing/SPEC.md section 5.5). Shows the team, who invited you and your
+ * role. Invited people never see the app picker or a price: after accepting they land on the
+ * launcher of the team they joined.
+ */
+export default async function InvitePage({
+  params,
+}: {
+  readonly params: Promise<{ invitationId: string }>;
+}) {
+  const { invitationId } = await params;
+  const [view, session] = await Promise.all([getInviteView(invitationId), getSession()]);
+
+  if (!view) {
+    return (
+      <>
+        <Icon tone="muted" />
+        <AuthHeading
+          title="This invite link does not work"
+          subtitle="The link may be cut short. Open it again from your email, or ask your team to send a new invite."
+        />
+        <LinkButton href={session ? '/' : '/login'} size="lg" fullWidth className="h-12 sm:h-11">
+          {session ? 'Open KitStak' : 'Go to sign in'}
+        </LinkButton>
+      </>
+    );
+  }
+
+  if (view.status !== 'pending') {
+    // A used invite that this very person accepted: they are in. Take them home.
+    const joined = session ? await isMember(view.orgId, session.user.id) : false;
+    return (
+      <>
+        <Icon tone={joined ? 'info' : 'muted'} />
+        <AuthHeading
+          title={joined ? `You are already on ${view.orgName}` : 'This invite is no longer active'}
+          subtitle={
+            joined ? 'This invite was used. You are all set.' : `Ask ${view.inviterName} to send a new one.`
+          }
+        />
+        <LinkButton href={session ? '/' : '/login'} size="lg" fullWidth className="h-12 sm:h-11">
+          {session ? 'Open KitStak' : 'Go to sign in'}
+        </LinkButton>
+      </>
+    );
+  }
+
+  const heading = (
+    <>
+      <Icon tone="info" />
+      <AuthHeading
+        title={`Join ${view.orgName} on KitStak`}
+        subtitle={
+          <>
+            {view.inviterName} invited you to{' '}
+            <span className="font-semibold text-fg" data-testid="invite-org-name">
+              {view.orgName}
+            </span>{' '}
+            as {/^[aeiou]/i.test(view.roleLabel) ? 'an' : 'a'} {view.roleLabel.toLowerCase()}.
+          </>
+        }
+      />
+    </>
+  );
+  const expires = (
+    <p className="mt-5 text-center text-xs text-fg-muted">This invite works until {formatDay(view.expiresAt)}.</p>
+  );
+  const invitePath = `/invite/${view.id}`;
+
+  if (!session) {
+    return (
+      <>
+        {heading}
+        {view.accountExists ? (
+          <div className="flex flex-col gap-4">
+            <p className="text-base text-fg-secondary">
+              You already have a KitStak account for <span className="font-medium break-all text-fg">{view.email}</span>.
+              Sign in to accept.
+            </p>
+            <LinkButton
+              href={`/login?next=${encodeURIComponent(invitePath)}#email=${encodeURIComponent(view.email)}`}
+              size="lg"
+              fullWidth
+              className="h-12 sm:h-11"
+              data-testid="invite-accept"
+            >
+              Sign in to accept
+            </LinkButton>
+          </div>
+        ) : (
+          <InviteJoinForm invitationId={view.id} email={view.email} orgName={view.orgName} />
+        )}
+        {expires}
+      </>
+    );
+  }
+
+  if (session.user.email.trim().toLowerCase() !== view.email) {
+    return (
+      <>
+        {heading}
+        <InviteWrongAccount invitedEmail={view.email} signedInEmail={session.user.email} invitePath={invitePath} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {heading}
+      <InviteAccept invitationId={view.id} orgName={view.orgName} email={view.email} />
+      {expires}
+    </>
+  );
+}

@@ -35,7 +35,7 @@ import {
 import type { Stack } from '@/components/site-links';
 import { BundleCalculator } from '@/components/stak/bundle-calculator';
 import { StackStep } from '@/components/wizard/wizard-steps';
-import { DEFAULT_ANSWERS, applyPrefill, handoffUrl, parseAnswers, wizardHref } from './stak';
+import { DEFAULT_ANSWERS, applyPrefill, handoffUrl, parseAnswers, trialUrl, wizardHref } from './stak';
 
 const noop = () => {};
 
@@ -103,7 +103,8 @@ describe.skipIf(PULSE_IS_LIVE)('while Pulse is coming soon', () => {
     for (const stack of everyStack()) {
       const links = [
         getStartedHref(stack),
-        wizardHref({ stack, seats: 5, warehouses: 1, billing: 'annual' }),
+        wizardHref({ stack, seats: 5, warehouses: 1, billing: 'yearly' }),
+        trialUrl({ products: stack, seats: 5, warehouses: 1, interval: 'monthly' }, 'pricing'),
         handoffUrl({ ...DEFAULT_ANSWERS, products: stack }),
       ];
       expect(links.filter(isPulseStartLink)).toEqual([]);
@@ -116,7 +117,7 @@ describe.skipIf(PULSE_IS_LIVE)('while Pulse is coming soon', () => {
 
     expect(getStartedHref('pulse')).toBe(pulseWalkthrough);
     expect(getStartedHref(['pulse'])).toBe(pulseWalkthrough);
-    expect(wizardHref({ stack: ['pulse'], seats: 5, warehouses: 1, billing: 'annual' })).toBe(
+    expect(wizardHref({ stack: ['pulse'], seats: 5, warehouses: 1, billing: 'yearly' })).toBe(
       pulseWalkthrough,
     );
     expect(startLink('pulse')).toEqual({ href: pulseWalkthrough, label: 'Book a walkthrough' });

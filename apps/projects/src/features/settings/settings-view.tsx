@@ -35,7 +35,7 @@ const SECTIONS: readonly { id: SettingsSectionId; label: string; hint: string; i
   {
     id: 'workspace',
     label: 'Workspace',
-    hint: 'Spaces and people',
+    hint: 'Plan, spaces and people',
     icon: <Building2 aria-hidden className="size-4" />,
   },
   {
@@ -56,10 +56,13 @@ export function SettingsView({
   spaces,
   notificationPrefs,
   integrationSummary,
+  planCard = null,
 }: {
   readonly spaces: SpaceDTO[];
   readonly notificationPrefs: Partial<Record<NotificationKind, boolean>>;
   readonly integrationSummary: IntegrationLinkSummary;
+  /** The "Plan and payment" row, rendered on the server from `@kitstak/billing`. */
+  readonly planCard?: ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? '/settings';
@@ -112,7 +115,12 @@ export function SettingsView({
           </h2>
           {section === 'profile' ? <ProfileSection notificationPrefs={notificationPrefs} /> : null}
           {section === 'appearance' ? <AppearanceSection /> : null}
-          {section === 'workspace' ? <WorkspaceSection spaces={spaces} /> : null}
+          {section === 'workspace' ? (
+            <div className="flex flex-col gap-5">
+              {planCard}
+              <WorkspaceSection spaces={spaces} />
+            </div>
+          ) : null}
           {section === 'integrations' ? <IntegrationsSection summary={integrationSummary} /> : null}
           {section === 'shortcuts' ? <ShortcutsSection /> : null}
         </section>

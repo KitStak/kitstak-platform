@@ -1,10 +1,9 @@
-import { Lock, ShieldQuestion } from 'lucide-react';
+import { ShieldQuestion } from 'lucide-react';
+import { PlanLockScreen, type PlanLockView } from '@kitstak/ui/plan-lock';
 import { PulseMark } from './logo';
 
 const primaryLink =
   'inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-base font-medium text-primary-fg hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
-const secondaryLink =
-  'inline-flex h-10 items-center rounded-md border border-border-input bg-panel px-4 text-base font-medium text-fg hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 
 function Frame({ testId, children }: { readonly testId: string; readonly children: React.ReactNode }) {
   return (
@@ -19,25 +18,13 @@ function Frame({ testId, children }: { readonly testId: string; readonly childre
   );
 }
 
-/** Shown inside the app frame when the org is not entitled to KitStak Pulse. */
-export function LockedScreen({ orgName, portalUrl, canManage }: { readonly orgName: string; readonly portalUrl: string; readonly canManage: boolean }) {
-  return (
-    <Frame testId="locked-screen">
-      <h1 className="mt-5 text-xl font-semibold text-fg">KitStak Pulse is not turned on for {orgName}</h1>
-      <p className="mt-2 text-base text-fg-secondary">
-        {canManage ? 'Turn it on from the Portal to see profit by job, client and service.' : 'Ask an owner or admin of your organization to turn it on in the Portal.'}
-      </p>
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-        <a href={`${portalUrl}/billing?module=pulse`} className={primaryLink}>
-          <Lock aria-hidden className="size-4" />
-          {canManage ? 'Turn on Pulse' : 'View plans'}
-        </a>
-        <a href={portalUrl} className={secondaryLink}>
-          Back to Portal
-        </a>
-      </div>
-    </Frame>
-  );
+/**
+ * Shown inside the app frame when Pulse is not in the org's plan. A thin wrapper over the shared
+ * `PlanLockScreen`: the title, the price and both links come from `planLockFor` in
+ * `@kitstak/billing`, so every KitStak app shows the same screen (docs/billing/SPEC.md 9.3).
+ */
+export function LockedScreen({ lock }: { readonly lock: PlanLockView }) {
+  return <PlanLockScreen app="pulse" lock={lock} />;
 }
 
 /** Shown when the org has Pulse but this person has no Pulse role yet. Seeing money is opt in. */

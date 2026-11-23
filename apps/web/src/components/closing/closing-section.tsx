@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { TRIAL_LINE } from '@/lib/pricing';
 import { Logo } from '../logo';
 import { ROUTES } from '../site-links';
 import styles from './closing-section.module.css';
@@ -18,7 +19,7 @@ export function ClosingSection({
   title = 'Sell it. Stock it. Ship it.',
   startHref = ROUTES.getStarted,
   startLabel = 'Set up your Stak',
-  note = 'About five minutes. No card needed to set up.',
+  note = `About five minutes. ${TRIAL_LINE}`,
   logo,
 }: ClosingSectionProps) {
   return (

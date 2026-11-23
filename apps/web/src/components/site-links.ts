@@ -1,20 +1,85 @@
+import {
+  PRODUCT_IDS,
+  isProductId,
+  parseStack,
+  stackParam,
+  toStack,
+  toggleProduct,
+} from '@kitstak/billing/catalog';
+import type { ProductId, Stack } from '@kitstak/billing/catalog';
+
+export interface AppOrigins {
+  readonly portal: string;
+  readonly crm: string;
+  readonly wms: string;
+  readonly projects: string;
+  readonly pulse: string;
+}
+
 /** Production app origins (from the platform's custom-domain configuration, docs/DEPLOYMENT.md). */
-export const LINKS = {
+export const PRODUCTION_ORIGINS: AppOrigins = {
   portal: 'https://kitstak.app',
   crm: 'https://crm.kitstak.app',
   wms: 'https://wms.kitstak.app',
   projects: 'https://projects.kitstak.app',
   pulse: 'https://pulse.kitstak.app',
-} as const;
+};
+
+/** The local dev ports from docs/billing/DEV.md. Used only by `next dev`, and only when no variable is set. */
+export const LOCAL_DEV_ORIGINS: AppOrigins = {
+  portal: 'http://localhost:3300',
+  crm: 'http://localhost:3100',
+  wms: 'http://localhost:3000',
+  projects: 'http://localhost:3400',
+  pulse: 'http://localhost:3500',
+};
+
+/** An origin from an env value: trimmed, no trailing slash. Blank or not a web address gives null. */
+function cleanOrigin(value: string | undefined): string | null {
+  const trimmed = value?.trim().replace(/\/+$/, '') ?? '';
+  return /^https?:\/\/[^\s/]+/.test(trimmed) ? trimmed : null;
+}
+
+/** The `NEXT_PUBLIC_*_URL` values, one per app. Any of them may be missing or blank. */
+export type OriginEnv = Partial<Record<keyof AppOrigins, string | undefined>>;
 
 /**
- * Whether customers can open the Pulse app yet. It is still being built, so the site does not send
- * anyone toward an account for it. While this is false, every Pulse start button becomes "Book a
- * walkthrough", start links leave Pulse out, the setup wizard will not take it, and the site labels
- * Pulse "Coming soon". Set this to true on the day pulse.kitstak.app opens. That one line brings
- * "Start with Pulse", the wizard row and the sign in link back.
+ * Where each app lives. A `NEXT_PUBLIC_*_URL` variable wins. An app with no variable, or a blank or
+ * broken one, gets its origin from `fallback`, so a link is never empty.
  */
-export const PULSE_IS_LIVE: boolean = false;
+export function resolveAppOrigins(env: OriginEnv, fallback: AppOrigins = PRODUCTION_ORIGINS): AppOrigins {
+  return {
+    portal: cleanOrigin(env.portal) ?? fallback.portal,
+    crm: cleanOrigin(env.crm) ?? fallback.crm,
+    wms: cleanOrigin(env.wms) ?? fallback.wms,
+    projects: cleanOrigin(env.projects) ?? fallback.projects,
+    pulse: cleanOrigin(env.pulse) ?? fallback.pulse,
+  };
+}
+
+/**
+ * The app origins every link on the site uses. With no variable set, a production build points at
+ * the real domains and `next dev` points at the local dev ports, so a wizard run on a local site
+ * lands on the local portal's sign-up with no setup. Each variable is named in full, so Next can put
+ * its value into the browser bundle.
+ */
+export const LINKS: AppOrigins = resolveAppOrigins(
+  {
+    portal: process.env.NEXT_PUBLIC_PORTAL_URL,
+    crm: process.env.NEXT_PUBLIC_CRM_URL,
+    wms: process.env.NEXT_PUBLIC_WMS_URL,
+    projects: process.env.NEXT_PUBLIC_PROJECTS_URL,
+    pulse: process.env.NEXT_PUBLIC_PULSE_URL,
+  },
+  process.env.NODE_ENV === 'development' ? LOCAL_DEV_ORIGINS : PRODUCTION_ORIGINS,
+);
+
+/**
+ * Whether customers can open the Pulse app. It is open: Pulse is sold through the same sign-up as
+ * the other three apps (docs/billing/DECISIONS.md). This stays the one switch for a product whose
+ * app is closed. Set to false, every start link leaves Pulse out and its buttons book a walkthrough.
+ */
+export const PULSE_IS_LIVE: boolean = true;
 
 /** False for a product whose app customers cannot open yet. Such a product gets no start button. */
 export function isAppLive(product: 'crm' | 'wms' | 'projects' | 'pulse'): boolean {
@@ -38,7 +103,9 @@ export const ROUTES = {
   crm: '/crm',
   projects: '/projects',
   pulse: '/pulse',
-  pricing: '/products#pricing',
+  pricing: '/pricing',
+  /** The price calculator on the pricing page. */
+  calculator: '/pricing#calculator',
   bundle: '/products#bundle',
   getStarted: '/get-started',
   contact: '/contact',
@@ -46,42 +113,14 @@ export const ROUTES = {
   demo: '/contact?topic=demo',
 } as const;
 
-/** The licensable apps, in the order the stack is drawn (matches @kitstak/entitlements `MODULES`). */
-export const PRODUCT_IDS = ['crm', 'wms', 'projects', 'pulse'] as const;
-export type ProductId = (typeof PRODUCT_IDS)[number];
-
-/** A chosen set of products, always in `PRODUCT_IDS` order with no repeats. Empty means none yet. */
-export type Stack = readonly ProductId[];
+/**
+ * The licensable apps and the stack helpers. They come from the shared catalog (`@kitstak/billing`),
+ * so the site, sign-up and billing always agree on which apps exist and in what order.
+ */
+export { PRODUCT_IDS, isProductId, parseStack, stackParam, toStack, toggleProduct };
+export type { ProductId, Stack };
 
 export const FULL_STACK: Stack = PRODUCT_IDS;
-
-export function isProductId(value: string): value is ProductId {
-  return (PRODUCT_IDS as readonly string[]).includes(value);
-}
-
-/** Puts any list of product ids into canonical stack form. */
-export function toStack(products: readonly string[]): Stack {
-  return PRODUCT_IDS.filter((id) => products.includes(id));
-}
-
-/** The stack with `product` switched on or off. */
-export function toggleProduct(stack: Stack, product: ProductId): Stack {
-  return stack.includes(product) ? stack.filter((id) => id !== product) : toStack([...stack, product]);
-}
-
-/**
- * Reads `?stack=`: a comma list (`crm,projects`) or one of the older values (`crm`, `wms`, `both`).
- * Unknown parts are dropped; nothing valid gives an empty stack.
- */
-export function parseStack(value: string | null | undefined): Stack {
-  if (!value) return [];
-  if (value === 'both') return ['crm', 'wms'];
-  return toStack(value.split(','));
-}
-
-export function stackParam(stack: Stack): string {
-  return stack.join(',');
-}
 
 /** How each product reads after "Start with": "Start with the CRM", "Start with Pulse". */
 export const START_NAME: Readonly<Record<ProductId, string>> = {
@@ -120,6 +159,15 @@ export function getStartedHref(stack?: Stack | ProductId): string {
   if (products.length === 0) return ROUTES.getStarted;
   const open = startableStack(products);
   return open.length > 0 ? `${ROUTES.getStarted}?stack=${stackParam(open)}` : walkthroughHref(products);
+}
+
+/**
+ * The price calculator with products already switched on. A product whose app is not open yet is
+ * left out, the same as every other start link.
+ */
+export function pricingHref(stack?: Stack | ProductId): string {
+  const products = startableStack(toStack(typeof stack === 'string' ? [stack] : (stack ?? [])));
+  return products.length === 0 ? ROUTES.calculator : `${ROUTES.pricing}?stack=${stackParam(products)}#calculator`;
 }
 
 export interface StartLink {

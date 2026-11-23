@@ -4,6 +4,10 @@ import { invitation, member, organization, user } from '@kitstak/db/schema';
 import { db } from '@/server/db';
 import { requirePageSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
+import { getBillingContext } from '@/server/billing/context';
+import { getOrgPlan } from '@/server/entitlements';
+import { env } from '@/server/env';
+import { usesSeats } from '@/features/billing/format';
 import { InviteMemberForm } from './invite-member-form';
 import { InvitationRow, MemberRow } from './member-rows';
 import { LeaveOrgButton } from './leave-org-card';
@@ -104,6 +108,15 @@ export default async function OrganizationSettingsPage() {
 
   const setup = await getSetupState(activeOrg);
 
+  // Seat facts for the invite form (docs/billing/SPEC.md 6.9). Limits apply on paid plans only.
+  const [billing, plan] = await Promise.all([getBillingContext(), getOrgPlan(activeOrg.id)]);
+  const inviteSeats = {
+    canManageBilling: billing?.access.canManage ?? false,
+    paidSelection: plan.state.hasSubscription && usesSeats(plan.state.selection) ? plan.state.selection : null,
+    ownerName: billing?.access.ownerName ?? null,
+    siteUrl: env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, ''),
+  };
+
   const [orgRow] = await db
     .select({ createdAt: organization.createdAt })
     .from(organization)
@@ -172,7 +185,7 @@ export default async function OrganizationSettingsPage() {
             <div className="border-t border-border-subtle px-6 py-5">
               <h3 className="text-sm font-semibold text-fg">Invite someone</h3>
               <div className="mt-3">
-                <InviteMemberForm orgId={activeOrg.id} />
+                <InviteMemberForm orgId={activeOrg.id} emailVerified={session.user.emailVerified === true} seats={inviteSeats} />
               </div>
             </div>
           ) : (
@@ -251,7 +264,7 @@ export default async function OrganizationSettingsPage() {
             Danger zone
           </h2>
           <p className="mt-1 text-sm text-fg-muted">
-            Leaving removes your access to {activeOrg.name} in the portal, CRM and WMS.
+            Leaving removes your access to {activeOrg.name} in the Portal and in every KitStak app.
           </p>
           <div className="mt-4">
             <LeaveOrgButton orgId={activeOrg.id} orgName={activeOrg.name} isSoleOwner={isSoleOwner} />

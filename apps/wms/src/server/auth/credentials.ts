@@ -247,6 +247,10 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
   )[0];
   const orgRole = orgRoleForLegacy(input.legacyRole);
   if (!membership) {
+    // A new person in the organization uses a seat of its paid plan (docs/billing/SPEC.md P6).
+    // No limit during a free trial, with no paid plan, or on a plan with WMS alone.
+    const { assertSeatAvailable } = await import('@/server/auth/plan');
+    await assertSeatAvailable(db, orgId, orgRole);
     await db.insert(member).values({
       id: randomUUID(),
       organizationId: orgId,

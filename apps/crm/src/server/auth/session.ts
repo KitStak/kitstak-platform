@@ -31,6 +31,8 @@ export interface OrgMembership {
   readonly memberId: string;
   readonly roles: readonly OrgRole[];
   readonly role: OrgRole;
+  /** The raw `core.member.role` string (a comma list), as billing reads it. */
+  readonly roleString: string;
   readonly permissions: readonly Permission[];
 }
 
@@ -94,6 +96,7 @@ export async function findOrgMembership(userId: string, orgIdOrSlug: string): Pr
     memberId: row.memberId,
     roles,
     role,
+    roleString: row.role,
     permissions: permissionsFor(roles),
   };
 }
@@ -122,11 +125,13 @@ export const getPageOrgMembership = cache(
     // Org IP allow-list applies to pages as well as /api/v1 (throws ForbiddenError when blocked).
     const { enforceNetworkPolicy } = await import('@/server/services/admin-org');
     await enforceNetworkPolicy(membership.organization.id, clientIp(await headers()));
-    // Module entitlement gate (BLUEPRINT.md §3.3): members of an unentitled org land on the
-    // branded lock page (served outside this gate, so no redirect loop). Dev/test default
-    // to allow-all — see @/server/entitlements.
-    const { orgHasCrmModule } = await import('@/server/entitlements');
-    if (!(await orgHasCrmModule(membership.organization.id))) {
+    // Plan gate (docs/billing/CONTRACTS.md section 18): when the CRM is not in the org's plan,
+    // members land on the lock page (served outside this gate, so no redirect loop). A view
+    // only org (trial over, payment late, paused, plan ended) still opens the app: the shell
+    // shows the banner and `withApi` refuses writes. Dev/test default to allow-all, see
+    // @/server/entitlements.
+    const { orgCrmAccess } = await import('@/server/entitlements');
+    if ((await orgCrmAccess(membership.organization.id)) === 'locked') {
       redirect(`/${membership.organization.slug}/locked`);
     }
     return { session, membership };

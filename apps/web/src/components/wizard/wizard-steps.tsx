@@ -1,7 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { MORE_SEATS_ACTION, PRICING, includedSeatsLabel, moreSeatsPrompt, percentLabel } from '@/lib/pricing';
+import {
+  BUNDLE_OFF,
+  MAX_SEATS,
+  MAX_WAREHOUSES,
+  MORE_SEATS_ACTION,
+  TRIAL_LINE,
+  includedSeatsLabel,
+  moreSeatsPrompt,
+  priceInWords,
+} from '@/lib/pricing';
 import {
   BUSINESS_TYPES,
   CRM_BOARDS,
@@ -183,7 +192,7 @@ export function StackStep({ answers, update }: StepProps) {
           <span className={styles.stackText}>
             <span className={styles.stackLabel}>
               {hasAllApps ? 'The whole stack' : 'Everything open today'}
-              <span className={styles.badge}>Save {percentLabel(PRICING.bundleDiscount)}</span>
+              <span className={styles.badge}>Save {BUNDLE_OFF}</span>
             </span>
             <span className={styles.tileNote}>
               {hasAllApps
@@ -215,8 +224,8 @@ export function StackStep({ answers, update }: StepProps) {
         })}
       </div>
       <p className={styles.reassure}>
-        Pick one or more. Two or more take {percentLabel(PRICING.bundleDiscount)} off each, and you can add
-        the rest later: your team and customers carry over.
+        Pick one or more. With two or more you save {BUNDLE_OFF} on each. You can add the rest later, and
+        your team and customers carry over.
       </p>
     </fieldset>
   );
@@ -259,9 +268,9 @@ function SeatsQuantity({ answers, update }: StepProps) {
         <span className={styles.tileNote}>Anyone who signs in to {list}.</span>
       </span>
       <Stepper
-        label="Users"
+        label="people"
         value={answers.seats}
-        max={PRICING.crm.max}
+        max={MAX_SEATS}
         onChange={(seats) => update({ seats })}
       />
     </div>
@@ -282,9 +291,9 @@ export function ShapeStep({ answers, update }: StepProps) {
               <span className={styles.tileNote}>Buildings you hold stock in. Add more any time.</span>
             </span>
             <Stepper
-              label="Warehouses"
+              label="warehouses"
               value={answers.warehouses}
-              max={PRICING.wms.max}
+              max={MAX_WAREHOUSES}
               onChange={(warehouses) => update({ warehouses })}
             />
           </div>
@@ -336,7 +345,7 @@ export function ShapeStep({ answers, update }: StepProps) {
             <AppIcon app="pulse" size={38} /> Your jobs
           </h3>
           <p className={styles.reassure}>
-            One flat price for your organization. {includedSeatsLabel('pulse')}. {moreSeatsPrompt('pulse')}{' '}
+            {priceInWords('pulse')}. {includedSeatsLabel('pulse')}. {moreSeatsPrompt('pulse')}{' '}
             <Link href={ROUTES.contact}>{MORE_SEATS_ACTION}</Link>
           </p>
           <ChipGroup
@@ -384,8 +393,8 @@ export function LaunchStep({ answers, update }: StepProps) {
           <span>
             <span className={styles.tileLabel}>Guided setup with the founder</span>
             <span className={styles.tileNote}>
-              A working session to map your floor or your pipeline and load your first data together. You pick
-              the time after you sign up.
+              A working session to map your floor or your pipeline and load your first data together. We note
+              it on your account. To pick a time, write to the founder from the contact page.
             </span>
           </span>
         </label>
@@ -394,7 +403,7 @@ export function LaunchStep({ answers, update }: StepProps) {
       <fieldset className={styles.group}>
         <legend>How would you like to pay?</legend>
         <BillingToggle value={answers.billing} onChange={(billing) => update({ billing })} />
-        <p className={styles.reassure}>Nothing is charged during setup.</p>
+        <p className={styles.reassure}>{TRIAL_LINE} You can switch between monthly and yearly later.</p>
       </fieldset>
     </>
   );

@@ -5,16 +5,19 @@ import {
   GRACE_DAYS,
   clearEntitlementsCache,
   getEntitlements,
+  getModuleAccess,
   hasModule,
   isEntitled,
+  moduleAccess,
   type ModuleEntitlement,
 } from './read';
 
 interface Row {
-  readonly module: 'crm' | 'wms';
+  readonly module: 'crm' | 'wms' | 'projects' | 'pulse';
   readonly status: 'active' | 'trialing' | 'past_due' | 'canceled';
   readonly source: 'stripe' | 'manual' | 'trial';
   readonly periodEnd: Date | null;
+  readonly seats?: number | null;
 }
 
 /** Plain-object mock of the `db.select({...}).from(...).where(...)` chain (repo norm). */
@@ -30,7 +33,7 @@ const NOW = new Date('2026-11-12T12:00:00.000Z');
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function entitlement(overrides: Partial<ModuleEntitlement> = {}): ModuleEntitlement {
-  return { status: 'active', source: 'manual', periodEnd: null, ...overrides };
+  return { status: 'active', source: 'manual', periodEnd: null, seats: null, ...overrides };
 }
 
 beforeEach(() => {
@@ -50,7 +53,7 @@ describe('getEntitlements', () => {
 
     const snapshot = await getEntitlements(db, ORG_ID);
 
-    expect(snapshot.crm).toEqual({ status: 'active', source: 'manual', periodEnd: null });
+    expect(snapshot.crm).toEqual({ status: 'active', source: 'manual', periodEnd: null, seats: null });
     expect(snapshot.wms).toBeNull();
   });
 
@@ -94,10 +97,55 @@ describe('getEntitlements', () => {
   });
 });
 
+describe('moduleAccess (the one access rule, row by row)', () => {
+  const future = new Date(NOW.getTime() + 3 * DAY_MS);
+  const past = new Date(NOW.getTime() - 3 * DAY_MS);
+  const cases: readonly [string, ModuleEntitlement | null, 'full' | 'read_only' | 'locked'][] = [
+    ['no row', null, 'locked'],
+    ['active', entitlement({ status: 'active', source: 'stripe' }), 'full'],
+    ['active manual grant', entitlement({ status: 'active', source: 'manual' }), 'full'],
+    ['trialing, no period end (old manual rows)', entitlement({ status: 'trialing', source: 'trial' }), 'full'],
+    ['trialing, period end in the future', entitlement({ status: 'trialing', source: 'trial', periodEnd: future }), 'full'],
+    ['trialing, period end in the past', entitlement({ status: 'trialing', source: 'trial', periodEnd: past }), 'read_only'],
+    ['past_due, no period end', entitlement({ status: 'past_due', source: 'stripe' }), 'locked'],
+    ['past_due, inside the grace days', entitlement({ status: 'past_due', source: 'stripe', periodEnd: past }), 'full'],
+    [
+      'past_due, after the grace days',
+      entitlement({ status: 'past_due', source: 'stripe', periodEnd: new Date(NOW.getTime() - (GRACE_DAYS + 1) * DAY_MS) }),
+      'read_only',
+    ],
+    ['canceled, source manual (a manual revoke)', entitlement({ status: 'canceled', source: 'manual', periodEnd: future }), 'locked'],
+    ['canceled, period end in the future', entitlement({ status: 'canceled', source: 'stripe', periodEnd: future }), 'full'],
+    ['canceled, period end in the past', entitlement({ status: 'canceled', source: 'stripe', periodEnd: past }), 'read_only'],
+    ['canceled, no period end', entitlement({ status: 'canceled', source: 'stripe' }), 'read_only'],
+    ['canceled trial row', entitlement({ status: 'canceled', source: 'trial', periodEnd: past }), 'read_only'],
+  ];
+
+  it.each(cases)('%s', (_name, row, expected) => {
+    expect(moduleAccess(row, NOW)).toBe(expected);
+  });
+
+  it('a trial ends exactly at its period end', () => {
+    const row = entitlement({ status: 'trialing', source: 'trial', periodEnd: NOW });
+    expect(moduleAccess(row, new Date(NOW.getTime() - 1))).toBe('full');
+    expect(moduleAccess(row, NOW)).toBe('read_only');
+  });
+});
+
 describe('isEntitled', () => {
   it('treats active and trialing as entitled', () => {
     expect(isEntitled(entitlement({ status: 'active' }), NOW)).toBe(true);
     expect(isEntitled(entitlement({ status: 'trialing' }), NOW)).toBe(true);
+  });
+
+  it('a trial past its end is no longer entitled', () => {
+    const periodEnd = new Date(NOW.getTime() - 1000);
+    expect(isEntitled(entitlement({ status: 'trialing', source: 'trial', periodEnd }), NOW)).toBe(false);
+  });
+
+  it('view only is not entitled', () => {
+    const periodEnd = new Date(NOW.getTime() - DAY_MS);
+    expect(isEntitled(entitlement({ status: 'canceled', source: 'stripe', periodEnd }), NOW)).toBe(false);
   });
 
   it('blocks canceled and missing entitlements', () => {
@@ -139,11 +187,51 @@ describe('hasModule', () => {
     await expect(hasModule(db, ORG_ID, 'wms')).resolves.toBe(false);
   });
 
+  it('reads a cached "not full" answer again, so good news shows on the next request', async () => {
+    const rows: Row[] = [];
+    const where = vi.fn().mockImplementation(async () => [...rows]);
+    const select = vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where }) });
+    const db = { select } as unknown as EntitlementsDb;
+
+    await expect(hasModule(db, ORG_ID, 'crm')).resolves.toBe(false);
+    expect(select).toHaveBeenCalledTimes(1);
+
+    // A payment lands in another process. The cached snapshot still says "no row".
+    rows.push({ module: 'crm', status: 'active', source: 'stripe', periodEnd: null });
+    await expect(hasModule(db, ORG_ID, 'crm')).resolves.toBe(true);
+    expect(select).toHaveBeenCalledTimes(2);
+
+    // A cached "full" answer is served from the cache.
+    await expect(hasModule(db, ORG_ID, 'crm')).resolves.toBe(true);
+    expect(select).toHaveBeenCalledTimes(2);
+  });
+
   it('short-circuits to true without touching the db when ENTITLEMENTS_DEV_ALLOW_ALL=1', async () => {
     vi.stubEnv('ENTITLEMENTS_DEV_ALLOW_ALL', '1');
     const { db, select } = mockSelectDb([]);
 
     await expect(hasModule(db, ORG_ID, 'crm')).resolves.toBe(true);
+    expect(select).not.toHaveBeenCalled();
+  });
+});
+
+describe('getModuleAccess', () => {
+  it('returns the three levels from the rows', async () => {
+    const { db } = mockSelectDb([
+      { module: 'crm', status: 'active', source: 'stripe', periodEnd: null },
+      { module: 'wms', status: 'trialing', source: 'trial', periodEnd: new Date(NOW.getTime() - DAY_MS) },
+    ]);
+
+    await expect(getModuleAccess(db, ORG_ID, 'crm')).resolves.toBe('full');
+    await expect(getModuleAccess(db, ORG_ID, 'wms')).resolves.toBe('read_only');
+    await expect(getModuleAccess(db, ORG_ID, 'projects')).resolves.toBe('locked');
+  });
+
+  it('returns full without touching the db when the dev switch is on', async () => {
+    vi.stubEnv('ENTITLEMENTS_DEV_ALLOW_ALL', 'true');
+    const { db, select } = mockSelectDb([]);
+
+    await expect(getModuleAccess(db, ORG_ID, 'pulse')).resolves.toBe('full');
     expect(select).not.toHaveBeenCalled();
   });
 });

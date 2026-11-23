@@ -29,6 +29,7 @@
     "@electric-sql/pglite": "0.5.11",
     "@hookform/resolvers": "7.0.3",
     "@kitstak/auth": "workspace:*",
+    "@kitstak/billing": "workspace:*",
     "@kitstak/db": "workspace:*",
     "@kitstak/entitlements": "workspace:*",
     "@kitstak/pm-bridge": "workspace:*",

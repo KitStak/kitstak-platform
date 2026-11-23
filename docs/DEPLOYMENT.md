@@ -46,7 +46,7 @@ script pushes the other four apps exactly as before, so it keeps working until t
 | `BETTER_AUTH_URL` | that app's own origin (e.g. `https://kitstak-portal.vercel.app`) |
 | `TRUSTED_ORIGINS` | comma list of the other deployed origins |
 | `DATABASE_URL` | pooled connection string |
-| `ENTITLEMENTS_DEV_ALLOW_ALL` | `1` until Stripe lands (else nothing is entitled) |
+| `ENTITLEMENTS_DEV_ALLOW_ALL` | `1` until billing is enforced (else an organization with no access rows is locked out). `deploy/push-env.mjs` keeps it at `1` in all five until `ENFORCE_ENTITLEMENTS=1` is in `deploy/secrets.env`. See `docs/billing/GO-LIVE.md` step 11 |
 
 ### kitstak-portal only
 
@@ -54,6 +54,16 @@ script pushes the other four apps exactly as before, so it keeps working until t
 |---|---|
 | `NEXT_PUBLIC_APP_URL` | portal origin |
 | `NEXT_PUBLIC_CRM_URL` / `NEXT_PUBLIC_WMS_URL` / `NEXT_PUBLIC_PROJECTS_URL` | the other origins (launcher tiles, app switcher, command palette) |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | signup and billing. Both or neither. With neither, production billing is off and says so (it fails closed). Production target only |
+| `STRIPE_PORTAL_CONFIGURATION_ID`, `STRIPE_AUTOMATIC_TAX` | optional. The Billing Portal configuration from `pnpm -F @kitstak/billing stripe:setup apply`, and `1` to turn Stripe Tax on |
+| `CRON_SECRET` | required for billing. Vercel Cron sends it to `/api/billing/jobs/tick` every minute (`apps/portal/vercel.json`): queued emails, trial and late payment reminders, and a second look at plans a lost webhook could have left behind. Without it the route answers 503 and no email goes out |
+| `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | mail. With no key, production mail stays queued in `core.billing_emails` until a key is set |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT_ID` | optional sign in buttons. Each shows only when its id and secret are both set |
+| `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_TERMS_URL`, `NEXT_PUBLIC_PRIVACY_URL` | optional links (marketing site, legal pages) |
+
+The full list with meanings, and the order to set them in, is `docs/billing/GO-LIVE.md`. The payment, mail
+and sign in secrets are pushed to the production target only and removed from preview and development, so
+a preview build can never charge a card or send real mail.
 
 ### kitstak-crm only
 
@@ -153,11 +163,18 @@ theirs. Seeding is optional — `db:seed` in each app for demo data.)
   (different sites) — SSO is fully seamless once custom subdomains exist.
 - WMS cron (`/api/cron/tick` every minute) comes from `apps/wms/vercel.json`
   automatically.
-- Entitlements: when ready to enforce, remove `ENTITLEMENTS_DEV_ALLOW_ALL` and
-  grant modules: `pnpm --filter @kitstak/entitlements grant grant <org-slug> <crm|wms|projects|pulse>`.
+- Entitlements: do not remove `ENTITLEMENTS_DEV_ALLOW_ALL` by hand. Follow `docs/billing/GO-LIVE.md`:
+  backfill access rows first (step 5), then add `ENFORCE_ENTITLEMENTS=1` to `deploy/secrets.env` and run
+  `deploy/push-env.mjs` (step 11). A single organization can still be granted an app by hand:
+  `pnpm --filter @kitstak/entitlements grant grant <org-slug> <crm|wms|projects|pulse>`.
 - Projects cron (`/api/v1/integrations/events` every 5 minutes) comes from
   `apps/projects/vercel.json`; set `CRON_SECRET` or the route answers 401.
-- Stripe: deferred — nothing to configure yet.
+- Portal cron (`/api/billing/jobs/tick` every minute) comes from `apps/portal/vercel.json`
+  automatically. It needs `CRON_SECRET`.
+- Signup and billing: follow `docs/billing/GO-LIVE.md` step by step. It covers the Stripe objects
+  (`pnpm -F @kitstak/billing stripe:setup check`), the mail domain, migration 0007, the access row
+  backfill (`pnpm -F @kitstak/billing backfill check`), the portal webhook, the live smoke test, turning
+  off the old Supabase webhook, and only then removing `ENTITLEMENTS_DEV_ALLOW_ALL`.
 
 ## KitStak Pulse (the fifth product project)
 

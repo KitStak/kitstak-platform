@@ -41,7 +41,7 @@ import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from 'bette
 import { createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { nextCookies } from 'better-auth/next-js';
-import { sharedAuthOptions } from './options';
+import { organizationPlugin, sharedAuthOptions, type OrganizationPluginExtras } from './options';
 import { createPasswordCompat, isBcryptHash, type PasswordCompatOptions } from './password-compat';
 import {
   passwordPolicyPlugin,
@@ -123,6 +123,14 @@ export interface CreateAuthOptions {
   readonly extraPlugins?: BetterAuthPlugin[];
   /** App-specific global hooks (e.g. CRM's org-metadata guards — not baked in here). */
   readonly hooks?: BetterAuthOptions['hooks'];
+  /**
+   * Merged into the shared organization plugin: the invite email sender and the organization
+   * hooks. Every app passes `billingOrganizationOptions(...)` from `@kitstak/billing/server`
+   * here, so seat limits, invite emails and the delete guard hold at every door.
+   */
+  readonly organization?: OrganizationPluginExtras;
+  /** Social sign in providers, passed through when set (the portal builds them from env). */
+  readonly socialProviders?: BetterAuthOptions['socialProviders'];
 }
 
 interface CredentialAccountRow {
@@ -220,6 +228,13 @@ export function createAuth(options: CreateAuthOptions) {
         '/request-password-reset': { window: 60 * 10, max: 5 },
         '/reset-password': { window: 60 * 10, max: 10 },
         '/change-password': { window: 60, max: 5 },
+        // Email codes (the emailOTP plugin the portal mounts) and invites.
+        '/email-otp/send-verification-otp': { window: 60 * 10, max: 5 },
+        '/email-otp/verify-email': { window: 60 * 10, max: 10 },
+        '/email-otp/request-password-reset': { window: 60 * 10, max: 5 },
+        '/forget-password/email-otp': { window: 60 * 10, max: 5 },
+        '/email-otp/reset-password': { window: 60 * 10, max: 10 },
+        '/organization/invite-member': { window: 60 * 10, max: 30 },
       },
     },
     advanced: {
@@ -235,10 +250,20 @@ export function createAuth(options: CreateAuthOptions) {
         : {}),
     },
     telemetry: { enabled: false },
+    ...(options.socialProviders
+      ? {
+          socialProviders: options.socialProviders,
+          // A person who signs in with Google or Microsoft joins the account that has the same
+          // verified email, instead of getting a second one.
+          account: { accountLinking: { enabled: true, trustedProviders: ['google', 'microsoft'] } },
+        }
+      : {}),
     ...(options.hooks ? { hooks: options.hooks } : {}),
     // nextCookies must be the last plugin so Set-Cookie works from Server Actions.
     plugins: [
-      ...sharedAuthOptions.plugins,
+      // The shared organization plugin, with this app's invite email and hooks merged in.
+      // `sharedAuthOptions.plugins` stays the plain one for the schema generator.
+      organizationPlugin(options.organization),
       // H1: lockout + policy are factory behaviour, never instance opt-in.
       passwordPolicyPlugin({ ...(options.passwordPolicy ?? {}), rawDb }),
       legacyRehashPlugin(),

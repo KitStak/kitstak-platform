@@ -19,6 +19,7 @@ import {
   Unlink,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { billingLink } from '@kitstak/billing/links';
 import { AppIcon } from '@kitstak/ui/app-icon';
 import { Button, IconButton, Skeleton, Switch, cn, toast } from '@/components/ui';
 import { Panel } from '@/components/layout/page';
@@ -266,10 +267,10 @@ function AppCard({
           ) : null}
           {app.state === 'not_on_plan' ? (
             <a
-              href={`${portalUrl}/billing/upgrade?module=${app.app}`}
+              href={billingLink(portalUrl, { to: 'add', product: app.app }, 'pulse')}
               className="inline-flex h-7 items-center gap-1 rounded-md border border-border-input bg-panel px-2.5 text-xs font-medium text-fg hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
-              See plans
+              Add to my plan
               <ArrowUpRight aria-hidden className="size-3.5" />
             </a>
           ) : (
@@ -670,7 +671,7 @@ export function ConnectedAppsView({ initial, initialLinks, portalUrl }: Connecte
           ? 'Pulse reads connected apps for this workspace only, never another workspace, and keeps working if one of them is switched off. A sync also runs by itself every few minutes while Pulse is in use. It only adds what is new, so running it again never counts anything twice.'
           : 'Nothing is connected, and nothing has to be. Every kind of data can come in from a spreadsheet instead.'}{' '}
         <Link
-          href={anyConnected ? `${portalUrl}/billing` : routes.importCenter()}
+          href={anyConnected ? billingLink(portalUrl, { to: 'home' }, 'pulse') : routes.importCenter()}
           className="font-medium text-fg-link hover:underline"
         >
           {anyConnected ? 'Manage apps in the Portal' : 'Go to Import and export'}

@@ -5,6 +5,8 @@
  * app URLs and module/integration flags. Read it anywhere with `useShell()`.
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import type { PlanBannerNotice } from '@kitstak/ui/plan-banner';
+import type { AppSwitcherPlanBadge } from '@kitstak/ui/plan-badges';
 import { canPulse, type OrgRole, type PulseAction, type PulseRole } from '@/lib/permissions';
 
 export interface ShellOrg {
@@ -40,6 +42,22 @@ export interface ShellContextValue {
   readonly badges?: ShellBadges;
   /** Sibling apps this org cannot use on any plan (app switcher shows them as "Not in your plan"). */
   readonly notInPlan?: readonly ('crm' | 'wms' | 'projects')[];
+  /** Plan state per app for the app switcher (`AppPlanView.badges`). */
+  readonly planBadges?: Readonly<Partial<Record<ShellProductId, AppSwitcherPlanBadge>>>;
+  /** Where a row that is not in the plan goes: the Portal plan picker with that app turned on. */
+  readonly addHrefs?: Readonly<Partial<Record<ShellProductId, string>>>;
+  /** The organization's plan as the shell needs it. Omitted outside the signed-in app. */
+  readonly plan?: ShellPlan;
+}
+
+export type ShellProductId = 'crm' | 'wms' | 'projects' | 'pulse';
+
+/** docs/billing/CONTRACTS.md section 18. */
+export interface ShellPlan {
+  /** `read_only` = view only: everything opens and reads, every change is refused by the server. */
+  readonly access: 'full' | 'read_only';
+  /** The plan banner under the top bar, or null. Words and link come from `@kitstak/billing`. */
+  readonly notice: PlanBannerNotice | null;
 }
 
 interface ShellContextApi extends ShellContextValue {

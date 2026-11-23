@@ -16,6 +16,11 @@
     "./theme-handoff": "./src/theme/handoff.tsx",
     "./handoff": "./src/handoff/index.ts",
     "./status-icon": "./src/status-icon/index.ts",
+    "./plan-banner": "./src/plan-banner/index.ts",
+    "./plan-lock": "./src/plan-lock/index.ts",
+    "./plan-summary": "./src/plan-summary/index.ts",
+    "./plan-summary-model": "./src/plan-summary/model.ts",
+    "./plan-badges": "./src/app-switcher/labels.ts",
     "./text": "./src/text/index.ts"
   },
   "scripts": {

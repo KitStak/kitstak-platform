@@ -5,7 +5,6 @@ import { loadShell } from '@/features/shell/shell-frame';
 import { getProjectDetail, listOrgPeople, resolveTaskKey } from '@/server/domain';
 import { isDomainError } from '@/server/errors';
 import { requirePageContext } from '@/server/session';
-import { canOrg } from '@/lib/permissions';
 
 /** Org people for the shell's people cache, stamped with when they were read (undefined on failure). */
 async function loadPeople(ctx: Parameters<typeof listOrgPeople>[0]) {
@@ -21,10 +20,10 @@ export default async function AppLayout({ children }: { readonly children: React
   const path = (await headers()).get('x-ks-path') ?? '/';
   const context = await requirePageContext(path);
   const shell = await loadShell(context);
-  if (!shell.entitled) {
+  if (shell.plan.lock) {
     return (
       <AppShell context={shell.shellContext} initialProjects={[]} initialSpaces={[]} initialUnread={0}>
-        <LockedScreen orgName={context.org.name} portalUrl={shell.urls.portal} canManage={canOrg(context.orgRole, 'workspace:manage')} />
+        <LockedScreen lock={shell.plan.lock} />
       </AppShell>
     );
   }

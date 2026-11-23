@@ -265,6 +265,20 @@ export function apiErrorMessage(error: unknown, fallback = 'Something went wrong
   return isApiError(error) ? friendlyErrorMessage(error, fallback) : fallback;
 }
 
+/**
+ * The next step for a plan limit error (docs/billing/SPEC.md section 6.9): "Add to my plan" opens
+ * the Portal plan picker at the count the person asked for. Undefined for every other error.
+ */
+export function planLimitAction(error: unknown): { label: string; onClick: () => void } | undefined {
+  if (!isApiError(error) || !error.planUrl) return undefined;
+  if (error.code !== 'PLAN_WAREHOUSE_LIMIT' && error.code !== 'PLAN_SEAT_LIMIT') return undefined;
+  const href = error.planUrl;
+  return {
+    label: error.code === 'PLAN_SEAT_LIMIT' ? 'Add a seat' : 'Add to my plan',
+    onClick: () => window.location.assign(href),
+  };
+}
+
 /* ---------------- cells ---------------- */
 
 export function YesNo({ value }: { readonly value: boolean | null | undefined }) {
@@ -511,7 +525,7 @@ export function useAction(invalidate: readonly QueryKey[]) {
         return data;
       } catch (error) {
         if (onError) onError(error);
-        else toast.error('Error', apiErrorMessage(error));
+        else toast.error('Error', apiErrorMessage(error), { action: planLimitAction(error) });
         return null;
       } finally {
         setPending(false);

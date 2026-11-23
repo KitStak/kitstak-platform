@@ -1,19 +1,26 @@
 /**
- * Model for the "Set up your Stak" wizard. The answer names and values match the portal's own
- * welcome wizard profile (`focus`, `businessType`, `teamSize`, `startMode`; see
- * docs/integration/ONBOARDING.md) so the answers can be handed to the portal at sign-up. The
- * portal's `focus` only knows the CRM and the WMS, so the full product set travels separately as
- * `products`. Pulse answers follow docs/pulse/SPEC.md (its first run and its feature list).
+ * Model for the "Set up your Stak" wizard. The answer names and values are the ones the portal reads
+ * at sign-up (`businessType`, `teamSize`, `startMode`; see docs/integration/ONBOARDING.md and
+ * docs/billing/CONTRACTS.md section 6), so nobody answers the same question twice. The link to the
+ * portal is built by the shared handoff codec in `@kitstak/billing`. Pulse answers follow
+ * docs/pulse/SPEC.md (its first run and its feature list).
  */
+import { signupUrl } from '@kitstak/billing/handoff';
+import type {
+  BusinessType,
+  HandoffIdentity,
+  HandoffSource,
+  SignupHandoff,
+  StartMode,
+  TeamSize,
+} from '@kitstak/billing/handoff';
 import { LINKS, ROUTES, parseStack, stackParam, startableStack, toStack, walkthroughHref } from '@/components/site-links';
 import type { ProductId, Stack } from '@/components/site-links';
 import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
-import { PRICING } from './pricing';
-import type { Billing } from './pricing';
+import { MAX_SEATS, MAX_WAREHOUSES, normalizeSelection } from './pricing';
+import type { BillingInterval, PlanSelection } from './pricing';
 
-export type BusinessType = '3pl' | 'brand' | 'distributor' | 'other';
-export type TeamSize = 'solo' | 'small' | 'medium' | 'large';
-export type StartMode = 'fresh' | 'sample' | 'import';
+export type { BusinessType, StartMode, TeamSize };
 
 export const STEP_IDS = ['stack', 'business', 'shape', 'launch', 'account'] as const;
 export type StepId = (typeof STEP_IDS)[number];
@@ -111,7 +118,8 @@ export interface StakAnswers {
   readonly startMode: StartMode;
   /** Wants the founder-led setup add-on. */
   readonly guided: boolean;
-  readonly billing: Billing;
+  /** How often to pay. Old saved answers and old links may still say `annual`; it is read as yearly. */
+  readonly billing: BillingInterval;
 }
 
 export const DEFAULT_ANSWERS: StakAnswers = {
@@ -126,7 +134,7 @@ export const DEFAULT_ANSWERS: StakAnswers = {
   pulseNeeds: [],
   startMode: 'fresh',
   guided: false,
-  billing: 'annual',
+  billing: 'monthly',
 };
 
 export function hasProduct(answers: StakAnswers, product: ProductId): boolean {
@@ -137,13 +145,6 @@ export const hasCrm = (answers: StakAnswers): boolean => hasProduct(answers, 'cr
 export const hasWms = (answers: StakAnswers): boolean => hasProduct(answers, 'wms');
 export const hasProjects = (answers: StakAnswers): boolean => hasProduct(answers, 'projects');
 export const hasPulse = (answers: StakAnswers): boolean => hasProduct(answers, 'pulse');
-
-/** The portal profile's `focus` (CRM and WMS only), or null when neither is in the stack. */
-export function portalFocus(stack: Stack): 'crm' | 'wms' | 'both' | null {
-  const crm = stack.includes('crm');
-  const wms = stack.includes('wms');
-  return crm && wms ? 'both' : crm ? 'crm' : wms ? 'wms' : null;
-}
 
 /** Whether the required answers for a step are in. `shape` and `launch` have sensible defaults. */
 export function canLeaveStep(step: StepId, answers: StakAnswers): boolean {
@@ -161,121 +162,6 @@ export function toggleIn(list: readonly string[], value: string): readonly strin
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-/* ------------------------------------------------------------------ Setup plan */
-
-export interface PlanStep {
-  readonly key: string;
-  readonly app: 'Portal' | 'CRM' | 'WMS' | 'Projects' | 'Pulse';
-  readonly title: string;
-  readonly note: string;
-  readonly isDone: boolean;
-}
-
-/**
- * The checklist a new organization sees after sign-up, in the order the portal uses: solo teams
- * skip the invite, 3PLs and distributors start in the warehouse, everyone else starts in the CRM.
- * Titles are the canonical onboarding step titles. Projects runs its own first-run (a starter
- * project from a built-in template and a guided tour), so its step follows the CRM and the WMS.
- * Pulse comes last: its own welcome screen offers sample data, an import or a first job.
- */
-export function setupPlan(answers: StakAnswers): readonly PlanStep[] {
-  const isImport = answers.startMode === 'import';
-  const isSample = answers.startMode === 'sample';
-
-  const crm: readonly PlanStep[] = [
-    {
-      key: 'create_workspace',
-      app: 'CRM',
-      title: 'Create your CRM workspace',
-      note: isSample
-        ? 'Start from a template with sample records.'
-        : 'Pick the boards your team will work from.',
-      isDone: false,
-    },
-    {
-      key: 'first_deal',
-      app: 'CRM',
-      title: 'Add your first deal',
-      note: 'One real deal makes the pipeline click.',
-      isDone: false,
-    },
-  ];
-  const wms: readonly PlanStep[] = [
-    {
-      key: 'create_warehouse',
-      app: 'WMS',
-      title: 'Create your warehouse',
-      note: 'Name it and generate its locations.',
-      isDone: false,
-    },
-    {
-      key: 'build_catalog',
-      app: 'WMS',
-      title: 'Build your product catalog',
-      note: isImport ? 'Import your SKUs from a spreadsheet.' : 'Add the products you stock.',
-      isDone: false,
-    },
-    {
-      key: 'first_order',
-      app: 'WMS',
-      title: 'Create your first order',
-      note: 'Take one order from allocation to label.',
-      isDone: false,
-    },
-  ];
-
-  const chosenTemplate = PROJECT_TEMPLATES.find((t) => answers.projectTemplates.includes(t.value));
-  const projects: readonly PlanStep[] = [
-    {
-      key: 'first_project',
-      app: 'Projects',
-      title: 'Start your first project',
-      note: chosenTemplate
-        ? `From the ${chosenTemplate.label} template, with its tasks, dates and rules in place.`
-        : isSample
-          ? 'Open the sample project and take the short tour.'
-          : 'Pick a template or start from a blank board.',
-      isDone: false,
-    },
-  ];
-
-  const pulse: readonly PlanStep[] = [
-    {
-      key: 'first_job',
-      app: 'Pulse',
-      title: 'See the profit on your first job',
-      note: isSample
-        ? 'Load the sample data and open a job to see its profit.'
-        : isImport
-          ? 'Import your spreadsheets, then open a job to check its numbers.'
-          : 'Set a labor rate, add a client and a job, then log a day.',
-      isDone: false,
-    },
-  ];
-
-  const isWarehouseFirst = answers.businessType === '3pl' || answers.businessType === 'distributor';
-  const crmSteps = hasCrm(answers) ? crm : [];
-  const wmsSteps = hasWms(answers) ? wms : [];
-
-  return [
-    { key: 'profile', app: 'Portal', title: 'Tell us about your business', note: 'Done here.', isDone: true },
-    ...(answers.teamSize === 'solo'
-      ? []
-      : [
-          {
-            key: 'invite_team',
-            app: 'Portal' as const,
-            title: 'Invite your team',
-            note: 'One invite covers every app.',
-            isDone: false,
-          },
-        ]),
-    ...(isWarehouseFirst ? [...wmsSteps, ...crmSteps] : [...crmSteps, ...wmsSteps]),
-    ...(hasProjects(answers) ? projects : []),
-    ...(hasPulse(answers) ? pulse : []),
-  ];
-}
-
 /* ------------------------------------------------------------------ Account */
 
 export interface AccountDraft {
@@ -288,7 +174,12 @@ export const EMPTY_ACCOUNT: AccountDraft = { name: '', email: '', company: '' };
 
 export type AccountErrors = Partial<Record<keyof AccountDraft, string>>;
 
-const MAX_FIELD = 120;
+/** The same limits portal sign-up checks, so an answer that passes here passes there. */
+const NAME_MIN = 2;
+const NAME_MAX = 100;
+const COMPANY_MIN = 2;
+const COMPANY_MAX = 80;
+const EMAIL_MAX = 120;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function accountErrors(draft: AccountDraft): AccountErrors {
@@ -296,41 +187,76 @@ export function accountErrors(draft: AccountDraft): AccountErrors {
   const email = draft.email.trim();
   const company = draft.company.trim();
   return {
-    ...(name === ''
-      ? { name: 'Enter your name.' }
-      : name.length > MAX_FIELD
-        ? { name: 'That name is too long.' }
+    ...(name.length < NAME_MIN
+      ? { name: 'Enter your full name.' }
+      : name.length > NAME_MAX
+        ? { name: `Use ${NAME_MAX} characters or fewer.` }
         : {}),
-    ...(email === ''
-      ? { email: 'Enter your work email.' }
-      : !EMAIL.test(email) || email.length > MAX_FIELD
-        ? { email: 'That does not look like an email address.' }
-        : {}),
-    ...(company === ''
+    ...(!EMAIL.test(email) || email.length > EMAIL_MAX ? { email: 'Enter a valid work email.' } : {}),
+    ...(company.length < COMPANY_MIN
       ? { company: 'Enter your company or team name.' }
-      : company.length > MAX_FIELD
-        ? { company: 'That name is too long.' }
+      : company.length > COMPANY_MAX
+        ? { company: `Use ${COMPANY_MAX} characters or fewer.` }
         : {}),
   };
 }
 
 /* ------------------------------------------------------------------ Hand-off and persistence */
 
+/** The cart the answers describe: the apps open today, the sizes and how often to pay. */
+export function selectionOf(answers: StakAnswers): PlanSelection {
+  return normalizeSelection({
+    products: startableStack(answers.products),
+    seats: answers.seats,
+    warehouses: answers.warehouses,
+    interval: answers.billing,
+  });
+}
+
 /**
- * Portal sign-up link carrying the setup answers. Only the non-personal profile answers travel in
- * the URL; name, email and company never do. A product whose app is not open yet is never handed
- * to sign-up.
+ * Portal sign-up link for a cart, with nothing else. Used by the price calculator and the product
+ * pages, where a visitor starts a free trial without the wizard. A product whose app is not open
+ * yet is never handed to sign-up; a cart with nothing open gives the plain sign-up page.
  */
-export function handoffUrl(answers: StakAnswers): string {
-  const params = new URLSearchParams();
-  const products = startableStack(answers.products);
-  const focus = portalFocus(products);
-  if (focus) params.set('focus', focus);
-  if (products.length > 0) params.set('products', stackParam(products));
-  if (answers.businessType) params.set('businessType', answers.businessType);
-  params.set('teamSize', answers.teamSize);
-  params.set('startMode', answers.startMode);
-  return `${LINKS.portal}/signup?${params.toString()}`;
+export function trialUrl(selection: PlanSelection, source: HandoffSource): string {
+  const products = startableStack(selection.products);
+  const handoff: SignupHandoff = {
+    selection: products.length > 0 ? normalizeSelection({ ...selection, products }) : null,
+    profile: {},
+    source,
+  };
+  return signupUrl(LINKS.portal, handoff);
+}
+
+/**
+ * Portal sign-up link carrying the wizard's answers: the cart (apps, seats, warehouses, period) and
+ * the business answers in the query, and name, email and company after the "#". The part after the
+ * "#" never reaches a server or a log. The link holds no price: the portal prices the cart itself
+ * from the shared catalog. A product whose app is not open yet is never handed to sign-up.
+ */
+export function handoffUrl(answers: StakAnswers, account?: AccountDraft): string {
+  const selection = selectionOf(answers);
+  const handoff: SignupHandoff = {
+    selection: selection.products.length > 0 ? selection : null,
+    profile: {
+      ...(answers.businessType ? { businessType: answers.businessType } : {}),
+      teamSize: answers.teamSize,
+      startMode: answers.startMode,
+      guided: answers.guided,
+    },
+    source: 'wizard',
+  };
+  const identity: HandoffIdentity | undefined = account
+    ? { name: account.name, email: account.email, company: account.company }
+    : undefined;
+  return signupUrl(LINKS.portal, handoff, identity);
+}
+
+/** Reads a saved or linked period. `annual` is the word older answers and links used for yearly. */
+function intervalFrom(value: unknown): BillingInterval | null {
+  if (value === 'monthly') return 'monthly';
+  if (value === 'yearly' || value === 'annual') return 'yearly';
+  return null;
 }
 
 function oneOf<T extends string>(options: readonly Option<T>[], value: unknown): T | null {
@@ -362,15 +288,15 @@ export function parseAnswers(raw: unknown): StakAnswers {
     products: startableStack(savedProducts),
     businessType: oneOf(BUSINESS_TYPES, data.businessType),
     teamSize: oneOf(TEAM_SIZES, data.teamSize) ?? DEFAULT_ANSWERS.teamSize,
-    seats: clampInt(data.seats, PRICING.crm.max, DEFAULT_ANSWERS.seats),
-    warehouses: clampInt(data.warehouses, PRICING.wms.max, DEFAULT_ANSWERS.warehouses),
+    seats: clampInt(data.seats, MAX_SEATS, DEFAULT_ANSWERS.seats),
+    warehouses: clampInt(data.warehouses, MAX_WAREHOUSES, DEFAULT_ANSWERS.warehouses),
     wmsNeeds: knownValues(WMS_NEEDS, data.wmsNeeds),
     crmBoards: knownValues(CRM_BOARDS, data.crmBoards),
     projectTemplates: knownValues(PROJECT_TEMPLATES, data.projectTemplates),
     pulseNeeds: knownValues(PULSE_NEEDS, data.pulseNeeds),
     startMode: oneOf(START_MODES, data.startMode) ?? DEFAULT_ANSWERS.startMode,
     guided: data.guided === true,
-    billing: data.billing === 'monthly' ? 'monthly' : DEFAULT_ANSWERS.billing,
+    billing: intervalFrom(data.billing) ?? DEFAULT_ANSWERS.billing,
   };
 }
 
@@ -380,7 +306,7 @@ export interface WizardPrefill {
   readonly stack: Stack;
   readonly seats: number;
   readonly warehouses: number;
-  readonly billing: Billing;
+  readonly billing: BillingInterval;
 }
 
 /**
@@ -422,9 +348,9 @@ export function applyPrefill(base: StakAnswers, params: URLSearchParams): StakAn
   return {
     ...base,
     products: stack.length > 0 ? stack : base.products,
-    seats: seats === null ? base.seats : clampInt(Number(seats), PRICING.crm.max, base.seats),
+    seats: seats === null ? base.seats : clampInt(Number(seats), MAX_SEATS, base.seats),
     warehouses:
-      warehouses === null ? base.warehouses : clampInt(Number(warehouses), PRICING.wms.max, base.warehouses),
-    billing: billing === 'monthly' || billing === 'annual' ? billing : base.billing,
+      warehouses === null ? base.warehouses : clampInt(Number(warehouses), MAX_WAREHOUSES, base.warehouses),
+    billing: intervalFrom(billing) ?? base.billing,
   };
 }

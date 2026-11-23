@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  WELCOME_STEPS_MAX,
+  WELCOME_STEPS_MIN,
   buildSetupSteps,
+  focusFromProducts,
   parseSetupProfile,
+  pickWelcomeSteps,
   readProgressRows,
   summarizeSetup,
+  toSetupProducts,
+  type SetupProduct,
   type SetupProfile,
   type SetupSignals,
 } from './setup-model';
@@ -294,5 +300,196 @@ describe('readProgressRows', () => {
     const result = readProgressRows(rows);
     expect(result.profile).toEqual(bothProfile);
     expect(result.overrides).toMatchObject({ profile: 'completed', invite_team: 'skipped' });
+  });
+});
+
+/* ===== Four app signup and the plan step (docs/billing/SPEC.md section 5.7) ===== */
+
+const ALL_PRODUCTS: readonly SetupProduct[] = ['crm', 'wms', 'projects', 'pulse'];
+
+/** Signals for a brand new team in a free trial with the given apps. */
+function trialSignals(products: readonly SetupProduct[], overrides: Partial<SetupSignals> = {}): SetupSignals {
+  return {
+    memberCount: 1,
+    pendingInvites: 0,
+    crmEntitled: products.includes('crm'),
+    wmsEntitled: products.includes('wms'),
+    crmBoards: 0,
+    crmDeals: 0,
+    wmsWarehouses: 0,
+    wmsProducts: 0,
+    wmsOrders: 0,
+    projectsEntitled: products.includes('projects'),
+    pmProjects: 0,
+    pmAssignedTasks: 0,
+    pmLinks: 0,
+    pulseEntitled: products.includes('pulse'),
+    pulseLaborRates: 0,
+    pulseJobs: 0,
+    pulseEntries: 0,
+    pulseLinks: 0,
+    billing: { state: 'trial', trialEndsLabel: 'Dec 7' },
+    ...overrides,
+  };
+}
+
+function profileFor(products: readonly SetupProduct[], overrides: Partial<SetupProfile> = {}): SetupProfile {
+  return {
+    focus: focusFromProducts(products),
+    businessType: 'brand',
+    teamSize: 'small',
+    startMode: 'fresh',
+    products,
+    ...overrides,
+  };
+}
+
+/** Every mix of the four apps with at least one app: 15 carts. */
+function everyStack(): SetupProduct[][] {
+  const stacks: SetupProduct[][] = [];
+  for (let mask = 1; mask < 16; mask += 1) {
+    stacks.push(ALL_PRODUCTS.filter((_, index) => (mask >> index) & 1));
+  }
+  return stacks;
+}
+
+describe('products on the setup profile', () => {
+  it('keeps known apps in catalog order and drops junk', () => {
+    expect(toSetupProducts(['pulse', 'erp', 'crm', 'crm', 7])).toEqual(['crm', 'pulse']);
+    expect(toSetupProducts('crm')).toEqual([]);
+  });
+
+  it('derives the old focus answer from the apps', () => {
+    expect(focusFromProducts(['crm'])).toBe('crm');
+    expect(focusFromProducts(['wms', 'pulse'])).toBe('wms');
+    expect(focusFromProducts(['crm', 'wms'])).toBe('both');
+    expect(focusFromProducts(['projects', 'pulse'])).toBe('both');
+    expect(focusFromProducts([])).toBe('both');
+  });
+
+  it('round trips products and still reads profiles saved without them', () => {
+    const withProducts = profileFor(['crm', 'pulse']);
+    expect(parseSetupProfile({ ...withProducts })).toEqual(withProducts);
+    expect(parseSetupProfile({ ...bothProfile })).toEqual(bothProfile);
+    expect(parseSetupProfile({ ...bothProfile, products: ['wms', 'nope'] })).toEqual({ ...bothProfile, products: ['wms'] });
+  });
+});
+
+describe('the "Pick your plan" step', () => {
+  it('is the last step during a free trial and names the end date', () => {
+    const steps = buildSetupSteps(trialSignals(['crm', 'wms']), profileFor(['crm', 'wms']), {});
+    const last = steps[steps.length - 1];
+    expect(last?.key).toBe('billing_plan');
+    expect(last?.title).toBe('Pick your plan');
+    expect(last?.status).toBe('todo');
+    expect(last?.cta).toBe('Pick a plan');
+    expect(last?.description).toBe('Add a card any time before Dec 7. No charge until then.');
+  });
+
+  it('stays last when the warehouse steps come first', () => {
+    const steps = buildSetupSteps(trialSignals(ALL_PRODUCTS), profileFor(ALL_PRODUCTS, { businessType: '3pl' }), {});
+    expect(steps[steps.length - 1]?.key).toBe('billing_plan');
+    expect(steps.filter((step) => step.key === 'billing_plan')).toHaveLength(1);
+  });
+
+  it('is done when a card is on file or the plan is paid', () => {
+    const steps = buildSetupSteps(
+      trialSignals(['crm'], { billing: { state: 'done', trialEndsLabel: 'Dec 7' } }),
+      profileFor(['crm']),
+      {},
+    );
+    expect(steps.find((step) => step.key === 'billing_plan')?.status).toBe('done');
+  });
+
+  it('says so when the free trial has ended', () => {
+    const steps = buildSetupSteps(
+      trialSignals(['crm'], { billing: { state: 'trial_ended', trialEndsLabel: 'Dec 7' } }),
+      profileFor(['crm']),
+      {},
+    );
+    expect(steps.find((step) => step.key === 'billing_plan')?.description).toBe(
+      'Your free trial has ended. Pick a plan to keep working.',
+    );
+  });
+
+  it('is not shown to teams on a manual grant or with no trial', () => {
+    for (const billing of [undefined, null]) {
+      const steps = buildSetupSteps(trialSignals(['crm', 'wms'], { billing }), profileFor(['crm', 'wms']), {});
+      expect(steps.some((step) => step.key === 'billing_plan')).toBe(false);
+    }
+    // The signals older callers build (no billing key at all) are unchanged.
+    expect(buildSetupSteps(freshSignals, bothProfile, {}).some((step) => step.key === 'billing_plan')).toBe(false);
+  });
+
+  it('can be skipped like any other step, and a skip never counts as done', () => {
+    const steps = buildSetupSteps(trialSignals(['crm']), profileFor(['crm']), { billing_plan: 'skipped' });
+    expect(steps.find((step) => step.key === 'billing_plan')?.status).toBe('skipped');
+    expect(summarizeSetup(steps).allDone).toBe(false);
+  });
+});
+
+describe('pickWelcomeSteps (must have 27: 3 to 5 next steps tied to the chosen apps)', () => {
+  it('lists 3 to 5 steps for every mix of apps and every team size, in a free trial', () => {
+    for (const products of everyStack()) {
+      for (const teamSize of ['solo', 'small', 'medium', 'large'] as const) {
+        for (const businessType of ['3pl', 'brand'] as const) {
+          const profile = profileFor(products, { teamSize, businessType });
+          const picked = pickWelcomeSteps(buildSetupSteps(trialSignals(products), profile, {}));
+          const label = `${products.join('+')} ${teamSize} ${businessType}`;
+          expect(picked.length, label).toBeGreaterThanOrEqual(WELCOME_STEPS_MIN);
+          expect(picked.length, label).toBeLessThanOrEqual(WELCOME_STEPS_MAX);
+        }
+      }
+    }
+  });
+
+  it('only lists steps for the apps the team picked, and always ends on the plan', () => {
+    for (const products of everyStack()) {
+      const picked = pickWelcomeSteps(buildSetupSteps(trialSignals(products), profileFor(products), {}));
+      expect(picked[picked.length - 1]?.key).toBe('billing_plan');
+      for (const step of picked) {
+        if (step.scope === 'portal') continue;
+        expect(products, `${step.key} for ${products.join('+')}`).toContain(step.scope);
+      }
+      expect(picked.some((step) => step.key === 'profile')).toBe(false);
+    }
+  });
+
+  it('gives every picked app its first step before any app gets a second one', () => {
+    const picked = pickWelcomeSteps(buildSetupSteps(trialSignals(ALL_PRODUCTS), profileFor(ALL_PRODUCTS, { teamSize: 'solo' }), {}));
+    expect(picked.map((step) => step.key)).toEqual([
+      'crm_workspace',
+      'wms_warehouse',
+      'projects_first_project',
+      'pulse_labor_rate',
+      'billing_plan',
+    ]);
+  });
+
+  it('never shows a step above the one that unlocks it', () => {
+    for (const products of everyStack()) {
+      const all = buildSetupSteps(trialSignals(products), profileFor(products), {});
+      const picked = pickWelcomeSteps(all);
+      const order = all.map((step) => step.key);
+      const positions = picked.map((step) => order.indexOf(step.key));
+      expect(positions).toEqual([...positions].sort((a, b) => a - b));
+      for (const step of picked) {
+        if (step.lockedBy === null) continue;
+        const unlocker = all.find((candidate) => candidate.title === step.lockedBy);
+        expect(picked.some((candidate) => candidate.key === unlocker?.key)).toBe(true);
+      }
+    }
+  });
+
+  it('the reference cart (CRM and WMS, a 3PL team) reads as the welcome screen shows it', () => {
+    const profile = profileFor(['crm', 'wms'], { businessType: '3pl' });
+    const picked = pickWelcomeSteps(buildSetupSteps(trialSignals(['crm', 'wms']), profile, {}));
+    expect(picked.map((step) => step.title)).toEqual([
+      'Invite your team',
+      'Create your warehouse',
+      'Build your product catalog',
+      'Create your CRM workspace',
+      'Pick your plan',
+    ]);
   });
 });

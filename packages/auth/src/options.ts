@@ -27,7 +27,18 @@ export const PASSWORD_MIN_LENGTH = 10;
  */
 export const PASSWORD_MAX_LENGTH = 72;
 
-export const organizationPlugin = () =>
+/**
+ * The parts of the organization plugin an app may add to (docs/billing/CONTRACTS.md section 15.1):
+ * the invite email sender and the organization hooks. Billing passes its seat checks, invite email
+ * and delete guard through here (`billingOrganizationOptions` in `@kitstak/billing/server`).
+ * Everything else about the plugin is shared and fixed.
+ */
+export type OrganizationPluginExtras = Pick<
+  Parameters<typeof organization>[0] & object,
+  'sendInvitationEmail' | 'organizationHooks'
+>;
+
+export const organizationPlugin = (extras?: OrganizationPluginExtras) =>
   organization({
     ac: orgAccessControl,
     roles: orgRoles,
@@ -37,6 +48,8 @@ export const organizationPlugin = () =>
     invitationExpiresIn: 60 * 60 * 24 * 7,
     cancelPendingInvitationsOnReInvite: true,
     teams: { enabled: true, defaultTeam: { enabled: false } },
+    ...(extras?.sendInvitationEmail ? { sendInvitationEmail: extras.sendInvitationEmail } : {}),
+    ...(extras?.organizationHooks ? { organizationHooks: extras.organizationHooks } : {}),
   });
 
 export const sharedAuthOptions = {

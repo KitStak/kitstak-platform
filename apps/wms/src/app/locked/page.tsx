@@ -1,42 +1,57 @@
 import type { Metadata } from 'next';
-import { Lock } from 'lucide-react';
+import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
+import { PlanLockScreen } from '@kitstak/ui/plan-lock';
 import { BrandLogo } from '@/components/layout/brand-logo';
+import { Skeleton } from '@/components/ui/skeleton';
+import { loadLockView } from '@/server/tenancy/lock-view';
+import { LockedSwitcher } from './locked-switcher';
 
 export const metadata: Metadata = {
-  title: 'Module locked',
+  title: 'WMS is not in your plan',
 };
 
 /**
- * Entitlement lock screen (BLUEPRINT.md §3.3): shown when the platform org does not
- * hold the `wms` module (`loadShellProps` redirects here). Intentionally outside the
- * (app) group so it renders without the gated shell. Billing lives in the portal; the
- * link only appears when NEXT_PUBLIC_PORTAL_URL is configured (Stripe is deferred —
- * access is restored by a manual grant).
+ * The WMS lock screen (docs/billing/SPEC.md section 9.3): shown when the WMS is not in the
+ * organization's plan (`loadShellProps` and the warehouse setup page redirect here). Outside the
+ * (app) group, so it renders without the gated shell. The words, the price and both links come
+ * from `planLockFor` in `@kitstak/billing`, the same in every KitStak app.
  */
-export default function LockedPage() {
-  const portalUrl = process.env.NEXT_PUBLIC_PORTAL_URL?.trim().replace(/\/+$/, '');
+async function LockedContent() {
+  const view = await loadLockView();
+  if (view.kind === 'signed_out') redirect('/login?next=/locked');
+  if (view.kind === 'open') redirect('/');
+  if (view.kind === 'setup') redirect('/setup-warehouse');
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center bg-muted/30 px-6">
-      <div className="w-full max-w-md rounded-xl border bg-background p-8 text-center shadow-sm">
-        <div className="mb-6 flex justify-center">
-          <BrandLogo tone="light" height={24} showProduct />
+    <>
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border-subtle bg-panel px-4 sm:px-6">
+        <BrandLogo tone="light" height={20} showProduct />
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="hidden truncate text-sm text-fg-secondary sm:block">{view.orgName}</span>
+          <LockedSwitcher badges={view.badges} />
         </div>
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-          <Lock className="h-6 w-6 text-muted-foreground" aria-hidden />
-        </div>
-        <h1 className="text-lg font-semibold">WMS is not enabled for this organization</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Contact your administrator to restore access.
-        </p>
-        {portalUrl ? (
-          <a
-            href={`${portalUrl}/billing`}
-            className="mt-6 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            Manage billing
-          </a>
-        ) : null}
-      </div>
+      </header>
+      <main id="main-content" className="flex flex-1 flex-col">
+        <PlanLockScreen app="wms" lock={view.lock} />
+      </main>
+    </>
+  );
+}
+
+function LockedFallback() {
+  return (
+    <main className="flex flex-1 items-center justify-center px-4 py-10" aria-busy="true">
+      <Skeleton className="h-96 w-full max-w-md rounded-2xl" />
     </main>
+  );
+}
+
+export default function LockedPage() {
+  return (
+    <div className="flex min-h-dvh flex-col bg-app">
+      <Suspense fallback={<LockedFallback />}>
+        <LockedContent />
+      </Suspense>
+    </div>
   );
 }

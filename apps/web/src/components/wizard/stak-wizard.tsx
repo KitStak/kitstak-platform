@@ -2,13 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { quote } from '@/lib/pricing';
-import { EMPTY_ACCOUNT, STEP_IDS, accountErrors, canLeaveStep } from '@/lib/stak';
+import { TRIAL_LINE, quote } from '@/lib/pricing';
+import { EMPTY_ACCOUNT, STEP_IDS, accountErrors, canLeaveStep, handoffUrl, selectionOf } from '@/lib/stak';
 import type { AccountDraft, AccountErrors, StepId } from '@/lib/stak';
 import { Logo } from '../logo';
 import { ROUTES } from '../site-links';
 import { AccountStep } from './account-step';
-import { ReadyView } from './ready-view';
 import { useStakWizard } from './use-stak-wizard';
 import { BusinessStep, LaunchStep, ShapeStep, StackStep } from './wizard-steps';
 import { WizardSummary } from './wizard-summary';
@@ -24,7 +23,7 @@ const STEP_META: Readonly<Record<StepId, StepMeta>> = {
   stack: {
     short: 'Stack',
     title: 'What are you stacking?',
-    lead: 'Choose the products your team will run on. This sets up everything that follows.',
+    lead: 'Pick the apps your team will run on. This sets up everything that follows.',
   },
   business: {
     short: 'Business',
@@ -44,16 +43,21 @@ const STEP_META: Readonly<Record<StepId, StepMeta>> = {
   account: {
     short: 'Account',
     title: 'Create your account.',
-    lead: 'This becomes your organization in KitStak. You are its owner and can invite everyone else.',
+    lead: 'Last step. This sets up your organization in KitStak. You own it and can invite your team.',
   },
 };
 
-/** The "Set up your Stak" wizard: five steps, a live summary, and a hand-off to sign-up. */
+/**
+ * The "Set up your Stak" wizard: five steps, a live summary, and a hand-off to portal sign-up. The
+ * last step's button opens the portal with the cart and the answers in the link, and the name,
+ * email and company after the "#", so sign-up opens already filled in.
+ */
 export function StakWizard() {
   const [account, setAccount] = useState<AccountDraft>(EMPTY_ACCOUNT);
-  const isAccountValid = Object.keys(accountErrors(account)).length === 0;
-  const { isReady, answers, view, stepIndex, reachableIndex, update, goTo, next, back } = useStakWizard(isAccountValid);
+  const { isReady, answers, view, stepIndex, reachableIndex, update, goTo, next, back } = useStakWizard();
   const [errors, setErrors] = useState<AccountErrors>({});
+  // True from the click on "Create my account" until the portal page takes over.
+  const [isLeaving, setIsLeaving] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const hasSettled = useRef(false);
 
@@ -68,13 +72,18 @@ export function StakWizard() {
     headingRef.current?.focus({ preventScroll: true });
   }, [view, isReady]);
 
-  const estimate = answers.products.length > 0
-    ? quote({ stack: answers.products, seats: answers.seats, warehouses: answers.warehouses, billing: answers.billing })
-    : null;
+  // Coming back with the browser's back button shows this page from memory: make the button work again.
+  useEffect(() => {
+    const onShow = () => setIsLeaving(false);
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, []);
+
+  const estimate = answers.products.length > 0 ? quote(selectionOf(answers)) : null;
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (view === 'ready' || !canLeaveStep(view, answers)) return;
+    if (isLeaving || !canLeaveStep(view, answers)) return;
     if (view !== 'account') {
       next();
       return;
@@ -87,11 +96,12 @@ export function StakWizard() {
       window.requestAnimationFrame(() => document.getElementById(`account-${first}`)?.focus());
       return;
     }
-    goTo('ready');
+    setIsLeaving(true);
+    window.location.assign(handoffUrl(answers, account));
   };
 
-  const canContinue = view !== 'ready' && canLeaveStep(view, answers);
-  const meta = view === 'ready' ? null : STEP_META[view];
+  const canContinue = canLeaveStep(view, answers);
+  const meta = STEP_META[view];
 
   return (
     <div className={styles.page}>
@@ -103,7 +113,7 @@ export function StakWizard() {
           <ol className={styles.progress} aria-label="Setup steps">
             {STEP_IDS.map((step, i) => {
               const state = i < stepIndex ? 'done' : i === stepIndex ? 'current' : 'todo';
-              const isOpenable = view !== 'ready' && i <= reachableIndex && i !== stepIndex;
+              const isOpenable = i <= reachableIndex && i !== stepIndex;
               return (
                 <li key={step} data-state={state}>
                   <button
@@ -136,9 +146,7 @@ export function StakWizard() {
       </header>
 
       <main id="main" className={`container ${styles.layout}`} data-ready={isReady || undefined}>
-        {!isReady ? null : view === 'ready' ? (
-          <ReadyView answers={answers} account={account} estimate={estimate} headingRef={headingRef} onEdit={() => goTo('stack')} />
-        ) : (
+        {!isReady ? null : (
           <>
             <form className={styles.main} onSubmit={submit} noValidate>
               <div className={styles.step} key={view}>
@@ -146,9 +154,9 @@ export function StakWizard() {
                   Step {stepIndex + 1} of {STEP_IDS.length}
                 </p>
                 <h1 ref={headingRef} tabIndex={-1} className={styles.title}>
-                  {meta?.title}
+                  {meta.title}
                 </h1>
-                <p className={styles.lead}>{meta?.lead}</p>
+                <p className={styles.lead}>{meta.lead}</p>
 
                 <div className={styles.body}>
                   {view === 'stack' ? <StackStep answers={answers} update={update} /> : null}
@@ -183,14 +191,26 @@ export function StakWizard() {
                 <button
                   type="submit"
                   className="btn btn-primary btn-lg"
-                  aria-disabled={!canContinue || undefined}
+                  aria-disabled={!canContinue || isLeaving || undefined}
                   aria-describedby="wizard-blocked"
+                  data-testid="wizard-submit"
                 >
-                  {view === 'account' ? 'Create account' : 'Continue'} <span className="btn-arrow" aria-hidden>→</span>
+                  {view !== 'account' ? 'Continue' : isLeaving ? 'Opening sign-up…' : 'Create my account'}{' '}
+                  {isLeaving ? null : (
+                    <span className="btn-arrow" aria-hidden>
+                      →
+                    </span>
+                  )}
                 </button>
               </div>
               <p id="wizard-blocked" className={styles.blocked} role="status">
-                {canContinue ? '' : view === 'stack' ? 'Choose a stack to continue.' : 'Choose your kind of business to continue.'}
+                {canContinue
+                  ? view === 'account'
+                    ? TRIAL_LINE
+                    : ''
+                  : view === 'stack'
+                    ? 'Pick at least one app to continue.'
+                    : 'Choose your kind of business to continue.'}
               </p>
             </form>
 

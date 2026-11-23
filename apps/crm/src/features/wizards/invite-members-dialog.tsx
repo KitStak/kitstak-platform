@@ -4,6 +4,7 @@
  * shown inline, and the pending invitations list (copy link, revoke with Undo).
  */
 import { useMemo, useState } from 'react';
+import { SeatLimitLink, seatLimitKind } from '@/features/shell/seat-limit-link';
 import { Check, Copy, Mail, UserPlus } from 'lucide-react';
 import {
   Badge,
@@ -66,6 +67,8 @@ export function InviteMembersDialog({ open, onClose }: InviteMembersDialogProps)
   const [defaultRole, setDefaultRole] = useState<InviteRole>('member');
   const [teamId, setTeamId] = useState<string>('none');
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+  // The plan's seat limit (docs/billing/SPEC.md section 6.9): the whole sentence and the next step.
+  const seatMessage = Object.values(rowErrors).find((message) => seatLimitKind(message) !== null) ?? null;
   const [error, setError] = useState<{ message: string; retryable: boolean } | null>(null);
 
   const pendingEmails = useMemo(
@@ -204,6 +207,16 @@ export function InviteMembersDialog({ open, onClose }: InviteMembersDialogProps)
                     ) : null}
                     {error ? (
                       <InlineError onRetry={error.retryable ? send : undefined}>{error.message}</InlineError>
+                    ) : null}
+                    {seatMessage ? (
+                      <div
+                        role="status"
+                        data-testid="invite-seat-limit"
+                        className="flex flex-col gap-1 rounded-md border border-warning/25 bg-warning-subtle px-3 py-2 text-sm text-warning-text"
+                      >
+                        <p>{seatMessage}</p>
+                        <SeatLimitLink text={seatMessage} />
+                      </div>
                     ) : null}
                   </>
                 )}

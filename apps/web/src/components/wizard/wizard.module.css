@@ -515,9 +515,6 @@
   color: var(--brand-cream);
   box-shadow: var(--elevation-modal);
 }
-.summary[data-static] {
-  position: static;
-}
 .summaryTitle {
   margin-bottom: 20px;
   font-size: var(--type-base);
@@ -557,27 +554,24 @@
   display: none;
 }
 
-/* ------------------------------------------------------------ Ready */
-.ready {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
-  gap: clamp(32px, 5vw, 80px);
-  align-items: start;
-  animation: stepIn 700ms var(--ease-site) both;
+/* ------------------------------------------------------------ What happens next (account step) */
+.after {
+  margin-top: 20px;
 }
-.readyMain {
-  max-width: 720px;
+.afterTitle {
+  font-size: var(--type-lg);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 .plan {
   list-style: none;
-  margin: 40px 0 0;
+  margin: 16px 0 0;
   padding: 0;
   border-top: 1px solid var(--border-default);
 }
 .plan li {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   padding: 16px 0;
@@ -595,72 +589,24 @@
   font-size: var(--type-sm);
   font-weight: var(--weight-bold);
 }
-.plan li[data-done] .planMark {
-  background: var(--success);
-  border-color: var(--success);
-  color: #fff;
-}
 .planTitle {
   display: block;
   font-weight: var(--weight-semibold);
   font-size: var(--type-md);
 }
-.plan li[data-done] .planTitle {
-  color: var(--text-muted);
-  text-decoration: line-through;
-}
-.planApp {
-  padding: 3px 10px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-pill);
-  font-size: var(--type-xs);
-  font-weight: var(--weight-semibold);
-  color: var(--text-secondary);
-}
-.readyActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 40px;
-}
-.notice {
-  margin-top: 20px;
-  padding: 14px 16px;
-  border-left: 3px solid var(--border-strong);
-  background: var(--surface-sunken);
-  font-size: var(--type-sm);
-  color: var(--text-secondary);
-  max-width: 60ch;
-}
-.edit {
-  margin-top: 16px;
-  padding: 6px 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font-size: var(--type-base);
-  font-weight: var(--weight-semibold);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 /* ------------------------------------------------------------ Small screens */
 @media (max-width: 960px) {
-  .layout,
-  .ready {
+  .layout {
     grid-template-columns: 1fr;
   }
   .layout {
     padding-top: 0;
     padding-bottom: 64px;
   }
-  .summary:not([data-static]) {
+  .summary {
     display: none;
   }
   .main {
-    padding-top: 28px;
-  }
-  .ready {
     padding-top: 28px;
   }
   /* "Your Stak" becomes a strip under the top bar; open it to see the detail. */
@@ -690,7 +636,9 @@
     color: var(--on-brand-muted);
   }
   .stripStack {
+    display: block;
     font-weight: var(--weight-semibold);
+    line-height: 1.3;
   }
   .stripPrice {
     display: flex;
@@ -699,7 +647,19 @@
     font-weight: var(--weight-bold);
     font-variant-numeric: tabular-nums;
   }
+  .stripAmount {
+    text-align: right;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+  .stripAmount span {
+    display: block;
+    font-size: var(--type-xs);
+    font-weight: var(--weight-regular);
+    color: var(--on-brand-muted);
+  }
   .stripPrice svg {
+    flex: none;
     transition: transform var(--duration-slow) var(--ease-site);
   }
   .strip[open] .stripPrice svg {
@@ -756,9 +716,5 @@
     height: 52px;
     padding: 0 20px;
     font-size: var(--type-md);
-  }
-  .readyActions :global(.btn) {
-    width: 100%;
-    justify-content: center;
   }
 }
