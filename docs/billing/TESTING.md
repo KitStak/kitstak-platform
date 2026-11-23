@@ -106,8 +106,17 @@ ENTITLEMENTS_DEV_ALLOW_ALL=0 deploy/dev/app-start.sh crm projects pulse wms
 
 ### Last full run
 
-See the lifecycle lane's report for the exact output of the last run on this branch, including every test
-that was skipped and why. Do not trust this file for a pass count: run the suite.
+2026-11-23, on this branch, after the lanes were joined. Portal, CRM, Projects, Pulse and WMS all ran with
+`ENTITLEMENTS_DEV_ALLOW_ALL=0`:
+
+- `pnpm -F kitstak-portal e2e`: 27 tests, 26 passed, 1 skipped (`billing-off`, no second portal in that run),
+  3.8 minutes. The integration spec printed: checked CRM trial banner, Projects, Pulse and WMS lock screens
+  with price, Pulse added from its lock screen in 2 clicks, Portal tiles follow the plan. Skipped: nothing.
+- `E2E_BILLING_OFF_URL=http://localhost:3310 pnpm -F kitstak-portal e2e billing-off`, with a built portal
+  started in production mode with no keys: 1 passed.
+
+Real Stripe and real email were not part of either run. Do not trust this file for a pass count: run the
+suite.
 
 ### When a test fails
 

@@ -2003,3 +2003,51 @@ recipient, the address is added to the dedupe key), `clearBillingCaches`, `resum
 Gateway: `signTestPayload(rawBody, secret, at)`, `TEST_PROMO_CODE`, `TestCardOutcome`.
 
 Entitlements: `getEntitlementsFresh(db, orgId)`, the `./write` export path, and `ModuleAccess`.
+
+### 2026-11-23, integration (gate round 0)
+
+The six lanes were joined and run together for the first time. What changed while joining them, and what the
+lanes reported as different from the sections above. All of it is in the code as described here.
+
+**Changed by the integrator**
+
+| What | Detail | Who it touches |
+|:-|:-|:-|
+| The Portal shows the shared banner | `ShellNotices` now renders `PlanBanner` from `@kitstak/ui/plan-banner` for the plan notice, the same component as the four product apps. The Portal's own copy of it is gone. `features/shell/portal-notice-bar.tsx` (`PortalNoticeBar`) only draws the two Portal only rows: the "Test mode" strip and the verify email notice. | billing-ui, apps |
+| `PlanBanner` can line up with a page column | `plan-banner.css` reads two optional custom properties set on the banner: `--ks-planbanner-max-width` and `--ks-planbanner-pad-x`. The Portal sets them to its 1120 px column. Apps that set neither look as before. | apps |
+| Verify email notice link | Its test id is `verify-email-action`. `plan-notice-action` now means the plan banner's link only. | lifecycle e2e |
+| Portal app switcher | The `(app)` layout passes `planBadges`, so the Portal's switcher shows the same plan words per app as CRM, WMS, Projects and Pulse. | billing-ui |
+| Back from the card page | When `/billing?updated=card` pays the open invoice, the page redirects to `/billing?notice=card_paid`. The plan banner in the shell is then read after the payment, and a reload does not try the payment again. A payment that still fails stays on the page with the plain message. | billing-ui, lifecycle e2e |
+| WMS seat sentence | WMS says "All 5 seats are in use. Add a seat to your plan, then add this person." The shared sentence ends in "Add a seat in Billing, then invite again.", and in WMS "Billing" means 3PL client billing (rule 10 in section 1). | apps |
+| Starting a portal in production mode for `billing-off.spec.ts` | The port goes on the `next start` line (`pnpm exec next start -p 3310` in `apps/portal`), because the package's `start` script is fixed to 3300. The dev portal on 3300 must be up too. The exact lines are at the top of the spec. | lifecycle |
+
+**Reported by the lanes and accepted as built**
+
+| Lane | What | Detail |
+|:-|:-|:-|
+| signup | Email codes | `overrideDefaultEmailVerification` is off, so the email code plugin sends the signup code itself. Sign in by code is closed (`/sign-in/email-otp` answers 404). Codes are limited to 5 per 10 minutes and 20 per day per address. A reset by code clears the sign in lockout for that address. |
+| signup | Password rules on reset by code | Checked in the Portal's own auth hook (`PASSWORD_POLICY`, 400), because the shared password plugin does not cover `/email-otp/reset-password`. |
+| signup | New actions | `resumeAfterSignInAction`, `skipWelcome`. `skipVerifyAction` takes an optional `next`. |
+| signup | Resume rules | `getSignupResume` sends a person to `/welcome` only while a signup intent is open. A signed in team that already has a trial or a plan and opens `/signup` with a cart goes to `/billing/plan?add=<first new app>`. |
+| signup | Time zone | The browser's time zone is saved on the user at signup, so trial dates show the right day. |
+| billing-ui | `PlanPickerProps.canPay` | Optional, default true. False hides "Add a card" for admins. |
+| billing-ui | Flash messages | Billing home reads `?notice=<key>` after an action, and `&from=<app>` adds a "Back to CRM" link. |
+| billing-ui | Error classes | `GatewayCardError` and `WebhookSignatureError` match by name (`Symbol.hasInstance`), so a dev hot reload cannot turn a declined card into a server error. |
+| apps | WMS `getPlanView` | Takes the platform database handle first: `getPlanView(platformDb, input)`. |
+| apps | Reads that use POST | A POST that changes no business data keeps working in view only: `planRead: true` on CRM routes, `read: true` on Projects and Pulse actions, a short path list in WMS. |
+| apps | Error codes | "Not in plan" keeps its old codes (`entitlement.missing`, `NOT_ENTITLED`, `ENTITLEMENT_MISSING`) with a plain message. The WMS error envelope has `planUrl` for `PLAN_WAREHOUSE_LIMIT` and `PLAN_SEAT_LIMIT`. CRM seat errors from its own API are 403 `FORBIDDEN` with `details.code: 'SEAT_LIMIT_REACHED'`. |
+| apps | Background writers | CRM and Projects public forms, the Projects automation sweep and the WMS scheduler stop for organizations without full access. Pulse cron and kiosk links treat view only as locked. |
+| apps | More shared UI | `@kitstak/ui/plan-summary`, `@kitstak/ui/plan-summary-model` and `@kitstak/ui/plan-badges`. |
+| web | Local links | Under `next dev` with no `NEXT_PUBLIC_PORTAL_URL`, the site links to the local dev ports. Builds keep the production default. |
+| web | Default period | The wizard and the calculator open on monthly. |
+| lifecycle | Jobs and emails | `TickReport` has `errors: string[]`. `runBillingTick` and `deliverQueuedEmails` take `env`. `sendEmailNow` takes a third options argument. `reconcileSubscriptions` also picks up a passed period end or trial end. |
+| lifecycle | More routes | `/billing/activity/export` (CSV) and `/dev/outbox/templates`. |
+| lifecycle | Scripts | `stripe:setup apply` also fixes names, nicknames and metadata in place and never changes an amount. `billing-reset.sh` takes the word `yes`. |
+
+**Known and left as designed**
+
+| What | Detail |
+|:-|:-|
+| Seat floor | The picker's seat floor counts people (SPEC 8.5), not open invites. A team can lower its seats below people plus open invites. The invited person then sees "The team has no free seat." (SPEC 5.5) until a seat is added. |
+| Seat checks under the allow all switch | `requireSeat` does not read `allowAll`, so seat limits of a paid plan apply in the Portal even with `ENTITLEMENTS_DEV_ALLOW_ALL=1`. |
+| Invite emails | Queued with `enqueueEmail`, so in production they leave with the next job run, up to a minute later. |

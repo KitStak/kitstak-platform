@@ -5,11 +5,15 @@ import { newPerson, resetRateLimits } from './support';
  * Fail closed. A portal in production mode with no Stripe key must say billing is off, charge nothing
  * and fake nothing. This needs a second server, so it runs only when its address is given:
  *
- *   NODE_ENV=production pnpm -F kitstak-portal build
- *   PORT=3310 BETTER_AUTH_URL=http://localhost:3310 NEXT_PUBLIC_APP_URL=http://localhost:3310 pnpm -F kitstak-portal start
+ *   deploy/dev/stop.sh portal && pnpm -F kitstak-portal build
+ *   cd apps/portal && BETTER_AUTH_URL=http://localhost:3310 NEXT_PUBLIC_APP_URL=http://localhost:3310 \
+ *     NEXT_PUBLIC_PORTAL_URL=http://localhost:3310 TRUSTED_ORIGINS=http://localhost:3310 pnpm exec next start -p 3310
+ *   deploy/dev/app-start.sh portal
  *   E2E_BILLING_OFF_URL=http://localhost:3310 pnpm -F kitstak-portal e2e billing-off
  *
- * (Stop the dev server before the build. See docs/billing/TESTING.md.)
+ * The port goes on the `next start` line itself: the package's `start` script is fixed to 3300. The dev
+ * portal on 3300 must be up as well, because the suite checks it before any spec runs. See
+ * docs/billing/TESTING.md.
  */
 const OFF_URL = process.env.E2E_BILLING_OFF_URL?.replace(/\/+$/, '');
 
