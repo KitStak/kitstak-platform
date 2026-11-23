@@ -2048,6 +2048,47 @@ lanes reported as different from the sections above. All of it is in the code as
 
 | What | Detail |
 |:-|:-|
-| Seat floor | The picker's seat floor counts people (SPEC 8.5), not open invites. A team can lower its seats below people plus open invites. The invited person then sees "The team has no free seat." (SPEC 5.5) until a seat is added. |
+| Seat floor | Fixed in review round 1 (see below): open invites now count toward the lowest seat number. |
 | Seat checks under the allow all switch | `requireSeat` does not read `allowAll`, so seat limits of a paid plan apply in the Portal even with `ENTITLEMENTS_DEV_ALLOW_ALL=1`. |
 | Invite emails | Queued with `enqueueEmail`, so in production they leave with the next job run, up to a minute later. |
+
+### 2026-11-23, review round 1 (backend fixes)
+
+Fifteen blockers from the visual, operational, security and critic reviews. Everything here is additive
+unless the row says "changed". Migration `0008_core_billing_credit.sql` carries the new columns and the trigger.
+
+**Money**
+
+| What | Detail | Who it touches |
+|:-|:-|:-|
+| Proration date, changed | The server picks it (`packages/billing/src/proration.ts`, pure). Always a whole number of days before the period end. A charge counts the day that has started (days left rounded up). A credit counts full days only (rounded down). So the amount matches "for the 30 days left", does not move within a day, and adding seats and taking them off again always costs one day. A date from the browser is never used. | billing-ui, gateways |
+| `applyPlanChange`, changed | Input is now `{ orgId, selection, basis, expectedDueTodayCents, actor }`. `prorationDate` is ignored. `basis` is the fingerprint the preview carried (`planBasis`: subscription id, items, period, credit, status). A basis that no longer matches answers `price_changed`, even when the dollars match. The amount must equal a fresh preview to the cent. | `confirmPlanChangeAction` takes `basis` instead of `prorationDate`. |
+| `PlanChangePreview` | What `previewPlanChange` returns (exported from the server barrel as `ChangePreview` too): the gateway preview plus `basis`, `daysLeft` and `creditBalanceCents`. `ChangePreview` itself gained `proratedCents` and `creditAppliedCents`. | billing-ui |
+| Credit and the next bill | `GatewaySubscription` has `creditBalanceCents` and `upcoming` (`GatewayUpcoming`: `amountDueCents`, `discountCents`, `discountLabel`, `creditAppliedCents`). Stripe reads them from the customer balance and `invoices.createPreview`; the test gateway from the same `billMath` its invoices use. Stored in `core.billing_subscriptions` as `credit_cents`, `next_charge_cents`, `next_discount_cents`, `next_discount_label`, `next_credit_cents`. | every screen that shows a next charge |
+| `PlanState` | `creditCents`, and `nextCharge` is now `{ amountCents, at, planCents, discountCents, discountLabel, creditAppliedCents }`. `amountCents` is what the card will really be charged. `usage.seatFloor` is people plus open invites. Pure helpers `nextChargeLine(state)` and `creditLine(state)` give the sentences. | portal, product apps (`seatFloor: 0` in their default usage) |
+| Invoices | `GatewayInvoice`, `core.billing_invoices` and `InvoiceRow` have `creditAppliedCents` and `refundedCents`. A first invoice that is $0.00 because credit paid it stays in the invoice list. | billing-ui |
+| Test gateway credit | Kept on the customer document (as Stripe keeps a customer balance), so it survives a plan that ends and comes off the first bill of a new plan. Older subscription documents with credit are read once and moved. | none |
+| Promo code | `applyTestPromo(rt, { sessionId, promoCode })` saves the code on the test checkout session. `getTestCheckout` returns `promo`, `creditAppliedCents` and `firstChargeCents`. The `plan_started` email takes an optional `firstChargeCents`. | test checkout page |
+| Activity | New actions `payment.credit_used`, `checkout.duplicate_refunded`, `account.email_changed`. `plan.changed` summaries end with what the change did to money. | activity page |
+
+**One plan per organization**
+
+| What | Detail |
+|:-|:-|
+| New gateway methods | `expireOpenCheckoutSessions(customerId)` and `cancelAndRefund(subscriptionId)`. `GATEWAY_CONTRACT_VERSION` (now 2) must be raised when `BillingGateway` changes; the portal rebuilds its cached runtime when it moved. |
+| `createCheckout` | Asks the gateway for a live subscription of the customer first (a plan paid a moment ago in another tab is taken in and the answer is `already_subscribed`), then closes every other open pay page. |
+| `rejectSecondSubscription` | In `sync.ts`, called by `applyCheckoutSession` and `fetchAndApplySubscription` under `lockOrgBilling` (one writer per organization per transaction). A second live subscription for an organization whose own plan is live is canceled and refunded, with an activity line and a log line. If the plan we know is gone at the gateway, that is recorded first and the new one is let in. `applySubscriptionSnapshot` never lets another subscription of the same gateway overwrite a live row. |
+| Test gateway | `completeTestCheckout` runs under the same lock and in one transaction. A second page answers `already_subscribed`; a declined first payment leaves nothing behind. |
+
+**People**
+
+| What | Detail |
+|:-|:-|
+| Invite needs a verified email | In `beforeCreateInvitation`, so it holds at every door. Code `EMAIL_NOT_VERIFIED`. Decision for older accounts: accounts made before `INVITE_NEEDS_VERIFIED_EMAIL_SINCE` (2026-11-23) were never asked to verify and may keep inviting. Move the date to the launch day if the launch is later. |
+| Invite cap | `INVITES_PER_DAY`: 50 a day for an organization with no paid plan, 500 with one. Code `INVITE_LIMIT_REACHED`. On top of the per address limit of the auth layer. |
+| Invite proof | `billingOrganizationOptions` takes `inviteSecret` (every app passes `BETTER_AUTH_SECRET`). The emailed link is `/invite/<id>?t=<proof>` (`signInviteProof`). The portal proxy moves the proof into the httpOnly cookie `kitstak.invite_proof` and redirects to the clean address. Accepting with a valid proof marks the email verified and sends no code. The invitation id alone proves nothing, because the people who sent the invite can see it. |
+| Join from an invite | `joinInviteAction` (portal) checks the seat, then makes the account, then accepts, and removes the account again if the accept is refused. `getInviteView` returns `seatAvailable`; the page shows "has no free seat right now" instead of the form. |
+| Seat floor, changed | `belowUsageMessage` counts people plus open invites, at checkout and on plan changes. |
+| Change an unverified email | `changeUnverifiedEmailAction` (portal): only while the email is unverified, only for password accounts, 3 tries an hour. Sends a new code and keeps the account, the organization and the trial. |
+| Billing manager cleanup | The trigger `core.billing_manager_cleanup` on `core.member` removes the `core.billing_managers` row when a member is deleted or deactivated, at every door, and writes a `manager.removed` activity line. |
+| Microsoft sign in, changed | `TRUSTED_LINK_PROVIDERS` in `@kitstak/auth` is `['google']`. A Microsoft sign in joins an existing account only when the token carries `xms_edov` (`microsoftEmailVerified` in the portal). |
