@@ -40,8 +40,8 @@ All live in `deploy/dev/`. All are safe to run again.
 | `db-setup.sh --migrate` | Migrations only. Use it after you add a migration. |
 | `db-setup.sh --reseed` | Migrations, then reload all demo data. Only the two demo orgs are rebuilt. Orgs you made by signing up stay. |
 | `env-init.sh` | Writes an untracked `.env.local` into each app that has none. Never overwrites one. `--print` shows what it would write. |
-| `app-start.sh <app> ...` | Starts each named app in the background and waits until it answers a real page. An app that is already listening is reused. |
-| `stop.sh [apps or db]` | Stops apps, the database, or both. |
+| `app-start.sh <app> ...` | Starts each named app in the background and waits until it answers a real page. An app that is already listening is reused. A new start begins from a clean dev cache (`apps/<app>/.next/dev` is removed first). |
+| `stop.sh [apps or db]` | Stops apps, the database, or both. Waits until each server is really gone. |
 | `status.sh` | One line per service: up or down, URL, log file. |
 | `shot.mjs` | Signs in and takes screenshots in light and dark, desktop and phone. See below. |
 | `rate-limit-reset.sh` | Clears the sign in and sign up rate limit counters in the local database. |
@@ -365,12 +365,16 @@ signed in. `/forgot-password` in every app goes to the Portal's too.
   grow past 4 GB by itself. When the machine runs short, the system stops the biggest one without a word:
   pages stop loading and `deploy/dev/status.sh` shows it as DOWN. Start it again with `app-start.sh`.
   Start only what you need.
-- **A page reloads itself over and over.** That is a stale dev cache, not the product. It showed up after
-  dev servers were stopped by the memory limit in the middle of a write: the browser gets "HMR hash
-  mismatch" from the dev server and reloads, about five times a second, and the tab grows until the system
-  stops it. A production build never does this. Stop the app, delete its dev cache and start it again:
-  `deploy/dev/stop.sh crm && rm -rf apps/crm/.next/dev && deploy/dev/app-start.sh crm`. The cache is only
-  build output, and it can grow past 3 GB, so clearing it also frees memory.
+- **A page reloads itself over and over.** That is a broken dev cache, not the product. A production
+  build never does this. The dev server keeps its work in `apps/<app>/.next/dev`. With that folder in a bad
+  state, the server sends "HMR hash mismatch" to the browser, the tab reloads about five times a second,
+  and it grows until the system stops it. It was seen in the CRM and in Pulse on gate round 4, after
+  servers had been stopped by the memory limit and started again many times. A restart on the same folder
+  kept the fault. Removing the folder fixed it every time. The exact cause was not found, so the scripts
+  now close both likely doors: `stop.sh` waits until the server is really gone, and `app-start.sh` removes
+  the folder before it starts a server, so every start is clean. `KITSTAK_KEEP_DEV_CACHE=1` keeps the
+  folder if you want a faster start. If you start an app some other way and see the reloads, stop it and
+  run `rm -rf apps/crm/.next/dev` (with your app's name) before you start it again.
 - **The seeded admin answers 401 with the right password.** Five wrong passwords lock an account for 15
   minutes. The Projects and Pulse smoke specs still sign in as `admin@kitstak.io` with the README password
   that does not work in this database, so one run of them locks that person. Clear it with

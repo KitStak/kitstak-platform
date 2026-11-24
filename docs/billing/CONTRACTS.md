@@ -2243,3 +2243,14 @@ What the backend lane changed for review round 4. Each row is live in code and h
 | One front door | `@kitstak/auth/front-door` (pure): `portalSignInUrl`, `portalForgotPasswordUrl`, `appEntryUrl`, `staysOnLocalSignIn`, `safeAppPath`. `/login` in the CRM, Projects and Pulse redirects a signed out person to `<portal>/login?next=<full app address>`. The WMS does it in its proxy (`server/http/front-door.ts`) and keeps its own page when the warehouse has company single sign on, on `sso_error`, and for a valid session the WMS refuses. Every app keeps its own form at `/login?local=1` (tests, and the day the Portal is down). `/forgot-password` in every app goes to the Portal's. The Portal accepts a full address in `next` only on a trusted origin (`safeReturnUrl`), and enters another app through `<app>/login?from=portal&next=<path>`, where the app never sends the person back. Notices `signed-out`, `password-reset` and `idle` are carried. | every app |
 | No organization | The WMS lock view has two end states: `no_org` ("You are not in an organization yet", one button to the Portal) and `no_warehouse`. `restingView` and `setupHasSomethingToShow` (pure) make sure the lock screen only sends a person to the setup page when that page will render, so the two can not loop. The CRM `/welcome` shows the same sentence and button when a Portal address is set (`?local=1` keeps the CRM's own setup). Projects and Pulse use the same words. | wms, crm, projects, pulse |
 
+
+### 2026-11-24, gate round 4 (integration)
+
+What the integration gate changed after the two round 4 lanes were joined.
+
+| What | Detail | Who it touches |
+|:-|:-|:-|
+| `deploy/dev/stop.sh` waits | It reports "stopped" only when the whole process group of the dev server is gone (up to 15 seconds, then it ends what is left). Before, it returned as soon as the port closed, while the server was still writing its dev cache. | everyone who runs the dev stack |
+| `deploy/dev/app-start.sh` starts clean | It removes `apps/<app>/.next/dev` before it starts a server, unless another `next dev` already runs from that folder. `KITSTAK_KEEP_DEV_CACHE=1` keeps the folder. A broken dev cache made a page reload without end in the CRM and in Pulse (dev only, never in a production build). See `DEV.md`, "A page reloads itself over and over". | everyone who runs the dev stack |
+| App specs follow the one front door | `apps/crm/e2e/health.spec.ts` and `apps/pulse/e2e/smoke.spec.ts` accept both answers for a signed out visit: the Portal sign in with the full app address in `next`, or the app's own page with the path when no Portal address is set. | crm, pulse |
+| Verdicts | `docs/billing/reviews/round-4-verdicts.json` holds the four round 4 reviewer verdicts. | docs |

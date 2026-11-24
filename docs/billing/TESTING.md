@@ -205,6 +205,39 @@ ENTITLEMENTS_DEV_ALLOW_ALL=0 deploy/dev/app-start.sh crm projects pulse wms
   organization settings were opened in light and dark at 1440 px and 390 px: 52 page loads, all 200, no
   console error.
 
+2026-11-24, gate round 4, after the review round 4 fixes. All six dev apps ran with
+`ENTITLEMENTS_DEV_ALLOW_ALL=0`, and a built portal ran in production mode with no keys on port 3310:
+
+- `pnpm typecheck`: 12 of 12 passed. `pnpm lint`: 5 of 5 passed, 0 errors. `pnpm build`: 6 of 6 passed, and
+  the build log has no warning. All three ran without the turbo cache.
+- `E2E_BILLING_OFF_URL=http://localhost:3310 pnpm -F kitstak-portal e2e`: 71 tests, 71 passed, none skipped,
+  in one run with no restart. It was run three times. The first run (14.6 minutes) and the third (16.3
+  minutes) were 71 of 71. The second run had 45 passed and 26 failed, and none of the 26 was a fault in the
+  product: a broken dev cache made Pulse reload one page without end, the browser tab grew to 2.5 GB and
+  was stopped (`billing-only.spec.ts`), and then the portal dev server was stopped by the memory limit, so
+  the last 25 tests found no server. The dev scripts were fixed (see `DEV.md`, "A page reloads itself over
+  and over"), every app was started again clean, and the third run is the one after that fix.
+- The integration spec printed: checked CRM trial banner, Projects, Pulse and WMS lock screens with price,
+  Pulse added from its lock screen in 2 clicks, Portal tiles follow the plan. Skipped: nothing. The banner
+  spec printed all 12 checks (WMS and Pulse, six banner kinds).
+- Unit tests: billing 572 (and 1 that only runs when the database is down), portal 278, shared UI 86,
+  entitlements 48, CRM 843, Projects 291, Pulse 906, marketing site 589, all passed. WMS: 2609 passed and
+  5 failed, the same 5 tests in 4 files as in every gate (task grid query, page header crumbs, token
+  alias rule, one timing budget). This work does not touch those files.
+- Two tests in other apps still expected the old sign in redirect and are fixed: `apps/crm/e2e/health.spec.ts`
+  and `apps/pulse/e2e/smoke.spec.ts` now accept the Portal sign in with the full app address in `next`.
+  The app specs the fixers edited were run: CRM `health` and `smoke` 9 of 9. CRM `wizards` opens the CRM
+  setup at `/welcome?local=1` and passes step 1, then stops at step 2 on a label the spec has wrong
+  (it looks for the team size written with a dash, and the screen says "6 to 20 people"); that is older
+  than this work. Pulse `smoke` and
+  `routes`: 8 passed, and 11 that sign in as `admin@kitstak.io` with the README password got 401.
+  Projects `smoke`: 1 passed and 7 got the same 401. That password has never matched this database
+  (`DEV.md`, "Seeded logins").
+- Signup (with and without a cart), sign in, forgot password, the launcher, every billing tab, organization
+  settings and My account were opened in light at 1440 px and in dark at 390 px: 30 page loads, all 200,
+  no console error and no failed request. On the production build with the allow all switch on, billing
+  home and the launcher show no "Dev override" badge.
+
 Real Stripe and real email were not part of any run. Do not trust this file for a pass count: run the
 suite.
 
