@@ -3,7 +3,7 @@
  * say"). PURE, so the words are unit tested and the page only lays them out.
  */
 import { formatDay, formatDayShort, formatMoney } from '@kitstak/billing/catalog';
-import { nextChargeLine, type PlanPhase, type PlanState } from '@kitstak/billing/plan-state';
+import { nextChargeLine, planEndedLine, type PlanPhase, type PlanState } from '@kitstak/billing/plan-state';
 import { cardLabel, plural } from './format';
 
 export type HomeActionId =
@@ -63,8 +63,24 @@ const BADGE: Readonly<Record<PlanPhase, PhaseCopy['badge']>> = {
   ended: { label: 'Ended', tone: 'danger' },
 };
 
-/** The Plan card line, the main button and the other actions for a plan state. */
+/**
+ * The Plan card line, the main button and the other actions for a plan state.
+ *
+ * A cancel that is set shows in every phase (review round 3): a plan that is late or paused and is
+ * also set to end says so, offers "Keep my plan", and never offers "Cancel plan" a second time.
+ */
 export function phaseCopy(state: PlanState, timeZone: string): PhaseCopy {
+  const copy = basePhaseCopy(state, timeZone);
+  if (!state.cancelAt || state.phase === 'cancel_scheduled') return copy;
+  const others = copy.others.filter((entry) => entry.id !== 'cancel' && entry.id !== 'keep_plan');
+  return {
+    ...copy,
+    line: `${copy.line} It is set to end on ${formatDay(state.cancelAt, timeZone)}.`,
+    others: copy.primary.id === 'keep_plan' ? others : [...others, action('keep_plan')],
+  };
+}
+
+function basePhaseCopy(state: PlanState, timeZone: string): PhaseCopy {
   const day = (date: Date) => formatDay(date, timeZone);
   const short = (date: Date) => formatDayShort(date, timeZone);
 
@@ -123,7 +139,9 @@ export function phaseCopy(state: PlanState, timeZone: string): PhaseCopy {
           : 'We could not charge your card.',
       ];
       if (due?.nextRetryAt) parts.push(`We will try again on ${short(due.nextRetryAt)}.`);
-      return { badge: BADGE.past_due, line: parts.join(' '), primary: action('update_card'), others: [action('pay_now')] };
+      // Cancel is offered here too, and the cancel page says what it does while a bill is open: the
+      // plan ends today and the bill is dropped.
+      return { badge: BADGE.past_due, line: parts.join(' '), primary: action('update_card'), others: [action('pay_now'), action('cancel')] };
     }
     case 'unpaid':
       return {
@@ -158,10 +176,12 @@ export function phaseCopy(state: PlanState, timeZone: string): PhaseCopy {
         others: [action('cancel')],
       };
     case 'ended': {
-      const ended = state.endedAt ? ` on ${day(state.endedAt)}` : '';
+      // Says why it ended, so a customer who never canceled is told (review round 3): "We could not
+      // collect $164.00 after 4 tries, so your plan ended on Nov 23, 2026."
+      const ended = planEndedLine(state, timeZone) ?? 'Your plan ended.';
       return {
         badge: BADGE.ended,
-        line: `Your plan ended${ended}. Your apps are view only. Your data is safe.`,
+        line: `${ended} Your apps are view only. Your data is safe.`,
         primary: action('pick_plan'),
         others: [],
       };

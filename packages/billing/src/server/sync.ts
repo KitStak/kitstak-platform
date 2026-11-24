@@ -15,13 +15,14 @@ import {
   entitlements,
   organization,
   stripeCustomers,
+  type BillingEndedReason,
   type BillingSubscriptionItemJson,
 } from '@kitstak/db/schema';
 import { type EntitlementsDb, clearEntitlementsCache, setEntitlement } from '@kitstak/entitlements';
 import { CATALOG, formatDay, formatMoney, normalizeSelection, productListLabel, type ProductId } from '../catalog';
 import { type BillingResult, billingError, billingOk } from '../errors';
 import type { GatewayInvoice, GatewayKind, GatewaySubscription } from '../gateway/types';
-import { isLiveSubscriptionStatus, type PlanState } from '../plan-state';
+import { isLiveSubscriptionStatus, planEndedWords, type PlanState } from '../plan-state';
 import { recordAudit } from './audit';
 import { type BillingActor, type BillingDb, type BillingRuntime, errorText, logBilling, SYSTEM_ACTOR } from './db';
 import { enqueueForBillingRecipients } from './outbox';
@@ -225,6 +226,40 @@ export async function applySubscriptionSnapshot(
   const late = sub.status === 'past_due' || sub.status === 'unpaid';
   const pastDueSince = late ? (samePrev?.pastDueSince ?? latestInvoice?.issuedAt ?? now) : null;
 
+  // Why the plan ended, kept on the row so the email, billing home and the activity line can say it.
+  //  - Already ended before this snapshot: what was stored stays.
+  //  - A person canceled with a bill open (`scheduleCancel` left that note on the row before it
+  //    asked the gateway): the plan ended that day and the bill was dropped.
+  //  - The plan was late and nobody canceled: the gateway gave up after its last try.
+  //  - Anything else: the customer canceled and the paid time ran out.
+  // On a live row only the note of intent is kept, and only while the plan is late.
+  let endedReason: BillingEndedReason | null = null;
+  let endedAmountCents: number | null = null;
+  let endedAttempts: number | null = null;
+  const wasLate = samePrev !== null && (samePrev.status === 'past_due' || samePrev.status === 'unpaid');
+  if (sub.status === 'canceled') {
+    if (samePrev && samePrev.status === 'canceled') {
+      endedReason = samePrev.endedReason;
+      endedAmountCents = samePrev.endedAmountCents;
+      endedAttempts = samePrev.endedAttempts;
+    } else if (samePrev && samePrev.endedReason === 'canceled_unpaid') {
+      endedReason = 'canceled_unpaid';
+      endedAmountCents = samePrev.endedAmountCents ?? samePrev.amountDueCents;
+      endedAttempts = samePrev.endedAttempts ?? latestInvoice?.attemptCount ?? null;
+    } else if (wasLate || (!samePrev && latestInvoice?.status === 'uncollectible')) {
+      endedReason = 'payment_failed';
+      const owed = samePrev?.amountDueCents ?? (latestInvoice && latestInvoice.amountDueCents > 0 ? latestInvoice.amountDueCents : (latestInvoice?.totalCents ?? null));
+      endedAmountCents = owed !== null && owed > 0 ? owed : null;
+      endedAttempts = latestInvoice && latestInvoice.attemptCount > 0 ? latestInvoice.attemptCount : null;
+    } else {
+      endedReason = 'canceled';
+    }
+  } else if (late && samePrev?.endedReason === 'canceled_unpaid') {
+    endedReason = 'canceled_unpaid';
+    endedAmountCents = samePrev.endedAmountCents;
+    endedAttempts = samePrev.endedAttempts;
+  }
+
   const row = {
     gateway: input.gateway,
     gatewaySubscriptionId: sub.id,
@@ -260,6 +295,9 @@ export async function applySubscriptionSnapshot(
     nextDiscountCents: live && sub.upcoming ? Math.max(0, Math.round(sub.upcoming.discountCents)) : 0,
     nextDiscountLabel: live && sub.upcoming ? sub.upcoming.discountLabel : null,
     nextCreditCents: live && sub.upcoming ? Math.max(0, Math.round(sub.upcoming.creditAppliedCents)) : 0,
+    endedReason,
+    endedAmountCents,
+    endedAttempts,
     gatewaySyncedAt: now,
   };
   await db
@@ -366,17 +404,26 @@ export async function applySubscriptionSnapshot(
     const endedAt = sub.endedAt ?? sub.canceledAt ?? now;
     await recordAudit(db, {
       orgId,
-      actor,
+      // The gateway giving up is KitStak's doing, whoever happened to trigger this sync.
+      actor: endedReason === 'payment_failed' ? SYSTEM_ACTOR : actor,
       action: 'plan.ended',
-      summary: 'The plan ended. Your apps are view only. Your data is safe.',
-      data: { subscriptionId: sub.id, endedAt: endedAt.toISOString() },
+      // The line says why, so a customer who never canceled is not left guessing.
+      summary: `${planEndedWords({ reason: endedReason, amountCents: endedAmountCents, attempts: endedAttempts }).audit} Your apps are view only. Your data is safe.`,
+      data: { subscriptionId: sub.id, endedAt: endedAt.toISOString(), reason: endedReason, amountCents: endedAmountCents, attempts: endedAttempts },
       ...eventId,
     });
     if (input.portalUrl) {
       await enqueueForBillingRecipients(db, {
         orgId,
         template: 'plan_ended',
-        payload: { orgName: await orgName(db, orgId), portalUrl: input.portalUrl, endedAt: endedAt.toISOString() },
+        payload: {
+          orgName: await orgName(db, orgId),
+          portalUrl: input.portalUrl,
+          endedAt: endedAt.toISOString(),
+          ...(endedReason ? { reason: endedReason } : {}),
+          amountCents: endedAmountCents,
+          attempts: endedAttempts,
+        },
         dedupeKey: `plan_ended:${sub.id}`,
       });
     }

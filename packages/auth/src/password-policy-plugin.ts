@@ -22,6 +22,7 @@ import type { BetterAuthPlugin } from 'better-auth';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { sql } from 'drizzle-orm';
 import { burnDummyPasswordVerify } from './timing';
+import { EASY_TO_GUESS_MESSAGE, isEasyToGuess } from './weak-passwords';
 
 /** bcrypt only uses the first 72 bytes; longer inputs are rejected by the policy. */
 export const MAX_PASSWORD_BYTES = 72;
@@ -77,6 +78,8 @@ export const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
 export interface PasswordContext {
   readonly email?: string;
   readonly name?: string;
+  /** The person's own company. A password built around it is refused, like one built around `kitstak`. */
+  readonly company?: string;
 }
 
 /** Returns human-readable violations (empty when the password is acceptable). */
@@ -104,6 +107,11 @@ export function validatePassword(
   const localPart = context.email?.split('@')[0]?.toLowerCase();
   if (localPart && localPart.length >= 3 && lowered.includes(localPart))
     issues.push('Do not include your email name.');
+  // Length is not strength by itself (billing review round 3): `passwordpassword`, one character
+  // held down, `123456789012345`, `qwertyuiopasdfgh`, a common password dressed up with digits, and
+  // anything built around the product or company name are refused at every length. Said only when
+  // nothing else is wrong, so a person fixes one clear thing at a time.
+  if (issues.length === 0 && isEasyToGuess(password, { names: [context.company] })) issues.push(EASY_TO_GUESS_MESSAGE);
   return issues;
 }
 

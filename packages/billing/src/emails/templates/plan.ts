@@ -104,21 +104,75 @@ export function paused(raw: unknown): EmailContent {
   };
 }
 
+/** 'after 4 tries', 'after 1 try', or '' when the count is not known. */
+function triesWords(attempts: number | null): string {
+  if (attempts === null || attempts < 1) return '';
+  return ` after ${attempts} ${attempts === 1 ? 'try' : 'tries'}`;
+}
+
 export function planEnded(raw: unknown): EmailContent {
   const payload = asPayload(raw);
   const orgName = text(payload, 'orgName', 120);
   const portalUrl = portal(payload);
   const endedAt = date(payload, 'endedAt');
+  const reason = payload.reason === 'payment_failed' || payload.reason === 'canceled_unpaid' || payload.reason === 'canceled' ? payload.reason : null;
+  const amount = typeof payload.amountCents === 'number' && Number.isFinite(payload.amountCents) && payload.amountCents > 0 ? Math.trunc(payload.amountCents) : null;
+  const attempts = typeof payload.attempts === 'number' && Number.isFinite(payload.attempts) ? Math.trunc(payload.attempts) : null;
+  const button = { label: 'Pick a plan', url: billingLink(portalUrl, { to: 'plan' }) };
+  const footer = billingFooter(orgName);
+  const viewOnly = 'Your apps are view only now. You can still open and read everything.';
+
+  if (reason === 'payment_failed') {
+    // Nobody canceled. Say why the plan ended, and that nothing more will be tried.
+    const why =
+      amount !== null
+        ? `We could not collect ${money(amount)}${triesWords(attempts)}, so the plan for ${orgName} ended on ${day(endedAt)}.`
+        : `We could not collect your payment${triesWords(attempts)}, so the plan for ${orgName} ended on ${day(endedAt)}.`;
+    return {
+      subject: 'Your KitStak plan has ended. We could not collect your payment.',
+      preheader: 'Your data is safe. Pick a plan any time to keep working.',
+      heading: 'Your plan has ended',
+      blocks: [
+        { kind: 'text', text: why },
+        { kind: 'text', text: 'We will not try that card again.' },
+        { kind: 'text', text: viewOnly },
+        { kind: 'text', text: 'Nothing is deleted. Pick a plan any time to keep working. You only pay from the day you start again.' },
+      ],
+      button,
+      footer,
+    };
+  }
+  if (reason === 'canceled_unpaid') {
+    return {
+      subject: 'Your KitStak plan has ended. Your data is safe.',
+      preheader: amount !== null ? `You canceled. We will not charge the ${money(amount)}.` : 'You canceled. Nothing more will be charged.',
+      heading: 'Your plan has ended',
+      blocks: [
+        { kind: 'text', text: `You canceled the plan for ${orgName}. It ended on ${day(endedAt)}.` },
+        {
+          kind: 'text',
+          text: amount !== null ? `A bill of ${money(amount)} was still open. We dropped it. We will not charge it.` : 'The open bill was dropped. We will not charge it.',
+        },
+        { kind: 'text', text: viewOnly },
+        { kind: 'text', text: 'Nothing is deleted. Pick a plan any time to keep working.' },
+      ],
+      button,
+      footer,
+    };
+  }
   return {
     subject: 'Your KitStak plan has ended. Your data is safe.',
     preheader: 'Your apps are view only. Pick a plan any time to keep working.',
     heading: 'Your plan has ended',
     blocks: [
-      { kind: 'text', text: `The plan for ${orgName} ended on ${day(endedAt)}.` },
-      { kind: 'text', text: 'Your apps are view only now. You can still open and read everything.' },
+      {
+        kind: 'text',
+        text: reason === 'canceled' ? `You canceled the plan for ${orgName}. It ended on ${day(endedAt)}.` : `The plan for ${orgName} ended on ${day(endedAt)}.`,
+      },
+      { kind: 'text', text: viewOnly },
       { kind: 'text', text: 'Nothing is deleted. Pick a plan any time to keep working.' },
     ],
-    button: { label: 'Pick a plan', url: billingLink(portalUrl, { to: 'plan' }) },
-    footer: billingFooter(orgName),
+    button,
+    footer,
   };
 }

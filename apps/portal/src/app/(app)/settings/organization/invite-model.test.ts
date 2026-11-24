@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { countTyped, invitePlanLine, parseInviteEmails, type SeatFacts } from './invite-model';
+import { countTyped, findOnTeam, inviteErrorWords, invitePlanLine, notInvitedYet, parseInviteEmails, type SeatFacts } from './invite-model';
 
 const PAID: SeatFacts = { paid: true, limit: 5, used: 2, canManageBilling: true, pulseOnly: false };
 
@@ -64,5 +64,38 @@ describe('invitePlanLine', () => {
       for (const sentence of line.split(/(?<=[.?!])\s+/)) expect(sentence.split(/\s+/).length).toBeLessThanOrEqual(20);
       expect(line).not.toMatch(/[–—]|-{2}/);
     }
+  });
+});
+
+describe('invite answers in our words', () => {
+  const TEAM = [
+    { email: 'sam@alderstreet.example', name: 'Sam Rivera' },
+    { email: 'Drew@AlderStreet.example', name: '' },
+  ];
+
+  test('a teammate is found whatever the letter case', () => {
+    expect(findOnTeam(' SAM@alderstreet.example ', TEAM)?.name).toBe('Sam Rivera');
+    expect(findOnTeam('new@alderstreet.example', TEAM)).toBeNull();
+  });
+
+  test('"User is already a member of this organization" becomes a sentence with the first name', () => {
+    expect(inviteErrorWords({ code: 'USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION', message: 'User is already a member of this organization' }, 'sam@alderstreet.example', TEAM)).toBe(
+      'Sam is already on your team.',
+    );
+    // No name on file: the address stands in. No code: the raw sentence is still recognized.
+    expect(inviteErrorWords({ message: 'User is already a member of this organization' }, 'drew@alderstreet.example', TEAM)).toBe('Drew@AlderStreet.example is already on your team.');
+    expect(inviteErrorWords({ code: 'USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION' }, 'ghost@alderstreet.example', TEAM)).toBe('ghost@alderstreet.example is already on your team.');
+  });
+
+  test('an open invite and an unknown answer', () => {
+    expect(inviteErrorWords({ code: 'USER_IS_ALREADY_INVITED_TO_THIS_ORGANIZATION' }, 'ana@x.co', TEAM)).toBe('ana@x.co already has an invite. It is in the list below.');
+    expect(inviteErrorWords({ message: 'Verify your email first.' }, 'ana@x.co', TEAM)).toBe('Verify your email first.');
+    expect(inviteErrorWords({}, 'ana@x.co', TEAM)).toBe('We could not send the invite. Try again.');
+  });
+
+  test('the people who still wait for a seat are named', () => {
+    expect(notInvitedYet(['ana@x.co'])).toBe('1 person was not invited yet: ana@x.co.');
+    expect(notInvitedYet(['ana@x.co', 'bo@x.co'])).toBe('2 people were not invited yet: ana@x.co and bo@x.co.');
+    expect(notInvitedYet(['ana@x.co', 'bo@x.co', 'cy@x.co'])).toBe('3 people were not invited yet: ana@x.co, bo@x.co and cy@x.co.');
   });
 });

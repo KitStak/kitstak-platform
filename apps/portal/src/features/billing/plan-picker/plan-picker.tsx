@@ -27,11 +27,12 @@ import {
   type PlanSelection,
   type ProductId,
 } from '@kitstak/billing/catalog';
+import { bundleChangeNote } from '@kitstak/billing/change-words';
 import type { BillingError } from '@kitstak/billing/errors';
 import type { PlanState } from '@kitstak/billing/plan-state';
 import { quote } from '@kitstak/billing/quote';
 import type { ChangePreview } from '@kitstak/billing/server';
-import { Badge, Button, Card, Switch, cn } from '@/components/ui';
+import { Badge, Button, Card, Notice, Switch, cn } from '@/components/ui';
 import {
   changeTrialProductsAction,
   confirmPlanChangeAction,
@@ -105,6 +106,15 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
     seats: Math.min(Math.max(initialSelection.seats, seatMin, 1), MAX_SEATS),
     warehouses: Math.min(Math.max(initialSelection.warehouses, warehousesUsed, 1), MAX_WAREHOUSES),
   }));
+  // The apps a person came with (their cart, or the plan they have) are listed first, as on the
+  // launcher. A Pulse only buyer sees Pulse at the top, not fourth. The order is set once, so no
+  // row moves under a finger when a switch is pressed.
+  const [appOrder] = useState<readonly ProductId[]>(() => {
+    const chosen = PRODUCT_IDS.filter((id) => initialSelection.products.includes(id) || (planState?.modules[id].inPlan ?? false));
+    return [...chosen, ...PRODUCT_IDS.filter((id) => !chosen.includes(id))];
+  });
+  // The last cart on this screen that had the bundle discount. See `bundleNote` below.
+  const [lastBundle, setLastBundle] = useState<PlanSelection | null>(null);
   const [busy, setBusy] = useState<null | 'primary' | 'confirm' | 'card'>(null);
   const [error, setError] = useState<BillingError | null>(null);
   const [trialUsed, setTrialUsed] = useState(false);
@@ -131,6 +141,26 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
   const q = useMemo(() => quote(selection), [selection]);
   const current = planState?.selection ?? null;
   const currentQuote = planState?.quote ?? null;
+  // Remember the cart while it has the bundle discount, so the moment it drops to one app the
+  // panel can say what that does to the price of the app that stays.
+  if (q.isBundle && (lastBundle === null || !sameSelection(lastBundle, selection))) setLastBundle(selection);
+  /*
+   * The bundle discount starts or ends (review round 3): one calm line in the panel, the moment
+   * it happens, in the same words the confirm panel uses (`bundleChangeNote` in @kitstak/billing).
+   *   - Changing a paid plan: compared with the plan as it is billed now.
+   *   - Everywhere else (a trial, a first plan): compared with the cart as it was a moment ago,
+   *     with the same seats, warehouses and pay period, so only the app that came off differs.
+   */
+  const bundleNote = useMemo(() => {
+    if (selection.products.length === 0) return null;
+    if (activeMode === 'change') {
+      if (!current || !currentQuote) return null;
+      return bundleChangeNote({ before: current, after: selection, beforeRecurringCents: currentQuote.totalCents, afterRecurringCents: q.totalCents });
+    }
+    if (q.isBundle || lastBundle === null) return null;
+    const before: PlanSelection = { ...lastBundle, seats: selection.seats, warehouses: selection.warehouses, interval: selection.interval };
+    return bundleChangeNote({ before, after: selection, beforeRecurringCents: quote(before).totalCents, afterRecurringCents: q.totalCents });
+  }, [activeMode, current, currentQuote, lastBundle, q, selection]);
   const unchanged = activeMode === 'change' && current !== null && sameSelection(current, selection);
   // "Unchanged" means the same apps as the trial has now. The saved cart can differ from the trial
   // (a plan the person started to pick), so the trial is read from the plan, not from the cart.
@@ -444,7 +474,7 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
         <div className="flex min-w-0 flex-col gap-6">
           <fieldset className="flex flex-col gap-3">
             <legend className="mb-3 text-sm font-semibold text-fg">Apps</legend>
-            {PRODUCT_IDS.map((id) => {
+            {appOrder.map((id) => {
               const pricing = CATALOG.products[id];
               const isIncluded = included.includes(id);
               const on = selection.products.includes(id);
@@ -671,6 +701,13 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
               <p className="mt-3 text-xs text-fg-muted">
                 The bundle discount stays as long as you have {CATALOG.bundleMinProducts} or more apps.
               </p>
+            ) : null}
+            {bundleNote ? (
+              // Said the moment the cart drops to one app (or gains a second): what it does to the
+              // price of the app that stays. The confirm panel repeats it above the amounts.
+              <Notice tone={bundleNote.tone} role="status" className="mt-3" testId="plan-bundle-note">
+                {bundleNote.text}
+              </Notice>
             ) : null}
 
             <div

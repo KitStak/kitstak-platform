@@ -7,6 +7,9 @@
  *
  * It also takes the proof out of an invite link (`/invite/<id>?t=...`) and keeps it in an httpOnly
  * cookie (see `@/lib/invite-proof`).
+ *
+ * And it notes the page that was asked for in a request header (see `@/lib/return-to`), so a signed
+ * out person is sent to sign in and then back to that page, with its query.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { extractThemeHandoff, THEME_COOKIE, THEME_COOKIE_MAX_AGE_SECONDS } from '@kitstak/ui/theme';
@@ -17,6 +20,7 @@ import {
   invitationIdFromPath,
   looksLikeInviteProof,
 } from '@/lib/invite-proof';
+import { RETURN_TO_HEADER, returnToOf } from '@/lib/return-to';
 
 export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
@@ -56,7 +60,15 @@ export function proxy(request: NextRequest): NextResponse {
     }
   }
 
-  return NextResponse.next();
+  // The page that was asked for, for the session guards. Always written here (or removed), so a
+  // header a browser sent under this name never reaches the server code.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete(RETURN_TO_HEADER);
+  if (request.method === 'GET' && !pathname.startsWith('/api/')) {
+    const returnTo = returnToOf(pathname, request.nextUrl.search);
+    if (returnTo) requestHeaders.set(RETURN_TO_HEADER, returnTo);
+  }
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

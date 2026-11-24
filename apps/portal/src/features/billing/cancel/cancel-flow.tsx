@@ -32,9 +32,13 @@ export interface CancelFlowProps {
   readonly pauseOptions: readonly PauseOption[];
   /** True when the plan has 2 or more apps, so removing one is an option. */
   readonly canRemoveApp: boolean;
+  /** The words on the confirm button. They change when a bill is open: the plan then ends today. */
+  readonly confirmLabel?: string;
+  /** True when a bill is open: the way back is to pay it, so the second button says so. */
+  readonly endsNow?: boolean;
 }
 
-export function CancelFlow({ pauseOptions, canRemoveApp }: CancelFlowProps) {
+export function CancelFlow({ pauseOptions, canRemoveApp, confirmLabel = 'Cancel my plan', endsNow = false }: CancelFlowProps) {
   const router = useRouter();
   const [reason, setReason] = useState<CancelReason | null>(null);
   const [detail, setDetail] = useState('');
@@ -53,7 +57,9 @@ export function CancelFlow({ pauseOptions, canRemoveApp }: CancelFlowProps) {
           ? await pausePlanAction({ months, reason })
           : await cancelPlanAction({ reason, detail: detail.trim() === '' ? null : detail.trim() });
       if (result.ok) {
-        router.push(`/billing?notice=${kind === 'pause' ? 'paused' : 'canceled'}`);
+        // A cancel with a bill open ends the plan at once. Billing home then says so, not "set to end".
+        const notice = kind === 'pause' ? 'paused' : result.data.phase === 'ended' ? 'ended_now' : 'canceled';
+        router.push(`/billing?notice=${notice}`);
         return;
       }
       setError(result.error.message);
@@ -182,11 +188,11 @@ export function CancelFlow({ pauseOptions, canRemoveApp }: CancelFlowProps) {
       ) : null}
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <LinkButton href="/billing" variant="secondary" size="xl" data-testid="cancel-back">
-          Keep my plan
+        <LinkButton href={endsNow ? '/billing?fix=payment' : '/billing'} variant="secondary" size="xl" data-testid="cancel-back">
+          {endsNow ? 'Pay the bill instead' : 'Keep my plan'}
         </LinkButton>
         <Button variant="danger" size="xl" data-testid="cancel-confirm" loading={busy === 'cancel'} disabled={busy === 'pause'} onClick={() => submit('cancel')}>
-          Cancel my plan
+          {confirmLabel}
         </Button>
       </div>
     </div>

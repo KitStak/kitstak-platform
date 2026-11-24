@@ -2,16 +2,22 @@
  * Cancel and pause (docs/billing/CONTRACTS.md section 11.7, SPEC P11 and P12). Cancel runs to the end
  * of the paid period and can be undone with one click. Pause is for monthly plans: it starts at the
  * end of the paid period and the plan starts again by itself.
+ *
+ * One exception, and one honest rule for it (review round 3): a cancel while a bill is open (a late
+ * payment) ends the plan today and drops that bill. The paid time is already over, so "you keep
+ * everything until" would be untrue, and a plan a customer has canceled must never be charged
+ * again. `cancelWords` in `../plan-state` says exactly this on the cancel page before the button.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   billingCancelFeedback,
+  billingInvoices,
   billingSubscriptions,
   BILLING_CANCEL_REASONS,
   organization,
   type BillingSubscription,
 } from '@kitstak/db/schema';
-import { CATALOG, formatDay } from '../catalog';
+import { CATALOG, formatDay, formatMoney } from '../catalog';
 import { addMonths } from '../dates';
 import { type BillingResult, billingError, billingOk } from '../errors';
 import type { BillingGateway, GatewaySubscription } from '../gateway/types';
@@ -20,7 +26,7 @@ import { recordAudit } from './audit';
 import { type BillingActor, type BillingRuntime, errorText, logBilling } from './db';
 import { enqueueForBillingRecipients } from './outbox';
 import { getPlanState } from './state';
-import { applySubscriptionSnapshot, clearBillingCaches } from './sync';
+import { applyInvoiceSnapshot, applySubscriptionSnapshot, clearBillingCaches, refreshFromGateway } from './sync';
 
 export type CancelReason = 'too_expensive' | 'missing_feature' | 'switching_tool' | 'not_using' | 'seasonal' | 'other';
 
@@ -72,6 +78,88 @@ async function apply(rt: BillingRuntime, orgId: string, subscription: GatewaySub
   );
 }
 
+/**
+ * Cancel with a bill open: the plan ends today and the bill is dropped. Nothing is charged after
+ * this, by a retry or by a new card.
+ *
+ * Before the gateway is asked, a note of intent is left on the plan row (`ended_reason`). The sync
+ * that sees the plan end, whether it is ours below or the gateway's own event arriving first, reads
+ * that note and records "the customer canceled", not "the gateway gave up". If the gateway refuses,
+ * the note is taken off again.
+ */
+async function endNowWithOpenBill(
+  rt: BillingRuntime,
+  found: { row: BillingSubscription; gateway: BillingGateway },
+  input: { orgId: string; reason: CancelReason | null; detail: string | null; actor: BillingActor },
+): Promise<BillingResult<PlanState>> {
+  const { row, gateway } = found;
+  const mine = and(eq(billingSubscriptions.orgId, input.orgId), eq(billingSubscriptions.gatewaySubscriptionId, row.gatewaySubscriptionId));
+  let attempts: number | null = null;
+  if (row.latestInvoiceId) {
+    const [invoice] = await rt.db
+      .select({ attemptCount: billingInvoices.attemptCount })
+      .from(billingInvoices)
+      .where(and(eq(billingInvoices.id, row.latestInvoiceId), eq(billingInvoices.orgId, input.orgId)));
+    attempts = invoice && invoice.attemptCount > 0 ? invoice.attemptCount : null;
+  }
+  await rt.db
+    .update(billingSubscriptions)
+    .set({ endedReason: 'canceled_unpaid', endedAmountCents: row.amountDueCents, endedAttempts: attempts })
+    .where(mine);
+
+  try {
+    const { subscription, voidedCents } = await gateway.cancelNow(row.gatewaySubscriptionId);
+    const dropped = voidedCents > 0 ? voidedCents : (row.amountDueCents ?? 0);
+    const latestInvoice = subscription.latestInvoiceId ? await gateway.getInvoice(subscription.latestInvoiceId) : null;
+    await rt.db.transaction(async (tx) => {
+      if (latestInvoice) await applyInvoiceSnapshot(tx, { orgId: input.orgId, gateway: gateway.kind, invoice: latestInvoice });
+      await applySubscriptionSnapshot(tx, {
+        orgId: input.orgId,
+        gateway: gateway.kind,
+        subscription,
+        latestInvoice,
+        now: rt.now(),
+        portalUrl: rt.portalUrl,
+        actor: input.actor,
+      });
+    });
+    await rt.db.insert(billingCancelFeedback).values({
+      orgId: input.orgId,
+      userId: input.actor.userId,
+      reason: cleanReason(input.reason),
+      detail: cleanDetail(input.detail),
+      outcome: 'canceled',
+    });
+    await recordAudit(rt.db, {
+      orgId: input.orgId,
+      actor: input.actor,
+      action: 'cancel.ended_now',
+      summary:
+        dropped > 0
+          ? `${input.actor.label} canceled the plan with a bill of ${formatMoney(dropped)} open. The plan ended and the bill was dropped. It will not be charged.`
+          : `${input.actor.label} canceled the plan while a payment was late. The plan ended. Nothing more will be charged.`,
+      data: { droppedCents: dropped, reason: cleanReason(input.reason), subscriptionId: subscription.id },
+    });
+  } catch (error) {
+    logBilling('error', 'cancel with an open bill failed', { orgId: input.orgId, error: errorText(error) });
+    // Take the note off a plan that is still running, then store whatever the gateway has now. If
+    // the plan did end at the gateway, that sync records it with the note still in place.
+    clearBillingCaches(input.orgId);
+    const synced = await refreshFromGateway(rt, input.orgId).catch(() => null);
+    if (synced && synced.ok && synced.data.phase === 'ended') return billingOk(synced.data);
+    await rt.db
+      .update(billingSubscriptions)
+      .set({ endedReason: null, endedAmountCents: null, endedAttempts: null })
+      .where(and(mine, eq(billingSubscriptions.endedReason, 'canceled_unpaid')))
+      .catch(() => undefined);
+    clearBillingCaches(input.orgId);
+    return billingError('gateway_error');
+  } finally {
+    clearBillingCaches(input.orgId);
+  }
+  return billingOk(await getPlanState(rt, input.orgId));
+}
+
 export async function scheduleCancel(
   rt: BillingRuntime,
   input: { orgId: string; reason: CancelReason | null; detail: string | null; actor: BillingActor },
@@ -79,6 +167,8 @@ export async function scheduleCancel(
   const found = await liveRow(rt, input.orgId);
   if (!found.ok) return found.error;
   const { row, gateway } = found;
+  // A bill is open: the plan ends today and the bill is dropped (see the top of this file).
+  if (row.status === 'past_due' || row.status === 'unpaid') return endNowWithOpenBill(rt, found, input);
   try {
     const subscription = await gateway.setCancelAtPeriodEnd(row.gatewaySubscriptionId, true);
     await apply(rt, input.orgId, subscription, input.actor);

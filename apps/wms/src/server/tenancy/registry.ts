@@ -120,6 +120,26 @@ export function pickWmsOrg(
 export const setupCandidates = (choices: readonly WmsOrgChoice[]): WmsOrgChoice[] =>
   choices.filter((c) => c.entitled && !c.viewOnly && c.schemaName === null && isSetupRole(c.memberRole));
 
+/** True when a `core.member.role` string is the billing only role and nothing else. */
+export function isBillingOnlyMemberRole(memberRole: string | null): boolean {
+  const parts = (memberRole ?? '').split(',').map((part) => part.trim().toLowerCase()).filter(Boolean);
+  return parts.length > 0 && parts.every((part) => part === 'billing');
+}
+
+/**
+ * The organization a person only manages billing for, or null. Such a person has no seat and no
+ * warehouse profile, so no warehouse opens for them: the lock screen says so, with a way back to
+ * Billing. It answers when every organization of theirs is billing only, or when the one they
+ * last worked in (`preferred`: the switcher cookie, then the active organization) is.
+ */
+export function billingOnlyOrg(choices: readonly WmsOrgChoice[], preferred: readonly (string | null)[]): WmsOrgChoice | null {
+  const billing = choices.filter((choice) => isBillingOnlyMemberRole(choice.memberRole));
+  if (billing.length === 0) return null;
+  const asked = billing.find((choice) => preferred.includes(choice.orgId));
+  if (asked) return asked;
+  return billing.length === choices.length ? (billing[0] ?? null) : null;
+}
+
 /** Records the platform org as the owner of the original `wms` schema (idempotent). */
 export async function registerPlatformTenant(db: AppDb, orgId: string): Promise<void> {
   await db

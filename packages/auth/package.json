@@ -11,6 +11,7 @@
     "./create-auth": "./src/create-auth.ts",
     "./password-compat": "./src/password-compat.ts",
     "./password-policy": "./src/password-policy-plugin.ts",
+    "./weak-passwords": "./src/weak-passwords.ts",
     "./session-cookie": "./src/session-cookie.ts"
   },
   "scripts": {

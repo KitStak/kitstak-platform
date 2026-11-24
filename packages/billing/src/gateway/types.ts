@@ -11,7 +11,7 @@ import type { PaymentMethodSummary } from '../plan-state';
  * gateway object across hot reloads; the portal rebuilds it when this number moved, so new code never
  * calls a method an old object does not have.
  */
-export const GATEWAY_CONTRACT_VERSION = 3;
+export const GATEWAY_CONTRACT_VERSION = 4;
 
 export type GatewayKind = 'stripe' | 'test';
 export type GatewaySubscriptionStatus = 'incomplete' | 'trialing' | 'active' | 'past_due' | 'unpaid' | 'canceled';
@@ -195,6 +195,13 @@ export interface BillingGateway {
    * second subscription that slipped in for an organization that already has a plan.
    */
   cancelAndRefund(subscriptionId: string): Promise<{ refundedCents: number }>;
+  /**
+   * Ends a subscription right now and drops its open bill, so that bill is never charged (review
+   * round 3). For a customer who cancels while a payment is late: no more tries, nothing refunded,
+   * nothing new invoiced. `voidedCents` is what the dropped bill still asked for, 0 when there was
+   * no open bill. Safe to call again for a subscription that has already ended.
+   */
+  cancelNow(subscriptionId: string): Promise<{ subscription: GatewaySubscription; voidedCents: number }>;
   createPaymentUpdateSession(input: { customerId: string; returnUrl: string }): Promise<{ url: string }>;
   getSubscription(id: string): Promise<GatewaySubscription | null>;
   findSubscriptionForCustomer(customerId: string): Promise<GatewaySubscription | null>;

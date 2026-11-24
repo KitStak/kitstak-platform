@@ -9,6 +9,10 @@
  * capital, no number, no symbol. "correct horse battery staple" is a good password.
  */
 
+import { EASY_TO_GUESS_MESSAGE, isEasyToGuess } from '@kitstak/auth/weak-passwords';
+
+export { EASY_TO_GUESS_MESSAGE, isEasyToGuess };
+
 export const PASSWORD_MIN_LENGTH = 10;
 /** From this length on, the password passes with no other rule. The same number as the shared policy. */
 export const PASSWORD_PASSPHRASE_LENGTH = 15;
@@ -33,6 +37,8 @@ export interface PasswordRule {
 
 export interface PasswordContext {
   readonly email?: string;
+  /** The person's own company name, when the form knows it. */
+  readonly company?: string;
 }
 
 /** The four rules a person can see and tick off, in the order they are shown. */
@@ -98,6 +104,9 @@ export function passwordIssue(password: string, context: PasswordContext = {}): 
   if (localPart && localPart.length >= 3 && password.toLowerCase().includes(localPart)) {
     return 'Do not use your email name in your password.';
   }
+  // Length is not strength by itself (review round 3): the same check the server runs, so
+  // `passwordpassword`, `aaaaaaaaaaaaaaaa`, `123456789012345` and `qwertyuiopasdfgh` are refused here too.
+  if (isEasyToGuess(password, { names: [context.company] })) return EASY_TO_GUESS_MESSAGE;
   return null;
 }
 
@@ -109,6 +118,8 @@ export interface PasswordStrength {
 /** A small strength meter: one point per rule met, with a bonus look at length. */
 export function passwordStrength(password: string): PasswordStrength {
   if (!password) return { score: 0, label: '' };
+  // A password a guessing program tries first is never "Good", however long it is.
+  if (isEasyToGuess(password)) return { score: 0, label: 'Too weak' };
   const met = passwordRules(password).filter((rule) => rule.met).length;
   // All four rules met reads "Good". A long password reads "Good" at 15 characters and "Strong" at 20,
   // whatever it is made of, or at 14 when it also has a capital, a number and a symbol.

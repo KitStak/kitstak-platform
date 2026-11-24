@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
-import { getPageOrgMembership, getSession } from '@/server/auth/session';
+import { findBillingOnlyOrg, getPageOrgMembership, getSession } from '@/server/auth/session';
 import { passwordChangeRedirect } from '@/server/auth/password-change';
 import type { OrgContextValue } from '@/features/shell/org-context';
 import { orgModuleFlags } from '@/server/entitlements';
@@ -29,6 +29,9 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   if (!result) {
     const session = await getSession();
     if (!session) redirect(`/login?next=${encodeURIComponent(`/${orgSlug}`)}`);
+    // A person who only manages billing has no seat here: the lock screen says so, with a way back.
+    const billingOrg = await findBillingOnlyOrg(session.user.id, orgSlug);
+    if (billingOrg) redirect(`/${billingOrg.slug}/locked`);
     notFound(); // signed in but not a member: do not reveal whether the org exists
   }
 

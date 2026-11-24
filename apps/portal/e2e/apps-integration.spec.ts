@@ -239,6 +239,13 @@ test.describe('one suite: the same banner and lock screen in every app', () => {
     await expect(addClient).toHaveAttribute('data-plan-write', '', { timeout: 30_000 });
     await expectDialog(() => addClient.click());
     await expect(page).toHaveURL(/\/dashboard$/);
+    // The guard marks a control only after React has hydrated it and committed that work. A mark put
+    // on sooner is a hydration error in the console on most loads, so load the page a few more times.
+    for (let load = 0; load < 6; load += 1) {
+      await page.goto(`${APP_URLS.wms}/dashboard`, { waitUntil: 'networkidle', timeout: 120_000 });
+      await expect(addClient).toHaveAttribute('data-plan-write', '', { timeout: 30_000 });
+    }
+    expect(consoleErrors, 'no console error on the view only WMS dashboard').toEqual([]);
     await openViewOnly(`${APP_URLS.wms}/clients`);
     const createClient = page.getByRole('button', { name: 'Create client' }).first();
     await expect(createClient).toHaveAttribute('data-plan-write', '', { timeout: 30_000 });

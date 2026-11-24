@@ -511,6 +511,28 @@ export function buildSetupSteps(
   });
 }
 
+/**
+ * Steps only an owner or an admin can do: the welcome answers, inviting people, and setting up the
+ * first warehouse (the WMS lets only an owner or admin do that).
+ */
+export const MANAGER_STEP_KEYS: readonly SetupStepKey[] = ['profile', 'invite_team', 'wms_warehouse'];
+
+/**
+ * The plan as a plain member sees it (review round 3). A step that is still open and that only an
+ * owner or admin can do is left out, and so is every open step that waits on one of those: a step
+ * with no button is a dead end. A step that is done still shows, as done. PURE.
+ */
+export function stepsForMember(steps: readonly SetupStep[]): readonly SetupStep[] {
+  let kept = steps.filter((step) => step.status !== 'todo' || !MANAGER_STEP_KEYS.includes(step.key));
+  // Steps that wait on a step that is no longer listed go too, down the whole chain.
+  for (;;) {
+    const openTitles = new Set(kept.map((step) => step.title));
+    const next = kept.filter((step) => step.status !== 'todo' || step.lockedBy === null || openTitles.has(step.lockedBy));
+    if (next.length === kept.length) return next;
+    kept = next;
+  }
+}
+
 export interface SetupSummary {
   /** DONE steps only — skips never count as finished work (ONBOARDING.md). */
   readonly doneCount: number;

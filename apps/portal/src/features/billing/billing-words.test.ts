@@ -128,7 +128,8 @@ describe('phaseCopy', () => {
     expect(copy('active').others.map((action) => action.label)).toEqual(['Update card', 'Cancel plan']);
     expect(copy('past_due').line).toBe('We could not charge your Visa ending 4242 for $395.20. We will try again on Nov 25.');
     expect(copy('past_due').primary.label).toBe('Update card');
-    expect(copy('past_due').others.map((action) => action.label)).toEqual(['Pay now']);
+    // Cancel is offered while a payment is late too. The cancel page says what it does then.
+    expect(copy('past_due').others.map((action) => action.label)).toEqual(['Pay now', 'Cancel plan']);
     expect(copy('unpaid').line).toBe('Your payment is late, so your apps are view only.');
     expect(copy('unpaid').others.map((action) => action.label)).toEqual(['Pay now', 'Cancel plan']);
     expect(copy('cancel_scheduled').line).toBe('Your plan ends on Dec 23, 2026. You keep everything until then.');
@@ -260,5 +261,74 @@ describe('invoice words', () => {
     expect(invoiceStatus({ status: 'paid' }).label).toBe('Paid');
     expect(invoiceStatus({ status: 'open' }).label).toBe('Due');
     expect(invoiceStatus({ status: 'void' }).label).toBe('Void');
+  });
+});
+
+/* ===== review round 3 ===== */
+
+describe('a cancel that is set shows on billing home in every phase', () => {
+  const lateRows = (): Record<ProductId, PlanEntitlementInput | null> => ({
+    ...noRows(),
+    crm: { status: 'past_due', source: 'stripe', periodEnd: days(-9), access: 'read_only' },
+    wms: { status: 'past_due', source: 'stripe', periodEnd: days(-9), access: 'read_only' },
+  });
+
+  it('view only and set to end: the end date, "Keep my plan", and never a second "Cancel plan"', () => {
+    // The state the review found in the database: past_due, cancel_at_period_end true, a bill open.
+    const late = state({
+      subscription: subscription({ status: 'past_due', pastDueSince: days(-9), amountDueCents: 34880, cancelAtPeriodEnd: true, currentPeriodEnd: days(21) }),
+      entitlements: lateRows(),
+    });
+    expect(late.phase).toBe('unpaid');
+    const copy = phaseCopy(late, 'UTC');
+    expect(copy.line).toBe('Your payment is late, so your apps are view only. It is set to end on Dec 14, 2026.');
+    expect(copy.primary.label).toBe('Update card');
+    expect(copy.others.map((action) => action.label)).toEqual(['Pay now', 'Keep my plan']);
+    expect([copy.primary, ...copy.others].map((action) => action.id)).not.toContain('cancel');
+  });
+
+  it('payment due and set to end, and paused and set to end', () => {
+    const due = phaseCopy(
+      state({
+        subscription: subscription({ status: 'past_due', pastDueSince: days(-1), amountDueCents: 34880, nextPaymentAttempt: days(2), cancelAtPeriodEnd: true }),
+        entitlements: paidRows(),
+      }),
+      'UTC',
+    );
+    expect(due.line).toBe('We could not charge your Visa ending 4242 for $348.80. We will try again on Nov 25. It is set to end on Dec 23, 2026.');
+    expect(due.others.map((action) => action.label)).toEqual(['Pay now', 'Keep my plan']);
+
+    const paused = phaseCopy(
+      state({ subscription: subscription({ pauseStartsAt: days(-2), pauseResumesAt: days(59), cancelAtPeriodEnd: true }), entitlements: paidRows() }),
+      'UTC',
+    );
+    expect(paused.primary.label).toBe('Start again now');
+    expect(paused.others.map((action) => action.label)).toEqual(['Keep my plan']);
+    expect(paused.line).toBe('Your plan is paused. It starts again on Jan 21, 2027. It is set to end on Dec 23, 2026.');
+  });
+
+  it('with no cancel set nothing changes, and the plain "ending" phase keeps its one button', () => {
+    expect(phaseCopy(STATES.unpaid, 'UTC').others.map((action) => action.label)).toEqual(['Pay now', 'Cancel plan']);
+    expect(phaseCopy(STATES.paused, 'UTC').others.map((action) => action.label)).toEqual(['Cancel plan']);
+    const ending = phaseCopy(STATES.cancel_scheduled, 'UTC');
+    expect(ending.primary.label).toBe('Keep my plan');
+    expect(ending.others).toEqual([]);
+    expect(ending.line).toBe('Your plan ends on Dec 23, 2026. You keep everything until then.');
+  });
+});
+
+describe('billing home says why a plan ended', () => {
+  const ended = (over: Partial<PlanSubscriptionInput>) =>
+    phaseCopy(state({ subscription: subscription({ status: 'canceled', endedAt: days(-3), ...over }), entitlements: paidRows() }), 'UTC');
+
+  it('the gateway gave up, the customer canceled with a bill open, and the plain end', () => {
+    expect(ended({ endedReason: 'payment_failed', endedAmountCents: 16400, endedAttempts: 4 }).line).toBe(
+      'We could not collect $164.00 after 4 tries, so your plan ended on Nov 20, 2026. Your apps are view only. Your data is safe.',
+    );
+    expect(ended({ endedReason: 'canceled_unpaid', endedAmountCents: 34880 }).line).toBe(
+      'You canceled, so your plan ended on Nov 20, 2026. We did not charge the $348.80. Your apps are view only. Your data is safe.',
+    );
+    expect(ended({ endedReason: 'canceled' }).line).toBe('Your plan ended on Nov 20, 2026. Your apps are view only. Your data is safe.');
+    expect(ended({}).primary.label).toBe('Pick a plan');
   });
 });

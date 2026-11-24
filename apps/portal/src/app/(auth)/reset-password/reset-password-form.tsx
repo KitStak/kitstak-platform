@@ -226,8 +226,8 @@ export function ResetPasswordForm({ justSent, minutes, devOutbox }: ResetPasswor
                 aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
                 invalid={invalid}
               />
-              <StrengthMeter password={password} />
-              <PasswordRules password={password} id={`${inputId}-rules`} showMissing={Boolean(errors.password)} />
+              <StrengthMeter password={password} context={{ email }} />
+              <PasswordRules password={password} id={`${inputId}-rules`} showMissing={Boolean(errors.password)} context={{ email }} />
             </div>
           )}
         </Field>

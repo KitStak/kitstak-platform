@@ -223,3 +223,111 @@ describe('safety', () => {
     expect(email.text).toBe('Hello\n\nFooter.\nKitStak. One account for every KitStak app.\n');
   });
 });
+
+/* ===== review round 3: no date that has passed is called a deadline, and an ended plan says why ===== */
+
+function allWords(template: EmailTemplateId, payload: unknown): string[] {
+  // Payloads come back from a JSON column, so the templates take them unchecked and check every value.
+  const content = emailContent(template, payload as never);
+  return [
+    content.subject,
+    content.preheader,
+    content.heading,
+    ...content.blocks.flatMap((block) => {
+      if (block.kind === 'text' || block.kind === 'note') return [block.text];
+      if (block.kind === 'facts') return block.rows.map((row) => `${row.label}: ${row.value}`);
+      return [];
+    }),
+  ];
+}
+
+describe('a failed try after the access date', () => {
+  // The case from the review: the first try failed on Nov 16, full access ended on Nov 23, and the
+  // third try failed on Nov 24.
+  const late = {
+    ...SAMPLE_EMAIL_PAYLOADS.payment_failed,
+    amountDueCents: 16400,
+    accessChangesAt: '2026-11-23T00:00:00.000Z',
+    nextRetryAt: '2026-12-01T00:00:00.000Z',
+    attempt: 3,
+    asOf: '2026-11-24T00:10:00.000Z',
+  };
+
+  it('says the apps are view only now and what to pay, with no "keep full access" line', () => {
+    const words = allWords('payment_failed', late);
+    expect(words).toContain('Your KitStak apps are view only. Your payment is still late.');
+    expect(words).toContain('Your apps are view only now. Pay $164.00 to turn them back on.');
+    expect(words).toContain('Apps view only since: Nov 23, 2026');
+    expect(words).toContain('We try again on: Dec 1, 2026');
+    const joined = words.join(' | ');
+    expect(joined).not.toContain('keep full access');
+    expect(joined).not.toContain('Full access until');
+    expect(joined).not.toContain('Update your card by');
+    for (const text of words) expect(copyProblems(text), text).toEqual([]);
+    expect(emailContent('payment_failed', late as never).button).toEqual({ label: 'Update card', url: 'http://localhost:3300/billing?fix=payment' });
+  });
+
+  it('a retry date that has passed too is not shown as a plan', () => {
+    const words = allWords('payment_failed', { ...late, nextRetryAt: '2026-11-20T00:00:00.000Z' });
+    expect(words.join(' | ')).not.toContain('We try again on');
+    expect(words).toContain('Nothing is deleted. Update your card and your apps open again right away.');
+  });
+
+  it('inside the grace days the email is unchanged: the day to act by is still ahead', () => {
+    const inTime = allWords('payment_failed', { ...late, attempt: 2, asOf: '2026-11-19T00:10:00.000Z', nextRetryAt: '2026-11-24T00:00:00.000Z' });
+    expect(inTime).toContain('We could not charge your card for KitStak');
+    expect(inTime).toContain('Update your card by Nov 23, 2026 to keep full access.');
+    expect(inTime).toContain('Full access until: Nov 23, 2026');
+    expect(inTime).toContain('We try again on: Nov 24, 2026');
+  });
+
+  it('without an `asOf` (rows queued before this fix) the time of rendering decides', () => {
+    const past = allWords('payment_failed', { ...late, asOf: undefined, accessChangesAt: '2020-01-01T00:00:00.000Z', nextRetryAt: null });
+    expect(past.join(' | ')).not.toContain('keep full access');
+    const ahead = allWords('payment_failed', { ...late, asOf: undefined, accessChangesAt: '2999-01-01T00:00:00.000Z', nextRetryAt: null });
+    expect(ahead).toContain('Update your card by Jan 1, 2999 to keep full access.');
+    expect(ahead).toContain('We try again on: No more tries planned');
+  });
+
+  it('the last day reminder, when it goes out late, does not name a last day that has passed', () => {
+    const words = allWords('grace_ending', { ...SAMPLE_EMAIL_PAYLOADS.grace_ending, asOf: '2026-12-15T09:00:00.000Z' });
+    expect(words).toContain('Your KitStak apps are view only. Your payment is still late.');
+    expect(words.join(' | ')).not.toContain('Last day');
+    expect(words.join(' | ')).not.toContain('by Dec 14');
+    for (const text of words) expect(copyProblems(text), text).toEqual([]);
+  });
+});
+
+describe('the plan ended email says why', () => {
+  const base = SAMPLE_EMAIL_PAYLOADS.plan_ended;
+
+  it('the gateway gave up: the amount and the number of tries', () => {
+    const words = allWords('plan_ended', { ...base, reason: 'payment_failed', amountCents: 16400, attempts: 4, endedAt: '2026-12-01T00:00:00.000Z' });
+    expect(words).toContain('Your KitStak plan has ended. We could not collect your payment.');
+    expect(words).toContain('We could not collect $164.00 after 4 tries, so the plan for Northwind Robotics ended on Dec 1, 2026.');
+    expect(words).toContain('We will not try that card again.');
+    for (const text of words) expect(copyProblems(text), text).toEqual([]);
+    expect(emailContent('plan_ended', { ...base, reason: 'payment_failed', amountCents: 16400, attempts: 4 } as never).button?.label).toBe('Pick a plan');
+  });
+
+  it('one try reads "1 try", and a missing amount or count is left out, never guessed', () => {
+    expect(allWords('plan_ended', { ...base, reason: 'payment_failed', amountCents: 16400, attempts: 1 })[3]).toContain('after 1 try, so');
+    const bare = allWords('plan_ended', { ...base, reason: 'payment_failed', amountCents: null, attempts: null });
+    expect(bare[3]).toBe('We could not collect your payment, so the plan for Northwind Robotics ended on Dec 23, 2026.');
+  });
+
+  it('the customer canceled with a bill open: the bill was dropped', () => {
+    const words = allWords('plan_ended', { ...base, reason: 'canceled_unpaid', amountCents: 34880, endedAt: '2026-11-24T00:00:00.000Z' });
+    expect(words).toContain('You canceled the plan for Northwind Robotics. It ended on Nov 24, 2026.');
+    expect(words).toContain('A bill of $348.80 was still open. We dropped it. We will not charge it.');
+    expect(words).toContain('You canceled. We will not charge the $348.80.');
+    for (const text of words) expect(copyProblems(text), text).toEqual([]);
+  });
+
+  it('the customer canceled and the paid time ran out, and old rows with no reason still render', () => {
+    expect(allWords('plan_ended', { ...base, reason: 'canceled' })).toContain('You canceled the plan for Northwind Robotics. It ended on Dec 23, 2026.');
+    expect(allWords('plan_ended', { orgName: base.orgName, portalUrl: base.portalUrl, endedAt: base.endedAt })).toContain(
+      'The plan for Northwind Robotics ended on Dec 23, 2026.',
+    );
+  });
+});

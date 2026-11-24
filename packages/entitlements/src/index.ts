@@ -16,6 +16,8 @@ export {
   hasModule,
   isEntitled,
   moduleAccess,
+  readBillingStamp,
+  resetBillingStampProbe,
   type EntitlementSnapshot,
   type ModuleAccess,
   type ModuleEntitlement,

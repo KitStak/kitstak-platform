@@ -225,20 +225,30 @@ export function PlanCards({ state, copy, nextCharge, canManage, canStartTrial, b
 
 /* ===== usage ===== */
 
-function Meter({ used, total, label }: { readonly used: number; readonly total: number; readonly label: string }) {
-  const percent = total <= 0 ? 0 : Math.min(100, Math.round((used / total) * 100));
-  const full = used >= total;
+/**
+ * A bar for "how much of what I pay for is in use". `held` is a second, lighter part for things
+ * that hold a place without using it yet (open invites hold a seat). `text` is what a screen
+ * reader says, so the two parts are told apart in words, never by color alone.
+ */
+function Meter({ used, held = 0, total, label, text }: { readonly used: number; readonly held?: number; readonly total: number; readonly label: string; readonly text?: string }) {
+  const share = (count: number): number => (total <= 0 ? 0 : Math.min(100, (count / total) * 100));
+  const usedPercent = share(used);
+  const heldPercent = Math.min(100 - usedPercent, share(held));
+  const full = used + held >= total;
   return (
     <div
       role="meter"
       aria-label={label}
       aria-valuemin={0}
       aria-valuemax={total}
-      aria-valuenow={Math.min(used, total)}
-      aria-valuetext={`${used} of ${total} used`}
-      className="h-2 w-full overflow-hidden rounded-full bg-sunken"
+      aria-valuenow={Math.min(used + held, total)}
+      aria-valuetext={text ?? `${used + held} of ${total} in use`}
+      className="flex h-2 w-full overflow-hidden rounded-full bg-sunken"
     >
-      <div className={cn('h-full rounded-full', full ? 'bg-warning' : 'bg-primary')} style={{ width: `${percent}%` }} />
+      <div className={cn('h-full', heldPercent > 0 ? 'rounded-l-full' : 'rounded-full', full ? 'bg-warning' : 'bg-primary')} style={{ width: `${usedPercent}%` }} />
+      {heldPercent > 0 ? (
+        <div data-testid="meter-held" className={cn('h-full rounded-r-full opacity-45', usedPercent === 0 && 'rounded-l-full', full ? 'bg-warning' : 'bg-primary')} style={{ width: `${heldPercent}%` }} />
+      ) : null}
     </div>
   );
 }
@@ -250,6 +260,10 @@ export function UsageSection({ state, canManage }: { readonly state: PlanState; 
   const pulseSeats = CATALOG.products.pulse.includedSeats ?? 0;
   const pulseOnly = state.hasSubscription && !usesSeats(selection) && selection.products.includes('pulse');
 
+  // Open invites hold a seat, so they count as in use: the number, the bar and the hint all agree.
+  const seatsHeld = usage.seatsUsed + usage.pendingInvites;
+  const seatParts = `${plural(usage.seatsUsed, 'person', 'people')} and ${plural(usage.pendingInvites, 'open invite', 'open invites')}.`;
+
   let seatHint: ReactNode = null;
   if (usage.seatsPaid === null) {
     seatHint =
@@ -258,14 +272,14 @@ export function UsageSection({ state, canManage }: { readonly state: PlanState; 
         : 'Seats are counted when you pick a plan. Guests are always free.';
   } else if (pulseOnly) {
     seatHint =
-      usage.seatsUsed >= pulseSeats
+      seatsHeld >= pulseSeats
         ? `Pulse covers up to ${pulseSeats} seats. For a bigger team, talk to us.`
         : `Pulse covers up to ${pulseSeats} seats for one price.`;
   } else if (perUser) {
-    const held = usage.seatsUsed + usage.pendingInvites;
+    const held = seatsHeld;
     const saving = oneSeatSavingCents(selection);
     if (usage.seatsPaid > held && saving > 0) {
-      seatHint = `You pay for ${plural(usage.seatsPaid, 'seat', 'seats')} and use ${usage.seatsUsed}. Remove a seat to save ${formatMoney(saving)} ${period}.`;
+      seatHint = `You pay for ${plural(usage.seatsPaid, 'seat', 'seats')} and use ${held}. Remove a seat to save ${formatMoney(saving)} ${period}.`;
     } else if (usage.seatsPaid <= held) {
       seatHint = 'Every seat is in use. Add a seat before you invite someone new.';
     }
@@ -290,7 +304,7 @@ export function UsageSection({ state, canManage }: { readonly state: PlanState; 
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-sm font-semibold text-fg">
               {usage.seatsPaid !== null
-                ? `Seats: ${usage.seatsUsed} of ${usage.seatsPaid} used`
+                ? `Seats: ${seatsHeld} of ${usage.seatsPaid} in use`
                 : `Seats: ${plural(usage.seatsUsed, 'person', 'people')} on your team`}
             </p>
             {canManage && perUser ? (
@@ -299,10 +313,24 @@ export function UsageSection({ state, canManage }: { readonly state: PlanState; 
               </Link>
             ) : null}
           </div>
-          {usage.seatsPaid !== null ? <div className="mt-2"><Meter used={usage.seatsUsed} total={usage.seatsPaid} label="Seats used" /></div> : null}
+          {usage.seatsPaid !== null ? (
+            <div className="mt-2">
+              <Meter
+                used={usage.seatsUsed}
+                held={usage.pendingInvites}
+                total={usage.seatsPaid}
+                label="Seats in use"
+                text={usage.pendingInvites > 0 ? `${seatsHeld} of ${usage.seatsPaid} in use: ${seatParts}` : undefined}
+              />
+            </div>
+          ) : null}
           {usage.pendingInvites > 0 ? (
-            <p className="mt-2 text-xs text-fg-muted">
-              {usage.pendingInvites === 1 ? '1 invite is waiting and holds a seat.' : `${usage.pendingInvites} invites are waiting and each holds a seat.`}
+            <p className="mt-2 text-xs text-fg-muted" data-testid="billing-usage-seat-parts">
+              {usage.seatsPaid !== null
+                ? `${seatParts} An open invite holds a seat.`
+                : usage.pendingInvites === 1
+                  ? '1 invite is waiting.'
+                  : `${usage.pendingInvites} invites are waiting.`}
             </p>
           ) : null}
           {seatHint ? <p className="mt-2 text-sm text-fg-secondary">{seatHint}</p> : null}

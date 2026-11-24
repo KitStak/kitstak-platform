@@ -7,6 +7,7 @@ export {
   answerViewOnly,
   askViewOnly,
   controlLabel,
+  isSettled,
   isWriteLabel,
   isWritePath,
   type ViewOnlyGuardProps,

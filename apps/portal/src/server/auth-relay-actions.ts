@@ -15,8 +15,10 @@
  * as they do for a direct call, and the session cookie is set by the same code. Only these three
  * endpoints can be reached through this file.
  */
+import { randomBytes } from 'node:crypto';
 import { cookies, headers } from 'next/headers';
 import { z } from 'zod';
+import { DEFAULT_PASSWORD_POLICY, validatePassword } from '@kitstak/auth/password-policy';
 import { auth } from '@/server/auth';
 import { env } from '@/server/env';
 
@@ -145,14 +147,35 @@ export async function signInAction(input: unknown): Promise<AuthRelayResult> {
 const signUpSchema = z.object({
   name: z.string().min(1).max(200),
   email: z.string().min(1).max(320),
-  password: z.string().min(1).max(200),
+  /** Left out for "Email me a code instead": the account then has no password a person knows. */
+  password: z.string().min(1).max(200).optional(),
+  noPassword: z.boolean().optional(),
   timezone: z.string().max(100).optional(),
 });
+
+/**
+ * A password for an account whose owner chose "Email me a code instead" (review round 3). It is
+ * long, random and never shown, stored or sent anywhere but through the normal sign up, which keeps
+ * only its hash. The person signs in with an emailed code, and can set a password of their own at
+ * any time with "Forgot password?".
+ */
+function unknowablePassword(email: string): string {
+  // A random string can, very rarely, hold the email name by chance. Draw again until the shared
+  // password rules accept it, so this sign up is never refused for a password nobody chose.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidate = `Kc-${randomBytes(33).toString('base64url')}`;
+    if (validatePassword(candidate, DEFAULT_PASSWORD_POLICY, { email }).length === 0) return candidate;
+  }
+  return `Kc-${randomBytes(33).toString('base64url')}`;
+}
 
 export async function signUpAction(input: unknown): Promise<AuthRelayResult> {
   const parsed = signUpSchema.safeParse(input);
   if (!parsed.success) return BAD_INPUT;
-  return relay('/sign-up/email', parsed.data);
+  const { noPassword, password, ...rest } = parsed.data;
+  if (noPassword === true) return relay('/sign-up/email', { ...rest, password: unknowablePassword(rest.email) });
+  if (!password) return BAD_INPUT;
+  return relay('/sign-up/email', { ...rest, password });
 }
 
 const inviteSchema = z.object({

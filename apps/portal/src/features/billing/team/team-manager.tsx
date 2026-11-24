@@ -64,12 +64,13 @@ export function TeamManager({ holders, candidates, invites = [], canAssign, self
             </span>
             <div className="min-w-0 flex-1 basis-40">
               <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
-                <span className="truncate">{holder.name}</span>
+                {/* Names and addresses wrap on a phone. They are never cut with an ellipsis. */}
+                <span className="min-w-0 [overflow-wrap:anywhere]">{holder.name}</span>
                 {holder.userId === selfId ? <span className="font-normal text-fg-muted">You</span> : null}
                 <Badge tone={holder.kind === 'owner' ? 'neutral' : 'info'}>{holder.kind === 'owner' ? 'Owner' : 'Billing manager'}</Badge>
                 {holder.billingOnly ? <Badge tone="neutral">Billing only</Badge> : null}
               </p>
-              <p className="truncate text-sm text-fg-secondary">{holder.email}</p>
+              <p data-testid="team-email" className="text-sm text-fg-secondary [overflow-wrap:anywhere]">{holder.email}</p>
               {holder.billingOnly ? <p className="text-xs text-fg-muted">Free. No seat and no access to your apps.</p> : null}
               {holder.addedLabel ? <p className="text-xs text-fg-muted">Billing manager since {holder.addedLabel}</p> : null}
             </div>
@@ -102,7 +103,7 @@ export function TeamManager({ holders, candidates, invites = [], canAssign, self
             </span>
             <div className="min-w-0 flex-1 basis-40">
               <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
-                <span className="truncate">{invite.email}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{invite.email}</span>
                 <Badge tone="warning">Invited</Badge>
                 <Badge tone="neutral">Billing only</Badge>
               </p>

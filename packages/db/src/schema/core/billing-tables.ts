@@ -9,6 +9,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -86,6 +87,9 @@ export interface BillingSubscriptionItemJson {
 }
 
 /** One per organization: the current plan as the gateway sees it. */
+export const BILLING_ENDED_REASONS = ['canceled', 'canceled_unpaid', 'payment_failed'] as const;
+export type BillingEndedReason = (typeof BILLING_ENDED_REASONS)[number];
+
 export const billingSubscriptions = coreSchema.table(
   'billing_subscriptions',
   {
@@ -128,6 +132,18 @@ export const billingSubscriptions = coreSchema.table(
     nextDiscountLabel: text('next_discount_label'),
     /** Credit that comes off the next bill. */
     nextCreditCents: integer('next_credit_cents').notNull().default(0),
+    /**
+     * Added by 0010. Why the plan ended, so the email, billing home and the activity line can say
+     * it. 'canceled': the customer canceled and the paid time ran out. 'canceled_unpaid': the
+     * customer canceled while a bill was open, so the plan ended that day and the bill was dropped.
+     * 'payment_failed': the gateway gave up after the last failed try. Set on a live row only as a
+     * short lived note of intent ('canceled_unpaid', written just before the gateway is asked).
+     */
+    endedReason: text('ended_reason', { enum: BILLING_ENDED_REASONS }),
+    /** The bill that was open when the plan ended: dropped ('canceled_unpaid') or never collected ('payment_failed'). */
+    endedAmountCents: integer('ended_amount_cents'),
+    /** How many times the card was tried for that bill. */
+    endedAttempts: integer('ended_attempts'),
     gatewaySyncedAt: timestamptz('gateway_synced_at').notNull().defaultNow(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -346,6 +362,19 @@ export const billingLocks = coreSchema.table('billing_locks', {
   purpose: text('purpose').notNull(),
   expiresAt: timestamptz('expires_at').notNull(),
   createdAt: createdAt(),
+});
+
+/**
+ * One number per organization that goes up on every billing write (review round 3, migration
+ * 0010_core_billing_round3.sql). Triggers on `core.entitlements`, `core.billing_subscriptions`,
+ * `core.billing_accounts` and `core.billing_managers` bump it, so no writer can forget. The product
+ * apps read it before they trust their 60 second copy of a plan (`readBillingStamp` in
+ * @kitstak/entitlements). Never written by application code.
+ */
+export const billingStamps = coreSchema.table('billing_stamps', {
+  orgId: uuid('org_id').primaryKey(),
+  version: bigint('version', { mode: 'number' }).notNull().default(1),
+  updatedAt: updatedAt(),
 });
 
 export const SIGNUP_INTENT_STEPS = ['company', 'plan', 'verify', 'welcome', 'done'] as const;

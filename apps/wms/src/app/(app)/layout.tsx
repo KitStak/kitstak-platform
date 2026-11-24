@@ -4,6 +4,7 @@ import { AppShell } from '@/components/layout/app-shell';
 import { ShellSkeleton } from '@/components/layout/shell-skeleton';
 import { getSessionResolution } from '@/server/auth/session';
 import { loadShellProps } from '@/server/shell/shell-props';
+import { loadLockView } from '@/server/tenancy/lock-view';
 
 /**
  * Reads the session cookie (runtime data), so it lives inside a Suspense boundary for
@@ -15,6 +16,9 @@ async function AuthedShell({ children }: Readonly<{ children: React.ReactNode }>
   if (!shell) {
     // Signed in, but no org of theirs has a warehouse yet: set one up (or explain who can).
     const resolution = await getSessionResolution();
+    // A person who only manages billing has no seat here. The proxy sends them to the lock screen
+    // first; this is the backstop for a move inside the app, so they never see the sign in form.
+    if (!resolution.ok && resolution.reason !== 'unauthenticated' && (await loadLockView()).kind === 'billing_only') redirect('/locked');
     redirect(!resolution.ok && resolution.reason === 'no_warehouse' ? '/setup-warehouse' : '/login');
   }
   return (

@@ -25,7 +25,7 @@ import { cleanCode, companyIssue, emailIssue, nameIssue } from '@/features/signu
 import { passwordIssue } from '@/features/signup/password-rules';
 import { safeNextPath } from '@/lib/routes';
 import { slugWithSuffix, slugify } from '@/lib/slug';
-import { auth, emailCodeApi, withoutSignupCode } from '@/server/auth';
+import { auth, clearSignInLockout, emailCodeApi, maySignInWithCode, withSignInCode, withoutSignupCode } from '@/server/auth';
 import { db } from '@/server/db';
 import { env } from '@/server/env';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
@@ -43,7 +43,8 @@ export interface SignupActionResult {
 }
 
 const SIGN_IN_AGAIN = 'Please sign in again.';
-const TOO_MANY_TRIES = 'Too many tries. Wait a few minutes and try again.';
+// Every limit that answers with this sentence has a 10 minute window, so the wait it names is true.
+const TOO_MANY_TRIES = 'Too many tries. Wait 10 minutes and try again.';
 const NO_NETWORK = 'We could not reach KitStak. Check your connection and try again.';
 const WORKSPACE_FAILED = 'Your account is ready, but we could not set up your workspace. Try again.';
 const CODE_WRONG = 'That code is not right. Check it and try again.';
@@ -304,6 +305,71 @@ export async function requestPasswordResetAction(input: unknown): Promise<Signup
       if (errorStatus(error) !== 429) console.error('[portal] requestPasswordResetAction failed', error);
     }
   });
+  return { ok: true };
+}
+
+/* ===== sign in with an emailed code ("Email me a code instead", review round 3) ===== */
+
+/**
+ * Sends a 6 digit sign in code. It always answers the same way and takes the same time, so it never
+ * says whether an address has an account. The code goes out after the response, and only to an
+ * account that may sign in (`maySignInWithCode`). The same limits as every other code: 5 per 10
+ * minutes and 20 per day for one address.
+ */
+export async function requestSignInCodeAction(input: unknown): Promise<SignupActionResult> {
+  const parsed = emailSchema.safeParse(input);
+  const email = parsed.success ? parsed.data.email.trim().toLowerCase() : '';
+  const issue = emailIssue(email, 'Enter a valid email address.');
+  if (issue) return { ...fail(issue), field: 'email' };
+  const requestHeaders = await headers();
+  if (!(await allowAnonymous('signin-code-request', requestHeaders, 5))) return fail(TOO_MANY_TRIES);
+  after(async () => {
+    try {
+      if (!(await maySignInWithCode(email))) return;
+      await withSignInCode(() => emailCodeApi().sendVerificationOTP({ body: { email, type: 'sign-in' } }));
+    } catch (error: unknown) {
+      // The per address limit answers here. The person was already told the neutral sentence.
+      if (errorStatus(error) !== 429) console.error('[portal] requestSignInCodeAction failed', error);
+    }
+  });
+  return { ok: true };
+}
+
+const signInCodeSchema = z.object({ email: z.string().max(320), code: z.string().max(40) });
+
+/**
+ * Signs a person in with the emailed code. The code proves the mailbox, so the address is marked
+ * verified in the same step: one code is both the sign in and the verification. A wrong code, an
+ * old code and an address with no account all get the same answer.
+ */
+export async function signInWithCodeAction(input: unknown): Promise<SignupActionResult> {
+  const parsed = signInCodeSchema.safeParse(input);
+  if (!parsed.success) return fail(CODE_WRONG);
+  const email = parsed.data.email.trim().toLowerCase();
+  const code = cleanCode(parsed.data.code);
+  if (emailIssue(email)) return { ...fail('Enter a valid email address.'), field: 'email' };
+  if (code.length !== 6) return fail('Enter the 6 digit code from your email.');
+  const requestHeaders = await headers();
+  if (!(await allowAnonymous('signin-code', requestHeaders, 10))) return fail(TOO_MANY_TRIES);
+  try {
+    // An address that may not sign in this way gets the answer a wrong code gets, after the same work.
+    const allowed = await maySignInWithCode(email);
+    await withSignInCode(() =>
+      emailCodeApi().signInEmailOTP({ body: { email: allowed ? email : `no-account+${email}`, otp: code }, headers: requestHeaders }),
+    );
+  } catch (error: unknown) {
+    if (!(error instanceof APIError)) {
+      console.error('[portal] signInWithCodeAction failed', error);
+      return fail(NO_NETWORK);
+    }
+    return fail(codeError(error));
+  }
+  try {
+    await clearSignInLockout(email);
+  } catch (error: unknown) {
+    console.error('[portal] could not clear the lockout after a sign in by code', error);
+  }
+  revalidatePath('/', 'layout');
   return { ok: true };
 }
 
@@ -632,7 +698,7 @@ export async function changeUnverifiedEmailAction(input: unknown): Promise<Signu
   } catch (error: unknown) {
     if (errorStatus(error) === 429) {
       revalidatePath('/', 'layout');
-      return { ok: true, error: 'Your email is changed. We sent many codes already, so wait a few minutes, then press Send a new code.' };
+      return { ok: true, error: 'Your email is changed. We sent many codes already, so wait 10 minutes, then press Send a new code.' };
     }
     console.error('[portal] could not send a code to the new address', error);
   }

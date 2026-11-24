@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { formatDay } from '@kitstak/billing/catalog';
 import { getOpenSignupIntent } from '@kitstak/billing/server';
 import { firstNameOf } from '@/features/signup/fields';
+import { READING_PLAN_COOKIE } from '@/features/welcome/reading-plan';
 import { WelcomeWizard } from '@/features/welcome/welcome-wizard';
 import { getBillingContext } from '@/server/billing/context';
 import { db } from '@/server/db';
@@ -36,7 +38,12 @@ export default async function WelcomePage() {
     getSetupState(context.org, { timeZone: context.timeZone }),
     resume.intent ? Promise.resolve(resume.intent) : getOpenSignupIntent(db, session.user.id),
   ]);
-  if (setup.profile) redirect('/');
+  // The wizard saves the answers the moment its last screen (the plan) opens, so "Done" there is
+  // true. Its cookie says the person is still reading that screen: they stay on it, with the saved
+  // answers, until they press "Looks good". Without it a saved profile means the launcher.
+  const readingPlan = (await cookies()).get(READING_PLAN_COOKIE)?.value === '1';
+  if (setup.profile && !readingPlan) redirect('/');
+  const saved = setup.profile;
 
   return (
     <WelcomeWizard
@@ -45,7 +52,8 @@ export default async function WelcomePage() {
       products={setup.products}
       billing={setup.billing}
       trialEndsOn={setup.trialEndsAt ? formatDay(setup.trialEndsAt, context.timeZone) : null}
-      prefill={intent?.profile ?? {}}
+      prefill={saved ? { businessType: saved.businessType, teamSize: saved.teamSize, startMode: saved.startMode } : (intent?.profile ?? {})}
+      answersSaved={saved !== null}
     />
   );
 }

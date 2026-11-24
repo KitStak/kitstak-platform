@@ -6,10 +6,17 @@
  * Three levels of access: `full`, `read_only` (view only: a trial past its end, a late payment past
  * the grace days, a pause, an ended plan) and `locked` (never in the plan, or revoked by hand).
  * A cached answer that is not `full` is always read again, so good news (a payment, a new trial)
- * shows in every app on the next request, while bad news may take up to 60 seconds.
+ * shows in every app on the next request.
+ *
+ * The billing stamp (review round 3): before a cached snapshot is trusted, one number is read for the
+ * organization, `core.billing_stamps.version`. Triggers bump it on every billing write, whichever
+ * process made it. A different number means the copy is old, and it is read again. So a change made
+ * in the Portal (cancel, "Keep my plan", pause, a payment) shows in every app on the very next
+ * request, also when both the old and the new state are full access. A database without that table
+ * (migration 0010 not applied yet) falls back to the plain 60 second rule.
  */
 import { eq } from 'drizzle-orm';
-import { entitlements, type EntitlementSource, type EntitlementStatus } from '@kitstak/db/schema';
+import { billingStamps, entitlements, type EntitlementSource, type EntitlementStatus } from '@kitstak/db/schema';
 import type { EntitlementsDb } from './db';
 import { isDevAllowAll } from './dev';
 import type { Module } from './modules';
@@ -36,9 +43,42 @@ export type EntitlementSnapshot = Readonly<Record<Module, ModuleEntitlement | nu
 interface CacheEntry {
   readonly expiresAt: number;
   readonly snapshot: EntitlementSnapshot;
+  /** The billing stamp read just before the snapshot. null when the stamp could not be read. */
+  readonly stamp: string | null;
 }
 
 const cache = new Map<string, CacheEntry>();
+
+/** How long a failed stamp read is remembered, so a database without the table is not asked on every request. */
+const STAMP_RETRY_MS = 60_000;
+let stampsOffUntil = 0;
+
+/**
+ * The organization's billing stamp: a value that changes on every billing write (the version number
+ * kept by triggers in `core.billing_stamps`). '0' when the organization has no billing rows yet.
+ * null when the stamp cannot be read (the table is not there yet); callers then fall back to their
+ * time based rule. One primary key lookup. Never throws.
+ */
+export async function readBillingStamp(db: Pick<EntitlementsDb, 'select'>, orgId: string): Promise<string | null> {
+  if (stampsOffUntil > Date.now()) return null;
+  try {
+    const rows = await db.select({ version: billingStamps.version }).from(billingStamps).where(eq(billingStamps.orgId, orgId));
+    if (!Array.isArray(rows)) return null;
+    const first = rows[0] as { version?: unknown } | undefined;
+    if (first === undefined) return '0';
+    return typeof first.version === 'number' || typeof first.version === 'string' || typeof first.version === 'bigint'
+      ? String(first.version)
+      : null;
+  } catch {
+    stampsOffUntil = Date.now() + STAMP_RETRY_MS;
+    return null;
+  }
+}
+
+/** Forgets that a stamp read failed (tests). */
+export function resetBillingStampProbe(): void {
+  stampsOffUntil = 0;
+}
 
 /** Drops one org's cached snapshot, or the whole cache (tests, post-write invalidation). */
 export function clearEntitlementsCache(orgId?: string): void {
@@ -46,7 +86,10 @@ export function clearEntitlementsCache(orgId?: string): void {
   else cache.delete(orgId);
 }
 
-async function readSnapshot(db: EntitlementsDb, orgId: string): Promise<EntitlementSnapshot> {
+async function readSnapshot(db: EntitlementsDb, orgId: string, knownStamp?: string | null): Promise<EntitlementSnapshot> {
+  // The stamp is read BEFORE the rows. A write that lands in between leaves an older stamp next to
+  // newer rows, which only costs one extra read later. The other order could mark old rows as fresh.
+  const stamp = knownStamp === undefined ? await readBillingStamp(db, orgId) : knownStamp;
   const rows = await db
     .select({
       module: entitlements.module,
@@ -68,7 +111,7 @@ async function readSnapshot(db: EntitlementsDb, orgId: string): Promise<Entitlem
     };
   }
   const snapshot: EntitlementSnapshot = Object.freeze(draft);
-  cache.set(orgId, { expiresAt: Date.now() + CACHE_TTL_MS, snapshot });
+  cache.set(orgId, { expiresAt: Date.now() + CACHE_TTL_MS, snapshot, stamp });
   return snapshot;
 }
 
@@ -78,7 +121,13 @@ async function loadSnapshot(
   orgId: string,
 ): Promise<{ snapshot: EntitlementSnapshot; fromCache: boolean }> {
   const cached = cache.get(orgId);
-  if (cached && cached.expiresAt > Date.now()) return { snapshot: cached.snapshot, fromCache: true };
+  if (cached && cached.expiresAt > Date.now()) {
+    const stamp = await readBillingStamp(db, orgId);
+    // No stamp to compare (older database): the time rule alone decides, as before.
+    if (stamp === null || stamp === cached.stamp) return { snapshot: cached.snapshot, fromCache: true };
+    // Something was written for this organization since the copy was made.
+    return { snapshot: await readSnapshot(db, orgId, stamp), fromCache: false };
+  }
   return { snapshot: await readSnapshot(db, orgId), fromCache: false };
 }
 

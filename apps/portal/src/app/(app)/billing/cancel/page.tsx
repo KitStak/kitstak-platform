@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { CalendarCheck, Lock } from 'lucide-react';
 import { BILLING_POLICY, CATALOG, formatDay, formatMoney } from '@kitstak/billing/catalog';
+import { cancelWords } from '@kitstak/billing/plan-state';
 import { getPlanState } from '@kitstak/billing/server';
 import { requireBillingContext } from '@/server/billing/context';
 import { LinkButton, Notice } from '@/components/ui';
@@ -58,7 +59,9 @@ export default async function CancelPage() {
           resumesLabel: formatDay(new Date(addMonthsUtc(endsAt, months).getTime() - HOUR_MS), timeZone),
         }))
       : [];
-  const endLabel = endsAt ? formatDay(endsAt, timeZone) : null;
+  // What pressing the button will do, in the words of the one rule (`cancelWords`): a plan in good
+  // standing ends on the last paid day, a plan with a bill open ends today and the bill is dropped.
+  const words = cancelWords(state, timeZone);
 
   return (
     <div className="flex max-w-[680px] flex-col gap-6">
@@ -67,11 +70,14 @@ export default async function CancelPage() {
         <BillingHeader orgName={org.name} title="Cancel your plan" badges={<TestModeBadge mode={state.mode} />} />
       </div>
 
-      <Notice tone="info" role="status">
-        {state.trial
-          ? `Your free trial still runs until ${endLabel ?? 'its last day'}. After that your apps are view only. Nothing is charged. Nothing is deleted.`
-          : `Your plan will end on ${endLabel ?? 'the last day you paid for'}. You keep everything until then. After that your apps are view only. Nothing is deleted.`}
-        {!monthly && endLabel && !state.trial ? <span className="mt-1 block font-normal">You are paid up until {endLabel}.</span> : null}
+      <Notice tone={words.mode === 'now' ? 'warning' : 'info'} role="status" testId="cancel-what-happens">
+        {words.notice}
+        {words.detail ? <span className="mt-1 block font-normal">{words.detail}</span> : null}
+        {words.instead ? (
+          <span className="mt-1 block font-normal" data-testid="cancel-instead">
+            {words.instead}
+          </span>
+        ) : null}
         {state.creditCents > 0 ? (
           <span className="mt-1 block font-normal" data-testid="cancel-credit">
             You have {formatMoney(state.creditCents)} credit. It stays on your account. If you come back, it comes off your first bill.
@@ -79,10 +85,16 @@ export default async function CancelPage() {
         ) : null}
       </Notice>
 
-      <CancelFlow pauseOptions={pauseOptions} canRemoveApp={state.selection.products.length >= 2} />
+      <CancelFlow
+        pauseOptions={pauseOptions}
+        // Removing an app is a plan change, and a plan with a bill open cannot be changed.
+        canRemoveApp={words.mode !== 'now' && state.selection.products.length >= 2}
+        confirmLabel={words.confirmLabel}
+        endsNow={words.mode === 'now'}
+      />
 
       {/* The refund rule, said before the person decides. The same words as on the pricing page. */}
-      {state.trial ? null : (
+      {state.trial || words.mode === 'now' ? null : (
         <p data-testid="cancel-refund-rule" className="text-sm text-fg-secondary">
           <span className="font-semibold text-fg">About refunds.</span> {BILLING_POLICY.refund}
         </p>

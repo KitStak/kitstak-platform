@@ -19,8 +19,12 @@ describe('signup fields', () => {
     expect(emailIssue(' maya@northwind.example ')).toBeNull();
     expect(companyIssue('Northwind Robotics')).toBeNull();
     expect(
-      signupIssues({ name: 'Maya Chen', email: 'maya@northwind.example', password: 'Good-Password-1', company: 'Northwind' }),
+      signupIssues({ name: 'Maya Chen', email: 'maya@northwind.example', password: 'Brave-Lantern-1', company: 'Northwind' }),
     ).toEqual({});
+    // A password built around the company name is refused with the kind line (review round 3).
+    expect(
+      signupIssues({ name: 'Maya Chen', email: 'maya@northwind.example', password: 'Northwind-Rocks-2026!', company: 'Northwind' }),
+    ).toEqual({ password: 'That one is too easy to guess. Try a few words that do not go together.' });
   });
 
   test('an empty form flags every field', () => {

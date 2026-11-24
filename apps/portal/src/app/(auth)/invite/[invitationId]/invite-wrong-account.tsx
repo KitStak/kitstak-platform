@@ -27,11 +27,11 @@ export function InviteWrongAccount({
   return (
     <div className="flex flex-col gap-4">
       <FormAlert tone="info">
-        This invite is for <EmailText email={invitedEmail} className="font-semibold" />. Sign out and open the link
-        again.
+        This invite is for <EmailText email={invitedEmail} className="font-semibold" after="." /> Sign out and open the
+        link again.
       </FormAlert>
       <p className="text-sm text-fg-muted">
-        You are signed in as <EmailText email={signedInEmail} className="font-medium text-fg-secondary" />.
+        You are signed in as <EmailText email={signedInEmail} className="font-medium text-fg-secondary" after="." />
       </p>
       <Button size="lg" fullWidth className="h-12 sm:h-11" loading={busy} onClick={() => void signOutAndReturn()}>
         Sign out and open the invite

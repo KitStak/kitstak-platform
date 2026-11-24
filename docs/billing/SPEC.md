@@ -95,7 +95,9 @@ confirm. Same rule for monthly and yearly plans.
 needs a bigger plan, the person sees the price and says yes first, or is told who can.
 
 **P11. Cancel.** Two clicks. The plan runs to the end of the paid period, then the apps become view only. One
-click undoes it before that day. One optional question asks why.
+click undoes it before that day. One optional question asks why. One exception: a cancel while a bill is open
+(a late payment) ends the plan today and drops that bill. The cancel page says so before the button, and
+nothing is charged after it.
 
 **P12. Pause.** Monthly plans can pause for 1, 2 or 3 months. The pause starts at the end of the paid period.
 No bills during the pause. Apps are view only. It starts again by itself on the date shown, or sooner with one
@@ -315,6 +317,20 @@ email is not verified yet, else `/welcome`.
   we sent a 6 digit code." `/reset-password` takes the code and a new password (same rules and meter). After
   a reset, every old session is signed out (already the shared setting).
 - **Password rules** stay the ones in `packages/auth` (10 to 72 characters, the policy plugin, lockout).
+  15 or more characters is enough by itself. At every length a password that is easy to guess is refused
+  (one character repeated, one piece repeated, a straight run like `1234` or `qwerty`, a common password
+  dressed up, the product or company name) with one line: "That one is too easy to guess. Try a few words
+  that do not go together."
+- **Email me a code instead** (review round 3). The second door, with no password. On `/login`, the link
+  under the form mails a 6 digit code to the address that was typed. The next screen says "If <address> has
+  a KitStak account, a code is on its way." and never says whether it has one. The code signs the person in
+  and marks the address verified. "Send a new code" and "Use my password instead" are on that screen. On
+  `/signup`, the same link under the password field takes the password field away ("No password needed. We
+  email you a 6 digit code. You use a new code each time you sign in."), and "Set a password instead" brings
+  it back. A person who signed up this way can set a password later with "Forgot password?".
+- **Back to where you were going.** A signed out person who opens any page of the Portal is sent to sign in
+  and then to that page, with its query. So "Update card" in the failed payment email lands on Billing with
+  the card in focus.
 
 ### 5.6 Resume where you left off
 
@@ -637,8 +653,12 @@ Stripe's Smart Retries decide the retry dates. We show the date Stripe gives us.
 Every change of plan state enters through one function (`processWebhook`) or through a direct gateway answer
 that is applied with the same snapshot code. Access rows in `core.entitlements` are written only there and in
 `startTrial`. A replayed event changes nothing and adds no row. A bad signature gets 400 and changes nothing.
-After a write, the entitlement cache is cleared, and the other apps see good news on their next request
-because a "not full" answer is always read fresh.
+After a write, the entitlement cache of that process is cleared. The other apps are separate processes, so
+they go by the billing stamp: one number per organization in `core.billing_stamps`, bumped by database
+triggers on every billing write. An app reads that number before it trusts its 60 second copy of a plan. A new
+number means the copy is read again. So every change shows in every app on the next request, also a change
+between two full access states (a cancel that is set and then undone, a pause, a payment inside the 7 days).
+A "not full" answer is always read fresh as well.
 
 ### 8.5 Seats and warehouses from real counts
 

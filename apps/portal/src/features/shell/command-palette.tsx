@@ -42,6 +42,8 @@ export interface CommandPaletteProps {
   /** KitStak Pulse origin (omitted: the Pulse entries are hidden). */
   readonly pulseUrl?: string;
   readonly entitled: { readonly crm: boolean; readonly wms: boolean; readonly projects?: boolean; readonly pulse?: boolean };
+  /** A person who only manages billing: no app rows, no launcher and no setup guide. */
+  readonly billingOnly?: boolean;
 }
 
 const groupClass =
@@ -110,7 +112,7 @@ function PaletteItem({
   );
 }
 
-export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl, pulseUrl, entitled }: CommandPaletteProps) {
+export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl, pulseUrl, entitled, billingOnly = false }: CommandPaletteProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -233,140 +235,146 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl,
           <Command.Empty className="px-6 py-8 text-center text-sm text-fg-muted">
             No matches. Try an app, page or organization name.
           </Command.Empty>
-          <Command.Group heading="Apps" className={groupClass}>
-            <PaletteItem
-              value="open-crm"
-              keywords={['crm', 'deals', 'pipeline', 'sales']}
-              onSelect={() => (entitled.crm ? openApp(crmUrl) : go('/billing?module=crm'))}
-              icon={
-                entitled.crm ? (
-                  <AppIcon app="crm" size={20} className="-m-0.5" />
-                ) : (
-                  <Lock aria-hidden className="size-4" />
-                )
-              }
-              meta={entitled.crm ? 'Pipelines, boards and automations' : 'Locked. View billing'}
-              external={entitled.crm}
-            >
-              Open CRM
-            </PaletteItem>
-            <PaletteItem
-              value="open-wms"
-              keywords={['wms', 'warehouse', 'orders', 'inventory', 'shipping']}
-              onSelect={() => (entitled.wms ? openApp(wmsUrl) : go('/billing?module=wms'))}
-              icon={
-                entitled.wms ? (
-                  <AppIcon app="wms" size={20} className="-m-0.5" />
-                ) : (
-                  <Lock aria-hidden className="size-4" />
-                )
-              }
-              meta={entitled.wms ? 'Warehouse operations' : 'Locked. View billing'}
-              external={entitled.wms}
-            >
-              Open WMS
-            </PaletteItem>
-            {projectsUrl ? (
+          {billingOnly ? null : (
+            <Command.Group heading="Apps" className={groupClass}>
               <PaletteItem
-                value="open-projects"
-                keywords={['projects', 'tasks', 'timeline', 'gantt', 'board', 'my work', 'goals']}
-                onSelect={() => (entitled.projects ? openApp(projectsUrl) : go('/billing?module=projects'))}
+                value="open-crm"
+                keywords={['crm', 'deals', 'pipeline', 'sales']}
+                onSelect={() => (entitled.crm ? openApp(crmUrl) : go('/billing?module=crm'))}
                 icon={
-                  entitled.projects ? (
-                    <ArrowUpRight aria-hidden className="size-4" />
+                  entitled.crm ? (
+                    <AppIcon app="crm" size={20} className="-m-0.5" />
                   ) : (
                     <Lock aria-hidden className="size-4" />
                   )
                 }
-                meta={entitled.projects ? 'Projects, tasks and timelines' : 'Locked. View billing'}
-                external={entitled.projects}
+                meta={entitled.crm ? 'Pipelines, boards and automations' : 'Locked. View billing'}
+                external={entitled.crm}
               >
-                Open Projects
+                Open CRM
               </PaletteItem>
-            ) : null}
-            {projectsUrl && entitled.projects ? (
               <PaletteItem
-                value="projects-my-work"
-                keywords={['my work', 'my tasks', 'assigned', 'todo', 'projects']}
-                onSelect={() => openApp(`${projectsUrl.replace(/\/+$/, '')}/my-work`)}
-                icon={<ArrowUpRight aria-hidden className="size-4" />}
-                meta="Everything assigned to you in Projects"
-                external
-              >
-                My work
-              </PaletteItem>
-            ) : null}
-            {pulseUrl ? (
-              <PaletteItem
-                value="open-pulse"
-                keywords={['pulse', 'profit', 'margin', 'jobs', 'kitting', 'cost', 'labor']}
-                onSelect={() => (entitled.pulse ? openApp(pulseUrl) : go('/billing?module=pulse'))}
+                value="open-wms"
+                keywords={['wms', 'warehouse', 'orders', 'inventory', 'shipping']}
+                onSelect={() => (entitled.wms ? openApp(wmsUrl) : go('/billing?module=wms'))}
                 icon={
-                  entitled.pulse ? (
-                    <AppIcon app="pulse" size={20} className="-m-0.5" />
+                  entitled.wms ? (
+                    <AppIcon app="wms" size={20} className="-m-0.5" />
                   ) : (
                     <Lock aria-hidden className="size-4" />
                   )
                 }
-                meta={entitled.pulse ? 'Know which jobs make money' : 'Locked. View billing'}
-                external={entitled.pulse}
+                meta={entitled.wms ? 'Warehouse operations' : 'Locked. View billing'}
+                external={entitled.wms}
               >
-                Open Pulse
+                Open WMS
               </PaletteItem>
-            ) : null}
-            {pulseUrl && entitled.pulse ? (
+              {projectsUrl ? (
+                <PaletteItem
+                  value="open-projects"
+                  keywords={['projects', 'tasks', 'timeline', 'gantt', 'board', 'my work', 'goals']}
+                  onSelect={() => (entitled.projects ? openApp(projectsUrl) : go('/billing?module=projects'))}
+                  icon={
+                    entitled.projects ? (
+                      <ArrowUpRight aria-hidden className="size-4" />
+                    ) : (
+                      <Lock aria-hidden className="size-4" />
+                    )
+                  }
+                  meta={entitled.projects ? 'Projects, tasks and timelines' : 'Locked. View billing'}
+                  external={entitled.projects}
+                >
+                  Open Projects
+                </PaletteItem>
+              ) : null}
+              {projectsUrl && entitled.projects ? (
+                <PaletteItem
+                  value="projects-my-work"
+                  keywords={['my work', 'my tasks', 'assigned', 'todo', 'projects']}
+                  onSelect={() => openApp(`${projectsUrl.replace(/\/+$/, '')}/my-work`)}
+                  icon={<ArrowUpRight aria-hidden className="size-4" />}
+                  meta="Everything assigned to you in Projects"
+                  external
+                >
+                  My work
+                </PaletteItem>
+              ) : null}
+              {pulseUrl ? (
+                <PaletteItem
+                  value="open-pulse"
+                  keywords={['pulse', 'profit', 'margin', 'jobs', 'kitting', 'cost', 'labor']}
+                  onSelect={() => (entitled.pulse ? openApp(pulseUrl) : go('/billing?module=pulse'))}
+                  icon={
+                    entitled.pulse ? (
+                      <AppIcon app="pulse" size={20} className="-m-0.5" />
+                    ) : (
+                      <Lock aria-hidden className="size-4" />
+                    )
+                  }
+                  meta={entitled.pulse ? 'Know which jobs make money' : 'Locked. View billing'}
+                  external={entitled.pulse}
+                >
+                  Open Pulse
+                </PaletteItem>
+              ) : null}
+              {pulseUrl && entitled.pulse ? (
+                <>
+                  <PaletteItem
+                    value="pulse-new-job"
+                    keywords={['new job', 'add job', 'create job', 'pulse', 'quote']}
+                    onSelect={() => openApp(`${pulseUrl.replace(/\/+$/, '')}/jobs/new`)}
+                    icon={<ArrowUpRight aria-hidden className="size-4" />}
+                    meta="Start tracking profit on a job in Pulse"
+                    external
+                  >
+                    New job
+                  </PaletteItem>
+                  <PaletteItem
+                    value="pulse-log-work"
+                    keywords={['log work', 'log production', 'daily log', 'units', 'hours', 'pulse']}
+                    onSelect={() => openApp(`${pulseUrl.replace(/\/+$/, '')}/log`)}
+                    icon={<ArrowUpRight aria-hidden className="size-4" />}
+                    meta="Type today's units, people and hours in Pulse"
+                    external
+                  >
+                    Log work
+                  </PaletteItem>
+                  <PaletteItem
+                    value="pulse-jobs-at-risk"
+                    keywords={['at risk', 'losing money', 'jobs', 'pulse', 'attention']}
+                    onSelect={() => openApp(`${pulseUrl.replace(/\/+$/, '')}/jobs?tab=open&risk=losing,at_risk`)}
+                    icon={<ArrowUpRight aria-hidden className="size-4" />}
+                    meta="Jobs that may lose money, worst first"
+                    external
+                  >
+                    Jobs at risk
+                  </PaletteItem>
+                </>
+              ) : null}
+            </Command.Group>
+          )}
+          <Command.Group heading="Portal" className={groupClass}>
+            {billingOnly ? null : (
               <>
                 <PaletteItem
-                  value="pulse-new-job"
-                  keywords={['new job', 'add job', 'create job', 'pulse', 'quote']}
-                  onSelect={() => openApp(`${pulseUrl.replace(/\/+$/, '')}/jobs/new`)}
-                  icon={<ArrowUpRight aria-hidden className="size-4" />}
-                  meta="Start tracking profit on a job in Pulse"
-                  external
+                  value="apps-home"
+                  keywords={['apps', 'home', 'launcher', 'start']}
+                  onSelect={() => go('/')}
+                  icon={<LayoutGrid aria-hidden className="size-4" />}
                 >
-                  New job
+                  Apps
                 </PaletteItem>
                 <PaletteItem
-                  value="pulse-log-work"
-                  keywords={['log work', 'log production', 'daily log', 'units', 'hours', 'pulse']}
-                  onSelect={() => openApp(`${pulseUrl.replace(/\/+$/, '')}/log`)}
-                  icon={<ArrowUpRight aria-hidden className="size-4" />}
-                  meta="Type today's units, people and hours in Pulse"
-                  external
+                  value="setup-guide"
+                  keywords={['setup', 'guide', 'get started', 'onboarding', 'checklist', 'welcome']}
+                  onSelect={() => go('/settings/organization#setup')}
+                  icon={<ListChecks aria-hidden className="size-4" />}
+                  meta="Your guided setup checklist"
                 >
-                  Log work
-                </PaletteItem>
-                <PaletteItem
-                  value="pulse-jobs-at-risk"
-                  keywords={['at risk', 'losing money', 'jobs', 'pulse', 'attention']}
-                  onSelect={() => openApp(`${pulseUrl.replace(/\/+$/, '')}/jobs?tab=open&risk=losing,at_risk`)}
-                  icon={<ArrowUpRight aria-hidden className="size-4" />}
-                  meta="Jobs that may lose money, worst first"
-                  external
-                >
-                  Jobs at risk
+                  Setup guide
                 </PaletteItem>
               </>
-            ) : null}
-          </Command.Group>
-          <Command.Group heading="Portal" className={groupClass}>
-            <PaletteItem
-              value="apps-home"
-              keywords={['apps', 'home', 'launcher', 'start']}
-              onSelect={() => go('/')}
-              icon={<LayoutGrid aria-hidden className="size-4" />}
-            >
-              Apps
-            </PaletteItem>
-            <PaletteItem
-              value="setup-guide"
-              keywords={['setup', 'guide', 'get started', 'onboarding', 'checklist', 'welcome']}
-              onSelect={() => go('/settings/organization#setup')}
-              icon={<ListChecks aria-hidden className="size-4" />}
-              meta="Your guided setup checklist"
-            >
-              Setup guide
-            </PaletteItem>
+            )}
             <PaletteItem
               value="billing"
               keywords={['billing', 'plan', 'entitlements', 'subscription']}

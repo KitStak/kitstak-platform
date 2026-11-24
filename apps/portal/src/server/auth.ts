@@ -15,7 +15,7 @@
 import 'server-only';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { after } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import { createAuth, ipAddressFromTrustProxy, type KitstakAuth } from '@kitstak/auth';
 import { DEFAULT_PASSWORD_POLICY, validatePassword } from '@kitstak/auth/password-policy';
 import { sendEmailNow } from '@kitstak/billing/emails';
@@ -73,7 +73,10 @@ const CODE_SEND_PATHS = new Set([
   '/forget-password/email-otp',
 ]);
 const OTP_RESET_PATH = '/email-otp/reset-password';
-const TOO_MANY_TRIES = 'Too many tries. Wait a few minutes and try again.';
+const SIGN_IN_CODE_PATH = '/sign-in/email-otp';
+// The short limit has a 10 minute window, so the wait it names is true.
+const TOO_MANY_TRIES = 'Too many tries. Wait 10 minutes and try again.';
+const TOO_MANY_TODAY = 'We sent many codes to this address today. Try again tomorrow.';
 
 function bodyText(body: unknown, key: string): string | null {
   if (!isObject(body)) return null;
@@ -86,10 +89,24 @@ function bodyText(body: unknown, key: string): string | null {
  * routes and for `auth.api` calls from server actions alike.
  */
 async function guardEmailCodes(path: string, body: unknown): Promise<void> {
-  // Codes verify an address and reset a password. Nobody signs in with one: that door would let
-  // a guessed code stand in for a password, and it would skip the account lockout.
-  if (path === '/sign-in/email-otp') throw new APIError('NOT_FOUND', { message: 'Not found' });
-  if (path === '/email-otp/send-verification-otp' && bodyText(body, 'type') === 'sign-in') {
+  // Signing in with an emailed code ("Email me a code instead", review round 3) has one door: the
+  // two server actions in `signup-actions.ts`, which run inside `withSignInCode`. They check that
+  // the account may sign in at all, count every try, and never say whether an address has an
+  // account. The raw endpoints stay closed, so none of that can be skipped by calling them directly.
+  const viaAction = signInCodeDoor.getStore() === true;
+  if (path === SIGN_IN_CODE_PATH) {
+    if (!viaAction) throw new APIError('NOT_FOUND', { message: 'Not found' });
+    const email = bodyText(body, 'email')?.trim().toLowerCase();
+    if (email) {
+      // A 6 digit code has a million values. Each code allows 5 guesses; on top of that, one address
+      // gets 10 tries per 10 minutes and 30 per day, right or wrong. A guesser gets nowhere, and the
+      // owner of the mailbox sees the code emails arrive.
+      const short = await enforceRateLimit(db, { key: `billing:code-signin:${email}`, windowSeconds: 600, max: 10 });
+      const day = await enforceRateLimit(db, { key: `billing:code-signin-day:${email}`, windowSeconds: 86_400, max: 30 });
+      if (!short || !day) throw new APIError('TOO_MANY_REQUESTS', { code: 'RATE_LIMITED', message: TOO_MANY_TRIES });
+    }
+  }
+  if (path === '/email-otp/send-verification-otp' && bodyText(body, 'type') === 'sign-in' && !viaAction) {
     throw new APIError('BAD_REQUEST', { message: 'Sign in with your password.' });
   }
 
@@ -101,7 +118,7 @@ async function guardEmailCodes(path: string, body: unknown): Promise<void> {
     // address has an account, so the answer gives nothing away.
     const short = await enforceRateLimit(db, { key: `billing:code:${email}`, windowSeconds: 600, max: 5 });
     const day = await enforceRateLimit(db, { key: `billing:code-day:${email}`, windowSeconds: 86_400, max: 20 });
-    if (!short || !day) throw new APIError('TOO_MANY_REQUESTS', { code: 'RATE_LIMITED', message: TOO_MANY_TRIES });
+    if (!short || !day) throw new APIError('TOO_MANY_REQUESTS', { code: 'RATE_LIMITED', message: day ? TOO_MANY_TRIES : TOO_MANY_TODAY });
   }
 
   // The shared password policy plugin guards /sign-up, /change-password and /reset-password. The
@@ -148,13 +165,46 @@ export function withoutSignupCode<T>(email: string, run: () => Promise<T>): Prom
 }
 
 /**
- * Sends the 6 digit code. Only two kinds of code are ever mailed: verify an address, reset a
- * password. The send runs after the response when it can, so the answer takes the same time
+ * The one door for signing in with an emailed code. Only code that runs inside this scope may ask
+ * for a sign in code or sign in with one (see `guardEmailCodes`).
+ */
+const signInCodeDoor = new AsyncLocalStorage<true>();
+
+/** Runs `run` with the sign in code endpoints open. Used by the two server actions only. */
+export function withSignInCode<T>(run: () => Promise<T>): Promise<T> {
+  return signInCodeDoor.run(true, run);
+}
+
+/**
+ * True when this address may sign in with an emailed code: the account exists and still holds a
+ * credential. Deactivating a person removes that credential row on purpose (auth review
+ * 2026-11-11, H3), so a deactivated person gets no code and cannot sign in with one.
+ */
+export async function maySignInWithCode(email: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.account.id })
+    .from(schema.account)
+    .innerJoin(schema.user, eq(schema.account.userId, schema.user.id))
+    .where(and(eq(schema.user.email, email.trim().toLowerCase()), eq(schema.account.providerId, 'credential'), isNotNull(schema.account.password)))
+    .limit(1);
+  return row !== undefined;
+}
+
+/** After a person proved they own the mailbox: wrong password guesses from before no longer lock them out. */
+export async function clearSignInLockout(email: string): Promise<void> {
+  await clearLockoutAfterReset({ email });
+}
+
+/**
+ * Sends the 6 digit code. Three kinds of code are mailed: verify an address, reset a password, and
+ * sign in (only through `withSignInCode`). The send runs after the response when it can, so the answer takes the same time
  * whether or not the address has an account.
  */
 async function sendVerificationOTP(data: { email: string; otp: string; type: string }): Promise<void> {
+  // A sign in code is the same 6 digit code email, with one sentence that says what it is for.
+  const signIn = data.type === 'sign-in';
   const template =
-    data.type === 'email-verification' ? 'verify_email' : data.type === 'forget-password' ? 'reset_password' : null;
+    data.type === 'email-verification' || signIn ? 'verify_email' : data.type === 'forget-password' ? 'reset_password' : null;
   if (template === null) return;
   if (template === 'verify_email' && signupCodeOff.getStore()?.email === data.email.trim().toLowerCase()) return;
   const send = async (): Promise<void> => {
@@ -167,7 +217,7 @@ async function sendVerificationOTP(data: { email: string; otp: string; type: str
           orgId: null,
           to: data.email,
           template,
-          payload: { code: data.otp, minutes: EMAIL_CODE_MINUTES },
+          payload: { code: data.otp, minutes: EMAIL_CODE_MINUTES, ...(signIn ? { purpose: 'sign_in' as const } : {}) },
           // Every code is its own email. The key never holds the code itself.
           dedupeKey: `code:${template}:${data.email.toLowerCase()}:${Date.now()}`,
         },
@@ -307,7 +357,7 @@ export type AuthUser = AuthSession['user'];
  */
 export type EmailCodeApi = Pick<
   ReturnType<typeof emailOTP>['endpoints'],
-  'sendVerificationOTP' | 'verifyEmailOTP' | 'requestPasswordResetEmailOTP' | 'resetPasswordEmailOTP'
+  'sendVerificationOTP' | 'verifyEmailOTP' | 'requestPasswordResetEmailOTP' | 'resetPasswordEmailOTP' | 'signInEmailOTP'
 >;
 
 export function emailCodeApi(): EmailCodeApi {

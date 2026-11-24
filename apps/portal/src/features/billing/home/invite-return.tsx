@@ -10,7 +10,7 @@ import { readInviteDraft } from '@/lib/invite-draft';
  * the way back: one line with a link to the invite, where the addresses they typed are still in
  * the field. It shows only in the tab that holds that unfinished invite.
  */
-export function InviteReturn() {
+export function InviteReturn({ cardUpdated = false }: { /** The card was just updated: the words say so, and the link is the next step. */ readonly cardUpdated?: boolean }) {
   const [waiting, setWaiting] = useState<string | null>(null);
   useEffect(() => {
     const draft = readInviteDraft();
@@ -31,7 +31,8 @@ export function InviteReturn() {
         </Link>
       }
     >
-      Your invite for <span className="[overflow-wrap:anywhere]">{waiting}</span> is waiting. Update your card below, then go back and send it.
+      Your invite for <span className="[overflow-wrap:anywhere]">{waiting}</span> is waiting.{' '}
+      {cardUpdated ? 'Your card is updated. Go back and send it.' : 'Update your card below, then go back and send it.'}
     </Notice>
   );
 }

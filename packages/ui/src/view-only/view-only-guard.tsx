@@ -97,23 +97,82 @@ export function isWriteLabel(label: string, writeLabel: RegExp, readLabel: RegEx
   return text !== '' && writeLabel.test(text) && !readLabel.test(text);
 }
 
+/** The parts of a React fiber this file reads. React keeps one per element it renders. */
+interface FiberNode {
+  readonly tag: number;
+  readonly return: FiberNode | null;
+  readonly child: FiberNode | null;
+  readonly sibling: FiberNode | null;
+  readonly alternate: FiberNode | null;
+  readonly stateNode: unknown;
+}
+
+/** React's number for the fiber at the top of a tree (the root). */
+const HOST_ROOT = 3;
+
+/** Elements that are known to be on the page for good. An element never goes back to "not yet". */
+const settled = new WeakSet<Element>();
+
 /**
- * True once React owns this element (it was hydrated, or made in the browser). React keeps its
- * props on the element under a `__reactProps$...` key from that moment on.
+ * True once React has put this element on the page for good: it was hydrated and that work was
+ * committed, or React made it in the browser. PURE apart from the cache, exported for tests.
  *
  * Why it matters: a page streams in pieces and each piece is hydrated when its code arrives. An
- * attribute put on server HTML that React has not hydrated yet is reported as a hydration
+ * attribute put on server HTML that React still has to compare is reported as a hydration
  * mismatch in the console. So the mark waits for hydration. A press is still caught before that,
  * because presses are judged by the label, not by the mark.
+ *
+ * Why "React has seen it" is not enough: React attaches itself to an element (a `__reactFiber$...`
+ * key) while it is still working. That work can be thrown away and done again, for example when a
+ * part of the page waits for code, or when something more urgent happens first. The second time
+ * React compares the element with its props again, and a mark put on in between is a mismatch.
+ * Only a commit ends the comparing. So this walks from the root of React's CURRENT tree (the one
+ * that is committed) down to the element. Work in progress hangs on the other tree and is not
+ * found. When React's inner shape is not what this expects, the answer is false: no mark, and
+ * never a console error.
  */
-function ownedByReact(control: Element): boolean {
-  for (const key in control) if (key.startsWith('__reactProps$')) return true;
-  return false;
+export function isSettled(control: Element): boolean {
+  if (settled.has(control)) return true;
+  let fiber: FiberNode | null = null;
+  for (const key in control) {
+    if (key.startsWith('__reactFiber$')) {
+      fiber = (control as unknown as Record<string, FiberNode | null>)[key] ?? null;
+      break;
+    }
+  }
+  if (!fiber) return false;
+  // The way up names the element's ancestors. Each one may be the committed fiber or its twin.
+  const path: FiberNode[] = [];
+  for (let node: FiberNode | null = fiber; node; node = node.return) {
+    path.push(node);
+    if (path.length > 10_000) return false;
+  }
+  const top = path[path.length - 1]!;
+  if (top.tag !== HOST_ROOT) return false;
+  const current = (top.stateNode as { readonly current?: FiberNode | null } | null)?.current ?? null;
+  if (!current || (current !== top && current !== top.alternate)) return false;
+  // The way down follows child links of the committed tree only.
+  let at: FiberNode = current;
+  for (let index = path.length - 2; index >= 0; index -= 1) {
+    const want = path[index]!;
+    let found: FiberNode | null = null;
+    for (let child = at.child; child; child = child.sibling) {
+      if (child === want || (want.alternate !== null && child === want.alternate)) {
+        found = child;
+        break;
+      }
+    }
+    if (!found) return false;
+    at = found;
+  }
+  if (at.stateNode !== control) return false;
+  settled.add(control);
+  return true;
 }
 
 /**
  * Puts the mark on every control whose label starts a change, and takes it off when the label
- * stops matching. Returns how many matching controls could not be marked yet (not hydrated).
+ * stops matching. Returns how many matching controls could not be marked yet (hydration not done).
  */
 function markWriteControls(root: ParentNode, writeLabel: RegExp, readLabel: RegExp): number {
   let waiting = 0;
@@ -126,7 +185,7 @@ function markWriteControls(root: ParentNode, writeLabel: RegExp, readLabel: RegE
     const off = control.matches(':disabled, [aria-disabled="true"]') || control.matches(CHOICES);
     const write = !off && isWriteLabel(controlLabel(control), writeLabel, readLabel);
     if (write && !auto) {
-      if (!ownedByReact(control)) {
+      if (!isSettled(control)) {
         waiting += 1;
         continue;
       }
@@ -255,9 +314,9 @@ export function ViewOnlyGuard({ active, notice, pathname, writePaths, homeHref =
     const run = () => {
       frame = 0;
       window.clearTimeout(retry);
-      // Controls that are still server HTML are marked a little later, once React has hydrated them.
-      // Hydration changes nothing in the page, so no observer reports it: look again shortly, for
-      // up to 12 seconds after the page last changed.
+      // Controls that are still server HTML are marked a little later, once React has hydrated them
+      // and committed that work. Hydration changes nothing in the page, so no observer reports it:
+      // look again shortly, for up to 12 seconds after the page last changed.
       if (markWriteControls(document, writeLabel, reads) > 0 && tries < 30) {
         tries += 1;
         retry = window.setTimeout(schedule, 400);

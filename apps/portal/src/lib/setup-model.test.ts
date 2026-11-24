@@ -8,6 +8,7 @@ import {
   moreGuideSteps,
   pickGuideSteps,
   readProgressRows,
+  stepsForMember,
   summarizeSetup,
   toSetupProducts,
   type SetupProduct,
@@ -515,5 +516,33 @@ describe('pickGuideSteps (must have 27: a quick start of 3 to 5 steps tied to th
   it('a team with no trial (a manual grant) has no plan step in the quick start', () => {
     const all = buildSetupSteps({ ...trialSignals(['crm']), billing: null }, profileFor(['crm']), {});
     expect(pickGuideSteps(all).some((step) => step.key === 'billing_plan')).toBe(false);
+  });
+});
+
+describe('stepsForMember', () => {
+  it('leaves out the open steps only an owner or admin can do, and the steps that wait on them', () => {
+    const all = buildSetupSteps(freshSignals, null, {});
+    const keys = stepsForMember(all).map((step) => step.key);
+    // No welcome answers, no inviting, no first warehouse, and nothing that waits on the warehouse.
+    expect(keys).not.toContain('profile');
+    expect(keys).not.toContain('invite_team');
+    expect(keys).not.toContain('wms_warehouse');
+    expect(keys).not.toContain('wms_catalog');
+    expect(keys).not.toContain('wms_first_order');
+    // What a member can do stays: the CRM steps.
+    expect(keys).toEqual(['crm_workspace', 'crm_first_deal']);
+    // Every open step left either has a button or names a step that is still listed.
+    const titles = new Set(stepsForMember(all).map((step) => step.title));
+    for (const step of stepsForMember(all)) expect(step.lockedBy === null || titles.has(step.lockedBy)).toBe(true);
+  });
+
+  it('keeps a step that is done, as done, and then the steps that waited on it', () => {
+    const all = buildSetupSteps({ ...freshSignals, memberCount: 3, wmsWarehouses: 1 }, bothProfile, {});
+    const member = stepsForMember(all);
+    expect(member.find((step) => step.key === 'profile')?.status).toBe('done');
+    expect(member.find((step) => step.key === 'invite_team')?.status).toBe('done');
+    expect(member.find((step) => step.key === 'wms_warehouse')?.status).toBe('done');
+    expect(member.map((step) => step.key)).toContain('wms_catalog');
+    expect(member).toHaveLength(all.length);
   });
 });

@@ -42,6 +42,20 @@ export function landingDecision(
   return target === pathname ? null : target;
 }
 
+/** One cookie's value from the request, or null. */
+function cookieOf(headers: Headers, name: string): string | null {
+  for (const part of (headers.get('cookie') ?? '').split(';')) {
+    const [key, ...rest] = part.trim().split('=');
+    if (key !== name) continue;
+    try {
+      return decodeURIComponent(rest.join('=')) || null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 /** The path a signed-in document request should be redirected to, or null to render as asked. */
 export async function landingRedirectFor(pathname: string, headers: Headers): Promise<string | null> {
   if (!isLandingGated(pathname)) return null;
@@ -55,17 +69,20 @@ export async function landingRedirectFor(pathname: string, headers: Headers): Pr
       const locked = (await wmsAccessForOrg(platform, session.user.orgId)) === 'locked';
       return landingDecision(pathname, { kind: 'open', locked });
     }
+    if (session.reason === 'unauthenticated') return landingDecision(pathname, { kind: 'other' });
+    const { getWmsAuth } = await import('@/server/auth/auth');
+    const { billingOnlyOrg, listWmsOrgs, WMS_ORG_COOKIE } = await import('@/server/tenancy/registry');
+    const auth = await getWmsAuth();
+    const current = await auth.api.getSession({ headers, query: { disableCookieCache: true } });
+    if (!current) return null;
+    const choices = await listWmsOrgs(platform, current.user.id);
+    // A person who only manages billing has no seat and no warehouse profile. Without this they
+    // would land on the sign in form while signed in. The lock screen tells them, with a way back.
+    const preferred = [cookieOf(headers, WMS_ORG_COOKIE), (current.session as { activeOrganizationId?: string | null }).activeOrganizationId ?? null];
+    if (billingOnlyOrg(choices, preferred)) return LOCKED_PATH;
     if (session.reason !== 'no_warehouse') return landingDecision(pathname, { kind: 'other' });
     const canSetUp = (session.setup?.length ?? 0) > 0;
-    let anyEntitled = canSetUp;
-    if (!canSetUp) {
-      const { getWmsAuth } = await import('@/server/auth/auth');
-      const { listWmsOrgs } = await import('@/server/tenancy/registry');
-      const auth = await getWmsAuth();
-      const current = await auth.api.getSession({ headers, query: { disableCookieCache: true } });
-      if (!current) return null;
-      anyEntitled = (await listWmsOrgs(platform, current.user.id)).some((choice) => choice.entitled);
-    }
+    const anyEntitled = canSetUp || choices.some((choice) => choice.entitled);
     return landingDecision(pathname, { kind: 'no_warehouse', canSetUp, anyEntitled });
   } catch {
     return null;

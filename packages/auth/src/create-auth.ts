@@ -278,6 +278,9 @@ export function createAuth(options: CreateAuthOptions) {
       // The shared organization plugin, with this app's invite email and hooks merged in.
       // `sharedAuthOptions.plugins` stays the plain one for the schema generator.
       organizationPlugin(options.organization),
+      // Guards for the organization endpoints that need to know who is acting (see
+      // `OrganizationPluginExtras.guardPlugins`). Mounted here so no instance can leave them out.
+      ...(options.organization?.guardPlugins ?? []),
       // H1: lockout + policy are factory behaviour, never instance opt-in.
       passwordPolicyPlugin({ ...(options.passwordPolicy ?? {}), rawDb }),
       legacyRehashPlugin(),

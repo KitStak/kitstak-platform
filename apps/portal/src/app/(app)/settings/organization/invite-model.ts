@@ -47,6 +47,46 @@ export function countTyped(text: string): number {
   return text.split(/[\s,;]+/).filter((part) => part.trim() !== '').length;
 }
 
+/** A person who is already in the organization. */
+export interface TeamPerson {
+  readonly email: string;
+  readonly name: string;
+}
+
+/** The first name, or the address when there is no name: "Sam is already on your team." */
+function shortName(person: TeamPerson): string {
+  return person.name.trim().split(/\s+/)[0] || person.email;
+}
+
+/** The teammate who already has this address, or null. PURE. */
+export function findOnTeam(email: string, team: readonly TeamPerson[]): TeamPerson | null {
+  const key = email.trim().toLowerCase();
+  return team.find((person) => person.email.trim().toLowerCase() === key) ?? null;
+}
+
+/**
+ * The sentence for an invite the server refused, in our words. The auth layer answers "User is
+ * already a member of this organization" for a teammate and a similar line for an open invite.
+ * Those become "Sam is already on your team." and "... already has an invite." Anything else keeps
+ * the server's sentence. PURE.
+ */
+export function inviteErrorWords(error: { readonly code?: string; readonly message?: string }, email: string, team: readonly TeamPerson[]): string {
+  const code = (error.code ?? '').toUpperCase();
+  const message = error.message ?? '';
+  if (code.includes('ALREADY_A_MEMBER') || /already a member/i.test(message)) {
+    const person = findOnTeam(email, team);
+    return `${person ? shortName(person) : email} is already on your team.`;
+  }
+  if (code.includes('ALREADY_INVITED') || /already invited/i.test(message)) return `${email} already has an invite. It is in the list below.`;
+  return message || 'We could not send the invite. Try again.';
+}
+
+/** "ana@x.co was not invited yet" for one, "2 people were not invited yet" for more. PURE. */
+export function notInvitedYet(emails: readonly string[]): string {
+  const list = emails.length <= 1 ? (emails[0] ?? '') : `${emails.slice(0, -1).join(', ')} and ${emails[emails.length - 1]}`;
+  return emails.length === 1 ? `1 person was not invited yet: ${list}.` : `${emails.length} people were not invited yet: ${list}.`;
+}
+
 export interface SeatFacts {
   /** A paid plan priced per seat is live. False in a trial and with no plan: no seat limit then. */
   readonly paid: boolean;

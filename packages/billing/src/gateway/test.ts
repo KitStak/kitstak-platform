@@ -16,6 +16,7 @@ import { billingSubscriptions, billingTestObjects, organization, type BillingTes
 import {
   type BillingInterval,
   CATALOG,
+  formatMoney,
   isBundle,
   isProductId,
   normalizeSelection,
@@ -789,8 +790,13 @@ function changeMath(
             );
           }
         } else {
-          if (old) push(`${lineLabel(old)}: ${unusedWords}`, product, old.quantity, old.unitCents, -prorated(old.unitCents * old.quantity));
-          if (next) push(`${lineLabel(next)} for ${leftWords}`, product, next.quantity, next.unitCents, prorated(next.unitCents * next.quantity));
+          // An app that stays and changes price (the bundle discount started or ended): both lines
+          // name their price, so "See the math" shows why there are two lines for one app.
+          const repriced = old !== undefined && next !== undefined;
+          const at = (item: ItemDoc) =>
+            repriced ? ` at ${formatMoney(item.unitCents)}${pricing.quantityFrom === 'flat' ? '' : ` per ${pricing.unit}`}` : '';
+          if (old) push(`${lineLabel(old)}${at(old)}: ${unusedWords}`, product, old.quantity, old.unitCents, -prorated(old.unitCents * old.quantity));
+          if (next) push(`${lineLabel(next)}${at(next)} for ${leftWords}`, product, next.quantity, next.unitCents, prorated(next.unitCents * next.quantity));
         }
       }
     }
@@ -957,6 +963,48 @@ export function createTestGateway(input: {
         await save(db, 'subscription', sub.orgId, sub);
       }
       return { refundedCents };
+    },
+
+    async cancelNow(subscriptionId) {
+      const sub = await requireSubscription(subscriptionId);
+      const now = ctx.now();
+      let voidedCents = 0;
+      let voided: InvoiceDoc | null = null;
+      const invoice = sub.latestInvoiceId ? await load<InvoiceDoc>(db, sub.latestInvoiceId, 'invoice') : null;
+      if (invoice && invoice.status === 'open') {
+        voidedCents = Math.max(0, invoice.amountDueCents);
+        invoice.status = 'void';
+        invoice.amountDueCents = 0;
+        invoice.nextPaymentAttempt = null;
+        await save(db, 'invoice', sub.orgId, invoice);
+        voided = invoice;
+        // Credit that was set against the dropped bill goes back to the customer, as at Stripe.
+        const given = Math.max(0, invoice.creditAppliedCents ?? 0);
+        if (given > 0) {
+          const customer = await load<CustomerDoc>(db, sub.customerId, 'customer');
+          if (customer) {
+            setCredit(customer, sub, creditOf(customer, sub) + given);
+            await save(db, 'customer', sub.orgId, customer);
+          }
+        }
+      }
+      if (sub.status !== 'canceled') {
+        sub.status = 'canceled';
+        sub.canceledAt = iso(now);
+        sub.endedAt = iso(now);
+        sub.cancelAtPeriodEnd = false;
+        sub.cancelAt = null;
+        sub.pauseResumesAt = null;
+        sub.failNextPayment = false;
+        await save(db, 'subscription', sub.orgId, sub);
+        // The same two events Stripe sends, through the same door.
+        if (voided) await deliver(ctx, gateway, 'invoice.voided', invoiceObject(voided));
+        await deliver(ctx, gateway, 'customer.subscription.deleted', subscriptionObject(sub));
+      } else if (voided) {
+        await save(db, 'subscription', sub.orgId, sub);
+        await deliver(ctx, gateway, 'invoice.voided', invoiceObject(voided));
+      }
+      return { subscription: await toGatewaySubscription(db, sub), voidedCents };
     },
 
     async createPaymentUpdateSession({ customerId, returnUrl }) {
@@ -1245,6 +1293,12 @@ export interface TestCardUpdateView {
   readonly orgName: string;
   readonly current: PaymentMethodSummary | null;
   readonly returnUrl: string;
+  /**
+   * What is charged right after the card is saved: the open bill of a plan that is still running
+   * (review round 3). 0 when nothing is due, and always 0 for a plan that has ended, because a
+   * canceled plan is never charged.
+   */
+  readonly dueNowCents: number;
 }
 
 async function orgNameOf(db: BillingDb, orgId: string): Promise<string> {
@@ -1533,12 +1587,22 @@ export async function cancelTestCheckout(rt: BillingRuntime, sessionId: string):
 export async function getTestCardUpdate(db: BillingDb, sessionId: string): Promise<TestCardUpdateView | null> {
   const session = await load<PortalSessionDoc>(db, sessionId, 'portal_session');
   if (!session) return null;
+  // The open bill of the customer's running subscription, if there is one.
+  let dueNowCents = 0;
+  const subs = (await listKind<SubscriptionDoc>(db, 'subscription', session.orgId)).filter(
+    (doc) => doc.customerId === session.customerId && (doc.status === 'past_due' || doc.status === 'unpaid'),
+  );
+  for (const sub of subs) {
+    const invoice = sub.latestInvoiceId ? await load<InvoiceDoc>(db, sub.latestInvoiceId, 'invoice') : null;
+    if (invoice && invoice.status === 'open') dueNowCents += Math.max(0, invoice.amountDueCents);
+  }
   return {
     sessionId: session.id,
     orgId: session.orgId,
     orgName: await orgNameOf(db, session.orgId),
     current: cardSummary(await cardOf(db, session.customerId)),
     returnUrl: session.returnUrl,
+    dueNowCents,
   };
 }
 

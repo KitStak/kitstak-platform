@@ -48,7 +48,16 @@ export { enforceRateLimit } from './rate-limit';
 export { completeSignupIntent, getOpenSignupIntent, upsertSignupIntent, type SignupIntent } from './intents';
 export { processWebhook, type WebhookOutcome } from './webhook';
 export { applyInvoiceSnapshot, applySubscriptionSnapshot, clearBillingCaches, refreshFromGateway } from './sync';
-export { billingOrganizationOptions, INVITE_NEEDS_VERIFIED_EMAIL_SINCE, INVITES_PER_DAY } from './auth-hooks';
+export {
+  BILLING_ROLE_OWNER_ONLY_MESSAGE,
+  billingOrganizationOptions,
+  billingRoleGuardPlugin,
+  guardBillingRoleChange,
+  INVITE_NEEDS_VERIFIED_EMAIL_SINCE,
+  INVITES_PER_DAY,
+  requireOwnerForBillingRole,
+  type BillingRoleDoor,
+} from './auth-hooks';
 export { signInviteProof, verifyInviteProof } from './invite-proof';
 export type { GatewayInvoice, GatewayInvoiceLine, GatewaySubscription, GatewayUpcoming } from '../gateway/types';
 /** What the confirm panel works with: the gateway's preview plus the `basis` the server checks on confirm. */

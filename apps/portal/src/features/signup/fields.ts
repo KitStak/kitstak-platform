@@ -50,7 +50,7 @@ export function signupFieldIssue(field: SignupField, values: SignupValues): stri
     case 'email':
       return emailIssue(values.email);
     case 'password':
-      return passwordIssue(values.password, { email: values.email });
+      return passwordIssue(values.password, { email: values.email, company: values.company });
     case 'company':
       return companyIssue(values.company);
   }

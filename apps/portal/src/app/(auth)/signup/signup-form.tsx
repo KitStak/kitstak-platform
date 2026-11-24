@@ -29,6 +29,7 @@ import { createWorkspaceAction } from '@/server/signup-actions';
 import {
   AuthHeading,
   AuthInput,
+  EmailHintLine,
   FormAlert,
   NO_NETWORK_MESSAGE,
   PasswordInput,
@@ -37,6 +38,7 @@ import {
   StrengthMeter,
   SubmitButton,
   authErrorMessage,
+  hasEmailHint,
   isEmailTaken,
 } from '../_components/form-parts';
 import { LegalLine, type LegalUrls } from '../_components/legal-line';
@@ -75,6 +77,8 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
   const router = useRouter();
   const [values, setValues] = useState<SignupValues>(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<SignupField, string>>>({});
+  /** "Email me a code instead": the account is made with no password a person knows. */
+  const [noPassword, setNoPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(socialErrorMessage(providerError));
   const [emailTaken, setEmailTaken] = useState(false);
   const [stage, setStage] = useState<Stage>('idle');
@@ -198,6 +202,8 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
     }
 
     const issues = signupIssues(values);
+    // "Email me a code instead": there is no password to check.
+    if (noPassword) delete issues.password;
     setErrors(issues);
     if (Object.keys(issues).length > 0) {
       focusFirstError(issues);
@@ -213,7 +219,7 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
       const result = await signUpAction({
         name: values.name.trim(),
         email: values.email.trim(),
-        password: values.password,
+        ...(noPassword ? { noPassword: true } : { password: values.password }),
         ...(timezone ? { timezone } : {}),
       });
       if (result.error) {
@@ -298,7 +304,23 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
                   />
                 )}
               </Field>
-              <Field label="Work email" error={errors.email}>
+              <Field
+                label="Work email"
+                error={errors.email}
+                // A likely typo in the mail host ("gmial.com") is offered back. One press fixes it.
+                hint={
+                  hasEmailHint(values.email) ? (
+                    <EmailHintLine
+                      email={values.email}
+                      onUse={(fixed) => {
+                        setValues((current) => ({ ...current, email: fixed }));
+                        setEmailTaken(false);
+                        refs.current.email?.focus();
+                      }}
+                    />
+                  ) : undefined
+                }
+              >
                 {({ inputId, describedBy, invalid }) => (
                   <AuthInput
                     id={inputId}
@@ -325,7 +347,29 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
                   />
                 )}
               </Field>
+              {/*
+                The second door (review round 3): no password. We mail a 6 digit code, and that one
+                code proves the address and signs the person in, now and every time after.
+              */}
+              {noPassword ? (
+                <div className="flex flex-col gap-1 rounded-lg border border-border-default bg-sunken px-4 py-3" data-testid="signup-no-password">
+                  <p className="text-sm font-semibold text-fg">No password needed</p>
+                  <p className="text-sm text-fg-secondary">We email you a 6 digit code. You use a new code each time you sign in.</p>
+                  <button
+                    type="button"
+                    data-testid="signup-use-password"
+                    className="mt-1 inline-flex min-h-11 items-center self-start rounded-sm text-sm font-semibold text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    onClick={() => {
+                      setNoPassword(false);
+                      requestAnimationFrame(() => refs.current.password?.focus());
+                    }}
+                  >
+                    Set a password instead
+                  </button>
+                </div>
+              ) : null}
               {/* The checklist under the field states every rule up front and marks what is missing, so the error is not printed twice. */}
+              {noPassword ? null : (
               <Field label="Password" error={errors.password} errorHidden={Boolean(errors.password) && isRulesIssue(values.password)}>
                 {({ inputId, describedBy, invalid }) => (
                   <div className="flex flex-col gap-2">
@@ -345,11 +389,28 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
                       aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
                       invalid={invalid}
                     />
-                    <StrengthMeter password={values.password} />
-                    <PasswordRules password={values.password} id={`${inputId}-rules`} showMissing={Boolean(errors.password)} />
+                    <StrengthMeter password={values.password} context={{ email: values.email, company: values.company }} />
+                    <PasswordRules
+                      password={values.password}
+                      id={`${inputId}-rules`}
+                      showMissing={Boolean(errors.password)}
+                      context={{ email: values.email, company: values.company }}
+                    />
+                    <button
+                      type="button"
+                      data-testid="signup-email-code"
+                      className="inline-flex min-h-11 items-center self-start rounded-sm text-sm font-semibold text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                      onClick={() => {
+                        setNoPassword(true);
+                        setErrors((current) => ({ ...current, password: undefined }));
+                      }}
+                    >
+                      Email me a code instead
+                    </button>
                   </div>
                 )}
               </Field>
+              )}
             </>
           ) : null}
           <Field label="Company or team" error={errors.company}>

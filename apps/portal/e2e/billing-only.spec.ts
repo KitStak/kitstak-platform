@@ -3,6 +3,7 @@ import type { PlanSelection } from '@kitstak/billing/catalog';
 import {
   APP_URLS,
   appIsUp,
+  emailsTo,
   inviteLinkFor,
   invoicesOf,
   joinFromInvite,
@@ -60,6 +61,18 @@ test.describe('a billing manager who holds no seat', () => {
     const booksId = await userIdOf(books.email);
     const roles = await sql<{ role: string }>(`SELECT role FROM core.member WHERE organization_id = $1 AND user_id = $2`, [orgId, booksId]);
     expect(roles).toEqual([{ role: 'billing' }]);
+
+    // Review round 3: she opened the link from the invite email, which only her mailbox has. That
+    // proves the address, for this role like for any other: it is marked verified, no code email
+    // goes out, no "enter the 6 digit code" bar shows, and the plan page is not locked.
+    expect(link).toMatch(/\/invite\/[0-9a-f-]{36}\?t=[A-Za-z0-9_-]{43}$/);
+    expect(await sql<{ email_verified: boolean }>(`SELECT email_verified FROM core."user" WHERE id = $1`, [booksId])).toEqual([{ email_verified: true }]);
+    expect(await emailsTo(books.email, 'verify_email')).toHaveLength(0);
+    await expect(booksPage.getByText('6 digit code')).toHaveCount(0);
+    await booksPage.goto('/billing/plan');
+    await expect(booksPage.locator('main').first()).toBeVisible({ timeout: 90_000 });
+    await expect(booksPage.getByText('Verify your email first')).toHaveCount(0);
+    await expect(booksPage.getByText('6 digit code')).toHaveCount(0);
 
     // They can do what a billing manager does: an invoice file and the activity log.
     const invoice = (await invoicesOf(orgId))[0]!;

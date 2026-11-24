@@ -111,6 +111,7 @@ export async function queueGraceReminders(rt: BillingRuntime): Promise<number> {
         portalUrl: rt.portalUrl,
         amountDueCents: state.pastDue.amountDueCents,
         accessChangesAt: state.pastDue.accessChangesAt.toISOString(),
+        asOf: now.toISOString(),
       });
     } catch (error) {
       logBilling('error', 'grace reminder failed for one organization', { orgId, error: errorText(error) });

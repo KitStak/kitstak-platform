@@ -12,8 +12,11 @@ const URLS = {
 
 export function LockedSwitcher({
   badges,
+  billingOnly = false,
 }: {
-  readonly badges: Readonly<Record<'crm' | 'wms' | 'projects' | 'pulse', AppSwitcherPlanBadge>>;
+  readonly badges?: Readonly<Record<'crm' | 'wms' | 'projects' | 'pulse', AppSwitcherPlanBadge>>;
+  /** A person who only manages billing: the apps are listed as text, and the Portal row opens Billing. */
+  readonly billingOnly?: boolean;
 }) {
   return (
     <AppSwitcher
@@ -21,6 +24,7 @@ export function LockedSwitcher({
       urls={URLS}
       planBadges={badges}
       addHref={(app) => `${URLS.portal}/billing/plan?add=${app}&from=wms`}
+      billingOnly={billingOnly}
     />
   );
 }

@@ -231,6 +231,7 @@ function MoreSteps({
   onToggle,
   rowProps,
   offset,
+  foldedOnPhone = 0,
 }: {
   readonly steps: readonly SetupStepView[];
   readonly open: boolean;
@@ -238,10 +239,12 @@ function MoreSteps({
   readonly rowProps: Pick<StepRowProps, 'canManage' | 'pending' | 'onSkip' | 'onUnskip'>;
   /** How many steps come before these, so the numbers carry on. */
   readonly offset: number;
+  /** Quick start rows a phone folds away too. The same press shows them, so the label counts them. */
+  readonly foldedOnPhone?: number;
 }) {
-  const left = steps.filter((step) => step.status === 'todo').length;
   if (steps.length === 0) return null;
-  const closedLabel = left === 0 ? 'Show all steps' : `Show all steps (${left} more)`;
+  // The number is the count of rows the press reveals, so it is true on a phone and on a desktop.
+  const closedLabel = (hidden: number) => `Show all steps (${hidden} more)`;
   return (
     <div className="border-t border-border-subtle">
       <button
@@ -252,7 +255,18 @@ function MoreSteps({
         data-testid="setup-more-toggle"
         className="flex min-h-11 w-full items-center justify-between gap-3 px-5 text-left text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
       >
-        <span>{open ? 'Show fewer steps' : closedLabel}</span>
+        {open ? (
+          <span>Show fewer steps</span>
+        ) : foldedOnPhone > 0 ? (
+          <>
+            <span className="sm:hidden" data-testid="setup-more-label-phone">
+              {closedLabel(steps.length + foldedOnPhone)}
+            </span>
+            <span className="max-sm:hidden">{closedLabel(steps.length)}</span>
+          </>
+        ) : (
+          <span>{closedLabel(steps.length)}</span>
+        )}
         <ChevronDown aria-hidden className={cn('size-4 shrink-0 transition-transform duration-[var(--duration-fast)] motion-reduce:transition-none', open && 'rotate-180')} />
       </button>
       {open ? (
@@ -368,6 +382,9 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
       {error}
     </p>
   ) : null;
+
+  // Phones, on the launcher: every quick start row but the open one waits behind "Show all steps".
+  const foldsOnPhone = !inSettings && summary.nextKey !== null;
 
   const rowProps = {
     canManage,
@@ -535,7 +552,7 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
                 justDone={justDoneKeys.includes(step.key)}
                 // Phones, on the launcher: only the open step shows until "Show all steps" is pressed,
                 // so the person's own app tile is on the first screen under the guide.
-                foldOnPhone={!inSettings && !moreOpen && summary.nextKey !== null && step.key !== summary.nextKey}
+                foldOnPhone={foldsOnPhone && !moreOpen && step.key !== summary.nextKey}
                 {...rowProps}
               />
             ))}
@@ -553,7 +570,14 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
               <ChevronDown aria-hidden className={cn('size-4 shrink-0 transition-transform duration-[var(--duration-fast)] motion-reduce:transition-none', moreOpen && 'rotate-180')} />
             </button>
           ) : null}
-          <MoreSteps steps={moreSteps} open={moreOpen} onToggle={() => setMoreOpen((current) => !current)} rowProps={rowProps} offset={steps.length} />
+          <MoreSteps
+            steps={moreSteps}
+            open={moreOpen}
+            onToggle={() => setMoreOpen((current) => !current)}
+            rowProps={rowProps}
+            offset={steps.length}
+            foldedOnPhone={foldsOnPhone ? steps.length - 1 : 0}
+          />
         </>
       )}
     </section>

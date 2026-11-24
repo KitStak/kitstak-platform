@@ -11,7 +11,7 @@ import { canManageRole, ORG_ROLES, parseRoles, primaryRole, type OrgRole } from 
 import { inTransaction, type ServiceContext } from './context';
 import { CATALOG } from '@kitstak/billing/catalog';
 import { assertInviteEmailAllowed } from './admin-org';
-import { assertSeatAvailable } from './seat-limit';
+import { assertMayChangeBillingManager, assertSeatAvailable, keepBillingRole } from './seat-limit';
 import type { InvitationDto, MemberDto, TeamDto } from './contracts/dto';
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -118,7 +118,12 @@ export async function updateMemberRole(
     // A guest is free. Moving a guest to a paid role needs a free seat on the plan.
     const freeRoles: readonly string[] = CATALOG.freeRoles;
     if (freeRoles.includes(target.role) && !freeRoles.includes(role)) await assertSeatAvailable(tx, { role });
-    await tx.db.update(member).set({ role }).where(eq(member.id, memberId));
+    // The billing role is not on the CRM role list. It stays next to the new role, so a role change
+    // here never takes billing rights away (only an owner can do that, in the Portal).
+    await tx.db
+      .update(member)
+      .set({ role: keepBillingRole(target.row.role, role) })
+      .where(eq(member.id, memberId));
     const [dto] = (await listMembers(tx)).filter((entry) => entry.memberId === memberId);
     if (!dto) throw new NotFoundError('Member');
     return dto;
@@ -134,6 +139,8 @@ export async function removeMember(ctx: ServiceContext, memberId: string): Promi
       throw new ForbiddenError('You cannot remove this member');
     if (target.role === 'owner' && (await ownerCount(tx)) <= 1)
       throw new BadRequestError('An organization must keep at least one owner');
+    // Removing a billing manager is an owner's call. A person may still leave by themselves.
+    if (!isSelf) await assertMayChangeBillingManager(tx, target.row);
     await tx.db.delete(member).where(eq(member.id, memberId));
     const orgTeams = await tx.db.select({ id: team.id }).from(team).where(eq(team.organizationId, tx.orgId));
     if (orgTeams.length > 0) {

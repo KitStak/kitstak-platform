@@ -12,7 +12,7 @@ import {
   type BillingAccount,
   type BillingSubscription,
 } from '@kitstak/db/schema';
-import { moduleAccess, type Module, type ModuleAccess as EntitlementAccess } from '@kitstak/entitlements';
+import { moduleAccess, readBillingStamp, type Module, type ModuleAccess as EntitlementAccess } from '@kitstak/entitlements';
 import { isProductId, PRODUCT_IDS, type ProductId } from '../catalog';
 import {
   derivePlanState,
@@ -76,6 +76,9 @@ export function subscriptionInput(row: BillingSubscription): PlanSubscriptionInp
     nextDiscountCents: row.nextDiscountCents,
     nextDiscountLabel: row.nextDiscountLabel,
     nextCreditCents: row.nextCreditCents,
+    endedReason: row.endedReason,
+    endedAmountCents: row.endedAmountCents,
+    endedAttempts: row.endedAttempts,
   };
 }
 
@@ -168,6 +171,8 @@ interface CachedOrg {
   readonly loaded: PlanRows;
   readonly ownerName: string | null;
   readonly managerIds: ReadonlySet<string>;
+  /** The billing stamp read just before the rows. null when the stamp could not be read. */
+  readonly stamp: string | null;
 }
 
 const CACHE_TTL_MS = 60_000;
@@ -179,7 +184,9 @@ export function clearPlanCache(orgId?: string): void {
   else cache.delete(orgId);
 }
 
-async function loadCachedOrg(db: BillingReadDb, orgId: string): Promise<CachedOrg> {
+async function loadCachedOrg(db: BillingReadDb, orgId: string, knownStamp?: string | null): Promise<CachedOrg> {
+  // The stamp first, then the rows: a write in between costs one extra read later, never a stale copy.
+  const stamp = knownStamp === undefined ? await readBillingStamp(db, orgId) : knownStamp;
   const loaded = await loadPlanRows(db, orgId);
   const ownerName = await findOwnerName(db, orgId);
   const managerRows = await db
@@ -191,6 +198,7 @@ async function loadCachedOrg(db: BillingReadDb, orgId: string): Promise<CachedOr
     loaded,
     ownerName,
     managerIds: new Set(managerRows.map((row) => row.userId)),
+    stamp,
   };
   cache.set(orgId, entry);
   return entry;
@@ -252,9 +260,15 @@ function buildView(
 }
 
 /**
- * For product apps. Reads only. Cached 60 seconds per process, except that any answer with a notice
- * of tone 'warning' or 'danger', or access other than 'full', is read again before it is returned.
- * So a payment or a new trial shows in every app on the next request.
+ * For product apps. Reads only. The plan rows are kept for 60 seconds per process, and two rules
+ * keep that copy honest:
+ *
+ *  1. Before the copy is used, the organization's billing stamp is read (one primary key lookup,
+ *     `readBillingStamp`). Every billing write bumps it, in whichever process it was made. A new
+ *     stamp means the copy is old, and the rows are read again. So a cancel, a "Keep my plan", a
+ *     pause or a payment made in the Portal shows here on the very next request (review round 3).
+ *  2. Any answer with a notice of tone 'warning' or 'danger', or access other than 'full', is read
+ *     again before it is returned. This also covers a database that has no stamps yet.
  */
 export async function getAppPlanView(
   db: BillingReadDb,
@@ -272,6 +286,8 @@ export async function getAppPlanView(
 ): Promise<AppPlanView> {
   const cached = cache.get(input.orgId);
   if (cached && cached.expiresAt > Date.now()) {
+    const stamp = await readBillingStamp(db, input.orgId);
+    if (stamp !== null && stamp !== cached.stamp) return buildView(await loadCachedOrg(db, input.orgId, stamp), input);
     const view = buildView(cached, input);
     const good = view.access === 'full' && (view.notice === null || view.notice.tone === 'info');
     if (good) return view;

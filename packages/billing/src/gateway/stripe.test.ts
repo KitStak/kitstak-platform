@@ -757,6 +757,39 @@ describe('Stripe adapter: one plan per organization', () => {
   });
 });
 
+describe('Stripe adapter: cancel with a bill open ends the plan now and drops the bill (review round 3)', () => {
+  it('cancels with no final invoice and no proration, then voids every open invoice of the subscription', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.subRetrieve
+      .mockResolvedValueOnce(subscription({ id: 'sub_1', status: 'past_due', latest_invoice: 'in_9' }))
+      .mockResolvedValue(subscription({ id: 'sub_1', status: 'canceled', latest_invoice: 'in_9' }));
+    calls.invoiceList.mockResolvedValue({ data: [{ id: 'in_9', status: 'open', amount_remaining: 34880, amount_due: 34880 }] });
+    const result = await gateway.cancelNow('sub_1');
+    expect(calls.subCancel.mock.calls).toEqual([['sub_1', { invoice_now: false, prorate: false }]]);
+    expect(calls.invoiceList.mock.calls[0]![0]).toEqual({ subscription: 'sub_1', status: 'open', limit: 20 });
+    expect(calls.invoiceVoid.mock.calls).toEqual([['in_9']]);
+    expect(result.voidedCents).toBe(34880);
+    expect(result.subscription.status).toBe('canceled');
+    // Nothing is paid, nothing is refunded, no card is tried.
+    expect(calls.invoicePay).not.toHaveBeenCalled();
+    expect(calls.creditNoteCreate).not.toHaveBeenCalled();
+  });
+
+  it('is safe to call again: an ended subscription is not canceled twice, and a bill left open is still dropped', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.subRetrieve.mockResolvedValue(subscription({ id: 'sub_1', status: 'canceled', latest_invoice: 'in_9' }));
+    calls.invoiceList.mockResolvedValue({ data: [{ id: 'in_9', status: 'open', amount_remaining: 5800 }, { id: 'in_8', status: 'open', amount_due: 1200 }] });
+    await expect(gateway.cancelNow('sub_1')).resolves.toMatchObject({ voidedCents: 7000 });
+    expect(calls.subCancel).not.toHaveBeenCalled();
+    expect(calls.invoiceVoid.mock.calls.map((call) => call[0])).toEqual(['in_9', 'in_8']);
+
+    calls.invoiceList.mockResolvedValue({ data: [] });
+    calls.invoiceVoid.mockClear();
+    await expect(gateway.cancelNow('sub_1')).resolves.toMatchObject({ voidedCents: 0 });
+    expect(calls.invoiceVoid).not.toHaveBeenCalled();
+  });
+});
+
 describe('Stripe adapter: the proration date comes from the server', () => {
   const previewInvoice = { total: -1000, amount_due: 0, lines: { data: [{ description: 'Unused time', amount: -1000, quantity: 1, proration: true }] } };
 

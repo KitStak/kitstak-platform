@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { billingStamps } from '@kitstak/db/schema';
 import type { EntitlementsDb } from './db';
 import { isDevAllowAll } from './dev';
 import {
@@ -9,6 +10,8 @@ import {
   hasModule,
   isEntitled,
   moduleAccess,
+  readBillingStamp,
+  resetBillingStampProbe,
   type ModuleEntitlement,
 } from './read';
 
@@ -20,12 +23,22 @@ interface Row {
   readonly seats?: number | null;
 }
 
-/** Plain-object mock of the `db.select({...}).from(...).where(...)` chain (repo norm). */
+/**
+ * Plain-object mock of the `db.select({...}).from(...).where(...)` chain (repo norm). Reads of
+ * `core.entitlements` and reads of the billing stamp are counted apart: `reads` is the first,
+ * `stampReads` the second. `stamp.version` is what the stamp read answers; set it to move the stamp.
+ * `stamp.missing` makes the stamp read fail, like a database without migration 0010.
+ */
 function mockSelectDb(rows: readonly Row[]) {
-  const where = vi.fn().mockResolvedValue([...rows]);
-  const from = vi.fn().mockReturnValue({ where });
+  const stamp: { version: number; missing: boolean } = { version: 1, missing: false };
+  const reads = vi.fn().mockResolvedValue([...rows]);
+  const stampReads = vi.fn(async () => {
+    if (stamp.missing) throw new Error('relation "core.billing_stamps" does not exist');
+    return [{ version: stamp.version }];
+  });
+  const from = vi.fn((table: unknown) => ({ where: table === billingStamps ? stampReads : reads }));
   const select = vi.fn().mockReturnValue({ from });
-  return { db: { select } as unknown as EntitlementsDb, select };
+  return { db: { select } as unknown as EntitlementsDb, select, reads, stampReads, stamp };
 }
 
 const ORG_ID = '22222222-2222-4222-8222-222222222222';
@@ -38,6 +51,7 @@ function entitlement(overrides: Partial<ModuleEntitlement> = {}): ModuleEntitlem
 
 beforeEach(() => {
   clearEntitlementsCache();
+  resetBillingStampProbe();
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
 });
@@ -58,42 +72,42 @@ describe('getEntitlements', () => {
   });
 
   it('serves from the cache within the 60s TTL and refetches after it expires', async () => {
-    const { db, select } = mockSelectDb([]);
+    const { db, reads } = mockSelectDb([]);
 
     await getEntitlements(db, ORG_ID);
     vi.setSystemTime(new Date(NOW.getTime() + 59_000));
     await getEntitlements(db, ORG_ID);
-    expect(select).toHaveBeenCalledTimes(1);
+    expect(reads).toHaveBeenCalledTimes(1);
 
     vi.setSystemTime(new Date(NOW.getTime() + 61_000));
     await getEntitlements(db, ORG_ID);
-    expect(select).toHaveBeenCalledTimes(2);
+    expect(reads).toHaveBeenCalledTimes(2);
   });
 
   it('caches per org id', async () => {
-    const { db, select } = mockSelectDb([]);
+    const { db, reads } = mockSelectDb([]);
 
     await getEntitlements(db, ORG_ID);
     await getEntitlements(db, '33333333-3333-4333-8333-333333333333');
 
-    expect(select).toHaveBeenCalledTimes(2);
+    expect(reads).toHaveBeenCalledTimes(2);
   });
 
   it('clearEntitlementsCache(orgId) evicts one org; clearEntitlementsCache() evicts all', async () => {
     const otherOrg = '33333333-3333-4333-8333-333333333333';
-    const { db, select } = mockSelectDb([]);
+    const { db, reads } = mockSelectDb([]);
     await getEntitlements(db, ORG_ID);
     await getEntitlements(db, otherOrg);
 
     clearEntitlementsCache(ORG_ID);
     await getEntitlements(db, ORG_ID);
     await getEntitlements(db, otherOrg);
-    expect(select).toHaveBeenCalledTimes(3);
+    expect(reads).toHaveBeenCalledTimes(3);
 
     clearEntitlementsCache();
     await getEntitlements(db, ORG_ID);
     await getEntitlements(db, otherOrg);
-    expect(select).toHaveBeenCalledTimes(5);
+    expect(reads).toHaveBeenCalledTimes(5);
   });
 });
 
@@ -189,21 +203,23 @@ describe('hasModule', () => {
 
   it('reads a cached "not full" answer again, so good news shows on the next request', async () => {
     const rows: Row[] = [];
-    const where = vi.fn().mockImplementation(async () => [...rows]);
-    const select = vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where }) });
+    // No stamp to go by here (a database without migration 0010): this older rule stands alone.
+    const reads = vi.fn().mockImplementation(async () => [...rows]);
+    const noStamp = vi.fn().mockRejectedValue(new Error('relation "core.billing_stamps" does not exist'));
+    const select = vi.fn().mockReturnValue({ from: vi.fn((table: unknown) => ({ where: table === billingStamps ? noStamp : reads })) });
     const db = { select } as unknown as EntitlementsDb;
 
     await expect(hasModule(db, ORG_ID, 'crm')).resolves.toBe(false);
-    expect(select).toHaveBeenCalledTimes(1);
+    expect(reads).toHaveBeenCalledTimes(1);
 
     // A payment lands in another process. The cached snapshot still says "no row".
     rows.push({ module: 'crm', status: 'active', source: 'stripe', periodEnd: null });
     await expect(hasModule(db, ORG_ID, 'crm')).resolves.toBe(true);
-    expect(select).toHaveBeenCalledTimes(2);
+    expect(reads).toHaveBeenCalledTimes(2);
 
     // A cached "full" answer is served from the cache.
     await expect(hasModule(db, ORG_ID, 'crm')).resolves.toBe(true);
-    expect(select).toHaveBeenCalledTimes(2);
+    expect(reads).toHaveBeenCalledTimes(2);
   });
 
   it('short-circuits to true without touching the db when ENTITLEMENTS_DEV_ALLOW_ALL=1', async () => {
@@ -243,5 +259,62 @@ describe('isDevAllowAll', () => {
     expect(isDevAllowAll({ ENTITLEMENTS_DEV_ALLOW_ALL: '0' } as NodeJS.ProcessEnv)).toBe(false);
     expect(isDevAllowAll({ ENTITLEMENTS_DEV_ALLOW_ALL: 'yes' } as NodeJS.ProcessEnv)).toBe(false);
     expect(isDevAllowAll({} as NodeJS.ProcessEnv)).toBe(false);
+  });
+});
+
+describe('the billing stamp: a write in another process shows on the very next read', () => {
+  const FULL: Row[] = [{ module: 'crm', status: 'active', source: 'stripe', periodEnd: new Date(NOW.getTime() + 20 * DAY_MS) }];
+
+  it('reads the stamp before it trusts the cached rows, and keeps them while the stamp stands', async () => {
+    const { db, reads, stampReads } = mockSelectDb(FULL);
+    await getEntitlements(db, ORG_ID);
+    await getEntitlements(db, ORG_ID);
+    await getEntitlements(db, ORG_ID);
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(stampReads).toHaveBeenCalledTimes(3);
+  });
+
+  it('full access before and after (cancel, then "Keep my plan"): the rows are read again at once', async () => {
+    const { db, reads, stamp } = mockSelectDb(FULL);
+    await expect(getModuleAccess(db, ORG_ID, 'crm')).resolves.toBe('full');
+    expect(reads).toHaveBeenCalledTimes(1);
+
+    // The Portal writes (another process). Nothing here was told. One second later the app is opened.
+    stamp.version += 1;
+    vi.setSystemTime(new Date(NOW.getTime() + 1_000));
+    await expect(getModuleAccess(db, ORG_ID, 'crm')).resolves.toBe('full');
+    expect(reads).toHaveBeenCalledTimes(2);
+
+    // And the new copy is kept until the stamp moves again.
+    await getModuleAccess(db, ORG_ID, 'crm');
+    expect(reads).toHaveBeenCalledTimes(2);
+  });
+
+  it('an organization with no billing rows yet has stamp 0, and its first billing write moves it', async () => {
+    const reads = vi.fn().mockResolvedValue([]);
+    let stampRows: { version: number }[] = [];
+    const from = vi.fn((table: unknown) => ({ where: table === billingStamps ? vi.fn(async () => stampRows) : reads }));
+    const db = { select: vi.fn().mockReturnValue({ from }) } as unknown as EntitlementsDb;
+    await expect(readBillingStamp(db, ORG_ID)).resolves.toBe('0');
+    await getEntitlements(db, ORG_ID);
+    await getEntitlements(db, ORG_ID);
+    expect(reads).toHaveBeenCalledTimes(1);
+    stampRows = [{ version: 1 }];
+    await getEntitlements(db, ORG_ID);
+    expect(reads).toHaveBeenCalledTimes(2);
+  });
+
+  it('a database without the stamp table falls back to the 60 second rule and is not asked on every read', async () => {
+    const { db, reads, stampReads, stamp } = mockSelectDb(FULL);
+    stamp.missing = true;
+    await expect(readBillingStamp(db, ORG_ID)).resolves.toBeNull();
+    await getEntitlements(db, ORG_ID);
+    vi.setSystemTime(new Date(NOW.getTime() + 30_000));
+    await getEntitlements(db, ORG_ID);
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(stampReads).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(new Date(NOW.getTime() + 61_000));
+    await getEntitlements(db, ORG_ID);
+    expect(reads).toHaveBeenCalledTimes(2);
   });
 });

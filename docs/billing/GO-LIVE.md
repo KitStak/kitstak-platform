@@ -23,7 +23,7 @@ Stripe test key exists in this repo, in the dev container or with the team that 
 2026-11-23: no `STRIPE_*` variable is set anywhere, and keys never go in the repo). So hosted Checkout,
 wallets, the Billing Portal, live signed webhooks, Stripe's invoice PDF and how Stripe's invoice lines look
 on our invoice page are all **unseen**. The adapter is proven only against the Stripe SDK types and a fake
-client (`packages/billing/src/gateway/stripe.test.ts`, 39 tests).
+client (`packages/billing/src/gateway/stripe.test.ts`, 41 tests).
 
 **What the owner must do:** make a Stripe account in test mode (or a sandbox) and hand over two values,
 `sk_test_...` and the `whsec_...` that `stripe listen` prints. Nothing else is needed.
@@ -50,6 +50,9 @@ client (`packages/billing/src/gateway/stripe.test.ts`, 39 tests).
 - [ ] Card update in the Billing Portal: the new last 4 shows on billing home and in the activity list.
 - [ ] `stripe events resend <id>` for a processed event: the route answers 200 `duplicate`.
 - [ ] Download an invoice PDF from the invoice page.
+- [ ] Added in review round 3. Let a renewal fail (test clock or card `4000 0000 0000 0341`), then cancel on
+      `/billing/cancel`: the plan ends at once, the Stripe invoice shows as void, and no retry runs. Then
+      let another plan fail all its retries: billing home says "We could not collect ... after N tries".
 
 Until every line passes, the honest state is: **built and unit tested, not proven against Stripe.**
 
@@ -172,7 +175,12 @@ In the Stripe dashboard:
 
 - [ ] **Smart Retries** on (Billing, Revenue recovery, Retries).
 - [ ] After the last failed retry: **cancel the subscription** (same page). KitStak then shows the plan as
-      ended and view only.
+      ended and view only, and says why: "We could not collect $164.00 after 4 tries, so your plan ended."
+      On the same page, set the invoice to **marked uncollectible** after the last retry, so it is not
+      left open.
+- [ ] A customer who cancels while a payment is late: KitStak ends the subscription at once and voids the
+      open invoice (`cancelNow` in the Stripe adapter). Nothing to set in the dashboard. Check it once in
+      test mode as part of Open item 1: the invoice shows as void and no retry runs.
 - [ ] **Customer emails:** turn off Stripe's own emails for successful payments and failed payments
       (Settings, Emails, and Billing, Revenue recovery, Emails). KitStak sends both. If you leave them on,
       customers get two emails for each event. Do that only on purpose.
@@ -495,6 +503,10 @@ The short form, for the day itself.
       with one. Raise it for a customer by hand only after you know who they are.
 - [ ] Migration `0008_core_billing_credit.sql` must be applied (step 4). It adds the credit columns and the
       trigger that removes a billing manager's role when the person leaves.
+- [ ] Migration `0010_core_billing_round3.sql` must be applied (step 4), before the new code is deployed or
+      in the same release. It adds `core.billing_stamps` with its triggers, and three columns on
+      `core.billing_subscriptions`. The apps work without the stamp table (they fall back to the 60 second
+      rule), but the plan row is written with the new columns, so the Portal needs the migration.
 - [ ] Migration `0009_core_billing_locks.sql` must be applied (step 4). It adds `core.billing_locks`. Without
       it, opening checkout and confirming a plan change answer "Something went wrong on our side".
 - [ ] Alert on the log line `RECONCILE FAILED FOR A LIVE PLAN`. It means our copy says a plan is live, a date

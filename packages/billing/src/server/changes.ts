@@ -181,6 +181,8 @@ export async function previewPlanChange(
         daysLeft: null,
         dueTodayNote: 'Nothing to pay now.',
         creditNote: null,
+        bundleNote: null,
+        bundleNoteTone: null,
         ...extra,
       });
     }
@@ -199,6 +201,12 @@ export async function previewPlanChange(
       direction: pricing.direction,
       fromInterval: pricing.subscription.interval,
       toInterval: selection.interval,
+      // The plan before and after, so the sentences can name the real cause (an app that came off,
+      // the bundle discount that started or ended) instead of "what you add".
+      before: state.selection,
+      after: selection,
+      beforeRecurringCents: pricing.subscription.items.reduce((sum, item) => sum + item.unitCents * item.quantity, 0),
+      afterRecurringCents: preview.newRecurringCents,
     });
     return billingOk({ ...preview, daysLeft: pricing.daysLeft, ...words, ...extra });
   } catch (error) {
@@ -273,7 +281,8 @@ export async function applyPlanChange(
   if (sameSelection(early.ready.state.selection, early.ready.selection)) return billingOk(early.ready.state);
 
   const allowed = await enforceRateLimit(rt.db, { key: `plan-change:${input.orgId}`, windowSeconds: 3600, max: 20 });
-  if (!allowed) return billingError('rate_limited');
+  // The message names the real wait: this limit's window is 1 hour.
+  if (!allowed) return billingError('rate_limited', 'Too many plan changes. Wait 1 hour and try again.');
 
   // One confirm at a time per organization (review round 2). The basis check, the fresh preview and
   // the gateway call are one step now. Confirms that arrive together run one after the other: the

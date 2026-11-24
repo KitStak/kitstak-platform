@@ -2,7 +2,7 @@
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
-import { Button, Field } from '@/components/ui';
+import { Button, EmailText, Field } from '@/components/ui';
 import { changePassword, signOut } from '@/lib/auth-client';
 import {
   AuthHeading,
@@ -39,7 +39,8 @@ type FieldErrors = Partial<Record<FieldName, string>>;
 /** Friendly copy for the change-password errors the shared auth layer returns. */
 function changeErrorMessage(error: { readonly code?: string; readonly message?: string; readonly status?: number }): string {
   if (error.code === 'INVALID_PASSWORD') return 'That is not the password you were given. Check it and try again.';
-  return authErrorMessage(error);
+  // A password change allows 5 tries a minute, so the wait is 1 minute.
+  return authErrorMessage(error, 1);
 }
 
 export function ChangePasswordForm({
@@ -112,7 +113,7 @@ export function ChangePasswordForm({
         title="Choose a new password"
         subtitle={
           <>
-            Your account <span className="font-semibold text-fg">{email}</span> was set up with a temporary
+            Your account <EmailText email={email} className="font-semibold text-fg" /> was set up with a temporary
             password. Replace it with one only you know to continue.
           </>
         }
@@ -147,7 +148,7 @@ export function ChangePasswordForm({
                 aria-describedby={describedBy}
                 invalid={invalid}
               />
-              <StrengthMeter password={values.newPassword} />
+              <StrengthMeter password={values.newPassword} context={{ email }} />
             </>
           )}
         </Field>

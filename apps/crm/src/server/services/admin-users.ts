@@ -10,7 +10,7 @@ import { AppError, BadRequestError, ForbiddenError, NotFoundError } from '@/serv
 import { canManageRole, primaryRole, type OrgRole } from '@/server/rbac';
 import { inTransaction, type ServiceContext } from './context';
 import { createInvitation, updateMemberRole } from './members';
-import { assertSeatAvailable } from './seat-limit';
+import { assertMayChangeBillingManager, assertSeatAvailable } from './seat-limit';
 import type {
   AdminInvitationDto,
   AdminUserDto,
@@ -133,6 +133,8 @@ export async function setMemberActive(ctx: ServiceContext, memberId: string, act
     if (!active && target.decoded.role === 'owner' && (await activeOwnerCount(tx)) <= 1) {
       throw new BadRequestError('An organization must keep at least one active owner');
     }
+    // Deactivating a billing manager takes the billing role away, which only an owner may do.
+    if (!active) await assertMayChangeBillingManager(tx, { userId: target.userId, role: target.role });
     // A deactivated member uses no seat. Turning them back on needs a free seat on the plan.
     if (active) await assertSeatAvailable(tx, { role: target.decoded.role });
     const role = active ? target.decoded.role : encodeDeactivatedRole(target.decoded.role);

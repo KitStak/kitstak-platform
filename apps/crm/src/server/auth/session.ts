@@ -102,6 +102,31 @@ export async function findOrgMembership(userId: string, orgIdOrSlug: string): Pr
 }
 
 /**
+ * The organization a person only manages billing for (`core.member.role` is exactly `billing`), or
+ * null. Such a person has no seat and no CRM role, so `findOrgMembership` answers null for them.
+ * Pages use this to show the billing only lock screen instead of "This page doesn't exist".
+ */
+export async function findBillingOnlyOrg(
+  userId: string,
+  orgIdOrSlug: string,
+): Promise<{ readonly id: string; readonly name: string; readonly slug: string } | null> {
+  const key = orgIdOrSlug.trim();
+  const byId = isUuid(key);
+  if (!byId && !SLUG_RE.test(key)) return null;
+  const rows = await db
+    .select({ id: organization.id, name: organization.name, slug: organization.slug, role: member.role })
+    .from(member)
+    .innerJoin(organization, eq(member.organizationId, organization.id))
+    .where(and(eq(member.userId, userId), byId ? eq(organization.id, key) : eq(organization.slug, key)))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  const parts = row.role.split(',').map((part) => part.trim().toLowerCase()).filter(Boolean);
+  if (parts.length === 0 || !parts.every((part) => part === 'billing')) return null;
+  return { id: row.id, name: row.name, slug: row.slug };
+}
+
+/**
  * Require that the session user belongs to the organization. Non-members get NotFound so
  * that org ids/slugs cannot be probed.
  */

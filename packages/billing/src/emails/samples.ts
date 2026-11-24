@@ -54,10 +54,11 @@ export const SAMPLE_EMAIL_PAYLOADS: { readonly [T in EmailTemplateId]: EmailPayl
     nextRetryAt: '2026-12-10T15:00:00.000Z',
     accessChangesAt: '2026-12-14T15:00:00.000Z',
     attempt: 1,
+    asOf: '2026-12-07T15:00:00.000Z',
   },
   payment_action_required: { ...base, amountDueCents: 39520, last4: '4242' },
-  grace_ending: { ...base, amountDueCents: 39520, accessChangesAt: '2026-12-14T15:00:00.000Z' },
+  grace_ending: { ...base, amountDueCents: 39520, accessChangesAt: '2026-12-14T15:00:00.000Z', asOf: '2026-12-13T15:00:00.000Z' },
   cancel_scheduled: { ...base, endsAt: '2026-12-23T15:00:00.000Z' },
   paused: { ...base, startsAt: '2026-12-23T15:00:00.000Z', resumesAt: '2027-02-23T15:00:00.000Z' },
-  plan_ended: { ...base, endedAt: '2026-12-23T15:00:00.000Z' },
+  plan_ended: { ...base, endedAt: '2026-12-23T15:00:00.000Z', reason: 'canceled' },
 };

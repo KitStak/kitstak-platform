@@ -1,4 +1,5 @@
 export {
+  APP_SWITCHER_BILLING_ONLY,
   AppSwitcher,
   appSwitcherRow,
   type AppSwitcherAppId,

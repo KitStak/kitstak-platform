@@ -184,7 +184,7 @@ export function VerifyEmailForm({
         title="Check your email"
         subtitle={
           <>
-            We sent a 6 digit code to <EmailText email={email} className="font-semibold text-fg" />. It works for{' '}
+            We sent a 6 digit code to <EmailText email={email} className="font-semibold text-fg" after="." /> It works for{' '}
             {minutes} minutes.
           </>
         }

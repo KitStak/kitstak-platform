@@ -57,7 +57,16 @@ export interface AppSwitcherProps {
   readonly planBadges?: Partial<Record<AppSwitcherAppId, AppSwitcherPlanBadge>>;
   /** Link for a row that is not in the plan. Default `${urls.portal}/billing/plan?add=<app>`. */
   readonly addHref?: (app: AppSwitcherAppId) => string;
+  /**
+   * True for a person who only manages billing (the bookkeeper). They have no seat in any app, so
+   * the app rows are plain text that says so, not links to a screen they cannot open. The Portal
+   * row stays a link.
+   */
+  readonly billingOnly?: boolean;
 }
+
+/** The second line of an app row for a person who only manages billing. */
+export const APP_SWITCHER_BILLING_ONLY = 'Billing only. Ask an owner for access.';
 
 export interface AppSwitcherRowState {
   /** The row does not open the app: it opens the Portal instead. */
@@ -196,6 +205,28 @@ function appUrl(id: AppSwitcherAppId, urls: AppSwitcherUrls): string | undefined
   return urls[id];
 }
 
+/** An app a billing only person cannot open: the name and why, with no link and no press. */
+function NoSeatRow({ app }: { readonly app: AppMeta }) {
+  return (
+    <li>
+      <div className="ks-appswitcher-row" data-locked="" data-no-seat="" data-testid={`app-switcher-${app.id}`}>
+        <span className="ks-appswitcher-mark">
+          <AppIcon app={app.id} size={MARK_SIZE} />
+        </span>
+        <span className="ks-appswitcher-text">
+          <span className="ks-appswitcher-title">
+            <span className="ks-appswitcher-name">{app.name}</span>
+          </span>
+          <span className="ks-appswitcher-desc">{APP_SWITCHER_BILLING_ONLY}</span>
+        </span>
+        <span className="ks-appswitcher-end">
+          <LockIcon />
+        </span>
+      </div>
+    </li>
+  );
+}
+
 function AppRow({
   app,
   current,
@@ -248,7 +279,7 @@ function AppRow({
 }
 
 /** Module-grid button + popover listing Portal / CRM / WMS / Projects / Pulse with entitlement-aware rows. */
-export function AppSwitcher({ current, urls, entitled, notInPlan, planBadges, addHref }: AppSwitcherProps) {
+export function AppSwitcher({ current, urls, entitled, notInPlan, planBadges, addHref, billingOnly = false }: AppSwitcherProps) {
   const [open, setOpen] = React.useState(false);
   const [handoff, startHandoff] = useHandoff();
   const [handoffTitle, setHandoffTitle] = React.useState('');
@@ -277,7 +308,10 @@ export function AppSwitcher({ current, urls, entitled, notInPlan, planBadges, ad
               const href = appUrl(app.id, urls);
               // The current app always lists itself; another app with no configured origin is hidden.
               if (href === undefined && app.id !== current) return null;
-              const row = appSwitcherRow(app, { current, urls, entitled, notInPlan, planBadges, addHref });
+              if (billingOnly && app.id !== 'portal') return <NoSeatRow key={app.id} app={app} />;
+              const found = appSwitcherRow(app, { current, urls, entitled, notInPlan, planBadges, addHref });
+              // A billing only person has one place in the Portal: Billing.
+              const row = billingOnly && app.id === 'portal' ? { ...found, href: `${urls.portal.replace(/\/+$/, '')}/billing` } : found;
               return (
                 <AppRow
                   key={app.id}
@@ -290,7 +324,7 @@ export function AppSwitcher({ current, urls, entitled, notInPlan, planBadges, ad
                     // the next app paints. New-tab clicks and the current app skip it.
                     const newTab = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
                     if (app.id === current || newTab) return;
-                    setHandoffTitle(row.handoffTitle);
+                    setHandoffTitle(billingOnly ? 'Opening Billing' : row.handoffTitle);
                     startHandoff();
                   }}
                 />

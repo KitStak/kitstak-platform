@@ -710,6 +710,29 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
       return { refundedCents: paid };
     },
 
+    async cancelNow(subscriptionId) {
+      const subscription = await retrieveSubscription(subscriptionId);
+      if (!subscription) throw new Error('Stripe subscription not found.');
+      const status = str(loose(subscription).status);
+      if (status !== 'canceled' && status !== 'incomplete_expired') {
+        // No final invoice and no proration. Stripe stops collecting the open invoices of a canceled
+        // subscription by itself; voiding them below makes that final and shows it on the invoice.
+        await stripe().subscriptions.cancel(subscriptionId, { invoice_now: false, prorate: false });
+      }
+      // Every open invoice of this subscription is dropped, not only the latest one, so no older
+      // bill can be collected after the customer was told "we will not charge it".
+      let voidedCents = 0;
+      const open = await stripe().invoices.list({ subscription: subscriptionId, status: 'open', limit: 20 });
+      for (const invoice of open.data) {
+        if (!invoice.id) continue;
+        voidedCents += Math.max(0, num(loose(invoice).amount_remaining) ?? num(loose(invoice).amount_due) ?? 0);
+        await stripe().invoices.voidInvoice(invoice.id);
+      }
+      const ended = await retrieveSubscription(subscriptionId);
+      if (!ended) throw new Error('Stripe subscription not found.');
+      return { subscription: await full(ended), voidedCents };
+    },
+
     async createPaymentUpdateSession({ customerId, returnUrl }) {
       const session = await stripe().billingPortal.sessions.create({
         customer: customerId,

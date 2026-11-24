@@ -114,7 +114,8 @@ export async function createCheckout(
   if (paid && isLiveSubscriptionStatus(paid.status)) return billingError('already_subscribed');
 
   const allowed = await enforceRateLimit(rt.db, { key: `checkout:${input.orgId}`, windowSeconds: 600, max: 10 });
-  if (!allowed) return billingError('rate_limited');
+  // The message names the real wait: this limit's window is 10 minutes.
+  if (!allowed) return billingError('rate_limited', 'Too many tries. Wait 10 minutes and try again.');
 
   // One at a time per organization (review round 2). Two calls at the same moment (two tabs, or an
   // owner and a billing manager) used to make two gateway customers and leave two pay pages open.

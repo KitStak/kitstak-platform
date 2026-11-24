@@ -20,6 +20,7 @@ import {
   buildSetupSteps,
   moreGuideSteps,
   pickGuideSteps,
+  stepsForMember,
   summarizeSetup,
   SETUP_PRODUCTS,
   type SetupBillingSignal,
@@ -328,6 +329,12 @@ export async function getSetupState(
      * Their guide has no "Pick your plan" step: it would be a button they cannot use.
      */
     readonly canManageBilling?: boolean;
+    /**
+     * False for a person who is not an owner or an admin. Their guide leaves out the steps only an
+     * owner or admin can do while those are still open (`stepsForMember`): a step with no button
+     * is a dead end. A step that is done still shows as done.
+     */
+    readonly canManageOrg?: boolean;
   } = {},
 ): Promise<SetupState> {
   const [{ signals: liveSignals, products, plan }, progress] = await Promise.all([
@@ -335,7 +342,8 @@ export async function getSetupState(
     getProgressRows(org.id),
   ]);
   const signals: SetupSignals = options.canManageBilling === false ? { ...liveSignals, billing: null } : liveSignals;
-  const steps = buildSetupSteps(signals, progress.profile, progress.overrides);
+  const allSteps = buildSetupSteps(signals, progress.profile, progress.overrides);
+  const steps = options.canManageOrg === false ? stepsForMember(allSteps) : allSteps;
   const view = (step: SetupStep): SetupStepView => {
     const link = stepHref(step.key, org.slug, progress.profile);
     return { ...step, cta: link.cta ?? step.cta, href: link.href, external: link.external };

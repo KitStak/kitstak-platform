@@ -288,6 +288,9 @@ async function handleEvent(rt: BillingRuntime, db: BillingDb, orgId: string, eve
             nextRetryAt: invoice.nextPaymentAttempt ? invoice.nextPaymentAttempt.toISOString() : null,
             accessChangesAt: new Date(since.getTime() + CATALOG.graceDays * DAY_MS).toISOString(),
             attempt: invoice.attemptCount,
+            // The email speaks from this moment: a try that fails after the access date says "your
+            // apps are view only now", never "update your card by" a day that has passed.
+            asOf: rt.now().toISOString(),
           },
           dedupeKey: `payment_failed:${invoice.id}:${invoice.attemptCount}`,
         });

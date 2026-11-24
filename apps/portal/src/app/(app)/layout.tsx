@@ -38,6 +38,9 @@ export default async function AppLayout({ children }: { readonly children: React
   // View only, Not in your plan, Included). A row that is not in the plan opens the plan picker
   // with that app turned on.
   const planBadges = moduleStates ? Object.fromEntries(moduleStates.modules.map((state) => [state.module, state.badge])) : undefined;
+  // A person who only manages billing has no seat in any app (review round 3). Their Portal has no
+  // "Apps" tab and no link into an app: Billing is their home.
+  const billingOnly = activeOrg?.role === 'billing';
 
   return (
     <div className="flex min-h-dvh flex-col bg-app">
@@ -52,7 +55,7 @@ export default async function AppLayout({ children }: { readonly children: React
         */}
         <div className="mx-auto flex h-14 w-full max-w-[1120px] min-w-0 items-center gap-2 px-4 sm:gap-4 sm:px-6">
           <Link
-            href="/"
+            href={billingOnly ? '/billing' : '/'}
             aria-label="KitStak Portal home"
             className="inline-flex shrink-0 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus pointer-coarse:min-w-11"
           >
@@ -67,12 +70,14 @@ export default async function AppLayout({ children }: { readonly children: React
             </>
           ) : null}
           <nav aria-label="Portal" className="ml-auto hidden shrink-0 items-center gap-1 lg:flex">
-            <Link
-              href="/"
-              className="rounded-md px-2.5 py-1.5 text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg"
-            >
-              Apps
-            </Link>
+            {billingOnly ? null : (
+              <Link
+                href="/"
+                className="rounded-md px-2.5 py-1.5 text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg"
+              >
+                Apps
+              </Link>
+            )}
             <Link
               href="/billing"
               className="rounded-md px-2.5 py-1.5 text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg"
@@ -95,16 +100,18 @@ export default async function AppLayout({ children }: { readonly children: React
               projectsUrl={appUrls.projects}
               pulseUrl={appUrls.pulse}
               entitled={entitled}
+              billingOnly={billingOnly}
             />
             <AppSwitcher
               current="portal"
               urls={appUrls}
               entitled={entitled}
               planBadges={planBadges}
+              billingOnly={billingOnly}
             />
             {/* On phones the theme switch lives in the account menu, so the bar keeps 44 px targets. */}
             <ThemeToggle className="max-sm:hidden" />
-            <UserMenu name={session.user.name} email={session.user.email} />
+            <UserMenu name={session.user.name} email={session.user.email} billingOnly={billingOnly} />
           </div>
         </div>
       </header>

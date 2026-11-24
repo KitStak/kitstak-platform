@@ -42,6 +42,8 @@ test.describe('a payment fails at renewal', () => {
     await page.waitForURL(/\/billing\?.*fix=payment/);
     await page.getByTestId('billing-update-card').click();
     await page.waitForURL(/\/test-gateway\/card\//);
+    // The card page names what saving will charge (review round 3).
+    await expect(page.getByTestId('test-card-due')).toHaveText('You have an unpaid bill of $29.00. We charge it to the new card right after you save.');
     await page.getByTestId('test-card-chip-success').click();
     const fixedAt = Date.now();
     await page.getByTestId('test-pay').click();

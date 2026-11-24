@@ -45,7 +45,7 @@ export function InviteAccept({
     <form onSubmit={accept} className="flex flex-col gap-4" aria-busy={busy}>
       {error ? <FormAlert>{error}</FormAlert> : null}
       <p className="text-base text-fg-secondary">
-        You are signed in as <EmailText email={email} className="font-medium text-fg" />.
+        You are signed in as <EmailText email={email} className="font-medium text-fg" after="." />
       </p>
       <SubmitButton data-testid="invite-accept" busyLabel={busy ? `Joining ${orgName}…` : null}>
         Accept invite

@@ -4,15 +4,18 @@
  * types at 16 px on phones, so a thumb can hit it and iOS never zooms the page on focus.
  */
 import { forwardRef, useState } from 'react';
-import { Check, Eye, EyeOff, X } from 'lucide-react';
+import { Check, CircleAlert, Eye, EyeOff, X } from 'lucide-react';
 import { Button, Input, Spinner, cn, type ButtonProps, type InputProps } from '@/components/ui';
+import { emailHint } from '@/features/signup/email-hint';
+import { meterStrength, passwordWarning } from '@/features/signup/password-meter';
 import {
-  PASSPHRASE_HINT,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PASSWORD_PASSPHRASE_LENGTH,
   isPassphrase,
   passwordRules,
   passwordStrength,
+  type PasswordContext,
 } from '@/features/signup/password-rules';
 
 export { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordStrength };
@@ -79,8 +82,13 @@ export const PasswordInput = forwardRef<HTMLInputElement, Omit<InputProps, 'type
   },
 );
 
-export function StrengthMeter({ password }: { readonly password: string }) {
-  const { score, label } = passwordStrength(password);
+/**
+ * The strength bar. With `context` (the email, the company) it never says "Good" or "Strong" for a
+ * password the server would refuse: one built on the email name or the company name, a repeated
+ * word, a run of keys, a common password.
+ */
+export function StrengthMeter({ password, context }: { readonly password: string; readonly context?: PasswordContext }) {
+  const { score, label } = meterStrength(password, context);
   if (!password) return null;
   const colors = ['bg-danger', 'bg-danger', 'bg-warning-accent', 'bg-success', 'bg-success'];
   return (
@@ -105,33 +113,69 @@ export function StrengthMeter({ password }: { readonly password: string }) {
 }
 
 /**
- * The four password rules. They are on screen before the first key press, so nobody has to guess
- * what a password needs. Each one turns green as it is met. After the form said no (`showMissing`),
- * the rules that are still missing turn red, all at once, and the form adds no second sentence.
+ * What a password needs, said under the field. Every word here is true for what is typed
+ * (review round 3):
+ *   - Before typing: the easy way in one line (15 or more characters). From 640 px up the four
+ *     short rules are listed too. On a phone they wait for the first key, so the fields under the
+ *     password stay on the first screen.
+ *   - While typing a short password: the four rules, each green only when it is really met.
+ *   - 15 characters or more: the four rules fold away, because they are not needed. One green
+ *     line stays: "15 or more characters. That is enough."
+ *   - A password the server would refuse for another reason (the email name, easy to guess): a
+ *     warning says so at once, and nothing reads "enough" or "done".
+ * After the form said no (`showMissing`), the rules that are still missing turn red, all at once,
+ * and the form adds no second sentence.
  */
 export function PasswordRules({
   password,
   id,
   showMissing = false,
+  context,
 }: {
   readonly password: string;
   readonly id?: string;
   readonly showMissing?: boolean;
+  /** The email and the company the password must not be built on. */
+  readonly context?: PasswordContext;
 }) {
   const rules = passwordRules(password);
   const long = isPassphrase(password);
+  const warning = passwordWarning(password, context);
+  // The field prints its own error after a refusal. The same sentence is not said twice.
+  const liveWarning = showMissing ? null : warning;
+  const enough = long && warning === null;
+  const typing = password.length > 0 || showMissing;
   return (
-    <div className="flex flex-col gap-1.5">
-      {/* The easy way, said first: a long password needs nothing else (review round 2). */}
-      <p
-        data-testid="password-passphrase-hint"
-        data-state={long ? 'met' : 'open'}
-        className={cn('text-xs transition-colors duration-[var(--duration-fast)] motion-reduce:transition-none', long ? 'font-medium text-success-text' : 'text-fg-secondary')}
+    <div id={id} className="flex flex-col gap-1.5">
+      {liveWarning ? (
+        <p role="status" data-testid="password-warning" className="flex items-start gap-1.5 text-xs font-medium text-danger-text">
+          <CircleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
+          {liveWarning}
+        </p>
+      ) : null}
+      {enough ? (
+        // The long rule is met: the short rules are not needed, so they are not listed as "done".
+        <p data-testid="password-passphrase-hint" data-state="met" className="flex items-center gap-1.5 text-xs font-medium text-success-text">
+          <span aria-hidden className="flex size-3.5 shrink-0 items-center justify-center rounded-full border border-success bg-success text-fg-inverse">
+            <Check className="size-2.5" strokeWidth={3.5} />
+          </span>
+          {PASSWORD_PASSPHRASE_LENGTH} or more characters. That is enough.
+        </p>
+      ) : (
+        // The easy way, said first: a long password needs nothing else (review round 2).
+        // On a phone, before the first key, it is one line: the fields under the password and the
+        // button stay on the first screen. The rest of the sentence shows with the first key.
+        <p data-testid="password-passphrase-hint" data-state="open" className="text-xs text-fg-secondary">
+          {PASSWORD_PASSPHRASE_LENGTH} or more characters is enough by itself.
+          <span className={cn(!typing && 'max-sm:hidden')}> A few words work well.</span>
+          {long ? null : <span className={cn(!typing && 'max-sm:hidden')}> Or use a shorter one with all of these:</span>}
+        </p>
+      )}
+      <ul
+        className={cn('grid gap-x-4 gap-y-1 sm:grid-cols-2', long && 'hidden', !typing && 'max-sm:hidden')}
+        aria-label="Your password needs"
+        data-testid="password-rules"
       >
-        {PASSPHRASE_HINT}
-        {long ? <span className="sr-only"> Done.</span> : ' Or use a shorter one with all of these:'}
-      </p>
-      <ul id={id} className="grid gap-x-4 gap-y-1 sm:grid-cols-2" aria-label="Your password needs" data-testid="password-rules">
         {rules.map((rule) => {
           const missing = showMissing && !rule.met;
           return (
@@ -163,6 +207,35 @@ export function PasswordRules({
   );
 }
 
+/**
+ * "Did you mean gmail.com?" under an email field, for an address with a likely typo
+ * (`dana@gmial.com`). Pressing the name puts the fixed address in the field. Nothing changes by
+ * itself, and a company domain the hint does not know is left alone. Renders nothing otherwise.
+ */
+export function EmailHintLine({ email, onUse }: { readonly email: string; readonly onUse: (fixed: string) => void }) {
+  const hint = emailHint(email);
+  if (!hint) return null;
+  return (
+    <span data-testid="email-hint" className="text-xs text-fg-secondary">
+      Did you mean{' '}
+      <button
+        type="button"
+        data-testid="email-hint-use"
+        onClick={() => onUse(hint.email)}
+        className={`${TAP_BUTTON} rounded-sm font-semibold text-fg-link underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`}
+      >
+        {hint.domain}
+      </button>
+      ?
+    </span>
+  );
+}
+
+/** True when `EmailHintLine` would show something. For a field that only passes a hint when there is one. */
+export function hasEmailHint(email: string): boolean {
+  return emailHint(email) !== null;
+}
+
 export interface SubmitButtonProps extends Omit<ButtonProps, 'loading' | 'type' | 'size'> {
   /** Set while the form is working. The label stays visible, with a spinner beside it. */
   readonly busyLabel?: string | null;
@@ -190,12 +263,22 @@ export function SubmitButton({ busyLabel, children, disabled, className, ...prop
   );
 }
 
-/** Maps Better Auth error codes to plain words that name the problem and the fix. */
+/** "Too many tries" with the real wait: the length of the limit's window, so it is never too short. */
+export function tooManyTries(waitMinutes: number): string {
+  return `Too many tries. Wait ${waitMinutes === 1 ? '1 minute' : `${waitMinutes} minutes`} and try again.`;
+}
+
+/**
+ * Maps Better Auth error codes to plain words that name the problem and the fix. `waitMinutes` is
+ * the window of the form's rate limit (`createAuth` in @kitstak/auth): 1 minute for sign in and for
+ * a password change, 10 minutes for the rest. The message says how long, not "a few minutes".
+ */
 export function authErrorMessage(
   error: { readonly code?: string; readonly message?: string; readonly status?: number } | null | undefined,
+  waitMinutes: number = 10,
 ): string {
   if (!error) return 'Something went wrong. Please try again.';
-  if (error.status === 429) return 'Too many tries. Wait a few minutes and try again.';
+  if (error.status === 429) return tooManyTries(waitMinutes);
   switch (error.code) {
     case 'INVALID_EMAIL_OR_PASSWORD':
       return 'That email and password do not match. Check them and try again.';

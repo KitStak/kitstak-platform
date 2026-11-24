@@ -101,6 +101,14 @@
   background: var(--surface-selected);
 }
 
+/* An app a billing only person cannot open: plain text, so no hover and no pointer. */
+.ks-appswitcher-row[data-no-seat],
+.ks-appswitcher-row[data-no-seat]:hover,
+.ks-appswitcher-row[data-no-seat]:active {
+  background: transparent;
+  cursor: default;
+}
+
 .ks-appswitcher-row[aria-current]:hover {
   background: var(--surface-selected-hover);
 }

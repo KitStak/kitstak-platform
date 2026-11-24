@@ -73,6 +73,14 @@ export function ChangeConfirm({
           </Notice>
         ) : null}
 
+        {preview?.bundleNote ? (
+          // Said before anyone confirms: the change starts or ends the bundle discount, so an app
+          // that stays changes its price. Written by the server from the same catalog it bills with.
+          <Notice tone={preview.bundleNoteTone === 'info' ? 'info' : 'warning'} role="status" className="mt-4" testId="change-bundle-note">
+            {preview.bundleNote}
+          </Notice>
+        ) : null}
+
         {!preview && open ? (
           // The plan is being read again (after "the amount changed"). Nothing can be confirmed yet.
           <p role="status" data-testid="change-loading" className="mt-5 flex items-center gap-2 rounded-lg border border-border-default px-4 py-3 text-sm text-fg-secondary">

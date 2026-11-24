@@ -473,7 +473,8 @@ export function WarehousesPage() {
       <ConfirmDialog
         open={limitOpen}
         onOpenChange={setLimitOpen}
-        variant="info"
+        // An offer, not a warning: the calm header with no coloured band.
+        variant="offer"
         title="This warehouse is not in your plan yet"
         description={plan?.warehouseLimit?.message}
         confirmLabel="Add to my plan"

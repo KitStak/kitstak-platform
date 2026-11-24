@@ -17,7 +17,7 @@ import {
 import { billingRuntime } from '@/server/billing/runtime';
 import { db } from '@/server/db';
 import { resolveActiveOrg, type OrgSummary } from '@/server/orgs';
-import { getSession, type Session } from '@/server/session';
+import { getSession, signInRedirectPath, type Session } from '@/server/session';
 
 export interface BillingContext {
   readonly rt: BillingRuntime;
@@ -71,7 +71,8 @@ export const getBillingContext = cache(async (): Promise<BillingContext | null> 
 /** For pages: redirects to /login?next= or to /welcome when there is no org. */
 export async function requireBillingContext(returnTo: string): Promise<BillingContext> {
   const session = await getSession();
-  if (!session) redirect(`/login?next=${encodeURIComponent(returnTo)}`);
+  // The page that was asked for, with its query (`?fix=payment`, `?add=projects`), not only `returnTo`.
+  if (!session) redirect(await signInRedirectPath(returnTo));
   const context = await getBillingContext();
   if (!context) redirect('/welcome');
   return context;

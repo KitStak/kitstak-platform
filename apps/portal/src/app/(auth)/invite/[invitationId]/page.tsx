@@ -6,7 +6,7 @@ import { member } from '@kitstak/db/schema';
 import { EmailText, LinkButton } from '@/components/ui';
 import { db } from '@/server/db';
 import { getSession } from '@/server/session';
-import { getInviteView } from '@/server/signup';
+import { getInviteViewOnce } from '@/server/signup';
 import { AuthHeading } from '../../_components/heading';
 import { InviteAccept } from './invite-accept';
 import { InviteJoinForm } from './invite-join-form';
@@ -46,7 +46,7 @@ export default async function InvitePage({
   readonly params: Promise<{ invitationId: string }>;
 }) {
   const { invitationId } = await params;
-  const [view, session] = await Promise.all([getInviteView(invitationId), getSession()]);
+  const [view, session] = await Promise.all([getInviteViewOnce(invitationId), getSession()]);
 
   if (!view) {
     return (
@@ -134,7 +134,7 @@ export default async function InvitePage({
         {view.accountExists ? (
           <div className="flex flex-col gap-4">
             <p className="text-base text-fg-secondary">
-              You already have a KitStak account for <EmailText email={view.email} className="font-medium text-fg" />.
+              You already have a KitStak account for <EmailText email={view.email} className="font-medium text-fg" after="." />{' '}
               Sign in to accept.
             </p>
             <LinkButton

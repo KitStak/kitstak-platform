@@ -204,6 +204,8 @@ describe.skipIf(!available)('the last day reminder for a late payment', () => {
       portalUrl: 'http://localhost:3300',
       amountDueCents: 2900,
       accessChangesAt: '2031-10-08T00:00:00.000Z',
+      // The moment the email was written, so it never calls a day that has passed a deadline.
+      asOf: '2031-10-07T01:00:00.000Z',
     });
 
     // After the 7 days the plan is view only. No more "last day" email.

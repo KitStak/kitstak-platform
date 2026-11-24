@@ -27,6 +27,11 @@ export interface PlanLockScreenProps {
   readonly app: PlanLockApp;
   readonly lock: PlanLockView;
   readonly className?: string;
+  /**
+   * Leave out the three lines on what the app does. For a person who only manages billing: they are
+   * not choosing an app, so the screen does not sell them one.
+   */
+  readonly hidePoints?: boolean;
 }
 
 /** What each app is for, in three short lines. Shown under the buttons so the screen is never bare. */
@@ -48,6 +53,23 @@ export const PLAN_LOCK_POINTS: Readonly<Record<PlanLockApp, { readonly name: str
     points: ['See profit by job, client and service.', 'Spot what makes money and what does not.', 'One flat price for your whole team.'],
   },
 };
+
+/**
+ * The lock screen for a person who only manages billing (the bookkeeper). They have no seat, so no
+ * app opens for them, whatever the plan holds. Every app shows these words in the same frame, with
+ * one way on: back to Billing in the Portal. PURE.
+ */
+export function billingOnlyLock(orgName: string, portalUrl: string): PlanLockView {
+  const portal = portalUrl.replace(/\/+$/, '');
+  return {
+    title: 'You have billing access only',
+    body: `You manage billing for ${orgName}. You do not have a seat in the apps. Ask an owner if you need this app.`,
+    priceLine: null,
+    primary: null,
+    secondary: { label: 'Back to Billing', href: `${portal}/billing` },
+    testId: 'plan-lock-billing-only',
+  };
+}
 
 function LockBadge() {
   return (
@@ -102,7 +124,7 @@ export function PlanLockFrame({ logo, orgName, switcher, children }: PlanLockFra
 }
 
 /** Centered card: app icon, title, one or two sentences, the main link and a way back. */
-export function PlanLockScreen({ app, lock, className }: PlanLockScreenProps): React.JSX.Element {
+export function PlanLockScreen({ app, lock, className, hidePoints = false }: PlanLockScreenProps): React.JSX.Element {
   const meta = PLAN_LOCK_POINTS[app];
   const headingId = `ks-planlock-title-${app}`;
   return (
@@ -139,14 +161,16 @@ export function PlanLockScreen({ app, lock, className }: PlanLockScreenProps): R
             {lock.secondary.label}
           </a>
         </div>
-        <ul className="ks-planlock-points" aria-label={`What ${meta.name} does`}>
-          {meta.points.map((point) => (
-            <li key={point} className="ks-planlock-point">
-              <PointIcon />
-              <span>{point}</span>
-            </li>
-          ))}
-        </ul>
+        {hidePoints ? null : (
+          <ul className="ks-planlock-points" aria-label={`What ${meta.name} does`}>
+            {meta.points.map((point) => (
+              <li key={point} className="ks-planlock-point">
+                <PointIcon />
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </section>
   );

@@ -43,7 +43,12 @@ interface Base {
 }
 
 export interface EmailPayloads {
-  verify_email: { readonly code: string; readonly minutes: number };
+  verify_email: {
+    readonly code: string;
+    readonly minutes: number;
+    /** 'sign_in' when the code signs a person in ("Email me a code instead"). Missing: it verifies an address. */
+    readonly purpose?: 'sign_in';
+  };
   reset_password: { readonly code: string; readonly minutes: number };
   invitation: Base & { readonly inviterName: string; readonly acceptUrl: string; readonly expiresAt: string };
   welcome: Base & { readonly firstName: string; readonly products: Stack; readonly trialEndsAt: string };
@@ -78,12 +83,37 @@ export interface EmailPayloads {
     readonly amountDueCents: number;
     readonly last4: string | null;
     readonly nextRetryAt: string | null;
+    /** The day full access ends (or ended): the first failed try plus the grace days. */
     readonly accessChangesAt: string;
     readonly attempt: number;
+    /**
+     * The moment this email was written (review round 3). A try that fails after `accessChangesAt`
+     * must not say "update your card by" a day that has passed: the email then says the apps are
+     * view only now. Missing on older rows; the template then uses the time it is rendered.
+     */
+    readonly asOf?: string;
   };
   payment_action_required: Base & { readonly amountDueCents: number; readonly last4: string | null };
-  grace_ending: Base & { readonly amountDueCents: number; readonly accessChangesAt: string };
+  grace_ending: Base & {
+    readonly amountDueCents: number;
+    readonly accessChangesAt: string;
+    /** The moment this email was written. See `payment_failed.asOf`. */
+    readonly asOf?: string;
+  };
   cancel_scheduled: Base & { readonly endsAt: string };
   paused: Base & { readonly startsAt: string; readonly resumesAt: string };
-  plan_ended: Base & { readonly endedAt: string };
+  plan_ended: Base & {
+    readonly endedAt: string;
+    /**
+     * Why the plan ended (review round 3), so a customer who never canceled is told. 'canceled':
+     * they canceled and the paid time ran out. 'canceled_unpaid': they canceled while a bill was
+     * open; the plan ended that day and the bill was dropped. 'payment_failed': every try to
+     * collect failed. Missing on older rows: the email then gives no reason.
+     */
+    readonly reason?: 'canceled' | 'canceled_unpaid' | 'payment_failed';
+    /** The bill that was dropped or never collected. */
+    readonly amountCents?: number | null;
+    /** How many times the card was tried. */
+    readonly attempts?: number | null;
+  };
 }

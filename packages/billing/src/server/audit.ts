@@ -25,6 +25,8 @@ export type AuditAction =
   | 'payment.retried'
   | 'card.updated'
   | 'cancel.scheduled'
+  /** A person canceled while a bill was open: the plan ended that day and the bill was dropped. */
+  | 'cancel.ended_now'
   | 'cancel.undone'
   | 'pause.scheduled'
   | 'pause.undone'

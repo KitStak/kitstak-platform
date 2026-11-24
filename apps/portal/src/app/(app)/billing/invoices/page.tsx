@@ -57,9 +57,9 @@ export default async function InvoicesPage({
           <p className="mt-1 max-w-sm text-sm text-fg-secondary">
             {before
               ? 'You have seen them all.'
-              : state.phase === 'trial' || state.phase === 'none'
-                ? 'Your first one arrives when your trial ends.'
-                : 'Your first one arrives with your first payment.'}
+              : // The same sentence as on billing home. No invoice is made without a payment, so a
+                // trial with no card is never promised one "when your trial ends".
+                'Your first one arrives with your first payment.'}
           </p>
           <LinkButton href={before ? '/billing/invoices' : '/billing'} variant="secondary" size="lg" className="mt-5">
             {before ? 'Back to the newest' : 'Back to Billing'}

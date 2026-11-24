@@ -4,7 +4,7 @@ import { handoffRecord, hasHandoff, readHandoff, withHandoff } from '@/features/
 import { safeNextPath } from '@/lib/routes';
 import { legalUrls } from '@/server/env';
 import { getSession } from '@/server/session';
-import { getSignupResumeHref, socialProviders } from '@/server/signup';
+import { devOutboxOn, getSignupResumeHref, socialProviders } from '@/server/signup';
 import { LoginForm } from './login-form';
 
 export const metadata: Metadata = { title: 'Sign in' };
@@ -39,6 +39,7 @@ export default async function LoginPage({
       providers={socialProviders()}
       legal={legalUrls()}
       providerError={typeof params.error === 'string' ? params.error : null}
+      devOutbox={devOutboxOn()}
     />
   );
 }

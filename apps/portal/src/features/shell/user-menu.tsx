@@ -20,7 +20,16 @@ function initials(name: string, email: string): string {
   return source.slice(0, 2).toUpperCase();
 }
 
-export function UserMenu({ name, email }: { readonly name: string; readonly email: string }) {
+export function UserMenu({
+  name,
+  email,
+  billingOnly = false,
+}: {
+  readonly name: string;
+  readonly email: string;
+  /** A person who only manages billing has no apps: the "Apps" row is left out. */
+  readonly billingOnly?: boolean;
+}) {
   const router = useRouter();
 
   const onSignOut = async () => {
@@ -49,12 +58,14 @@ export function UserMenu({ name, email }: { readonly name: string; readonly emai
           <p className="truncate text-xs text-fg-muted">{email}</p>
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/">
-            <LayoutGrid aria-hidden className="size-4 text-icon" />
-            Apps
-          </Link>
-        </DropdownMenuItem>
+        {billingOnly ? null : (
+          <DropdownMenuItem asChild>
+            <Link href="/">
+              <LayoutGrid aria-hidden className="size-4 text-icon" />
+              Apps
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link href="/billing">
             <CreditCard aria-hidden className="size-4 text-icon" />

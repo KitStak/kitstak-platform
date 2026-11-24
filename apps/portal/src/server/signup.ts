@@ -4,6 +4,7 @@
  * the step itself is pure and lives in `@/features/signup/resume`.
  */
 import 'server-only';
+import { cache } from 'react';
 import { and, eq, isNull } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import {
@@ -129,6 +130,8 @@ export interface InviteView {
   readonly email: string;
   /** "Admin", "Member", ... for the screen. */
   readonly roleLabel: string;
+  /** The first role as stored, lower case ("admin", "member", "viewer", "guest", "billing"). */
+  readonly roleKey: string;
   readonly inviterName: string;
   readonly expiresAt: Date;
   /** An account with the invited address already exists. */
@@ -198,12 +201,16 @@ export async function getInviteView(invitationId: string, now: Date = new Date()
     orgId: row.orgId,
     email,
     roleLabel: roleLabel(row.role),
+    roleKey: (row.role ?? 'member').split(',')[0]?.trim().toLowerCase() || 'member',
     inviterName: row.inviterName.trim() || 'the person who invited you',
     expiresAt: row.expiresAt,
     accountExists: account !== undefined,
     seatAvailable: seat.ok,
   };
 }
+
+/** `getInviteView`, read once per request: the invite page and the panel beside it share the answer. */
+export const getInviteViewOnce = cache((invitationId: string): Promise<InviteView | null> => getInviteView(invitationId));
 
 /**
  * True when this browser came from the link in the invite email for this invitation: the proof the

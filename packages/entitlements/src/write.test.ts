@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { entitlements } from '@kitstak/db/schema';
+import { billingStamps } from '@kitstak/db/schema';
 import type { EntitlementsDb } from './db';
 import { clearEntitlementsCache, getEntitlements } from './read';
 import { setEntitlement, type EntitlementWrite } from './write';
@@ -13,9 +14,11 @@ function mockDb(returned: readonly { id: string }[]) {
   const onConflictDoUpdate = vi.fn().mockReturnValue({ returning });
   const values = vi.fn().mockReturnValue({ onConflictDoUpdate });
   const insert = vi.fn().mockReturnValue({ values });
-  const where = vi.fn().mockResolvedValue([]);
-  const select = vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where }) });
-  return { db: { insert, select } as unknown as EntitlementsDb, insert, values, onConflictDoUpdate, select };
+  // Reads of `core.entitlements`. The billing stamp read is answered apart and not counted here.
+  const reads = vi.fn().mockResolvedValue([]);
+  const from = vi.fn((table: unknown) => ({ where: table === billingStamps ? vi.fn().mockResolvedValue([{ version: 1 }]) : reads }));
+  const select = vi.fn().mockReturnValue({ from });
+  return { db: { insert, select } as unknown as EntitlementsDb, insert, values, onConflictDoUpdate, select: reads };
 }
 
 const TRIAL_WRITE: EntitlementWrite = {

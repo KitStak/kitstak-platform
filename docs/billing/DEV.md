@@ -189,6 +189,9 @@ code at the top with a copy button. Use the search box to see one address. Openi
 anything still waiting, so a signup code is there at once. You do not have to be signed in, because a person
 who forgot a password is not. The page does not exist in production.
 
+**Sign in with a code.** "Email me a code instead" on http://localhost:3300/login mails a 6 digit code. Locally
+it is in the dev outbox like every other email, and the code step links there.
+
 **All templates.** http://localhost:3300/dev/outbox/templates renders all 14 emails with sample data. Nothing
 is sent or saved. Use it to read copy and check the look.
 
@@ -325,6 +328,9 @@ const { chromium } = require('playwright');
   hit on a page can take 5 to 20 seconds. Later hits are fast. `app-start.sh` waits for
   the first page, so READY means the server really answers.
 - **Env changes need a restart.** Next reads `.env.local` at start.
+- **Sign in rules need a restart too.** Each app builds its sign in instance once and keeps it. After a
+  change in `packages/auth`, or in the organization rules of `packages/billing` (`auth-hooks.ts`), restart
+  the apps you test against, or they keep the old rules: `deploy/dev/stop.sh crm && deploy/dev/app-start.sh crm`.
 - **Use `localhost`, not `127.0.0.1`,** in the browser. The apps trust the `localhost`
   origins, and the shared cookie is tied to the host name.
 - **Memory.** All six apps together use about 6 GB, and a dev server that has compiled many routes can

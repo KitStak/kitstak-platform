@@ -5,7 +5,14 @@
  * trial, with no paid plan, and for guests the answer is always yes. Nothing here changes a charge.
  */
 import { sql } from 'drizzle-orm';
-import { checkSeatAvailable, getBillingAccess, rows } from '@kitstak/billing/server';
+import {
+  BILLING_ONLY_ROLE,
+  BILLING_ROLE_OWNER_ONLY_MESSAGE,
+  checkSeatAvailable,
+  getBillingAccess,
+  hasBillingRole,
+  rows,
+} from '@kitstak/billing/server';
 import { ForbiddenError } from '@/server/http/errors';
 import type { ServiceContext } from './context';
 
@@ -61,4 +68,34 @@ export async function assertSeatAvailable(
     pulseOnly: check.pulseOnly,
     canManage,
   });
+}
+
+/**
+ * Only an owner can add or remove a billing manager (docs/billing/SPEC.md P15). The CRM writes member
+ * roles straight to the shared `core.member` table, so it asks the question the shared sign in API
+ * asks (`guardBillingRoleChange` in `@kitstak/billing/server`): is the person being changed, removed
+ * or deactivated a billing manager? If so, only an owner may go on.
+ */
+export async function assertMayChangeBillingManager(
+  ctx: ServiceContext,
+  target: { readonly userId: string; readonly role: string },
+): Promise<void> {
+  if (ctx.roles.includes('owner')) return;
+  let manager = hasBillingRole(target.role);
+  if (!manager && (await hasBillingTables(ctx))) {
+    const found = await ctx.db.execute(
+      sql`SELECT 1 FROM "core"."billing_managers" WHERE "org_id" = ${ctx.orgId} AND "user_id" = ${target.userId} LIMIT 1`,
+    );
+    manager = rows(found).length > 0;
+  }
+  if (manager) throw new ForbiddenError(BILLING_ROLE_OWNER_ONLY_MESSAGE);
+}
+
+/**
+ * The role string to store when the CRM sets a member's role. A person who holds the billing role
+ * keeps it next to the new role: the CRM role list has no billing entry, so a role change made here
+ * must never take billing rights away as a side effect.
+ */
+export function keepBillingRole(previousRole: string, nextRole: string): string {
+  return hasBillingRole(previousRole) && !hasBillingRole(nextRole) ? `${nextRole},${BILLING_ONLY_ROLE}` : nextRole;
 }

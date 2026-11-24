@@ -11,7 +11,7 @@ import type { AppPlanView } from '@kitstak/billing/server';
 import { getPlatformDb } from '@/server/api/db';
 import { getWmsAuth } from '@/server/auth/auth';
 import { getPlanView } from '@/server/auth/plan';
-import { listWmsOrgs, openableOrgs, WMS_ORG_COOKIE } from './registry';
+import { billingOnlyOrg, listWmsOrgs, openableOrgs, WMS_ORG_COOKIE } from './registry';
 
 export type LockView =
   | { readonly kind: 'signed_out' }
@@ -19,6 +19,8 @@ export type LockView =
   | { readonly kind: 'open' }
   /** An org of theirs has the WMS but no warehouse yet: the setup page handles that. */
   | { readonly kind: 'setup' }
+  /** The person only manages billing for this organization: no seat, so no warehouse opens. */
+  | { readonly kind: 'billing_only'; readonly orgName: string }
   | {
       readonly kind: 'locked';
       readonly orgName: string;
@@ -50,13 +52,16 @@ export async function loadLockView(): Promise<LockView> {
 
   const platformDb = await getPlatformDb();
   const choices = await listWmsOrgs(platformDb, session.user.id);
-  // Orgs whose plan does not include the WMS. The one the person last worked in comes first.
-  const locked = choices.filter((choice) => !choice.entitled);
-  if (locked.length === 0) return openableOrgs(choices).length > 0 ? { kind: 'open' } : { kind: 'setup' };
   const preferred = [
     cookieValue(requestHeaders.get('cookie'), WMS_ORG_COOKIE),
     (session.session as { activeOrganizationId?: string | null }).activeOrganizationId ?? null,
   ];
+  // A person who only manages billing has no seat: the lock screen says that, whatever the plan holds.
+  const billing = billingOnlyOrg(choices, preferred);
+  if (billing) return { kind: 'billing_only', orgName: billing.name };
+  // Orgs whose plan does not include the WMS. The one the person last worked in comes first.
+  const locked = choices.filter((choice) => !choice.entitled);
+  if (locked.length === 0) return openableOrgs(choices).length > 0 ? { kind: 'open' } : { kind: 'setup' };
   const org = locked.find((choice) => preferred.includes(choice.orgId)) ?? locked[0];
   if (!org) return { kind: 'setup' };
   // A person with another warehouse they can open, and no locked org they asked for, goes there.

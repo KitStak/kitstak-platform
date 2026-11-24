@@ -5,7 +5,7 @@
  *
  * Extracted from `apps/crm/src/server/auth/options.ts` (blueprint §1.1).
  */
-import type { BetterAuthOptions } from 'better-auth';
+import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
 import { organization } from 'better-auth/plugins';
 import { orgAccessControl, orgRoles } from './access-control';
 
@@ -36,7 +36,16 @@ export const PASSWORD_MAX_LENGTH = 72;
 export type OrganizationPluginExtras = Pick<
   Parameters<typeof organization>[0] & object,
   'sendInvitationEmail' | 'organizationHooks'
->;
+> & {
+  /**
+   * Request guards that belong to the organization rules (billing review round 3). The organization
+   * hooks are not told who is acting when a role is changed or a member is removed, so a rule about
+   * the acting person ("only an owner can add or remove a billing manager") is a small plugin that
+   * runs before the organization endpoints. `createAuth` mounts these on every instance, right
+   * after the organization plugin, so the rule holds at every door without any app opting in.
+   */
+  readonly guardPlugins?: readonly BetterAuthPlugin[];
+};
 
 export const organizationPlugin = (extras?: OrganizationPluginExtras) =>
   organization({

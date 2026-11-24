@@ -161,6 +161,8 @@ export default async function LauncherPage({
   // A person who only manages billing has no apps to open (review round 2). Billing is their home.
   if (activeOrg.role === 'billing') redirect('/billing');
 
+  // A member's guide lists only steps a member can do: no welcome answers, no inviting.
+  const canManageSetup = activeOrg.role === 'owner' || activeOrg.role === 'admin';
   // The billing context is cached per request: the setup guide needs it to know who may pay.
   const billing = await getBillingContext();
   const [{ devAllowAll, modules, state: plan }, stats, customerWork, pulseAttention, glance, setup, params] = await Promise.all([
@@ -169,16 +171,15 @@ export default async function LauncherPage({
     getCustomerWork(activeOrg.id),
     getPulseAttention(activeOrg.id, session.user.id),
     getOrgGlance(activeOrg.id),
-    getSetupState(activeOrg, { timeZone: billing?.timeZone, canManageBilling: billing?.access.canManage ?? false }),
+    getSetupState(activeOrg, { timeZone: billing?.timeZone, canManageBilling: billing?.access.canManage ?? false, canManageOrg: canManageSetup }),
     searchParams,
   ]);
-  const canManageSetup = activeOrg.role === 'owner' || activeOrg.role === 'admin';
   const forceSetupGuide = params.setup === '1';
   // Rollout guard (ONBOARDING.md): an org that was already fully set up before ever
   // seeing the guide never gets a surprise card or celebration. The guide on the launcher is the
   // quick start (3 to 5 steps), so "set up" means those steps.
   const showSetupGuide =
-    forceSetupGuide || (!setup.dismissed && (!setup.quick.summary.allDone || setup.seen));
+    setup.quick.steps.length > 0 && (forceSetupGuide || (!setup.dismissed && (!setup.quick.summary.allDone || setup.seen)));
   if (showSetupGuide && !setup.quick.summary.allDone && !setup.seen) {
     after(() => markGuideSeen(activeOrg.id));
   }

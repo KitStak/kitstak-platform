@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2 } from 'lucide-react';
-import { Field } from '@/components/ui';
+import { EmailText, Field } from '@/components/ui';
 import { companyIssue } from '@/features/signup/fields';
 import { signOut } from '@/lib/auth-client';
 import { createWorkspaceAction } from '@/server/signup-actions';
@@ -102,7 +102,7 @@ export function CompanyForm({ firstName, email }: { readonly firstName: string; 
         </SubmitButton>
       </form>
       <p className="mt-7 text-center text-base text-fg-secondary">
-        Signed in as <span className="font-medium text-fg">{email}</span>.{' '}
+        Signed in as <EmailText email={email} className="font-medium text-fg" after="." />{' '}
         <button type="button" onClick={onSignOut} className={`${TAP_BUTTON} font-semibold text-fg-link hover:underline`}>
           Sign out
         </button>

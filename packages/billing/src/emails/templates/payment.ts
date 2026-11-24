@@ -69,6 +69,14 @@ export function receipt(raw: unknown): EmailContent {
   };
 }
 
+/**
+ * The moment an email speaks from: the `asOf` of its payload, else now. A date is only called "by
+ * then" or "until then" when it is still ahead of this moment.
+ */
+function writtenAt(payload: Readonly<Record<string, unknown>>): Date {
+  return optionalDate(payload, 'asOf') ?? new Date();
+}
+
 export function paymentFailed(raw: unknown): EmailContent {
   const payload = asPayload(raw);
   const orgName = text(payload, 'orgName', 120);
@@ -77,13 +85,47 @@ export function paymentFailed(raw: unknown): EmailContent {
   const last4 = optionalText(payload, 'last4', 8);
   const nextRetryAt = optionalDate(payload, 'nextRetryAt');
   const accessChangesAt = date(payload, 'accessChangesAt');
+  const asOf = writtenAt(payload);
+  // A retry date that has passed is not a plan. Say "no more tries" only when there really is none.
+  const retryAhead = nextRetryAt !== null && nextRetryAt.getTime() > asOf.getTime() ? nextRetryAt : null;
+  const button = { label: 'Update card', url: billingLink(portalUrl, { to: 'fix_payment' }) };
+
+  if (accessChangesAt.getTime() <= asOf.getTime()) {
+    // The grace days are over: this try failed after the apps became view only. Nothing here asks
+    // the customer to act "by" a day that has passed, or promises access they no longer have.
+    const facts = [
+      { label: 'Amount due', value: money(amount) },
+      { label: 'Apps view only since', value: day(accessChangesAt) },
+    ];
+    if (retryAhead) facts.push({ label: 'We try again on', value: day(retryAhead) });
+    const blocks: EmailBlock[] = [
+      { kind: 'text', text: `We tried ${cardWords(last4)} again for ${money(amount)}. It did not go through.` },
+      { kind: 'text', text: `Your apps are view only now. Pay ${money(amount)} to turn them back on.` },
+      { kind: 'facts', rows: facts },
+      {
+        kind: 'note',
+        text: retryAhead
+          ? 'Nothing is deleted. You do not have to wait for the next try. Update your card and your apps open again right away.'
+          : 'Nothing is deleted. Update your card and your apps open again right away.',
+      },
+    ];
+    return {
+      subject: 'Your KitStak apps are view only. Your payment is still late.',
+      preheader: `Pay ${money(amount)} to turn your apps back on.`,
+      heading: 'Your payment is still late',
+      blocks,
+      button,
+      footer: billingFooter(orgName),
+    };
+  }
+
   const blocks: EmailBlock[] = [
     { kind: 'text', text: `We could not charge ${cardWords(last4)} for ${money(amount)}.` },
     {
       kind: 'facts',
       rows: [
         { label: 'Amount due', value: money(amount) },
-        { label: 'We try again on', value: nextRetryAt ? day(nextRetryAt) : 'No more tries planned' },
+        { label: 'We try again on', value: retryAhead ? day(retryAhead) : 'No more tries planned' },
         { label: 'Full access until', value: day(accessChangesAt) },
       ],
     },
@@ -95,7 +137,7 @@ export function paymentFailed(raw: unknown): EmailContent {
     preheader: `Update your card by ${day(accessChangesAt)} to keep full access.`,
     heading: 'Your payment did not go through',
     blocks,
-    button: { label: 'Update card', url: billingLink(portalUrl, { to: 'fix_payment' }) },
+    button,
     footer: billingFooter(orgName),
   };
 }
@@ -126,6 +168,22 @@ export function graceEnding(raw: unknown): EmailContent {
   const portalUrl = portal(payload);
   const amount = cents(payload, 'amountDueCents');
   const accessChangesAt = date(payload, 'accessChangesAt');
+  const button = { label: 'Update card', url: billingLink(portalUrl, { to: 'fix_payment' }) };
+  if (accessChangesAt.getTime() <= writtenAt(payload).getTime()) {
+    // Sent late (a job that did not run on the day): the last day has passed, so say what is true now.
+    return {
+      subject: 'Your KitStak apps are view only. Your payment is still late.',
+      preheader: `Pay ${money(amount)} to turn your apps back on.`,
+      heading: 'Your payment is still late',
+      blocks: [
+        { kind: 'text', text: `We still could not collect ${money(amount)} for ${orgName}.` },
+        { kind: 'text', text: `Your apps are view only now. Pay ${money(amount)} to turn them back on.` },
+        { kind: 'note', text: 'Nothing is deleted. Update your card and your apps open again right away.' },
+      ],
+      button,
+      footer: billingFooter(orgName),
+    };
+  }
   return {
     subject: 'Last day to fix your KitStak payment',
     preheader: `Pay ${money(amount)} by ${day(accessChangesAt)} to keep full access.`,
@@ -135,7 +193,7 @@ export function graceEnding(raw: unknown): EmailContent {
       { kind: 'text', text: `Update your card by ${day(accessChangesAt)} to keep full access.` },
       { kind: 'note', text: 'After that your apps are view only. Nothing is deleted.' },
     ],
-    button: { label: 'Update card', url: billingLink(portalUrl, { to: 'fix_payment' }) },
+    button,
     footer: billingFooter(orgName),
   };
 }

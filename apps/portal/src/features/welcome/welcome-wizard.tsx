@@ -7,7 +7,7 @@
  * Answers from the marketing site arrive already filled in. When all three are there the wizard
  * opens on its last screen, the plan, with one button: "Looks good".
  */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -40,6 +40,16 @@ import {
 } from '@/lib/setup-model';
 import { saveSetupProfile, skipWelcome } from '@/server/onboarding-actions';
 import { PillGroup, TileGroup } from './option-tile';
+import { READING_PLAN_COOKIE } from './reading-plan';
+
+/** Writes or clears the "still reading the plan" cookie (see `reading-plan.ts`). */
+function setReadingPlan(on: boolean): void {
+  try {
+    document.cookie = `${READING_PLAN_COOKIE}=${on ? '1' : ''}; path=/welcome; max-age=${on ? 1800 : 0}; samesite=lax`;
+  } catch {
+    // Without cookies the plan closes after the save and the launcher shows the same progress.
+  }
+}
 
 type WizardStep = 'apps' | 'about' | 'start' | 'plan';
 const STEP_ORDER: readonly WizardStep[] = ['apps', 'about', 'start', 'plan'];
@@ -61,8 +71,10 @@ export interface WelcomeWizardProps {
   readonly billing: SetupBillingSignal | null;
   /** "Dec 7, 2026" while a free trial is running. */
   readonly trialEndsOn: string | null;
-  /** Answers already given on the marketing site. */
+  /** Answers already given on the marketing site, or saved a moment ago by this wizard. */
   readonly prefill: WelcomePrefill;
+  /** True when the answers in `prefill` are already saved (the plan screen was opened again). */
+  readonly answersSaved?: boolean;
 }
 
 function AppsStep({
@@ -127,7 +139,7 @@ function AppsStep({
   );
 }
 
-export function WelcomeWizard({ firstName, orgName, products, billing, trialEndsOn, prefill }: WelcomeWizardProps) {
+export function WelcomeWizard({ firstName, orgName, products, billing, trialEndsOn, prefill, answersSaved = false }: WelcomeWizardProps) {
   const router = useRouter();
   const prefilled =
     prefill.businessType !== undefined && prefill.teamSize !== undefined && prefill.startMode !== undefined;
@@ -184,6 +196,35 @@ export function WelcomeWizard({ firstName, orgName, products, billing, trialEnds
   const planSummary = summarizeSetup(planSteps);
   const planMinutes = planSummary.remainingMinutes;
 
+  /*
+   * The answers are saved the moment the plan opens (review round 3). The plan shows "Tell us about
+   * your business" as done, and that has to be true: a person who leaves here without pressing
+   * "Looks good" finds the same "1 of 5 done" on the launcher, and is not asked again. Until the
+   * save has landed the row reads "Saving", never "Done".
+   *
+   * Saving makes the server send this page again, and a saved profile normally means "go to the
+   * launcher". A short lived cookie, set first, tells the page the person is still reading the
+   * plan, so the wizard stays until they press "Looks good" (`READING_PLAN_COOKIE`).
+   */
+  const profileKey = planProfile === null ? null : JSON.stringify(planProfile);
+  const [savedKey, setSavedKey] = useState<string | null>(() => (answersSaved ? profileKey : null));
+  const profileSaved = profileKey !== null && savedKey === profileKey;
+  useEffect(() => {
+    if (step !== 'plan' || planProfile === null || profileKey === null || savedKey === profileKey) return;
+    let live = true;
+    setReadingPlan(true);
+    saveSetupProfile(planProfile)
+      .then((result) => {
+        if (live && result.ok) setSavedKey(profileKey);
+      })
+      // "Looks good" saves again and shows the reason when that fails too.
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the answers, not the object
+  }, [step, profileKey]);
+
   const goNext = () => setStepIndex((index) => Math.min(index + 1, STEP_ORDER.length - 1));
   const goBack = () => setStepIndex((index) => Math.max(index - 1, 0));
 
@@ -193,6 +234,7 @@ export function WelcomeWizard({ firstName, orgName, products, billing, trialEnds
     setSaving(true);
     setError(null);
     try {
+      setReadingPlan(false);
       const result = await saveSetupProfile(planProfile);
       if (!result.ok) {
         setError(result.error ?? 'Something went wrong. Try again.');
@@ -214,9 +256,11 @@ export function WelcomeWizard({ firstName, orgName, products, billing, trialEnds
     working.current = true;
     setSkipping(true);
     try {
-      // A person who already answered these questions on the website is not asked again, and the
-      // answers are not thrown away because they skipped a confirm screen: they count as done.
-      if (prefilled && planProfile !== null) await saveSetupProfile(planProfile);
+      setReadingPlan(false);
+      // A person who already answered these questions (on the website, or here up to the plan) is
+      // not asked again, and the answers are not thrown away because they skipped a confirm
+      // screen: they count as done.
+      if ((prefilled || step === 'plan') && planProfile !== null) await saveSetupProfile(planProfile);
       else await skipWelcome();
     } catch {
       // Skipping must never trap anyone on this screen. The launcher still opens.
@@ -369,15 +413,18 @@ export function WelcomeWizard({ firstName, orgName, products, billing, trialEnds
               <p className="text-sm font-semibold text-fg">First steps for {orgName}</p>
               {/* The same count and minutes the launcher shows next. */}
               <p className="text-xs text-fg-muted tabular-nums" data-testid="welcome-plan-summary">
-                {planSummary.doneCount} of {planSummary.totalCount} done · about {planMinutes} min left
+                {planSummary.doneCount - (profileSaved ? 0 : planSteps.filter((planStep) => planStep.key === 'profile' && planStep.status === 'done').length)} of{' '}
+                {planSummary.totalCount} done · about {planMinutes} min left
               </p>
             </div>
             {planSteps.length > 0 ? (
               <ol className="divide-y divide-border-subtle" data-testid="welcome-steps">
                 {planSteps.map((planStep, index) => {
-                  const done = planStep.status === 'done';
+                  // The answers row is "done" only once they are saved. Until then it says "Saving".
+                  const saving = planStep.key === 'profile' && planStep.status === 'done' && !profileSaved;
+                  const done = planStep.status === 'done' && !saving;
                   return (
-                    <li key={planStep.key} className="flex items-center gap-3 px-5 py-3">
+                    <li key={planStep.key} data-step={planStep.key} data-state={done ? 'done' : saving ? 'saving' : 'open'} className="flex items-center gap-3 px-5 py-3">
                       {done ? (
                         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-success text-fg-inverse">
                           <Check aria-hidden className="size-3.5" strokeWidth={3} />
@@ -389,10 +436,10 @@ export function WelcomeWizard({ firstName, orgName, products, billing, trialEnds
                       )}
                       <div className="min-w-0 flex-1">
                         <p className={cn('text-sm font-medium', done ? 'text-fg-muted' : 'text-fg')}>{planStep.title}</p>
-                        {done ? null : <p className="mt-0.5 text-xs text-fg-muted">{planStep.description}</p>}
+                        {done || saving ? null : <p className="mt-0.5 text-xs text-fg-muted">{planStep.description}</p>}
                       </div>
                       <span className={cn('shrink-0 text-2xs tabular-nums', done ? 'font-medium text-success-text' : 'text-fg-muted')}>
-                        {done ? 'Done' : `${planStep.minutes} min`}
+                        {done ? 'Done' : saving ? 'Saving' : `${planStep.minutes} min`}
                       </span>
                     </li>
                   );

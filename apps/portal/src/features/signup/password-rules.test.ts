@@ -3,6 +3,7 @@ import { DEFAULT_PASSWORD_POLICY, mergePasswordPolicy, validatePassword } from '
 import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  isEasyToGuess,
   isRulesIssue,
   missingRuleWords,
   passwordIssue,
@@ -16,6 +17,9 @@ const SAMPLES = [
   'correcthorsebatterystaple',
   'abcdefghijklmn',
   'abcdefghijklmno',
+  'sevenbluekitesfly',
+  'passwordpassword',
+  'Brave-Lantern-12',
   'maya is my name ok',
   'short',
   'alllowercase',
@@ -31,6 +35,7 @@ const SAMPLES = [
   'Passw0rd!ééé',
   `Aa1!${'é'.repeat(34)}`,
   `Aa1!${'é'.repeat(35)}`,
+  `Bx7!${'é'.repeat(34)}`,
 ];
 
 describe('passwordIssue', () => {
@@ -64,13 +69,15 @@ describe('passwordIssue', () => {
     // A long passphrase is a good password. No capital, number or symbol is asked for (review round 2).
     expect(passwordIssue('correct horse battery staple')).toBeNull();
     expect(passwordIssue('correcthorsebatterystaple')).toBeNull();
-    expect(passwordIssue('abcdefghijklmno')).toBeNull();
+    expect(passwordIssue('sevenbluekitesfly')).toBeNull();
+    // Length alone is not enough for a password a guessing program tries first (review round 3).
+    expect(passwordIssue('abcdefghijklmno')).toBe('That one is too easy to guess. Try a few words that do not go together.');
     expect(passwordIssue('abc')).toBe('Your password still needs 10 or more characters, a capital letter, a number and a symbol, like ! or #.');
     expect(passwordIssue('1234')).toBe('Your password still needs 10 or more characters, a capital and a small letter and a symbol, like ! or #.');
     expect(passwordIssue('Maya-Secret-12!', { email: 'maya@northwind.example' })).toBe(
       'Do not use your email name in your password.',
     );
-    expect(passwordIssue('Good-Password-1')).toBeNull();
+    expect(passwordIssue('Brave-Lantern-1')).toBeNull();
   });
 
   test('the missing words match the checklist: a rule is named exactly when its tick is off', () => {
@@ -83,7 +90,7 @@ describe('passwordIssue', () => {
   });
 
   test('counts bytes, so a long password with accents is caught before the server refuses it', () => {
-    expect(passwordIssue(`Aa1!${'é'.repeat(34)}`)).toBeNull();
+    expect(passwordIssue(`Bx7!${'é'.repeat(34)}`)).toBeNull();
     expect(passwordIssue(`Aa1!${'é'.repeat(35)}`)).toBe('Use 72 characters or fewer.');
   });
 });
@@ -104,7 +111,8 @@ describe('passwordRules', () => {
       if (sample.length > PASSWORD_MAX_LENGTH) continue;
       if (new TextEncoder().encode(sample).length > PASSWORD_MAX_LENGTH) continue;
       const allMet = passwordRules(sample).every((rule) => rule.met);
-      expect({ sample, ok: passwordIssue(sample) === null }).toEqual({ sample, ok: allMet });
+      // Every tick on, and not a password that is easy to guess (review round 3).
+      expect({ sample, ok: passwordIssue(sample) === null }).toEqual({ sample, ok: allMet && !isEasyToGuess(sample) });
     }
   });
 });
@@ -113,10 +121,13 @@ describe('passwordStrength', () => {
   test('never calls a password good before it meets every rule', () => {
     expect(passwordStrength('').score).toBe(0);
     expect(passwordStrength('abcdefghijklmn').score).toBeLessThan(3);
-    expect(passwordStrength('Good-Pass-1').label).toBe('Good');
-    expect(passwordStrength('Good-Password-12').label).toBe('Strong');
+    expect(passwordStrength('Brave-Lamp-1').label).toBe('Good');
+    expect(passwordStrength('Brave-Lantern-12').label).toBe('Strong');
     // Length alone is enough from 15 characters on, and reads "Strong" from 20.
-    expect(passwordStrength('abcdefghijklmnop').label).toBe('Good');
+    expect(passwordStrength('sevenbluekitesfly').label).toBe('Good');
+    // But never for a straight run, a repeat or a common password.
+    expect(passwordStrength('abcdefghijklmnop').label).toBe('Too weak');
+    expect(passwordStrength('Good-Password-12').label).toBe('Too weak');
     expect(passwordStrength('correct horse battery staple').label).toBe('Strong');
   });
 });
@@ -124,7 +135,8 @@ describe('passwordStrength', () => {
 describe('the shared policy: 15 characters or more needs nothing else', () => {
   test('the server accepts a long passphrase and still refuses a short one without the three kinds', () => {
     expect(validatePassword('correct horse battery staple', DEFAULT_PASSWORD_POLICY)).toEqual([]);
-    expect(validatePassword('abcdefghijklmno', DEFAULT_PASSWORD_POLICY)).toEqual([]);
+    expect(validatePassword('sevenbluekitesfly', DEFAULT_PASSWORD_POLICY)).toEqual([]);
+    expect(validatePassword('abcdefghijklmno', DEFAULT_PASSWORD_POLICY)).toEqual(['That one is too easy to guess. Try a few words that do not go together.']);
     expect(validatePassword('abcdefghijklmn', DEFAULT_PASSWORD_POLICY)).toEqual(['Include an uppercase letter.', 'Include a number.', 'Include a symbol.']);
     // The two rules that are not about kinds of characters stay for every length.
     expect(validatePassword('x'.repeat(80), DEFAULT_PASSWORD_POLICY)).toEqual(['Use at most 72 bytes.']);

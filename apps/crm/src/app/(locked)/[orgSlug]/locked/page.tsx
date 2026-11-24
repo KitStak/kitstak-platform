@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { PlanLockFrame, PlanLockScreen } from '@kitstak/ui/plan-lock';
+import { PlanLockFrame, PlanLockScreen, billingOnlyLock } from '@kitstak/ui/plan-lock';
 import { Logo } from '@/features/shell/logo';
-import { findOrgMembership, getSession } from '@/server/auth/session';
-import { getPlanView } from '@/server/plan';
+import { findBillingOnlyOrg, findOrgMembership, getSession } from '@/server/auth/session';
+import { getPlanView, portalUrl } from '@/server/plan';
 import { LockedSwitcher } from './locked-switcher';
 
 export const metadata: Metadata = { title: 'CRM is not in your plan' };
@@ -24,7 +24,24 @@ export default async function LockedPage({ params }: LockedPageProps) {
   const session = await getSession();
   if (!session) redirect(`/login?next=${encodeURIComponent(`/${orgSlug}`)}`);
   const membership = await findOrgMembership(session.user.id, orgSlug);
-  if (!membership) notFound(); // signed in but not a member: do not reveal whether the org exists
+  if (!membership) {
+    // A person who only manages billing: no seat in any app. The same frame, with a way back to Billing.
+    const billingOrg = await findBillingOnlyOrg(session.user.id, orgSlug);
+    if (!billingOrg) notFound(); // signed in but not a member: do not reveal whether the org exists
+    return (
+      <PlanLockFrame
+        logo={
+          <Link href="/" aria-label="KitStak CRM home">
+            <Logo size={24} />
+          </Link>
+        }
+        orgName={billingOrg.name}
+        switcher={<LockedSwitcher billingOnly />}
+      >
+        <PlanLockScreen app="crm" lock={billingOnlyLock(billingOrg.name, portalUrl())} hidePoints />
+      </PlanLockFrame>
+    );
+  }
 
   const plan = await getPlanView({
     orgId: membership.organization.id,

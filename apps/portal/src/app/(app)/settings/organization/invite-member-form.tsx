@@ -6,10 +6,10 @@ import { Mail } from 'lucide-react';
 import { formatMoney, type PlanSelection } from '@kitstak/billing/catalog';
 import type { ChangePreview } from '@kitstak/billing/server';
 import { Button, Field, Input, LinkButton, Notice, Select } from '@/components/ui';
-import { clearInviteDraft, readInviteDraft, saveInviteDraft } from '@/lib/invite-draft';
+import { clearInviteDraft, clearInviteWaiting, readInviteDraft, readInviteWaiting, saveInviteDraft, saveInviteWaiting } from '@/lib/invite-draft';
 import { inviteMemberAction } from '@/server/auth-relay-actions';
 import { confirmPlanChangeAction, previewPlanChangeAction } from '@/features/billing/actions';
-import { INVITE_ROLES, ROLE_LABEL, countTyped, invitePlanLine, parseInviteEmails, type InviteRole } from './invite-model';
+import { INVITE_ROLES, ROLE_LABEL, countTyped, findOnTeam, inviteErrorWords, invitePlanLine, notInvitedYet, parseInviteEmails, type InviteRole, type TeamPerson } from './invite-model';
 
 export interface InviteSeatInfo {
   /** The viewer may pay and change the plan (owner or billing manager). */
@@ -65,11 +65,14 @@ export function InviteMemberForm({
   orgId,
   emailVerified,
   seats,
+  team = [],
 }: {
   /** Passed explicitly: portal sessions do not always carry an active organization. */
   readonly orgId: string;
   readonly emailVerified: boolean;
   readonly seats: InviteSeatInfo;
+  /** The people already in the organization, so "already on your team" can use their name. */
+  readonly team?: readonly TeamPerson[];
 }) {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -80,6 +83,8 @@ export function InviteMemberForm({
   const [offerError, setOfferError] = useState<OfferError | null>(null);
   const [sent, setSent] = useState<string | null>(null);
   const [pending, setPending] = useState<'invite' | 'seat' | null>(null);
+  /** The people a reload found still waiting for a seat. The notice names them. */
+  const [restored, setRestored] = useState<readonly string[] | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Back from "Update card": the addresses and the role are still here (kept for this tab only).
@@ -97,12 +102,62 @@ export function InviteMemberForm({
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
+  // After a reload: the people who still wait for a seat are back in the field, with the reason
+  // and, for a person who may pay, the price of the missing seats. Nothing is sent by itself.
+  useEffect(() => {
+    const waiting = readInviteWaiting(orgId);
+    if (!waiting || readInviteDraft()) return;
+    let live = true;
+    const frame = window.requestAnimationFrame(() => {
+      const waitingRole = (INVITE_ROLES as readonly string[]).includes(waiting.role) ? (waiting.role as InviteRole) : 'member';
+      setEmail(waiting.emails.join(', '));
+      setRole(waitingRole);
+      setRestored(waiting.emails);
+      const open = seats.limit === null ? waiting.emails.length : Math.max(0, seats.limit - seats.used);
+      const short = waiting.emails.length - open;
+      // Seats opened up since then (someone left, seats were added): nothing to buy, only to send.
+      if (short <= 0) return;
+      setSeatMessage(waiting.message);
+      if (seats.canManageBilling && seats.paidSelection) {
+        const selection = { ...seats.paidSelection, seats: seats.paidSelection.seats + short };
+        void previewPlanChangeAction({ selection })
+          .then((preview) => {
+            if (live && preview.ok) setOffer({ emails: waiting.emails, role: waitingRole, selection, preview: preview.data });
+          })
+          .catch(() => undefined);
+      }
+    });
+    return () => {
+      live = false;
+      window.cancelAnimationFrame(frame);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, when the form opens
+  }, []);
+
   /** Sends one invite. "All seats are in use" is an answer, not a failed request in the console. */
   const sendOne = async (to: string, as: InviteRole): Promise<SendOutcome> => {
+    // A teammate: say so by name, with no request at all.
+    const onTeam = findOnTeam(to, team);
+    if (onTeam) return { kind: 'failed', message: inviteErrorWords({ code: 'USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION' }, to, team) };
     const result = await inviteMemberAction({ email: to, role: as, organizationId: orgId });
     if (!result.error) return { kind: 'sent' };
     if (result.error.code === 'SEAT_LIMIT_REACHED') return { kind: 'seat_limit', message: result.error.message ?? 'All your seats are in use. Add a seat first.' };
-    return { kind: 'failed', message: result.error.message ?? 'We could not send the invite. Try again.' };
+    return { kind: 'failed', message: inviteErrorWords(result.error, to, team) };
+  };
+
+  /** Keeps the people who wait for a seat for this tab, or forgets them once none is left. */
+  const rememberWaiting = (left: readonly string[], as: InviteRole, stop: SendOutcome | null) => {
+    if (stop?.kind === 'seat_limit' && left.length > 0) saveInviteWaiting({ orgId, emails: left, role: as, message: stop.message });
+    else clearInviteWaiting();
+  };
+
+  /** "Not now": the offer closes and the people are no longer kept for a reload. */
+  const dismissOffer = () => {
+    setOffer(null);
+    setSeatMessage(null);
+    setOfferError(null);
+    setRestored(null);
+    clearInviteWaiting();
   };
 
   /**
@@ -137,9 +192,11 @@ export function InviteMemberForm({
     setSeatMessage(null);
     setOffer(null);
     setOfferError(null);
+    setRestored(null);
     setPending('invite');
     try {
       const { sentTo, left, stop } = await sendAll(parsed.emails, role);
+      rememberWaiting(left, role, stop);
       setEmail(left.join(', '));
       setSent(sentWords(sentTo));
       if (sentTo.length > 0) router.refresh();
@@ -182,10 +239,12 @@ export function InviteMemberForm({
         }
         return;
       }
-      const added = offer.emails.length;
+      const added = offer.selection.seats - (seats.paidSelection?.seats ?? offer.selection.seats - offer.emails.length);
       setOffer(null);
       setSeatMessage(null);
+      setRestored(null);
       const { sentTo, left, stop } = await sendAll(offer.emails, offer.role);
+      rememberWaiting(left, offer.role, stop);
       setEmail(left.join(', '));
       setSent(sentWords(sentTo, added === 1 ? 'Seat added. ' : `${added} seats added. `));
       if (stop && stop.kind !== 'sent') setError(left.length > 1 ? `${left[0]}: ${stop.message}` : stop.message);
@@ -215,7 +274,10 @@ export function InviteMemberForm({
   const paid = seats.paidSelection;
   const period = paid?.interval === 'yearly' ? 'per year' : 'per month';
   const pulseOnly = seatMessage?.startsWith('Pulse covers') ?? false;
-  const offerCount = offer?.emails.length ?? 0;
+  // Seats the offer adds. After a reload some seats may have opened up, so it can be fewer than the people.
+  const offerCount = offer ? Math.max(1, offer.selection.seats - (paid?.seats ?? 0)) : 0;
+  const offerPeople = offer?.emails.length ?? 0;
+  const restoredLine = restored ? `${notInvitedYet(restored)} ` : '';
   const planLine = invitePlanLine(
     { paid: seats.paid, limit: seats.limit, used: seats.used, canManageBilling: seats.canManageBilling, pulseOnly: seats.paid && seats.paidSelection === null && seats.limit !== null },
     role,
@@ -291,14 +353,15 @@ export function InviteMemberForm({
           action={
             <>
               <Button size="lg" data-testid="invite-add-seat" loading={pending === 'seat'} onClick={addSeatAndInvite}>
-                {offerCount === 1 ? 'Add seat and send invite' : `Add ${offerCount} seats and send invites`}
+                {offerCount === 1 ? `Add seat and send ${offerPeople === 1 ? 'invite' : 'invites'}` : `Add ${offerCount} seats and send invites`}
               </Button>
-              <Button variant="ghost" size="lg" disabled={pending === 'seat'} onClick={() => { setOffer(null); setSeatMessage(null); setOfferError(null); }}>
+              <Button variant="ghost" size="lg" disabled={pending === 'seat'} onClick={dismissOffer} data-testid="invite-offer-dismiss">
                 Not now
               </Button>
             </>
           }
         >
+          {restored ? <span data-testid="invite-waiting">{restoredLine}</span> : null}
           {seatsInUse(paid.seats)} Add {offerCount === 1 ? '1 seat' : `${offerCount} seats`} for {formatMoney(offer.preview.recurringDeltaCents)} more {period}.{' '}
           {offer.preview.dueTodayCents > 0
             ? `You pay ${formatMoney(offer.preview.dueTodayCents)} today for the days left.`
@@ -343,9 +406,24 @@ export function InviteMemberForm({
             ) : undefined
           }
         >
+          {restored ? <span data-testid="invite-waiting">{restoredLine}</span> : null}
           {pulseOnly || seats.canManageBilling || !paid
             ? seatMessage
             : `${seatsInUse(paid.seats)} Ask ${seats.ownerName ?? 'your organization owner'} to add one.`}
+        </Notice>
+      ) : restored ? (
+        // Seats opened up since the reload: nothing to buy. The people are back in the field.
+        <Notice
+          tone="info"
+          role="status"
+          testId="invite-waiting-open"
+          action={
+            <Button variant="ghost" size="sm" onClick={dismissOffer}>
+              Dismiss
+            </Button>
+          }
+        >
+          <span data-testid="invite-waiting">{restoredLine}</span>There is room for them now. Press Send invite.
         </Notice>
       ) : null}
     </div>

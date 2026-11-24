@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { formatMoney } from '@kitstak/billing/catalog';
 import { TEST_CARDS, getTestCardUpdate } from '@kitstak/billing/gateway/test';
 import { billingRuntime } from '@/server/billing/runtime';
 import { isActiveOrgMember } from '@/server/orgs';
@@ -26,7 +27,12 @@ export default async function TestCardPage({ params }: { readonly params: Promis
           {view.current
             ? `Your card now: ${cardLabel(view.current)}, expires ${cardExpiry(view.current)}.`
             : 'You have no card on file yet.'}{' '}
-          If a payment is due, we try it right after you save.
+          {/* The amount is named, so nobody is charged by surprise. A plan that has ended owes nothing. */}
+          <span data-testid="test-card-due">
+            {view.dueNowCents > 0
+              ? `You have an unpaid bill of ${formatMoney(view.dueNowCents)}. We charge it to the new card right after you save.`
+              : 'Nothing is due now, so nothing is charged when you save.'}
+          </span>
         </p>
       </div>
       <Card as="section" aria-label="New card" className="p-5 sm:p-6">

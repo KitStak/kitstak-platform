@@ -10,6 +10,7 @@ import {
   type BillingInterval,
   CATALOG,
   daysLeft,
+  formatDay,
   formatDayShort,
   formatMoney,
   isBundle,
@@ -117,10 +118,31 @@ export interface PlanState {
     readonly nextRetryAt: Date | null;
     readonly accessChangesAt: Date;
   } | null;
+  /**
+   * The day the plan is set to end, whenever a cancel is set on a live plan. Set in phase
+   * `cancel_scheduled`, and also when a cancel sits on a plan that is late or paused (review round
+   * 3), so every screen can show "Keep my plan" and never a second "Cancel plan".
+   */
   readonly cancelAt: Date | null;
   readonly pause: { readonly startsAt: Date; readonly resumesAt: Date } | null;
   readonly endedAt: Date | null;
+  /**
+   * Why the plan ended (review round 3). null while the plan runs, and for plans that ended before
+   * the reason was recorded.
+   */
+  readonly endedReason: PlanEndedReason | null;
+  /** The bill that was dropped ('canceled_unpaid') or never collected ('payment_failed'). */
+  readonly endedAmountCents: number | null;
+  /** How many times the card was tried for that bill. */
+  readonly endedAttempts: number | null;
 }
+
+/**
+ * 'canceled': the customer canceled and the paid time ran out. 'canceled_unpaid': the customer
+ * canceled while a bill was open, so the plan ended that day and the bill was dropped.
+ * 'payment_failed': the gateway gave up after its last failed try.
+ */
+export type PlanEndedReason = 'canceled' | 'canceled_unpaid' | 'payment_failed';
 
 /* ===== input rows ===== */
 
@@ -161,6 +183,10 @@ export interface PlanSubscriptionInput {
   readonly nextDiscountCents?: number;
   readonly nextDiscountLabel?: string | null;
   readonly nextCreditCents?: number;
+  /** Why the plan ended, with the bill that was open then. Missing on rows from before 0010. */
+  readonly endedReason?: PlanEndedReason | null;
+  readonly endedAmountCents?: number | null;
+  readonly endedAttempts?: number | null;
 }
 
 /** One `core.entitlements` row plus the answer of `moduleAccess` for it. */
@@ -335,12 +361,151 @@ export function derivePlanState(input: PlanStateInput): PlanState {
     creditCents: Math.max(0, counted?.creditCents ?? 0),
     currentPeriodEnd: live?.currentPeriodEnd ?? null,
     pastDue,
-    cancelAt: phase === 'cancel_scheduled' && live ? (live.cancelAt ?? live.currentPeriodEnd) : null,
+    cancelAt: live && (live.cancelAtPeriodEnd || live.cancelAt) ? (live.cancelAt ?? live.currentPeriodEnd) : null,
     pause:
       live && live.pauseResumesAt && (phase === 'paused' || phase === 'pause_scheduled')
         ? { startsAt: live.pauseStartsAt ?? now, resumesAt: live.pauseResumesAt }
         : null,
     endedAt: phase === 'ended' && counted ? (counted.endedAt ?? counted.canceledAt ?? counted.currentPeriodEnd) : null,
+    endedReason: phase === 'ended' && counted ? (counted.endedReason ?? null) : null,
+    endedAmountCents: phase === 'ended' && counted ? (counted.endedAmountCents ?? null) : null,
+    endedAttempts: phase === 'ended' && counted ? (counted.endedAttempts ?? null) : null,
+  };
+}
+
+/* ===== why a plan ended ===== */
+
+/**
+ * The words for a plan that ended, by reason. `audit` is one sentence for the activity log (the
+ * log row carries its own date). `line(day)` is the sentence for billing home and the app banners,
+ * with the day the plan ended. PURE, so the email, the screens and the log say the same thing.
+ *
+ *  - gave up:  'We could not collect $164.00 after 4 tries, so your plan ended on Nov 23, 2026.'
+ *  - canceled with a bill open: 'You canceled, so your plan ended on Nov 24, 2026. We did not charge the $348.80.'
+ *  - canceled: 'Your plan ended on Dec 16, 2026.'
+ */
+export function planEndedWords(input: {
+  readonly reason: PlanEndedReason | null;
+  readonly amountCents: number | null;
+  readonly attempts: number | null;
+}): { readonly audit: string; readonly line: (endedOn: string | null) => string } {
+  const amount = input.amountCents !== null && input.amountCents > 0 ? formatMoney(input.amountCents) : null;
+  const tries = input.attempts !== null && input.attempts >= 1 ? ` after ${input.attempts} ${input.attempts === 1 ? 'try' : 'tries'}` : '';
+  const on = (endedOn: string | null) => (endedOn ? ` on ${endedOn}` : '');
+  if (input.reason === 'payment_failed') {
+    const what = amount ?? 'your payment';
+    return {
+      audit: `We could not collect ${what}${tries}, so the plan ended.`,
+      line: (endedOn) => `We could not collect ${what}${tries}, so your plan ended${on(endedOn)}.`,
+    };
+  }
+  if (input.reason === 'canceled_unpaid') {
+    return {
+      audit: 'The plan ended.',
+      line: (endedOn) =>
+        amount ? `You canceled, so your plan ended${on(endedOn)}. We did not charge the ${amount}.` : `You canceled, so your plan ended${on(endedOn)}.`,
+    };
+  }
+  return { audit: 'The plan ended.', line: (endedOn) => `Your plan ended${on(endedOn)}.` };
+}
+
+/** The sentence for an ended plan, with its day in the viewer's time zone. null when the plan has not ended. */
+export function planEndedLine(state: PlanState, timeZone?: string, short = false): string | null {
+  if (state.phase !== 'ended') return null;
+  const endedOn = state.endedAt ? (short ? formatDayShort(state.endedAt, timeZone) : formatDay(state.endedAt, timeZone)) : null;
+  return planEndedWords({ reason: state.endedReason, amountCents: state.endedAmountCents, attempts: state.endedAttempts }).line(endedOn);
+}
+
+/* ===== cancel: what pressing the button will do ===== */
+
+export interface CancelWords {
+  /**
+   * 'trial': a free trial with a card saved; it ends by itself and nothing is charged.
+   * 'period_end': the plan runs to the end of the paid time and can be kept until then.
+   * 'now': a bill is open, so the plan ends today and that bill is dropped.
+   */
+  readonly mode: 'trial' | 'period_end' | 'now';
+  /** The sentences at the top of the cancel page: what happens, and when. */
+  readonly notice: string;
+  /** One more line under the notice, or null. */
+  readonly detail: string | null;
+  /** The other way out, said before the person decides, or null. */
+  readonly instead: string | null;
+  /** The words on the confirm button. */
+  readonly confirmLabel: string;
+  /** The line billing home shows right after the cancel. */
+  readonly doneNotice: string;
+  /** Mode 'now' only: the bill that will be dropped. */
+  readonly openBillCents: number | null;
+}
+
+/**
+ * What the cancel page says, from the plan as it is now (review round 3). PURE. The rule it states:
+ *
+ *  - A plan in good standing ends on the last day that was paid for, and can be kept until then.
+ *  - A plan with a bill open (a late payment) ends today, and that bill is dropped. Nobody is told
+ *    "you keep everything until" a day they have not paid for, and nothing is charged after a cancel.
+ *
+ * `scheduleCancel` in `server/cancel.ts` does exactly what these words say.
+ */
+export function cancelWords(state: PlanState, timeZone?: string): CancelWords {
+  const day = (date: Date) => formatDay(date, timeZone);
+  const endsAt = state.currentPeriodEnd;
+  const endLabel = endsAt ? day(endsAt) : null;
+
+  if (state.pastDue) {
+    const amount = formatMoney(state.pastDue.amountDueCents);
+    const viewOnly = state.phase === 'unpaid';
+    const notice = viewOnly
+      ? `You have an unpaid bill of ${amount}, and your apps are view only now. If you cancel, your plan ends today and we will not charge the ${amount}. Nothing is deleted.`
+      : `You have an unpaid bill of ${amount}. If you cancel now, your plan ends today and we will not charge the ${amount}. Your apps become view only today. Nothing is deleted.`;
+    return {
+      mode: 'now',
+      notice,
+      detail: null,
+      instead: endLabel
+        ? `Want to keep your plan? Pay the ${amount} and you have full access until ${endLabel}.`
+        : `Want to keep your plan? Pay the ${amount} and your apps open again.`,
+      confirmLabel: 'End my plan today',
+      doneNotice: `Your plan has ended. We will not charge the ${amount}. Your data is safe.`,
+      openBillCents: state.pastDue.amountDueCents,
+    };
+  }
+
+  if (state.trial) {
+    return {
+      mode: 'trial',
+      notice: `Your free trial still runs until ${endLabel ?? 'its last day'}. After that your apps are view only. Nothing is charged. Nothing is deleted.`,
+      detail: null,
+      instead: null,
+      confirmLabel: 'Cancel my plan',
+      doneNotice: 'Your plan is set to end. You keep everything until then. You can undo this any time before that day.',
+      openBillCents: null,
+    };
+  }
+
+  if (state.phase === 'paused') {
+    return {
+      mode: 'period_end',
+      notice: endLabel
+        ? `Your plan is paused, so your apps are view only now. If you cancel, it ends on ${endLabel} and does not start again. Nothing more is charged. Nothing is deleted.`
+        : 'Your plan is paused, so your apps are view only now. If you cancel, it does not start again. Nothing more is charged. Nothing is deleted.',
+      detail: null,
+      instead: null,
+      confirmLabel: 'Cancel my plan',
+      doneNotice: 'Your plan is set to end. It will not start again. You can undo this any time before that day.',
+      openBillCents: null,
+    };
+  }
+
+  return {
+    mode: 'period_end',
+    notice: `Your plan will end on ${endLabel ?? 'the last day you paid for'}. You keep everything until then. After that your apps are view only. Nothing is deleted.`,
+    detail: state.selection.interval === 'yearly' && endLabel ? `You are paid up until ${endLabel}.` : null,
+    instead: null,
+    confirmLabel: 'Cancel my plan',
+    doneNotice: 'Your plan is set to end. You keep everything until then. You can undo this any time before that day.',
+    openBillCents: null,
   };
 }
 
@@ -578,7 +743,8 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
       const parts = [
         `We could not charge your ${cardLabel(state.paymentMethod)} for ${formatMoney(due.amountDueCents)}.`,
       ];
-      if (due.nextRetryAt) parts.push(`We will try again on ${day(due.nextRetryAt)}.`);
+      // Only a try that is still ahead is named.
+      if (due.nextRetryAt && due.nextRetryAt.getTime() > context.now.getTime()) parts.push(`We will try again on ${day(due.nextRetryAt)}.`);
       parts.push(`Update your card by ${day(due.accessChangesAt)} to keep full access.`);
       return notice('payment_failed', 'warning', parts.join(' '), {
         label: 'Update card',
@@ -615,11 +781,12 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
       });
     }
     case 'ended': {
-      const ended = state.endedAt ? ` on ${day(state.endedAt)}` : '';
+      // The reason comes first, so a customer who never canceled is told why (review round 3).
+      const ended = planEndedLine(state, timeZone, true) ?? 'Your plan ended.';
       return notice(
         'ended',
         'danger',
-        `Your plan ended${ended}. Your data is safe. Pick a plan to keep working.`,
+        `${ended} Your data is safe. Pick a plan to keep working.`,
         { label: 'Pick a plan', href: link({ to: 'plan' }) },
       );
     }

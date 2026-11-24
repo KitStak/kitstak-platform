@@ -30,6 +30,7 @@ export const ACTION_KIND: Readonly<Record<AuditAction, ActivityKind>> = {
   'plan.started': 'plan',
   'plan.changed': 'plan',
   'cancel.scheduled': 'plan',
+  'cancel.ended_now': 'plan',
   'cancel.undone': 'plan',
   'pause.scheduled': 'plan',
   'pause.undone': 'plan',

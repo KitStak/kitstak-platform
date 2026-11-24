@@ -11,7 +11,8 @@ import { requireBillingContext } from '@/server/billing/context';
 import { env } from '@/server/env';
 import { Badge, Card, Notice } from '@/components/ui';
 import { BillingHeader, TestModeBadge } from '@/features/billing/billing-chrome';
-import { Flash, type FlashMessage } from '@/features/billing/home/flash';
+import { RememberAppReturn } from '@/features/billing/home/app-return';
+import { Flash, type FlashBackTargets, type FlashMessage } from '@/features/billing/home/flash';
 import { PaymentFocus } from '@/features/billing/home/payment-focus';
 import { InviteReturn } from '@/features/billing/home/invite-return';
 import { AppsSection, DetailsCard, InvoicesPreview, PlanCards, TeamCard, UsageSection } from '@/features/billing/home/sections';
@@ -27,6 +28,8 @@ const NOTICES: Readonly<Record<string, FlashMessage>> = {
   trial_started: { tone: 'success', text: 'Your free trial has started. No card needed.' },
   apps_saved: { tone: 'success', text: 'Your trial apps are saved.' },
   canceled: { tone: 'info', text: 'Your plan is set to end. You keep everything until then. You can undo this any time before that day.' },
+  // A cancel while a bill was open: the plan ended that day and the bill was dropped (review round 3).
+  ended_now: { tone: 'info', text: 'Your plan has ended. The open bill was dropped. We will not charge it. Your data is safe.' },
   paused: { tone: 'info', text: 'Your pause is set. No bills while paused.' },
   kept: { tone: 'success', text: 'Your plan stays on. Nothing changes.' },
   pause_undone: { tone: 'success', text: 'Your pause is off. Your plan carries on as before.' },
@@ -114,6 +117,15 @@ export default async function BillingPage({
     flash = { ...NOTICES[noticeKey], back };
   }
 
+  // The app a person came from to fix a payment is kept for this tab (the card page drops the
+  // link's `from`), so the line that confirms the fix can still say "Back to CRM".
+  const cameFrom = first(params.from);
+  const rememberFrom = !noticeKey && first(params.updated) !== 'card' && cameFrom && isProductId(cameFrom) ? { from: cameFrom, returnPath: appReturnPath(first(params.return)) } : null;
+  const backTargets: FlashBackTargets = Object.fromEntries(
+    PRODUCT_IDS.map((id) => [id, { label: `Back to ${CATALOG.products[id].shortName}`, base: APP_URL[id]() }]),
+  );
+  const cardUpdated = first(params.updated) === 'card' || noticeKey === 'card_paid' || noticeKey === 'paid';
+
   const [profile, invoices, holders] = await Promise.all([
     getBillingProfile(rt.db, org.id),
     listInvoices(rt.db, { orgId: org.id, limit: 3 }),
@@ -148,9 +160,10 @@ export default async function BillingPage({
         }
       />
 
-      {flash ? <Flash message={flash} keys={flashKeys} /> : null}
+      {flash ? <Flash message={flash} keys={flashKeys} backTargets={backTargets} /> : null}
+      {rememberFrom ? <RememberAppReturn from={rememberFrom.from} returnPath={rememberFrom.returnPath} /> : null}
       {/* Sent here from the invite form to fix a card: the way back to the invite, in this tab only. */}
-      {access.canManage ? <InviteReturn /> : null}
+      {access.canManage ? <InviteReturn cardUpdated={cardUpdated} /> : null}
       {billingOff ? (
         <Notice tone="neutral" role="status" testId="billing-off">
           {BILLING_OFF}

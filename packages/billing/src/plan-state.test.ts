@@ -8,8 +8,11 @@ import {
   type PlanStateInput,
   type PlanSubscriptionInput,
   type PlanViewer,
+  cancelWords,
   derivePlanState,
   planBadgeFor,
+  planEndedLine,
+  planEndedWords,
   planLockFor,
   planNoticeFor,
 } from './plan-state';
@@ -466,5 +469,153 @@ describe('planBadgeFor', () => {
 
     const ended = derivePlanState(input({ account: trialAccount(-2), entitlements: trialRows(-2) }));
     expect(planBadgeFor(ended, 'crm')).toBe('view_only');
+  });
+});
+
+/* ===== review round 3 ===== */
+
+describe('a cancel that is set shows in every phase', () => {
+  const paid = rows({ crm: row('past_due', 'stripe', 'full', at(-2)), wms: row('past_due', 'stripe', 'full', at(-2)) });
+
+  it('late and set to end: the phase stays "payment due", and the end date is there for "Keep my plan"', () => {
+    const state = derivePlanState(
+      input({
+        subscription: subscription({ status: 'past_due', pastDueSince: at(-2), amountDueCents: 34880, cancelAtPeriodEnd: true, currentPeriodEnd: at(28) }),
+        entitlements: paid,
+      }),
+    );
+    expect(state.phase).toBe('past_due');
+    expect(state.cancelAt).toEqual(at(28));
+    expect(state.pastDue?.amountDueCents).toBe(34880);
+  });
+
+  it('view only and set to end, and paused and set to end', () => {
+    const unpaid = derivePlanState(
+      input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-9), amountDueCents: 34880, cancelAtPeriodEnd: true, currentPeriodEnd: at(21) }), entitlements: paid }),
+    );
+    expect(unpaid.phase).toBe('unpaid');
+    expect(unpaid.cancelAt).toEqual(at(21));
+    const paused = derivePlanState(input({ subscription: subscription({ pauseStartsAt: at(-3), pauseResumesAt: at(58), cancelAtPeriodEnd: true, cancelAt: at(27) }) }));
+    expect(paused.phase).toBe('paused');
+    expect(paused.cancelAt).toEqual(at(27));
+  });
+
+  it('no cancel set: no end date, in any phase', () => {
+    expect(derivePlanState(input({ subscription: subscription() })).cancelAt).toBeNull();
+    expect(derivePlanState(input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-2), amountDueCents: 100 }), entitlements: paid })).cancelAt).toBeNull();
+    expect(derivePlanState(input({ subscription: subscription({ status: 'canceled', cancelAtPeriodEnd: true, endedAt: at(-1) }) })).cancelAt).toBeNull();
+  });
+});
+
+describe('cancelWords: what the cancel page says before the button', () => {
+  it('a plan in good standing ends on the last paid day', () => {
+    const words = cancelWords(derivePlanState(input({ subscription: subscription() })), 'UTC');
+    expect(words).toEqual({
+      mode: 'period_end',
+      notice: 'Your plan will end on Dec 23, 2026. You keep everything until then. After that your apps are view only. Nothing is deleted.',
+      detail: null,
+      instead: null,
+      confirmLabel: 'Cancel my plan',
+      doneNotice: 'Your plan is set to end. You keep everything until then. You can undo this any time before that day.',
+      openBillCents: null,
+    });
+    const yearly = cancelWords(derivePlanState(input({ subscription: subscription({ interval: 'yearly', currentPeriodEnd: at(200) }) })), 'UTC');
+    expect(yearly.detail).toBe('You are paid up until Jun 16, 2027.');
+  });
+
+  it('a bill is open and the apps still work: the plan ends today and the bill is dropped', () => {
+    const state = derivePlanState(
+      input({ subscription: subscription({ status: 'past_due', pastDueSince: at(0), amountDueCents: 34880, currentPeriodEnd: at(30) }) }),
+    );
+    const words = cancelWords(state, 'UTC');
+    expect(words.mode).toBe('now');
+    expect(words.notice).toBe(
+      'You have an unpaid bill of $348.80. If you cancel now, your plan ends today and we will not charge the $348.80. Your apps become view only today. Nothing is deleted.',
+    );
+    expect(words.instead).toBe('Want to keep your plan? Pay the $348.80 and you have full access until Dec 28, 2026.');
+    expect(words.confirmLabel).toBe('End my plan today');
+    expect(words.doneNotice).toBe('Your plan has ended. We will not charge the $348.80. Your data is safe.');
+    expect(words.openBillCents).toBe(34880);
+  });
+
+  it('a bill is open and the apps are view only: never "you keep everything until"', () => {
+    const state = derivePlanState(
+      input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-8), amountDueCents: 34880, currentPeriodEnd: at(22) }) }),
+    );
+    expect(state.phase).toBe('unpaid');
+    const words = cancelWords(state, 'UTC');
+    expect(words.mode).toBe('now');
+    expect(words.notice).toBe(
+      'You have an unpaid bill of $348.80, and your apps are view only now. If you cancel, your plan ends today and we will not charge the $348.80. Nothing is deleted.',
+    );
+    expect(`${words.notice} ${words.instead}`).not.toContain('You keep everything until');
+  });
+
+  it('a paused plan: it is view only now, and a cancel means it does not start again', () => {
+    const words = cancelWords(derivePlanState(input({ subscription: subscription({ pauseStartsAt: at(-3), pauseResumesAt: at(58) }) })), 'UTC');
+    expect(words.mode).toBe('period_end');
+    expect(words.notice).toBe(
+      'Your plan is paused, so your apps are view only now. If you cancel, it ends on Dec 23, 2026 and does not start again. Nothing more is charged. Nothing is deleted.',
+    );
+  });
+
+  it('a free trial with a card saved ends by itself and nothing is charged', () => {
+    const words = cancelWords(
+      derivePlanState(input({ account: { cart: null, trialStartedAt: at(-4), trialEndsAt: at(10) }, subscription: subscription({ status: 'trialing', trialEnd: at(10), currentPeriodEnd: at(10) }) })),
+      'UTC',
+    );
+    expect(words.mode).toBe('trial');
+    expect(words.notice).toBe('Your free trial still runs until Dec 8, 2026. After that your apps are view only. Nothing is charged. Nothing is deleted.');
+  });
+});
+
+describe('an ended plan says why', () => {
+  const ended = (over: Partial<PlanSubscriptionInput>) =>
+    derivePlanState(input({ subscription: subscription({ status: 'canceled', endedAt: at(-5), ...over }), entitlements: rows({ crm: row('canceled', 'stripe', 'read_only', at(-5)) }) }));
+
+  it('the gateway gave up after the last try', () => {
+    const state = ended({ endedReason: 'payment_failed', endedAmountCents: 16400, endedAttempts: 4 });
+    expect(state).toMatchObject({ phase: 'ended', endedReason: 'payment_failed', endedAmountCents: 16400, endedAttempts: 4 });
+    expect(planEndedLine(state, 'UTC')).toBe('We could not collect $164.00 after 4 tries, so your plan ended on Nov 23, 2026.');
+    const banner = planNoticeFor(state, context(MANAGER, 'crm'));
+    expect(banner?.text).toBe('We could not collect $164.00 after 4 tries, so your plan ended on Nov 23. Your data is safe. Pick a plan to keep working.');
+    expect(banner?.action?.label).toBe('Pick a plan');
+  });
+
+  it('the customer canceled with a bill open, or canceled and the paid time ran out', () => {
+    expect(planEndedLine(ended({ endedReason: 'canceled_unpaid', endedAmountCents: 34880 }), 'UTC')).toBe(
+      'You canceled, so your plan ended on Nov 23, 2026. We did not charge the $348.80.',
+    );
+    expect(planEndedLine(ended({ endedReason: 'canceled' }), 'UTC')).toBe('Your plan ended on Nov 23, 2026.');
+    // Rows from before the reason was stored.
+    expect(planEndedLine(ended({}), 'UTC')).toBe('Your plan ended on Nov 23, 2026.');
+    expect(planEndedLine(derivePlanState(input({ subscription: subscription() })), 'UTC')).toBeNull();
+  });
+
+  it('the words for the activity log carry no date, and never guess a missing number', () => {
+    expect(planEndedWords({ reason: 'payment_failed', amountCents: 16400, attempts: 4 }).audit).toBe('We could not collect $164.00 after 4 tries, so the plan ended.');
+    expect(planEndedWords({ reason: 'payment_failed', amountCents: 16400, attempts: 1 }).audit).toBe('We could not collect $164.00 after 1 try, so the plan ended.');
+    expect(planEndedWords({ reason: 'payment_failed', amountCents: null, attempts: null }).audit).toBe('We could not collect your payment, so the plan ended.');
+    expect(planEndedWords({ reason: 'canceled_unpaid', amountCents: 5800, attempts: 2 }).audit).toBe('The plan ended.');
+    expect(planEndedWords({ reason: null, amountCents: null, attempts: null }).line(null)).toBe('Your plan ended.');
+  });
+
+  it('a member is not shown the amount', () => {
+    const state = ended({ endedReason: 'payment_failed', endedAmountCents: 16400, endedAttempts: 4 });
+    expect(planNoticeFor(state, context(MEMBER, 'crm'))?.text).toBe('This app is view only right now. Ask Maya Chen to pick a plan.');
+  });
+});
+
+describe('a late payment banner never names a retry day that has passed', () => {
+  it('drops the "we will try again" sentence when that day is behind us', () => {
+    const state = derivePlanState(
+      input({
+        subscription: subscription({ status: 'past_due', pastDueSince: at(-2), amountDueCents: 39520, nextPaymentAttempt: at(-1) }),
+        entitlements: rows({ crm: row('past_due', 'stripe', 'full', at(-2)) }),
+      }),
+    );
+    const text = planNoticeFor(state, context(MANAGER, 'crm'))?.text ?? '';
+    expect(text).not.toContain('We will try again');
+    expect(text).toContain('Update your card by Dec 3 to keep full access.');
   });
 });

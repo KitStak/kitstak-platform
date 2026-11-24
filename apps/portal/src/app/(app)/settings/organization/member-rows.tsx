@@ -1,9 +1,33 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserMinus, X } from 'lucide-react';
-import { Badge, Button, Spinner, cn } from '@/components/ui';
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Notice, Spinner, cn } from '@/components/ui';
 import { organization } from '@/lib/auth-client';
+
+/** Told to the page when a person was removed, so one line can say so after the row is gone. */
+const REMOVED_EVENT = 'kitstak:member-removed';
+
+/**
+ * The line after a person is removed. The row is gone by then, so the words live here, above the
+ * list: who was removed, and the way to bring them back.
+ */
+export function MemberRemovedNotice() {
+  const [name, setName] = useState<string | null>(null);
+  useEffect(() => {
+    const onRemoved = (event: Event) => setName((event as CustomEvent<string>).detail);
+    window.addEventListener(REMOVED_EVENT, onRemoved);
+    return () => window.removeEventListener(REMOVED_EVENT, onRemoved);
+  }, []);
+  if (!name) return null;
+  return (
+    <div className="border-b border-border-subtle px-6 py-3">
+      <Notice tone="success" role="status" testId="member-removed">
+        {name} was removed. To bring them back, send a new invite.
+      </Notice>
+    </div>
+  );
+}
 
 /** Admin, member and viewer use a seat. Guest is free. */
 const ASSIGNABLE_ROLES = ['admin', 'member', 'viewer', 'guest'] as const;
@@ -24,6 +48,7 @@ export function MemberRow({
   role,
   isSelf,
   canManage,
+  seatNote = null,
 }: {
   readonly memberId: string;
   /** Passed explicitly: portal sessions don't always carry an active organization. */
@@ -33,10 +58,16 @@ export function MemberRow({
   readonly role: string;
   readonly isSelf: boolean;
   readonly canManage: boolean;
+  /**
+   * What removing this person does to the bill, in one sentence ("You still pay for 5 seats until
+   * you lower them."). null when it changes nothing worth saying (a trial, a free role).
+   */
+  readonly seatNote?: string | null;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const primaryRole = role.split(',')[0]?.trim() || 'member';
   const isOwner = primaryRole === 'owner';
   const editable = canManage && !isSelf && !isOwner;
@@ -64,11 +95,15 @@ export function MemberRow({
     try {
       const result = await organization.removeMember({ memberIdOrEmail: memberId, organizationId: orgId });
       if (result.error) {
-        setError(result.error.message ?? 'Removal failed.');
+        setConfirming(false);
+        setError(result.error.message ?? 'We could not remove this person. Try again.');
         return;
       }
+      setConfirming(false);
+      window.dispatchEvent(new CustomEvent(REMOVED_EVENT, { detail: name }));
       router.refresh();
     } catch {
+      setConfirming(false);
       setError('We couldn’t reach KitStak. Try again.');
     } finally {
       setPending(false);
@@ -124,20 +159,39 @@ export function MemberRow({
             <Button
               variant="danger"
               size="sm"
-              onClick={() => void remove()}
+              onClick={() => setConfirming(true)}
               disabled={pending}
               leadingIcon={<UserMinus aria-hidden />}
+              data-testid="member-remove"
             >
               Remove
             </Button>
+            {/* Removing takes access away at once, so it asks first and says what happens to the seat. */}
+            <Dialog open={confirming} onOpenChange={(open) => (pending ? undefined : setConfirming(open))}>
+              <DialogContent size="sm" data-testid="member-remove-dialog">
+                <DialogTitle>Remove {name}?</DialogTitle>
+                <DialogDescription>
+                  They lose access to every app now.{seatNote ? ` ${seatNote}` : ''}
+                </DialogDescription>
+                <DialogFooter>
+                  <Button variant="secondary" size="lg" onClick={() => setConfirming(false)} disabled={pending} autoFocus>
+                    Keep {name.trim().split(/\s+/)[0] || 'them'}
+                  </Button>
+                  <Button variant="danger" size="lg" onClick={() => void remove()} loading={pending} data-testid="member-remove-confirm">
+                    Remove
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </>
         ) : (
           <Badge
             tone="neutral"
-            className={cn('capitalize', !canManage && 'cursor-default')}
+            className={cn(!canManage && 'cursor-default')}
             title={canManage ? undefined : 'Only owners and admins can change roles'}
           >
-            {primaryRole}
+            {/* The first letter only: "Billing only" stays as it is written. */}
+            {primaryRole.charAt(0).toUpperCase() + primaryRole.slice(1)}
           </Badge>
         )}
       </span>

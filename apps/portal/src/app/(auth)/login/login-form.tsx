@@ -10,7 +10,7 @@ import { hasHandoff, readHandoff, withHandoff } from '@/features/signup/cart';
 import { emailIssue } from '@/features/signup/fields';
 import type { SocialProviderId } from '@/features/signup/social';
 import { signInAction } from '@/server/auth-relay-actions';
-import { resumeAfterSignInAction } from '@/server/signup-actions';
+import { requestSignInCodeAction, resumeAfterSignInAction, signInWithCodeAction } from '@/server/signup-actions';
 import {
   AuthHeading,
   AuthInput,
@@ -21,6 +21,7 @@ import {
   TAP_BUTTON,
   authErrorMessage,
 } from '../_components/form-parts';
+import { CodeInput } from '../_components/code-input';
 import { LegalLine, type LegalUrls } from '../_components/legal-line';
 import { SocialButtons, socialErrorMessage } from '../_components/social-buttons';
 import { prefersAutoFocus, useHashIdentity } from '../_components/use-hash-identity';
@@ -36,9 +37,13 @@ export interface LoginFormProps {
   readonly providers: readonly SocialProviderId[];
   readonly legal: LegalUrls;
   readonly providerError: string | null;
+  /** True when emails land in the dev outbox page, so the code step can point there. */
+  readonly devOutbox?: boolean;
 }
 
-export function LoginForm({ next, notice, handoff, providers, legal, providerError }: LoginFormProps) {
+const LINK_BUTTON = `${TAP_BUTTON} rounded-sm text-sm font-semibold text-fg-link hover:underline disabled:cursor-not-allowed disabled:text-fg-muted disabled:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`;
+
+export function LoginForm({ next, notice, handoff, providers, legal, providerError, devOutbox = false }: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -51,6 +56,15 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
   const submitting = useRef(false);
   const emailInput = useRef<HTMLInputElement | null>(null);
   const passwordInput = useRef<HTMLInputElement | null>(null);
+  /**
+   * "Email me a code instead": the second way in, with no password. 'password' is the normal form,
+   * 'code' shows the 6 digit field for the code that was just mailed.
+   */
+  const [mode, setMode] = useState<'password' | 'code'>('password');
+  const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [sendingCode, setSendingCode] = useState(false);
+  const codeInput = useRef<HTMLInputElement | null>(null);
 
   const parsedHandoff = useMemo(() => readHandoff(handoff), [handoff]);
   const carriesCart = hasHandoff(parsedHandoff);
@@ -85,7 +99,8 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
       // form shows, not a failed request in the console.
       const result = await signInAction({ email: email.trim(), password, rememberMe: remember });
       if (result.error) {
-        setError(authErrorMessage(result.error));
+        // Sign in allows 10 tries a minute, so the wait is 1 minute.
+        setError(authErrorMessage(result.error, 1));
         submitting.current = false;
         setPending(false);
         // Keep the email. Select the password so the next try is one keystroke away.
@@ -115,6 +130,153 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
   };
 
   const forgotHref = email.trim() ? `/forgot-password#${encodeHandoffIdentity({ email: email.trim() })}` : '/forgot-password';
+
+  /** After any successful sign in: the place asked for, else wherever the person left off. */
+  const goOn = async () => {
+    setSignedIn(true);
+    let destination = afterSignIn;
+    if (!destination) {
+      try {
+        destination = (await resumeAfterSignInAction()).next ?? '/';
+      } catch {
+        destination = '/';
+      }
+    }
+    router.replace(destination);
+    router.refresh();
+  };
+
+  /** Mails a 6 digit sign in code to the address in the form and opens the code step. */
+  const sendCode = async () => {
+    if (sendingCode || submitting.current) return;
+    setError(null);
+    setCodeError(null);
+    const emailProblem = emailIssue(email, 'Enter a valid email address.');
+    if (emailProblem) {
+      setFieldErrors({ email: emailProblem });
+      emailInput.current?.focus();
+      return;
+    }
+    setFieldErrors({});
+    setSendingCode(true);
+    try {
+      const result = await requestSignInCodeAction({ email: email.trim() });
+      if (!result.ok) {
+        setError(result.error ?? NO_NETWORK_MESSAGE);
+      } else {
+        setCode('');
+        setMode('code');
+        requestAnimationFrame(() => codeInput.current?.focus());
+      }
+    } catch {
+      setError(NO_NETWORK_MESSAGE);
+    }
+    setSendingCode(false);
+  };
+
+  const submitCode = async (value: string) => {
+    if (submitting.current) return;
+    if (value.length !== 6) {
+      setCodeError('Enter the 6 digit code from your email.');
+      codeInput.current?.focus();
+      return;
+    }
+    submitting.current = true;
+    setPending(true);
+    setCodeError(null);
+    try {
+      const result = await signInWithCodeAction({ email: email.trim(), code: value });
+      if (!result.ok) {
+        setCodeError(result.error ?? 'That code is not right. Check it and try again.');
+        setCode('');
+        submitting.current = false;
+        setPending(false);
+        requestAnimationFrame(() => codeInput.current?.focus());
+        return;
+      }
+      await goOn();
+    } catch {
+      setCodeError(NO_NETWORK_MESSAGE);
+      submitting.current = false;
+      setPending(false);
+      setSignedIn(false);
+    }
+  };
+
+  if (mode === 'code') {
+    return (
+      <>
+        {signedIn ? <HandoffScreen title="Signing you in" detail="Opening your KitStak apps" /> : null}
+        <AuthHeading title="Check your email" subtitle="Enter the 6 digit code to sign in. No password needed." />
+        <form
+          noValidate
+          className="flex flex-col gap-5"
+          aria-busy={pending}
+          data-testid="login-code-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitCode(code);
+          }}
+        >
+          <p className="text-base text-fg-secondary" role="status">
+            If <span className="font-medium text-fg [overflow-wrap:anywhere]">{email.trim()}</span> has a KitStak account, a code is on its way. It works for 10 minutes.
+          </p>
+          {devOutbox ? (
+            <p className="text-sm text-fg-secondary" data-testid="login-code-dev">
+              Test mode: no real email is sent. Find the code in the{' '}
+              <Link href="/dev/outbox" target="_blank" className="font-semibold text-fg-link underline underline-offset-2">
+                dev outbox
+              </Link>
+              .
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="login-code" className="text-xs font-medium text-fg-secondary">
+              6 digit code
+            </label>
+            <CodeInput
+              ref={codeInput}
+              id="login-code"
+              testId="login-code"
+              value={code}
+              onChange={(value) => {
+                setCode(value);
+                if (codeError) setCodeError(null);
+              }}
+              onComplete={(value) => void submitCode(value)}
+              invalid={Boolean(codeError)}
+              disabled={pending}
+              describedBy={codeError ? 'login-code-error' : undefined}
+            />
+            {codeError ? (
+              <p id="login-code-error" role="alert" className="text-xs font-medium text-danger-text">
+                {codeError}
+              </p>
+            ) : null}
+          </div>
+          <SubmitButton busyLabel={pending ? 'Signing you in…' : null}>Sign in</SubmitButton>
+          <div className="flex flex-wrap items-center justify-between gap-x-4">
+            <button type="button" className={LINK_BUTTON} disabled={sendingCode || pending} onClick={() => void sendCode()} data-testid="login-code-resend">
+              {sendingCode ? 'Sending a new code' : 'Send a new code'}
+            </button>
+            <button
+              type="button"
+              className={LINK_BUTTON}
+              disabled={pending}
+              data-testid="login-use-password"
+              onClick={() => {
+                setMode('password');
+                setCodeError(null);
+                requestAnimationFrame(() => passwordInput.current?.focus());
+              }}
+            >
+              Use my password instead
+            </button>
+          </div>
+        </form>
+      </>
+    );
+  }
 
   return (
     <>
@@ -187,6 +349,13 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
             onChange={(event) => setRemember(event.target.checked)}
           />
           <SubmitButton busyLabel={pending ? 'Signing you in…' : null}>Sign in</SubmitButton>
+          {/* The second way in: no password at all. The code that is mailed signs the person in. */}
+          <p className="-mt-2 text-center text-sm text-fg-secondary">
+            Or skip the password.{' '}
+            <button type="button" className={LINK_BUTTON} disabled={sendingCode || pending} onClick={() => void sendCode()} data-testid="login-email-code">
+              {sendingCode ? 'Sending your code' : 'Email me a code instead'}
+            </button>
+          </p>
         </form>
         <LegalLine urls={legal} lead="By signing in" />
       </div>

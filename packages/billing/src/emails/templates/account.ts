@@ -19,18 +19,26 @@ export function verifyEmail(raw: unknown): EmailContent {
   const payload = asPayload(raw);
   const otp = code(payload);
   const minutes = wholeNumber(payload, 'minutes');
+  // The same email carries a sign in code ("Email me a code instead"). Only the two sentences that
+  // say what the code is for, and why the email came, change.
+  const signIn = payload.purpose === 'sign_in';
   return {
     subject: `Your KitStak code: ${otp}`,
     preheader: `It works for ${minutesWords(minutes)}.`,
     heading: 'Your code',
     blocks: [
-      { kind: 'text', text: 'Enter this code to verify your email.' },
+      { kind: 'text', text: signIn ? 'Enter this code to sign in to KitStak.' : 'Enter this code to verify your email.' },
       { kind: 'code', code: otp },
       { kind: 'text', text: `It works for ${minutesWords(minutes)}.` },
-      { kind: 'note', text: 'If you did not ask for this, ignore this email.' },
+      {
+        kind: 'note',
+        text: signIn ? 'If you did not ask for this, ignore this email. Nobody can sign in without the code.' : 'If you did not ask for this, ignore this email.',
+      },
     ],
     button: null,
-    footer: 'You get this email because someone used this address to sign up for KitStak.',
+    footer: signIn
+      ? 'You get this email because someone asked to sign in to KitStak with this address.'
+      : 'You get this email because someone used this address to sign up for KitStak.',
   };
 }
 
