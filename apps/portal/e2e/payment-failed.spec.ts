@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { CART_PULSE, auditOf, emailsTo, entitlementsOf, expectPhase, invoicesOf, openBilling, paidAccount, skipDays, runTestTool } from './support';
+import { CART_PULSE, auditOf, emailsTo, entitlementsOf, expectPhase, invoicesOf, openBilling, paidAccount, portalAppsOpen, skipDays, runTestTool } from './support';
 
 test.describe('a payment fails at renewal', () => {
   test('email and banner with the amount, card, retry date and access date; a new card restores everything at once', async ({ page }) => {
@@ -96,8 +96,14 @@ test.describe('a payment fails at renewal', () => {
     await runTestTool(page, 'run-due');
     await page.reload();
     await expectPhase(page, 'unpaid');
-    await expect(page.getByTestId('billing-plan-card')).toContainText('Your payment is late, so your apps are view only.');
-    await expect(page.getByTestId('plan-notice-unpaid')).toContainText('Your payment is late, so your apps are view only. Update your card to turn them back on.');
+    // With the allow all switch on every app is open, and the Portal never says "view only" then.
+    const appsOpen = await portalAppsOpen(page);
+    await expect(page.getByTestId('billing-plan-card')).toContainText(appsOpen ? 'Your payment is late.' : 'Your payment is late, so your apps are view only.');
+    await expect(page.getByTestId('plan-notice-unpaid')).toContainText(
+      appsOpen ? 'Your payment is late. Update your card to keep your apps open.' : 'Your payment is late, so your apps are view only. Update your card to turn them back on.',
+    );
+    // The sentence and the button use one name for the fix (review round 4).
+    await expect(page.getByTestId('plan-notice-unpaid')).not.toContainText('Pay now');
     expect((await entitlementsOf(orgId)).map((row) => row.module)).toEqual(['pulse']);
     expect((await invoicesOf(orgId)).filter((invoice) => invoice.status === 'open')).toHaveLength(1);
 

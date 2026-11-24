@@ -104,6 +104,8 @@ describe.skipIf(!available)('trial reminders', () => {
     expect(week[0]!.payload).toEqual({
       orgName: s.org.name,
       portalUrl: 'http://localhost:3300',
+      // Written by `enqueueEmail`, so every link in the email opens this organization (review round 4).
+      orgId: s.org.orgId,
       daysLeft: 7,
       trialEndsAt: '2031-03-15T10:00:00.000Z',
       totalCents: 39520,
@@ -132,6 +134,8 @@ describe.skipIf(!available)('trial reminders', () => {
     expect(ended[0]!.payload).toEqual({
       orgName: s.org.name,
       portalUrl: 'http://localhost:3300',
+      // Written by `enqueueEmail`, so every link in the email opens this organization (review round 4).
+      orgId: s.org.orgId,
       trialEndedAt: '2031-03-15T10:00:00.000Z',
       products: ['crm', 'wms'],
     });
@@ -202,6 +206,8 @@ describe.skipIf(!available)('the last day reminder for a late payment', () => {
     expect(rows[0]!.payload).toEqual({
       orgName: s.org.name,
       portalUrl: 'http://localhost:3300',
+      // Written by `enqueueEmail`, so every link in the email opens this organization (review round 4).
+      orgId: s.org.orgId,
       amountDueCents: 2900,
       accessChangesAt: '2031-10-08T00:00:00.000Z',
       // The moment the email was written, so it never calls a day that has passed a deadline.

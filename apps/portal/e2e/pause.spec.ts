@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { CART_PULSE, emailsTo, entitlementsOf, expectPhase, invoicesOf, paidAccount, skipDays, runTestTool } from './support';
+import { CART_PULSE, emailsTo, entitlementsOf, expectPhase, invoicesOf, paidAccount, portalAppsOpen, skipDays, runTestTool } from './support';
 
 test.describe('pause for 1, 2 or 3 months', () => {
   test('pause 2 months: dates shown, no bill while paused, view only, then it starts again by itself', async ({ page }) => {
@@ -28,7 +28,10 @@ test.describe('pause for 1, 2 or 3 months', () => {
     await page.reload();
     await expectPhase(page, 'paused');
     await expect(page.getByTestId('billing-plan-card')).toContainText(/Your plan is paused\. It starts again on/);
-    await expect(page.getByTestId('plan-notice-paused')).toContainText('Your plan is paused, so your apps are view only.');
+    // With the allow all switch on every app is open, and the Portal never says "view only" then.
+    await expect(page.getByTestId('plan-notice-paused')).toContainText(
+      (await portalAppsOpen(page)) ? /Your plan is paused\. It starts again on/ : 'Your plan is paused, so your apps are view only.',
+    );
     expect(await invoicesOf(orgId)).toHaveLength(1);
     expect((await entitlementsOf(orgId)).map((row) => row.module)).toEqual(['pulse']);
 

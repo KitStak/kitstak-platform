@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { CART_CRM_WMS, emailsTo, entitlementsOf, expectPhase, invoicesOf, openBilling, payWith, totalOf, trialAccount, runTestTool } from './support';
+import { CART_CRM_WMS, emailsTo, entitlementsOf, expectPhase, invoicesOf, openBilling, payWith, portalAppsOpen, totalOf, trialAccount, runTestTool } from './support';
 
 test.describe('the free trial ends with no card', () => {
   test('a soft landing: view only, nothing deleted, and paying turns everything back on at once', async ({ page }) => {
@@ -31,7 +31,13 @@ test.describe('the free trial ends with no card', () => {
     await page.reload();
     await expectPhase(page, 'trial_ended');
     await expect(page.getByTestId('billing-plan-card')).toContainText('Your free trial ended on');
-    await expect(page.getByTestId('billing-plan-card')).toContainText('Your apps are view only. Your data is safe.');
+    // With the allow all switch on every app is open, and the Portal never says "view only" then.
+    if (await portalAppsOpen(page)) {
+      await expect(page.getByTestId('billing-plan-card')).toContainText('Your data is safe.');
+      await expect(page.getByTestId('billing-plan-card')).not.toContainText('view only');
+    } else {
+      await expect(page.getByTestId('billing-plan-card')).toContainText('Your apps are view only. Your data is safe.');
+    }
     await expect(page.getByTestId('plan-notice-trial_ended')).toContainText('Your data is safe. Pick a plan to keep working.');
     // Nothing was deleted: the rows are still there, and no invoice was made.
     expect((await entitlementsOf(orgId)).map((row) => row.module)).toEqual(['crm', 'wms']);

@@ -212,3 +212,14 @@ export function viewOnlyFix(phase: PlanState['phase']): string {
   if (phase === 'paused') return 'Start your plan again to make changes.';
   return 'Pick a plan to make changes.';
 }
+
+/**
+ * The same, for a person who can see billing but cannot pay (an admin): who to ask, and for what.
+ * The words follow the plan banner for that person ("Ask Maya Chen to update the card."), so the
+ * tile never names a fix they cannot do themselves (review round 4).
+ */
+export function viewOnlyAsk(phase: PlanState['phase'], who: string): string {
+  if (phase === 'unpaid' || phase === 'past_due') return `Ask ${who} to update the card.`;
+  if (phase === 'paused') return `Ask ${who} to start the plan again.`;
+  return `Ask ${who} to pick a plan.`;
+}

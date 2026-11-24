@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { type EntitlementsDb, grantModule } from '@kitstak/entitlements';
 import { completeTestCheckout } from '../gateway/test';
 import { addPerson, createTestOrg, openTestDb, removeTestOrg, testRuntime, TEST_PORTAL_URL, type TestOrg } from '../testing/db';
-import { billingOrganizationOptions } from './auth-hooks';
+import { billingOrganizationOptions, inviteEmailStatus } from './auth-hooks';
 import { createCheckout } from './checkout';
 import { completeSignupIntent, getOpenSignupIntent, upsertSignupIntent } from './intents';
 import { getBillingProfile, updateBillingProfile, validateBillingProfile } from './profile';
@@ -91,7 +91,7 @@ describe.skipIf(!available)('app plan view, organization hooks, intents and prof
     const locked = await view(org, 'crm', owner);
     expect(locked.access).toBe('locked');
     expect(locked.notice).toBeNull();
-    expect(locked.lock).toMatchObject({ kind: 'trial_available', primary: { label: 'Start free trial', href: 'http://localhost:3300/billing/plan?add=crm&from=crm' } });
+    expect(locked.lock).toMatchObject({ kind: 'trial_available', primary: { label: 'Start free trial', href: `http://localhost:3300/billing/plan?add=crm&from=crm&org=${org.orgId}` } });
     expect(locked.badges).toEqual({ crm: 'not_in_plan', wms: 'not_in_plan', projects: 'not_in_plan', pulse: 'not_in_plan' });
 
     const dev = await view(org, 'crm', owner, true);
@@ -113,7 +113,7 @@ describe.skipIf(!available)('app plan view, organization hooks, intents and prof
     expect(crm.notice).toBeNull();
     expect(crm.badges).toEqual({ crm: 'trial', wms: 'trial', projects: 'not_in_plan', pulse: 'not_in_plan' });
     const dayTwo = await view(org, 'crm', owner!, false, new Date(Date.now() + 25 * 60 * 60 * 1000));
-    expect(dayTwo.notice).toMatchObject({ kind: 'trial', tone: 'info', action: { label: 'Pick a plan', href: 'http://localhost:3300/billing/plan?from=crm' } });
+    expect(dayTwo.notice).toMatchObject({ kind: 'trial', tone: 'info', action: { label: 'Pick a plan', href: `http://localhost:3300/billing/plan?from=crm&org=${org.orgId}` } });
     expect(dayTwo.notice?.text).toMatch(/^Free trial\. 13 days left\. Ends [A-Z][a-z]{2} \d{1,2}\.$/);
     expect(crm.usage).toMatchObject({ seatsUsed: 3, seatLimit: null });
 
@@ -174,7 +174,8 @@ describe.skipIf(!available)('app plan view, organization hooks, intents and prof
     expect((await view(paidOrg, 'wms', owner)).lock).toMatchObject({
       title: 'WMS is not in your plan yet',
       body: 'Add WMS for $279.20 per warehouse each month.',
-      primary: { label: 'Add WMS to my plan', href: 'http://localhost:3300/billing/plan?add=wms&from=wms' },
+      // Every billing link from a product app names its organization (review round 4).
+      primary: { label: 'Add WMS to my plan', href: `http://localhost:3300/billing/plan?add=wms&from=wms&org=${paidOrg.orgId}` },
     });
   });
 
@@ -243,15 +244,22 @@ describe.skipIf(!available)('app plan view, organization hooks, intents and prof
       invitation: { id: 'inv_123', organizationId: seatOrg.orgId, email: 'new.person@kitstak-test.example', role: 'member', status: 'pending', inviterId: owner.id, expiresAt, createdAt: new Date() },
       inviter: { id: 'm0', organizationId: seatOrg.orgId, userId: owner.id, role: 'owner', createdAt: new Date(), user: ownerUser },
     } as never);
-    const emails = (await pool.query(`select to_email, template, payload, dedupe_key from core.billing_emails where org_id = $1 and template = 'invitation'`, [seatOrg.orgId])).rows;
+    // Review round 4: the invite email goes out at once, not with the one minute job. The row is
+    // already `sent` when the hook returns (outside production the dev outbox takes it), and its
+    // payload carries the organization.
+    const emails = (await pool.query(`select to_email, template, payload, dedupe_key, status, sent_at is not null as sent from core.billing_emails where org_id = $1 and template = 'invitation'`, [seatOrg.orgId])).rows;
     expect(emails).toEqual([
       {
         to_email: 'new.person@kitstak-test.example',
         template: 'invitation',
         dedupe_key: 'invite:inv_123',
-        payload: { orgName: seatOrg.name, portalUrl: TEST_PORTAL_URL, inviterName: 'Maya Chen', acceptUrl: `${TEST_PORTAL_URL}/invite/inv_123`, expiresAt: expiresAt.toISOString() },
+        status: 'sent',
+        sent: true,
+        payload: { orgName: seatOrg.name, portalUrl: TEST_PORTAL_URL, orgId: seatOrg.orgId, inviterName: 'Maya Chen', acceptUrl: `${TEST_PORTAL_URL}/invite/inv_123`, expiresAt: expiresAt.toISOString() },
       },
     ]);
+    await expect(inviteEmailStatus(db, 'inv_123')).resolves.toBe('sent');
+    await expect(inviteEmailStatus(db, 'inv_none')).resolves.toBe('none');
   });
 
   it('signup intents: one open intent per person, merged, read back clean, then closed', async () => {

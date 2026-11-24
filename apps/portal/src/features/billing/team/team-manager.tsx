@@ -35,7 +35,7 @@ export function TeamManager({ holders, candidates, invites = [], canAssign, self
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  const run = async (key: string, work: () => Promise<{ ok: true } | { ok: false; error: { message: string } }>, doneText: string) => {
+  const run = async (key: string, work: () => Promise<{ ok: true } | { ok: false; error: { message: string } }>, doneText: string | (() => string)) => {
     if (busy) return;
     setBusy(key);
     setError(null);
@@ -43,7 +43,7 @@ export function TeamManager({ holders, candidates, invites = [], canAssign, self
     try {
       const result = await work();
       if (result.ok) {
-        setDone(doneText);
+        setDone(typeof doneText === 'function' ? doneText() : doneText);
         setPicked('');
         setInviteEmail('');
         router.refresh();
@@ -137,7 +137,17 @@ export function TeamManager({ holders, candidates, invites = [], canAssign, self
               setError('Enter an email address, like name@company.com.');
               return;
             }
-            void run('invite', () => inviteBillingManagerAction({ email }), `We sent an invite to ${email}.`);
+            // "Sent" only when the email has left. With the mail provider down it goes out a little later.
+            let delivery: 'sent' | 'queued' = 'sent';
+            void run(
+              'invite',
+              async () => {
+                const result = await inviteBillingManagerAction({ email });
+                if (result.ok) delivery = result.data.delivery;
+                return result;
+              },
+              () => (delivery === 'sent' ? `We sent an invite to ${email}.` : `The invite for ${email} will go out in about a minute.`),
+            );
           }}
         >
           <div className="min-w-0 flex-1">

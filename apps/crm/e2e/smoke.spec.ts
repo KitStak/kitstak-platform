@@ -19,7 +19,7 @@ const LOGIN_PATH = /\/login(\?|$)/;
 
 publicTest.describe('logged out', () => {
   publicTest('login page renders an accessible sign-in form', async ({ page, diagnostics }) => {
-    const response = await page.goto('/login');
+    const response = await page.goto('/login?local=1');
     expect(response?.status(), 'GET /login status').toBeLessThan(400);
 
     await expect(page.getByLabel(/email/i).first()).toBeVisible();
@@ -31,7 +31,7 @@ publicTest.describe('logged out', () => {
 
   publicTest('signing in with the demo admin lands in the app', async ({ page }) => {
     const credentials = loadCredentials();
-    await page.goto('/login');
+    await page.goto('/login?local=1');
     await page.getByLabel(/email/i).first().fill(credentials.email);
     await page
       .getByLabel(/^password/i)
@@ -48,7 +48,7 @@ publicTest.describe('logged out', () => {
 
   publicTest('wrong password shows an inline error and stays on login', async ({ page }) => {
     const credentials = loadCredentials();
-    await page.goto('/login');
+    await page.goto('/login?local=1');
     await page.getByLabel(/email/i).first().fill(credentials.email);
     await page
       .getByLabel(/^password/i)

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { PlanSelection } from '@kitstak/billing/catalog';
-import { describeChange, pickerPriceWords, rebaseSelection, viewOnlyFix } from './format';
+import { describeChange, pickerPriceWords, rebaseSelection, viewOnlyAsk, viewOnlyFix } from './format';
 
 const plan = (over: Partial<PlanSelection> = {}): PlanSelection => ({ products: ['crm'], seats: 7, warehouses: 1, interval: 'monthly', ...over });
 
@@ -51,6 +51,15 @@ describe('pickerPriceWords: both price lines of a row use one unit', () => {
       expect(words.yours).toContain('each month');
       expect(words.yours).not.toContain('each year');
     }
+  });
+});
+
+describe('viewOnlyAsk: a person who cannot pay reads who to ask (review round 4)', () => {
+  test('one ask per state, the same as the plan banner for an admin', () => {
+    expect(viewOnlyAsk('unpaid', 'Maya Chen')).toBe('Ask Maya Chen to update the card.');
+    expect(viewOnlyAsk('paused', 'Maya Chen')).toBe('Ask Maya Chen to start the plan again.');
+    expect(viewOnlyAsk('trial_ended', 'your organization owner')).toBe('Ask your organization owner to pick a plan.');
+    expect(viewOnlyAsk('ended', 'Maya Chen')).toBe('Ask Maya Chen to pick a plan.');
   });
 });
 

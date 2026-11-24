@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { CART_PULSE, auditOf, emailsTo, entitlementsOf, expectPhase, openBilling, paidAccount, skipDays, sql, totalOf, runTestTool } from './support';
+import { CART_PULSE, auditOf, emailsTo, entitlementsOf, expectPhase, openBilling, paidAccount, portalAppsOpen, skipDays, sql, totalOf, runTestTool } from './support';
 
 test.describe('cancel in two clicks, and undo', () => {
   test('cancel with a reason, keep access to the end, undo in one click, then cancel for good', async ({ page }) => {
@@ -53,7 +53,12 @@ test.describe('cancel in two clicks, and undo', () => {
     await runTestTool(page, 'run-due');
     await page.reload();
     await expectPhase(page, 'ended');
-    await expect(page.getByTestId('billing-plan-card')).toContainText(/Your plan ended on [A-Z][a-z]{2} \d{1,2}, \d{4}\. Your apps are view only\. Your data is safe\./);
+    // With the allow all switch on every app is open, and the Portal never says "view only" then.
+    await expect(page.getByTestId('billing-plan-card')).toContainText(
+      (await portalAppsOpen(page))
+        ? /Your plan ended on [A-Z][a-z]{2} \d{1,2}, \d{4}\. Your data is safe\./
+        : /Your plan ended on [A-Z][a-z]{2} \d{1,2}, \d{4}\. Your apps are view only\. Your data is safe\./,
+    );
     await expect(page.getByTestId('plan-notice-ended')).toContainText('Your data is safe. Pick a plan to keep working.');
     expect((await entitlementsOf(orgId)).map((row) => row.module)).toEqual(['pulse']);
     await page.request.post('/api/billing/jobs/tick');

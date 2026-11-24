@@ -53,7 +53,7 @@ test.describe('invited people and email addresses', () => {
     await context.close();
   });
 
-  test('an invite opened without the emailed proof still works, and that person verifies like anyone else', async ({ browser, page }) => {
+  test('an invite opened without the emailed proof is refused in one sentence, and no account is made', async ({ browser, page }) => {
     test.setTimeout(300_000);
     await trialAccount(page, 'inviter2', CART_CRM_2);
     const member = newPerson('noproof', 'Robin Vale');
@@ -62,11 +62,22 @@ test.describe('invited people and email addresses', () => {
 
     const context = await browser.newContext();
     const memberPage = await context.newPage();
-    // Only the id, as someone on the team who can list invites would have it.
-    await joinFromInvite(memberPage, link.split('?')[0] ?? link, member);
-    const rows = await sql<{ email_verified: boolean }>('select email_verified from core."user" where email = $1', [member.email]);
-    expect(rows).toEqual([{ email_verified: false }]);
-    await expect.poll(async () => (await emailsTo(member.email, 'verify_email')).length, { timeout: 30_000 }).toBe(1);
+    // Only the id, as someone on the team who can list invites would have it. Review round 4: the
+    // id is not a secret, so by itself it no longer lets anyone join (it did until round 3, and an
+    // admin could take an owner's billing invite that way). See round4-backend.spec.ts.
+    await resetRateLimits();
+    await memberPage.goto(link.split('?')[0] ?? link);
+    await expect(memberPage.getByTestId('invite-org-name')).toBeVisible({ timeout: 90_000 });
+    await memberPage.getByTestId('invite-name').fill(member.name);
+    await memberPage.getByTestId('invite-password').fill(member.password);
+    await memberPage.getByTestId('invite-accept').click();
+    await expect(memberPage.getByText('Open the link in your invite email to join. That shows the email is yours.')).toBeVisible({ timeout: 30_000 });
+    expect(await sql('select 1 from core."user" where email = $1', [member.email])).toHaveLength(0);
+    expect(await emailsTo(member.email, 'verify_email')).toHaveLength(0);
+
+    // The link from the email still works afterwards.
+    await joinFromInvite(memberPage, link, member);
+    expect(await sql<{ email_verified: boolean }>('select email_verified from core."user" where email = $1', [member.email])).toEqual([{ email_verified: true }]);
     await context.close();
   });
 

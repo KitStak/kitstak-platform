@@ -21,6 +21,7 @@ import {
   LOCAL_SIGN_IN_PARAM,
   portalForgotPasswordUrl,
   portalSignInUrl,
+  safeAppPath,
 } from '@kitstak/auth/front-door';
 
 export const LOGIN_PATH = '/login';
@@ -58,7 +59,7 @@ export function isFrontDoorPath(pathname: string): boolean {
 }
 
 /**
- * The redirect for a document request, or null. A failing lookup never blocks the page: single
+ * The redirect for a document request (a Portal address, or a path inside the WMS), or null. A failing lookup never blocks the page: single
  * sign on then counts as off and the session as missing, which sends the person to the Portal,
  * where every way in still works.
  */
@@ -68,6 +69,21 @@ export async function frontDoorRedirectFor(pathname: string, params: URLSearchPa
   const appUrl = process.env.BETTER_AUTH_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim() || 'http://localhost:3000';
   let ssoEnabled = false;
   let hasValidSession = false;
+  // The Portal sent a signed in person here on their way to a WMS page. When the WMS opens for
+  // them, go straight on to that page: they never see a sign in form while signed in.
+  if (pathname === LOGIN_PATH && hasSessionCookie && params.get(FROM_PORTAL_PARAM) === FROM_PORTAL_VALUE) {
+    try {
+      const { getPlatformDb } = await import('@/server/api/db');
+      const { resolveSession } = await import('@/server/auth/session-store');
+      if ((await resolveSession(await getPlatformDb(), headers)).ok) {
+        const next = safeAppPath(params.get('next'));
+        // Never back to this page itself.
+        return next && !next.startsWith(LOGIN_PATH) ? next : '/';
+      }
+    } catch {
+      // Not resolvable: the sign in page below is the answer.
+    }
+  }
   if (pathname === LOGIN_PATH) {
     try {
       const { getPlatformDb } = await import('@/server/api/db');

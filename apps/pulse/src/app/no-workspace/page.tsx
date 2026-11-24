@@ -98,7 +98,7 @@ export default async function NoWorkspacePage() {
         <div className="mx-auto mt-6 flex size-12 items-center justify-center rounded-xl bg-sunken">
           <Building2 aria-hidden className="size-6 text-icon" />
         </div>
-        <h1 className="mt-4 text-xl font-semibold text-fg">You’re not in an organization yet</h1>
+        <h1 className="mt-4 text-xl font-semibold text-fg">You are not in an organization yet</h1>
         <p className="mt-2 text-base text-fg-secondary">
           Create one in the Portal, or ask a teammate to invite you.
         </p>

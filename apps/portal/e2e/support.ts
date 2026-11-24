@@ -434,6 +434,18 @@ export async function textOf(locator: Locator): Promise<string> {
   return ((await locator.first().textContent()) ?? '').replace(/\s+/g, ' ').trim();
 }
 
+let appsOpenInPortal: boolean | null = null;
+
+/**
+ * True when the Portal runs with the allow all switch on, so every app is open whatever the plan
+ * says. The Portal then never says "view only" (review round 4), and the specs expect the words for
+ * open apps instead. Read once per run, from billing home. Needs a signed in owner.
+ */
+export async function portalAppsOpen(page: Page): Promise<boolean> {
+  if (appsOpenInPortal === null) appsOpenInPortal = await allowAllIsOn(page);
+  return appsOpenInPortal;
+}
+
 /** Whether the portal runs with the allow all switch on. The launcher tile check is skipped when it is. */
 export async function allowAllIsOn(page: Page): Promise<boolean> {
   if (process.env.E2E_ALLOW_ALL === '0') return false;

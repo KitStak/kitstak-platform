@@ -320,7 +320,13 @@ email is not verified yet, else `/welcome`.
   15 or more characters is enough by itself. At every length a password that is easy to guess is refused
   (one character repeated, one piece repeated, a straight run like `1234` or `qwerty`, a common password
   dressed up, the product or company name) with one line: "That one is too easy to guess. Try a few words
-  that do not go together."
+  that do not go together." A name is named as the cause (review round 4), because that is the one thing a
+  person can fix at once: "Do not use your company name in your password." and "Do not use the word KitStak
+  in your password.", like "Do not use your email name in your password." These three show as soon as the
+  name is typed, also when the company is filled in after the password, and go away when it no longer fits.
+  One place for the red line: right under the field and its meter, above the rules, with no other control
+  in between. While typing it is the live warning. After a refusal it is the field's error, in the same
+  spot. On `/invite` the team's name counts as the company name.
   The screens never say something that is not true for what is typed (review round 3). A long password that
   is refused shows the reason alone, with no "15 is enough" line. After a refusal the sentence under the
   field follows each key, so it is never about an older try. `/signup`, `/invite`, `/reset-password` and
@@ -328,10 +334,20 @@ email is not verified yet, else `/welcome`.
 - **Email me a code instead** (review round 3). The second door, with no password. On `/login`, the link
   under the form mails a 6 digit code to the address that was typed. The next screen says "If <address> has
   a KitStak account, a code is on its way." and never says whether it has one. The code signs the person in
-  and marks the address verified. "Send a new code" and "Use my password instead" are on that screen. On
-  `/signup`, the same link under the password field takes the password field away ("No password needed. We
-  email you a 6 digit code. You use a new code each time you sign in."), and "Set a password instead" brings
-  it back. A person who signed up this way can set a password later with "Forgot password?".
+  and marks the address verified. "Send a new code" and "Use my password instead" are on that screen. The
+  code step has its own address (review round 4): `/login?step=code`, with the email after the "#", where no
+  server sees it. A refresh, a tab a phone reloaded, or Back from another page shows the code field again
+  for the same address, and the code that was mailed still works. No second email is sent by a reload. On
+  `/signup`, the same choice is a quiet row of its own under "Create account" ("Or skip the password. Email
+  me a code instead"), never between the password and its error. It takes the password field away ("No
+  password needed. We email you a 6 digit code. You use a new code each time you sign in."), and "Set a
+  password instead" brings it back. A person who signed up this way can set a password later with "Forgot
+  password?". The link is underlined, 44 px tall, and its focus ring touches no other text.
+- **In no organization.** A person who was in an organization and is in none now (removed, or left) sees
+  one screen wherever they land, the launcher: "You are no longer in an organization. Your account still
+  works, but you are not on a team right now. Ask a teammate to invite you again. Or start your own
+  organization below." Billing and every signup step send them there. Only a person who never had an
+  organization is asked to "Name your workspace".
 - **Back to where you were going.** A signed out person who opens any page of the Portal is sent to sign in
   and then to that page, with its query. So "Update card" in the failed payment email lands on Billing with
   the card in focus.
@@ -369,7 +385,10 @@ The same check runs when a signed in person opens `/login`, `/signup` or `/welco
   count and the same minutes the welcome screen showed (`pickGuideSteps` in `apps/portal/src/lib/setup-model.ts`).
   It is "Tell us about your business", then the first step of each area in turn, then "Pick your plan". The
   pick does not change as steps are done. The next step is open with the one filled button. The other rows
-  are one line each. Every other step sits behind "Show all steps" and does not move the count.
+  are one line each. Every other step sits behind "Show 3 more steps for later" and does not move the count.
+  On a phone the launcher shows the open step and one row, "Show the other 4 steps", counted in the
+  header's own terms (5 steps, one open). The steps for later keep their own row under them. A quiet link
+  of a step starts where the step title starts.
 - Answers given on the marketing site count as done even when the person presses "Skip for now" on the
   welcome screen.
 - The guide still lists 3 to 5 steps tied to the chosen apps and still follows ONBOARDING.md.
@@ -462,6 +481,14 @@ $145.00 per month. New: $395.20 per month.").
 
 Floors: the seat stepper cannot go below the people you have, the warehouse stepper cannot go below the
 warehouses you have. The hint says why: "You have 6 people. Remove someone first to go lower."
+
+On a paid plan, every app switched off is not a plan change. The hint under the button says "To stop paying
+for everything, cancel your plan." with a link to the cancel page (review round 4).
+
+Pulse and seats, one plain rule (P8): with CRM or Projects in the plan and more than 5 seats, a calm note
+says "Pulse covers every seat in a plan with CRM or Projects. All 6 people can use it for the same flat
+price." With Pulse alone and more than 5 people: "Pulse alone covers up to 5 people, and you have 6. Add CRM
+or Projects to cover everyone, or talk to us."
 
 ### 6.3 Confirm a change (paid plans)
 
@@ -556,7 +583,9 @@ pause offer and the line "You are paid up until Nov 23, 2027."
 
 - **Inviting from the portal** when all paid seats are used: the invite form shows, before anything is sent,
   "All 5 seats are in use. Add 1 seat for $29 more per month. You pay $14.50 today for the days left." with
-  "Add seat and send invite" and "Not now". Yes changes the plan, then sends the invite.
+  "Add seat and send invite" and "Not now". Yes changes the plan, then sends the invite. When credit pays
+  part of it, the sentence says so and the amounts add up: "You pay $1.09 today: $24.05 for the days left,
+  less $22.96 credit." (`seatOfferPayLine`).
 - **Inviting from another app** (for example CRM admin): the server refuses with "All 5 seats are in use. Add
   a seat in Billing, then invite again." and a link to the picker with the seat stepper focused.
 - **A member who cannot manage billing** sees "All 5 seats are in use. Ask Maya Chen to add one."
@@ -646,7 +675,7 @@ the one minute job.
 | Each retry that fails | A new email (one per attempt). The banner updates the retry date. |
 | The bank asks for approval | Email "Your bank needs you to approve a KitStak payment" with a link to billing home and "Pay now". |
 | 1 day before the 7 days end | Email "Last day to fix your KitStak payment". |
-| Day 7 | Phase `unpaid`. Apps are view only. Banner: "Your payment is late, so your apps are view only. Pay now to turn them back on." |
+| Day 7 | Phase `unpaid`. Apps are view only. Banner: "Your payment is late, so your apps are view only. Update your card to turn them back on." |
 | Card updated, or "Pay now" | The open invoice is paid at once. Access is full again within 5 seconds. The banner goes away. Receipt email. |
 | The gateway closes the plan after its last retry | Phase `ended`. Still view only. "Pick a plan" starts fresh. |
 
@@ -699,11 +728,26 @@ Shown at the top of the app shell, above the page, never over content.
 | `trial_with_card` | info | Free trial. Your first payment of $395.20 is on Dec 7. | See my plan |
 | `trial_ended` | danger | Your free trial ended on Dec 7. Your data is safe. Pick a plan to keep working. | Pick a plan |
 | `payment_failed` | warning | We could not charge your Visa ending 4242 for $395.20. We will try again on Dec 10. Update your card by Dec 14 to keep full access. | Update card |
-| `unpaid` | danger | Your payment is late, so your apps are view only. Pay now to turn them back on. | Update card |
+| `unpaid` | danger | Your payment is late, so your apps are view only. Update your card to turn them back on. | Update card |
 | `cancel_scheduled` | info | Your plan ends on Dec 23. You keep everything until then. | Keep my plan |
 | `pause_scheduled` | info | Your plan pauses on Dec 23 and starts again on Feb 23. | Undo pause |
 | `paused` | danger | Your plan is paused, so your apps are view only. It starts again on Feb 23. | Start again now |
 | `ended` | danger | Your plan ended on Dec 23. Your data is safe. Pick a plan to keep working. | Pick a plan |
+
+The table is for a person who can pay (an owner or a billing manager). A person who can see billing but
+cannot pay (an admin) reads the same facts, then who to ask, and never gets a pay button (review round 4):
+"Your payment is late, so your apps are view only. Ask Maya Chen to update the card.", "Your free trial
+ended on Dec 7. Your data is safe. Ask Maya Chen to pick a plan.", "We could not charge the Visa ending 4242
+for $395.20. ... Ask Maya Chen to update the card by Dec 14 to keep full access." The calm banners (`trial`,
+`cancel_scheduled`, `pause_scheduled`) give an admin "See my plan", which opens billing home.
+
+With the allow all switch on (`ENTITLEMENTS_DEV_ALLOW_ALL`, which stays on in production until the last go
+live step) every app is open, so no banner, badge or line says "view only": "Your payment is late. Update
+your card to keep your apps open." A member with no billing rights then sees no banner. Billing home shows
+no "Dev override" badge in production.
+
+The banner button is the way out of view only. The view only guard never marks it, never dims it and never
+catches a press on it, in any app: one press on "Add WMS" or "Update card" lands on the Portal.
 
 Other members see a banner only when the app is view only, with no button: "This app is view only right now.
 Ask Maya Chen to pick a plan." Info banners can be hidden for the day. Warning and danger banners cannot.
@@ -868,7 +912,7 @@ rules.
 - **Keyboard.** The whole path, signup to paid to cancel, works with the keyboard alone. Visible focus ring
   (`outline-focus`) on every control. App rows in the picker are real switches. Steppers take arrow keys.
   Dialogs trap focus and return it on close. The confirm panel puts focus on its heading, not on the pay
-  button.
+  button, and gives it back to "Review change" on Esc, "Go back" and the X.
 - **Screen readers.** The summary total is a live region (polite), so changes are spoken once. Errors use
   `role="alert"` and are tied to their fields. Banners use `role="status"` (info) or `role="alert"`. Badges
   have text, never color alone. Money lines are a real table or a definition list.

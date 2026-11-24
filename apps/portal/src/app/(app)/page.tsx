@@ -10,7 +10,7 @@ import { getOrgGlance, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { CATALOG, formatDayShort } from '@kitstak/billing/catalog';
 import { getBillingContext } from '@/server/billing/context';
 import { getOrgPlan, type ModuleState } from '@/server/entitlements';
-import { addAppPriceNote, plural, viewOnlyFix } from '@/features/billing/format';
+import { addAppPriceNote, plural, viewOnlyAsk, viewOnlyFix } from '@/features/billing/format';
 import { getCustomerWork, getLauncherStats, getPulseAttention } from '@/server/product-stats';
 import { CustomerWorkPanel } from '@/features/launcher/customer-work';
 import { PulseAttentionPanel } from '@/features/launcher/pulse-attention';
@@ -212,7 +212,9 @@ export default async function LauncherPage({
         return plan.pastDue ? `Payment due. Open until ${formatDayShort(plan.pastDue.accessChangesAt, timeZone)}.` : 'Payment due';
       case 'view_only':
         // The same fix the plan banner names for this state ("Pick a plan", "Update card", "Start again now").
-        return access?.canView ? `View only. ${viewOnlyFix(plan.phase)}` : `View only. Ask ${askWho} to pick a plan.`;
+        // A person who can pay reads the fix. An admin, who can see billing but cannot pay, reads who to ask.
+        if (access?.canManage) return `View only. ${viewOnlyFix(plan.phase)}`;
+        return access?.canView ? `View only. ${viewOnlyAsk(plan.phase, askWho)}` : `View only. Ask ${askWho} to pick a plan.`;
       case 'not_in_plan':
         return mayAdd ? addAppPriceNote(plan, state.module) : `Ask ${askWho} to add it.`;
       case 'included':

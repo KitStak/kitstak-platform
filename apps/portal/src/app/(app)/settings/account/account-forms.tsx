@@ -109,7 +109,8 @@ export function SetPasswordForm({ email }: { readonly email: string }) {
 
   const signInAgain = async () => {
     await signOut();
-    window.location.assign(`/login?next=${encodeURIComponent('/settings/account#password')}`);
+    router.replace(`/login?next=${encodeURIComponent('/settings/account')}`);
+    router.refresh();
   };
 
   if (done) {

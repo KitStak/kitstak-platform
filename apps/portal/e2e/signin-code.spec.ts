@@ -162,7 +162,7 @@ test.describe('sign in with an emailed code', () => {
     await expect(page.getByTestId('login-code-form')).toHaveCount(0);
   });
 
-  test('nothing says whether an address has an account, and a person with no credential gets no code', async ({ page, context }) => {
+  test('nothing says whether an address has an account, and a switched off person gets no code', async ({ page, context }) => {
     await resetRateLimits();
     const stranger = `e2e-nobody-${Date.now().toString(36)}@kitstak-e2e.example`;
     const asked = new Date();
@@ -175,9 +175,11 @@ test.describe('sign in with an emailed code', () => {
     expect(await sql(`SELECT 1 FROM core.billing_emails WHERE to_email = $1 AND created_at > $2`, [stranger, asked])).toHaveLength(0);
     expect(await sql(`SELECT 1 FROM core."user" WHERE email = $1`, [stranger])).toHaveLength(0);
 
-    // A deactivated person: the credential row is gone (how every app switches a person off).
+    // A switched off person: the block row every app reads, and no password row (review round 4.
+    // Before, the missing password row alone meant switched off. See round4-backend.spec.ts).
     const { person } = await trialAccount(page, 'codeoff', CART_PULSE);
     await context.clearCookies();
+    await sql(`INSERT INTO core.sign_in_blocks (user_id) SELECT id FROM core."user" WHERE email = $1 ON CONFLICT DO NOTHING`, [person.email]);
     await sql(`DELETE FROM core.account WHERE provider_id = 'credential' AND user_id = (SELECT id FROM core."user" WHERE email = $1)`, [person.email]);
     await resetRateLimits();
     const off = new Date();

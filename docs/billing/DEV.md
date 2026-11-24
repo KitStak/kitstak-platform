@@ -121,7 +121,7 @@ pulse. These files are gitignored. Never commit them. The marketing site needs n
 | `TRUSTED_ORIGINS` | the five app URLs | Lets the apps call each other's sign in routes. |
 | `NEXT_PUBLIC_PORTAL_URL`, `NEXT_PUBLIC_CRM_URL`, `NEXT_PUBLIC_WMS_URL`, `NEXT_PUBLIC_PROJECTS_URL`, `NEXT_PUBLIC_PULSE_URL` | the five app URLs | App switcher and links between apps. |
 | `ENTITLEMENTS_DEV_ALLOW_ALL` | `1` | Every org can open every app. See the next section. |
-| `DEMO_MODE` (WMS only) | `1` | Shows the demo login on the WMS sign in page. |
+| `DEMO_MODE` (WMS only) | `1` | Shows the demo login on the WMS's own sign in page (`/login?local=1`). |
 
 The file for Portal also lists the billing, mail and sign in variables, all commented out. With none of them
 set and `NODE_ENV` not set to `production`:
@@ -311,6 +311,34 @@ const { chromium } = require('playwright');
   await browser.close();
 })();
 ```
+
+## One sign in page, and what that means locally
+
+KitStak has one sign in page: the Portal's (http://localhost:3300/login). A signed out visit to the CRM,
+the WMS, Projects or Pulse goes there, with the full address of the page you asked for, and comes back
+signed in. `/forgot-password` in every app goes to the Portal's too.
+
+- Each app still has its own form at `/login?local=1`. Use it in a test that runs one app alone, or when
+  the Portal is down. The WMS demo login (`DEMO_MODE=1`) is on that page:
+  http://localhost:3000/login?local=1.
+- The WMS also keeps its own page when the warehouse turned on company single sign on.
+- Sessions are checked against the database on every request. There is no cached copy in the browser, so a
+  session you delete from `core.session` is gone on the next click, in every app.
+- A person is switched off by a row in `core.sign_in_blocks` (the WMS writes it when it deactivates a
+  person). To try it by hand:
+
+  ```sql
+  insert into core.sign_in_blocks (user_id) select id from core."user" where email = 'sofia@northwind-robotics.example';
+  delete from core.session where user_id = (select id from core."user" where email = 'sofia@northwind-robotics.example');
+  -- and back on:
+  delete from core.sign_in_blocks where user_id = (select id from core."user" where email = 'sofia@northwind-robotics.example');
+  ```
+
+- A link that names an organization (`?org=<organization id>`, as every billing email and every app banner
+  does) goes through `/org/switch` in the Portal and opens the page for that organization.
+- "My account" (name, email, "Set a password") is at http://localhost:3300/settings/account and in the
+  account menu.
+- An invite email goes out at once. You do not need `billing-tick.sh` to see it in the outbox.
 
 ## Known pitfalls
 

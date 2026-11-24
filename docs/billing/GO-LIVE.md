@@ -264,6 +264,32 @@ SELECT count(*) FROM information_schema.tables
 
 You should see 10 (`billing_events` from before, plus 9 new ones). `core.signup_intents` is new too.
 
+Review round 4 added migration `0011_core_sign_in_round4` (and `0013_core_sign_in_blocks` in the WMS
+stream, which makes the same two tables on a WMS only database). Run the WMS migration, then the core
+one, before the new code serves traffic:
+
+```bash
+node deploy/with-prod-db.mjs pnpm -F kitstak-wms db:migrate
+node deploy/with-prod-db.mjs pnpm -F @kitstak/db db:migrate
+```
+
+It makes `core.sign_in_blocks` (a person who is switched off) and `core.user_last_org` (the
+organization a person used last). It also writes a block row for every person who is inactive in a
+warehouse and has no password row today, so "Forgot password" cannot bring them back. Check it:
+
+```sql
+SELECT count(*) FROM core.sign_in_blocks;
+```
+
+The number is the count of people who are switched off right now. If the new code runs for a few
+minutes before the migration, nothing breaks: a database with no such table has nobody switched off,
+which is what the old code did too. A warehouse admin who deactivates a person in those minutes gets an
+error and can try again after the migration.
+
+One more thing changes on the day the new code goes out: the sign in layer no longer keeps a copy of
+the session in the browser (the `kitstak.session_data` cookie). Nobody is signed out by this. Each
+request now reads the session row, which is one lookup by primary key.
+
 ## Step 5. Backfill access rows
 
 Today every organization can open every app because of the allow all switch. When that switch goes away
@@ -412,7 +438,9 @@ ENFORCE_ENTITLEMENTS=1
 - [ ] As an existing organization, open each app. Everything that was open is still open.
 - [ ] As a brand new signup with CRM only, open the WMS. You should see the lock screen "WMS is not in your
       trial yet" with one button to add it.
-- [ ] Billing home no longer shows the "Dev override" badge.
+- [ ] An organization whose trial has ended now reads "Your apps are view only" on billing home. (While the
+      switch was on, no screen said "view only", because every app was open. The "Dev override" badge is for
+      local work only and never shows in production.)
 
 ## Step 12. Watch
 

@@ -134,13 +134,22 @@ export function InviteMemberForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once, when the form opens
   }, []);
 
+  /** Addresses whose invite email is still waiting to go out. Read by `sentWords`. */
+  const slowMail = useRef<Set<string>>(new Set());
+
   /** Sends one invite. "All seats are in use" is an answer, not a failed request in the console. */
   const sendOne = async (to: string, as: InviteRole): Promise<SendOutcome> => {
     // A teammate: say so by name, with no request at all.
     const onTeam = findOnTeam(to, team);
     if (onTeam) return { kind: 'failed', message: inviteErrorWords({ code: 'USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION' }, to, team) };
     const result = await inviteMemberAction({ email: to, role: as, organizationId: orgId });
-    if (!result.error) return { kind: 'sent' };
+    if (!result.error) {
+      // "Sent" is only said for an email that has left (review round 4). When the mail provider
+      // was down, the invite waits for the one minute job, and the line says so.
+      if (result.delivery === 'queued') slowMail.current.add(to);
+      else slowMail.current.delete(to);
+      return { kind: 'sent' };
+    }
     if (result.error.code === 'SEAT_LIMIT_REACHED') return { kind: 'seat_limit', message: result.error.message ?? 'All your seats are in use. Add a seat first.' };
     return { kind: 'failed', message: inviteErrorWords(result.error, to, team) };
   };
@@ -175,8 +184,15 @@ export function InviteMemberForm({
     return { sentTo, left: [], stop: null };
   };
 
-  const sentWords = (sentTo: readonly string[], lead = ''): string | null =>
-    sentTo.length === 0 ? null : `${lead}${sentTo.length === 1 ? 'Invite' : 'Invites'} sent to ${listOf(sentTo)}.`;
+  const sentWords = (sentTo: readonly string[], lead = ''): string | null => {
+    if (sentTo.length === 0) return null;
+    const out = sentTo.filter((to) => !slowMail.current.has(to));
+    const waiting = sentTo.filter((to) => slowMail.current.has(to));
+    const parts: string[] = [];
+    if (out.length > 0) parts.push(`${out.length === 1 ? 'Invite' : 'Invites'} sent to ${listOf(out)}.`);
+    if (waiting.length > 0) parts.push(`The ${waiting.length === 1 ? 'invite' : 'invites'} for ${listOf(waiting)} will go out in about a minute.`);
+    return `${lead}${parts.join(' ')}`;
+  };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

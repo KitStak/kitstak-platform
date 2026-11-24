@@ -59,7 +59,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   // every way in (see front-door.ts for the few cases that keep the WMS page).
   if (isDocumentRequest(request.method, request.headers) && isFrontDoorPath(pathname)) {
     const door = await frontDoorRedirectFor(pathname, request.nextUrl.searchParams, request.headers, hasSession);
-    if (door) return NextResponse.redirect(door);
+    if (door) return NextResponse.redirect(new URL(door, request.url));
   }
 
   if (hasSession && isDocumentRequest(request.method, request.headers) && !pathname.startsWith('/api/') && !isPublicPath(pathname)) {

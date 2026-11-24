@@ -5,8 +5,12 @@
  * invitation id alone is not proof, because the people who sent the invite can see that id.
  *
  * Accepting an invite with a valid proof shows the person owns the address, so their email is marked
- * verified and they are never asked for a 6 digit code. Without a proof the invite still works; the
- * person is simply asked to verify like anyone else.
+ * verified and they are never asked for a 6 digit code.
+ *
+ * Review round 4: without a proof, an account whose email is not confirmed can no longer accept
+ * (`beforeAcceptInvitation` in `auth-hooks.ts`), and the Portal makes no account from a bare
+ * invite address. Before, the invite "still worked" without the proof, and an admin who read the
+ * id of an owner's billing invite could make the account and take it.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
