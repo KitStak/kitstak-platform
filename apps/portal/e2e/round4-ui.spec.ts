@@ -314,7 +314,11 @@ test.describe('review round 4: the setup guide on a phone', () => {
         };
         const title = element.querySelector('p > span');
         const link = element.querySelector('a[href]');
-        return title && link ? { title: textLeft(title), link: textLeft(link) } : null;
+        if (!title || !link) return null;
+        // The open step has a filled button: its edge lines up with the title. A quiet link has no
+        // edge to see, so its words line up with the title.
+        const filled = element.getAttribute('aria-current') === 'step';
+        return { title: textLeft(title), link: filled ? link.getBoundingClientRect().left : textLeft(link) };
       });
       if (!lefts) continue;
       expect(Math.abs(lefts.link - lefts.title), `row ${index + 1}: the link starts ${Math.round(lefts.link - lefts.title)} px from the title`).toBeLessThanOrEqual(2);
