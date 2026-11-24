@@ -300,31 +300,46 @@ test.describe('review round 4: the setup guide on a phone', () => {
     }
 
     // Every link and button of a step starts where the step title starts.
-    const rows = page.locator('[data-testid=setup-steps] > li:visible');
-    let checked = 0;
-    for (let index = 0; index < (await rows.count()); index += 1) {
-      const row = rows.nth(index);
-      const action = row.locator('a[href]').first();
-      if ((await action.count()) === 0) continue;
-      const lefts = await row.evaluate((element) => {
-        const textLeft = (node: Element): number => {
-          const range = document.createRange();
-          range.selectNodeContents(node);
-          return Math.min(...[...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => rect.left));
-        };
-        const title = element.querySelector('p > span');
-        const link = element.querySelector('a[href]');
-        if (!title || !link) return null;
-        // The open step has a filled button: its edge lines up with the title. A quiet link has no
-        // edge to see, so its words line up with the title.
-        const filled = element.getAttribute('aria-current') === 'step';
-        return { title: textLeft(title), link: filled ? link.getBoundingClientRect().left : textLeft(link) };
-      });
-      if (!lefts) continue;
-      expect(Math.abs(lefts.link - lefts.title), `row ${index + 1}: the link starts ${Math.round(lefts.link - lefts.title)} px from the title`).toBeLessThanOrEqual(2);
-      checked += 1;
-    }
-    expect(checked, 'at least two rows with a link were measured').toBeGreaterThanOrEqual(2);
+    /** Measures every visible step row that has a link. Returns how many rows were checked. */
+    const expectLinksLineUp = async (onPage: Page, where: string): Promise<number> => {
+      const rows = onPage.locator('[data-testid=setup-steps] > li:visible');
+      let checked = 0;
+      for (let index = 0; index < (await rows.count()); index += 1) {
+        const lefts = await rows.nth(index).evaluate((element) => {
+          const textLeft = (node: Element): number => {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            return Math.min(...[...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => rect.left));
+          };
+          const title = element.querySelector('p > span');
+          const link = element.querySelector('a[href]');
+          if (!title || !link) return null;
+          // The open step has a filled button: its edge lines up with the title. A quiet link has no
+          // edge to see, so its words line up with the title.
+          const filled = element.getAttribute('aria-current') === 'step';
+          return { title: textLeft(title), link: filled ? link.getBoundingClientRect().left : textLeft(link) };
+        });
+        if (!lefts) continue;
+        expect(Math.abs(lefts.link - lefts.title), `${where}, row ${index + 1}: the link starts ${Math.round(lefts.link - lefts.title)} px from the title`).toBeLessThanOrEqual(2);
+        checked += 1;
+      }
+      return checked;
+    };
+    expect(await expectLinksLineUp(page, 'touch phone'), 'at least two rows with a link were measured').toBeGreaterThanOrEqual(2);
+
+    // A narrow window with a mouse (no touch): "Skip" is there for hover and keyboard, unseen until
+    // then. It must not push the link to the right (this is where the 54 px came from).
+    const narrow = await browser.newContext({ viewport: { width: 390, height: 844 }, storageState: await context.storageState() });
+    const narrowPage = await narrow.newPage();
+    await narrowPage.goto('/?setup=1');
+    await expect(narrowPage.getByTestId('setup-phone-toggle')).toBeVisible({ timeout: 90_000 });
+    await narrowPage.getByTestId('setup-phone-toggle').click();
+    expect(await expectLinksLineUp(narrowPage, 'narrow window with a mouse')).toBeGreaterThanOrEqual(2);
+    // Organization settings shows the same guide, with every row open.
+    await narrowPage.goto('/settings/organization');
+    await expect(narrowPage.getByTestId('setup-steps')).toBeVisible({ timeout: 90_000 });
+    expect(await expectLinksLineUp(narrowPage, 'Organization, narrow window')).toBeGreaterThanOrEqual(2);
+    await narrow.close();
     await context.close();
   });
 });
