@@ -170,6 +170,26 @@ ENTITLEMENTS_DEV_ALLOW_ALL=0 deploy/dev/app-start.sh crm projects pulse wms
 - Signup, sign in, the launcher, every billing tab, organization settings and the 404 page were opened at
   1440 px in light and at 390 px in dark: no console error and no failed request.
 
+2026-11-24, gate round 3, after the review round 3 fixes. All six dev apps ran with
+`ENTITLEMENTS_DEV_ALLOW_ALL=0`, and a built portal ran in production mode with no keys on port 3310:
+
+- `pnpm typecheck`: 12 of 12 passed. `pnpm lint`: 5 of 5 passed, 0 errors. `pnpm build`: 6 of 6 passed. All
+  three ran without the turbo cache.
+- `E2E_BILLING_OFF_URL=http://localhost:3310 pnpm -F kitstak-portal e2e`: 53 tests, 53 passed, none skipped,
+  11.7 minutes, in one run with no restart. The integration spec printed: checked CRM trial banner, Projects,
+  Pulse and WMS lock screens with price, Pulse added from its lock screen in 2 clicks, Portal tiles follow
+  the plan. Skipped: nothing.
+- Unit tests: billing 537, portal 262, shared UI 82, entitlements 48, CRM 843, Projects 291, Pulse 906,
+  marketing site 589, all passed. WMS: 2595 passed and 6 failed in the full run. Run alone, the same 5 tests
+  in 4 files as before failed (task grid query, page header crumbs, token alias rule, one timing budget), and
+  the sixth (a second timing budget, `inventory-scale.test.ts`) passed. This work does not touch those files.
+- One fault found and fixed in this gate: the side panels beside "Check your email" and beside an invite
+  caught a signal that belongs to Next and logged it as "plan read failed" during the build. They now hand
+  it back with `unstable_rethrow`, and the build log is clean.
+- Signup (with and without a cart), sign in, forgot password, the launcher, every billing tab and
+  organization settings were opened in light and dark at 1440 px and 390 px: 52 page loads, all 200, no
+  console error.
+
 Real Stripe and real email were not part of any run. Do not trust this file for a pass count: run the
 suite.
 

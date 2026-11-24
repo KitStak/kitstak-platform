@@ -1,3 +1,4 @@
+import { unstable_rethrow } from 'next/navigation';
 import type { ProductId } from '@kitstak/billing/catalog';
 import { getOrgModuleStates } from '@/server/entitlements';
 import { getInviteViewOnce } from '@/server/signup';
@@ -19,6 +20,8 @@ export default async function Hero({ params }: { readonly params: Promise<{ invi
       const { modules } = await getOrgModuleStates(view.orgId);
       products = modules.filter((state) => state.badge !== 'not_in_plan').map((state) => state.module);
     } catch (error: unknown) {
+      // Next's own signals (a redirect, "this page reads the request") are not failures: hand them back.
+      unstable_rethrow(error);
       console.error('[portal] invite panel: plan read failed', error instanceof Error ? error.message : error);
     }
   }

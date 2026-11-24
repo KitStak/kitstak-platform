@@ -1,3 +1,4 @@
+import { unstable_rethrow } from 'next/navigation';
 import { PRODUCT_IDS, formatDay, formatMoney } from '@kitstak/billing/catalog';
 import { quote } from '@kitstak/billing/quote';
 import { getPlanState } from '@kitstak/billing/server';
@@ -23,6 +24,8 @@ async function runningTrial(): Promise<TrialHeroProps | null> {
       endsLabel: formatDay(state.trial.endsAt, context.timeZone),
     };
   } catch (error: unknown) {
+    // Next's own signals (a redirect, "this page reads the request") are not failures: hand them back.
+    unstable_rethrow(error);
     // The panel is a nice to have. A failed read never breaks the form beside it.
     console.error('[portal] verify email panel: plan read failed', error instanceof Error ? error.message : error);
     return null;
