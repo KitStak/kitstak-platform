@@ -50,16 +50,26 @@ export interface PasswordPolicy {
   readonly requireUpper: boolean;
   readonly requireNumber: boolean;
   readonly requireSymbol: boolean;
+  /**
+   * A password of this many characters or more needs no capital, number or symbol: its length does
+   * the work (billing review round 2; the same idea as NIST SP 800-63B). Shorter passwords still
+   * follow the three `require*` rules. Leave it out to apply those rules to every length.
+   */
+  readonly passphraseLength?: number;
   readonly maxAgeDays?: number;
   readonly lockoutThreshold: number;
   readonly lockoutMinutes: number;
 }
+
+/** "correct horse battery staple" is a good password. From this length on, no other rule applies. */
+export const DEFAULT_PASSPHRASE_LENGTH = 15;
 
 export const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
   minLength: 10,
   requireUpper: true,
   requireNumber: true,
   requireSymbol: true,
+  passphraseLength: DEFAULT_PASSPHRASE_LENGTH,
   lockoutThreshold: DEFAULT_LOCKOUT_THRESHOLD,
   lockoutMinutes: DEFAULT_LOCKOUT_MINUTES,
 };
@@ -79,10 +89,17 @@ export function validatePassword(
   if (password.length < policy.minLength) issues.push(`Use at least ${policy.minLength} characters.`);
   if (new TextEncoder().encode(password).length > MAX_PASSWORD_BYTES)
     issues.push(`Use at most ${MAX_PASSWORD_BYTES} bytes.`);
-  if (policy.requireUpper && !/[A-Z]/.test(password)) issues.push('Include an uppercase letter.');
-  if (policy.requireUpper && !/[a-z]/.test(password)) issues.push('Include a lowercase letter.');
-  if (policy.requireNumber && !/[0-9]/.test(password)) issues.push('Include a number.');
-  if (policy.requireSymbol && !/[^A-Za-z0-9]/.test(password)) issues.push('Include a symbol.');
+  // Long enough to stand by itself: no capital, number or symbol is asked for.
+  const passphrase =
+    typeof policy.passphraseLength === 'number' &&
+    policy.passphraseLength >= policy.minLength &&
+    password.length >= policy.passphraseLength;
+  if (!passphrase) {
+    if (policy.requireUpper && !/[A-Z]/.test(password)) issues.push('Include an uppercase letter.');
+    if (policy.requireUpper && !/[a-z]/.test(password)) issues.push('Include a lowercase letter.');
+    if (policy.requireNumber && !/[0-9]/.test(password)) issues.push('Include a number.');
+    if (policy.requireSymbol && !/[^A-Za-z0-9]/.test(password)) issues.push('Include a symbol.');
+  }
   const lowered = password.toLowerCase();
   const localPart = context.email?.split('@')[0]?.toLowerCase();
   if (localPart && localPart.length >= 3 && lowered.includes(localPart))
@@ -198,11 +215,26 @@ function toTime(value: Date | string | null | undefined): number | null {
   return Number.isNaN(time) ? null : time;
 }
 
+/**
+ * A loaded policy over the defaults. One rule on top: a company that set its own character rules
+ * (WMS company settings) keeps them for every length, unless it also names a passphrase length. So
+ * the default passphrase rule never loosens a policy somebody chose on purpose.
+ */
+export function mergePasswordPolicy(partial: Partial<PasswordPolicy>): PasswordPolicy {
+  const merged: PasswordPolicy = { ...DEFAULT_PASSWORD_POLICY, ...partial };
+  const setOwnRules = partial.requireUpper !== undefined || partial.requireNumber !== undefined || partial.requireSymbol !== undefined;
+  if (setOwnRules && partial.passphraseLength === undefined) {
+    const { passphraseLength: _dropped, ...rest } = merged;
+    return rest;
+  }
+  return merged;
+}
+
 async function resolvePolicy(loadPolicy: PasswordPolicyLoader | undefined): Promise<PasswordPolicy> {
   if (!loadPolicy) return DEFAULT_PASSWORD_POLICY;
   try {
     const partial = await loadPolicy();
-    return { ...DEFAULT_PASSWORD_POLICY, ...partial };
+    return mergePasswordPolicy(partial);
   } catch {
     return DEFAULT_PASSWORD_POLICY; // invalid/unavailable policy falls back to defaults (WMS behavior)
   }

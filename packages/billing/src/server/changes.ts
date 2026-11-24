@@ -22,8 +22,15 @@ import {
   PRODUCT_IDS,
   productListLabel,
 } from '../catalog';
+import { changeWords, type ChangeWords } from '../change-words';
 import { type BillingResult, billingError, billingOk } from '../errors';
-import { type BillingGateway, type ChangePreview, GatewayCardError, type GatewaySubscription } from '../gateway/types';
+import {
+  type BillingGateway,
+  type ChangePreview,
+  GatewayCardError,
+  type GatewayInvoice,
+  type GatewaySubscription,
+} from '../gateway/types';
 import { isLiveSubscriptionStatus, type PlanState } from '../plan-state';
 import { prorationDateFor, prorationDaysLeft, prorationDirection, type ProrationDirection } from '../proration';
 import { quote } from '../quote';
@@ -31,15 +38,20 @@ import { recordAudit } from './audit';
 import { writeCart } from './cart';
 import { belowUsageMessage } from './checkout';
 import { type BillingActor, type BillingRuntime, errorText, logBilling } from './db';
+import { withOrgBillingTurn } from './lock';
 import { enforceRateLimit } from './rate-limit';
 import { getPlanState } from './state';
 import { applyInvoiceSnapshot, applySubscriptionSnapshot, clearBillingCaches, lockOrgBilling, withCardFallback } from './sync';
 
 /** What the confirm panel gets: the gateway's preview plus what it was based on. */
-export interface PlanChangePreview extends ChangePreview {
+export interface PlanChangePreview extends ChangePreview, ChangeWords {
   /** A fingerprint of the plan this preview was worked out for. Pass it back unchanged to confirm. */
   readonly basis: string;
-  /** Whole days the prorated amount is for. null when nothing is prorated (free trial, no change). */
+  /**
+   * Whole days the prorated amount is for: rounded up for a charge (a day that has started counts),
+   * rounded down for a credit (only full days come back). null when nothing is prorated (free
+   * trial, no change). The panel shows `dueTodayNote` and `creditNote`, which are written from it.
+   */
   readonly daysLeft: number | null;
   /** Credit the organization holds before this change. */
   readonly creditBalanceCents: number;
@@ -167,6 +179,8 @@ export async function previewPlanChange(
         proratedCents: 0,
         creditAppliedCents: 0,
         daysLeft: null,
+        dueTodayNote: 'Nothing to pay now.',
+        creditNote: null,
         ...extra,
       });
     }
@@ -175,7 +189,18 @@ export async function previewPlanChange(
       selection,
       prorationDate: pricing.prorationDate,
     });
-    return billingOk({ ...preview, daysLeft: pricing.daysLeft, ...extra });
+    const words = changeWords({
+      dueTodayCents: preview.dueTodayCents,
+      creditCents: preview.creditCents,
+      creditAppliedCents: preview.creditAppliedCents,
+      taxCents: preview.taxCents,
+      lines: preview.lines,
+      daysLeft: pricing.daysLeft,
+      direction: pricing.direction,
+      fromInterval: pricing.subscription.interval,
+      toInterval: selection.interval,
+    });
+    return billingOk({ ...preview, daysLeft: pricing.daysLeft, ...words, ...extra });
   } catch (error) {
     logBilling('error', 'preview plan change failed', { orgId: input.orgId, error: errorText(error) });
     return billingError('gateway_error');
@@ -242,14 +267,67 @@ export async function applyPlanChange(
     prorationDate?: unknown;
   },
 ): Promise<BillingResult<PlanState>> {
+  // A first look without the turn: an answer a person can fix needs no waiting.
+  const early = await prepare(rt, input);
+  if (!early.ok) return early.error;
+  if (sameSelection(early.ready.state.selection, early.ready.selection)) return billingOk(early.ready.state);
+
+  const allowed = await enforceRateLimit(rt.db, { key: `plan-change:${input.orgId}`, windowSeconds: 3600, max: 20 });
+  if (!allowed) return billingError('rate_limited');
+
+  // One confirm at a time per organization (review round 2). The basis check, the fresh preview and
+  // the gateway call are one step now. Confirms that arrive together run one after the other: the
+  // first applies the change, and each later one reads the plan the first one left. It then either
+  // finds its change already done and returns the plan as it is, or is told the amount changed.
+  // The gateway is asked to charge once.
+  try {
+    const turn = await withOrgBillingTurn(rt.db, { orgId: input.orgId, purpose: 'plan_change' }, () => confirmChange(rt, input));
+    return turn.ok ? turn.value : billingError('busy');
+  } catch (error) {
+    logBilling('error', 'apply plan change failed', { orgId: input.orgId, error: errorText(error) });
+    return billingError('gateway_error');
+  } finally {
+    clearBillingCaches(input.orgId);
+  }
+}
+
+/**
+ * What a change did to money, read from the gateway's own answer and not from the preview: the
+ * invoice it made for this change, and the credit balance before and after.
+ */
+function moneyOfChange(
+  before: GatewaySubscription,
+  after: GatewaySubscription,
+  invoice: GatewayInvoice | null,
+  preview: ChangePreview,
+): Pick<ChangePreview, 'dueTodayCents' | 'creditCents' | 'creditAppliedCents'> & { invoiceId: string | null } {
+  const made = invoice !== null && invoice.id !== before.latestInvoiceId && invoice.status === 'paid' ? invoice : null;
+  if (made) {
+    return { dueTodayCents: made.amountPaidCents, creditCents: 0, creditAppliedCents: made.creditAppliedCents, invoiceId: made.id };
+  }
+  // No invoice: nothing was charged. Credit went up (a decrease) or down (credit paid for the change).
+  const delta = after.creditBalanceCents - before.creditBalanceCents;
+  return {
+    dueTodayCents: 0,
+    creditCents: delta > 0 ? delta : preview.creditCents > 0 && delta === 0 ? preview.creditCents : 0,
+    creditAppliedCents: delta < 0 ? -delta : 0,
+    invoiceId: null,
+  };
+}
+
+/** The body of `applyPlanChange`. Only ever runs while the organization's billing turn is held. */
+async function confirmChange(
+  rt: BillingRuntime,
+  input: { orgId: string; selection: PlanSelection; basis: string; expectedDueTodayCents: number; actor: BillingActor },
+): Promise<BillingResult<PlanState>> {
+  // Read again, now that the turn is ours: another confirm may have finished while this one waited.
+  clearBillingCaches(input.orgId);
   const prepared = await prepare(rt, input);
   if (!prepared.ok) return prepared.error;
   const { row, state, selection } = prepared.ready;
   const gateway = rt.gateway!;
+  // The same change was confirmed a moment ago (a double click, two tabs). It is done; say so.
   if (sameSelection(state.selection, selection)) return billingOk(state);
-
-  const allowed = await enforceRateLimit(rt.db, { key: `plan-change:${input.orgId}`, windowSeconds: 3600, max: 20 });
-  if (!allowed) return billingError('rate_limited');
 
   try {
     const pricing = await pricingFor(gateway, row, selection, rt.now());
@@ -274,6 +352,7 @@ export async function applyPlanChange(
       prorationDate: fresh.prorationDate,
     });
     const latestInvoice = subscription.latestInvoiceId ? await gateway.getInvoice(subscription.latestInvoiceId) : null;
+    const money = moneyOfChange(pricing.subscription, subscription, latestInvoice, fresh);
     await rt.db.transaction(async (tx) => {
       await lockOrgBilling(tx, input.orgId);
       if (latestInvoice) {
@@ -298,13 +377,14 @@ export async function applyPlanChange(
         orgId: input.orgId,
         actor: input.actor,
         action: 'plan.changed',
-        summary: `${describePlanChange(input.actor.label, state.selection, selection)}${describeChangeMoney(fresh)}`,
+        summary: `${describePlanChange(input.actor.label, state.selection, selection)}${describeChangeMoney(money)}`,
         data: {
           before: state.selection,
           after: selection,
-          dueTodayCents: fresh.dueTodayCents,
-          creditCents: fresh.creditCents,
-          creditAppliedCents: fresh.creditAppliedCents,
+          dueTodayCents: money.dueTodayCents,
+          creditCents: money.creditCents,
+          creditAppliedCents: money.creditAppliedCents,
+          invoiceId: money.invoiceId,
           creditBalanceCents: subscription.creditBalanceCents,
           daysLeft: pricing.daysLeft,
           newRecurringCents: after.totalCents,

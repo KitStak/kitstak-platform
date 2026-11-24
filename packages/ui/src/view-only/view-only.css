@@ -27,6 +27,29 @@
   background: var(--surface-app);
 }
 
+/*
+ * A create screen opened by its address: the message sits in the page area of the app frame, in
+ * place of the form. The top bar and the plan banner stay where they are.
+ */
+.ks-viewonly-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  padding: var(--space-8) var(--space-4);
+  background: var(--surface-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+.ks-viewonly-page .ks-viewonly-card {
+  width: 100%;
+  max-width: 440px;
+  box-shadow: var(--elevation-md);
+}
+
 .ks-viewonly-card {
   display: flex;
   flex-direction: column;
@@ -134,6 +157,11 @@
  */
 [data-plan-view-only] [data-plan-write] {
   opacity: 0.55;
+}
+
+/* A row in an open menu is read on a small surface: a lighter touch keeps the words easy to read. */
+[data-plan-view-only] [role='menuitem'][data-plan-write] {
+  opacity: 0.7;
 }
 
 @keyframes ks-viewonly-in {

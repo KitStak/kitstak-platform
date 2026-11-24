@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { TRIAL_LINE } from '@/lib/pricing';
 import { HELP_LABEL, ROUTES, START_LABEL, startFreeHref } from '../site-links';
 import { OrderStack } from './order-stack';
 import styles from './hero.module.css';
@@ -25,6 +26,10 @@ export function Hero() {
               {HELP_LABEL}
             </Link>
           </div>
+          {/* What "Start free" means, right under the button. The number comes from the one catalog. */}
+          <p className={styles.note} data-testid="hero-trial-note">
+            {TRIAL_LINE}
+          </p>
         </div>
         <OrderStack />
       </div>

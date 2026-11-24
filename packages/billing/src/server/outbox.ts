@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import { billingAccounts, billingEmails, billingManagers, member, user } from '@kitstak/db/schema';
 import type { EmailPayloads, EmailTemplateId } from '../email-types';
 import type { BillingDb, BillingReadDb } from './db';
-import { isActiveRole, roleParts } from './roles';
+import { hasBillingRole, isActiveRole, roleParts } from './roles';
 
 export async function enqueueEmail<T extends EmailTemplateId>(
   db: Pick<BillingDb, 'insert'>,
@@ -56,7 +56,7 @@ export async function billingRecipients(db: BillingReadDb, orgId: string): Promi
   const managers = new Set(managerRows.map((row) => row.userId));
   for (const row of members) {
     if (!isActiveRole(row.role)) continue;
-    if (roleParts(row.role).includes('owner') || managers.has(row.userId)) {
+    if (roleParts(row.role).includes('owner') || managers.has(row.userId) || hasBillingRole(row.role)) {
       const email = row.email.trim().toLowerCase();
       if (email) out.add(email);
     }

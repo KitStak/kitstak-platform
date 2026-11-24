@@ -70,7 +70,7 @@ export function MultiSelect({
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[300px] p-0">
+      <PopoverContent align="end" className="w-[300px] p-0" data-plan-read="">
         <div className="border-b border-border p-2">
           <div className="relative">
             <Search

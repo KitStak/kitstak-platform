@@ -1,5 +1,6 @@
 /** App shell (owner: foundation). */
 export { AppShell, type AppShellProps } from './app-shell';
+export { LockedFrame, type LockedFrameProps } from './locked-frame';
 export { LockedScreen } from './locked-screen';
 export { Logo, LogoMark, ProjectsMark } from './logo';
 export { useShell, useOptionalShell, ShellProvider, type ShellContextValue } from './shell-context';

@@ -130,7 +130,7 @@ set and `NODE_ENV` not set to `production`:
 - every email goes to the **dev outbox** at http://localhost:3300/dev/outbox instead of a real inbox,
 - the billing job needs no secret.
 
-`NEXT_PUBLIC_SITE_URL` points at the local marketing site (port 3600), so "Talk to us" stays local. The full
+`NEXT_PUBLIC_SITE_URL` points at the local marketing site (port 3600), so "Talk to us", Terms and Privacy stay local. An older `.env.local` without that line works too: with no value and `NODE_ENV` not `production`, the Portal uses `http://localhost:3600` by itself. The full
 list of variables and what each one does is in `GO-LIVE.md`. Keys never go in the repo.
 
 To try real Stripe test mode, put your own **test** keys in `apps/portal/.env.local`
@@ -211,7 +211,13 @@ The tools move one organization's dates back, so the rest of the database is not
 
 **Test cards** on the test checkout page: 4242 4242 4242 4242 works, 4000 0000 0000 0002 is declined,
 4000 0000 0000 9995 has not enough money, 4000 0027 6000 3184 needs bank approval, and
-4000 0000 0000 0341 works now and fails at the next renewal. The promo code `TEST10` takes 10% off.
+4000 0000 0000 0341 fails at renewals. The promo code `TEST10` takes 10% off.
+
+What 4000 0000 0000 0341 does, exactly: saving it always works. It pays a first bill (at checkout, or the
+first charge when a free trial ends) and it pays a plan change, such as an added seat. It fails every
+renewal charge: the renewal itself, each retry, and "Pay now" on a renewal bill. It does not matter
+whether you typed it at checkout or saved it later on the Update card page. To show a failed payment on a
+plan that is active: Update card, tap "Fails at next renewal", save, then skip ahead 30 days.
 
 **Start over for one organization.** `deploy/dev/billing-reset.sh <org-slug>` shows its billing rows. Add the
 word `yes` to remove them.

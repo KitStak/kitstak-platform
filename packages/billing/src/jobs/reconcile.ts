@@ -9,6 +9,7 @@
  */
 import { and, asc, eq, lt, or, sql } from 'drizzle-orm';
 import { billingSubscriptions } from '@kitstak/db/schema';
+import { isLiveSubscriptionStatus } from '../plan-state';
 import { errorText, logBilling, type BillingRuntime } from '../server/db';
 import { refreshFromGateway } from '../server/sync';
 
@@ -22,7 +23,7 @@ export async function reconcileSubscriptions(rt: BillingRuntime, options?: { lim
   const stale = new Date(now.getTime() - HOUR_MS);
 
   const due = await rt.db
-    .select({ orgId: billingSubscriptions.orgId })
+    .select({ orgId: billingSubscriptions.orgId, status: billingSubscriptions.status, subscriptionId: billingSubscriptions.gatewaySubscriptionId })
     .from(billingSubscriptions)
     .where(
       and(
@@ -46,14 +47,30 @@ export async function reconcileSubscriptions(rt: BillingRuntime, options?: { lim
     .limit(limit);
 
   let reconciled = 0;
-  for (const { orgId } of due) {
+  for (const { orgId, status, subscriptionId } of due) {
     let ok = false;
+    let why = '';
     try {
       const result = await refreshFromGateway(rt, orgId);
       ok = result.ok;
-      if (!result.ok) logBilling('warn', 'reconcile could not refresh a plan', { orgId, code: result.error.code });
+      if (!result.ok) why = result.error.code;
     } catch (error) {
-      logBilling('error', 'reconcile failed for one organization', { orgId, error: errorText(error) });
+      why = errorText(error);
+    }
+    if (!ok) {
+      if (isLiveSubscriptionStatus(status)) {
+        // Loud on purpose (review round 2). Our copy says the plan is live, a date on it has passed,
+        // and the gateway would not tell us the truth. Access and charges may be wrong until a
+        // person looks. Alert on this line.
+        logBilling('error', 'RECONCILE FAILED FOR A LIVE PLAN: access may be wrong until this is fixed', {
+          orgId,
+          subscriptionId,
+          status,
+          why,
+        });
+      } else {
+        logBilling('warn', 'reconcile could not refresh a plan', { orgId, subscriptionId, status, why });
+      }
     }
     if (ok) {
       reconciled += 1;

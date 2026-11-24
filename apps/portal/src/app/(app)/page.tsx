@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { after } from 'next/server';
 import { CalendarDays, ClipboardPen, CreditCard, FolderKanban, LayoutGrid, ListChecks, Package, PackagePlus, Plus, Settings2, Users, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import type { Module } from '@kitstak/entitlements';
 import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
@@ -9,7 +10,7 @@ import { getOrgGlance, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { CATALOG, formatDayShort } from '@kitstak/billing/catalog';
 import { getBillingContext } from '@/server/billing/context';
 import { getOrgPlan, type ModuleState } from '@/server/entitlements';
-import { addAppPriceNote, plural } from '@/features/billing/format';
+import { addAppPriceNote, plural, viewOnlyFix } from '@/features/billing/format';
 import { getCustomerWork, getLauncherStats, getPulseAttention } from '@/server/product-stats';
 import { CustomerWorkPanel } from '@/features/launcher/customer-work';
 import { PulseAttentionPanel } from '@/features/launcher/pulse-attention';
@@ -18,6 +19,7 @@ import { CreateOrgForm } from '@/features/launcher/create-org-form';
 import { ProductTile } from '@/features/launcher/product-tile';
 import { SetupGuide } from '@/features/setup/setup-guide';
 import { LogoMark } from '@/features/shell/logo';
+import { AppIcon } from '@kitstak/ui/app-icon';
 import { Badge, cn } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Apps' };
@@ -156,6 +158,9 @@ export default async function LauncherPage({
     );
   }
 
+  // A person who only manages billing has no apps to open (review round 2). Billing is their home.
+  if (activeOrg.role === 'billing') redirect('/billing');
+
   // The billing context is cached per request: the setup guide needs it to know who may pay.
   const billing = await getBillingContext();
   const [{ devAllowAll, modules, state: plan }, stats, customerWork, pulseAttention, glance, setup, params] = await Promise.all([
@@ -196,7 +201,8 @@ export default async function LauncherPage({
       case 'past_due':
         return plan.pastDue ? `Payment due. Open until ${formatDayShort(plan.pastDue.accessChangesAt, timeZone)}.` : 'Payment due';
       case 'view_only':
-        return access?.canView ? 'View only. Pick a plan to make changes.' : `View only. Ask ${askWho} to pick a plan.`;
+        // The same fix the plan banner names for this state ("Pick a plan", "Update card", "Start again now").
+        return access?.canView ? `View only. ${viewOnlyFix(plan.phase)}` : `View only. Ask ${askWho} to pick a plan.`;
       case 'not_in_plan':
         return mayAdd ? addAppPriceNote(plan, state.module) : `Ask ${askWho} to add it.`;
       case 'included':
@@ -242,42 +248,88 @@ export default async function LauncherPage({
     { label: 'Org settings', href: '/settings/organization', icon: Settings2, external: false },
   ];
 
+  const ownTiles = modules.filter((state) => state.badge !== 'not_in_plan');
+  const moreTiles = modules.filter((state) => state.badge === 'not_in_plan');
+  const renderTile = (state: ModuleState, index: number, count: number) => {
+    const copy = PRODUCTS[state.module];
+    // An odd last tile spans the row so the grid never ends on a lonely half-width card.
+    const spanRow = count % 2 === 1 && index === count - 1;
+    return (
+      <ProductTile
+        key={state.module}
+        className={spanRow ? 'sm:col-span-2' : undefined}
+        module={state.module}
+        name={copy.name}
+        tagline={copy.tagline}
+        href={productUrl(state.module)}
+        entitled={state.entitled}
+        badge={state.badge}
+        planNote={planNoteFor(state)}
+        addAction={addActionFor(state)}
+        stats={stats[state.module]}
+        emptyStateHref={emptyStateUrl(state.module, activeOrg.slug)}
+      />
+    );
+  };
+
   return (
     <div className="mx-auto flex w-full max-w-[880px] flex-col gap-8">
-      <section>
-        <p className="text-sm font-medium text-fg-muted">{activeOrg.name}</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-fg">
-          Good to see you, {firstName(session.user.name)}
-        </h1>
+      <section className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-fg-muted">{activeOrg.name}</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-fg">
+            Good to see you, {firstName(session.user.name)}
+          </h1>
+        </div>
+        {/*
+          The apps this person has, one press away at the very top, above the setup guide. On a
+          laptop and on a phone the app they signed up for is on the first screen, whatever the
+          guide and the banners above the tiles take.
+        */}
+        {ownTiles.length > 0 ? (
+          <nav aria-label="Open an app" data-testid="launcher-open" className="flex flex-wrap gap-2">
+            {ownTiles.map((state) => (
+              <a
+                key={state.module}
+                href={productUrl(state.module)}
+                target="_blank"
+                rel="noopener"
+                data-testid={`launcher-open-${state.module}`}
+                className={cn(
+                  'inline-flex h-10 items-center gap-2 rounded-lg border border-border-default bg-panel pr-3.5 pl-2 text-sm font-semibold text-fg shadow-xs pointer-coarse:h-11',
+                  'transition-colors duration-[var(--duration-fast)] hover:border-border-strong hover:bg-muted',
+                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+                )}
+              >
+                <AppIcon app={state.module} size={22} />
+                Open {CATALOG.products[state.module].shortName}
+              </a>
+            ))}
+          </nav>
+        ) : null}
       </section>
 
       {showSetupGuide ? (
         <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManageSetup} />
       ) : null}
 
-      <section aria-label="Your apps" className="grid gap-4 sm:grid-cols-2">
-        {modules.map((state, index) => {
-          const copy = PRODUCTS[state.module];
-          // An odd last tile spans the row so the grid never ends on a lonely half-width card.
-          const spanRow = modules.length % 2 === 1 && index === modules.length - 1;
-          return (
-            <ProductTile
-              key={state.module}
-              className={spanRow ? 'sm:col-span-2' : undefined}
-              module={state.module}
-              name={copy.name}
-              tagline={copy.tagline}
-              href={productUrl(state.module)}
-              entitled={state.entitled}
-              badge={state.badge}
-              planNote={planNoteFor(state)}
-              addAction={addActionFor(state)}
-              stats={stats[state.module]}
-              emptyStateHref={emptyStateUrl(state.module, activeOrg.slug)}
-            />
-          );
-        })}
+      {/*
+        The apps this organization has (in its trial or its plan) come first, so the app a person
+        signed up for is on the first screen under the guide, also on a phone. The rest sit below
+        under "More apps", each with its price. An organization with no plan yet sees all four.
+      */}
+      <section aria-label="Your apps" data-testid="launcher-apps" className="grid gap-4 sm:grid-cols-2">
+        {(ownTiles.length > 0 ? ownTiles : moreTiles).map((state, index, list) => renderTile(state, index, list.length))}
       </section>
+
+      {ownTiles.length > 0 && moreTiles.length > 0 ? (
+        <section aria-labelledby="more-apps-heading" data-testid="launcher-more-apps">
+          <h2 id="more-apps-heading" className="text-2xs font-semibold tracking-[0.08em] text-fg-muted uppercase">
+            More apps
+          </h2>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">{moreTiles.map((state, index, list) => renderTile(state, index, list.length))}</div>
+        </section>
+      ) : null}
 
       {entitledFor('pulse') && pulseAttention ? (
         <PulseAttentionPanel attention={pulseAttention} pulseUrl={env.NEXT_PUBLIC_PULSE_URL} />

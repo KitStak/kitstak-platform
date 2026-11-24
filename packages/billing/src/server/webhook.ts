@@ -10,12 +10,12 @@
  *  5. If the handler throws: roll back, record the event as `failed`, answer 500 so the gateway retries.
  *  6. After commit: clear the entitlement and plan caches for the org.
  */
-import { eq, sql } from 'drizzle-orm';
-import { billingEvents, billingSubscriptions, organization, stripeCustomers } from '@kitstak/db/schema';
+import { and, eq, sql } from 'drizzle-orm';
+import { billingAuditLog, billingEvents, billingSubscriptions, organization, stripeCustomers } from '@kitstak/db/schema';
 import { CATALOG, formatMoney } from '../catalog';
 import { type GatewayEvent, type GatewayInvoice, WebhookSignatureError } from '../gateway/types';
 import { isLiveSubscriptionStatus } from '../plan-state';
-import { recordAudit } from './audit';
+import { type AuditAction, recordAudit } from './audit';
 import { applyCheckoutSession } from './checkout';
 import { type BillingDb, type BillingRuntime, errorText, isUuid, logBilling, SYSTEM_ACTOR } from './db';
 import { enqueueForBillingRecipients } from './outbox';
@@ -26,6 +26,7 @@ import {
   fetchAndApplySubscription,
   isForeignSubscription,
   lockOrgBilling,
+  planRowIds,
   withCardFallback,
 } from './sync';
 
@@ -47,6 +48,31 @@ function cardWords(brand: string | null | undefined, last4: string | null | unde
 async function orgNameOf(db: BillingDb, orgId: string): Promise<string> {
   const [org] = await db.select({ name: organization.name }).from(organization).where(eq(organization.id, orgId));
   return org?.name ?? 'your organization';
+}
+
+/**
+ * True when the activity log already has this line for this invoice (and this try, when given).
+ * Gateways do not promise event order and may send the same fact under a new event id, so a payment
+ * line is written once per invoice and a failed charge once per try. Every caller holds the
+ * organization lock, so check then write cannot race.
+ */
+async function invoiceLineExists(
+  db: BillingDb,
+  input: { orgId: string; action: AuditAction; invoiceId: string; attempt?: number },
+): Promise<boolean> {
+  const [found] = await db
+    .select({ id: billingAuditLog.id })
+    .from(billingAuditLog)
+    .where(
+      and(
+        eq(billingAuditLog.orgId, input.orgId),
+        eq(billingAuditLog.action, input.action),
+        sql`${billingAuditLog.data}->>'invoiceId' = ${input.invoiceId}`,
+        input.attempt === undefined ? undefined : sql`${billingAuditLog.data}->>'attempt' = ${String(input.attempt)}`,
+      ),
+    )
+    .limit(1);
+  return found !== undefined;
 }
 
 /** Finds the org an event is about: the id on the object, else the customer we stored. */
@@ -77,7 +103,11 @@ async function fetchInvoice(rt: BillingRuntime, db: BillingDb, orgId: string, ev
   const invoice = await rt.gateway.getInvoice(event.invoiceId);
   if (!invoice) return null;
   const customerId = await customerIdForOrg(db, orgId, rt.gateway.kind);
-  const owned = customerId !== null ? invoice.customerId === customerId : event.orgId === orgId;
+  // Ours when it is an invoice of the stored customer, or of the subscription or customer our own
+  // plan row holds (see the ownership rule in `fetchAndApplySubscription`).
+  const plan = await planRowIds(db, orgId, rt.gateway.kind);
+  const ofPlan = plan !== null && (invoice.customerId === plan.customerId || (invoice.subscriptionId !== null && invoice.subscriptionId === plan.subscriptionId));
+  const owned = customerId !== null ? invoice.customerId === customerId || ofPlan : ofPlan || event.orgId === orgId;
   if (!owned) {
     logBilling('warn', 'invoice does not belong to the org', { orgId, invoiceId: invoice.id });
     return null;
@@ -156,7 +186,13 @@ async function handleEvent(rt: BillingRuntime, db: BillingDb, orgId: string, eve
       if (!subscription && (await storeForeignInvoice(invoice))) return 'processed';
       const stored = withCardFallback(invoice, subscription);
       await applyInvoiceSnapshot(db, { orgId, gateway: gateway.kind, invoice: stored });
-      if (invoice.creditAppliedCents > 0) {
+      // The event only says "look at this invoice". What is written comes from the invoice as it is
+      // now: an invoice that is not paid gets no payment line, and a paid one gets its lines once.
+      if (invoice.status !== 'paid') return 'processed';
+      if (
+        invoice.creditAppliedCents > 0 &&
+        !(await invoiceLineExists(db, { orgId, action: 'payment.credit_used', invoiceId: invoice.id }))
+      ) {
         const kept = subscription ? subscription.creditBalanceCents : null;
         const left = kept === null ? '' : kept > 0 ? ` ${formatMoney(kept)} credit is left.` : ' Your credit is used up.';
         await recordAudit(db, {
@@ -172,14 +208,16 @@ async function handleEvent(rt: BillingRuntime, db: BillingDb, orgId: string, eve
         });
       }
       if (invoice.amountPaidCents > 0) {
-        await recordAudit(db, {
-          orgId,
-          actor: SYSTEM_ACTOR,
-          action: 'payment.succeeded',
-          summary: `Payment of ${formatMoney(invoice.amountPaidCents)} succeeded.`,
-          data: { invoiceId: invoice.id, amountPaidCents: invoice.amountPaidCents },
-          eventId: event.id,
-        });
+        if (!(await invoiceLineExists(db, { orgId, action: 'payment.succeeded', invoiceId: invoice.id }))) {
+          await recordAudit(db, {
+            orgId,
+            actor: SYSTEM_ACTOR,
+            action: 'payment.succeeded',
+            summary: `Payment of ${formatMoney(invoice.amountPaidCents)} succeeded.`,
+            data: { invoiceId: invoice.id, amountPaidCents: invoice.amountPaidCents },
+            eventId: event.id,
+          });
+        }
         const renews =
           subscription &&
           isLiveSubscriptionStatus(subscription.status) &&
@@ -216,6 +254,14 @@ async function handleEvent(rt: BillingRuntime, db: BillingDb, orgId: string, eve
       if (!subscription && (await storeForeignInvoice(invoice))) return 'processed';
       const stored = withCardFallback(invoice, subscription);
       await applyInvoiceSnapshot(db, { orgId, gateway: gateway.kind, invoice: stored });
+      // A failed try that arrives after the invoice was paid (or voided) is old news: the invoice
+      // and the plan above are already stored as they are now, and no "could not charge" line is
+      // written. A try that is already in the log is not written again either.
+      const stillOwed = (invoice.status === 'open' || invoice.status === 'uncollectible') && invoice.amountDueCents > 0;
+      if (!stillOwed) return 'processed';
+      if (await invoiceLineExists(db, { orgId, action: 'payment.failed', invoiceId: invoice.id, attempt: invoice.attemptCount })) {
+        return 'processed';
+      }
       await recordAudit(db, {
         orgId,
         actor: SYSTEM_ACTOR,

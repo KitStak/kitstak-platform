@@ -19,28 +19,37 @@ test.describe('checkout: adding a card during the free trial', () => {
     await expect(page.getByTestId('billing-payment-method')).toContainText('No card yet');
 
     // "Pick a plan" is the one name for the paying step. On billing home it is the one filled button
-    // of the card row. It opens the picker to pay, with one filled button: "Continue to review".
+    // of the card row. It opens the picker to pay. That screen shows the three facts (the plan, due
+    // today, the first charge) and its one filled button opens the pay page: two clicks to the card
+    // field, and no screen in between that repeats the same numbers.
     await expect(page.getByTestId('billing-home').getByRole('link', { name: 'Pick a plan' })).toHaveCount(1);
     await expect(page.getByTestId('billing-home').getByText('Add a card', { exact: true })).toHaveCount(0);
     await page.getByTestId('billing-pick-plan').click();
     await page.waitForURL(/\/billing\/plan/);
     await expect(page.getByTestId('plan-picker')).toHaveAttribute('data-mode', 'checkout');
-    await expect(page.getByTestId('plan-submit')).toHaveText(/Continue to review/);
-    await page.getByTestId('plan-submit').click();
-    // The review step. Three facts, one button, no card field.
-    await page.waitForURL(/\/billing\/checkout/);
-    await expect(page.getByTestId('review-due-today')).toHaveText('$0.00');
-    await expect(page.getByTestId('review-first-charge-amount')).toHaveText(totalOf(CART_CRM_WMS));
-    const firstChargeDate = await textOf(page.getByTestId('review-first-charge-date'));
+    await expect(page.getByTestId('plan-summary')).toContainText('Due today');
+    await expect(page.getByTestId('plan-summary')).toContainText('$0.00');
+    await expect(page.getByTestId('plan-first-charge-amount')).toHaveText(totalOf(CART_CRM_WMS));
+    const firstChargeDate = await textOf(page.getByTestId('plan-first-charge-date'));
     expect(firstChargeDate).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
     await expect(page.getByTestId('quote-total').first()).toHaveText(totalOf(CART_CRM_WMS));
-    await expect(page.getByTestId('review-trust')).toContainText('No charge today.');
-    await expect(page.getByTestId('review-trust')).toContainText('Cancel any time in Billing.');
+    await expect(page.getByTestId('plan-picker')).toContainText('No charge today.');
+    await expect(page.getByTestId('plan-picker')).toContainText('Cancel any time in Billing.');
     await expect(page.locator('input[autocomplete="cc-number"]')).toHaveCount(0);
+    await expect(page.getByTestId('plan-submit')).toHaveText(/Continue to test checkout/);
+
+    // The review page is still there for links that land on it (an email, the way back from the pay
+    // page). It says the same facts.
+    await page.goto('/billing/checkout');
+    await expect(page.getByTestId('review-due-today')).toHaveText('$0.00');
+    await expect(page.getByTestId('review-first-charge-amount')).toHaveText(totalOf(CART_CRM_WMS));
+    await expect(page.getByTestId('review-first-charge-date')).toHaveText(firstChargeDate);
     await expect(page.getByTestId('review-pay')).toHaveText(/Continue to test checkout/);
+    await page.goBack();
+    await expect(page.getByTestId('plan-submit')).toHaveText(/Continue to test checkout/);
 
     // The pay page says the same three facts and wears the test mode label.
-    await page.getByTestId('review-pay').click();
+    await page.getByTestId('plan-submit').click();
     await page.waitForURL(/\/test-gateway\/checkout\//);
     await expect(page.getByTestId('test-mode-label').first()).toContainText('Test mode');
     await expect(page.getByTestId('test-checkout')).toContainText(totalOf(CART_CRM_WMS));

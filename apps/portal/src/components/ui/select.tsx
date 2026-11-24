@@ -22,9 +22,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           'w-full appearance-none rounded-md border bg-panel pr-8 pl-2.5 text-sm text-fg',
           size === 'lg' ? 'h-10' : 'h-8',
           'border-border-input hover:border-border-input-hover',
-          'focus:border-border-strong focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--border-strong)_28%,transparent)] focus:outline-none',
+          'focus:field-focus',
           'disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60',
-          invalid && 'border-danger hover:border-danger',
+          invalid && 'border-danger hover:border-danger focus:field-focus-danger',
           className,
         )}
         {...props}
@@ -51,9 +51,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       className={cn(
         'min-h-20 w-full rounded-md border bg-panel px-2.5 py-2 text-sm text-fg',
         'border-border-input hover:border-border-input-hover',
-        'focus:border-border-strong focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--border-strong)_28%,transparent)] focus:outline-none',
+        'focus:field-focus',
         'disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60',
-        invalid && 'border-danger hover:border-danger',
+        invalid && 'border-danger hover:border-danger focus:field-focus-danger',
         className,
       )}
       {...props}

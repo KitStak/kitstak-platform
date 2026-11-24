@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { CircleAlert } from 'lucide-react';
 import type { BillingProfile } from '@kitstak/billing/server';
 import { Button, Field, Input, LinkButton, Select } from '@/components/ui';
-import { updateBillingDetailsAction } from '@/server/billing-actions';
+import { updateBillingDetailsAction } from '@/features/billing/actions';
 import { TAX_ID_TYPES, type CountryOption } from './countries';
 
 export interface DetailsFormProps {

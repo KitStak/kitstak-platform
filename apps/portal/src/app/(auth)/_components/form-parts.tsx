@@ -7,8 +7,10 @@ import { forwardRef, useState } from 'react';
 import { Check, Eye, EyeOff, X } from 'lucide-react';
 import { Button, Input, Spinner, cn, type ButtonProps, type InputProps } from '@/components/ui';
 import {
+  PASSPHRASE_HINT,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  isPassphrase,
   passwordRules,
   passwordStrength,
 } from '@/features/signup/password-rules';
@@ -117,35 +119,47 @@ export function PasswordRules({
   readonly showMissing?: boolean;
 }) {
   const rules = passwordRules(password);
+  const long = isPassphrase(password);
   return (
-    <ul id={id} className="grid gap-x-4 gap-y-1 sm:grid-cols-2" aria-label="Your password needs" data-testid="password-rules">
-      {rules.map((rule) => {
-        const missing = showMissing && !rule.met;
-        return (
-          <li
-            key={rule.id}
-            data-rule={rule.id}
-            data-state={rule.met ? 'met' : missing ? 'missing' : 'open'}
-            className={cn(
-              'flex items-center gap-1.5 text-xs transition-colors duration-[var(--duration-fast)] motion-reduce:transition-none',
-              rule.met ? 'text-success-text' : missing ? 'font-medium text-danger-text' : 'text-fg-muted',
-            )}
-          >
-            <span
-              aria-hidden
+    <div className="flex flex-col gap-1.5">
+      {/* The easy way, said first: a long password needs nothing else (review round 2). */}
+      <p
+        data-testid="password-passphrase-hint"
+        data-state={long ? 'met' : 'open'}
+        className={cn('text-xs transition-colors duration-[var(--duration-fast)] motion-reduce:transition-none', long ? 'font-medium text-success-text' : 'text-fg-secondary')}
+      >
+        {PASSPHRASE_HINT}
+        {long ? <span className="sr-only"> Done.</span> : ' Or use a shorter one with all of these:'}
+      </p>
+      <ul id={id} className="grid gap-x-4 gap-y-1 sm:grid-cols-2" aria-label="Your password needs" data-testid="password-rules">
+        {rules.map((rule) => {
+          const missing = showMissing && !rule.met;
+          return (
+            <li
+              key={rule.id}
+              data-rule={rule.id}
+              data-state={rule.met ? 'met' : missing ? 'missing' : 'open'}
               className={cn(
-                'flex size-3.5 shrink-0 items-center justify-center rounded-full border',
-                rule.met ? 'border-success bg-success text-fg-inverse' : missing ? 'border-danger text-danger-text' : 'border-border-strong',
+                'flex items-center gap-1.5 text-xs transition-colors duration-[var(--duration-fast)] motion-reduce:transition-none',
+                rule.met ? 'text-success-text' : missing ? 'font-medium text-danger-text' : 'text-fg-muted',
               )}
             >
-              {rule.met ? <Check className="size-2.5" strokeWidth={3.5} /> : missing ? <X className="size-2.5" strokeWidth={3.5} /> : null}
-            </span>
-            {rule.label}
-            <span className="sr-only">{rule.met ? ', done' : ', still needed'}</span>
-          </li>
-        );
-      })}
-    </ul>
+              <span
+                aria-hidden
+                className={cn(
+                  'flex size-3.5 shrink-0 items-center justify-center rounded-full border',
+                  rule.met ? 'border-success bg-success text-fg-inverse' : missing ? 'border-danger text-danger-text' : 'border-border-strong',
+                )}
+              >
+                {rule.met ? <Check className="size-2.5" strokeWidth={3.5} /> : missing ? <X className="size-2.5" strokeWidth={3.5} /> : null}
+              </span>
+              {rule.label}
+              <span className="sr-only">{rule.met ? ', done' : ', still needed'}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

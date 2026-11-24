@@ -2106,3 +2106,79 @@ unless the row says "changed". Migration `0008_core_billing_credit.sql` carries 
 | Test invoice PDF | `renderInvoicePdf` draws the KitStak mark, a seller block and a buyer block, then the same lines as the screen. Seller facts come from `BILLING_SELLER_NAME`, `BILLING_SELLER_ADDRESS` and `BILLING_SELLER_TAX_ID` (see `GO-LIVE.md`). | test gateway |
 | `checkout.started`, changed | Written with `recordAuditOnce`: going to the pay page and back with the same cart is one row in the log and in the CSV file. A different cart, another person or anything that happened in between starts a new row. The activity page still folds older repeated rows into one line with a count. | activity page, CSV export |
 | CRM home | `useHydrated` (CRM `lib/hooks`): the home cards show their loading rows until the page is live in the browser, so the first browser pass matches what the server drew. | CRM |
+
+### 2026-11-24, review round 2 (backend fixes)
+
+Ten blockers from the operational, security and critic reviews. Everything here is additive unless the row
+says "changed". Migration `0009_core_billing_locks.sql` carries the one new table.
+
+**One step at a time**
+
+| What | Detail | Who it touches |
+|:-|:-|:-|
+| `withOrgBillingTurn` | `packages/billing/src/server/lock.ts`. One billing step that talks to the gateway at a time per organization. A lease row in `core.billing_locks` (holder, purpose, `expires_at`), not an advisory lock: no database connection is held while the gateway is asked, and a lease ends by itself after 120 seconds. A caller waits up to 20 seconds, then answers `busy`. The webhook path keeps its own short advisory lock (`lockOrgBilling`) inside one transaction. | checkout, plan changes |
+| `createCheckout`, changed | Runs under the turn. The stored customer is read, the gateway is asked, and the customer is stored before anything else happens, so two calls at the same moment make one gateway customer and leave one open pay page. | billing-ui (new answer `busy`) |
+| `applyPlanChange`, changed | The basis check, the fresh preview and the gateway call run under the turn. Confirms that arrive together run one after the other. A later one finds the change done and returns the plan as it is, or answers `price_changed`. The `plan.changed` activity line takes its amounts from the invoice the gateway made and from the credit balance before and after, not from the preview. Its data has `invoiceId`. | billing-ui |
+| Test gateway `applyChange`, changed | Reads, changes and saves its documents in one transaction under the organization lock. Events go out after the commit. | none |
+| The plan and the stored customer agree | `applyCheckoutSession` adopts the customer of a paid session of the organization in the same transaction (`adoptGatewayCustomer` in `sync.ts`) and closes the pay pages of the customer it replaced. `fetchAndApplySubscription` and the invoice check in the webhook also accept the subscription and customer our own plan row holds, and bring the stored customer back in line. So a plan can never be cut off from its own events. A customer that another organization holds is never adopted. | none |
+| Test gateway `expireOpenCheckoutSessions`, changed | Closes every open pay page of the customer's organization, whichever customer it was made for. | none |
+| Reconcile | A live plan that cannot be refreshed is logged at error level with the words `RECONCILE FAILED FOR A LIVE PLAN`. Alert on that line. | ops |
+| `GATEWAY_CONTRACT_VERSION` | Now 3. The interface did not change, but the test gateway's behavior did, and a dev server only rebuilds its cached gateway when this number moves. | dev |
+| New error codes | `busy` ("Another billing change is still running. Nothing was charged. Wait a moment and try again.") and `org_changed` ("You switched organizations. Reload this page."). | billing-ui |
+
+**Activity log**
+
+| What | Detail |
+|:-|:-|
+| Invoice events, changed | `invoice.payment_failed` writes `payment.failed` only when the invoice, read from the gateway now, is still open (or given up on) with money due, and only once per invoice and try. `invoice.paid` writes `payment.succeeded` and `payment.credit_used` only when the invoice is paid, once per invoice. Gateways do not promise event order, and may send a fact twice under new event ids. |
+
+**Words**
+
+| What | Detail | Who it touches |
+|:-|:-|:-|
+| `@kitstak/billing/change-words` | New pure module. `changeWords` writes the sentence under "Due today" (`dueTodayNote`) and the one after the credit (`creditNote`) from the numbers the server charges. Every amount in a sentence adds up to what is due or to the credit; if it ever would not, a plain sentence with no numbers is used. `PlanChangePreview` carries both. `STARTED_DAY_RULE` is "A day that has started counts as used." | confirm panel, pricing page, Terms |
+| Day counts | A charge names the days it is for ("For the 15 days left in this period."). A credit names the full days that come back ("That is for the 14 full days left in this period. A day that has started counts as used."). A change of billing period reads "$1,479.00 for the next year. Less $140.17 for the 29 full days left on your monthly plan. Less $1,329.95 from your credit." | confirm panel |
+| Test gateway lines | A credit line ends with its day count: "KitStak CRM: 1 user fewer, unused time, 14 full days left". | "See the math", invoices |
+
+**Stale tabs**
+
+| What | Detail |
+|:-|:-|
+| `renderedOrgId`, changed | Every action in `apps/portal/src/server/billing-actions.ts` that runs for the active organization takes the organization the page was made for as its first argument, compares it with the session's active organization, and answers `org_changed` when they differ. The id from the browser is only compared, never used (SPEC 12.3 holds). Screens call the actions through `apps/portal/src/features/billing/actions.ts`, which adds the id that `BillingOrgScope` (rendered by the signed in shell and the signup plan step) recorded for the tab. The four test pay page actions are tied to their pay page document and are not changed. |
+
+**People**
+
+| What | Detail |
+|:-|:-|
+| The billing role | `BILLING_ONLY_ROLE = 'billing'` is defined once, in `@kitstak/auth/access-control` (`orgRoles.billing`, no organization rights). `@kitstak/billing/server` exports the same constant again, it does not define a second one. A member with this role is a billing manager by itself (`billingAccessFor`), uses no seat (`CATALOG.freeRoles` is `['guest', 'billing']`), gets the billing emails, and has no access to CRM, WMS, Projects or Pulse: each app reads role names from its own list and this name is on none of them. With another role next to it (`member,billing`) the person is a paid member who also manages billing. |
+| Invite for billing only | `inviteBillingManagerAction` and `cancelBillingInviteAction` (portal, owners only) go through the shared invite endpoint with the role `billing`, so the verified email rule, the daily cap and the invite email apply. `listBillingInvites`, `checkBillingInvite`, `BillingManagerRow.billingOnly`. Removing a person who holds only this role removes them from the organization. The launcher sends such a person to Billing. |
+| WMS | Adding a guest or a billing only person as a WMS user now checks for a free seat first and keeps the billing role next to the new one. |
+| Password policy, changed | `PasswordPolicy.passphraseLength` (default 15, `DEFAULT_PASSPHRASE_LENGTH`): a password of that many characters or more needs no capital, number or symbol. The length limits and the "not your email name" rule stay. A loaded policy that sets its own character rules (WMS company settings) keeps them for every length unless it names a passphrase length (`mergePasswordPolicy`). |
+| Test card 0341, changed | "Works now, fails at the next renewal" pays a first bill (at checkout or at the end of a trial) and a plan change, and fails every renewal charge: the renewal, its retries and "Pay now" on a renewal bill. It no longer matters how the card was saved or what it paid before. `TEST_CARDS[].detail` says this in one sentence. |
+
+### 2026-11-24, review round 2 (screen fixes and gate round 2)
+
+Screen side of review round 2, and what the integrator changed when the lanes were joined.
+
+| What | Detail | Who it touches |
+|:-|:-|:-|
+| `PlanLockFrame` | New in `@kitstak/ui` (`plan-lock`): the one frame around the lock screen in CRM, WMS, Projects and Pulse. A quiet top bar with the app's logo, the organization name and the app switcher, then the lock card. No navigation and no create buttons. Test id `plan-lock-frame`. | all four apps |
+| `ViewOnlyGuard`, changed | New props `writeLabel`, `readLabel` and `writePage`. With `writeLabel` (use `WRITE_LABEL`) the guard marks every button, link and menu row whose label starts a change with `data-plan-write`, after hydration, so an app needs no mark per button. `READ_LABEL` and the `data-plan-read` attribute keep filters, columns and saved views working. `ViewOnlyPage` is what an app shell shows in place of a create screen opened by its address. `answerViewOnly(message)` turns a server refusal into the same dialog: each app's toast helper calls it first. | all four apps |
+| WMS landing gate | `apps/wms/src/server/http/landing-gate.ts`, called from `proxy.ts`: a signed in person whose organization has no warehouse, or no WMS in the plan, is sent to `/setup-warehouse` or `/locked` before anything renders. The `(app)` layout keeps its own redirect as a backstop. | WMS |
+| WMS first warehouse, changed | Only the name is needed. Short code and time zone are filled in. Address, contact and phone are optional for the first warehouse only (`starter-seed.ts`, `grid-defs/facility/warehouses.ts`); every later warehouse keeps the full rules. The form checks its fields in the browser, so a mistake sends no request. | WMS |
+| Invite roles, changed | The portal invite form offers Guest, which uses no seat, and takes several addresses at once. `inviteSchema` in `auth-relay-actions.ts` accepts `guest`. The pure rules are in `settings/organization/invite-model.ts`. | portal |
+| Invite draft | `apps/portal/src/lib/invite-draft.ts`: when a seat for an invite cannot be paid, the addresses and the role are kept in session storage, "Update card" goes to `/billing?fix=payment`, and billing home shows the way back (`invite-return.tsx`). | portal |
+| Picker to pay page | In pay mode the picker shows due today and the first or next charge (`plan-pay-facts`), and its button opens the pay page: two clicks from "Pick a plan" to a card field. `/billing/checkout` stays for links that land on it. `SPEC.md` 6.2 to 6.4 say the same. | billing-ui |
+| New portal variables | `BILLING_SUPPORT_EMAIL` (default `hello@kitstak.com`) and `BILLING_SUPPORT_REPLY_TIME` (no default, shown only when set). `NEXT_PUBLIC_SITE_URL` now defaults to `http://localhost:3600` outside production. All three are in `apps/portal/.env.example` and `GO-LIVE.md`. | ops |
+| Portal 404 | `apps/portal/src/app/not-found.tsx`: a themed page with two ways on, for signed in and signed out people. | portal |
+
+Integrator, gate round 2:
+
+| What | Detail |
+|:-|:-|
+| One name for the billing role | `BILLING_ONLY_ROLE` is defined in `@kitstak/auth/access-control` only. `packages/billing/src/server/roles.ts` imports it and exports it again. |
+| Day math in one place | The picker no longer works out "days left" in the browser. `ChangeConfirm` lost its `daysLeftInPeriod` prop: the sentences come from the server (`dueTodayNote`, `creditNote`). |
+| Password hint | The "Choose a new password" screen names the 15 character rule too, with the same sentence as signup (`PASSPHRASE_HINT`). |
+| CRM owner script test | `owner-spec.test.ts` follows the shared policy: 14 small letters are refused, 15 or more pass. |
+| Browser tab titles | The billing layout repeats the title pattern, so every billing page reads "Plan · KitStak Portal" and not just "Plan". `a11y-mobile.spec.ts` checks it. |
+| Two browser tests made steady | `round2-money.spec.ts` (three tabs) waited for `notice=plan_updated` in the address of each tab in turn, but billing home removes it as soon as the message shows. It now checks the message. `runTestTool` in `e2e/support.ts` waited for a button that leaves the page when the trial ends. It now accepts "ready again or gone". Nothing was skipped or loosened. |

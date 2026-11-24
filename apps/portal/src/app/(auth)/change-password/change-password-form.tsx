@@ -13,6 +13,7 @@ import {
   StrengthMeter,
   authErrorMessage,
 } from '../_components/form-parts';
+import { PASSPHRASE_HINT } from '@/features/signup/password-rules';
 
 const schema = z
   .object({
@@ -134,7 +135,7 @@ export function ChangePasswordForm({
         <Field
           label="New password"
           error={fieldErrors.newPassword}
-          hint={`At least ${PASSWORD_MIN_LENGTH} characters, with an uppercase letter, a number and a symbol.`}
+          hint={`At least ${PASSWORD_MIN_LENGTH} characters, with a capital letter, a number and a symbol. ${PASSPHRASE_HINT}`}
         >
           {({ inputId, describedBy, invalid }) => (
             <>

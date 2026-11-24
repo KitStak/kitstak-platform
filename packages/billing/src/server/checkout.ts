@@ -12,14 +12,18 @@ import { type Quote, quote } from '../quote';
 import { recordAuditOnce } from './audit';
 import { writeCart } from './cart';
 import { type BillingActor, type BillingDb, type BillingRuntime, errorText, logBilling } from './db';
+import { withOrgBillingTurn } from './lock';
 import { getBillingProfile, profileInput } from './profile';
 import { enforceRateLimit } from './rate-limit';
 import { getPlanState } from './state';
 import {
+  adoptGatewayCustomer,
   applyInvoiceSnapshot,
   applySubscriptionSnapshot,
   clearBillingCaches,
+  customerIdForOrg,
   fetchAndApplySubscription,
+  lockOrgBilling,
   rejectSecondSubscription,
   withCardFallback,
 } from './sync';
@@ -92,14 +96,48 @@ export async function checkoutPreview(
   });
 }
 
+type CheckoutOpened = BillingResult<{ url: string; sessionId: string; dueTodayCents: number; firstChargeAt: Date }>;
+
 export async function createCheckout(
   rt: BillingRuntime,
   input: { orgId: string; orgName: string; selection: PlanSelection; actor: BillingActor; actorEmail: string },
-): Promise<BillingResult<{ url: string; sessionId: string; dueTodayCents: number; firstChargeAt: Date }>> {
+): Promise<CheckoutOpened> {
   if (!rt.gateway) return billingError('billing_unavailable');
-  const gateway = rt.gateway;
   const selection = normalizeSelection(input.selection);
   if (selection.products.length === 0) return billingError('invalid_selection');
+
+  // Asked again inside the turn. Here it only keeps "you already have a plan" ahead of the try counter.
+  const [paid] = await rt.db
+    .select({ status: billingSubscriptions.status })
+    .from(billingSubscriptions)
+    .where(eq(billingSubscriptions.orgId, input.orgId));
+  if (paid && isLiveSubscriptionStatus(paid.status)) return billingError('already_subscribed');
+
+  const allowed = await enforceRateLimit(rt.db, { key: `checkout:${input.orgId}`, windowSeconds: 600, max: 10 });
+  if (!allowed) return billingError('rate_limited');
+
+  // One at a time per organization (review round 2). Two calls at the same moment (two tabs, or an
+  // owner and a billing manager) used to make two gateway customers and leave two pay pages open.
+  // Now the second call waits, finds the customer the first one stored, and closes the first page.
+  try {
+    const turn = await withOrgBillingTurn(rt.db, { orgId: input.orgId, purpose: 'checkout' }, () =>
+      openCheckout(rt, { ...input, selection }),
+    );
+    return turn.ok ? turn.value : billingError('busy');
+  } catch (error) {
+    logBilling('error', 'create checkout failed', { orgId: input.orgId, error: errorText(error) });
+    return billingError('gateway_error');
+  }
+}
+
+/** The body of `createCheckout`. Only ever runs while the organization's billing turn is held. */
+async function openCheckout(
+  rt: BillingRuntime,
+  input: { orgId: string; orgName: string; selection: PlanSelection; actor: BillingActor; actorEmail: string },
+): Promise<CheckoutOpened> {
+  const gateway = rt.gateway;
+  if (!gateway) return billingError('billing_unavailable');
+  const { selection } = input;
 
   const [existing] = await rt.db
     .select({ status: billingSubscriptions.status })
@@ -111,9 +149,6 @@ export async function createCheckout(
   const below = belowUsageMessage(selection, state);
   if (below) return billingError('below_usage', below);
 
-  const allowed = await enforceRateLimit(rt.db, { key: `checkout:${input.orgId}`, windowSeconds: 600, max: 10 });
-  if (!allowed) return billingError('rate_limited');
-
   await writeCart(rt.db, input.orgId, selection);
 
   const priced = quote(selection);
@@ -124,18 +159,15 @@ export async function createCheckout(
 
   try {
     const profile = await getBillingProfile(rt.db, input.orgId);
-    const [account] = await rt.db
-      .select({ gateway: billingAccounts.gateway })
-      .from(billingAccounts)
-      .where(eq(billingAccounts.orgId, input.orgId));
-    const [stored] = await rt.db.select().from(stripeCustomers).where(eq(stripeCustomers.orgId, input.orgId));
     // A customer made by another gateway is treated as missing and replaced.
-    const existingCustomerId = stored && account?.gateway === gateway.kind ? stored.stripeCustomerId : null;
+    const existingCustomerId = await customerIdForOrg(rt.db, input.orgId, gateway.kind);
     const { customerId } = await gateway.ensureCustomer({
       orgId: input.orgId,
       existingCustomerId,
       profile: profileInput(profile, { email: input.actorEmail, name: input.orgName }),
     });
+    // Stored before anything else is asked of the gateway, so every later step and every event of
+    // this organization meets the same customer.
     await rt.db
       .insert(stripeCustomers)
       .values({ orgId: input.orgId, stripeCustomerId: customerId })
@@ -155,8 +187,16 @@ export async function createCheckout(
       return billingError('already_subscribed');
     }
     // Only one pay page can be open. Any older one (another tab, the back button) is closed first, so
-    // two pages can never both be paid.
+    // two pages can never both be paid. A customer that was replaced a moment ago is swept too.
     await gateway.expireOpenCheckoutSessions(customerId);
+    if (existingCustomerId && existingCustomerId !== customerId) {
+      try {
+        await gateway.expireOpenCheckoutSessions(existingCustomerId);
+      } catch (error) {
+        // The old customer may be gone at the gateway. Then it has no pay page to close.
+        logBilling('warn', 'could not close the pay pages of a replaced customer', { orgId: input.orgId, error: errorText(error) });
+      }
+    }
 
     const session = await gateway.createCheckoutSession({
       orgId: input.orgId,
@@ -204,9 +244,32 @@ export async function applyCheckoutSession(
   if (!subscription) return 'not_complete';
   if (subscription.orgId !== null && subscription.orgId !== input.orgId) return 'not_found';
   if (session.customerId !== null && subscription.customerId !== session.customerId) return 'not_found';
+  // One writer per organization from here on.
+  await lockOrgBilling(db, input.orgId);
   // A second paid session for an organization that already has a plan: canceled and refunded, never applied.
   if (await rejectSecondSubscription(rt, db, { orgId: input.orgId, subscription, ...(input.eventId ? { eventId: input.eventId } : {}) })) {
     return 'duplicate';
+  }
+
+  // The plan and the stored customer must agree (review round 2). The session is this
+  // organization's own and it is paid, so its customer becomes the stored one in the same
+  // transaction that writes the plan. Any pay page still open for the customer it replaces is closed.
+  const storedCustomerId = await customerIdForOrg(db, input.orgId, rt.gateway.kind);
+  if (storedCustomerId !== subscription.customerId) {
+    const adopted = await adoptGatewayCustomer(db, {
+      orgId: input.orgId,
+      gateway: rt.gateway.kind,
+      customerId: subscription.customerId,
+      now: rt.now(),
+    });
+    if (!adopted) return 'not_found';
+    if (storedCustomerId) {
+      try {
+        await rt.gateway.expireOpenCheckoutSessions(storedCustomerId);
+      } catch (error) {
+        logBilling('warn', 'could not close the pay pages of a replaced customer', { orgId: input.orgId, error: errorText(error) });
+      }
+    }
   }
 
   const latestInvoice = subscription.latestInvoiceId ? await rt.gateway.getInvoice(subscription.latestInvoiceId) : null;

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { PlanLockScreen } from '@kitstak/ui/plan-lock';
+import { PlanLockFrame, PlanLockScreen } from '@kitstak/ui/plan-lock';
 import { BrandLogo } from '@/components/layout/brand-logo';
 import { Skeleton } from '@/components/ui/skeleton';
 import { loadLockView } from '@/server/tenancy/lock-view';
@@ -22,19 +22,11 @@ async function LockedContent() {
   if (view.kind === 'signed_out') redirect('/login?next=/locked');
   if (view.kind === 'open') redirect('/');
   if (view.kind === 'setup') redirect('/setup-warehouse');
+  // The same frame as the CRM, Projects and Pulse lock screens (`PlanLockFrame`).
   return (
-    <>
-      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border-subtle bg-panel px-4 sm:px-6">
-        <BrandLogo tone="light" height={20} showProduct />
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="hidden truncate text-sm text-fg-secondary sm:block">{view.orgName}</span>
-          <LockedSwitcher badges={view.badges} />
-        </div>
-      </header>
-      <main id="main-content" className="flex flex-1 flex-col">
-        <PlanLockScreen app="wms" lock={view.lock} />
-      </main>
-    </>
+    <PlanLockFrame logo={<BrandLogo tone="light" height={20} showProduct />} orgName={view.orgName} switcher={<LockedSwitcher badges={view.badges} />}>
+      <PlanLockScreen app="wms" lock={view.lock} />
+    </PlanLockFrame>
   );
 }
 

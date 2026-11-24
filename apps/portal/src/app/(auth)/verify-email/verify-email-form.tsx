@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { CircleAlert, MailCheck } from 'lucide-react';
-import { Badge } from '@/components/ui';
+import { Badge, EmailText } from '@/components/ui';
 import { signOut } from '@/lib/auth-client';
 import { changeUnverifiedEmailAction, resendVerificationAction, skipVerifyAction, verifyEmailAction } from '@/server/signup-actions';
 import { CodeInput } from '../_components/code-input';
@@ -184,7 +184,7 @@ export function VerifyEmailForm({
         title="Check your email"
         subtitle={
           <>
-            We sent a 6 digit code to <span className="font-semibold break-all text-fg">{email}</span>. It works for{' '}
+            We sent a 6 digit code to <EmailText email={email} className="font-semibold text-fg" />. It works for{' '}
             {minutes} minutes.
           </>
         }

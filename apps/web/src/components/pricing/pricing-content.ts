@@ -52,6 +52,7 @@ export const BILLING_RULES: readonly BillingRule[] = [
       'Add or remove seats, warehouses or apps any time. You pay only for the days left.',
       `Add 1 CRM seat halfway through the month and you pay ${seat.today} today, then ${seat.eachMonth} more each month.`,
       'Remove something and the unused part becomes credit on your next bill.',
+      'A day that has started counts as used. So you pay for today when you add, and credit is for the full days left.',
     ],
   },
   {

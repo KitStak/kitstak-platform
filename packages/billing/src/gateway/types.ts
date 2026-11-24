@@ -11,7 +11,7 @@ import type { PaymentMethodSummary } from '../plan-state';
  * gateway object across hot reloads; the portal rebuilds it when this number moved, so new code never
  * calls a method an old object does not have.
  */
-export const GATEWAY_CONTRACT_VERSION = 2;
+export const GATEWAY_CONTRACT_VERSION = 3;
 
 export type GatewayKind = 'stripe' | 'test';
 export type GatewaySubscriptionStatus = 'incomplete' | 'trialing' | 'active' | 'past_due' | 'unpaid' | 'canceled';

@@ -2,6 +2,10 @@
 /**
  * Every billing mutation in the portal (docs/billing/CONTRACTS.md section 16.4). Each action:
  *   1. reads the session's own active organization (never an id from the browser),
+ *   1b. compares it with the organization the page was made for (`renderedOrgId`, review round 2).
+ *       A tab left open while the person switched organization elsewhere is refused with "You
+ *       switched organizations. Reload this page." and nothing is written. The id from the browser
+ *       is only ever compared, never used, so the rule in 1 still holds,
  *   2. checks the role rule on the server,
  *   3. parses input with zod and clamps selections with `normalizeSelection`,
  *   4. calls the package function, which prices everything from the catalog and the gateway,
@@ -10,6 +14,7 @@
  * with a fresh preview, so a stale screen can never confirm an amount the person did not see.
  */
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 import { z } from 'zod';
 import { normalizeSelection, toStack, type PlanSelection } from '@kitstak/billing/catalog';
 import { billingError, billingOk, type BillingResult } from '@kitstak/billing/errors';
@@ -28,13 +33,17 @@ import {
 import {
   addBillingManager,
   applyPlanChange,
+  BILLING_ONLY_ROLE,
   changeTrialProducts,
+  checkBillingInvite,
   createCheckout,
   createPaymentUpdateSession,
   getOpenSignupIntent,
   getPlanState,
+  listBillingInvites,
   pausePlan,
   previewPlanChange,
+  recordAudit,
   removeBillingManager,
   retryPayment,
   saveCart,
@@ -49,7 +58,9 @@ import {
   type CancelReason,
   type ChangePreview,
 } from '@kitstak/billing/server';
+import { auth } from '@/server/auth';
 import { getBillingContext, type BillingContext } from '@/server/billing/context';
+import { sameOrganization, type RenderedOrgId } from '@/server/billing/org-scope';
 import { billingRuntime } from '@/server/billing/runtime';
 import { isActiveOrgMember } from '@/server/orgs';
 import { getSession } from '@/server/session';
@@ -57,12 +68,17 @@ import { getSession } from '@/server/session';
 type Need = 'view' | 'manage' | 'trial' | 'assign';
 type Failure = ReturnType<typeof billingError>;
 
-async function contextFor(need: Need): Promise<{ ok: true; ctx: BillingContext } | { ok: false; error: Failure }> {
+async function contextFor(
+  need: Need,
+  renderedOrgId: RenderedOrgId,
+): Promise<{ ok: true; ctx: BillingContext } | { ok: false; error: Failure }> {
   const ctx = await getBillingContext();
   if (!ctx) {
     const session = await getSession();
     return { ok: false, error: billingError(session ? 'no_org' : 'not_signed_in') };
   }
+  // Before the role check: the role that counts is the one in the organization the person is looking at.
+  if (!sameOrganization(renderedOrgId, ctx.org.id)) return { ok: false, error: billingError('org_changed') };
   const allowed =
     need === 'view'
       ? ctx.access.canView
@@ -112,8 +128,8 @@ function readSelection(input: unknown): PlanSelection | null {
 
 /* ===== trial and cart ===== */
 
-export async function startTrialAction(input: { selection: PlanSelection }): Promise<BillingResult<{ redirectTo: string }>> {
-  const found = await contextFor('trial');
+export async function startTrialAction(renderedOrgId: RenderedOrgId, input: { selection: PlanSelection }): Promise<BillingResult<{ redirectTo: string }>> {
+  const found = await contextFor('trial', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const selection = readSelection(input);
@@ -130,8 +146,8 @@ export async function startTrialAction(input: { selection: PlanSelection }): Pro
   });
 }
 
-export async function changeTrialProductsAction(input: { products: readonly string[] }): Promise<BillingResult<PlanState>> {
-  const found = await contextFor('trial');
+export async function changeTrialProductsAction(renderedOrgId: RenderedOrgId, input: { products: readonly string[] }): Promise<BillingResult<PlanState>> {
+  const found = await contextFor('trial', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const parsed = productsInput.safeParse(input);
@@ -141,8 +157,8 @@ export async function changeTrialProductsAction(input: { products: readonly stri
   return guarded('change trial apps', () => changeTrialProducts(ctx.rt, { orgId: ctx.org.id, products, actor: ctx.actor }));
 }
 
-export async function saveCartAction(input: { selection: PlanSelection }): Promise<BillingResult<PlanSelection>> {
-  const found = await contextFor('manage');
+export async function saveCartAction(renderedOrgId: RenderedOrgId, input: { selection: PlanSelection }): Promise<BillingResult<PlanSelection>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const selection = readSelection(input);
@@ -156,8 +172,8 @@ export async function saveCartAction(input: { selection: PlanSelection }): Promi
  * activity entry for every key press and no page reload under the person's hands. Only for a plan
  * that is not paid yet. A paid plan changes through preview and confirm, never through here.
  */
-export async function saveCartDraftAction(input: { selection: PlanSelection }): Promise<BillingResult<null>> {
-  const found = await contextFor('manage');
+export async function saveCartDraftAction(renderedOrgId: RenderedOrgId, input: { selection: PlanSelection }): Promise<BillingResult<null>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const selection = readSelection(input);
@@ -175,8 +191,8 @@ export async function saveCartDraftAction(input: { selection: PlanSelection }): 
 
 /* ===== checkout and plan changes ===== */
 
-export async function startCheckoutAction(input: { selection: PlanSelection }): Promise<BillingResult<{ url: string }>> {
-  const found = await contextFor('manage');
+export async function startCheckoutAction(renderedOrgId: RenderedOrgId, input: { selection: PlanSelection }): Promise<BillingResult<{ url: string }>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   if (!ctx.emailVerified) return billingError('email_unverified');
@@ -194,8 +210,8 @@ export async function startCheckoutAction(input: { selection: PlanSelection }): 
   });
 }
 
-export async function previewPlanChangeAction(input: { selection: PlanSelection }): Promise<BillingResult<ChangePreview>> {
-  const found = await contextFor('manage');
+export async function previewPlanChangeAction(renderedOrgId: RenderedOrgId, input: { selection: PlanSelection }): Promise<BillingResult<ChangePreview>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const selection = readSelection(input);
@@ -221,12 +237,15 @@ const confirmInput = z.object({
  * preview and are only compared, never used: the server picks the proration date itself and prices
  * the change again. A date from the browser is not accepted at all.
  */
-export async function confirmPlanChangeAction(input: {
-  selection: PlanSelection;
-  basis: string;
-  expectedDueTodayCents: number;
-}): Promise<BillingResult<PlanState>> {
-  const found = await contextFor('manage');
+export async function confirmPlanChangeAction(
+  renderedOrgId: RenderedOrgId,
+  input: {
+    selection: PlanSelection;
+    basis: string;
+    expectedDueTodayCents: number;
+  },
+): Promise<BillingResult<PlanState>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   if (!ctx.emailVerified) return billingError('email_unverified');
@@ -249,15 +268,15 @@ export async function confirmPlanChangeAction(input: {
 
 /* ===== payment ===== */
 
-export async function openCardUpdateAction(): Promise<BillingResult<{ url: string }>> {
-  const found = await contextFor('manage');
+export async function openCardUpdateAction(renderedOrgId: RenderedOrgId): Promise<BillingResult<{ url: string }>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   return guarded('open card update', () => createPaymentUpdateSession(ctx.rt, { orgId: ctx.org.id, actor: ctx.actor }));
 }
 
-export async function retryPaymentAction(): Promise<BillingResult<PlanState>> {
-  const found = await contextFor('manage');
+export async function retryPaymentAction(renderedOrgId: RenderedOrgId): Promise<BillingResult<PlanState>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   return guarded('retry payment', () => retryPayment(ctx.rt, { orgId: ctx.org.id, actor: ctx.actor }));
@@ -275,8 +294,8 @@ const pauseInput = z.object({
   reason: z.enum(CANCEL_REASONS).nullable().optional(),
 });
 
-export async function cancelPlanAction(input: { reason: CancelReason | null; detail: string | null }): Promise<BillingResult<PlanState>> {
-  const found = await contextFor('manage');
+export async function cancelPlanAction(renderedOrgId: RenderedOrgId, input: { reason: CancelReason | null; detail: string | null }): Promise<BillingResult<PlanState>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const parsed = cancelInput.safeParse(input);
@@ -291,15 +310,15 @@ export async function cancelPlanAction(input: { reason: CancelReason | null; det
   );
 }
 
-export async function keepPlanAction(): Promise<BillingResult<PlanState>> {
-  const found = await contextFor('manage');
+export async function keepPlanAction(renderedOrgId: RenderedOrgId): Promise<BillingResult<PlanState>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   return guarded('keep plan', () => undoCancel(ctx.rt, { orgId: ctx.org.id, actor: ctx.actor }));
 }
 
-export async function pausePlanAction(input: { months: 1 | 2 | 3; reason: CancelReason | null }): Promise<BillingResult<PlanState>> {
-  const found = await contextFor('manage');
+export async function pausePlanAction(renderedOrgId: RenderedOrgId, input: { months: 1 | 2 | 3; reason: CancelReason | null }): Promise<BillingResult<PlanState>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const parsed = pauseInput.safeParse(input);
@@ -309,8 +328,8 @@ export async function pausePlanAction(input: { months: 1 | 2 | 3; reason: Cancel
   );
 }
 
-export async function undoPauseAction(): Promise<BillingResult<PlanState>> {
-  const found = await contextFor('manage');
+export async function undoPauseAction(renderedOrgId: RenderedOrgId): Promise<BillingResult<PlanState>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   return guarded('undo pause', () => undoPause(ctx.rt, { orgId: ctx.org.id, actor: ctx.actor }));
@@ -335,8 +354,8 @@ const profileInput = z.object({
   taxIdValue: z.string().max(120).nullable(),
 });
 
-export async function updateBillingDetailsAction(input: BillingProfile): Promise<BillingResult<BillingProfile>> {
-  const found = await contextFor('manage');
+export async function updateBillingDetailsAction(renderedOrgId: RenderedOrgId, input: BillingProfile): Promise<BillingResult<BillingProfile>> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const parsed = profileInput.safeParse(input);
@@ -348,8 +367,8 @@ export async function updateBillingDetailsAction(input: BillingProfile): Promise
 
 const userInput = z.object({ userId: z.string().min(1).max(200) });
 
-export async function addBillingManagerAction(input: { userId: string }): Promise<BillingResult<null>> {
-  const found = await contextFor('assign');
+export async function addBillingManagerAction(renderedOrgId: RenderedOrgId, input: { userId: string }): Promise<BillingResult<null>> {
+  const found = await contextFor('assign', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const parsed = userInput.safeParse(input);
@@ -359,8 +378,8 @@ export async function addBillingManagerAction(input: { userId: string }): Promis
   );
 }
 
-export async function removeBillingManagerAction(input: { userId: string }): Promise<BillingResult<null>> {
-  const found = await contextFor('assign');
+export async function removeBillingManagerAction(renderedOrgId: RenderedOrgId, input: { userId: string }): Promise<BillingResult<null>> {
+  const found = await contextFor('assign', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const parsed = userInput.safeParse(input);
@@ -368,6 +387,76 @@ export async function removeBillingManagerAction(input: { userId: string }): Pro
   return guarded('remove billing manager', () =>
     removeBillingManager(ctx.rt, { orgId: ctx.org.id, userId: parsed.data.userId, actor: ctx.actor }),
   );
+}
+
+/**
+ * Invites a person by email to manage billing only (review round 2). They get Billing and nothing
+ * else: no seat is used, and they have no access to CRM, WMS, Projects or Pulse. The invite goes
+ * through the same Better Auth endpoint as every other invite, so the verified email rule, the
+ * daily cap and the invite email all apply. Only an owner can do this.
+ */
+export async function inviteBillingManagerAction(renderedOrgId: RenderedOrgId, input: { email: string }): Promise<BillingResult<{ email: string }>> {
+  const found = await contextFor('assign', renderedOrgId);
+  if (!found.ok) return found.error;
+  const { ctx } = found;
+  const parsed = z.object({ email: z.string().min(1).max(320) }).safeParse(input);
+  if (!parsed.success) return billingError('invalid_input', 'Enter an email address, like name@company.com.');
+  return guarded('invite billing manager', async () => {
+    const checked = await checkBillingInvite(ctx.rt.db, { orgId: ctx.org.id, email: parsed.data.email });
+    if (!checked.ok) return checked;
+    const { email } = checked.data;
+    try {
+      await auth.api.createInvitation({
+        body: { email, role: BILLING_ONLY_ROLE, organizationId: ctx.org.id, resend: true },
+        headers: await headers(),
+      });
+    } catch (error) {
+      // The auth layer's own plain answers (verify your email first, the daily cap) are shown as they are.
+      const body = (error as { body?: { code?: unknown; message?: unknown } } | null)?.body;
+      const code = typeof body?.code === 'string' ? body.code : '';
+      const message = typeof body?.message === 'string' ? body.message : '';
+      if (code === 'EMAIL_NOT_VERIFIED') return billingError('email_unverified', message || undefined);
+      if (code === 'INVITE_LIMIT_REACHED') return billingError('rate_limited', message || undefined);
+      console.error('[billing] invite billing manager failed', code || (error instanceof Error ? error.message : error));
+      return billingError('gateway_error', 'We could not send the invite. Nothing changed. Please try again.');
+    }
+    await recordAudit(ctx.rt.db, {
+      orgId: ctx.org.id,
+      actor: ctx.actor,
+      action: 'manager.added',
+      summary: `${ctx.actor.label} invited ${email} to manage billing. Billing only: no seat and no access to the apps.`,
+      data: { email, billingOnly: true, invited: true },
+    });
+    return billingOk({ email });
+  });
+}
+
+/** Takes back an open invite to manage billing. Only invites of that kind can be reached from here. */
+export async function cancelBillingInviteAction(renderedOrgId: RenderedOrgId, input: { invitationId: string }): Promise<BillingResult<null>> {
+  const found = await contextFor('assign', renderedOrgId);
+  if (!found.ok) return found.error;
+  const { ctx } = found;
+  const parsed = z.object({ invitationId: z.string().min(1).max(200) }).safeParse(input);
+  if (!parsed.success) return billingError('invalid_input');
+  return guarded('cancel billing invite', async () => {
+    const open = await listBillingInvites(ctx.rt.db, ctx.org.id);
+    const invite = open.find((row) => row.invitationId === parsed.data.invitationId);
+    if (!invite) return billingError('not_found', 'That invite is no longer open.');
+    try {
+      await auth.api.cancelInvitation({ body: { invitationId: invite.invitationId }, headers: await headers() });
+    } catch (error) {
+      console.error('[billing] cancel billing invite failed', error instanceof Error ? error.message : error);
+      return billingError('gateway_error', 'We could not cancel the invite. Please try again.');
+    }
+    await recordAudit(ctx.rt.db, {
+      orgId: ctx.org.id,
+      actor: ctx.actor,
+      action: 'manager.removed',
+      summary: `${ctx.actor.label} canceled the billing invite for ${invite.email}.`,
+      data: { email: invite.email, billingOnly: true, invited: true },
+    });
+    return billingOk(null);
+  });
 }
 
 /* ===== test gateway pages (never in production: the mode check fails closed) ===== */
@@ -469,15 +558,15 @@ export async function testCompleteCardUpdateAction(input: {
 
 /* ===== test tools on billing home (test gateway only, billing managers only) ===== */
 
-async function testToolContext(): Promise<{ ok: true; ctx: BillingContext } | { ok: false; error: Failure }> {
-  const found = await contextFor('manage');
+async function testToolContext(renderedOrgId: RenderedOrgId): Promise<{ ok: true; ctx: BillingContext } | { ok: false; error: Failure }> {
+  const found = await contextFor('manage', renderedOrgId);
   if (!found.ok) return found;
   if (found.ctx.rt.mode !== 'test_gateway') return { ok: false, error: billingError('billing_unavailable', NOT_TEST) };
   return found;
 }
 
-export async function testShiftTimeAction(input: { days: number }): Promise<BillingResult<PlanState>> {
-  const found = await testToolContext();
+export async function testShiftTimeAction(renderedOrgId: RenderedOrgId, input: { days: number }): Promise<BillingResult<PlanState>> {
+  const found = await testToolContext(renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   const parsed = z.object({ days: z.number().int().min(1).max(800) }).safeParse(input);
@@ -485,15 +574,15 @@ export async function testShiftTimeAction(input: { days: number }): Promise<Bill
   return guarded('test shift time', () => testShiftTime(ctx.rt, { orgId: ctx.org.id, days: parsed.data.days }));
 }
 
-export async function testFailNextPaymentAction(): Promise<BillingResult<null>> {
-  const found = await testToolContext();
+export async function testFailNextPaymentAction(renderedOrgId: RenderedOrgId): Promise<BillingResult<null>> {
+  const found = await testToolContext(renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   return guarded('test fail next payment', () => testFailNextPayment(ctx.rt, { orgId: ctx.org.id }));
 }
 
-export async function testRunDueAction(): Promise<BillingResult<{ renewed: number; failed: number }>> {
-  const found = await testToolContext();
+export async function testRunDueAction(renderedOrgId: RenderedOrgId): Promise<BillingResult<{ renewed: number; failed: number }>> {
+  const found = await testToolContext(renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
   return guarded('test run due', async () => billingOk(await testRunDue(ctx.rt, { orgId: ctx.org.id })));

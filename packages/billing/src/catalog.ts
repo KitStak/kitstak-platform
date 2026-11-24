@@ -69,7 +69,8 @@ export const CATALOG: {
   readonly trialReminderDays: readonly [7, 3, 1, 0];
   readonly pauseMonths: readonly [1, 2, 3];
   /** Members with only these roles do not use a seat. */
-  readonly freeRoles: readonly ['guest'];
+  /** Roles that use no seat: guests, and people who only manage billing (review round 2). */
+  readonly freeRoles: readonly ['guest', 'billing'];
   readonly trialsPerUser: 1;
   readonly products: Readonly<Record<ProductId, ProductPricing>>;
 } = {
@@ -82,7 +83,7 @@ export const CATALOG: {
   graceDays: 7,
   trialReminderDays: [7, 3, 1, 0],
   pauseMonths: [1, 2, 3],
-  freeRoles: ['guest'],
+  freeRoles: ['guest', 'billing'],
   trialsPerUser: 1,
   products: {
     crm: {

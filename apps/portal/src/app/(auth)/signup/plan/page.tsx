@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { DEFAULT_SELECTION } from '@kitstak/billing/catalog';
 import { getPlanState } from '@kitstak/billing/server';
+import { BillingOrgScope } from '@/features/billing/org-scope';
 import { PlanPicker } from '@/features/billing/plan-picker/plan-picker';
 import { getBillingContext } from '@/server/billing/context';
 import { getSession } from '@/server/session';
@@ -32,6 +33,8 @@ export default async function SignupPlanPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Which organization this render is for. Billing actions send it back and a stale tab is refused. */}
+      <BillingOrgScope orgId={context.org.id} />
       {/* The same width as the picker below, so the two line up. */}
       <div className="mx-auto w-full max-w-[1000px]">
         <PlanStepHeader orgName={context.org.name} email={session.user.email} trialUsed={trialUsed} />

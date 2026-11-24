@@ -4,6 +4,8 @@
  * knows which page it is on:
  *   - the welcome screen never carries a calm (info) plan banner. A person who just started a free
  *     trial reads "Your apps are ready", not a request to pay.
+ *   - the "You are all set" page after paying never carries a calm banner either: the page says
+ *     the same facts itself, and its main button stays on the first screen.
  *   - on the plan picker and on the review and pay screens the banner keeps its words but loses
  *     its button. That page is already the place the button would lead to, and each screen has
  *     one main button.
@@ -19,6 +21,9 @@ const PLAN_KINDS = new Set(['trial', 'trial_ending', 'trial_ended', 'ended']);
 export function shellNoticeFor(notice: PlanBannerNotice | null, pathname: string): PlanBannerNotice | null {
   if (notice === null) return null;
   if (pathname === '/welcome' && notice.tone === 'info') return null;
+  // "You are all set" already says the plan, the first charge and its date. A calm banner with the
+  // same words above it only pushes "Open my apps" down the page.
+  if (pathname === '/billing/checkout/success' && notice.tone === 'info') return null;
   const onPlanStep = PLAN_STEPS.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
   if (onPlanStep && PLAN_KINDS.has(notice.kind)) {
     // The calm trial line says nothing the page does not say itself.

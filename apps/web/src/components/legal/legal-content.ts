@@ -43,6 +43,7 @@ export const TERMS_SECTIONS: readonly LegalSection[] = [
     paragraphs: [
       'You can add or remove seats, warehouses and apps at any time. A change starts right away. When you add something you pay only for the days left in the period, and you see the exact amount before you confirm.',
       'When you remove something, the unused part becomes credit on your account. Credit comes off your next bills. It is not paid out as money.',
+      'A day that has started counts as used. When you add something, you pay for the day you add it and for each day left. When you remove something, the credit is for the full days left. So adding a seat and removing it on the same day costs one day.',
     ],
   },
   {

@@ -10,7 +10,7 @@ import { RadioGroup } from 'radix-ui';
 import { CircleAlert, PauseCircle } from 'lucide-react';
 import type { CancelReason } from '@kitstak/billing/server';
 import { Button, Card, LinkButton, Textarea, cn } from '@/components/ui';
-import { cancelPlanAction, pausePlanAction } from '@/server/billing-actions';
+import { cancelPlanAction, pausePlanAction } from '@/features/billing/actions';
 
 const REASONS: readonly { readonly value: CancelReason; readonly label: string }[] = [
   { value: 'too_expensive', label: 'Too expensive' },

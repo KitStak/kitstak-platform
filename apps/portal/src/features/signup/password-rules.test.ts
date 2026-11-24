@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { DEFAULT_PASSWORD_POLICY, validatePassword } from '@kitstak/auth/password-policy';
+import { DEFAULT_PASSWORD_POLICY, mergePasswordPolicy, validatePassword } from '@kitstak/auth/password-policy';
 import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -12,6 +12,11 @@ import {
 
 const SAMPLES = [
   '',
+  'correct horse battery staple',
+  'correcthorsebatterystaple',
+  'abcdefghijklmn',
+  'abcdefghijklmno',
+  'maya is my name ok',
   'short',
   'alllowercase',
   'ALLUPPERCASE1!',
@@ -49,13 +54,17 @@ describe('passwordIssue', () => {
 
   test('names every missing rule at once, in one plain sentence', () => {
     expect(passwordIssue('')).toBe('Enter a password.');
-    expect(passwordIssue('alllowercase1!')).toBe('Your password still needs a capital letter.');
-    expect(passwordIssue('ALLUPPERCASE1!')).toBe('Your password still needs a small letter.');
-    expect(passwordIssue('NoNumberHere!')).toBe('Your password still needs a number.');
-    expect(passwordIssue('NoSymbol12345')).toBe('Your password still needs a symbol, like ! or #.');
-    // A long passphrase with no capital, number or symbol hears all three, not one at a time.
-    expect(passwordIssue('correct horse battery staple')).toBe('Your password still needs a capital letter and a number.');
-    expect(passwordIssue('correcthorsebatterystaple')).toBe('Your password still needs a capital letter, a number and a symbol, like ! or #.');
+    // Once the length is fine, the easy way is named too: make it longer and nothing else is needed.
+    const OR = ' Or make it 15 characters or longer.';
+    expect(passwordIssue('alllowercase1!')).toBe(`Your password still needs a capital letter.${OR}`);
+    expect(passwordIssue('ALLUPPERCASE1!')).toBe(`Your password still needs a small letter.${OR}`);
+    expect(passwordIssue('NoNumberHere!')).toBe(`Your password still needs a number.${OR}`);
+    expect(passwordIssue('NoSymbol12345')).toBe(`Your password still needs a symbol, like ! or #.${OR}`);
+    expect(passwordIssue('abcdefghijklmn')).toBe(`Your password still needs a capital letter, a number and a symbol, like ! or #.${OR}`);
+    // A long passphrase is a good password. No capital, number or symbol is asked for (review round 2).
+    expect(passwordIssue('correct horse battery staple')).toBeNull();
+    expect(passwordIssue('correcthorsebatterystaple')).toBeNull();
+    expect(passwordIssue('abcdefghijklmno')).toBeNull();
     expect(passwordIssue('abc')).toBe('Your password still needs 10 or more characters, a capital letter, a number and a symbol, like ! or #.');
     expect(passwordIssue('1234')).toBe('Your password still needs 10 or more characters, a capital and a small letter and a symbol, like ! or #.');
     expect(passwordIssue('Maya-Secret-12!', { email: 'maya@northwind.example' })).toBe(
@@ -85,6 +94,9 @@ describe('passwordRules', () => {
     expect(passwordRules('abcdefghij').map((rule) => rule.met)).toEqual([true, false, false, false]);
     expect(passwordRules('Abcdefghi1').map((rule) => rule.met)).toEqual([true, true, true, false]);
     expect(passwordRules('Good-Password-1').every((rule) => rule.met)).toBe(true);
+    // 15 characters or more: every tick is on, whatever the password is made of.
+    expect(passwordRules('correct horse battery staple').every((rule) => rule.met)).toBe(true);
+    expect(passwordRules('abcdefghijklmn').map((rule) => rule.met)).toEqual([true, false, false, false]);
   });
 
   test('a password that meets every rule passes the full check', () => {
@@ -100,8 +112,34 @@ describe('passwordRules', () => {
 describe('passwordStrength', () => {
   test('never calls a password good before it meets every rule', () => {
     expect(passwordStrength('').score).toBe(0);
-    expect(passwordStrength('abcdefghijklmnop').score).toBeLessThan(3);
+    expect(passwordStrength('abcdefghijklmn').score).toBeLessThan(3);
     expect(passwordStrength('Good-Pass-1').label).toBe('Good');
     expect(passwordStrength('Good-Password-12').label).toBe('Strong');
+    // Length alone is enough from 15 characters on, and reads "Strong" from 20.
+    expect(passwordStrength('abcdefghijklmnop').label).toBe('Good');
+    expect(passwordStrength('correct horse battery staple').label).toBe('Strong');
+  });
+});
+
+describe('the shared policy: 15 characters or more needs nothing else', () => {
+  test('the server accepts a long passphrase and still refuses a short one without the three kinds', () => {
+    expect(validatePassword('correct horse battery staple', DEFAULT_PASSWORD_POLICY)).toEqual([]);
+    expect(validatePassword('abcdefghijklmno', DEFAULT_PASSWORD_POLICY)).toEqual([]);
+    expect(validatePassword('abcdefghijklmn', DEFAULT_PASSWORD_POLICY)).toEqual(['Include an uppercase letter.', 'Include a number.', 'Include a symbol.']);
+    // The two rules that are not about kinds of characters stay for every length.
+    expect(validatePassword('x'.repeat(80), DEFAULT_PASSWORD_POLICY)).toEqual(['Use at most 72 bytes.']);
+    expect(validatePassword('maya likes long walks', DEFAULT_PASSWORD_POLICY, { email: 'maya@northwind.example' })).toEqual(['Do not include your email name.']);
+  });
+
+  test('a company that set its own character rules keeps them for every length', () => {
+    const company = mergePasswordPolicy({ minLength: 12, requireUpper: true, requireNumber: true, requireSymbol: false });
+    expect(company.passphraseLength).toBeUndefined();
+    expect(validatePassword('correct horse battery staple', company)).toEqual(['Include an uppercase letter.', 'Include a number.']);
+    // Unless it names a passphrase length itself.
+    const both = mergePasswordPolicy({ requireUpper: true, passphraseLength: 20 });
+    expect(validatePassword('correct horse battery staple', both)).toEqual([]);
+    expect(validatePassword('correct horse bat', both)).not.toEqual([]);
+    // A loader that only changes the lockout keeps the default passphrase rule.
+    expect(mergePasswordPolicy({ lockoutThreshold: 3 }).passphraseLength).toBe(15);
   });
 });

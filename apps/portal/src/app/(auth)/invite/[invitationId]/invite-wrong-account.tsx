@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Button } from '@/components/ui';
+import { Button, EmailText } from '@/components/ui';
 import { signOut } from '@/lib/auth-client';
 import { FormAlert } from '../../_components/form-parts';
 
@@ -27,11 +27,11 @@ export function InviteWrongAccount({
   return (
     <div className="flex flex-col gap-4">
       <FormAlert tone="info">
-        This invite is for <span className="font-semibold break-all">{invitedEmail}</span>. Sign out and open the link
+        This invite is for <EmailText email={invitedEmail} className="font-semibold" />. Sign out and open the link
         again.
       </FormAlert>
       <p className="text-sm text-fg-muted">
-        You are signed in as <span className="font-medium break-all text-fg-secondary">{signedInEmail}</span>.
+        You are signed in as <EmailText email={signedInEmail} className="font-medium text-fg-secondary" />.
       </p>
       <Button size="lg" fullWidth className="h-12 sm:h-11" loading={busy} onClick={() => void signOutAndReturn()}>
         Sign out and open the invite

@@ -348,7 +348,11 @@ export async function runTestTool(page: Page, tool: 'shift-1' | 'shift-7' | 'shi
   await button.click();
   const result = page.getByTestId('test-tools-result');
   await expect(result).toBeVisible({ timeout: 60_000 });
-  await expect(button).toBeEnabled({ timeout: 60_000 });
+  // Done means the button is ready again, or gone: the "end of the trial" tool leaves the page with
+  // the trial, and the page reloads right after the result shows.
+  await expect(async () => {
+    if ((await button.count()) > 0) await expect(button).toBeEnabled({ timeout: 1_000 });
+  }).toPass({ timeout: 60_000 });
   return (await result.textContent()) ?? '';
 }
 

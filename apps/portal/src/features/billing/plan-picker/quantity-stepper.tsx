@@ -105,8 +105,7 @@ export function QuantityStepper({
           }}
           className={cn(
             'h-11 w-20 rounded-lg border border-border-input bg-panel text-center text-md font-semibold text-fg tabular-nums',
-            'hover:border-border-input-hover focus:border-border-strong focus:outline-none',
-            'focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--border-strong)_28%,transparent)]',
+            'hover:border-border-input-hover focus:field-focus',
             '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
             'disabled:cursor-not-allowed disabled:opacity-60',
           )}

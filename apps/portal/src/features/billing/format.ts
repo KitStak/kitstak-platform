@@ -47,6 +47,29 @@ export function unitPriceWords(product: ProductId, interval: BillingInterval, bu
   return `${formatMoney(unitCents(product, interval, bundle), { trimZeroCents: true })} ${priceTermsLabel(product, interval)}`;
 }
 
+/**
+ * The two price lines of an app row in the picker, always in ONE unit, so nobody compares a price
+ * "each month" with a price "each year" on the next line.
+ *   monthly: '$29 per user each month'  and  '$23.20 per user each month'
+ *   yearly:  '$29 per user each month'  and  '$19.72 per user each month, billed yearly'
+ * A yearly price is shown per month only when it divides into 12 without a rest (every number on
+ * screen is exact). If it ever does not, both lines switch to "each year" instead.
+ */
+export function pickerPriceWords(product: ProductId, interval: BillingInterval, bundle: boolean): { readonly list: string; readonly yours: string } {
+  if (interval !== 'yearly') return { list: listPriceWords(product), yours: unitPriceWords(product, 'monthly', bundle) };
+  const yearly = unitCents(product, 'yearly', bundle);
+  if (yearly % 12 === 0) {
+    return {
+      list: listPriceWords(product),
+      yours: `${formatMoney(yearly / 12, { trimZeroCents: true })} ${priceTermsLabel(product, 'monthly')}, billed yearly`,
+    };
+  }
+  return {
+    list: `${formatMoney(unitCents(product, 'monthly', false) * 12, { trimZeroCents: true })} ${priceTermsLabel(product, 'yearly')}`,
+    yours: unitPriceWords(product, 'yearly', bundle),
+  };
+}
+
 /** '$29 per user each month': the public list price of an app. */
 export function listPriceWords(product: ProductId): string {
   return unitPriceWords(product, 'monthly', false);
@@ -116,6 +139,28 @@ export function describeChange(before: PlanSelection, after: PlanSelection): str
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
+/**
+ * A cart that was made against an older plan, moved onto the plan as it is now (the "amount changed
+ * while you were looking" case: a colleague changed the plan in another tab).
+ *
+ * Only what the person changed themselves is kept from the cart. Everything they left alone follows
+ * the plan as it is now, so confirming never undoes somebody else's change by accident:
+ *   plan was 7 seats monthly, the cart says 7 seats yearly, the plan is now 8 seats monthly
+ *   result: 8 seats yearly. The title stays "Switch to yearly".
+ * PURE.
+ */
+export function rebaseSelection(base: PlanSelection, fresh: PlanSelection, cart: PlanSelection): PlanSelection {
+  const added = cart.products.filter((id) => !base.products.includes(id));
+  const removed = base.products.filter((id) => !cart.products.includes(id));
+  const products = toStack([...fresh.products.filter((id) => !removed.includes(id)), ...added]);
+  return {
+    products,
+    seats: cart.seats === base.seats ? fresh.seats : cart.seats,
+    warehouses: cart.warehouses === base.warehouses ? fresh.warehouses : cart.warehouses,
+    interval: cart.interval === base.interval ? fresh.interval : cart.interval,
+  };
+}
+
 export function sameSelection(a: PlanSelection, b: PlanSelection): boolean {
   return (
     a.interval === b.interval &&
@@ -152,4 +197,18 @@ export function addAppPriceNote(state: PlanState, product: ProductId): string {
   const lead = state.phase === 'trial' ? 'Free during your trial. Then adds' : 'Adds';
   const bundle = addingStartsBundle(state.selection, product) ? ' with the bundle discount' : '';
   return `${lead} ${formatMoney(delta)} ${period}${bundle}.`;
+}
+
+/**
+ * The second half of "View only. ..." on a launcher tile and anywhere else the Portal says why an
+ * app is view only. It names the same fix as the plan banner's button for that state, so a person
+ * never reads "Pick a plan" in one place and "Update card" in another:
+ *   payment late (`unpaid`)  the banner button is "Update card"
+ *   plan paused (`paused`)   the banner button is "Start again now"
+ *   trial or plan ended      the banner button is "Pick a plan"
+ */
+export function viewOnlyFix(phase: PlanState['phase']): string {
+  if (phase === 'unpaid' || phase === 'past_due') return 'Update your card to make changes.';
+  if (phase === 'paused') return 'Start your plan again to make changes.';
+  return 'Pick a plan to make changes.';
 }

@@ -84,6 +84,8 @@ test.describe('phones, keyboards and reduced motion', () => {
       await page.goto(path);
       await expect(page.locator('main h1').first()).toBeVisible({ timeout: 90_000 });
       await expectNoSidewaysScroll(page, path);
+      // The browser tab names the page and the product on every billing page.
+      await expect(page).toHaveTitle(/\S · KitStak Portal$/);
     }
     await page.goto('/billing/checkout');
     await expectTapTarget(page, 'review-pay');

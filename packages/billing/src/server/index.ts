@@ -17,12 +17,16 @@ export { createBillingRuntime } from './runtime';
 export { clearPlanCache, getAppPlanView, getPlanState, type AppPlanView } from './state';
 export {
   addBillingManager,
+  checkBillingInvite,
   getBillingAccess,
   listBillingHolders,
+  listBillingInvites,
   removeBillingManager,
   type BillingAccess,
+  type BillingInviteRow,
   type BillingManagerRow,
 } from './access';
+export { BILLING_ONLY_ROLE, hasBillingRole, isBillingOnlyRole } from './roles';
 export { canStartTrial, changeTrialProducts, startTrial } from './trial';
 export { getCart, saveCart, writeCart } from './cart';
 export { checkoutPreview, createCheckout, syncCheckoutSession } from './checkout';

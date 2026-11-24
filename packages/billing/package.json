@@ -11,6 +11,7 @@
     "./links": "./src/links.ts",
     "./plan-state": "./src/plan-state.ts",
     "./errors": "./src/errors.ts",
+    "./change-words": "./src/change-words.ts",
     "./email-types": "./src/email-types.ts",
     "./invoice-view": "./src/invoice-view.ts",
     "./server": "./src/server/index.ts",

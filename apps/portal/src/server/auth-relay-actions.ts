@@ -157,7 +157,8 @@ export async function signUpAction(input: unknown): Promise<AuthRelayResult> {
 
 const inviteSchema = z.object({
   email: z.string().min(1).max(320),
-  role: z.enum(['admin', 'member', 'viewer']),
+  // Guest is free: it uses no seat (`CATALOG.freeRoles` in @kitstak/billing).
+  role: z.enum(['admin', 'member', 'viewer', 'guest']),
   organizationId: z.string().min(1).max(100),
 });
 

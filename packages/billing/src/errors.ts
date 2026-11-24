@@ -23,7 +23,11 @@ export type BillingErrorCode =
   | 'warehouse_limit'
   | 'yearly_no_pause'
   | 'gateway_error'
-  | 'not_found';
+  | 'not_found'
+  /** Review round 2: another billing step of the same organization is still running. Nothing was done. */
+  | 'busy'
+  /** Review round 2: the page was made for one organization and the session is now in another. */
+  | 'org_changed';
 
 export interface BillingError {
   readonly code: BillingErrorCode;
@@ -56,6 +60,8 @@ export const BILLING_ERROR_COPY: Readonly<Record<BillingErrorCode, string>> = {
   yearly_no_pause: 'Yearly plans cannot be paused. You are paid up until your renewal date.',
   gateway_error: 'Something went wrong on our side. Nothing was charged. Please try again.',
   not_found: 'We could not find that.',
+  busy: 'Another billing change is still running. Nothing was charged. Wait a moment and try again.',
+  org_changed: 'You switched organizations. Reload this page.',
 };
 
 /** An error result. With no message, the plain sentence for the code is used. */

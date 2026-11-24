@@ -64,7 +64,9 @@ export default async function CheckoutSuccessPage({
   facts.push(state.selection.interval === 'yearly' ? 'Yearly' : 'Monthly');
 
   return (
-    <section data-testid="checkout-success" className="relative mx-auto flex max-w-[560px] flex-col items-center py-8 text-center">
+    // The two buttons sit right under the good news, so "Open my apps" is on the first screen at
+    // 1280 by 800 and on a phone. The plan details follow as the record of what was bought.
+    <section data-testid="checkout-success" className="relative mx-auto flex max-w-[560px] flex-col items-center py-2 text-center sm:py-4">
       <ConfettiBurst pieceCount={36} />
       <span className="inline-flex size-14 items-center justify-center rounded-full bg-success-subtle text-success-text motion-safe:animate-check-pop">
         <CircleCheck aria-hidden className="size-8" />
@@ -75,6 +77,15 @@ export default async function CheckoutSuccessPage({
       </p>
       <div className="mt-2">
         <TestModeBadge mode={state.mode} />
+      </div>
+
+      <div className="mt-5 flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <LinkButton href="/" size="xl" data-testid="checkout-success-open-apps">
+          Open my apps
+        </LinkButton>
+        <LinkButton href="/billing" variant="secondary" size="xl">
+          See my plan
+        </LinkButton>
       </div>
 
       <Card as="div" className="mt-6 w-full p-5 text-left">
@@ -129,15 +140,6 @@ export default async function CheckoutSuccessPage({
           {inTrial ? `We emailed your plan details to ${mailTo}.` : `We emailed a receipt to ${mailTo}.`}
         </p>
       </Card>
-
-      <div className="mt-6 flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-        <LinkButton href="/" size="xl" data-testid="checkout-success-open-apps">
-          Open my apps
-        </LinkButton>
-        <LinkButton href="/billing" variant="secondary" size="xl">
-          See my plan
-        </LinkButton>
-      </div>
     </section>
   );
 }

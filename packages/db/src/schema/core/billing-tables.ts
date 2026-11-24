@@ -1,6 +1,6 @@
 /**
  * Signup and billing tables added by drizzle/0007_core_billing.sql and widened by
- * drizzle/0008_core_billing_credit.sql (docs/billing/CONTRACTS.md section 9): core.billing_accounts, billing_subscriptions, billing_invoices, billing_audit_log,
+ * drizzle/0008_core_billing_credit.sql and drizzle/0009_core_billing_locks.sql (docs/billing/CONTRACTS.md section 9): core.billing_accounts, billing_subscriptions, billing_invoices, billing_audit_log,
  * billing_managers, billing_cancel_feedback, billing_emails, billing_test_objects,
  * billing_trial_uses and core.signup_intents.
  *
@@ -334,6 +334,19 @@ export const billingTrialUses = coreSchema.table(
   },
   (t) => [primaryKey({ name: 'billing_trial_uses_pkey', columns: [t.userId, t.orgId] })],
 );
+
+/**
+ * A lease per organization for a person's billing step that talks to the gateway (drizzle/
+ * 0009_core_billing_locks.sql). At most one holder at a time; the lease ends by itself at
+ * `expires_at`. Read and written only by `withOrgBillingTurn` in @kitstak/billing.
+ */
+export const billingLocks = coreSchema.table('billing_locks', {
+  orgId: uuid('org_id').primaryKey(),
+  holder: text('holder').notNull(),
+  purpose: text('purpose').notNull(),
+  expiresAt: timestamptz('expires_at').notNull(),
+  createdAt: createdAt(),
+});
 
 export const SIGNUP_INTENT_STEPS = ['company', 'plan', 'verify', 'welcome', 'done'] as const;
 export type SignupIntentStep = (typeof SIGNUP_INTENT_STEPS)[number];

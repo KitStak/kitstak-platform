@@ -91,9 +91,11 @@ only and removes them from preview and development, so a preview build can never
 | `EMAIL_PROVIDER` | optional | Leave it out. `resend` is chosen by itself when the key is set. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | optional | Google sign in. The button shows only when both are set. |
 | `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT_ID` | optional | Microsoft sign in. Tenant defaults to `common`. |
-| `NEXT_PUBLIC_SITE_URL` | optional | The marketing site. Default `https://kitstak.com`. |
+| `NEXT_PUBLIC_SITE_URL` | optional | The marketing site. Default `https://kitstak.com` in production. In local dev the default is the local site on port 3600. |
+| `BILLING_SUPPORT_EMAIL` | optional | The billing help address at the foot of every billing page. Default `hello@kitstak.com`, the address on the marketing site. |
+| `BILLING_SUPPORT_REPLY_TIME` | set before launch | How fast you answer, for example `1 business day`. The page then says "We reply within 1 business day." Until it is set, no reply time is promised. Set only a time you can keep. |
 | `BILLING_SELLER_NAME` | optional | The company name in the "From" block of every invoice. Default `KitStak LLC`, the name on the Stripe account. |
-| `BILLING_SELLER_ADDRESS` | optional | The seller address on invoices. Split the lines with a bar, like `1 Main St\|Austin, TX 78701\|US`. Not printed until it is set. |
+| `BILLING_SELLER_ADDRESS` | set before launch | The seller address on invoices. Split the lines with a bar, like `1 Main St\|Austin, TX 78701\|US`. Not printed until it is set. |
 | `BILLING_SELLER_TAX_ID` | optional | The seller tax ID on invoices. Not printed until it is set. |
 | `NEXT_PUBLIC_TERMS_URL`, `NEXT_PUBLIC_PRIVACY_URL` | optional | Legal links. Default: the pages the CRM serves. |
 | `ENTITLEMENTS_DEV_ALLOW_ALL` | set to `1` until step 11 | Every organization can open every app. `push-env.mjs` keeps it at `1` in all five product projects until `ENFORCE_ENTITLEMENTS=1` is in `deploy/secrets.env`. |
@@ -222,6 +224,10 @@ existing password account by email. That is on purpose.
 - [ ] Set `EMAIL_FROM` to an address on that exact domain, for example `KitStak <billing@mail.kitstak.com>`.
       If the domain in `EMAIL_FROM` is not the verified one, Resend answers 403 and mail stays queued.
 - [ ] Optional: `EMAIL_REPLY_TO`.
+- [ ] Set `BILLING_SELLER_ADDRESS` (and `BILLING_SELLER_TAX_ID` if you have one). Until then an invoice shows
+      the seller name and site only, with no address.
+- [ ] Set `BILLING_SUPPORT_REPLY_TIME` to a reply time you can keep, for example `1 business day`. Check that
+      mail to `BILLING_SUPPORT_EMAIL` reaches a person.
 
 The first real send happens in step 9. Volume note: a new sending domain should start slow. Signup codes,
 receipts and reminders for a launch week are well inside that.
@@ -489,6 +495,12 @@ The short form, for the day itself.
       with one. Raise it for a customer by hand only after you know who they are.
 - [ ] Migration `0008_core_billing_credit.sql` must be applied (step 4). It adds the credit columns and the
       trigger that removes a billing manager's role when the person leaves.
+- [ ] Migration `0009_core_billing_locks.sql` must be applied (step 4). It adds `core.billing_locks`. Without
+      it, opening checkout and confirming a plan change answer "Something went wrong on our side".
+- [ ] Alert on the log line `RECONCILE FAILED FOR A LIVE PLAN`. It means our copy says a plan is live, a date
+      on it has passed, and the gateway would not confirm it. A person has to look.
+- [ ] A row in `core.billing_locks` older than 2 minutes means a server stopped in the middle of a billing
+      step. It ends by itself. If you see many, look at the gateway's response times.
 
 ## Questions the owner still has to answer
 

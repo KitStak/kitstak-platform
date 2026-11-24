@@ -12,7 +12,7 @@ import { usePeople } from '@/lib/hooks/use-data';
 import { ShellProvider, type ShellContextValue } from './shell-context';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { PlanBanner } from '@kitstak/ui/plan-banner';
-import { ViewOnlyGuard } from '@kitstak/ui/view-only';
+import { ViewOnlyGuard, ViewOnlyPage, WRITE_LABEL, isWritePath } from '@kitstak/ui/view-only';
 import { TopBar } from './top-bar';
 import { useShellHotkeys } from './use-shell-hotkeys';
 
@@ -35,16 +35,49 @@ function Hotkeys() {
   return null;
 }
 
-/** Pulse screens that start a change: the new job wizard and the day grid where work is logged. */
-const PULSE_WRITE_PATHS: readonly (string | RegExp)[] = [/^\/jobs\/new$/, /^\/log$/];
+/**
+ * Pulse screens that are a form from the first pixel: the new job wizard, the day grid and the
+ * bulk grid where work is logged, the new import, and the first run steps ("Save the rate").
+ */
+const PULSE_WRITE_PATHS: readonly (string | RegExp)[] = [/^\/jobs\/new$/, /^\/log$/, /^\/log\/bulk$/, /^\/import\/new$/, /^\/welcome$/];
 
 /**
- * View only is told before a form opens (docs/billing/SPEC.md 9.4): "New job", "Log work" and any
- * control marked `data-plan-write` open one small dialog with the banner's words and button.
+ * View only is told before a form opens (docs/billing/SPEC.md 9.4). A press on a link to one of
+ * the screens above, on anything marked `data-plan-write`, or on any button whose label starts a
+ * change ("Add a labor class", "Save", "New job", "Log work": see `WRITE_LABEL`) opens one small
+ * dialog with the banner's words and button. Those buttons are dimmed too.
  */
 function PlanViewOnly({ plan }: { readonly plan: ShellContextValue['plan'] }) {
   const pathname = usePathname();
-  return <ViewOnlyGuard active={plan?.access === 'read_only'} notice={plan?.notice ?? null} pathname={pathname} writePaths={PULSE_WRITE_PATHS} homeHref="/" />;
+  return (
+    <ViewOnlyGuard
+      active={plan?.access === 'read_only'}
+      notice={plan?.notice ?? null}
+      pathname={pathname}
+      writePaths={PULSE_WRITE_PATHS}
+      writeLabel={WRITE_LABEL}
+      writePage="inline"
+      homeHref="/"
+    />
+  );
+}
+
+/**
+ * A create screen opened by its address while the plan is view only: the message takes the place
+ * of the form, inside the app frame. The top bar and the banner stay.
+ */
+function PlanPage({ plan, children }: { readonly plan: ShellContextValue['plan']; readonly children: ReactNode }) {
+  const pathname = usePathname();
+  if (plan?.access === 'read_only' && isWritePath(pathname, PULSE_WRITE_PATHS)) {
+    return (
+      <>
+        <ViewOnlyPage notice={plan.notice ?? null} homeHref="/" />
+        {/* The form stays in the tree, hidden and out of reach, so Next can still check the route in development. */}
+        <div hidden>{children}</div>
+      </>
+    );
+  }
+  return <>{children}</>;
 }
 
 export function AppShell({ context, initialPeople, peopleLoadedAt, children }: AppShellProps) {
@@ -63,7 +96,9 @@ export function AppShell({ context, initialPeople, peopleLoadedAt, children }: A
         {/* Trial, payment and view only notices: above the page, never over content. */}
         <PlanBanner notice={context.plan?.notice ?? null} dismissible />
         <main id="main-content" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-app outline-none">
-          <div className="h-full overflow-auto">{children}</div>
+          <div className="h-full overflow-auto">
+            <PlanPage plan={context.plan}>{children}</PlanPage>
+          </div>
         </main>
       </div>
       <CommandPalette />

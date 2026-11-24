@@ -1,15 +1,22 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CircleAlert, UserPlus } from 'lucide-react';
+import { CircleAlert, Mail, UserPlus } from 'lucide-react';
 import type { BillingManagerRow } from '@kitstak/billing/server';
-import { Badge, Button, Field, Select } from '@/components/ui';
-import { addBillingManagerAction, removeBillingManagerAction } from '@/server/billing-actions';
+import { Badge, Button, Field, Input, Select } from '@/components/ui';
+import {
+  addBillingManagerAction,
+  cancelBillingInviteAction,
+  inviteBillingManagerAction,
+  removeBillingManagerAction,
+} from '@/features/billing/actions';
 
 export interface TeamManagerProps {
   readonly holders: readonly (Omit<BillingManagerRow, 'addedAt'> & { readonly addedLabel: string | null })[];
   /** Active members who do not hold billing yet. */
   readonly candidates: readonly { readonly userId: string; readonly name: string; readonly email: string }[];
+  /** Open invites to manage billing only. */
+  readonly invites?: readonly { readonly invitationId: string; readonly email: string; readonly expiresLabel: string }[];
   readonly canAssign: boolean;
   readonly selfId: string;
 }
@@ -20,9 +27,10 @@ function initials(name: string): string {
 }
 
 /** Who can manage billing (SPEC 6.7). Owners are fixed. An owner adds or removes billing managers. */
-export function TeamManager({ holders, candidates, canAssign, selfId }: TeamManagerProps) {
+export function TeamManager({ holders, candidates, invites = [], canAssign, selfId }: TeamManagerProps) {
   const router = useRouter();
   const [picked, setPicked] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -37,6 +45,7 @@ export function TeamManager({ holders, candidates, canAssign, selfId }: TeamMana
       if (result.ok) {
         setDone(doneText);
         setPicked('');
+        setInviteEmail('');
         router.refresh();
       } else setError(result.error.message);
     } catch {
@@ -58,8 +67,10 @@ export function TeamManager({ holders, candidates, canAssign, selfId }: TeamMana
                 <span className="truncate">{holder.name}</span>
                 {holder.userId === selfId ? <span className="font-normal text-fg-muted">You</span> : null}
                 <Badge tone={holder.kind === 'owner' ? 'neutral' : 'info'}>{holder.kind === 'owner' ? 'Owner' : 'Billing manager'}</Badge>
+                {holder.billingOnly ? <Badge tone="neutral">Billing only</Badge> : null}
               </p>
               <p className="truncate text-sm text-fg-secondary">{holder.email}</p>
+              {holder.billingOnly ? <p className="text-xs text-fg-muted">Free. No seat and no access to your apps.</p> : null}
               {holder.addedLabel ? <p className="text-xs text-fg-muted">Billing manager since {holder.addedLabel}</p> : null}
             </div>
             {holder.kind === 'manager' && canAssign ? (
@@ -70,7 +81,11 @@ export function TeamManager({ holders, candidates, canAssign, selfId }: TeamMana
                 disabled={busy !== null && busy !== `remove-${holder.userId}`}
                 aria-label={`Remove ${holder.name} as billing manager`}
                 onClick={() =>
-                  run(`remove-${holder.userId}`, () => removeBillingManagerAction({ userId: holder.userId }), `${holder.name} can no longer manage billing.`)
+                  run(
+                    `remove-${holder.userId}`,
+                    () => removeBillingManagerAction({ userId: holder.userId }),
+                    holder.billingOnly ? `${holder.name} is removed and can no longer manage billing.` : `${holder.name} can no longer manage billing.`,
+                  )
                 }
               >
                 Remove
@@ -80,7 +95,79 @@ export function TeamManager({ holders, candidates, canAssign, selfId }: TeamMana
             ) : null}
           </li>
         ))}
+        {invites.map((invite) => (
+          <li key={invite.invitationId} data-testid="team-invite-row" className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 sm:px-6">
+            <span aria-hidden className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-sunken text-fg-secondary">
+              <Mail className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1 basis-40">
+              <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
+                <span className="truncate">{invite.email}</span>
+                <Badge tone="warning">Invited</Badge>
+                <Badge tone="neutral">Billing only</Badge>
+              </p>
+              <p className="text-xs text-fg-muted">The invite is open until {invite.expiresLabel}.</p>
+            </div>
+            {canAssign ? (
+              <Button
+                variant="secondary"
+                size="lg"
+                loading={busy === `cancel-${invite.invitationId}`}
+                disabled={busy !== null && busy !== `cancel-${invite.invitationId}`}
+                aria-label={`Cancel the invite for ${invite.email}`}
+                onClick={() => run(`cancel-${invite.invitationId}`, () => cancelBillingInviteAction({ invitationId: invite.invitationId }), `The invite for ${invite.email} is canceled.`)}
+              >
+                Cancel invite
+              </Button>
+            ) : null}
+          </li>
+        ))}
       </ul>
+
+      {canAssign ? (
+        <form
+          noValidate
+          data-testid="team-invite-form"
+          className="flex flex-col gap-3 border-t border-border-subtle px-5 py-5 sm:flex-row sm:items-end sm:px-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const email = inviteEmail.trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+              setError('Enter an email address, like name@company.com.');
+              return;
+            }
+            void run('invite', () => inviteBillingManagerAction({ email }), `We sent an invite to ${email}.`);
+          }}
+        >
+          <div className="min-w-0 flex-1">
+            <Field label="Invite someone for billing only" hint="Billing only. Free. No access to your apps. Good for a bookkeeper.">
+              {({ inputId, describedBy }) => (
+                <Input
+                  id={inputId}
+                  size="lg"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  data-testid="team-invite-email"
+                  value={inviteEmail}
+                  maxLength={254}
+                  placeholder="bookkeeper@company.com"
+                  aria-describedby={describedBy}
+                  onChange={(event) => {
+                    setInviteEmail(event.target.value);
+                    setError(null);
+                  }}
+                />
+              )}
+            </Field>
+          </div>
+          <Button type="submit" size="xl" data-testid="team-invite" loading={busy === 'invite'} disabled={busy !== null && busy !== 'invite'} leadingIcon={<Mail aria-hidden />} className="sm:mb-[22px]">
+            Send invite
+          </Button>
+        </form>
+      ) : null}
 
       {canAssign ? (
         <form
@@ -96,7 +183,7 @@ export function TeamManager({ holders, candidates, canAssign, selfId }: TeamMana
           }}
         >
           <div className="min-w-0 flex-1">
-            <Field label="Add a billing manager" hint={candidates.length === 0 ? 'Everyone on your team already manages billing. Invite someone new in Organization.' : 'Pick anyone on your team.'}>
+            <Field label="Add a billing manager" hint={candidates.length === 0 ? 'Everyone on your team already manages billing. Invite someone for billing only above.' : 'Pick anyone on your team.'}>
               {({ inputId, describedBy }) => (
                 <Select id={inputId} size="lg" value={picked} disabled={candidates.length === 0} aria-describedby={describedBy} onChange={(event) => { setPicked(event.target.value); setError(null); }}>
                   <option value="">Pick a person</option>

@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { AppShell, LockedScreen } from '@/features/shell';
+import { AppShell, LockedFrame } from '@/features/shell';
 import { loadShell } from '@/features/shell/shell-frame';
 import { getProjectDetail, listOrgPeople, resolveTaskKey } from '@/server/domain';
 import { isDomainError } from '@/server/errors';
@@ -20,13 +20,9 @@ export default async function AppLayout({ children }: { readonly children: React
   const path = (await headers()).get('x-ks-path') ?? '/';
   const context = await requirePageContext(path);
   const shell = await loadShell(context);
-  if (shell.plan.lock) {
-    return (
-      <AppShell context={shell.shellContext} initialProjects={[]} initialSpaces={[]} initialUnread={0}>
-        <LockedScreen lock={shell.plan.lock} />
-      </AppShell>
-    );
-  }
+  // Not in the plan: the lock screen in the same quiet frame as the CRM and the WMS. No sidebar
+  // and no "New task" button, because nothing can be opened or made in a locked app.
+  if (shell.plan.lock) return <LockedFrame lock={shell.plan.lock} context={shell.shellContext} />;
   const { ctx, projects } = shell;
   // Org people ride along with the first HTML so names (goal owners, workload rows, assignees)
   // render on the server instead of a placeholder that swaps in on the client.

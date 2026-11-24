@@ -148,6 +148,7 @@ const ROLE_LABELS: Readonly<Record<string, string>> = {
   member: 'Member',
   viewer: 'Viewer',
   guest: 'Guest',
+  billing: 'Billing manager',
 };
 
 /** "admin,member" to "Admin". The first role is the one a person would name. */

@@ -13,6 +13,7 @@ import { Badge, Card, Notice } from '@/components/ui';
 import { BillingHeader, TestModeBadge } from '@/features/billing/billing-chrome';
 import { Flash, type FlashMessage } from '@/features/billing/home/flash';
 import { PaymentFocus } from '@/features/billing/home/payment-focus';
+import { InviteReturn } from '@/features/billing/home/invite-return';
 import { AppsSection, DetailsCard, InvoicesPreview, PlanCards, TeamCard, UsageSection } from '@/features/billing/home/sections';
 import { TestTools } from '@/features/billing/home/test-tools';
 import { memberLine, nextChargeCopy, phaseCopy } from '@/features/billing/phase-copy';
@@ -148,6 +149,8 @@ export default async function BillingPage({
       />
 
       {flash ? <Flash message={flash} keys={flashKeys} /> : null}
+      {/* Sent here from the invite form to fix a card: the way back to the invite, in this tab only. */}
+      {access.canManage ? <InviteReturn /> : null}
       {billingOff ? (
         <Notice tone="neutral" role="status" testId="billing-off">
           {BILLING_OFF}

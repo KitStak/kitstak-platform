@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Toaster as SonnerToaster, toast as sonnerToast } from 'sonner';
 import { CircleAlert, CircleCheck, Info, TriangleAlert } from 'lucide-react';
+import { answerViewOnly } from '@kitstak/ui/view-only';
 import { Spinner } from './spinner';
 
 export interface ToasterProps {
@@ -127,6 +128,12 @@ export const toast = {
    */
   error: (message: string, description?: string, options?: ToastOptions) => {
     if (options?.id !== undefined && lastUndo?.id === options.id) lastUndo = null;
+    // A change the server refused because the plan is view only is answered by the view only
+    // dialog (the banner's words and its button), not by a toast with other words (SPEC 9.4).
+    if (answerViewOnly(message, description)) {
+      if (options?.id !== undefined) sonnerToast.dismiss(options.id);
+      return options?.id ?? '';
+    }
     return sonnerToast.error(message, { description, id: options?.id, action: undefined, icon: undefined });
   },
   info: (message: string, description?: string, options?: ToastOptions) =>

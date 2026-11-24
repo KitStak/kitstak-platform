@@ -171,4 +171,118 @@ test.describe('one suite: the same banner and lock screen in every app', () => {
     await page.waitForURL(/\/billing\/plan/, { timeout: 90_000 });
     await expect(page.getByTestId('plan-picker')).toHaveAttribute('data-mode', 'checkout');
   });
+  test('view only in the WMS and in Pulse: every create entry opens the small dialog, and a locked app has no create buttons', async ({ page }) => {
+    test.setTimeout(600_000);
+    await holdDevReloads(page.context());
+    // A trial with the WMS and Pulse. Projects is not in it.
+    const { orgId } = await trialAccount(page, 'viewonly-wms', { products: ['wms', 'pulse'], seats: 1, warehouses: 1, interval: 'monthly' });
+    const slug = await slugOf(orgId);
+    if (!(await appIsUp(page, `${APP_URLS.wms}/login`)) || !(await appIsUp(page, `${APP_URLS.pulse}/login`))) test.skip(true, 'The WMS or Pulse is not running.');
+
+    // First run of the WMS: one screen, one required field that is already filled in, one press.
+    const consoleErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
+    await page.goto(`${APP_URLS.wms}/`, { timeout: 120_000 });
+    const setup = page.getByTestId('setup-form');
+    const lock = page.getByTestId('plan-lock');
+    await expect(setup.or(lock).or(page.getByTestId('top-bar')).first()).toBeVisible({ timeout: 120_000 });
+    test.skip(!(await setup.isVisible()), 'The WMS runs with the allow all switch on, or already has a warehouse for this person.');
+    await expect(page).toHaveURL(/\/setup-warehouse$/);
+    await expect(page.getByTestId('setup-back-to-portal')).toBeVisible();
+    await expect(page.getByTestId('setup-name')).not.toHaveValue('');
+    await expect(page.getByTestId('setup-code')).not.toHaveValue('');
+    // The address and the phone are optional and folded away.
+    await expect(page.getByTestId('setup-contactPhone')).toBeHidden();
+    // An empty name is caught in the browser: an inline message, focus on the field, no failed request.
+    const name = await page.getByTestId('setup-name').inputValue();
+    await page.getByTestId('setup-name').fill('');
+    await page.getByTestId('setup-submit').click();
+    await expect(page.locator('#setup-name-error')).toHaveText('Enter a name for your warehouse.');
+    await expect(page.getByTestId('setup-name')).toBeFocused();
+    await page.getByTestId('setup-name').fill(name);
+    await page.getByTestId('setup-submit').click();
+    await page.waitForURL(/\/dashboard$/, { timeout: 300_000 });
+    await expect(page.getByTestId('top-bar')).toBeVisible({ timeout: 120_000 });
+    expect(consoleErrors, 'no console error on the first WMS screens').toEqual([]);
+
+    // The trial ends with no card: every app in it is view only. The tool's button can leave the
+    // page as soon as the trial is over, so the phase on billing home is the proof, not the button.
+    await runTestTool(page, 'shift-trial-end').catch(() => undefined);
+    await page.goto('/billing');
+    await expectPhase(page, 'trial_ended');
+    const ended = page.getByTestId('plan-notice-trial_ended');
+    const dialog = page.getByTestId('view-only-dialog');
+    /** Opens a page and waits until the app knows the trial ended (another process reads it within a minute). */
+    const openViewOnly = async (url: string): Promise<void> => {
+      await expect(async () => {
+        await page.goto(url, { timeout: 120_000 });
+        await expect(ended).toBeVisible({ timeout: 15_000 });
+      }).toPass({ timeout: 150_000 });
+    };
+    /** A press on a write control opens the dialog with the banner's words and button. No form opens. */
+    const expectDialog = async (press: () => Promise<void>): Promise<void> => {
+      await press();
+      await expect(dialog).toBeVisible();
+      await expect(page.getByTestId('view-only-text').first()).toContainText('Pick a plan to keep working.');
+      await expect(page.getByTestId('view-only-action').first()).toHaveText('Pick a plan');
+      await expect(page.locator('[role="dialog"]:not(.ks-viewonly):visible')).toHaveCount(0);
+      await expect(page.locator('[role="menu"]')).toHaveCount(0);
+      await page.getByTestId('view-only-close').click();
+      await expect(dialog).toBeHidden();
+    };
+
+    // WMS: the dashboard step, the Clients page buttons, and a create screen opened by its address.
+    await openViewOnly(`${APP_URLS.wms}/dashboard`);
+    const addClient = page.getByRole('link', { name: 'Add client' }).or(page.getByRole('button', { name: 'Add client' })).first();
+    await expect(addClient).toHaveAttribute('data-plan-write', '', { timeout: 30_000 });
+    await expectDialog(() => addClient.click());
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await openViewOnly(`${APP_URLS.wms}/clients`);
+    const createClient = page.getByRole('button', { name: 'Create client' }).first();
+    await expect(createClient).toHaveAttribute('data-plan-write', '', { timeout: 30_000 });
+    await expect(createClient).toHaveCSS('opacity', '0.55');
+    await expectDialog(() => createClient.click());
+    await expectDialog(() => page.getByRole('button', { name: /Bulk import/ }).first().click());
+    await createClient.focus();
+    await expectDialog(() => page.keyboard.press('Enter'));
+    await openViewOnly(`${APP_URLS.wms}/products/new`);
+    await expect(page.getByTestId('view-only-page')).toBeVisible();
+    await expect(page.getByTestId('top-bar')).toBeVisible();
+    await expect(page.getByTestId('view-only-page').getByTestId('view-only-action')).toHaveText('Pick a plan');
+
+    // Pulse: the home buttons, "Other ways to start", the labor page, and two screens opened by address.
+    await openViewOnly(`${APP_URLS.pulse}/`);
+    await expect(page.getByTestId('home-new-job')).toHaveAttribute('data-plan-write', '', { timeout: 30_000 });
+    await expect(page.getByTestId('home-new-job')).toHaveCSS('opacity', '0.55');
+    await expectDialog(() => page.getByTestId('home-new-job').click());
+    const otherWays = page.getByText('Other ways to start').first();
+    if (await otherWays.isVisible()) {
+      await expectDialog(() => otherWays.click());
+      await expect(page).toHaveURL(new RegExp(`^${APP_URLS.pulse}/$`));
+    }
+    await openViewOnly(`${APP_URLS.pulse}/labor?tab=rates`);
+    const addClass = page.getByRole('button', { name: /Add a labor class/ }).first();
+    await expect(addClass).toHaveAttribute('data-plan-write', '', { timeout: 30_000 });
+    await expectDialog(() => addClass.click());
+    for (const path of ['/welcome', '/jobs/new']) {
+      await openViewOnly(`${APP_URLS.pulse}${path}`);
+      // The message takes the place of the form, inside the app frame.
+      await expect(page.getByTestId('view-only-page')).toBeVisible();
+      await expect(page.getByTestId('top-bar')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Save the rate' })).toBeHidden();
+    }
+
+    // Projects is not in the plan: the same quiet lock frame as the other apps, with no create button.
+    if (await appIsUp(page, `${APP_URLS.projects}/login`)) {
+      await page.goto(homeOf('projects', slug), { timeout: 120_000 });
+      await expect(page.getByTestId('plan-lock')).toBeVisible({ timeout: 90_000 });
+      await expect(page.getByTestId('plan-lock-frame')).toBeVisible();
+      await expect(page.getByRole('button', { name: /New task/ })).toHaveCount(0);
+      await expect(page.getByTestId('top-bar')).toHaveCount(0);
+      await page.keyboard.press('c');
+      await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+    }
+  });
 });

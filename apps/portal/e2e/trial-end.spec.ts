@@ -49,17 +49,17 @@ test.describe('the free trial ends with no card', () => {
     await expect(page.getByTestId('tile-crm')).toBeVisible();
     await expect(page.getByTestId('tile-badge-crm')).toHaveText(/View only|Included/);
 
-    // "Pick a plan" from the banner: the picker with the old cart, then review, then pay. Charged today.
+    // "Pick a plan" from the banner: the picker with the old cart, then the pay page. Two clicks to
+    // the card field. Charged today.
     await page.getByTestId('plan-notice-action').first().click();
     await page.waitForURL(/\/billing\/plan/);
     await expect(page.getByTestId('plan-picker')).toHaveAttribute('data-mode', 'checkout');
     await expect(page.getByTestId('quote-total').first()).toHaveText(totalOf(CART_CRM_WMS));
-    await expect(page.getByTestId('plan-submit')).toHaveText(/Continue to review/);
+    await expect(page.getByTestId('plan-summary')).toContainText('Due today');
+    await expect(page.getByTestId('plan-pay-facts')).toContainText('Next charge');
+    await expect(page.getByTestId('plan-picker')).toContainText(`You pay ${totalOf(CART_CRM_WMS)} today.`);
+    await expect(page.getByTestId('plan-submit')).toHaveText(/Continue to test checkout/);
     await page.getByTestId('plan-submit').click();
-    await page.waitForURL(/\/billing\/checkout/);
-    await expect(page.getByTestId('review-due-today')).toHaveText(totalOf(CART_CRM_WMS));
-    await expect(page.getByTestId('review-trust')).toContainText(`You pay ${totalOf(CART_CRM_WMS)} today.`);
-    await page.getByTestId('review-pay').click();
     await page.waitForURL(/\/test-gateway\/checkout\//);
 
     const paidAt = Date.now();

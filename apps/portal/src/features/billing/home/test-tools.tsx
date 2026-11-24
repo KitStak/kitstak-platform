@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { FlaskConical } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
-import { testFailNextPaymentAction, testRunDueAction, testShiftTimeAction } from '@/server/billing-actions';
+import { testFailNextPaymentAction, testRunDueAction, testShiftTimeAction } from '@/features/billing/actions';
 import { plural } from '../format';
 
 const SHIFTS = [1, 7, 14, 30] as const;

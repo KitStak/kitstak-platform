@@ -7,6 +7,7 @@ import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getBillingContext } from '@/server/billing/context';
 import { getOrgPlan } from '@/server/entitlements';
 import { env } from '@/server/env';
+import { CATALOG, seatLimitFor } from '@kitstak/billing/catalog';
 import { usesSeats } from '@/features/billing/format';
 import { InviteMemberForm } from './invite-member-form';
 import { InvitationRow, MemberRow } from './member-rows';
@@ -109,9 +110,22 @@ export default async function OrganizationSettingsPage() {
   // Seat facts for the invite form (docs/billing/SPEC.md 6.9). Limits apply on paid plans only.
   const [billing, plan] = await Promise.all([getBillingContext(), getOrgPlan(activeOrg.id)]);
   const setup = await getSetupState(activeOrg, { timeZone: billing?.timeZone, canManageBilling: billing?.access.canManage ?? false });
+  // Seats in use: people whose role uses a seat, and open invites with such a role (the same count
+  // the server uses when it decides whether an invite may go out). Guests and people who only
+  // manage billing are free.
+  const freeRoles: readonly string[] = CATALOG.freeRoles;
+  const usesSeat = (role: string | null): boolean => {
+    const parts = (role ?? 'member').split(',').map((part) => part.trim().toLowerCase()).filter(Boolean);
+    if (parts.some((part) => part.startsWith('deactivated:'))) return false;
+    return parts.length === 0 || !parts.every((part) => freeRoles.includes(part));
+  };
+  const seatsUsed = members.filter((row) => usesSeat(row.role)).length + invitations.filter((invite) => !invite.expired && usesSeat(invite.role)).length;
   const inviteSeats = {
     canManageBilling: billing?.access.canManage ?? false,
     paidSelection: plan.state.hasSubscription && usesSeats(plan.state.selection) ? plan.state.selection : null,
+    paid: plan.state.hasSubscription,
+    limit: plan.state.hasSubscription ? seatLimitFor(plan.state.selection) : null,
+    used: seatsUsed,
     ownerName: billing?.access.ownerName ?? null,
     siteUrl: env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, ''),
   };
@@ -174,9 +188,10 @@ export default async function OrganizationSettingsPage() {
                 orgId={activeOrg.id}
                 name={row.name}
                 email={row.email}
-                role={row.role}
+                // A person who only manages billing is added and removed on the Billing team page.
+                role={row.role.trim() === 'billing' ? 'Billing only' : row.role}
                 isSelf={row.userId === session.user.id}
-                canManage={canManage}
+                canManage={canManage && row.role.trim() !== 'billing'}
               />
             ))}
           </ul>

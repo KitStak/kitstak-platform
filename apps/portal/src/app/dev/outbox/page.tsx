@@ -104,7 +104,7 @@ export default async function OutboxPage({
         <label htmlFor="outbox-to" className="sr-only">
           Show emails to one address
         </label>
-        <div className="flex h-11 w-full items-center gap-2 rounded-md border border-border-input bg-panel px-3 focus-within:border-border-strong sm:max-w-md">
+        <div className="flex h-11 w-full items-center gap-2 rounded-md border border-border-input bg-panel px-3 focus-within:field-focus sm:max-w-md">
           <Search aria-hidden className="size-4 shrink-0 text-icon" />
           <input
             id="outbox-to"

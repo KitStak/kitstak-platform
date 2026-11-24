@@ -41,6 +41,72 @@ export async function customerIdForOrg(db: Pick<BillingDb, 'select'>, orgId: str
   return customer?.id ?? null;
 }
 
+/**
+ * Makes `customerId` the organization's stored gateway customer (review round 2). Our plan and the
+ * stored customer must always agree, or every later event of the plan is refused. Called when a
+ * paid checkout of the organization, or the plan row itself, names another customer than the one
+ * stored. Returns false, and changes nothing, when another organization holds that customer.
+ */
+export async function adoptGatewayCustomer(
+  db: Pick<BillingDb, 'select' | 'insert' | 'update'>,
+  input: { orgId: string; gateway: GatewayKind; customerId: string; now: Date },
+): Promise<boolean> {
+  const [holder] = await db
+    .select({ orgId: stripeCustomers.orgId })
+    .from(stripeCustomers)
+    .where(eq(stripeCustomers.stripeCustomerId, input.customerId));
+  if (holder && holder.orgId !== input.orgId) {
+    logBilling('error', 'a gateway customer of one organization was named by another', {
+      orgId: input.orgId,
+      holder: holder.orgId,
+      customerId: input.customerId,
+    });
+    return false;
+  }
+  const [account] = await db
+    .select({ gateway: billingAccounts.gateway })
+    .from(billingAccounts)
+    .where(eq(billingAccounts.orgId, input.orgId));
+  if (holder && account?.gateway === input.gateway) return true;
+  const [stored] = await db
+    .select({ id: stripeCustomers.stripeCustomerId })
+    .from(stripeCustomers)
+    .where(eq(stripeCustomers.orgId, input.orgId));
+  await db
+    .insert(stripeCustomers)
+    .values({ orgId: input.orgId, stripeCustomerId: input.customerId })
+    .onConflictDoUpdate({ target: stripeCustomers.orgId, set: { stripeCustomerId: input.customerId } });
+  await db
+    .insert(billingAccounts)
+    .values({ orgId: input.orgId, gateway: input.gateway })
+    .onConflictDoUpdate({ target: billingAccounts.orgId, set: { gateway: input.gateway, updatedAt: input.now } });
+  if (stored && stored.id !== input.customerId) {
+    logBilling('warn', 'the stored gateway customer was replaced by the one the plan belongs to', {
+      orgId: input.orgId,
+      was: stored.id,
+      now: input.customerId,
+    });
+  }
+  return true;
+}
+
+/** The subscription and customer our own plan row holds, when it was written by this gateway. */
+export async function planRowIds(
+  db: Pick<BillingDb, 'select'>,
+  orgId: string,
+  gateway: GatewayKind,
+): Promise<{ subscriptionId: string; customerId: string } | null> {
+  const [row] = await db
+    .select({
+      gateway: billingSubscriptions.gateway,
+      subscriptionId: billingSubscriptions.gatewaySubscriptionId,
+      customerId: billingSubscriptions.gatewayCustomerId,
+    })
+    .from(billingSubscriptions)
+    .where(eq(billingSubscriptions.orgId, orgId));
+  return row && row.gateway === gateway ? { subscriptionId: row.subscriptionId, customerId: row.customerId } : null;
+}
+
 async function orgName(db: Pick<BillingDb, 'select'>, orgId: string): Promise<string> {
   const [org] = await db.select({ name: organization.name }).from(organization).where(eq(organization.id, orgId));
   return org?.name ?? 'your organization';
@@ -448,9 +514,26 @@ export async function fetchAndApplySubscription(
   const customerId = await customerIdForOrg(db, input.orgId, rt.gateway.kind);
   const ownedByMetadata = subscription.orgId === input.orgId;
   const ownedByCustomer = customerId !== null && subscription.customerId === customerId;
-  if (!ownedByCustomer && !(ownedByMetadata && customerId === null)) {
+  // The subscription our own plan row holds is ours, whatever the stored customer says. The row is
+  // only ever written from a checkout session of this organization or from a snapshot that passed
+  // this same check. Without this rule a plan whose customer is not the stored one (two checkouts
+  // opened at the same moment, before round 2) would be cut off from every later event: no renewal,
+  // no cancel and no failed payment would ever reach it.
+  const plan = await planRowIds(db, input.orgId, rt.gateway.kind);
+  const ownedByPlanRow = plan !== null && plan.subscriptionId === subscription.id && (subscription.orgId === null || ownedByMetadata);
+  if (!ownedByCustomer && !ownedByPlanRow && !(ownedByMetadata && customerId === null)) {
     logBilling('warn', 'subscription does not belong to the org', { orgId: input.orgId, subscriptionId: subscription.id });
     return null;
+  }
+  if (!ownedByCustomer) {
+    // Bring the stored customer in line with the plan, so the card page and the invoices agree too.
+    const adopted = await adoptGatewayCustomer(db, {
+      orgId: input.orgId,
+      gateway: rt.gateway.kind,
+      customerId: subscription.customerId,
+      now: rt.now(),
+    });
+    if (!adopted) return null;
   }
   if (await rejectSecondSubscription(rt, db, { orgId: input.orgId, subscription, ...(input.eventId ? { eventId: input.eventId } : {}) })) {
     return null;

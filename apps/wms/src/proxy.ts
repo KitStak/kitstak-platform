@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { extractThemeHandoff, THEME_COOKIE, THEME_COOKIE_MAX_AGE_SECONDS } from '@kitstak/ui/theme';
 import { hasKitstakSessionCookie } from '@kitstak/auth/session-cookie';
 import { documentStatusFor, isDocumentRequest } from '@/server/http/status-gates';
+import { landingRedirectFor } from '@/server/http/landing-gate';
 
 const PUBLIC_PREFIXES: readonly string[] = [
   '/login',
@@ -53,6 +54,17 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   const hasSession = hasKitstakSessionCookie(request);
 
+  if (hasSession && isDocumentRequest(request.method, request.headers) && !pathname.startsWith('/api/') && !isPublicPath(pathname)) {
+    // No warehouse yet, or the WMS is not in the plan: go to the right screen before any page
+    // renders (see landing-gate.ts). The (app) layout keeps the same redirect as a backstop.
+    const landing = await landingRedirectFor(pathname, request.headers);
+    if (landing) {
+      const target = request.nextUrl.clone();
+      target.pathname = landing;
+      target.search = '';
+      return NextResponse.redirect(target);
+    }
+  }
   if (hasSession && isDocumentRequest(request.method, request.headers)) {
     // Real 403/404 statuses for document loads; the page still renders its in-shell view.
     const status = await documentStatusFor(pathname, undefined, request.headers);

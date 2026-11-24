@@ -4,9 +4,21 @@
  * The server is the judge: `passwordPolicyPlugin` in `@kitstak/auth` checks every new password.
  * This file mirrors its default policy. The four rules are on screen before the first key press,
  * each turns green as it is met, and a refusal names every missing rule at once. `password-rules.test.ts` proves the two agree.
+ *
+ * One more way in (review round 2): a password of 15 characters or more needs nothing else. No
+ * capital, no number, no symbol. "correct horse battery staple" is a good password.
  */
 
 export const PASSWORD_MIN_LENGTH = 10;
+/** From this length on, the password passes with no other rule. The same number as the shared policy. */
+export const PASSWORD_PASSPHRASE_LENGTH = 15;
+/** One plain line for the screens, so the easy way is said before the first key press. */
+export const PASSPHRASE_HINT = `${PASSWORD_PASSPHRASE_LENGTH} or more characters is enough by itself. A few words work well.`;
+
+/** True when the password is long enough to need no capital, number or symbol. */
+export function isPassphrase(password: string): boolean {
+  return password.length >= PASSWORD_PASSPHRASE_LENGTH;
+}
 /** 72, not more: older credentials are bcrypt hashes, and bcrypt ignores bytes after the 72nd. */
 export const PASSWORD_MAX_LENGTH = 72;
 
@@ -25,11 +37,13 @@ export interface PasswordContext {
 
 /** The four rules a person can see and tick off, in the order they are shown. */
 export function passwordRules(password: string): readonly PasswordRule[] {
+  // A long password has met them all: length stands in for the other three.
+  const long = isPassphrase(password);
   return [
     { id: 'length', label: `${PASSWORD_MIN_LENGTH} or more characters`, met: password.length >= PASSWORD_MIN_LENGTH },
-    { id: 'case', label: 'A capital and a small letter', met: /[A-Z]/.test(password) && /[a-z]/.test(password) },
-    { id: 'number', label: 'A number', met: /[0-9]/.test(password) },
-    { id: 'symbol', label: 'A symbol, like ! or #', met: /[^A-Za-z0-9]/.test(password) },
+    { id: 'case', label: 'A capital and a small letter', met: long || (/[A-Z]/.test(password) && /[a-z]/.test(password)) },
+    { id: 'number', label: 'A number', met: long || /[0-9]/.test(password) },
+    { id: 'symbol', label: 'A symbol, like ! or #', met: long || /[^A-Za-z0-9]/.test(password) },
   ];
 }
 
@@ -47,6 +61,7 @@ function joinWords(words: readonly string[]): string {
  * ['10 or more characters', 'a number', 'a symbol, like ! or #']. Empty when all four are met.
  */
 export function missingRuleWords(password: string): readonly string[] {
+  if (isPassphrase(password)) return [];
   const words: string[] = [];
   if (password.length < PASSWORD_MIN_LENGTH) words.push(`${PASSWORD_MIN_LENGTH} or more characters`);
   const upper = /[A-Z]/.test(password);
@@ -74,7 +89,11 @@ export function passwordIssue(password: string, context: PasswordContext = {}): 
     return `Use ${PASSWORD_MAX_LENGTH} characters or fewer.`;
   }
   const missing = missingRuleWords(password);
-  if (missing.length > 0) return `Your password still needs ${joinWords(missing)}.`;
+  if (missing.length > 0) {
+    // The easy way is named too, once the short rules are the only thing missing.
+    const longer = password.length >= PASSWORD_MIN_LENGTH ? ` Or make it ${PASSWORD_PASSPHRASE_LENGTH} characters or longer.` : '';
+    return `Your password still needs ${joinWords(missing)}.${longer}`;
+  }
   const localPart = context.email?.split('@')[0]?.trim().toLowerCase();
   if (localPart && localPart.length >= 3 && password.toLowerCase().includes(localPart)) {
     return 'Do not use your email name in your password.';
@@ -91,8 +110,11 @@ export interface PasswordStrength {
 export function passwordStrength(password: string): PasswordStrength {
   if (!password) return { score: 0, label: '' };
   const met = passwordRules(password).filter((rule) => rule.met).length;
-  // All four rules met reads "Good". A long password that meets them reads "Strong".
-  const score = (met === 4 && password.length >= 14 ? 4 : met === 4 ? 3 : Math.min(met, 2)) as PasswordStrength['score'];
+  // All four rules met reads "Good". A long password reads "Good" at 15 characters and "Strong" at 20,
+  // whatever it is made of, or at 14 when it also has a capital, a number and a symbol.
+  const mixed = /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password);
+  const strong = password.length >= 20 || (mixed && password.length >= 14);
+  const score = (met === 4 && strong ? 4 : met === 4 ? 3 : Math.min(met, 2)) as PasswordStrength['score'];
   const labels = ['Too weak', 'Weak', 'Fair', 'Good', 'Strong'] as const;
   return { score, label: labels[score] };
 }

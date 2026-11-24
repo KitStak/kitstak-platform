@@ -2,6 +2,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { acceptInviteAction } from '@/server/signup-actions';
+import { EmailText } from '@/components/ui';
 import { FormAlert, NO_NETWORK_MESSAGE, SubmitButton } from '../../_components/form-parts';
 
 /** Signed in with the invited address: one button. */
@@ -44,7 +45,7 @@ export function InviteAccept({
     <form onSubmit={accept} className="flex flex-col gap-4" aria-busy={busy}>
       {error ? <FormAlert>{error}</FormAlert> : null}
       <p className="text-base text-fg-secondary">
-        You are signed in as <span className="font-medium break-all text-fg">{email}</span>.
+        You are signed in as <EmailText email={email} className="font-medium text-fg" />.
       </p>
       <SubmitButton data-testid="invite-accept" busyLabel={busy ? `Joining ${orgName}…` : null}>
         Accept invite

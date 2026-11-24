@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { Check } from 'lucide-react';
 import { formatDay } from '@kitstak/billing/catalog';
-import { getPlanState, listBillingHolders } from '@kitstak/billing/server';
+import { getPlanState, listBillingHolders, listBillingInvites } from '@kitstak/billing/server';
 import { requireBillingContext } from '@/server/billing/context';
 import { listOrgMembers } from '@/server/orgs';
 import { Card, Notice } from '@/components/ui';
@@ -18,7 +18,12 @@ export default async function BillingTeamPage() {
   const context = await requireBillingContext('/billing/team');
   const { rt, org, access, session, timeZone } = context;
   if (!access.canView) redirect('/billing');
-  const [holders, members, state] = await Promise.all([listBillingHolders(rt.db, org.id), listOrgMembers(org.id), getPlanState(rt, org.id)]);
+  const [holders, members, state, invites] = await Promise.all([
+    listBillingHolders(rt.db, org.id),
+    listOrgMembers(org.id),
+    getPlanState(rt, org.id),
+    listBillingInvites(rt.db, org.id),
+  ]);
   const holderIds = new Set(holders.map((holder) => holder.userId));
   const candidates = members.filter((person) => !holderIds.has(person.userId));
 
@@ -31,7 +36,9 @@ export default async function BillingTeamPage() {
         badges={<TestModeBadge mode={state.mode} />}
       />
       {holders.length === 1 ? (
-        <Notice tone="info">Add a second person so billing never gets stuck.</Notice>
+        <Notice tone="info">
+          Add a second person so billing never gets stuck. Your bookkeeper can join for billing only. That is free and uses no seat.
+        </Notice>
       ) : null}
       {!access.canAssignManagers ? (
         <Notice tone="neutral" role="status">
@@ -48,7 +55,13 @@ export default async function BillingTeamPage() {
             name: holder.name,
             email: holder.email,
             kind: holder.kind,
+            billingOnly: holder.billingOnly,
             addedLabel: holder.addedAt ? formatDay(holder.addedAt, timeZone) : null,
+          }))}
+          invites={invites.map((invite) => ({
+            invitationId: invite.invitationId,
+            email: invite.email,
+            expiresLabel: formatDay(invite.expiresAt, timeZone),
           }))}
           candidates={candidates.map((person) => ({ userId: person.userId, name: person.name, email: person.email }))}
           canAssign={access.canAssignManagers}

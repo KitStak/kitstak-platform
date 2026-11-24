@@ -48,12 +48,15 @@ test.describe('the whole lifecycle, and the record it leaves', () => {
     await expect(page.getByTestId('billing-invoices-preview')).toContainText('$58.00');
 
     /* ----- plan change: add a seat ----- */
+    // The bank says no to the next charge, once (the "Make the next payment fail" test tool). The
+    // 0341 card by itself pays a plan change: it only fails renewals.
+    await runTestTool(page, 'fail-next');
     await page.getByTestId('billing-change-plan').click();
     await page.waitForURL(/\/billing\/plan/);
     await page.getByTestId('plan-seats-inc').click();
     await page.getByTestId('plan-submit').click();
     await expect(page.getByTestId('change-preview')).toBeVisible();
-    // This card fails every charge after the first one, so the change is refused and nothing moves.
+    // The change is refused and nothing moves.
     await page.getByTestId('change-confirm').click();
     await expect(page.getByTestId('change-preview')).toContainText('That card was declined. Try another card or call your bank.');
     await page.keyboard.press('Escape');

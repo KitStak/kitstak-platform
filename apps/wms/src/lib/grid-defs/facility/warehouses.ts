@@ -266,6 +266,35 @@ export const warehouseSchema = z
   })
   .transform((v) => normalizeWarehouseAddress(v));
 
+/** Text that may be left empty and is stored as an empty string (the first warehouse of a new organization). */
+const blankText = (max: number) => z.string().trim().max(max).default('');
+
+/**
+ * The first warehouse of a new organization (the setup screen a trial opens on). Only the name,
+ * the code and the time zone are needed to start working. The address and the contact can be
+ * added later under Settings, Warehouse, where the full `warehouseSchema` still asks for them.
+ * Anything that IS typed is checked the same way (state, postal code, phone). Same output shape
+ * as `warehouseSchema`, so both go through `createWarehouse`.
+ */
+export const firstWarehouseSaveSchema = z
+  .object({
+    ...INFO_SHAPE,
+    addressLine: blankText(250),
+    postalCode: blankText(20),
+    city: blankText(100),
+    state: blankText(60),
+    contactName: blankText(120),
+    contactPhone: blankText(40),
+    ...SETTINGS_SHAPE,
+    version: versionField,
+  })
+  .superRefine((v, ctx) => {
+    checkShift(v, ctx);
+    checkLogout(v, ctx);
+    checkAddress(v, ctx);
+  })
+  .transform((v) => normalizeWarehouseAddress(v));
+
 export type WarehouseInput = z.input<typeof warehouseSchema>;
 export type WarehouseSave = z.output<typeof warehouseSchema>;
 

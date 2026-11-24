@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { MailX, UsersRound } from 'lucide-react';
 import { formatDay } from '@kitstak/billing/catalog';
 import { member } from '@kitstak/db/schema';
-import { LinkButton } from '@/components/ui';
+import { EmailText, LinkButton } from '@/components/ui';
 import { db } from '@/server/db';
 import { getSession } from '@/server/session';
 import { getInviteView } from '@/server/signup';
@@ -134,7 +134,7 @@ export default async function InvitePage({
         {view.accountExists ? (
           <div className="flex flex-col gap-4">
             <p className="text-base text-fg-secondary">
-              You already have a KitStak account for <span className="font-medium break-all text-fg">{view.email}</span>.
+              You already have a KitStak account for <EmailText email={view.email} className="font-medium text-fg" />.
               Sign in to accept.
             </p>
             <LinkButton

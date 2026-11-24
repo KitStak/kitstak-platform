@@ -1,5 +1,6 @@
 'use client';
 import { Toaster as SonnerToaster, toast as sonnerToast } from 'sonner';
+import { answerViewOnly } from '@kitstak/ui/view-only';
 import { CircleAlert, CircleCheck, Info, TriangleAlert } from 'lucide-react';
 import { Spinner } from './spinner';
 
@@ -60,7 +61,9 @@ export interface UndoToastOptions {
  */
 export const toast = {
   success: (message: string, description?: string) => sonnerToast.success(message, { description }),
-  error: (message: string, description?: string) => sonnerToast.error(message, { description }),
+  // A change the server refused because the plan is view only is answered by the view only dialog
+  // (the banner's words and its button), not by a toast with other words (docs/billing/SPEC.md 9.4).
+  error: (message: string, description?: string) => (answerViewOnly(message, description) ? '' : sonnerToast.error(message, { description })),
   info: (message: string, description?: string) => sonnerToast.info(message, { description }),
   warning: (message: string, description?: string) => sonnerToast.warning(message, { description }),
   loading: (message: string) => sonnerToast.loading(message),

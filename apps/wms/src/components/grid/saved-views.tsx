@@ -86,7 +86,7 @@ function SaveViewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md">
+      <DialogContent size="md" data-plan-read="">
         <DialogHeader
           title="Save view"
           description="Keep the current search, filters and sort as a named view."
@@ -220,7 +220,7 @@ export function SavedViews({ api, query, activeViewId, onApply }: SavedViewsProp
             <span className="max-w-[140px] truncate">{active ? active.name : 'Views'}</span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-72">
+        <DropdownMenuContent align="start" className="w-72" data-plan-read="">
           <DropdownMenuItem
             icon={BookmarkPlus}
             onSelect={() => setSaveOpen(true)}

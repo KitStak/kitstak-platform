@@ -424,10 +424,17 @@ The same `PlanPicker` as signup, inside the billing shell. It opens in the right
 | Situation | Mode | Main button |
 |:-|:-|:-|
 | No trial yet and eligible | `trial` | Start my free trial |
-| In a free trial, no card, opened from "Pick a plan" | `checkout` | Continue to review (and a quiet link: Change your trial apps) |
+| In a free trial, no card, opened from "Pick a plan" | `checkout` | Continue to secure checkout (and a quiet link: Change your trial apps) |
 | In a free trial, no card, opened from "Change trial apps" (`?apps=1`) or "Add <app>" (`?add=`), or by a person who cannot pay | `trial_change` | Save my apps (and a quiet link: Pick a plan) |
-| Trial over, or plan ended | `checkout` | Continue to review |
+| Trial over, or plan ended | `checkout` | Continue to secure checkout |
 | Paid plan | `change` | Review change |
+
+"Pick a plan" is two clicks to the card field (review round 2). In `checkout` mode the picker is the last
+step before the pay page. Its summary shows the three facts: the plan lines, **Due today**, and **First
+charge** ("$395.20 on Dec 7, 2026" during the trial, else "Next charge"), then "Then $395.20 each month until
+you change or cancel. Have a promo code? Enter it on the next screen." Its button opens the pay page (test
+gateway: "Continue to test checkout"). With an email that is not verified yet the button is off and says
+"Verify your email first. It takes one minute." No screen in between repeats the same numbers.
 
 Links can prefill it: `?add=wms` turns WMS on, `?seats=6`, `?warehouses=2`, `?interval=yearly`,
 `?focus=seats`. Values are clamped. On a paid plan the picker shows the current plan beside the new one ("Now:
@@ -455,9 +462,18 @@ reloads with "The amount changed while you were looking. Check the new amount an
 is declined nothing changes: "That card was declined. Try another card or call your bank." with "Update
 card". On success: back to billing home with "Your plan is updated."
 
+When the plan itself moved (a colleague added a seat in another tab), the cart is moved onto the plan as it
+is now before the new amount is shown. Only what this person changed stays in the cart; everything else
+follows the fresh plan, so a second "Confirm change" never undoes the other change. The panel says what
+happened ("Your plan was changed while you were looking: add 1 seat. That change is kept."), and its title is
+built from the fresh plan, so it always names all of the change it will make.
+
 ### 6.4 Review before paying `/billing/checkout`
 
-One screen, three facts, one button. It never shows a card field (the pay page does).
+One screen, three facts, one button. It never shows a card field (the pay page does). The picker in
+`checkout` mode shows the same facts and goes straight to the pay page (section 6.2), so this screen is not
+a step of "Pick a plan" any more. It stays for links that land on it: the way back from the pay page, the
+link after email verification, and old links.
 
 - The plan lines and discount lines (same block as the picker).
 - **Due today:** "$0.00" during the trial, else the amount.

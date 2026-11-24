@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { PlanLockScreen } from '@kitstak/ui/plan-lock';
+import { PlanLockFrame, PlanLockScreen } from '@kitstak/ui/plan-lock';
 import { Logo } from '@/features/shell/logo';
 import { findOrgMembership, getSession } from '@/server/auth/session';
 import { getPlanView } from '@/server/plan';
@@ -34,24 +34,18 @@ export default async function LockedPage({ params }: LockedPageProps) {
   // The CRM is in the plan (again): nothing to lock, back into the app.
   if (!plan.lock) redirect(`/${membership.organization.slug}`);
 
+  // The same frame as the WMS, Projects and Pulse lock screens (`PlanLockFrame`).
   return (
-    <div className="flex min-h-dvh flex-col bg-app">
-      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border-subtle bg-panel px-4 sm:px-6">
-        <Link
-          href="/"
-          aria-label="KitStak CRM home"
-          className="inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        >
-          <Logo size={26} />
+    <PlanLockFrame
+      logo={
+        <Link href="/" aria-label="KitStak CRM home">
+          <Logo size={24} />
         </Link>
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="hidden truncate text-sm text-fg-secondary sm:block">{membership.organization.name}</span>
-          <LockedSwitcher badges={plan.badges} />
-        </div>
-      </header>
-      <main id="main-content" className="flex flex-1 flex-col">
-        <PlanLockScreen app="crm" lock={plan.lock} />
-      </main>
-    </div>
+      }
+      orgName={membership.organization.name}
+      switcher={<LockedSwitcher badges={plan.badges} />}
+    >
+      <PlanLockScreen app="crm" lock={plan.lock} />
+    </PlanLockFrame>
   );
 }

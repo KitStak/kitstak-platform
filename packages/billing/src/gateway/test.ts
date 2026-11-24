@@ -65,13 +65,44 @@ export const TEST_CARDS: readonly {
   readonly number: string;
   readonly label: string;
   readonly outcome: TestCardOutcome;
+  /** One plain sentence that says exactly what the test gateway does with this card. */
+  readonly detail: string;
 }[] = [
-  { number: '4242 4242 4242 4242', label: 'Works', outcome: 'success' },
-  { number: '4000 0000 0000 0002', label: 'Declined', outcome: 'declined' },
-  { number: '4000 0000 0000 9995', label: 'Not enough money', outcome: 'insufficient_funds' },
-  { number: '4000 0027 6000 3184', label: 'Needs bank approval', outcome: 'requires_action' },
-  { number: '4000 0000 0000 0341', label: 'Works now, fails at the next renewal', outcome: 'fails_on_renewal' },
+  { number: '4242 4242 4242 4242', label: 'Works', outcome: 'success', detail: 'Every charge is paid.' },
+  { number: '4000 0000 0000 0002', label: 'Declined', outcome: 'declined', detail: 'The bank says no. The card is not saved.' },
+  {
+    number: '4000 0000 0000 9995',
+    label: 'Not enough money',
+    outcome: 'insufficient_funds',
+    detail: 'The bank says there is not enough money. The card is not saved.',
+  },
+  {
+    number: '4000 0027 6000 3184',
+    label: 'Needs bank approval',
+    outcome: 'requires_action',
+    detail: 'The bank asks you to approve first. After that every charge is paid.',
+  },
+  {
+    number: '4000 0000 0000 0341',
+    label: 'Works now, fails at the next renewal',
+    outcome: 'fails_on_renewal',
+    detail: 'Saving it works. A first bill and a plan change are paid. Every renewal charge fails.',
+  },
 ];
+
+/**
+ * What a charge is for. The "fails at the next renewal" card looks at this and at nothing else: it
+ * pays a first bill and a plan change, and it fails every renewal charge (the renewal itself, its
+ * retries, and "Pay now" on a renewal bill). So it does not matter whether the card was typed at
+ * checkout or saved later on the card page, or what was charged before (review round 2).
+ */
+type ChargeKind = 'first' | 'change' | 'renewal';
+
+function chargeKindOf(invoice: Pick<InvoiceDoc, 'billingReason' | 'firstBill'>): ChargeKind {
+  if (invoice.billingReason === 'subscription_update') return 'change';
+  if (invoice.firstBill === true || invoice.billingReason === 'subscription_create') return 'first';
+  return 'renewal';
+}
 
 /** The one promo code the test gateway knows: 10% off the first charge. */
 export const TEST_PROMO_CODE = 'TEST10';
@@ -118,7 +149,7 @@ interface PaymentMethodDoc {
   expMonth: number;
   expYear: number;
   outcome: TestCardOutcome;
-  /** How many charges above $0 this card has paid. A "fails at the next renewal" card pays one. */
+  /** How many charges above $0 this card has paid. Kept for the record; no rule reads it. */
   chargesSucceeded: number;
 }
 
@@ -186,6 +217,8 @@ interface InvoiceDoc {
   creditAppliedCents?: number;
   /** Money sent back for this invoice (a second subscription that was canceled at once). */
   refundedCents?: number;
+  /** True for the first bill of a plan: at checkout, or at the end of the free trial. */
+  firstBill?: boolean;
 }
 
 interface PendingCard {
@@ -544,7 +577,7 @@ async function deliver(ctx: Ctx, gateway: BillingGateway, type: string, object: 
 type ChargeResult = { ok: true; last4: string } | { ok: false; code: string };
 
 /** Tries the card on file. Mutates `sub.failNextPayment`; the caller saves the subscription. */
-async function attemptCharge(ctx: Ctx, sub: SubscriptionDoc, amountCents: number): Promise<ChargeResult> {
+async function attemptCharge(ctx: Ctx, sub: SubscriptionDoc, amountCents: number, kind: ChargeKind): Promise<ChargeResult> {
   const card = await cardOf(ctx.db, sub.customerId);
   if (!card) return { ok: false, code: 'no_payment_method' };
   if (amountCents <= 0) return { ok: true, last4: card.last4 };
@@ -554,7 +587,7 @@ async function attemptCharge(ctx: Ctx, sub: SubscriptionDoc, amountCents: number
   }
   if (card.outcome === 'declined') return { ok: false, code: 'card_declined' };
   if (card.outcome === 'insufficient_funds') return { ok: false, code: 'insufficient_funds' };
-  if (card.outcome === 'fails_on_renewal' && card.chargesSucceeded >= 1) return { ok: false, code: 'card_declined' };
+  if (card.outcome === 'fails_on_renewal' && kind === 'renewal') return { ok: false, code: 'card_declined' };
   card.chargesSucceeded += 1;
   await save(ctx.db, 'payment_method', sub.orgId, card);
   return { ok: true, last4: card.last4 };
@@ -710,6 +743,10 @@ function changeMath(
     const left = Math.min(total, Math.max(0, periodEnd.getTime() - prorationDate.getTime()));
     const fraction = left / total;
     const leftWords = daysLeftWords(prorationDate, periodEnd);
+    // For a credit the server hands in a date a whole number of full days before the period end
+    // (`proration.ts`), so this is the count of full days that come back.
+    const fullDays = Math.max(0, Math.round((periodEnd.getTime() - prorationDate.getTime()) / DAY_MS));
+    const unusedWords = `unused time, ${plural(fullDays, 'full day', 'full days')} left`;
     const prorated = (cents: number) => roundCents(cents * fraction);
     const push = (description: string, product: ProductId, quantity: number, unit: number, amountCents: number) => {
       if (amountCents !== 0) lines.push({ description, product, quantity, unitCents: unit, amountCents, proration: true });
@@ -718,7 +755,7 @@ function changeMath(
     if (intervalChanged) {
       // A new billing period starts today. The unused part of the old one comes back as credit.
       for (const old of sub.items) {
-        push(`Unused time on ${lineLabel(old)}`, old.product, old.quantity, old.unitCents, -prorated(old.unitCents * old.quantity));
+        push(`${lineLabel(old)}: ${unusedWords}`, old.product, old.quantity, old.unitCents, -prorated(old.unitCents * old.quantity));
       }
       for (const item of newItems) {
         lines.push({
@@ -744,7 +781,7 @@ function changeMath(
           if (diff !== 0) {
             const what = plural(Math.abs(diff), pricing.unit, pricing.unitPlural);
             push(
-              diff > 0 ? `${pricing.name}: ${what} more for ${leftWords}` : `${pricing.name}: ${what} fewer, unused time`,
+              diff > 0 ? `${pricing.name}: ${what} more for ${leftWords}` : `${pricing.name}: ${what} fewer, ${unusedWords}`,
               product,
               Math.abs(diff),
               next.unitCents,
@@ -752,7 +789,7 @@ function changeMath(
             );
           }
         } else {
-          if (old) push(`Unused time on ${lineLabel(old)}`, product, old.quantity, old.unitCents, -prorated(old.unitCents * old.quantity));
+          if (old) push(`${lineLabel(old)}: ${unusedWords}`, product, old.quantity, old.unitCents, -prorated(old.unitCents * old.quantity));
           if (next) push(`${lineLabel(next)} for ${leftWords}`, product, next.quantity, next.unitCents, prorated(next.unitCents * next.quantity));
         }
       }
@@ -885,8 +922,10 @@ export function createTestGateway(input: {
     async expireOpenCheckoutSessions(customerId) {
       const customer = await load<CustomerDoc>(db, customerId, 'customer');
       if (!customer) return 0;
+      // Every open pay page of the customer's organization, whichever customer it was made for
+      // (review round 2). An organization has one plan, so it never needs two open pay pages.
       const open = (await listKind<CheckoutSessionDoc>(db, 'checkout_session', customer.orgId)).filter(
-        (session) => session.customerId === customerId && session.status === 'open',
+        (session) => session.status === 'open',
       );
       for (const session of open) {
         session.status = 'expired';
@@ -955,61 +994,74 @@ export function createTestGateway(input: {
     },
 
     async applyChange({ subscriptionId, selection, prorationDate }) {
-      const sub = await requireSubscription(subscriptionId);
       const normalized = normalizeSelection(selection);
-      const now = ctx.now();
-      let customer = await load<CustomerDoc>(db, sub.customerId, 'customer');
-      if (!customer) throw new Error('Test customer is missing.');
-      const credit = creditOf(customer, sub);
-      const math = changeMath(sub, credit, normalized, prorationDate, now);
-      let paidInvoice: InvoiceDoc | null = null;
+      const { orgId } = await requireSubscription(subscriptionId);
+      // One step (review round 2): the documents are read, changed and saved under the lock of the
+      // organization and in one transaction. Two calls at the same moment run one after the other,
+      // and the second one meets the plan the first one left: it charges nothing twice.
+      type Changed = { ok: true; sub: SubscriptionDoc; paidInvoice: InvoiceDoc | null } | { ok: false; code: string };
+      const changed = await db.transaction(async (tx): Promise<Changed> => {
+        const locked: Ctx = { ...ctx, db: tx as unknown as BillingDb };
+        await lockOrg(locked.db, orgId);
+        const sub = await load<SubscriptionDoc>(locked.db, subscriptionId, 'subscription');
+        if (!sub) throw new Error('Test subscription not found.');
+        const now = locked.now();
+        let customer = await load<CustomerDoc>(locked.db, sub.customerId, 'customer');
+        if (!customer) throw new Error('Test customer is missing.');
+        const credit = creditOf(customer, sub);
+        const math = changeMath(sub, credit, normalized, prorationDate, now);
+        let paidInvoice: InvoiceDoc | null = null;
 
-      if (math.preview.dueTodayCents > 0) {
-        const drafted = await draftInvoice(ctx, sub, {
-          reason: 'subscription_update',
-          lines: math.lines,
-          periodStart: now,
-          periodEnd: math.intervalChanged ? addInterval(now, normalized.interval) : new Date(sub.currentPeriodEnd),
-          issuedAt: now,
-          usePromo: false,
-          useCredit: true,
-        });
-        const charge = await attemptCharge(ctx, sub, drafted.invoice.totalCents);
-        if (!charge.ok) {
-          // A declined card changes nothing. Only the used up "fail next" flag is kept.
-          await save(db, 'subscription', sub.orgId, sub);
-          throw new GatewayCardError('The test card was declined.', charge.code);
+        if (math.preview.dueTodayCents > 0) {
+          const drafted = await draftInvoice(locked, sub, {
+            reason: 'subscription_update',
+            lines: math.lines,
+            periodStart: now,
+            periodEnd: math.intervalChanged ? addInterval(now, normalized.interval) : new Date(sub.currentPeriodEnd),
+            issuedAt: now,
+            usePromo: false,
+            useCredit: true,
+          });
+          const charge = await attemptCharge(locked, sub, drafted.invoice.totalCents, 'change');
+          if (!charge.ok) {
+            // A declined card changes nothing. Only the used up "fail next" flag is kept.
+            await save(locked.db, 'subscription', sub.orgId, sub);
+            return { ok: false, code: charge.code };
+          }
+          markPaid(drafted.invoice, charge.last4, now);
+          customer = drafted.customer;
+          setCredit(customer, sub, credit - drafted.creditUsed);
+          sub.latestInvoiceId = drafted.invoice.id;
+          await save(locked.db, 'invoice', sub.orgId, drafted.invoice);
+          paidInvoice = drafted.invoice;
+        } else if (math.netCents > 0) {
+          // Fully covered by credit from an earlier decrease.
+          setCredit(customer, sub, credit - math.creditApplied);
+        } else {
+          setCredit(customer, sub, credit - math.netCents);
         }
-        markPaid(drafted.invoice, charge.last4, now);
-        customer = drafted.customer;
-        setCredit(customer, sub, credit - drafted.creditUsed);
-        sub.latestInvoiceId = drafted.invoice.id;
-        await save(db, 'invoice', sub.orgId, drafted.invoice);
-        paidInvoice = drafted.invoice;
-      } else if (math.netCents > 0) {
-        // Fully covered by credit from an earlier decrease.
-        setCredit(customer, sub, credit - math.creditApplied);
-      } else {
-        setCredit(customer, sub, credit - math.netCents);
-      }
-      await save(db, 'customer', sub.orgId, customer);
+        await save(locked.db, 'customer', sub.orgId, customer);
 
-      sub.items = math.newItems;
-      sub.seats = normalized.seats;
-      sub.warehouses = normalized.warehouses;
-      if (math.intervalChanged) {
-        sub.interval = normalized.interval;
-        if (sub.status !== 'trialing') {
-          sub.currentPeriodStart = iso(now);
-          sub.currentPeriodEnd = iso(addInterval(now, normalized.interval));
+        sub.items = math.newItems;
+        sub.seats = normalized.seats;
+        sub.warehouses = normalized.warehouses;
+        if (math.intervalChanged) {
+          sub.interval = normalized.interval;
+          if (sub.status !== 'trialing') {
+            sub.currentPeriodStart = iso(now);
+            sub.currentPeriodEnd = iso(addInterval(now, normalized.interval));
+          }
         }
-      }
-      if (sub.cancelAtPeriodEnd) sub.cancelAt = sub.currentPeriodEnd;
-      await save(db, 'subscription', sub.orgId, sub);
+        if (sub.cancelAtPeriodEnd) sub.cancelAt = sub.currentPeriodEnd;
+        await save(locked.db, 'subscription', sub.orgId, sub);
+        return { ok: true, sub, paidInvoice };
+      });
+      if (!changed.ok) throw new GatewayCardError('The test card was declined.', changed.code);
 
-      if (paidInvoice) await deliver(ctx, gateway, 'invoice.paid', invoiceObject(paidInvoice));
-      await deliver(ctx, gateway, 'customer.subscription.updated', subscriptionObject(sub));
-      return toGatewaySubscription(db, sub);
+      // Events go out after the commit, through the same door Stripe uses.
+      if (changed.paidInvoice) await deliver(ctx, gateway, 'invoice.paid', invoiceObject(changed.paidInvoice));
+      await deliver(ctx, gateway, 'customer.subscription.updated', subscriptionObject(changed.sub));
+      return toGatewaySubscription(db, changed.sub);
     },
 
     async setCancelAtPeriodEnd(subscriptionId, cancel) {
@@ -1053,7 +1105,7 @@ export function createTestGateway(input: {
       if (!invoice) throw new Error('There is no invoice to pay.');
       if (invoice.status !== 'open') return toGatewayInvoice(invoice);
 
-      const charge = await attemptCharge(ctx, sub, invoice.totalCents);
+      const charge = await attemptCharge(ctx, sub, invoice.totalCents, chargeKindOf(invoice));
       invoice.attemptCount += 1;
       if (!charge.ok) {
         invoice.lastErrorCode = charge.code;
@@ -1128,6 +1180,8 @@ async function billPeriod(
   reason: string,
 ): Promise<{ invoice: InvoiceDoc; paid: boolean }> {
   const end = addInterval(start, sub.interval);
+  // The first bill of a plan: at checkout, or the first charge when the free trial ends.
+  const firstBill = reason === 'subscription_create' || sub.trialEnd !== null;
   const drafted = await draftInvoice(ctx, sub, {
     reason,
     lines: periodLines(sub.items),
@@ -1138,6 +1192,7 @@ async function billPeriod(
     useCredit: true,
   });
   const { invoice } = drafted;
+  invoice.firstBill = firstBill;
   sub.currentPeriodStart = iso(start);
   sub.currentPeriodEnd = iso(end);
   sub.trialEnd = null;
@@ -1146,7 +1201,7 @@ async function billPeriod(
   if (drafted.promoUsed) sub.promoCode = null;
   if (sub.cancelAtPeriodEnd) sub.cancelAt = sub.currentPeriodEnd;
 
-  const charge = await attemptCharge(ctx, sub, invoice.totalCents);
+  const charge = await attemptCharge(ctx, sub, invoice.totalCents, firstBill ? 'first' : 'renewal');
   invoice.attemptCount = 1;
   invoice.autoAttempts = 1;
   if (charge.ok) {
@@ -1583,7 +1638,7 @@ export async function testRunDue(rt: BillingRuntime, input?: { orgId?: string })
       }
 
       if (due.action === 'retry' && invoice) {
-        const charge = await attemptCharge(ctx, sub, invoice.totalCents);
+        const charge = await attemptCharge(ctx, sub, invoice.totalCents, chargeKindOf(invoice));
         invoice.attemptCount += 1;
         invoice.autoAttempts = (invoice.autoAttempts ?? invoice.attemptCount - 1) + 1;
         if (charge.ok) {

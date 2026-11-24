@@ -39,7 +39,7 @@ export const CodeInput = forwardRef<HTMLInputElement, CodeInputProps>(function C
               invalid ? 'border-danger' : 'border-border-input',
               !disabled &&
                 index === activeIndex &&
-                'group-focus-within:border-border-strong group-focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--border-strong)_28%,transparent)]',
+                'group-focus-within:field-focus',
               disabled && 'opacity-60',
             )}
           >

@@ -4,6 +4,80 @@
  * with @kitstak/ui.
  */
 
+/* PlanLockFrame: the same quiet top bar around the lock card in all four apps. */
+.ks-planlock-frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--surface-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+.ks-planlock-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  height: 56px;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-panel);
+}
+
+.ks-planlock-bar-logo {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.ks-planlock-bar-logo a {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-md);
+}
+
+.ks-planlock-bar-logo a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ks-planlock-bar-end {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ks-planlock-bar-org {
+  display: none;
+  overflow: hidden;
+  max-width: 320px;
+  font-size: var(--type-sm);
+  line-height: var(--type-sm-lh);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-planlock-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+@media (min-width: 640px) {
+  .ks-planlock-bar {
+    padding: 0 var(--space-6);
+  }
+
+  .ks-planlock-bar-org {
+    display: block;
+  }
+}
+
 .ks-planlock {
   display: flex;
   flex: 1;

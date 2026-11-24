@@ -18,7 +18,7 @@ import { ShellProvider, type ShellContextValue } from './shell-context';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { Sidebar } from './sidebar';
 import { PlanBanner } from '@kitstak/ui/plan-banner';
-import { ViewOnlyGuard } from '@kitstak/ui/view-only';
+import { ViewOnlyGuard, ViewOnlyPage, isWritePath } from '@kitstak/ui/view-only';
 import { TopBar } from './top-bar';
 import { useShellHotkeys } from './use-shell-hotkeys';
 
@@ -65,7 +65,25 @@ const PROJECTS_WRITE_PATHS: readonly (string | RegExp)[] = [/^\/projects\/new$/]
  */
 function PlanViewOnly({ plan }: { readonly plan: ShellContextValue['plan'] }) {
   const pathname = usePathname();
-  return <ViewOnlyGuard active={plan?.access === 'read_only'} notice={plan?.notice ?? null} pathname={pathname} writePaths={PROJECTS_WRITE_PATHS} homeHref="/" />;
+  return <ViewOnlyGuard active={plan?.access === 'read_only'} notice={plan?.notice ?? null} pathname={pathname} writePaths={PROJECTS_WRITE_PATHS} writePage="inline" homeHref="/" />;
+}
+
+/**
+ * A create screen opened by its address while the plan is view only: the message takes the place
+ * of the form, inside the app frame. The top bar, the sidebar and the banner stay.
+ */
+function PlanPage({ plan, children }: { readonly plan: ShellContextValue['plan']; readonly children: ReactNode }) {
+  const pathname = usePathname();
+  if (plan?.access === 'read_only' && isWritePath(pathname, PROJECTS_WRITE_PATHS)) {
+    return (
+      <>
+        <ViewOnlyPage notice={plan.notice ?? null} homeHref="/" />
+        {/* The form stays in the tree, hidden and out of reach, so Next can still check the route in development. */}
+        <div hidden>{children}</div>
+      </>
+    );
+  }
+  return <>{children}</>;
 }
 
 export function AppShell(props: AppShellProps) {
@@ -96,7 +114,9 @@ function ShellBody({ context, initialProjects, initialSpaces, initialUnread, ini
             <Sidebar initialProjects={initialProjects} initialSpaces={initialSpaces} initialUnread={initialUnread} />
           </div>
           <main id="main-content" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-app outline-none">
-            <div className="h-full overflow-auto">{children}</div>
+            <div className="h-full overflow-auto">
+              <PlanPage plan={context.plan}>{children}</PlanPage>
+            </div>
           </main>
         </div>
       </div>

@@ -97,6 +97,10 @@ async function findOrCreatePlatformOrg(db: AppDb, now: Date): Promise<string> {
 
 /** Org roles a WMS edit must never overwrite (they are granted in the portal, not here). */
 const PRESERVED_ORG_ROLES: ReadonlySet<string> = new Set(['owner', 'admin']);
+/** The role of a person who only manages billing in the Portal (`BILLING_ONLY_ROLE` in @kitstak/auth). */
+const BILLING_ONLY_ORG_ROLE = 'billing';
+/** Org roles that use no seat of a paid plan (`CATALOG.freeRoles` in @kitstak/billing). */
+const FREE_ORG_ROLES: ReadonlySet<string> = new Set(['guest', BILLING_ONLY_ORG_ROLE]);
 
 /**
  * True when the core identity belongs to NO organization other than the one owning this
@@ -260,7 +264,17 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
     });
   } else if (!membership.role.split(',').some((r) => PRESERVED_ORG_ROLES.has(r.trim()))) {
     // An owner/admin role granted in the portal is kept as is.
-    await db.update(member).set({ role: orgRole }).where(eq(member.id, membership.id));
+    const held = membership.role.split(',').map((r) => r.trim()).filter(Boolean);
+    const heldNoSeat = held.length > 0 && held.every((r) => FREE_ORG_ROLES.has(r));
+    if (heldNoSeat) {
+      // A guest, or a person who only manages billing, held no seat until now. Working in the
+      // warehouse uses one, so the plan must have room (billing review round 2).
+      const { assertSeatAvailable } = await import('@/server/auth/plan');
+      await assertSeatAvailable(db, orgId, orgRole);
+    }
+    // A billing manager stays one: the billing role is kept next to the new role.
+    const nextRole = held.includes(BILLING_ONLY_ORG_ROLE) ? `${orgRole},${BILLING_ONLY_ORG_ROLE}` : orgRole;
+    await db.update(member).set({ role: nextRole }).where(eq(member.id, membership.id));
   }
 
   await db

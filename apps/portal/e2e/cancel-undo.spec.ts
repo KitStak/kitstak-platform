@@ -65,7 +65,7 @@ test.describe('cancel in two clicks, and undo', () => {
     await expect(page.getByTestId('plan-picker')).toHaveAttribute('data-mode', 'checkout');
     await expect(page.getByTestId('plan-product-pulse')).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByTestId('quote-total').first()).toHaveText(totalOf(CART_PULSE));
-    await expect(page.getByTestId('plan-submit')).toHaveText(/Continue to review/);
+    await expect(page.getByTestId('plan-submit')).toHaveText(/Continue to test checkout/);
 
     const actions = (await auditOf(orgId)).map((row) => row.action);
     expect(actions).toEqual(expect.arrayContaining(['cancel.scheduled', 'cancel.undone', 'plan.ended']));

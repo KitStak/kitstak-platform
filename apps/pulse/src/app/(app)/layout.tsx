@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { AppShell, LockedScreen, NoAccessScreen } from '@/features/shell';
+import { AppShell, LockedFrame, NoAccessScreen } from '@/features/shell';
 import { jobRouteMissing } from '@/features/jobs/server/job-exists';
 import { importRouteMissing } from '@/features/imports/server/batch-exists';
 import { profitRecordMissing } from '@/features/profit/server/record-exists';
@@ -27,13 +27,9 @@ export default async function AppLayout({ children }: { readonly children: React
   const path = (await headers()).get('x-ks-path') ?? '/';
   const context = await requirePageContext(path);
   const shell = await loadShell(context);
-  if (shell.plan.lock) {
-    return (
-      <AppShell context={shell.shellContext}>
-        <LockedScreen lock={shell.plan.lock} />
-      </AppShell>
-    );
-  }
+  // Not in the plan: the lock screen in the same quiet frame as the CRM and the WMS. No navigation
+  // and no "New job" or "Log work" button, because nothing can be opened or made in a locked app.
+  if (shell.plan.lock) return <LockedFrame lock={shell.plan.lock} context={shell.shellContext} />;
   if (shell.access.role === 'none') {
     return (
       <AppShell context={shell.shellContext}>

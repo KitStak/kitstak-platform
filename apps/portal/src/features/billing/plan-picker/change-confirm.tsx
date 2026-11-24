@@ -9,20 +9,23 @@ import Link from 'next/link';
 import { formatDay, formatMoney, type BillingInterval } from '@kitstak/billing/catalog';
 import type { BillingError } from '@kitstak/billing/errors';
 import type { ChangePreview } from '@kitstak/billing/server';
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Notice } from '@/components/ui';
-import { perPeriod, plural } from '../format';
+import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Notice, Spinner } from '@/components/ui';
+import { perPeriod } from '../format';
 
 export interface ChangeConfirmProps {
   readonly open: boolean;
   readonly title: string;
   readonly preview: ChangePreview | null;
   readonly interval: BillingInterval;
-  /** Whole days left in the paid period, for the "days left" words. */
-  readonly daysLeftInPeriod: number | null;
   readonly timeZone: string;
   /** "Visa ending 4242": the card on file, named so nobody wonders what will be charged. null when unknown. */
   readonly cardLabel: string | null;
   readonly error: BillingError | null;
+  /**
+   * Set after "the amount changed while you were looking": what somebody else did to the plan in
+   * the meantime, as a short phrase ("Add 1 seat"). That change is kept, and the panel says so.
+   */
+  readonly planMoved?: string | null;
   readonly confirming: boolean;
   readonly updatingCard: boolean;
   readonly onConfirm: () => void;
@@ -36,10 +39,10 @@ export function ChangeConfirm({
   title,
   preview,
   interval,
-  daysLeftInPeriod,
   timeZone,
   cardLabel,
   error,
+  planMoved = null,
   confirming,
   updatingCard,
   onConfirm,
@@ -48,9 +51,6 @@ export function ChangeConfirm({
   verifyHref,
 }: ChangeConfirmProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const unusedCents = preview ? -preview.lines.filter((line) => line.amountCents < 0).reduce((sum, line) => sum + line.amountCents, 0) : 0;
-  const daysWords =
-    daysLeftInPeriod !== null && daysLeftInPeriod > 0 ? `for the ${plural(daysLeftInPeriod, 'day', 'days')} left in this period` : 'for the time left in this period';
 
   return (
     <Dialog open={open} onOpenChange={(next) => (!next && !confirming ? onClose() : undefined)}>
@@ -67,6 +67,20 @@ export function ChangeConfirm({
         </DialogTitle>
         <DialogDescription>Check the amounts. Nothing is charged until you confirm.</DialogDescription>
 
+        {planMoved ? (
+          <Notice tone="info" role="status" className="mt-4" testId="change-plan-moved">
+            Your plan was changed while you were looking: {planMoved.charAt(0).toLowerCase() + planMoved.slice(1)}. That change is kept. The amounts below are new.
+          </Notice>
+        ) : null}
+
+        {!preview && open ? (
+          // The plan is being read again (after "the amount changed"). Nothing can be confirmed yet.
+          <p role="status" data-testid="change-loading" className="mt-5 flex items-center gap-2 rounded-lg border border-border-default px-4 py-3 text-sm text-fg-secondary">
+            <Spinner size="xs" className="text-icon" />
+            Getting the new amount.
+          </p>
+        ) : null}
+
         {preview ? (
           <dl className="mt-5 divide-y divide-border-subtle rounded-lg border border-border-default">
             {preview.creditCents > 0 ? (
@@ -78,6 +92,11 @@ export function ChangeConfirm({
                     {formatMoney(preview.creditCents)}
                   </span>{' '}
                   credit on your next bill.
+                  {preview.creditNote ? (
+                    <span data-testid="change-credit-note" className="mt-0.5 block text-xs text-fg-muted">
+                      {preview.creditNote}
+                    </span>
+                  ) : null}
                 </dd>
               </div>
             ) : null}
@@ -85,15 +104,8 @@ export function ChangeConfirm({
               <dt className="text-sm font-semibold text-fg">
                 Due today
                 <span className="block text-xs font-normal text-fg-muted">
-                  {preview.creditAppliedCents > 0
-                    ? preview.dueTodayCents > 0
-                      ? `${formatMoney(preview.proratedCents)} ${daysWords}, less ${formatMoney(preview.creditAppliedCents)} paid from your credit.`
-                      : `${formatMoney(preview.proratedCents)} ${daysWords}. Paid from your credit.`
-                    : preview.dueTodayCents > 0
-                    ? unusedCents > 0
-                      ? `After ${formatMoney(unusedCents)} credit for the part you did not use.`
-                      : daysWords.charAt(0).toUpperCase() + daysWords.slice(1) + '.'
-                    : 'Nothing to pay now.'}
+                  {/* Written by the server from the numbers it charges, so the reason always fits the amount. */}
+                  <span data-testid="change-due-note">{preview.dueTodayNote}</span>
                 </span>
                 {preview.dueTodayCents > 0 && cardLabel ? (
                   <span data-testid="change-card" className="block text-xs font-normal text-fg-muted">

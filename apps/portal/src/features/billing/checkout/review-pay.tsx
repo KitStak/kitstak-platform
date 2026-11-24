@@ -5,7 +5,7 @@ import { CircleAlert, Lock } from 'lucide-react';
 import type { PlanSelection } from '@kitstak/billing/catalog';
 import type { BillingError } from '@kitstak/billing/errors';
 import { Button } from '@/components/ui';
-import { startCheckoutAction } from '@/server/billing-actions';
+import { startCheckoutAction } from '@/features/billing/actions';
 
 /** The one button on the review step. It asks the server for a pay page and goes there. */
 export function ReviewPay({

@@ -18,7 +18,7 @@ function first(value: string | string[] | undefined): string | undefined {
 const HEADING: Readonly<Record<PlanPickerProps['mode'], { title: string; description: string }>> = {
   trial: { title: 'Pick your apps', description: `Try them free for ${CATALOG.trialDays} days. No card needed.` },
   trial_change: { title: 'Change your trial apps', description: 'Add or remove apps any time. Apps you add share the same trial end date.' },
-  checkout: { title: 'Pick your plan', description: 'Choose your apps, seats and how often you pay. You review everything before you pay.' },
+  checkout: { title: 'Pick your plan', description: 'Choose your apps, seats and how often you pay. You enter your card on the next screen.' },
   change: { title: 'Change your plan', description: 'Changes start right away. You pay only for the days left, and you see the amount first.' },
 };
 
@@ -37,7 +37,7 @@ export default async function PlanPage({
 
   // During a free trial the picker has two jobs, and each gets its own screen with one filled button:
   //   "Pick a plan" (the banner, billing home, the emails, the setup guide) opens it to pay: apps,
-  //   seats, pay period, then "Continue to review".
+  //   seats, pay period, the three facts (plan, due today, first charge), then the pay page.
   //   "Change trial apps" and "Add <app>" open it to change what is in the trial: "Save my apps".
   // A person who may change trial apps but may not pay (an admin) always gets the second one.
   const wantsApps = first(params.apps) === '1' || first(params.add) !== undefined;
@@ -126,8 +126,11 @@ export default async function PlanPage({
         </Notice>
       ) : null}
       <PlanPicker
-        // A new link (another app, another number) gives a fresh picker.
-        key={`${mode}:${prefilled.products.join(',')}:${prefilled.seats}:${prefilled.warehouses}:${prefilled.interval}`}
+        // A new link (another app, another number) gives a fresh picker. The key is made from the
+        // link only, never from the plan: when the plan changes under an open picker (a colleague
+        // adds a seat in another tab), the picker must stay mounted, so its confirm panel can say
+        // what happened and show the new amount instead of vanishing.
+        key={`${mode}:${add ?? ''}:${first(params.seats) ?? ''}:${first(params.warehouses) ?? ''}:${first(params.interval) ?? ''}:${first(params.apps) ?? ''}`}
         mode={mode}
         initialSelection={prefilled}
         planState={state}
@@ -136,6 +139,7 @@ export default async function PlanPage({
         layout="billing"
         timeZone={timeZone}
         canPay={access.canManage}
+        payBlockedReason={context.emailVerified ? null : 'Verify your email first. It takes one minute.'}
       />
     </div>
   );

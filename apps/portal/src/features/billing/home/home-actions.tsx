@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { CircleAlert } from 'lucide-react';
 import type { BillingResult } from '@kitstak/billing/errors';
 import { Button, LinkButton, type ButtonSize, type ButtonVariant } from '@/components/ui';
-import { keepPlanAction, openCardUpdateAction, retryPaymentAction, undoPauseAction } from '@/server/billing-actions';
+import { keepPlanAction, openCardUpdateAction, retryPaymentAction, undoPauseAction } from '@/features/billing/actions';
 import type { HomeAction, HomeActionId } from '../phase-copy';
 
 const LINKS: Partial<Record<HomeActionId, string>> = {

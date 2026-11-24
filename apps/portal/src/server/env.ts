@@ -98,8 +98,18 @@ const envSchema = z.object({
   BILLING_SELLER_NAME: optionalText,
   BILLING_SELLER_ADDRESS: optionalText,
   BILLING_SELLER_TAX_ID: optionalText,
+  /**
+   * Billing help, shown at the foot of every billing page. The address defaults to the one the
+   * marketing site publishes. The reply time ("1 business day") is a promise only the owner can
+   * make: the page says "We reply within ..." only once it is set here. Nothing is made up.
+   */
+  BILLING_SUPPORT_EMAIL: z.email().default('hello@kitstak.com'),
+  BILLING_SUPPORT_REPLY_TIME: optionalText,
   /** Marketing site origin, for "Talk to us" and pricing links. */
-  NEXT_PUBLIC_SITE_URL: z.url().default('https://kitstak.com'),
+  // The marketing site ("Talk to us", Terms, Privacy, pricing). With no value set, local dev uses the
+  // local site on port 3600 (docs/billing/DEV.md), so those links never leave the machine. Production
+  // uses the real site.
+  NEXT_PUBLIC_SITE_URL: z.url().default(process.env.NODE_ENV === 'production' ? 'https://kitstak.com' : 'http://localhost:3600'),
   /** Legal links on the signup and sign in screens. Default: the Terms and Privacy pages of the marketing site. */
   NEXT_PUBLIC_TERMS_URL: z.url().optional(),
   NEXT_PUBLIC_PRIVACY_URL: z.url().optional(),

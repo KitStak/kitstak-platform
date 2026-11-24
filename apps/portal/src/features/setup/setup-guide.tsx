@@ -74,9 +74,11 @@ interface StepRowProps {
   readonly pending: boolean;
   readonly onSkip: (key: string) => void;
   readonly onUnskip: (key: string) => void;
+  /** On a phone this row waits behind "Show all steps", so the app tiles stay on the first screen. */
+  readonly foldOnPhone?: boolean;
 }
 
-function StepStatusIcon({ step, index, isNext, justDone }: Omit<StepRowProps, 'canManage' | 'pending' | 'onSkip' | 'onUnskip'>) {
+function StepStatusIcon({ step, index, isNext, justDone }: Omit<StepRowProps, 'canManage' | 'pending' | 'onSkip' | 'onUnskip' | 'foldOnPhone'>) {
   if (step.status === 'done') {
     return (
       <span
@@ -115,7 +117,7 @@ function StepStatusIcon({ step, index, isNext, justDone }: Omit<StepRowProps, 'c
   );
 }
 
-function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, onUnskip }: StepRowProps) {
+function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, onUnskip, foldOnPhone = false }: StepRowProps) {
   const settled = step.status !== 'todo';
   const locked = step.status === 'todo' && step.lockedBy !== null;
   const actionable = step.status === 'todo' && !locked;
@@ -123,7 +125,10 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
   const canShowCta = step.key !== 'profile' || canManage;
   // The next step is open: its description shows and its button is the one filled button of the
   // card. Every other row is one quiet line, so the whole quick start fits above the app tiles.
-  const ctaClass = cn(buttonVariants({ variant: isNext ? 'primary' : 'ghost', size: isNext ? 'md' : 'sm' }), 'shrink-0');
+  // On a phone a row with a link is two lines: the title on the first, the link under it. A title
+  // such as "Create your CRM workspace" then has the whole width and never wraps beside its link.
+  const stacked = isNext || (actionable && canShowCta);
+  const ctaClass = cn(buttonVariants({ variant: isNext ? 'primary' : 'ghost', size: isNext ? 'md' : 'sm' }), 'shrink-0', !isNext && 'max-sm:-ml-2.5');
   const cta = actionable && canShowCta ? (
     step.external ? (
       <a href={step.href} target="_blank" rel="noopener" className={ctaClass}>
@@ -160,7 +165,10 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
       data-status={step.status}
       className={cn(
         'group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-5',
-        isNext ? 'gap-y-2 bg-sunken/60 py-3.5 max-sm:grid-cols-[auto_minmax(0,1fr)]' : 'min-h-11 py-1.5',
+        isNext ? 'gap-y-2 bg-sunken/60 py-3.5' : 'min-h-11 py-1.5',
+        stacked && 'max-sm:grid-cols-[auto_minmax(0,1fr)]',
+        stacked && !isNext && 'max-sm:pt-2.5 max-sm:pb-1',
+        foldOnPhone && 'max-sm:hidden',
       )}
       aria-current={isNext ? 'step' : undefined}
     >
@@ -186,7 +194,7 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
           </p>
         ) : null}
       </div>
-      <div className={cn('flex items-center justify-end gap-1.5', isNext && 'max-sm:col-start-2 max-sm:justify-start')}>
+      <div className={cn('flex items-center justify-end gap-1.5', stacked && 'max-sm:col-start-2 max-sm:justify-start')}>
         {step.status === 'done' ? <span className="text-xs font-medium text-success-text">Done</span> : null}
         {step.status === 'skipped' && canManage ? (
           <Button
@@ -454,12 +462,20 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
           ) : null}
         </div>
       ) : null}
-      <header className="flex items-center gap-4 px-5 py-4">
-        <ProgressRing percent={summary.percent} />
-        <div className="min-w-0 flex-1">
+      {/*
+        Phones: the ring, the title and the two small buttons share the first line. The progress
+        line gets the full width under the title, so "Set up Harbor Supply Co" and "2 of 5 done ·
+        about 7 min left" never wrap into three or four short lines. In settings, "Hide from home"
+        sits on its own line under them. From 640 px up it is one row.
+      */}
+      <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 px-5 py-4 sm:flex sm:gap-4">
+        <div className="max-sm:row-span-2 max-sm:self-start">
+          <ProgressRing percent={summary.percent} />
+        </div>
+        <div className="min-w-0 flex-1 max-sm:contents">
           {/* The name wraps on a phone. It is never cut with an ellipsis. */}
-          <h2 className="text-md font-semibold text-balance break-words text-fg">Set up {orgName}</h2>
-          <p className="mt-0.5 text-sm text-fg-muted" data-testid="setup-progress">
+          <h2 className="min-w-0 text-md font-semibold text-balance break-words text-fg">Set up {orgName}</h2>
+          <p className="mt-0.5 text-sm text-fg-muted max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-2" data-testid="setup-progress">
             {summary.doneCount} of {summary.totalCount} done
             {summary.skippedCount > 0 ? <> · {summary.skippedCount} skipped</> : null}
             {summary.remainingMinutes > 0 ? (
@@ -467,39 +483,44 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
             ) : null}
           </p>
         </div>
-        {inSettings ? homeToggle : canManage ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Setup guide options"
-              className="flex size-8 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            >
-              <MoreHorizontal aria-hidden className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => run(dismissSetupGuide)}>
-                <span className="flex flex-col">
-                  <span>Dismiss setup guide</span>
-                  <span className="text-xs text-fg-muted">It moves to Organization settings and keeps checking off steps.</span>
-                </span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        {inSettings && homeToggle ? (
+          <div className="max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-3 max-sm:-ml-2.5 max-sm:justify-self-start">{homeToggle}</div>
         ) : null}
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Expand setup guide' : 'Collapse setup guide'}
-          className="flex size-8 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        >
-          <ChevronDown
-            aria-hidden
-            className={cn(
-              'size-4 transition-transform duration-[var(--duration-fast)]',
-              collapsed && '-rotate-90',
-            )}
-          />
-        </button>
+        <div className="flex shrink-0 items-center gap-1 max-sm:col-start-3 max-sm:row-start-1">
+          {!inSettings && canManage ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Setup guide options"
+                className="flex size-8 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              >
+                <MoreHorizontal aria-hidden className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => run(dismissSetupGuide)}>
+                  <span className="flex flex-col">
+                    <span>Dismiss setup guide</span>
+                    <span className="text-xs text-fg-muted">It moves to Organization settings and keeps checking off steps.</span>
+                  </span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? 'Expand setup guide' : 'Collapse setup guide'}
+            className="flex size-8 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          >
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                'size-4 transition-transform duration-[var(--duration-fast)]',
+                collapsed && '-rotate-90',
+              )}
+            />
+          </button>
+        </div>
       </header>
       {error ? <div className="px-5 pb-3">{errorLine}</div> : null}
       {collapsed ? null : (
@@ -512,10 +533,26 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
                 index={index}
                 isNext={step.key === summary.nextKey}
                 justDone={justDoneKeys.includes(step.key)}
+                // Phones, on the launcher: only the open step shows until "Show all steps" is pressed,
+                // so the person's own app tile is on the first screen under the guide.
+                foldOnPhone={!inSettings && !moreOpen && summary.nextKey !== null && step.key !== summary.nextKey}
                 {...rowProps}
               />
             ))}
           </ol>
+          {moreSteps.length === 0 && !inSettings && steps.length > 1 ? (
+            // With no extra steps there is no "Show all steps" row, so phones get their own.
+            <button
+              type="button"
+              onClick={() => setMoreOpen((current) => !current)}
+              aria-expanded={moreOpen}
+              data-testid="setup-phone-toggle"
+              className="flex min-h-11 w-full items-center justify-between gap-3 border-t border-border-subtle px-5 text-left text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus sm:hidden"
+            >
+              <span>{moreOpen ? 'Show fewer steps' : `Show all ${steps.length} steps`}</span>
+              <ChevronDown aria-hidden className={cn('size-4 shrink-0 transition-transform duration-[var(--duration-fast)] motion-reduce:transition-none', moreOpen && 'rotate-180')} />
+            </button>
+          ) : null}
           <MoreSteps steps={moreSteps} open={moreOpen} onToggle={() => setMoreOpen((current) => !current)} rowProps={rowProps} offset={steps.length} />
         </>
       )}

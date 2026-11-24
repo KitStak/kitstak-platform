@@ -6,6 +6,7 @@ import { requirePageSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
 import { mustChangePassword } from '@/server/password-change';
+import { BillingOrgScope } from '@/features/billing/org-scope';
 import { CommandPalette } from '@/features/shell/command-palette';
 import { Logo, LogoMark } from '@/features/shell/logo';
 import { OrgSwitcher } from '@/features/shell/org-switcher';
@@ -40,6 +41,8 @@ export default async function AppLayout({ children }: { readonly children: React
 
   return (
     <div className="flex min-h-dvh flex-col bg-app">
+      {/* Which organization this render is for. Billing actions send it back and a stale tab is refused. */}
+      <BillingOrgScope orgId={activeOrg?.id ?? null} />
       <header className="sticky top-0 z-40 border-b border-border-subtle bg-panel/90 backdrop-blur">
         {/*
           The bar must fit every width from 320 px up with a 40 character organization name:

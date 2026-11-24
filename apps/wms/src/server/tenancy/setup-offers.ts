@@ -4,6 +4,7 @@
  */
 import 'server-only';
 import { headers } from 'next/headers';
+import type { AppPlanView } from '@kitstak/billing/server';
 import { getPlatformDb } from '@/server/api/db';
 import { getWmsAuth } from '@/server/auth/auth';
 import { getPlanView, portalUrl } from '@/server/auth/plan';
@@ -31,6 +32,16 @@ export interface SetupOffers {
   } | null;
   /** The Portal, for a way out of this page that always works. */
   readonly portalHref: string;
+  /**
+   * What the page frame shows for the organization this screen is about: its name, the plan
+   * banner (for example "Free trial. 14 days left.") and the plan state of each app for the app
+   * switcher. null when the person has no organization this screen can be about.
+   */
+  readonly frame: {
+    readonly orgName: string;
+    readonly notice: AppPlanView['notice'];
+    readonly badges: AppPlanView['badges'];
+  } | null;
 }
 
 export async function loadSetupOffers(): Promise<SetupOffers> {
@@ -40,7 +51,7 @@ export async function loadSetupOffers(): Promise<SetupOffers> {
     .getSession({ headers: requestHeaders, query: { disableCookieCache: true } })
     .catch(() => null);
   const portalHref = portalUrl();
-  if (!session) return { signedIn: false, offers: [], hasWarehouse: false, waitingOn: [], needsPlan: null, portalHref };
+  if (!session) return { signedIn: false, offers: [], hasWarehouse: false, waitingOn: [], needsPlan: null, portalHref, frame: null };
   const platformDb = await getPlatformDb();
   const choices = await listWmsOrgs(platformDb, session.user.id);
   const offers = setupCandidates(choices).map((c) => ({ orgId: c.orgId, orgName: c.name }));
@@ -49,6 +60,7 @@ export async function loadSetupOffers(): Promise<SetupOffers> {
   // change, so it waits for a plan. The reader IS the owner, so the page must not say "ask an owner".
   const held = choices.find((c) => c.entitled && c.viewOnly === true && !c.schemaName && isSetupRole(c.memberRole));
   let needsPlan: SetupOffers['needsPlan'] = null;
+  let frame: SetupOffers['frame'] = null;
   if (held) {
     const view = await getPlanView(platformDb, { orgId: held.orgId, userId: session.user.id, role: held.memberRole }).catch(() => null);
     needsPlan = {
@@ -56,6 +68,14 @@ export async function loadSetupOffers(): Promise<SetupOffers> {
       text: view?.notice?.text ?? null,
       action: view?.notice?.action ? { label: view.notice.action.label, href: view.notice.action.href } : null,
     };
+    // The page already says the plan words in its card, so the frame does not repeat them in a banner.
+    if (view) frame = { orgName: held.name, notice: null, badges: view.badges };
+  }
+  // The organization the setup form is for (the first one offered), or the one a member waits on.
+  const about = setupCandidates(choices)[0] ?? choices.find((c) => c.entitled && !c.schemaName && c.orgId !== held?.orgId);
+  if (!frame && about) {
+    const view = await getPlanView(platformDb, { orgId: about.orgId, userId: session.user.id, role: about.memberRole }).catch(() => null);
+    if (view) frame = { orgName: about.name, notice: view.notice, badges: view.badges };
   }
   return {
     signedIn: true,
@@ -64,5 +84,6 @@ export async function loadSetupOffers(): Promise<SetupOffers> {
     waitingOn: choices.filter((c) => c.entitled && !c.schemaName && !offered.has(c.orgId) && c.orgId !== held?.orgId).map((c) => c.name),
     needsPlan,
     portalHref,
+    frame,
   };
 }

@@ -68,6 +68,39 @@ function PointIcon() {
   );
 }
 
+export interface PlanLockFrameProps {
+  /** The app's own lockup, already a link home where the app has one. */
+  readonly logo: React.ReactNode;
+  /** The organization the person is in. Hidden on phones, where the bar has no room for it. */
+  readonly orgName?: string | null;
+  /** The shared app switcher, so a person can go to an app that is in the plan. */
+  readonly switcher?: React.ReactNode;
+  /** The lock screen. */
+  readonly children: React.ReactNode;
+}
+
+/**
+ * The one frame around the lock screen in CRM, WMS, Projects and Pulse: a quiet top bar with the
+ * app's logo, the organization name and the app switcher, then the lock card. No navigation and no
+ * create buttons, because nothing in a locked app can be opened or made. Server safe.
+ */
+export function PlanLockFrame({ logo, orgName, switcher, children }: PlanLockFrameProps): React.JSX.Element {
+  return (
+    <div className="ks-planlock-frame" data-testid="plan-lock-frame">
+      <header className="ks-planlock-bar">
+        <div className="ks-planlock-bar-logo">{logo}</div>
+        <div className="ks-planlock-bar-end">
+          {orgName ? <span className="ks-planlock-bar-org">{orgName}</span> : null}
+          {switcher}
+        </div>
+      </header>
+      <main id="main-content" className="ks-planlock-main">
+        {children}
+      </main>
+    </div>
+  );
+}
+
 /** Centered card: app icon, title, one or two sentences, the main link and a way back. */
 export function PlanLockScreen({ app, lock, className }: PlanLockScreenProps): React.JSX.Element {
   const meta = PLAN_LOCK_POINTS[app];

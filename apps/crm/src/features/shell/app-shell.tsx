@@ -2,7 +2,7 @@
 import { Suspense, useEffect, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { PlanBanner } from '@kitstak/ui/plan-banner';
-import { ViewOnlyGuard, askViewOnly } from '@kitstak/ui/view-only';
+import { ViewOnlyGuard, ViewOnlyPage, askViewOnly, isWritePath } from '@kitstak/ui/view-only';
 import { CommandPalette } from './command-palette';
 import { CreateBoardDialog } from './dialogs/create-board-dialog';
 import { CreateSimpleDialog } from './dialogs/create-simple-dialog';
@@ -156,7 +156,18 @@ export function AppShell({ context, slots, children }: AppShellProps) {
           <SetupCallout />
         </Suspense>
         <main id="main-content" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-app outline-none">
-          <div className="h-full overflow-auto">{children}</div>
+          <div className="h-full overflow-auto">
+            {/* The import wizard opened by its address in view only: the message takes its place, inside the app frame. */}
+            {context.plan?.access === 'read_only' && isWritePath(pathname, CRM_WRITE_PATHS) ? (
+              <>
+                <ViewOnlyPage notice={context.plan.notice ?? null} homeHref={`/${context.org.slug}`} />
+                {/* The wizard stays in the tree, hidden and out of reach, so Next can still check the route in development. */}
+                <div hidden>{children}</div>
+              </>
+            ) : (
+              children
+            )}
+          </div>
         </main>
       </div>
       {layout === 'drawer' ? <MobileNav /> : null}
@@ -166,6 +177,7 @@ export function AppShell({ context, slots, children }: AppShellProps) {
         notice={context.plan?.notice ?? null}
         pathname={pathname}
         writePaths={CRM_WRITE_PATHS}
+        writePage="inline"
         homeHref={`/${context.org.slug}`}
       />
       <CreateDialogs slots={slots} />

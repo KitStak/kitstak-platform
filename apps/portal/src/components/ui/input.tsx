@@ -9,10 +9,11 @@ export const inputSurface = cva(
     'flex w-full items-center gap-2 rounded-md border bg-panel text-fg',
     'transition-[border-color,box-shadow,background-color] duration-[var(--duration-fast)] ease-out',
     'border-border-input hover:border-border-input-hover',
-    // Neutral focus treatment: brand red stays reserved for invalid states (design review P2).
-    'focus-within:border-border-strong focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--border-strong)_28%,transparent)] focus-within:hover:border-border-strong',
+    // Focus is a 2 px edge in the text colour (see `field-focus` in globals.css): 18 to 1 in light,
+    // 15 to 1 in dark. It stays neutral, so red is only ever an error.
+    'focus-within:field-focus focus-within:hover:border-(--field-focus)',
     'has-[:disabled]:cursor-not-allowed has-[:disabled]:bg-muted has-[:disabled]:opacity-60 has-[:disabled]:hover:border-border-input',
-    'data-[invalid=true]:border-danger data-[invalid=true]:hover:border-danger data-[invalid=true]:focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--danger)_22%,transparent)]',
+    'data-[invalid=true]:border-danger data-[invalid=true]:hover:border-danger data-[invalid=true]:focus-within:field-focus-danger',
   ],
   {
     variants: {
