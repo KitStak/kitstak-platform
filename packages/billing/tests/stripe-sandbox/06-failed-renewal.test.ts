@@ -8,7 +8,7 @@ import { CATALOG } from '../../src/catalog';
 import { scheduleCancel } from '../../src/server/cancel';
 import { createPaymentUpdateSession, retryPayment } from '../../src/server/payment';
 import { getPlanState } from '../../src/server/state';
-import { buyPlan, CANCEL_NEEDS_APPROVAL, DAY_MS, failures, HOUR_MS, type Json, openTestDb, Sandbox, SANDBOX_ENABLED, stripeApi, stripeSubscription } from './harness';
+import { buyPlan, CANCEL_NEEDS_APPROVAL, CHECK_REFUSED_CANCEL, DAY_MS, failures, HOUR_MS, type Json, openTestDb, Sandbox, SANDBOX_ENABLED, stripeApi, stripeSubscription } from './harness';
 
 const test = SANDBOX_ENABLED ? await openTestDb() : null;
 vi.setConfig({ testTimeout: 1_200_000, hookTimeout: 1_200_000 });
@@ -232,7 +232,7 @@ describe.skipIf(!SANDBOX_ENABLED || !test?.available)('Stripe sandbox: a failed 
       ({ box, subscriptionId, invoice } = await lateOrg('06c cancel with an open bill', 'pm_card_chargeCustomerFail'));
     });
 
-    it.skipIf(!CANCEL_NEEDS_APPROVAL)('when Stripe refuses the cancel (this key needs a person to approve it), nothing changes and nothing is lost', async () => {
+    it.skipIf(!CHECK_REFUSED_CANCEL)('when Stripe refuses the cancel (this key needs a person to approve it), nothing changes and nothing is lost', async () => {
       const result = await scheduleCancel(box.rt, { orgId: box.org.orgId, reason: 'too_expensive', detail: null, actor: box.actor });
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error.code).toBe('gateway_error');

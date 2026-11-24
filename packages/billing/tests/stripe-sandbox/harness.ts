@@ -43,7 +43,12 @@ const EVIDENCE_DIR = process.env.STRIPE_SANDBOX_EVIDENCE_DIR ?? resolve(HERE, '.
  * STRIPE_SANDBOX_CANCEL_NEEDS_APPROVAL=1: the two flows that end a subscription at once then check
  * that the refusal changes nothing, instead of checking the cancel itself.
  */
-export const CANCEL_NEEDS_APPROVAL = process.env.STRIPE_SANDBOX_CANCEL_NEEDS_APPROVAL === '1';
+export const CANCEL_NEEDS_APPROVAL = ['1', 'check'].includes(process.env.STRIPE_SANDBOX_CANCEL_NEEDS_APPROVAL ?? '');
+/**
+ * Every refused cancel leaves an approval request in the Stripe dashboard. So the refusal itself is
+ * only tried when asked for with STRIPE_SANDBOX_CANCEL_NEEDS_APPROVAL=check.
+ */
+export const CHECK_REFUSED_CANCEL = process.env.STRIPE_SANDBOX_CANCEL_NEEDS_APPROVAL === 'check';
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const HOUR_MS = 60 * 60 * 1000;
 
@@ -162,6 +167,8 @@ export class Sandbox {
   private readonly test: TestDb;
   /** The Stripe side of a past event read, kept so the next read starts after it. */
   private lastEventId: string | null = null;
+  /** Every event that was delivered, in the order it was delivered. For the replay tests. */
+  readonly history: StripeEventBody[] = [];
 
   private constructor(test: TestDb, org: TestOrg, label: string) {
     this.test = test;
@@ -327,6 +334,7 @@ export class Sandbox {
     const rawBody = JSON.stringify(event);
     const signature = signStripePayload(rawBody, this.webhookSecret, Math.floor(Date.now() / 1000));
     const outcome = await processWebhook(this.rt, { rawBody, signature });
+    if (!this.history.some((seen) => seen.id === event.id)) this.history.push(event);
     return { id: event.id, type: event.type, outcome };
   }
 

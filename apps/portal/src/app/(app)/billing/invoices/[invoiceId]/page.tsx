@@ -10,7 +10,7 @@ import { env } from '@/server/env';
 import { Badge, Card, Eyebrow, buttonVariants, cn } from '@/components/ui';
 import { BackLink, BillingHeader, TestModeBadge } from '@/features/billing/billing-chrome';
 import { invoiceSeller, invoiceView } from '@/features/billing/invoices/invoice-view';
-import { invoiceStatus, invoiceTitle } from '@/features/billing/invoices/invoice-words';
+import { invoiceOutcomeLine, invoiceStatus, invoiceTitle, isCreditInvoice } from '@/features/billing/invoices/invoice-words';
 
 export const metadata: Metadata = { title: 'Invoice' };
 
@@ -196,10 +196,17 @@ export default async function InvoicePage({ params }: { readonly params: Promise
             <dt className="font-semibold text-fg">Total</dt>
             <dd data-testid="invoice-total" className="text-md font-semibold text-fg tabular-nums">{formatMoney(invoice.totalCents)}</dd>
           </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-fg-secondary">Paid</dt>
-            <dd className="text-fg tabular-nums">{formatMoney(invoice.amountPaidCents)}</dd>
-          </div>
+          {isCreditInvoice(invoice) ? (
+            <div className="flex justify-between gap-4" data-testid="invoice-credit-added">
+              <dt className="text-fg-secondary">Added to your credit</dt>
+              <dd className="font-medium text-success-text tabular-nums">{formatMoney(-invoice.totalCents)}</dd>
+            </div>
+          ) : (
+            <div className="flex justify-between gap-4">
+              <dt className="text-fg-secondary">Paid</dt>
+              <dd className="text-fg tabular-nums">{formatMoney(invoice.amountPaidCents)}</dd>
+            </div>
+          )}
           {invoice.refundedCents > 0 ? (
             <div className="flex justify-between gap-4">
               <dt className="text-fg-secondary">Sent back to your card</dt>
@@ -214,14 +221,8 @@ export default async function InvoicePage({ params }: { readonly params: Promise
           ) : null}
         </dl>
 
-        <p className="mt-5 border-t border-border-subtle pt-4 text-sm text-fg-secondary">
-          {invoice.status === 'paid' && invoice.paidAt
-            ? `Paid on ${day(invoice.paidAt)}${invoice.paymentMethodLast4 ? ` with the card ending ${invoice.paymentMethodLast4}` : ''}.`
-            : invoice.status === 'open'
-              ? 'This invoice is not paid yet. Go to Billing to pay it or to update your card.'
-              : invoice.status === 'void'
-                ? 'This invoice was canceled. Nothing is owed on it.'
-                : 'This invoice is closed.'}
+        <p data-testid="invoice-outcome" className="mt-5 border-t border-border-subtle pt-4 text-sm text-fg-secondary">
+          {invoiceOutcomeLine(invoice, { day, money: formatMoney })}
         </p>
       </Card>
     </div>

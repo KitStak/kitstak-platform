@@ -22,7 +22,7 @@ import {
   oneSeatSavingCents,
   sameSelection,
 } from './format';
-import { invoiceStatus, invoiceTitle } from './invoices/invoice-words';
+import { invoiceOutcomeLine, invoiceStatus, invoiceTitle, isCreditInvoice } from './invoices/invoice-words';
 import { memberLine, nextChargeCopy, phaseCopy } from './phase-copy';
 
 const NOW = new Date('2026-11-23T12:00:00Z');
@@ -303,6 +303,24 @@ describe('invoice words', () => {
     expect(invoiceStatus({ status: 'paid' }).label).toBe('Paid');
     expect(invoiceStatus({ status: 'open' }).label).toBe('Due');
     expect(invoiceStatus({ status: 'void' }).label).toBe('Void');
+  });
+  // Real Stripe makes an invoice with a total below zero when a plan gets smaller (found on the sandbox run).
+  it('an invoice with a total below zero is a credit, never "paid with the card"', () => {
+    const credit = { status: 'paid' as const, totalCents: -2803, paidAt: new Date('2026-11-24T22:30:00.000Z'), paymentMethodLast4: '4242' };
+    expect(isCreditInvoice(credit)).toBe(true);
+    expect(invoiceStatus(credit)).toEqual({ label: 'Credit', tone: 'success' });
+    const words = { day: () => 'Nov 24, 2026', money: (cents: number) => `$${(cents / 100).toFixed(2)}` };
+    expect(invoiceOutcomeLine(credit, words)).toBe('This is a credit of $28.03 for a plan change. Nothing was charged. It comes off your next bills.');
+    // A normal paid invoice keeps its sentence.
+    const paid = { ...credit, totalCents: 5800 };
+    expect(isCreditInvoice(paid)).toBe(false);
+    expect(invoiceStatus(paid).label).toBe('Paid');
+    expect(invoiceOutcomeLine(paid, words)).toBe('Paid on Nov 24, 2026 with the card ending 4242.');
+    expect(invoiceOutcomeLine({ ...paid, paymentMethodLast4: null }, words)).toBe('Paid on Nov 24, 2026.');
+    expect(invoiceOutcomeLine({ ...paid, status: 'open' }, words)).toBe('This invoice is not paid yet. Go to Billing to pay it or to update your card.');
+    expect(invoiceOutcomeLine({ ...paid, status: 'void' }, words)).toBe('This invoice was canceled. Nothing is owed on it.');
+    // A bill of $0.00 that credit paid in full is a paid bill, not a credit.
+    expect(invoiceStatus({ status: 'paid', totalCents: 0 }).label).toBe('Paid');
   });
 });
 
