@@ -117,7 +117,8 @@ export function WelcomeWizard({ firstName, orgName, crmEntitled, wmsEntitled }: 
         setSaving(false);
         return;
       }
-      router.replace('/');
+      // The answers shape the setup guide, which lives in Organization settings.
+      router.replace('/settings/organization#setup');
       router.refresh();
     } catch {
       setError('We couldn’t reach KitStak. Check your connection and try again.');

@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CreditCard, LayoutGrid, LogOut, Settings2 } from 'lucide-react';
+import { CreditCard, LayoutGrid, LogOut, Moon, Settings2, Sun } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +11,7 @@ import {
   cn,
 } from '@/components/ui';
 import { signOut } from '@/lib/auth-client';
+import { toggleTheme } from './theme-toggle';
 
 function initials(name: string, email: string): string {
   const source = name.trim() || email;
@@ -33,7 +34,7 @@ export function UserMenu({ name, email }: { readonly name: string; readonly emai
       <DropdownMenuTrigger
         aria-label="Account menu"
         className={cn(
-          'inline-flex size-8 items-center justify-center rounded-full bg-inverse text-2xs font-bold text-fg-inverse',
+          'inline-flex size-9 items-center justify-center rounded-full bg-inverse text-xs font-bold text-fg-inverse',
           'hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         )}
       >
@@ -62,6 +63,11 @@ export function UserMenu({ name, email }: { readonly name: string; readonly emai
             <Settings2 aria-hidden className="size-4 text-icon" />
             Organization settings
           </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={toggleTheme}>
+          <Sun aria-hidden className="size-4 text-icon dark:hidden" />
+          <Moon aria-hidden className="hidden size-4 text-icon dark:inline" />
+          Light or dark theme
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
