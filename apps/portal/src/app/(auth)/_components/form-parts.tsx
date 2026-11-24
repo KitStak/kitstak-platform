@@ -122,7 +122,8 @@ export function StrengthMeter({ password, context }: { readonly password: string
  *   - 15 characters or more: the four rules fold away, because they are not needed. One green
  *     line stays: "15 or more characters. That is enough."
  *   - A password the server would refuse for another reason (the email name, easy to guess): a
- *     warning says so at once, and nothing reads "enough" or "done".
+ *     warning says so at once, and nothing reads "enough" or "done". When that password is 15
+ *     characters or more, the warning stands alone: "15 is enough" is not true for it.
  * After the form said no (`showMissing`), the rules that are still missing turn red, all at once,
  * and the form adds no second sentence.
  */
@@ -161,14 +162,16 @@ export function PasswordRules({
           </span>
           {PASSWORD_PASSPHRASE_LENGTH} or more characters. That is enough.
         </p>
-      ) : (
+      ) : long ? null : (
+        // (Long and still refused shows nothing here: the warning above is the whole answer, and
+        // "15 is enough" would not be true for that password.)
         // The easy way, said first: a long password needs nothing else (review round 2).
         // On a phone, before the first key, it is one line: the fields under the password and the
         // button stay on the first screen. The rest of the sentence shows with the first key.
         <p data-testid="password-passphrase-hint" data-state="open" className="text-xs text-fg-secondary">
           {PASSWORD_PASSPHRASE_LENGTH} or more characters is enough by itself.
           <span className={cn(!typing && 'max-sm:hidden')}> A few words work well.</span>
-          {long ? null : <span className={cn(!typing && 'max-sm:hidden')}> Or use a shorter one with all of these:</span>}
+          <span className={cn(!typing && 'max-sm:hidden')}> Or use a shorter one with all of these:</span>
         </p>
       )}
       <ul

@@ -321,6 +321,10 @@ email is not verified yet, else `/welcome`.
   (one character repeated, one piece repeated, a straight run like `1234` or `qwerty`, a common password
   dressed up, the product or company name) with one line: "That one is too easy to guess. Try a few words
   that do not go together."
+  The screens never say something that is not true for what is typed (review round 3). A long password that
+  is refused shows the reason alone, with no "15 is enough" line. After a refusal the sentence under the
+  field follows each key, so it is never about an older try. `/signup`, `/invite`, `/reset-password` and
+  `/change-password` share one meter and one checklist.
 - **Email me a code instead** (review round 3). The second door, with no password. On `/login`, the link
   under the form mails a 6 digit code to the address that was typed. The next screen says "If <address> has
   a KitStak account, a code is on its way." and never says whether it has one. The code signs the person in
@@ -870,6 +874,8 @@ rules.
   have text, never color alone. Money lines are a real table or a definition list.
 - **Phones.** At 360 px wide there is no sideways scroll. Tap targets are at least 44 px. The picker summary
   sticks to the bottom of the screen with the total and the button. The portal's phone menu gains "Billing".
+  On a 360 by 740 px phone the signup form shows every field and "Create account" on the first screen, also
+  with a cart of one or two apps on top. Under the password there is one line of hint until the first key.
 - **Browser help.** The right `autocomplete` on every field, `one-time-code` on the code field, real `<form>`
   elements, a real URL change after signup and login so password managers offer to save and fill.
 - **Slow networks.** Every button shows a busy state within 100 ms and cannot be sent twice. Server actions

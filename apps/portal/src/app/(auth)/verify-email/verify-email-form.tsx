@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { CircleAlert, MailCheck } from 'lucide-react';
 import { Badge, EmailText } from '@/components/ui';
@@ -35,7 +35,7 @@ export function VerifyEmailForm({
   const errorId = `${codeId}-error`;
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<ReactNode>(null);
   const [state, setState] = useState<'idle' | 'checking' | 'done' | 'sending' | 'skipping'>('idle');
   const [wait, setWait] = useState(initialWaitSeconds);
   // "Change email": fixes a typo without losing the account, the organization or the free trial.
@@ -103,7 +103,12 @@ export function VerifyEmailForm({
     try {
       const result = await resendVerificationAction();
       if (result.ok) {
-        setNotice(`We sent a new code to ${email}.`);
+        // The address is one box with its full stop inside, so a long one never leaves a "." on a line by itself.
+        setNotice(
+          <>
+            We sent a new code to <EmailText email={email} className="font-semibold" after="." />
+          </>,
+        );
         setCode('');
         setWait(resendWaitSeconds);
       } else {
@@ -151,7 +156,13 @@ export function VerifyEmailForm({
         setChanging(false);
         setNewEmail('');
         setCode('');
-        setNotice(result.error ?? `Your email is now ${wanted.toLowerCase()}. We sent a new code there.`);
+        setNotice(
+          result.error ?? (
+            <>
+              Your email is now <EmailText email={wanted.toLowerCase()} className="font-semibold" after="." /> We sent a new code there.
+            </>
+          ),
+        );
         setWait(resendWaitSeconds);
         router.refresh();
         requestAnimationFrame(() => input.current?.focus());

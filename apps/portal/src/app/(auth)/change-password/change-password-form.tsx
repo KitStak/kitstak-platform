@@ -10,10 +10,11 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   PasswordInput,
+  PasswordRules,
   StrengthMeter,
   authErrorMessage,
 } from '../_components/form-parts';
-import { PASSPHRASE_HINT } from '@/features/signup/password-rules';
+import { isRulesIssue, passwordIssue } from '@/features/signup/password-rules';
 
 const schema = z
   .object({
@@ -67,11 +68,14 @@ export function ChangePasswordForm({
     event.preventDefault();
     setError(null);
     const parsed = schema.safeParse(values);
-    if (!parsed.success) {
-      const flat = z.flattenError(parsed.error).fieldErrors;
+    // The same rules the server checks, said here first: every missing rule at once, the email
+    // name, and a password that is too easy to guess.
+    const issue = passwordIssue(values.newPassword, { email });
+    if (!parsed.success || issue) {
+      const flat: Partial<Record<FieldName, string[]>> = parsed.success ? {} : z.flattenError(parsed.error).fieldErrors;
       setFieldErrors({
         currentPassword: flat.currentPassword?.[0],
-        newPassword: flat.newPassword?.[0],
+        newPassword: issue ?? flat.newPassword?.[0],
         confirmPassword: flat.confirmPassword?.[0],
       });
       return;
@@ -133,23 +137,37 @@ export function ChangePasswordForm({
             />
           )}
         </Field>
+        {/* The checklist under the field says every rule and marks what is missing, so the error is not printed twice. */}
         <Field
           label="New password"
           error={fieldErrors.newPassword}
-          hint={`At least ${PASSWORD_MIN_LENGTH} characters, with a capital letter, a number and a symbol. ${PASSPHRASE_HINT}`}
+          errorHidden={Boolean(fieldErrors.newPassword) && isRulesIssue(values.newPassword)}
         >
           {({ inputId, describedBy, invalid }) => (
-            <>
+            <div className="flex flex-col gap-2">
               <PasswordInput
                 id={inputId}
                 autoComplete="new-password"
                 value={values.newPassword}
-                onChange={(event) => setField('newPassword', event.target.value)}
-                aria-describedby={describedBy}
+                onChange={(event) => {
+                  setField('newPassword', event.target.value);
+                  // After a refusal the sentence follows what is typed, so it is never about an older try.
+                  if (fieldErrors.newPassword) {
+                    const issue = passwordIssue(event.target.value, { email }) ?? undefined;
+                    setFieldErrors((current) => ({ ...current, newPassword: issue }));
+                  }
+                }}
+                aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
                 invalid={invalid}
               />
               <StrengthMeter password={values.newPassword} context={{ email }} />
-            </>
+              <PasswordRules
+                password={values.newPassword}
+                id={`${inputId}-rules`}
+                showMissing={Boolean(fieldErrors.newPassword)}
+                context={{ email }}
+              />
+            </div>
           )}
         </Field>
         <Field label="Confirm new password" error={fieldErrors.confirmPassword}>

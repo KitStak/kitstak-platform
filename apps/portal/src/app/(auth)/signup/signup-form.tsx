@@ -37,6 +37,7 @@ import {
   StepEyebrow,
   StrengthMeter,
   SubmitButton,
+  TAP_BUTTON,
   authErrorMessage,
   hasEmailHint,
   isEmailTaken,
@@ -141,10 +142,12 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
   const set = (field: SignupField) => (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     setValues((current) => ({ ...current, [field]: value }));
-    // A field that showed an error clears as soon as the person fixes it.
+    // A field that showed an error clears as soon as the person fixes it. Until then the sentence
+    // follows what is typed, so it is never about an older try ("still needs a symbol" under a
+    // long password that is refused for another reason).
     if (errors[field]) {
-      const next = { ...values, [field]: value };
-      if (!signupFieldIssue(field, next)) setErrors((current) => ({ ...current, [field]: undefined }));
+      const issue = signupFieldIssue(field, { ...values, [field]: value }) ?? undefined;
+      setErrors((current) => ({ ...current, [field]: issue }));
     }
     if (field === 'email') setEmailTaken(false);
   };
@@ -265,7 +268,8 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
             onError={setFormError}
           />
         ) : null}
-        <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5" data-testid="signup-form" aria-busy={busy}>
+        {/* A little tighter on a phone, so the button stays on the first screen of a small one (360 by 740) with a cart on top. */}
+        <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4 sm:gap-5" data-testid="signup-form" aria-busy={busy}>
           {formError ? <FormAlert>{formError}</FormAlert> : null}
           {emailTaken ? (
             <FormAlert>
@@ -399,7 +403,8 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
                     <button
                       type="button"
                       data-testid="signup-email-code"
-                      className="inline-flex min-h-11 items-center self-start rounded-sm text-sm font-semibold text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                      // 48 px tall to press, one line of text in the layout (`TAP_BUTTON`).
+                      className={`${TAP_BUTTON} inline-flex items-center self-start rounded-sm text-sm font-semibold text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`}
                       onClick={() => {
                         setNoPassword(true);
                         setErrors((current) => ({ ...current, password: undefined }));

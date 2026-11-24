@@ -11,7 +11,7 @@ export function TrialSummaryInline({ summary }: { readonly summary: TrialSummary
     <section
       data-testid="signup-plan-summary-inline"
       aria-label="Your free trial"
-      className="mb-6 rounded-xl border border-border-default bg-sunken/60 px-4 py-3 lg:hidden"
+      className="mb-5 rounded-xl border border-border-default bg-sunken/60 px-4 py-2.5 sm:mb-6 sm:py-3 lg:hidden"
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <p className="text-2xs font-semibold tracking-[0.08em] text-fg-muted uppercase">Your free trial</p>
@@ -27,7 +27,7 @@ export function TrialSummaryInline({ summary }: { readonly summary: TrialSummary
           ))}
         </ul>
       </div>
-      <p className="mt-2 text-sm text-fg-secondary">
+      <p className="mt-1.5 text-sm text-fg-secondary sm:mt-2">
         {summary.thenLine}
         {summary.monthlyLine ? ` ${summary.monthlyLine}` : ''}
       </p>

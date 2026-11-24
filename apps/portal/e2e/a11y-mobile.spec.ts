@@ -53,11 +53,25 @@ test.describe('phones, keyboards and reduced motion', () => {
     await expect(page.getByTestId('signup-form')).toBeVisible({ timeout: 90_000 });
     await expectNoSidewaysScroll(page, '/signup');
     await expectTapTarget(page, 'signup-submit');
+    // Review round 3: on a small phone (360 by 740) with a cart on top, every field and the button are
+    // on the first screen. Under the password there is one line of hint until the first key.
+    await expect(page.getByTestId('signup-submit')).toBeInViewport({ ratio: 1 });
+    await expect(page.getByTestId('password-rules')).toBeHidden();
     // On a phone the first field is not focused by itself, so the keyboard does not cover the form.
     expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('INPUT');
     // The email field asks the phone for the email keyboard and leaves the text alone.
     await expect(page.getByTestId('signup-email')).toHaveAttribute('inputmode', 'email');
     await expect(page.getByTestId('signup-email')).toHaveAttribute('autocapitalize', /none|off/);
+
+    // The meter never says something that is not true: a long password that is easy to guess reads
+    // "Too weak" with the reason, and no line says that 15 characters is enough.
+    await page.getByTestId('signup-password').fill('passwordpassword');
+    await expect(page.getByTestId('password-warning')).toContainText('too easy to guess');
+    await expect(page.getByTestId('password-passphrase-hint')).toHaveCount(0);
+    await expect(page.getByTestId('signup-form')).toContainText('Too weak');
+    await page.getByTestId('signup-password').fill('correct horse battery staple');
+    await expect(page.getByTestId('password-passphrase-hint')).toHaveText('15 or more characters. That is enough.');
+    await expect(page.getByTestId('password-rules')).toBeHidden();
 
     await page.getByTestId('signup-password').fill(person.password);
     await page.getByTestId('signup-submit').click();

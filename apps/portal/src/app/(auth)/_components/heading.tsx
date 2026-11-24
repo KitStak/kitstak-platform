@@ -17,7 +17,7 @@ export function AuthHeading({
   readonly eyebrow?: ReactNode;
 }) {
   return (
-    <div className="mb-7 flex flex-col gap-2">
+    <div className="mb-5 flex flex-col gap-2 sm:mb-7">
       {eyebrow ? <div className="mb-1">{eyebrow}</div> : null}
       <h1 className="text-xl font-semibold tracking-[-0.02em] text-fg sm:text-2xl">{title}</h1>
       {subtitle ? <p className="text-md text-fg-secondary">{subtitle}</p> : null}

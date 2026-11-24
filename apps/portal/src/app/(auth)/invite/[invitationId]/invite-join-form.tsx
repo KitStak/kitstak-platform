@@ -160,8 +160,10 @@ export function InviteJoinForm({
               value={password}
               onChange={(event) => {
                 setPassword(event.target.value);
-                if (errors.password && !passwordIssue(event.target.value, { email })) {
-                  setErrors((current) => ({ ...current, password: undefined }));
+                // After a refusal the sentence follows what is typed, so it is never about an older try.
+                if (errors.password) {
+                  const issue = passwordIssue(event.target.value, { email }) ?? undefined;
+                  setErrors((current) => ({ ...current, password: issue }));
                 }
               }}
               aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
