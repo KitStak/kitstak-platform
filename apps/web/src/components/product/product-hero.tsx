@@ -36,12 +36,8 @@ interface ProductHeroProps {
   readonly phoneFacts?: 2;
 }
 
-/**
- * The size of the app icon beside the product name. The Pulse mark is short and wide inside its
- * square, so it is drawn a little larger to carry the same weight as the others.
- */
+/** The size of the app icon beside the product name. Every app mark fills its square about the same. */
 const CRUMB_ICON_SIZE = 30;
-const CRUMB_ICON_SIZE_WIDE_MARK = 36;
 
 export function ProductHero({
   product,
@@ -64,7 +60,7 @@ export function ProductHero({
             <Link href={ROUTES.products}>Products</Link>
             <span aria-hidden>/</span>
             <span className={styles.crumbHere} aria-current="page">
-              <AppIcon app={app} size={app === 'pulse' ? CRUMB_ICON_SIZE_WIDE_MARK : CRUMB_ICON_SIZE} />
+              <AppIcon app={app} size={CRUMB_ICON_SIZE} />
               {product}
             </span>
             {badge ? <span className={styles.badge}>{badge}</span> : null}

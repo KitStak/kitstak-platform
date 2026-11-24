@@ -3,9 +3,9 @@ import { Logo as KitStakLogo, LogoMark, type LogoMarkProps, type LogoProps } fro
 export { LogoMark };
 export type { LogoMarkProps, LogoProps };
 
-/** The KitStak lockup with the Projects product tag (shared @kitstak/ui logo). */
-export function Logo({ product = 'Projects', ...props }: LogoProps) {
-  return <KitStakLogo product={product} {...props} />;
+/** The KitStak lockup with the Projects icon and product tag (shared @kitstak/ui logo). */
+export function Logo({ product = 'Projects', app = 'projects', ...props }: LogoProps) {
+  return <KitStakLogo product={product} app={app} {...props} />;
 }
 
 /** The Projects app mark (three staggered bars, brand pack `kitstak-icon-projects.svg`). */

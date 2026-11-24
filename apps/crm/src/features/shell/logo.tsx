@@ -8,7 +8,7 @@ import { Logo as KitStakLogo, LogoMark, type LogoMarkProps, type LogoProps } fro
 export { LogoMark };
 export type { LogoMarkProps, LogoProps };
 
-/** The KitStak lockup with the CRM product tag by default. */
-export function Logo({ product = 'CRM', ...props }: LogoProps) {
-  return <KitStakLogo product={product} {...props} />;
+/** The KitStak lockup with the CRM icon and product tag by default. */
+export function Logo({ product = 'CRM', app = 'crm', ...props }: LogoProps) {
+  return <KitStakLogo product={product} app={app} {...props} />;
 }
