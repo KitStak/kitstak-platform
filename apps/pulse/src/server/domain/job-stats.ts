@@ -93,6 +93,7 @@ interface JobRow {
   l30_units: string;
   l30_hours: string;
   l30_entry_days: number;
+  has_project: boolean;
 }
 
 interface ProdRow {
@@ -112,6 +113,8 @@ interface ProdRow {
   std_material_cents: string;
   std_scrap_cents: string;
   needs_rate: boolean;
+  /** The Projects task the line was for (0014), or null. */
+  pm_task_id: string | null;
 }
 
 /** Fully past work days in a row with nothing logged, for rule W5. */
@@ -197,7 +200,8 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
            ce.other_cost_cents::text, re.other_revenue_cents::text, re.true_up_cents::text, re.billed_cents::text,
            l30.l30_revenue::text, l30.l30_labor::text, l30.l30_material::text, l30.l30_other::text, l30.l30_shared::text, l30.l30_units::text, l30.l30_hours::text,
            (SELECT count(DISTINCT p.work_date)::int FROM pulse.production_entries p
-             WHERE p.job_id = j.id AND p.deleted_at IS NULL AND p.work_date > (now() AT TIME ZONE s.timezone)::date - 30) AS l30_entry_days
+             WHERE p.job_id = j.id AND p.deleted_at IS NULL AND p.work_date > (now() AT TIME ZONE s.timezone)::date - 30) AS l30_entry_days,
+           EXISTS (SELECT 1 FROM pulse.job_links jl WHERE jl.org_id = j.org_id AND jl.job_id = j.id AND jl.target_type = 'pm_project') AS has_project
       FROM pulse.jobs j
       JOIN pulse.job_types jt ON jt.id = j.job_type_id
       JOIN pulse.clients c ON c.id = j.client_id
@@ -243,7 +247,7 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
     executor,
     sql`SELECT job_id, to_char(work_date, 'YYYY-MM-DD') AS work_date, units_good::text, units_scrap::text, units_rework::text, hours::text, overtime_hours::text,
                setup_hours::text, hours_confirmed, source, labor_cost_cents::text, shared_cents::text, base_revenue_cents::text, std_material_cents::text,
-               std_scrap_cents::text, needs_rate
+               std_scrap_cents::text, needs_rate, pm_task_id::text AS pm_task_id
           FROM pulse.production_entries
          WHERE org_id = ${ctx.orgId} AND job_id = ANY(${idList}) AND deleted_at IS NULL
          ORDER BY job_id, work_date`,
@@ -377,6 +381,8 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
       (job.pricing_model === 'fixed' && job.fixed_price_cents === null) ||
       (job.pricing_model === 'hourly' && job.bill_rate_cents === null && entries.some((row) => Number(row.hours) > 0 && B(row.base_revenue_cents) === BigInt(0)));
     const needsRateCount = entries.filter((row) => row.needs_rate).length + job.vas_needs_rate;
+    // 0014: on a job linked to a project, hours with no task leave the cost by task incomplete. Projects time rows come in untagged by design.
+    const untaggedLines = job.has_project ? entries.filter((row) => row.pm_task_id === null && Number(row.hours) > 0 && row.source !== 'projects').length : 0;
     // D1: warehouse rows that still need crew hours, plus typed days with units and no hours at all.
     const missingDays = daysMissingHours(days) + days.filter((day) => !day.missingHours && Number(day.unitsGood) > 0 && Number(day.hours) === 0).length;
     const lastEntry = entries.length > 0 ? entries[entries.length - 1]!.work_date : null;
@@ -453,6 +459,7 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
         noPrice,
         daysMissingHours: missingDays,
         serviceNoPrice: job.vas_no_price,
+        untaggedLines,
         noPlan: !planHasCosts(plan),
         summary: risk.summary,
       },

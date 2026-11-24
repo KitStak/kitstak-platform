@@ -38,6 +38,8 @@ interface LineState {
   readonly laborClassId: string;
   /** "day" for a new line; a line read from the day keeps its shift. */
   readonly shift: string;
+  /** The Projects task of a line read from the day, kept as it was. New lines are untagged. */
+  readonly pmTaskId: string | null;
   readonly people: string;
   readonly hoursEach: string;
   readonly hours: string;
@@ -53,6 +55,7 @@ const blankLine = (laborClassId: string): LineState => ({
   id: null,
   laborClassId,
   shift: 'day',
+  pmTaskId: null,
   people: '',
   hoursEach: '',
   hours: '',
@@ -120,6 +123,7 @@ export function WorkEntryForm({
           id: row.id,
           laborClassId: row.laborClassId ?? '',
           shift: row.shift || 'day',
+          pmTaskId: row.pmTaskId ?? null,
           people: tidy(row.headcount),
           hoursEach: hoursEachFrom(row.hours, row.headcount),
           hours: tidy(row.hours),
@@ -142,7 +146,7 @@ export function WorkEntryForm({
         if (line.key !== key) return line;
         // People times hours each fills labor hours, the same rule as the Log work grid.
         const next = applyField(
-          { ...line, unitsGood: '', unitsScrap: '', unitsRework: '', note: '' },
+          { ...line, unitsGood: '', unitsScrap: '', unitsRework: '', note: '', pmTaskId: null, taskUnits: '' },
           field,
           text,
         );
@@ -185,7 +189,7 @@ export function WorkEntryForm({
     ...lines
       .map((line) =>
         crewQuestion(
-          { ...line, unitsGood: '', unitsScrap: '', unitsRework: '', note: '' },
+          { ...line, unitsGood: '', unitsScrap: '', unitsRework: '', note: '', pmTaskId: null, taskUnits: '' },
           shiftHours,
         ),
       )
@@ -224,7 +228,7 @@ export function WorkEntryForm({
     if (lines.length === 0) next.lines = 'Add at least one labor class.';
     if (!(goodNumber && goodNumber > 0) && !lines.some((line) => (parseTyped(line.hours) ?? 0) > 0))
       next.unitsGood ??= 'Type the units made, the hours worked, or both.';
-    for (const index of repeatedLaborLines(lines.map((line) => ({ laborClassId: line.laborClassId || null, shift: line.shift }))))
+    for (const index of repeatedLaborLines(lines.map((line) => ({ laborClassId: line.laborClassId || null, shift: line.shift, pmTaskId: line.pmTaskId }))))
       next[`laborClassId.${index}`] = 'Each labor class can only be on the day once. Put its people and hours on one line.';
     return next;
   };
@@ -256,6 +260,7 @@ export function WorkEntryForm({
           id: line.id,
           laborClassId: line.laborClassId || null,
           shift: line.shift,
+          pmTaskId: line.pmTaskId,
           headcount: (parseTyped(line.people) ?? 0) > 0 ? fixed(line.people, 2) : null,
           hours: fixed(line.hours, 2),
           setupHours: fixed(line.setup, 2),

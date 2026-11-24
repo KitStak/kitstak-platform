@@ -8,6 +8,7 @@
     { "idx": 9, "version": "7", "when": 1795305600000, "tag": "0009_db_guard_role", "breakpoints": true },
     { "idx": 11, "version": "7", "when": 1795478400000, "tag": "0011_wms_contract_prices_switch", "breakpoints": true },
     { "idx": 12, "version": "7", "when": 1795564800000, "tag": "0012_db_guard_set_grant", "breakpoints": true },
-    { "idx": 13, "version": "7", "when": 1795651200000, "tag": "0013_company_cost_spread", "breakpoints": true }
+    { "idx": 13, "version": "7", "when": 1795651200000, "tag": "0013_company_cost_spread", "breakpoints": true },
+    { "idx": 14, "version": "7", "when": 1795910400000, "tag": "0014_entry_tasks", "breakpoints": true }
   ]
 }

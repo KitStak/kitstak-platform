@@ -310,6 +310,7 @@ send files with `csvResponse(fileName, body)`.
 | `GET jobs/attention`, `jobs/counts`, `jobs/deleted` | `limit` / `client,jobType,site` / | `JobListItemDTO[]`, `{ losing, at_risk, heads_up, on_track, no_data, none }`, `DeletedJobDTO[]` (a job list item plus `deletedById`, from the activity log) |
 | `GET jobs/by-link` | `type (crm_deal\|crm_account\|wms_work_order\|wms_shipment_order\|wms_client\|pm_project\|pm_task\|core_customer),id` | `JobListItemDTO[]` |
 | `GET jobs/[ref]`, `/plans`, `/prices`, `/days` | id or number; `by=day\|week\|month` | `JobDetailDTO`, `JobPlansDTO`, `JobPriceDTO[]`, `ProfitResponse` for the job's whole life |
+| `GET jobs/[ref]/tasks`, `/tasks/costs` | id or number | `{ hasProject, tasks: { id, ref, title, done }[] }`, `JobTaskCostsDTO` (hours, labor cost, share, task units by Projects task, untagged last; SPEC 8.4) |
 | `GET log`, `log/previous-crew` | `date,site` | `LogGridDTO`, `PreviousCrewDTO[]` |
 | `PUT log/rows` | JSON production row, plus `seen` (ids of the lines of that job and day the editor shows) | `{ entry, created }`; a 409 carries `error.fresh` (the newer row). A new line on a day that holds a line not in `seen` is 409 with `error.reason` "day_changed" and `error.day` |
 | `PUT log/days` | `{ jobId, workDate, mode: create\|edit, fromDate?, read?: [{ id, version }], lines[] }` | `{ entries, created, updated, removed }`; a 409 carries `error.reason` (`day_exists` or `stale`), `error.workDate` and `error.fresh` (the day as it is now) |

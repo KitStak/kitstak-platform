@@ -41,6 +41,7 @@ import { shortDate, weekdayName } from '@/lib/profit/calendar';
 import { routes } from '@/lib/routes';
 import { deleteProductionEntriesAction, restoreProductionEntriesAction } from '@/server/actions/log';
 import { WorkEntryForm, type DaySaved } from './forms/work-entry-form';
+import { JobTaskCosts } from './job-task-costs';
 import { useDeleteWithUndo, useJobProduction, useRefreshJob } from './job-data';
 import { rowPace, shiftDate, singularUnit } from './job-math';
 import type { JobTabProps } from './job-overview';
@@ -456,6 +457,8 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
           />
         </Panel>
       ) : null}
+
+      <JobTaskCosts job={job} seesMoney={seesMoney} />
 
       <Panel
         title="Entries"

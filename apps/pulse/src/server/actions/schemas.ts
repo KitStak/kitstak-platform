@@ -146,6 +146,8 @@ export const productionInput = z.object({
   setupHours: hours.optional(),
   hoursConfirmed: z.boolean().optional(),
   note: text(1000).nullable().optional(),
+  pmTaskId: uuid.nullable().optional(),
+  taskUnits: quantity.nullable().optional(),
   version,
 });
 
@@ -163,6 +165,8 @@ export const productionDayLine = z.object({
   setupHours: hours.optional(),
   hoursConfirmed: z.boolean().optional(),
   note: text(1000).nullable().optional(),
+  pmTaskId: uuid.nullable().optional(),
+  taskUnits: quantity.nullable().optional(),
 });
 
 /** A whole day of work on one job: a new day, or an edit of the day that was read. */

@@ -112,6 +112,8 @@ export interface LaborLineInput {
   readonly laborClassId: string | null;
   /** The shift of a line read from the day ("day", "night"). New lines are on the day shift. */
   readonly shift?: string | null;
+  /** The Projects task of a line read from the day. Kept as it was; new lines are untagged. */
+  readonly pmTaskId?: string | null;
   readonly headcount: string | null;
   readonly hours: string;
   readonly setupHours: string;
@@ -132,6 +134,8 @@ export interface DayLinePayload {
   readonly overtimeHours: string;
   readonly hoursConfirmed?: boolean;
   readonly note: string | null;
+  readonly pmTaskId?: string | null;
+  readonly taskUnits?: string | null;
 }
 
 /**
@@ -160,6 +164,7 @@ export function planDayLines(input: {
     overtimeHours: line.overtimeHours,
     hoursConfirmed: true,
     note: index === 0 ? input.note : null,
+    ...(line.pmTaskId !== undefined ? { pmTaskId: line.pmTaskId } : {}),
   }));
 }
 
@@ -178,16 +183,18 @@ export function restoreDayLines(before: readonly ProductionEntryDTO[], liveIds: 
     overtimeHours: row.overtimeHours,
     hoursConfirmed: row.hoursConfirmed,
     note: row.note,
+    pmTaskId: row.pmTaskId,
+    taskUnits: row.taskUnits,
   }));
 }
 
-const lineSlot = (line: Pick<LaborLineInput, 'laborClassId' | 'shift'>): string => `${line.laborClassId ?? ''}|${line.shift || 'day'}`;
+const lineSlot = (line: Pick<LaborLineInput, 'laborClassId' | 'shift' | 'pmTaskId'>): string => `${line.laborClassId ?? ''}|${line.shift || 'day'}|${line.pmTaskId ?? ''}`;
 
 /**
  * The index of every line whose labor class is on more than one line of the same shift. One day
  * holds one entry per labor class and shift, so a day line and a night line of one class are fine.
  */
-export function repeatedLaborLines(lines: readonly Pick<LaborLineInput, 'laborClassId' | 'shift'>[]): number[] {
+export function repeatedLaborLines(lines: readonly Pick<LaborLineInput, 'laborClassId' | 'shift' | 'pmTaskId'>[]): number[] {
   const count = new Map<string, number>();
   for (const line of lines) count.set(lineSlot(line), (count.get(lineSlot(line)) ?? 0) + 1);
   return lines.flatMap((line, index) => ((count.get(lineSlot(line)) ?? 0) > 1 ? [index] : []));

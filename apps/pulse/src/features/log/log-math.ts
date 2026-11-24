@@ -38,6 +38,10 @@ export interface LineValues {
   setup: string;
   note: string;
   laborClassId: string | null;
+  /** The Projects task the hours were for, or null (untagged). */
+  pmTaskId: string | null;
+  /** Optional count of the task's output. Never part of units good. */
+  taskUnits: string;
 }
 
 export const EMPTY_VALUES: LineValues = {
@@ -51,6 +55,8 @@ export const EMPTY_VALUES: LineValues = {
   setup: '',
   note: '',
   laborClassId: null,
+  pmTaskId: null,
+  taskUnits: '',
 };
 
 /** "1,250" or " 12.50 " to a plain number. Empty text is 0. Returns null for text that is not a number of 0 or more. */
@@ -94,6 +100,8 @@ export function valuesFromEntry(entry: ProductionEntryDTO): LineValues {
     setup: tidy(entry.setupHours),
     note: entry.note ?? '',
     laborClassId: entry.laborClassId,
+    pmTaskId: entry.pmTaskId ?? null,
+    taskUnits: tidy(entry.taskUnits),
   };
 }
 
@@ -101,7 +109,7 @@ export function valuesFromEntry(entry: ProductionEntryDTO): LineValues {
  * Applies one typed cell. Typing people or hours each fills labor hours (people times hours
  * each); typing labor hours keeps it and works hours each back out, so an uneven crew can be typed.
  */
-export function applyField(values: LineValues, field: LineField | 'setup', text: string): LineValues {
+export function applyField(values: LineValues, field: LineField | 'setup' | 'taskUnits', text: string): LineValues {
   const next = { ...values, [field]: text };
   if (field === 'people' || field === 'hoursEach') {
     const people = parseTyped(next.people);
@@ -130,6 +138,7 @@ export function lineProblem(values: LineValues): string | null {
     hours: 'Labor hours',
     overtime: 'Overtime',
     setup: 'Setup hours',
+    taskUnits: 'Task units',
   };
   for (const [field, label] of Object.entries(labels)) {
     if (parseTyped(values[field as keyof LineValues] as string) === null)
@@ -146,18 +155,21 @@ export function lineProblem(values: LineValues): string | null {
   if ((parseTyped(values.overtime) ?? 0) > hours) return 'Overtime cannot be more than the labor hours.';
   if ((parseTyped(values.setup) ?? 0) > hours) return 'Setup hours cannot be more than the labor hours.';
   if ((parseTyped(values.hoursEach) ?? 0) > 24) return 'Hours each cannot be more than 24.';
+  if ((parseTyped(values.taskUnits) ?? 0) >= 100_000_000) return 'Task units is too big. Type a number under 100,000,000.';
+  if ((parseTyped(values.taskUnits) ?? 0) > 0 && !values.pmTaskId) return 'Task units need a task. Pick the task, or clear Task units.';
   return null;
 }
 
 export const isBlank = (values: LineValues): boolean =>
-  ['unitsGood', 'unitsScrap', 'unitsRework', 'people', 'hours', 'overtime', 'setup'].every(
+  ['unitsGood', 'unitsScrap', 'unitsRework', 'people', 'hours', 'overtime', 'setup', 'taskUnits'].every(
     (field) => (parseTyped(values[field as keyof LineValues] as string) ?? 0) === 0,
   ) && values.note.trim() === '';
 
 export const sameValues = (a: LineValues, b: LineValues): boolean =>
   a.laborClassId === b.laborClassId &&
+  (a.pmTaskId ?? null) === (b.pmTaskId ?? null) &&
   a.note.trim() === b.note.trim() &&
-  (['unitsGood', 'unitsScrap', 'unitsRework', 'people', 'hours', 'overtime', 'setup'] as const).every(
+  (['unitsGood', 'unitsScrap', 'unitsRework', 'people', 'hours', 'overtime', 'setup', 'taskUnits'] as const).every(
     (field) => (parseTyped(a[field]) ?? -1) === (parseTyped(b[field]) ?? -1),
   );
 
@@ -174,6 +186,8 @@ export function toPayload(values: LineValues): {
   setupHours: string;
   note: string | null;
   laborClassId: string | null;
+  pmTaskId: string | null;
+  taskUnits: string | null;
 } {
   const people = parseTyped(values.people) ?? 0;
   return {
@@ -186,6 +200,8 @@ export function toPayload(values: LineValues): {
     setupHours: fixed(values.setup, 2),
     note: values.note.trim() === '' ? null : values.note.trim(),
     laborClassId: values.laborClassId,
+    pmTaskId: values.pmTaskId ?? null,
+    taskUnits: (values.taskUnits ?? '').trim() === '' ? null : fixed(values.taskUnits, 3),
   };
 }
 

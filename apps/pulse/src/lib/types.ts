@@ -577,6 +577,10 @@ export interface ProductionEntryDTO extends StreamRowBase {
   readonly overtimeHours: DecimalString;
   readonly setupHours: DecimalString;
   readonly hoursConfirmed: boolean;
+  /** The Projects task the hours were for, or null (untagged). */
+  readonly pmTaskId: string | null;
+  /** Optional count of the task's output, apart from units_good. */
+  readonly taskUnits: DecimalString | null;
   readonly rateCents: MoneyCents;
   readonly overtimeRateCents: MoneyCents;
   readonly laborCostCents: MoneyCents;
@@ -696,6 +700,23 @@ export interface LogGridRowDTO {
   readonly plannedUnits: DecimalString;
   readonly unitsDone: DecimalString;
   readonly entries: readonly ProductionEntryDTO[];
+  /** The job is linked to a Projects project: its lines can be tagged with a task (0014). */
+  readonly hasProject: boolean;
+  /** Tasks of the linked projects. Deleted ones only when a line of this day still points at one. */
+  readonly tasks: readonly LogGridTaskDTO[];
+  /** The task of this job's latest tagged line on or before this day: the default for a new line. */
+  readonly lastTaskId: string | null;
+}
+
+/** A Projects task a Log work line can be tagged with. */
+export interface LogGridTaskDTO {
+  readonly id: string;
+  /** Like ADV-12. */
+  readonly ref: string;
+  readonly title: string;
+  readonly done: boolean;
+  /** Deleted in Projects. Shown for old lines, never offered for new ones. */
+  readonly gone: boolean;
 }
 
 export interface DayReviewDTO {
@@ -1468,4 +1489,29 @@ export interface ReportRunDTO {
   readonly createdAt: string;
   /** False when the build holds money and the reader may not see money. */
   readonly canOpen: boolean;
+}
+
+/** One task of a job's cost by task (0014). `taskId` null is the untagged lines. */
+export interface JobTaskCostRowDTO {
+  readonly taskId: string | null;
+  readonly title: string;
+  /** Like ADV-12, or null for untagged lines and tasks no longer in Projects. */
+  readonly ref: string | null;
+  readonly entries: number;
+  readonly hours: DecimalString;
+  readonly setupHours: DecimalString;
+  readonly laborCostCents: MoneyCents;
+  /** Share of the job's labor cost, 0 to 100, or null when money is hidden. */
+  readonly sharePct: number | null;
+  readonly taskUnits: DecimalString | null;
+  readonly unitsPerHour: DecimalString | null;
+  readonly gone: boolean;
+}
+
+export interface JobTaskCostsDTO {
+  readonly hasProject: boolean;
+  readonly rows: readonly JobTaskCostRowDTO[];
+  readonly untaggedEntries: number;
+  readonly untaggedHours: DecimalString;
+  readonly moneyHidden: boolean;
 }

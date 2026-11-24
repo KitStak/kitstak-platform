@@ -16,6 +16,7 @@ export * from './people';
 export * from './periods';
 export * from './plans';
 export * from './production';
+export * from './job-tasks';
 export * from './profit';
 export * from './recalc';
 export * from './reviews';
