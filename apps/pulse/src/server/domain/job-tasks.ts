@@ -14,7 +14,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { scoped } from '@/server/db/scope';
 import { productionEntries } from '@/server/db/schema';
-import { tasksOfProjects, type PmTask } from '@/server/integrations/projects';
+import { pickableTasks, tasksOfProjects, type PmTask } from '@/server/integrations/projects';
 import type { JobTaskCostRowDTO, JobTaskCostsDTO } from '@/lib/types';
 import { moneyOut, type DomainContext } from './_shared';
 import { requirePulse } from './access';
@@ -46,7 +46,7 @@ export const listJobTasks = scoped(async function listJobTasks(ctx: DomainContex
   const job = await getJobRowForReader(ctx, jobRef, access);
   const projectIds = await linkedProjectIds(db, ctx, job.id);
   if (projectIds.length === 0) return { hasProject: false, tasks: [] };
-  const tasks = await tasksOfProjects(ctx, projectIds);
+  const tasks = pickableTasks(await tasksOfProjects(ctx, projectIds));
   return { hasProject: tasks.length > 0, tasks: tasks.map((task) => ({ id: task.id, ref: refOf(task), title: task.title, done: task.done })) };
 });
 

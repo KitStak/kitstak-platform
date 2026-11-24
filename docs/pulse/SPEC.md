@@ -1241,7 +1241,7 @@ fee and bill rows there, runs the sync and drops it. Pulse never writes to a rea
   job, day, shift, labor class **and task**, so temps on puzzles and temps on kit pack the same day are two lines. Kiosk and time punch rows keep landing on the untagged line.
 - `task_units` counts the task's own output (puzzles built, labels applied). It needs a task, and it never counts toward the job's units, progress, revenue or pace.
   With task units, the task gets its own units per labor hour.
-- **Log work**: a job with a linked project shows a Task picker and a Task units box under each line. A new line starts on the job's last tagged task.
+- **Log work**: a job with a linked project shows a Task picker and a Task units box under each line. A new line starts on the job's last tagged task. The picker shows the work people log hours against: when a linked project has a section named **Floor**, only that section's tasks are listed, so office tasks (buying, approvals) stay out; a project without one lists every task. Done and deleted tasks are left out of the list, except one a line already uses. Saving and imports still accept any task on the job's projects.
   Tasks deleted in Projects are not offered, but a line that already points at one still shows its name.
 - **Work log**: a "Cost by task" panel (labor hours, labor cost, share of labor cost, task units, units per labor hour), untagged lines last. Routes `GET jobs/[ref]/tasks`
   (`{ hasProject, tasks }`) and `GET jobs/[ref]/tasks/costs` (`JobTaskCostsDTO`).

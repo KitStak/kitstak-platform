@@ -25,9 +25,9 @@ const ELSEWHERE = '00000000-0000-4000-8000-0000000000b3';
 vi.mock('@/server/integrations/projects', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/server/integrations/projects')>();
   const tasks: PmTask[] = [
-    { id: PUZZLES, projectId: PROJECT, projectKey: 'ADV', number: 1, title: 'Puzzles', done: false, gone: false },
-    { id: KIT_PACK, projectId: PROJECT, projectKey: 'ADV', number: 2, title: 'Kit pack', done: false, gone: false },
-    { id: ELSEWHERE, projectId: OTHER_PROJECT, projectKey: 'OTH', number: 1, title: 'Other work', done: false, gone: false },
+    { id: PUZZLES, projectId: PROJECT, projectKey: 'ADV', number: 1, title: 'Puzzles', done: false, gone: false, sectionName: null },
+    { id: KIT_PACK, projectId: PROJECT, projectKey: 'ADV', number: 2, title: 'Kit pack', done: false, gone: false, sectionName: null },
+    { id: ELSEWHERE, projectId: OTHER_PROJECT, projectKey: 'OTH', number: 1, title: 'Other work', done: false, gone: false, sectionName: null },
   ];
   return { ...real, tasksOfProjects: async (_ctx: unknown, ids: readonly string[]) => tasks.filter((task) => ids.includes(task.projectId)) };
 });
