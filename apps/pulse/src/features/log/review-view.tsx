@@ -1,6 +1,7 @@
 'use client';
 /** Review the day: the manager queue. Odd rows in plain words, missing jobs, approve or send back. */
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -74,11 +75,14 @@ export function flagWords(flag: Readonly<Record<string, unknown>>): string {
 
 export function ReviewView({
   initial,
+  month = null,
   sites,
   laborClasses,
   thresholds,
 }: {
   readonly initial: DayQueueDTO[];
+  /** A month picked from the month close (`2026-01`): its days are listed instead of the last 21. */
+  readonly month?: { readonly value: string; readonly label: string } | null;
   readonly sites: readonly SiteDTO[];
   readonly laborClasses: readonly LaborClassDTO[];
   readonly thresholds: PaceThresholds;
@@ -86,7 +90,7 @@ export function ReviewView({
   const [siteId, setSiteId] = useState<string>('all');
   const [show, setShow] = useState<Show>('todo');
   const queue = useReviewQueue(
-    { siteId: siteId === 'all' ? null : siteId, days: 21 },
+    month ? { siteId: siteId === 'all' ? null : siteId, month: month.value } : { siteId: siteId === 'all' ? null : siteId, days: 21 },
     { initialData: siteId === 'all' ? initial : undefined },
   );
   const days = useMemo(() => queue.data ?? [], [queue.data]);
@@ -131,7 +135,16 @@ export function ReviewView({
             ]}
           />
         ) : null}
-        <span className="ml-auto text-xs text-fg-muted">The last 21 days</span>
+        {month ? (
+          <span className="ml-auto flex items-center gap-2 text-xs text-fg-muted">
+            {`Days in ${month.label}`}
+            <Link href={routes.logReview()} className="rounded-sm font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-focus">
+              Show the last 21 days
+            </Link>
+          </span>
+        ) : (
+          <span className="ml-auto text-xs text-fg-muted">The last 21 days</span>
+        )}
       </div>
       {queue.isLoading ? (
         <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading the days">
@@ -157,7 +170,7 @@ export function ReviewView({
         <Panel>
           <Teach
             icon={ClipboardCheck}
-            title={show === 'approved' ? 'No approved days in the last 21 days' : 'Nothing to review'}
+            title={show === 'approved' ? `No approved days in ${month ? month.label : 'the last 21 days'}` : month ? `Nothing to review in ${month.label}` : 'Nothing to review'}
             why="When work is logged for a day it lands here. Pulse points out rows that look off, like units with no hours or a pace far from the target, so you can fix them before the numbers are used."
             points={[
               'Units with no hours',

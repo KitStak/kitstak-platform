@@ -62,8 +62,11 @@ export const routes = {
   job: (ref: string) => `/jobs/${encodeURIComponent(ref)}`,
   jobTab: (ref: string, tab: JobTab) => (tab === 'overview' ? `/jobs/${encodeURIComponent(ref)}` : `/jobs/${encodeURIComponent(ref)}/${tab}`),
   log: (opts?: { date?: string; job?: string; site?: string }) => withQuery('/log', { date: opts?.date, job: opts?.job, site: opts?.site }),
-  logReview: () => '/log/review',
-  logEntries: () => '/log/entries',
+  /** The days to review. With a month (`2026-01`) it lists that month's days, not the last 21. */
+  logReview: (opts?: { month?: string }) => withQuery('/log/review', { month: opts?.month ? opts.month.slice(0, 7) : undefined }),
+  /** Every production entry. `from`/`to` pick the days, `needsHours` keeps rows with units and no hours. */
+  logEntries: (opts?: { from?: string; to?: string; needsHours?: boolean }) =>
+    withQuery('/log/entries', { from: opts?.from, to: opts?.to, needsHours: opts?.needsHours ? '1' : undefined }),
   /** Many days at once (the bulk grid). */
   logBulk: () => '/log/bulk',
   profit: (opts?: { by?: ProfitView; client?: string; jobType?: string; from?: string; to?: string }) =>
@@ -77,7 +80,9 @@ export const routes = {
    */
   servicesNoPrice: (month?: string) => withQuery('/services', { show: 'no-price', month: month ? month.slice(0, 7) : undefined }),
   service: (id: string) => `/services/${encodeURIComponent(id)}`,
-  labor: (tab?: LaborTab) => withQuery('/labor', { tab }),
+  /** A labor tab. With `range` the Time and Cost tabs open on exactly those days. */
+  labor: (tab?: LaborTab, range?: { from: string; to: string }) =>
+    withQuery('/labor', { tab, range: range ? 'custom' : undefined, from: range?.from, to: range?.to }),
   targetPace: () => '/target-pace',
   calculator: (opts?: { job?: string; scenario?: string }) => withQuery('/calculator', { job: opts?.job, scenario: opts?.scenario }),
   goals: () => '/goals',
