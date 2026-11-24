@@ -353,7 +353,7 @@ export class Sandbox {
    * Like `sync`, and keeps reading until an event of the given type has been delivered. Stripe makes
    * some events (a failed payment of an invoice, for one) a while after the others of the same step.
    */
-  async syncUntil(type: string, timeoutMs = 90_000): Promise<Delivered[]> {
+  async syncUntil(type: string, timeoutMs = 180_000): Promise<Delivered[]> {
     const out: Delivered[] = [];
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -361,6 +361,20 @@ export class Sandbox {
       if (out.some((event) => event.type === type)) return out;
       if (Date.now() > deadline) throw new Error(`Stripe made no ${type} event for ${this.customerId} in ${String(timeoutMs / 1000)} seconds.`);
     }
+  }
+
+  /**
+   * Waits until Stripe's own answer passes `done` (a retry has run, a status has moved), then
+   * delivers every event that step made. For steps where the event that proves them can already
+   * have come in with an earlier read.
+   */
+  async syncWhen(done: () => Promise<boolean>, timeoutMs = 180_000): Promise<Delivered[]> {
+    const deadline = Date.now() + timeoutMs;
+    while (!(await done())) {
+      if (Date.now() > deadline) throw new Error(`Stripe did not finish the step for ${this.customerId} in ${String(timeoutMs / 1000)} seconds.`);
+      await sleep(2000);
+    }
+    return this.sync();
   }
 
   async rows<T = Json>(sql: string, params: readonly unknown[] = []): Promise<T[]> {
