@@ -141,6 +141,24 @@ ENTITLEMENTS_DEV_ALLOW_ALL=0 deploy/dev/app-start.sh crm projects pulse wms
 - Signup, sign in, the launcher, every billing tab and organization settings were opened at 1440 px in light
   and at 390 px in dark: no console error and no failed request.
 
+2026-11-24, gate round 2, after the review round 2 fixes. Portal, CRM, Projects, Pulse and WMS ran with
+`ENTITLEMENTS_DEV_ALLOW_ALL=0`, and a built portal ran in production mode with no keys on port 3310:
+
+- `E2E_BILLING_OFF_URL=http://localhost:3310 pnpm -F kitstak-portal e2e`: 40 tests, 40 passed, none skipped,
+  8.1 minutes. The integration spec printed: checked CRM trial banner, Projects, Pulse and WMS lock screens
+  with price, Pulse added from its lock screen in 2 clicks, Portal tiles follow the plan. Skipped: nothing.
+  The first full run of this round had 38 passed and 2 failed. Both were faults in the tests, not in the
+  product, and both are fixed: the three tab test waited for `notice=plan_updated` in an address that
+  billing home cleans as soon as the message shows, and the test tool helper waited for a button that
+  leaves the page when the trial ends.
+- Unit tests: billing 484, portal 215, shared UI 77, entitlements 44, CRM 843, Projects 291, Pulse 906,
+  marketing site 589, all passed. The Pulse test that used to fail now and then
+  (`production-day.db.test.ts`) passes: a saved day now comes back in the order its lines were sent.
+  WMS: 2593 passed, and the same 5 tests in 4 files as before failed. This work does not touch those files
+  (task grid query, page header crumbs, token alias rule, one timing budget).
+- Signup, sign in, the launcher, every billing tab, organization settings and the 404 page were opened at
+  1440 px in light and at 390 px in dark: no console error and no failed request.
+
 Real Stripe and real email were not part of any run. Do not trust this file for a pass count: run the
 suite.
 
