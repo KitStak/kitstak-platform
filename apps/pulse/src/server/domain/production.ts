@@ -9,7 +9,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lte, sql, type SQL } from 'dr
 import { db, type Executor } from '@/server/db';
 import { scoped } from '@/server/db/scope';
 import { clients, dayReviews, jobLinks, jobStats, jobs, productionEntries } from '@/server/db/schema';
-import { tasksOfProjects } from '@/server/integrations/projects';
+import { pickableTasks, tasksOfProjects } from '@/server/integrations/projects';
 import { conflict, DomainError, forbidden, invalid, notFound } from '@/server/errors';
 import { SUPERVISOR_EDIT_DAYS, type JobStatusValue, type StreamSource } from '@/lib/constants';
 import { canPulse } from '@/lib/permissions';
@@ -776,9 +776,11 @@ export const getLogGrid = scoped(async function getLogGrid(ctx: DomainContext, o
       )
     : [];
   const lastTaskOf = new Map(lastTasks.map((row) => [row.job_id, row.pm_task_id]));
+  const keptTaskIds = new Set(taggedIds);
   const tasksOfJob = (jobId: string): LogGridTaskDTO[] => {
     const projects = new Set(links.filter((link) => link.jobId === jobId).map((link) => link.projectId));
-    return allTasks.filter((task) => projects.has(task.projectId)).map((task) => ({ id: task.id, ref: `${task.projectKey}-${task.number}`, title: task.title, done: task.done, gone: task.gone }));
+    // Floor tasks only when the project has a Floor section; done tasks only where a line of the day still uses one.
+    return pickableTasks(allTasks.filter((task) => projects.has(task.projectId)), keptTaskIds).map((task) => ({ id: task.id, ref: `${task.projectKey}-${task.number}`, title: task.title, done: task.done, gone: task.gone }));
   };
   const gridRows: LogGridRowDTO[] = jobRows.map(({ job, clientName, standardUph, unitsDone }) => ({
     jobId: job.id,

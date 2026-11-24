@@ -155,6 +155,26 @@ export interface PmTask {
   readonly done: boolean;
   /** True when the task was deleted in Projects. Kept so old entries still show its name. */
   readonly gone: boolean;
+  /** The project section the task sits in, like "Floor", or null. */
+  readonly sectionName: string | null;
+}
+
+/** The section that holds the work people log hours against. */
+export const FLOOR_SECTION = 'floor';
+
+/**
+ * The tasks an operator picks from on Log work. In a project with a "Floor" section only its tasks
+ * are offered, so office tasks (buying, approvals) stay out of the list; a project without one offers
+ * every task. Done and deleted tasks are left out, except a task in `keepIds` (a line already points
+ * at it, so the picker must still show it).
+ */
+export function pickableTasks(tasks: readonly PmTask[], keepIds: ReadonlySet<string> = new Set()): PmTask[] {
+  const withFloor = new Set(tasks.filter((task) => !task.gone && task.sectionName?.trim().toLowerCase() === FLOOR_SECTION).map((task) => task.projectId));
+  return tasks.filter((task) => {
+    if (keepIds.has(task.id)) return true;
+    if (task.gone || task.done) return false;
+    return !withFloor.has(task.projectId) || task.sectionName?.trim().toLowerCase() === FLOOR_SECTION;
+  });
 }
 
 /**
@@ -169,19 +189,20 @@ export const tasksOfProjects = scoped(async function tasksOfProjects(ctx: Domain
   const keep = [...new Set(keepIds.filter((id) => UUID.test(id)))];
   const kept = keep.length > 0 ? sql`or t.id in (${sql.join(keep.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``;
   try {
-    const found = await rows<{ id: string; project_id: string; key: string; number: number; title: string; done: boolean; gone: boolean }>(
+    const found = await rows<{ id: string; project_id: string; key: string; number: number; title: string; done: boolean; gone: boolean; section_name: string | null }>(
       siblingDb,
       sql`select t.id::text as id, t.project_id::text as project_id, p.key, t.number, t.title,
-                 coalesce(s.category = 'done', false) as done, (t.deleted_at is not null) as gone
+                 coalesce(s.category = 'done', false) as done, (t.deleted_at is not null) as gone, sec.name as section_name
             from pm.tasks t
             join pm.projects p on p.id = t.project_id
             left join pm.statuses s on s.id = t.status_id
+            left join pm.sections sec on sec.id = t.section_id
            where t.org_id = ${ctx.orgId}
              and t.project_id in (${sql.join(clean.map((id) => sql`${id}::uuid`), sql`, `)})
              and (t.deleted_at is null ${kept})
            order by p.key, t.position, t.number`,
     );
-    return found.map((row) => ({ id: row.id, projectId: row.project_id, projectKey: row.key, number: Number(row.number), title: row.title, done: Boolean(row.done), gone: Boolean(row.gone) }));
+    return found.map((row) => ({ id: row.id, projectId: row.project_id, projectKey: row.key, number: Number(row.number), title: row.title, done: Boolean(row.done), gone: Boolean(row.gone), sectionName: row.section_name ?? null }));
   } catch (error) {
     logSoftFail(ctx.orgId, 'projects.tasksOfProjects', error);
     return [];
