@@ -19,6 +19,16 @@ TIMEOUT="${KITSTAK_START_TIMEOUT:-240}"
 
 http_code() { curl -s -o /dev/null -m 120 -w '%{http_code}' "$1" 2>/dev/null || true; }
 
+# True when some `next dev` process already runs from this app folder (on any port). Its cache is
+# in use then, and must not be removed.
+dev_server_runs_in() {
+  local pid
+  for pid in $(pgrep -f 'next(/dist/bin/next)? dev' 2>/dev/null || true); do
+    [ "$(readlink "/proc/$pid/cwd" 2>/dev/null || true)" = "$1" ] && return 0
+  done
+  return 1
+}
+
 start_one() {
   local app="$1" port ready log pid code waited=0
   port="$(app_port "$app")" || { echo "Unknown app: $app" >&2; return 2; }
@@ -39,6 +49,14 @@ start_one() {
   fi
   if [ "$app" != "web" ] && ! port_open "$PG_PORT"; then
     "$DEV_DIR/db-start.sh" >/dev/null
+  fi
+
+  # Start from a clean dev cache. A cache left behind by a server that was stopped by the memory
+  # limit, or that was still writing when the next one started, can make the new server tell every
+  # browser tab to reload without end (docs/billing/DEV.md, "A page reloads itself over and over").
+  # The cache is build output only. KITSTAK_KEEP_DEV_CACHE=1 keeps it.
+  if [ "${KITSTAK_KEEP_DEV_CACHE:-0}" != "1" ] && ! dev_server_runs_in "$REPO_ROOT/apps/$app"; then
+    rm -rf "$REPO_ROOT/apps/$app/.next/dev"
   fi
 
   : >"$log"

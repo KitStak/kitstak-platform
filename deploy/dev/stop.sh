@@ -18,11 +18,12 @@ port_pids() {
 }
 
 stop_app() {
-  local app="$1" port pid_file pid
+  local app="$1" port pid_file pid group=""
   port="$(app_port "$app")" || { echo "Unknown app: $app" >&2; return 2; }
   pid_file="$PID_DIR/$app.pid"
   if [ -f "$pid_file" ]; then
     pid="$(cat "$pid_file")"
+    group="$pid"
     # Negative pid = the whole process group that app-start.sh created with setsid.
     kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
     rm -f "$pid_file"
@@ -39,6 +40,16 @@ stop_app() {
   if port_open "$port"; then
     echo "STILL UP  $app on port $port (stop it by hand)" >&2
     return 1
+  fi
+  # The port closes before the server is gone: next dev still writes its cache on the way out. Wait
+  # for the whole group, so a start right after never shares apps/<app>/.next/dev with a server
+  # that is still leaving (see "A page reloads itself over and over" in docs/billing/DEV.md).
+  if [ -n "$group" ]; then
+    for _ in $(seq 1 60); do
+      pgrep -g "$group" >/dev/null 2>&1 || break
+      sleep 0.25
+    done
+    pkill -KILL -g "$group" 2>/dev/null || true
   fi
   echo "stopped  $app"
 }
