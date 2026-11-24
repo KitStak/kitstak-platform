@@ -55,8 +55,9 @@ export async function getPlanView(input: PlanViewInput): Promise<AppPlanView> {
 }
 
 /** Link into Portal billing with the CRM as the way back. */
-export function crmBillingLink(intent: Parameters<typeof billingLink>[1]): string {
-  return billingLink(portalUrl(), intent, 'crm');
+export function crmBillingLink(intent: Parameters<typeof billingLink>[1], orgId?: string): string {
+  // With the organization named, the Portal opens the page for it, whichever one was used last there.
+  return billingLink(portalUrl(), intent, 'crm', orgId);
 }
 
 /** The "Plan and payment" row on the CRM admin page (SPEC 9.5). */
@@ -74,7 +75,7 @@ export async function getPlanSummary(input: PlanViewInput): Promise<PlanSummaryV
     openAccess: entitlementsAllowAll() && state.phase === 'none',
     canView: access.canView,
     ownerName: access.ownerName,
-    billingHref: crmBillingLink({ to: 'home' }),
+    billingHref: crmBillingLink({ to: 'home' }, input.orgId),
     pulseIncludedSeats: CATALOG.products.pulse.includedSeats ?? 0,
     contactHref: `${siteUrl()}/contact`,
     format: { money: (cents) => formatMoney(cents), day: (date) => formatDay(date, input.timeZone) },

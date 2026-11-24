@@ -89,7 +89,6 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
   const submitting = useRef(false);
   const refs = useRef<Partial<Record<SignupField, HTMLInputElement | null>>>({});
   const usePasswordButton = useRef<HTMLButtonElement | null>(null);
-  const emailCodeButton = useRef<HTMLButtonElement | null>(null);
 
   const parsedHandoff = useMemo(() => readHandoff(handoff), [handoff]);
   const summary = useMemo(() => trialSummary(parsedHandoff), [parsedHandoff]);
@@ -462,7 +461,6 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
           {!companyOnly && !noPassword ? (
             <QuietRow lead="Or skip the password." className="-my-2">
               <button
-                ref={emailCodeButton}
                 type="button"
                 data-testid="signup-email-code"
                 className={ROW_LINK}

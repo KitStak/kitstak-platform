@@ -60,9 +60,16 @@ test.describe('smoke', () => {
     await expect(page.getByTestId('top-nav')).toBeVisible();
   });
 
-  test('signed out visitors are sent to sign in and come back to the page they wanted', async ({ page }) => {
+  test('signed out visitors are sent to sign in and come back to the page they wanted', async ({ page, baseURL }) => {
     await page.goto('/profit?by=client');
-    await expect(page).toHaveURL(/\/login\?next=%2Fprofit%3Fby%3Dclient/);
+    // One front door (docs/billing/CONTRACTS.md, review round 4). With a Portal address set, this is
+    // the Portal sign in and `next` is the full Pulse address. Run alone, it is Pulse's own page and
+    // `next` is the path. Either way the person comes back to the page they wanted.
+    await expect(page).toHaveURL(/\/login\?/);
+    const landed = new URL(page.url());
+    expect(landed.pathname).toBe('/login');
+    const appOrigin = new URL(baseURL ?? 'http://localhost:3500').origin;
+    expect(['/profit?by=client', `${appOrigin}/profit?by=client`]).toContain(landed.searchParams.get('next'));
   });
 
   test('device link pages need no sign in and show nothing for an unknown link', async ({ page }) => {

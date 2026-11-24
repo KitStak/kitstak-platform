@@ -330,7 +330,7 @@ signed in. `/forgot-password` in every app goes to the Portal's too.
   ```sql
   insert into core.sign_in_blocks (user_id) select id from core."user" where email = 'sofia@northwind-robotics.example';
   delete from core.session where user_id = (select id from core."user" where email = 'sofia@northwind-robotics.example');
-  -- and back on:
+  /* and back on: */
   delete from core.sign_in_blocks where user_id = (select id from core."user" where email = 'sofia@northwind-robotics.example');
   ```
 
@@ -365,6 +365,16 @@ signed in. `/forgot-password` in every app goes to the Portal's too.
   grow past 4 GB by itself. When the machine runs short, the system stops the biggest one without a word:
   pages stop loading and `deploy/dev/status.sh` shows it as DOWN. Start it again with `app-start.sh`.
   Start only what you need.
+- **A page reloads itself over and over.** That is a stale dev cache, not the product. It showed up after
+  dev servers were stopped by the memory limit in the middle of a write: the browser gets "HMR hash
+  mismatch" from the dev server and reloads, about five times a second, and the tab grows until the system
+  stops it. A production build never does this. Stop the app, delete its dev cache and start it again:
+  `deploy/dev/stop.sh crm && rm -rf apps/crm/.next/dev && deploy/dev/app-start.sh crm`. The cache is only
+  build output, and it can grow past 3 GB, so clearing it also frees memory.
+- **The seeded admin answers 401 with the right password.** Five wrong passwords lock an account for 15
+  minutes. The Projects and Pulse smoke specs still sign in as `admin@kitstak.io` with the README password
+  that does not work in this database, so one run of them locks that person. Clear it with
+  `update core.password_policy_state set locked_until = null, failed_login_count = 0 where email = 'admin@kitstak.io';`
 - **No email arrives.** There is no real email locally. Look in http://localhost:3300/dev/outbox. Reminder
   emails are only queued when the billing job runs: `deploy/dev/billing-tick.sh`.
 - **Playwright cannot find its browser.** The dev container ships one Chromium build. `shot.mjs` and the

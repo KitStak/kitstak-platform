@@ -81,7 +81,7 @@ export const sharedAuthOptions = {
      * download the activity file and cancel the plan for up to 5 minutes. A person resets their
      * password exactly when they think someone else is in their account.
      *
-     * Off, every request reads the session row (one primary key lookup on `core.session`). A
+     * Off, every request reads the session row (one lookup on the unique token index of `core.session`). A
      * session that was ended is refused on the very next request, in every app.
      */
     cookieCache: { enabled: false },

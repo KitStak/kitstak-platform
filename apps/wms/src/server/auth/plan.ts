@@ -45,8 +45,9 @@ function siteUrl(env: NodeJS.ProcessEnv = process.env): string {
 const billingDb = (db: AppDb): BillingReadDb => db as unknown as BillingReadDb;
 
 /** Link into the Portal's billing area with the WMS as the way back. */
-export function wmsPlanLink(intent: Parameters<typeof billingLink>[1]): string {
-  return billingLink(portalUrl(), intent, 'wms');
+export function wmsPlanLink(intent: Parameters<typeof billingLink>[1], orgId?: string): string {
+  // With the organization named, the Portal opens the page for it, whichever one was used last there.
+  return billingLink(portalUrl(), intent, 'wms', orgId);
 }
 
 export interface PlanViewInput {
@@ -118,7 +119,7 @@ export async function getPlanSummary(platformDb: AppDb, input: PlanViewInput): P
     openAccess: entitlementsAllowAll() && state.phase === 'none',
     canView: access.canView,
     ownerName: access.ownerName,
-    billingHref: wmsPlanLink({ to: 'home' }),
+    billingHref: wmsPlanLink({ to: 'home' }, input.orgId),
     pulseIncludedSeats: CATALOG.products.pulse.includedSeats ?? 0,
     contactHref: `${siteUrl()}/contact`,
     format: { money: (cents) => formatMoney(cents), day: (date) => formatDay(date, input.timeZone) },

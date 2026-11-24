@@ -58,8 +58,9 @@ export async function getPlanView(input: PlanViewInput): Promise<AppPlanView> {
 }
 
 /** Link into Portal billing with Pulse as the way back. */
-export function pulseBillingLink(intent: Parameters<typeof billingLink>[1]): string {
-  return billingLink(appUrls().portal, intent, 'pulse');
+export function pulseBillingLink(intent: Parameters<typeof billingLink>[1], orgId?: string): string {
+  // With the organization named, the Portal opens the page for it, whichever one was used last there.
+  return billingLink(appUrls().portal, intent, 'pulse', orgId);
 }
 
 /** Seats the flat Pulse price covers (SPEC P8). */
@@ -84,7 +85,7 @@ export async function getPlanSummary(input: PlanViewInput): Promise<PlanSummaryV
     openAccess: entitlementsAllowAll() && state.phase === 'none',
     canView: access.canView,
     ownerName: access.ownerName,
-    billingHref: pulseBillingLink({ to: 'home' }),
+    billingHref: pulseBillingLink({ to: 'home' }, input.orgId),
     pulseIncludedSeats: PULSE_INCLUDED_SEATS,
     contactHref: `${siteUrl()}/contact`,
     format: { money: (cents) => formatMoney(cents), day: (date) => formatDay(date, input.timeZone) },

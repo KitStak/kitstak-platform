@@ -232,6 +232,11 @@ existing password account by email. That is on purpose.
 - [ ] Set `EMAIL_FROM` to an address on that exact domain, for example `KitStak <billing@mail.kitstak.com>`.
       If the domain in `EMAIL_FROM` is not the verified one, Resend answers 403 and mail stays queued.
 - [ ] Optional: `EMAIL_REPLY_TO`.
+- [ ] Invite emails go out the moment a person presses "Send invite" (review round 4). The Portal has the
+      mail key, so invites sent there leave at once. An invite sent from the CRM leaves at once too if the
+      CRM project has `RESEND_API_KEY` and `EMAIL_FROM` set. Without them it waits for the Portal's one
+      minute job, and nothing is lost. Set the two values on the CRM project if you want CRM invites in
+      seconds.
 - [ ] Set `BILLING_SELLER_ADDRESS` (and `BILLING_SELLER_TAX_ID` if you have one). Until then an invoice shows
       the seller name and site only, with no address.
 - [ ] Set `BILLING_SUPPORT_REPLY_TIME` to a reply time you can keep, for example `1 business day`. Check that
@@ -288,7 +293,7 @@ error and can try again after the migration.
 
 One more thing changes on the day the new code goes out: the sign in layer no longer keeps a copy of
 the session in the browser (the `kitstak.session_data` cookie). Nobody is signed out by this. Each
-request now reads the session row, which is one lookup by primary key.
+request now reads the session row, which is one lookup on a unique index.
 
 ## Step 5. Backfill access rows
 

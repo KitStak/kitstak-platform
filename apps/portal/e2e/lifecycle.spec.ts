@@ -171,7 +171,8 @@ test.describe('the whole lifecycle, and the record it leaves', () => {
     await expect(page.getByTestId('outbox-to')).toHaveText(person.email);
     const frame = page.frameLocator('[data-testid="outbox-html"]');
     await expect(frame.getByRole('heading', { level: 1 })).toHaveText(/^Your plan will end on/);
-    await expect(frame.getByRole('link', { name: 'Keep my plan' })).toHaveAttribute('href', /\/billing$/);
+    // Every billing email link names its organization (review round 4), so it opens the right one.
+    await expect(frame.getByRole('link', { name: 'Keep my plan' })).toHaveAttribute('href', /\/billing\?org=[0-9a-f-]{36}$/);
     await page.getByRole('tab', { name: 'Plain text' }).click();
     await expect(page.getByTestId('outbox-text').first()).toContainText('You can undo this with one click.');
 
