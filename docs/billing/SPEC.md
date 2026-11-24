@@ -902,6 +902,7 @@ with its rendered HTML and text, newest first, so a person can read the code or 
 | `warehouse_limit` | Your plan covers the warehouses you have now. Add one to your plan first. |
 | `yearly_no_pause` | Yearly plans cannot be paused. You are paid up until your renewal date. |
 | `gateway_error` | Something went wrong on our side. Nothing was charged. Please try again. |
+| `payment_needs_approval` | Your bank wants you to approve this payment. Nothing was charged yet. Use another card, or call your bank. (With Stripe's page for the bill at hand, "Pay now" says: "Your bank wants you to approve this payment. We are taking you to a secure Stripe page to do that. Nothing was charged yet." and opens it.) |
 | `not_found` | We could not find that. |
 
 Functions may return a more exact sentence for a case (for example with the real numbers), following the same

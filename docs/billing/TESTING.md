@@ -6,6 +6,10 @@ reports on. `DEV.md` is how to start the local stack.
 
 Everything runs from the repo root. Nothing here needs a Stripe key, a mail key or the network.
 
+There is a fourth, opt in layer: the same flows against the real Stripe sandbox
+(`deploy/dev/stripe-sandbox-test.sh`). It does need Stripe, so the commands below skip it. See "The real
+Stripe sandbox suite" at the end of this file, and `STRIPE-SANDBOX-RUN.md` for its first run.
+
 ## Quick start
 
 ```bash
@@ -42,6 +46,9 @@ The files the lifecycle lane added:
 | `src/server/round3-roles.test.ts` | Database. Review round 3. Only an owner can add or remove a billing manager: one case per door (invite, role change, remove, cancel invite, the two hooks), then the real endpoints of a real auth instance called as an admin with a real session cookie. Admin refused with one plain sentence, owner allowed, nothing written on a refusal. |
 | `src/server/round3-stamp.test.ts` | Database. Review round 3. With the "clear my own copy" calls turned off, as in a separate app process: cancel, "Keep my plan", pause and "Undo pause" each show in the CRM view on the very next read. The stamp moves on every billing write, also plain SQL, and a deleted organization leaves no stamp. |
 | `src/server/round4-auth.test.ts` | Database. Review round 4, the shared sign in layer on a real auth instance. A switched off person, one case per door: password sign in (refused even with the right password row), any road to a session, a new password row or Google link, "Forgot password" (no code mailed, the answer of an unknown address), reset with a code mailed before the block, sign in with a code. `blockSignIn` ends every session, and the cookie the person still holds is refused. Sign in with a code three times in a row with no password row. A session that was ended is refused on the next request, and no cached copy of the session is sent to the browser. A new session starts in an organization the person owns, then in the one picked last, never in one they left. Accepting an invite with an unconfirmed email: 403 `INVITE_NEEDS_PROVEN_MAILBOX`, nothing written, for the billing role and for a member; confirmed, the same person joins. Pure parts: `pickDefaultOrg`, `billingLink` with `org=<id>`, every billing email carries the organization in every link, and the front door addresses. |
+| `src/server/stripe-sandbox-fixes.test.ts` | Database. The fixes from the real Stripe run, proven without Stripe. The bank approval email: not for a bill that is already paid, not for a first payment that is still on the pay page, once for an open bill of a running plan. "Pay now" when the bank wants approval answers `payment_needs_approval` with Stripe's page, and only ever a Stripe https address. The confirmed amount of a plan change reaches the gateway, and a moved amount charges nothing (`price_changed`). The day count is only said when the gateway priced from the whole day date. "Start again now" with a card that cannot be charged answers `card_declined` and stays paused. |
+| `src/gateway/stripe.test.ts` (grown to 62 tests) | The Stripe adapter against a fake client. New from the real run: a decrease is invoiced at once; a change preview leaves out invoice lines that waited before it (with the line shapes and amounts real Stripe answered); a change of billing period starts a new period today, charges nothing when the amount moved, and refunds any cent above the confirmed amount; "Start again now" in a pause bills first, leaves nothing open on a decline, and never bills twice. |
+| `tests/stripe-events.test.ts` | The dev tool that forwards real Stripe events to the local Portal. Its signature is one the real webhook check accepts. It refuses a live key, a live account and a live event, only reads from Stripe, only posts to `localhost`, and reads new events oldest first across pages. |
 | `tests/copy-rules.test.ts` | No em dash, en dash, double dash, "coming soon" or lorem in anything the billing package or the shared plan banner and lock screen can show. Every error message, email and catalog sentence is 20 words or fewer. The checker itself is tested. |
 
 Portal files (`pnpm -F kitstak-portal test`):
@@ -274,3 +281,27 @@ Things a script cannot judge.
 - Browser tests run in Chromium only, at 1280 by 800 and at 360 by 740.
 - No load test. The one minute job handles 50 emails per run with a real provider, on purpose (Resend
   allows 2 requests a second).
+
+## The real Stripe sandbox suite
+
+`deploy/dev/stripe-sandbox-test.sh`. Opt in: the files in `packages/billing/tests/stripe-sandbox/` skip
+themselves unless `STRIPE_SANDBOX=1` and a Stripe test key are set, which the script does from
+`deploy/dev/.run/stripe.env`. About 15 minutes. It needs the local database and `api.stripe.com`. The Portal
+does not have to run. It refuses a live key and an account that answers in live mode.
+
+What is real: the Stripe API in test mode, the Stripe adapter, the server functions, the webhook handler
+and the local database. What stands in: Stripe cannot deliver webhooks to this machine, so the events are
+read from `GET /v1/events` and handed to `processWebhook` with a valid signature. The hosted pay page cannot
+be driven from a test, so after the app makes the real Checkout Session the pay step is done through the API
+with a Stripe test card. Time moves with Stripe test clocks.
+
+| File | What it proves on real Stripe |
+|:-|:-|
+| `01-trial-and-first-payment.test.ts` | A trial with no card makes no Stripe object. Adding a card makes a real Checkout Session and a trialing subscription that keeps every trial day. When the trial ends the card is charged, the plan is active, the invoice and the receipt are there. |
+| `02-first-payment.test.ts` | A pay page that is open, a declined card and a card that needs bank approval grant nothing and send no late payment or bank approval email. A good card starts the plan. |
+| `03-plan-changes.test.ts` | Seats and warehouses up and down, the bundle discount on and off, monthly to yearly. Every charge equals the preview to the cent, credit lands on the balance at once and pays for the next change, nothing is left waiting, and the invoice list equals Stripe's with a PDF link for each. |
+| `04-pause.test.ts` | A pause is set and taken back. When the paid month ends nothing is charged and the apps are view only. "Start again now" with a failing card charges nothing and stays paused. With a good card it bills a new month today. A pause that runs its full time starts again by itself and the next month is charged. |
+| `05-cancel.test.ts` | Cancel at period end keeps full access, can be undone, and when the period runs out the plan ends with no further invoice. |
+| `06-failed-renewal.test.ts` | A failed renewal makes the plan late with full access and one email per failed try. Stripe's retries run to the end and the plan ends with the reason. A card saved the way the Billing Portal saves it becomes the plan's card, and "Pay now" pays the open bill. A renewal the bank wants approved sends the email once, and "Pay now" answers with Stripe's page for that invoice. Cancel with a bill open (skipped with a key that needs approval to end a subscription). |
+| `07-webhook-replay.test.ts` | Every real event delivered a second and a third time is a duplicate and changes nothing. A bad signature writes nothing. Real events delivered newest first end in the state Stripe has, with each email and activity line once. A second paid subscription is canceled and refunded (skipped with a key that needs approval). |
+

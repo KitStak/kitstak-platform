@@ -14,47 +14,75 @@ Three rules for the whole day:
    then, so every organization can open every app the whole time.
 3. **The old webhook stays on until step 10.** Do not disable the Supabase endpoint earlier.
 
-## Open item 1: real Stripe has never been run end to end
+## Open item 1: real Stripe, what is proven and what a person still has to see
 
-This is the first thing to close. It is written first so nobody can miss it.
+Until 2026-11-24 every payment in the tests and reviews used the built in test gateway or a fake Stripe
+client. On 2026-11-24 the whole billing flow was run against the real Stripe sandbox
+"KitStak LLC sandbox" (`acct_1TYwSo3PaLKIRZri`, test mode). The full record is `STRIPE-SANDBOX-RUN.md`:
+what was run, the Stripe object ids, the six defects it found and how each was fixed, and what could
+not be run. The run can be repeated with one command: `deploy/dev/stripe-sandbox-test.sh` (`DEV.md`,
+"Real Stripe test mode").
 
-Every payment in the tests and in the reviews used the built in test gateway or a fake Stripe client. No
-Stripe test key exists in this repo, in the dev container or with the team that built this (checked on
-2026-11-23: no `STRIPE_*` variable is set anywhere, and keys never go in the repo). So hosted Checkout,
-wallets, the Billing Portal, live signed webhooks, Stripe's invoice PDF and how Stripe's invoice lines look
-on our invoice page are all **unseen**. The adapter is proven only against the Stripe SDK types and a fake
-client (`packages/billing/src/gateway/stripe.test.ts`, 41 tests).
+**Proven on real Stripe** (Stripe objects and our tables checked after every step): products, prices
+and the portal configuration from `stripe:setup`; a trial with no card; the real Checkout Session the
+app makes; a card saved during the trial and the first charge when the trial ends; a first payment
+with no trial; a declined card and a card that needs bank approval grant nothing; seats and warehouses
+up and down, to the cent of the preview; the bundle discount on and off; monthly to yearly; pause,
+"Start again now" and a pause that runs out; cancel at period end and "Keep my plan"; a failed renewal,
+all of Stripe's retries, and the plan ending when Stripe gives up; a new card and "Pay now"; a renewal
+the bank wants approved; the invoice list and the PDF links; every event delivered twice and newest
+first.
 
-**What the owner must do:** make a Stripe account in test mode (or a sandbox) and hand over two values,
-`sk_test_...` and the `whsec_...` that `stripe listen` prints. Nothing else is needed.
+**Not seen yet, because the run was made from a container that can reach `api.stripe.com` only.** A
+browser there is refused on `checkout.stripe.com`, `js.stripe.com`, `billing.stripe.com`,
+`pay.stripe.com`, `invoice.stripe.com` and `hooks.stripe.com`. In the run, the step a person does on
+each of those pages was done through the Stripe API instead. So one short pass by a person, on a normal
+machine, is still open. It takes about 30 minutes. Use the sandbox, not the live account.
 
-**The run, one hour, in this order.** Record the screen. Each line is pass or fail.
+Setup for the pass: `STRIPE_SECRET_KEY=sk_test_... deploy/dev/stripe-env.sh`, then
+`KITSTAK_STRIPE=1 deploy/dev/app-start.sh portal` and `deploy/dev/stripe-events.sh watch` (or
+`stripe listen`). Record the screen. Each line is pass or fail.
 
-- [ ] `STRIPE_SECRET_KEY=sk_test_... pnpm -F @kitstak/billing stripe:setup apply`, then `stripe:setup check`
-      prints every product and price as `ok`.
-- [ ] Portal started with the two keys (`DEV.md`, "To try real Stripe test mode"). Billing shows "Test mode".
 - [ ] Three carts: Pulse monthly ($29.00), CRM 5 seats and WMS 1 warehouse monthly ($395.20), the same cart
       yearly ($4,031.04). For each, the total on the Stripe pay page equals our review page to the cent.
-- [ ] Checkout with `4242 4242 4242 4242`: back on the success page, billing home is active within seconds.
-- [ ] Checkout with `4000 0000 0000 0002` (declined): the message shows, nothing is granted.
-- [ ] Checkout with `4000 0027 6000 3184` (bank approval): approve finishes it, fail grants nothing.
+- [ ] Pay with `4242 4242 4242 4242` on the pay page: back on the success page, billing home is active
+      within seconds. (The event `checkout.session.completed` only exists when the page itself is paid.
+      Its handler is proven with the test gateway, not yet with a real one.)
+- [ ] Pay with `4000 0000 0000 0002` (declined): Stripe's page shows the message, nothing is granted.
+- [ ] Pay with `4000 0027 6000 3184` (bank approval): approve finishes it, fail grants nothing, and no
+      "your bank needs you to approve" email goes out for it.
 - [ ] A promo code made in the Stripe dashboard, during a trial: the success page and billing home show the
       reduced first charge with the line "Promo code", and the first invoice equals it.
 - [ ] Open two pay pages in two tabs: the first one says it is closed. Only one can be paid.
-- [ ] Add 1 seat on a paid plan: the confirm panel amount equals the new Stripe invoice to the cent, and the
-      words say "for the N days left".
-- [ ] Remove 1 seat: credit shows on billing home, and "Next charge" is the plan price less the credit. The
-      server prorates a credit from a date up to one day ahead (full days only). **Watch the portal log
-      here.** If Stripe refuses a proration date in the future, the adapter logs one line and counts credits
-      from the start of the hour instead. Both are safe. Write down which one Stripe does.
-- [ ] Card update in the Billing Portal: the new last 4 shows on billing home and in the activity list.
-- [ ] `stripe events resend <id>` for a processed event: the route answers 200 `duplicate`.
-- [ ] Download an invoice PDF from the invoice page.
-- [ ] Added in review round 3. Let a renewal fail (test clock or card `4000 0000 0000 0341`), then cancel on
-      `/billing/cancel`: the plan ends at once, the Stripe invoice shows as void, and no retry runs. Then
-      let another plan fail all its retries: billing home says "We could not collect ... after N tries".
+- [ ] "Update card" opens the Billing Portal. Save `5555 5555 5555 4444`: back on billing home the card is
+      "Mastercard ending 4444", and the activity list says so.
+- [ ] "Download PDF" on an invoice opens Stripe's PDF.
+- [ ] A renewal the bank wants approved (card `4000 0027 6000 3184` on a plan, then a test clock past the
+      renewal): the email arrives, "Pay now" sends you to Stripe's page for that invoice, approving there
+      pays it, and billing home is active again.
+- [ ] Cancel while a bill is open, and a second payment for one organization. Both end a subscription at
+      once (`DELETE /v1/subscriptions/:id`). The key used for the sandbox run needs a person to approve
+      that call in Stripe, so these two could not be finished there. See "The Stripe key" below.
 
-Until every line passes, the honest state is: **built and unit tested, not proven against Stripe.**
+Until every line above passes, the honest state is: **the server side is proven against real Stripe. The
+pages Stripe hosts have not been seen with our sessions in them.**
+
+### The Stripe key must be allowed to end a subscription
+
+Two things KitStak does end a subscription at once: a customer cancels while a bill is open (the bill is
+dropped), and a second payment comes in for an organization that already has a plan (it is canceled and
+refunded). Both call `DELETE /v1/subscriptions/:id`. The sandbox key used on 2026-11-24 answered that
+call with "This action requires human approval before it can be completed". The app handled it the safe
+way (nothing changed, the person saw "Something went wrong on our side. Nothing was charged."), but the
+cancel did not happen.
+
+- [ ] Before go live, check the live key: it must be able to cancel a subscription, void an invoice and
+      create a credit note with no approval step. A restricted key needs write access to Subscriptions,
+      Invoices, Credit notes, Customers, Checkout Sessions, Customer portal, and read access to Prices,
+      Products, Payment methods and Events.
+- [ ] In the sandbox, with a key that has those rights, run
+      `deploy/dev/stripe-sandbox-test.sh 06-failed 07-webhook` with no
+      `STRIPE_SANDBOX_CANCEL_NEEDS_APPROVAL` line in `deploy/dev/.run/stripe.env`. The two flows then run.
 
 ## What is and is not proven
 
@@ -65,14 +93,16 @@ Say this out loud before go live, so nobody assumes more than is true.
 | Prices, quotes, discounts | Proven by unit tests to the cent, for 9 reference carts. |
 | Test gateway, webhooks, sync, access rows | Proven by unit tests and by the browser tests in `TESTING.md`. |
 | Emails, reminders, the one minute job | Proven by unit tests and the browser tests, with the dev outbox. |
-| Stripe adapter | Checked against the Stripe SDK types and a mocked SDK only. **It has never talked to Stripe.** Open item 1 above is its first real test. |
-| Credit, the real next charge, the one plan rule, whole day proration | Proven on the test gateway by database tests (`round1.test.ts`) and browser tests. On Stripe they rest on `invoices.createPreview`, `checkout.sessions.expire`, `creditNotes.create` and `proration_date`, which are only checked against a fake client. |
-| Stripe setup script | Proven against a fake account in unit tests. **It has never talked to Stripe.** Step 1 is its first real test. |
+| Stripe adapter | **Run against the real Stripe sandbox on 2026-11-24** (`STRIPE-SANDBOX-RUN.md`), with test cards and test clocks. Six defects were found and fixed. The suite is in `packages/billing/tests/stripe-sandbox` and is rerun with `deploy/dev/stripe-sandbox-test.sh`. Not run: the two flows that end a subscription at once (the key needs approval for that call), and anything that needs a page Stripe hosts. |
+| Credit, the real next charge, the one plan rule, whole day proration | Proven on the test gateway by database tests and browser tests, and now on real Stripe: the preview equals the charge to the cent for seats, warehouses, the bundle and monthly to yearly, and Stripe takes a proration date up to one day ahead. `creditNotes.create` with a refund was run for one cent. The refund of a second payment was not run (see the key note above). |
+| Stripe hosted pages (pay page, Billing Portal, invoice page, PDF) | **Not seen.** The app makes the real sessions and links, and Stripe accepts them. No person or browser has opened them yet. Open item 1 lists the pass. |
+| Stripe setup script | Run against the real sandbox: 4 products, 16 prices, 1 portal configuration, and `check` says ok. |
 | Sending with Resend | Proven with a fake HTTP layer only. Step 3 is its first real test. |
 
-There is no Stripe sandbox for this account (`DECISIONS.md` section 2). If you can make a second Stripe
-account in test mode first, run steps 1, 8 and 9 there with test keys before you touch live mode. That is
-the safer path and it costs one hour.
+The sandbox "KitStak LLC sandbox" (`acct_1TYwSo3PaLKIRZri`) now exists. Use it for every trial run. Run
+steps 1, 8 and 9 there with test keys before you touch live mode. Nothing in the build, the dev scripts or
+the sandbox suite creates, changes or disables a webhook endpoint, in the sandbox or in the live account:
+step 8 is done by a person, by hand.
 
 ## Env vars
 
@@ -83,7 +113,7 @@ only and removes them from preview and development, so a preview build can never
 
 | Variable | Needed | What it is |
 |:-|:-|:-|
-| `STRIPE_SECRET_KEY` | yes, for billing | The Stripe secret key (`sk_live_...`, or a restricted key `rk_live_...`). With no key, production billing is off. |
+| `STRIPE_SECRET_KEY` | yes, for billing | The Stripe secret key (`sk_live_...`, or a restricted key `rk_live_...`). With no key, production billing is off. The key must be allowed to cancel a subscription with no approval step (Open item 1, "The Stripe key"). |
 | `STRIPE_WEBHOOK_SECRET` | yes, with the key | The signing secret (`whsec_...`) of the portal webhook endpoint from step 8. A key with no secret keeps billing off. |
 | `STRIPE_PORTAL_CONFIGURATION_ID` | recommended | The Billing Portal configuration id (`bpc_...`) that step 1 prints. Card updates only. |
 | `STRIPE_AUTOMATIC_TAX` | optional | `1` turns Stripe Tax on. Leave it out until tax registrations are set in Stripe. |
@@ -110,6 +140,10 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ```
 
 `BILLING_TEST_WEBHOOK_SECRET` is for the test gateway only. Never set it in production.
+
+`STRIPE_HTTP_CLIENT` and `NODE_USE_ENV_PROXY` are for a dev container behind a proxy only (`DEV.md`, "Real
+Stripe test mode"). Never set them in production. `KITSTAK_STRIPE`, `STRIPE_SANDBOX` and the other
+`STRIPE_SANDBOX_...` names are read by the dev scripts and the sandbox suite only. The apps ignore them.
 
 ## Step 0. Before the day
 
@@ -178,6 +212,14 @@ In the Stripe dashboard:
       ended and view only, and says why: "We could not collect $164.00 after 4 tries, so your plan ended."
       On the same page, set the invoice to **marked uncollectible** after the last retry, so it is not
       left open.
+      What the sandbox does today (seen on 2026-11-24): 8 retries, about one every 2 days, so 9 tries in
+      15 days. Then the subscription is canceled and **the invoice stays open**. KitStak shows the plan as
+      ended and says "We could not collect $58.00 after 9 tries", but the invoice list still shows that
+      bill as "Due". Set "marked uncollectible" in the live account so no bill is left open for a plan
+      that has ended. The number of tries in the sentence is Stripe's own count, whatever you set.
+- [ ] Nothing to set for Stripe's billing mode. New subscriptions use Stripe's "flexible" mode. The adapter
+      was fixed for the three places where that mode differs from what the screens say (a change of
+      billing period, a decrease, and starting again in a pause). See `STRIPE-SANDBOX-RUN.md`.
 - [ ] A customer who cancels while a payment is late: KitStak ends the subscription at once and voids the
       open invoice (`cancelNow` in the Stripe adapter). Nothing to set in the dashboard. Check it once in
       test mode as part of Open item 1: the invoice shows as void and no retry runs.
@@ -512,7 +554,7 @@ The short form, for the day itself.
 
 - [ ] 0. Tests and build pass on the release commit. Two people have read this file.
 - [ ] 1. `stripe:setup check` prints `All ok`. Portal configuration id noted.
-- [ ] 2. Stripe settings: Smart Retries, cancel after the last retry, Stripe emails off, public details, tax decided.
+- [ ] 2. Stripe settings: Smart Retries, cancel after the last retry, invoice marked uncollectible, Stripe emails off, public details, tax decided. The live key can end a subscription with no approval step.
 - [ ] 3. Resend domain verified. Key and sender in `deploy/secrets.env`.
 - [ ] 4. Migration 0007 applied. Module rule lists four apps.
 - [ ] 5. Backfill done. `backfill check` says every organization has rows.
