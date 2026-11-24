@@ -26,6 +26,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "stripe:setup": "tsx scripts/stripe-setup.ts",
+    "stripe:events": "tsx scripts/stripe-events.ts",
     "backfill": "tsx scripts/backfill-entitlements.ts"
   },
   "dependencies": {

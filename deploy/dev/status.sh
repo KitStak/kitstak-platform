@@ -13,7 +13,15 @@ fi
 for app in $ALL_APPS; do
   port="$(app_port "$app")"
   if port_open "$port"; then
-    echo "UP    $(printf '%-8s' "$app")  http://localhost:$port  log: $LOG_DIR/$app.log"
+    note=""
+    if [ "$app" = "portal" ]; then
+      case "$(portal_billing_mode)" in
+        stripe) note="  billing: REAL STRIPE TEST MODE" ;;
+        test) note="  billing: test gateway (default)" ;;
+        own-keys) note="  billing: your own Stripe keys" ;;
+      esac
+    fi
+    echo "UP    $(printf '%-8s' "$app")  http://localhost:$port  log: $LOG_DIR/$app.log$note"
   else
     echo "DOWN  $(printf '%-8s' "$app")  port $port  (start: deploy/dev/app-start.sh $app)"
   fi

@@ -22,6 +22,37 @@ export DEV_DATABASE_URL="postgres://$PG_USER:$PG_PASSWORD@127.0.0.1:$PG_PORT/$PG
 
 ALL_APPS="portal crm wms projects pulse web"
 
+# Real Stripe TEST mode for the Portal (docs/billing/DEV.md, "Real Stripe test mode"). The env file
+# is written by deploy/dev/stripe-env.sh and is never committed. The mode file says which billing
+# mode the running Portal was started in, so status.sh and the Stripe tools can tell.
+STRIPE_ENV_FILE="$RUN_DIR/stripe.env"
+PORTAL_MODE_FILE="$RUN_DIR/portal.billing-mode"
+
+# load_stripe_env: export every NAME=value line of the Stripe env file into this shell.
+# Refuses a live key. Returns 1 when the file is missing.
+load_stripe_env() {
+  local line name value
+  [ -s "$STRIPE_ENV_FILE" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in '' | '#'*) continue ;; esac
+    name="${line%%=*}"
+    value="${line#*=}"
+    case "$name" in STRIPE_* | NODE_USE_ENV_PROXY) ;; *) continue ;; esac
+    if [ "$name" = "STRIPE_SECRET_KEY" ]; then
+      case "$value" in
+        sk_test_* | rk_test_*) ;;
+        *) echo "Refused: $STRIPE_ENV_FILE does not hold a Stripe TEST key." >&2; return 2 ;;
+      esac
+    fi
+    export "$name=$value"
+  done <"$STRIPE_ENV_FILE"
+}
+
+# portal_billing_mode: "stripe" or "test", as the running Portal was started. Empty when unknown.
+portal_billing_mode() {
+  [ -f "$PORTAL_MODE_FILE" ] && cat "$PORTAL_MODE_FILE" || true
+}
+
 # app_port <app>: the port each app listens on in local dev.
 # web runs on 3600 (its own `dev` script uses the same port), so it never collides with Projects on 3400.
 app_port() {

@@ -6,6 +6,12 @@
 #   deploy/dev/app-start.sh portal crm wms    start several
 #   deploy/dev/app-start.sh all               portal crm wms projects pulse web
 #
+#   KITSTAK_STRIPE=1 deploy/dev/app-start.sh portal
+#                                             start Portal in real Stripe TEST mode. The settings
+#                                             come from deploy/dev/.run/stripe.env, which
+#                                             deploy/dev/stripe-env.sh writes. Without the switch
+#                                             the Portal uses the built in test gateway (the default).
+#
 # Ports: portal 3300, crm 3100, wms 3000, projects 3400, pulse 3500, web 3600.
 # Logs:  deploy/dev/.run/logs/<app>.log
 # The script waits until the app answers a real page, so when it prints READY you can use it.
@@ -39,8 +45,26 @@ start_one() {
   exec 9>"$PID_DIR/$app.lock"
   flock 9
 
+  # The Portal has two billing modes. The switch picks one for this start.
+  local want_mode=""
+  if [ "$app" = "portal" ]; then
+    want_mode=test
+    if [ "${KITSTAK_STRIPE:-0}" = "1" ]; then
+      want_mode=stripe
+    elif [ -n "${STRIPE_SECRET_KEY:-}" ] || grep -Eq '^STRIPE_SECRET_KEY=.+' "$REPO_ROOT/apps/portal/.env.local" 2>/dev/null; then
+      # Your own keys, from the shell or from apps/portal/.env.local. The script does not manage them.
+      want_mode=own-keys
+    fi
+  fi
+
   if port_open "$port"; then
-    echo "READY  $app  http://localhost:$port  (already running, log: $log)"
+    if [ -n "$want_mode" ] && [ -n "$(portal_billing_mode)" ] && [ "$(portal_billing_mode)" != "$want_mode" ]; then
+      echo "WRONG MODE  portal is running in $(portal_billing_mode) mode and you asked for $want_mode mode." >&2
+      echo "            Stop it first: deploy/dev/stop.sh portal" >&2
+      flock -u 9
+      return 1
+    fi
+    echo "READY  $app  http://localhost:$port  (already running${want_mode:+, billing mode: $(portal_billing_mode)}, log: $log)"
     flock -u 9
     return 0
   fi
@@ -61,6 +85,13 @@ start_one() {
 
   : >"$log"
   (
+    if [ "$want_mode" = "stripe" ]; then
+      # Real Stripe TEST mode: the key, the local webhook secret and the proxy settings come from the
+      # untracked env file. A variable on the command line wins over apps/portal/.env.local.
+      [ -s "$STRIPE_ENV_FILE" ] || "$DEV_DIR/stripe-env.sh" >&2
+      load_stripe_env || { echo "FAILED portal  could not read $STRIPE_ENV_FILE" >&2; exit 1; }
+    fi
+    [ -n "$want_mode" ] && echo "$want_mode" >"$PORTAL_MODE_FILE"
     cd "$REPO_ROOT/apps/$app"
     # setsid: the server gets its own process group, so it outlives this shell and
     # stop.sh can stop the whole group (next dev spawns helper processes).
@@ -89,7 +120,7 @@ start_one() {
       return 1
     fi
   done
-  echo "READY  $app  http://localhost:$port  (pid $pid, log: $log)"
+  echo "READY  $app  http://localhost:$port  (pid $pid${want_mode:+, billing mode: $want_mode}, log: $log)"
   flock -u 9
 }
 

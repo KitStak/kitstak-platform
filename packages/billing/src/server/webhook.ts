@@ -301,7 +301,19 @@ async function handleEvent(rt: BillingRuntime, db: BillingDb, orgId: string, eve
     case 'invoice.payment_action_required': {
       const invoice = await fetchInvoice(rt, db, orgId, event);
       if (!invoice) return 'ignored';
-      await applyInvoiceSnapshot(db, { orgId, gateway: gateway.kind, invoice });
+      const subscription = invoice.subscriptionId
+        ? await fetchAndApplySubscription(rt, db, { orgId, subscriptionId: invoice.subscriptionId, eventId: event.id })
+        : null;
+      if (!subscription && (await storeForeignInvoice(invoice))) return 'processed';
+      const stored = withCardFallback(invoice, subscription);
+      await applyInvoiceSnapshot(db, { orgId, gateway: gateway.kind, invoice: stored });
+      // The email asks a person to come back and approve a payment. It is only true, and only useful,
+      // when a bill of a running plan is still open (found on the real Stripe sandbox):
+      //  - A first payment is made on the pay page, and the bank step is right there in front of the
+      //    person. The plan has not started (`incomplete`), so there is nothing in Billing to approve.
+      //  - An event that arrives after the bill was paid or dropped is old news.
+      const stillOwed = invoice.status === 'open' && invoice.amountDueCents > 0;
+      if (!stillOwed || !subscription || !isLiveSubscriptionStatus(subscription.status)) return 'processed';
       await enqueueForBillingRecipients(db, {
         orgId,
         template: 'payment_action_required',
@@ -309,7 +321,7 @@ async function handleEvent(rt: BillingRuntime, db: BillingDb, orgId: string, eve
           orgName: await orgNameOf(db, orgId),
           portalUrl: rt.portalUrl,
           amountDueCents: invoice.amountDueCents,
-          last4: invoice.paymentMethodLast4,
+          last4: stored.paymentMethodLast4,
         },
         dedupeKey: `payment_action:${invoice.id}`,
       });
