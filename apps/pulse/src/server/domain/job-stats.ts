@@ -381,8 +381,10 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
       (job.pricing_model === 'fixed' && job.fixed_price_cents === null) ||
       (job.pricing_model === 'hourly' && job.bill_rate_cents === null && entries.some((row) => Number(row.hours) > 0 && B(row.base_revenue_cents) === BigInt(0)));
     const needsRateCount = entries.filter((row) => row.needs_rate).length + job.vas_needs_rate;
-    // 0014: on a job linked to a project, hours with no task leave the cost by task incomplete. Projects time rows come in untagged by design.
-    const untaggedLines = job.has_project ? entries.filter((row) => row.pm_task_id === null && Number(row.hours) > 0 && row.source !== 'projects').length : 0;
+    // 0014: once a job uses tasks (one tagged line), its hours with no task leave the cost by task incomplete. A job whose
+    // project has no tasks is never asked. Projects time rows come in untagged by design.
+    const usesTasks = job.has_project && entries.some((row) => row.pm_task_id !== null);
+    const untaggedLines = usesTasks ? entries.filter((row) => row.pm_task_id === null && Number(row.hours) > 0 && row.source !== 'projects').length : 0;
     // D1: warehouse rows that still need crew hours, plus typed days with units and no hours at all.
     const missingDays = daysMissingHours(days) + days.filter((day) => !day.missingHours && Number(day.unitsGood) > 0 && Number(day.hours) === 0).length;
     const lastEntry = entries.length > 0 ? entries[entries.length - 1]!.work_date : null;

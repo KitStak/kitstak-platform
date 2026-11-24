@@ -793,7 +793,8 @@ export const getLogGrid = scoped(async function getLogGrid(ctx: DomainContext, o
     plannedUnits: job.plannedUnits,
     unitsDone: unitsDone ?? '0',
     entries: entries.filter((item) => item.row.jobId === job.id).map((item) => toProductionDTO(item.row, item, access, closed)),
-    hasProject: links.some((link) => link.jobId === job.id),
+    // Only a project with tasks to pick turns tagging on: a linked project with no tasks shows nothing.
+    hasProject: tasksOfJob(job.id).some((task) => !task.gone),
     tasks: tasksOfJob(job.id),
     lastTaskId: lastTaskOf.get(job.id) ?? null,
   }));

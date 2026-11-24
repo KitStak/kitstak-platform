@@ -138,6 +138,18 @@ describe.skipIf(!ready)('tasks on production entries', () => {
     expect(job.stats.needs).toMatchObject({ untaggedLines: 1 });
   }, 60_000);
 
+  it('leaves a job alone when its project has no tasks', async () => {
+    const client = await createClient(owner, { name: 'Ecomm Client' });
+    const plain = await createJob(owner, { name: 'Ecomm job', clientId: client.id, status: 'active', pricingModel: 'per_unit', unitPrice: '3.0000' });
+    await addJobLink(owner, plain.id, { targetType: 'pm_project', targetId: '00000000-0000-4000-8000-0000000000a9', title: 'Empty project' });
+    await saveProductionEntry(owner, { jobId: plain.id, workDate: today, laborClassId: temp, headcount: '1', hours: '8', unitsGood: '40' });
+    const grid = await getLogGrid(owner, { date: today });
+    expect(grid.rows.find((item) => item.jobId === plain.id)?.hasProject).toBe(false);
+    expect(await listJobTasks(owner, plain.number)).toMatchObject({ hasProject: false });
+    expect(await getJobTaskCosts(owner, plain.number)).toMatchObject({ hasProject: false, untaggedEntries: 0 });
+    expect((await getJob(owner, plain.number)).stats.needs).toMatchObject({ untaggedLines: 0 });
+  }, 60_000);
+
   it('takes the task from a production file by number or title, and leaves it alone when the file has none', async () => {
     const upload = async (csv: string) => {
       const parsed = parseCsv(csv);
