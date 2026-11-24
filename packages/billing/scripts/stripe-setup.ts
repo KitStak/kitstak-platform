@@ -240,7 +240,11 @@ async function main(): Promise<void> {
 
   const live = /^(sk|rk)_live_/.test(key);
   if (!live && !/^(sk|rk)_test_/.test(key)) fail('STRIPE_SECRET_KEY does not look like a Stripe secret key. Nothing was changed.');
-  const client = adapt(new Stripe(key, { maxNetworkRetries: 2, appInfo: { name: 'KitStak billing setup' } }));
+  const client = adapt(new Stripe(key, {
+    maxNetworkRetries: 2,
+    appInfo: { name: 'KitStak billing setup' },
+    ...(process.env.STRIPE_HTTP_CLIENT === 'fetch' ? { httpClient: Stripe.createFetchHttpClient() } : {}),
+  }));
   print(`Stripe ${live ? 'LIVE mode' : 'test mode'}. Catalog ${spec.catalogVersion}. Command: ${command}${reprice ? ' reprice' : ''}.`);
   print();
 

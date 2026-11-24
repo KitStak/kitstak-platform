@@ -352,6 +352,9 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
     client = new Stripe(config.stripeSecretKey, {
       maxNetworkRetries: 2,
       appInfo: { name: 'KitStak Portal' },
+      // STRIPE_HTTP_CLIENT=fetch makes the SDK use fetch, which follows HTTPS_PROXY when Node runs
+      // with NODE_USE_ENV_PROXY=1. Only needed behind a proxy (cloud dev containers). Unset in production.
+      ...(process.env.STRIPE_HTTP_CLIENT === 'fetch' ? { httpClient: Stripe.createFetchHttpClient() } : {}),
     });
     return client;
   }
