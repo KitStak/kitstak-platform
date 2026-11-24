@@ -219,6 +219,8 @@ export function Sidebar({ variant = 'docked', initialProjects, initialSpaces, in
   const bySpace = useMemo(() => {
     const map = new Map<string | null, ProjectSummary[]>();
     for (const project of list) {
+      // The sidebar lists open work; finished projects live under the Completed tab on the Projects page.
+      if (project.status === 'completed' || project.status === 'archived') continue;
       const key = project.spaceId;
       map.set(key, [...(map.get(key) ?? []), project]);
     }
