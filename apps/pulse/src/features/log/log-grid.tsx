@@ -394,7 +394,11 @@ const TaskStrip = memo(function TaskStrip({
       { value: NO_TASK, label: 'No task' },
       ...tasks
         .filter((task) => !task.gone || task.id === value)
-        .map((task) => ({ value: task.id, label: `${task.title}${task.gone ? ' (removed in Projects)' : task.done ? ' (done)' : ''}` })),
+        .map((task) => {
+          // Long Projects titles are cut so the list stays inside the screen.
+          const title = task.title.length > 56 ? `${task.title.slice(0, 55).trimEnd()}...` : task.title;
+          return { value: task.id, label: `${title}${task.gone ? ' (removed in Projects)' : task.done ? ' (done)' : ''}` };
+        }),
     ],
     [tasks, value],
   );

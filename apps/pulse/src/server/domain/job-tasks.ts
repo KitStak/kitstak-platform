@@ -47,7 +47,7 @@ export const listJobTasks = scoped(async function listJobTasks(ctx: DomainContex
   const projectIds = await linkedProjectIds(db, ctx, job.id);
   if (projectIds.length === 0) return { hasProject: false, tasks: [] };
   const tasks = await tasksOfProjects(ctx, projectIds);
-  return { hasProject: true, tasks: tasks.map((task) => ({ id: task.id, ref: refOf(task), title: task.title, done: task.done })) };
+  return { hasProject: tasks.length > 0, tasks: tasks.map((task) => ({ id: task.id, ref: refOf(task), title: task.title, done: task.done })) };
 });
 
 const UNTAGGED = 'Untagged';
@@ -98,11 +98,15 @@ export const getJobTaskCosts = scoped(async function getJobTaskCosts(ctx: Domain
     })
     .sort((a, b) => (a.taskId === null ? 1 : 0) - (b.taskId === null ? 1 : 0) || Number(b.hours) - Number(a.hours));
   const untagged = grouped.find((row) => row.taskId === null);
+  // The panel shows for a job whose projects have tasks, or that has tagged lines already.
+  const usesTasks = tasks.some((task) => !task.gone) || taggedIds.length > 0;
+  // Untagged lines only count once the job has a tagged line: until then there is nothing to compare.
+  const counting = usesTasks && taggedIds.length > 0;
   return {
-    hasProject: projectIds.length > 0,
+    hasProject: usesTasks,
     rows,
-    untaggedEntries: projectIds.length > 0 && untagged && Number(untagged.hours) > 0 ? Number(untagged.entries) : 0,
-    untaggedHours: projectIds.length > 0 && untagged ? untagged.hours : '0',
+    untaggedEntries: counting && untagged && Number(untagged.hours) > 0 ? Number(untagged.entries) : 0,
+    untaggedHours: counting && untagged ? untagged.hours : '0',
     moneyHidden: !seesMoney,
   };
 });
