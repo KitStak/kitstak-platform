@@ -137,7 +137,7 @@ export default async function OrganizationSettingsPage() {
         </section>
 
         <div id="setup" className="scroll-mt-24">
-          <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManage} placement="settings" />
+          <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManage} />
         </div>
 
         <section

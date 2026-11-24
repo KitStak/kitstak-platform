@@ -1,6 +1,6 @@
 'use client';
 /**
- * The launcher's guided-setup card: live progress ring, auto-detected checklist with
+ * The guided-setup card in Organization settings: live progress ring, auto-detected checklist with
  * operational ordering, deep links into the exact screens, skip/undo, and a celebration
  * when the org is ready for business. Re-checks on window focus so steps completed in
  * CRM/WMS check themselves off when the user comes back.
@@ -8,32 +8,10 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  Lock,
-  MoreHorizontal,
-  PartyPopper,
-  RotateCcw,
-} from 'lucide-react';
-import {
-  Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  buttonVariants,
-  cn,
-} from '@/components/ui';
+import { ArrowUpRight, Check, ChevronDown, Lock, PartyPopper, RotateCcw } from 'lucide-react';
+import { Button, buttonVariants, cn } from '@/components/ui';
 import type { SetupState, SetupStepView } from '@/server/onboarding';
-import {
-  dismissSetupGuide,
-  restoreSetupGuide,
-  skipSetupStep,
-  unskipSetupStep,
-} from '@/server/onboarding-actions';
-import { ConfettiBurst } from './confetti';
+import { skipSetupStep, unskipSetupStep } from '@/server/onboarding-actions';
 import { ProgressRing } from './progress-ring';
 
 const COLLAPSE_KEY = 'kitstak.portal.setupGuide.collapsed';
@@ -59,8 +37,6 @@ export interface SetupGuideProps {
   readonly orgName: string;
   readonly state: SetupState;
   readonly canManage: boolean;
-  /** 'home' is the launcher card; 'settings' is the always-on copy in Organization settings. */
-  readonly placement?: 'home' | 'settings';
 }
 
 interface StepRowProps {
@@ -206,7 +182,7 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
   );
 }
 
-export function SetupGuide({ orgName, state, canManage, placement = 'home' }: SetupGuideProps) {
+export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [collapsed, setCollapsed] = useState(false);
@@ -275,25 +251,6 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
     });
   };
 
-  const inSettings = placement === 'settings';
-  // In settings the guide always shows; the button only decides whether it is also on the home page.
-  const homeToggle = canManage ? (
-    inSettings ? (
-      state.dismissed ? (
-        <Button variant="secondary" size="sm" loading={pending} onClick={() => run(restoreSetupGuide)}>
-          Show on home
-        </Button>
-      ) : (
-        <Button variant="ghost" size="sm" loading={pending} onClick={() => run(dismissSetupGuide)}>
-          Hide from home
-        </Button>
-      )
-    ) : (
-      <Button variant="secondary" size="sm" loading={pending} onClick={() => run(dismissSetupGuide)}>
-        Dismiss guide
-      </Button>
-    )
-  ) : null;
   const errorLine = error ? (
     <p role="alert" className="mt-3 text-sm text-danger-text">
       {error}
@@ -307,7 +264,6 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
         aria-label="Setup complete"
         className="relative overflow-hidden rounded-2xl border border-border-default bg-panel p-6 shadow-xs animate-fade-in"
       >
-        {inSettings ? null : <ConfettiBurst />}
         <div className="relative flex flex-wrap items-center gap-4">
           <span className="flex size-11 items-center justify-center rounded-full bg-success-subtle text-success-text">
             <PartyPopper aria-hidden className="size-5" />
@@ -320,7 +276,6 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
               Every setup step is done.
             </p>
           </div>
-          {homeToggle}
         </div>
         {errorLine}
       </section>
@@ -359,7 +314,6 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
                   Undo skip
                 </Button>
               ))}
-              {homeToggle}
             </div>
           ) : null}
         </div>
@@ -373,18 +327,6 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
       aria-label="Setup guide"
       className="overflow-hidden rounded-2xl border border-border-default bg-panel shadow-xs animate-fade-in"
     >
-      {state.dismissed && !inSettings ? (
-        <div className="flex items-center justify-between gap-3 border-b border-border-subtle bg-sunken px-5 py-2.5">
-          <p className="text-xs text-fg-muted">
-            This guide is hidden from your home page. It stays in Organization settings.
-          </p>
-          {canManage ? (
-            <Button variant="secondary" size="sm" loading={pending} onClick={() => run(restoreSetupGuide)}>
-              Show it again
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
       <header className="flex items-center gap-4 px-5 py-4">
         <ProgressRing percent={summary.percent} />
         <div className="min-w-0 flex-1">
@@ -397,24 +339,6 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
             ) : null}
           </p>
         </div>
-        {inSettings ? homeToggle : canManage ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Setup guide options"
-              className="flex size-8 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            >
-              <MoreHorizontal aria-hidden className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => run(dismissSetupGuide)}>
-                <span className="flex flex-col">
-                  <span>Dismiss setup guide</span>
-                  <span className="text-xs text-fg-muted">It moves to Organization settings and keeps checking off steps.</span>
-                </span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
         <button
           type="button"
           onClick={toggleCollapsed}

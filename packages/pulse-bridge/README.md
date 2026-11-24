@@ -58,7 +58,7 @@ Add `"@kitstak/pulse-bridge": "workspace:*"` to the app's `package.json` and the
 to `transpilePackages` in `next.config.ts`. Pass your Drizzle database or transaction as
 `db as unknown as BridgeExecutor`. See `apps/crm/src/server/services/pulse-bridge.ts`,
 `apps/wms/src/server/pulse/bridge.ts`, `apps/projects/src/server/integrations/pulse-profit.ts`
-and `apps/portal/src/server/product-stats.ts`.
+and `apps/portal/src/server/onboarding.ts`.
 
 ## Tests
 
