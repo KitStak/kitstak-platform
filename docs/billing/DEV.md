@@ -47,6 +47,9 @@ All live in `deploy/dev/`. All are safe to run again.
 | `rate-limit-reset.sh` | Clears the sign in and sign up rate limit counters in the local database. |
 | `billing-tick.sh` | Runs the billing job once on the local portal: sends waiting emails to the dev outbox, queues trial and late payment reminders, runs what is due for test subscriptions. With the word `watch` it runs every 15 seconds. |
 | `billing-reset.sh <org-slug>` | Shows the billing rows of one organization. With the word `yes` after the slug it removes them, so the organization is back to "never had a trial". Keeps the organization, its people, its data and manual grants. Refuses any database that is not on this machine. |
+| `stripe-env.sh` | Writes `deploy/dev/.run/stripe.env`: the settings that put the Portal in real Stripe test mode. Refuses a live key. Only reads from Stripe. See "Real Stripe test mode" below. |
+| `stripe-events.sh` | Fetches real Stripe test events and posts them to the local Portal webhook route, signed with the local webhook secret. `watch` keeps going. Only reads from Stripe, only posts to `localhost`. |
+| `stripe-sandbox-test.sh` | Runs the real Stripe sandbox suite (`packages/billing/tests/stripe-sandbox`). Every other test command skips it. |
 
 Runtime files (logs, pid files, saved sessions, screenshots, the generated sign-in secret)
 go to `deploy/dev/.run/`, which is gitignored.
@@ -133,14 +136,7 @@ set and `NODE_ENV` not set to `production`:
 `NEXT_PUBLIC_SITE_URL` points at the local marketing site (port 3600), so "Talk to us", Terms and Privacy stay local. An older `.env.local` without that line works too: with no value and `NODE_ENV` not `production`, the Portal uses `http://localhost:3600` by itself. The full
 list of variables and what each one does is in `GO-LIVE.md`. Keys never go in the repo.
 
-To try real Stripe test mode, put your own **test** keys in `apps/portal/.env.local`
-(`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`), then:
-
-```bash
-STRIPE_SECRET_KEY=sk_test_yours pnpm -F @kitstak/billing stripe:setup apply   # products, prices, portal configuration
-stripe listen -f localhost:3300/api/billing/webhooks/stripe                   # prints the whsec_ value to use
-deploy/dev/stop.sh portal && deploy/dev/app-start.sh portal
-```
+Real Stripe test mode has its own switch and its own section: "Real Stripe test mode" below.
 
 After you change an env file, restart that app:
 
@@ -180,6 +176,148 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5544/kitstak \
 
 Right after `db-setup.sh` no org has any entitlement row, so `list` shows every module as
 blocked. That is the true starting state for trial and checkout testing.
+
+## Real Stripe test mode
+
+The default billing mode of the local Portal is the built in test gateway. That is what every test
+suite expects, and it is the mode to leave the shared dev stack in. Real Stripe test mode is one
+switch away. It talks to a real Stripe account in **test mode** (a sandbox). No real money moves, and
+every billing screen still says "Test mode".
+
+### Turn it on
+
+```bash
+deploy/dev/stripe-env.sh                              # once: writes deploy/dev/.run/stripe.env
+deploy/dev/stop.sh portal
+KITSTAK_STRIPE=1 deploy/dev/app-start.sh portal       # the Portal in real Stripe test mode
+deploy/dev/status.sh                                  # portal line says "billing: REAL STRIPE TEST MODE"
+deploy/dev/stripe-events.sh watch                     # in a second terminal: brings Stripe's events in
+```
+
+### Turn it off again
+
+```bash
+deploy/dev/stop.sh portal
+deploy/dev/app-start.sh portal                        # back to the test gateway, the default
+```
+
+`app-start.sh` refuses to "reuse" a Portal that runs in the other mode. It says `WRONG MODE` and tells
+you to stop it first, so nobody tests against the wrong gateway by accident.
+
+### Where the key comes from
+
+- **In the cloud dev container** the sandbox key is not in any file or variable. The network proxy adds
+  it to every request to `api.stripe.com`. Code sends the placeholder `sk_test_proxyinjected` and never
+  sees the real key. `stripe-env.sh` writes that placeholder, and two more lines the proxy needs:
+  `STRIPE_HTTP_CLIENT=fetch` (the Stripe SDK then uses `fetch`) and `NODE_USE_ENV_PROXY=1` (Node then
+  follows `HTTPS_PROXY`). `curl` works as it is.
+- **On your own machine** export your own test key first, then run the script:
+  `STRIPE_SECRET_KEY=sk_test_yours deploy/dev/stripe-env.sh`. The key is stored in the untracked file.
+
+`stripe-env.sh` refuses a live key, and it refuses a key that answers in live mode. `deploy/dev/.run/`
+is gitignored. Never commit that file. `deploy/dev/stripe-env.sh --print` shows it with secrets hidden.
+
+A new Stripe account needs its products, prices and Billing Portal configuration once:
+
+```bash
+STRIPE_SECRET_KEY=sk_test_proxyinjected STRIPE_HTTP_CLIENT=fetch NODE_USE_ENV_PROXY=1 \
+  pnpm -F @kitstak/billing stripe:setup apply          # 4 products, 16 prices, 1 portal configuration
+```
+
+(On your own machine use your own key and leave the two proxy variables out.) The sandbox
+"KitStak LLC sandbox" (`acct_1TYwSo3PaLKIRZri`) already has them. `stripe-env.sh` finds the portal
+configuration by its label and writes its id (`bpc_1UfR5Q3PaLKIRZriUCmhs1PW`).
+
+### Webhooks with no tunnel
+
+Stripe cannot reach a Portal on a laptop or in a container. So nothing is registered at Stripe at all.
+`stripe-env.sh` makes a signing secret on your machine (`STRIPE_WEBHOOK_SECRET=whsec_local_...`), the
+Portal checks signatures with it, and `stripe-events.sh` does the delivery:
+
+1. it reads new events from Stripe (`GET /v1/events`), oldest first,
+2. it signs each one the way Stripe does (HMAC SHA-256 of `<time>.<body>` with the local secret),
+3. it posts it to `http://localhost:3300/api/billing/webhooks/stripe`.
+
+So the real webhook route and the real handler run on real event bodies.
+
+```bash
+deploy/dev/stripe-events.sh                 # everything new, once
+deploy/dev/stripe-events.sh watch           # every 3 seconds, until Ctrl C
+deploy/dev/stripe-events.sh status          # what is waiting. Sends nothing.
+deploy/dev/stripe-events.sh since 30        # start again from the last 30 minutes
+deploy/dev/stripe-events.sh replay evt_1 evt_2      # send these again: the Portal answers "duplicate"
+deploy/dev/stripe-events.sh since 30 --reverse --twice   # newest first, each one two times
+```
+
+Each line it prints is one delivery: the HTTP status, what the Portal answered (`processed`,
+`duplicate`, `ignored`, `failed`), the event id and its type. `ignored` is normal for events of
+customers this database does not know (other people's test runs in the same sandbox). The tool keeps
+the id of the last event it forwarded in `deploy/dev/.run/stripe-events.cursor.json`. An event the
+Portal answers 500 for stops the run and is tried again next time, so order is kept. A 503 means the
+Portal is not in Stripe mode. A 400 means the Portal was started with another webhook secret: restart it.
+
+The tool only reads from Stripe, only posts to `localhost`, refuses a live key and never forwards a
+live event. It never creates, changes or disables a webhook endpoint. On your own machine
+`stripe listen -f localhost:3300/api/billing/webhooks/stripe` works too: put the `whsec_` value it
+prints into `deploy/dev/.run/stripe.env` and restart the Portal.
+
+### What does not work in the cloud dev container
+
+The container's network lets `api.stripe.com` through and nothing else of Stripe. A browser there is
+refused (HTTP 403 from the proxy, `net::ERR_TUNNEL_CONNECTION_FAILED` in Chromium) on:
+
+| Host | What lives there | What to do instead |
+|:-|:-|:-|
+| `checkout.stripe.com`, `js.stripe.com` | The hosted pay page | The Portal still makes the real Checkout Session. Do the pay step through the API (below). |
+| `billing.stripe.com` | The Billing Portal (card update) | The Portal still makes the real session. Attach a test card and make it the customer's default through the API. |
+| `pay.stripe.com`, `invoice.stripe.com` | Invoice PDF and the hosted invoice page | The Portal still answers with the right link. Open it on a machine with normal internet. |
+| `hooks.stripe.com` | The 3D Secure bank step | Cannot be finished. A card that needs it stays "needs approval". |
+
+This is the container, not the product. On a normal machine all of these open.
+
+The pay step through the API, for the Checkout Session the Portal just made (`cs_test_...` is in the
+address the browser was sent to, and in the portal log):
+
+```bash
+K=sk_test_proxyinjected; CS=cs_test_...; ORG=<organization id>
+CUS=$(curl -s -u $K: https://api.stripe.com/v1/checkout/sessions/$CS | node -pe 'JSON.parse(require("fs").readFileSync(0)).customer')
+curl -s -u $K: https://api.stripe.com/v1/checkout/sessions/$CS/line_items       # the prices and quantities
+PM=$(curl -s -u $K: https://api.stripe.com/v1/payment_methods/pm_card_visa/attach -d customer=$CUS | node -pe 'JSON.parse(require("fs").readFileSync(0)).id')
+curl -s -u $K: https://api.stripe.com/v1/subscriptions -d customer=$CUS \
+  -d "items[0][price]=price_..." -d "items[0][quantity]=2" \
+  -d "metadata[kitstak_org_id]=$ORG" -d default_payment_method=$PM \
+  -d "payment_settings[save_default_payment_method]=on_subscription"          # add -d trial_end=<unix time> while a trial runs
+curl -s -u $K: -X POST https://api.stripe.com/v1/checkout/sessions/$CS/expire   # the pay page is not used
+deploy/dev/stripe-events.sh                                                     # bring the events in
+```
+
+Test cards for this: `pm_card_visa` works, `pm_card_chargeDeclined` is declined,
+`pm_card_authenticationRequired` needs the bank step, `pm_card_chargeCustomerFail` can be saved and
+fails when it is charged later (a failed renewal).
+
+### The real Stripe sandbox suite
+
+```bash
+deploy/dev/stripe-sandbox-test.sh              # all of it, about 15 minutes
+deploy/dev/stripe-sandbox-test.sh 03-plan      # one file
+```
+
+It runs the same server code and the same webhook handler against real Stripe, with Stripe test
+clocks for time. The Portal does not have to run, in either mode. Each flow makes its own organization
+and its own Stripe customer on its own test clock, checks the Stripe objects and our tables after
+every step, and removes its local rows when it is done. `pnpm -F @kitstak/billing test` skips these
+files: they only run with `STRIPE_SANDBOX=1`, which this script sets. What the suite covers, what it
+found and what it cannot cover is in `STRIPE-SANDBOX-RUN.md`.
+
+- Stripe objects are kept after a run, so you can look at them. `STRIPE_SANDBOX_CLEANUP=1` deletes the
+  test clocks the run made (their customers and plans go with them).
+- Evidence (the Stripe ids and the events of each flow) is written to
+  `deploy/dev/.run/stripe-sandbox/*.json`.
+- Some Stripe keys need a person to approve `DELETE /v1/subscriptions/:id` in the Stripe dashboard
+  (Stripe answers "This action requires human approval"). The key of the cloud dev container is one.
+  With such a key put `STRIPE_SANDBOX_CANCEL_NEEDS_APPROVAL=1` in `deploy/dev/.run/stripe.env`: the two
+  flows that end a subscription at once are then skipped and say so. `=check` instead runs the test that
+  proves a refusal changes nothing. Each refusal leaves one approval request in Stripe, so use it rarely.
 
 ## Emails, the billing job and test time
 
@@ -396,3 +534,9 @@ signed in. `/forgot-password` in every app goes to the Portal's too.
 - **Production stays strict.** None of this applies when `NODE_ENV=production`. There the
   test gateway is off, and billing without Stripe keys must fail closed with an honest
   message.
+- **`app-start.sh portal` says `WRONG MODE`.** The Portal runs in real Stripe test mode and you asked
+  for the default (or the other way round). Run `deploy/dev/stop.sh portal` and start it again the
+  way you want it. `deploy/dev/status.sh` shows the mode of the running Portal.
+- **A Stripe call from Node hangs or fails in the cloud container, and `curl` works.** Node ignores the
+  proxy unless it is told. The process needs `STRIPE_HTTP_CLIENT=fetch` and `NODE_USE_ENV_PROXY=1`.
+  The three Stripe scripts in `deploy/dev/` set both from `deploy/dev/.run/stripe.env`.
