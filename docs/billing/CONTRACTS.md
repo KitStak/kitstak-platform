@@ -82,6 +82,7 @@ packages/billing/
     plan-state.ts         PURE. PlanState types, derivePlanState, planNoticeFor, planLockFor
     errors.ts             PURE. BillingErrorCode, BillingResult, BILLING_ERROR_COPY
     email-types.ts        PURE. EmailTemplateId and payload map (the email contract)
+    invoice-view.ts       PURE. invoiceView, invoiceTitle: the lines and sums of an invoice, for the screen and the test PDF
     index.ts              re-exports the PURE modules only
     server/
       index.ts            barrel for everything below
@@ -110,7 +111,7 @@ packages/billing/
       types.ts            BillingGateway and the normalized Gateway* types
       stripe.ts           createStripeGateway (the only file that imports `stripe`)
       test.ts             createTestGateway, TEST_CARDS, test tools
-      test-pdf.ts         renderInvoicePdf (tiny built in PDF writer, no dependency)
+      test-pdf.ts         renderInvoicePdf (built in PDF writer, no dependency; same lines as the invoice screen)
     emails/               LIFECYCLE: index.ts, send.ts, deliver.ts, render.ts, layout.ts, templates/*.ts
     jobs/                 LIFECYCLE: index.ts, tick.ts, reminders.ts, reconcile.ts
   scripts/                LIFECYCLE: stripe-setup.ts, backfill-entitlements.ts
@@ -129,6 +130,7 @@ packages/billing/
 | `@kitstak/billing/plan-state` | `src/plan-state.ts` | yes |
 | `@kitstak/billing/errors` | `src/errors.ts` | yes |
 | `@kitstak/billing/email-types` | `src/email-types.ts` | yes |
+| `@kitstak/billing/invoice-view` | `src/invoice-view.ts` | yes |
 | `@kitstak/billing/server` | `src/server/index.ts` | no |
 | `@kitstak/billing/gateway` | `src/gateway/types.ts` | types only |
 | `@kitstak/billing/gateway/stripe` | `src/gateway/stripe.ts` | no |
@@ -1244,7 +1246,8 @@ Rules inside `createCheckout`:
 5. Success URL `${portalUrl}/billing/checkout/success?session_id={CHECKOUT_SESSION_ID}`; cancel URL
    `${portalUrl}/billing/checkout/canceled`. Both are built here from `rt.portalUrl`, never from input.
 6. Rate limit: 10 sessions per org per 10 minutes (`rate_limited`).
-7. Audit `checkout.started`.
+7. Audit `checkout.started`, once per checkout (`recordAuditOnce`): opening the pay page again with the same cart
+   adds no second row.
 
 ### 11.6 Changing a paid plan
 
@@ -1327,6 +1330,8 @@ export type AuditAction =
 export interface AuditEntry { readonly orgId: string; readonly actor: BillingActor; readonly action: AuditAction;
   readonly summary: string; readonly data?: Record<string, unknown>; readonly eventId?: string }
 export function recordAudit(db: Pick<BillingDb, 'insert'>, entry: AuditEntry): Promise<void>;
+/** Skips the row when the newest row of the organization, from the last day, says the same thing by the same person. */
+export function recordAuditOnce(db: Pick<BillingDb, 'insert' | 'select'>, entry: AuditEntry): Promise<boolean>;
 export interface AuditRow { readonly id: string; readonly at: Date; readonly actorLabel: string;
   readonly action: AuditAction; readonly summary: string; readonly data: Record<string, unknown> }
 export function listAuditLog(db: BillingReadDb, input: { orgId: string; limit?: number; before?: Date }): Promise<readonly AuditRow[]>;
@@ -2092,3 +2097,12 @@ unless the row says "changed". Migration `0008_core_billing_credit.sql` carries 
 | Change an unverified email | `changeUnverifiedEmailAction` (portal): only while the email is unverified, only for password accounts, 3 tries an hour. Sends a new code and keeps the account, the organization and the trial. |
 | Billing manager cleanup | The trigger `core.billing_manager_cleanup` on `core.member` removes the `core.billing_managers` row when a member is deleted or deactivated, at every door, and writes a `manager.removed` activity line. |
 | Microsoft sign in, changed | `TRUSTED_LINK_PROVIDERS` in `@kitstak/auth` is `['google']`. A Microsoft sign in joins an existing account only when the token carries `xms_edov` (`microsoftEmailVerified` in the portal). |
+
+### 2026-11-24, review round 1 (screen fixes and gate round 1)
+
+| What | Detail | Who it touches |
+|:-|:-|:-|
+| `@kitstak/billing/invoice-view` | New pure module: `invoiceView` and `invoiceTitle` moved here from the portal, so the invoice screen and the test gateway's PDF print the same lines and the same sums. The portal files `features/billing/invoices/invoice-view.ts` and `invoice-words.ts` re-export them. | billing-ui, test gateway |
+| Test invoice PDF | `renderInvoicePdf` draws the KitStak mark, a seller block and a buyer block, then the same lines as the screen. Seller facts come from `BILLING_SELLER_NAME`, `BILLING_SELLER_ADDRESS` and `BILLING_SELLER_TAX_ID` (see `GO-LIVE.md`). | test gateway |
+| `checkout.started`, changed | Written with `recordAuditOnce`: going to the pay page and back with the same cart is one row in the log and in the CSV file. A different cart, another person or anything that happened in between starts a new row. The activity page still folds older repeated rows into one line with a count. | activity page, CSV export |
+| CRM home | `useHydrated` (CRM `lib/hooks`): the home cards show their loading rows until the page is live in the browser, so the first browser pass matches what the server drew. | CRM |

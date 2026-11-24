@@ -38,7 +38,7 @@ export {
   type BillingProfile,
 } from './profile';
 export { checkSeatAvailable, checkWarehouseAvailable, countBillableSeats, countWarehouses } from './usage';
-export { listAuditLog, recordAudit, type AuditAction, type AuditEntry, type AuditRow } from './audit';
+export { listAuditLog, recordAudit, recordAuditOnce, type AuditAction, type AuditEntry, type AuditRow } from './audit';
 export { billingRecipients, enqueueEmail, enqueueForBillingRecipients } from './outbox';
 export { enforceRateLimit } from './rate-limit';
 export { completeSignupIntent, getOpenSignupIntent, upsertSignupIntent, type SignupIntent } from './intents';

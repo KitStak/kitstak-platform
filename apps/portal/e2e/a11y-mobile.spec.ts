@@ -6,8 +6,10 @@ import {
   handoffLink,
   newPerson,
   openBilling,
+  openTestCheckout,
   orgIdOf,
   payAndSucceed,
+  payWith,
   resetRateLimits,
   scrollsSideways,
   trialAccount,
@@ -98,8 +100,16 @@ test.describe('phones, keyboards and reduced motion', () => {
   test('the cancel screen and the activity list fit a phone on a paid plan', async ({ browser }) => {
     const context = await browser.newContext(PHONE);
     const page = await context.newPage();
-    await trialAccount(page, 'phonepaid', CART_PULSE);
-    await payAndSucceed(page);
+    await trialAccount(page, 'phonepaid', CART_CRM_WMS);
+    // The test pay page with a two app summary, the card chips and the promo field: it fits too.
+    await openTestCheckout(page);
+    await expectNoSidewaysScroll(page, 'the test pay page');
+    await expectTapTarget(page, 'test-pay');
+    await expectTapTarget(page, 'test-promo');
+    await payWith(page, 'success');
+    await page.waitForURL(/\/billing\/checkout\/success/, { timeout: 90_000 });
+    await expect(page.getByTestId('checkout-success')).toBeVisible({ timeout: 30_000 });
+    await expectNoSidewaysScroll(page, 'the success page');
     await page.goto('/billing/cancel');
     await expect(page.getByTestId('cancel-confirm')).toBeVisible({ timeout: 90_000 });
     await expectNoSidewaysScroll(page, '/billing/cancel');

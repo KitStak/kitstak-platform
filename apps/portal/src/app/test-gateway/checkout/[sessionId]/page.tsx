@@ -75,7 +75,7 @@ export default async function TestCheckoutPage({
     : null;
 
   return (
-    <div data-testid="test-checkout" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
+    <div data-testid="test-checkout" className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
       <section aria-labelledby="test-order-heading" className="min-w-0">
         <p className="text-sm font-medium text-fg-muted">{view.orgName}</p>
         <h1 id="test-order-heading" className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-fg">
@@ -106,7 +106,7 @@ export default async function TestCheckoutPage({
         </Card>
       </section>
 
-      <Card as="section" aria-label="Card details" className="p-5 sm:p-6">
+      <Card as="section" aria-label="Card details" className="min-w-0 p-5 sm:p-6">
         <TestCheckout
           sessionId={view.sessionId}
           cards={TEST_CARDS.map((card) => ({ number: card.number, label: card.label.replace('Works now, fails at the next renewal', 'Fails at next renewal'), outcome: card.outcome }))}

@@ -7,8 +7,9 @@ import { Logo } from '@/features/shell/logo';
 import { ThemeToggle } from '@/features/shell/theme-toggle';
 import type { LegalUrls } from './legal-line';
 
+/** Short words ("Terms"): on touch screens the link is 44 px wide as well as 44 px tall. */
 const FOOT_LINK =
-  'rounded-sm hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
+  'rounded-sm hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus pointer-coarse:inline-flex pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center';
 
 function Footer({ legal, year, className }: { readonly legal: LegalUrls; readonly year: number; readonly className?: string }) {
   return (

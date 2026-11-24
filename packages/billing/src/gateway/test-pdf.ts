@@ -1,32 +1,53 @@
 /**
- * A tiny built in PDF writer for test gateway invoices (docs/billing/CONTRACTS.md section 10.4). No
- * dependency: one page, the standard Helvetica and Courier fonts, plain text. Stripe makes its own
- * PDFs in the Stripe modes; this file is only for local and non production use.
+ * A small built in PDF writer for test gateway invoices (docs/billing/CONTRACTS.md section 10.4). No
+ * dependency: one page, the standard Helvetica fonts, a few filled boxes and thin rules. Stripe makes
+ * its own PDFs in the Stripe modes; this file is only for local and non production use.
+ *
+ * The page reads like the invoice screen in the Portal (SPEC 6.6), top to bottom:
+ *   the KitStak mark from the email header, who sells and who buys, the date and what it is for,
+ *   the same plan lines as the picker, then one sum: list price, discounts, subtotal, promo code or
+ *   credit (once), tax, total, paid. `invoiceView` builds the lines for both, so they cannot differ.
  */
 import { formatDay, formatMoney } from '../catalog';
+import { type InvoiceSeller, invoiceSeller, invoiceTitle, invoiceView } from '../invoice-view';
+
+export { type InvoiceSeller, invoiceSeller };
+import { quoteSummaryLines } from '../quote';
 import type { GatewayInvoice } from './types';
 
 export interface InvoicePdfInput {
   readonly invoice: GatewayInvoice;
   readonly orgName: string;
-  /** Lines under "Bill to": email, address, tax ID. */
+  /** Lines under "Billed to": email, address, tax ID. */
   readonly billTo?: readonly string[];
+  /** Defaults to `invoiceSeller(process.env)`. */
+  readonly seller?: InvoiceSeller;
 }
 
-interface TextRun {
-  readonly font: 'F1' | 'F2' | 'F3';
-  readonly size: number;
-  readonly x: number;
-  readonly y: number;
-  readonly text: string;
-}
+type Font = 'F1' | 'F2';
+type Rgb = readonly [number, number, number];
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
 const LEFT = 56;
 const RIGHT = PAGE_WIDTH - 56;
-/** Courier is fixed width: every glyph is 0.6 of the font size. That makes right aligning exact. */
-const COURIER_ADVANCE = 0.6;
+/** The second column of the two column blocks, and the label edge of the totals. */
+const MID = 326;
+
+/** The colors of the email header and the Portal's light theme. */
+const hex = (value: string): Rgb => [
+  parseInt(value.slice(1, 3), 16) / 255,
+  parseInt(value.slice(3, 5), 16) / 255,
+  parseInt(value.slice(5, 7), 16) / 255,
+];
+const INK = hex('#0a1628');
+const BODY = hex('#3c4659');
+const MUTED = hex('#566072');
+const RULE = hex('#dcd6c8');
+const RULE_SOFT = hex('#e9e4d8');
+const RED = hex('#c8102e');
+const OXBLOOD = hex('#8f122c');
+const GREEN = hex('#1a6b45');
 
 /** PDF standard fonts speak Latin 1. Anything else becomes a question mark. */
 function latin1(text: string): string {
@@ -42,8 +63,37 @@ function escapePdf(text: string): string {
   return latin1(text).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
 
-function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+/**
+ * The width of a money string in Helvetica or Helvetica Bold. Digits and "$" are 556 units wide in
+ * both, "." and "," are 278 and "-" is 333 (the Adobe font metrics), so right aligning is exact.
+ */
+function moneyWidth(text: string, size: number): number {
+  let units = 0;
+  for (const char of text) units += char === '.' || char === ',' ? 278 : char === '-' ? 333 : 556;
+  return (units / 1000) * size;
+}
+
+/** Breaks a long line at spaces. Helvetica averages about half its size per letter. */
+function wrap(text: string, width: number, size: number, maxLines = 2): string[] {
+  const perLine = Math.max(8, Math.floor(width / (size * 0.52)));
+  const words = text.trim().split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= perLine) {
+      current = next;
+      continue;
+    }
+    if (current) lines.push(current);
+    current = word.length > perLine ? `${word.slice(0, perLine - 3)}...` : word;
+  }
+  if (current) lines.push(current);
+  if (lines.length <= maxLines) return lines;
+  const kept = lines.slice(0, maxLines);
+  const last = kept[maxLines - 1] ?? '';
+  kept[maxLines - 1] = `${last.slice(0, Math.max(0, perLine - 3))}...`;
+  return kept;
 }
 
 function statusWords(invoice: GatewayInvoice): string {
@@ -63,86 +113,148 @@ function statusWords(invoice: GatewayInvoice): string {
 
 export function renderInvoicePdf(input: InvoicePdfInput): Uint8Array {
   const { invoice } = input;
-  const runs: TextRun[] = [];
-  let y = PAGE_HEIGHT - 64;
-  const text = (value: string, options?: { font?: TextRun['font']; size?: number; x?: number }) => {
-    runs.push({ font: options?.font ?? 'F1', size: options?.size ?? 11, x: options?.x ?? LEFT, y, text: value });
+  const seller = input.seller ?? invoiceSeller(process.env);
+  const view = invoiceView(invoice);
+  const ops: string[] = [];
+  const num = (value: number) => value.toFixed(2);
+  const fill = (color: Rgb) => `${color.map((part) => part.toFixed(3)).join(' ')} rg`;
+
+  const text = (value: string, x: number, y: number, options?: { font?: Font; size?: number; color?: Rgb; spacing?: number }) => {
+    const size = options?.size ?? 10.5;
+    ops.push(
+      `BT /${options?.font ?? 'F1'} ${size} Tf ${fill(options?.color ?? INK)} ${num(options?.spacing ?? 0)} Tc ${num(x)} ${num(y)} Td (${escapePdf(value)}) Tj ET`,
+    );
   };
-  const amount = (cents: number, options?: { bold?: boolean }) => {
+  const money = (cents: number, y: number, options?: { font?: Font; size?: number; color?: Rgb }) => {
     const value = formatMoney(cents);
-    const size = 11;
-    runs.push({ font: 'F3', size, x: RIGHT - value.length * size * COURIER_ADVANCE, y, text: value });
-    void options;
+    const size = options?.size ?? 10.5;
+    text(value, RIGHT - moneyWidth(value, size), y, { ...options, size });
   };
-  const down = (by: number) => {
-    y -= by;
+  const box = (x: number, y: number, width: number, height: number, color: Rgb) => {
+    ops.push(`${fill(color)} ${num(x)} ${num(y)} ${num(width)} ${num(height)} re f`);
   };
+  const rule = (y: number, from = LEFT, color: Rgb = RULE) => box(from, y, RIGHT - from, 0.75, color);
+  const eyebrow = (value: string, x: number, y: number) => text(value.toUpperCase(), x, y, { font: 'F2', size: 7.5, color: MUTED, spacing: 0.9 });
 
-  text('KitStak', { font: 'F2', size: 22 });
-  down(26);
-  text(`Invoice ${invoice.number ?? invoice.id}`, { font: 'F2', size: 14 });
-  down(18);
-  text('Test mode. No real money moved.', { size: 10 });
-  down(26);
+  /* The mark from the email header: a red bar over an oxblood bar, then the word. */
+  let y = PAGE_HEIGHT - 62;
+  box(LEFT, y + 9, 26, 6, RED);
+  box(LEFT, y - 1, 26, 6, OXBLOOD);
+  text('KITSTAK', LEFT + 36, y + 1.5, { font: 'F2', size: 15, spacing: 2.6 });
 
-  text(`Date: ${formatDay(invoice.issuedAt)}`);
-  down(16);
-  text(`Status: ${statusWords(invoice)}`);
-  down(16);
+  y -= 46;
+  text(`Invoice ${invoice.number ?? invoice.id}`, LEFT, y, { font: 'F2', size: 20 });
+  y -= 19;
+  text(statusWords(invoice), LEFT, y, { size: 10.5, color: BODY });
+  y -= 14;
+  text('Test mode. No real money moved.', LEFT, y, { size: 9, color: MUTED });
+  y -= 18;
+  rule(y);
+
+  /* Who sells and who buys. */
+  y -= 24;
+  eyebrow('From', LEFT, y);
+  eyebrow('Billed to', MID, y);
+  const columnWidth = MID - LEFT - 24;
+  const column = (x: number, title: string, lines: readonly string[]): number => {
+    let at = y - 16;
+    for (const part of wrap(title, columnWidth, 11)) {
+      text(part, x, at, { font: 'F2', size: 11 });
+      at -= 14;
+    }
+    for (const line of lines.slice(0, 7)) {
+      for (const part of wrap(line, columnWidth, 9.5)) {
+        text(part, x, at, { size: 9.5, color: MUTED });
+        at -= 13;
+      }
+    }
+    return at;
+  };
+  const sellerLines = [...seller.address, ...(seller.taxId ? [`Tax ID: ${seller.taxId}`] : []), seller.site];
+  y = Math.min(column(LEFT, seller.name, sellerLines), column(MID, input.orgName, input.billTo ?? [])) - 12;
+
+  /* When, and what for. */
+  eyebrow('Date', LEFT, y);
+  eyebrow('For', MID, y);
+  text(formatDay(invoice.issuedAt), LEFT, y - 16, { font: 'F2', size: 11 });
+  text(invoiceTitle(invoice), MID, y - 16, { font: 'F2', size: 11 });
   if (invoice.periodStart && invoice.periodEnd) {
-    text(`Period: ${formatDay(invoice.periodStart)} to ${formatDay(invoice.periodEnd)}`);
-    down(16);
+    text(`${formatDay(invoice.periodStart)} to ${formatDay(invoice.periodEnd)}`, MID, y - 30, { size: 9.5, color: MUTED });
   }
-  down(10);
+  y -= 48;
+  rule(y);
 
-  text('Bill to', { font: 'F2' });
-  down(16);
-  text(clip(input.orgName, 80));
-  down(16);
-  for (const line of input.billTo ?? []) {
-    text(clip(line, 80));
-    down(16);
+  /* The lines. A plan invoice repeats the picker: one math line per app at its list price. */
+  y -= 24;
+  if (view.quote) {
+    eyebrow('Your plan', LEFT, y);
+    y -= 18;
+    for (const line of view.quote.lines) {
+      text(line.math, LEFT, y);
+      y -= 16;
+    }
+  } else {
+    eyebrow('What it was for', LEFT, y);
+    text('AMOUNT', RIGHT - 39, y, { font: 'F2', size: 7.5, color: MUTED, spacing: 0.9 });
+    y -= 18;
+    for (const line of view.rawLines.slice(0, 18)) {
+      const [first = ''] = wrap(line.description, RIGHT - LEFT - 90, 10.5, 1);
+      text(first, LEFT, y);
+      money(line.amountCents, y);
+      y -= 16;
+    }
   }
-  down(14);
+  y -= 2;
+  rule(y, LEFT, RULE_SOFT);
 
-  text('What it was for', { font: 'F2' });
-  runs.push({ font: 'F2', size: 11, x: RIGHT - 48, y, text: 'Amount' });
-  down(18);
-  for (const line of invoice.lines.slice(0, 24)) {
-    text(clip(line.description, 70));
-    amount(line.amountCents);
-    down(16);
-  }
-  down(10);
-
-  const total = (label: string, cents: number, bold = false) => {
-    runs.push({ font: bold ? 'F2' : 'F1', size: 11, x: RIGHT - 240, y, text: label });
-    amount(cents);
-    down(16);
+  /* One sum, top to bottom. Every row is printed once, and each total is the rows above it. */
+  y -= 22;
+  const row = (label: string, cents: number, options?: { bold?: boolean; color?: Rgb; size?: number }) => {
+    const font: Font = options?.bold ? 'F2' : 'F1';
+    const [first = ''] = wrap(label, RIGHT - MID - 70, 10.5, 1);
+    text(first, MID, y, { font, size: options?.size ?? 10.5, color: options?.bold ? INK : BODY });
+    money(cents, y, { font, size: options?.size ?? 10.5, color: options?.color ?? INK });
+    y -= 17;
   };
-  total('Subtotal', invoice.subtotalCents);
-  if (invoice.discountCents > 0) total('Discount', -invoice.discountCents);
-  total('Tax', invoice.taxCents);
-  total('Total', invoice.totalCents, true);
-  total('Paid', invoice.amountPaidCents);
-  total('Still due', invoice.amountDueCents, true);
-  if (invoice.paymentMethodLast4) {
-    down(8);
-    text(`Paid with the card ending ${invoice.paymentMethodLast4}.`);
-    down(16);
+  const thin = () => {
+    rule(y + 9, MID, RULE_SOFT);
+    y -= 8;
+  };
+  const summary = view.quote ? quoteSummaryLines(view.quote).filter((entry) => entry.kind !== 'total') : [];
+  for (const entry of summary) row(entry.label, entry.amountCents, { color: entry.amountCents < 0 ? GREEN : INK });
+  if (summary.length > 0) thin();
+  row('Subtotal', view.subtotalCents, { bold: true });
+  for (const entry of view.adjustments) row(entry.label, entry.amountCents, { color: GREEN });
+  row('Sales tax', invoice.taxCents);
+  thin();
+  row('Total', invoice.totalCents, { bold: true, size: 12 });
+  row('Paid', invoice.amountPaidCents);
+  if (invoice.refundedCents > 0) row('Sent back to your card', invoice.refundedCents);
+  if (invoice.amountDueCents > 0) row('Still due', invoice.amountDueCents, { bold: true });
+
+  y -= 4;
+  rule(y);
+  y -= 22;
+  if (invoice.status === 'paid' && invoice.paymentMethodLast4) {
+    const when = invoice.paidAt ? `Paid on ${formatDay(invoice.paidAt)}` : 'Paid';
+    text(`${when} with the card ending ${invoice.paymentMethodLast4}.`, LEFT, y, { color: BODY });
+  } else if (invoice.status === 'paid') {
+    text(invoice.paidAt ? `Paid on ${formatDay(invoice.paidAt)}.` : 'Paid.', LEFT, y, { color: BODY });
+  } else if (invoice.status === 'open') {
+    text('This invoice is not paid yet. Pay it in Billing in the Portal.', LEFT, y, { color: BODY });
   }
 
-  const stream = runs
-    .map((run) => `BT /${run.font} ${run.size} Tf ${run.x.toFixed(2)} ${run.y.toFixed(2)} Td (${escapePdf(run.text)}) Tj ET`)
-    .join('\n');
+  /* The foot of the page: who sent it. */
+  rule(64, LEFT, RULE_SOFT);
+  text(`${seller.name} \u00b7 ${seller.site}`, LEFT, 48, { size: 9, color: MUTED });
 
+  const stream = ops.join('\n');
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 4 0 R /F2 5 0 R /F3 6 0 R >> >> /Contents 7 0 R >>`,
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>',
     `<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`,
   ];
 

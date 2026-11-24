@@ -12,6 +12,7 @@
     "./plan-state": "./src/plan-state.ts",
     "./errors": "./src/errors.ts",
     "./email-types": "./src/email-types.ts",
+    "./invoice-view": "./src/invoice-view.ts",
     "./server": "./src/server/index.ts",
     "./gateway": "./src/gateway/types.ts",
     "./gateway/stripe": "./src/gateway/stripe.ts",

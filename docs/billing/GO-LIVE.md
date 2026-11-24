@@ -92,6 +92,9 @@ only and removes them from preview and development, so a preview build can never
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | optional | Google sign in. The button shows only when both are set. |
 | `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT_ID` | optional | Microsoft sign in. Tenant defaults to `common`. |
 | `NEXT_PUBLIC_SITE_URL` | optional | The marketing site. Default `https://kitstak.com`. |
+| `BILLING_SELLER_NAME` | optional | The company name in the "From" block of every invoice. Default `KitStak LLC`, the name on the Stripe account. |
+| `BILLING_SELLER_ADDRESS` | optional | The seller address on invoices. Split the lines with a bar, like `1 Main St\|Austin, TX 78701\|US`. Not printed until it is set. |
+| `BILLING_SELLER_TAX_ID` | optional | The seller tax ID on invoices. Not printed until it is set. |
 | `NEXT_PUBLIC_TERMS_URL`, `NEXT_PUBLIC_PRIVACY_URL` | optional | Legal links. Default: the pages the CRM serves. |
 | `ENTITLEMENTS_DEV_ALLOW_ALL` | set to `1` until step 11 | Every organization can open every app. `push-env.mjs` keeps it at `1` in all five product projects until `ENFORCE_ENTITLEMENTS=1` is in `deploy/secrets.env`. |
 

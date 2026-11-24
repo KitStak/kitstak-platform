@@ -33,7 +33,8 @@ The files the lifecycle lane added:
 | `tests/price-parity.test.ts` | For the 9 reference carts: the quote, the Stripe mapping total and the first test gateway invoice are the same number, to the cent. The Stripe mapping holds exactly the 16 amounts of `CONTRACTS.md` section 5.2. |
 | `tests/stripe-setup.test.ts` | The setup logic against a fake Stripe account: an empty account gets 4 products, 16 prices and 1 portal configuration; a second run changes nothing; `check` never writes; a wrong amount is skipped unless `reprice` is given; labels are fixed in place; a price on a foreign product is never touched; foreign portal configurations are ignored. |
 | `tests/backfill.test.ts` | Database. `check` lists an organization with no rows. `apply manual` grants four apps once. `apply trial` starts a real 14 day trial in the owner's name. `quiet` holds back the welcome email. No owner means skipped, with the reason. |
-| `src/server/round1.test.ts` | Database. Review round 1. Two pay pages: the older one closes, two paid at the same moment leave one subscription and one charge, and a second live subscription that still got through is canceled and refunded. The server picks the proration date: whole days, the same amount all day, and five rounds of adding 499 seats and taking them off with a back dated date lose one day each and never gain. A stale confirm panel is refused even when the dollars match. Credit and the real next charge after monthly to yearly and back, after removing seats, and across a plan that ends. A promo code: the pay page, the plan state, the email and the first invoice all say $355.68. An open invite holds a seat. A billing manager who is removed or deactivated loses the role. `POST /organization/invite-member` from an unverified account answers 403 `EMAIL_NOT_VERIFIED`; the daily cap answers `INVITE_LIMIT_REACHED`. |
+| `src/server/round1.test.ts` | Database. Review round 1. Two pay pages: the older one closes, two paid at the same moment leave one subscription and one charge, and a second live subscription that still got through is canceled and refunded. Opening the pay page four times with the same cart writes one `checkout.started` row. The server picks the proration date: whole days, the same amount all day, and five rounds of adding 499 seats and taking them off with a back dated date lose one day each and never gain. A stale confirm panel is refused even when the dollars match. Credit and the real next charge after monthly to yearly and back, after removing seats, and across a plan that ends. A promo code: the pay page, the plan state, the email and the first invoice all say $355.68. An open invite holds a seat. A billing manager who is removed or deactivated loses the role. `POST /organization/invite-member` from an unverified account answers 403 `EMAIL_NOT_VERIFIED`; the daily cap answers `INVITE_LIMIT_REACHED`. |
+| `src/gateway/test-pdf.test.ts` | The test invoice PDF reads like the invoice screen: the KitStak mark, a seller block and a buyer block with address and tax ID, the picker lines, then list price, bundle discount, subtotal, the promo code once, tax, total and paid, in that order. A plan change falls back to the gateway lines and names what is still due. Long names wrap. Only seller facts that are set are printed. |
 | `src/proration.test.ts` | The whole day rule: a plan paid minutes ago charges the full period, the date is the same all day, a credit never counts more days than a charge. |
 | `tests/copy-rules.test.ts` | No em dash, en dash, double dash, "coming soon" or lorem in anything the billing package or the shared plan banner and lock screen can show. Every error message, email and catalog sentence is 20 words or fewer. The checker itself is tested. |
 
@@ -43,6 +44,7 @@ Portal files (`pnpm -F kitstak-portal test`):
 |:-|:-|
 | `src/lib/copy-rules.test.ts` | The same copy rules for every screen in the portal. |
 | `src/app/api/billing/jobs/tick/auth.test.ts` | Who may call the billing job: the right bearer secret only, local dev with no secret, production with no secret answers 503. |
+| `src/features/billing/invoices/invoice-view.test.ts` | The invoice lines shared by the invoice screen and the test PDF (`@kitstak/billing/invoice-view`): a plan invoice repeats the picker lines, a promo code or credit is listed once, the subtotal is the sum of the lines above it, and an invoice the catalog cannot rebuild falls back to the gateway lines. |
 | `src/features/billing-activity/model.test.ts` | Every activity action sits in one filter. Rows group by day in the viewer's time zone. Invoice ids are checked before they become a link. CSV cells cannot start a formula. |
 
 ## Layer 3: browser tests (Playwright)
@@ -105,7 +107,7 @@ ENTITLEMENTS_DEV_ALLOW_ALL=0 deploy/dev/app-start.sh crm projects pulse wms
 | `webhook-replay.spec.ts` | The same signed test event twice: 200 then 200 `duplicate`, one ledger row. A changed body with the old signature: 400, no row. No signature: 400. The Stripe route with no key: 503. The job route with a wrong secret. |
 | `lifecycle.spec.ts` | The whole road in one test: signup, trial, paid, plan change, failed payment, fix, cancel. Then the activity page lists it in plain words, the filters and the CSV work, and the outbox shows every email with its HTML and text. |
 | `apps-integration.spec.ts` | The trial banner in the CRM says the same words as the portal's. Projects, Pulse and WMS, which are not in the trial, show the lock screen with the end date, the price after the trial and one button. Adding an app from its lock screen takes 2 clicks, and the app then opens. The test prints which apps it checked and which it skipped. A second test ends a trial and proves view only is told before a form opens: in the CRM, "New board", "Invite" and "Import" open the view only dialog with the banner's words and button, no form opens, and no board or invite row is written. |
-| `a11y-mobile.spec.ts` | At 360 px: no sideways scroll on signup, picker, verify, welcome, billing home, plan, review, invoices, details, team, cancel, activity, the outbox and the template gallery. The main buttons are 44 px tall. Signup to trial with the keyboard alone: Tab, Space on a switch, arrow keys on the stepper, Enter. Reduced motion: no confetti, and with motion allowed the confetti is there. |
+| `a11y-mobile.spec.ts` | At 360 px: no sideways scroll on signup, picker, verify, welcome, billing home, plan, review, the test pay page with a two app plan, the success page, invoices, details, team, cancel, activity, the outbox and the template gallery. The main buttons are 44 px tall. Signup to trial with the keyboard alone: Tab, Space on a switch, arrow keys on the stepper, Enter. Reduced motion: no confetti, and with motion allowed the confetti is there. |
 | `billing-off.spec.ts` | A portal in production mode with no key: pay buttons are disabled with the plain message, the test gateway and the outbox do not exist, and a trial can still start. |
 
 ### Last full run
@@ -119,13 +121,19 @@ ENTITLEMENTS_DEV_ALLOW_ALL=0 deploy/dev/app-start.sh crm projects pulse wms
 - `E2E_BILLING_OFF_URL=http://localhost:3310 pnpm -F kitstak-portal e2e billing-off`, with a built portal
   started in production mode with no keys: 1 passed.
 
-2026-11-23, review round 1, while the backend and the screen fixes were both still landing: `pnpm -F
-kitstak-portal e2e` ran 32 tests in 6.0 minutes: 26 passed, 1 skipped (`billing-off`), 5 failed. The five
-(`apps-integration`, `checkout-success`, `signup-trial`, `trial-end`, `verify-email`) each waited for a
-screen text or button that the screen lane was changing at that moment (the trial banner on day one, the
-"Add a card" button, the verify banner words). The new `credit-promo` and `invite-verified` specs and
-`plan-change`, `seat-limit`, `roles`, `lifecycle` and `payment-failed` passed. Run the suite again once
-both lanes are done.
+2026-11-24, gate round 1, after the review round 1 fixes. Portal, CRM, Projects, Pulse and WMS ran with
+`ENTITLEMENTS_DEV_ALLOW_ALL=0`, and a built portal ran in production mode with no keys on port 3310:
+
+- `E2E_BILLING_OFF_URL=http://localhost:3310 pnpm -F kitstak-portal e2e`: 33 tests, 33 passed, none skipped,
+  5.7 minutes. The integration spec printed: checked CRM trial banner, Projects, Pulse and WMS lock screens
+  with price, Pulse added from its lock screen in 2 clicks. Skipped: nothing.
+- Unit tests: billing 449, portal 149, shared UI 71, entitlements 44, CRM 842, Projects 291, marketing site
+  589, all passed. WMS: 2589 passed, 5 failed in 4 files that this work does not touch (task grid query,
+  page header crumbs, token alias rule, one timing budget). Pulse: 905 passed, and one test that is older
+  than this work (`production-day.db.test.ts`, the order of two lines saved in the same moment) failed in
+  1 run of 5.
+- Signup, sign in, the launcher, every billing tab and organization settings were opened at 1440 px in light
+  and at 390 px in dark: no console error and no failed request.
 
 Real Stripe and real email were not part of any run. Do not trust this file for a pass count: run the
 suite.

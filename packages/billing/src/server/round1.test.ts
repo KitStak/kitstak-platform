@@ -141,6 +141,22 @@ describe.skipIf(!available)('one plan per organization (two checkout sessions)',
     expect(again).toMatchObject({ ok: false, error: { code: 'already_subscribed' } });
   });
 
+  it('opening the pay page again with the same cart is one line in the activity log', async () => {
+    const s = await scene();
+    for (let i = 0; i < 4; i += 1) await openCheckout(s, CRM(2));
+    const started = () => auditsOf(s.org.orgId).then((rows) => rows.filter((row) => row.action === 'checkout.started'));
+    expect(await started()).toHaveLength(1);
+    // A different cart reads differently ("CRM and WMS"), so it is a new line.
+    await openCheckout(s, { products: ['crm', 'wms'], seats: 2, warehouses: 1, interval: 'monthly' });
+    expect((await started()).map((row) => row.summary)).toEqual([
+      `${s.org.owner.name} started checkout for CRM.`,
+      `${s.org.owner.name} started checkout for CRM and WMS.`,
+    ]);
+    // Going back to the first cart after that is a new line too: something happened in between.
+    await openCheckout(s, CRM(2));
+    expect(await started()).toHaveLength(3);
+  });
+
   it('two sessions, both paid at the same moment: one live subscription and one charge', async () => {
     const s = await scene();
     const gateway = s.rt.gateway!;

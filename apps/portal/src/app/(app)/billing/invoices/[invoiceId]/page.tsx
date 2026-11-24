@@ -9,7 +9,7 @@ import { requireBillingContext } from '@/server/billing/context';
 import { env } from '@/server/env';
 import { Badge, Card, Eyebrow, buttonVariants, cn } from '@/components/ui';
 import { BackLink, BillingHeader, TestModeBadge } from '@/features/billing/billing-chrome';
-import { invoiceView } from '@/features/billing/invoices/invoice-view';
+import { invoiceSeller, invoiceView } from '@/features/billing/invoices/invoice-view';
 import { invoiceStatus, invoiceTitle } from '@/features/billing/invoices/invoice-words';
 
 export const metadata: Metadata = { title: 'Invoice' };
@@ -42,12 +42,13 @@ export default async function InvoicePage({ params }: { readonly params: Promise
   const view = invoiceView(invoice);
   // The list price and the discounts of a plan invoice, as their own rows above the subtotal.
   const summary = view.quote ? quoteSummaryLines(view.quote).filter((row) => row.kind !== 'total') : [];
-  const seller = {
-    name: env.BILLING_SELLER_NAME ?? 'KitStak LLC',
-    address: (env.BILLING_SELLER_ADDRESS ?? '').split('|').map((part) => part.trim()).filter(Boolean),
-    taxId: env.BILLING_SELLER_TAX_ID ?? null,
-    site: env.NEXT_PUBLIC_SITE_URL.replace(/^https?:\/\//, '').replace(/\/+$/, ''),
-  };
+  // The same seller block as the PDF: one rule in the billing package.
+  const seller = invoiceSeller({
+    BILLING_SELLER_NAME: env.BILLING_SELLER_NAME,
+    BILLING_SELLER_ADDRESS: env.BILLING_SELLER_ADDRESS,
+    BILLING_SELLER_TAX_ID: env.BILLING_SELLER_TAX_ID,
+    NEXT_PUBLIC_SITE_URL: env.NEXT_PUBLIC_SITE_URL,
+  });
 
   return (
     <div className="flex max-w-[760px] flex-col gap-6">

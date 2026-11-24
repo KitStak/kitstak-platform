@@ -9,7 +9,7 @@ import { CATALOG, normalizeSelection, type PlanSelection, productListLabel } fro
 import { type BillingResult, billingError, billingOk } from '../errors';
 import { isLiveSubscriptionStatus, type PlanState } from '../plan-state';
 import { type Quote, quote } from '../quote';
-import { recordAudit } from './audit';
+import { recordAuditOnce } from './audit';
 import { writeCart } from './cart';
 import { type BillingActor, type BillingDb, type BillingRuntime, errorText, logBilling } from './db';
 import { getBillingProfile, profileInput } from './profile';
@@ -166,7 +166,8 @@ export async function createCheckout(
       successUrl,
       cancelUrl,
     });
-    await recordAudit(rt.db, {
+    // Once per checkout: opening the pay page again with the same cart adds no second line.
+    await recordAuditOnce(rt.db, {
       orgId: input.orgId,
       actor: input.actor,
       action: 'checkout.started',

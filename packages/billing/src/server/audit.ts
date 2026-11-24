@@ -2,7 +2,7 @@
  * The billing audit log (docs/billing/CONTRACTS.md section 11.9). Every billing write records who did
  * it and one plain sentence a customer can read. The activity page lists these rows.
  */
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import { billingAuditLog } from '@kitstak/db/schema';
 import type { BillingActor, BillingDb, BillingReadDb } from './db';
 
@@ -57,6 +57,37 @@ export async function recordAudit(db: Pick<BillingDb, 'insert'>, entry: AuditEnt
     data: entry.data ?? {},
     eventId: entry.eventId ?? null,
   });
+}
+
+/**
+ * For a step a person can repeat without changing anything (opening the pay page again). The row is
+ * skipped when the newest row of this organization, written in the last day, already says the same
+ * thing by the same person. So going to the pay page and back four times is one line in the log and
+ * in the CSV file, and anything that happened in between starts a new line. Returns false on a skip.
+ */
+export async function recordAuditOnce(db: Pick<BillingDb, 'insert' | 'select'>, entry: AuditEntry): Promise<boolean> {
+  const [newest] = await db
+    .select({
+      actorUserId: billingAuditLog.actorUserId,
+      action: billingAuditLog.action,
+      summary: billingAuditLog.summary,
+      fresh: sql<boolean>`${billingAuditLog.createdAt} > now() - interval '1 day'`,
+    })
+    .from(billingAuditLog)
+    .where(eq(billingAuditLog.orgId, entry.orgId))
+    .orderBy(desc(billingAuditLog.createdAt), desc(billingAuditLog.id))
+    .limit(1);
+  if (
+    newest &&
+    newest.fresh &&
+    newest.action === entry.action &&
+    newest.actorUserId === entry.actor.userId &&
+    newest.summary === entry.summary
+  ) {
+    return false;
+  }
+  await recordAudit(db, entry);
+  return true;
 }
 
 export interface AuditRow {
