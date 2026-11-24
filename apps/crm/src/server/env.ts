@@ -82,6 +82,12 @@ const envSchema = z.object({
   /** Vercel Blob credentials. When either is set, uploads go to Blob instead of local disk. */
   BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
   BLOB_STORE_ID: z.string().min(1).optional(),
+  /**
+   * Supabase Storage credentials (server only). When both are set, uploads go to the private
+   * `crm-files` bucket. This is the preferred store: data and files live with one provider.
+   */
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   MAX_UPLOAD_BYTES: z.coerce
     .number()
     .int()
