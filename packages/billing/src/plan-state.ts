@@ -560,8 +560,20 @@ export interface NoticeContext {
   readonly module: ProductId | null;
   readonly viewer: PlanViewer;
   readonly portalUrl: string;
+  /**
+   * The organization the notice is about. Product apps pass it, so every billing link opens the
+   * Portal for this organization, also when the person last used another one there (review round
+   * 4). The Portal itself leaves it out: its links stay inside the organization that is open.
+   */
+  readonly orgId?: string;
   readonly now: Date;
   readonly timeZone?: string;
+  /**
+   * True when every app is open whatever the plan says (`ENTITLEMENTS_DEV_ALLOW_ALL`, which stays
+   * on in production until the last go live step). The notice then never says "view only", because
+   * that would not be true, and a member with no billing rights is shown nothing.
+   */
+  readonly appsOpen?: boolean;
 }
 
 function askWho(viewer: PlanViewer): string {
@@ -624,12 +636,26 @@ function notice(
 
 const MEMBER_KINDS: readonly PlanNoticeKind[] = ['trial_ended', 'unpaid', 'paused', 'ended'];
 
-/** null means show nothing. Pure and deterministic: same input, same words, in every app. */
+/**
+ * null means show nothing. Pure and deterministic: same input, same words, in every app.
+ *
+ * Three kinds of viewer (review round 4):
+ *   - can pay (owner, billing manager): the words and the one button that fixes it,
+ *   - can see billing but cannot pay (admin): the same facts, then who to ask. Never a pay button,
+ *     because that button would end on a page that says "only an owner can do this",
+ *   - a member: a line only when the app is view only, with who to ask.
+ */
 export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNotice | null {
   const { module, viewer, portalUrl, timeZone } = context;
   const from = module ?? undefined;
+  const appsOpen = context.appsOpen === true;
   const day = (date: Date) => formatDayShort(date, timeZone);
-  const link = (intent: Parameters<typeof billingLink>[1]) => billingLink(portalUrl, intent, from);
+  const link = (intent: Parameters<typeof billingLink>[1]) => billingLink(portalUrl, intent, from, context.orgId);
+  /** May pay and change a paid plan. An admin may see billing and change the apps of a free trial. */
+  const payer = viewer.canManage;
+  const who = askWho(viewer);
+  /** The quiet button for a person who can see billing but cannot pay. */
+  const seePlan = { label: 'See my plan', href: link({ to: 'home' }) };
 
   if (module) {
     const plan = state.modules[module];
@@ -637,9 +663,16 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
       // An app that is not part of the trial or the plan gets a lock screen, never a banner. The one
       // exception: it was in the trial or the plan before and is view only now.
       if (plan.access !== 'read_only' || plan.source === 'manual') return null;
+      // Every app is open: nothing is view only, so there is nothing to say.
+      if (appsOpen) return null;
       const name = CATALOG.products[module].shortName;
       if (!viewer.canView) {
-        return notice('app_removed', 'warning', `This app is view only right now. Ask ${askWho(viewer)} to add it.`, null);
+        return notice('app_removed', 'warning', `This app is view only right now. Ask ${who} to add it.`, null);
+      }
+      // The same rule as the lock screen: an admin can add an app to a free trial, not to a paid plan.
+      const canAdd = payer || state.phase === 'trial';
+      if (!canAdd) {
+        return notice('app_removed', 'warning', `${name} is view only because it is not in your plan. Ask ${who} to add it.`, null);
       }
       return notice(
         'app_removed',
@@ -686,9 +719,10 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
   if (!kind) return null;
 
   if (!viewer.canView) {
-    if (!MEMBER_KINDS.includes(kind)) return null;
+    // A member hears about the plan only when it stops their work. With every app open it does not.
+    if (appsOpen || !MEMBER_KINDS.includes(kind)) return null;
     const subject = module ? 'This app is' : 'Your apps are';
-    return notice(kind, 'danger', `${subject} view only right now. Ask ${askWho(viewer)} to pick a plan.`, null);
+    return notice(kind, 'danger', `${subject} view only right now. Ask ${who} to pick a plan.`, null);
   }
 
   switch (kind) {
@@ -703,7 +737,7 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
         'trial',
         'info',
         `Free trial. ${trial.daysLeft} days left. Ends ${day(trial.endsAt)}.`,
-        { label: 'Pick a plan', href: link({ to: 'plan' }) },
+        payer ? { label: 'Pick a plan', href: link({ to: 'plan' }) } : seePlan,
       );
     }
     case 'trial_ending': {
@@ -717,6 +751,7 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
       } else {
         text = `Your free trial ends tomorrow, on ${day(trial.endsAt)}.`;
       }
+      if (!payer) return notice('trial_ending', 'warning', `${text} Ask ${who} to pick a plan.`, null);
       return notice('trial_ending', 'warning', text, { label: 'Pick a plan', href: link({ to: 'plan' }) });
     }
     case 'trial_with_card': {
@@ -726,10 +761,13 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
       const text = charge
         ? `Free trial. Your first payment of ${formatMoney(charge.amountCents)} is on ${day(charge.at)}.`
         : `Free trial. Your first payment is on ${day(trial.endsAt)}.`;
-      return notice('trial_with_card', 'info', text, { label: 'See my plan', href: link({ to: 'home' }) });
+      return notice('trial_with_card', 'info', text, seePlan);
     }
     case 'trial_ended': {
       const ended = state.trial ? ` on ${day(state.trial.endsAt)}` : '';
+      if (!payer) {
+        return notice('trial_ended', 'danger', `Your free trial ended${ended}. Your data is safe. Ask ${who} to pick a plan.`, null);
+      }
       return notice(
         'trial_ended',
         'danger',
@@ -740,29 +778,36 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
     case 'payment_failed': {
       const due = state.pastDue;
       if (!due) return null;
-      const parts = [
-        `We could not charge your ${cardLabel(state.paymentMethod)} for ${formatMoney(due.amountDueCents)}.`,
-      ];
+      const card = cardLabel(state.paymentMethod);
+      const parts = [`We could not charge ${payer ? 'your' : 'the'} ${card} for ${formatMoney(due.amountDueCents)}.`];
       // Only a try that is still ahead is named.
       if (due.nextRetryAt && due.nextRetryAt.getTime() > context.now.getTime()) parts.push(`We will try again on ${day(due.nextRetryAt)}.`);
+      if (!payer) {
+        parts.push(`Ask ${who} to update the card by ${day(due.accessChangesAt)} to keep full access.`);
+        return notice('payment_failed', 'warning', parts.join(' '), null);
+      }
       parts.push(`Update your card by ${day(due.accessChangesAt)} to keep full access.`);
       return notice('payment_failed', 'warning', parts.join(' '), {
         label: 'Update card',
         href: link({ to: 'fix_payment' }),
       });
     }
-    case 'unpaid':
+    case 'unpaid': {
+      // One name for the fix (review round 4): the sentence and the button both say "update card".
+      const late = appsOpen ? 'Your payment is late.' : 'Your payment is late, so your apps are view only.';
+      if (!payer) return notice('unpaid', 'danger', `${late} Ask ${who} to update the card.`, null);
       return notice(
         'unpaid',
         'danger',
-        'Your payment is late, so your apps are view only. Pay now to turn them back on.',
+        appsOpen ? `${late} Update your card to keep your apps open.` : `${late} Update your card to turn them back on.`,
         { label: 'Update card', href: link({ to: 'fix_payment' }) },
       );
+    }
     case 'cancel_scheduled': {
       const text = state.cancelAt
         ? `Your plan ends on ${day(state.cancelAt)}. You keep everything until then.`
         : 'Your plan is set to end. You keep everything until then.';
-      return notice('cancel_scheduled', 'info', text, { label: 'Keep my plan', href: link({ to: 'home' }) });
+      return notice('cancel_scheduled', 'info', text, payer ? { label: 'Keep my plan', href: link({ to: 'home' }) } : seePlan);
     }
     case 'pause_scheduled': {
       if (!state.pause) return null;
@@ -770,12 +815,14 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
         'pause_scheduled',
         'info',
         `Your plan pauses on ${day(state.pause.startsAt)} and starts again on ${day(state.pause.resumesAt)}.`,
-        { label: 'Undo pause', href: link({ to: 'home' }) },
+        payer ? { label: 'Undo pause', href: link({ to: 'home' }) } : seePlan,
       );
     }
     case 'paused': {
       const again = state.pause ? ` It starts again on ${day(state.pause.resumesAt)}.` : '';
-      return notice('paused', 'danger', `Your plan is paused, so your apps are view only.${again}`, {
+      const text = appsOpen ? `Your plan is paused.${again}` : `Your plan is paused, so your apps are view only.${again}`;
+      if (!payer) return notice('paused', 'danger', `${text} Ask ${who} to start it sooner.`, null);
+      return notice('paused', 'danger', text, {
         label: 'Start again now',
         href: link({ to: 'home' }),
       });
@@ -783,6 +830,7 @@ export function planNoticeFor(state: PlanState, context: NoticeContext): PlanNot
     case 'ended': {
       // The reason comes first, so a customer who never canceled is told why (review round 3).
       const ended = planEndedLine(state, timeZone, true) ?? 'Your plan ended.';
+      if (!payer) return notice('ended', 'danger', `${ended} Your data is safe. Ask ${who} to pick a plan.`, null);
       return notice(
         'ended',
         'danger',
@@ -804,7 +852,7 @@ export function planLockFor(state: PlanState, context: NoticeContext & { module:
   const { module, viewer, portalUrl, timeZone } = context;
   const name = CATALOG.products[module].shortName;
   const secondary = { label: 'Back to Portal', href: portalUrl.replace(/\/+$/, '') };
-  const addHref = billingLink(portalUrl, { to: 'add', product: module }, module);
+  const addHref = billingLink(portalUrl, { to: 'add', product: module }, module, context.orgId);
   const base = { secondary, testId: 'plan-lock' as const };
 
   const inTrial = state.phase === 'trial';

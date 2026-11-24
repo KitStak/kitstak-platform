@@ -20,10 +20,16 @@
  *    instances. Note Better Auth still keys buckets by its header-derived client IP
  *    (spoofable without a trusted proxy) — the per-ACCOUNT lockout in the policy
  *    plugin is the durable, spoof-indifferent control.
- *  - There is deliberately NO shared "banned" sign-in gate: Better Auth's base `user`
- *    table has no banned/active column (that field belongs to its admin plugin, which
- *    we do not mount), so cross-instance deactivation is enforced by deleting the
- *    credential `core.account` row instead (H3 — see WMS `setUsersActive`).
+ *  - A switched off person is refused at every door of every instance (H3, and billing
+ *    review round 4). The fact is one row in `core.sign_in_blocks`, read by the hooks in
+ *    `./sign-in-block.ts`: no session, no password row, no Google or Microsoft link, no
+ *    reset code and no sign in code. The WMS writes the row when it deactivates a person
+ *    (`blockSignIn`), and still deletes the password row as a second lock. "Has no password
+ *    row" alone no longer means switched off: a person who signs in with an emailed code
+ *    has none either.
+ *  - Sessions are checked against the database on every request. There is no cookie cache
+ *    (`./options.ts`), so a session that was ended (password reset, sign out everywhere,
+ *    switched off) is refused on the very next request in every app.
  *
  * Client-IP resolution (round-2 NEW-3): Better Auth keys its database rate-limit
  * buckets (and session `ip_address`) on `advanced.ipAddress`. The factory exposes an
@@ -48,6 +54,7 @@ import {
   type PasswordPolicyPluginOptions,
   type RawSqlExecutor,
 } from './password-policy-plugin';
+import { signInBlockPlugin, signInDatabaseHooks } from './sign-in-block';
 import { signOutCookieSweepPlugin } from './sign-out-cookie-sweep';
 
 type DrizzleDb = Parameters<typeof drizzleAdapter>[0];
@@ -273,6 +280,10 @@ export function createAuth(options: CreateAuthOptions) {
         }
       : {}),
     ...(options.hooks ? { hooks: options.hooks } : {}),
+    // The hard stops for a switched off person, the starting organization of a new session, and
+    // the note of the organization a person picked (./sign-in-block.ts). Needs the raw SQL seam,
+    // which every app's Drizzle handle has.
+    ...(rawDb ? { databaseHooks: signInDatabaseHooks(rawDb) } : {}),
     // nextCookies must be the last plugin so Set-Cookie works from Server Actions.
     plugins: [
       // The shared organization plugin, with this app's invite email and hooks merged in.
@@ -281,6 +292,9 @@ export function createAuth(options: CreateAuthOptions) {
       // Guards for the organization endpoints that need to know who is acting (see
       // `OrganizationPluginExtras.guardPlugins`). Mounted here so no instance can leave them out.
       ...(options.organization?.guardPlugins ?? []),
+      // A switched off address gets its neutral answer here, before the password policy plugin
+      // and before any plugin an app adds (./sign-in-block.ts).
+      ...(rawDb ? [signInBlockPlugin(rawDb)] : []),
       // H1: lockout + policy are factory behaviour, never instance opt-in.
       passwordPolicyPlugin({ ...(options.passwordPolicy ?? {}), rawDb }),
       legacyRehashPlugin(),

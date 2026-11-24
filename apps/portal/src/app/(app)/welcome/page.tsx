@@ -30,7 +30,8 @@ export default async function WelcomePage() {
     redirect(stepHref(resume.step));
   }
   const context = await getBillingContext();
-  if (!context) redirect('/signup/company');
+  // No organization: the signup step for a new person, home for one who was removed from theirs.
+  if (!context) redirect(resume.step === '/' ? '/' : '/signup/company');
 
   // Members without a managing role (and already profiled orgs) go straight to the launcher.
   if (!MANAGER_ROLES.has(context.org.role)) redirect('/');

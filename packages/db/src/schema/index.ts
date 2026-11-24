@@ -18,6 +18,7 @@ export * from './core/billing';
 export * from './core/billing-tables';
 export * from './core/onboarding';
 export * from './core/password-change';
+export * from './core/sign-in';
 export * from './core/links';
 export * from './core/wms-profiles';
 export * from './core/wms-tenants';

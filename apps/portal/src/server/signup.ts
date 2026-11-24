@@ -5,7 +5,7 @@
  */
 import 'server-only';
 import { cache } from 'react';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import {
   checkSeatAvailable,
@@ -16,7 +16,7 @@ import {
 } from '@kitstak/billing/server';
 import { canStartTrial } from '@kitstak/billing/server';
 import type { PlanState } from '@kitstak/billing/plan-state';
-import { invitation, onboardingProgress, organization, user } from '@kitstak/db/schema';
+import { invitation, onboardingProgress, organization, signupIntents, user } from '@kitstak/db/schema';
 import { enabledSocialProviders, type SocialProviderId } from '@/features/signup/social';
 import { INVITE_PROOF_COOKIE, proofFromCookie } from '@/lib/invite-proof';
 import { resolveSignupStep, stepHref, type SignupStep } from '@/features/signup/resume';
@@ -57,11 +57,39 @@ export function isPlanUntouched(state: PlanState): boolean {
   return state.phase === 'none' && state.trial === null && !state.hasSubscription;
 }
 
+/**
+ * True when this person was in an organization before: they joined one from an invite, or made one
+ * themselves. With no organization now, that means they were removed, they left, or the
+ * organization is gone. They are not new, so no screen greets them as if they were (review round
+ * 4: a removed member read "Name your workspace. Good to meet you, Casey."). Cached per request.
+ */
+export const wasInOrganization = cache(async (userId: string, email: string): Promise<boolean> => {
+  const [joined, made] = await Promise.all([
+    db
+      .select({ id: invitation.id })
+      .from(invitation)
+      .where(and(eq(sql`lower(${invitation.email})`, email.trim().toLowerCase()), eq(invitation.status, 'accepted')))
+      .limit(1),
+    db
+      .select({ id: signupIntents.id })
+      .from(signupIntents)
+      .where(and(eq(signupIntents.userId, userId), isNotNull(signupIntents.orgId)))
+      .limit(1),
+  ]);
+  return joined.length > 0 || made.length > 0;
+});
+
 /** Where this person should be right now. Used by every signup page to resume or skip ahead. */
 export async function getSignupResume(session: Session | null): Promise<SignupResume> {
   if (!session) return { step: '/signup', intent: null };
   const [intent, context] = await Promise.all([getOpenSignupIntent(db, session.user.id), getBillingContext()]);
-  if (!context) return { step: resolveSignupStep(baseFacts(false)), intent };
+  if (!context) {
+    // In no organization. A person who never had one names their workspace (the signup step). A
+    // person who had one goes home, where one screen says they are no longer in an organization
+    // and what they can do.
+    if (await wasInOrganization(session.user.id, session.user.email)) return { step: '/', intent };
+    return { step: resolveSignupStep(baseFacts(false)), intent };
+  }
 
   // Only an open signup needs the plan and the setup answers. Everyone else is simply home.
   if (!intent) return { step: '/', intent: null };

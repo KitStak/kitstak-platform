@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { Mail, UserRound } from 'lucide-react';
 import { Field } from '@/components/ui';
 import { nameIssue } from '@/features/signup/fields';
-import { isRulesIssue, passwordIssue } from '@/features/signup/password-rules';
+import { passwordIssue } from '@/features/signup/password-rules';
 import { joinInviteAction } from '@/server/signup-actions';
 import {
   AuthInput,
@@ -21,6 +21,7 @@ import {
   PasswordRules,
   StrengthMeter,
   SubmitButton,
+  passwordFieldError,
 } from '../../_components/form-parts';
 
 type Stage = 'idle' | 'joining';
@@ -51,6 +52,8 @@ export function InviteJoinForm({
   const submitting = useRef(false);
   const nameInput = useRef<HTMLInputElement | null>(null);
   const passwordInput = useRef<HTMLInputElement | null>(null);
+  // The password must not be built on the invited address or on the name of the team being joined.
+  const passwordContext = { email, company: orgName };
 
   useEffect(() => {
     if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) nameInput.current?.focus({ preventScroll: true });
@@ -68,7 +71,7 @@ export function InviteJoinForm({
 
     const issues = {
       name: nameIssue(name) ?? undefined,
-      password: passwordIssue(password, { email }) ?? undefined,
+      password: passwordIssue(password, passwordContext) ?? undefined,
     };
     setErrors(issues);
     if (issues.name) return nameInput.current?.focus();
@@ -146,7 +149,8 @@ export function InviteJoinForm({
           />
         )}
       </Field>
-      <Field label="Password" error={errors.password} errorHidden={Boolean(errors.password) && isRulesIssue(password)}>
+      {/* The same order as signup: the field, its meter, the red line, then the rules. */}
+      <Field label="Password" error={errors.password} errorHidden>
         {({ inputId, describedBy, invalid }) => (
           <div className="flex flex-col gap-2">
             <PasswordInput
@@ -162,15 +166,21 @@ export function InviteJoinForm({
                 setPassword(event.target.value);
                 // After a refusal the sentence follows what is typed, so it is never about an older try.
                 if (errors.password) {
-                  const issue = passwordIssue(event.target.value, { email }) ?? undefined;
+                  const issue = passwordIssue(event.target.value, passwordContext) ?? undefined;
                   setErrors((current) => ({ ...current, password: issue }));
                 }
               }}
               aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
               invalid={invalid}
             />
-            <StrengthMeter password={password} context={{ email }} />
-            <PasswordRules password={password} id={`${inputId}-rules`} showMissing={Boolean(errors.password)} context={{ email }} />
+            <StrengthMeter password={password} context={passwordContext} />
+            <PasswordRules
+              password={password}
+              id={`${inputId}-rules`}
+              showMissing={Boolean(errors.password)}
+              error={passwordFieldError(password, errors.password)}
+              context={passwordContext}
+            />
           </div>
         )}
       </Field>

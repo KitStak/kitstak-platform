@@ -8,6 +8,17 @@ import type { EmailPayloads, EmailTemplateId } from '../email-types';
 import type { BillingDb, BillingReadDb } from './db';
 import { hasBillingRole, isActiveRole, roleParts } from './roles';
 
+/**
+ * Every email about an organization carries that organization's id in its payload (review round
+ * 4), so every link in it opens the Portal for that organization. Written here, in the one place
+ * every email passes, so no sender can forget it. Emails with no organization (codes) are left as
+ * they are.
+ */
+export function payloadWithOrg(payload: Record<string, unknown>, orgId: string | null): Record<string, unknown> {
+  if (!orgId || typeof payload.portalUrl !== 'string' || typeof payload.orgId === 'string') return payload;
+  return { ...payload, orgId };
+}
+
 export async function enqueueEmail<T extends EmailTemplateId>(
   db: Pick<BillingDb, 'insert'>,
   input: {
@@ -27,7 +38,7 @@ export async function enqueueEmail<T extends EmailTemplateId>(
       orgId: input.orgId,
       toEmail: to,
       template: input.template,
-      payload: input.payload as unknown as Record<string, unknown>,
+      payload: payloadWithOrg(input.payload as unknown as Record<string, unknown>, input.orgId),
       dedupeKey: input.dedupeKey,
       ...(input.sendAfter ? { sendAfter: input.sendAfter } : {}),
     })

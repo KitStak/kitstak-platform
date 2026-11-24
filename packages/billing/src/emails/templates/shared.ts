@@ -13,6 +13,7 @@ import {
   type BillingInterval,
   type Stack,
 } from '../../catalog';
+import { orgParamValue } from '../../links';
 
 export class EmailPayloadError extends Error {
   constructor(message: string) {
@@ -100,6 +101,11 @@ export function portal(payload: Payload): string {
     throw new EmailPayloadError('The email payload has a bad portal address.');
   }
   return value.replace(/\/+$/, '');
+}
+
+/** The organization the email is about, or null on an older row. Only ever an organization id. */
+export function orgOf(payload: Payload): string | null {
+  return orgParamValue(typeof payload.orgId === 'string' ? payload.orgId : null);
 }
 
 /** 'Dec 7, 2026'. Emails have no viewer time zone, so dates are in UTC like the invoices. */

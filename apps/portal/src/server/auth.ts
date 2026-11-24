@@ -16,7 +16,7 @@ import 'server-only';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { after } from 'next/server';
 import { and, eq, isNotNull } from 'drizzle-orm';
-import { createAuth, ipAddressFromTrustProxy, type KitstakAuth } from '@kitstak/auth';
+import { createAuth, ipAddressFromTrustProxy, isSignInBlocked, type KitstakAuth } from '@kitstak/auth';
 import { DEFAULT_PASSWORD_POLICY, validatePassword } from '@kitstak/auth/password-policy';
 import { sendEmailNow } from '@kitstak/billing/emails';
 import { billingOrganizationOptions, enforceRateLimit } from '@kitstak/billing/server';
@@ -176,11 +176,26 @@ export function withSignInCode<T>(run: () => Promise<T>): Promise<T> {
 }
 
 /**
- * True when this address may sign in with an emailed code: the account exists and still holds a
- * credential. Deactivating a person removes that credential row on purpose (auth review
- * 2026-11-11, H3), so a deactivated person gets no code and cannot sign in with one.
+ * True when this address may sign in with an emailed code: the account exists and is not switched
+ * off.
+ *
+ * It used to ask for a password row (review round 3), because "no password row" was how a person
+ * was switched off. That broke the second code sign in: the first one removes the password of an
+ * account whose email was never proven (Better Auth does this on purpose, so nobody keeps a
+ * password they set on someone else's address), and from then on no code was ever mailed, while the
+ * screen said one was on its way (review round 4). Being switched off is now a fact of its own
+ * (`core.sign_in_blocks`, read by the shared sign in layer at every door), so a person with no
+ * password row can sign in with a code as often as they like.
  */
 export async function maySignInWithCode(email: string): Promise<boolean> {
+  const address = email.trim().toLowerCase();
+  const [row] = await db.select({ id: schema.user.id }).from(schema.user).where(eq(schema.user.email, address)).limit(1);
+  if (!row) return false;
+  return !(await isSignInBlocked(db, row.id));
+}
+
+/** True when the account with this address has a password of its own (a `core.account` password row). */
+export async function hasPassword(email: string): Promise<boolean> {
   const [row] = await db
     .select({ id: schema.account.id })
     .from(schema.account)
@@ -193,6 +208,17 @@ export async function maySignInWithCode(email: string): Promise<boolean> {
 /** After a person proved they own the mailbox: wrong password guesses from before no longer lock them out. */
 export async function clearSignInLockout(email: string): Promise<void> {
   await clearLockoutAfterReset({ email });
+}
+
+/** The mail settings from the checked env, so a blank line in an env file never counts as a key. */
+function mailEnv(): NodeJS.ProcessEnv {
+  return {
+    NODE_ENV: env.NODE_ENV,
+    EMAIL_PROVIDER: env.EMAIL_PROVIDER,
+    RESEND_API_KEY: env.RESEND_API_KEY,
+    EMAIL_FROM: env.EMAIL_FROM,
+    EMAIL_REPLY_TO: env.EMAIL_REPLY_TO,
+  } as NodeJS.ProcessEnv;
 }
 
 /**
@@ -223,13 +249,7 @@ async function sendVerificationOTP(data: { email: string; otp: string; type: str
         },
         {
           // The validated env, so a blank line in an env file never counts as a key.
-          env: {
-            NODE_ENV: env.NODE_ENV,
-            EMAIL_PROVIDER: env.EMAIL_PROVIDER,
-            RESEND_API_KEY: env.RESEND_API_KEY,
-            EMAIL_FROM: env.EMAIL_FROM,
-            EMAIL_REPLY_TO: env.EMAIL_REPLY_TO,
-          } as NodeJS.ProcessEnv,
+          env: mailEnv(),
         },
       );
       if (!sent.ok) console.error(`[portal] the ${template} email is not out yet: ${sent.error ?? 'no detail'}`);
@@ -320,6 +340,8 @@ function buildAuth(): KitstakAuth {
       allowAll: isDevAllowAll,
       // Lets the invite link prove the mailbox, so an invited person is not asked for a code.
       inviteSecret: env.BETTER_AUTH_SECRET,
+      // The invite email goes out at once, with the checked mail settings.
+      emailEnv: mailEnv(),
     }),
     extraPlugins: [emailCodePlugin()],
     ...(socialProviders ? { socialProviders } : {}),

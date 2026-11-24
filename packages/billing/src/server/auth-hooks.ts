@@ -8,11 +8,11 @@ import type { OrganizationPluginExtras } from '@kitstak/auth/options';
 import type { BetterAuthPlugin } from 'better-auth';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { and, eq } from 'drizzle-orm';
-import { billingManagers, billingSubscriptions, invitation as invitationTable, member, user } from '@kitstak/db/schema';
+import { billingEmails, billingManagers, billingSubscriptions, invitation as invitationTable, member, user } from '@kitstak/db/schema';
 import { isLiveSubscriptionStatus } from '../plan-state';
 import type { BillingDb } from './db';
+import { sendEmailNow } from '../emails/send';
 import { signInviteProof } from './invite-proof';
-import { enqueueEmail } from './outbox';
 import { enforceRateLimit } from './rate-limit';
 import { hasBillingRole, isActiveRole, isFreeRole, roleParts, usesSeat } from './roles';
 import { checkSeatAvailable } from './usage';
@@ -37,6 +37,11 @@ export const INVITE_NEEDS_VERIFIED_EMAIL_SINCE = new Date('2026-11-23T00:00:00.0
 
 /** Invite emails one organization may send in a day. A paid plan is also held by its seat count. */
 export const INVITES_PER_DAY = { withoutPlan: 50, withPlan: 500 } as const;
+
+/** Refused: an invite can only be accepted by the person who owns the invited mailbox (review round 4). */
+export const INVITE_NEEDS_PROVEN_MAILBOX_CODE = 'INVITE_NEEDS_PROVEN_MAILBOX';
+/** The one sentence a refused person reads, at every door. */
+export const INVITE_NEEDS_PROVEN_MAILBOX_MESSAGE = 'Open the link in your invite email to join. That shows the email is yours.';
 
 /* ===== only an owner can add or remove a billing manager (SPEC P15, review round 3) ===== */
 
@@ -205,6 +210,25 @@ export function billingRoleGuardPlugin(db: Pick<BillingDb, 'select'>): BetterAut
   } satisfies BetterAuthPlugin;
 }
 
+/** The outbox key of an invitation's email. One invitation, one email. */
+export function inviteEmailKey(invitationId: string): string {
+  return `invite:${invitationId}`;
+}
+
+/**
+ * Has the invite email left? 'sent' once the mail provider took it, 'queued' while it waits for
+ * the job (the provider was down or this app has no mail key), 'failed' when it could not be sent.
+ * The page that says "Invite sent" asks this first, so the word is true (review round 4).
+ */
+export async function inviteEmailStatus(db: Pick<BillingDb, 'select'>, invitationId: string): Promise<'sent' | 'queued' | 'failed' | 'none'> {
+  const [row] = await db
+    .select({ status: billingEmails.status })
+    .from(billingEmails)
+    .where(eq(billingEmails.dedupeKey, inviteEmailKey(invitationId)));
+  if (!row) return 'none';
+  return row.status === 'sent' ? 'sent' : row.status === 'failed' ? 'failed' : 'queued';
+}
+
 export function billingOrganizationOptions(input: {
   db: BillingDb;
   portalUrl: string;
@@ -217,6 +241,12 @@ export function billingOrganizationOptions(input: {
   inviteSecret?: string;
   /** Overrides `INVITE_NEEDS_VERIFIED_EMAIL_SINCE` (tests). */
   verifiedEmailSince?: Date;
+  /**
+   * The mail settings the invite email is sent with (`RESEND_API_KEY`, `EMAIL_FROM`, ...). Default:
+   * `process.env`. The Portal passes its checked env, so a blank line in an env file never counts
+   * as a key.
+   */
+  emailEnv?: NodeJS.ProcessEnv;
 }): OrganizationPluginExtras {
   const { db } = input;
   const portalUrl = input.portalUrl.replace(/\/+$/, '');
@@ -235,6 +265,25 @@ export function billingOrganizationOptions(input: {
       code: 'EMAIL_NOT_VERIFIED',
       message: 'Verify your email first. Then you can invite people. Open the KitStak Portal to enter your code.',
     });
+  }
+
+  /**
+   * Accepting an invite needs a proven mailbox (review round 4). The invitation id is not a secret:
+   * owners and admins of the organization can read it. Signing up needs no proof of the mailbox
+   * either. So without this rule an admin could read the id of an owner's open billing invite, make
+   * an account with the invited address, accept, and hold a billing manager account that can cancel
+   * the plan.
+   *
+   * Proven means `email_verified` on the account, read fresh from the database. A person gets it
+   * from the emailed code, or from the link in the invite email itself: the Portal checks the proof
+   * in that link (`invite-proof.ts`) and marks the address verified right before it accepts. So the
+   * real invited person joins with one click and no code, and nobody else can take the invite. The
+   * rule holds for every role, at every app, because every app mounts these hooks.
+   */
+  async function requireProvenMailbox(userId: string): Promise<void> {
+    const [person] = await db.select({ emailVerified: user.emailVerified }).from(user).where(eq(user.id, userId));
+    if (person?.emailVerified === true) return;
+    throw new APIError('FORBIDDEN', { code: INVITE_NEEDS_PROVEN_MAILBOX_CODE, message: INVITE_NEEDS_PROVEN_MAILBOX_MESSAGE });
   }
 
   /** Throws INVITE_LIMIT_REACHED when the organization sent too many invites today. */
@@ -295,7 +344,9 @@ export function billingOrganizationOptions(input: {
       await requireSeat(organization.id, adding.role, { inviteEmail: person.email });
     },
 
-    beforeAcceptInvitation: async ({ invitation, organization }) => {
+    beforeAcceptInvitation: async ({ invitation, user: person, organization }) => {
+      // First: only the person who owns the invited mailbox may accept (review round 4).
+      await requireProvenMailbox(person.id);
       // The seat was held by the invite itself. Accepting only fails if the plan shrank since.
       await requireSeat(organization.id, invitation.role ?? 'member', { invitationId: invitation.id });
     },
@@ -321,21 +372,35 @@ export function billingOrganizationOptions(input: {
     guardPlugins: [billingRoleGuardPlugin(db)],
     sendInvitationEmail: async (data) => {
       const expiresAt = data.invitation.expiresAt instanceof Date ? data.invitation.expiresAt : new Date(data.invitation.expiresAt);
-      await enqueueEmail(db, {
-        orgId: data.organization.id,
-        to: data.email,
-        template: 'invitation',
-        payload: {
-          orgName: data.organization.name,
-          portalUrl,
-          inviterName: data.inviter.user.name,
-          acceptUrl: input.inviteSecret
-            ? `${portalUrl}/invite/${data.id}?t=${signInviteProof(input.inviteSecret, data.id, data.email)}`
-            : `${portalUrl}/invite/${data.id}`,
-          expiresAt: expiresAt.toISOString(),
-        },
-        dedupeKey: `invite:${data.id}`,
-      });
+      // An invite is mail a person is waiting for, like a code (review round 4): it goes out at
+      // once, not with the one minute job. `sendEmailNow` writes the outbox row first, so when the
+      // mail provider is down, or this app has no mail key of its own, the row stays queued and
+      // the job sends it a little later. Nothing is lost either way.
+      try {
+        const sent = await sendEmailNow(
+          db,
+          {
+            orgId: data.organization.id,
+            to: data.email,
+            template: 'invitation',
+            payload: {
+              orgName: data.organization.name,
+              portalUrl,
+              inviterName: data.inviter.user.name,
+              acceptUrl: input.inviteSecret
+                ? `${portalUrl}/invite/${data.id}?t=${signInviteProof(input.inviteSecret, data.id, data.email)}`
+                : `${portalUrl}/invite/${data.id}`,
+              expiresAt: expiresAt.toISOString(),
+            },
+            dedupeKey: inviteEmailKey(data.id),
+          },
+          input.emailEnv ? { env: input.emailEnv } : undefined,
+        );
+        if (!sent.ok) console.error(`[billing] the invite email is not out yet and stays queued: ${sent.error ?? 'no detail'}`);
+      } catch (error: unknown) {
+        // The invitation exists. A mail problem must not turn the invite into an error.
+        console.error('[billing] could not send the invite email right now', error);
+      }
     },
   };
 }

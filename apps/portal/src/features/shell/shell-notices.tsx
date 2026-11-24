@@ -8,6 +8,7 @@
  * A server component: it reads the plan once per request and renders nothing when all is well.
  */
 import { planNoticeFor, type PlanNotice } from '@kitstak/billing/plan-state';
+import { isDevAllowAll } from '@kitstak/entitlements';
 import { getBillingContext } from '@/server/billing/context';
 import { getOrgPlan } from '@/server/entitlements';
 import { PortalNoticeBar } from './portal-notice-bar';
@@ -34,6 +35,8 @@ export async function ShellNotices() {
     portalUrl: rt.portalUrl,
     now: rt.now(),
     timeZone,
+    // Under the allow all switch every app is open, so the banner never says "view only".
+    appsOpen: isDevAllowAll(),
   });
   const plan: PlanNotice | null = found
     ? { ...found, action: found.action ? { label: found.action.label, href: localHref(found.action.href, rt.portalUrl) } : null }

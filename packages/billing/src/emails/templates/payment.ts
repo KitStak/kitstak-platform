@@ -2,7 +2,7 @@
  * Payment emails: the receipt, a failed payment, a bank approval request and the last day reminder
  * (docs/billing/SPEC.md sections 8.3 and 10).
  */
-import { billingLink } from '../../links';
+import { billingLink, withOrgParam } from '../../links';
 import type { EmailBlock, EmailContent } from '../layout';
 import {
   EmailPayloadError,
@@ -17,6 +17,7 @@ import {
   optionalText,
   portal,
   text,
+  orgOf,
 } from './shared';
 
 function receiptLines(value: unknown): { label: string; amount: string }[] {
@@ -64,7 +65,7 @@ export function receipt(raw: unknown): EmailContent {
     preheader: `Paid on ${day(paidAt)}. Thank you.`,
     heading: `Receipt for ${money(paid)}`,
     blocks,
-    button: { label: 'View invoice', url: `${portalUrl}/billing/invoices/${encodeURIComponent(invoiceId)}` },
+    button: { label: 'View invoice', url: withOrgParam(`${portalUrl}/billing/invoices/${encodeURIComponent(invoiceId)}`, orgOf(payload)) },
     footer: billingFooter(orgName),
   };
 }
@@ -88,7 +89,7 @@ export function paymentFailed(raw: unknown): EmailContent {
   const asOf = writtenAt(payload);
   // A retry date that has passed is not a plan. Say "no more tries" only when there really is none.
   const retryAhead = nextRetryAt !== null && nextRetryAt.getTime() > asOf.getTime() ? nextRetryAt : null;
-  const button = { label: 'Update card', url: billingLink(portalUrl, { to: 'fix_payment' }) };
+  const button = { label: 'Update card', url: billingLink(portalUrl, { to: 'fix_payment' }, undefined, orgOf(payload)) };
 
   if (accessChangesAt.getTime() <= asOf.getTime()) {
     // The grace days are over: this try failed after the apps became view only. Nothing here asks
@@ -157,7 +158,7 @@ export function paymentActionRequired(raw: unknown): EmailContent {
       { kind: 'text', text: `We tried ${cardWords(last4)}. Nothing was charged yet.` },
       { kind: 'text', text: 'Open Billing and choose Pay now. Your bank will ask you to confirm.' },
     ],
-    button: { label: 'Approve payment', url: billingLink(portalUrl, { to: 'fix_payment' }) },
+    button: { label: 'Approve payment', url: billingLink(portalUrl, { to: 'fix_payment' }, undefined, orgOf(payload)) },
     footer: billingFooter(orgName),
   };
 }
@@ -168,7 +169,7 @@ export function graceEnding(raw: unknown): EmailContent {
   const portalUrl = portal(payload);
   const amount = cents(payload, 'amountDueCents');
   const accessChangesAt = date(payload, 'accessChangesAt');
-  const button = { label: 'Update card', url: billingLink(portalUrl, { to: 'fix_payment' }) };
+  const button = { label: 'Update card', url: billingLink(portalUrl, { to: 'fix_payment' }, undefined, orgOf(payload)) };
   if (accessChangesAt.getTime() <= writtenAt(payload).getTime()) {
     // Sent late (a job that did not run on the day): the last day has passed, so say what is true now.
     return {

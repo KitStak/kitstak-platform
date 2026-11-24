@@ -1,5 +1,5 @@
 /** Free trial emails: welcome, the reminders and the end (docs/billing/SPEC.md sections 8.2 and 10). */
-import { billingLink } from '../../links';
+import { billingLink, withOrgParam } from '../../links';
 import type { EmailContent } from '../layout';
 import {
   TRIAL_DAYS,
@@ -17,6 +17,7 @@ import {
   stack,
   text,
   wholeNumber,
+  orgOf,
 } from './shared';
 
 export function welcome(raw: unknown): EmailContent {
@@ -42,7 +43,7 @@ export function welcome(raw: unknown): EmailContent {
       { kind: 'text', text: 'You have full access until then. Nothing is charged.' },
       { kind: 'note', text: 'You can add more apps to your trial any time in Billing.' },
     ],
-    button: { label: 'Open KitStak', url: portalUrl },
+    button: { label: 'Open KitStak', url: withOrgParam(`${portalUrl}/`, orgOf(payload)) },
     footer: `You get this email because you started a free trial for ${orgName} on KitStak.`,
   };
 }
@@ -77,7 +78,7 @@ export function trialEnding(raw: unknown): EmailContent {
       { kind: 'text', text: 'Pick a plan to keep working after that day.' },
       { kind: 'note', text: 'Nothing is deleted if you wait. Your apps become view only until you pick a plan.' },
     ],
-    button: { label: 'Pick a plan', url: billingLink(portalUrl, { to: 'plan' }) },
+    button: { label: 'Pick a plan', url: billingLink(portalUrl, { to: 'plan' }, undefined, orgOf(payload)) },
     footer: billingFooter(orgName),
   };
 }
@@ -97,7 +98,7 @@ export function trialEnded(raw: unknown): EmailContent {
       { kind: 'text', text: 'Your apps are view only now. You can still open and read everything.' },
       { kind: 'text', text: 'Nothing is deleted. Pick a plan to keep working.' },
     ],
-    button: { label: 'Pick a plan', url: billingLink(portalUrl, { to: 'plan' }) },
+    button: { label: 'Pick a plan', url: billingLink(portalUrl, { to: 'plan' }, undefined, orgOf(payload)) },
     footer: billingFooter(orgName),
   };
 }

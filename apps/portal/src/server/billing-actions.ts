@@ -40,6 +40,7 @@ import {
   createPaymentUpdateSession,
   getOpenSignupIntent,
   getPlanState,
+  inviteEmailStatus,
   listBillingInvites,
   pausePlan,
   previewPlanChange,
@@ -395,7 +396,10 @@ export async function removeBillingManagerAction(renderedOrgId: RenderedOrgId, i
  * through the same Better Auth endpoint as every other invite, so the verified email rule, the
  * daily cap and the invite email all apply. Only an owner can do this.
  */
-export async function inviteBillingManagerAction(renderedOrgId: RenderedOrgId, input: { email: string }): Promise<BillingResult<{ email: string }>> {
+export async function inviteBillingManagerAction(
+  renderedOrgId: RenderedOrgId,
+  input: { email: string },
+): Promise<BillingResult<{ email: string; /** 'sent': the invite email has left. 'queued': it waits for the one minute job. */ delivery: 'sent' | 'queued' }>> {
   const found = await contextFor('assign', renderedOrgId);
   if (!found.ok) return found.error;
   const { ctx } = found;
@@ -405,11 +409,13 @@ export async function inviteBillingManagerAction(renderedOrgId: RenderedOrgId, i
     const checked = await checkBillingInvite(ctx.rt.db, { orgId: ctx.org.id, email: parsed.data.email });
     if (!checked.ok) return checked;
     const { email } = checked.data;
+    let invitationId: string | null = null;
     try {
-      await auth.api.createInvitation({
+      const created = await auth.api.createInvitation({
         body: { email, role: BILLING_ONLY_ROLE, organizationId: ctx.org.id, resend: true },
         headers: await headers(),
       });
+      invitationId = typeof (created as { id?: unknown } | null)?.id === 'string' ? (created as { id: string }).id : null;
     } catch (error) {
       // The auth layer's own plain answers (verify your email first, the daily cap) are shown as they are.
       const body = (error as { body?: { code?: unknown; message?: unknown } } | null)?.body;
@@ -427,7 +433,9 @@ export async function inviteBillingManagerAction(renderedOrgId: RenderedOrgId, i
       summary: `${ctx.actor.label} invited ${email} to manage billing. Billing only: no seat and no access to the apps.`,
       data: { email, billingOnly: true, invited: true },
     });
-    return billingOk({ email });
+    // The invite email goes out at once. "Sent" is only said when the mail provider took it.
+    const delivery = invitationId !== null && (await inviteEmailStatus(ctx.rt.db, invitationId)) === 'sent' ? 'sent' : 'queued';
+    return billingOk({ email, delivery });
   });
 }
 

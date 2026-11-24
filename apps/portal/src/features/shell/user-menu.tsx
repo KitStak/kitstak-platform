@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CreditCard, LayoutGrid, LogOut, Moon, Settings2, Sun } from 'lucide-react';
+import { CreditCard, LayoutGrid, LogOut, Moon, Settings2, Sun, UserRound } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,6 +76,13 @@ export function UserMenu({
           <Link href="/settings/organization">
             <Settings2 aria-hidden className="size-4 text-icon" />
             Organization settings
+          </Link>
+        </DropdownMenuItem>
+        {/* Name, email and "Set a password" (review round 4). */}
+        <DropdownMenuItem asChild>
+          <Link href="/settings/account" data-testid="menu-account">
+            <UserRound aria-hidden className="size-4 text-icon" />
+            My account
           </Link>
         </DropdownMenuItem>
         {/* Phones only: the top bar has no room for the theme button there. */}

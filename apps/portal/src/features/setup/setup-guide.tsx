@@ -3,7 +3,7 @@
  * The launcher's guided-setup card: live progress ring and the quick start, the 3 to 5 steps the
  * welcome screen promised (docs/billing/SPEC.md 5.7). The next step is open with its one filled
  * button; the others are one line each, so the app tiles stay on the first screen. The deeper
- * steps of each app sit behind "Show all steps". Auto-detected ticks, deep links into the exact
+ * steps of each app sit behind "Show 3 more steps for later". Auto-detected ticks, deep links into the exact
  * screens, skip and undo, and a celebration when the first steps are done. Re-checks on window focus so steps completed in
  * CRM/WMS check themselves off when the user comes back.
  */
@@ -36,6 +36,7 @@ import {
   unskipSetupStep,
 } from '@/server/onboarding-actions';
 import { ConfettiBurst } from './confetti';
+import { moreStepsLabel, otherStepsLabel } from './step-labels';
 import { ProgressRing } from './progress-ring';
 
 const COLLAPSE_KEY = 'kitstak.portal.setupGuide.collapsed';
@@ -74,7 +75,7 @@ interface StepRowProps {
   readonly pending: boolean;
   readonly onSkip: (key: string) => void;
   readonly onUnskip: (key: string) => void;
-  /** On a phone this row waits behind "Show all steps", so the app tiles stay on the first screen. */
+  /** On a phone this row waits behind "Show the other 4 steps", so the app tiles stay on the first screen. */
   readonly foldOnPhone?: boolean;
 }
 
@@ -152,7 +153,10 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
         className={cn(
           // On the open step Skip is always there. On the quiet rows it shows on hover and on
           // keyboard focus, and not at all on touch screens, where the row has room for one button.
-          !isNext && 'opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:hidden',
+          // On a narrow screen the row is stacked and Skip comes after the link, so the link starts
+          // where the step title starts, exactly like the filled button of the open step. (Before,
+          // the unseen Skip button still took its room and pushed the link about 54 px right.)
+          !isNext && 'opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:hidden max-sm:order-last',
         )}
       >
         Skip
@@ -231,7 +235,7 @@ function MoreSteps({
   onToggle,
   rowProps,
   offset,
-  foldedOnPhone = 0,
+  className,
 }: {
   readonly steps: readonly SetupStepView[];
   readonly open: boolean;
@@ -239,14 +243,11 @@ function MoreSteps({
   readonly rowProps: Pick<StepRowProps, 'canManage' | 'pending' | 'onSkip' | 'onUnskip'>;
   /** How many steps come before these, so the numbers carry on. */
   readonly offset: number;
-  /** Quick start rows a phone folds away too. The same press shows them, so the label counts them. */
-  readonly foldedOnPhone?: number;
+  readonly className?: string;
 }) {
   if (steps.length === 0) return null;
-  // The number is the count of rows the press reveals, so it is true on a phone and on a desktop.
-  const closedLabel = (hidden: number) => `Show all steps (${hidden} more)`;
   return (
-    <div className="border-t border-border-subtle">
+    <div className={cn('border-t border-border-subtle', className)}>
       <button
         type="button"
         onClick={onToggle}
@@ -255,18 +256,7 @@ function MoreSteps({
         data-testid="setup-more-toggle"
         className="flex min-h-11 w-full items-center justify-between gap-3 px-5 text-left text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
       >
-        {open ? (
-          <span>Show fewer steps</span>
-        ) : foldedOnPhone > 0 ? (
-          <>
-            <span className="sm:hidden" data-testid="setup-more-label-phone">
-              {closedLabel(steps.length + foldedOnPhone)}
-            </span>
-            <span className="max-sm:hidden">{closedLabel(steps.length)}</span>
-          </>
-        ) : (
-          <span>{closedLabel(steps.length)}</span>
-        )}
+        <span>{open ? 'Hide the steps for later' : moreStepsLabel(steps.length)}</span>
         <ChevronDown aria-hidden className={cn('size-4 shrink-0 transition-transform duration-[var(--duration-fast)] motion-reduce:transition-none', open && 'rotate-180')} />
       </button>
       {open ? (
@@ -294,10 +284,12 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
   const prevStatuses = useRef<ReadonlyMap<string, string> | null>(null);
   const lastRefresh = useRef(0);
   // The guide is the quick start: 3 to 5 steps, the ones the welcome screen promised. The rest of
-  // the plan is folded behind "Show all steps" and does not move the count or the minutes.
+  // the plan is folded behind "Show 3 more steps for later" and does not move the count or the minutes.
   const { steps, summary } = state.quick;
   const moreSteps = state.more;
   const [moreOpen, setMoreOpen] = useState(false);
+  // Phones only: the quick start rows other than the open one. A separate fold from the later steps.
+  const [quickOpen, setQuickOpen] = useState(false);
 
   // Read the saved preference after mount (localStorage is client only) so SSR markup matches.
   useEffect(() => {
@@ -383,7 +375,7 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
     </p>
   ) : null;
 
-  // Phones, on the launcher: every quick start row but the open one waits behind "Show all steps".
+  // Phones, on the launcher: every quick start row but the open one waits behind "Show the other 4 steps".
   const foldsOnPhone = !inSettings && summary.nextKey !== null;
 
   const rowProps = {
@@ -550,24 +542,26 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
                 index={index}
                 isNext={step.key === summary.nextKey}
                 justDone={justDoneKeys.includes(step.key)}
-                // Phones, on the launcher: only the open step shows until "Show all steps" is pressed,
-                // so the person's own app tile is on the first screen under the guide.
-                foldOnPhone={foldsOnPhone && !moreOpen && step.key !== summary.nextKey}
+                // Phones, on the launcher: only the open step shows until "Show the other steps" is
+                // pressed, so the person's own app tile is on the first screen under the guide.
+                foldOnPhone={foldsOnPhone && !quickOpen && step.key !== summary.nextKey}
                 {...rowProps}
               />
             ))}
           </ol>
-          {moreSteps.length === 0 && !inSettings && steps.length > 1 ? (
-            // With no extra steps there is no "Show all steps" row, so phones get their own.
+          {foldsOnPhone && steps.length > 1 ? (
+            // Phones: one row that shows the rest of the quick start. It counts what the header
+            // counts ("2 of 5 done", so "the other 4 steps"). The steps for later keep their own row
+            // below, and that row only shows once these are open, so a phone starts with one row.
             <button
               type="button"
-              onClick={() => setMoreOpen((current) => !current)}
-              aria-expanded={moreOpen}
+              onClick={() => setQuickOpen((current) => !current)}
+              aria-expanded={quickOpen}
               data-testid="setup-phone-toggle"
               className="flex min-h-11 w-full items-center justify-between gap-3 border-t border-border-subtle px-5 text-left text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus sm:hidden"
             >
-              <span>{moreOpen ? 'Show fewer steps' : `Show all ${steps.length} steps`}</span>
-              <ChevronDown aria-hidden className={cn('size-4 shrink-0 transition-transform duration-[var(--duration-fast)] motion-reduce:transition-none', moreOpen && 'rotate-180')} />
+              <span>{quickOpen ? 'Show only the next step' : otherStepsLabel(steps.length - 1)}</span>
+              <ChevronDown aria-hidden className={cn('size-4 shrink-0 transition-transform duration-[var(--duration-fast)] motion-reduce:transition-none', quickOpen && 'rotate-180')} />
             </button>
           ) : null}
           <MoreSteps
@@ -576,7 +570,7 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
             onToggle={() => setMoreOpen((current) => !current)}
             rowProps={rowProps}
             offset={steps.length}
-            foldedOnPhone={foldsOnPhone ? steps.length - 1 : 0}
+            className={cn(foldsOnPhone && steps.length > 1 && !quickOpen && 'max-sm:hidden')}
           />
         </>
       )}

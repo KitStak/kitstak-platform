@@ -63,14 +63,23 @@ const BADGE: Readonly<Record<PlanPhase, PhaseCopy['badge']>> = {
   ended: { label: 'Ended', tone: 'danger' },
 };
 
+export interface PhaseCopyOptions {
+  /**
+   * True when every app is open whatever the plan says (`ENTITLEMENTS_DEV_ALLOW_ALL`, on in
+   * production until the last go live step). The words then never say "view only": that would not
+   * be true, and a customer would read a wrong state (review round 4).
+   */
+  readonly appsOpen?: boolean;
+}
+
 /**
  * The Plan card line, the main button and the other actions for a plan state.
  *
  * A cancel that is set shows in every phase (review round 3): a plan that is late or paused and is
  * also set to end says so, offers "Keep my plan", and never offers "Cancel plan" a second time.
  */
-export function phaseCopy(state: PlanState, timeZone: string): PhaseCopy {
-  const copy = basePhaseCopy(state, timeZone);
+export function phaseCopy(state: PlanState, timeZone: string, options: PhaseCopyOptions = {}): PhaseCopy {
+  const copy = basePhaseCopy(state, timeZone, options.appsOpen === true);
   if (!state.cancelAt || state.phase === 'cancel_scheduled') return copy;
   const others = copy.others.filter((entry) => entry.id !== 'cancel' && entry.id !== 'keep_plan');
   return {
@@ -80,7 +89,9 @@ export function phaseCopy(state: PlanState, timeZone: string): PhaseCopy {
   };
 }
 
-function basePhaseCopy(state: PlanState, timeZone: string): PhaseCopy {
+function basePhaseCopy(state: PlanState, timeZone: string, appsOpen: boolean): PhaseCopy {
+  // "Your apps are view only." is only said when it is true.
+  const viewOnly = appsOpen ? '' : ' Your apps are view only.';
   const day = (date: Date) => formatDay(date, timeZone);
   const short = (date: Date) => formatDayShort(date, timeZone);
 
@@ -110,7 +121,7 @@ function basePhaseCopy(state: PlanState, timeZone: string): PhaseCopy {
       const ended = state.trial ? ` on ${day(state.trial.endsAt)}` : '';
       return {
         badge: BADGE.trial_ended,
-        line: `Your free trial ended${ended}. Your apps are view only. Your data is safe.`,
+        line: `Your free trial ended${ended}.${viewOnly} Your data is safe.`,
         primary: action('pick_plan'),
         others: [],
       };
@@ -145,8 +156,8 @@ function basePhaseCopy(state: PlanState, timeZone: string): PhaseCopy {
     }
     case 'unpaid':
       return {
-        badge: BADGE.unpaid,
-        line: 'Your payment is late, so your apps are view only.',
+        badge: appsOpen ? { label: 'Payment late', tone: 'danger' } : BADGE.unpaid,
+        line: appsOpen ? 'Your payment is late.' : 'Your payment is late, so your apps are view only.',
         primary: action('update_card'),
         others: [action('pay_now'), action('cancel')],
       };
@@ -181,7 +192,7 @@ function basePhaseCopy(state: PlanState, timeZone: string): PhaseCopy {
       const ended = planEndedLine(state, timeZone) ?? 'Your plan ended.';
       return {
         badge: BADGE.ended,
-        line: `${ended} Your apps are view only. Your data is safe.`,
+        line: `${ended}${viewOnly} Your data is safe.`,
         primary: action('pick_plan'),
         others: [],
       };
@@ -190,36 +201,38 @@ function basePhaseCopy(state: PlanState, timeZone: string): PhaseCopy {
 }
 
 /** The one sentence a member without billing rights sees (SPEC 6.1). No amounts. */
-export function memberLine(state: PlanState, orgName: string, timeZone: string): string {
+export function memberLine(state: PlanState, orgName: string, timeZone: string, options: PhaseCopyOptions = {}): string {
   const day = (date: Date) => formatDay(date, timeZone);
+  const viewOnly = options.appsOpen === true ? '' : ' Your apps are view only.';
   switch (state.phase) {
     case 'none':
       return `${orgName} has no plan yet.`;
     case 'trial':
       return state.trial ? `${orgName} is on a free trial that ends ${day(state.trial.endsAt)}.` : `${orgName} is on a free trial.`;
     case 'trial_ended':
-      return `The free trial for ${orgName} has ended. Your apps are view only. Your data is safe.`;
+      return `The free trial for ${orgName} has ended.${viewOnly} Your data is safe.`;
     case 'active':
       return state.trial ? `${orgName} is on a free trial with a plan ready to start.` : `${orgName} has an active plan.`;
     case 'past_due':
       return `${orgName} has a payment due. Your apps still work.`;
     case 'unpaid':
-      return `A payment for ${orgName} is late, so your apps are view only.`;
+      return options.appsOpen === true ? `A payment for ${orgName} is late.` : `A payment for ${orgName} is late, so your apps are view only.`;
     case 'cancel_scheduled':
       return state.cancelAt ? `The plan for ${orgName} ends on ${day(state.cancelAt)}.` : `The plan for ${orgName} is set to end.`;
     case 'pause_scheduled':
       return state.pause ? `The plan for ${orgName} pauses on ${day(state.pause.startsAt)}.` : `The plan for ${orgName} is set to pause.`;
     case 'paused':
       return state.pause
-        ? `The plan for ${orgName} is paused until ${day(state.pause.resumesAt)}. Your apps are view only.`
-        : `The plan for ${orgName} is paused. Your apps are view only.`;
+        ? `The plan for ${orgName} is paused until ${day(state.pause.resumesAt)}.${viewOnly}`
+        : `The plan for ${orgName} is paused.${viewOnly}`;
     case 'ended':
-      return `The plan for ${orgName} has ended. Your apps are view only. Your data is safe.`;
+      return `The plan for ${orgName} has ended.${viewOnly} Your data is safe.`;
   }
 }
 
 /** The Next charge card: a headline and one supporting line. */
-export function nextChargeCopy(state: PlanState, timeZone: string): { readonly headline: string; readonly detail: string } {
+export function nextChargeCopy(state: PlanState, timeZone: string, options: PhaseCopyOptions = {}): { readonly headline: string; readonly detail: string } {
+  const payNow = options.appsOpen === true ? 'Pay now to keep your apps open.' : 'Pay now to turn your apps back on.';
   const day = (date: Date) => formatDay(date, timeZone);
   const short = (date: Date) => formatDayShort(date, timeZone);
   switch (state.phase) {
@@ -244,7 +257,7 @@ export function nextChargeCopy(state: PlanState, timeZone: string): { readonly h
     case 'unpaid':
       return {
         headline: 'Payment due now',
-        detail: state.pastDue ? `${formatMoney(state.pastDue.amountDueCents)} is late. Pay now to turn your apps back on.` : 'Pay now to turn your apps back on.',
+        detail: state.pastDue ? `${formatMoney(state.pastDue.amountDueCents)} is late. ${payNow}` : payNow,
       };
     case 'cancel_scheduled':
       return { headline: 'No more charges', detail: state.cancelAt ? `Your plan ends on ${day(state.cancelAt)}.` : 'Your plan is set to end.' };

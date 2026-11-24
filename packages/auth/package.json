@@ -12,7 +12,9 @@
     "./password-compat": "./src/password-compat.ts",
     "./password-policy": "./src/password-policy-plugin.ts",
     "./weak-passwords": "./src/weak-passwords.ts",
-    "./session-cookie": "./src/session-cookie.ts"
+    "./session-cookie": "./src/session-cookie.ts",
+    "./sign-in-block": "./src/sign-in-block.ts",
+    "./front-door": "./src/front-door.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

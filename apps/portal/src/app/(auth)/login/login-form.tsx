@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useMemo, useRef, useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Mail } from 'lucide-react';
 import { HandoffScreen } from '@kitstak/ui/handoff';
 import { encodeHandoffIdentity } from '@kitstak/billing/handoff';
@@ -16,7 +16,10 @@ import {
   AuthInput,
   FormAlert,
   NO_NETWORK_MESSAGE,
+  OutboxHint,
   PasswordInput,
+  QuietRow,
+  ROW_LINK,
   SubmitButton,
   TAP_BUTTON,
   authErrorMessage,
@@ -41,7 +44,9 @@ export interface LoginFormProps {
   readonly devOutbox?: boolean;
 }
 
-const LINK_BUTTON = `${TAP_BUTTON} rounded-sm text-sm font-semibold text-fg-link hover:underline disabled:cursor-not-allowed disabled:text-fg-muted disabled:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`;
+/** The query key that says "the code step". The address is then `/login?step=code#e=...`. */
+const STEP_KEY = 'step';
+const CODE_STEP = 'code';
 
 export function LoginForm({ next, notice, handoff, providers, legal, providerError, devOutbox = false }: LoginFormProps) {
   const router = useRouter();
@@ -57,14 +62,35 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
   const emailInput = useRef<HTMLInputElement | null>(null);
   const passwordInput = useRef<HTMLInputElement | null>(null);
   /**
-   * "Email me a code instead": the second way in, with no password. 'password' is the normal form,
-   * 'code' shows the 6 digit field for the code that was just mailed.
+   * "Email me a code instead": the second way in, with no password.
+   *
+   * The code step has its own address (review round 4): `/login?step=code`, with the email after
+   * the "#", where no server and no log sees it. So a refresh, a tab the phone reloaded while the
+   * person read their mail, or Back from another page all show the code field again, for the same
+   * address, and the code that was mailed still works. The step is read from the address, never
+   * kept only in this component.
    */
-  const [mode, setMode] = useState<'password' | 'code'>('password');
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const onCodeStep = searchParams.get(STEP_KEY) === CODE_STEP;
+  /** True when the page was opened on the code step (a reload, Back, a tab the phone brought back). */
+  const [openedOnCodeStep] = useState(onCodeStep);
+  /** False until the part after the "#" was read. Until then the code step does not know its address. */
+  const [hashRead, setHashRead] = useState(false);
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
   const [sendingCode, setSendingCode] = useState(false);
   const codeInput = useRef<HTMLInputElement | null>(null);
+
+  /** The address of this screen with or without the code step. Everything else in the link is kept. */
+  const stepUrl = (step: 'code' | 'password', forEmail: string): string => {
+    const params = new URLSearchParams(window.location.search);
+    if (step === 'code') params.set(STEP_KEY, CODE_STEP);
+    else params.delete(STEP_KEY);
+    const query = params.toString();
+    const hash = step === 'code' ? `#${encodeHandoffIdentity({ email: forEmail })}` : '';
+    return `${pathname}${query ? `?${query}` : ''}${hash}`;
+  };
 
   const parsedHandoff = useMemo(() => readHandoff(handoff), [handoff]);
   const carriesCart = hasHandoff(parsedHandoff);
@@ -73,12 +99,25 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
   const signupHref = withHandoff('/signup', parsedHandoff);
 
   // An address passed after the "#" (from signup or password reset) is filled in, then removed.
-  useHashIdentity((identity) => {
-    if (identity.email) setEmail((current) => current || identity.email || '');
-    if (prefersAutoFocus()) {
-      (identity.email ? passwordInput.current : emailInput.current)?.focus({ preventScroll: true });
-    }
-  });
+  // On the code step it stays, like on the reset password screen, so a reload keeps it.
+  // This runs once, for the address the page was opened with. So it asks how the page was opened
+  // (`openedOnCodeStep`), never where the person is by now.
+  useHashIdentity(
+    (identity) => {
+      if (identity.email) setEmail((current) => current || identity.email || '');
+      setHashRead(true);
+      if (openedOnCodeStep && !identity.email) {
+        // The code step was opened with no address (a link someone cut short). There is nobody to
+        // send a code to, so this is the normal sign in form.
+        window.history.replaceState(null, '', stepUrl('password', ''));
+      }
+      if (prefersAutoFocus()) {
+        const target = openedOnCodeStep && identity.email ? codeInput.current : identity.email ? passwordInput.current : emailInput.current;
+        target?.focus({ preventScroll: true });
+      }
+    },
+    { strip: !openedOnCodeStep },
+  );
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -165,7 +204,11 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
         setError(result.error ?? NO_NETWORK_MESSAGE);
       } else {
         setCode('');
-        setMode('code');
+        // The code step gets its own entry in the history, with the address after the "#". Asking
+        // for a new code on the step itself keeps the one entry.
+        const url = stepUrl('code', email.trim());
+        if (onCodeStep) window.history.replaceState(null, '', url);
+        else window.history.pushState(null, '', url);
         requestAnimationFrame(() => codeInput.current?.focus());
       }
     } catch {
@@ -175,7 +218,8 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
   };
 
   const submitCode = async (value: string) => {
-    if (submitting.current) return;
+    // No address yet (the link is read a moment after the page shows): nothing to check a code against.
+    if (submitting.current || email.trim() === '') return;
     if (value.length !== 6) {
       setCodeError('Enter the 6 digit code from your email.');
       codeInput.current?.focus();
@@ -185,13 +229,21 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
     setPending(true);
     setCodeError(null);
     try {
-      const result = await signInWithCodeAction({ email: email.trim(), code: value });
+      const result = await signInWithCodeAction({ email: email.trim(), code: value, ...(afterSignIn ? { next: afterSignIn } : {}) });
       if (!result.ok) {
         setCodeError(result.error ?? 'That code is not right. Check it and try again.');
         setCode('');
         submitting.current = false;
         setPending(false);
         requestAnimationFrame(() => codeInput.current?.focus());
+        return;
+      }
+      // The server names a stop on the way when it has something to say first: the account page,
+      // when an old password that was never confirmed was removed (it carries the way on).
+      if (result.next) {
+        setSignedIn(true);
+        router.replace(result.next);
+        router.refresh();
         return;
       }
       await goOn();
@@ -202,6 +254,10 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
       setSignedIn(false);
     }
   };
+
+  // The step comes from the address. An address with no email (after the "#" was read) is not a code step.
+  const codeEmail = email.trim();
+  const mode: 'password' | 'code' = onCodeStep && (!hashRead || codeEmail !== '') ? 'code' : 'password';
 
   if (mode === 'code') {
     return (
@@ -218,18 +274,19 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
             void submitCode(code);
           }}
         >
-          <p className="text-base text-fg-secondary" role="status">
-            If <span className="font-medium text-fg [overflow-wrap:anywhere]">{email.trim()}</span> has a KitStak account, a code is on its way. It works for 10 minutes.
+          <p className="text-base text-fg-secondary" role="status" data-testid="login-code-sent">
+            {codeEmail ? (
+              <>
+                If <span className="font-medium text-fg [overflow-wrap:anywhere]">{codeEmail}</span> has a KitStak account, a code is on its way.
+              </>
+            ) : (
+              // The address is read from the link a moment after the page shows.
+              'If that address has a KitStak account, a code is on its way.'
+            )}{' '}
+            It works for 10 minutes.
           </p>
-          {devOutbox ? (
-            <p className="text-sm text-fg-secondary" data-testid="login-code-dev">
-              Test mode: no real email is sent. Find the code in the{' '}
-              <Link href="/dev/outbox" target="_blank" className="font-semibold text-fg-link underline underline-offset-2">
-                dev outbox
-              </Link>
-              .
-            </p>
-          ) : null}
+          {/* The same pill as on the verify email and reset password screens. */}
+          {devOutbox ? <OutboxHint testId="login-code-dev" /> : null}
           <div className="flex flex-col gap-1.5">
             <label htmlFor="login-code" className="text-xs font-medium text-fg-secondary">
               6 digit code
@@ -255,17 +312,18 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
             ) : null}
           </div>
           <SubmitButton busyLabel={pending ? 'Signing you in…' : null}>Sign in</SubmitButton>
-          <div className="flex flex-wrap items-center justify-between gap-x-4">
-            <button type="button" className={LINK_BUTTON} disabled={sendingCode || pending} onClick={() => void sendCode()} data-testid="login-code-resend">
+          <div className="-my-2 flex flex-wrap items-center justify-between gap-x-4 text-sm">
+            <button type="button" className={ROW_LINK} disabled={sendingCode || pending} onClick={() => void sendCode()} data-testid="login-code-resend">
               {sendingCode ? 'Sending a new code' : 'Send a new code'}
             </button>
             <button
               type="button"
-              className={LINK_BUTTON}
+              className={ROW_LINK}
               disabled={pending}
               data-testid="login-use-password"
               onClick={() => {
-                setMode('password');
+                // Back to the normal form, at its own address. The email stays in the field.
+                window.history.replaceState(null, '', stepUrl('password', ''));
                 setCodeError(null);
                 requestAnimationFrame(() => passwordInput.current?.focus());
               }}
@@ -350,12 +408,11 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
           />
           <SubmitButton busyLabel={pending ? 'Signing you in…' : null}>Sign in</SubmitButton>
           {/* The second way in: no password at all. The code that is mailed signs the person in. */}
-          <p className="-mt-2 text-center text-sm text-fg-secondary">
-            Or skip the password.{' '}
-            <button type="button" className={LINK_BUTTON} disabled={sendingCode || pending} onClick={() => void sendCode()} data-testid="login-email-code">
+          <QuietRow lead="Or skip the password." className="-my-2">
+            <button type="button" className={ROW_LINK} disabled={sendingCode || pending} onClick={() => void sendCode()} data-testid="login-email-code">
               {sendingCode ? 'Sending your code' : 'Email me a code instead'}
             </button>
-          </p>
+          </QuietRow>
         </form>
         <LegalLine urls={legal} lead="By signing in" />
       </div>

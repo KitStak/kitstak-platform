@@ -2,8 +2,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserMinus, X } from 'lucide-react';
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Notice, Spinner, cn } from '@/components/ui';
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, Notice, Select, Spinner, cn } from '@/components/ui';
 import { organization } from '@/lib/auth-client';
+import { INVITE_ROLES, ROLE_LABEL, type InviteRole } from './invite-model';
 
 /** Told to the page when a person was removed, so one line can say so after the row is gone. */
 const REMOVED_EVENT = 'kitstak:member-removed';
@@ -29,9 +30,9 @@ export function MemberRemovedNotice() {
   );
 }
 
-/** Admin, member and viewer use a seat. Guest is free. */
-const ASSIGNABLE_ROLES = ['admin', 'member', 'viewer', 'guest'] as const;
-type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+/** Admin, member and viewer use a seat. Guest is free. The same roles and words as the invite form. */
+const ASSIGNABLE_ROLES = INVITE_ROLES;
+type AssignableRole = InviteRole;
 
 function initials(name: string, email: string): string {
   const source = name.trim() || email;
@@ -140,22 +141,22 @@ export function MemberRow({
             <label className="sr-only" htmlFor={`role-${memberId}`}>
               Role for {name}
             </label>
-            <select
-              id={`role-${memberId}`}
-              value={ASSIGNABLE_ROLES.includes(primaryRole as AssignableRole) ? primaryRole : 'member'}
-              disabled={pending}
-              onChange={(event) => void changeRole(event.target.value as AssignableRole)}
-              className={cn(
-                'h-8 rounded-md border border-border-input bg-panel px-2 text-sm text-fg capitalize pointer-coarse:h-11 pointer-coarse:text-md',
-                'hover:border-border-input-hover focus:field-focus',
-              )}
-            >
-              {ASSIGNABLE_ROLES.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            {/* The design system select, the same control as "Role" in the invite form below (review round 4). */}
+            <span className="w-32 shrink-0">
+              <Select
+                id={`role-${memberId}`}
+                data-testid="member-role"
+                value={ASSIGNABLE_ROLES.includes(primaryRole as AssignableRole) ? primaryRole : 'member'}
+                disabled={pending}
+                onChange={(event) => void changeRole(event.target.value as AssignableRole)}
+              >
+                {ASSIGNABLE_ROLES.map((option) => (
+                  <option key={option} value={option}>
+                    {ROLE_LABEL[option]}
+                  </option>
+                ))}
+              </Select>
+            </span>
             <Button
               variant="danger"
               size="sm"

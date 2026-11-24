@@ -8,6 +8,9 @@
  * It also takes the proof out of an invite link (`/invite/<id>?t=...`) and keeps it in an httpOnly
  * cookie (see `@/lib/invite-proof`).
  *
+ * A link that names its organization (`org=<id>`) is sent through `/org/switch` (see
+ * `@/lib/org-link`), so a person who is in two organizations lands in the right one.
+ *
  * And it notes the page that was asked for in a request header (see `@/lib/return-to`), so a signed
  * out person is sent to sign in and then back to that page, with its query.
  */
@@ -20,6 +23,7 @@ import {
   invitationIdFromPath,
   looksLikeInviteProof,
 } from '@/lib/invite-proof';
+import { orgSwitchRedirect } from '@/lib/org-link';
 import { RETURN_TO_HEADER, returnToOf } from '@/lib/return-to';
 
 export function proxy(request: NextRequest): NextResponse {
@@ -58,6 +62,13 @@ export function proxy(request: NextRequest): NextResponse {
       }
       return response;
     }
+  }
+
+  // A link that names its organization (`org=<id>`, from a billing email or from another app) goes
+  // through the switch route first, so the page opens for that organization (see `@/lib/org-link`).
+  if (request.method === 'GET' && !pathname.startsWith('/api/')) {
+    const viaSwitch = orgSwitchRedirect(pathname, request.nextUrl.search);
+    if (viaSwitch) return NextResponse.redirect(new URL(viaSwitch, request.url));
   }
 
   // The page that was asked for, for the session guards. Always written here (or removed), so a

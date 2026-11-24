@@ -67,16 +67,21 @@ export default async function InvoicesPage({
         </Card>
       ) : (
         <Card className="overflow-hidden" aria-label="Invoices">
-          {/* A real table from 640 px. On phones each invoice is a stacked row, so nothing scrolls sideways. */}
+          {/*
+            A real table from 640 px. On phones each invoice is a stacked row, so nothing scrolls sideways.
+            The date, the number, the amount and the status each stay on one line at every width: a
+            date cut in two or "TEST-" above "0001" reads as a mistake. Only "For" may wrap, and it
+            takes all the room the other columns leave (review round 4, seen at 768 px).
+          */}
           <table className="w-full text-left text-sm">
             <thead className="hidden sm:table-header-group">
-              <tr className="border-b border-border-subtle bg-sunken text-2xs font-semibold tracking-[0.08em] text-fg-muted uppercase">
-                <th scope="col" className="px-5 py-3">Date</th>
-                <th scope="col" className="px-5 py-3">Number</th>
-                <th scope="col" className="px-5 py-3">For</th>
-                <th scope="col" className="px-5 py-3 text-right">Amount</th>
-                <th scope="col" className="px-5 py-3">Status</th>
-                <th scope="col" className="px-5 py-3 text-right">
+              <tr className="border-b border-border-subtle bg-sunken text-2xs font-semibold tracking-[0.08em] whitespace-nowrap text-fg-muted uppercase">
+                <th scope="col" className="py-3 pr-3 pl-5">Date</th>
+                <th scope="col" className="px-3 py-3">Number</th>
+                <th scope="col" className="w-full px-3 py-3">For</th>
+                <th scope="col" className="px-3 py-3 text-right">Amount</th>
+                <th scope="col" className="px-3 py-3">Status</th>
+                <th scope="col" className="py-3 pr-5 pl-3 text-right">
                   <span className="sr-only">PDF</span>
                 </th>
               </tr>
@@ -87,18 +92,18 @@ export default async function InvoicesPage({
                 const date = formatDay(invoice.issuedAt, timeZone);
                 return (
                   <tr key={invoice.id} data-testid={`invoice-row-${invoice.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3.5 sm:table-row sm:p-0">
-                    <td className="basis-full font-semibold text-fg sm:basis-auto sm:px-5 sm:py-3.5">
+                    <td data-testid="invoice-date" className="basis-full font-semibold whitespace-nowrap text-fg sm:basis-auto sm:py-3.5 sm:pr-3 sm:pl-5">
                       <Link href={`/billing/invoices/${invoice.id}`} className="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                         {date}
                       </Link>
                     </td>
-                    <td className="text-fg-secondary sm:px-5 sm:py-3.5">{invoice.number ?? 'Pending'}</td>
-                    <td className="text-fg-secondary sm:px-5 sm:py-3.5">{invoiceTitle(invoice)}</td>
-                    <td className="ml-auto font-semibold text-fg tabular-nums sm:ml-0 sm:px-5 sm:py-3.5 sm:text-right">{formatMoney(invoice.totalCents)}</td>
-                    <td className="sm:px-5 sm:py-3.5">
+                    <td data-testid="invoice-number" className="whitespace-nowrap text-fg-secondary sm:px-3 sm:py-3.5">{invoice.number ?? 'Pending'}</td>
+                    <td data-testid="invoice-for" className="text-fg-secondary sm:w-full sm:px-3 sm:py-3.5">{invoiceTitle(invoice)}</td>
+                    <td data-testid="invoice-amount" className="ml-auto font-semibold whitespace-nowrap text-fg tabular-nums sm:ml-0 sm:px-3 sm:py-3.5 sm:text-right">{formatMoney(invoice.totalCents)}</td>
+                    <td className="whitespace-nowrap sm:px-3 sm:py-3.5">
                       <Badge tone={status.tone}>{status.label}</Badge>
                     </td>
-                    <td className="sm:px-5 sm:py-2 sm:text-right">
+                    <td className="whitespace-nowrap sm:py-2 sm:pr-5 sm:pl-3 sm:text-right">
                       <a
                         href={`/billing/invoices/${invoice.id}/pdf`}
                         target="_blank"

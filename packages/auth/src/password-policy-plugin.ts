@@ -22,7 +22,7 @@ import type { BetterAuthPlugin } from 'better-auth';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { sql } from 'drizzle-orm';
 import { burnDummyPasswordVerify } from './timing';
-import { EASY_TO_GUESS_MESSAGE, isEasyToGuess } from './weak-passwords';
+import { weakPasswordMessage } from './weak-passwords';
 
 /** bcrypt only uses the first 72 bytes; longer inputs are rejected by the policy. */
 export const MAX_PASSWORD_BYTES = 72;
@@ -111,7 +111,10 @@ export function validatePassword(
   // held down, `123456789012345`, `qwertyuiopasdfgh`, a common password dressed up with digits, and
   // anything built around the product or company name are refused at every length. Said only when
   // nothing else is wrong, so a person fixes one clear thing at a time.
-  if (issues.length === 0 && isEasyToGuess(password, { names: [context.company] })) issues.push(EASY_TO_GUESS_MESSAGE);
+  // The line names the cause when the cause is a name (review round 4): "Do not use your company
+  // name in your password." The form says the same words while the person types.
+  const weak = issues.length === 0 ? weakPasswordMessage(password, { names: [context.company] }) : null;
+  if (weak) issues.push(weak);
   return issues;
 }
 

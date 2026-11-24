@@ -8,8 +8,10 @@ export {
   askViewOnly,
   controlLabel,
   isSettled,
+  isWayOut,
   isWriteLabel,
   isWritePath,
+  leavesApp,
   type ViewOnlyGuardProps,
   type ViewOnlyPageProps,
 } from './view-only-guard';

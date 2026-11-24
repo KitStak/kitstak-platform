@@ -1,13 +1,12 @@
 'use client';
-import Link from 'next/link';
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { CircleAlert, MailCheck } from 'lucide-react';
-import { Badge, EmailText } from '@/components/ui';
+import { EmailText } from '@/components/ui';
 import { signOut } from '@/lib/auth-client';
 import { changeUnverifiedEmailAction, resendVerificationAction, skipVerifyAction, verifyEmailAction } from '@/server/signup-actions';
 import { CodeInput } from '../_components/code-input';
-import { AuthHeading, FormAlert, NO_NETWORK_MESSAGE, SubmitButton, TAP_BUTTON, TAP_LINK } from '../_components/form-parts';
+import { AuthHeading, FormAlert, NO_NETWORK_MESSAGE, OutboxHint, SubmitButton, TAP_BUTTON } from '../_components/form-parts';
 
 const LINK_BUTTON =
   'inline-flex min-h-11 items-center rounded-md px-1 font-semibold text-fg-link hover:underline disabled:cursor-not-allowed disabled:font-medium disabled:text-fg-muted disabled:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
@@ -202,19 +201,7 @@ export function VerifyEmailForm({
       />
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5" aria-busy={state === 'checking'}>
         {notice ? <FormAlert tone="success">{notice}</FormAlert> : null}
-        {devOutbox ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border-default bg-sunken/60 px-3.5 py-3 text-sm text-fg-secondary">
-            <Badge tone="info">
-              <span data-testid="test-mode-label">Test mode</span>
-            </Badge>
-            <span>
-              <Link href="/dev/outbox" target="_blank" className={`${TAP_LINK} font-semibold text-fg-link underline underline-offset-2`}>
-                Open the email outbox
-              </Link>{' '}
-              to see your code.
-            </span>
-          </div>
-        ) : null}
+        {devOutbox ? <OutboxHint /> : null}
         <div className="flex flex-col gap-2">
           <label htmlFor={codeId} className="text-xs font-medium text-fg-secondary">
             6 digit code

@@ -9,7 +9,7 @@ import { Button, Field, Input, LinkButton, Notice, Select } from '@/components/u
 import { clearInviteDraft, clearInviteWaiting, readInviteDraft, readInviteWaiting, saveInviteDraft, saveInviteWaiting } from '@/lib/invite-draft';
 import { inviteMemberAction } from '@/server/auth-relay-actions';
 import { confirmPlanChangeAction, previewPlanChangeAction } from '@/features/billing/actions';
-import { INVITE_ROLES, ROLE_LABEL, countTyped, findOnTeam, inviteErrorWords, invitePlanLine, notInvitedYet, parseInviteEmails, type InviteRole, type TeamPerson } from './invite-model';
+import { INVITE_ROLES, ROLE_LABEL, countTyped, findOnTeam, inviteErrorWords, invitePlanLine, notInvitedYet, parseInviteEmails, seatOfferPayLine, type InviteRole, type TeamPerson } from './invite-model';
 
 export interface InviteSeatInfo {
   /** The viewer may pay and change the plan (owner or billing manager). */
@@ -363,11 +363,8 @@ export function InviteMemberForm({
         >
           {restored ? <span data-testid="invite-waiting">{restoredLine}</span> : null}
           {seatsInUse(paid.seats)} Add {offerCount === 1 ? '1 seat' : `${offerCount} seats`} for {formatMoney(offer.preview.recurringDeltaCents)} more {period}.{' '}
-          {offer.preview.dueTodayCents > 0
-            ? `You pay ${formatMoney(offer.preview.dueTodayCents)} today for the days left.`
-            : offer.preview.creditAppliedCents > 0
-              ? `You pay ${formatMoney(0)} today. Your credit pays the ${formatMoney(offer.preview.creditAppliedCents)} for the days left.`
-              : `You pay ${formatMoney(0)} today.`}
+          {/* The amount and its real reason: the days left, less any credit (review round 4). */}
+          <span data-testid="invite-seat-pay">{seatOfferPayLine(offer.preview)}</span>
           {offerError ? (
             // The reason the seat was not added. Nothing was charged and no invite was sent.
             <span role="alert" data-testid="invite-seat-error" className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-warning/25 pt-2 text-danger-text">

@@ -74,7 +74,17 @@ export const sharedAuthOptions = {
     expiresIn: 60 * 60 * 24 * 14,
     updateAge: 60 * 60 * 24,
     freshAge: 60 * 15,
-    cookieCache: { enabled: true, maxAge: 60 * 5 },
+    /**
+     * No cookie cache (billing review round 4). With the cache on, a signed copy of the session
+     * in the browser was believed for 5 minutes without a look at the database. So after a
+     * password reset, which deletes every session row, the old browser could still open Billing,
+     * download the activity file and cancel the plan for up to 5 minutes. A person resets their
+     * password exactly when they think someone else is in their account.
+     *
+     * Off, every request reads the session row (one primary key lookup on `core.session`). A
+     * session that was ended is refused on the very next request, in every app.
+     */
+    cookieCache: { enabled: false },
   },
   user: {
     additionalFields: {

@@ -11,7 +11,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { and, eq, ne } from 'drizzle-orm';
-import { isBcryptHash } from '@kitstak/auth';
+import { blockSignIn, isBcryptHash, unblockSignIn, type RawSqlExecutor } from '@kitstak/auth';
 import { account, member, organization, passwordPolicyState, user, userProfiles } from '@kitstak/db/schema';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import bcrypt from 'bcryptjs';
@@ -390,6 +390,26 @@ export async function deleteCredentialAccount(db: AppDb, userId: string): Promis
     .where(and(eq(account.userId, userId), eq(account.providerId, CREDENTIAL_PROVIDER)))
     .returning({ id: account.id });
   return removed.length > 0;
+}
+
+/**
+ * Switches a person's KitStak account off, for every app: the block row the shared sign in layer
+ * reads at every door (`core.sign_in_blocks`, see `@kitstak/auth` sign-in-block.ts), every session
+ * ended, and the password row removed as a second lock. Since billing review round 4 the block row
+ * is the fact; before it, a missing password row was, and "Forgot password" could bring the person
+ * back. Only for an identity this warehouse manages (`identityManagedHere`).
+ */
+export async function switchOffSignIn(db: AppDb, userId: string, blockedBy?: string | null): Promise<void> {
+  await deleteCredentialAccount(db, userId);
+  await blockSignIn(db as unknown as RawSqlExecutor, { userId, blockedBy: blockedBy ?? null });
+}
+
+/**
+ * Switches the account back on. The password is not brought back: an administrator resets it, or
+ * the person uses "Forgot password" in the Portal.
+ */
+export async function switchOnSignIn(db: AppDb, userId: string): Promise<void> {
+  await unblockSignIn(db as unknown as RawSqlExecutor, userId);
 }
 
 /** Clears the password-policy plugin's lockout row for an email. */

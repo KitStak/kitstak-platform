@@ -3,9 +3,10 @@
  * Shared pieces of the signup and sign in forms. Every control here is at least 44 px tall and
  * types at 16 px on phones, so a thumb can hit it and iOS never zooms the page on focus.
  */
-import { forwardRef, useState } from 'react';
+import { forwardRef, useState, type HTMLAttributes, type ReactNode } from 'react';
+import Link from 'next/link';
 import { Check, CircleAlert, Eye, EyeOff, X } from 'lucide-react';
-import { Button, Input, Spinner, cn, type ButtonProps, type InputProps } from '@/components/ui';
+import { Badge, Button, Input, Spinner, cn, type ButtonProps, type InputProps } from '@/components/ui';
 import { emailHint } from '@/features/signup/email-hint';
 import { meterStrength, passwordWarning } from '@/features/signup/password-meter';
 import {
@@ -13,6 +14,7 @@ import {
   PASSWORD_MIN_LENGTH,
   PASSWORD_PASSPHRASE_LENGTH,
   isPassphrase,
+  isRulesIssue,
   passwordRules,
   passwordStrength,
   type PasswordContext,
@@ -36,6 +38,14 @@ export const AUTH_BUTTON_HEIGHT = 'h-12 sm:h-11';
  */
 export const TAP_LINK = 'py-3.5';
 export const TAP_BUTTON = '-my-3.5 py-3.5';
+/**
+ * A quiet text button that stands in a row of its own ("Email me a code instead"). It reads as a
+ * link (underlined), it is a real 44 px tall so a thumb can hit it, and the row gives it room, so
+ * its focus ring never runs through the text above or below it (review round 4). Use it inside
+ * `QuietRow`. For a link in the middle of a sentence use `TAP_BUTTON`.
+ */
+export const ROW_LINK =
+  'inline-flex min-h-11 items-center rounded-md px-1 font-medium text-fg-link underline decoration-border-strong underline-offset-4 hover:decoration-fg disabled:cursor-not-allowed disabled:text-fg-muted disabled:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 export const AUTH_INPUT_TEXT = 'text-md sm:text-base';
 
 /** The portal input at auth form size: 44 px tall, 16 px type on phones. */
@@ -53,6 +63,41 @@ export const AuthInput = forwardRef<HTMLInputElement, InputProps>(function AuthI
     />
   );
 });
+
+/**
+ * A quiet row under a form's main button: a few plain words, then one `ROW_LINK` button. The row is
+ * 44 px tall and sits a full form gap away from its neighbours, so the button's focus ring touches
+ * no other text.
+ */
+export function QuietRow({ lead, children, className, ...props }: { readonly lead?: string; readonly children: ReactNode; readonly className?: string } & HTMLAttributes<HTMLParagraphElement>) {
+  return (
+    <p className={cn('flex min-h-11 flex-wrap items-center justify-center gap-x-1.5 text-center text-sm text-fg-secondary', className)} {...props}>
+      {lead ? <span>{lead}</span> : null}
+      {children}
+    </p>
+  );
+}
+
+/**
+ * The test mode hint on every screen that waits for an emailed code (verify email, reset password,
+ * sign in with a code): the "Test mode" pill and the way to the dev outbox, where the code is. One
+ * look on all three (review round 4). Only rendered when emails land in the dev outbox.
+ */
+export function OutboxHint({ testId }: { readonly testId?: string }) {
+  return (
+    <div data-testid={testId} className="flex flex-wrap items-center gap-2 rounded-lg border border-border-default bg-sunken/60 px-3.5 py-3 text-sm text-fg-secondary">
+      <Badge tone="info">
+        <span data-testid="test-mode-label">Test mode</span>
+      </Badge>
+      <span>
+        <Link href="/dev/outbox" target="_blank" className={`${TAP_LINK} font-semibold text-fg-link underline underline-offset-2`}>
+          Open the email outbox
+        </Link>{' '}
+        to see your code.
+      </span>
+    </div>
+  );
+}
 
 /** Password input with a show and hide button. */
 export const PasswordInput = forwardRef<HTMLInputElement, Omit<InputProps, 'type' | 'trailing'>>(
@@ -126,32 +171,51 @@ export function StrengthMeter({ password, context }: { readonly password: string
  *     characters or more, the warning stands alone: "15 is enough" is not true for it.
  * After the form said no (`showMissing`), the rules that are still missing turn red, all at once,
  * and the form adds no second sentence.
+ *
+ * One place for the red line (review round 4): right under the field and its meter, above the
+ * rules, with nothing in between. While typing it is the live warning. After the form said no it
+ * is the field's own error (`error`), in the same spot, so the sentence never jumps and never ends
+ * up under some other control. The field prints that error for screen readers only.
  */
 export function PasswordRules({
   password,
   id,
   showMissing = false,
   context,
+  error = null,
 }: {
   readonly password: string;
   readonly id?: string;
   readonly showMissing?: boolean;
   /** The email and the company the password must not be built on. */
   readonly context?: PasswordContext;
+  /**
+   * The field's error when it is not about the checklist ("Enter a password.", "Do not use your
+   * company name in your password."). Shown here, in the warning's place. See `passwordFieldError`.
+   */
+  readonly error?: string | null;
 }) {
   const rules = passwordRules(password);
   const long = isPassphrase(password);
   const warning = passwordWarning(password, context);
-  // The field prints its own error after a refusal. The same sentence is not said twice.
-  const liveWarning = showMissing ? null : warning;
-  const enough = long && warning === null;
+  // The refusal comes first. Else the live warning, which also stays when the refusal is about the
+  // checklist (the missing rules turn red and the name warning is still true).
+  const line = error || warning;
+  const enough = long && warning === null && !error;
   const typing = password.length > 0 || showMissing;
   return (
     <div id={id} className="flex flex-col gap-1.5">
-      {liveWarning ? (
-        <p role="status" data-testid="password-warning" className="flex items-start gap-1.5 text-xs font-medium text-danger-text">
+      {line ? (
+        // The field already announces its error (`role="alert"`, for screen readers only), so the
+        // same words are not announced twice here.
+        <p
+          role={error ? undefined : 'status'}
+          aria-hidden={error ? true : undefined}
+          data-testid={error ? 'password-error' : 'password-warning'}
+          className="flex items-start gap-1.5 text-xs font-medium text-danger-text"
+        >
           <CircleAlert aria-hidden className="mt-px size-3.5 shrink-0" />
-          {liveWarning}
+          {line}
         </p>
       ) : null}
       {enough ? (
@@ -163,7 +227,7 @@ export function PasswordRules({
           {PASSWORD_PASSPHRASE_LENGTH} or more characters. That is enough.
         </p>
       ) : long ? null : (
-        // (Long and still refused shows nothing here: the warning above is the whole answer, and
+        // (Long and still refused shows nothing here: the line above is the whole answer, and
         // "15 is enough" would not be true for that password.)
         // The easy way, said first: a long password needs nothing else (review round 2).
         // On a phone, before the first key, it is one line: the fields under the password and the
@@ -208,6 +272,17 @@ export function PasswordRules({
       </ul>
     </div>
   );
+}
+
+/**
+ * The part of a password field's error that `PasswordRules` prints in the warning's place: every
+ * error that is not about the checklist. A checklist error is shown by the rules turning red, so
+ * it has no sentence. Pass the result to `PasswordRules` as `error`, and give the `Field`
+ * `errorHidden` so the sentence is on screen once.
+ */
+export function passwordFieldError(password: string, error: string | null | undefined): string | null {
+  if (!error) return null;
+  return isRulesIssue(password) ? null : error;
 }
 
 /**

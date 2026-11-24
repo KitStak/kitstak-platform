@@ -98,6 +98,70 @@ test.describe('sign in with an emailed code', () => {
     await expect(page.getByTestId('billing-home')).toBeVisible();
   });
 
+  // Review round 4: the code step has its own address. People leave this page to read their mail,
+  // and a phone often reloads the tab when they come back.
+  test('a refresh or Back on the code step keeps the step, the address and the code', async ({ page, context }) => {
+    const { person } = await trialAccount(page, 'codereload', CART_PULSE);
+    await context.clearCookies();
+    await resetRateLimits();
+
+    // Asked for a page first, so `next` must survive the reload too.
+    await page.goto('/billing/invoices');
+    await page.waitForURL(/\/login\?next=%2Fbilling%2Finvoices/);
+    await page.getByLabel('Work email').fill(person.email);
+    const asked = new Date();
+    await page.getByTestId('login-email-code').click();
+    await expect(page.getByTestId('login-code-form')).toBeVisible();
+    // The step is in the address: `step=code`, and the email after the "#", where no server sees it.
+    await expect.poll(() => new URL(page.url()).searchParams.get('step')).toBe('code');
+    expect(new URL(page.url()).searchParams.get('next')).toBe('/billing/invoices');
+    expect(new URL(page.url()).hash).not.toBe('');
+    expect(new URL(page.url()).search).not.toContain(encodeURIComponent(person.email));
+    const code = await newestCode(person.email, 'sign_in', asked);
+
+    // Refresh: still "Check your email", for the same address, with the code field. No new email.
+    await page.reload();
+    await expect(page.getByTestId('login-code-form')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+    await expect(page.getByTestId('login-code-sent')).toContainText(person.email);
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toHaveCount(0);
+    // The test mode hint is the same pill as on the verify email screen.
+    await expect(page.getByTestId('login-code-dev').getByTestId('test-mode-label')).toHaveText('Test mode');
+    await expect(page.getByTestId('login-code-dev')).toContainText('Open the email outbox to see your code.');
+
+    // Away to another page (the outbox, like reading mail) and Back: the code step again.
+    await page.goto('/dev/outbox');
+    await page.goBack();
+    await expect(page.getByTestId('login-code-form')).toBeVisible();
+    await expect(page.getByTestId('login-code-sent')).toContainText(person.email);
+    const mails = await sql<{ n: string }>(
+      `SELECT count(*)::text AS n FROM core.billing_emails WHERE to_email = $1 AND created_at > $2 AND payload->>'purpose' = 'sign_in'`,
+      [person.email.toLowerCase(), asked],
+    );
+    expect(mails[0]?.n, 'a reload asks for no second code').toBe('1');
+
+    // The code that was mailed before the reload still works, and the person lands on the page from `next`.
+    await page.getByTestId('login-code').fill(code);
+    await page.waitForURL(/\/billing\/invoices/, { timeout: 60_000 });
+
+    // The browser's Back from the code step is the normal form again, with the email still there.
+    await context.clearCookies();
+    await resetRateLimits();
+    await page.goto('/login');
+    await page.getByLabel('Work email').fill(person.email);
+    await page.getByTestId('login-email-code').click();
+    await expect(page.getByTestId('login-code-form')).toBeVisible();
+    await page.goBack();
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    await expect(page.getByLabel('Work email')).toHaveValue(person.email);
+    expect(new URL(page.url()).searchParams.get('step')).toBeNull();
+
+    // A code step link with no address is the normal form, not a code field for nobody.
+    await page.goto('/login?step=code');
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    await expect(page.getByTestId('login-code-form')).toHaveCount(0);
+  });
+
   test('nothing says whether an address has an account, and a person with no credential gets no code', async ({ page, context }) => {
     await resetRateLimits();
     const stranger = `e2e-nobody-${Date.now().toString(36)}@kitstak-e2e.example`;
@@ -143,7 +207,7 @@ test.describe('signup with no password', () => {
     await page.getByTestId('signup-email').fill(person.email);
     await page.getByTestId('signup-company').fill(person.company);
 
-    // The link sits under the password field. Choosing it takes the password field away.
+    // The link sits in a quiet row of its own under the button. Choosing it takes the password field away.
     await page.getByTestId('signup-email-code').click();
     await expect(page.getByTestId('signup-no-password')).toContainText('No password needed');
     await expect(page.getByTestId('signup-password')).toHaveCount(0);

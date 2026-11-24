@@ -3,6 +3,7 @@
  * that says what sending does to the plan before anything is sent (docs/billing/SPEC.md 6.9).
  */
 import { z } from 'zod';
+import { formatMoney } from '@kitstak/billing/catalog';
 
 /** Roles a person can be invited with. Admin, member and viewer use a seat. Guest is free. */
 export const INVITE_ROLES = ['admin', 'member', 'viewer', 'guest'] as const;
@@ -116,4 +117,38 @@ export function invitePlanLine(facts: SeatFacts, role: InviteRole, typed: number
   if (facts.pulseOnly) return `${lead} Pulse covers up to ${facts.limit} seats.`;
   if (!facts.canManageBilling) return `${lead} An owner or a billing manager can add ${short === 1 ? 'one' : 'more'}.`;
   return `${lead} We show the price and ask before we add ${seats(short)}.`;
+}
+
+/** The amounts of a seat offer, as the gateway priced them (`ChangePreview` in @kitstak/billing). */
+export interface SeatOfferAmounts {
+  /** Charged to the card now. */
+  readonly dueTodayCents: number;
+  /** The price of the new seats for the days left, before credit. */
+  readonly proratedCents: number;
+  /** Credit the organization already had that pays part or all of it. */
+  readonly creditAppliedCents: number;
+  /** The server's own sentence for "Due today". Used when the short sentence would not add up. */
+  readonly dueTodayNote?: string | null;
+}
+
+/**
+ * What adding the seats costs today, with the real reason (review round 4). PURE.
+ *
+ * The amount due is the price for the days left, less any credit. Before, the offer said "You pay
+ * $1.09 today for the days left" when the days left cost $24.05 and credit paid $22.96 of it: the
+ * right amount with the wrong reason. Every number named here adds up to what is due. If it ever
+ * would not (tax, a gateway line this file does not know), the server's own sentence is used.
+ */
+export function seatOfferPayLine(amounts: SeatOfferAmounts): string {
+  const { dueTodayCents: due, proratedCents: prorated, creditAppliedCents: credit } = amounts;
+  const today = `You pay ${formatMoney(due)} today`;
+  if (credit > 0 && prorated > 0 && prorated - credit === due) {
+    return due > 0
+      ? `${today}: ${formatMoney(prorated)} for the days left, less ${formatMoney(credit)} credit.`
+      : `${today}. Your credit pays the ${formatMoney(prorated)} for the days left.`;
+  }
+  if (credit === 0 && due > 0 && prorated === due) return `${today} for the days left.`;
+  if (credit === 0 && due === 0 && prorated === 0) return `${today}.`;
+  const note = amounts.dueTodayNote?.trim();
+  return note ? `${today}. ${note}` : `${today}.`;
 }

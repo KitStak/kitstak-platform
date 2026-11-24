@@ -15,6 +15,7 @@ import {
   portal,
   stack,
   text,
+  orgOf,
 } from './shared';
 
 export function planStarted(raw: unknown): EmailContent {
@@ -52,7 +53,7 @@ export function planStarted(raw: unknown): EmailContent {
       },
       { kind: 'note', text: 'You can change or cancel your plan any time in Billing.' },
     ],
-    button: { label: 'See my plan', url: billingLink(portalUrl, { to: 'home' }) },
+    button: { label: 'See my plan', url: billingLink(portalUrl, { to: 'home' }, undefined, orgOf(payload)) },
     footer: billingFooter(orgName),
   };
 }
@@ -71,7 +72,7 @@ export function cancelScheduled(raw: unknown): EmailContent {
       { kind: 'text', text: `You keep everything until ${day(endsAt)}. After that your apps are view only.` },
       { kind: 'text', text: 'Nothing is deleted. Changed your mind? You can undo this with one click.' },
     ],
-    button: { label: 'Keep my plan', url: billingLink(portalUrl, { to: 'home' }) },
+    button: { label: 'Keep my plan', url: billingLink(portalUrl, { to: 'home' }, undefined, orgOf(payload)) },
     footer: billingFooter(orgName),
   };
 }
@@ -99,7 +100,7 @@ export function paused(raw: unknown): EmailContent {
       { kind: 'text', text: 'There are no bills during the pause. Your apps are view only while paused.' },
       { kind: 'note', text: 'Nothing is deleted. You can start again sooner in Billing.' },
     ],
-    button: { label: 'See my plan', url: billingLink(portalUrl, { to: 'home' }) },
+    button: { label: 'See my plan', url: billingLink(portalUrl, { to: 'home' }, undefined, orgOf(payload)) },
     footer: billingFooter(orgName),
   };
 }
@@ -118,7 +119,7 @@ export function planEnded(raw: unknown): EmailContent {
   const reason = payload.reason === 'payment_failed' || payload.reason === 'canceled_unpaid' || payload.reason === 'canceled' ? payload.reason : null;
   const amount = typeof payload.amountCents === 'number' && Number.isFinite(payload.amountCents) && payload.amountCents > 0 ? Math.trunc(payload.amountCents) : null;
   const attempts = typeof payload.attempts === 'number' && Number.isFinite(payload.attempts) ? Math.trunc(payload.attempts) : null;
-  const button = { label: 'Pick a plan', url: billingLink(portalUrl, { to: 'plan' }) };
+  const button = { label: 'Pick a plan', url: billingLink(portalUrl, { to: 'plan' }, undefined, orgOf(payload)) };
   const footer = billingFooter(orgName);
   const viewOnly = 'Your apps are view only now. You can still open and read everything.';
 

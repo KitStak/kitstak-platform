@@ -16,7 +16,12 @@
  *     the `data-plan-write` mark on these by itself, so an app with hundreds of screens (the WMS)
  *     is covered without a mark on every button, and a new button cannot be missed.
  * Marked controls look held back (see view-only.css) and still take a press: the press opens the
- * dialog. A create screen opened by typing its address is covered too: the app shell shows
+ * dialog.
+ *
+ * What never counts, whatever its label says (review round 4): the way out of view only. The plan
+ * banner and its button ("Add WMS", "Update card"), the lock screen, the app switcher, and any link
+ * that leaves this app for another address (the Portal). These are never marked, never dimmed and
+ * never caught, so one press on the banner's button lands on Billing from every app. A create screen opened by typing its address is covered too: the app shell shows
  * `ViewOnlyPage` in place of the form, inside the app frame, with the same words and a way back.
  * When the server still refuses a change (a control nothing marked), the app calls `askViewOnly()`
  * and the same dialog opens, so the answer always has the banner's words and button.
@@ -80,6 +85,35 @@ export const READ_LABEL =
  * "New", a radio, a switch, a checkbox, a row of a list box.
  */
 const CHOICES = '[role="tab"], [role="radio"], [role="switch"], [role="checkbox"], [role="option"], [role="menuitemradio"], [role="menuitemcheckbox"]';
+
+/**
+ * The shared plan surfaces. Everything inside them is the way OUT of view only: the banner's
+ * button, the lock screen's button, the "Add" rows of the app switcher. Never marked, never caught.
+ */
+const PLAN_SURFACES = '.ks-planbanner, .ks-planlock-frame, .ks-appswitcher-menu, [data-plan-way-out]';
+/** Parts of the page the guard leaves alone: its own dialog and page, a part that opted out, the plan surfaces. */
+const LEFT_ALONE = `.ks-viewonly, .ks-viewonly-page, [data-plan-read], ${PLAN_SURFACES}`;
+
+/**
+ * True when a control is a link that leaves this app (another origin, such as the Portal's Billing).
+ * A change to this app's data cannot start there. PURE apart from reading the page address;
+ * exported for tests.
+ */
+export function leavesApp(control: { closest(selector: string): unknown } | null, here: string = typeof window === 'undefined' ? '' : window.location.href): boolean {
+  const link = control?.closest('a[href]') as { readonly href?: string; getAttribute?(name: string): string | null } | null | undefined;
+  const href = link?.href ?? link?.getAttribute?.('href') ?? null;
+  if (!href || here === '') return false;
+  try {
+    return new URL(href, here).origin !== new URL(here).origin;
+  } catch {
+    return false;
+  }
+}
+
+/** True when the guard must not touch this element: see `LEFT_ALONE` and `leavesApp`. Exported for tests. */
+export function isWayOut(control: Element): boolean {
+  return control.closest(LEFT_ALONE) !== null || leavesApp(control);
+}
 
 const MARK = 'data-plan-write';
 const AUTO = 'data-plan-write-auto';
@@ -177,9 +211,17 @@ export function isSettled(control: Element): boolean {
 function markWriteControls(root: ParentNode, writeLabel: RegExp, readLabel: RegExp): number {
   let waiting = 0;
   for (const control of root.querySelectorAll(CANDIDATES)) {
-    // The view only dialog itself, a part of the page that opted out, and hand marked controls are left alone.
-    if (control.closest('.ks-viewonly, .ks-viewonly-page, [data-plan-read]')) continue;
+    // The view only dialog itself, a part of the page that opted out, the plan banner and every other
+    // way out of view only, and hand marked controls are left alone. A mark this guard put on
+    // earlier (before the control moved into a banner, say) comes off again.
     const auto = control.hasAttribute(AUTO);
+    if (isWayOut(control)) {
+      if (auto) {
+        control.removeAttribute(MARK);
+        control.removeAttribute(AUTO);
+      }
+      continue;
+    }
     if (control.hasAttribute(MARK) && !auto) continue;
     // A control that is switched off already looks held back, and cannot be pressed.
     const off = control.matches(':disabled, [aria-disabled="true"]') || control.matches(CHOICES);
@@ -351,6 +393,9 @@ export function ViewOnlyGuard({ active, notice, pathname, writePaths, homeHref =
     const starts = (target: EventTarget | null): boolean => {
       if (!(target instanceof Element)) return false;
       if (target.closest('.ks-viewonly, .ks-viewonly-page')) return false;
+      // The banner's own button, the lock screen, the app switcher and links to the Portal are the
+      // way out of view only. A press on them goes straight through, whatever the label says.
+      if (target.closest(PLAN_SURFACES) || leavesApp(target)) return false;
       if (target.closest('[data-plan-write]')) return true;
       // A control that appeared in this same frame may not carry the mark yet: read its label now.
       if (writeLabel) {

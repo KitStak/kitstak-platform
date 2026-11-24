@@ -119,7 +119,7 @@ function chargeLine(input: PlanSummaryInput): string {
         ? `A payment of ${format.money(state.pastDue.amountDueCents)} failed. Update your card by ${format.day(state.pastDue.accessChangesAt)} to keep full access.`
         : 'A payment failed. Update your card to keep full access.';
     case 'unpaid':
-      return 'Your payment is late, so your apps are view only. Pay now to turn them back on.';
+      return 'Your payment is late, so your apps are view only. Update your card to turn them back on.';
     case 'cancel_scheduled':
       return state.cancelAt
         ? `Your plan ends on ${format.day(state.cancelAt)}. You keep everything until then.`

@@ -17,6 +17,7 @@ import { billingEmails } from '@kitstak/db/schema';
 import type { EmailTemplateId } from '../email-types';
 import { recordAudit } from '../server/audit';
 import { SYSTEM_ACTOR, errorText, logBilling, rows, type BillingDb, type BillingReadDb } from '../server/db';
+import { payloadWithOrg } from '../server/outbox';
 import { resolveEmailProvider, sendWithResend, type EmailProvider, type FetchLike } from './provider';
 import { CODE_TEMPLATES, emailAuditSummary, isEmailTemplateId, renderEmail } from './render';
 import type { RenderedEmail } from './layout';
@@ -326,7 +327,7 @@ export async function sendEmailNow<T extends EmailTemplateId>(
       orgId: input.orgId,
       toEmail: to,
       template: input.template,
-      payload: input.payload as unknown as Record<string, unknown>,
+      payload: payloadWithOrg(input.payload as unknown as Record<string, unknown>, input.orgId),
       dedupeKey: input.dedupeKey,
       sendAfter: now,
     })

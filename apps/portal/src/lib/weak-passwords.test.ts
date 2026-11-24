@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from 'vitest';
 import { DEFAULT_PASSWORD_POLICY, validatePassword } from '@kitstak/auth/password-policy';
-import { EASY_TO_GUESS_MESSAGE, isEasyToGuess, weakPasswordReason } from '@kitstak/auth/weak-passwords';
+import { COMPANY_NAME_MESSAGE, EASY_TO_GUESS_MESSAGE, PRODUCT_NAME_MESSAGE, isEasyToGuess, weakPasswordMessage, weakPasswordReason } from '@kitstak/auth/weak-passwords';
 import { passwordIssue, passwordStrength } from '@/features/signup/password-rules';
 
 const serverIssues = (password: string, context: { email?: string; company?: string } = {}) =>
@@ -73,8 +73,24 @@ describe('passwords that are easy to guess are refused at every length', () => {
     expect(weakPasswordReason('Whitlock-Supply-88!', { names: ['Whitlock Supply Co'] })).toBe('company_name');
     expect(weakPasswordReason('whitlocksupplyco2026', { names: ['Whitlock Supply Co'] })).toBe('company_name');
     expect(weakPasswordReason('Whitlock-Supply-88!')).toBeNull();
-    expect(serverIssues('Whitlock-Supply-88!', { company: 'Whitlock Supply Co' })).toEqual([EASY_TO_GUESS_MESSAGE]);
-    expect(passwordIssue('Whitlock-Supply-88!', { company: 'Whitlock Supply Co' })).toBe(EASY_TO_GUESS_MESSAGE);
+    // Review round 4: the line names the cause. The server and the form say the same words.
+    expect(serverIssues('Whitlock-Supply-88!', { company: 'Whitlock Supply Co' })).toEqual([COMPANY_NAME_MESSAGE]);
+    expect(passwordIssue('Whitlock-Supply-88!', { company: 'Whitlock Supply Co' })).toBe(COMPANY_NAME_MESSAGE);
+    expect(serverIssues('KitStak-Rocks-2026!')).toEqual([PRODUCT_NAME_MESSAGE]);
+    expect(passwordIssue('KitStak-Rocks-2026!')).toBe(PRODUCT_NAME_MESSAGE);
+    for (const [password, company] of [
+      ['Harbor-Lantern-77-quiet!', 'Harbor Supply Co'],
+      ['Harborline#2026!', 'Harborline Freight'],
+      ['Harbor!line2026x', 'Harborline Freight'],
+    ] as const) {
+      expect(serverIssues(password, { company }), password).toEqual(['Do not use your company name in your password.']);
+      expect(passwordIssue(password, { company }), password).toBe('Do not use your company name in your password.');
+      expect(weakPasswordMessage(password, { names: [company] }), password).toBe(COMPANY_NAME_MESSAGE);
+      // Without that company the same password is fine.
+      expect(serverIssues(password), password).toEqual([]);
+    }
+    expect(weakPasswordMessage('passwordpassword')).toBe(EASY_TO_GUESS_MESSAGE);
+    expect(weakPasswordMessage('correct horse battery staple')).toBeNull();
     // A short or everyday word in a company name is not the name.
     expect(weakPasswordReason('The-Purple-Cart-91!', { names: ['The Cart Co'] })).toBeNull();
   });

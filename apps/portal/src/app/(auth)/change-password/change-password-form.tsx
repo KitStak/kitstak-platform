@@ -13,8 +13,9 @@ import {
   PasswordRules,
   StrengthMeter,
   authErrorMessage,
+  passwordFieldError,
 } from '../_components/form-parts';
-import { isRulesIssue, passwordIssue } from '@/features/signup/password-rules';
+import { passwordIssue } from '@/features/signup/password-rules';
 
 const schema = z
   .object({
@@ -138,11 +139,7 @@ export function ChangePasswordForm({
           )}
         </Field>
         {/* The checklist under the field says every rule and marks what is missing, so the error is not printed twice. */}
-        <Field
-          label="New password"
-          error={fieldErrors.newPassword}
-          errorHidden={Boolean(fieldErrors.newPassword) && isRulesIssue(values.newPassword)}
-        >
+        <Field label="New password" error={fieldErrors.newPassword} errorHidden>
           {({ inputId, describedBy, invalid }) => (
             <div className="flex flex-col gap-2">
               <PasswordInput
@@ -165,6 +162,7 @@ export function ChangePasswordForm({
                 password={values.newPassword}
                 id={`${inputId}-rules`}
                 showMissing={Boolean(fieldErrors.newPassword)}
+                error={passwordFieldError(values.newPassword, fieldErrors.newPassword)}
                 context={{ email }}
               />
             </div>

@@ -8,7 +8,7 @@ import { getBillingProfile, getPlanState, listBillingHolders, listInvoices, retr
 import { isDevAllowAll } from '@kitstak/entitlements';
 import { appReturnPath } from '@/lib/routes';
 import { requireBillingContext } from '@/server/billing/context';
-import { env } from '@/server/env';
+import { env, isProduction } from '@/server/env';
 import { Badge, Card, Notice } from '@/components/ui';
 import { BillingHeader, TestModeBadge } from '@/features/billing/billing-chrome';
 import { RememberAppReturn } from '@/features/billing/home/app-return';
@@ -76,7 +76,7 @@ export default async function BillingPage({
             <ShieldQuestion aria-hidden className="size-5" />
           </span>
           <div>
-            <p className="text-base font-semibold text-fg">{memberLine(state, org.name, timeZone)}</p>
+            <p className="text-base font-semibold text-fg">{memberLine(state, org.name, timeZone, { appsOpen: isDevAllowAll() })}</p>
             <p className="mt-1 text-sm text-fg-secondary">
               {access.ownerName ? `Ask ${access.ownerName} to manage billing.` : 'Ask your organization owner to manage billing.'}
             </p>
@@ -132,12 +132,22 @@ export default async function BillingPage({
     listBillingHolders(rt.db, org.id),
   ]);
 
+  // The allow all switch: every app is open whatever the plan says. It stays on in production until
+  // the last go live step (GO-LIVE.md), so real customers see this page with it on. Two rules follow
+  // (review round 4): nothing here says "view only" while the apps are open, and no staff words
+  // ("Dev override") are shown on a production page.
   const devAllowAll = isDevAllowAll();
-  const copy = phaseCopy(state, timeZone);
+  const copy = phaseCopy(state, timeZone, { appsOpen: devAllowAll });
   const billingOff = state.mode === 'unavailable';
   const fixPayment = first(params.fix) === 'payment';
-  // Billing shows the plan as it is. The Dev override badge says why every app still opens here.
-  const badges = Object.fromEntries(PRODUCT_IDS.map((id) => [id, planBadgeFor(state, id)])) as Record<ProductId, PlanBadge>;
+  // Billing shows the plan as it is, with one exception: under the switch an app is never marked
+  // "View only", because it opens in full. It keeps the badge the launcher gives it ("Included").
+  const badges = Object.fromEntries(
+    PRODUCT_IDS.map((id) => {
+      const badge = planBadgeFor(state, id);
+      return [id, devAllowAll && badge === 'view_only' ? 'included' : badge];
+    }),
+  ) as Record<ProductId, PlanBadge>;
   const canAdd = access.canManage || (access.canStartTrial && (state.phase === 'trial' || state.phase === 'none'));
 
   return (
@@ -151,9 +161,10 @@ export default async function BillingPage({
               <Badge tone={copy.badge.tone}>{copy.badge.label}</Badge>
             </span>
             <TestModeBadge mode={state.mode} />
-            {devAllowAll ? (
+            {devAllowAll && !isProduction() ? (
+              // For the people who build KitStak, on their own machines only. Never on a customer page.
               <Badge tone="info" title="Every app is open on this environment. In production, access follows your plan.">
-                Dev override
+                <span data-testid="dev-override-badge">Dev override</span>
               </Badge>
             ) : null}
           </>
@@ -179,7 +190,7 @@ export default async function BillingPage({
       <PlanCards
         state={state}
         copy={copy}
-        nextCharge={nextChargeCopy(state, timeZone)}
+        nextCharge={nextChargeCopy(state, timeZone, { appsOpen: devAllowAll })}
         canManage={access.canManage}
         canStartTrial={access.canStartTrial}
         billingOff={billingOff}

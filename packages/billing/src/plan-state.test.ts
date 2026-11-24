@@ -270,7 +270,7 @@ describe('planNoticeFor: the words in SPEC 9.2', () => {
       'Update card',
       'https://kitstak.app/billing?fix=payment',
     ],
-    ['unpaid', unpaid, 'unpaid', 'danger', 'Your payment is late, so your apps are view only. Pay now to turn them back on.', 'Update card', 'https://kitstak.app/billing?fix=payment'],
+    ['unpaid', unpaid, 'unpaid', 'danger', 'Your payment is late, so your apps are view only. Update your card to turn them back on.', 'Update card', 'https://kitstak.app/billing?fix=payment'],
     ['cancel scheduled', canceling, 'cancel_scheduled', 'info', 'Your plan ends on Dec 23. You keep everything until then.', 'Keep my plan', 'https://kitstak.app/billing'],
     ['pause scheduled', pauseSoon, 'pause_scheduled', 'info', 'Your plan pauses on Dec 23 and starts again on Feb 22.', 'Undo pause', 'https://kitstak.app/billing'],
     ['paused', paused, 'paused', 'danger', 'Your plan is paused, so your apps are view only. It starts again on Jan 25.', 'Start again now', 'https://kitstak.app/billing'],
@@ -313,6 +313,56 @@ describe('planNoticeFor: the words in SPEC 9.2', () => {
   it('admins see every kind, like owners', () => {
     expect(planNoticeFor(trial9, context(ADMIN))?.kind).toBe('trial');
     expect(planNoticeFor(pastDue, context(ADMIN))?.kind).toBe('payment_failed');
+  });
+
+  // Review round 4: an admin can see billing but cannot pay. A pay button would end on a page that
+  // says "only an owner can do this", so the banner names who can and has no pay button.
+  const adminTable: readonly [string, ReturnType<typeof derivePlanState>, string, string | null][] = [
+    ['trial', trial9, 'Free trial. 9 days left. Ends Dec 7.', 'See my plan'],
+    ['trial ending', trial2, 'Your free trial ends in 2 days, on Nov 30. Ask Maya Chen to pick a plan.', null],
+    ['trial with card', withCard, 'Free trial. Your first payment of $395.20 is on Dec 7.', 'See my plan'],
+    ['trial ended', trialEnded, 'Your free trial ended on Nov 26. Your data is safe. Ask Maya Chen to pick a plan.', null],
+    [
+      'payment failed',
+      pastDue,
+      'We could not charge the Visa ending 4242 for $395.20. We will try again on Nov 29. Ask Maya Chen to update the card by Dec 3 to keep full access.',
+      null,
+    ],
+    ['unpaid', unpaid, 'Your payment is late, so your apps are view only. Ask Maya Chen to update the card.', null],
+    ['cancel scheduled', canceling, 'Your plan ends on Dec 23. You keep everything until then.', 'See my plan'],
+    ['pause scheduled', pauseSoon, 'Your plan pauses on Dec 23 and starts again on Feb 22.', 'See my plan'],
+    ['paused', paused, 'Your plan is paused, so your apps are view only. It starts again on Jan 25. Ask Maya Chen to start it sooner.', null],
+    ['ended', ended, 'Your plan ended on Nov 23. Your data is safe. Ask Maya Chen to pick a plan.', null],
+  ];
+
+  it.each(adminTable)('%s (admin: sees billing, cannot pay)', (_name, state, text, label) => {
+    for (const module of [null, 'crm'] as const) {
+      const notice = planNoticeFor(state, context(ADMIN, module));
+      expect(notice?.text).toBe(text);
+      expect(notice?.action?.label ?? null).toBe(label);
+      // The only button an admin ever gets opens billing home, which an admin can read.
+      if (notice?.action) expect(notice.action.href).toBe(module ? 'https://kitstak.app/billing?from=crm' : 'https://kitstak.app/billing');
+    }
+    expect(planNoticeFor(state, context({ ...ADMIN, ownerName: null }))?.text).toBe(text.replace('Maya Chen', 'your organization owner'));
+  });
+
+  it('with every app open (the allow all switch) nothing says "view only"', () => {
+    const open = (viewer: PlanViewer, module: ProductId | null = null): NoticeContext => ({ ...context(viewer, module), appsOpen: true });
+    for (const state of [trial9, trial2, trialToday, withCard, trialEnded, pastDue, unpaid, canceling, pauseSoon, paused, ended]) {
+      for (const viewer of [MANAGER, ADMIN, MEMBER]) {
+        for (const module of [null, 'crm', 'projects'] as const) {
+          expect(planNoticeFor(state, open(viewer, module))?.text ?? '').not.toMatch(/view only/i);
+        }
+      }
+    }
+    expect(planNoticeFor(unpaid, open(MANAGER))).toMatchObject({
+      text: 'Your payment is late. Update your card to keep your apps open.',
+      action: { label: 'Update card' },
+    });
+    expect(planNoticeFor(unpaid, open(ADMIN))).toMatchObject({ text: 'Your payment is late. Ask Maya Chen to update the card.', action: null });
+    expect(planNoticeFor(paused, open(MANAGER))?.text).toBe('Your plan is paused. It starts again on Jan 25.');
+    // A member is told nothing: no app is held back for them.
+    for (const state of [trialEnded, unpaid, paused, ended]) expect(planNoticeFor(state, open(MEMBER, 'crm'))).toBeNull();
   });
 
   it('other members see a banner only when apps are view only, with no button', () => {
@@ -365,6 +415,16 @@ describe('planNoticeFor: the words in SPEC 9.2', () => {
       testId: 'plan-notice-app_removed',
     });
     expect(planNoticeFor(removed, context(MEMBER, 'crm'))?.text).toBe('This app is view only right now. Ask Maya Chen to add it.');
+    // An admin cannot change a paid plan: the banner names who can and has no button (review round 4).
+    expect(planNoticeFor(removed, context(ADMIN, 'crm'))).toEqual({
+      kind: 'app_removed',
+      tone: 'warning',
+      text: 'CRM is view only because it is not in your plan. Ask Maya Chen to add it.',
+      action: null,
+      testId: 'plan-notice-app_removed',
+    });
+    // With every app open, the app is not view only and the banner is not shown.
+    expect(planNoticeFor(removed, { ...context(MANAGER, 'crm'), appsOpen: true })).toBeNull();
     expect(planBadgeFor(removed, 'crm')).toBe('view_only');
   });
 

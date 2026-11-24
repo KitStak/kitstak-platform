@@ -4,7 +4,7 @@ import { CalendarDays, ClipboardPen, CreditCard, FolderKanban, LayoutGrid, ListC
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { Module } from '@kitstak/entitlements';
-import { env } from '@/server/env';
+import { env, isProduction } from '@/server/env';
 import { requirePageSession } from '@/server/session';
 import { getOrgGlance, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { CATALOG, formatDayShort } from '@kitstak/billing/catalog';
@@ -15,6 +15,7 @@ import { getCustomerWork, getLauncherStats, getPulseAttention } from '@/server/p
 import { CustomerWorkPanel } from '@/features/launcher/customer-work';
 import { PulseAttentionPanel } from '@/features/launcher/pulse-attention';
 import { getSetupState, markGuideSeen } from '@/server/onboarding';
+import { wasInOrganization } from '@/server/signup';
 import { CreateOrgForm } from '@/features/launcher/create-org-form';
 import { ProductTile } from '@/features/launcher/product-tile';
 import { SetupGuide } from '@/features/setup/setup-guide';
@@ -144,12 +145,20 @@ export default async function LauncherPage({
   const activeOrg = await resolveActiveOrg(session, orgs);
 
   if (!activeOrg) {
+    // Two kinds of people are in no organization. A new one (signed up, no workspace yet) is asked
+    // to name it. One who was in an organization before (removed, or left) is told so, in the same
+    // words wherever they land: Billing and every signup step send them here (review round 4).
+    const former = await wasInOrganization(session.user.id, session.user.email);
     return (
-      <section className="flex flex-col items-center py-20 text-center">
+      <section data-testid={former ? 'no-org-former' : 'no-org-new'} className="flex flex-col items-center py-20 text-center">
         <LogoMark size={40} />
-        <h1 className="mt-8 text-2xl font-semibold tracking-[-0.02em] text-fg">Create your organization</h1>
-        <p className="mt-2 max-w-md text-md text-fg-secondary">
-          You’re not in an organization yet. Create one, or ask a teammate for an invitation.
+        <h1 className="mt-8 text-2xl font-semibold tracking-[-0.02em] text-balance text-fg">
+          {former ? 'You are no longer in an organization' : 'Create your organization'}
+        </h1>
+        <p className="mt-2 max-w-md text-md text-pretty text-fg-secondary">
+          {former
+            ? 'Your account still works, but you are not on a team right now. Ask a teammate to invite you again. Or start your own organization below.'
+            : 'You are not in an organization yet. Create one, or ask a teammate for an invitation.'}
         </p>
         <div className="mt-8 flex w-full justify-center">
           <CreateOrgForm />
@@ -381,7 +390,8 @@ export default async function LauncherPage({
         </section>
       ) : null}
 
-      {devAllowAll ? (
+      {devAllowAll && !isProduction() ? (
+        // For the people who build KitStak, on their own machines. Never on a customer page.
         <p className="flex items-center gap-2 text-xs text-fg-muted">
           <Badge tone="info">Dev</Badge>
           Every app is open on this environment. In production, access follows your plan.

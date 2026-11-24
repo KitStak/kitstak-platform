@@ -19,13 +19,22 @@ import { randomBytes } from 'node:crypto';
 import { cookies, headers } from 'next/headers';
 import { z } from 'zod';
 import { DEFAULT_PASSWORD_POLICY, validatePassword } from '@kitstak/auth/password-policy';
+import { and, eq } from 'drizzle-orm';
+import { inviteEmailStatus } from '@kitstak/billing/server';
+import { account } from '@kitstak/db/schema';
 import { auth } from '@/server/auth';
+import { db } from '@/server/db';
 import { env } from '@/server/env';
 
 export interface AuthRelayResult {
   readonly ok: boolean;
   /** The auth endpoint's own answer, kept for the form's error words. null on success. */
   readonly error: { readonly code?: string; readonly message?: string; readonly status: number } | null;
+  /**
+   * Invites only: 'sent' when the mail provider took the invite email, 'queued' when it waits for
+   * the one minute job (the provider was down). A form says "sent" only for 'sent' (review round 4).
+   */
+  readonly delivery?: 'sent' | 'queued';
 }
 
 /** The request headers the auth layer reads: who is calling, from where, and with which session. */
@@ -97,7 +106,12 @@ async function forwardCookies(response: Response): Promise<void> {
 
 type RelayPath = '/sign-in/email' | '/sign-up/email' | '/organization/invite-member';
 
-async function relay(path: RelayPath, body: Record<string, unknown>): Promise<AuthRelayResult> {
+async function relay(
+  path: RelayPath,
+  body: Record<string, unknown>,
+  /** Called with the endpoint's own answer when it worked, before the result goes back. */
+  onSuccess?: (payload: unknown) => Promise<void>,
+): Promise<AuthRelayResult> {
   const incoming = await headers();
   const forwarded = new Headers({ 'content-type': 'application/json' });
   for (const name of FORWARDED_HEADERS) {
@@ -113,7 +127,16 @@ async function relay(path: RelayPath, body: Record<string, unknown>): Promise<Au
     return { ok: false, error: { status: 500 } };
   }
   await forwardCookies(response);
-  if (response.ok) return { ok: true, error: null };
+  if (response.ok) {
+    if (onSuccess) {
+      try {
+        await onSuccess(await response.clone().json());
+      } catch (error: unknown) {
+        console.error(`[portal] auth relay follow up failed (${path})`, error instanceof Error ? error.message : error);
+      }
+    }
+    return { ok: true, error: null };
+  }
   let payload: { code?: unknown; message?: unknown } = {};
   try {
     payload = (await response.json()) as { code?: unknown; message?: unknown };
@@ -156,8 +179,9 @@ const signUpSchema = z.object({
 /**
  * A password for an account whose owner chose "Email me a code instead" (review round 3). It is
  * long, random and never shown, stored or sent anywhere but through the normal sign up, which keeps
- * only its hash. The person signs in with an emailed code, and can set a password of their own at
- * any time with "Forgot password?".
+ * only its hash, and that hash is removed again right after the account is made (see `signUpAction`).
+ * The person signs in with an emailed code, and can set a password of their own at any time on
+ * their account page or with "Forgot password?".
  */
 function unknowablePassword(email: string): string {
   // A random string can, very rarely, hold the email name by chance. Draw again until the shared
@@ -173,7 +197,18 @@ export async function signUpAction(input: unknown): Promise<AuthRelayResult> {
   const parsed = signUpSchema.safeParse(input);
   if (!parsed.success) return BAD_INPUT;
   const { noPassword, password, ...rest } = parsed.data;
-  if (noPassword === true) return relay('/sign-up/email', { ...rest, password: unknowablePassword(rest.email) });
+  if (noPassword === true) {
+    return relay('/sign-up/email', { ...rest, password: unknowablePassword(rest.email) }, async (payload) => {
+      // "No password needed" is now simply true (review round 4): the account that was just made
+      // keeps no password row at all. Before, it kept the hash of a random password nobody knew,
+      // and the account looked like one whose owner had chosen a password. Only the account this
+      // very sign up created is touched: the id comes from the sign up's own answer.
+      const created = (payload as { user?: { id?: unknown; email?: unknown } } | null)?.user;
+      if (typeof created?.id !== 'string' || typeof created.email !== 'string') return;
+      if (created.email.trim().toLowerCase() !== rest.email.trim().toLowerCase()) return;
+      await db.delete(account).where(and(eq(account.userId, created.id), eq(account.providerId, 'credential')));
+    });
+  }
   if (!password) return BAD_INPUT;
   return relay('/sign-up/email', { ...rest, password });
 }
@@ -188,5 +223,10 @@ const inviteSchema = z.object({
 export async function inviteMemberAction(input: unknown): Promise<AuthRelayResult> {
   const parsed = inviteSchema.safeParse(input);
   if (!parsed.success) return BAD_INPUT;
-  return relay('/organization/invite-member', parsed.data);
+  let delivery: 'sent' | 'queued' = 'queued';
+  const result = await relay('/organization/invite-member', parsed.data, async (payload) => {
+    const id = (payload as { id?: unknown } | null)?.id;
+    if (typeof id === 'string' && (await inviteEmailStatus(db, id)) === 'sent') delivery = 'sent';
+  });
+  return result.ok ? { ...result, delivery } : result;
 }

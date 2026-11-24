@@ -22,6 +22,15 @@ import { COMMON_PASSWORDS } from './common-passwords';
 /** The one kind line a person reads. The same words on every screen and from every endpoint. */
 export const EASY_TO_GUESS_MESSAGE = 'That one is too easy to guess. Try a few words that do not go together.';
 
+/**
+ * Said when the password is built around the person's own company name (review round 4). The plain
+ * "too easy to guess" line told nobody what to fix: "Harbor-Lantern-77-quiet!" already is a few
+ * words that do not go together. The email name case names its cause; so does this one.
+ */
+export const COMPANY_NAME_MESSAGE = 'Do not use your company name in your password.';
+/** Said when the password is built around the name of the product. */
+export const PRODUCT_NAME_MESSAGE = 'Do not use the word KitStak in your password.';
+
 export type WeakPasswordReason = 'few_characters' | 'repeated' | 'straight_run' | 'common' | 'company_name';
 
 export interface WeakPasswordContext {
@@ -148,6 +157,28 @@ function nameWords(names: readonly (string | null | undefined)[]): string[] {
   return words;
 }
 
+/** The password read three ways (as typed, and with look alike characters as letters), letters and digits only. */
+function readings(lowered: string): string[] {
+  return [lowered, unLookAlike(lowered, 'l'), unLookAlike(lowered, 'i')].map((text) => text.replace(/[^a-z0-9]/g, ''));
+}
+
+/** True when the password, read as letters, holds one of these words. */
+function holdsWord(password: string, words: readonly string[]): boolean {
+  if (words.length === 0) return false;
+  const read = readings(password.normalize('NFKC').toLowerCase());
+  return words.some((word) => read.some((text) => text.includes(word)));
+}
+
+/** True when the password is built around the name of the person's own company (`context.names`). */
+export function usesCompanyName(password: string, context: WeakPasswordContext = {}): boolean {
+  return holdsWord(password, nameWords(context.names ?? []));
+}
+
+/** True when the password is built around the product name. */
+export function usesProductName(password: string): boolean {
+  return holdsWord(password, PRODUCT_NAMES);
+}
+
 /** Why a password is easy to guess, or null when it is not. */
 export function weakPasswordReason(password: string, context: WeakPasswordContext = {}): WeakPasswordReason | null {
   if (password.length === 0) return null;
@@ -157,11 +188,25 @@ export function weakPasswordReason(password: string, context: WeakPasswordContex
   const solid = lowered.replace(/[^a-z0-9]/g, '');
   if (solid.length >= MIN_RUN && charactersInRuns(solid) * 2 > solid.length) return 'straight_run';
   if (isCommon(lowered)) return 'common';
-  const readings = [lowered, unLookAlike(lowered, 'l'), unLookAlike(lowered, 'i')].map((text) => text.replace(/[^a-z0-9]/g, ''));
+  const read = readings(lowered);
   for (const word of [...PRODUCT_NAMES, ...nameWords(context.names ?? [])]) {
-    if (readings.some((text) => text.includes(word))) return 'company_name';
+    if (read.some((text) => text.includes(word))) return 'company_name';
   }
   return null;
+}
+
+/**
+ * The one line a person reads for a password that is easy to guess, or null when it is fine. It
+ * names the cause when the cause is a name (the company, the product), because that is the one
+ * thing the person can fix at once. The same words from the form and from every endpoint.
+ */
+export function weakPasswordMessage(password: string, context: WeakPasswordContext = {}): string | null {
+  if (weakPasswordReason(password, context) === null) return null;
+  // A name comes first, whatever else is wrong with the password (it may also be a repeated word):
+  // taking the name out is the fix, and the form says the same line while the person types.
+  if (usesCompanyName(password, context)) return COMPANY_NAME_MESSAGE;
+  if (usesProductName(password)) return PRODUCT_NAME_MESSAGE;
+  return EASY_TO_GUESS_MESSAGE;
 }
 
 /** True when a guessing program would try this password early. See the list at the top of this file. */

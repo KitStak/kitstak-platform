@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { countTyped, findOnTeam, inviteErrorWords, invitePlanLine, notInvitedYet, parseInviteEmails, type SeatFacts } from './invite-model';
+import { countTyped, findOnTeam, inviteErrorWords, invitePlanLine, notInvitedYet, parseInviteEmails, seatOfferPayLine, type SeatFacts } from './invite-model';
 
 const PAID: SeatFacts = { paid: true, limit: 5, used: 2, canManageBilling: true, pulseOnly: false };
 
@@ -97,5 +97,44 @@ describe('invite answers in our words', () => {
     expect(notInvitedYet(['ana@x.co'])).toBe('1 person was not invited yet: ana@x.co.');
     expect(notInvitedYet(['ana@x.co', 'bo@x.co'])).toBe('2 people were not invited yet: ana@x.co and bo@x.co.');
     expect(notInvitedYet(['ana@x.co', 'bo@x.co', 'cy@x.co'])).toBe('3 people were not invited yet: ana@x.co, bo@x.co and cy@x.co.');
+  });
+});
+
+describe('seatOfferPayLine: the amount due today comes with its real reason (review round 4)', () => {
+  test('credit pays part of it: both amounts are named and they add up', () => {
+    // The case from the review: 22 days cost $24.05 and $22.96 of credit was used, so $1.09 is due.
+    const line = seatOfferPayLine({ dueTodayCents: 109, proratedCents: 2405, creditAppliedCents: 2296 });
+    expect(line).toBe('You pay $1.09 today: $24.05 for the days left, less $22.96 credit.');
+    expect(2405 - 2296).toBe(109);
+  });
+
+  test('no credit: the plain sentence', () => {
+    expect(seatOfferPayLine({ dueTodayCents: 1450, proratedCents: 1450, creditAppliedCents: 0 })).toBe('You pay $14.50 today for the days left.');
+  });
+
+  test('credit pays all of it', () => {
+    expect(seatOfferPayLine({ dueTodayCents: 0, proratedCents: 1450, creditAppliedCents: 1450 })).toBe(
+      'You pay $0.00 today. Your credit pays the $14.50 for the days left.',
+    );
+  });
+
+  test('nothing to pay and nothing used (a free trial)', () => {
+    expect(seatOfferPayLine({ dueTodayCents: 0, proratedCents: 0, creditAppliedCents: 0 })).toBe('You pay $0.00 today.');
+  });
+
+  test('numbers that would not add up are never put in one sentence: the server sentence is used', () => {
+    // Sales tax on top: 14.50 for the days left plus 1.20 tax.
+    const withTax = seatOfferPayLine({
+      dueTodayCents: 1570,
+      proratedCents: 1450,
+      creditAppliedCents: 0,
+      dueTodayNote: '$14.50 for the 15 days left in this period. Plus $1.20 sales tax.',
+    });
+    expect(withTax).toBe('You pay $15.70 today. $14.50 for the 15 days left in this period. Plus $1.20 sales tax.');
+    expect(seatOfferPayLine({ dueTodayCents: 500, proratedCents: 1450, creditAppliedCents: 100 })).toBe('You pay $5.00 today.');
+  });
+
+  test('never the old sentence that named the wrong reason', () => {
+    expect(seatOfferPayLine({ dueTodayCents: 109, proratedCents: 2405, creditAppliedCents: 2296 })).not.toMatch(/\$1\.09 today for the days left/);
   });
 });

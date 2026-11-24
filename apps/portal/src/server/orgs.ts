@@ -5,6 +5,8 @@
  */
 import 'server-only';
 import { asc, eq } from 'drizzle-orm';
+import { defaultOrgIdFor } from '@kitstak/auth/sign-in-block';
+import type { RawSqlExecutor } from '@kitstak/auth/password-policy';
 import { member, organization, user } from '@kitstak/db/schema';
 import { db } from '@/server/db';
 import type { Session } from '@/server/session';
@@ -87,8 +89,14 @@ export async function getOrgGlance(orgId: string): Promise<OrgGlance | null> {
 }
 
 /**
- * The org the launcher should show: the session's active organization when the user is
- * still a member of it, otherwise the first org, otherwise null (no-org empty state).
+ * The org the launcher should show: the session's active organization when the user is still a
+ * member of it. Otherwise the one they worked in last, else one they own, else the one they joined
+ * first (`defaultOrgIdFor` in @kitstak/auth, the same rule a new session starts with). null when
+ * they are in none (no-org empty state).
+ *
+ * It was "otherwise the first by name" before (review round 4): an owner who is also a member of
+ * an organization earlier in the alphabet landed there after every sign in, and the one button of
+ * her failed payment email told her to ask someone else.
  */
 export async function resolveActiveOrg(
   session: Session,
@@ -97,7 +105,16 @@ export async function resolveActiveOrg(
   const memberships = orgs ?? (await listUserOrgs(session.user.id));
   if (memberships.length === 0) return null;
   const activeId = session.session.activeOrganizationId;
-  return memberships.find((org) => org.id === activeId) ?? memberships[0];
+  const active = memberships.find((org) => org.id === activeId);
+  if (active) return active;
+  if (memberships.length === 1) return memberships[0] ?? null;
+  let preferredId: string | null = null;
+  try {
+    preferredId = await defaultOrgIdFor(db as unknown as RawSqlExecutor, session.user.id);
+  } catch (error: unknown) {
+    console.error('[portal] could not read the starting organization', error);
+  }
+  return memberships.find((org) => org.id === preferredId) ?? memberships[0] ?? null;
 }
 
 export interface OrgMemberSummary {

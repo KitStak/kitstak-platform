@@ -4,9 +4,9 @@ import { useId, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { CircleAlert, Mail } from 'lucide-react';
 import { encodeHandoffIdentity } from '@kitstak/billing/handoff';
-import { Badge, Field } from '@/components/ui';
+import { Field } from '@/components/ui';
 import { emailIssue } from '@/features/signup/fields';
-import { isRulesIssue, passwordIssue } from '@/features/signup/password-rules';
+import { passwordIssue } from '@/features/signup/password-rules';
 import { requestPasswordResetAction, resetPasswordAction } from '@/server/signup-actions';
 import { CodeInput } from '../_components/code-input';
 import { prefersAutoFocus, useHashIdentity } from '../_components/use-hash-identity';
@@ -15,12 +15,13 @@ import {
   AuthInput,
   FormAlert,
   NO_NETWORK_MESSAGE,
+  OutboxHint,
   PasswordInput,
   PasswordRules,
   StrengthMeter,
   SubmitButton,
   TAP_BUTTON,
-  TAP_LINK,
+  passwordFieldError,
 } from '../_components/form-parts';
 
 type FieldName = 'email' | 'code' | 'password';
@@ -136,19 +137,7 @@ export function ResetPasswordForm({ justSent, minutes, devOutbox }: ResetPasswor
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5" aria-busy={busy === 'saving'}>
         {notice ? <FormAlert tone="success">{notice}</FormAlert> : null}
         {formError ? <FormAlert>{formError}</FormAlert> : null}
-        {devOutbox ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border-default bg-sunken/60 px-3.5 py-3 text-sm text-fg-secondary">
-            <Badge tone="info">
-              <span data-testid="test-mode-label">Test mode</span>
-            </Badge>
-            <span>
-              <Link href="/dev/outbox" target="_blank" className={`${TAP_LINK} font-semibold text-fg-link underline underline-offset-2`}>
-                Open the email outbox
-              </Link>{' '}
-              to see your code.
-            </span>
-          </div>
-        ) : null}
+        {devOutbox ? <OutboxHint /> : null}
         <Field label="Work email" error={errors.email}>
           {({ inputId, describedBy, invalid }) => (
             <AuthInput
@@ -206,7 +195,8 @@ export function ResetPasswordForm({ justSent, minutes, devOutbox }: ResetPasswor
             </p>
           ) : null}
         </div>
-        <Field label="New password" error={errors.password} errorHidden={Boolean(errors.password) && isRulesIssue(password)}>
+        {/* The same order as signup: the field, its meter, the red line, then the rules. */}
+        <Field label="New password" error={errors.password} errorHidden>
           {({ inputId, describedBy, invalid }) => (
             <div className="flex flex-col gap-2">
               <PasswordInput
@@ -229,7 +219,13 @@ export function ResetPasswordForm({ justSent, minutes, devOutbox }: ResetPasswor
                 invalid={invalid}
               />
               <StrengthMeter password={password} context={{ email }} />
-              <PasswordRules password={password} id={`${inputId}-rules`} showMissing={Boolean(errors.password)} context={{ email }} />
+              <PasswordRules
+                password={password}
+                id={`${inputId}-rules`}
+                showMissing={Boolean(errors.password)}
+                error={passwordFieldError(password, errors.password)}
+                context={{ email }}
+              />
             </div>
           )}
         </Field>

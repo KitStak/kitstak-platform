@@ -22,7 +22,6 @@ import {
   type SignupField,
   type SignupValues,
 } from '@/features/signup/fields';
-import { isRulesIssue } from '@/features/signup/password-rules';
 import type { SocialProviderId } from '@/features/signup/social';
 import { signUpAction } from '@/server/auth-relay-actions';
 import { createWorkspaceAction } from '@/server/signup-actions';
@@ -34,13 +33,15 @@ import {
   NO_NETWORK_MESSAGE,
   PasswordInput,
   PasswordRules,
+  QuietRow,
+  ROW_LINK,
   StepEyebrow,
   StrengthMeter,
   SubmitButton,
-  TAP_BUTTON,
   authErrorMessage,
   hasEmailHint,
   isEmailTaken,
+  passwordFieldError,
 } from '../_components/form-parts';
 import { LegalLine, type LegalUrls } from '../_components/legal-line';
 import { SocialButtons, socialErrorMessage } from '../_components/social-buttons';
@@ -87,6 +88,8 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
   const [companyOnly, setCompanyOnly] = useState(false);
   const submitting = useRef(false);
   const refs = useRef<Partial<Record<SignupField, HTMLInputElement | null>>>({});
+  const usePasswordButton = useRef<HTMLButtonElement | null>(null);
+  const emailCodeButton = useRef<HTMLButtonElement | null>(null);
 
   const parsedHandoff = useMemo(() => readHandoff(handoff), [handoff]);
   const summary = useMemo(() => trialSummary(parsedHandoff), [parsedHandoff]);
@@ -141,13 +144,22 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
 
   const set = (field: SignupField) => (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
+    const next = { ...values, [field]: value };
     setValues((current) => ({ ...current, [field]: value }));
     // A field that showed an error clears as soon as the person fixes it. Until then the sentence
     // follows what is typed, so it is never about an older try ("still needs a symbol" under a
     // long password that is refused for another reason).
     if (errors[field]) {
-      const issue = signupFieldIssue(field, { ...values, [field]: value }) ?? undefined;
+      const issue = signupFieldIssue(field, next) ?? undefined;
       setErrors((current) => ({ ...current, [field]: issue }));
+    }
+    // The password is judged against the email name and the company name. When one of those
+    // changes, a password error that is on screen is checked again, so it never says "do not use
+    // your company name" about a company that is no longer in the form. (The live warning under
+    // the field follows these two fields by itself, also when the company is typed last.)
+    if ((field === 'email' || field === 'company') && errors.password) {
+      const issue = signupFieldIssue('password', next) ?? undefined;
+      setErrors((current) => ({ ...current, password: issue }));
     }
     if (field === 'email') setEmailTaken(false);
   };
@@ -358,11 +370,15 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
               {noPassword ? (
                 <div className="flex flex-col gap-1 rounded-lg border border-border-default bg-sunken px-4 py-3" data-testid="signup-no-password">
                   <p className="text-sm font-semibold text-fg">No password needed</p>
-                  <p className="text-sm text-fg-secondary">We email you a 6 digit code. You use a new code each time you sign in.</p>
+                  <p id="signup-no-password-text" className="text-sm text-fg-secondary">
+                    We email you a 6 digit code. You use a new code each time you sign in.
+                  </p>
                   <button
+                    ref={usePasswordButton}
                     type="button"
                     data-testid="signup-use-password"
-                    className="mt-1 inline-flex min-h-11 items-center self-start rounded-sm text-sm font-semibold text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    aria-describedby="signup-no-password-text"
+                    className={`${ROW_LINK} -mb-1.5 -ml-1 self-start text-sm`}
                     onClick={() => {
                       setNoPassword(false);
                       requestAnimationFrame(() => refs.current.password?.focus());
@@ -372,49 +388,42 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
                   </button>
                 </div>
               ) : null}
-              {/* The checklist under the field states every rule up front and marks what is missing, so the error is not printed twice. */}
+              {/*
+                One order, top to bottom: the field, its meter, the red line (a live warning, or the
+                error after a refusal), then the rules. Nothing else sits in between (review round
+                4). The checklist marks what is missing, so that error has no second sentence.
+              */}
               {noPassword ? null : (
-              <Field label="Password" error={errors.password} errorHidden={Boolean(errors.password) && isRulesIssue(values.password)}>
-                {({ inputId, describedBy, invalid }) => (
-                  <div className="flex flex-col gap-2">
-                    <PasswordInput
-                      id={inputId}
-                      ref={(node) => {
-                        refs.current.password = node;
-                      }}
-                      name="password"
-                      data-testid="signup-password"
-                      autoComplete="new-password"
-                      enterKeyHint="next"
-                      required
-                      value={values.password}
-                      onChange={set('password')}
-                      onBlur={checkOnBlur('password')}
-                      aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
-                      invalid={invalid}
-                    />
-                    <StrengthMeter password={values.password} context={{ email: values.email, company: values.company }} />
-                    <PasswordRules
-                      password={values.password}
-                      id={`${inputId}-rules`}
-                      showMissing={Boolean(errors.password)}
-                      context={{ email: values.email, company: values.company }}
-                    />
-                    <button
-                      type="button"
-                      data-testid="signup-email-code"
-                      // 48 px tall to press, one line of text in the layout (`TAP_BUTTON`).
-                      className={`${TAP_BUTTON} inline-flex items-center self-start rounded-sm text-sm font-semibold text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`}
-                      onClick={() => {
-                        setNoPassword(true);
-                        setErrors((current) => ({ ...current, password: undefined }));
-                      }}
-                    >
-                      Email me a code instead
-                    </button>
-                  </div>
-                )}
-              </Field>
+                <Field label="Password" error={errors.password} errorHidden>
+                  {({ inputId, describedBy, invalid }) => (
+                    <div className="flex flex-col gap-2">
+                      <PasswordInput
+                        id={inputId}
+                        ref={(node) => {
+                          refs.current.password = node;
+                        }}
+                        name="password"
+                        data-testid="signup-password"
+                        autoComplete="new-password"
+                        enterKeyHint="next"
+                        required
+                        value={values.password}
+                        onChange={set('password')}
+                        onBlur={checkOnBlur('password')}
+                        aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
+                        invalid={invalid}
+                      />
+                      <StrengthMeter password={values.password} context={{ email: values.email, company: values.company }} />
+                      <PasswordRules
+                        password={values.password}
+                        id={`${inputId}-rules`}
+                        showMissing={Boolean(errors.password)}
+                        error={passwordFieldError(values.password, errors.password)}
+                        context={{ email: values.email, company: values.company }}
+                      />
+                    </div>
+                  )}
+                </Field>
               )}
             </>
           ) : null}
@@ -444,6 +453,32 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
           <SubmitButton data-testid="signup-submit" busyLabel={busy ? BUSY_LABEL[stage] : null}>
             {companyOnly ? 'Continue' : 'Create account'}
           </SubmitButton>
+          {/*
+            The second door (review round 3): no password. We mail a 6 digit code, and that one code
+            proves the address and signs the person in, now and every time after. It is a quiet row
+            of its own under the button, the same place as on the sign in screen, so it never sits
+            between the password and its error, and its focus ring touches no other text.
+          */}
+          {!companyOnly && !noPassword ? (
+            <QuietRow lead="Or skip the password." className="-my-2">
+              <button
+                ref={emailCodeButton}
+                type="button"
+                data-testid="signup-email-code"
+                className={ROW_LINK}
+                disabled={busy}
+                onClick={() => {
+                  setNoPassword(true);
+                  setErrors((current) => ({ ...current, password: undefined }));
+                  // This row goes away with the password field. Focus moves to the box that took
+                  // its place, so a keyboard or screen reader user lands on what just changed.
+                  requestAnimationFrame(() => usePasswordButton.current?.focus());
+                }}
+              >
+                Email me a code instead
+              </button>
+            </QuietRow>
+          ) : null}
           <p className="sr-only" role="status" aria-live="polite">
             {busy ? BUSY_LABEL[stage] : ''}
           </p>

@@ -40,6 +40,13 @@ export const EMAIL_TEMPLATE_IDS: readonly EmailTemplateId[] = [
 interface Base {
   readonly orgName: string;
   readonly portalUrl: string;
+  /**
+   * The organization the email is about. `enqueueEmail` writes it from the row's organization, so
+   * senders leave it out. Every link in the email carries it (`org=<id>`), so a person who is in two
+   * organizations lands in the right one (review round 4). Missing on older rows: links then open
+   * the organization the person used last.
+   */
+  readonly orgId?: string;
 }
 
 export interface EmailPayloads {

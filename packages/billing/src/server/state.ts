@@ -235,6 +235,8 @@ function buildView(
     module: input.module,
     viewer,
     portalUrl: input.portalUrl,
+    // Every billing link from a product app names its organization (review round 4).
+    orgId: input.orgId,
     now,
     ...(input.timeZone ? { timeZone: input.timeZone } : {}),
   };
@@ -244,7 +246,8 @@ function buildView(
     const hasPlanFacts = state.phase !== 'none';
     return {
       access: 'full',
-      notice: hasPlanFacts ? planNoticeFor(state, context) : null,
+      // Every app is open under the switch, so the banner must not say "view only" (review round 4).
+      notice: hasPlanFacts ? planNoticeFor(state, { ...context, appsOpen: true }) : null,
       lock: null,
       badges: badgesFor(state, true),
       usage: state.usage,

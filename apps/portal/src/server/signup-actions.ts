@@ -17,17 +17,19 @@ import {
   completeSignupIntent,
   enforceRateLimit,
   getOpenSignupIntent,
+  INVITE_NEEDS_PROVEN_MAILBOX_CODE,
+  INVITE_NEEDS_PROVEN_MAILBOX_MESSAGE,
   recordAudit,
   upsertSignupIntent,
 } from '@kitstak/billing/server';
 import { account, billingAccounts, member, user, verification } from '@kitstak/db/schema';
 import { cleanCode, companyIssue, emailIssue, nameIssue } from '@/features/signup/fields';
 import { passwordIssue } from '@/features/signup/password-rules';
-import { safeNextPath } from '@/lib/routes';
+import { safeNextPath, safeReturnUrl } from '@/lib/routes';
 import { slugWithSuffix, slugify } from '@/lib/slug';
-import { auth, clearSignInLockout, emailCodeApi, maySignInWithCode, withSignInCode, withoutSignupCode } from '@/server/auth';
+import { auth, clearSignInLockout, emailCodeApi, hasPassword, maySignInWithCode, withSignInCode, withoutSignupCode } from '@/server/auth';
 import { db } from '@/server/db';
-import { env } from '@/server/env';
+import { env, trustedOrigins } from '@/server/env';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getSession } from '@/server/session';
 import { getInviteView, getSignupResumeHref, inviteProofValid } from '@/server/signup';
@@ -39,10 +41,12 @@ export interface SignupActionResult {
   /** Which field the error belongs to, when it belongs to one. */
   readonly field?: 'name' | 'password' | 'email';
   /** A short machine word for the cases a form treats in a special way. */
-  readonly code?: 'account_exists' | 'no_seat';
+  readonly code?: 'account_exists' | 'no_seat' | 'password_removed' | 'needs_invite_link';
 }
 
 const SIGN_IN_AGAIN = 'Please sign in again.';
+/** Said when an invite is opened without the link from the invite email (review round 4). */
+const NEEDS_INVITE_LINK = INVITE_NEEDS_PROVEN_MAILBOX_MESSAGE;
 // Every limit that answers with this sentence has a 10 minute window, so the wait it names is true.
 const TOO_MANY_TRIES = 'Too many tries. Wait 10 minutes and try again.';
 const NO_NETWORK = 'We could not reach KitStak. Check your connection and try again.';
@@ -335,12 +339,21 @@ export async function requestSignInCodeAction(input: unknown): Promise<SignupAct
   return { ok: true };
 }
 
-const signInCodeSchema = z.object({ email: z.string().max(320), code: z.string().max(40) });
+const signInCodeSchema = z.object({ email: z.string().max(320), code: z.string().max(40), next: z.string().max(2000).optional() });
+
+/** Where the account page lives. It is where a person sets a password. */
+const ACCOUNT_PATH = '/settings/account';
 
 /**
  * Signs a person in with the emailed code. The code proves the mailbox, so the address is marked
  * verified in the same step: one code is both the sign in and the verification. A wrong code, an
  * old code and an address with no account all get the same answer.
+ *
+ * One more thing can happen here, and the person is told (review round 4). When the email of the
+ * account was never proven before, the password it had is removed in this step. That is on purpose:
+ * until the mailbox is proven, nobody knows who set that password. The answer then carries
+ * `code: 'password_removed'` and sends the person to their account page, which says so in one
+ * sentence and offers "Set a password". Signing in with a code keeps working either way.
  */
 export async function signInWithCodeAction(input: unknown): Promise<SignupActionResult> {
   const parsed = signInCodeSchema.safeParse(input);
@@ -351,9 +364,11 @@ export async function signInWithCodeAction(input: unknown): Promise<SignupAction
   if (code.length !== 6) return fail('Enter the 6 digit code from your email.');
   const requestHeaders = await headers();
   if (!(await allowAnonymous('signin-code', requestHeaders, 10))) return fail(TOO_MANY_TRIES);
+  let hadPassword = false;
   try {
     // An address that may not sign in this way gets the answer a wrong code gets, after the same work.
     const allowed = await maySignInWithCode(email);
+    hadPassword = await hasPassword(email);
     await withSignInCode(() =>
       emailCodeApi().signInEmailOTP({ body: { email: allowed ? email : `no-account+${email}`, otp: code }, headers: requestHeaders }),
     );
@@ -370,6 +385,17 @@ export async function signInWithCodeAction(input: unknown): Promise<SignupAction
     console.error('[portal] could not clear the lockout after a sign in by code', error);
   }
   revalidatePath('/', 'layout');
+  try {
+    if (hadPassword && !(await hasPassword(email))) {
+      // The old password is gone. Say so, on the page where a new one is set, then go on.
+      const after = safeReturnUrl(parsed.data.next, trustedOrigins(), '');
+      const query = new URLSearchParams({ notice: 'password-removed' });
+      if (after !== '') query.set('next', after);
+      return { ok: true, code: 'password_removed', next: `${ACCOUNT_PATH}?${query.toString()}` };
+    }
+  } catch (error: unknown) {
+    console.error('[portal] could not check the password after a sign in by code', error);
+  }
   return { ok: true };
 }
 
@@ -460,6 +486,7 @@ async function acceptInvitation(view: InviteFacts, requestHeaders: Headers): Pro
   } catch (error: unknown) {
     const code = errorCode(error);
     if (code === 'SEAT_LIMIT_REACHED') return { ...fail(noSeatMessage(view.inviterName)), code: 'no_seat' };
+    if (code === INVITE_NEEDS_PROVEN_MAILBOX_CODE) return { ...fail(NEEDS_INVITE_LINK), code: 'needs_invite_link' };
     if (code === 'INVITATION_NOT_FOUND') return fail(inactive);
     if (code === 'YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION') {
       return fail(`This invite is for ${view.email}. Sign out and open the link again.`);
@@ -512,7 +539,8 @@ export async function joinInviteAction(input: unknown): Promise<SignupActionResu
   const name = parsed.data.name.trim();
   const nameProblem = nameIssue(name);
   if (nameProblem) return { ...fail(nameProblem), field: 'name' };
-  const passwordProblem = passwordIssue(parsed.data.password, { email: view.email });
+  // The same check the invite form runs: not built on the invited address, nor on the team's name.
+  const passwordProblem = passwordIssue(parsed.data.password, { email: view.email, company: view.orgName });
   if (passwordProblem) return { ...fail(passwordProblem), field: 'password' };
 
   const requestHeaders = await headers();
@@ -524,7 +552,12 @@ export async function joinInviteAction(input: unknown): Promise<SignupActionResu
   // Before any account exists: is there room on the team?
   if (!view.seatAvailable) return { ...fail(noSeatMessage(view.inviterName)), code: 'no_seat' };
 
+  // Before any account exists: did this person come from the link in the invite email? Only that
+  // mailbox has the link's proof. Without it nothing is made (review round 4): the invitation id by
+  // itself is not a secret, because the people who manage the team can read it, and one of them
+  // could otherwise make the account for the invited address and take the invite.
   const proven = await inviteProofValid(view.id, view.email);
+  if (!proven) return { ...fail(NEEDS_INVITE_LINK), code: 'needs_invite_link' };
   const signUp = () =>
     auth.api.signUpEmail({
       body: {
@@ -728,7 +761,12 @@ export async function acceptInviteAction(input: unknown): Promise<SignupActionRe
   // The person came from the link in the invite email, which only the invited mailbox has. That
   // proves the address, so it is marked verified and no 6 digit code is ever asked for.
   let requestHeaders = await headers();
-  if (!session.user.emailVerified && (await inviteProofValid(view.id, view.email))) {
+  // Read fresh: the rule in the shared sign in layer reads the database too.
+  const [fresh] = await db.select({ emailVerified: user.emailVerified }).from(user).where(eq(user.id, session.user.id));
+  if (fresh?.emailVerified !== true) {
+    // An address nobody has proven yet, and no link from the invite email: the invite stays where
+    // it is (review round 4). The link proves the mailbox, and so does the emailed code.
+    if (!(await inviteProofValid(view.id, view.email))) return { ...fail(NEEDS_INVITE_LINK), code: 'needs_invite_link' };
     await markEmailVerified(session.user.id);
     // Read the person fresh from the database from here on, so the new cookie says "verified".
     requestHeaders = withoutSessionCache(requestHeaders);

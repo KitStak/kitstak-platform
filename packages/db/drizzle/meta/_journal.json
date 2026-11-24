@@ -78,6 +78,13 @@
       "when": 1795305600000,
       "tag": "0010_core_billing_round3",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795392000000,
+      "tag": "0011_core_sign_in_round4",
+      "breakpoints": true
     }
   ]
 }

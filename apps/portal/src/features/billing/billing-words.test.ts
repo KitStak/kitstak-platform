@@ -172,6 +172,48 @@ describe('phaseCopy', () => {
   });
 });
 
+describe('with every app open (the allow all switch), nothing says "view only" (review round 4)', () => {
+  const open = { appsOpen: true } as const;
+
+  it('billing home never claims view only while the apps are open', () => {
+    for (const [phase, built] of Object.entries(STATES)) {
+      const words = phaseCopy(built, 'UTC', open);
+      const lines = [words.line, words.badge.label, memberLine(built, 'Northwind Robotics', 'UTC', open), ...Object.values(nextChargeCopy(built, 'UTC', open))];
+      for (const line of lines) expect(line, phase).not.toMatch(/view only/i);
+    }
+  });
+
+  it('says the same facts, less the claim', () => {
+    expect(phaseCopy(STATES.trial_ended, 'UTC', open).line).toBe('Your free trial ended on Nov 22, 2026. Your data is safe.');
+    expect(phaseCopy(STATES.unpaid, 'UTC', open).line).toBe('Your payment is late.');
+    expect(phaseCopy(STATES.unpaid, 'UTC', open).badge).toEqual({ label: 'Payment late', tone: 'danger' });
+    expect(phaseCopy(STATES.ended, 'UTC', open).line).toMatch(/^Your plan ended on .+\. Your data is safe\.$/);
+    expect(nextChargeCopy(STATES.unpaid, 'UTC', open).detail).toBe('$395.20 is late. Pay now to keep your apps open.');
+    expect(memberLine(STATES.unpaid, 'Northwind Robotics', 'UTC', open)).toBe('A payment for Northwind Robotics is late.');
+    expect(memberLine(STATES.paused, 'Northwind Robotics', 'UTC', open)).not.toContain('view only');
+  });
+
+  it('the buttons do not change, and without the switch the words are as before', () => {
+    for (const built of Object.values(STATES)) {
+      expect(phaseCopy(built, 'UTC', open).primary).toEqual(phaseCopy(built, 'UTC').primary);
+      expect(phaseCopy(built, 'UTC', { appsOpen: false })).toEqual(phaseCopy(built, 'UTC'));
+    }
+    expect(phaseCopy(STATES.unpaid, 'UTC').badge.label).toBe('View only');
+    expect(phaseCopy(STATES.trial_ended, 'UTC').line).toBe('Your free trial ended on Nov 22, 2026. Your apps are view only. Your data is safe.');
+  });
+
+  it('keeps the copy rules', () => {
+    for (const built of Object.values(STATES)) {
+      const lines = [phaseCopy(built, 'UTC', open).line, memberLine(built, 'Northwind Robotics', 'UTC', open), ...Object.values(nextChargeCopy(built, 'UTC', open))];
+      for (const line of lines) {
+        expect(line).not.toMatch(/[–—]|--/);
+        expect(line).not.toMatch(/\s{2,}|\s\./);
+        for (const sentence of line.split(/(?<=\.)\s+/)) expect(sentence.split(/\s+/).length).toBeLessThanOrEqual(20);
+      }
+    }
+  });
+});
+
 describe('memberLine', () => {
   it('names the organization and the date, and never an amount', () => {
     expect(memberLine(STATES.trial, 'Northwind Robotics', 'UTC')).toBe('Northwind Robotics is on a free trial that ends Dec 2, 2026.');

@@ -9,9 +9,17 @@
  * capital, no number, no symbol. "correct horse battery staple" is a good password.
  */
 
-import { EASY_TO_GUESS_MESSAGE, isEasyToGuess } from '@kitstak/auth/weak-passwords';
+import {
+  COMPANY_NAME_MESSAGE,
+  EASY_TO_GUESS_MESSAGE,
+  PRODUCT_NAME_MESSAGE,
+  isEasyToGuess,
+  usesCompanyName,
+  usesProductName,
+  weakPasswordMessage,
+} from '@kitstak/auth/weak-passwords';
 
-export { EASY_TO_GUESS_MESSAGE, isEasyToGuess };
+export { COMPANY_NAME_MESSAGE, EASY_TO_GUESS_MESSAGE, PRODUCT_NAME_MESSAGE, isEasyToGuess, usesCompanyName, usesProductName, weakPasswordMessage };
 
 export const PASSWORD_MIN_LENGTH = 10;
 /** From this length on, the password passes with no other rule. The same number as the shared policy. */
@@ -106,8 +114,9 @@ export function passwordIssue(password: string, context: PasswordContext = {}): 
   }
   // Length is not strength by itself (review round 3): the same check the server runs, so
   // `passwordpassword`, `aaaaaaaaaaaaaaaa`, `123456789012345` and `qwertyuiopasdfgh` are refused here too.
-  if (isEasyToGuess(password, { names: [context.company] })) return EASY_TO_GUESS_MESSAGE;
-  return null;
+  // The line names the cause when the cause is a name (review round 4): "Do not use your company
+  // name in your password." The same words the server answers with.
+  return weakPasswordMessage(password, { names: [context.company] });
 }
 
 export interface PasswordStrength {

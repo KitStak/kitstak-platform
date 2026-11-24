@@ -2,7 +2,7 @@ import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { PlanBannerNotice } from '../plan-banner';
-import { READ_LABEL, VIEW_ONLY_MESSAGE, ViewOnlyGuard, ViewOnlyPage, WRITE_LABEL, controlLabel, isWriteLabel, isWritePath } from './index';
+import { READ_LABEL, VIEW_ONLY_MESSAGE, ViewOnlyGuard, ViewOnlyPage, WRITE_LABEL, controlLabel, isWayOut, isWriteLabel, isWritePath, leavesApp } from './index';
 
 const ENDED: PlanBannerNotice = {
   kind: 'trial_ended',
@@ -85,6 +85,53 @@ describe('isWriteLabel', () => {
     expect(controlLabel({ textContent: '  Create\n   client ', getAttribute: () => null })).toBe('Create client');
     expect(controlLabel({ textContent: '', getAttribute: (name) => (name === 'aria-label' ? 'Add user' : null) })).toBe('Add user');
     expect(controlLabel({ textContent: null, getAttribute: () => null })).toBe('');
+  });
+});
+
+/** A stand in for an element: `inside` lists the selectors of its ancestors, `href` makes it a link. */
+function fakeControl(options: { inside?: readonly string[]; href?: string } = {}): Element {
+  const link = options.href ? { href: options.href, getAttribute: () => options.href ?? null } : null;
+  return {
+    closest(selector: string) {
+      if (selector === 'a[href]') return link;
+      return selector.split(',').some((part) => (options.inside ?? []).includes(part.trim())) ? {} : null;
+    },
+  } as unknown as Element;
+}
+
+describe('the way out of view only is never held back (review round 4)', () => {
+  const here = 'http://localhost:3000/dashboard';
+
+  it('the banner button labels are write labels, which is why the banner must be left alone', () => {
+    // "Add WMS" and "Update card" match `WRITE_LABEL`. Before the fix the guard dimmed them and
+    // caught the first press. The label rule stays as it is; the banner is exempt by where it sits.
+    expect(isWriteLabel('Add WMS', WRITE_LABEL, READ_LABEL)).toBe(true);
+    expect(isWriteLabel('Update card', WRITE_LABEL, READ_LABEL)).toBe(true);
+  });
+
+  it('leaves the plan banner, the lock screen and the app switcher alone', () => {
+    expect(isWayOut(fakeControl({ inside: ['.ks-planbanner'] }))).toBe(true);
+    expect(isWayOut(fakeControl({ inside: ['.ks-planlock-frame'] }))).toBe(true);
+    expect(isWayOut(fakeControl({ inside: ['.ks-appswitcher-menu'] }))).toBe(true);
+    expect(isWayOut(fakeControl({ inside: ['[data-plan-way-out]'] }))).toBe(true);
+    expect(isWayOut(fakeControl({ inside: ['.ks-viewonly'] }))).toBe(true);
+    expect(isWayOut(fakeControl({ inside: ['[data-plan-read]'] }))).toBe(true);
+  });
+
+  it('a button of the app itself is not a way out', () => {
+    expect(isWayOut(fakeControl())).toBe(false);
+    expect(isWayOut(fakeControl({ inside: ['.some-toolbar'] }))).toBe(false);
+  });
+
+  it('a link to the Portal leaves the app, a link inside the app does not', () => {
+    expect(leavesApp(fakeControl({ href: 'http://localhost:3300/billing/plan?add=wms&from=wms' }), here)).toBe(true);
+    expect(leavesApp(fakeControl({ href: 'https://kitstak.app/billing?fix=payment' }), 'https://wms.kitstak.app/dashboard')).toBe(true);
+    expect(leavesApp(fakeControl({ href: 'http://localhost:3000/jobs/new' }), here)).toBe(false);
+    expect(leavesApp(fakeControl({ href: '/jobs/new' }), here)).toBe(false);
+    expect(leavesApp(fakeControl(), here)).toBe(false);
+    expect(leavesApp(null, here)).toBe(false);
+    // No page address (server render): nothing is called a way out by accident.
+    expect(leavesApp(fakeControl({ href: 'https://kitstak.app/billing' }), '')).toBe(false);
   });
 });
 

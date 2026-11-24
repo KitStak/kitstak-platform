@@ -97,7 +97,7 @@ test.describe('a payment fails at renewal', () => {
     await page.reload();
     await expectPhase(page, 'unpaid');
     await expect(page.getByTestId('billing-plan-card')).toContainText('Your payment is late, so your apps are view only.');
-    await expect(page.getByTestId('plan-notice-unpaid')).toContainText('Your payment is late, so your apps are view only. Pay now to turn them back on.');
+    await expect(page.getByTestId('plan-notice-unpaid')).toContainText('Your payment is late, so your apps are view only. Update your card to turn them back on.');
     expect((await entitlementsOf(orgId)).map((row) => row.module)).toEqual(['pulse']);
     expect((await invoicesOf(orgId)).filter((invoice) => invoice.status === 'open')).toHaveLength(1);
 

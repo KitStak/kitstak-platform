@@ -2,7 +2,7 @@
 /**
  * The confirm panel for a change to a paid plan (SPEC 6.3). It shows what the gateway said the
  * change costs. Nothing is charged until "Confirm change". Focus lands on the heading, not on the
- * button, so nobody confirms by reflex.
+ * button, so nobody confirms by reflex. On close, focus goes back to the button that opened it.
  */
 import { useRef } from 'react';
 import Link from 'next/link';
@@ -32,6 +32,12 @@ export interface ChangeConfirmProps {
   readonly onClose: () => void;
   readonly onUpdateCard: () => void;
   readonly verifyHref: string;
+  /**
+   * The element that gets focus back when the panel closes: the button that opened it. The page
+   * names it, because that button is switched off while the amounts are fetched and loses focus
+   * then, so the dialog cannot remember it by itself (review round 4).
+   */
+  readonly restoreFocus?: () => HTMLElement | null;
 }
 
 export function ChangeConfirm({
@@ -49,6 +55,7 @@ export function ChangeConfirm({
   onClose,
   onUpdateCard,
   verifyHref,
+  restoreFocus,
 }: ChangeConfirmProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -60,6 +67,13 @@ export function ChangeConfirm({
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           headingRef.current?.focus();
+        }}
+        onCloseAutoFocus={(event) => {
+          // Dialogs give focus back on close (SPEC 13): Esc, "Go back" and the X all end here.
+          const target = restoreFocus?.();
+          if (!target) return;
+          event.preventDefault();
+          target.focus();
         }}
       >
         <DialogTitle ref={headingRef} tabIndex={-1}>

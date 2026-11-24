@@ -7,11 +7,11 @@
  * mapping use, so the picker never does its own math and updates on every key with no page load.
  * The browser only ever sends the selection. The server prices it again.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { RadioGroup } from 'radix-ui';
-import { ArrowRight, Check, CircleAlert, Lock, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Check, CircleAlert, Info, Lock, ShieldCheck } from 'lucide-react';
 import { AppIcon } from '@kitstak/ui/app-icon';
 import {
   CATALOG,
@@ -125,6 +125,11 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
   const [planMoved, setPlanMoved] = useState<string | null>(null);
   // The plan the stale preview was made for. Not null while a fresh plan is on its way.
   const rebaseFrom = useRef<PlanSelection | null>(null);
+  // The confirm panel gives focus back to the button that opened it (SPEC 13). While the panel was
+  // being fetched that button was switched off and lost focus, so the browser cannot remember it
+  // for us: the panel asks for it by name when it closes.
+  const submitRef = useRef<HTMLButtonElement | null>(null);
+  const summaryHeadingRef = useRef<HTMLHeadingElement | null>(null);
   // Signup: focus starts on the heading of this step, so the keyboard is inside the page at once.
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   useEffect(() => {
@@ -415,17 +420,28 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
           : 'Review change';
   const payBlocked = paysHere && payBlockedReason !== null;
   const primaryDisabled = empty || billingOff || unchanged || trialUnchanged || payBlocked;
-  const primaryHint = empty
-    ? 'Pick at least one app.'
-    : billingOff
-      ? BILLING_OFF
-      : payBlocked
-        ? payBlockedReason
-      : unchanged
-        ? 'Change something to review it.'
-        : trialUnchanged
-          ? 'These are the apps in your trial now.'
-          : null;
+  // On a paid plan, "no apps" is not a plan change. The way to stop paying is to cancel, so the
+  // hint says that and links there, instead of a dead button with "Pick at least one app."
+  const cancelInstead = empty && activeMode === 'change';
+  const primaryHint: ReactNode = cancelInstead ? (
+    <>
+      To stop paying for everything,{' '}
+      <Link href="/billing/cancel" data-testid="plan-cancel-instead" className="font-semibold text-fg underline decoration-border-strong underline-offset-4 hover:decoration-fg">
+        cancel your plan
+      </Link>
+      .
+    </>
+  ) : empty ? (
+    'Pick at least one app.'
+  ) : billingOff ? (
+    BILLING_OFF
+  ) : payBlocked ? (
+    payBlockedReason
+  ) : unchanged ? (
+    'Change something to review it.'
+  ) : trialUnchanged ? (
+    'These are the apps in your trial now.'
+  ) : null;
 
   const totalLabel =
     activeMode === 'trial' || activeMode === 'trial_change' || (activeMode === 'checkout' && trialRunning)
@@ -590,16 +606,22 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
             </Card>
           ) : null}
 
-          {pulseOver ? (
-            <p role="status" data-testid="plan-pulse-note" className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning-subtle px-3 py-2 text-sm font-medium text-warning-text">
+          {pulseOver && usesSeats(selection) ? (
+            // One plain rule (SPEC P8, review round 4). With a per user app in the plan nothing is
+            // held back: Pulse follows the team, at the same flat price. So this is a calm fact, not
+            // a warning, and it does not send anyone to sales.
+            <p role="status" data-testid="plan-pulse-note" data-tone="info" className="flex items-start gap-2 rounded-lg border border-border-default bg-sunken px-3 py-2 text-sm text-fg-secondary">
+              <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-icon" />
+              <span>
+                Pulse covers every seat in a plan with CRM or Projects. All {pulsePeople} people can use it for the same flat price.
+              </span>
+            </p>
+          ) : pulseOver ? (
+            // Pulse alone stops at its included seats: the next person cannot be added.
+            <p role="status" data-testid="plan-pulse-note" data-tone="warning" className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning-subtle px-3 py-2 text-sm font-medium text-warning-text">
               <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
               <span>
-                {usesSeats(selection)
-                  ? // With a per user app in the plan, Pulse follows the team: every seat can open it.
-                    `The Pulse price is made for teams of up to ${pulseSeats} people. You picked ${pulsePeople} seats. All ${pulsePeople} people can use Pulse, at the price shown here.`
-                  : // Pulse alone stops at its included seats: the next person cannot be added.
-                    `Pulse alone covers a team of up to ${pulseSeats} people, and you have ${pulsePeople}. Add CRM or Projects to cover everyone.`}{' '}
-                For a bigger team,{' '}
+                Pulse alone covers up to {pulseSeats} people, and you have {pulsePeople}. Add CRM or Projects to cover everyone, or{' '}
                 <a href={`${SITE_URL}/contact?topic=sales`} className="underline underline-offset-2">
                   talk to us
                 </a>
@@ -654,7 +676,7 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
 
         <aside className="lg:sticky lg:top-20">
           <Card as="div" className="p-5">
-            <h2 className="text-base font-semibold text-fg">
+            <h2 ref={summaryHeadingRef} tabIndex={-1} className="text-base font-semibold text-fg outline-none">
               {activeMode === 'trial' ? 'Your free trial' : activeMode === 'change' ? 'Your new plan' : 'Your plan'}
             </h2>
 
@@ -740,6 +762,7 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
                 <Button
                   size="xl"
                   fullWidth
+                  ref={submitRef}
                   id="plan-submit"
                   data-testid="plan-submit"
                   loading={busy === 'primary'}
@@ -753,7 +776,7 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
                 </Button>
               </div>
               {primaryHint ? (
-                <p id="plan-submit-hint" className="mt-2 text-center text-xs text-fg-muted">
+                <p id="plan-submit-hint" data-testid="plan-submit-hint" className={cn('mt-2 text-center', cancelInstead ? 'text-sm text-fg-secondary' : 'text-xs text-fg-muted')}>
                   {primaryHint}
                 </p>
               ) : null}
@@ -823,6 +846,10 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
           setPlanMoved(null);
         }}
         verifyHref="/verify-email?next=/billing/plan"
+        // Esc, "Go back" and the X all put the keyboard back on "Review change". If that button is
+        // switched off by then (the plan already has the change), the summary heading above it takes
+        // focus, so the next Tab still starts at the money step and not at the logo.
+        restoreFocus={() => (submitRef.current && !submitRef.current.disabled ? submitRef.current : summaryHeadingRef.current)}
       />
     </div>
   );

@@ -7,10 +7,13 @@
  * only decides what to show.
  */
 import {
-  EASY_TO_GUESS_MESSAGE,
+  COMPANY_NAME_MESSAGE,
   PASSWORD_MAX_LENGTH,
-  isEasyToGuess,
+  PRODUCT_NAME_MESSAGE,
   missingRuleWords,
+  usesCompanyName,
+  usesProductName,
+  weakPasswordMessage,
   passwordStrength,
   type PasswordContext,
   type PasswordStrength,
@@ -26,15 +29,22 @@ export function usesEmailName(password: string, email: string | undefined): bool
 
 /**
  * The sentence for a password that is refused for a reason the checklist does not show, or null.
- *   - The email name: said as soon as it is typed, whatever else is missing.
- *   - Easy to guess (`passwordpassword`, `123456789012345`): said once the checklist is met, which
- *     is when the form would say it. Before that the checklist is the thing to fix.
+ *   - A name (the email name, the company name, the product name): said as soon as it is typed,
+ *     whatever else is missing, and it names the cause. It is the one thing a person can fix at
+ *     once, and no number of extra characters makes that password pass (review round 4).
+ *   - Easy to guess in another way (`passwordpassword`, `123456789012345`): said once the
+ *     checklist is met, which is when the form would say it. Before that the checklist is the
+ *     thing to fix.
+ * The company comes from the form, so the answer follows it: fill the company in after the
+ * password and the line appears; change the company and it goes away.
  */
 export function passwordWarning(password: string, context: PasswordContext = {}): string | null {
   if (password.length === 0) return null;
   if (usesEmailName(password, context.email)) return EMAIL_NAME_MESSAGE;
   if (new TextEncoder().encode(password).length > PASSWORD_MAX_LENGTH) return `Use ${PASSWORD_MAX_LENGTH} characters or fewer.`;
-  if (missingRuleWords(password).length === 0 && isEasyToGuess(password, { names: [context.company] })) return EASY_TO_GUESS_MESSAGE;
+  if (usesCompanyName(password, { names: [context.company] })) return COMPANY_NAME_MESSAGE;
+  if (usesProductName(password)) return PRODUCT_NAME_MESSAGE;
+  if (missingRuleWords(password).length === 0) return weakPasswordMessage(password, { names: [context.company] });
   return null;
 }
 
