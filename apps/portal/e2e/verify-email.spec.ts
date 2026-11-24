@@ -36,7 +36,7 @@ test.describe('verify your email with a 6 digit code', () => {
     expect(rows[0]?.email_verified).toBe(true);
     await page.goto('/billing');
     await expect(page.getByTestId('billing-home')).toBeVisible();
-    await expect(page.getByText('Check your email for a 6 digit code to verify your address.')).toHaveCount(0);
+    await expect(page.getByTestId('verify-email-notice')).toHaveCount(0);
 
     // The code is wiped from the outbox table once the email has gone out.
     const stored = await sql<{ payload: Record<string, unknown> }>(
@@ -57,7 +57,7 @@ test.describe('verify your email with a 6 digit code', () => {
 
     // The shell keeps a quiet reminder with one button.
     await page.goto('/billing');
-    await expect(page.getByText('Check your email for a 6 digit code to verify your address.')).toBeVisible();
+    await expect(page.getByTestId('verify-email-notice')).toContainText('Enter the 6 digit code we emailed you.');
 
     // Paying needs a verified address. The pay button is off, says why, and one link fixes it.
     await page.goto('/billing/checkout');

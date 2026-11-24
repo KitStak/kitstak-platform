@@ -90,9 +90,17 @@ const envSchema = z.object({
   MICROSOFT_CLIENT_ID: optionalText,
   MICROSOFT_CLIENT_SECRET: optionalText,
   MICROSOFT_TENANT_ID: optionalText,
+  /**
+   * Who sells: printed in the "From" block of every invoice on screen. The name defaults to the
+   * company that holds the Stripe account. The address (parts split with `|`) and the tax ID are
+   * left out until the owner sets them. Nothing is made up.
+   */
+  BILLING_SELLER_NAME: optionalText,
+  BILLING_SELLER_ADDRESS: optionalText,
+  BILLING_SELLER_TAX_ID: optionalText,
   /** Marketing site origin, for "Talk to us" and pricing links. */
   NEXT_PUBLIC_SITE_URL: z.url().default('https://kitstak.com'),
-  /** Legal links on the signup and sign in screens. Default: the pages the CRM serves today. */
+  /** Legal links on the signup and sign in screens. Default: the Terms and Privacy pages of the marketing site. */
   NEXT_PUBLIC_TERMS_URL: z.url().optional(),
   NEXT_PUBLIC_PRIVACY_URL: z.url().optional(),
 });

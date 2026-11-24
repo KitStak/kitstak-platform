@@ -29,6 +29,7 @@ import {
   toneOf,
   type ActivityFilter,
   type ActivityTone,
+  foldRepeats,
 } from '@/features/billing-activity/model';
 import { countActivity, listActivity } from '@/features/billing-activity/query';
 
@@ -98,7 +99,8 @@ export default async function BillingActivityPage({
   const items = found.slice(0, PAGE_SIZE);
   const last = items[items.length - 1];
   const hasMore = found.length > PAGE_SIZE && last !== undefined;
-  const days = groupByDay(items, rt.now(), timeZone);
+  // The same press repeated (a checkout started again and again) reads as one row with a count.
+  const days = groupByDay(foldRepeats(items), rt.now(), timeZone);
   const empty = EMPTY_COPY[filter];
 
   return (
@@ -202,7 +204,14 @@ export default async function BillingActivityPage({
                           <Icon className="size-4" />
                         </span>
                         <div className="min-w-0">
-                          <p className="text-md font-medium [overflow-wrap:anywhere] text-fg">{item.summary}</p>
+                          <p className="text-md font-medium [overflow-wrap:anywhere] text-fg">
+                            {item.summary}
+                            {'times' in item && typeof item.times === 'number' && item.times > 1 ? (
+                              <span data-testid="activity-times" className="ml-2 inline-flex items-center rounded-full bg-sunken px-2 py-0.5 align-middle text-xs font-semibold text-fg-secondary tabular-nums">
+                                {item.times} times
+                              </span>
+                            ) : null}
+                          </p>
                           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-fg-secondary">
                             <span className="sr-only">{KIND_WORDS[kindOf(item.action)]}. </span>
                             <time dateTime={item.at.toISOString()}>{timeLabel(item.at, timeZone)}</time>

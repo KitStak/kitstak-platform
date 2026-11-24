@@ -138,11 +138,23 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
    *   - at signup, every change is saved to the signup intent on the server;
    *   - when picking a plan to pay for, every change is saved to the cart on the server (the same
    *     cart the review step reads), quietly, with no activity entry;
-   *   - a change that needs a confirm step (trial apps, a paid plan) is kept in this browser until
-   *     it is saved or confirmed, and only while the plan it started from is still the same.
+   *   - a change to the apps in a trial is kept in this browser until "Save my apps", and only
+   *     while the trial it started from is still the same.
+   * A paid plan is different on purpose: its picker always opens on the plan as it is. An old,
+   * unconfirmed change must never come back by itself and turn "add 1 seat" into "add 2".
    */
   const draftKind: 'intent' | 'cart' | 'local' | null =
-    activeMode === 'trial' ? (layout === 'signup' ? 'intent' : null) : activeMode === 'checkout' ? (canPay ? 'cart' : null) : 'local';
+    activeMode === 'trial'
+      ? layout === 'signup'
+        ? 'intent'
+        : null
+      : activeMode === 'checkout'
+        ? canPay
+          ? 'cart'
+          : null
+        : activeMode === 'trial_change'
+          ? 'local'
+          : null;
   const draftKey = planState ? `${planState.orgId}:${activeMode}` : null;
   const draftBase = `${trialProducts.join(',')}|${current ? `${current.products.join(',')}:${current.seats}:${current.warehouses}:${current.interval}` : ''}`;
   const touched = useRef(false);

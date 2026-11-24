@@ -18,8 +18,16 @@ test.describe('checkout: adding a card during the free trial', () => {
     await expectPhase(page, 'trial');
     await expect(page.getByTestId('billing-payment-method')).toContainText('No card yet');
 
-    // Click one: "Add a card" on billing home opens the review step. Three facts, one button, no card field.
-    await page.getByTestId('billing-add-card').click();
+    // "Pick a plan" is the one name for the paying step. On billing home it is the one filled button
+    // of the card row. It opens the picker to pay, with one filled button: "Continue to review".
+    await expect(page.getByTestId('billing-home').getByRole('link', { name: 'Pick a plan' })).toHaveCount(1);
+    await expect(page.getByTestId('billing-home').getByText('Add a card', { exact: true })).toHaveCount(0);
+    await page.getByTestId('billing-pick-plan').click();
+    await page.waitForURL(/\/billing\/plan/);
+    await expect(page.getByTestId('plan-picker')).toHaveAttribute('data-mode', 'checkout');
+    await expect(page.getByTestId('plan-submit')).toHaveText(/Continue to review/);
+    await page.getByTestId('plan-submit').click();
+    // The review step. Three facts, one button, no card field.
     await page.waitForURL(/\/billing\/checkout/);
     await expect(page.getByTestId('review-due-today')).toHaveText('$0.00');
     await expect(page.getByTestId('review-first-charge-amount')).toHaveText(totalOf(CART_CRM_WMS));

@@ -4,11 +4,15 @@ import { CART_CRM_WMS, emailsTo, entitlementsOf, expectPhase, invoicesOf, openBi
 test.describe('the free trial ends with no card', () => {
   test('a soft landing: view only, nothing deleted, and paying turns everything back on at once', async ({ page }) => {
     const { person, orgId } = await trialAccount(page, 'trialend', CART_CRM_WMS);
-    await expect(page.getByTestId('plan-notice-trial')).toContainText('Free trial. 14 days left.');
+    // Day one: no banner asks for a plan yet. It starts on the second day.
+    await expect(page.getByTestId('plan-notice-trial')).toHaveCount(0);
+    await runTestTool(page, 'shift-1');
+    await page.reload();
+    await expect(page.getByTestId('plan-notice-trial')).toContainText('Free trial. 13 days left.');
+    await expect(page.getByTestId('plan-notice-action').first()).toHaveText(/Pick a plan/);
 
     // 11 days in: 3 days left. The banner turns into a warning and the reminder emails have gone out.
     await runTestTool(page, 'shift-7');
-    await runTestTool(page, 'shift-1');
     await runTestTool(page, 'shift-1');
     await runTestTool(page, 'shift-1');
     await runTestTool(page, 'shift-1');

@@ -21,7 +21,7 @@ const EXPECTED: Readonly<Record<EmailTemplateId, { subject: string; button: stri
   payment_action_required: { subject: 'Your bank needs you to approve a KitStak payment', button: 'Approve payment' },
   grace_ending: { subject: 'Last day to fix your KitStak payment', button: 'Update card' },
   cancel_scheduled: { subject: 'Your KitStak plan will end on Dec 23', button: 'Keep my plan' },
-  paused: { subject: 'Your KitStak plan is paused', button: 'See my plan' },
+  paused: { subject: 'Your KitStak plan will pause on Dec 23', button: 'See my plan' },
   plan_ended: { subject: 'Your KitStak plan has ended. Your data is safe.', button: 'Pick a plan' },
 };
 

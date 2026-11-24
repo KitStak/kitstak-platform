@@ -52,7 +52,7 @@ test.describe('billing is off in production with no key', () => {
     await expect(page.getByText('Billing is not available right now. Nothing will be charged. Please try again later.').first()).toBeVisible();
     await expect(page.getByTestId('test-mode-label')).toHaveCount(0);
     await expect(page.getByTestId('test-tools')).toHaveCount(0);
-    await expect(page.getByTestId('billing-add-card')).toBeDisabled();
+    await expect(page.getByTestId('billing-pick-plan')).toBeDisabled();
 
     // The review step cannot be used to pay either.
     await page.goto('/billing/checkout');

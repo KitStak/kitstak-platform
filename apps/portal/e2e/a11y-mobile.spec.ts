@@ -22,6 +22,8 @@ async function expectNoSidewaysScroll(page: Page, label: string): Promise<void> 
 }
 
 async function expectTapTarget(page: Page, testId: string): Promise<void> {
+  // Wait for the control first: right after a navigation it may not be on the page yet.
+  await expect(page.getByTestId(testId).first(), testId).toBeVisible({ timeout: 90_000 });
   const box = await page.getByTestId(testId).first().boundingBox();
   expect(box, testId).not.toBeNull();
   expect(box!.height, `${testId} is ${box!.height} px tall`).toBeGreaterThanOrEqual(44);

@@ -83,7 +83,8 @@ export function paused(raw: unknown): EmailContent {
   const startsAt = date(payload, 'startsAt');
   const resumesAt = date(payload, 'resumesAt');
   return {
-    subject: 'Your KitStak plan is paused',
+    // The pause is planned, not running yet, so the subject gives the day it starts.
+    subject: `Your KitStak plan will pause on ${dayShort(startsAt)}`,
     preheader: `The pause starts on ${day(startsAt)}. Your plan starts again on ${day(resumesAt)}.`,
     heading: 'Your pause is set',
     blocks: [

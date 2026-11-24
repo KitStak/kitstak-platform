@@ -7,6 +7,7 @@ import {
   csvCell,
   dayKey,
   dayLabel,
+  foldRepeats,
   groupByDay,
   invoiceIdOf,
   isActivityFilter,
@@ -102,3 +103,46 @@ describe('billing activity model', () => {
     for (const filter of ACTIVITY_FILTERS) expect(EMPTY_COPY[filter.id].body.split(' ').length).toBeLessThanOrEqual(20);
   });
 });
+
+describe('foldRepeats', () => {
+  const row = (id: string, action: string, summary: string, actorLabel = 'Riley Carter'): ActivityItem => ({
+    id,
+    at: new Date('2026-12-07T15:00:00.000Z'),
+    actorLabel,
+    action,
+    summary,
+    data: {},
+  });
+
+  it('shows a checkout that was started four times in a row once, marked "4 times"', () => {
+    const started = 'Riley Carter started checkout for CRM and WMS.';
+    const rows = foldRepeats([
+      row('a', 'checkout.started', started),
+      row('b', 'checkout.started', started),
+      row('c', 'checkout.started', started),
+      row('d', 'checkout.started', started),
+      row('e', 'trial.started', 'Riley Carter started a free trial of CRM and WMS.'),
+    ]);
+    expect(rows.map((entry) => [entry.id, entry.times])).toEqual([
+      ['a', 4],
+      ['e', 1],
+    ]);
+  });
+
+  it('never folds payments or emails, a different person, different words, or rows that are not next to each other', () => {
+    const paid = 'Payment of $395.20 succeeded.';
+    const started = 'Riley Carter started checkout for CRM.';
+    const rows = foldRepeats([
+      row('a', 'payment.succeeded', paid, 'KitStak'),
+      row('b', 'payment.succeeded', paid, 'KitStak'),
+      row('c', 'checkout.started', started),
+      row('d', 'checkout.started', 'Sam Rivera started checkout for CRM.', 'Sam Rivera'),
+      row('e', 'checkout.started', started),
+      row('f', 'email.sent', 'We emailed a receipt to riley@example.com.', 'KitStak'),
+      row('g', 'checkout.started', started),
+    ]);
+    expect(rows.map((entry) => entry.times)).toEqual([1, 1, 1, 1, 1, 1, 1]);
+    expect(foldRepeats([])).toEqual([]);
+  });
+});
+

@@ -131,7 +131,7 @@ opens everything.
 | Verify email | portal `/verify-email` | 6 digit code; can skip for now | signup |
 | Welcome | portal `/welcome` then `/` | Wizard already answered, setup guide with 3 to 5 steps | signup |
 | Use the apps | CRM, WMS, Projects, Pulse | Trial banner with the end date and one button | apps |
-| Add a card | portal `/billing/checkout` then Stripe Checkout | Review step with three facts, then pay page | billing-ui, foundation |
+| Pick a plan | portal `/billing/plan`, then `/billing/checkout`, then Stripe Checkout | The picker to pay (one filled button), the review step with three facts, then the pay page | billing-ui, foundation |
 | Come back | portal `/billing/checkout/success` | Access confirmed in seconds | billing-ui |
 | Run the plan | portal `/billing` | Plan, cost, next charge, card, invoices, usage | billing-ui |
 | Change it | portal `/billing/plan` | Preview, confirm, done | billing-ui |
@@ -341,9 +341,17 @@ The same check runs when a signed in person opens `/login`, `/signup` or `/welco
   Nobody answers the same question twice.
 - Saving the profile closes the signup intent.
 - The setup guide gains one step at the end, key `billing_plan`, title "Pick your plan". It is `ready` during
-  a free trial with the text "Add a card any time before Dec 7. No charge until then." and the button "Pick a
+  a free trial with the text "Pick a plan any time before Dec 7. No charge until then." and the button "Pick a
   plan". It is `done` when a card is on file or the plan is paid. It is not shown for organizations on a
-  manual grant or with no trial. `docs/integration/ONBOARDING.md` lists the new key (signup lane).
+  manual grant or with no trial, and not to a person who cannot pay (not an owner, not a billing manager).
+  `docs/integration/ONBOARDING.md` lists the new key (signup lane).
+- The guide on the launcher and in Organization settings is the QUICK START: the same 3 to 5 steps, the same
+  count and the same minutes the welcome screen showed (`pickGuideSteps` in `apps/portal/src/lib/setup-model.ts`).
+  It is "Tell us about your business", then the first step of each area in turn, then "Pick your plan". The
+  pick does not change as steps are done. The next step is open with the one filled button. The other rows
+  are one line each. Every other step sits behind "Show all steps" and does not move the count.
+- Answers given on the marketing site count as done even when the person presses "Skip for now" on the
+  welcome screen.
 - The guide still lists 3 to 5 steps tied to the chosen apps and still follows ONBOARDING.md.
 
 ## 6. Billing in the portal
@@ -360,8 +368,11 @@ one row of four cards, then two columns.
 |:-|:-|:-|
 | Plan | App chips, seats and warehouses, monthly or yearly, the phase line from the table below | Change plan |
 | Cost | "$395.20 per month" (or per year with the per month view), "Includes your 20% bundle discount." when true | See the math (opens the lines) |
-| Next charge | "Dec 7, 2026" and the amount; in a trial with no card: "No charge planned. Add a card to keep your apps after Dec 7." | Add a card (trial) |
-| Payment method | "Visa ending 4242, expires 08/28" or "No card yet" | Update card or Add a card |
+| Next charge | "Dec 7, 2026" and what the card will really be charged (the price, less a promo code, less credit, each named); in a trial with no card: "No charge planned. Pick a plan to keep your apps after Dec 7." | none |
+| Payment method | "Visa ending 4242, expires 08/28" or "No card yet. You add it when you pick a plan." | Update card (when a card is on file) |
+
+One name for the paying step everywhere: "Pick a plan" (the banner, the emails, the setup guide, billing home).
+The card row has one filled button, on the Plan card.
 
 Left column: **Usage** ("Seats: 5 of 5 used", "Warehouses: 1 of 1 used", each with a bar and a hint such as
 "You pay for 6 seats and use 5. Remove a seat to save $23.20 per month."), then **Your apps** (one row per app
@@ -378,7 +389,7 @@ What the Plan card and the main button say in each phase:
 | Phase | Line on the Plan card | Main button | Other actions |
 |:-|:-|:-|:-|
 | `none` | You have no plan yet. Try any app free for 14 days. | Start free trial | |
-| `trial` | Free trial. 9 days left. Ends Dec 7, 2026. | Add a card | Change apps |
+| `trial` | Free trial. 9 days left. Ends Dec 7, 2026. | Pick a plan | Change trial apps |
 | `active`, first charge still ahead | Free trial. Your first payment is on Dec 7, 2026. | Change plan | Update card, Cancel plan |
 | `trial_ended` | Your free trial ended on Dec 7, 2026. Your apps are view only. Your data is safe. | Pick a plan | |
 | `active` | Your plan is active. | Change plan | Update card, Cancel plan |
@@ -413,7 +424,8 @@ The same `PlanPicker` as signup, inside the billing shell. It opens in the right
 | Situation | Mode | Main button |
 |:-|:-|:-|
 | No trial yet and eligible | `trial` | Start my free trial |
-| In a free trial, no card | `trial_change` | Save my apps (and a second button: Add a card) |
+| In a free trial, no card, opened from "Pick a plan" | `checkout` | Continue to review (and a quiet link: Change your trial apps) |
+| In a free trial, no card, opened from "Change trial apps" (`?apps=1`) or "Add <app>" (`?add=`), or by a person who cannot pay | `trial_change` | Save my apps (and a quiet link: Pick a plan) |
 | Trial over, or plan ended | `checkout` | Continue to review |
 | Paid plan | `change` | Review change |
 
@@ -641,7 +653,7 @@ Shown at the top of the app shell, above the page, never over content.
 
 | Kind | Tone | Text | Button |
 |:-|:-|:-|:-|
-| `trial` (more than 3 days left) | info | Free trial. 9 days left. Ends Dec 7. | Pick a plan |
+| `trial` (more than 3 days left, from the second day on) | info | Free trial. 9 days left. Ends Dec 7. | Pick a plan |
 | `trial_ending` (3 days or less) | warning | Your free trial ends in 2 days, on Dec 7. | Pick a plan |
 | `trial_ending` (last day) | warning | Your free trial ends today. | Pick a plan |
 | `trial_with_card` | info | Free trial. Your first payment of $395.20 is on Dec 7. | See my plan |
@@ -674,11 +686,20 @@ The main button is `billingLink(portal, { to: 'add', product: 'crm' }, 'crm')`. 
 CRM is 3 clicks: the WMS row in the app switcher, "Add WMS to my plan", "Confirm change". The price line shows
 the bundle discount on both apps.
 
+No app shows the `trial` banner on the first day of a trial: nobody is asked to pick a plan a minute after
+starting a "no card needed" trial. The Portal shows one notice at a time (an urgent plan notice, else "verify
+your email", else a calm plan notice), never the calm one on the welcome screen, and no banner button on the
+picker and review screens. On phones a notice is one row: the words and the button side by side.
+
 ### 9.4 View only
 
 In view only the app opens and reads as usual, with the danger banner on top. Every write is refused at the
 app's server choke point with one plain message: "Your plan is view only right now. Pick a plan in the Portal
-to make changes." Exports and downloads keep working. `CONTRACTS.md` section 18 lists the choke points and
+to make changes." Exports and downloads keep working. The person is told BEFORE a form opens: `ViewOnlyGuard`
+from `@kitstak/ui/view-only` sits in every app shell. A press on a control marked `data-plan-write`, a link to
+a create screen (`/jobs/new`, `/log`, `/projects/new`, the CRM import), or a create dialog opened through an
+app's store (CRM boards and invites, Projects quick add) opens one small dialog with the banner's words and
+the banner's button. A create screen opened by its address shows the same message over the page. `CONTRACTS.md` section 18 lists the choke points and
 error codes per app. If a path cannot be made view only safely, it is locked, never left open.
 
 ### 9.5 Other integration points
@@ -717,7 +738,7 @@ mail goes to the billing email (if set), every owner and every billing manager.
 | `payment_action_required` | The bank wants approval | Your bank needs you to approve a KitStak payment | Amount, what to do | Approve payment |
 | `grace_ending` | 1 day before view only | Last day to fix your KitStak payment | Amount, tomorrow's date, "Nothing is deleted." | Update card |
 | `cancel_scheduled` | Cancel confirmed | Your KitStak plan will end on Dec 23 | Keep access until then, how to undo | Keep my plan |
-| `paused` | Pause confirmed | Your KitStak plan is paused | Pause start, the date it starts again | See my plan |
+| `paused` | Pause confirmed (it is planned, not running yet) | Your KitStak plan will pause on Dec 23 | Pause start, the date it starts again | See my plan |
 | `plan_ended` | The plan's last day passed | Your KitStak plan has ended. Your data is safe. | Apps are view only, how to come back | Pick a plan |
 
 Each email is sent once (a unique key per email in the outbox table). The dev outbox page lists every email
@@ -877,7 +898,7 @@ Run with `ENTITLEMENTS_DEV_ALLOW_ALL=0` in the portal and the product apps. Each
 | `pause.spec.ts` | Pause 2 months: dates shown. Shift past the start: view only, no invoice made. Shift past the end: active again and billed. |
 | `roles.spec.ts` | A billing manager who is a plain member can pay, change and download. A member sees the small card only. An admin can read but not change. |
 | `webhook-replay.spec.ts` | Post the same signed test event twice and a bad signature once (CONTRACTS 12.2 results). |
-| `apps-integration.spec.ts` | In CRM, WMS, Projects and Pulse: the trial banner text matches the portal's; an app not in the plan shows the lock screen with the price; adding WMS from the CRM takes 3 clicks. |
+| `apps-integration.spec.ts` | In CRM, WMS, Projects and Pulse: the trial banner text matches the portal's; an app not in the plan shows the lock screen with the price; adding WMS from the CRM takes 3 clicks. In a view only CRM, "New board", "Invite" and "Import" open the view only dialog and no form, and nothing is created. |
 | `a11y-mobile.spec.ts` | At 360 px: no sideways scroll on signup, picker, review, billing home, cancel. Keyboard only run of signup to trial. Reduced motion: no confetti node. |
 | `billing-off.spec.ts` | Portal started in production mode with no key (a second run config): pay buttons are disabled with the plain message; trial start still works. |
 

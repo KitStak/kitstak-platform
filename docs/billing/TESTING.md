@@ -104,7 +104,7 @@ ENTITLEMENTS_DEV_ALLOW_ALL=0 deploy/dev/app-start.sh crm projects pulse wms
 | `invite-verified.spec.ts` | Joining from the emailed invite link: the email is verified, no code email is sent, no banner on the launcher or on billing, and the proof is not left in the address bar. The same invite opened without the proof still works and that person verifies with a code. "Change email" on the verify screen keeps the account, the organization and the trial, and the new code verifies the new address. |
 | `webhook-replay.spec.ts` | The same signed test event twice: 200 then 200 `duplicate`, one ledger row. A changed body with the old signature: 400, no row. No signature: 400. The Stripe route with no key: 503. The job route with a wrong secret. |
 | `lifecycle.spec.ts` | The whole road in one test: signup, trial, paid, plan change, failed payment, fix, cancel. Then the activity page lists it in plain words, the filters and the CSV work, and the outbox shows every email with its HTML and text. |
-| `apps-integration.spec.ts` | The trial banner in the CRM says the same words as the portal's. Projects, Pulse and WMS, which are not in the trial, show the lock screen with the end date, the price after the trial and one button. Adding an app from its lock screen takes 2 clicks, and the app then opens. The test prints which apps it checked and which it skipped. |
+| `apps-integration.spec.ts` | The trial banner in the CRM says the same words as the portal's. Projects, Pulse and WMS, which are not in the trial, show the lock screen with the end date, the price after the trial and one button. Adding an app from its lock screen takes 2 clicks, and the app then opens. The test prints which apps it checked and which it skipped. A second test ends a trial and proves view only is told before a form opens: in the CRM, "New board", "Invite" and "Import" open the view only dialog with the banner's words and button, no form opens, and no board or invite row is written. |
 | `a11y-mobile.spec.ts` | At 360 px: no sideways scroll on signup, picker, verify, welcome, billing home, plan, review, invoices, details, team, cancel, activity, the outbox and the template gallery. The main buttons are 44 px tall. Signup to trial with the keyboard alone: Tab, Space on a switch, arrow keys on the stepper, Enter. Reduced motion: no confetti, and with motion allowed the confetti is there. |
 | `billing-off.spec.ts` | A portal in production mode with no key: pay buttons are disabled with the plain message, the test gateway and the outbox do not exist, and a trial can still start. |
 
@@ -119,7 +119,15 @@ ENTITLEMENTS_DEV_ALLOW_ALL=0 deploy/dev/app-start.sh crm projects pulse wms
 - `E2E_BILLING_OFF_URL=http://localhost:3310 pnpm -F kitstak-portal e2e billing-off`, with a built portal
   started in production mode with no keys: 1 passed.
 
-Real Stripe and real email were not part of either run. Do not trust this file for a pass count: run the
+2026-11-23, review round 1, while the backend and the screen fixes were both still landing: `pnpm -F
+kitstak-portal e2e` ran 32 tests in 6.0 minutes: 26 passed, 1 skipped (`billing-off`), 5 failed. The five
+(`apps-integration`, `checkout-success`, `signup-trial`, `trial-end`, `verify-email`) each waited for a
+screen text or button that the screen lane was changing at that moment (the trial banner on day one, the
+"Add a card" button, the verify banner words). The new `credit-promo` and `invite-verified` specs and
+`plan-change`, `seat-limit`, `roles`, `lifecycle` and `payment-failed` passed. Run the suite again once
+both lanes are done.
+
+Real Stripe and real email were not part of any run. Do not trust this file for a pass count: run the
 suite.
 
 ### When a test fails

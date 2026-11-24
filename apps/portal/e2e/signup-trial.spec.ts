@@ -110,8 +110,11 @@ test.describe('signup to free trial', () => {
     await expect(page.getByTestId('tile-crm')).toBeVisible({ timeout: 90_000 });
     await expect(page.getByTestId('tile-wms')).toBeVisible();
 
-    // The portal shell says the trial is running, with its end date and one button.
-    await expect(page.getByTestId('plan-notice-trial')).toContainText('Free trial. 14 days left.');
-    await expect(page.getByTestId('plan-notice-action').first()).toHaveText(/Pick a plan/);
+    // First session: nobody is asked to pick a plan a minute into a "no card needed" trial. The
+    // tiles say the trial is running. The banner starts on the second day.
+    await expect(page.getByTestId('plan-notice-trial')).toHaveCount(0);
+    // The quick start is the 5 steps the welcome screen promised, with the answers already ticked.
+    await expect(page.getByTestId('setup-steps').locator('li')).toHaveCount(5);
+    await expect(page.getByTestId('setup-progress')).toContainText('1 of 5 done');
   });
 });

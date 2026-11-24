@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { APP_URLS, CART_CRM_2, allowAllIsOn, appIsUp, entitlementsOf, holdDevReloads, sql, textOf, trialAccount } from './support';
+import { APP_URLS, CART_CRM_2, allowAllIsOn, appIsUp, entitlementsOf, expectPhase, holdDevReloads, runTestTool, sql, textOf, trialAccount } from './support';
 
 type AppId = keyof typeof APP_URLS;
 const APP_NAME: Readonly<Record<AppId, string>> = { crm: 'CRM', wms: 'WMS', projects: 'Projects', pulse: 'Pulse' };
@@ -36,8 +36,12 @@ test.describe('one suite: the same banner and lock screen in every app', () => {
     await holdDevReloads(page.context());
     const { orgId } = await trialAccount(page, 'suite', CART_CRM_2);
     const slug = await slugOf(orgId);
+    // No app asks for a plan on the first day of a trial. The banner starts on the second day.
+    await expect(page.getByTestId('plan-notice-trial')).toHaveCount(0);
+    await runTestTool(page, 'shift-1');
+    await page.reload();
     const portalBanner = await textOf(page.getByTestId('plan-notice-trial'));
-    expect(portalBanner).toMatch(/^Free trial\. 14 days left\. Ends [A-Z][a-z]{2} \d{1,2}\./);
+    expect(portalBanner).toMatch(/^Free trial\. 13 days left\. Ends [A-Z][a-z]{2} \d{1,2}\./);
     const endsOn = /Ends ([A-Z][a-z]{2} \d{1,2})\./.exec(portalBanner)![1]!;
 
     const checked: string[] = [];
@@ -50,7 +54,7 @@ test.describe('one suite: the same banner and lock screen in every app', () => {
         const banner = page.getByTestId('plan-notice-trial');
         await expect(banner).toBeVisible();
         // The same sentence as the portal, word for word.
-        expect((await textOf(banner)).startsWith(`Free trial. 14 days left. Ends ${endsOn}.`)).toBe(true);
+        expect((await textOf(banner)).startsWith(`Free trial. 13 days left. Ends ${endsOn}.`)).toBe(true);
         await expect(page.getByTestId('plan-notice-action').first()).toHaveText(/Pick a plan/);
         await expect(page.getByTestId('plan-notice-action').first()).toHaveAttribute('href', /\/billing\/plan/);
         checked.push('crm: trial banner');
@@ -126,5 +130,45 @@ test.describe('one suite: the same banner and lock screen in every app', () => {
     for (const line of skipped) test.info().annotations.push({ type: 'skipped part', description: line });
     // The test is only worth a pass if at least one product app was really checked.
     test.skip(checked.filter((line) => !line.startsWith('portal')).length === 0, `No product app could be checked: ${skipped.join('; ')}.`);
+  });
+  test('view only is told before a form opens: the create buttons open one small dialog, never the form', async ({ page }) => {
+    test.setTimeout(420_000);
+    await holdDevReloads(page.context());
+    const { orgId } = await trialAccount(page, 'viewonly', CART_CRM_2);
+    const slug = await slugOf(orgId);
+    // The trial ends with no card: every app is view only.
+    await runTestTool(page, 'shift-trial-end');
+    await page.reload();
+    await expectPhase(page, 'trial_ended');
+
+    if (!(await appIsUp(page, `${APP_URLS.crm}/login`))) test.skip(true, 'The CRM is not running.');
+    const state = await openApp(page, 'crm', slug);
+    test.skip(state !== 'banner', 'The CRM runs with the allow all switch on, so it is never view only here.');
+    await expect(page.getByTestId('plan-notice-trial_ended')).toBeVisible();
+    await expect(page.getByTestId('home-page')).toBeVisible({ timeout: 90_000 });
+
+    const dialog = page.getByTestId('view-only-dialog');
+    for (const button of [page.getByTestId('home-new-board'), page.getByRole('button', { name: /^Invite/ }).first(), page.getByRole('button', { name: 'Import' }).first()]) {
+      if ((await button.count()) === 0) continue;
+      await button.click();
+      // The dialog repeats the banner's words and the banner's button. No create or invite form is open.
+      await expect(dialog).toBeVisible();
+      await expect(page.getByTestId('view-only-text')).toContainText('Pick a plan to keep working.');
+      await expect(page.getByTestId('view-only-action')).toHaveText('Pick a plan');
+      await expect(page.getByTestId('view-only-action')).toHaveAttribute('href', /\/billing\/plan/);
+      await expect(page.locator('[role="dialog"]:not(.ks-viewonly)')).toHaveCount(0);
+      await page.getByTestId('view-only-close').click();
+      await expect(dialog).toBeHidden();
+    }
+    // Nothing was created by any of the presses.
+    const boards = await sql<{ n: string }>(`SELECT count(*)::text AS n FROM crm.boards WHERE org_id = $1`, [orgId]);
+    expect(boards[0]?.n).toBe('0');
+    const invites = await sql<{ n: string }>(`SELECT count(*)::text AS n FROM core.invitation WHERE organization_id = $1`, [orgId]);
+    expect(invites[0]?.n).toBe('0');
+    // The dialog's button is the way out: the plan picker in the Portal.
+    await page.getByTestId('home-new-board').click();
+    await page.getByTestId('view-only-action').click();
+    await page.waitForURL(/\/billing\/plan/, { timeout: 90_000 });
+    await expect(page.getByTestId('plan-picker')).toHaveAttribute('data-mode', 'checkout');
   });
 });

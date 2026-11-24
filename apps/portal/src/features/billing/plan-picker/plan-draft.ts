@@ -1,7 +1,7 @@
 /**
- * An unsaved picker change, kept in this browser so a refresh or a closed tab does not lose it
- * (docs/billing/SPEC.md 5.6). Used for changes that need a confirm step: trial apps and a paid plan.
- * The plan to pay for and the signup cart are saved on the server instead.
+ * An unsaved change to the apps in a free trial, kept in this browser so a refresh or a closed tab
+ * does not lose it (docs/billing/SPEC.md 5.6). The plan to pay for and the signup cart are saved on
+ * the server instead. A paid plan keeps no draft: its picker always opens on the plan as it is.
  *
  * A draft is tied to the plan it started from (`base`). When the plan changes (someone saved, a
  * renewal ran), the draft is dropped. It is also dropped after a day. Storage can be blocked or

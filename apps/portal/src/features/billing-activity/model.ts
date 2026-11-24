@@ -141,6 +141,33 @@ export function groupByDay(items: readonly ActivityItem[], now: Date, timeZone: 
   return days;
 }
 
+/** Actions a person can repeat by pressing a button again without changing anything. */
+const REPEATABLE: ReadonlySet<string> = new Set(['checkout.started', 'checkout.expired', 'cart.saved']);
+
+export interface ActivityRow extends ActivityItem {
+  /** How many times in a row this happened (same person, same words). 1 for a single event. */
+  readonly times: number;
+}
+
+/**
+ * The page shows each thing once. "Riley started checkout for CRM and WMS." four times in a row
+ * (the person went to the pay page and came back) reads as one row marked "4 times", with the time
+ * of the newest one. Only the same action, by the same person, with the same words, next to each
+ * other on the same day is folded. The CSV file still has every row.
+ */
+export function foldRepeats(items: readonly ActivityItem[]): ActivityRow[] {
+  const rows: ActivityRow[] = [];
+  for (const item of items) {
+    const last = rows[rows.length - 1];
+    if (last && REPEATABLE.has(item.action) && last.action === item.action && last.summary === item.summary && last.actorLabel === item.actorLabel) {
+      rows[rows.length - 1] = { ...last, times: last.times + 1 };
+    } else {
+      rows.push({ ...item, times: 1 });
+    }
+  }
+  return rows;
+}
+
 /** A cell for a CSV file. Quoted, and never able to start a formula in a spreadsheet. */
 export function csvCell(value: string): string {
   const guarded = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
