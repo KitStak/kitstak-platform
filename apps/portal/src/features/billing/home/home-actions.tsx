@@ -127,6 +127,13 @@ export function HomeActionButton({
           router.refresh();
           return;
         }
+        // The bank wants the card holder to approve the payment. That step is on Stripe's own page
+        // for this bill (the server only ever hands out an https Stripe address here).
+        if (result.error.code === 'payment_needs_approval' && result.error.actionUrl) {
+          setError(result.error.message);
+          window.location.assign(result.error.actionUrl);
+          return;
+        }
         setError(result.error.message);
       }
     } catch {

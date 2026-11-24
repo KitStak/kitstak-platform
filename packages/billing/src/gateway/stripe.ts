@@ -36,6 +36,7 @@ import {
   type BillingAddress,
   type BillingGateway,
   type ChangePreview,
+  GatewayAmountChangedError,
   GatewayCardError,
   type GatewayCheckoutSession,
   type GatewayEvent,
@@ -57,6 +58,8 @@ const LOOKUP_CHUNK = 10;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRODUCT_ID_PREFIX = 'kitstak_';
 const SUBSCRIPTION_EXPAND = ['default_payment_method', 'customer.invoice_settings.default_payment_method'];
+/** Marks the invoice that bills the new period when a pause is ended early. Its value is the subscription id. */
+const RESTART_MARK = 'kitstak_restart';
 
 type Loose = Record<string, unknown>;
 
@@ -253,6 +256,86 @@ export function upcomingFromPreview(preview: unknown): UpcomingFacts {
   };
 }
 
+/** What a change will bill right now, read from Stripe's preview of it. */
+export interface ChangeFacts {
+  readonly lines: GatewayInvoiceLine[];
+  /** The total of the invoice this change makes. Below 0 when the change hands back credit. */
+  readonly totalCents: number;
+  readonly taxCents: number;
+  /** What the card is asked for now, after the customer's credit balance. Never below 0. */
+  readonly dueTodayCents: number;
+}
+
+function waitingItemIdOf(line: unknown): string | null {
+  const parent = loose(loose(line).parent);
+  return idOf(loose(parent.subscription_item_details).invoice_item) ?? idOf(loose(parent.invoice_item_details).invoice_item);
+}
+
+/** One line as it counts toward the invoice total: its amount, minus its discounts, plus tax that is added on top. */
+function lineNet(line: unknown): { net: number; tax: number } {
+  const record = loose(line);
+  const amount = num(record.amount) ?? 0;
+  const discount = sumAmounts(record.discount_amounts);
+  let added = 0;
+  let tax = 0;
+  for (const entry of Array.isArray(record.taxes) ? record.taxes : []) {
+    const value = num(loose(entry).amount) ?? 0;
+    tax += value;
+    if (loose(entry).tax_behavior !== 'inclusive') added += value;
+  }
+  return { net: amount - discount + added, tax };
+}
+
+/**
+ * Reads the preview of a change (found on the real Stripe sandbox). Stripe's preview lists every
+ * invoice line that is waiting on the customer, also lines from before this change. But the invoice
+ * that a change makes ("always invoice") holds only the lines of that change: the older lines stay
+ * where they are until the next renewal. So a preview with older lines in it shows another amount
+ * than the card is then charged.
+ *
+ * `waitingItemIds` are the invoice items that waited on the customer before the preview was asked
+ * for. Their lines are left out and the amounts are worked out again from the lines that remain, so
+ * the number a person confirms is the number on the invoice. With no older lines (the normal case:
+ * this adapter no longer leaves any) Stripe's own totals are used as they are.
+ */
+export function changeFromPreview(preview: unknown, waitingItemIds: ReadonlySet<string>): ChangeFacts {
+  const record = loose(preview);
+  const list = loose(record.lines);
+  const rawLines: unknown[] = Array.isArray(list.data) ? list.data : [];
+  const isOlder = (line: unknown): boolean => {
+    const id = waitingItemIdOf(line);
+    return id !== null && waitingItemIds.has(id);
+  };
+  if (!rawLines.some(isOlder)) {
+    const invoice = toInvoice(preview);
+    const total = invoice.totalCents;
+    return {
+      lines: [...invoice.lines],
+      totalCents: total,
+      taxCents: invoice.taxCents,
+      dueTodayCents: total > 0 ? Math.max(0, num(record.amount_due) ?? total) : 0,
+    };
+  }
+  // The amounts below need every line. A preview page holds the first lines only.
+  if (list.has_more === true) throw new Error('Too many invoice lines are waiting on this customer to price a change.');
+  const kept = rawLines.filter((line) => !isOlder(line));
+  let total = 0;
+  let tax = 0;
+  for (const line of kept) {
+    const part = lineNet(line);
+    total += part.net;
+    tax += part.tax;
+  }
+  // A negative starting balance is credit the customer holds. Stripe takes it off the invoice.
+  const balance = num(record.starting_balance) ?? 0;
+  return {
+    lines: kept.map(toInvoiceLine),
+    totalCents: total,
+    taxCents: tax,
+    dueTodayCents: total > 0 ? Math.max(0, total + balance) : 0,
+  };
+}
+
 function toSubscription(subscription: unknown, facts: UpcomingFacts | null = null): GatewaySubscription {
   const record = loose(subscription);
   const itemList = loose(record.items).data;
@@ -326,6 +409,10 @@ function isMissing(error: unknown): boolean {
 
 function asCardError(error: unknown): GatewayCardError | null {
   const record = loose(error);
+  // The bank wants the person to approve the charge (3D Secure). The card could not be charged now.
+  if (record.code === 'invoice_payment_intent_requires_action' || record.code === 'authentication_required') {
+    return new GatewayCardError('The bank needs the card holder to approve this payment.', 'authentication_required');
+  }
   if (record.type === 'StripeCardError' || record.code === 'card_declined' || str(record.decline_code)) {
     return new GatewayCardError('The card was declined.', str(record.decline_code) ?? str(record.code));
   }
@@ -520,25 +607,65 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
     }
   }
 
+  /** The invoice items that wait on the customer right now. Their lines are not part of a change. */
+  async function waitingItemIds(customerId: string): Promise<Set<string>> {
+    const ids = new Set<string>();
+    const page = await stripe().invoiceItems.list({ customer: customerId, pending: true, limit: 100 });
+    for (const item of page.data) ids.add(item.id);
+    return ids;
+  }
+
+  /**
+   * True when a change starts a new paid period today: the billing period itself changes (monthly to
+   * yearly or back) on a plan that has been paid for.
+   *
+   * Found on the real Stripe sandbox: Stripe no longer starts a new period by itself when the price
+   * interval changes (its "flexible" billing mode keeps the old renewal day). Left alone, a switch to
+   * yearly on day 10 billed "the rest of a year that began 10 days ago", and the confirm panel, the
+   * next charge date and the receipt all said something else. So the adapter asks for the new period
+   * in so many words (`billing_cycle_anchor: now`): the new month or year starts today and is billed
+   * in full, and the unused part of the old one comes off. Inside a free trial nothing has been paid
+   * and the first charge stays on the day the trial ends, so nothing restarts there.
+   */
+  function restartsPeriod(current: GatewaySubscription, selection: PlanSelection): boolean {
+    const trialing = current.status === 'trialing' && current.trialEnd !== null;
+    return selection.interval !== current.interval && !trialing;
+  }
+
   async function preview(subscription: Stripe.Subscription, selection: PlanSelection, askedDate: Date): Promise<ChangePreview> {
     const current = toSubscription(subscription);
     const items = await itemParams(subscription, selection);
+    // Asked before the preview, so the preview's own new lines can never be mistaken for older ones.
+    const waiting = await waitingItemIds(current.customerId);
+    const restart = restartsPeriod(current, selection);
     let prorationDate = askedDate;
-    const upcoming = await withProrationDate(askedDate, (used) => {
-      prorationDate = used;
-      return stripe().invoices.createPreview({
+    let upcoming: unknown;
+    if (restart) {
+      // Stripe takes no proration date together with a new period: it counts the unused time from
+      // the moment of the call. `applyChange` checks the amount again right before it charges.
+      prorationDate = new Date(Math.floor(now().getTime() / 1000) * 1000);
+      upcoming = await stripe().invoices.createPreview({
         customer: current.customerId,
         subscription: subscription.id,
-        subscription_details: {
-          items,
-          proration_date: unix(used),
-          proration_behavior: 'always_invoice',
-        },
+        subscription_details: { items, billing_cycle_anchor: { type: 'now' }, proration_behavior: 'always_invoice' },
       });
-    });
-    const invoice = toInvoice(upcoming);
-    const total = invoice.totalCents;
-    const dueToday = total > 0 ? Math.max(0, num(loose(upcoming).amount_due) ?? total) : 0;
+    } else {
+      upcoming = await withProrationDate(askedDate, (used) => {
+        prorationDate = used;
+        return stripe().invoices.createPreview({
+          customer: current.customerId,
+          subscription: subscription.id,
+          subscription_details: {
+            items,
+            proration_date: unix(used),
+            proration_behavior: 'always_invoice',
+          },
+        });
+      });
+    }
+    const change = changeFromPreview(upcoming, waiting);
+    const total = change.totalCents;
+    const dueToday = change.dueTodayCents;
     const oldRecurring = current.items.reduce((sum, item) => sum + item.unitCents * item.quantity, 0);
     const newRecurring = quote(selection).totalCents;
     const intervalChanged = selection.interval !== current.interval;
@@ -551,15 +678,128 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
       nextChargeAt: trialing && current.trialEnd
         ? current.trialEnd
         : intervalChanged
-          ? // A new period starts at the moment of the change, whatever date the unused time is counted from.
+          ? // A new period starts at the moment of the change.
             addInterval(now(), selection.interval)
           : current.currentPeriodEnd,
       prorationDate,
-      lines: invoice.lines,
-      taxCents: invoice.taxCents,
+      lines: change.lines,
+      taxCents: change.taxCents,
       proratedCents: total > 0 ? total : 0,
       creditAppliedCents: total > 0 ? total - dueToday : 0,
     };
+  }
+
+  /**
+   * The safety net under a change that starts a new period. Its unused time is counted from the
+   * moment Stripe gets the call, so one second after the last preview the invoice can come out a cent
+   * higher. A person is never charged more than the amount they confirmed: whatever the invoice
+   * asked on top is sent straight back to the card with a credit note on that invoice.
+   */
+  async function refundAnyExcess(updated: Stripe.Subscription, confirmedTotalCents: number): Promise<void> {
+    const invoiceId = idOf(loose(updated).latest_invoice);
+    if (!invoiceId) return;
+    try {
+      const invoice = loose(await stripe().invoices.retrieve(invoiceId));
+      const excess = (num(invoice.total) ?? 0) - confirmedTotalCents;
+      const paid = num(invoice.amount_paid) ?? 0;
+      if (invoice.status !== 'paid' || excess <= 0 || paid <= 0) return;
+      const back = Math.min(excess, paid);
+      await stripe().creditNotes.create({ invoice: invoiceId, amount: back, refund_amount: back, reason: 'order_change' });
+      process.stderr.write(`[kitstak-billing] invoice ${invoiceId} came out ${String(excess)} cents above the confirmed amount. ${String(back)} cents were refunded.\n`);
+    } catch (error) {
+      // Loud on purpose: a person may have paid a cent or two more than they confirmed.
+      process.stderr.write(
+        `[kitstak-billing] COULD NOT CHECK THE AMOUNT of invoice ${invoiceId} against the confirmed amount: ${str(loose(error).message) ?? 'error'}\n`,
+      );
+    }
+  }
+
+  /** Drops an invoice that must not stay collectable: a draft is deleted, an open one is voided. */
+  async function dropInvoice(invoiceId: string): Promise<void> {
+    try {
+      const status = str(loose(await stripe().invoices.retrieve(invoiceId)).status);
+      if (status === 'draft') await stripe().invoices.del(invoiceId);
+      else if (status === 'open') await stripe().invoices.voidInvoice(invoiceId);
+    } catch {
+      process.stderr.write(`[kitstak-billing] could not drop invoice ${invoiceId}. Void it by hand in Stripe.\n`);
+    }
+  }
+
+  /**
+   * Bills the new period of a plan that is started again in the middle of a pause, before the pause
+   * is lifted. Throws `GatewayCardError`, and leaves nothing open, when the card cannot be charged.
+   *
+   * Why this is done by hand (found on the real Stripe sandbox): while collection is paused Stripe
+   * keeps making the invoice of each period and drops it, and from then on it counts that period as
+   * billed. Asking Stripe for a new period with no proration made no invoice at all, and asking for
+   * one with proration billed only the days after the dropped period. Both gave the month away. So
+   * the invoice for the new period is made here from the subscription's own prices and quantities,
+   * and paid, and only then is the pause lifted. The invoice carries a mark, so a second try after a
+   * failure between the two steps finds it and does not bill again.
+   */
+  async function billRestart(subscription: Stripe.Subscription): Promise<void> {
+    const record = loose(subscription);
+    const current = toSubscription(subscription);
+    const start = now();
+    const end = addInterval(start, current.interval);
+
+    const recent = await stripe().invoices.list({ customer: current.customerId, limit: 20 });
+    for (const invoice of recent.data) {
+      const entry = loose(invoice);
+      if (loose(entry.metadata)[RESTART_MARK] !== subscription.id) continue;
+      // An older pause of the same plan has its own invoice. Only one of this pause counts.
+      if ((num(entry.created) ?? 0) < unix(current.currentPeriodStart)) continue;
+      if (entry.status === 'paid') return;
+      if (invoice.id && (entry.status === 'draft' || entry.status === 'open')) await dropInvoice(invoice.id);
+    }
+
+    const rawItems: unknown[] = Array.isArray(loose(record.items).data) ? (loose(record.items).data as unknown[]) : [];
+    const billable = rawItems.filter((raw) => priceKeyOf(loose(raw).price) !== null);
+    if (billable.length === 0) throw new Error('The plan has no items to bill.');
+    // A promo code on the plan keeps counting.
+    const discounts = (Array.isArray(record.discounts) ? record.discounts : [])
+      .map((entry) => idOf(entry))
+      .filter((id): id is string => id !== null)
+      .map((id) => ({ discount: id }));
+    const orgId = orgIdFrom(record.metadata);
+    const draft = await stripe().invoices.create({
+      customer: current.customerId,
+      subscription: subscription.id,
+      collection_method: 'charge_automatically',
+      // Paid right below, by this code. Stripe must not finalize or retry it by itself.
+      auto_advance: false,
+      automatic_tax: { enabled: config.automaticTax },
+      ...(discounts.length > 0 ? { discounts } : {}),
+      metadata: { [RESTART_MARK]: subscription.id, ...(orgId ? { kitstak_org_id: orgId } : {}) },
+    });
+    if (!draft.id) throw new Error('Stripe returned an invoice with no id.');
+    try {
+      for (const raw of billable) {
+        const item = loose(raw);
+        const price = loose(item.price);
+        const product = idOf(price.product);
+        const unitAmount = num(price.unit_amount);
+        if (!product || unitAmount === null) throw new Error('A plan item has no price to bill.');
+        // Bound to this draft, so a line can never slip onto another invoice.
+        await stripe().invoiceItems.create({
+          customer: current.customerId,
+          invoice: draft.id,
+          quantity: num(item.quantity) ?? 1,
+          price_data: { currency: str(price.currency) ?? 'usd', product, unit_amount: unitAmount },
+          period: { start: unix(start), end: unix(end) },
+        });
+      }
+      await stripe().invoices.finalizeInvoice(draft.id, { auto_advance: false });
+      const method = idOf(record.default_payment_method) ?? idOf(loose(loose(record.customer).invoice_settings).default_payment_method);
+      const paid = await stripe().invoices.pay(draft.id, method ? { payment_method: method } : {});
+      if (loose(paid).status !== 'paid') throw new GatewayCardError('The card was declined.', null);
+    } catch (error) {
+      await dropInvoice(draft.id);
+      if (error instanceof GatewayCardError) throw error;
+      const cardError = asCardError(error);
+      if (cardError) throw cardError;
+      throw error;
+    }
   }
 
   const gateway: BillingGateway = {
@@ -772,21 +1012,41 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
       return preview(subscription, normalizeSelection(selection), prorationDate);
     },
 
-    async applyChange({ subscriptionId, selection: rawSelection, prorationDate }) {
+    async applyChange({ subscriptionId, selection: rawSelection, prorationDate, expectedDueTodayCents }) {
       const selection = normalizeSelection(rawSelection);
       const subscription = await retrieveSubscription(subscriptionId);
       if (!subscription) throw new Error('Stripe subscription not found.');
       const before = toSubscription(subscription);
+      const restart = restartsPeriod(before, selection);
       const planned = await preview(subscription, selection, prorationDate);
+      // A change that starts a new period has no fixed date to count from, so its amount can move
+      // with the clock. If it moved since the person confirmed, nothing is charged: they see the new
+      // amount first.
+      if (restart && expectedDueTodayCents !== undefined && planned.dueTodayCents !== Math.round(expectedDueTodayCents)) {
+        throw new GatewayAmountChangedError();
+      }
       const items = await itemParams(subscription, selection);
-      // A change of billing period always makes an invoice now, so it must be paid or not happen.
-      const invoiceNow = planned.dueTodayCents > 0 || selection.interval !== before.interval;
+      // Every change that prorates anything makes its invoice now (found on the real Stripe sandbox).
+      // An increase is charged now. A decrease makes an invoice with a total below zero, and Stripe
+      // puts that amount on the customer's credit balance at once, where every later invoice uses it.
+      // Before, a decrease left its credit as lines that waited for the next renewal. A change made
+      // after it was then previewed with that credit and charged without it: the card was asked for
+      // more than the person had confirmed. Nothing is left waiting now. A change of billing period
+      // always makes an invoice too, so it must be paid or not happen.
+      const invoiceNow =
+        planned.dueTodayCents > 0 ||
+        planned.creditCents > 0 ||
+        selection.interval !== before.interval ||
+        planned.lines.some((line) => line.proration);
       let updated: Stripe.Subscription;
       try {
         updated = await stripe().subscriptions.update(subscriptionId, {
           items,
-          // The date the preview above really used, so the invoice equals the preview to the cent.
-          proration_date: unix(planned.prorationDate),
+          ...(restart
+            ? // The new month or year starts today (see `restartsPeriod`).
+              { billing_cycle_anchor: { type: 'now' as const } }
+            : // The date the preview above really used, so the invoice equals the preview to the cent.
+              { proration_date: unix(planned.prorationDate) }),
           proration_behavior: invoiceNow ? 'always_invoice' : 'create_prorations',
           // With this, a declined card changes nothing: the update waits and is then dropped.
           ...(invoiceNow ? { payment_behavior: 'pending_if_incomplete' as const } : {}),
@@ -809,6 +1069,11 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
         }
         throw new GatewayCardError('The card was declined.', null);
       }
+      if (restart) {
+        await refundAnyExcess(updated, planned.creditCents > 0 ? -planned.creditCents : planned.proratedCents);
+        const fresh = await retrieveSubscription(subscriptionId);
+        if (fresh) updated = fresh;
+      }
       return full(updated);
     },
 
@@ -829,10 +1094,23 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
     },
 
     async resume(subscriptionId, options) {
+      if (options?.billNow) {
+        // The paid time ran out during the pause: bill a new period today, then start it today.
+        const paused = await retrieveSubscription(subscriptionId);
+        if (!paused) throw new Error('Stripe subscription not found.');
+        if (!loose(paused).pause_collection) return full(paused);
+        await billRestart(paused);
+        const restarted = await stripe().subscriptions.update(subscriptionId, {
+          pause_collection: '',
+          // The new period starts now. Its invoice was made and paid above, so Stripe makes none.
+          billing_cycle_anchor: { type: 'now' },
+          proration_behavior: 'none',
+          expand: SUBSCRIPTION_EXPAND,
+        });
+        return full(restarted);
+      }
       const updated = await stripe().subscriptions.update(subscriptionId, {
         pause_collection: '',
-        // The paid time ran out during the pause: start a new period today and bill it today.
-        ...(options?.billNow ? { billing_cycle_anchor: { type: 'now' as const }, proration_behavior: 'none' as const } : {}),
         expand: SUBSCRIPTION_EXPAND,
       });
       return full(updated);
@@ -858,6 +1136,17 @@ export function createStripeGateway(config: BillingConfig, deps?: { client?: Str
         return toInvoice(paid);
       } catch (error) {
         const cardError = asCardError(error);
+        if (cardError?.declineCode === 'authentication_required') {
+          // Found on the real Stripe sandbox: the bank step (3D Secure) cannot be done from a server
+          // call. Stripe's own page for this invoice can do it, so the person is sent there.
+          let approveUrl: string | null = null;
+          try {
+            approveUrl = str(loose(await stripe().invoices.retrieve(invoiceId)).hosted_invoice_url);
+          } catch {
+            // Without the link the person still gets a clear message and the "Update card" way out.
+          }
+          throw new GatewayCardError(cardError.message, cardError.declineCode, approveUrl);
+        }
         if (cardError) throw cardError;
         throw error;
       }

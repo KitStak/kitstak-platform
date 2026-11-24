@@ -20,7 +20,7 @@ import {
 import { CATALOG, formatDay, formatMoney } from '../catalog';
 import { addMonths } from '../dates';
 import { type BillingResult, billingError, billingOk } from '../errors';
-import type { BillingGateway, GatewaySubscription } from '../gateway/types';
+import { type BillingGateway, GatewayCardError, type GatewaySubscription } from '../gateway/types';
 import { isLiveSubscriptionStatus, type PlanState } from '../plan-state';
 import { recordAudit } from './audit';
 import { type BillingActor, type BillingRuntime, errorText, logBilling } from './db';
@@ -323,6 +323,9 @@ export async function undoPause(
         : `${input.actor.label} took back the pause. The plan will renew as usual.`,
     });
   } catch (error) {
+    // Starting again in the middle of a pause bills a new period first. The card said no: the plan
+    // stays paused and nothing was charged.
+    if (error instanceof GatewayCardError) return billingError('card_declined');
     logBilling('error', 'undo pause failed', { orgId: input.orgId, error: errorText(error) });
     return billingError('gateway_error');
   } finally {

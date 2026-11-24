@@ -48,6 +48,7 @@ export async function retryPayment(
   if (row.status !== 'past_due' && row.status !== 'unpaid') return billingOk(await getPlanState(rt, input.orgId));
 
   let declined = false;
+  let approveUrl: string | null = null;
   try {
     const invoice = await gateway.payLatestInvoice(row.gatewaySubscriptionId);
     if (invoice.status === 'paid') {
@@ -65,6 +66,7 @@ export async function retryPayment(
       return billingError('gateway_error');
     }
     declined = true;
+    approveUrl = stripeHostedUrl(error.approveUrl);
   }
 
   try {
@@ -76,6 +78,30 @@ export async function retryPayment(
   } finally {
     clearBillingCaches(input.orgId);
   }
+  if (declined && approveUrl) {
+    // The bank wants the card holder to approve the payment. That step lives on Stripe's page for
+    // this bill, so the person is sent there. Nothing was charged.
+    return {
+      ok: false,
+      error: {
+        code: 'payment_needs_approval',
+        message: 'Your bank wants you to approve this payment. We are taking you to a secure Stripe page to do that. Nothing was charged yet.',
+        actionUrl: approveUrl,
+      },
+    };
+  }
   if (declined) return billingError('card_declined');
   return billingOk(await getPlanState(rt, input.orgId));
+}
+
+/** The link only when it is an https page on Stripe. Anything else is dropped: a person is never sent to an address we did not expect. */
+export function stripeHostedUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return url.protocol === 'https:' && (host === 'stripe.com' || host.endsWith('.stripe.com')) ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }

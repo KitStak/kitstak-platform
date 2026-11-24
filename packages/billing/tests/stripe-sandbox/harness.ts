@@ -37,6 +37,13 @@ export const SANDBOX_ENABLED = process.env.STRIPE_SANDBOX === '1' && /^(sk|rk)_t
 const STRIPE_API = 'https://api.stripe.com';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EVIDENCE_DIR = process.env.STRIPE_SANDBOX_EVIDENCE_DIR ?? resolve(HERE, '../../../../deploy/dev/.run/stripe-sandbox');
+/**
+ * Some Stripe keys need a person to approve `DELETE /v1/subscriptions/:id` in the Stripe dashboard
+ * before it runs (Stripe answers "This action requires human approval"). With such a key, set
+ * STRIPE_SANDBOX_CANCEL_NEEDS_APPROVAL=1: the two flows that end a subscription at once then check
+ * that the refusal changes nothing, instead of checking the cancel itself.
+ */
+export const CANCEL_NEEDS_APPROVAL = process.env.STRIPE_SANDBOX_CANCEL_NEEDS_APPROVAL === '1';
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const HOUR_MS = 60 * 60 * 1000;
 
@@ -292,18 +299,25 @@ export class Sandbox {
   /** New Stripe events about this customer, oldest first. Events already returned are left out. */
   async pullEvents(): Promise<StripeEventBody[]> {
     const get = stripeReader(KEY);
-    // Stripe writes events a moment after the call that caused them returns.
-    await sleep(2500);
-    const all = await listNewEvents(get, { afterId: this.lastEventId, sinceSeconds: this.startedAt });
-    if (all.length > 0) this.lastEventId = all[all.length - 1]!.id;
     const mine: StripeEventBody[] = [];
-    for (const event of all) {
-      if (this.seen.has(event.id)) continue;
-      const object = ((event.data as Json | undefined)?.object ?? {}) as Json;
-      const customer = typeof object.customer === 'string' ? object.customer : (object.customer as Json | null)?.id;
-      if (object.id !== this.customerId && customer !== this.customerId) continue;
-      this.seen.add(event.id);
-      mine.push(event);
+    // Stripe writes events a moment after the call that caused them returns. Read until two reads
+    // in a row bring nothing new, so a slow event is not left for the next step of a test.
+    let quiet = 0;
+    for (let round = 0; round < 12 && quiet < 2; round += 1) {
+      await sleep(round === 0 ? 2500 : 1500);
+      const all = await listNewEvents(get, { afterId: this.lastEventId, sinceSeconds: this.startedAt });
+      if (all.length > 0) this.lastEventId = all[all.length - 1]!.id;
+      let found = 0;
+      for (const event of all) {
+        if (this.seen.has(event.id)) continue;
+        const object = ((event.data as Json | undefined)?.object ?? {}) as Json;
+        const customer = typeof object.customer === 'string' ? object.customer : (object.customer as Json | null)?.id;
+        if (object.id !== this.customerId && customer !== this.customerId) continue;
+        this.seen.add(event.id);
+        mine.push(event);
+        found += 1;
+      }
+      quiet = found === 0 ? quiet + 1 : 0;
     }
     return mine;
   }
@@ -325,6 +339,20 @@ export class Sandbox {
   /** Reads every new event of this customer and delivers them in the order Stripe made them. */
   async sync(): Promise<Delivered[]> {
     return this.deliver(await this.pullEvents());
+  }
+
+  /**
+   * Like `sync`, and keeps reading until an event of the given type has been delivered. Stripe makes
+   * some events (a failed payment of an invoice, for one) a while after the others of the same step.
+   */
+  async syncUntil(type: string, timeoutMs = 90_000): Promise<Delivered[]> {
+    const out: Delivered[] = [];
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      out.push(...(await this.sync()));
+      if (out.some((event) => event.type === type)) return out;
+      if (Date.now() > deadline) throw new Error(`Stripe made no ${type} event for ${this.customerId} in ${String(timeoutMs / 1000)} seconds.`);
+    }
   }
 
   async rows<T = Json>(sql: string, params: readonly unknown[] = []): Promise<T[]> {
@@ -422,3 +450,35 @@ export async function buyPlan(
 
 export { openTestDb };
 export type { Json };
+
+/** A plan change the way the confirm panel does it: preview, confirm with the preview's basis and amount, then the events. */
+export async function changePlan(box: Sandbox, selection: PlanSelection) {
+  const { applyPlanChange, previewPlanChange } = await import('../../src/server/changes');
+  const preview = await previewPlanChange(box.rt, { orgId: box.org.orgId, selection });
+  if (!preview.ok) throw new Error(`previewPlanChange failed: ${preview.error.code} ${preview.error.message}`);
+  const applied = await applyPlanChange(box.rt, {
+    orgId: box.org.orgId,
+    selection,
+    basis: preview.data.basis,
+    expectedDueTodayCents: preview.data.dueTodayCents,
+    actor: box.actor,
+  });
+  if (!applied.ok) throw new Error(`applyPlanChange failed: ${applied.error.code} ${applied.error.message}`);
+  const delivered = await box.sync();
+  return { preview: preview.data, state: applied.data, delivered };
+}
+
+/** The events that did not answer 200. Empty when every event was handled. */
+export function failures(delivered: readonly Delivered[]): Delivered[] {
+  return delivered.filter((event) => event.outcome.status !== 200);
+}
+
+/** The Stripe subscription with its items, as Stripe has it now. */
+export async function stripeSubscription(id: string): Promise<Json> {
+  return stripeApi('GET', `/v1/subscriptions/${id}`);
+}
+
+/** `kitstak_crm_monthly:5`, one per item, sorted. */
+export function itemKeys(subscription: Json): string[] {
+  return (subscription.items.data as Json[]).map((item) => `${String(item.price.lookup_key)}:${String(item.quantity)}`).sort();
+}

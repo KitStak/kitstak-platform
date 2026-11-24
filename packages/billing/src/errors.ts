@@ -27,11 +27,18 @@ export type BillingErrorCode =
   /** Review round 2: another billing step of the same organization is still running. Nothing was done. */
   | 'busy'
   /** Review round 2: the page was made for one organization and the session is now in another. */
-  | 'org_changed';
+  | 'org_changed'
+  /**
+   * Real Stripe run: the bank wants the card holder to approve the payment (3D Secure). The error
+   * carries `actionUrl`, Stripe's own page for this invoice, where the bank step can be done.
+   */
+  | 'payment_needs_approval';
 
 export interface BillingError {
   readonly code: BillingErrorCode;
   readonly message: string;
+  /** A page the person has to open to finish. Only set with `payment_needs_approval`. Always https, always Stripe. */
+  readonly actionUrl?: string;
 }
 
 export type BillingResult<T> =
@@ -62,6 +69,7 @@ export const BILLING_ERROR_COPY: Readonly<Record<BillingErrorCode, string>> = {
   not_found: 'We could not find that.',
   busy: 'Another billing change is still running. Nothing was charged. Wait a moment and try again.',
   org_changed: 'You switched organizations. Reload this page.',
+  payment_needs_approval: 'Your bank wants you to approve this payment. Nothing was charged yet. Use another card, or call your bank.',
 };
 
 /** An error result. With no message, the plain sentence for the code is used. */

@@ -27,6 +27,7 @@ import { type BillingResult, billingError, billingOk } from '../errors';
 import {
   type BillingGateway,
   type ChangePreview,
+  GatewayAmountChangedError,
   GatewayCardError,
   type GatewayInvoice,
   type GatewaySubscription,
@@ -191,13 +192,17 @@ export async function previewPlanChange(
       selection,
       prorationDate: pricing.prorationDate,
     });
+    // The sentence "for the 20 full days left" is only said when the gateway priced from the whole
+    // day date it was given. Stripe counts a change of billing period from the moment of the call
+    // instead; then the amount is for the time left, and the words say exactly that.
+    const daysLeft = preview.prorationDate.getTime() === pricing.prorationDate.getTime() ? pricing.daysLeft : null;
     const words = changeWords({
       dueTodayCents: preview.dueTodayCents,
       creditCents: preview.creditCents,
       creditAppliedCents: preview.creditAppliedCents,
       taxCents: preview.taxCents,
       lines: preview.lines,
-      daysLeft: pricing.daysLeft,
+      daysLeft,
       direction: pricing.direction,
       fromInterval: pricing.subscription.interval,
       toInterval: selection.interval,
@@ -208,7 +213,7 @@ export async function previewPlanChange(
       beforeRecurringCents: pricing.subscription.items.reduce((sum, item) => sum + item.unitCents * item.quantity, 0),
       afterRecurringCents: preview.newRecurringCents,
     });
-    return billingOk({ ...preview, daysLeft: pricing.daysLeft, ...words, ...extra });
+    return billingOk({ ...preview, daysLeft, ...words, ...extra });
   } catch (error) {
     logBilling('error', 'preview plan change failed', { orgId: input.orgId, error: errorText(error) });
     return billingError('gateway_error');
@@ -311,6 +316,10 @@ function moneyOfChange(
   preview: ChangePreview,
 ): Pick<ChangePreview, 'dueTodayCents' | 'creditCents' | 'creditAppliedCents'> & { invoiceId: string | null } {
   const made = invoice !== null && invoice.id !== before.latestInvoiceId && invoice.status === 'paid' ? invoice : null;
+  // A decrease on Stripe makes an invoice with a total below zero. That amount is now credit.
+  if (made && made.totalCents < 0) {
+    return { dueTodayCents: 0, creditCents: -made.totalCents, creditAppliedCents: 0, invoiceId: made.id };
+  }
   if (made) {
     return { dueTodayCents: made.amountPaidCents, creditCents: 0, creditAppliedCents: made.creditAppliedCents, invoiceId: made.id };
   }
@@ -359,6 +368,7 @@ async function confirmChange(
       subscriptionId: row.gatewaySubscriptionId,
       selection,
       prorationDate: fresh.prorationDate,
+      expectedDueTodayCents: fresh.dueTodayCents,
     });
     const latestInvoice = subscription.latestInvoiceId ? await gateway.getInvoice(subscription.latestInvoiceId) : null;
     const money = moneyOfChange(pricing.subscription, subscription, latestInvoice, fresh);
@@ -403,6 +413,8 @@ async function confirmChange(
     });
   } catch (error) {
     if (error instanceof GatewayCardError) return billingError('card_declined');
+    // The amount moved in the moment before the charge. Nothing was charged: show the new amount.
+    if (error instanceof GatewayAmountChangedError) return billingError('price_changed');
     logBilling('error', 'apply plan change failed', { orgId: input.orgId, error: errorText(error) });
     return billingError('gateway_error');
   } finally {

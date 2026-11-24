@@ -6,8 +6,8 @@ import type Stripe from 'stripe';
 import { describe, expect, it, vi } from 'vitest';
 import { allPriceKeys, type PlanSelection } from '../catalog';
 import type { BillingConfig } from '../server/config';
-import { createStripeGateway } from './stripe';
-import { GatewayCardError, WebhookSignatureError } from './types';
+import { changeFromPreview, createStripeGateway } from './stripe';
+import { GatewayAmountChangedError, GatewayCardError, WebhookSignatureError } from './types';
 
 const NOW = new Date('2026-11-23T12:00:00.000Z');
 const unix = (date: Date) => Math.floor(date.getTime() / 1000);
@@ -75,6 +75,12 @@ function fakeStripe() {
     invoicePay: vi.fn(),
     invoiceVoid: vi.fn(async (_id: string) => ({})),
     invoiceList: vi.fn(),
+    invoiceCreate: vi.fn(async (_params: Record<string, unknown>) => ({ id: 'in_restart' })),
+    invoiceFinalize: vi.fn(async (_id: string, _params?: Record<string, unknown>) => ({ id: 'in_restart', status: 'open' })),
+    invoiceDelete: vi.fn(async (_id: string) => ({})),
+    invoiceItemCreate: vi.fn(async (_params: Record<string, unknown>) => ({ id: 'ii_1' })),
+    // Invoice items that wait on the customer from before a change. None, unless a test says so.
+    invoiceItemsList: vi.fn(async (_params: Record<string, unknown>) => ({ data: [] as { id: string }[] })),
     customerCreate: vi.fn(async (_params: Record<string, unknown>) => ({ id: 'cus_new' })),
     customerRetrieve: vi.fn(),
     customerUpdate: vi.fn(async () => ({})),
@@ -97,7 +103,11 @@ function fakeStripe() {
       pay: calls.invoicePay,
       voidInvoice: calls.invoiceVoid,
       list: calls.invoiceList,
+      create: calls.invoiceCreate,
+      finalizeInvoice: calls.invoiceFinalize,
+      del: calls.invoiceDelete,
     },
+    invoiceItems: { list: calls.invoiceItemsList, create: calls.invoiceItemCreate },
     customers: {
       create: calls.customerCreate,
       retrieve: calls.customerRetrieve,
@@ -488,9 +498,20 @@ describe('Stripe adapter: plan changes', () => {
     ]);
   });
 
-  it('applies a decrease as prorations for the next bill', async () => {
+  it('applies a decrease with an invoice now, so the credit lands on the balance and nothing is left waiting', async () => {
     const { gateway, calls } = fakeStripe();
-    calls.invoicePreview.mockResolvedValue(previewInvoice(-1450));
+    calls.invoicePreview.mockResolvedValue(previewInvoice(-1450, [{ amount: -1450, description: 'Unused time' }]));
+    await gateway.applyChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 4 }, prorationDate: NOW });
+    const params = calls.subUpdate.mock.calls[0]![1];
+    // Found on the real Stripe sandbox: with `create_prorations` the credit waited as invoice lines
+    // until the next renewal, and a later change was previewed with it but charged without it.
+    expect(params.proration_behavior).toBe('always_invoice');
+    expect(params.payment_behavior).toBe('pending_if_incomplete');
+  });
+
+  it('a change inside a free trial prorates nothing and makes no invoice', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoicePreview.mockResolvedValue(previewInvoice(0));
     await gateway.applyChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 4 }, prorationDate: NOW });
     const params = calls.subUpdate.mock.calls[0]![1];
     expect(params.proration_behavior).toBe('create_prorations');
@@ -550,7 +571,7 @@ describe('Stripe adapter: cancel, pause, cards and invoices', () => {
     expect(calls.subUpdate.mock.calls.map((call) => call[1].cancel_at_period_end)).toEqual([true, false]);
   });
 
-  it('pause voids invoices until the resume date; resume clears it and can bill today', async () => {
+  it('pause voids invoices until the resume date; resume before it began just clears it', async () => {
     const { gateway, calls } = fakeStripe();
     const resumesAt = new Date('2027-01-31T23:00:00.000Z');
     await gateway.pause('sub_1', resumesAt);
@@ -558,8 +579,123 @@ describe('Stripe adapter: cancel, pause, cards and invoices', () => {
     await gateway.resume('sub_1');
     expect(calls.subUpdate.mock.calls[1]![1]).toMatchObject({ pause_collection: '' });
     expect(calls.subUpdate.mock.calls[1]![1]).not.toHaveProperty('billing_cycle_anchor');
-    await gateway.resume('sub_1', { billNow: true });
-    expect(calls.subUpdate.mock.calls[2]![1]).toMatchObject({ pause_collection: '', billing_cycle_anchor: { type: 'now' }, proration_behavior: 'none' });
+    expect(calls.invoiceCreate).not.toHaveBeenCalled();
+  });
+
+  describe('"Start again now" in the middle of a pause (found on the real Stripe sandbox)', () => {
+    const pausedSubscription = () =>
+      subscription({
+        pause_collection: { behavior: 'void', resumes_at: unix(NOW) + 20 * DAY },
+        discounts: [],
+        items: {
+          data: [
+            { id: 'si_crm', quantity: 5, price: { ...price('kitstak_crm_monthly_bundle', 2320), currency: 'usd', product: 'kitstak_crm' }, current_period_start: unix(NOW) - 10 * DAY, current_period_end: unix(NOW) + 20 * DAY },
+            { id: 'si_wms', quantity: 2, price: { ...price('kitstak_wms_monthly_bundle', 27920), currency: 'usd', product: 'kitstak_wms' }, current_period_start: unix(NOW) - 10 * DAY, current_period_end: unix(NOW) + 20 * DAY },
+          ],
+        },
+      });
+
+    it('bills the new period first, with the plan\'s own prices, and only then lifts the pause', async () => {
+      const { gateway, calls } = fakeStripe();
+      calls.subRetrieve.mockResolvedValue(pausedSubscription());
+      calls.invoiceList.mockResolvedValue({ data: [] });
+      calls.invoicePay.mockResolvedValue({ id: 'in_restart', status: 'paid' });
+      const order: string[] = [];
+      calls.invoicePay.mockImplementation(async () => {
+        order.push('pay');
+        return { id: 'in_restart', status: 'paid' };
+      });
+      calls.subUpdate.mockImplementation(async () => {
+        order.push('update');
+        return subscription();
+      });
+      await gateway.resume('sub_1', { billNow: true });
+
+      expect(calls.invoiceCreate.mock.calls[0]![0]).toEqual({
+        customer: 'cus_1',
+        subscription: 'sub_1',
+        collection_method: 'charge_automatically',
+        auto_advance: false,
+        automatic_tax: { enabled: false },
+        metadata: { kitstak_restart: 'sub_1', kitstak_org_id: ORG },
+      });
+      // One line per app, bound to that invoice, for one month from today.
+      expect(calls.invoiceItemCreate.mock.calls.map((call) => call[0])).toEqual([
+        { customer: 'cus_1', invoice: 'in_restart', quantity: 5, price_data: { currency: 'usd', product: 'kitstak_crm', unit_amount: 2320 }, period: { start: unix(NOW), end: unix(new Date('2026-12-23T12:00:00.000Z')) } },
+        { customer: 'cus_1', invoice: 'in_restart', quantity: 2, price_data: { currency: 'usd', product: 'kitstak_wms', unit_amount: 27920 }, period: { start: unix(NOW), end: unix(new Date('2026-12-23T12:00:00.000Z')) } },
+      ]);
+      expect(calls.invoiceFinalize).toHaveBeenCalledWith('in_restart', { auto_advance: false });
+      expect(calls.invoicePay).toHaveBeenCalledWith('in_restart', { payment_method: 'pm_1' });
+      // Stripe makes no invoice of its own for the new period: it was billed above.
+      expect(calls.subUpdate.mock.calls[0]![1]).toMatchObject({ pause_collection: '', billing_cycle_anchor: { type: 'now' }, proration_behavior: 'none' });
+      expect(order).toEqual(['pay', 'update']);
+    });
+
+    it('a declined card leaves the plan paused and no invoice open', async () => {
+      const { gateway, calls } = fakeStripe();
+      calls.subRetrieve.mockResolvedValue(pausedSubscription());
+      calls.invoiceList.mockResolvedValue({ data: [] });
+      calls.invoicePay.mockRejectedValue({ type: 'StripeCardError', code: 'card_declined', decline_code: 'insufficient_funds' });
+      calls.invoiceRetrieve.mockResolvedValue({ id: 'in_restart', status: 'open' });
+      await expect(gateway.resume('sub_1', { billNow: true })).rejects.toBeInstanceOf(GatewayCardError);
+      expect(calls.invoiceVoid).toHaveBeenCalledWith('in_restart');
+      expect(calls.subUpdate).not.toHaveBeenCalled();
+    });
+
+    it('a card that needs the bank step counts as a card that could not be charged', async () => {
+      const { gateway, calls } = fakeStripe();
+      calls.subRetrieve.mockResolvedValue(pausedSubscription());
+      calls.invoiceList.mockResolvedValue({ data: [] });
+      calls.invoicePay.mockRejectedValue({ type: 'StripeInvalidRequestError', code: 'invoice_payment_intent_requires_action' });
+      calls.invoiceRetrieve.mockResolvedValue({ id: 'in_restart', status: 'open' });
+      await expect(gateway.resume('sub_1', { billNow: true })).rejects.toMatchObject({ name: 'GatewayCardError', declineCode: 'authentication_required' });
+      expect(calls.invoiceVoid).toHaveBeenCalledWith('in_restart');
+      expect(calls.subUpdate).not.toHaveBeenCalled();
+    });
+
+    it('a failure while the lines are added deletes the draft, so nothing can be charged later', async () => {
+      const { gateway, calls } = fakeStripe();
+      calls.subRetrieve.mockResolvedValue(pausedSubscription());
+      calls.invoiceList.mockResolvedValue({ data: [] });
+      calls.invoiceItemCreate.mockRejectedValue(new Error('Stripe is down'));
+      calls.invoiceRetrieve.mockResolvedValue({ id: 'in_restart', status: 'draft' });
+      await expect(gateway.resume('sub_1', { billNow: true })).rejects.toThrow('Stripe is down');
+      expect(calls.invoiceDelete).toHaveBeenCalledWith('in_restart');
+      expect(calls.invoicePay).not.toHaveBeenCalled();
+      expect(calls.subUpdate).not.toHaveBeenCalled();
+    });
+
+    it('a second try after the bill was paid does not bill again', async () => {
+      const { gateway, calls } = fakeStripe();
+      calls.subRetrieve.mockResolvedValue(pausedSubscription());
+      calls.invoiceList.mockResolvedValue({
+        data: [
+          { id: 'in_paid_restart', status: 'paid', created: unix(NOW) - 60, metadata: { kitstak_restart: 'sub_1' } },
+          // The bill of an older pause of the same plan does not count.
+          { id: 'in_old_restart', status: 'paid', created: unix(NOW) - 90 * DAY, metadata: { kitstak_restart: 'sub_1' } },
+        ],
+      });
+      await gateway.resume('sub_1', { billNow: true });
+      expect(calls.invoiceCreate).not.toHaveBeenCalled();
+      expect(calls.invoicePay).not.toHaveBeenCalled();
+      expect(calls.subUpdate.mock.calls[0]![1]).toMatchObject({ pause_collection: '', billing_cycle_anchor: { type: 'now' } });
+    });
+
+    it('only the bill of an older pause is there: this pause is billed', async () => {
+      const { gateway, calls } = fakeStripe();
+      calls.subRetrieve.mockResolvedValue(pausedSubscription());
+      calls.invoiceList.mockResolvedValue({ data: [{ id: 'in_old_restart', status: 'paid', created: unix(NOW) - 90 * DAY, metadata: { kitstak_restart: 'sub_1' } }] });
+      calls.invoicePay.mockResolvedValue({ id: 'in_restart', status: 'paid' });
+      await gateway.resume('sub_1', { billNow: true });
+      expect(calls.invoiceCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('a plan that is not paused any more is left as it is, and nothing is billed', async () => {
+      const { gateway, calls } = fakeStripe();
+      await gateway.resume('sub_1', { billNow: true });
+      expect(calls.invoiceCreate).not.toHaveBeenCalled();
+      expect(calls.subUpdate).not.toHaveBeenCalled();
+    });
   });
 
   it('opens the Billing Portal on "update payment method" and comes back to billing home', async () => {
@@ -828,5 +964,216 @@ describe('Stripe adapter: the proration date comes from the server', () => {
     const day = new Date((unix(NOW) - 10 * DAY) * 1000);
     await gateway.applyChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 6 }, prorationDate: day });
     expect(calls.subUpdate.mock.calls[0]![1]).toMatchObject({ proration_date: unix(day), proration_behavior: 'always_invoice' });
+  });
+});
+
+/**
+ * Found on the real Stripe sandbox (docs/billing/STRIPE-SANDBOX-RUN.md). The line shapes and the
+ * amounts below are the ones Stripe answered with for customer cus_VgozCGn0KqLnVz.
+ */
+describe('Stripe adapter: a change preview never counts lines that waited before the change', () => {
+  const line = (amount: number, description: string, invoiceItem: string, extra: Record<string, unknown> = {}) => ({
+    amount,
+    description,
+    quantity: 3,
+    discount_amounts: [],
+    taxes: [],
+    period: { start: unix(NOW), end: unix(NOW) + 20 * DAY },
+    pricing: { price_details: { product: 'kitstak_crm', price: 'price_x' }, unit_amount_decimal: null },
+    parent: { type: 'subscription_item_details', invoice_item_details: null, subscription_item_details: { invoice_item: invoiceItem, proration: true } },
+    ...extra,
+  });
+  // Two lines of the change that is being previewed, then five lines that waited from older decreases.
+  const realPreview = {
+    total: -29778,
+    subtotal: -29778,
+    amount_due: 0,
+    starting_balance: 0,
+    total_taxes: [],
+    total_discount_amounts: [],
+    lines: {
+      has_more: false,
+      data: [
+        line(-86309, 'Unused time on 3 x KitStak CRM', 'ii_new_1'),
+        line(115078, 'Remaining time on 4 x KitStak CRM', 'ii_new_2'),
+        line(-55840, 'Unused time on 3 x KitStak WMS', 'ii_old_1'),
+        line(-4640, 'Unused time on 3 x KitStak CRM', 'ii_old_2'),
+        line(5800, 'Remaining time on 3 x KitStak CRM', 'ii_old_3'),
+        line(-9667, 'Unused time on 5 x KitStak CRM', 'ii_old_4'),
+        line(5800, 'Remaining time on 3 x KitStak CRM', 'ii_old_5'),
+      ],
+    },
+  };
+  const waiting = new Set(['ii_old_1', 'ii_old_2', 'ii_old_3', 'ii_old_4', 'ii_old_5']);
+
+  it('with no older lines, Stripe\'s own totals are used as they are', () => {
+    const facts = changeFromPreview({ ...realPreview, total: 28769, amount_due: 28769, lines: { has_more: false, data: realPreview.lines.data.slice(0, 2) } }, new Set());
+    expect(facts).toMatchObject({ totalCents: 28769, dueTodayCents: 28769, taxCents: 0 });
+    expect(facts.lines).toHaveLength(2);
+  });
+
+  it('leaves the older lines out, so the amount is what the invoice of this change will charge', () => {
+    // Stripe's preview says "nothing to pay, $297.78 credit". The invoice Stripe then makes holds
+    // only the two lines of the change: $287.69 to pay. That is the number a person must see.
+    const facts = changeFromPreview(realPreview, waiting);
+    expect(facts.totalCents).toBe(-86309 + 115078);
+    expect(facts.dueTodayCents).toBe(28769);
+    expect(facts.lines.map((entry) => entry.amountCents)).toEqual([-86309, 115078]);
+  });
+
+  it('a decrease stays a credit, and only for the lines of this change', () => {
+    const facts = changeFromPreview(
+      { ...realPreview, lines: { has_more: false, data: [line(-86309, 'Unused time', 'ii_new_1'), line(57539, 'Remaining time', 'ii_new_2'), ...realPreview.lines.data.slice(2)] } },
+      waiting,
+    );
+    expect(facts.totalCents).toBe(-28770);
+    expect(facts.dueTodayCents).toBe(0);
+  });
+
+  it('credit on the customer balance comes off, and discounts and added tax count per line', () => {
+    const facts = changeFromPreview(
+      {
+        ...realPreview,
+        starting_balance: -10000,
+        lines: {
+          has_more: false,
+          data: [
+            line(-86309, 'Unused time', 'ii_new_1'),
+            line(115078, 'Remaining time', 'ii_new_2', {
+              discount_amounts: [{ amount: 1000, discount: 'di_1' }],
+              taxes: [
+                { amount: 500, tax_behavior: 'exclusive' },
+                { amount: 300, tax_behavior: 'inclusive' },
+              ],
+            }),
+            ...realPreview.lines.data.slice(2),
+          ],
+        },
+      },
+      waiting,
+    );
+    // 115078 - 86309 - 1000 discount + 500 tax on top. Tax that is inside the price adds nothing.
+    expect(facts.totalCents).toBe(28269);
+    expect(facts.taxCents).toBe(800);
+    expect(facts.dueTodayCents).toBe(18269);
+  });
+
+  it('refuses to price a change when older lines exist and the preview does not show every line', () => {
+    expect(() => changeFromPreview({ ...realPreview, lines: { ...realPreview.lines, has_more: true } }, waiting)).toThrow(/Too many invoice lines/);
+  });
+
+  it('the preview asks Stripe which lines wait, and the confirm panel gets the corrected amount', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoiceItemsList.mockResolvedValue({ data: [...waiting].map((id) => ({ id })) });
+    calls.invoicePreview.mockResolvedValue(realPreview);
+    const preview = await gateway.previewChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 6 }, prorationDate: NOW });
+    expect(calls.invoiceItemsList.mock.calls[0]![0]).toEqual({ customer: 'cus_1', pending: true, limit: 100 });
+    expect(preview).toMatchObject({ dueTodayCents: 28769, creditCents: 0, proratedCents: 28769, creditAppliedCents: 0 });
+    expect(preview.lines).toHaveLength(2);
+  });
+
+  it('a preview fails, and shows no amount, when Stripe cannot say which lines wait', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoiceItemsList.mockRejectedValue(new Error('Stripe is down'));
+    calls.invoicePreview.mockResolvedValue(realPreview);
+    await expect(gateway.previewChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 6 }, prorationDate: NOW })).rejects.toThrow('Stripe is down');
+  });
+});
+
+/**
+ * Found on the real Stripe sandbox (docs/billing/STRIPE-SANDBOX-RUN.md): Stripe keeps the old renewal
+ * day when the price interval changes, unless it is asked to start a new period.
+ */
+describe('Stripe adapter: a change of billing period starts the new period today', () => {
+  const YEARLY: PlanSelection = { ...CRM5, interval: 'yearly' };
+  // What Stripe answers for a new period: the unused month as a credit line, the new year as a plain line.
+  const restartPreview = (total: number) => ({
+    total,
+    amount_due: Math.max(0, total),
+    starting_balance: 0,
+    total_taxes: [],
+    total_discount_amounts: [],
+    lines: {
+      has_more: false,
+      data: [
+        { amount: -9667, description: 'Unused time on 5 x KitStak CRM', quantity: 5, parent: { subscription_item_details: { proration: true, invoice_item: 'ii_a' } }, pricing: { price_details: { product: 'kitstak_crm' } }, period: { start: 1, end: 2 } },
+        { amount: total + 9667, description: '5 user x KitStak CRM (at $295.80 / year)', quantity: 5, parent: { subscription_item_details: { proration: false } }, pricing: { price_details: { product: 'kitstak_crm' } }, period: { start: 1, end: 2 } },
+      ],
+    },
+  });
+
+  it('previews with a new period and with no proration date', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoicePreview.mockResolvedValue(restartPreview(138233));
+    const preview = await gateway.previewChange({ subscriptionId: 'sub_1', selection: YEARLY, prorationDate: new Date(NOW.getTime() + 3600_000) });
+    expect(calls.invoicePreview.mock.calls[0]![0]).toEqual({
+      customer: 'cus_1',
+      subscription: 'sub_1',
+      subscription_details: {
+        items: [{ id: 'si_crm', price: 'price_kitstak_crm_yearly', quantity: 5 }],
+        billing_cycle_anchor: { type: 'now' },
+        proration_behavior: 'always_invoice',
+      },
+    });
+    expect(preview.dueTodayCents).toBe(138233);
+    // The amount is counted from this moment, and the next charge is one year from today.
+    expect(preview.prorationDate).toEqual(NOW);
+    expect(preview.nextChargeAt.toISOString()).toBe('2027-11-23T12:00:00.000Z');
+    // One plain line for the new year, one credit line for the unused month: what the sentences need.
+    expect(preview.lines.map((line) => [line.proration, line.amountCents])).toEqual([
+      [true, -9667],
+      [false, 147900],
+    ]);
+  });
+
+  it('applies it with a new period, the safe payment rule, and no proration date', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoicePreview.mockResolvedValue(restartPreview(138233));
+    calls.invoiceRetrieve.mockResolvedValue({ id: 'in_1', status: 'paid', total: 138233, amount_paid: 138233 });
+    await gateway.applyChange({ subscriptionId: 'sub_1', selection: YEARLY, prorationDate: NOW, expectedDueTodayCents: 138233 });
+    const params = calls.subUpdate.mock.calls[0]![1];
+    expect(params).toMatchObject({ billing_cycle_anchor: { type: 'now' }, proration_behavior: 'always_invoice', payment_behavior: 'pending_if_incomplete' });
+    expect(params).not.toHaveProperty('proration_date');
+    expect(calls.creditNoteCreate).not.toHaveBeenCalled();
+  });
+
+  it('charges nothing when the amount moved since the person confirmed', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoicePreview.mockResolvedValue(restartPreview(138234));
+    await expect(
+      gateway.applyChange({ subscriptionId: 'sub_1', selection: YEARLY, prorationDate: NOW, expectedDueTodayCents: 138233 }),
+    ).rejects.toBeInstanceOf(GatewayAmountChangedError);
+    expect(calls.subUpdate).not.toHaveBeenCalled();
+  });
+
+  it('sends back whatever the invoice asked above the confirmed amount', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoicePreview.mockResolvedValue(restartPreview(138233));
+    // One second later Stripe counted one cent less unused time.
+    calls.invoiceRetrieve.mockResolvedValue({ id: 'in_1', status: 'paid', total: 138234, amount_paid: 138234 });
+    await gateway.applyChange({ subscriptionId: 'sub_1', selection: YEARLY, prorationDate: NOW, expectedDueTodayCents: 138233 });
+    expect(calls.creditNoteCreate.mock.calls[0]![0]).toEqual({ invoice: 'in_1', amount: 1, refund_amount: 1, reason: 'order_change' });
+  });
+
+  it('inside a free trial nothing restarts: the first charge stays on the day the trial ends', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.subRetrieve.mockResolvedValue(subscription({ status: 'trialing', trial_end: unix(NOW) + 5 * DAY }));
+    calls.invoicePreview.mockResolvedValue(previewInvoice(0));
+    await gateway.applyChange({ subscriptionId: 'sub_1', selection: YEARLY, prorationDate: NOW });
+    const details = calls.invoicePreview.mock.calls[0]![0].subscription_details;
+    expect(details).not.toHaveProperty('billing_cycle_anchor');
+    expect(details.proration_date).toBe(unix(NOW));
+    const params = calls.subUpdate.mock.calls[0]![1];
+    expect(params).not.toHaveProperty('billing_cycle_anchor');
+    expect(params.proration_date).toBe(unix(NOW));
+  });
+
+  it('a seat change on the same billing period still prices from the date it is given', async () => {
+    const { gateway, calls } = fakeStripe();
+    calls.invoicePreview.mockResolvedValue(previewInvoice(1933, [{ amount: 1933, description: 'Remaining time' }]));
+    await gateway.applyChange({ subscriptionId: 'sub_1', selection: { ...CRM5, seats: 6 }, prorationDate: NOW, expectedDueTodayCents: 1 });
+    const params = calls.subUpdate.mock.calls[0]![1];
+    expect(params.proration_date).toBe(unix(NOW));
+    expect(params).not.toHaveProperty('billing_cycle_anchor');
   });
 });

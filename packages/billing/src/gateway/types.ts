@@ -11,7 +11,7 @@ import type { PaymentMethodSummary } from '../plan-state';
  * gateway object across hot reloads; the portal rebuilds it when this number moved, so new code never
  * calls a method an old object does not have.
  */
-export const GATEWAY_CONTRACT_VERSION = 4;
+export const GATEWAY_CONTRACT_VERSION = 5;
 
 export type GatewayKind = 'stripe' | 'test';
 export type GatewaySubscriptionStatus = 'incomplete' | 'trialing' | 'active' | 'past_due' | 'unpaid' | 'canceled';
@@ -214,6 +214,13 @@ export interface BillingGateway {
     subscriptionId: string;
     selection: PlanSelection;
     prorationDate: Date;
+    /**
+     * The amount the person confirmed (added on the real Stripe run, CONTRACTS section 24). A gateway
+     * whose amount can move with the clock checks it once more right before it charges, and throws
+     * `GatewayAmountChangedError` when it moved. A gateway that prices from `prorationDate` alone
+     * may ignore it.
+     */
+    expectedDueTodayCents?: number;
   }): Promise<GatewaySubscription>;
   setCancelAtPeriodEnd(subscriptionId: string, cancel: boolean): Promise<GatewaySubscription>;
   pause(subscriptionId: string, resumesAt: Date): Promise<GatewaySubscription>;
@@ -246,13 +253,31 @@ export class WebhookSignatureError extends Error {
 
 export class GatewayCardError extends Error {
   readonly declineCode: string | null;
+  /**
+   * Set when the bank wants the card holder to approve the payment (3D Secure): the gateway's own
+   * page for the open invoice, where the bank step can be done. null in every other case.
+   */
+  readonly approveUrl: string | null;
   /** True for this error by name, also across copies of this module (see WebhookSignatureError). */
   static [Symbol.hasInstance](value: unknown): boolean {
     return typeof value === 'object' && value !== null && (value as { name?: unknown }).name === 'GatewayCardError';
   }
-  constructor(message = 'The card was declined', declineCode: string | null = null) {
+  constructor(message = 'The card was declined', declineCode: string | null = null, approveUrl: string | null = null) {
     super(message);
     this.name = 'GatewayCardError';
     this.declineCode = declineCode;
+    this.approveUrl = approveUrl;
+  }
+}
+
+/** The amount of a change moved between the preview a person confirmed and the charge. Nothing was charged. */
+export class GatewayAmountChangedError extends Error {
+  /** True for this error by name, also across copies of this module (see WebhookSignatureError). */
+  static [Symbol.hasInstance](value: unknown): boolean {
+    return typeof value === 'object' && value !== null && (value as { name?: unknown }).name === 'GatewayAmountChangedError';
+  }
+  constructor(message = 'The amount changed before the charge') {
+    super(message);
+    this.name = 'GatewayAmountChangedError';
   }
 }
