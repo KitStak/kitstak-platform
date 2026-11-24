@@ -8,7 +8,7 @@ import 'server-only';
 import { sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { scoped } from '@/server/db/scope';
-import { addDays, earnedHours, productivityBp, shortDate, unitsPerHour, weekdayName } from '@/lib/profit';
+import { addDays, earnedHours, endOfMonth, productivityBp, shortDate, unitsPerHour, weekdayName } from '@/lib/profit';
 import type { DayQueueDTO, PaceBoardDTO, PaceBoardRowDTO, PaceSuggestionRowDTO } from '@/lib/types';
 import { monthStart, rows, todayInZone, type DomainContext } from './_shared';
 import { requirePulse } from './access';
@@ -20,17 +20,23 @@ import { listStandards, suggestStandard } from './standards';
 /**
  * The manager queue: every site day of the last `days` days that has work logged or a review
  * state, newest first, with its odd rows computed fresh and the jobs that look forgotten.
+ * With `month` (`2026-01`) it is that calendar month instead (up to today), so the month close
+ * can link straight to the days it counts.
  */
 export const getReviewQueue = scoped(async function getReviewQueue(
   ctx: DomainContext,
-  options: { siteId?: string | null; days?: number } = {},
+  options: { siteId?: string | null; days?: number; month?: string | null } = {},
 ): Promise<DayQueueDTO[]> {
   await requirePulse(ctx, 'pulse:read');
   const span = Math.min(Math.max(options.days ?? 14, 1), 62);
   const sites = (await listSites(ctx)).filter((site) => !options.siteId || site.id === options.siteId);
   if (sites.length === 0) return [];
-  const newest = sites.reduce((latest, site) => (site.today > latest ? site.today : latest), sites[0]!.today);
-  const from = addDays(newest, -(span - 1));
+  const siteToday = sites.reduce((latest, site) => (site.today > latest ? site.today : latest), sites[0]!.today);
+  const month = options.month && /^\d{4}-\d{2}$/.test(options.month) ? `${options.month}-01` : null;
+  if (month && month > siteToday) return [];
+  const monthEnd = month ? endOfMonth(month) : null;
+  const newest = monthEnd && monthEnd < siteToday ? monthEnd : siteToday;
+  const from = month ?? addDays(newest, -(span - 1));
   const siteFilter = options.siteId ? sql`AND p.site_id = ${options.siteId}` : sql``;
   const dayRows = await rows<{
     site_id: string;
