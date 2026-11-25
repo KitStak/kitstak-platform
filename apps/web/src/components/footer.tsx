@@ -36,8 +36,11 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
     title: 'Company',
     links: [
       { href: ROUTES.platform, label: 'Platform' },
+      { href: ROUTES.team1, label: 'Customer story: Team 1' },
+      { href: ROUTES.articles, label: 'Articles' },
       { href: ROUTES.founder, label: 'Talk to the founder' },
       { href: ROUTES.contact, label: 'Contact' },
+      { href: ROUTES.security, label: 'Security' },
       { href: ROUTES.terms, label: 'Terms' },
       { href: ROUTES.privacy, label: 'Privacy' },
     ],

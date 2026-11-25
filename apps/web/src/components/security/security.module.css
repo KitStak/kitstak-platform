@@ -1,0 +1,85 @@
+.groups {
+  display: grid;
+  gap: clamp(48px, 6vw, 80px);
+}
+.group {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  gap: clamp(24px, 5vw, 80px);
+  scroll-margin-top: calc(var(--header-h) + 24px);
+}
+.groupTitle {
+  font-size: clamp(26px, 2.8vw, 36px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+.groupLead {
+  margin-top: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.point {
+  padding: 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+.pointName {
+  font-weight: 700;
+}
+.pointNote {
+  margin-top: 6px;
+  font-size: var(--type-base);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.disclosure {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 32px;
+  align-items: center;
+  padding: clamp(28px, 4vw, 48px);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-brand);
+  color: var(--brand-cream);
+}
+.disclosure h2 {
+  font-size: clamp(26px, 3vw, 40px);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  font-weight: 800;
+}
+.disclosure p {
+  margin-top: 12px;
+  color: var(--on-brand-muted);
+  line-height: 1.6;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+}
+@media (max-width: 960px) {
+  .group,
+  .disclosure {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .actions {
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 640px) {
+  .points {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

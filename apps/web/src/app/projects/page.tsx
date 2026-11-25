@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/components/json-ld';
+import { breadcrumbLd, softwareApplicationLd } from '@/lib/seo';
 import { ClosingSection } from '@/components/closing/closing-section';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
@@ -48,6 +50,7 @@ export default function ProjectsPage() {
       <PageEffects />
       <Header />
       <main id="main">
+        <JsonLd data={[softwareApplicationLd('projects'), breadcrumbLd([{ name: 'KitStak Projects', path: '/projects' }])]} />
         <ProductHero
           product="KitStak Projects"
           app="projects"

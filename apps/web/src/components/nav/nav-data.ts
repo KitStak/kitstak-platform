@@ -80,6 +80,8 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
 /** Top-level header links (the Products menu is rendered separately, before these). */
 export const PRIMARY_NAV: readonly NavLink[] = [
   { href: ROUTES.platform, label: 'Platform' },
+  { href: ROUTES.customers, label: 'Customers' },
+  { href: ROUTES.articles, label: 'Articles' },
   { href: ROUTES.pricing, label: 'Pricing' },
   { href: ROUTES.contact, label: 'Contact' },
 ];

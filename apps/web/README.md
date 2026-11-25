@@ -26,6 +26,9 @@ Marketing site for the KitStak platform, served at **https://kitstak.com**
 | `/pulse`       | KitStak Pulse. Copy in `src/components/pulse/pulse-content.ts`, visuals in `src/components/pulse/` (see "Pulse" below) |
 | `/get-started` | The "Set up your Stak" wizard (`src/components/wizard`, model in `src/lib/stak.ts`). Its last step opens portal sign-up |
 | `/contact`     | Contact and "talk to the founder" (`?topic=founder\|demo\|projects\|pulse\|sales`). `&product=pulse` on a walkthrough link starts the message with that product (`walkthroughHref`)                                     |
+| `/articles`    | Articles. Copy and the article list live in `src/components/articles/articles-content.ts`. RSS at `/articles/feed.xml`                   |
+| `/customers`   | Customer stories. Team 1 is at `/customers/team-1`, copy in `src/components/customers/team1-content.ts` (facts only, keep the disclosure) |
+| `/security`    | How KitStak protects data. Copy in `src/components/security/security-content.ts`. Name only controls that exist in the code             |
 
 Every internal link goes through `ROUTES` in `src/components/site-links.ts`; the header menu, the
 mobile drawer and the footer all read `src/components/nav/nav-data.ts`.
@@ -183,6 +186,17 @@ ticked. Each one is a click through on the Pulse demo workspace, signed off by t
 
 If a feature is cut or changes, change the copy in `src/components/pulse/pulse-content.ts` to match
 before the page ships.
+
+## Search
+
+- Structured data (JSON-LD) is built in `src/lib/seo.ts` and rendered with `src/components/json-ld.tsx`:
+  Organization and WebSite on every page, SoftwareApplication with the catalog price on each product page,
+  BreadcrumbList on inner pages, FAQPage wherever the `Faq` component renders, and Article on articles.
+- `sitemap.xml`, `robots.txt`, `manifest.webmanifest`, `llms.txt` and `/.well-known/security.txt` are all
+  generated or served from this app. Add a new page to `src/app/sitemap.ts`; articles join it on their own.
+- Search Console and Bing: set `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` on the Vercel
+  project and redeploy. With none set, no tag is written. Then submit `https://kitstak.com/sitemap.xml`.
+- Security headers (CSP, HSTS, COOP and the rest) are in `next.config.ts`.
 
 ## Social preview images
 
