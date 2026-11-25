@@ -2,12 +2,13 @@
   "name": "@kitstak/entitlements",
   "version": "0.1.0",
   "private": true,
-  "description": "Per-module entitlements for KitStak orgs (BLUEPRINT.md §3): cached reads of core.entitlements, grace-window gating, manual grants, and the dev allow-all switch. Stripe sync is deferred by owner decision — no Stripe code lives here. TypeScript source-shipped (consumers transpile via Next transpilePackages).",
+  "description": "Per-module entitlements for KitStak orgs (BLUEPRINT.md §3, docs/billing/CONTRACTS.md section 8): cached reads of core.entitlements, the access rule (full, view only, locked), manual grants, the full-row writer used by billing, and the dev allow-all switch. No gateway code lives here. TypeScript source-shipped (consumers transpile via Next transpilePackages).",
   "exports": {
     ".": "./src/index.ts",
     "./modules": "./src/modules.ts",
     "./read": "./src/read.ts",
     "./grant": "./src/grant.ts",
+    "./write": "./src/write.ts",
     "./dev": "./src/dev.ts"
   },
   "scripts": {

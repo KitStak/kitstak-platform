@@ -9,9 +9,16 @@ test('health endpoint is healthy and exposes only {status} publicly', async ({ r
   expect(body.data).toEqual({ status: 'ok' });
 });
 
-test('unauthenticated app routes redirect to login', async ({ page }) => {
+test('unauthenticated app routes redirect to login', async ({ page, baseURL }) => {
   await page.goto('/some-org');
-  await expect(page).toHaveURL(/\/login\?next=%2Fsome-org/);
+  // One front door (docs/billing/CONTRACTS.md, review round 4). With a Portal address set, this is
+  // the Portal sign in and `next` is the full CRM address. Run alone, it is the CRM's own page and
+  // `next` is the path. Either way the person comes back to the page they asked for.
+  await expect(page).toHaveURL(/\/login\?/);
+  const landed = new URL(page.url());
+  expect(landed.pathname).toBe('/login');
+  const appOrigin = new URL(baseURL ?? 'http://localhost:3100').origin;
+  expect(['/some-org', `${appOrigin}/some-org`]).toContain(landed.searchParams.get('next'));
 });
 
 test('mutating API calls from a foreign origin are rejected', async ({ request }) => {

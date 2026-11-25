@@ -16,6 +16,7 @@ import {
   toast,
 } from '@/components/ui';
 import { useOrg } from '@/features/shell/org-context';
+import { SeatLimitLink } from '@/features/shell/seat-limit-link';
 import { canManageRole, ORG_ROLES, type OrgRole } from '@/server/rbac/permissions';
 import { useInviteMembers } from '../api';
 import { parseEmailList, ROLE_DESCRIPTION, ROLE_LABEL } from '../format';
@@ -114,6 +115,7 @@ export function InviteMembersDialog({
               />
             )}
           </Field>
+          <SeatLimitLink text={error} />
           {valid.length + invalid.length > 0 ? (
             <ul aria-label="Recipients" className="flex flex-wrap gap-1.5" data-testid="invite-chips">
               {valid.map((email) => (

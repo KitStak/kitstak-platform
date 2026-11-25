@@ -2,7 +2,11 @@
 
 import { useEffect } from 'react';
 
-/** Adds `.is-in` to every [data-reveal] element as it scrolls into view. */
+/**
+ * Adds `.is-in` to every [data-reveal] element as it comes up to the bottom of the screen, which
+ * plays its entrance once. Nothing is hidden before that (see globals.css), so a page that is never
+ * scrolled still shows all of its content.
+ */
 export function useReveal(): void {
   useEffect(() => {
     document.documentElement.classList.add('js');
@@ -15,7 +19,8 @@ export function useReveal(): void {
           observer.unobserve(entry.target);
         }
       },
-      { rootMargin: '0px 0px -10% 0px', threshold: 0.12 },
+      // Start a little before the element is on screen, so it is never seen popping out and back in.
+      { rootMargin: '0px 0px 6% 0px', threshold: 0 },
     );
     targets.forEach((el) => observer.observe(el));
     return () => observer.disconnect();

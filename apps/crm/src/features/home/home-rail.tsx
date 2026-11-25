@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Bell, LayoutTemplate, Star } from 'lucide-react';
 import { Avatar, CountBadge, Skeleton, cn } from '@/components/ui';
-import { useBoardTemplates, useFavorites, useNotifications, useUnreadCount } from '@/lib/hooks';
+import { useBoardTemplates, useFavorites, useHydrated, useNotifications, useUnreadCount } from '@/lib/hooks';
 import { describeNotification, notificationHref } from '@/features/notifications/describe';
 import { EntityIcon } from '@/features/shell/entity-icon';
 import { useCan, useOrg } from '@/features/shell/org-context';
@@ -29,6 +29,8 @@ export function InboxPreview() {
   const { org } = useOrg();
   const notifications = useNotifications('all');
   const unread = useUnreadCount();
+  // The top bar loads the same data first. Until this card is live it shows what the server drew.
+  const hydrated = useHydrated();
   const entries = (notifications.data?.pages.flatMap((page) => page.items) ?? []).slice(0, INBOX_PREVIEW);
   return (
     <SectionCard
@@ -37,12 +39,12 @@ export function InboxPreview() {
       title="Inbox"
       aside={
         <span className="flex items-center gap-2">
-          {unread.data ? <CountBadge count={unread.data} tone="primary" label={`${unread.data} unread`} /> : null}
+          {hydrated && unread.data ? <CountBadge count={unread.data} tone="primary" label={`${unread.data} unread`} /> : null}
           <SeeAll href={routes.inbox(org.slug)}>Open</SeeAll>
         </span>
       }
     >
-      {notifications.isPending ? (
+      {!hydrated || notifications.isPending ? (
         <RowSkeletons rows={3} />
       ) : notifications.isError ? (
         <button
@@ -97,10 +99,11 @@ export function InboxPreview() {
 export function FavoritesCard() {
   const { org } = useOrg();
   const favorites = useFavorites();
+  const hydrated = useHydrated();
   const list = (favorites.data ?? []).filter((favorite) => entityHref(org.slug, favorite.entityType, favorite.entityId));
   return (
     <SectionCard id="home-favorites" icon={<Star aria-hidden />} title="Favorites">
-      {favorites.isPending ? (
+      {!hydrated || favorites.isPending ? (
         <RowSkeletons rows={2} />
       ) : list.length === 0 ? (
         <p className="px-4 py-6 text-center text-sm text-fg-muted">
@@ -127,13 +130,14 @@ export function FavoritesCard() {
 
 export function TemplatesRail({ workspaceId }: { readonly workspaceId: string | null }) {
   const templates = useBoardTemplates();
+  const hydrated = useHydrated();
   const requestCreate = useShellStore((state) => state.requestCreate);
   const canCreate = useCan('board:create');
   const list = (templates.data ?? []).filter((template) => template.category !== 'blank').slice(0, TEMPLATE_LIMIT);
   if (!canCreate) return null;
   return (
     <SectionCard id="home-templates" icon={<LayoutTemplate aria-hidden />} title="Start from a template">
-      {templates.isPending ? (
+      {!hydrated || templates.isPending ? (
         <RowSkeletons rows={3} />
       ) : list.length === 0 ? (
         <p className="px-4 py-6 text-center text-sm text-fg-muted">No templates available.</p>

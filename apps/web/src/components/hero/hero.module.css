@@ -51,6 +51,13 @@
   flex-wrap: wrap;
   gap: 12px;
 }
+.note {
+  margin-top: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 500;
+  color: rgb(244 241 233 / 0.78);
+}
 @media (max-width: 900px) {
   .inner {
     grid-template-columns: 1fr;

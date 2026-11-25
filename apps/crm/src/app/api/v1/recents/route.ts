@@ -8,6 +8,6 @@ export const GET = withApi(
   (ctx) => listRecents(svc(ctx), ctx.query.limit),
 );
 
-export const POST = withApi({ permission: 'org:read', rateLimit: 'default', body: entityRefSchema }, (ctx) =>
+export const POST = withApi({ permission: 'org:read', planRead: true, rateLimit: 'default', body: entityRefSchema }, (ctx) =>
   recordVisit(svc(ctx), ctx.body),
 );

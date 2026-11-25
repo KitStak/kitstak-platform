@@ -2,7 +2,10 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { AppSwitcher } from '@kitstak/ui/app-switcher';
+import { usePathname } from 'next/navigation';
+import { AppSwitcher, type AppSwitcherPlanBadge } from '@kitstak/ui/app-switcher';
+import { PlanBanner, type PlanBannerNotice } from '@kitstak/ui/plan-banner';
+import { ViewOnlyGuard, ViewOnlyPage, WRITE_LABEL, isWritePath } from '@kitstak/ui/view-only';
 import { PRODUCT_NAME } from '@/config/brand';
 import { BrandLogo } from './brand-logo';
 import { DASHBOARD_ITEM, HEADER_ITEMS, NAV_MENUS, USER_MENU_ITEMS } from '@/config/nav-config';
@@ -76,7 +79,83 @@ const APP_URLS = {
   pulse: process.env.NEXT_PUBLIC_PULSE_URL ?? 'http://localhost:3500',
 } as const;
 
-function TopBar({ org, orgs }: { readonly org?: OrgRef; readonly orgs?: readonly OrgRef[] }) {
+type ProductId = 'crm' | 'wms' | 'projects' | 'pulse';
+
+/** The organization's plan as the shell needs it (docs/billing/CONTRACTS.md section 18). */
+export interface ShellPlan {
+  readonly access: 'full' | 'read_only';
+  /** The plan banner under the top bar, or null. Words and link come from `@kitstak/billing`. */
+  readonly notice: PlanBannerNotice | null;
+  /** Plan state per app for the app switcher. */
+  readonly badges: Readonly<Record<ProductId, AppSwitcherPlanBadge>>;
+  /** Where a row that is not in the plan goes: the Portal plan picker with that app turned on. */
+  readonly addHrefs: Readonly<Record<ProductId, string>>;
+  /** Set when the plan has no room for one more warehouse: the sentence with the price, and the link. */
+  readonly warehouseLimit?: { readonly message: string; readonly planUrl: string } | null;
+}
+
+const ShellPlanContext = React.createContext<ShellPlan | null>(null);
+
+/** The organization's plan, for pages that must say "view only" or "at your limit" before a form opens. null in tests and harnesses. */
+export function useShellPlan(): ShellPlan | null {
+  return React.useContext(ShellPlanContext);
+}
+
+/**
+ * WMS screens that are a form from the first pixel: every "new" screen (orders, returns, receipts,
+ * products, workflows, billing forms, printouts) and the file import screens.
+ */
+const WMS_WRITE_PATHS: readonly (string | RegExp)[] = [/\/new$/, /^\/imports\/[^/]+$/, /^\/receiving\/import$/];
+
+/**
+ * View only is told before a form opens (docs/billing/SPEC.md 9.4). The WMS has hundreds of create
+ * and edit buttons, so they are not marked one by one: the guard marks every button, link and menu
+ * row whose label starts a change ("Create client", "Add client", "Bulk import/update", "Edit",
+ * "Delete": see `WRITE_LABEL`). A press on one opens one small dialog with the banner's words and
+ * button, and the buttons are dimmed. Links to the screens above are caught the same way.
+ */
+function PlanViewOnly({ plan }: { readonly plan?: ShellPlan }) {
+  const pathname = usePathname();
+  return (
+    <ViewOnlyGuard
+      active={plan?.access === 'read_only'}
+      notice={plan?.notice ?? null}
+      pathname={pathname ?? '/'}
+      writePaths={WMS_WRITE_PATHS}
+      writeLabel={WRITE_LABEL}
+      writePage="inline"
+      homeHref="/"
+    />
+  );
+}
+
+/**
+ * A create screen opened by its address while the plan is view only: the message takes the place
+ * of the form, inside the app frame. The top bar and the banner stay.
+ */
+function PlanPage({ plan, children }: { readonly plan?: ShellPlan; readonly children: React.ReactNode }) {
+  const pathname = usePathname();
+  if (plan?.access === 'read_only' && isWritePath(pathname ?? '/', WMS_WRITE_PATHS)) {
+    return (
+      <>
+        <ViewOnlyPage notice={plan.notice} homeHref="/" />
+        {/* The form stays in the tree, hidden and out of reach, so Next can still check the route in development. */}
+        <div hidden>{children}</div>
+      </>
+    );
+  }
+  return <>{children}</>;
+}
+
+function TopBar({
+  org,
+  orgs,
+  plan,
+}: {
+  readonly org?: OrgRef;
+  readonly orgs?: readonly OrgRef[];
+  readonly plan?: ShellPlan;
+}) {
   const { permissions, activeApps: ssrApps, entitledApps } = useShell();
   const allows = useShellAllows();
   // `/api/me` refreshes the active add-on apps after Settings → Apps changes; SSR value until then.
@@ -111,7 +190,13 @@ function TopBar({ org, orgs }: { readonly org?: OrgRef; readonly orgs?: readonly
             <HelpMenu />
             <NotificationsBell />
           </div>
-          <AppSwitcher current="wms" urls={APP_URLS} entitled={entitledApps} />
+          <AppSwitcher
+            current="wms"
+            urls={APP_URLS}
+            entitled={entitledApps}
+            planBadges={plan?.badges}
+            addHref={plan ? (app) => (app === 'portal' ? `${APP_URLS.portal}/billing/plan` : plan.addHrefs[app]) : undefined}
+          />
           <UserMenu />
         </div>
       </div>
@@ -145,6 +230,7 @@ export function AppShell({
   idleMinutes = null,
   org,
   orgs,
+  plan,
   children,
 }: {
   readonly user: ShellUser;
@@ -157,6 +243,8 @@ export function AppShell({
   /** The organization whose warehouse is open, and the others the user can switch to. */
   readonly org?: OrgRef;
   readonly orgs?: readonly OrgRef[];
+  /** Omitted in tests and harnesses: no banner, no plan badges. */
+  readonly plan?: ShellPlan;
   readonly children: React.ReactNode;
 }) {
   return (
@@ -167,6 +255,7 @@ export function AppShell({
       activeApps={activeApps}
       entitledApps={entitledApps}
     >
+      <ShellPlanContext.Provider value={plan ?? null}>
       <PreferencesBoundary>
         <div className="flex min-h-screen flex-col">
           <a
@@ -175,15 +264,21 @@ export function AppShell({
           >
             Skip to content
           </a>
-          <TopBar org={org} orgs={orgs} />
+          <TopBar org={org} orgs={orgs} plan={plan} />
+          {/* Trial, payment and view only notices: above the page, never over content. */}
+          <PlanBanner notice={plan?.notice ?? null} dismissible className="print:hidden" />
+          <PlanViewOnly plan={plan} />
           {/* lg:pr-6 reserves a gutter as wide as the fixed (w-6) "Feedback" side tab so it never covers grid action columns. */}
           <main id="main-content" className="flex min-h-0 flex-1 flex-col lg:pr-6 print:pr-0">
             <SetupCallout />
-            <PasswordChangeGate reason={passwordChange}>{children}</PasswordChangeGate>
+            <PasswordChangeGate reason={passwordChange}>
+              <PlanPage plan={plan}>{children}</PlanPage>
+            </PasswordChangeGate>
           </main>
           <IdleSignOut minutes={idleMinutes} />
         </div>
       </PreferencesBoundary>
+      </ShellPlanContext.Provider>
     </ShellProvider>
   );
 }

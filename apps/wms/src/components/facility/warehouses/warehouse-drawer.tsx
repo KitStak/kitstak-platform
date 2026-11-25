@@ -34,7 +34,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { FormGrid, FormSection } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/toast';
-import { apiErrorMessage } from '@/components/facility/facility-shared';
+import { apiErrorMessage, planLimitAction } from '@/components/facility/facility-shared';
 import { Wizard, type WizardStep } from '@/components/ui/wizard';
 import {
   CheckboxField,
@@ -391,6 +391,7 @@ function Body({
 }) {
   const formRef = React.useRef<UseFormReturn<F> | null>(null);
   const [conflict, setConflict] = React.useState(false);
+  const [planLimit, setPlanLimit] = React.useState<{ message: string; href: string | null } | null>(null);
   const guard = useWizardGuard();
   const steps = React.useMemo<readonly WizardStep<F>[]>(
     () => [
@@ -438,9 +439,18 @@ function Body({
       onDone();
     } catch (error) {
       if (isApiError(error) && error.code === 'CONFLICT') setConflict(true);
+      // One more warehouse than the plan covers: keep the sentence and the next step on screen.
+      setPlanLimit(
+        isApiError(error) && error.code === 'PLAN_WAREHOUSE_LIMIT'
+          ? { message: error.message, href: error.planUrl ?? null }
+          : null,
+      );
       const routed = guard.handleServerError(error, values);
       if (!routed && formRef.current) applyServerFieldErrors(formRef.current, error);
-      toast.error("Couldn't save the warehouse", apiErrorMessage(error), { duration: ERROR_TOAST_MS });
+      toast.error("Couldn't save the warehouse", apiErrorMessage(error), {
+        duration: ERROR_TOAST_MS,
+        action: planLimitAction(error),
+      });
       throw error;
     }
   };
@@ -459,7 +469,22 @@ function Body({
           Someone else saved this warehouse. Reload to see their changes.
         </Callout>
       ) : null}
-      {guard.banner && !conflict ? (
+      {planLimit ? (
+        <Callout
+          variant="attention"
+          title="This warehouse is not in your plan yet"
+          action={
+            planLimit.href ? (
+              <Button size="sm" data-testid="plan-warehouse-add" onClick={() => window.location.assign(planLimit.href ?? '/')}>
+                Add to my plan
+              </Button>
+            ) : undefined
+          }
+        >
+          {planLimit.message}
+        </Callout>
+      ) : null}
+      {guard.banner && !conflict && !planLimit ? (
         <Callout variant="error" title="Couldn't save the warehouse" onDismiss={guard.dismissBanner}>
           {guard.banner}
         </Callout>

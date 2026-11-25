@@ -12,7 +12,7 @@ function contentDisposition(fileName: string): string {
 }
 
 export const POST = withApi(
-  { permission: 'data:export', rateLimit: 'heavy', body: exportSchema, maxBodyBytes: 512 * 1024 },
+  { permission: 'data:export', planRead: true, rateLimit: 'heavy', body: exportSchema, maxBodyBytes: 512 * 1024 },
   async (ctx) => {
     const file = await exportBoard(svc(ctx), ctx.body);
     await ctx.audit({

@@ -17,7 +17,7 @@ import { NextResponse } from 'next/server';
 import { withOrg } from '@/server/db/scope';
 import { toDomainContext, type DomainContext } from '@/server/domain/_shared';
 import { assertAddressRefsReadable } from '@/server/domain/deleted';
-import { orgHasPulseModule } from '@/server/entitlements';
+import { assertPlanAllows, isPlanSafeMethod } from '@/server/plan-gate';
 import { trustedOrigins } from '@/server/env';
 import { DomainError, isDomainError } from '@/server/errors';
 import { getApiContext, type PulseContext } from '@/server/session';
@@ -33,6 +33,11 @@ export interface ApiArgs<P> {
 export interface ApiOptions {
   /** Allow credentialed calls from trusted sibling origins (Portal, CRM, WMS, Projects). */
   readonly cors?: boolean;
+  /**
+   * Marks a route that is not GET or HEAD but changes no business data (a query or an export sent
+   * as POST). It keeps working while the plan is view only. Every other write method is refused.
+   */
+  readonly planRead?: boolean;
 }
 
 function corsHeaders(request: Request, enabled: boolean): Record<string, string> {
@@ -116,9 +121,9 @@ export function apiRoute<P = Record<string, never>, T = unknown>(
       assertSafeOrigin(request);
       const context = await getApiContext(request);
       if (!context) throw new DomainError('UNAUTHENTICATED', 'Sign in to KitStak to continue.');
-      if (!(await orgHasPulseModule(context.org.id))) {
-        throw new DomainError('NOT_ENTITLED', 'KitStak Pulse is not turned on for this organization.');
-      }
+      // Plan gate: not in the plan refuses everything; view only lets reads through and refuses
+      // every other method, unless the route is marked as a read (`planRead`).
+      await assertPlanAllows(context.org.id, { write: !isPlanSafeMethod(request.method) && options.planRead !== true });
       const params = route?.params ? await route.params : ({} as P);
       const ctx = toDomainContext(context);
       const searchParams = new URL(request.url).searchParams;

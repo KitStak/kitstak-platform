@@ -11,6 +11,7 @@ import { useGreeting } from '@kitstak/ui/text';
 import { Button, cn } from '@/components/ui';
 import { useShellHome, useWorkspaces } from '@/features/shell/api';
 import { useCan, useOrg } from '@/features/shell/org-context';
+import { useHydrated } from '@/lib/hooks';
 import { routes } from '@/features/shell/routes';
 import { startRouteProgress } from '@/features/shell/route-progress';
 import { useShellStore } from '@/features/shell/store';
@@ -48,7 +49,7 @@ function QuickActions({ workspaceId }: { readonly workspaceId: string | null }) 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="home-quick-actions">
       {canInvite ? (
-        <Button variant="secondary" leadingIcon={<UserPlus aria-hidden />} onClick={() => openPanel('invite')}>
+        <Button variant="secondary" leadingIcon={<UserPlus aria-hidden />} data-plan-write onClick={() => openPanel('invite')}>
           Invite
         </Button>
       ) : null}
@@ -56,6 +57,8 @@ function QuickActions({ workspaceId }: { readonly workspaceId: string | null }) 
         <Button
           variant="secondary"
           leadingIcon={<Upload aria-hidden />}
+          // In view only this press opens the "view only" dialog instead (see ViewOnlyGuard).
+          data-plan-write
           onClick={() => {
             startRouteProgress();
             router.push(routes.importData(org.slug));
@@ -68,6 +71,8 @@ function QuickActions({ workspaceId }: { readonly workspaceId: string | null }) 
         <Button
           leadingIcon={<Plus aria-hidden />}
           data-testid="home-new-board"
+          // In view only this press opens the "view only" dialog instead (see ViewOnlyGuard).
+          data-plan-write
           loading={pendingCreate}
           onClick={() => {
             if (workspaceId) requestCreate({ kind: 'board', workspaceId });
@@ -92,7 +97,9 @@ export function HomePage() {
     () => new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }),
     [],
   );
-  const loading = home.isPending;
+  // Loading until this page is live, so the first browser pass matches the server's placeholders.
+  const hydrated = useHydrated();
+  const loading = !hydrated || home.isPending;
 
   return (
     <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8" data-testid="home-page">

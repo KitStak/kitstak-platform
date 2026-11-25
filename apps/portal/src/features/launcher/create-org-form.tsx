@@ -1,67 +1,68 @@
 'use client';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2 } from 'lucide-react';
 import { Button, Field, Input } from '@/components/ui';
-import { organization } from '@/lib/auth-client';
-import { slugWithSuffix, slugify } from '@/lib/slug';
+import { companyIssue } from '@/features/signup/fields';
+import { createWorkspaceAction } from '@/server/signup-actions';
 
-const NAME_MIN = 2;
-const NAME_MAX = 80;
-
-/** Empty-state org creation (signed-in user with no memberships yet). */
+/**
+ * Organization creation for a signed in person with no memberships yet (the launcher's empty
+ * state). It runs the same server action as signup, so the new organization gets a signup intent
+ * and the person goes on to pick their apps and start the free trial.
+ */
 export function CreateOrgForm() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const submitting = useRef(false);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const trimmed = name.trim();
-    if (trimmed.length < NAME_MIN || trimmed.length > NAME_MAX) {
-      setError(`Use ${NAME_MIN} to ${NAME_MAX} characters.`);
-      return;
-    }
-    setError(null);
+    if (submitting.current) return;
+    const issue = companyIssue(name);
+    setError(issue);
+    if (issue) return;
+    submitting.current = true;
     setPending(true);
     try {
-      const base = slugify(trimmed);
-      let result = await organization.create({ name: trimmed, slug: base });
-      if (result.error) {
-        result = await organization.create({ name: trimmed, slug: slugWithSuffix(base) });
-      }
-      if (result.error) {
-        setError(result.error.message ?? 'We couldn’t create the organization. Try again.');
-        setPending(false);
+      const result = await createWorkspaceAction({ company: name.trim(), handoff: {} });
+      if (result.ok) {
+        router.replace(result.next ?? '/signup/plan');
+        router.refresh();
         return;
       }
-      if (result.data) await organization.setActive({ organizationId: result.data.id });
-      router.refresh();
+      setError(result.error ?? 'We could not create the organization. Try again.');
     } catch {
-      setError('We couldn’t reach KitStak. Check your connection and try again.');
-      setPending(false);
+      setError('We could not reach KitStak. Check your connection and try again.');
     }
+    submitting.current = false;
+    setPending(false);
   };
 
   return (
     <form noValidate onSubmit={onSubmit} className="flex w-full max-w-sm flex-col gap-4">
-      <Field label="Organization name" error={error}>
+      <Field label="Company or team" error={error}>
         {({ inputId, describedBy, invalid }) => (
           <Input
             id={inputId}
             size="lg"
+            name="organization"
+            autoComplete="organization"
             autoFocus
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Acme Inc."
+            placeholder="Northwind Robotics"
             leadingIcon={<Building2 aria-hidden />}
             aria-describedby={describedBy}
             invalid={invalid}
+            containerClassName="h-12 sm:h-11"
+            className="text-md sm:text-base"
           />
         )}
       </Field>
-      <Button type="submit" size="lg" loading={pending}>
+      <Button type="submit" size="lg" className="h-12 sm:h-11" loading={pending}>
         Create organization
       </Button>
     </form>

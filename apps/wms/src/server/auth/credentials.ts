@@ -11,7 +11,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { and, eq, ne } from 'drizzle-orm';
-import { isBcryptHash } from '@kitstak/auth';
+import { blockSignIn, isBcryptHash, unblockSignIn, type RawSqlExecutor } from '@kitstak/auth';
 import { account, member, organization, passwordPolicyState, user, userProfiles } from '@kitstak/db/schema';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import bcrypt from 'bcryptjs';
@@ -97,6 +97,10 @@ async function findOrCreatePlatformOrg(db: AppDb, now: Date): Promise<string> {
 
 /** Org roles a WMS edit must never overwrite (they are granted in the portal, not here). */
 const PRESERVED_ORG_ROLES: ReadonlySet<string> = new Set(['owner', 'admin']);
+/** The role of a person who only manages billing in the Portal (`BILLING_ONLY_ROLE` in @kitstak/auth). */
+const BILLING_ONLY_ORG_ROLE = 'billing';
+/** Org roles that use no seat of a paid plan (`CATALOG.freeRoles` in @kitstak/billing). */
+const FREE_ORG_ROLES: ReadonlySet<string> = new Set(['guest', BILLING_ONLY_ORG_ROLE]);
 
 /**
  * True when the core identity belongs to NO organization other than the one owning this
@@ -247,6 +251,10 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
   )[0];
   const orgRole = orgRoleForLegacy(input.legacyRole);
   if (!membership) {
+    // A new person in the organization uses a seat of its paid plan (docs/billing/SPEC.md P6).
+    // No limit during a free trial, with no paid plan, or on a plan with WMS alone.
+    const { assertSeatAvailable } = await import('@/server/auth/plan');
+    await assertSeatAvailable(db, orgId, orgRole);
     await db.insert(member).values({
       id: randomUUID(),
       organizationId: orgId,
@@ -256,7 +264,17 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
     });
   } else if (!membership.role.split(',').some((r) => PRESERVED_ORG_ROLES.has(r.trim()))) {
     // An owner/admin role granted in the portal is kept as is.
-    await db.update(member).set({ role: orgRole }).where(eq(member.id, membership.id));
+    const held = membership.role.split(',').map((r) => r.trim()).filter(Boolean);
+    const heldNoSeat = held.length > 0 && held.every((r) => FREE_ORG_ROLES.has(r));
+    if (heldNoSeat) {
+      // A guest, or a person who only manages billing, held no seat until now. Working in the
+      // warehouse uses one, so the plan must have room (billing review round 2).
+      const { assertSeatAvailable } = await import('@/server/auth/plan');
+      await assertSeatAvailable(db, orgId, orgRole);
+    }
+    // A billing manager stays one: the billing role is kept next to the new role.
+    const nextRole = held.includes(BILLING_ONLY_ORG_ROLE) ? `${orgRole},${BILLING_ONLY_ORG_ROLE}` : orgRole;
+    await db.update(member).set({ role: nextRole }).where(eq(member.id, membership.id));
   }
 
   await db
@@ -372,6 +390,26 @@ export async function deleteCredentialAccount(db: AppDb, userId: string): Promis
     .where(and(eq(account.userId, userId), eq(account.providerId, CREDENTIAL_PROVIDER)))
     .returning({ id: account.id });
   return removed.length > 0;
+}
+
+/**
+ * Switches a person's KitStak account off, for every app: the block row the shared sign in layer
+ * reads at every door (`core.sign_in_blocks`, see `@kitstak/auth` sign-in-block.ts), every session
+ * ended, and the password row removed as a second lock. Since billing review round 4 the block row
+ * is the fact; before it, a missing password row was, and "Forgot password" could bring the person
+ * back. Only for an identity this warehouse manages (`identityManagedHere`).
+ */
+export async function switchOffSignIn(db: AppDb, userId: string, blockedBy?: string | null): Promise<void> {
+  await deleteCredentialAccount(db, userId);
+  await blockSignIn(db as unknown as RawSqlExecutor, { userId, blockedBy: blockedBy ?? null });
+}
+
+/**
+ * Switches the account back on. The password is not brought back: an administrator resets it, or
+ * the person uses "Forgot password" in the Portal.
+ */
+export async function switchOnSignIn(db: AppDb, userId: string): Promise<void> {
+  await unblockSignIn(db as unknown as RawSqlExecutor, userId);
 }
 
 /** Clears the password-policy plugin's lockout row for an email. */

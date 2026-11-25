@@ -2,8 +2,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
+import { billingLink } from '@kitstak/billing/links';
 import {
   Building2,
+  CreditCard,
   Keyboard,
   LogOut,
   Monitor,
@@ -53,7 +55,7 @@ function isThemePreference(value: string): value is ThemePreference {
 export function UserMenu() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { org, user, role } = useOrg();
+  const { org, user, role, apps } = useOrg();
   const { preference, setPreference } = useTheme();
   const openPanel = useShellStore((state) => state.openPanel);
   const canAdmin = useCan('org:update');
@@ -156,6 +158,17 @@ export function UserMenu() {
             onSelect={() => router.push(routes.admin(org.slug))}
           >
             Administration
+          </DropdownMenuItem>
+        ) : null}
+        {canAdmin ? (
+          <DropdownMenuItem
+            icon={<CreditCard aria-hidden />}
+            data-testid="user-menu-plan"
+            onSelect={() =>
+              window.location.assign(billingLink(apps?.urls.portal ?? 'http://localhost:3300', { to: 'home' }, 'crm'))
+            }
+          >
+            Plan and payment
           </DropdownMenuItem>
         ) : null}
         {canMembers ? (

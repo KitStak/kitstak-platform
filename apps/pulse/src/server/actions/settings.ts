@@ -56,7 +56,7 @@ export async function updateSettingsAction(input: UpdateSettingsActionInput) {
 const onboardingSchema = z.object({ key: z.string().regex(/^[a-z][a-zA-Z0-9_]{0,40}$/), value: z.union([z.boolean(), z.string().max(200), z.number(), z.null()]).optional() });
 /** Marks a welcome or checklist step (for example the browser time zone, or "added a client"). */
 export async function setOnboardingAction(input: z.input<typeof onboardingSchema>) {
-  return runAction(onboardingSchema, input, (data, ctx) => setOnboarding(ctx, data.key, data.value ?? true), { revalidate: false });
+  return runAction(onboardingSchema, input, (data, ctx) => setOnboarding(ctx, data.key, data.value ?? true), { revalidate: false, read: true });
 }
 
 const siteFields = { code: code.nullable().optional(), name: name(120), timezone: z.string().min(1).max(64), isDefault: z.boolean().optional() };

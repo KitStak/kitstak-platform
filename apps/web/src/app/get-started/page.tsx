@@ -8,7 +8,7 @@ const CHOICES = isAppLive('pulse') ? 'the CRM, the WMS, Projects, Pulse' : 'the 
 
 export const metadata: Metadata = {
   title: 'Set up your Stak - KitStak',
-  description: `Choose ${CHOICES} or any mix. Tell us about your operation. Get a setup plan and a price in about five minutes.`,
+  description: `Choose ${CHOICES} or any mix. Tell us about your operation. Get a price and a setup plan, then start your free trial. It takes about five minutes.`,
   alternates: { canonical: '/get-started' },
 };
 

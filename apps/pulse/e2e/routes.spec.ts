@@ -119,7 +119,8 @@ for (const who of ['admin', 'maya'] as const satisfies readonly Login[]) {
 test.describe('routes with no sign in', () => {
   test('sign in, forgot password, floor tablet and wall TV pages render clean', async ({ page }) => {
     const watch = watchPage(page);
-    expect(await open(page, '/login')).toBe(200);
+    // The Pulse form itself. A plain /login goes to the Portal sign in, the one front door.
+    expect(await open(page, '/login?local=1')).toBe(200);
     await expect(page).toHaveTitle(/KitStak Pulse/);
     expect(watch.problems, '/login').toEqual([]);
     // Password reset is one shared KitStak flow: Pulse sends people to it and never renders its own.

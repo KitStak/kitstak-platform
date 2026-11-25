@@ -41,14 +41,14 @@ import {
   PulseStackVisual,
   RiskVisual,
 } from '@/components/pulse/pulse-visuals';
-import { PULSE_IS_LIVE, ROUTES, availabilityLabel, getStartedHref, walkthroughHref } from '@/components/site-links';
+import { availabilityLabel, PULSE_IS_LIVE, ROUTES, startFreeHref, walkthroughHref } from '@/components/site-links';
 
 /**
  * The main action. "Start with Pulse" only once the app is open to customers. Until then the page
  * leads with a walkthrough, and the second button jumps to the worked job.
  */
 const PRIMARY = PULSE_IS_LIVE
-  ? { href: getStartedHref('pulse'), label: HERO.startLabel }
+  ? { href: startFreeHref('pulse', 'product'), label: HERO.startLabel }
   : { href: walkthroughHref('pulse'), label: HERO.walkthroughLabel };
 const SECONDARY = PULSE_IS_LIVE
   ? { href: walkthroughHref('pulse'), label: HERO.walkthroughLabel }

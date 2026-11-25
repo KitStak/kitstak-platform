@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { DAY_EXISTS, DAY_STALE, DayConflict, saveProductionDay, toDomainContext } from '@/server/domain';
 import { productionDayInput } from '@/server/actions/schemas';
-import { orgHasPulseModule } from '@/server/entitlements';
+import { assertPlanAllows } from '@/server/plan-gate';
 import { DomainError } from '@/server/errors';
 import { errorResponse, readJson } from '@/server/http/api';
 import { trustedOrigins } from '@/server/env';
@@ -24,7 +24,8 @@ export async function PUT(request: Request): Promise<NextResponse> {
     if (!(request.headers.get('content-type') ?? '').toLowerCase().startsWith('application/json')) throw new DomainError('VALIDATION', 'Send the day as JSON.');
     const context = await getApiContext(request);
     if (!context) throw new DomainError('UNAUTHENTICATED', 'Sign in to KitStak to continue.');
-    if (!(await orgHasPulseModule(context.org.id))) throw new DomainError('NOT_ENTITLED', 'KitStak Pulse is not turned on for this organization.');
+    // Saving a day or a row is a write: refused while the plan is view only or Pulse is not in it.
+    await assertPlanAllows(context.org.id, { write: true });
     const ctx = toDomainContext(context);
     const parsed = productionDayInput.safeParse(await readJson(request));
     if (!parsed.success) {

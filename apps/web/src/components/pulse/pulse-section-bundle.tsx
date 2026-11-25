@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { PRICING, percentLabel } from '@/lib/pricing';
+import { BUNDLE_OFF } from '@/lib/pricing';
 import cta from '../product/cta.module.css';
 import { FULL_STACK, PULSE_IS_LIVE, ROUTES, getStartedHref } from '../site-links';
 import { StakMark } from '../stak-mark';
@@ -23,7 +23,7 @@ export function PulseBundleSection({ visual }: PulseBundleSectionProps) {
         <div>
           <p className={cta.saving} data-reveal>
             <StakMark lit="both" size={28} />
-            Save {percentLabel(PRICING.bundleDiscount)} when you stack two or more
+            Save {BUNDLE_OFF} when you stack two or more
           </p>
           <h2 id="together-heading" className={`h2 ${cta.bundleTitle}`} data-reveal>
             {BUNDLE.title}

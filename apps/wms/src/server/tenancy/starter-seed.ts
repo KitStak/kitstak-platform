@@ -20,11 +20,16 @@ import * as schema from '@/server/db/schema';
 import { CLIENT_ROLE_KEY, CLIENT_ROLE_PERMISSIONS } from '@/server/db/seed/access';
 import { GLOBAL_LOOKUPS, LOCATION_GROUPS, LOCATION_ZONE_SETTINGS, LOCATION_ZONES } from '@/server/db/seed/lookups';
 import { SEED_APPS, seedPrintouts } from '@/server/db/seed/platform';
-import { warehouseSchema, WAREHOUSE_DEFAULTS } from '@/lib/grid-defs/facility/warehouses';
+import { firstWarehouseSaveSchema, phoneError, WAREHOUSE_DEFAULTS } from '@/lib/grid-defs/facility/warehouses';
 import { createWarehouse } from '@/server/repositories/warehouses';
 import type { LookupType } from '@/lib/enums';
 
-/** What the setup form collects about the org's first warehouse. */
+/**
+ * What the setup form collects about the org's first warehouse. Only the name and the short code
+ * are needed (the form fills both in, and the time zone has a default). The address and the
+ * contact are optional here: a new trial is not stopped by nine required fields, and they can be
+ * added later under Settings, Warehouse. What is typed is still checked.
+ */
 export const firstWarehouseSchema = z.object({
   name: z.string().trim().min(1, 'Enter the warehouse name').max(120),
   code: z
@@ -33,13 +38,21 @@ export const firstWarehouseSchema = z.object({
     .min(1, 'Enter a short code')
     .max(20)
     .regex(/^[A-Za-z0-9_-]+$/, 'Letters, numbers, dash or underscore'),
-  addressLine: z.string().trim().min(1, 'Enter the street address').max(250),
-  city: z.string().trim().min(1, 'Enter the city').max(100),
-  state: z.string().trim().min(1, 'Enter the state').max(60),
-  postalCode: z.string().trim().min(1, 'Enter the postal code').max(20),
+  addressLine: z.string().trim().max(250).default(''),
+  city: z.string().trim().max(100).default(''),
+  state: z.string().trim().max(60).default(''),
+  postalCode: z.string().trim().max(20).default(''),
   country: z.string().trim().min(1).max(60).default('United States'),
-  contactName: z.string().trim().min(1, 'Enter a contact name').max(120),
-  contactPhone: z.string().trim().min(1, 'Enter a contact phone number').max(40),
+  contactName: z.string().trim().max(120).default(''),
+  contactPhone: z
+    .string()
+    .trim()
+    .max(40)
+    .default('')
+    .superRefine((value, ctx) => {
+      const problem = phoneError(value);
+      if (problem) ctx.addIssue({ code: 'custom', message: problem });
+    }),
   timezone: z.string().trim().default('America/Chicago'),
 });
 export type FirstWarehouseInput = z.input<typeof firstWarehouseSchema>;
@@ -214,7 +227,7 @@ export async function seedStarterWarehouse(
     orgSlug: '',
     tenantSchema: input.schemaName,
   });
-  const save = warehouseSchema.parse({
+  const save = firstWarehouseSaveSchema.parse({
     ...WAREHOUSE_DEFAULTS,
     ...first,
     prefix: prefixFromCode(first.code),

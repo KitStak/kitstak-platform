@@ -55,5 +55,5 @@ export async function deleteLaborRateAction(input: z.input<typeof rateIdSchema>)
 const previewSchema = z.object({ ...rateFields, rateId: uuid.nullable().optional() });
 /** "This changes 212 entries and lowers profit by $1,430 across 9 jobs." Saves nothing. */
 export async function previewLaborRateAction(input: z.input<typeof previewSchema>) {
-  return runAction(previewSchema, input, (data, ctx) => previewLaborRate(ctx, data), { revalidate: false });
+  return runAction(previewSchema, input, (data, ctx) => previewLaborRate(ctx, data), { revalidate: false, read: true });
 }

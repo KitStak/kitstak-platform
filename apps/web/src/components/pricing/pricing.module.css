@@ -1,0 +1,220 @@
+/* ------------------------------------------------------------ Hero (navy) */
+.hero {
+  background: var(--surface-brand);
+  color: var(--brand-cream);
+  /* Extra room at the bottom: the price cards rise into the navy. */
+  padding: calc(var(--header-h) + clamp(32px, 4vw, 56px)) 0 clamp(120px, 12vw, 160px);
+}
+.heroInner {
+  display: grid;
+  justify-items: start;
+}
+.heroKicker {
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+  color: var(--on-brand-muted);
+}
+.heroTitle {
+  margin-top: 12px;
+  font-size: clamp(38px, 5vw, 72px);
+  letter-spacing: -0.045em;
+  line-height: 1;
+  font-weight: 800;
+  text-wrap: balance;
+}
+.heroTitle span {
+  display: block;
+  animation: rise 900ms var(--ease-site) both;
+}
+.heroTitle span:last-child {
+  color: var(--brand-red);
+  animation-delay: 110ms;
+}
+.heroLead {
+  margin-top: 24px;
+  font-size: var(--type-lead);
+  line-height: 1.6;
+  max-width: 60ch;
+  color: var(--on-brand-muted);
+  animation: rise 900ms 220ms var(--ease-site) both;
+}
+.heroToggle {
+  margin-top: 28px;
+  animation: rise 900ms 320ms var(--ease-site) both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------ Price cards */
+.cardsBand {
+  margin-top: calc(clamp(72px, 8vw, 112px) * -1);
+  padding-bottom: clamp(48px, 6vw, 80px);
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(12px, 1.6vw, 20px);
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  padding: clamp(20px, 2vw, 28px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  background: var(--surface-panel);
+  box-shadow: var(--elevation-lg);
+  animation: rise 900ms var(--ease-site) both;
+}
+.card:nth-child(2) {
+  animation-delay: 80ms;
+}
+.card:nth-child(3) {
+  animation-delay: 160ms;
+}
+.card:nth-child(4) {
+  animation-delay: 240ms;
+}
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: -6px;
+}
+.cardName {
+  font-size: var(--type-md);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.cardLine {
+  margin-top: 12px;
+  min-height: 3em;
+  font-size: var(--type-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.cardPrice {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+.cardFigure {
+  font-size: clamp(56px, 5vw, 72px);
+  font-variant-numeric: tabular-nums;
+}
+.cardTerms {
+  min-height: 2.8em;
+  font-size: var(--type-base);
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+.cardYearly {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  min-height: calc(12px + 2.9em);
+  margin-bottom: 16px;
+  font-size: var(--type-sm);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.cardStart {
+  margin-top: auto;
+}
+.cardMore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  margin-top: 4px;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+.cardMore:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.cardsNote {
+  margin-top: 24px;
+  text-align: center;
+  font-size: var(--type-base);
+  color: var(--text-secondary);
+}
+.cardsNote strong {
+  color: var(--text-primary);
+}
+
+/* ------------------------------------------------------------ Calculator */
+.calcBand {
+  padding-top: clamp(40px, 5vw, 72px);
+}
+.calcBand :global(.h2),
+.rulesBand :global(.h2) {
+  max-width: 18ch;
+}
+.calc {
+  margin-top: clamp(40px, 5vw, 64px);
+}
+
+/* ------------------------------------------------------------ How billing works */
+.rulesBand {
+  border-top: 1px solid var(--border-subtle);
+}
+.rules {
+  list-style: none;
+  margin: clamp(40px, 5vw, 64px) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(16px, 2vw, 28px);
+}
+.rules li {
+  padding-top: 20px;
+  border-top: 2px solid var(--text-primary);
+}
+.ruleIndex {
+  display: block;
+  font-size: 44px;
+  color: var(--brand-red);
+}
+.ruleTitle {
+  margin-top: 16px;
+  font-size: var(--type-lg);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.ruleLine {
+  margin-top: 10px;
+  font-size: var(--type-base);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 1080px) {
+  .cards,
+  .rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .cards,
+  .rules {
+    grid-template-columns: 1fr;
+  }
+  .cardLine,
+  .cardTerms,
+  .cardYearly {
+    min-height: 0;
+  }
+}

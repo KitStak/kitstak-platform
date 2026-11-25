@@ -7,6 +7,6 @@ export default defineConfig({
     // Node by default (pure token/theme helpers); DOM-dependent suites opt in with
     // `// @vitest-environment jsdom` at the top of the file.
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });

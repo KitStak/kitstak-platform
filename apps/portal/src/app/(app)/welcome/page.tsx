@@ -1,52 +1,60 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { requirePageSession } from '@/server/session';
-import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
-import { getSetupState } from '@/server/onboarding';
-import { CreateOrgForm } from '@/features/launcher/create-org-form';
+import { formatDay } from '@kitstak/billing/catalog';
+import { getOpenSignupIntent } from '@kitstak/billing/server';
+import { firstNameOf } from '@/features/signup/fields';
+import { READING_PLAN_COOKIE } from '@/features/welcome/reading-plan';
 import { WelcomeWizard } from '@/features/welcome/welcome-wizard';
-import { LogoMark } from '@/features/shell/logo';
+import { getBillingContext } from '@/server/billing/context';
+import { db } from '@/server/db';
+import { getSetupState } from '@/server/onboarding';
+import { requirePageSession } from '@/server/session';
+import { getSignupResume, stepHref } from '@/server/signup';
 
 export const metadata: Metadata = { title: 'Welcome' };
 
-function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] || name;
-}
-
 const MANAGER_ROLES = new Set(['owner', 'admin']);
 
-/** Post-signup welcome wizard: three tile-click questions → a personalized setup plan. */
+/**
+ * The welcome wizard after signup (docs/billing/SPEC.md section 5.7). It shows the apps in the
+ * trial, asks at most three tile questions, and ends on a short plan of next steps. Answers given
+ * on the marketing site are already filled in, so nobody answers the same question twice.
+ */
 export default async function WelcomePage() {
   const session = await requirePageSession('/welcome');
-  const orgs = await listUserOrgs(session.user.id);
-  const activeOrg = await resolveActiveOrg(session, orgs);
 
-  // Org creation failed or was skipped during signup: recover here, then the wizard runs.
-  if (!activeOrg) {
-    return (
-      <section className="flex flex-col items-center py-20 text-center">
-        <LogoMark size={40} />
-        <h1 className="mt-8 text-2xl font-semibold tracking-[-0.02em] text-fg">
-          First, create your organization
-        </h1>
-        <div className="mt-8 flex w-full justify-center">
-          <CreateOrgForm />
-        </div>
-      </section>
-    );
+  // The same check every signup screen runs: an earlier step that is still open comes first.
+  const resume = await getSignupResume(session);
+  if (resume.step === '/signup/company' || resume.step === '/signup/plan' || resume.step === '/verify-email') {
+    redirect(stepHref(resume.step));
   }
+  const context = await getBillingContext();
+  // No organization: the signup step for a new person, home for one who was removed from theirs.
+  if (!context) redirect(resume.step === '/' ? '/' : '/signup/company');
 
-  // Members without a managing role (and already-profiled orgs) go straight to the launcher.
-  if (!MANAGER_ROLES.has(activeOrg.role)) redirect('/');
-  const setup = await getSetupState(activeOrg);
-  if (setup.profile) redirect('/');
+  // Members without a managing role (and already profiled orgs) go straight to the launcher.
+  if (!MANAGER_ROLES.has(context.org.role)) redirect('/');
+  const [setup, intent] = await Promise.all([
+    getSetupState(context.org, { timeZone: context.timeZone }),
+    resume.intent ? Promise.resolve(resume.intent) : getOpenSignupIntent(db, session.user.id),
+  ]);
+  // The wizard saves the answers the moment its last screen (the plan) opens, so "Done" there is
+  // true. Its cookie says the person is still reading that screen: they stay on it, with the saved
+  // answers, until they press "Looks good". Without it a saved profile means the launcher.
+  const readingPlan = (await cookies()).get(READING_PLAN_COOKIE)?.value === '1';
+  if (setup.profile && !readingPlan) redirect('/');
+  const saved = setup.profile;
 
   return (
     <WelcomeWizard
-      firstName={firstName(session.user.name)}
-      orgName={activeOrg.name}
-      crmEntitled={setup.guideEntitlements.crm}
-      wmsEntitled={setup.guideEntitlements.wms}
+      firstName={firstNameOf(session.user.name ?? '')}
+      orgName={context.org.name}
+      products={setup.products}
+      billing={setup.billing}
+      trialEndsOn={setup.trialEndsAt ? formatDay(setup.trialEndsAt, context.timeZone) : null}
+      prefill={saved ? { businessType: saved.businessType, teamSize: saved.teamSize, startMode: saved.startMode } : (intent?.profile ?? {})}
+      answersSaved={saved !== null}
     />
   );
 }

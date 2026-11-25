@@ -85,7 +85,14 @@ describe('passwordProblems', () => {
 
   test('rejects a short or simple password', () => {
     expect(passwordProblems('short', who).length).toBeGreaterThan(0);
-    expect(passwordProblems('alllowercaseletters', who).length).toBeGreaterThan(0);
+    // 14 lowercase letters: long enough for the minimum, too short to count as a passphrase.
+    expect(passwordProblems('alllowercasepw', who).length).toBeGreaterThan(0);
+  });
+
+  test('accepts a passphrase of 15 or more characters with no capital, number or symbol', () => {
+    // The shared sign-up policy (`passphraseLength` in @kitstak/auth): length does the work.
+    expect(passwordProblems('alllowercaseletters', who)).toEqual([]);
+    expect(passwordProblems('correct horse battery staple', who)).toEqual([]);
   });
 });
 

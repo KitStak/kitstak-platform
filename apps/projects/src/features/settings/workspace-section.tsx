@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { billingLink } from '@kitstak/billing/links';
 import { ExternalLink, FolderKanban, MoreHorizontal, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import {
   Avatar,
@@ -223,7 +224,7 @@ export function WorkspaceSection({ spaces }: { readonly spaces: readonly SpaceDT
             <ExternalLink aria-hidden className="size-3.5 text-icon" />
           </a>
           <a
-            href={`${appUrls.portal}/billing`}
+            href={billingLink(appUrls.portal, { to: 'home' }, 'projects')}
             className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg"
           >
             Plan and billing <ExternalLink aria-hidden className="size-3.5 text-icon" />

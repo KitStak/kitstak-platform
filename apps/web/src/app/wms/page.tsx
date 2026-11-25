@@ -10,7 +10,7 @@ import { IntegrationWall } from '@/components/product/integrations';
 import { PriceBand } from '@/components/product/price-band';
 import { ProductHero } from '@/components/product/product-hero';
 import { SubNav } from '@/components/product/sub-nav';
-import { ROUTES, getStartedHref } from '@/components/site-links';
+import { ROUTES, startFreeHref } from '@/components/site-links';
 import { BillStatement } from '@/components/wms/bill-statement';
 import { FloorTicker } from '@/components/wms/floor-ticker';
 import { PackStation } from '@/components/wms/pack-station';
@@ -56,12 +56,12 @@ export default function WmsPage() {
           app="wms"
           lines={['Dock.', 'Shelf.', 'Door.']}
           lead="KitStak WMS runs receiving, inventory, picking, packing, shipping and returns. Every unit has a location and every location has a count."
-          primary={{ href: getStartedHref('wms'), label: 'Start with the WMS' }}
+          primary={{ href: startFreeHref('wms', 'product'), label: 'Start with the WMS' }}
           secondary={{ href: ROUTES.demo, label: 'Book a walkthrough' }}
           visual={<FloorTicker />}
           facts={HERO_FACTS}
         />
-        <SubNav current="wms" sections={SECTIONS} cta={{ href: getStartedHref('wms'), label: 'Start with the WMS' }} />
+        <SubNav current="wms" sections={SECTIONS} cta={{ href: startFreeHref('wms', 'product'), label: 'Start with the WMS' }} />
 
         <Chapter
           id="inbound"
@@ -160,7 +160,7 @@ export default function WmsPage() {
         />
         <ClosingSection
           title="Know where every unit is."
-          startHref={getStartedHref('wms')}
+          startHref={startFreeHref('wms', 'product')}
           startLabel="Start with the WMS"
         />
       </main>

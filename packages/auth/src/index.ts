@@ -12,4 +12,6 @@ export * from './create-auth';
 export * from './password-compat';
 export * from './password-policy-plugin';
 export * from './timing';
+export * from './sign-in-block';
+export * from './front-door';
 export { getKitstakSessionCookie, hasKitstakSessionCookie } from './session-cookie';
