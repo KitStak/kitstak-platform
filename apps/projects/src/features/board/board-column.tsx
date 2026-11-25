@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { ChevronsLeftRight, ChevronsRightLeft, Gauge, MoreHorizontal, Plus } from 'lucide-react';
+import { ChevronsLeftRight, ChevronsRightLeft, Gauge, MoreHorizontal, Plus, Boxes } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,12 +60,14 @@ export interface ColumnHeaderProps {
   readonly canCreate: boolean;
   readonly canManage: boolean;
   readonly onAdd: () => void;
+  /** Projects: "New build" in this column (docs/programs/SPEC.md 5.17). */
+  readonly onAddBuild?: () => void;
   readonly onCollapse: () => void;
   readonly onWipLimit: (limit: number | null) => void;
   readonly sticky?: boolean;
 }
 
-export function ColumnHeader({ status, count, wipCount, canCreate, canManage, onAdd, onCollapse, onWipLimit, sticky }: ColumnHeaderProps) {
+export function ColumnHeader({ status, count, wipCount, canCreate, canManage, onAdd, onAddBuild, onCollapse, onWipLimit, sticky }: ColumnHeaderProps) {
   return (
     <header
       className={cn('flex h-10 shrink-0 items-center gap-2 rounded-t-xl pr-1 pl-3', sticky && 'bg-sunken')}
@@ -86,6 +88,11 @@ export function ColumnHeader({ status, count, wipCount, canCreate, canManage, on
             {canCreate ? (
               <DropdownMenuItem icon={<Plus aria-hidden />} onSelect={onAdd}>
                 Add a task here
+              </DropdownMenuItem>
+            ) : null}
+            {canCreate && onAddBuild ? (
+              <DropdownMenuItem icon={<Boxes aria-hidden />} description="Planned units, a day, and where it bills" onSelect={onAddBuild} data-testid="column-add-build">
+                New build
               </DropdownMenuItem>
             ) : null}
             <DropdownMenuItem icon={<ChevronsRightLeft aria-hidden />} onSelect={onCollapse} data-testid="column-collapse">

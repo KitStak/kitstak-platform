@@ -7,19 +7,21 @@
  * Cmd/Ctrl+F focuses the search.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { CalendarClock, CircleDashed, ListFilter, RotateCcw, Save, Search, Signal, Tag, UserRound, UsersRound } from 'lucide-react';
+import { Boxes, CalendarClock, CircleDashed, ListFilter, RotateCcw, Save, Search, Signal, Tag, UserRound, UsersRound } from 'lucide-react';
 import { Avatar, Button, Chip, IconButton, SearchInput, Tooltip, cn } from '@/components/ui';
 import { PriorityIcon, StatusIcon } from '@/components/pm';
 import { PRIORITIES, PRIORITY_LABELS, type Priority } from '@/lib/constants';
 import { usePeople } from '@/lib/hooks/use-data';
 import type { TaskSummary } from '@/lib/types';
 import { useCurrentProject } from '@/features/projects/project-context';
+import { useCardExtras } from './card-extras';
 import { LabelDot } from './field-pickers';
 import { OptionList, type OptionItem } from './option-list';
 import { SaveViewButton, SavedViewsMenu } from './saved-views-menu';
 import { ToolbarButton, ToolbarDivider, ToolbarPopover } from './toolbar-button';
 import type { ViewStateApi } from './use-view-state';
-import { DUE_FILTERS, DUE_FILTER_LABELS, ME, NONE, type DueFilter, type QuickFilters } from './view-state';
+import { DUE_FILTERS, DUE_FILTER_LABELS, ME, NONE, WORK_FILTERS, WORK_FILTER_LABELS, type DueFilter, type QuickFilters, type WorkFilter } from './view-state';
+import { useTaskSource } from './task-source';
 
 type FilterKey = 'assignee' | 'status' | 'priority' | 'label' | 'due';
 
@@ -203,7 +205,7 @@ export function ViewToolbar({ view, tasks, shownCount, totalCount, controls, con
   const searchRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(view.quick.q);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [open, setOpen] = useState<FilterKey | 'all' | null>(null);
+  const [open, setOpen] = useState<FilterKey | 'all' | 'work' | null>(null);
 
   // URL → field (reset, saved view switch). Skip while the user is typing.
   const lastPushed = useRef(view.quick.q);
@@ -238,10 +240,20 @@ export function ViewToolbar({ view, tasks, shownCount, totalCount, controls, con
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const extras = useCardExtras();
+  const source = useTaskSource();
+  const noun = extras.noun?.plural ?? 'tasks';
+  const searchLabel = `Search ${noun}`;
+  // Projects that hold builds get a Work type chip (Tasks, Builds, Both). Program pages carry
+  // their own Work type inside the Builds filter.
+  const hasBuilds = !source.fromProvider && tasks.some((task) => task.kind === 'build');
+  const work: WorkFilter = view.quick.work ?? 'both';
   const summaryNow = model.summary(view.quick);
   // Separate filter buttons only when they fit: estimate their width from what they show. Room for
   // Save/Reset is always reserved so typing a search never flips the layout.
   const needed =
+    (extras.toolbarLead ? 360 : 0) +
+    (extras.toolbarTrail ? 140 : 0) +
     440 + FILTER_KEYS.reduce((sum, key) => sum + (summaryNow[key] ? 60 + Math.min(150, 7.5 * (FILTER_META[key].label.length + (summaryNow[key]?.length ?? 0))) : 92), 0) + 130 + (controlsWidth ?? 100);
   // When the separate filters only fit with icon-only view controls (Table's Columns + Display),
   // shrink those controls first: every view keeps the same filter bar at the same width.
@@ -256,6 +268,12 @@ export function ViewToolbar({ view, tasks, shownCount, totalCount, controls, con
   return (
     <div className="shrink-0 border-b border-border-subtle bg-panel" data-testid="view-toolbar">
       <div ref={rootRef} role="toolbar" aria-label="View tools" className="flex h-12 items-center gap-1.5 px-4 sm:px-6">
+        {extras.toolbarLead ? (
+          <>
+            {extras.toolbarLead}
+            <ToolbarDivider />
+          </>
+        ) : null}
         <SavedViewsMenu view={view} compact={compact} />
         <ToolbarDivider />
         <div className="-my-2 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -267,14 +285,14 @@ export function ViewToolbar({ view, tasks, shownCount, totalCount, controls, con
             onValueChange={setText}
             onEscape={() => setSearchOpen(false)}
             onBlur={() => !text && setSearchOpen(false)}
-            aria-label="Search tasks"
-            placeholder="Search tasks"
+            aria-label={searchLabel}
+            placeholder={searchLabel}
             data-testid="view-search"
             containerClassName={cn('shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none', compact ? 'w-36' : separate ? 'w-44' : 'w-44 focus-within:w-56')}
           />
         ) : (
           <IconButton
-            label="Search tasks"
+            label={searchLabel}
             icon={<Search aria-hidden />}
             shortcut={['⌘', 'F']}
             onClick={() => {
@@ -295,6 +313,30 @@ export function ViewToolbar({ view, tasks, shownCount, totalCount, controls, con
             data-testid="filter-mine"
           />
         </Tooltip>
+        {hasBuilds ? (
+          <ToolbarPopover
+            icon={<Boxes aria-hidden />}
+            label={work === 'both' ? 'Work type' : `Work type: ${WORK_FILTER_LABELS[work]}`}
+            text={work === 'both' ? 'Work type' : WORK_FILTER_LABELS[work]}
+            iconOnly={compact}
+            active={work !== 'both'}
+            open={open === 'work'}
+            onOpenChange={(next) => setOpen(next ? 'work' : null)}
+            onClear={() => view.setQuick({ work: 'both' })}
+            width={220}
+            testId="filter-work"
+          >
+            <OptionList
+              multiple={false}
+              options={WORK_FILTERS.map((value) => ({ value, label: value === 'both' ? 'Both' : WORK_FILTER_LABELS[value], hint: value === 'both' ? undefined : tasks.filter((task) => (value === 'build') === (task.kind === 'build')).length || undefined }))}
+              selected={[work]}
+              onToggle={(value) => {
+                view.setQuick({ work: value as WorkFilter });
+                setOpen(null);
+              }}
+            />
+          </ToolbarPopover>
+        ) : null}
         {separate ? (
           FILTER_KEYS.map((key) => (
             <ToolbarPopover
@@ -353,6 +395,7 @@ export function ViewToolbar({ view, tasks, shownCount, totalCount, controls, con
         ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1.5 pl-1">
+          {extras.toolbarTrail}
           {filtered && !compact && (!separate || width >= needed + 70) ? (
             <span className="text-xs whitespace-nowrap text-fg-muted tabular-nums" data-testid="view-count">
               {shownCount} of {totalCount}

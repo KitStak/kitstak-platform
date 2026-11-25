@@ -28,7 +28,8 @@ import {
 } from '@/components/ui';
 import { PersonAvatar, PriorityIcon, StatusIcon } from '@/components/pm';
 import { addDaysIso, diffDays, formatRange, parseIsoDate, todayIso, type IsoDate } from '@/lib/dates';
-import { useProjectTasks } from '@/lib/hooks/use-data';
+import { useTaskSource } from '@/features/views/task-source';
+import { useCardExtras } from '@/features/views/card-extras';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { useTaskMutations } from '@/lib/hooks/use-task-mutations';
@@ -117,7 +118,9 @@ export function CalendarSkeleton() {
 
 export function CalendarView() {
   const { project, statuses, statusById, capabilities } = useCurrentProject();
-  const tasksQuery = useProjectTasks(project.key);
+  const tasksQuery = useTaskSource();
+  const extras = useCardExtras();
+  const extraFilter = extras.filter;
   const people = usePeopleMap();
   const { openTask } = useTaskDrawer();
   const openQuickAdd = useShellStore((state) => state.openQuickAdd);
@@ -126,7 +129,9 @@ export function CalendarView() {
   const narrow = useIsNarrow();
   const today = todayIso();
   const canEdit = capabilities['task:update'];
-  const canCreate = capabilities['task:create'];
+  const canCreate = capabilities['task:create'] && !extras.hideCreate;
+  /** A page (Programs) supplies its own lead and trail: one compact row without task-only controls. */
+  const pageToolbar = Boolean(extras.toolbarLead);
 
   const [anchor, setAnchor] = useState<IsoDate>(today);
   const [search, setSearch] = useState('');
@@ -153,9 +158,10 @@ export function CalendarView() {
       if (!prefs.showCompleted && isClosed(task)) return false;
       if (!prefs.showSubtasks && task.parentTaskId) return false;
       if (q && !task.title.toLowerCase().includes(q) && !task.key.toLowerCase().includes(q)) return false;
+      if (extraFilter && !extraFilter(task)) return false;
       return true;
     });
-  }, [allTasks, prefs.showCompleted, prefs.showSubtasks, search]);
+  }, [allTasks, extraFilter, prefs.showCompleted, prefs.showSubtasks, search]);
   const taskById = useMemo(() => new Map(allTasks.map((task) => [task.id, task])), [allTasks]);
 
   const events = useMemo<TaskEvent[]>(() => {
@@ -284,6 +290,17 @@ export function CalendarView() {
       dragRef.current = null;
       setDragging(null);
       if (!task) return;
+      if (extras.moveToDate && task.kind === 'build') {
+        const current = task.dueDate ?? task.startDate;
+        if (current === day) return;
+        const refused = extras.refuseDate?.(task, day) ?? null;
+        if (refused) {
+          toast.error(`Couldn't move ${task.key}`, refused);
+          return;
+        }
+        void extras.moveToDate(task, day);
+        return;
+      }
       const span = taskSpan(task);
       if (!span) {
         void reschedule(task, { start: day, end: day });
@@ -304,7 +321,7 @@ export function CalendarView() {
 
   const look = (task: TaskSummary) => labelColorStyle(taskColor(task, prefs.colorBy, statusById));
 
-  const chip = (task: TaskSummary, options: { days: readonly IsoDate[]; segment?: WeekSegment<TaskSummary>; style?: CSSProperties; className?: string; variant: 'chip' | 'band' | 'card' | 'list' }) => {
+  const chip = (task: TaskSummary, options: { days: readonly IsoDate[]; segment?: WeekSegment<TaskSummary>; style?: CSSProperties; className?: string; variant: 'chip' | 'band' | 'card' | 'list'; label?: string }) => {
     const { segment, variant } = options;
     const done = isClosed(task);
     const span = taskSpan(task);
@@ -375,7 +392,7 @@ export function CalendarView() {
             <>
               <span className="flex min-w-0 items-center gap-1.5">
                 <StatusIcon category={task.statusCategory} color={status?.color} size={12} />
-                <span className={cn('truncate', done && 'line-through decoration-1')}>{task.title}</span>
+                <span className={cn('truncate', done && !options.label && 'line-through decoration-1', options.label && 'tabular-nums')}>{options.label ?? task.title}</span>
               </span>
               <span className="flex min-w-0 items-center gap-1.5 text-2xs font-normal text-fg-muted">
                 <span className="font-key">{task.key}</span>
@@ -394,8 +411,8 @@ export function CalendarView() {
                 <StatusIcon category={task.statusCategory} color={status?.color} size={variant === 'band' ? 10 : 12} />
               )}
               {overdue ? <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-danger" /> : null}
-              <span className={cn('truncate', done && variant === 'list' && 'line-through decoration-1')}>{task.title}</span>
-              {variant === 'list' ? (
+              <span className={cn('truncate', done && variant === 'list' && 'line-through decoration-1')}>{options.label ?? task.title}</span>
+              {variant === 'list' && !options.label ? (
                 <span className="ml-auto flex shrink-0 items-center gap-1.5">
                   <span className="font-key text-2xs font-normal text-fg-muted">{task.key}</span>
                   <PersonAvatar userId={task.assigneeId} size="xs" />
@@ -447,6 +464,15 @@ export function CalendarView() {
     </ul>
   );
 
+  const summaryMode = Boolean(extras.renderDaySummary) && mode === 'month';
+  // Day stacks count every build of the day, done ones included (the ring shows how many are done).
+  const summaryByDay = new Map<string, TaskSummary[]>();
+  if (summaryMode) {
+    for (const task of allTasks) {
+      if (!task.dueDate || (extraFilter && !extraFilter(task))) continue;
+      summaryByDay.set(task.dueDate, [...(summaryByDay.get(task.dueDate) ?? []), task]);
+    }
+  }
   const monthGrid = (
     <div ref={measureGrid} className="flex min-h-0 flex-1 flex-col overflow-auto" data-testid="calendar-month">
       <div role="grid" aria-label={title} className="flex shrink-0 flex-col">
@@ -463,10 +489,10 @@ export function CalendarView() {
         // so a continuation is never an unlabeled strip.
         // Tasks longer than a week are slim labelled bands under the day numbers; everything else
         // gets the full-height lanes below them.
-        const bandSegments = layoutWeek(days, longEvents);
+        const bandSegments = summaryMode ? [] : layoutWeek(days, longEvents);
         const bandLanes = Math.min(MAX_BANDS, bandSegments.reduce((max, segment) => Math.max(max, segment.slot + 1), 0));
         const shownBands = bandSegments.filter((segment) => segment.slot < bandLanes);
-        const segments = layoutWeek(days, shortEvents);
+        const segments = summaryMode ? [] : layoutWeek(days, shortEvents);
         const lanesTop = DAY_HEADER_H + (bandLanes ? bandLanes * BAND_H + 4 : 0);
         // Rows grow to show up to 5 lanes before folding into "+N more" (the grid scrolls instead).
         const lanesNeeded = segments.reduce((max, segment) => Math.max(max, segment.slot + 1), 0);
@@ -526,6 +552,9 @@ export function CalendarView() {
                           </button>
                         ) : null}
                       </div>
+                      {summaryMode && extras.renderDaySummary ? (
+                        <div className="relative z-[1] px-1.5 pb-1.5">{extras.renderDaySummary(day, summaryByDay.get(day) ?? [])}</div>
+                      ) : null}
                       {(hidden[col] ?? 0) > 0 || (extraOnly[col] ?? 0) > 0 ? (
                         <Popover open={moreDay === day} onOpenChange={(open) => setMoreDay(open ? day : null)}>
                           <PopoverAnchor asChild>
@@ -596,6 +625,13 @@ export function CalendarView() {
   );
 
   const weekDays = weeks[0] ?? [];
+  const summaryByWeekDay = new Map<string, TaskSummary[]>();
+  if (extras.renderDaySummary && mode === 'week') {
+    for (const task of allTasks) {
+      if (!task.dueDate || !weekDays.includes(task.dueDate) || (extraFilter && !extraFilter(task))) continue;
+      summaryByWeekDay.set(task.dueDate, [...(summaryByWeekDay.get(task.dueDate) ?? []), task]);
+    }
+  }
   const weekSegments = layoutWeek(weekDays, events);
   const weekSlots = weekSegments.reduce((max, segment) => Math.max(max, segment.slot + 1), 0);
   // Phones: the week as an agenda, one day per row with full-width task lines (Google Calendar's
@@ -632,6 +668,61 @@ export function CalendarView() {
       })}
     </div>
   );
+
+  // Builds: the week shows one row per variant (SPEC 5.7), days as columns, builds in the cells.
+  const rowGroup = extras.timelineGroup;
+  // Every build of the week shows in its row, done ones included (the header ring counts them too).
+  const weekRowTasks = rowGroup ? allTasks.filter((task) => task.dueDate && weekDays.includes(task.dueDate) && (!extraFilter || extraFilter(task)) && (!search.trim() || `${task.title} ${task.key}`.toLowerCase().includes(search.trim().toLowerCase()))) : [];
+  const weekRowKeys = rowGroup ? rowGroup.order(weekRowTasks) : [];
+  const variantWeek = rowGroup ? (
+    <div role="grid" aria-label={title} className="flex min-h-0 flex-1 flex-col overflow-auto" data-testid="calendar-week-rows">
+      <div role="row" className="sticky top-0 z-[var(--z-sticky)] grid shrink-0 border-b border-border-subtle bg-panel" style={{ gridTemplateColumns: `180px repeat(${columns}, minmax(0, 1fr))` }}>
+        <div role="columnheader" className="flex items-center border-r border-border-subtle px-3 text-xs font-semibold text-fg-muted">
+          {rowGroup.label}
+        </div>
+        {weekDays.map((day) => {
+          const isToday = day === today;
+          const dayTasks = summaryByWeekDay.get(day) ?? [];
+          return (
+            <div role="columnheader" key={day} className="flex flex-col gap-1 border-r border-border-subtle px-2 py-1.5 last:border-r-0">
+              <span className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-fg-muted">{WEEKDAY_SHORT.format(parseIsoDate(day))}</span>
+                <span aria-current={isToday ? 'date' : undefined} className={cn('inline-flex size-6 items-center justify-center rounded-full text-xs font-semibold tabular-nums', isToday ? 'bg-primary text-primary-fg' : 'text-fg')}>
+                  {Number(day.slice(8, 10))}
+                </span>
+              </span>
+              {extras.renderDaySummary && dayTasks.length ? extras.renderDaySummary(day, dayTasks) : null}
+            </div>
+          );
+        })}
+      </div>
+      {weekRowKeys.length === 0 ? (
+        <p className="px-6 py-12 text-center text-sm text-fg-muted">Nothing planned this week.</p>
+      ) : (
+        weekRowKeys.map((rowKey) => (
+          <div role="row" key={rowKey} className="grid shrink-0 border-b border-border-subtle" style={{ gridTemplateColumns: `180px repeat(${columns}, minmax(0, 1fr))` }} data-testid="calendar-week-row">
+            <div role="rowheader" className="flex min-w-0 items-start border-r border-border-subtle bg-panel px-3 py-2.5 text-sm font-medium text-fg">
+              <span className="truncate">{rowGroup.title(rowKey)}</span>
+            </div>
+            {weekDays.map((day) => {
+              const cellTasks = weekRowTasks.filter((task) => task.dueDate === day && rowGroup.keyOf(task) === rowKey);
+              return (
+                <div
+                  role="gridcell"
+                  key={day}
+                  data-date={day}
+                  {...dayDropProps(day)}
+                  className={cn('flex min-h-14 min-w-0 flex-col gap-1 border-r border-border-subtle p-1.5 last:border-r-0', isWeekendIso(day) ? 'bg-sunken' : 'bg-panel', overDay === day && 'bg-primary-subtle')}
+                >
+                  {cellTasks.map((task) => chip(task, { days: weekDays, variant: 'card', label: extras.calendarChipLabel?.(task) }))}
+                </div>
+              );
+            })}
+          </div>
+        ))
+      )}
+    </div>
+  ) : null;
 
   const weekGrid = (
     <div role="grid" aria-label={title} className="flex min-h-0 flex-1 flex-col overflow-auto" data-testid="calendar-week">
@@ -702,14 +793,22 @@ export function CalendarView() {
 
   return (
     <div className="flex h-full min-h-[520px] flex-col" data-testid="calendar-view">
-      <ViewToolbar testId="calendar-toolbar">
-        <SavedViewsMenu<CalendarViewOptions>
-          kind="calendar"
-          options={viewOptions(prefs)}
-          defaults={viewOptions(DEFAULT_PREFS)}
-          activeId={prefs.viewId}
-          onApply={(options, viewId) => setPrefs({ ...options, viewId })}
-        />
+      <ViewToolbar testId="calendar-toolbar" className={pageToolbar ? 'h-12 flex-nowrap py-0' : undefined}>
+        {extras.toolbarLead ? (
+          <>
+            {extras.toolbarLead}
+            <span aria-hidden className="mx-0.5 h-5 w-px bg-border-subtle" />
+          </>
+        ) : null}
+        {pageToolbar ? null : (
+          <SavedViewsMenu<CalendarViewOptions>
+            kind="calendar"
+            options={viewOptions(prefs)}
+            defaults={viewOptions(DEFAULT_PREFS)}
+            activeId={prefs.viewId}
+            onApply={(options, viewId) => setPrefs({ ...options, viewId })}
+          />
+        )}
         <Button variant="secondary" size="sm" onClick={() => setAnchor(today)} data-testid="calendar-today">
           Today
         </Button>
@@ -717,7 +816,7 @@ export function CalendarView() {
           <IconButton size="sm" label={mode === 'month' ? 'Previous month' : 'Previous week'} icon={<ChevronLeft aria-hidden />} onClick={() => go(-1)} data-testid="calendar-prev" />
           <IconButton size="sm" label={mode === 'month' ? 'Next month' : 'Next week'} icon={<ChevronRight aria-hidden />} onClick={() => go(1)} data-testid="calendar-next" />
         </span>
-        <h2 className="min-w-0 truncate text-md font-semibold text-fg" aria-live="polite" data-testid="calendar-title">
+        <h2 className={cn('min-w-0 truncate font-semibold text-fg', pageToolbar ? 'text-sm whitespace-nowrap' : 'text-md')} aria-live="polite" data-testid="calendar-title">
           {title}
         </h2>
         <ToggleGroup<CalendarMode>
@@ -731,13 +830,16 @@ export function CalendarView() {
           ]}
         />
         <ToolbarSpacer />
-        <span className="hidden text-xs whitespace-nowrap text-fg-muted tabular-nums 2xl:inline">
-          {visibleCount} {visibleCount === 1 ? 'task' : 'tasks'} this {mode}
+        <span className={cn('hidden text-xs whitespace-nowrap text-fg-muted tabular-nums', !pageToolbar && '2xl:inline')}>
+          {visibleCount} {extras.noun ? (visibleCount === 1 ? extras.noun.singular : extras.noun.plural) : visibleCount === 1 ? 'task' : 'tasks'} this {mode}
         </span>
-        <span className="w-40 max-[639px]:w-[100px] 2xl:w-48">
-          <SearchInput size="sm" value={search} onValueChange={setSearch} placeholder="Find a task" aria-label="Find a task" />
+        <span className={cn('w-40 max-[639px]:w-[100px]', pageToolbar ? 'shrink-0 max-xl:hidden' : '2xl:w-48')}>
+          <SearchInput size="sm" value={search} onValueChange={setSearch} placeholder={extras.noun ? `Search ${extras.noun.plural}` : 'Find a task'} aria-label={extras.noun ? `Search ${extras.noun.plural}` : 'Find a task'} />
         </span>
-        <OptionsMenu title="Calendar options" testId="calendar-options">
+        {extras.toolbarTrail}
+        <OptionsMenu title="Calendar options" testId="calendar-options" iconOnly={pageToolbar}>
+          {pageToolbar ? null : (
+          <>
           <OptionSelect<ColorBy>
             label="Color by"
             value={prefs.colorBy}
@@ -757,10 +859,13 @@ export function CalendarView() {
             ]}
           />
           <OptionsDivider />
+          </>
+          )}
           <OptionSwitch label="Show weekends" checked={prefs.showWeekends} onChange={(showWeekends) => setPrefs({ showWeekends })} />
-          <OptionSwitch label="Show subtasks" checked={prefs.showSubtasks} onChange={(showSubtasks) => setPrefs({ showSubtasks })} />
-          <OptionSwitch label="Hide done tasks" checked={!prefs.showCompleted} onChange={(hide) => setPrefs({ showCompleted: !hide })} />
+          {pageToolbar ? null : <OptionSwitch label="Show subtasks" checked={prefs.showSubtasks} onChange={(showSubtasks) => setPrefs({ showSubtasks })} />}
+          <OptionSwitch label={`Hide done ${extras.noun?.plural ?? 'tasks'}`} checked={!prefs.showCompleted} onChange={(hide) => setPrefs({ showCompleted: !hide })} />
         </OptionsMenu>
+        {pageToolbar ? null : (
         <Button
           variant={prefs.trayOpen ? 'secondary' : 'ghost'}
           size="sm"
@@ -774,6 +879,8 @@ export function CalendarView() {
           <span className="max-[639px]:sr-only">No dates</span>
           <span className="rounded-full bg-muted px-1.5 text-2xs font-semibold text-fg-secondary tabular-nums">{unscheduled.length}</span>
         </Button>
+        )}
+        {pageToolbar ? null : (
         <ViewTips
           title="How the calendar works"
           testId="calendar-tips"
@@ -784,6 +891,7 @@ export function CalendarView() {
             { icon: <Keyboard />, text: 'With a task selected, Alt and the arrow keys move it by a day or a week.' },
           ]}
         />
+        )}
       </ViewToolbar>
       <div className="relative flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -807,7 +915,7 @@ export function CalendarView() {
           ) : narrow ? (
             agendaList
           ) : (
-            weekGrid
+            variantWeek ?? weekGrid
           )}
         </div>
         {prefs.trayOpen ? (

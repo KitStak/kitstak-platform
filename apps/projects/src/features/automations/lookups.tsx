@@ -12,12 +12,21 @@ import { describeAutomation, type DescribeLookups } from '@/server/automations/e
 import type { AutomationAction, AutomationCondition, AutomationTrigger } from '@/lib/automation-types';
 import { PRIORITIES, PRIORITY_LABELS, STATUS_CATEGORIES, STATUS_CATEGORY_LABELS } from '@/lib/constants';
 import { useLabels, usePeople, useProject } from '@/lib/hooks/use-data';
+import { usePrograms, useVariants } from '@/lib/hooks/use-programs';
+import type { ProgramListItemDTO, VariantDTO } from '@/lib/program-types';
+import { buildWords, clockText } from './catalog';
 import type { LabelDTO, OrgPerson, ProjectSummary, SectionDTO, StatusDTO } from '@/lib/types';
 import type { OptionItem } from '@/features/views/option-list';
 
 export interface BuilderLookups {
   readonly projectId: string | null;
   readonly projects: readonly ProjectSummary[];
+  /** Live programs (5.17: rules can work in one program and check the program or variant). */
+  readonly programs: readonly ProgramListItemDTO[];
+  /** The program the rule works in, when "Works in" is a program. */
+  readonly program: ProgramListItemDTO | null;
+  /** Variants of that program (the Variant condition needs one program). */
+  readonly variants: readonly VariantDTO[];
   readonly statuses: readonly StatusDTO[];
   readonly sections: readonly SectionDTO[];
   readonly labels: readonly LabelDTO[];
@@ -31,14 +40,20 @@ export function useBuilderLookups(
   projects: readonly ProjectSummary[],
 ): BuilderLookups {
   const project = projects.find((p) => p.id === projectId);
-  const detail = useProject(project?.key ?? '', { enabled: Boolean(project) });
+  const programsQuery = usePrograms();
+  const programs = useMemo(() => (programsQuery.data ?? []).filter((program) => !program.archivedAt), [programsQuery.data]);
+  const program = project ? null : (programs.find((p) => p.id === projectId) ?? null);
+  const containerKey = project?.key ?? program?.key ?? '';
+  const detail = useProject(containerKey, { enabled: Boolean(containerKey) });
+  const variantsQuery = useVariants(program?.key ?? '', false, { enabled: Boolean(program) });
   const people = usePeople();
   const labels = useLabels(projectId ?? null);
   return useMemo(() => {
-    const statuses = project ? (detail.data?.statuses ?? []) : [];
-    const sections = project ? (detail.data?.sections ?? []) : [];
+    const statuses = containerKey ? (detail.data?.statuses ?? []) : [];
+    const sections = containerKey ? (detail.data?.sections ?? []) : [];
     const labelList = labels.data ?? [];
     const personList = people.data ?? [];
+    const variants = program ? (variantsQuery.data ?? []) : [];
     const byId = <T extends { id: string; name: string }>(list: readonly T[]) => {
       const map = new Map(list.map((item) => [item.id, item.name]));
       return (id: string) => map.get(id);
@@ -46,30 +61,42 @@ export function useBuilderLookups(
     return {
       projectId,
       projects,
+      programs,
+      program,
+      variants,
       statuses,
       sections,
       labels: labelList,
       people: personList,
-      loading: Boolean(project && detail.isLoading) || people.isLoading || labels.isLoading,
+      loading: Boolean(containerKey && detail.isLoading) || people.isLoading || labels.isLoading,
       describe: {
         status: byId(statuses),
         section: byId(sections),
         label: byId(labelList),
         person: byId(personList),
-        project: byId(projects),
+        project: byId([...projects, ...programs]),
+        variant: byId(variants),
       },
     };
   }, [
-    project,
+    containerKey,
     detail.data,
     detail.isLoading,
     labels.data,
     labels.isLoading,
     people.data,
     people.isLoading,
+    program,
+    programs,
     projectId,
     projects,
+    variantsQuery.data,
   ]);
+}
+
+/** True when the id is a program (rules scoped to a program, or a "the program is" rule). */
+export function isProgramId(lookups: Pick<BuilderLookups, 'programs'>, id: string | null | undefined): boolean {
+  return Boolean(id) && lookups.programs.some((program) => program.id === id);
 }
 
 export function sentenceFor(
@@ -79,8 +106,16 @@ export function sentenceFor(
     readonly actions: readonly AutomationAction[];
   },
   lookups: DescribeLookups,
+  programNames: readonly string[] = [],
+  forBuilds = false,
 ): string {
-  return describeAutomation(draft, lookups);
+  let sentence = describeAutomation(draft, lookups);
+  if (forBuilds) sentence = buildWords(sentence);
+  // Times read the way the pickers show them: "at 2:00 PM", not "at 14:00".
+  sentence = sentence.replace(/\bat (\d{1,2}):(\d{2})\b/g, (_, hour: string, minute: string) => `at ${clockText(`${hour.padStart(2, '0')}:${minute}`)}`);
+  // The engine words a container rule as "in the X project"; a program reads "in the X program".
+  for (const name of programNames) sentence = sentence.replaceAll(`“${name}” project`, `“${name}” program`);
+  return sentence;
 }
 
 // --- Option lists -----------------------------------------------------------------------------
@@ -165,6 +200,25 @@ export function projectOptions(
       hint: project.key,
       icon: <EntityIcon icon={project.icon} color={project.color} size={16} />,
     }));
+}
+
+export function programOptions(lookups: BuilderLookups): OptionItem[] {
+  return lookups.programs.map((program) => ({
+    value: program.id,
+    label: program.name,
+    keywords: program.key,
+    hint: program.key,
+    icon: <EntityIcon icon={program.icon} color={program.color} size={16} />,
+  }));
+}
+
+export function variantOptions(lookups: BuilderLookups): OptionItem[] {
+  return lookups.variants.map((variant) => ({
+    value: variant.id,
+    label: variant.name,
+    keywords: variant.sku ?? undefined,
+    hint: variant.sku ?? undefined,
+  }));
 }
 
 export const PERSON_TARGET_OPTIONS: readonly OptionItem[] = [

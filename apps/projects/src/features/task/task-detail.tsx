@@ -33,6 +33,7 @@ import { TaskContextProvider, useTaskContext } from './task-context';
 import { TASK_PANEL_ATTR, useTaskNeighbours } from './task-nav';
 import { TaskProperties } from './task-properties';
 import { TimeSection } from './time-section';
+import { BuildKitSection, BuildLinkedSection, BuildOutputSection, BuildProperties } from './build-sections';
 import { useTaskUploads } from './use-task-uploads';
 import { WatchersButton } from './watchers';
 import { letterKeysPaused, setDateWithUndo, taskKeyAction, startLetterKeyGuard, writeWithUndo } from './task-keys';
@@ -301,13 +302,25 @@ function Breadcrumb() {
       <ol className="flex min-w-0 items-center gap-1 text-sm text-fg-secondary">
         <li className="flex min-w-0 shrink items-center">
           <Link
-            href={routes.project(project.key)}
+            href={task.projectKind === 'program' ? routes.program(project.key) : routes.project(project.key)}
             className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
           >
             <EntityIcon icon={project.icon} color={project.color} size={18} />
-            <span className="truncate">{project.name}</span>
+            <span className="truncate">{task.projectKind === 'program' ? project.key : project.name}</span>
           </Link>
         </li>
+        {task.kind === 'build' && task.projectKind === 'program' ? (
+          <>
+            <li aria-hidden className="shrink-0 text-fg-muted">
+              <ChevronRight className="size-3.5" />
+            </li>
+            <li className="flex shrink-0 items-center">
+              <Link href={routes.programBuilds(project.key)} className="rounded-sm px-1 py-0.5 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus">
+                Builds
+              </Link>
+            </li>
+          </>
+        ) : null}
         {task.parent ? (
           <>
             <li aria-hidden className="shrink-0 text-fg-muted">
@@ -468,11 +481,22 @@ function TaskBody({
     <div className="flex min-w-0 flex-col gap-5">
       <BlockedBanner />
       <TaskTitle />
+      {task.kind === 'build' ? <BuildProperties /> : null}
       {wide ? null : (
         <div className="-mt-1">
           <TaskProperties compact />
         </div>
       )}
+      {task.kind === 'build' ? (
+        <Section>
+          <BuildOutputSection />
+        </Section>
+      ) : null}
+      {task.kind === 'build' && task.projectKind === 'program' ? (
+        <SectionIfContent>
+          <BuildKitSection />
+        </SectionIfContent>
+      ) : null}
       <DescriptionEditor />
       <Section>
         <SubtasksSection />
@@ -480,7 +504,13 @@ function TaskBody({
       <Section>
         <DependenciesSection />
       </Section>
-      <LinksBlock />
+      {task.kind === 'build' ? (
+        <Section>
+          <BuildLinkedSection />
+        </Section>
+      ) : (
+        <LinksBlock />
+      )}
       <FilesBlock uploads={uploads} />
       {wide ? null : <TimeBlock />}
       <Section>

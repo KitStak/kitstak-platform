@@ -20,12 +20,12 @@ export function ToolbarSpacer() {
   return <span aria-hidden className="min-w-0 flex-1" />;
 }
 
-export function OptionsMenu({ children, title, testId }: { readonly children: ReactNode; readonly title: string; readonly testId?: string }) {
+export function OptionsMenu({ children, title, testId, iconOnly }: { readonly children: ReactNode; readonly title: string; readonly testId?: string; readonly iconOnly?: boolean }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" leadingIcon={<SlidersHorizontal aria-hidden />} data-testid={testId} aria-label={title}>
-          <span className="max-[639px]:sr-only">Options</span>
+        <Button variant="ghost" size="sm" leadingIcon={<SlidersHorizontal aria-hidden />} data-testid={testId} aria-label={title} className="shrink-0">
+          <span className={iconOnly ? 'sr-only' : 'max-[639px]:sr-only'}>Options</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72" aria-label={title}>

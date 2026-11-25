@@ -17,6 +17,8 @@ import { AssigneePicker, DuePicker, PriorityPicker } from '@/features/views/fiel
 import { LazyPicker } from '@/features/views/lazy-picker';
 import { LinkChips } from '@/features/views/link-chips';
 import { TaskMenuItems } from '@/features/views/task-menu';
+import { useCardExtras } from '@/features/views/card-extras';
+import { ProjectBuildFacts } from '@/features/views/build-facts';
 import type { TaskOps } from '@/features/views/use-task-ops';
 
 export interface BoardCardProps {
@@ -72,6 +74,7 @@ function EmptyPriorityIcon() {
 export function CardBody({ task, labels, links, ops, canEdit, interactive = true }: Pick<BoardCardProps, 'task' | 'labels' | 'links' | 'ops' | 'canEdit'> & { readonly interactive?: boolean }) {
   const done = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
   const editable = canEdit && interactive;
+  const extras = useCardExtras();
   const priority = (
     <span className="inline-flex size-5 items-center justify-center rounded-xs">
       {task.priority === 'none' ? <EmptyPriorityIcon /> : <PriorityIcon priority={task.priority} />}
@@ -93,6 +96,7 @@ export function CardBody({ task, labels, links, ops, canEdit, interactive = true
         {task.title}
       </p>
       {links && links.length ? <LinkChips links={links} max={2} variant="ref" wrap /> : null}
+      {extras.renderCardFooter ? extras.renderCardFooter(task) : task.kind === 'build' ? <ProjectBuildFacts task={task} /> : null}
       {/* Meta on the left clips and wraps; the editable due, priority and assignee on the right never move. */}
       <div className="flex min-h-5 items-center gap-2 text-2xs text-fg-muted">
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 overflow-hidden">
@@ -237,14 +241,14 @@ export const BoardCard = memo(function BoardCard({ id, task, container, labels, 
                   </button>
                 </DropdownMenuTrigger>
               </Tooltip>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className={task.kind === 'build' ? 'w-[280px]' : 'w-56'}>
                 <TaskMenuItems task={task} ops={ops} kind="dropdown" />
               </DropdownMenuContent>
             </DropdownMenu>
           </span>
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-56">
+      <ContextMenuContent className={task.kind === 'build' ? 'w-[280px]' : 'w-56'}>
         <TaskMenuItems task={task} ops={ops} kind="context" />
       </ContextMenuContent>
     </ContextMenu>
@@ -259,3 +263,4 @@ export function BoardCardOverlay({ task, labels, links, ops }: Pick<BoardCardPro
     </div>
   );
 }
+

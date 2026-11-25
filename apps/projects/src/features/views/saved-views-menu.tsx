@@ -28,6 +28,7 @@ import {
 } from '@/components/ui';
 import type { SavedViewDTO } from '@/lib/types';
 import type { ViewStateApi } from './use-view-state';
+import { useCardExtras } from './card-extras';
 
 const TYPE_NOUN: Readonly<Record<ViewStateApi['type'], string>> = { board: 'board', list: 'list', table: 'table' };
 
@@ -143,7 +144,9 @@ export function SavedViewsMenu({ view, compact = false }: { readonly view: ViewS
   const [confirmDelete, setConfirmDelete] = useState(false);
   const active = view.activeView;
   const canEditActive = active ? view.canEditView(active) : false;
-  const title = active?.name ?? 'All tasks';
+  const extras = useCardExtras();
+  const allLabel = `All ${extras.noun?.plural ?? 'tasks'}`;
+  const title = active?.name ?? allLabel;
 
   return (
     <>
@@ -170,9 +173,9 @@ export function SavedViewsMenu({ view, compact = false }: { readonly view: ViewS
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-72" data-testid="saved-views-menu">
           <DropdownMenuLabel>Views</DropdownMenuLabel>
-          <DropdownMenuItem icon={<Bookmark aria-hidden />} onSelect={() => view.selectView(null)} description="Every task, with your own filters">
+          <DropdownMenuItem icon={<Bookmark aria-hidden />} onSelect={() => view.selectView(null)} description={`Every ${extras.noun?.singular ?? 'task'}, with your own filters`}>
             <span className="inline-flex items-center gap-2">
-              All tasks
+              {allLabel}
               {!active ? <Check aria-hidden className="size-3.5 text-primary-text" /> : null}
             </span>
           </DropdownMenuItem>

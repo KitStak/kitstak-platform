@@ -145,3 +145,32 @@ export function matchesText(task: TaskSummary, text: string, projectName: (id: s
   if (!q) return true;
   return task.title.toLowerCase().includes(q) || task.key.toLowerCase().includes(q) || projectName(task.projectId).toLowerCase().includes(q);
 }
+
+/* Builds (docs/programs/SPEC.md 5.17) ------------------------------------------------------------ */
+
+export interface BuildRunGroup {
+  /** `${programKey}|${runId}` */
+  readonly key: string;
+  readonly programKey: string;
+  readonly runId: string;
+  readonly date: IsoDate;
+  readonly overdue: boolean;
+  readonly tasks: readonly TaskSummary[];
+}
+
+/** Open builds dated today or earlier, grouped by program and run: today first, then older days newest first. */
+export function groupBuildsByRun(builds: readonly TaskSummary[], today: IsoDate): BuildRunGroup[] {
+  const groups = new Map<string, { programKey: string; runId: string; date: IsoDate; tasks: TaskSummary[] }>();
+  for (const task of builds) {
+    const build = task.build as (TaskSummary['build'] & { readonly runId?: string }) | null | undefined;
+    if (task.kind !== 'build' || !build || isDone(task) || build.buildDate > today) continue;
+    const runId = build.runId ?? `run:manual:${build.buildDate}`;
+    const key = `${task.projectKey}|${runId}`;
+    const group = groups.get(key) ?? { programKey: task.projectKey, runId, date: build.buildDate, tasks: [] };
+    group.tasks.push(task);
+    groups.set(key, group);
+  }
+  return [...groups.entries()]
+    .map(([key, group]) => ({ key, ...group, overdue: group.date < today, tasks: [...group.tasks].sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true })) }))
+    .sort((a, b) => (a.date === b.date ? a.programKey.localeCompare(b.programKey) : b.date.localeCompare(a.date)));
+}

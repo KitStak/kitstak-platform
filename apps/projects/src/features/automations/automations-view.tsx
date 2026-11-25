@@ -57,11 +57,12 @@ import {
   updateAutomationAction,
 } from '@/server/actions/automations';
 import { useShell } from '@/features/shell/shell-context';
-import { CrossAppRecipes } from '@/features/integrations/cross-app-recipes';
+import { usePrograms } from '@/lib/hooks/use-programs';
+import { RecordRecipes } from './record-recipes';
 import { LocalTime } from '@/features/task/local-time';
 import { SampleProjectButton } from '@/features/onboarding/sample-project-button';
 import { AutomationBuilder, blankDraft, draftFromRule, type AutomationDraft } from './automation-builder';
-import { RECIPES, RECIPE_CATEGORIES, triggerOption, type Recipe, type RecipeCategory } from './catalog';
+import { RECIPES, RECIPE_CATEGORIES, actsOnBuilds, buildWords, triggerOption, type Recipe, type RecipeCategory } from './catalog';
 import { RunHistoryList, useRunHistory, type RunFilter } from './run-history';
 
 export interface AutomationRow extends AutomationDTO {
@@ -153,6 +154,12 @@ function RecipeCard({
   );
 }
 
+/** The saved sentence in the words of where the rule runs: build words for rules on builds. */
+function plainSentence(rule: AutomationRow, project?: { readonly isProgram?: boolean }): string {
+  const onBuilds = Boolean(project?.isProgram) || actsOnBuilds(rule.trigger, rule.conditions);
+  return onBuilds ? buildWords(rule.sentence) : rule.sentence;
+}
+
 function RuleCard({
   rule,
   project,
@@ -165,7 +172,8 @@ function RuleCard({
   onDelete,
 }: {
   readonly rule: AutomationRow;
-  readonly project?: ProjectSummary;
+  /** The project or program the rule works in. */
+  readonly project?: { readonly name: string; readonly icon: string | null; readonly color: string | null; readonly isProgram?: boolean };
   readonly lastRun?: AutomationRunRowDTO;
   readonly canEdit: boolean;
   readonly onToggle: (enabled: boolean) => void;
@@ -205,7 +213,7 @@ function RuleCard({
             {rule.name}
           </button>
           <p className={cn('mt-0.5 text-sm', rule.enabled ? 'text-fg-secondary' : 'text-fg-muted')}>
-            {rule.sentence}
+            {plainSentence(rule, project)}
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-secondary">
             <span className="inline-flex items-center gap-1.5">
@@ -214,7 +222,7 @@ function RuleCard({
               ) : (
                 <Workflow aria-hidden className="size-3.5 text-icon" />
               )}
-              {project ? project.name : 'Every project'}
+              {project ? (project.isProgram ? `${project.name} (program)` : project.name) : 'Every project'}
             </span>
             <button
               type="button"
@@ -326,8 +334,10 @@ export function AutomationsView({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { can, integrations } = useShell();
+  const { can, integrations, user } = useShell();
   const { params, set } = useUrlState();
+  const programsQuery = usePrograms();
+  const programs = useMemo(() => (programsQuery.data ?? []).filter((program) => !program.archivedAt), [programsQuery.data]);
   const tab = (
     ['rules', 'recipes', 'apps', 'history'].includes(params?.get('tab') ?? '') ? params?.get('tab') : 'rules'
   ) as Tab;
@@ -349,12 +359,26 @@ export function AutomationsView({
     () => projects.filter((p) => !p.archivedAt && (p.role === 'owner' || p.role === 'editor')),
     [projects],
   );
-  const byId = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
-  const canAdd = canManageGlobal || editableProjects.length > 0;
+  const byId = useMemo(
+    () =>
+      new Map<string, { name: string; icon: string | null; color: string | null; isProgram?: boolean }>([
+        ...projects.map((p) => [p.id, p] as const),
+        ...programs.map((p) => [p.id, { name: p.name, icon: p.icon, color: p.color, isProgram: true }] as const),
+      ]),
+    [programs, projects],
+  );
+  // Program rules: workspace managers and the program owner (the server checks the program role).
+  const editablePrograms = useMemo(
+    () => programs.filter((program) => canManageGlobal || program.owner?.id === user.id),
+    [canManageGlobal, programs, user.id],
+  );
+  const canAdd = canManageGlobal || editableProjects.length > 0 || editablePrograms.length > 0;
   const canEditRule = useCallback(
     (rule: AutomationDTO) =>
-      rule.projectId ? editableProjects.some((p) => p.id === rule.projectId) : canManageGlobal,
-    [canManageGlobal, editableProjects],
+      rule.projectId
+        ? editableProjects.some((p) => p.id === rule.projectId) || editablePrograms.some((p) => p.id === rule.projectId)
+        : canManageGlobal,
+    [canManageGlobal, editablePrograms, editableProjects],
   );
 
   const list = useMemo(
@@ -389,7 +413,7 @@ export function AutomationsView({
     if (
       projectFilter !== 'all' &&
       projectFilter !== 'workspace' &&
-      editableProjects.some((p) => p.id === projectFilter)
+      (editableProjects.some((p) => p.id === projectFilter) || editablePrograms.some((p) => p.id === projectFilter))
     )
       return projectFilter;
     if (canManageGlobal) return null;
@@ -508,8 +532,8 @@ export function AutomationsView({
   const historyRule = historyFor ? list.find((rule) => rule.id === historyFor) : undefined;
 
   const filterOptions = [
-    { value: 'all', label: 'All projects' },
-    { value: 'workspace', label: 'Every-project rules' },
+    { value: 'all', label: 'All rules' },
+    { value: 'workspace', label: 'Rules for everywhere' },
     ...projects
       .filter((p) => !p.archivedAt)
       .map((p) => ({
@@ -517,6 +541,12 @@ export function AutomationsView({
         label: p.name,
         icon: <EntityIcon icon={p.icon} color={p.color} size={16} />,
       })),
+    ...programs.map((p) => ({
+      value: p.id,
+      label: p.name,
+      description: 'Program',
+      icon: <EntityIcon icon={p.icon} color={p.color} size={16} />,
+    })),
   ];
 
   return (
@@ -735,7 +765,7 @@ export function AutomationsView({
         </div>
       ) : null}
 
-      {tab === 'apps' ? <CrossAppRecipes /> : null}
+      {tab === 'apps' ? <RecordRecipes /> : null}
 
       {tab === 'history' ? (
         <div className="flex flex-col gap-3">
@@ -768,6 +798,7 @@ export function AutomationsView({
         initial={builder.draft}
         recipeName={builder.recipeName}
         projects={projects}
+        programIds={editablePrograms.map((program) => program.id)}
         canManageGlobal={canManageGlobal}
         onSaved={(rule, created) => {
           toast.success(

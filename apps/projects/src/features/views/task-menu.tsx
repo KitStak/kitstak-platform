@@ -28,6 +28,7 @@ import { useCurrentProject } from '@/features/projects/project-context';
 import { useShell } from '@/features/shell/shell-context';
 import { toggleDoneWithUndo } from '@/features/task/done-toggle';
 import type { TaskOps } from './use-task-ops';
+import { useCardExtras } from './card-extras';
 
 type ItemProps = { readonly icon?: ReactNode; readonly onSelect?: (event: Event) => void; readonly variant?: 'default' | 'danger'; readonly children: ReactNode; readonly disabled?: boolean; readonly shortcut?: string };
 
@@ -67,11 +68,21 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
   const otherProjects = (projects.data ?? []).filter((entry) => entry.id !== project.id && !entry.archivedAt && !entry.isTemplate && (entry.role === 'owner' || entry.role === 'editor'));
   const today = todayIso();
   const done = statuses.find((status) => status.category === 'done');
+  const extras = useCardExtras();
+  const hidden = new Set(extras.hideTaskMenuItems?.(task) ?? []);
+  const extraItems = extras.renderMenuItems?.(task, { kind });
+  const dangerItems = extras.renderMenuDanger?.(task, { kind });
 
   return (
     <>
+      {extraItems ? (
+        <>
+          {extraItems}
+          <Separator />
+        </>
+      ) : null}
       <Item icon={<ExternalLink aria-hidden />} onSelect={() => openTask(task.key)} shortcut="Enter">
-        Open task
+        {task.kind === 'build' ? 'Open build' : 'Open task'}
       </Item>
       <Item icon={<Link2 aria-hidden />} onSelect={() => void ops.copyLink(task)}>
         Copy link
@@ -113,7 +124,7 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
               Assign to me
             </Item>
           )}
-          <Sub>
+          {hidden.has('due') ? null : <Sub>
             <SubTrigger icon={<CalendarCheck2 aria-hidden />}>Due date</SubTrigger>
             <SubContent className="w-48">
               <Item onSelect={() => void ops.updateTask(task.id, { dueDate: today })}>Today</Item>
@@ -125,16 +136,16 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
                 </Item>
               ) : null}
             </SubContent>
-          </Sub>
+          </Sub>}
         </>
       ) : null}
-      {canCreate || (canEdit && otherProjects.length > 0) ? <Separator /> : null}
-      {canCreate ? (
+      {(canCreate && !hidden.has('duplicate')) || (canEdit && otherProjects.length > 0 && !hidden.has('move')) ? <Separator /> : null}
+      {canCreate && !hidden.has('duplicate') ? (
         <Item icon={<Copy aria-hidden />} onSelect={() => void ops.duplicate(task)}>
           Duplicate
         </Item>
       ) : null}
-      {canEdit && otherProjects.length > 0 ? (
+      {canEdit && otherProjects.length > 0 && !hidden.has('move') ? (
         <Sub>
           <SubTrigger icon={<ArrowRightLeft aria-hidden />}>Move to project</SubTrigger>
           <SubContent className="max-h-72 w-60 overflow-y-auto">
@@ -146,12 +157,18 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
           </SubContent>
         </Sub>
       ) : null}
-      {canDelete ? (
+      {canDelete && !hidden.has('delete') ? (
         <>
           <Separator />
           <Item icon={<Trash2 aria-hidden />} variant="danger" onSelect={() => void ops.deleteTasks([task.id], `Deleted ${task.key}`)} shortcut="Del">
             Delete
           </Item>
+        </>
+      ) : null}
+      {dangerItems ? (
+        <>
+          <Separator />
+          {dangerItems}
         </>
       ) : null}
     </>
