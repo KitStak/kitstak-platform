@@ -56,6 +56,12 @@ export interface ResilientPoolOptions {
   readonly readStallMs?: number;
   /** A statement slower than this (that still answered) is logged, with its SQL, as slow. */
   readonly slowMs?: number;
+  /**
+   * Budget for a quick statement or a connection acquisition on a pool that has not answered
+   * anything yet: the wait is then the connection opening. postgres-js stops its connect timer
+   * before its own first query on a new connection, so a connection that hangs there never fails.
+   */
+  readonly coldStallMs?: number;
   /** Budget for a whole transaction (many statements). */
   readonly transactionStallMs: number;
   readonly now?: () => number;
@@ -104,6 +110,7 @@ export function resilientDefaults(env: Readonly<Record<string, string | undefine
   idleResetMs: number;
   stallMs: number;
   readStallMs: number;
+  coldStallMs: number;
   transactionStallMs: number;
   slowMs: number;
 } {
@@ -119,6 +126,9 @@ export function resilientDefaults(env: Readonly<Record<string, string | undefine
     // Production 2026-11-25: a read on a fresh connection went silent for 35 s, then answered at
     // once when retried. A plain read that quiet is a dead connection; fail over far sooner.
     readStallMs: num(env.DATABASE_READ_STALL_MS, 8_000),
+    // Production 2026-11-25 (twice): the stalled read was the first on a brand-new pool, and the
+    // retry on fresh connections answered at once. Opening a connection takes well under a second.
+    coldStallMs: num(env.DATABASE_CONNECT_STALL_MS, 3_000),
     transactionStallMs: num(env.DATABASE_TX_STALL_MS, 120_000),
     slowMs: num(env.DATABASE_SLOW_MS, 3_000),
   };
@@ -140,6 +150,10 @@ export function resilientPool(create: () => PgSqlLike, options: ResilientPoolOpt
   let inFlight = 0;
   let lastActivity = now();
   let used = false;
+  // The generation that has answered at least one statement (a pool is "cold" until then).
+  let warmGeneration = -1;
+  const isCold = (): boolean => warmGeneration !== generation;
+  const coldOr = (budget: number): number => (isCold() ? Math.min(budget, options.coldStallMs ?? budget) : budget);
 
   const replace = (reason: string, details: Record<string, unknown> = {}): void => {
     const old = current;
@@ -184,7 +198,9 @@ export function resilientPool(create: () => PgSqlLike, options: ResilientPoolOpt
           reject(new DbStallError(options.name, what, budgetMs));
         }, budgetMs);
       });
-      return await Promise.race([Promise.resolve(start()), stall]);
+      const value = await Promise.race([Promise.resolve(start()), stall]);
+      if (generation === startedOn) warmGeneration = startedOn;
+      return value;
     } finally {
       clearTimeout(timer);
       inFlight -= 1;
@@ -223,11 +239,13 @@ export function resilientPool(create: () => PgSqlLike, options: ResilientPoolOpt
     retry: boolean,
   ): PgPendingQuery =>
     lazyQuery(async (arrayMode) => {
-      const budget = isQuickStatement(query) ? (options.readStallMs ?? options.stallMs) : options.stallMs;
+      const quick = isQuickStatement(query);
       const sql = sqlForLog(query);
       let startedOn = generation;
       const once = (): Promise<unknown> => {
         startedOn = generation;
+        // Picked per attempt: a retry lands on a fresh (cold) pool.
+        const budget = quick ? coldOr(options.readStallMs ?? options.stallMs) : options.stallMs;
         return guarded(
           'statement',
           budget,
@@ -264,7 +282,8 @@ export function resilientPool(create: () => PgSqlLike, options: ResilientPoolOpt
     },
     reserve: async () => {
       beforeUse();
-      const acquire = (): Promise<PgReservedLike> => guarded('connection acquisition', options.stallMs, () => current.reserve());
+      const acquire = (): Promise<PgReservedLike> =>
+        guarded('connection acquisition', coldOr(options.stallMs), () => current.reserve());
       let conn: PgReservedLike;
       try {
         conn = await acquire();

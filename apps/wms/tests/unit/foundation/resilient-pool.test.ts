@@ -183,6 +183,7 @@ describe('resilientDefaults', () => {
       idleResetMs: 15_000,
       stallMs: 35_000,
       readStallMs: 8_000,
+      coldStallMs: 3_000,
       transactionStallMs: 120_000,
       slowMs: 3_000,
     });
@@ -249,5 +250,43 @@ describe('isQuickStatement and sqlForLog', () => {
   it('logs SQL flattened and short, never parameters', () => {
     expect(sqlForLog('select  *\n  from t\n where id = $1')).toBe('select * from t where id = $1');
     expect(sqlForLog(`select ${'x'.repeat(300)}`).length).toBe(161);
+  });
+});
+
+describe('resilientPool cold pool budget', () => {
+  it('fails over a read on a brand-new pool after the short connect budget', async () => {
+    const { create } = factory(true);
+    const pool = resilientPool(create, { ...FAST, stallMs: 1_000, readStallMs: 600, coldStallMs: 30 });
+    const started = Date.now();
+    const rows = (await pool.client.unsafe('select 1')) as { pool: number }[];
+    expect(rows[0]?.pool).toBe(1);
+    expect(Date.now() - started).toBeLessThan(400);
+  });
+
+  it('gives a warm pool the full read budget', async () => {
+    const { pools, create } = factory();
+    const pool = resilientPool(create, { ...FAST, stallMs: 1_000, readStallMs: 150, coldStallMs: 20 });
+    await pool.client.unsafe('select 1'); // warms generation 0
+    (pools[0] as FakePool).hang = true;
+    const started = Date.now();
+    await pool.client.unsafe('select 2'); // stalls, then retried on a fresh pool
+    expect(Date.now() - started).toBeGreaterThanOrEqual(140);
+  });
+
+  it('never shortens the budget of a write', async () => {
+    const { create } = factory(true);
+    const pool = resilientPool(create, { ...FAST, stallMs: 120, readStallMs: 50, coldStallMs: 10 });
+    const started = Date.now();
+    await expect(pool.client.unsafe('update t set a = 1')).rejects.toBeInstanceOf(DbStallError);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(110);
+  });
+
+  it('times out a connection acquisition on a cold pool quickly and retries it', async () => {
+    const { create } = factory(true);
+    const pool = resilientPool(create, { ...FAST, stallMs: 1_000, coldStallMs: 25 });
+    const started = Date.now();
+    const conn = await pool.client.reserve();
+    expect(Date.now() - started).toBeLessThan(400);
+    conn.release();
   });
 });
