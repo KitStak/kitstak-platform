@@ -12,7 +12,7 @@ All billing for every KitStak app lives in one place: **Billing** in the Portal.
 1. In the Portal top bar, select your initials to open the **Account menu**.
 2. Select **Billing**.
 
-Owners, admins and billing managers see the full page with these tabs: **Overview**, **Plan**, **Invoices**, **Details**, **Team** and **Activity**. Other members see one card instead. See [Who sees what](#who-sees-what) below.
+Owners, admins and billing managers see the full page with these tabs: **Overview**, **Plan**, **Invoices**, **Details**, **Team** and **Activity**. Other members see one card instead. See **Who sees what** below.
 
 ## The four cards
 
@@ -26,7 +26,7 @@ Owners, admins and billing managers see the full page with these tabs: **Overvie
 ## Below the cards
 
 - **Usage**: seats and warehouses in use against what you pay for, with a hint when you pay for more than you use.
-- **Your apps**: every app with its badge, and **Add** with the app name for an app not on your plan.
+- **Your apps**: every app with its badge. An app not on your plan has an **Add** button and the price it would add.
 - **Invoices**: your newest invoices with a PDF link.
 - **Billing details**: company, billing email and tax ID, with **Edit**.
 - **Billing team**: who can manage billing, with **Manage**. With only one person it says **Add a second person so billing never gets stuck.**
@@ -57,6 +57,7 @@ Owners, admins and billing managers see the full page with these tabs: **Overvie
 | Your plan is set to end. You keep everything until then. You can undo this any time before that day. | Canceled |
 | Your plan stays on. Nothing changes. | Selected **Keep my plan** |
 | Your pause is set. No bills while paused. | Paused |
+| Your pause is off. Your plan carries on as before. | Selected **Undo pause** |
 | Your plan is back on. Your apps are open again. | Started again after a pause |
 | Your payment went through. Your apps are fully open. | Paid an open bill |
 | Your billing details are saved. | Edited billing details |
@@ -66,7 +67,7 @@ Owners, admins and billing managers see the full page with these tabs: **Overvie
 | Who | What they see |
 | --- | --- |
 | Owner or billing manager | Everything, and every button. |
-| Admin | Everything, but buttons that pay or change a paid plan are replaced by **Only an owner or a billing manager can change the plan.** An admin can still start the free trial and change trial apps. |
+| Admin | Everything. Where a pay or change button would be, the card says **Only an owner or a billing manager can pick a plan and pay.** or **Only an owner or a billing manager can change the plan.** An admin can still start the free trial and change trial apps. |
 | Any other member | One card: who manages billing, the plan state in one line, and **Back to my apps**. Under it, **Apps you do not have yet** lists apps to ask for. |
 
 ### Ask for an app

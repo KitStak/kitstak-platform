@@ -33,7 +33,7 @@ A cycle is a short round of work inside a project, usually one or two weeks, wit
 3. Tick the tasks you want.
 4. Select **Add** and the number of tasks, such as **Add 4 to cycle**.
 
-To take a task out, select **Take** the task **out of the cycle** next to it.
+To take a task out, select the remove button next to it in **In this cycle**.
 
 A task is in one cycle at a time. Subtasks follow their parent task, so add the parent. Tasks from one project only. A closed cycle cannot take new tasks.
 
@@ -62,7 +62,7 @@ To close it early:
 2. Under **Unfinished tasks**, pick **Move to next cycle** or **Back to backlog**.
 3. Select **Close cycle**.
 
-To change a cycle, select **Edit**. To remove it, open its menu and select **Remove** the cycle.
+To change a cycle's name, dates, goal or rollover, select **Edit**. To delete it, select the bin button next to **Close cycle**.
 
 ## See cycles in the table
 
