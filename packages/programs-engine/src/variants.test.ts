@@ -9,6 +9,7 @@ import {
   QTY_TOO_LARGE,
   RATE_TOO_LARGE,
   SCRAP_TOO_LARGE,
+  VALUE_CODE_RULE,
   VARIANT_KEY_RULE,
   applyPattern,
   axisNameProblem,
@@ -226,12 +227,30 @@ describe('inferAxes', () => {
     const result = inferAxes({ text: 'GLOVE-S-BRN\nGLOVE-S-YLW\nGLOVE-M-BRN\nGLOVE-XL-YLW\n' });
     expect(result.mode).toBe('sku');
     expect(result.axes).toEqual([
-      { name: 'Part 1', values: [{ label: 'Small', code: 'S' }, { label: 'Medium', code: 'M' }, { label: 'XL', code: 'XL' }] },
-      { name: 'Part 2', values: [{ label: 'Brown', code: 'BRN' }, { label: 'Yellow', code: 'YLW' }] },
+      { name: 'Size', values: [{ label: 'Small', code: 'S' }, { label: 'Medium', code: 'M' }, { label: 'XL', code: 'XL' }] },
+      { name: 'Color', values: [{ label: 'Brown', code: 'BRN' }, { label: 'Yellow', code: 'YLW' }] },
     ]);
     expect(result.rows).toHaveLength(4);
-    expect(result.rows[0]).toMatchObject({ sku: 'GLOVE-S-BRN', name: 'Small Brown', attributes: { 'Part 1': 'Small', 'Part 2': 'Brown' } });
+    expect(result.rows[0]).toMatchObject({ sku: 'GLOVE-S-BRN', name: 'Small Brown', attributes: { Size: 'Small', Color: 'Brown' } });
     expect(result.unmatched).toEqual([]);
+  });
+  it('names SKU parts the same way as names: Size and Color from known values, else Part N', () => {
+    // The same values typed as names get the same attribute names.
+    const asNames = inferAxes({ text: 'Small Brown\nSmall Yellow\nMedium Brown' });
+    const asSkus = inferAxes({ text: 'GLOVE-S-BRN\nGLOVE-S-YLW\nGLOVE-M-BRN' });
+    expect(asSkus.axes.map((axis) => axis.name)).toEqual(asNames.axes.map((axis) => axis.name));
+    expect(asSkus.axes.map((axis) => axis.name)).toEqual(['Size', 'Color']);
+    // Parts that are not known sizes or colors keep the Part N fallback for the wizard to rename.
+    const plain = inferAxes({ text: 'KIT-A1-Q7\nKIT-B2-Q8' });
+    expect(plain.axes.map((axis) => axis.name)).toEqual(['Part 1', 'Part 2']);
+    expect(plain.rows[0]!.attributes).toEqual({ 'Part 1': 'A1', 'Part 2': 'Q7' });
+    // A mix: a known size part and an unknown part.
+    const mixed = inferAxes({ text: 'GLOVE-S-Q7\nGLOVE-L-Q8' });
+    expect(mixed.axes.map((axis) => axis.name)).toEqual(['Size', 'Part 2']);
+    expect(mixed.rows[1]!.attributes).toEqual({ Size: 'Large', 'Part 2': 'Q8' });
+    // Two parts that are both colors never share a name.
+    const twoColors = inferAxes({ text: 'GLOVE-BRN-YLW\nGLOVE-YLW-BRN' });
+    expect(twoColors.axes.map((axis) => axis.name)).toEqual(['Color', 'Color 2']);
   });
   it('sends a repeated SKU to unmatched so the same variant is never made twice', () => {
     const result = inferAxes({ text: 'A-1\nB-2\nA-1' });
@@ -265,7 +284,7 @@ describe('inferAxes', () => {
   });
   it('uses the separator given, and keeps a first part that differs', () => {
     const result = inferAxes({ text: 'S_BRN\nM_YLW', separator: '_' });
-    expect(result.axes.map((axis) => axis.name)).toEqual(['Part 1', 'Part 2']);
+    expect(result.axes.map((axis) => axis.name)).toEqual(['Size', 'Color']);
     expect(result.rows[1]!.name).toBe('Medium Yellow');
   });
   it('refuses more than 4 parts', () => {
@@ -374,6 +393,17 @@ describe('cells and numbers', () => {
     expect(plainNumber('$1,200.50')).toBe('1200.50');
     expect(plainNumber('x')).toBeNull();
   });
+  it('never reads a leading zero thousands group (a European 0.5) as a number', () => {
+    for (const cell of ['0,500', '00,123', '0,5', '$0,500']) {
+      expect(looksLikeNumber(cell)).toBe(false);
+      expect(plainNumber(cell)).toBeNull();
+    }
+    expect(plainNumber('0500')).toBe('0500');
+    expect(plainNumber('1,500')).toBe('1500');
+    const result = inferAxes({ text: 'Fit,Qty,Rate\nSlim,"0,500",1.95\nWide,"00,123",1.95\nTall,10,"0,500"\nShort,10,"0,5"' });
+    expect(result.rows).toEqual([]);
+    expect(result.unmatched.map((row) => row.why)).toEqual(['The qty 0,500 is not a number.', 'The qty 00,123 is not a number.', 'The rate 0,500 is not a number.', 'The rate 0,5 is not a number.']);
+  });
 });
 
 describe('codes in other scripts', () => {
@@ -457,5 +487,177 @@ describe('inferAxes reads number columns and repeated names', () => {
       [4, QTY_TOO_LARGE],
     ]);
     expect(splitCells('a; "b; c" ;d', ';')).toEqual(['a', 'b; c', 'd']);
+  });
+});
+
+describe('inferAxes reads a pasted list of names as names', () => {
+  const allCodesPass = (result: ReturnType<typeof inferAxes>): boolean => result.axes.every((axis) => axis.values.every((value) => VALUE_CODE_RULE.test(value.code)));
+  it('Small Brown, Small Yellow, Medium Brown, XL Yellow: labels as typed, known codes, no SKU', () => {
+    const result = inferAxes({ text: 'Small Brown\nSmall Yellow\nMedium Brown\nXL Yellow' });
+    expect(result.axes).toEqual([
+      { name: 'Size', values: [{ label: 'Small', code: 'S' }, { label: 'Medium', code: 'M' }, { label: 'XL', code: 'XL' }] },
+      { name: 'Color', values: [{ label: 'Brown', code: 'BRN' }, { label: 'Yellow', code: 'YLW' }] },
+    ]);
+    expect(result.rows.map((row) => [row.name, row.sku, row.attributes])).toEqual([
+      ['Small Brown', null, { Size: 'Small', Color: 'Brown' }],
+      ['Small Yellow', null, { Size: 'Small', Color: 'Yellow' }],
+      ['Medium Brown', null, { Size: 'Medium', Color: 'Brown' }],
+      ['XL Yellow', null, { Size: 'XL', Color: 'Yellow' }],
+    ]);
+    expect(result.unmatched).toEqual([]);
+    expect(result.notes).toEqual([{ line: 1, text: 'These lines were read as names, not SKUs, so the kits have no SKU yet. Each part of a name is one attribute.' }]);
+  });
+  it('a shared first word that is a value (Small) is kept, never dropped as a program code', () => {
+    const result = inferAxes({ text: 'Small Brown\nSmall Yellow' });
+    expect(result.axes.map((axis) => [axis.name, axis.values.map((value) => value.label)])).toEqual([
+      ['Size', ['Small']],
+      ['Color', ['Brown', 'Yellow']],
+    ]);
+    expect(result.rows.map((row) => row.name)).toEqual(['Small Brown', 'Small Yellow']);
+    // A shared part that looks like a program code is still dropped.
+    const coded = inferAxes({ text: 'GLOVE Small Brown\nGLOVE Large Brown' });
+    expect(coded.axes.map((axis) => axis.name)).toEqual(['Size', 'Color']);
+    expect(coded.rows.map((row) => row.name)).toEqual(['Small Brown', 'Large Brown']);
+  });
+  it('a shared word that is not a value names the attribute after it (size 7, size 8)', () => {
+    const result = inferAxes({ text: 'size 7\nsize 8\nSize 9' });
+    expect(result.axes).toEqual([{ name: 'Size', values: [{ label: '7', code: '7' }, { label: '8', code: '8' }, { label: '9', code: '9' }] }]);
+    expect(result.rows.map((row) => [row.name, row.attributes])).toEqual([
+      ['7', { Size: '7' }],
+      ['8', { Size: '8' }],
+      ['9', { Size: '9' }],
+    ]);
+    expect(result.notes).toEqual([
+      { line: 1, text: 'Every line starts with size, so Size is the name of the attribute, not a value.' },
+      { line: 1, text: 'These lines were read as names, not SKUs, so the kits have no SKU yet. Each part of a name is one attribute.' },
+    ]);
+    // With more parts, the word names the part right after it and the rest are named from their values.
+    const longer = inferAxes({ text: 'width 10 Brown\nwidth 12 Yellow' });
+    expect(longer.axes.map((axis) => [axis.name, axis.values.map((value) => value.label)])).toEqual([
+      ['Width', ['10', '12']],
+      ['Color', ['Brown', 'Yellow']],
+    ]);
+    // When the values are known sizes, Size wins and the shared word is only left out.
+    const known = inferAxes({ text: 'glove Small\nglove Large' });
+    expect(known.axes.map((axis) => [axis.name, axis.values.map((value) => value.label)])).toEqual([['Size', ['Small', 'Large']]]);
+    expect(known.notes[0]).toEqual({ line: 1, text: 'Every line starts with glove, so it was left out of the values.' });
+    // A word that cannot be an attribute name falls back to Part 1.
+    const reserved = inferAxes({ text: 'program 7\nprogram 8' });
+    expect(reserved.axes.map((axis) => axis.name)).toEqual(['Part 1']);
+    // One line alone is never split this way.
+    expect(inferAxes({ text: 'size 7' }).axes.map((axis) => axis.name)).toEqual(['Part 1', 'Part 2']);
+  });
+  it('Strawberry and Banana get codes the database takes', () => {
+    const result = inferAxes({ text: 'Strawberry\nBanana' });
+    expect(result.axes).toEqual([{ name: 'Part 1', values: [{ label: 'Strawberry', code: 'STR' }, { label: 'Banana', code: 'BAN' }] }]);
+    expect(result.rows.map((row) => [row.name, row.sku])).toEqual([
+      ['Strawberry', null],
+      ['Banana', null],
+    ]);
+    expect(allCodesPass(result)).toBe(true);
+  });
+  it('Extra Large is one value, not a third part', () => {
+    const result = inferAxes({ text: 'Small Brown\nExtra Large Yellow\nX Large Brown' });
+    expect(result.unmatched).toEqual([]);
+    expect(result.axes[0]).toEqual({ name: 'Size', values: [{ label: 'Small', code: 'S' }, { label: 'Extra Large', code: 'XL' }, { label: 'X Large', code: 'XL2' }] });
+    expect(result.rows.map((row) => row.name)).toEqual(['Small Brown', 'Extra Large Yellow', 'X Large Brown']);
+  });
+  it('lower case names get a first capital, short known codes are spelled out, and repeats are listed', () => {
+    const result = inferAxes({ text: 'small brown\ns ylw\nSMALL BROWN\nDark Brown Small' });
+    expect(result.rows.map((row) => row.name)).toEqual(['Small Brown', 'Small Yellow']);
+    expect(result.unmatched).toEqual([
+      { line: 3, raw: 'SMALL BROWN', why: 'These values are already on line 1.' },
+      { line: 4, raw: 'Dark Brown Small', why: 'This name has 3 parts. The others have 2. To use a value of more than one word, paste a sheet with one column per attribute.' },
+    ]);
+  });
+  it('mixed case with dashes reads as names too', () => {
+    const result = inferAxes({ text: 'Small-Brown\nLarge-Yellow' });
+    expect(result.rows.map((row) => [row.name, row.sku])).toEqual([
+      ['Small Brown', null],
+      ['Large Yellow', null],
+    ]);
+  });
+  it('a SKU list typed in lower case is still a SKU list', () => {
+    const result = inferAxes({ text: 'glove-s-brn\nglove-m-ylw' });
+    expect(result.notes).toEqual([]);
+    expect(result.rows.map((row) => [row.sku, row.name])).toEqual([
+      ['GLOVE-S-BRN', 'Small Brown'],
+      ['GLOVE-M-YLW', 'Medium Yellow'],
+    ]);
+  });
+});
+
+describe('inferAxes codes always pass the database CHECK', () => {
+  it('a SKU part longer than 6 or with other characters gets a short code, and the SKU is kept', () => {
+    const result = inferAxes({ text: 'STRAWBERRY\nBANANA\nKIWI.2' });
+    expect(result.axes[0]!.values).toEqual([
+      { label: 'STRAWBERRY', code: 'STR' },
+      { label: 'BANANA', code: 'BANANA' },
+      { label: 'KIWI.2', code: 'KIW' },
+    ]);
+    expect(result.rows.map((row) => row.sku)).toEqual(['STRAWBERRY', 'BANANA', 'KIWI.2']);
+  });
+  it('a shared first part that is a known value (S) is kept, and one that looks like a program code is dropped', () => {
+    const small = inferAxes({ text: 'S-BRN\nS-YLW' });
+    expect(small.axes.map((axis) => axis.values.map((value) => value.code))).toEqual([['S'], ['BRN', 'YLW']]);
+    const program = inferAxes({ text: 'KIT7-A\nKIT7-B' });
+    expect(program.axes.map((axis) => axis.values.map((value) => value.code))).toEqual([['A', 'B']]);
+  });
+  it('holds for random pasted lists', () => {
+    let state = 7;
+    const random = (): number => {
+      state = (state * 1103515245 + 12345) % 2147483648;
+      return state / 2147483648;
+    };
+    const words = ['Small', 'Extra Large', 'brown', 'Strawberry', 'BANANAS', 'KIT.1', 'x', 'Navy', 'XXL', 'Ünïcode', '日本', 'GLOVE', 'A_B', 'Medium-Tall'];
+    for (let run = 0; run < 400; run += 1) {
+      const sep = [' ', '-', '_', '/'][Math.floor(random() * 4)]!;
+      const lines = Array.from({ length: 1 + Math.floor(random() * 6) }, () => Array.from({ length: 1 + Math.floor(random() * 3) }, () => words[Math.floor(random() * words.length)]).join(sep));
+      const result = inferAxes({ text: lines.join('\n') });
+      for (const axis of result.axes) for (const value of axis.values) expect(VALUE_CODE_RULE.test(value.code), `${value.code} from ${JSON.stringify(lines)}`).toBe(true);
+      for (const row of result.rows) expect(row.sku === null || !/\s/.test(row.sku)).toBe(true);
+    }
+  });
+});
+
+describe('inferAxes refuses a dollar sign in a qty column', () => {
+  it('reads $10 under Qty as a price read as the qty', () => {
+    const result = inferAxes({ text: 'Size,Qty\nSmall,$10\nLarge,10' });
+    expect(result.rows.map((row) => row.qty)).toEqual(['10']);
+    expect(result.unmatched).toEqual([{ line: 2, raw: 'Small,$10', why: 'The qty $10 looks like a price. Type only how many units.' }]);
+  });
+});
+
+describe('inferAxes never makes an axis from a stray cell', () => {
+  it('a row with more cells than the header is listed, and the other rows keep their axes', () => {
+    const result = inferAxes({ text: 'Size,Color,Qty\nSmall,Brown,0,500\nSmall,Yellow,100\nLarge,Brown,"1,200"' });
+    expect(result.mode).toBe('columns');
+    expect(result.axes.map((axis) => axis.name)).toEqual(['Size', 'Color']);
+    expect(result.rows.map((row) => [row.attributes, row.qty])).toEqual([
+      [{ Size: 'Small', Color: 'Yellow' }, '100'],
+      [{ Size: 'Large', Color: 'Brown' }, '1200'],
+    ]);
+    expect(result.unmatched).toEqual([{ line: 2, raw: 'Small,Brown,0,500', why: 'This row has 4 cells. The header has 3. Put a number like 1,200 in quotes, or type it as 1200.' }]);
+  });
+  it('names a split thousands number', () => {
+    const result = inferAxes({ text: 'Size,Color,Qty\nSmall,Brown,1,200\nSmall,Yellow,100' });
+    expect(result.unmatched[0]?.why).toBe('This row has 4 cells. The header has 3. Put "1,200" in quotes, or type it as 1200.');
+    expect(result.axes.map((axis) => axis.values.map((value) => value.label))).toEqual([['Small'], ['Yellow']]);
+  });
+  it('a stray text cell gets the plain fix', () => {
+    const result = inferAxes({ text: 'Size\tColor\nSmall\tBrown\tOops\nSmall\tYellow' });
+    expect(result.unmatched[0]?.why).toBe('This row has 3 cells. The header has 2. Take out the extra tab.');
+    expect(result.rows).toHaveLength(1);
+  });
+  it('with no header, a row longer than most rows is listed instead of adding a column', () => {
+    const result = inferAxes({ text: 'Small,Brown,100\nSmall,Yellow,100\nMedium,Brown,0,500' });
+    expect(result.axes).toHaveLength(2);
+    expect(result.rows).toHaveLength(2);
+    expect(result.unmatched).toEqual([{ line: 3, raw: 'Medium,Brown,0,500', why: 'This row has 4 cells. Most rows have 3. Put a number like 1,200 in quotes, or type it as 1200.' }]);
+  });
+  it('the qty words match the imports', () => {
+    const result = inferAxes({ text: 'Size,Color,Qty\nSmall,Brown,-4\nSmall,Yellow,ten' });
+    expect(result.unmatched.map((row) => row.why)).toEqual(['The qty cannot be less than 0.', 'The qty ten is not a number.']);
+    expect(decimalProblem('-4', 3, 'qty')).toBe('The qty cannot be less than 0.');
   });
 });

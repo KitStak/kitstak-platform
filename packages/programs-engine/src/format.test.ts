@@ -42,14 +42,48 @@ describe('other formats', () => {
     expect(formatMarginBp(3150)).toBe('31.5%');
     expect(formatMarginBp(-1266)).toBe('-12.7%');
     expect(formatMarginBp(null)).toBe('No margin yet');
+    expect(formatMarginBp(3000)).toBe('30%');
+    expect(formatMarginBp(0)).toBe('0%');
+  });
+  it('formatMarginBp never prints -0% and rounds half away from zero', () => {
+    for (const bp of [-1, -2, -3, -4, 1, 4, -0, -0.4]) expect(formatMarginBp(bp)).toBe('0%');
+    expect(formatMarginBp(-5)).toBe('-0.1%');
+    expect(formatMarginBp(5)).toBe('0.1%');
+    expect(formatMarginBp(-15)).toBe('-0.2%');
+    expect(formatMarginBp(15)).toBe('0.2%');
+    expect(formatMarginBp(-95)).toBe('-1%');
+    expect(formatMarginBp(9995)).toBe('100%');
+    expect(formatMarginBp(9994)).toBe('99.9%');
+    expect(formatMarginBp(1234567)).toBe('12,345.7%');
+    expect(formatMarginBp(-1234567)).toBe('-12,345.7%');
+    expect(formatMarginBp(Number.POSITIVE_INFINITY, { empty: '' })).toBe('');
+  });
+  it('a margin rounds and an attainment cuts, as the format.ts header says', () => {
+    expect(formatMarginBp(9995)).toBe('100%');
+    expect(formatPercentBp(9995, { decimals: 1 })).toBe('99.9%');
   });
   it('formatPercentBp', () => {
     expect(formatPercentBp(10533)).toBe('105%');
     expect(formatPercentBp(10533, { decimals: 1 })).toBe('105.3%');
     expect(formatPercentBp(BigInt(10000), { decimals: 1 })).toBe('100%');
-    expect(formatPercentBp(-450)).toBe('-5%');
+    expect(formatPercentBp(-450)).toBe('-4%');
+    expect(formatPercentBp(-50)).toBe('0%');
     expect(formatPercentBp(null)).toBe('No number yet');
     expect(formatPercentBp(Number.NaN, { empty: '' })).toBe('');
+  });
+  it('formatPercentBp never shows a band the number has not reached (programHealth edges)', () => {
+    // On track starts at exactly 10000, at risk at 9000 (forecast.ts programHealth).
+    expect(formatPercentBp(9999)).toBe('99%');
+    expect(formatPercentBp(9950)).toBe('99%');
+    expect(formatPercentBp(BigInt(9999))).toBe('99%');
+    expect(formatPercentBp(9999.9)).toBe('99%');
+    expect(formatPercentBp(10000)).toBe('100%');
+    expect(formatPercentBp(8999)).toBe('89%');
+    expect(formatPercentBp(8950)).toBe('89%');
+    expect(formatPercentBp(9000)).toBe('90%');
+    expect(formatPercentBp(9999, { decimals: 1 })).toBe('99.9%');
+    expect(formatPercentBp(8999, { decimals: 1 })).toBe('89.9%');
+    expect(formatPercentBp(1234567)).toBe('12,345%');
   });
   it('formatUnitPrice trims to 2 decimals unless more are needed', () => {
     expect(formatUnitPrice('1.9500')).toBe('$1.95');

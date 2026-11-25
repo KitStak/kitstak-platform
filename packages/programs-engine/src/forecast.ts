@@ -65,11 +65,36 @@ function positive(value: Cents): Cents {
 }
 
 /**
+ * Refuses repeated inputs, the way `monthCharges` and `rangeRollup` do: a trailing day listed
+ * twice would count twice in the average, a planned build listed twice would add its remaining
+ * work twice, and a one time charge listed twice would add its cents twice.
+ */
+function assertUniqueForecastInputs(input: ForecastInput): void {
+  const days = new Set<string>();
+  for (const day of input.trailingDaily) {
+    if (days.has(day.date)) throw new RangeError(`Duplicate trailing day ${day.date}`);
+    days.add(day.date);
+  }
+  const builds = new Set<string>();
+  for (const build of input.planned) {
+    if (builds.has(build.buildId)) throw new RangeError(`Duplicate planned build ${build.buildId}`);
+    builds.add(build.buildId);
+  }
+  const charges = new Set<string>();
+  for (const charge of input.oneTime ?? []) {
+    if (charges.has(charge.id)) throw new RangeError(`Duplicate one time charge ${charge.id}`);
+    charges.add(charge.id);
+  }
+}
+
+/**
  * The month estimate (3.8). Throws a RangeError when `asOf` is not a real date, `month` is not
- * a real month, or `result` is a different month.
+ * a real month, `result` is a different month, or a trailing day, a planned build or a one time
+ * charge is listed twice.
  */
 export function forecastMonth(input: ForecastInput): ForecastResult {
   assertMonthClock(input);
+  assertUniqueForecastInputs(input);
   if (input.result.month !== input.month) throw new RangeError(`The result is for ${String(input.result.month)}, not ${input.month}.`);
   const { month, asOf, calendar, result } = input;
   const monthEnd = lastDayOfMonth(month);
@@ -118,7 +143,8 @@ export function forecastMonth(input: ForecastInput): ForecastResult {
   const fixedForMonth = fixedLineForMonth({ month, calendar, versions: input.versions, kind: 'flat_monthly' }).cents + oneTimeCents;
   const minimumCents = result.minimum.minimumCents;
   const project = (work: Cents): { total: Cents; gap: Cents } => {
-    const gap = result.minimum.status === 'none' ? ZERO : positive(minimumCents - (work + toward));
+    // No minimum, or a $0 minimum in force (paused all month), never tops up: the same rule as monthCharges.
+    const gap = result.minimum.status === 'none' || minimumCents === ZERO ? ZERO : positive(minimumCents - (work + toward));
     return { total: work + fixedForMonth + gap, gap };
   };
   const recent = project(recentWork);

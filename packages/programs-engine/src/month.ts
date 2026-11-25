@@ -6,7 +6,7 @@
  * same cents.
  */
 import { accrueDay, minutesToHours } from './accrual';
-import { activeRange, daysInMonth, eachDay, isPausedOn, isRealDate, isRealMonth, lastDayOfMonth, maxDate, monthOf } from './calendar';
+import { activeRange, daysInMonth, eachDay, isPausedOn, isRealDate, isRealMonth, lastDayOfMonth, monthOf } from './calendar';
 import { formatQty, formatUnitPrice } from './format';
 import { type Cents, ZERO, allocate, divRound, fromScaled, mulHoursRate, quantityToScaled, toCents } from './money';
 import { isUsableLine, resolveHourRate, resolveOrderCharge, versionFor } from './price';
@@ -165,51 +165,73 @@ function fixedLineOf(version: CardVersion, kind: 'flat_monthly' | 'monthly_minim
 }
 
 /**
- * True when a fixed line in force on `date` charges that day: always on a day the program is not
- * paused, and on a paused day only when the line has "Charge while paused" on. A day with no
- * line charges when it is not paused (it still holds its place in the month, so a fee that
- * starts on the 16th charges half a month).
+ * True when a fixed line charges on `date`: always on a day the program is not paused, and on a
+ * paused day only when the line has "Charge while paused" on (3.5 step 5).
  */
-function chargesOn(calendar: ProgramCalendar, date: IsoDate, line: CardLine | null): boolean {
-  if (!isPausedOn(calendar, date)) return true;
-  return line !== null && line.chargeWhilePaused;
+function chargesOn(calendar: ProgramCalendar, date: IsoDate, line: CardLine): boolean {
+  return line.chargeWhilePaused || !isPausedOn(calendar, date);
 }
 
 /**
- * A monthly fee or monthly minimum for one month (3.5 step 5, A6). The active days of the month
- * are cut into segments where the same version is in force and has the line. A segment's `d` is
- * the days of it that charge (`chargesOn`). Its exact share of a month is `a * d / D` when its
- * line charges part of a partial month (`prorate`, `D` the days of the month) and `a * d / N`
- * when it does not, where `N` is one frame for every such segment: the active days that charge
- * under the line in force that day. Every charged day belongs to one segment only, and
- * `N <= D`, so the shares can never add up to more than one month of the largest amount.
+ * A monthly fee or monthly minimum for one month (SPEC 3.5 step 5 and A6).
  *
- * The month is rounded once (`divRound` of the exact sum), then split over the segments by the
- * largest remainder (`money.allocate`), so the segments add back to the month to the cent. One
- * version all month, or any number of versions at the same amount over a whole month, gives
- * exactly `a`; mixed amounts and options give at most the largest amount.
+ * - `D` is the days of the month. The active range is `firstActive` to `lastActive`; `A` is its
+ *   day count, paused days included. `A` is the same for every line.
+ * - The active range is cut into segments: contiguous runs of active days where the same version
+ *   is in force and has the line. A paused day stays inside its segment.
+ * - `d` is the days of a segment that charge. A paused day charges only when the segment's line
+ *   has "Charge while paused" on. That is the only place pauses count: paused days only ever
+ *   leave `d`, never the frame.
+ * - Each segment's frame is `D` when its line has `prorate` on and `A` when it is off. `prorate`
+ *   only decides whether a month the program starts or ends in is charged in part or in full
+ *   (A6), so in a month the program is active all month (`A == D`) it changes nothing, and a
+ *   pause bills the same with it on or off: paused Nov 9 to 15 under a $1,500.00 line that does
+ *   not charge while paused is `divRound(150000 * 23, 30) = 115000` either way (E36).
+ * - Since every frame is at least `A` and the `d` of all segments add up to at most `A`, the
+ *   shares `d / frame` never add up to more than one month, with no special case.
+ * - Rounding: neighboring segments with the same amount and the same frame round once as one
+ *   group, `divRound(a * sum(d), frame)`, and the group's cents are split over its segments by
+ *   days with `allocate`. A segment alone in its group is exactly `divRound(a * d, frame)`. So
+ *   versions that do not change the fee add back to one whole month to the cent (A6): three
+ *   $1,500.00 versions in December (2, 2 and 27 days) are 150000, not 9677 + 9677 + 130645 =
+ *   149999. A flag with no effect that month (prorate while the program is active all month)
+ *   gives the same frame, so it never splits a group.
+ * - Rounding each group by up to half a cent could still pass one month of the largest amount in
+ *   force. Then the month is held to that amount, and the segments are cut back in proportion
+ *   (largest remainder), so they still add up to the month to the cent.
+ *
+ * So one version all month gives exactly `a`, a mid month change splits by days (E19), a fee
+ * that starts mid month charges its share (E34), and a program that starts on the 15th pays its
+ * share with prorate on and the full amount with it off (E14, E35).
+ *
+ * `inForce` is true when some version has the line on some active day of the month, even when
+ * no day of it charges (paused all month with "Charge while paused" off). A minimum in force at
+ * 0 cents is met, never "No minimum".
  */
-export function fixedLineForMonth(input: { readonly month: IsoMonth; readonly calendar: ProgramCalendar; readonly versions: readonly CardVersion[]; readonly kind: 'flat_monthly' | 'monthly_minimum' }): { cents: Cents; segments: readonly FixedSegment[] } {
+export function fixedLineForMonth(input: { readonly month: IsoMonth; readonly calendar: ProgramCalendar; readonly versions: readonly CardVersion[]; readonly kind: 'flat_monthly' | 'monthly_minimum' }): {
+  cents: Cents;
+  segments: readonly FixedSegment[];
+  inForce: boolean;
+} {
   const range = activeRange(input.calendar, input.month);
-  if (!range) return { cents: ZERO, segments: [] };
+  if (!range) return { cents: ZERO, segments: [], inForce: false };
   const monthDays = BigInt(daysInMonth(input.month));
+  const activeDays = eachDay(range.from, range.to);
+  const active = BigInt(activeDays.length);
 
   interface Run {
     version: CardVersion;
     line: CardLine;
     from: IsoDate;
     to: IsoDate;
+    /** Days of the run that charge. */
     days: number;
   }
   const runs: Run[] = [];
   let current: Run | null = null;
-  /** The frame `N` of every segment whose line does not charge part of a partial month. */
-  let chargedDays = 0;
-  for (const date of eachDay(range.from, range.to)) {
+  for (const date of activeDays) {
     const version = versionFor(input.versions, date);
     const line = version ? fixedLineOf(version, input.kind) : null;
-    const charges = chargesOn(input.calendar, date, line);
-    if (charges) chargedDays += 1;
     if (!version || !line) {
       current = null;
       continue;
@@ -219,20 +241,44 @@ export function fixedLineForMonth(input: { readonly month: IsoMonth; readonly ca
       runs.push(current);
     }
     current.to = date;
-    if (charges) current.days += 1;
+    if (chargesOn(input.calendar, date, line)) current.days += 1;
   }
 
+  const inForce = runs.length > 0;
   const kept = runs.filter((run) => run.days > 0);
-  if (kept.length === 0) return { cents: ZERO, segments: [] };
-  // Exact shares over one common denominator: a * d / D is a * d * N / (D * N), and a * d / N is a * d * D / (D * N).
-  const frame = BigInt(chargedDays);
-  const denominator = monthDays * frame;
-  const weights = kept.map((run) => toCents(run.line.amountCents as string) * BigInt(run.days) * (run.line.prorate ? frame : monthDays));
-  const exact = weights.reduce((total, weight) => total + weight, ZERO);
-  const cents = divRound(exact, denominator);
-  const parts = allocate(cents, weights);
-  const segments: FixedSegment[] = kept.map((run, index) => ({ versionId: run.version.id, lineId: run.line.id, from: run.from, to: run.to, days: run.days, cents: parts[index] as Cents }));
-  return { cents, segments };
+  if (kept.length === 0) return { cents: ZERO, segments: [], inForce };
+  const amounts = kept.map((run) => toCents(run.line.amountCents as string));
+  const frameOf = (run: Run): bigint => (run.line.prorate ? monthDays : active);
+
+  // Rounding groups: each longest stretch of neighboring segments with the same amount and the
+  // same frame rounds once as a whole, and its cents are then split over its segments by days
+  // (largest remainder). A new version that only changes other lines (GLOVE publishes mid month
+  // versions that only change kit rates) never moves the fee by a cent.
+  const parts: Cents[] = new Array<Cents>(kept.length).fill(ZERO);
+  let start = 0;
+  while (start < kept.length) {
+    const head = kept[start] as Run;
+    let end = start + 1;
+    while (end < kept.length) {
+      const next = kept[end] as Run;
+      if (amounts[end] !== amounts[start] || frameOf(next) !== frameOf(head)) break;
+      end += 1;
+    }
+    const weights = kept.slice(start, end).map((run) => BigInt(run.days));
+    const groupDays = weights.reduce((total, days) => total + days, ZERO);
+    const groupCents = divRound((amounts[start] as Cents) * groupDays, frameOf(head));
+    allocate(groupCents, weights).forEach((share, offset) => {
+      parts[start + offset] = share;
+    });
+    start = end;
+  }
+  const sum = parts.reduce((total, part) => total + part, ZERO);
+  const largest = amounts.reduce((top, amount) => (amount > top ? amount : top), ZERO);
+  const capped = sum > largest;
+  const cents = capped ? largest : sum;
+  const shares = capped ? allocate(cents, parts) : parts;
+  const segments: FixedSegment[] = kept.map((run, index) => ({ versionId: run.version.id, lineId: run.line.id, from: run.from, to: run.to, days: run.days, cents: shares[index] as Cents }));
+  return { cents, segments, inForce };
 }
 
 /* ------------------------------------------------------------------------------------------ */
@@ -400,20 +446,22 @@ export function monthCharges(input: MonthInput): MonthResult {
     });
   }
 
-  // 5. Monthly fee, dated the first day a fee version is in force (the first active day when
-  // one is in force on the 1st), and posted once that day has come, so month to date never
-  // counts a fee from a version that is not in force yet (M3).
+  // 5. Monthly fee: one charge for the whole month, dated the first active day (the 1st when the
+  // program is active all month, even when that is not a work day; E16) and posted once that day
+  // has come. It is the month's full `fixedLineForMonth` amount, so it also holds the share of a
+  // version published for later in the month (a Scheduled version from the 16th) from the first
+  // active day on. When no version has the line on the first active day, the charge still names
+  // the first segment's version and line.
   const fee = fixedLineForMonth({ month, calendar, versions, kind: 'flat_monthly' });
   let monthlyFeeCents = ZERO;
   const first = fee.segments[0];
-  const feeDate = range && first ? maxDate(range.from, first.from) : null;
-  if (feeDate && first && fee.cents !== ZERO && asOf >= feeDate) {
+  if (range && first && fee.cents !== ZERO && asOf >= range.from) {
     monthlyFeeCents = fee.cents;
     const line = versions.find((version) => version.id === first.versionId)?.lines.find((row) => row.id === first.lineId);
     charges.push({
       ref: feeRef.monthly(programId, month),
       kind: 'flat_monthly',
-      date: feeDate,
+      date: range.from,
       cents: fee.cents,
       quantity: null,
       unitPrice: null,
@@ -467,9 +515,11 @@ export function monthCharges(input: MonthInput): MonthResult {
   let status: MinimumStatus = 'none';
   let gapSoFarCents = ZERO;
   let topUpCents = ZERO;
-  if (range && minimum.segments.length > 0) {
+  // A minimum in force counts even at 0 cents (paused all month with "Charge while paused" off):
+  // it is met, not "No minimum". A $0 minimum never tops up, even when credits pass the work.
+  if (range && minimum.inForce) {
     const forMinimum = workTotal + towardMinimumCents;
-    gapSoFarCents = minimum.cents > forMinimum ? minimum.cents - forMinimum : ZERO;
+    gapSoFarCents = minimum.cents > ZERO && minimum.cents > forMinimum ? minimum.cents - forMinimum : ZERO;
     const over = asOf > monthEnd;
     if (over) {
       topUpCents = gapSoFarCents;

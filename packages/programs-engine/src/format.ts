@@ -3,6 +3,17 @@
  * and the browser print the same text (hydration safe). Money is formatted from exact integers:
  * `bigint` cents never pass through a float. `@kitstak/pulse-bridge/format` re-exports
  * `formatCents` and `formatMarginBp` from here, so every app prints money the same way.
+ *
+ * Two percent formats, on purpose:
+ * - `formatMarginBp` (a margin) rounds to the nearest tenth, half away from zero, like every
+ *   other number the engine rounds (`divRound`). A margin is a measure, so the nearest value is
+ *   the honest one: 9995 bp is "100%".
+ * - `formatPercentBp` (progress to a goal, such as minimum or forecast attainment) cuts toward
+ *   zero. It sits next to a health band, and rounding up could claim a band the number has not
+ *   reached: 9995 bp is "99%" (or "99.9%"), never "100%", because on track starts at 10000.
+ * A screen that shows both shows a margin with `formatMarginBp` and an attainment with
+ * `formatPercentBp`; never print one kind of number with the other formatter, or the two can
+ * be a tenth apart for the same basis points.
  */
 import { type Cents, ZERO, absBig, divRound, fromScaled, priceToScaled, quantityToScaled, toScaled } from './money';
 
@@ -137,25 +148,42 @@ export function formatCents(cents: Cents | number | string | null | undefined, o
   return withCurrency(negative && dollars !== ZERO, groupDigits(dollars), currency);
 }
 
-/** Basis points to percent text: 3150 becomes "31.5%". */
+/**
+ * Basis points to a margin with up to one decimal: 3150 becomes "31.5%", 3000 becomes "30%".
+ *
+ * Rounds to the tenth with the engine's one rounding rule (`divRound`, half away from zero), so
+ * +5 bp is "0.1%" and -5 bp is "-0.1%". A value that rounds to zero prints "0%", never "-0%".
+ */
 export function formatMarginBp(bp: number | null | undefined, options: { readonly empty?: string } = {}): string {
   if (bp === null || bp === undefined || !Number.isFinite(bp)) return options.empty ?? 'No margin yet';
-  const tenths = Math.round(bp / 10) / 10;
-  return `${new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 0, maximumFractionDigits: 1 }).format(tenths)}%`;
+  // A fractional bp rounds half away from zero too, so the sign never changes the result.
+  const whole = BigInt(Math.sign(bp) * Math.round(Math.abs(bp)));
+  const tenths = divRound(whole, BigInt(10));
+  const { whole: digits, fraction } = splitDecimal(fromScaled(absBig(tenths), 1));
+  const body = fraction === '0' ? groupDigits(BigInt(digits)) : `${groupDigits(BigInt(digits))}.${fraction}`;
+  return `${tenths < ZERO ? '-' : ''}${body}%`;
 }
 
-/** Basis points to a whole percent: 10533 becomes "105%". With `decimals: 1`, "105.3%". */
+/**
+ * Basis points to a whole percent: 10533 becomes "105%". With `decimals: 1`, "105.3%".
+ *
+ * The percent is cut toward zero, never rounded up, so it can never claim a band the number has
+ * not reached: 9999 is "99%" (with one decimal "99.9%"), which sits next to "At risk" from
+ * `programHealth` (on track starts at exactly 10000), and 8999 is "89%" next to "Off track".
+ * A credit cuts toward zero too: -450 is "-4%".
+ */
 export function formatPercentBp(bp: number | bigint | null | undefined, options: { readonly decimals?: 0 | 1; readonly empty?: string } = {}): string {
   if (bp === null || bp === undefined) return options.empty ?? 'No number yet';
   if (typeof bp === 'number' && !Number.isFinite(bp)) return options.empty ?? 'No number yet';
-  const value = typeof bp === 'bigint' ? bp : BigInt(Math.round(bp));
+  const value = typeof bp === 'bigint' ? bp : BigInt(Math.trunc(bp));
   if (options.decimals === 1) {
-    const tenths = divRound(value, BigInt(10));
+    // bigint division cuts toward zero.
+    const tenths = value / BigInt(10);
     const { negative, whole, fraction } = splitDecimal(fromScaled(tenths, 1));
     const body = fraction === '0' ? groupDigits(BigInt(whole)) : `${groupDigits(BigInt(whole))}.${fraction}`;
     return `${negative && tenths !== ZERO ? '-' : ''}${body}%`;
   }
-  const percent = divRound(value, HUNDRED);
+  const percent = value / HUNDRED;
   return `${percent < ZERO ? '-' : ''}${groupDigits(absBig(percent))}%`;
 }
 

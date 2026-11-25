@@ -6,37 +6,34 @@ describe('isWonStage (A12)', () => {
     expect(isWonStage({ isDone: true, name: 'Closed' })).toBe(true);
     expect(isWonStage({ isDone: null, name: 'Won' })).toBe(true);
     expect(isWonStage({ isDone: false, name: 'Won back later' })).toBe(false);
-    expect(isWonStage({ isDone: null, name: "Won't buy" })).toBe(false);
     expect(isWonStage({ isDone: null, name: 'Closed won' })).toBe(true);
-  });
-  it('E31 a negation right before won, the word lost, or a question is never won', () => {
-    for (const name of ['Not won', 'Never won', 'No won deals', 'Not yet won', "Isn't won", 'Lost to competitor who won', 'Lost', 'Won?', 'Won (maybe)?']) {
-      expect(isWonStage({ isDone: null, name })).toBe(false);
-    }
-    expect(isWonStage({ isDone: null, name: 'Won - signed' })).toBe(true);
-    expect(isWonStage({ isDone: null, name: 'Deal won' })).toBe(true);
-    expect(isWonStage({ isDone: true, name: 'Not won' })).toBe(true);
   });
   it('A12 reads only the whole word won, so real CRM won stages with more words start a program', () => {
     expect(isWonStage({ isDone: null, name: 'Closed Won - Pending Signature' })).toBe(true);
     expect(isWonStage({ isDone: null, name: 'Won (expected start Jan)' })).toBe(true);
     expect(isWonStage({ name: 'Won, starts soon' })).toBe(true);
     expect(isWonStage({ name: 'Won back later' })).toBe(true);
-    // The board's own flag still wins over the words.
-    expect(isWonStage({ isDone: false, name: 'Closed Won - Pending Signature' })).toBe(false);
-  });
-  it('an apostrophe joins the word, so lost stages never count as won', () => {
-    expect(isWonStage({ name: "Won't renew" })).toBe(false);
-    expect(isWonStage({ name: 'Won\u2019t renew' })).toBe(false);
-    expect(isWonStage({ name: "Lost: won't buy" })).toBe(false);
+    expect(isWonStage({ name: 'Deal won' })).toBe(true);
     expect(isWonStage({ name: "Deal's won" })).toBe(true);
     expect(isWonStage({ name: 'Won (signed)' })).toBe(true);
     expect(isWonStage({ name: 'WON' })).toBe(true);
   });
-  it('matches the whole word only', () => {
+  it('A12 adds no other rule: labels with the whole word won are won unless the board flag says no', () => {
+    // These read like not won, but A12 reads only the word. The board marks such a label not done.
+    for (const name of ['Not won', 'Not yet won', 'Won?', 'Lost to Acme who won', "Won't renew", 'Won\u2019t renew']) {
+      expect(isWonStage({ isDone: null, name })).toBe(true);
+      expect(isWonStage({ isDone: false, name })).toBe(false);
+    }
+    expect(isWonStage({ isDone: true, name: 'Not won' })).toBe(true);
+    expect(isWonStage({ isDone: null, name: 'Lost' })).toBe(false);
+  });
+  it('matches the whole word only, like the Postgres \\mwon\\M test', () => {
     expect(isWonStage({ name: 'Closed won' })).toBe(true);
     expect(isWonStage({ name: 'Closed-Won' })).toBe(true);
+    expect(isWonStage({ name: 'won_stage' })).toBe(false);
     expect(isWonStage({ name: 'Wonderful' })).toBe(false);
+    expect(isWonStage({ name: 'Swon' })).toBe(false);
+    expect(isWonStage({ name: 'Won2' })).toBe(false);
     expect(isWonStage({ name: null })).toBe(false);
     expect(isWonStage({})).toBe(false);
   });
@@ -50,6 +47,21 @@ describe('deal values', () => {
     expect(dealValueToCents(19.995)).toBe(BigInt(2000));
     expect(dealValueToCents(BigInt(5))).toBe(BigInt(500));
     expect(dealValueToCents('n/a')).toBeNull();
+    expect(dealValueToCents('386,400')).toBe(BigInt(38640000));
+    expect(dealValueToCents('$386,400.00')).toBe(BigInt(38640000));
+    expect(dealValueToCents(' $ 386,400.00 ')).toBe(BigInt(38640000));
+    expect(dealValueToCents('386400')).toBe(BigInt(38640000));
+    expect(dealValueToCents('-$1,000')).toBe(BigInt(-100000));
+    expect(dealValueToCents('.5')).toBe(BigInt(50));
+    // A comma must group thousands: never read a European decimal comma or bad grouping.
+    for (const bad of ['1,23', '1.234,56', '1,2,3', '12,34,567', '1,2345', '386 400', ',500', '1,000.', '$', '']) expect(dealValueToCents(bad)).toBeNull();
+    // A leading zero thousands group is a European decimal (0,500 is 0.5), never $500 or $123.
+    expect(dealValueToCents('0,500')).toBeNull();
+    expect(dealValueToCents('00,123')).toBeNull();
+    expect(dealValueToCents('0,5')).toBeNull();
+    expect(dealValueToCents('$0,500.00')).toBeNull();
+    expect(dealValueToCents('0500')).toBe(BigInt(50000));
+    expect(dealValueToCents('1,000,000')).toBe(BigInt(100000000));
     expect(dealValueToCents(Number.NaN)).toBeNull();
     expect(dealValueToCents(null)).toBeNull();
   });

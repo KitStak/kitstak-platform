@@ -232,4 +232,27 @@ describe('forecastMonth input (spec 3.8 shape)', () => {
     expect(() => forecastMonth(input({ month: '2026-00' }))).toThrow(RangeError);
     expect(() => forecastMonth(input({ month: '2026-12' }))).toThrow(new RangeError('The result is for 2026-11, not 2026-12.'));
   });
+  it('refuses a trailing day listed twice instead of counting it twice in the average', () => {
+    const repeated = [
+      { date: '2026-11-23', workCents: BigInt(1000), units: '10' },
+      { date: '2026-11-24', workCents: BigInt(100), units: '1' },
+      { date: '2026-11-24', workCents: BigInt(100), units: '1' },
+    ];
+    expect(() => forecastMonth(input({ asOf: '2026-11-25', result: november('2026-11-25'), trailingDaily: repeated }))).toThrow(new RangeError('Duplicate trailing day 2026-11-24'));
+    // The same days listed once average to 550.
+    const once = forecastMonth(input({ asOf: '2026-11-25', result: november('2026-11-25'), trailingDaily: repeated.slice(0, 2) }));
+    expect(once.avgDailyWorkCents).toBe(BigInt(550));
+  });
+  it('refuses a planned build listed twice instead of adding its work twice', () => {
+    const planned = plannedFor(['2026-11-25', '2026-11-27', '2026-11-30']);
+    const first = planned[0]!;
+    expect(() => forecastMonth(input({ planned: [...planned, first] }))).toThrow(new RangeError(`Duplicate planned build ${first.buildId}`));
+    expect(() => forecastMonth(input({ planned: [...planned, { ...first, date: '2026-11-27' }] }))).toThrow(RangeError);
+    expect(forecastMonth(input({ planned })).plannedCents).toBe(BigInt(3370000));
+  });
+  it('refuses a one time charge listed twice', () => {
+    const fee: OneTimeCharge = { id: 'r1', kind: 'adjustment', chargeOn: '2026-11-27', amountCents: '15000', label: 'Rush fee', variantId: null, countsTowardMinimum: false };
+    expect(() => forecastMonth(input({ oneTime: [fee, fee] }))).toThrow(new RangeError('Duplicate one time charge r1'));
+    expect(forecastMonth(input({ oneTime: [fee] })).forecastCents).toBe(BigInt(3370000 + 15000));
+  });
 });

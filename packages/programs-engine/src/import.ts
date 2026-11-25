@@ -6,7 +6,7 @@
 import { isRealDate, weekday, weekdayName } from './calendar';
 import { fromScaled, quantityToScaled } from './money';
 import type { IsoDate } from './types';
-import { MAX_QTY_WHOLE_DIGITS, QTY_TOO_LARGE, SCRAP_TOO_LARGE, anyDelimiter, plainNumber, splitCells, textLines, wholeDigits } from './variants';
+import { type ExpectedCells, type SheetDelimiter, anyDelimiter, extraCellsMessage, filledWidth, plainNumber, readQtyCell, splitCells, textLines } from './variants';
 
 export interface VariantMatch {
   readonly id: string;
@@ -173,7 +173,8 @@ export function parseDateCell(cell: string, dates?: readonly IsoDate[], order: D
 /**
  * Why a date cell cannot be used, as UI copy, or null when `parseDateCell` reads it:
  * "Nov 30 is a Monday, not a Tuesday.", "Dec 5 is outside the days you are planning.",
- * "Nov 30 has no year. Use dates like 2026-11-30." or "The date abc is not a date this can read."
+ * "Nov 30 has no year. Use dates like 2026-11-30." or "2026-02-30 is not a real date. Use dates
+ * like 2026-11-30."
  */
 export function dateCellProblem(cell: string, dates?: readonly IsoDate[], order: DateOrder = 'month_first'): string | null {
   if (parseDateCell(cell, dates, order) !== null) return null;
@@ -188,7 +189,7 @@ export function dateCellProblem(cell: string, dates?: readonly IsoDate[], order:
     if (dates) return `${text} is outside the days you are planning.`;
     if ((dateParts(text, order) as DateParts).year === null) return `${text} has no year. Use dates like 2026-11-30.`;
   }
-  return `The date ${text} is not a date this can read.`;
+  return `${text} is not a real date. Use dates like 2026-11-30.`;
 }
 
 function dayWords(parts: DateParts): string {
@@ -254,28 +255,25 @@ export const MAX_QTY_DECIMALS = 3;
 export const MAX_QTY_SCALED = BigInt('99999999999');
 
 /**
- * A qty cell as a 3 decimal string, or a reason it cannot be used. More than 3 decimals is
- * refused, never rounded, and so is a value of 100,000,000 or more (the database CHECK).
+ * A qty cell as a 3 decimal string, or a reason it cannot be used, in the same words as the
+ * variant paste (`readQtyCell` and `qtyMessage` in variants). `where` names the cell for a grid
+ * ("Nov 30"): "The qty 5. is not a number (Nov 30)." and "The qty is too large (Nov 30). Use up
+ * to 99,999,999."
  */
-function readQty(cell: string, what: 'qty' | 'scrap'): { qty: string } | { why: string } {
-  const plain = plainNumber(cell);
-  if (plain === null) return { why: `The ${what} ${cell.trim()} is not a number.` };
-  const [whole = '', frac = ''] = plain.replace(/^[+-]/, '').split('.');
-  if (frac.length > MAX_QTY_DECIMALS && /[1-9]/.test(frac.slice(MAX_QTY_DECIMALS))) return { why: what === 'qty' ? 'Use up to 3 decimals.' : 'Use up to 3 decimals for scrap.' };
-  if (wholeDigits(whole) > MAX_QTY_WHOLE_DIGITS) return { why: what === 'qty' ? QTY_TOO_LARGE : SCRAP_TOO_LARGE };
-  const scaled = quantityToScaled(plain);
-  if (scaled < BigInt(0)) return { why: `The ${what} cannot be less than 0.` };
-  return { qty: fromScaled(scaled, 3) };
+function readQty(cell: string, what: 'qty' | 'scrap', where?: string): { qty: string } | { why: string } {
+  const read = readQtyCell(cell, what, where);
+  return 'why' in read ? read : { qty: fromScaled(quantityToScaled(read.plain), 3) };
 }
 
 interface Sheet {
+  readonly delimiter: SheetDelimiter;
   readonly rows: readonly { readonly line: number; readonly raw: string; readonly cells: readonly string[] }[];
 }
 
 function readSheet(text: string): Sheet {
   const lines = textLines(text);
   const delimiter = anyDelimiter(lines);
-  return { rows: lines.map((row) => ({ ...row, cells: splitCells(row.raw, delimiter) })) };
+  return { delimiter, rows: lines.map((row) => ({ ...row, cells: splitCells(row.raw, delimiter) })) };
 }
 
 const DATE_HEADERS = ['date', 'day', 'work date', 'build date', 'work day', 'when', 'made on', 'built on', 'plan date', 'planned date', 'build day'];
@@ -347,8 +345,12 @@ function guessColumns(body: readonly { readonly cells: readonly string[] }[], va
   if (withScrap) {
     if (named.scrap >= 0) scrap = named.scrap;
     else {
-      const next = indexes.find((index) => !taken.has(index) && index !== qty && count(index, (cell) => plainNumber(cell) !== null) > 0);
-      scrap = next ?? (width > 3 && !taken.has(3) ? 3 : null);
+      // Scrap is guessed only from a column filled on more than half the rows, so a few rows with
+      // a stray cell (an unquoted 1,200) are never read as qty 1 and scrap 200: those rows have
+      // more cells than the columns used and are listed in unmatched instead.
+      const usable = (index: number): boolean => count(index, () => true) * 2 > sample.length;
+      const next = indexes.find((index) => !taken.has(index) && index !== qty && usable(index) && count(index, (cell) => plainNumber(cell) !== null) > 0);
+      scrap = next ?? (width > 3 && !taken.has(3) && usable(3) ? 3 : null);
     }
   }
   return { date, variant, qty, scrap };
@@ -398,7 +400,17 @@ function readLongRows(
     options.dateOrder,
   );
   notes.push(...settled.notes);
+  // A row is held to the header's cells, or with no header to the columns read. A row with a
+  // filled cell past them (most often a number like 1,200 typed without quotes) is left out with
+  // the reason, never read in part: "1,200" read as 1 would under count by 1,200 times.
+  const used = [{ index: columns.date, word: 'date' }, { index: columns.variant, word: 'SKU or variant' }, { index: columns.qty, word: 'qty' }, ...(columns.scrap === null ? [] : [{ index: columns.scrap, word: 'scrap' }])].sort((a, b) => a.index - b.index);
+  const expected: ExpectedCells = headerRow && first ? { kind: 'header', cells: filledWidth(first.cells) } : { kind: 'columns', names: used.map((column) => column.word) };
+  const limit = expected.kind === 'header' ? expected.cells : Math.max(...used.map((column) => column.index)) + 1;
   for (const row of body) {
+    if (filledWidth(row.cells) > limit) {
+      unmatched.push({ line: row.line, raw: row.raw, why: extraCellsMessage(row.cells, expected, sheet.delimiter) });
+      continue;
+    }
     const dateCell = row.cells[columns.date] ?? '';
     const variantCell = row.cells[columns.variant] ?? '';
     const qtyCell = row.cells[columns.qty] ?? '';
@@ -475,7 +487,13 @@ function readGrid(
     unmatched.push({ line: header.line, raw: header.raw, why: dateCellProblem(cell, dates, settled.order) as string });
   });
   const cells: { variantId: string; date: IsoDate; qty: string; line: number; raw: string }[] = [];
+  const headerCells = filledWidth(header.cells);
   for (const row of sheet.rows.slice(1)) {
+    // A row with more cells than the header would put its qtys under the wrong dates, so it is left out.
+    if (filledWidth(row.cells) > headerCells) {
+      unmatched.push({ line: row.line, raw: row.raw, why: extraCellsMessage(row.cells, { kind: 'header', cells: headerCells }, sheet.delimiter) });
+      continue;
+    }
     const token = row.cells[0] ?? '';
     if (token.trim() === '') {
       unmatched.push({ line: row.line, raw: row.raw, why: 'This row has no SKU or variant.' });
@@ -490,9 +508,9 @@ function readGrid(
       const date = headerDates[index];
       const value = (row.cells[index] ?? '').trim();
       if (!date || value === '') continue;
-      const qty = readQty(value, 'qty');
+      const qty = readQty(value, 'qty', header.cells[index]);
       if ('why' in qty) {
-        unmatched.push({ line: row.line, raw: row.raw, why: `${qty.why.replace(/\.$/, '')} (${header.cells[index]?.trim()}).` });
+        unmatched.push({ line: row.line, raw: row.raw, why: qty.why });
         continue;
       }
       if (quantityToScaled(qty.qty) === BigInt(0)) continue;
@@ -502,66 +520,134 @@ function readGrid(
   return { cells, unmatched, notes: settled.notes, dateOrder: settled.order, dateOrderNeeded: settled.needed };
 }
 
-/** "The qty for Small Brown on 2026-11-02 adds up to 100,000,000 or more. Use up to 99,999,999." */
-function overflowMessage(what: 'qty' | 'scrap', variantName: string, date: IsoDate): string {
-  return `The ${what} for ${variantName} on ${date} adds up to 100,000,000 or more. Use up to 99,999,999.`;
+/** "line 3", "lines 3 and 4", "lines 2, 3 and 4"; past 5 lines, "lines 2, 3, 4, 5, 6 and 7 more". */
+function lineList(lines: readonly number[]): string {
+  if (lines.length === 1) return `line ${lines[0]}`;
+  const shown = lines.length > 5 ? lines.slice(0, 5) : lines.slice(0, -1);
+  const tail = lines.length > 5 ? `${lines.length - 5} more` : String(lines[lines.length - 1]);
+  return `lines ${shown.join(', ')} and ${tail}`;
 }
 
-/** "Added to line 2, which also has Small Brown on 2026-11-30." */
-function mergedMessage(firstLine: number, variantName: string, date: IsoDate): string {
-  return `Added to line ${firstLine}, which also has ${variantName} on ${date}.`;
+/** A day in UI words, the way the other import messages say it: "Mon, Nov 30". */
+function shortDay(date: IsoDate): string {
+  const [, month = '1', day = '1'] = date.split('-');
+  return `${weekdayName(date).slice(0, 3)}, ${MONTH_WORDS[Number(month) - 1] ?? '?'} ${Number(day)}`;
 }
 
 /**
- * Adds up cells for the same variant and date, keeping first seen order. Each later cell is listed
- * in `merged` with the line it was added to, so the review step can say what was combined. A total
- * of 100,000,000 or more (the database CHECK) is left out whole and listed in `unmatched` on the
- * line that went over, and its merges are dropped.
+ * "Left out: Small Brown on Mon, Nov 2 adds up to 100,000,000 or more with line 3. Use up to
+ * 99,999,999 for one day." Every line that fed the day gets it, each naming the other lines.
  */
-function combine<T extends { variantId: string; date: IsoDate; qty: string; line: number; raw: string }>(cells: readonly T[], variants: readonly VariantMatch[]): { cells: { variantId: string; date: IsoDate; qty: string }[]; unmatched: Unmatched[]; merged: Unmatched[] } {
-  const order: string[] = [];
-  const totals = new Map<string, { variantId: string; date: IsoDate; qty: bigint; over: boolean; line: number }>();
-  const unmatched: Unmatched[] = [];
-  const merged: (Unmatched & { key: string })[] = [];
-  const nameOf = (variantId: string): string => variants.find((variant) => variant.id === variantId)?.name ?? variantId;
-  for (const cell of cells) {
-    const key = `${cell.variantId}|${cell.date}`;
-    const found = totals.get(key);
-    if (found) {
-      if (found.over) continue;
-      found.qty += quantityToScaled(cell.qty);
-      if (found.qty > MAX_QTY_SCALED) {
-        found.over = true;
-        unmatched.push({ line: cell.line, raw: cell.raw, why: overflowMessage('qty', nameOf(cell.variantId), cell.date) });
-      } else merged.push({ key, line: cell.line, raw: cell.raw, why: mergedMessage(found.line, nameOf(cell.variantId), cell.date) });
-    } else {
-      order.push(key);
-      totals.set(key, { variantId: cell.variantId, date: cell.date, qty: quantityToScaled(cell.qty), over: false, line: cell.line });
-    }
-  }
-  const out = order
-    .map((key) => totals.get(key) as { variantId: string; date: IsoDate; qty: bigint; over: boolean })
-    .filter((row) => !row.over)
-    .map((row) => ({ variantId: row.variantId, date: row.date, qty: fromScaled(row.qty, 3) }));
-  const kept = merged.filter((entry) => !(totals.get(entry.key) as { over: boolean }).over).map((entry) => ({ line: entry.line, raw: entry.raw, why: entry.why }));
-  return { cells: out, unmatched, merged: kept };
+function leftOutMessage(what: 'qty' | 'scrap', variantName: string, date: IsoDate, otherLines: readonly number[]): string {
+  const subject = what === 'qty' ? `${variantName} on ${shortDay(date)}` : `the scrap for ${variantName} on ${shortDay(date)}`;
+  const where = otherLines.length === 0 ? 'on this line' : `with ${lineList(otherLines)}`;
+  return `Left out: ${subject} adds up to 100,000,000 or more ${where}. Use up to 99,999,999 for one day.`;
 }
 
-/** Long rows with a qty above 0 as cells to combine. */
-function longCells(rows: readonly LongRow[]): { variantId: string; date: IsoDate; qty: string; line: number; raw: string }[] {
-  return rows.filter((row) => quantityToScaled(row.qty) > BigInt(0)).map((row) => ({ variantId: row.variant.id, date: row.date, qty: row.qty, line: row.line, raw: row.raw }));
+/** "Added to line 2, which also has Small Brown on Mon, Nov 30." */
+function mergedMessage(firstLine: number, variantName: string, date: IsoDate): string {
+  return `Added to line ${firstLine}, which also has ${variantName} on ${shortDay(date)}.`;
+}
+
+/** One read cell (a long row, or one qty under a date in a grid) to add up by variant and day. */
+interface Feed {
+  readonly key: string;
+  readonly line: number;
+  readonly raw: string;
+  readonly variantId: string;
+  readonly variantName: string;
+  readonly date: IsoDate;
+  readonly qty: bigint;
+  readonly scrap: bigint;
+}
+
+interface Total {
+  readonly variantId: string;
+  readonly date: IsoDate;
+  readonly qty: bigint;
+  readonly scrap: bigint;
+}
+
+/**
+ * Adds up feeds for the same variant and day, keeping first seen order. Each later feed is listed
+ * in `merged` with the line it was added to, so the review step can say what was combined.
+ *
+ * A day whose qty or scrap adds up to 100,000,000 or more (the database CHECK) cannot be saved in
+ * one row, so the whole day is left out, and every line that fed it, the first line, the ones
+ * added to it and the ones after, goes to `unmatched` with the other lines named. So every line
+ * read ends up in exactly one place: a row, `merged` or `unmatched`.
+ */
+function addUp(feeds: readonly Feed[]): { totals: Total[]; merged: Unmatched[]; unmatched: Unmatched[] } {
+  const groups = new Map<string, Feed[]>();
+  for (const feed of feeds) {
+    const group = groups.get(feed.key);
+    if (group) group.push(feed);
+    else groups.set(feed.key, [feed]);
+  }
+  const totals: Total[] = [];
+  const merged: Unmatched[] = [];
+  const unmatched: Unmatched[] = [];
+  for (const group of groups.values()) {
+    const first = group[0] as Feed;
+    const qty = group.reduce((sum, feed) => sum + feed.qty, BigInt(0));
+    const scrap = group.reduce((sum, feed) => sum + feed.scrap, BigInt(0));
+    const over = qty > MAX_QTY_SCALED ? 'qty' : scrap > MAX_QTY_SCALED ? 'scrap' : null;
+    if (over) {
+      const lines = [...new Set(group.map((feed) => feed.line))];
+      const listed = new Set<number>();
+      for (const feed of group) {
+        // A grid line that feeds the same day twice (two columns read as one date) is listed once.
+        if (listed.has(feed.line)) continue;
+        listed.add(feed.line);
+        unmatched.push({ line: feed.line, raw: feed.raw, why: leftOutMessage(over, feed.variantName, feed.date, lines.filter((line) => line !== feed.line)) });
+      }
+      continue;
+    }
+    totals.push({ variantId: first.variantId, date: first.date, qty, scrap });
+    for (const feed of group.slice(1)) merged.push({ line: feed.line, raw: feed.raw, why: mergedMessage(first.line, feed.variantName, feed.date) });
+  }
+  return { totals, merged, unmatched };
+}
+
+/** Unmatched lines in line order (a stable sort keeps one line's reasons in the order found). */
+function byLine(rows: readonly Unmatched[]): Unmatched[] {
+  return [...rows].sort((a, b) => a.line - b.line);
+}
+
+/** Plan cells (from a grid or long rows) added up by variant and day. */
+function combine(cells: readonly { variantId: string; date: IsoDate; qty: string; line: number; raw: string }[], variants: readonly VariantMatch[]): { cells: { variantId: string; date: IsoDate; qty: string }[]; unmatched: Unmatched[]; merged: Unmatched[] } {
+  const nameOf = (variantId: string): string => variants.find((variant) => variant.id === variantId)?.name ?? variantId;
+  const added = addUp(
+    cells.map((cell) => ({ key: `${cell.variantId}|${cell.date}`, line: cell.line, raw: cell.raw, variantId: cell.variantId, variantName: nameOf(cell.variantId), date: cell.date, qty: quantityToScaled(cell.qty), scrap: BigInt(0) })),
+  );
+  return { cells: added.totals.map((total) => ({ variantId: total.variantId, date: total.date, qty: fromScaled(total.qty, 3) })), unmatched: added.unmatched, merged: added.merged };
+}
+
+/** UI copy for a plan line whose qty is 0. */
+export const ZERO_PLAN_QTY = 'The qty is 0, so this line plans nothing.';
+
+/** Long plan rows as cells to combine. A row with a qty of 0 plans nothing, so it is listed with that reason instead. */
+function longCells(rows: readonly LongRow[]): { cells: { variantId: string; date: IsoDate; qty: string; line: number; raw: string }[]; zero: Unmatched[] } {
+  const cells: { variantId: string; date: IsoDate; qty: string; line: number; raw: string }[] = [];
+  const zero: Unmatched[] = [];
+  for (const row of rows) {
+    if (quantityToScaled(row.qty) > BigInt(0)) cells.push({ variantId: row.variant.id, date: row.date, qty: row.qty, line: row.line, raw: row.raw });
+    else zero.push({ line: row.line, raw: row.raw, why: ZERO_PLAN_QTY });
+  }
+  return { cells, zero };
 }
 
 function report(source: { unmatched: Unmatched[]; notes: ImportNote[]; dateOrder: DateOrder; dateOrderNeeded: boolean }): ImportReport {
-  return { unmatched: source.unmatched, notes: source.notes, dateOrder: source.dateOrder, dateOrderNeeded: source.dateOrderNeeded };
+  return { unmatched: byLine(source.unmatched), notes: source.notes, dateOrder: source.dateOrder, dateOrderNeeded: source.dateOrderNeeded };
 }
 
 /**
  * A pasted plan for the planner: rows of SKU or variant with a column per date (a header row of
  * dates such as `2026-11-30`, `11/30`, `Nov 30` or `Mon Nov 30`, found among `dates`), or rows of
  * date, variant and qty. Cells for the same variant and day add up, and each later one is listed in
- * `merged` ("Added to line 2, which also has Small Brown on 2026-11-30."). Empty and 0 cells are
- * skipped. Pass `dateOrder` once people pick how slash dates read (see `ImportReport.dateOrderNeeded`).
+ * `merged` ("Added to line 2, which also has Small Brown on Mon, Nov 30."). Empty and 0 cells of
+ * a grid are skipped (a grid is mostly blanks); a long row with a qty of 0 is listed in
+ * `unmatched` with `ZERO_PLAN_QTY`. Pass `dateOrder` once people pick how slash dates read (see `ImportReport.dateOrderNeeded`).
  */
 export function parsePlanPaste(input: { readonly text: string; readonly variants: readonly VariantMatch[]; readonly dates: readonly IsoDate[]; readonly dateOrder?: DateOrder }): { cells: readonly { variantId: string; date: IsoDate; qty: string }[]; merged: readonly Unmatched[] } & ImportReport {
   const sheet = readSheet(input.text);
@@ -571,14 +657,15 @@ export function parsePlanPaste(input: { readonly text: string; readonly variants
     return { cells: combined.cells, merged: combined.merged, ...report({ ...grid, unmatched: [...grid.unmatched, ...combined.unmatched] }) };
   }
   const long = readLongRows(sheet, input.variants, { withScrap: false, dates: input.dates, dateOrder: input.dateOrder });
-  const combined = combine(longCells(long.rows), input.variants);
-  return { cells: combined.cells, merged: combined.merged, ...report({ ...long, unmatched: [...long.unmatched, ...combined.unmatched] }) };
+  const read = longCells(long.rows);
+  const combined = combine(read.cells, input.variants);
+  return { cells: combined.cells, merged: combined.merged, ...report({ ...long, unmatched: [...long.unmatched, ...read.zero, ...combined.unmatched] }) };
 }
 
 /**
  * A plan CSV: rows of date, variant and qty (a header row is optional), or a grid with a header
  * row of full dates. Dates need a year. Rows for the same variant and day add up, and each later
- * one is listed in `merged` ("Added to line 2, which also has Small Brown on 2026-11-30.").
+ * one is listed in `merged` ("Added to line 2, which also has Small Brown on Mon, Nov 30.").
  */
 export function parsePlanCsv(input: { readonly text: string; readonly variants: readonly VariantMatch[]; readonly dateOrder?: DateOrder }): { rows: readonly { buildDate: IsoDate; variantId: string; qty: string }[]; merged: readonly Unmatched[] } & ImportReport {
   const sheet = readSheet(input.text);
@@ -589,8 +676,9 @@ export function parsePlanCsv(input: { readonly text: string; readonly variants: 
     return { rows: toRows(combined.cells), merged: combined.merged, ...report({ ...grid, unmatched: [...grid.unmatched, ...combined.unmatched] }) };
   }
   const long = readLongRows(sheet, input.variants, { withScrap: false, dateOrder: input.dateOrder });
-  const combined = combine(longCells(long.rows), input.variants);
-  return { rows: toRows(combined.cells), merged: combined.merged, ...report({ ...long, unmatched: [...long.unmatched, ...combined.unmatched] }) };
+  const read = longCells(long.rows);
+  const combined = combine(read.cells, input.variants);
+  return { rows: toRows(combined.cells), merged: combined.merged, ...report({ ...long, unmatched: [...long.unmatched, ...read.zero, ...combined.unmatched] }) };
 }
 
 /**
@@ -598,7 +686,7 @@ export function parsePlanCsv(input: { readonly text: string; readonly variants: 
  * optional and may put the columns in any order; without a known header the columns are found
  * from the data). Each row is one day of one variant: lines for the same variant and day add up
  * (qty and scrap), the way the plan parsers add repeats, and each later line is listed in
- * `merged` ("Added to line 2, which also has Small Brown on 2026-11-02.") so the review step can
+ * `merged` ("Added to line 2, which also has Small Brown on Mon, Nov 2.") so the review step can
  * say what was combined. `notes` holds what people should check (a guessed header, slash dates
  * that could mean two days).
  */
@@ -607,32 +695,9 @@ export function parseOutputCsv(input: { readonly text: string; readonly variants
   merged: readonly Unmatched[];
 } & ImportReport {
   const long = readLongRows(readSheet(input.text), input.variants, { withScrap: true, dateOrder: input.dateOrder });
-  const order: string[] = [];
-  const totals = new Map<string, { line: number; workDate: IsoDate; variant: VariantMatch; qty: bigint; scrap: bigint; over: boolean }>();
-  const merged: (Unmatched & { key: string })[] = [];
-  const unmatched: Unmatched[] = [...long.unmatched];
-  for (const row of long.rows) {
-    const key = `${row.variant.id}|${row.date}`;
-    const found = totals.get(key);
-    if (found) {
-      if (found.over) continue;
-      found.qty += quantityToScaled(row.qty);
-      found.scrap += quantityToScaled(row.scrapQty);
-      const over = found.qty > MAX_QTY_SCALED ? 'qty' : found.scrap > MAX_QTY_SCALED ? 'scrap' : null;
-      if (over) {
-        // The day cannot be saved in one row, so it is left out whole and the line that went over is listed.
-        found.over = true;
-        unmatched.push({ line: row.line, raw: row.raw, why: overflowMessage(over, row.variant.name, row.date) });
-      } else merged.push({ key, line: row.line, raw: row.raw, why: mergedMessage(found.line, row.variant.name, row.date) });
-    } else {
-      order.push(key);
-      totals.set(key, { line: row.line, workDate: row.date, variant: row.variant, qty: quantityToScaled(row.qty), scrap: quantityToScaled(row.scrapQty), over: false });
-    }
-  }
-  const rows = order
-    .map((key) => totals.get(key) as { workDate: IsoDate; variant: VariantMatch; qty: bigint; scrap: bigint; over: boolean })
-    .filter((total) => !total.over)
-    .map((total) => ({ workDate: total.workDate, variantId: total.variant.id, qty: fromScaled(total.qty, 3), scrapQty: fromScaled(total.scrap, 3) }));
-  const kept = merged.filter((entry) => !(totals.get(entry.key) as { over: boolean }).over).map((entry) => ({ line: entry.line, raw: entry.raw, why: entry.why }));
-  return { rows, merged: kept, ...report({ ...long, unmatched }) };
+  const added = addUp(
+    long.rows.map((row) => ({ key: `${row.variant.id}|${row.date}`, line: row.line, raw: row.raw, variantId: row.variant.id, variantName: row.variant.name, date: row.date, qty: quantityToScaled(row.qty), scrap: quantityToScaled(row.scrapQty) })),
+  );
+  const rows = added.totals.map((total) => ({ workDate: total.date, variantId: total.variantId, qty: fromScaled(total.qty, 3), scrapQty: fromScaled(total.scrap, 3) }));
+  return { rows, merged: added.merged, ...report({ ...long, unmatched: [...long.unmatched, ...added.unmatched] }) };
 }

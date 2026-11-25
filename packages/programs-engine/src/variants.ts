@@ -532,8 +532,12 @@ export function anyDelimiter(lines: readonly { raw: string }[]): SheetDelimiter 
   return best;
 }
 
-/** A number such as `100`, `1,200`, `$1.95` or `.5`. A comma must group thousands, so a decimal comma (`10,5`) is not read as 105. */
-const NUMBER = /^[+-]?\$?\s*(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$|^[+-]?\$?\s*\.\d+$/;
+/**
+ * A number such as `100`, `1,200`, `$1.95` or `.5`. A comma must group thousands, so a decimal
+ * comma (`10,5`) is not read as 105, and a grouped number starts with 1 to 9, so a European
+ * `0,500` (0.5) is not read as 500. A plain `0500` with no comma is still 500.
+ */
+const NUMBER = /^[+-]?\$?\s*([1-9]\d{0,2}(,\d{3})+|\d+)(\.\d+)?$|^[+-]?\$?\s*\.\d+$/;
 const SKU_LIKE = /^[A-Za-z0-9]+([-_/][A-Za-z0-9]+)+$/;
 
 /** True when a cell holds a number such as `100`, `1,200` or `$1.95`. */
@@ -553,11 +557,111 @@ export function plainNumber(cell: string): string | null {
  * Extra decimals are refused, never rounded quietly, and neither can be below 0.
  */
 export function decimalProblem(plain: string, decimals: 3 | 4, what: 'qty' | 'rate'): string | null {
-  if (plain.startsWith('-') && /[1-9]/.test(plain)) return what === 'rate' ? 'A rate cannot be less than $0.' : 'A qty cannot be less than 0.';
+  if (what === 'qty') {
+    const problem = qtyNumberProblem(plain);
+    return problem === null ? null : qtyMessage(problem, 'qty');
+  }
+  if (plain.startsWith('-') && /[1-9]/.test(plain)) return 'A rate cannot be less than $0.';
   const [whole = '', frac = ''] = plain.replace(/^[+-]/, '').split('.');
-  if (frac.length > decimals && /[1-9]/.test(frac.slice(decimals))) return what === 'rate' ? 'Use up to 4 decimals for a rate.' : 'Use up to 3 decimals.';
-  if (wholeDigits(whole) > (what === 'rate' ? MAX_RATE_WHOLE_DIGITS : MAX_QTY_WHOLE_DIGITS)) return what === 'rate' ? RATE_TOO_LARGE : QTY_TOO_LARGE;
+  if (frac.length > decimals && /[1-9]/.test(frac.slice(decimals))) return 'Use up to 4 decimals for a rate.';
+  if (wholeDigits(whole) > MAX_RATE_WHOLE_DIGITS) return RATE_TOO_LARGE;
   return null;
+}
+
+/** What can be wrong with a qty or scrap cell. */
+export type QtyProblem = 'not_a_number' | 'price' | 'negative' | 'decimals' | 'too_large';
+
+/**
+ * Every qty and scrap message, built in one place so the variant paste, the plan paste and the
+ * CSV imports use the same words. `where` names the cell of a grid ("Nov 30") and goes in with
+ * `placeNote`; `cell` is the text as typed, for the messages that quote it.
+ * "The qty 5. is not a number (Nov 30).", "The qty $10 looks like a price. Type only how many
+ * units.", "The qty cannot be less than 0.", "Use up to 3 decimals for scrap." and "The qty is
+ * too large (Nov 30). Use up to 99,999,999."
+ */
+export function qtyMessage(problem: QtyProblem, what: 'qty' | 'scrap', where?: string, cell = ''): string {
+  const at = placeNote(where);
+  const text = cell.trim();
+  switch (problem) {
+    case 'not_a_number':
+      return `The ${what} ${text} is not a number${at}.`;
+    case 'price':
+      return `The ${what} ${text} looks like a price${at}. Type only how many units.`;
+    case 'negative':
+      return `The ${what} cannot be less than 0${at}.`;
+    case 'decimals':
+      return what === 'qty' ? `Use up to 3 decimals${at}.` : `Use up to 3 decimals for scrap${at}.`;
+    case 'too_large':
+      return `The ${what} is too large${at}. Use up to 99,999,999.`;
+  }
+}
+
+/** What is wrong with a plain number as a qty: below 0, more than 3 decimals, or 100,000,000 or more. */
+function qtyNumberProblem(plain: string): 'negative' | 'decimals' | 'too_large' | null {
+  if (plain.startsWith('-') && /[1-9]/.test(plain)) return 'negative';
+  const [whole = '', frac = ''] = plain.replace(/^[+-]/, '').split('.');
+  if (frac.length > 3 && /[1-9]/.test(frac.slice(3))) return 'decimals';
+  if (wholeDigits(whole) > MAX_QTY_WHOLE_DIGITS) return 'too_large';
+  return null;
+}
+
+/**
+ * Reads a qty or scrap cell as a plain decimal string, or says why it cannot be used. More than 3
+ * decimals is refused, never rounded, and so is 100,000,000 or more (the database CHECK). A cell
+ * with a dollar sign is refused too: "$10" in a qty column almost always means a price column was
+ * read as the qty, so it is never taken as 10 kits.
+ */
+export function readQtyCell(cell: string, what: 'qty' | 'scrap', where?: string): { plain: string } | { why: string } {
+  const text = cell.trim();
+  const number = plainNumber(text);
+  if (text.includes('$') && number !== null) return { why: qtyMessage('price', what, where, text) };
+  if (number === null || text.includes('$')) return { why: qtyMessage('not_a_number', what, where, text) };
+  const problem = qtyNumberProblem(number);
+  return problem === null ? { plain: number } : { why: qtyMessage(problem, what, where, text) };
+}
+
+/** How many cells a row has, up to its last filled one ("a,b,," has 2). */
+export function filledWidth(cells: readonly string[]): number {
+  for (let index = cells.length - 1; index >= 0; index -= 1) if ((cells[index] ?? '').trim() !== '') return index + 1;
+  return 0;
+}
+
+/** What a row is held to: the header's cells, the cells most rows have, or the named columns a file without a header uses. */
+export type ExpectedCells = { readonly kind: 'header'; readonly cells: number } | { readonly kind: 'most'; readonly cells: number } | { readonly kind: 'columns'; readonly names: readonly string[] };
+
+function listWords(words: readonly string[]): string {
+  if (words.length <= 1) return words.join('');
+  if (words.length === 2) return `${words[0]} and ${words[1]}`;
+  return `${words.slice(0, -1).join(', ')}, and ${words[words.length - 1]}`;
+}
+
+/**
+ * Why a row with more cells than the sheet has columns is left out, with the fix. A comma file
+ * most often has a number such as 1,200 typed without quotes, which splits it in two, so that is
+ * named when the row shows it: "This row has 4 cells. The header has 3. Put "1,200" in quotes, or
+ * type it as 1200." Nothing in such a row is read, so no part of a number is ever saved alone.
+ */
+export function extraCellsMessage(cells: readonly string[], expected: ExpectedCells, delimiter: SheetDelimiter): string {
+  const count = filledWidth(cells);
+  const want = expected.kind === 'columns' ? `A row needs ${expected.names.length}: ${listWords(expected.names)}.` : expected.kind === 'header' ? `The header has ${expected.cells}.` : `Most rows have ${expected.cells}.`;
+  let fix: string;
+  if (delimiter === ',') {
+    let split: string | null = null;
+    for (let index = 0; index + 1 < count && split === null; index += 1) {
+      const head = (cells[index] ?? '').trim();
+      let end = index + 1;
+      while (end < count && /^\d{3}$/.test((cells[end] ?? '').trim())) end += 1;
+      const tail = (cells[end] ?? '').trim();
+      if (end < count && /^\d{3}\.\d+$/.test(tail)) end += 1;
+      if (end === index + 1) continue;
+      const joined = [head, ...cells.slice(index + 1, end).map((cell) => cell.trim())].join(',');
+      if (/^\$?[1-9]\d{0,2}$/.test(head) && plainNumber(joined) !== null) split = joined;
+    }
+    const columns = expected.kind === 'columns' ? expected.names.length : expected.cells;
+    const digits = cells.slice(columns, count).every((cell) => /^\d+(\.\d+)?$/.test(cell.trim()) || cell.trim() === '');
+    fix = split !== null ? `Put "${split}" in quotes, or type it as ${plainNumber(split)}.` : digits ? 'Put a number like 1,200 in quotes, or type it as 1200.' : 'Take out the extra comma, or put a cell that has a comma in quotes.';
+  } else fix = delimiter === ';' ? 'Take out the extra semicolon.' : 'Take out the extra tab.';
+  return `This row has ${count} cells. ${want} ${fix}`;
 }
 
 /** The most whole digits a qty can have (`pm.builds.planned_qty` and `pm.build_output.qty` are CHECK `< 100000000`). */
@@ -565,11 +669,22 @@ export const MAX_QTY_WHOLE_DIGITS = 8;
 /** The most whole digits a rate can have (every rate column is CHECK `< 1000000`). */
 export const MAX_RATE_WHOLE_DIGITS = 6;
 /** UI copy for a qty at or above the 100,000,000 database limit. */
-export const QTY_TOO_LARGE = 'The qty is too large. Use up to 99,999,999.';
+export const QTY_TOO_LARGE = qtyMessage('too_large', 'qty');
 /** UI copy for scrap at or above the 100,000,000 limit (the same cap as the qty). */
-export const SCRAP_TOO_LARGE = 'The scrap is too large. Use up to 99,999,999.';
+export const SCRAP_TOO_LARGE = qtyMessage('too_large', 'scrap');
 /** UI copy for a rate at or above the $1,000,000 database limit (the same words as `RATE_TOO_LARGE_MESSAGE` in price). */
 export const RATE_TOO_LARGE = RATE_TOO_LARGE_MESSAGE;
+
+/** UI copy for a qty or scrap cell that holds a price such as `$10`: it is a number, but not a count of units. */
+export function priceInQtyMessage(cell: string, what: 'qty' | 'scrap', where?: string): string {
+  return qtyMessage('price', what, where, cell);
+}
+
+/** " (Nov 30)" for a message about one cell of a grid, or "" when no place is given. */
+export function placeNote(where?: string): string {
+  const text = where?.trim() ?? '';
+  return text === '' ? '' : ` (${text})`;
+}
 
 /** Whole digits of a plain number's whole part, leading zeros aside. */
 export function wholeDigits(whole: string): number {
@@ -606,6 +721,21 @@ function numberColumnRole(cells: readonly string[]): 'qty' | 'rate' | null {
   return rate ? 'rate' : 'qty';
 }
 
+/** The width most rows have; the larger one on a tie, so no row is cut short by the guess. */
+function mostCommonWidth(widths: readonly number[]): number {
+  const counts = new Map<number, number>();
+  for (const width of widths) counts.set(width, (counts.get(width) ?? 0) + 1);
+  let best = 0;
+  let top = 0;
+  for (const [width, count] of counts) {
+    if (count > top || (count === top && width > best)) {
+      best = width;
+      top = count;
+    }
+  }
+  return best;
+}
+
 function inferColumns(lines: { line: number; raw: string }[], delimiter: SheetDelimiter): InferResult {
   const table = lines.map((row) => ({ ...row, cells: splitCells(row.raw, delimiter) }));
   const first = table[0] as (typeof table)[number];
@@ -613,8 +743,12 @@ function inferColumns(lines: { line: number; raw: string }[], delimiter: SheetDe
   const repeatsBelow = (cell: string, index: number): boolean => rest.some((row) => (row.cells[index] ?? '').toLowerCase() === cell.toLowerCase() && cell !== '');
   const named = first.cells.some((cell) => roleOf(cell) !== 'attribute');
   const header = named || first.cells.every((cell, index) => cell !== '' && !looksLikeNumber(cell) && !SKU_LIKE.test(cell) && !repeatsBelow(cell, index));
-  const width = Math.max(...table.map((row) => row.cells.length));
   const body = header ? rest : table;
+  // The column count is the header's when there is one. With no header it is the count most rows
+  // have (the larger on a tie). A row with filled cells past it is left out, never read as an
+  // extra attribute: one stray comma ("Small,Brown,0,500") must not add an axis to every row.
+  const width = header ? filledWidth(first.cells) : mostCommonWidth(body.map((row) => filledWidth(row.cells)));
+  const expected: ExpectedCells = header ? { kind: 'header', cells: width } : { kind: 'most', cells: width };
   const unmatched: { line: number; raw: string; why: string }[] = [];
   const notes: { line: number; text: string }[] = [];
 
@@ -666,6 +800,10 @@ function inferColumns(lines: { line: number; raw: string }[], delimiter: SheetDe
   const skuLines = new Map<string, number>();
   const comboLines = new Map<string, number>();
   for (const row of body) {
+    if (filledWidth(row.cells) > width) {
+      unmatched.push({ line: row.line, raw: row.raw, why: extraCellsMessage(row.cells, expected, delimiter) });
+      continue;
+    }
     if (rows.length >= MAX_PASTE_ROWS) {
       unmatched.push({ line: row.line, raw: row.raw, why: `Only ${MAX_PASTE_ROWS} rows fit. This row was left out.` });
       continue;
@@ -690,20 +828,21 @@ function inferColumns(lines: { line: number; raw: string }[], delimiter: SheetDe
     }
     const qtyText = cell('qty');
     const rateText = cell('rate');
-    const qty = qtyText === null ? null : plainNumber(qtyText);
-    const rate = rateText === null ? null : plainNumber(rateText);
-    if (qtyText !== null && qty === null) {
-      unmatched.push({ line: row.line, raw: row.raw, why: `The qty ${qtyText} is not a number.` });
+    // "$10" in a qty column is a price read as the qty, so it is refused like the import does.
+    const qtyRead = qtyText === null ? null : readQtyCell(qtyText, 'qty');
+    if (qtyRead !== null && 'why' in qtyRead) {
+      unmatched.push({ line: row.line, raw: row.raw, why: qtyRead.why });
       continue;
     }
+    const qty = qtyRead === null ? null : qtyRead.plain;
+    const rate = rateText === null ? null : plainNumber(rateText);
     if (rateText !== null && rate === null) {
       unmatched.push({ line: row.line, raw: row.raw, why: `The rate ${rateText} is not a number.` });
       continue;
     }
-    const qtyProblem = qty === null ? null : decimalProblem(qty, 3, 'qty');
     const rateProblem = rate === null ? null : decimalProblem(rate, 4, 'rate');
-    if (qtyProblem !== null || rateProblem !== null) {
-      unmatched.push({ line: row.line, raw: row.raw, why: (qtyProblem ?? rateProblem) as string });
+    if (rateProblem !== null) {
+      unmatched.push({ line: row.line, raw: row.raw, why: rateProblem });
       continue;
     }
     // The same SKU or the same values twice would make the same variant twice, so the later row goes to unmatched.
@@ -757,13 +896,77 @@ function commonSeparator(lines: readonly { raw: string }[]): string {
   return best;
 }
 
-function inferSkus(all: { line: number; raw: string }[], separator: string | undefined): InferResult {
-  // A pasted SKU column often keeps its header ("SKU"). It is not a SKU, so it is left out.
-  const lines = all.length > 1 && isSkuHeader((all[0] as { raw: string }).raw) ? all.slice(1) : all;
-  const sep = separator && separator !== '' ? separator : commonSeparator(lines);
-  const split = lines.map((row) => ({ ...row, sku: row.raw.trim(), parts: row.raw.trim().split(sep).map((part) => part.trim()).filter((part) => part !== '') }));
+/** A value code the database takes (`pm.program_attributes` values CHECK `^[A-Z0-9]{1,6}$`). */
+export const VALUE_CODE_RULE = /^[A-Z0-9]{1,6}$/;
+
+/** Size codes of the known words table; the other known words are colors. */
+const SIZE_CODES = new Set(['S', 'M', 'L', 'XL', 'XXL']);
+
+/** The known words table code of a label ("Extra Large" and "X-Large" are XL), or null. */
+function knownCode(label: string): string | null {
+  const words = foldAccents(label).trim().toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
+  return KNOWN_CODES.find(([word]) => word === words)?.[1] ?? null;
+}
+
+/**
+ * A shared first part is the program code (GLOVE) and is dropped only when it looks like one:
+ * letters and digits, upper case as typed, and not a value of the known words table (a list that
+ * is all XL keeps its XL).
+ */
+function programPrefix(parts: readonly string[]): boolean {
+  return parts.length > 0 && /^[A-Z0-9]+$/.test(parts[0] as string) && KNOWN_LABELS[parts[0] as string] === undefined;
+}
+
+/**
+ * True when a pasted line reads as a SKU: no spaces, and all one case (`GLOVE-S-BRN`, or
+ * `glove-s-brn` typed in lower case). A line with spaces or with mixed case ("Small Brown",
+ * "Strawberry", "Small-Brown") is a name.
+ */
+function readsAsSku(raw: string): boolean {
+  const text = raw.trim();
+  if (/\s/.test(text)) return false;
+  if (!/[a-z]/.test(text)) return true;
+  // All lower case: a SKU only when it has a separator (`glove-s-brn`); a lone lower case word ("banana") is a name.
+  return !/[A-Z]/.test(text) && /[-_/]/.test(text);
+}
+
+/** Title case for a word typed all in lower case ("small" to "Small"); anything with a capital is kept as typed. */
+function labelAsTyped(text: string): string {
+  const clean = text.trim().replace(/\s+/g, ' ');
+  if (/[A-Z]/.test(clean)) return clean;
+  return clean.replace(/(^|[\s-])([a-z])/g, (_, lead: string, letter: string) => `${lead}${letter.toUpperCase()}`);
+}
+
+/**
+ * The label of one part of a pasted name: a short known code is spelled out (`brn` and `BRN` are
+ * Brown, `S` is Small, `xl` is XL), anything else is kept as typed, with a first capital when it
+ * was typed all in lower case ("small" is Small).
+ */
+function nameLabel(part: string): string {
+  const upper = part.trim().toUpperCase();
+  const known = KNOWN_LABELS[upper];
+  if (known !== undefined && upper.length <= 3) return known;
+  return labelAsTyped(part);
+}
+
+/** Joins a known label of two words split by the separator back into one part ("Extra" "Large" is Extra Large). */
+function mergeKnownWords(parts: readonly string[], sep: string): string[] {
+  const out: string[] = [];
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index] as string;
+    const next = parts[index + 1];
+    if (next !== undefined && knownCode(`${part} ${next}`) !== null) {
+      out.push(`${part}${sep === ' ' ? ' ' : sep}${next}`);
+      index += 1;
+    } else out.push(part);
+  }
+  return out;
+}
+
+/** The parts count most lines have (ties go to the larger count). */
+function commonCount(rows: readonly { parts: readonly string[] }[]): number {
   const counts = new Map<number, number>();
-  for (const row of split) counts.set(row.parts.length, (counts.get(row.parts.length) ?? 0) + 1);
+  for (const row of rows) counts.set(row.parts.length, (counts.get(row.parts.length) ?? 0) + 1);
   let mode = 0;
   let modeCount = -1;
   for (const [count, seen] of counts) {
@@ -772,15 +975,60 @@ function inferSkus(all: { line: number; raw: string }[], separator: string | und
       modeCount = seen;
     }
   }
+  return mode;
+}
+
+/** The kind of an attribute from its values: Size when every value is a known size, Color when every value is a known color, else null. */
+function kindOfValues(values: readonly { label: string }[]): 'Size' | 'Color' | null {
+  const codes = values.map((value) => knownCode(value.label) ?? (KNOWN_LABELS[value.label.toUpperCase()] !== undefined ? value.label.toUpperCase() : null));
+  if (codes.length === 0 || codes.some((code) => code === null)) return null;
+  if (codes.every((code) => SIZE_CODES.has(code as string))) return 'Size';
+  if (codes.every((code) => !SIZE_CODES.has(code as string))) return 'Color';
+  return null;
+}
+
+/**
+ * Names pasted attributes the same way in SKU mode and names mode: a given name first (a shared
+ * word such as "size" in "size 7"), else Size or Color from the values, else "Part 1", "Part 2"
+ * (the fallback the wizard then asks people to rename). Names never repeat: a second Size is
+ * Size 2. Returns the old name to new name map so rows can follow.
+ */
+function nameAxes(axes: { name: string; values: { label: string; code: string }[] }[], given: readonly (string | null)[] = []): Map<string, string> {
+  const renamed = new Map<string, string>();
+  const taken = new Set<string>();
+  axes.forEach((axis, index) => {
+    const wanted = given[index] ?? null;
+    const usable = wanted !== null && axisNameProblem([{ name: wanted, values: [{ id: '', label: '', code: '' }] }]) === null ? wanted : null;
+    const kind = kindOfValues(axis.values) ?? usable ?? `Part ${index + 1}`;
+    let name = kind;
+    for (let n = 2; taken.has(name.toLowerCase()); n += 1) name = `${kind} ${n}`;
+    taken.add(name.toLowerCase());
+    renamed.set(axis.name, name);
+    axis.name = name;
+  });
+  return renamed;
+}
+
+function inferSkus(all: { line: number; raw: string }[], separator: string | undefined): InferResult {
+  // A pasted SKU column often keeps its header ("SKU"). It is not a SKU, so it is left out.
+  const lines = all.length > 1 && isSkuHeader((all[0] as { raw: string }).raw) ? all.slice(1) : all;
+  const sep = separator && separator !== '' ? separator : commonSeparator(lines);
+  // A space never sits in a SKU, and mixed case reads as words: such a list is a list of names.
+  if (sep === ' ' || !lines.every((row) => readsAsSku(row.raw))) return inferNames(lines, sep);
+  const split = lines.map((row) => ({ ...row, sku: row.raw.trim(), parts: row.raw.trim().split(sep).map((part) => part.trim()).filter((part) => part !== '') }));
+  const mode = commonCount(split);
   const unmatched: { line: number; raw: string; why: string }[] = [];
   const good = split.filter((row) => {
     if (row.parts.length === mode) return true;
     unmatched.push({ line: row.line, raw: row.raw, why: `This SKU has ${row.parts.length} ${row.parts.length === 1 ? 'part' : 'parts'}. The others have ${mode}.` });
     return false;
   });
-  const prefix = good.length > 0 && mode > 1 && good.every((row) => (row.parts[0] as string).toUpperCase() === (good[0]?.parts[0] as string).toUpperCase()) ? 1 : 0;
+  const firstPart = (row: { parts: readonly string[] }): string => (row.parts[0] as string).toUpperCase();
+  const prefix = good.length > 0 && mode > 1 && good.every((row) => firstPart(row) === firstPart(good[0] as (typeof good)[number])) && programPrefix([firstPart(good[0] as (typeof good)[number])]) ? 1 : 0;
   const positions = mode - prefix;
   const axes = Array.from({ length: Math.min(positions, MAX_AXES) }, (_, index) => ({ name: `Part ${index + 1}`, values: [] as { label: string; code: string }[] }));
+  /** Each axis's values by the part as typed (upper case), so a part that needs a new code keeps one value. */
+  const byPart = axes.map(() => new Map<string, { label: string; code: string }>());
   const rows: InferredRow[] = [];
   const skuLines = new Map<string, number>();
   const comboLines = new Map<string, number>();
@@ -807,30 +1055,117 @@ function inferSkus(all: { line: number; raw: string }[], separator: string | und
     const labels: string[] = [];
     row.parts.slice(prefix).forEach((part, index) => {
       const axis = axes[index] as (typeof axes)[number];
-      const code = part.toUpperCase();
-      let value = axis.values.find((entry) => entry.code === code);
+      const seen = byPart[index] as Map<string, { label: string; code: string }>;
+      const upper = part.toUpperCase();
+      let value = seen.get(upper);
       if (!value) {
-        value = { label: labelForCode(code), code };
+        const label = labelForCode(upper);
+        // A part the database cannot hold as a code (longer than 6, or with other characters) gets a short one.
+        const code = VALUE_CODE_RULE.test(upper) && !axis.values.some((entry) => entry.code === upper) ? upper : suggestCode(label, new Set(axis.values.map((entry) => entry.code)));
+        value = { label, code };
+        seen.set(upper, value);
         axis.values.push(value);
       }
       attributes[axis.name] = value.label;
       labels.push(value.label);
     });
-    rows.push({ raw: row.raw, attributes, sku: row.sku.toUpperCase(), name: labels.join(' '), qty: null, rate: null });
+    rows.push({ raw: row.raw, attributes, sku: upperSku, name: labels.join(' '), qty: null, rate: null });
   }
-  return { mode: 'sku', axes: positions > MAX_AXES ? [] : axes, rows, unmatched, notes: [] };
+  // Name the attributes from their values, as names mode does (S, M, XL is Size; BRN, YLW is Color).
+  const renamed = nameAxes(axes);
+  const named = rows.map((row) => ({ ...row, attributes: Object.fromEntries(Object.entries(row.attributes).map(([name, label]) => [renamed.get(name) ?? name, label])) }));
+  return { mode: 'sku', axes: positions > MAX_AXES ? [] : axes, rows: named, unmatched: unmatched.sort((a, b) => a.line - b.line), notes: [] };
+}
+
+/**
+ * A pasted list of names, one kit per line ("Small Brown", "Extra Large Yellow", "Strawberry").
+ * Each part is an attribute value, kept as typed ("Small" stays Small; "brn" is spelled out as
+ * Brown), with a code from `suggestCode` (S, BRN, STR) that the database takes. Known labels of
+ * two words ("Extra Large", "X Large") are one part. A name has no SKU. An attribute whose values
+ * are all known sizes is called Size, all known colors Color, else "Part 1", "Part 2". A first
+ * part every line shares is dropped when it is not a known value (never a word like Small): a
+ * program code (GLOVE) is just left out, and a word ("size" in "size 7" and "size 8") becomes
+ * the name of the attribute after it (Size, with values 7 and 8), with a note.
+ */
+function inferNames(lines: { line: number; raw: string }[], sep: string): InferResult {
+  const splitter = sep === ' ' ? /\s+/ : sep;
+  const split = lines.map((row) => ({ ...row, parts: mergeKnownWords(row.raw.trim().split(splitter).map((part) => part.trim()).filter((part) => part !== ''), sep) }));
+  const mode = commonCount(split);
+  const unmatched: { line: number; raw: string; why: string }[] = [];
+  const notes: { line: number; text: string }[] = [];
+  const good = split.filter((row) => {
+    if (row.parts.length === mode) return true;
+    unmatched.push({
+      line: row.line,
+      raw: row.raw,
+      why: `This name has ${row.parts.length} ${row.parts.length === 1 ? 'part' : 'parts'}. The others have ${mode}. To use a value of more than one word, paste a sheet with one column per attribute.`,
+    });
+    return false;
+  });
+  const sharedFirst = good.length > 1 && mode > 1 && good.every((row) => (row.parts[0] as string).toLowerCase() === (good[0]?.parts[0] as string).toLowerCase()) ? (good[0]?.parts[0] as string) : null;
+  // A shared first part that is not a known value is dropped: a program code (GLOVE) is just
+  // left out, and a word ("size" in "size 7", "size 8") names the attribute after it.
+  const sharedWord = sharedFirst !== null && !programPrefix([sharedFirst]) && knownCode(sharedFirst) === null && KNOWN_LABELS[sharedFirst.toUpperCase()] === undefined ? sharedFirst : null;
+  const prefix = sharedFirst !== null && (programPrefix([sharedFirst]) || sharedWord !== null) ? 1 : 0;
+  const positions = mode - prefix;
+  const axes = Array.from({ length: Math.min(positions, MAX_AXES) }, (_, index) => ({ name: `Part ${index + 1}`, values: [] as { label: string; code: string }[] }));
+  const kept: { line: number; raw: string; labels: string[] }[] = [];
+  const comboLines = new Map<string, number>();
+  for (const row of good) {
+    if (positions > MAX_AXES) {
+      unmatched.push({ line: row.line, raw: row.raw, why: `This name has ${positions} parts. The limit is ${MAX_AXES}.` });
+      continue;
+    }
+    if (kept.length >= MAX_PASTE_ROWS) {
+      unmatched.push({ line: row.line, raw: row.raw, why: `Only ${MAX_PASTE_ROWS} rows fit. This row was left out.` });
+      continue;
+    }
+    const labels = row.parts.slice(prefix).map((part) => nameLabel(part));
+    const comboKey = labels.map((label) => label.toLowerCase()).join('\u0000');
+    const firstLine = comboLines.get(comboKey);
+    if (firstLine !== undefined) {
+      unmatched.push({ line: row.line, raw: row.raw, why: repeatedValuesMessage(firstLine) });
+      continue;
+    }
+    comboLines.set(comboKey, row.line);
+    labels.forEach((label, index) => addValue((axes[index] as (typeof axes)[number]).values, label));
+    kept.push({ line: row.line, raw: row.raw, labels });
+  }
+  // Name the attributes: Size or Color from their values, else the shared word, else Part N.
+  const wordName = sharedWord === null ? null : labelAsTyped(sharedWord);
+  nameAxes(axes, [wordName]);
+  const first = lines[0];
+  if (first && sharedWord !== null && kept.length > 0 && axes[0]) {
+    notes.push({
+      line: first.line,
+      text: axes[0].name === wordName ? `Every line starts with ${sharedWord}, so ${wordName} is the name of the attribute, not a value.` : `Every line starts with ${sharedWord}, so it was left out of the values.`,
+    });
+  }
+  const rows: InferredRow[] = kept.map((row) => {
+    const attributes: Record<string, string> = {};
+    row.labels.forEach((label, index) => {
+      const axis = axes[index] as (typeof axes)[number];
+      attributes[axis.name] = (axis.values.find((value) => value.label.toLowerCase() === label.toLowerCase()) as { label: string }).label;
+    });
+    return { raw: row.raw, attributes, sku: null, name: row.labels.join(' '), qty: null, rate: null };
+  });
+  if (first && rows.length > 0) notes.push({ line: first.line, text: 'These lines were read as names, not SKUs, so the kits have no SKU yet. Each part of a name is one attribute.' });
+  return { mode: 'sku', axes: positions > MAX_AXES ? [] : axes, rows, unmatched: unmatched.sort((a, b) => a.line - b.line), notes };
 }
 
 /**
  * Reads a pasted list of kits (3.9). A sheet (tabs or commas on most lines) is read by columns:
  * SKU, Name, Qty and Rate columns fill those fields and every other column is an attribute. A
- * plain list of SKUs is split by the separator: a part every line shares is the program prefix
- * and is dropped, and every other position is an attribute ("Part 1", "Part 2"). SKUs typed on
- * one line with commas, tabs or semicolons between them are read the same way, one SKU per item. At most 4
- * attributes and 200 rows. A SKU that repeats ("This SKU is already on line 1.") or, in columns
- * mode, a row with the same values as an earlier one ("These values are already on line 1.") is
- * left out, so the wizard never makes the same variant twice. Anything else that cannot be used is
- * listed in `unmatched` with the reason.
+ * plain list of SKUs is split by the separator: a shared first part that looks like a program
+ * code (GLOVE) is dropped, and every other position is an attribute, named Size or Color when
+ * every value is a known size or color, else "Part 1", "Part 2" for the wizard to rename. SKUs
+ * typed on one line with commas, tabs or semicolons between them are read the same way, one SKU
+ * per item. A list of names ("Small Brown", "Extra Large Yellow", "Strawberry": spaces or mixed
+ * case) is read as names: values as typed, no SKU, and a note says so. Every value code fits the
+ * database (1 to 6 of A to Z and 0 to 9). At most 4 attributes and 200 rows. A SKU that repeats
+ * ("This SKU is already on line 1.") or a row with the same values as an earlier one ("These
+ * values are already on line 1.") is left out, so the wizard never makes the same variant twice.
+ * Anything else that cannot be used is listed in `unmatched` with the reason, in line order.
  */
 export function inferAxes(input: { readonly text: string; readonly separator?: string }): InferResult {
   const lines = textLines(input.text);
