@@ -128,10 +128,17 @@ export interface MeterProps {
   readonly value: number;
   readonly label: string;
   readonly tone?: MeterTone;
+  /**
+   * `thin` (4 px) in tiles and lists, `thick` (8 px) where the meter is the cell, as in the dense
+   * WMS tables. Both use the same colors.
+   */
+  readonly size?: MeterSize;
   readonly className?: string;
 }
 
-export function Meter({ value, label, tone = 'data', className }: MeterProps) {
+export type MeterSize = 'thin' | 'thick';
+
+export function Meter({ value, label, tone = 'data', size = 'thin', className }: MeterProps) {
   const safe = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
   const percent = Math.round(safe * 100);
   return (
@@ -143,6 +150,7 @@ export function Meter({ value, label, tone = 'data', className }: MeterProps) {
       aria-valuenow={percent}
       className={cx('ks-dash-meter', className)}
       data-tone={tone}
+      data-size={size}
     >
       <span className="ks-dash-meter-fill" style={{ width: `${percent}%` }} />
     </span>

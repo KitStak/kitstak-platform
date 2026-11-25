@@ -5,6 +5,6 @@
 
 export { DashboardFrame, DashboardHeader, DashColumns, type DashboardApp, type DashboardFrameProps, type DashboardHeaderProps } from './frame';
 export { DashboardLinkProvider, DashLink, type DashAction, type DashLinkComponent, type DashLinkProps } from './link';
-export { Pill, Tag, Count, Legend, PILL_TONES, type PillProps, type PillTone, type LegendItem } from './pill';
-export { StatRow, StatTile, Delta, Meter, statColumns, type StatTileProps, type DeltaProps, type DeltaTone, type DeltaDirection, type MeterProps, type MeterTone } from './stat';
-export { DashSection, ActionList, ActionRow, EmptyNote, type DashSectionProps, type ActionRowProps, type EmptyNoteProps, type ValueTone } from './section';
+export { Pill, Tag, Count, Legend, PILL_TONES, type PillProps, type PillTone, type LegendItem, type LegendProps } from './pill';
+export { StatRow, StatTile, Delta, Meter, statColumns, type StatTileProps, type DeltaProps, type DeltaTone, type DeltaDirection, type MeterProps, type MeterTone, type MeterSize } from './stat';
+export { DashSection, ActionList, ActionRow, EmptyNote, type DashSectionProps, type ActionRowProps, type EmptyNoteProps, type DashButtonAction, type ValueTone } from './section';
