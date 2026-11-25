@@ -11,6 +11,12 @@ import { AuthShell } from './_components/auth-shell';
  * running trial beside "Check your email", the team and the role beside an invite. Every page of
  * this group has a file of the same path under `@hero`; `@hero/default.tsx` is the fallback.
  */
+/**
+ * Rendered per request, never prebuilt. The legal links come from the server environment, and the
+ * Vercel build runs without it (turbo strict env mode), so a prebuilt page here fails the build.
+ */
+export const dynamic = 'force-dynamic';
+
 export default function AuthLayout({ children, hero }: { readonly children: React.ReactNode; readonly hero: React.ReactNode }) {
   return (
     <AuthShell legal={legalUrls()} year={new Date().getFullYear()} hero={hero}>
