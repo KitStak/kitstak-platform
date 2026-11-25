@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { Module } from '@kitstak/entitlements';
 import { formatDayShort } from '@kitstak/billing/catalog';
+import { DashboardFrame, DashboardHeader } from '@kitstak/ui/dashboard';
 import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
@@ -176,8 +177,8 @@ export default async function LauncherPage() {
     }));
 
   return (
-    <div className="mx-auto flex w-full max-w-[1110px] flex-col gap-8">
-      <h1 className="text-2xl font-semibold tracking-[-0.02em] text-fg sm:text-[40px] sm:leading-[48px]">Your apps</h1>
+    <DashboardFrame app="portal" className="mx-auto w-full max-w-[1110px]">
+      <DashboardHeader title="Your apps" />
       {apps.length > 0 ? (
         <AppLauncher apps={apps} />
       ) : (
@@ -187,6 +188,6 @@ export default async function LauncherPage() {
           askWho={askWho}
         />
       )}
-    </div>
+    </DashboardFrame>
   );
 }

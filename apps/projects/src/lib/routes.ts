@@ -34,7 +34,8 @@ export const PROJECT_TABS: readonly ProjectTab[] = [
 
 export const routes = {
   home: () => '/',
-  myWork: () => '/my-work',
+  /** My work, optionally narrowed to one due-date group: `/my-work?when=overdue|today|upcoming|done`. */
+  myWork: (when?: 'overdue' | 'today' | 'upcoming' | 'done') => (when ? `/my-work?when=${when}` : '/my-work'),
   inbox: () => '/inbox',
   /** Global search page: `/search?q=…&type=tasks|comments|projects|people|goals`. */
   search: (q?: string, type?: string) => {

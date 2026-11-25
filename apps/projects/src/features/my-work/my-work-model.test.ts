@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskSummary } from '@/lib/types';
-import { compareTasks, dueDateForDrop, focusQueue, groupBuildsByRun, groupByProject, groupByWhen, matchesText, whenGroup } from './my-work-model';
+import { compareTasks, dueDateForDrop, focusQueue, groupBuildsByRun, groupByProject, groupByWhen, matchesText, matchesWhen, whenGroup } from './my-work-model';
 
 const TODAY = '2026-11-11';
 
@@ -135,5 +135,25 @@ describe('groupBuildsByRun', () => {
       ['GLOVE|r1', 2, false],
       ['GLOVE|r0', 1, true],
     ]);
+  });
+});
+
+describe('matchesWhen', () => {
+  it('keeps every task for "all"', () => {
+    expect(matchesWhen(task('a', { dueDate: '2026-11-01' }), 'all', TODAY)).toBe(true);
+  });
+
+  it('narrows to one due-date group', () => {
+    expect(matchesWhen(task('a', { dueDate: '2026-11-10' }), 'overdue', TODAY)).toBe(true);
+    expect(matchesWhen(task('a', { dueDate: TODAY }), 'overdue', TODAY)).toBe(false);
+    expect(matchesWhen(task('b', { dueDate: TODAY }), 'today', TODAY)).toBe(true);
+    expect(matchesWhen(task('c', { dueDate: '2026-11-14' }), 'upcoming', TODAY)).toBe(true);
+    expect(matchesWhen(task('d', { statusCategory: 'done', dueDate: TODAY }), 'done', TODAY)).toBe(true);
+    expect(matchesWhen(task('d', { statusCategory: 'done', dueDate: TODAY }), 'today', TODAY)).toBe(false);
+  });
+
+  it('keeps a task finished during this visit in the group it was in', () => {
+    const finished = task('e', { statusCategory: 'done', dueDate: TODAY });
+    expect(matchesWhen(finished, 'today', TODAY, new Set(['e']))).toBe(true);
   });
 });

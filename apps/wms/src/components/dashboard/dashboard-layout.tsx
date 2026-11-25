@@ -21,13 +21,13 @@ import type { FilterOption } from './filter-bar';
 export const DASHBOARD_LAYOUT_KEY = 'dashboard-layout';
 
 export const DASHBOARD_CARDS = [
-  { id: 'progress', label: 'Progress for Today' },
-  { id: 'unfulfilled', label: 'Unfulfilled Orders' },
-  { id: 'breakdown', label: 'Order Breakdown by Status' },
+  { id: 'progress', label: 'Progress for today' },
+  { id: 'unfulfilled', label: 'Unfulfilled orders' },
+  { id: 'breakdown', label: 'Order breakdown by status' },
   { id: 'channels', label: 'Channels' },
   { id: 'clients', label: 'Clients' },
   { id: 'carriers', label: 'Carriers' },
-  { id: 'countries', label: 'Order By Country' },
+  { id: 'countries', label: 'Order by country' },
   { id: 'jobs', label: 'Jobs' },
 ] as const;
 export type DashboardCardId = (typeof DASHBOARD_CARDS)[number]['id'];

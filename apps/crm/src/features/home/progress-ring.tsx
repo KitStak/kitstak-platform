@@ -1,8 +1,9 @@
 'use client';
 /**
  * Token-colored SVG progress ring for the Getting-started guide (cross-app contract:
- * one progress treatment — a circular ring, primary tone until 100%, then success,
- * with the percent label in the center). The arc animates via a CSS transition on
+ * one progress treatment, a circular ring, then success at 100%, with the percent label
+ * in the center). Progress is a quantity, so the arc uses the app's data color
+ * (`--dash-data`, indigo in CRM), never crimson (docs/design/UI-CLEANUP.md). The arc animates via a CSS transition on
  * stroke-dashoffset, disabled under prefers-reduced-motion.
  */
 import { cn } from '@/components/ui';
@@ -42,7 +43,7 @@ export function ProgressRing({ percent, size = 44, strokeWidth = 4, className }:
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={clamped === 100 ? 'var(--success)' : 'var(--primary)'}
+          stroke={clamped === 100 ? 'var(--success)' : 'var(--dash-data, var(--label-indigo))'}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
