@@ -220,7 +220,7 @@ export function BoardView() {
     for (const task of visible) for (const key of keysOfTask(task)) present.add(key);
     const keys = (extraLane ? extraLane.order(visible) : laneMeta.order).filter((key) => present.has(key));
     return keys.length ? keys : [];
-  }, [extraLane, keysOfTask, laneMeta.order, swimlanes, visible]);
+  }, [extraLane, keysOfTask, laneMeta, swimlanes, visible]);
 
   const baseIds = useMemo<ContainerMap>(() => {
     const map: ContainerMap = new Map();

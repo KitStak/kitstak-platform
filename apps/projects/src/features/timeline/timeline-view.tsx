@@ -37,6 +37,7 @@ import { qk } from '@/lib/query-keys';
 import { useProjectDependencies, type DependencyRow } from '@/lib/hooks/use-data';
 import { useTaskSource } from '@/features/views/task-source';
 import { useCardExtras } from '@/features/views/card-extras';
+import { usePageFilter, useQuickFilterState } from '@/features/views/view-toolbar';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { useTaskMutations } from '@/lib/hooks/use-task-mutations';
@@ -141,6 +142,8 @@ export function TimelineSkeleton() {
   );
 }
 
+const NO_TASKS: readonly TaskSummary[] = [];
+
 export function TimelineView() {
   const { project, statuses, statusById, capabilities } = useCurrentProject();
   const tasksQuery = useTaskSource();
@@ -157,6 +160,8 @@ export function TimelineView() {
   // Builds are mostly one day long: pages open on the Days zoom so each bar reads well.
   const [prefs, setPrefs] = useViewPrefs<TimelinePrefs>(`timeline:${project.key}`, pageToolbar ? PAGE_DEFAULT_PREFS : DEFAULT_PREFS);
   const narrow = useIsNarrow();
+  const quickState = useQuickFilterState();
+  const pageFilter = usePageFilter(quickState, tasksQuery.data ?? NO_TASKS, { compact: narrow, enabled: pageToolbar });
   const markerId = useId().replace(/:/g, '');
   const today = todayIso();
   const canEdit = capabilities['task:update'];
@@ -1117,11 +1122,12 @@ export function TimelineView() {
 
   return (
     <div className="flex h-full min-h-[460px] flex-col" data-testid="timeline-view">
-      <ViewToolbar testId="timeline-toolbar" className={pageToolbar ? 'h-12 flex-nowrap py-0' : undefined}>
+      <ViewToolbar testId="timeline-toolbar" className={pageToolbar ? 'h-12 flex-nowrap overflow-x-auto py-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0' : undefined}>
         {extras.toolbarLead ? (
           <>
             {extras.toolbarLead}
             <span aria-hidden className="mx-0.5 h-5 w-px bg-border-subtle" />
+            {pageFilter.button}
           </>
         ) : null}
         {pageToolbar ? null : (
@@ -1164,9 +1170,11 @@ export function TimelineView() {
         <span className={cn('hidden text-xs whitespace-nowrap text-fg-muted tabular-nums', !pageToolbar && '2xl:inline')}>
           {scheduledCount} of {tasks.length} scheduled
         </span>
-        <span className={cn('w-40 max-[639px]:w-32', pageToolbar ? 'shrink-0 max-xl:hidden' : '2xl:w-48')}>
-          <SearchInput size="sm" value={search} onValueChange={setSearch} placeholder={extras.noun ? `Search ${extras.noun.plural}` : 'Find a task'} aria-label={extras.noun ? `Search ${extras.noun.plural}` : 'Find a task'} />
-        </span>
+        {pageToolbar ? null : (
+          <span className="w-40 max-[639px]:w-32 2xl:w-48">
+            <SearchInput size="sm" value={search} onValueChange={setSearch} placeholder="Find a task" aria-label="Find a task" />
+          </span>
+        )}
         {extras.toolbarTrail}
         <OptionsMenu title="Timeline options" testId="timeline-options" iconOnly={pageToolbar}>
           <OptionSelect<TimelineGroupBy>
@@ -1224,6 +1232,7 @@ export function TimelineView() {
         </>
         )}
       </ViewToolbar>
+      {pageToolbar && pageFilter.chips ? <div className="shrink-0 border-b border-border-subtle bg-panel pt-2.5">{pageFilter.chips}</div> : null}
       {prefs.showCritical && !pageToolbar ? (
         <div role="status" data-testid="timeline-critical-banner" className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border-subtle bg-danger-subtle/60 px-4 py-1.5 text-xs text-fg-secondary sm:px-6">
           <Route aria-hidden className="size-3.5 text-danger-text" />
@@ -1285,7 +1294,7 @@ export function TimelineView() {
             {/* Header */}
             <div role="row" className="sticky top-0 z-[var(--z-header)] flex" style={{ height: HEADER_H }}>
               <div role="columnheader" className="sticky left-0 z-[1] flex shrink-0 items-end justify-between border-r border-b border-border-default bg-panel px-3 pb-2 text-xs font-semibold text-fg-muted" style={{ width: nameWidth }}>
-                <span>Task</span>
+                <span>{extras.noun ? extras.noun.singular.charAt(0).toUpperCase() + extras.noun.singular.slice(1) : 'Task'}</span>
                 {!narrow && rows.some((r) => r.kind === 'group') ? (
                   <button
                     type="button"

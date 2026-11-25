@@ -19,6 +19,7 @@ import { AlertTriangle, Boxes, Briefcase, CalendarDays, CircleDollarSign, Clipbo
 import { formatCents, formatQty, formatUnitPrice, mulQuantityPrice, quantityToScaled, unitLabel } from '@kitstak/programs-engine';
 import { Avatar, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, IconButton, Input, IsoDatePicker, Popover, PopoverContent, PopoverTrigger, Skeleton, Textarea, Tooltip, cn, toast } from '@/components/ui';
 import { apiGet, apiPath } from '@/lib/api-client';
+import { qk } from '@/lib/query-keys';
 import { programInvalidations, useBuildLinks, useProgram, useProgramRuns, useVariants } from '@/lib/hooks/use-programs';
 import type { BuildDTO, IsoDate, LinkedRecordDTO, OutputSheetDTO, OutputSheetRow } from '@/lib/program-types';
 import type { PersonRef } from '@/lib/types';
@@ -43,9 +44,26 @@ const RATE_RE = /^\$?\s*(\d{1,6})(\.\d{1,4})?$/;
 
 export const buildKey = (id: string) => ['build', id] as const;
 
-/** The build facts of the open task (BuildDTO), or null for a task. */
-export function useBuildOf(taskId: string, isBuild: boolean) {
-  return useQuery({ queryKey: buildKey(taskId), queryFn: () => apiGet<BuildDTO>(apiPath(`builds/${encodeURIComponent(taskId)}`)), enabled: isBuild, staleTime: 15_000 });
+/**
+ * The build facts of the open task (BuildDTO), or null for a task. Shows the copy a builds view
+ * already holds at once (the builds list returns the same BuildDTO) while the fresh one loads.
+ */
+export function useBuildOf(taskId: string, isBuild: boolean, projectKey?: string) {
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: buildKey(taskId),
+    queryFn: () => apiGet<BuildDTO>(apiPath(`builds/${encodeURIComponent(taskId)}`)),
+    enabled: isBuild,
+    staleTime: 15_000,
+    placeholderData: () => {
+      if (!projectKey) return undefined;
+      for (const [, list] of queryClient.getQueriesData<readonly { readonly id: string; readonly kind?: string }[]>({ queryKey: [...qk.projectTasks(projectKey), 'builds'] })) {
+        const hit = Array.isArray(list) ? list.find((item) => item.id === taskId && item.kind === 'build') : undefined;
+        if (hit) return hit as unknown as BuildDTO;
+      }
+      return undefined;
+    },
+  });
 }
 
 function useRefreshBuild() {
@@ -142,7 +160,7 @@ function plannedFromText(from: PlannedFrom, runName: string | null): string {
 export function BuildProperties() {
   const { task, canEdit, openTask } = useTaskContext();
   const isBuild = isBuildTask(task);
-  const buildQuery = useBuildOf(task.id, isBuild);
+  const buildQuery = useBuildOf(task.id, isBuild, task.projectKey);
   const inProgram = task.projectKind === 'program';
   const program = useProgram(task.projectKey, { enabled: isBuild && inProgram, staleTime: 30_000 });
   const variants = useVariants(task.projectKey, false, { enabled: isBuild && inProgram, staleTime: 60_000 });
@@ -150,6 +168,7 @@ export function BuildProperties() {
   const [jobOpen, setJobOpen] = useState(false);
   const day = buildQuery.data?.build.buildDate ?? '';
   const runs = useProgramRuns(task.projectKey, { from: day, to: day }, { enabled: isBuild && inProgram && Boolean(day), staleTime: 30_000 });
+  const kit = useBuildKit(task.id, isBuild && inProgram);
   if (!isBuild) return null;
   const build = buildQuery.data;
   if (!build) {
@@ -181,6 +200,16 @@ export function BuildProperties() {
   const scheduleName = b.scheduleId ? (runs.data?.find((run) => run.id === b.runId)?.name ?? null) : null;
   const params = typeof window === 'undefined' ? new URLSearchParams() : new URLSearchParams(window.location.search);
   const pathname = typeof window === 'undefined' ? '' : window.location.pathname;
+  const kitLink = kit.data?.productUrl ? (
+    <a href={kit.data.productUrl} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-fg-link hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus" data-testid="build-kit-link">
+      Open kit
+      <ExternalLink aria-hidden className="size-3" />
+    </a>
+  ) : kit.data?.reason === 'not_linked' && b.variantId ? (
+    <Link href={`/programs/${encodeURIComponent(task.projectKey)}/variants`} className="h-7 rounded-md px-2 text-xs leading-7 font-medium text-fg-link hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus" data-testid="build-kit-link">
+      Link a kit
+    </Link>
+  ) : null;
   const logLink = logHref(pathname, params, { date: logDate, builds: [build.id], programKey: inProgram && !pathname.startsWith(`/programs/${task.projectKey}`) ? task.projectKey : null });
 
   return (
@@ -211,6 +240,7 @@ export function BuildProperties() {
           ) : (
             <span className="px-2 text-sm text-fg-muted">No variant</span>
           )}
+          {kitLink}
         </PropertyRow>
       ) : null}
       <PropertyRow icon={<CalendarDays aria-hidden />} label="Day">
@@ -249,11 +279,11 @@ export function BuildProperties() {
       <PropertyRow icon={<Hash aria-hidden />} label="Remaining">
         <span className="px-2 text-sm text-fg tabular-nums">{unitLabel(b.remainingQty, unit)}</span>
       </PropertyRow>
-      {quantityToScaled(b.scrapQty) > BigInt(0) ? (
-        <PropertyRow icon={<Trash2 aria-hidden />} label="Scrap">
-          <span className="px-2 text-sm text-fg tabular-nums">{unitLabel(b.scrapQty, unit)}</span>
-        </PropertyRow>
-      ) : null}
+      <PropertyRow icon={<Trash2 aria-hidden />} label="Scrap">
+        <span className={cn('px-2 text-sm tabular-nums', quantityToScaled(b.scrapQty) > BigInt(0) ? 'text-fg' : 'text-fg-muted')} data-testid="build-scrap">
+          {quantityToScaled(b.scrapQty) > BigInt(0) ? unitLabel(b.scrapQty, unit) : 'None'}
+        </span>
+      </PropertyRow>
       {!moneyHidden ? (
         <PropertyRow icon={<CircleDollarSign aria-hidden />} label="Rate">
           <span className="flex flex-wrap items-center gap-2 px-2">
@@ -373,7 +403,7 @@ function outputDates(buildDate: IsoDate, today: IsoDate): IsoDate[] {
 export function BuildOutputSection() {
   const { task, canEdit } = useTaskContext();
   const isBuild = isBuildTask(task);
-  const buildQuery = useBuildOf(task.id, isBuild);
+  const buildQuery = useBuildOf(task.id, isBuild, task.projectKey);
   const program = useProgram(task.projectKey, { enabled: isBuild && task.projectKind === 'program', staleTime: 30_000 });
   const refreshBuild = useRefreshBuild();
   const b = buildQuery.data?.build;
@@ -551,10 +581,15 @@ interface KitShortage {
   readonly productUrl?: string | null;
 }
 
+/** The kit of a build's variant in WMS: stock, shortages and the product link. */
+function useBuildKit(taskId: string, enabled: boolean) {
+  return useQuery({ queryKey: ['build', taskId, 'shortages'], queryFn: () => apiGet<KitShortage>(apiPath(`builds/${encodeURIComponent(taskId)}/shortages`)), enabled, retry: false, staleTime: 60_000 });
+}
+
 export function BuildKitSection() {
   const { task } = useTaskContext();
   const isBuild = isBuildTask(task) && task.projectKind === 'program';
-  const shortages = useQuery({ queryKey: ['build', task.id, 'shortages'], queryFn: () => apiGet<KitShortage>(apiPath(`builds/${encodeURIComponent(task.id)}/shortages`)), enabled: isBuild, retry: false, staleTime: 60_000 });
+  const shortages = useBuildKit(task.id, isBuild);
   if (!isBuild || !shortages.data) return null;
   const data = shortages.data;
   if (!data.available) {

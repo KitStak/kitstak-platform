@@ -8,7 +8,7 @@
  * - Busy days show "+3 more"; tasks without dates wait in the "No dates" tray.
  * Every change is optimistic (useTaskMutations) with an Undo toast.
  */
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Inbox, Keyboard, MousePointerClick, Move, Plus } from 'lucide-react';
 import {
   Button,
@@ -30,6 +30,7 @@ import { PersonAvatar, PriorityIcon, StatusIcon } from '@/components/pm';
 import { addDaysIso, diffDays, formatRange, parseIsoDate, todayIso, type IsoDate } from '@/lib/dates';
 import { useTaskSource } from '@/features/views/task-source';
 import { useCardExtras } from '@/features/views/card-extras';
+import { usePageFilter, useQuickFilterState } from '@/features/views/view-toolbar';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { useTaskMutations } from '@/lib/hooks/use-task-mutations';
@@ -116,6 +117,8 @@ export function CalendarSkeleton() {
   );
 }
 
+const NO_TASKS: readonly TaskSummary[] = [];
+
 export function CalendarView() {
   const { project, statuses, statusById, capabilities } = useCurrentProject();
   const tasksQuery = useTaskSource();
@@ -132,8 +135,11 @@ export function CalendarView() {
   const canCreate = capabilities['task:create'] && !extras.hideCreate;
   /** A page (Programs) supplies its own lead and trail: one compact row without task-only controls. */
   const pageToolbar = Boolean(extras.toolbarLead);
+  const quickState = useQuickFilterState();
+  const pageFilter = usePageFilter(quickState, tasksQuery.data ?? NO_TASKS, { compact: narrow, enabled: pageToolbar });
 
-  const [anchor, setAnchor] = useState<IsoDate>(today);
+  const sync = extras.calendarRange;
+  const [anchor, setAnchor] = useState<IsoDate>(() => sync?.from ?? today);
   const [search, setSearch] = useState('');
   const [dragging, setDragging] = useState<DragPayload | null>(null);
   const [overDay, setOverDay] = useState<IsoDate | null>(null);
@@ -200,6 +206,26 @@ export function CalendarView() {
     if (!first || !last) return 0;
     return events.filter((event) => event.end >= first && event.start <= last).length;
   }, [events, weeks]);
+
+  // A page range (Programs) follows the grid: the visible month or week, both ways.
+  const span = useMemo(() => {
+    if (mode === 'month') {
+      const from = shiftMonth(anchor, 0);
+      return { from, to: addDaysIso(shiftMonth(anchor, 1), -1) };
+    }
+    const days = weekOf(anchor);
+    return { from: days[0] as IsoDate, to: days[6] as IsoDate };
+  }, [anchor, mode]);
+  const syncFrom = sync?.from;
+  const [seenFrom, setSeenFrom] = useState(syncFrom);
+  if (syncFrom !== seenFrom) {
+    setSeenFrom(syncFrom);
+    if (syncFrom && (syncFrom < span.from || syncFrom > span.to)) setAnchor(syncFrom);
+  }
+  const onVisibleChange = sync?.onVisibleChange;
+  useEffect(() => {
+    onVisibleChange?.(span.from, span.to);
+  }, [onVisibleChange, span.from, span.to]);
 
   const go = (delta: number) => {
     setAnchor((current) => (mode === 'month' ? shiftMonth(current, delta) : addDaysIso(current, delta * 7)));
@@ -793,11 +819,12 @@ export function CalendarView() {
 
   return (
     <div className="flex h-full min-h-[520px] flex-col" data-testid="calendar-view">
-      <ViewToolbar testId="calendar-toolbar" className={pageToolbar ? 'h-12 flex-nowrap py-0' : undefined}>
+      <ViewToolbar testId="calendar-toolbar" className={pageToolbar ? 'h-12 flex-nowrap overflow-x-auto py-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0' : undefined}>
         {extras.toolbarLead ? (
           <>
             {extras.toolbarLead}
             <span aria-hidden className="mx-0.5 h-5 w-px bg-border-subtle" />
+            {pageFilter.button}
           </>
         ) : null}
         {pageToolbar ? null : (
@@ -833,9 +860,11 @@ export function CalendarView() {
         <span className={cn('hidden text-xs whitespace-nowrap text-fg-muted tabular-nums', !pageToolbar && '2xl:inline')}>
           {visibleCount} {extras.noun ? (visibleCount === 1 ? extras.noun.singular : extras.noun.plural) : visibleCount === 1 ? 'task' : 'tasks'} this {mode}
         </span>
-        <span className={cn('w-40 max-[639px]:w-[100px]', pageToolbar ? 'shrink-0 max-xl:hidden' : '2xl:w-48')}>
-          <SearchInput size="sm" value={search} onValueChange={setSearch} placeholder={extras.noun ? `Search ${extras.noun.plural}` : 'Find a task'} aria-label={extras.noun ? `Search ${extras.noun.plural}` : 'Find a task'} />
-        </span>
+        {pageToolbar ? null : (
+          <span className="w-40 max-[639px]:w-[100px] 2xl:w-48">
+            <SearchInput size="sm" value={search} onValueChange={setSearch} placeholder="Find a task" aria-label="Find a task" />
+          </span>
+        )}
         {extras.toolbarTrail}
         <OptionsMenu title="Calendar options" testId="calendar-options" iconOnly={pageToolbar}>
           {pageToolbar ? null : (
@@ -893,6 +922,7 @@ export function CalendarView() {
         />
         )}
       </ViewToolbar>
+      {pageToolbar && pageFilter.chips ? <div className="shrink-0 border-b border-border-subtle bg-panel pt-2.5">{pageFilter.chips}</div> : null}
       <div className="relative flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {allTasks.length === 0 ? (

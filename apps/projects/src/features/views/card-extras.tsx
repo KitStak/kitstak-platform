@@ -65,7 +65,25 @@ export interface ExtraDisplay {
   readonly collapseEmptyColumns?: boolean;
 }
 
+/** A category the page adds to the single Filter of its toolbar (Variant, Short, Work type). */
+export interface ExtraFilterCategory {
+  readonly key: string;
+  readonly label: string;
+  readonly icon: ReactNode;
+  /** `lead`: right after Search; `trail`: after Labels. */
+  readonly placement: 'lead' | 'trail';
+  /** Chip text when it is on ("Variant: Small Brown"), else null. */
+  readonly chip: string | null;
+  clear(): void;
+  /** The panel body (an option list). */
+  render(): ReactNode;
+}
+
 export interface CardExtrasValue {
+  /** Categories for the single Filter of page toolbars (Variant, Short, Unplanned, Work type). */
+  readonly filterCategories?: readonly ExtraFilterCategory[];
+  /** Turns every page category off at once ("Clear all"). */
+  readonly clearExtraFilters?: () => void;
   /** Display menu additions. */
   readonly display?: ExtraDisplay;
   /** Content at the start of the view toolbar row (view toggle, date range). */
@@ -106,6 +124,11 @@ export interface CardExtrasValue {
   readonly refuseDate?: (task: TaskSummary, date: string) => string | null;
   /** Moves a page item (a build) to another day; the shared date patch is used otherwise. */
   readonly moveToDate?: (task: TaskSummary, date: string) => Promise<boolean>;
+  /**
+   * Calendar: the page's date range. The calendar opens on `from`, follows it when it moves, and
+   * reports the month or week it shows so the range always matches the grid.
+   */
+  readonly calendarRange?: { readonly from: string; onVisibleChange(from: string, to: string): void };
   /** Calendar week rows: a short label for an item inside its row ("GLOVE-212 · 60 of 100"). */
   readonly calendarChipLabel?: (task: TaskSummary) => string;
   /** Timeline: row group of a task (variant) when the page wants its own rows. */

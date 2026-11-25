@@ -6,7 +6,7 @@
  * grouping, the Done fold, build menus and the bulk bar). The range bar under the tabs (L3)
  * and the toolbar's range control write the same `range` param.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { CalendarRange, Shapes } from 'lucide-react';
@@ -25,15 +25,21 @@ import type { TaskSummary } from '@/lib/types';
 import { useCurrentProgram } from '../program-context';
 import { rangeLabel } from '../kit/format';
 import { useBuildRange } from '../frame/range-bar';
+import { presetRange } from '../frame/range';
 import { useProgramOverlays } from '../overlays/overlay-params';
-import { BUILD_FILTER_PARAM, activeBuildFilterCount, buildShowFrom, formatBuildFilters, matchesBuildFilters, parseBuildFilters, type BuildFilters } from './builds-model';
+import { setPageTaskList } from '@/features/task/task-nav';
+import { BUILD_FILTER_PARAM, DEFAULT_BUILD_FILTERS, activeBuildFilterCount, buildOf, buildShowFrom, formatBuildFilters, matchesBuildFilters, parseBuildFilters, type BuildFilters } from './builds-model';
+import { usePageFilter, useQuickFilterState, type FilterStateApi } from '@/features/views/view-toolbar';
+import { countActiveFilters, matchesQuick } from '@/features/views/view-state';
 import { useStoredSet } from '@/features/views/use-stored-set';
 import { BuildDialogsHost } from './build-dialogs';
 import { useBuildExtras } from './build-extras';
-import { BuildViewToggle, BuildsFilterButton, BuildsMoreMenu, RangeControl } from './builds-toolbar';
+import { BuildViewToggle, BuildsMoreMenu, RangeControl, useBuildFilterCategories } from './builds-toolbar';
 import { RunsView } from './runs-view';
+import { useIsNarrow } from '@/features/timeline/use-view-prefs';
 import { useBuildTasks } from './use-build-tasks';
 
+const NO_TASKS: readonly TaskSummary[] = [];
 const GROUP_PARAM = 'bgroup';
 const LANE_PARAM = 'blane';
 const ORDER_PARAM = 'border';
@@ -79,8 +85,26 @@ function BuildsEmpty({ from, to, onChangeDates }: { readonly from: string; reado
   );
 }
 
+/** The Runs toolbar: the same row as the other views (toggle, range, Filter, More). */
+function RunsToolbar({ state, tasks, lead, trail }: { readonly state: FilterStateApi; readonly tasks: readonly TaskSummary[]; readonly lead: React.ReactNode; readonly trail: React.ReactNode }) {
+  const narrow = useIsNarrow();
+  const filter = usePageFilter(state, tasks, { compact: narrow });
+  return (
+    <div className="shrink-0 border-b border-border-subtle bg-panel">
+      <div role="toolbar" aria-label="Builds tools" className="flex h-12 items-center gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
+        {lead}
+        <span aria-hidden className="mx-0.5 h-5 w-px bg-border-subtle" />
+        {filter.button}
+        <span aria-hidden className="min-w-2 flex-1 !shrink" />
+        {trail}
+      </div>
+      {filter.chips}
+    </div>
+  );
+}
+
 export function BuildsView({ view }: { readonly view: BuildView }) {
-  const { key } = useCurrentProgram();
+  const { key, today } = useCurrentProgram();
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname() ?? '';
@@ -88,13 +112,14 @@ export function BuildsView({ view }: { readonly view: BuildView }) {
   const filters = useMemo(() => parseBuildFilters(params?.get(BUILD_FILTER_PARAM)), [params]);
   const setParam = useCallback(
     (name: string, value: string | null) => {
-      const search = new URLSearchParams(params?.toString() ?? '');
+      // The live URL: the shared filters write it with history calls a moment earlier.
+      const search = new URLSearchParams(globalThis.location.search);
       if (value) search.set(name, value);
       else search.delete(name);
       const query = search.toString();
       router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     },
-    [params, pathname, router],
+    [pathname, router],
   );
   const setFilters = useCallback((next: BuildFilters) => setParam(BUILD_FILTER_PARAM, formatBuildFilters(next) || null), [setParam]);
   const groupParam = params?.get(GROUP_PARAM);
@@ -117,28 +142,59 @@ export function BuildsView({ view }: { readonly view: BuildView }) {
     return { from: range.from, to: range.to };
   }, [range.from, range.to, view]);
   const { source } = useBuildTasks(key, window, { workKind: filters.workKind });
-  const tasks: readonly TaskSummary[] = source.tasks ?? [];
-  const filterFn = useCallback((task: TaskSummary) => matchesBuildFilters(task, filters), [filters]);
+  const tasks: readonly TaskSummary[] = source.tasks ?? NO_TASKS;
+  // Board, List and Table apply the shared filters (Search, Status, Assignee...) through their own
+  // view state; Runs, Calendar and Timeline get them here, from the same URL params.
+  const quickState = useQuickFilterState();
+  const ownsQuick = view === 'runs' || view === 'calendar' || view === 'timeline';
+  const { quick, me } = quickState;
+  const filterFn = useCallback((task: TaskSummary) => matchesBuildFilters(task, filters) && (!ownsQuick || matchesQuick(task, quick, me)), [filters, me, ownsQuick, quick]);
+  const filterCategories = useBuildFilterCategories(filters, setFilters, tasks);
+  // The drawer's previous and next walk the builds of this range and these filters.
+  const { variants } = useCurrentProgram();
+  const navKeys = useMemo(() => {
+    const rank = new Map(variants.map((variant, index) => [variant.id, index]));
+    const numberOf = (task: TaskSummary) => Number(task.key.split('-').at(-1)) || 0;
+    const dateOf = (task: TaskSummary) => buildOf(task)?.buildDate ?? task.dueDate ?? '';
+    return tasks
+      .filter((task) => filterFn(task) && (!buildOf(task) || (buildOf(task)!.buildDate >= range.from && buildOf(task)!.buildDate <= range.to)))
+      .sort((a, b) => (view === 'runs' ? dateOf(b).localeCompare(dateOf(a)) : dateOf(a).localeCompare(dateOf(b))) || (rank.get(buildOf(a)?.variantId ?? '') ?? 999) - (rank.get(buildOf(b)?.variantId ?? '') ?? 999) || numberOf(a) - numberOf(b))
+      .map((task) => task.key);
+  }, [filterFn, range.from, range.to, tasks, variants, view]);
+  useEffect(() => {
+    setPageTaskList(navKeys);
+    return () => setPageTaskList(null);
+  }, [navKeys]);
+  const clearExtraFilters = useCallback(() => setFilters(DEFAULT_BUILD_FILTERS), [setFilters]);
 
   const toolbarLead = (
     <span className="flex shrink-0 items-center gap-1.5">
       <BuildViewToggle view={view} />
-      <RangeControl key={rangeNudge} range={range} onChange={setRange} />
+      {/* The calendar moves by its own month and week arrows; the range follows the grid. */}
+      {view === 'calendar' ? null : <RangeControl key={rangeNudge} range={range} onChange={setRange} />}
     </span>
   );
-  const toolbarTrail = (
-    <span className="flex shrink-0 items-center gap-1.5">
-      <BuildsFilterButton filters={filters} onChange={setFilters} tasks={tasks} />
-      <BuildsMoreMenu range={range} tasks={tasks} />
-    </span>
-  );
+  const toolbarTrail = <BuildsMoreMenu range={range} tasks={tasks} />;
   const renderEmpty = useCallback(() => <BuildsEmpty from={range.from} to={range.to} onChangeDates={() => setRangeNudge((n) => n + 1)} />, [range.from, range.to]);
 
-  const extras = useBuildExtras({
+  const onCalendarSpan = useCallback(
+    (from: string, to: string) => {
+      if (from === range.from && to === range.to) return;
+      const month = presetRange('this-month', today);
+      const week = presetRange('this-week', today);
+      const preset = from === month.from && to === month.to ? 'this-month' : from === week.from && to === week.to ? 'this-week' : null;
+      setRange({ from, to, preset });
+    },
+    [range.from, range.to, setRange, today],
+  );
+
+  const buildExtras = useBuildExtras({
     range,
     filters,
     filterFn,
-    extraFilterCount: activeBuildFilterCount(filters),
+    extraFilterCount: activeBuildFilterCount(filters) + (ownsQuick ? countActiveFilters(quick) : 0),
+    filterCategories,
+    clearExtraFilters,
     tasks,
     grouping,
     onGroupingChange,
@@ -152,6 +208,7 @@ export function BuildsView({ view }: { readonly view: BuildView }) {
     order,
     onOrderChange,
   });
+  const extras = useMemo(() => (view === 'calendar' ? { ...buildExtras, calendarRange: { from: range.from, onVisibleChange: onCalendarSpan } } : buildExtras), [buildExtras, onCalendarSpan, range.from, view]);
 
   const body =
     view === 'runs' ? (
@@ -159,13 +216,7 @@ export function BuildsView({ view }: { readonly view: BuildView }) {
         tasks={tasks}
         range={range}
         isLoading={source.isLoading}
-        toolbar={
-          <div role="toolbar" aria-label="Builds tools" className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border-subtle bg-panel px-4 sm:px-6">
-            {toolbarLead}
-            <span className="min-w-0 flex-1" />
-            {toolbarTrail}
-          </div>
-        }
+        toolbar={<RunsToolbar state={quickState} tasks={tasks} lead={toolbarLead} trail={toolbarTrail} />}
       />
     ) : view === 'board' ? (
       <BoardView />

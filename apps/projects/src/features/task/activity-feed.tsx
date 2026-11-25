@@ -36,6 +36,7 @@ import { useShell } from '@/features/shell/shell-context';
 import { CommentComposer, type ComposerHandle } from './comment-composer';
 import { CommentItem } from './comment-item';
 import { SectionHeading } from './property-row';
+import { useProgram, useVariants } from '@/lib/hooks/use-programs';
 import { useTaskContext } from './task-context';
 import { useTaskUploads } from './use-task-uploads';
 import { LocalTime } from './local-time';
@@ -117,6 +118,10 @@ function HistoryLine({ event }: { readonly event: ActivityDTO }) {
   const { task, project, statusById, openTask } = useTaskContext();
   const { user } = useShell();
   const people = usePeopleMap();
+  const isBuild = task.kind === 'build';
+  // Builds speak in the program's words: "created this build", "logged 100 kits".
+  const program = useProgram(task.projectKey, { enabled: isBuild && task.projectKind === 'program', staleTime: 60_000 });
+  const variants = useVariants(task.projectKey, false, { enabled: isBuild && task.projectKind === 'program', staleTime: 60_000 });
   const actor =
     event.actorKind === 'automation'
       ? 'Automation'
@@ -132,7 +137,10 @@ function HistoryLine({ event }: { readonly event: ActivityDTO }) {
     labelName: (id) => project.labels.find((label) => label.id === id)?.name,
     sectionName: (id) => project.sections.find((section) => section.id === id)?.name,
     viewerId: user.id,
+    unit: program.data?.unit,
+    variantName: (id) => variants.data?.find((variant) => variant.id === id)?.name,
   });
+  const sentence = isBuild && text === 'created this task' ? 'created this build' : text;
   return (
     <li className="flex items-start gap-3 py-1.5 pl-1" data-testid="history-item">
       <span className="relative z-[1] mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border-subtle bg-raised text-icon">
@@ -149,7 +157,7 @@ function HistoryLine({ event }: { readonly event: ActivityDTO }) {
             {text}
           </button>
         ) : (
-          text
+          sentence
         )}{' '}
         <LocalTime iso={event.createdAt} className="text-fg-muted">
           · {formatRelative(event.createdAt)}

@@ -14,7 +14,7 @@ import { PLANNED_FROM_LABELS, PRICE_SOURCE_LABELS } from '@/lib/constants';
 import { useProgramRuns } from '@/lib/hooks/use-programs';
 import type { BuildBlockDTO, IsoDate, RunDTO } from '@/lib/program-types';
 import type { TaskSummary } from '@/lib/types';
-import type { CardExtrasValue, ExtraDisplay, ExtraGrouping, ExtraLane, ExtraOrder } from '@/features/views/card-extras';
+import type { CardExtrasValue, ExtraDisplay, ExtraFilterCategory, ExtraGrouping, ExtraLane, ExtraOrder } from '@/features/views/card-extras';
 import type { ColumnDef } from '@/features/table/table-columns';
 import { BarButton } from '@/features/views/bulk-bar';
 import { useCurrentProgram } from '../program-context';
@@ -174,14 +174,21 @@ function runFromTasks(id: string, tasks: readonly TaskSummary[], name: string, p
 /* --------------------------------------------------------------------------------------------- */
 
 function DayPopover({ date, tasks }: { readonly date: IsoDate; readonly tasks: readonly TaskSummary[] }) {
-  const { key, unit, today, capabilities, moneyHidden } = useCurrentProgram();
+  const { key, unit, today, capabilities, moneyHidden, variants } = useCurrentProgram();
   const log = useLogEntries(key);
   const overlays = useProgramOverlays();
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const canLog = capabilities.canLog && date <= today;
   const canMove = capabilities.canPlan;
-  const builds = tasks.filter((task) => buildOf(task));
+  // Variant card order, then the build number (GLOVE-1, GLOVE-2...).
+  const builds = useMemo(() => {
+    const rank = new Map(variants.map((variant, index) => [variant.id, index]));
+    const numberOf = (task: TaskSummary) => Number(task.key.split('-').at(-1)) || 0;
+    return tasks
+      .filter((task) => buildOf(task))
+      .sort((a, b) => (rank.get(buildOf(a)!.variantId ?? '') ?? 999) - (rank.get(buildOf(b)!.variantId ?? '') ?? 999) || numberOf(a) - numberOf(b));
+  }, [tasks, variants]);
   const entries = Object.entries(values)
     .map(([buildId, text]) => ({ buildId, read: readQty(text) }))
     .filter((entry) => entry.read.ok && entry.read.qty !== null)
@@ -678,6 +685,9 @@ export interface BuildExtrasInput {
   readonly filters: BuildFilters;
   readonly filterFn: (task: TaskSummary) => boolean;
   readonly extraFilterCount: number;
+  /** Variant, Short, Unplanned and Work type for the toolbar's single Filter. */
+  readonly filterCategories: readonly ExtraFilterCategory[];
+  readonly clearExtraFilters: () => void;
   readonly tasks: readonly TaskSummary[];
   readonly grouping: string | null;
   readonly onGroupingChange: (value: string | null) => void;
@@ -836,6 +846,8 @@ export function useBuildExtras(input: BuildExtrasInput): CardExtrasValue {
       toolbarTrail: input.toolbarTrail,
       filter: input.filterFn,
       extraFilterCount: input.extraFilterCount,
+      filterCategories: input.filterCategories,
+      clearExtraFilters: input.clearExtraFilters,
       renderCardFooter: (task) => <BuildCardFacts task={task} show={show} />,
       renderRowCells: (task) => <BuildRowCells task={task} show={show} />,
       rowCellsHeader: <RowCellsHeader show={show} />,

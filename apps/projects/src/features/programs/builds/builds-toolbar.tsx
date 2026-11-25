@@ -1,13 +1,13 @@
 'use client';
 /**
  * Builds toolbar parts (docs/programs/SPEC.md 5.7): the view toggle (also routes), the date range
- * control (presets and a custom range, written to the `range` param), the builds Filter (Variant,
- * Short, Unplanned, Work type; Search, Status, Assignee, Labels and Mine sit in the shared filter
- * bar beside it) and the More menu (Import output, Import plan, Export CSV, Print build tickets).
+ * control (presets and a custom range, written to the `range` param), the builds categories of the
+ * single Filter (Variant, Short, Unplanned, Work type; Search, Status, Assignee, Labels and Mine are
+ * the shared categories beside them) and the More menu (Import output, Import plan, Export CSV, Print build tickets).
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CalendarDays, CalendarRange, Check, ChevronDown, Download, FileUp, GanttChartSquare, KanbanSquare, List, MoreHorizontal, Printer, Rows3, Shapes, Table2, Upload } from 'lucide-react';
+import { Boxes, CalendarDays, CalendarRange, Check, ChevronDown, Download, FileUp, GanttChartSquare, KanbanSquare, List, MoreHorizontal, Printer, Rows3, Shapes, Sparkles, Table2, TrendingDown, Upload } from 'lucide-react';
 import { addDays, daysBetween } from '@kitstak/programs-engine';
 import {
   Button,
@@ -22,7 +22,6 @@ import {
   PopoverContent,
   PopoverTrigger,
   RangeCalendar,
-  Switch,
   ToggleGroup,
   type DateRange,
 } from '@/components/ui';
@@ -30,13 +29,13 @@ import { routes, BUILD_VIEWS } from '@/lib/routes';
 import type { BuildView, IsoDate } from '@/lib/program-types';
 import type { TaskSummary } from '@/lib/types';
 import { OptionList } from '@/features/views/option-list';
-import { ToolbarPopover } from '@/features/views/toolbar-button';
+import type { ExtraFilterCategory } from '@/features/views/card-extras';
 import type { WorkKind } from '@/features/views/task-source';
 import { useCurrentProgram } from '../program-context';
 import { VariantDot } from '../kit/chips';
 import { RANGE_PRESETS, RANGE_PRESET_LABELS, MAX_RANGE_DAYS, rangeButtonLabel, type BuildRange } from '../frame/range';
 import { useProgramOverlays } from '../overlays/overlay-params';
-import { activeBuildFilterCount, buildOf, toCsv, type BuildFilters } from './builds-model';
+import { buildOf, isShort, toCsv, type BuildFilters } from './builds-model';
 import { ticketsHref } from './run-menu';
 
 const VIEW_META: Readonly<Record<BuildView, { label: string; icon: React.ReactNode }>> = {
@@ -54,7 +53,7 @@ export function BuildViewToggle({ view }: { readonly view: BuildView }) {
   const params = useSearchParams();
   const go = (next: BuildView) => {
     const search = new URLSearchParams();
-    for (const name of ['range', 'bf', 'border']) {
+    for (const name of ['range', 'bf', 'border', 'q', 'mine', 'assignee', 'status', 'label', 'priority', 'due']) {
       const value = params?.get(name);
       if (value) search.set(name, value);
     }
@@ -174,57 +173,87 @@ const WORK_KINDS: readonly { value: WorkKind; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-export function BuildsFilterButton({ filters, onChange, tasks }: { readonly filters: BuildFilters; readonly onChange: (filters: BuildFilters) => void; readonly tasks: readonly TaskSummary[] }) {
+/** Variant, Short, Unplanned and Work type as categories of the toolbar's single Filter. */
+export function useBuildFilterCategories(filters: BuildFilters, onChange: (filters: BuildFilters) => void, tasks: readonly TaskSummary[]): ExtraFilterCategory[] {
   const { variants } = useCurrentProgram();
-  const count = activeBuildFilterCount(filters);
-  const counts = new Map<string, number>();
-  for (const task of tasks) {
-    const id = buildOf(task)?.variantId;
-    if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
-  }
-  return (
-    <ToolbarPopover icon={<Shapes aria-hidden />} label={count ? `Build filters, ${count} on` : 'Build filters'} text="Builds" active={count > 0} badge={count || undefined} width={300} testId="filter-builds">
-      <div className="flex flex-col">
-        <p className="px-3 pt-3 pb-1 text-2xs font-semibold tracking-wide text-fg-muted uppercase">Variant</p>
-        <OptionList
-          multiple
-          searchable={variants.length > 6}
-          placeholder="Find a variant"
-          options={variants.filter((variant) => variant.status === 'active' || counts.has(variant.id)).map((variant) => ({ value: variant.id, label: variant.name, icon: <VariantDot color={variant.color} />, hint: counts.get(variant.id), keywords: `${variant.key} ${variant.sku ?? ''}` }))}
-          selected={filters.variants}
-          onToggle={(value) => onChange({ ...filters, variants: filters.variants.includes(value) ? filters.variants.filter((entry) => entry !== value) : [...filters.variants, value] })}
-          className="max-h-56"
-        />
-        <div className="flex flex-col gap-2.5 border-t border-border-subtle px-3 py-3">
-          <label className="flex items-center justify-between gap-3 text-sm text-fg">
-            <span>
-              Short
-              <span className="block text-xs text-fg-muted">Closed below plan</span>
-            </span>
-            <Switch checked={filters.short} onCheckedChange={(short) => onChange({ ...filters, short })} aria-label="Only builds closed short" />
-          </label>
-          <label className="flex items-center justify-between gap-3 text-sm text-fg">
-            <span>
-              Unplanned
-              <span className="block text-xs text-fg-muted">Made while logging output</span>
-            </span>
-            <Switch checked={filters.unplanned} onCheckedChange={(unplanned) => onChange({ ...filters, unplanned })} aria-label="Only unplanned builds" />
-          </label>
-          <div className="flex items-center justify-between gap-3 text-sm text-fg">
-            <span>Work type</span>
-            <ToggleGroup<WorkKind> size="sm" label="Work type" value={filters.workKind} onValueChange={(workKind) => onChange({ ...filters, workKind })} options={WORK_KINDS} />
-          </div>
-        </div>
-        {count ? (
-          <div className="border-t border-border-subtle p-1.5">
-            <Button variant="ghost" size="xs" fullWidth onClick={() => onChange({ variants: [], short: false, unplanned: false, workKind: 'build' })}>
-              Clear build filters
-            </Button>
-          </div>
-        ) : null}
-      </div>
-    </ToolbarPopover>
-  );
+  return useMemo(() => {
+    const counts = new Map<string, number>();
+    let short = 0;
+    let unplanned = 0;
+    for (const task of tasks) {
+      const build = buildOf(task);
+      if (!build) continue;
+      if (build.variantId) counts.set(build.variantId, (counts.get(build.variantId) ?? 0) + 1);
+      if (isShort(build, task.statusCategory === 'done' || task.statusCategory === 'cancelled')) short += 1;
+      if (build.unplanned) unplanned += 1;
+    }
+    const builds = tasks.filter((task) => buildOf(task)).length;
+    const nameOf = (id: string) => variants.find((variant) => variant.id === id)?.name ?? 'Variant';
+    const variantChip = filters.variants.length ? `Variant: ${nameOf(filters.variants[0]!)}${filters.variants.length > 1 ? ` +${filters.variants.length - 1}` : ''}` : null;
+    const toggleOne = (label: string, hint: number, on: boolean, flip: () => void, icon: React.ReactNode) => (
+      <OptionList searchable={false} options={[{ value: 'on', label, hint: hint || undefined, icon }]} selected={on ? ['on'] : []} onToggle={flip} className="min-w-0 flex-1" />
+    );
+    return [
+      {
+        key: 'variant',
+        label: 'Variant',
+        icon: <Shapes aria-hidden />,
+        placement: 'lead',
+        chip: variantChip,
+        clear: () => onChange({ ...filters, variants: [] }),
+        render: () => (
+          <OptionList
+            key="variant"
+            multiple
+            searchable={variants.length > 6}
+            placeholder="Find a variant"
+            options={variants
+              .filter((variant) => variant.status === 'active' || counts.has(variant.id))
+              .map((variant) => ({ value: variant.id, label: variant.name, icon: <VariantDot color={variant.color} />, hint: counts.get(variant.id), keywords: `${variant.key} ${variant.sku ?? ''}` }))}
+            selected={filters.variants}
+            onToggle={(value) => onChange({ ...filters, variants: filters.variants.includes(value) ? filters.variants.filter((entry) => entry !== value) : [...filters.variants, value] })}
+            className="min-w-0 flex-1"
+          />
+        ),
+      },
+      {
+        key: 'short',
+        label: 'Short',
+        icon: <TrendingDown aria-hidden />,
+        placement: 'trail',
+        chip: filters.short ? 'Closed short' : null,
+        clear: () => onChange({ ...filters, short: false }),
+        render: () => toggleOne('Only builds closed below plan', short, filters.short, () => onChange({ ...filters, short: !filters.short }), <TrendingDown aria-hidden className="size-4 text-icon" />),
+      },
+      {
+        key: 'unplanned',
+        label: 'Unplanned',
+        icon: <Sparkles aria-hidden />,
+        placement: 'trail',
+        chip: filters.unplanned ? 'Unplanned' : null,
+        clear: () => onChange({ ...filters, unplanned: false }),
+        render: () => toggleOne('Only builds made while logging output', unplanned, filters.unplanned, () => onChange({ ...filters, unplanned: !filters.unplanned }), <Sparkles aria-hidden className="size-4 text-icon" />),
+      },
+      {
+        key: 'work',
+        label: 'Work type',
+        icon: <Boxes aria-hidden />,
+        placement: 'trail',
+        chip: filters.workKind === 'build' ? null : `Work type: ${WORK_KINDS.find((kind) => kind.value === filters.workKind)?.label}`,
+        clear: () => onChange({ ...filters, workKind: 'build' }),
+        render: () => (
+          <OptionList
+            key="work"
+            searchable={false}
+            options={WORK_KINDS.map((kind) => ({ value: kind.value, label: kind.label, hint: kind.value === 'build' ? builds || undefined : undefined }))}
+            selected={[filters.workKind]}
+            onToggle={(value) => onChange({ ...filters, workKind: value as WorkKind })}
+            className="min-w-0 flex-1"
+          />
+        ),
+      },
+    ] satisfies ExtraFilterCategory[];
+  }, [filters, onChange, tasks, variants]);
 }
 
 function download(filename: string, text: string) {
