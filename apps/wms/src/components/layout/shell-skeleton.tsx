@@ -1,7 +1,11 @@
 import { Skeleton, SkeletonTable } from '@/components/ui/skeleton';
+import { ShellLoader } from './shell-loader';
 import { StaticSlowNotice } from './static-slow-notice';
 
-/** Streaming fallback for the authenticated shell (header bar + page skeleton). */
+/**
+ * Streaming fallback for the authenticated shell: the header bar, then the animated "Opening your
+ * warehouse" loader (it fades in only when the open takes a moment), with the slow / failed notice.
+ */
 export function ShellSkeleton() {
   return (
     <div className="flex min-h-screen flex-col" aria-busy="true" aria-label="Loading">
@@ -9,7 +13,10 @@ export function ShellSkeleton() {
         <span className="hidden h-8 w-44 animate-pulse rounded-full bg-skeleton xl:block" />
         <span className="h-6 w-6 animate-pulse rounded-full bg-skeleton" />
       </div>
-      <PageSkeleton />
+      <div className="px-6 pt-4">
+        <StaticSlowNotice />
+      </div>
+      <ShellLoader />
     </div>
   );
 }
