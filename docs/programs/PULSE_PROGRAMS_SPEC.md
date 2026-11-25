@@ -45,10 +45,10 @@ Everything the tracker shows already exists:
 
 ### 2.2 One migration: `apps/pulse/drizzle/0016_program_tracker.sql`
 
-Small and additive:
+Small and additive. One column, no new tables:
 
 - `pulse.jobs.program_job boolean NOT NULL DEFAULT false`: true for a job that a `pm_program` link points at. Kept by the sync (set on mirror, cleared when the mirror goes). It drives list filters and redirects without a join. Backfill: `UPDATE pulse.jobs SET program_job = true WHERE id IN (SELECT job_id FROM pulse.job_links WHERE target_type = 'pm_program')`.
-- `pulse.program_prefs` (one row per org and program): `org_id`, `pm_program_id uuid`, `labor_split text NOT NULL DEFAULT 'by_units' CHECK (labor_split IN ('by_units','by_standard','as_logged'))`, `standard_minutes jsonb NOT NULL DEFAULT '{}'` (minutes per kit by variant id), `version integer NOT NULL DEFAULT 1`, timestamps, `UNIQUE (org_id, pm_program_id)`, RLS enabled with the `pulse_app` policy like other Pulse tables. Pulse only settings: Projects never reads them.
+
 
 Preview builds skip it (the `db:migrate` guard). Production applies it on deploy.
 
@@ -64,8 +64,6 @@ programMonthFigures(input: {
   lines: ProgramLine[];        // pmb rows: date, variantId, units, scrap, revenueCents, laborCents, hours, materialCents
   fees: FeeLine[];             // pmf rows: date, kind, amountCents
   jobCosts: JobCostLine[];     // program job rows with no variant: date, hours, laborCents, materialCents, otherCents, sharedCents
-  split: 'by_units' | 'by_standard' | 'as_logged';
-  standardMinutes: Record<VariantId, string>;
 }): ProgramMonth
 ```
 
@@ -73,13 +71,9 @@ Returns revenue (work plus fees), labor, material, other, shared, profit, margin
 
 ### 3.2 Labor split
 
-Typed hours on the program job have no variant, so today Pulse shows all of it on one row. The tracker splits job cost that has no variant across variants **per day**:
+Hours typed in Pulse (crew timesheets, the daily log, the kiosk) are logged against the program job, not a variant. The tracker splits that cost across variants **per day, by each variant's good units that day**. If a day was 60% Small Brown kits, Small Brown gets 60% of that day's hours and labor cost. This is the only rule. There is no setting.
 
-- `by_units` (default): by each variant's good units that day.
-- `by_standard`: by units times the variant's standard minutes that day. Falls back to `by_units` for a variant with no standard.
-- `as_logged`: no split. A "Not tied to a variant" row holds it.
-
-A day with job cost and no units keeps that cost in "Not tied to a variant" in every mode. Splits use the engine's `allocate` (largest remainder), so the rows always add up to the total to the cent.
+A day with job cost and no units keeps that cost in "Not tied to a variant". Splits use the engine's `allocate` (largest remainder), so the rows always add up to the total to the cent.
 
 ### 3.3 Plan for the month (read from Projects)
 
@@ -109,7 +103,7 @@ When there is no cost yet, forecast margin is null and the screen says "Not enou
 
 ### 3.5 Target margin
 
-Per customer. The first of these that is set: the client's `target_margin_bp` (the Pulse client the program job belongs to), then the org default. A target typed on the program job itself is ignored, so every program for a customer is judged the same way. The Settings tab shows the customer's target with "Change it on the client" linking to the client page.
+Per customer. The first of these that is set: the client's `target_margin_bp` (the Pulse client the program job belongs to), then the org default. A target typed on the program job itself is ignored, so every program for a customer is judged the same way. The Overview shows the customer's target with "Change it on the client" linking to the client page.
 
 ## 4. Server (`apps/pulse/src/server/domain/programs.ts`)
 
@@ -122,7 +116,6 @@ Reads use `requirePulse`. Money is hidden through `moneyOut` exactly as on jobs:
 | `getProgramVariants(ctx, key, month)` | `byVariant` with planned units per variant and the `notTiedToVariant` row. |
 | `getProgramMonths(ctx, key, { from, to })` | One row per month: units, revenue, cost, profit, margin, target, minimum met or missed, closed or open. |
 | `getProgramDays(ctx, key, month)` | One row per work day: planned units, units, scrap, hours, units per hour, revenue, cost, profit. |
-| `getProgramPrefs` / `saveProgramPrefs` | Labor split and standard minutes. `saveProgramPrefs` needs `rate:manage` and checks `version`. |
 | `trackProgram(ctx, programId)` | Makes the program job when the program has none: `kind='ongoing'`, `pricing_model='per_unit'`, unit label from the program, client matched by core customer or CRM account (else asks), no quote, no budget, no typed price, `program_job = true`. Writes the `bills_to` edge through `@kitstak/db/record-links` and the mirror in one transaction, runs `canLinkJob` first, and queues a program sync. Needs `job:manage`. |
 | `convertToProgramJob(ctx, jobId)` | For a job already linked (all 8 in production): sets `program_job = true` and writes one activity line "J-26131 is now tracked as the GLOVE program." Plans and typed price are left in place but unused. Idempotent. The sync also does this on its own for every linked job, so no one has to click anything. |
 
@@ -201,15 +194,15 @@ Tabs:
 
 1. **Overview**
    - KPI strip: Revenue, Cost, Profit, Margin (against target), Kits built (against planned), Units per hour.
+   - Under Margin: "Target 30% for this customer" with "Change it on the client". No Settings tab.
    - Forecast row: "Forecast revenue $32,508.18 (from Projects)", "Forecast cost $22,104.00", "Forecast margin 32%".
    - Chart: cumulative revenue and cost by day, with the forecast and target lines.
    - Alerts strip (section 6, up to 3).
    - "Matches Projects to the cent" or "Pulse is catching up" (SPEC 6.1 parity rules, same audience).
-2. **By variant**: variant, planned, built, scrap, revenue, labor, material, profit, margin, profit per kit, share of revenue. Footer rows "Program fees" and "Not tied to a variant", then Total equal to the Overview. A small control "Labor split: By kits / By standard time / As logged" (saves to prefs for people with `rate:manage`, else changes the view only). Phone layout: one card per variant with kits, profit per kit and margin.
+2. **By variant**: variant, planned, built, scrap, revenue, labor, material, profit, margin, profit per kit, share of revenue. Footer rows "Program fees" and "Not tied to a variant", then Total equal to the Overview. Phone layout: one card per variant with kits, profit per kit and margin.
 3. **By month**: last 12 months. Units, revenue, cost, profit, margin, target margin, minimum met or missed, closed or open. Clicking a month opens that month on the Overview.
 4. **Days**: the month by work day. Planned, built, scrap, hours, units per hour, revenue, cost, profit. Days with kits and no hours are flagged with an "Add hours" link to the daily log, prefilled for the program job.
 5. **Labor**: hours and cost by labor class and by person for the month, and prep labor from Projects (`pmt:` rows) on its own row "Prep work in Projects".
-6. **Settings** (`rate:manage`): the customer's target margin (read only here, "Change it on the client"), labor split, standard minutes per variant.
 
 ### 7.4 Monthly program report
 
@@ -238,7 +231,7 @@ The 8 programs in production (GLOVE, BULLET, EXPLOR, BIGFAC, FOAM, DUDE, MAHCO, 
 
 ## 9. Tests and acceptance
 
-- Unit tests for `programMonthFigures` (splits add up to the cent in all 3 modes, a day with cost and no units, a variant with no standard), `programMonthPlan` (matches Projects' forecast for the seed GLOVE November), the cost forecast, and each program alert rule (fires and does not fire).
+- Unit tests for `programMonthFigures` (splits add up to the cent, a day with cost and no units, a day with one variant), `programMonthPlan` (matches Projects' forecast for the seed GLOVE November), the cost forecast, and each program alert rule (fires and does not fire).
 - Report tests: internal and customer versions total to the program page to the cent; the customer version never contains cost, labor, profit or margin.
 - DB tests: `trackProgram` (makes the job and edge once, refuses a second, refuses a non per unit job), `convertToProgramJob` (idempotent), sync sets and clears `program_job`, money hidden for a viewer on every read.
 - Risk tests: a `program_job` never gets W7, W8, D4 or "Add a quote or a budget", even with a typed quote present.
@@ -264,7 +257,4 @@ Disjoint file ownership, each layer ends with typecheck, tests and a commit.
 1. Programs are their own section in the top bar, and program jobs leave the Jobs list.
 2. Target margin is set per customer.
 3. A printable monthly report is in scope, with an internal and a customer version.
-
-## 12. Open question
-
-Hours typed in Pulse (crew timesheets from the CSV import, the daily log, the kiosk) are logged against the program job, not against a variant. In November, GLOVE has 1,448 such hours and every one has no variant. To show profit per variant, Pulse has to split them. The default in this spec is by kits built that day. If you know the standard minutes per kit for each SKU, Pulse can split by that instead (Settings, per program).
+4. Labor with no variant is split by kits built that day. No other modes and no setting.
