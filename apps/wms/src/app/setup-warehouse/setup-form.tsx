@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Loader2 } from 'lucide-react';
+import { WarehouseSetupLoader } from '@/components/setup/warehouse-setup-loader';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { errorTextClass, labelClass } from '@/components/ui/control-styles';
@@ -36,6 +37,27 @@ const FIELDS: readonly { key: FieldKey; label: string; placeholder?: string; aut
   { key: 'contactPhone', label: 'Contact phone', autoComplete: 'tel' },
 ];
 
+/** Longest we keep the setup screen up while the new warehouse's first page loads. */
+const WARM_UP_TIMEOUT_MS = 60_000;
+
+/**
+ * Loads the dashboard once in the background so the setup screen stays up until the new
+ * warehouse can actually render, instead of handing over to a bare skeleton. Best effort:
+ * on any failure or timeout we navigate anyway.
+ */
+async function warmUpDashboard(): Promise<void> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), WARM_UP_TIMEOUT_MS);
+  try {
+    const res = await fetch('/dashboard', { cache: 'no-store', credentials: 'same-origin', signal: controller.signal });
+    await res.text();
+  } catch {
+    // The navigation that follows loads the page for real; nothing to report here.
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 /** A code suggestion from the org name: its letters/digits, upper case, at most 6 + "1". */
 function suggestCode(orgName: string): string {
   const base = orgName.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
@@ -59,13 +81,16 @@ export function SetupWarehouseForm({ offers }: { readonly offers: readonly Offer
   const [errors, setErrors] = React.useState<Partial<Record<string, string>>>({});
   const [failure, setFailure] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [stage, setStage] = React.useState<'building' | 'opening'>('building');
 
   const set = (key: FieldKey) => (event: React.ChangeEvent<HTMLInputElement>) =>
     setValues((prev) => ({ ...prev, [key]: event.target.value }));
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
+    setStage('building');
     setFailure(null);
     setErrors({});
     try {
@@ -73,6 +98,8 @@ export function SetupWarehouseForm({ offers }: { readonly offers: readonly Offer
         method: 'POST',
         body: { orgId, warehouse: { ...values, country: 'United States', timezone } },
       });
+      setStage('opening');
+      await warmUpDashboard();
       // A full navigation: the new warehouse is now the open one (org cookie).
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign('/');
@@ -91,7 +118,8 @@ export function SetupWarehouseForm({ offers }: { readonly offers: readonly Offer
   }
 
   return (
-    <form className="mt-6 space-y-5" onSubmit={submit} noValidate>
+    <form className="mt-6 space-y-5" onSubmit={submit} noValidate inert={busy}>
+      {busy ? <WarehouseSetupLoader warehouseName={values.name.trim() || undefined} stage={stage} /> : null}
       {offers.length > 1 ? (
         <div className="space-y-1.5">
           <label className={labelClass} htmlFor="setup-org">

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="KitStak pulse loader">
+<style>
+rect,polygon{transform-box:fill-box}
+/* Pulse: a sweep wipes the two notched bars in from the left, holds, then wipes them out to the right */
+.sweep { animation: sweep 2s infinite; }
+@keyframes sweep {
+  0% { transform: translateX(-120px); animation-timing-function: linear; }
+  50% { transform: translateX(0); }
+  75% { transform: translateX(0); animation-timing-function: cubic-bezier(.65,0,.35,1); }
+  92%, 100% { transform: translateX(120px); }
+}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+</style>
+<defs><mask id="pulse-mask" maskUnits="userSpaceOnUse" x="-400" y="0" width="1000" height="200"><rect class="sweep" x="40" y="0" width="120" height="200" fill="#fff"/></mask></defs>
+<g mask="url(#pulse-mask)"><polygon points="40,71 82,71 100,53 118,71 160,71 160,101 118,101 100,83 82,101 40,101" fill="#C8102E"/><polygon points="40,117 82,117 100,99 118,117 160,117 160,147 118,147 100,129 82,147 40,147" fill="#D65A6E"/></g>
+</svg>
