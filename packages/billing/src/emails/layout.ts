@@ -3,8 +3,10 @@
  * content blocks. This file turns the same blocks into the HTML version and the text version, so the
  * two can never say different things.
  *
- * The HTML is table based with inline styles, because mail clients drop most CSS. It carries no
- * image and no tracking pixel, so nothing is blocked and nothing is tracked. The colors are the
+ * The HTML is table based with inline styles, because mail clients drop most CSS. Its one image is
+ * the KitStak lockup artwork from kitstak.com (alt "KitStak" where images are blocked); there is no
+ * tracking pixel and no per-recipient link, so nothing is tracked. The display face is Bebas Neue,
+ * also from kitstak.com, where a client loads web fonts, else a narrow system face. The colors are the
  * KitStak brand colors from packages/ui (tokens.css), written as hex because a mail client cannot
  * read CSS variables.
  */
@@ -81,7 +83,6 @@ const COLOR = {
   muted: '#566072',
   sunken: '#f7f5ef',
   red: '#c8102e',
-  oxblood: '#8f122c',
   white: '#ffffff',
   navy: '#0a1628',
   cream: '#f4f1e9',
@@ -202,26 +203,39 @@ function buttonHtml(button: EmailButton): string {
 }
 
 /**
- * The KitStak lockup, built from table cells so no image is needed: the two bar mark, KITSTAK and,
- * like the app headers, a divider and the part of KitStak the email is from.
+ * The supplied KitStak lockup artwork (bars and wordtype), served by the marketing site. Navy
+ * wordtype on light, cream on dark. 1200 x 228 source, shown at LOGO_WIDTH.
+ */
+export const BRAND_ASSET_ORIGIN = 'https://kitstak.com';
+const LOGO = {
+  light: `${BRAND_ASSET_ORIGIN}/brand/kitstak-lockup-navy.png`,
+  dark: `${BRAND_ASSET_ORIGIN}/brand/kitstak-lockup-cream.png`,
+  width: 126,
+  height: 24,
+} as const;
+
+function logoImg(src: string, className: string, hidden: boolean): string {
+  const img = `<img src="${src}" width="${LOGO.width}" height="${LOGO.height}" alt="KitStak" style="display:block;width:${LOGO.width}px;height:${LOGO.height}px;border:0;outline:none;text-decoration:none;font-family:${FONT};font-size:16px;font-weight:700;color:${COLOR.ink};">`;
+  // The dark copy is hidden everywhere (Outlook included) until dark mode shows it.
+  return hidden
+    ? `<!--[if !mso]><!--><div class="${className}" style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${img}</div><!--<![endif]-->`
+    : `<div class="${className}">${img}</div>`;
+}
+
+/**
+ * The KitStak lockup as the apps draw it (packages/ui Logo): the supplied artwork, then a divider
+ * and the part of KitStak the email is from, in the app header's product label style.
  */
 function logoHtml(area?: string): string {
   const areaCells = area
     ? [
-        `<td valign="middle" style="padding:0 10px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td width="1" height="18" class="ks-divider" bgcolor="${COLOR.divider}" style="width:1px;height:18px;line-height:18px;font-size:0;background-color:${COLOR.divider};">&nbsp;</td></tr></table></td>`,
-        `<td valign="middle" class="ks-product" style="font-family:${FONT};font-size:13px;line-height:22px;font-weight:600;letter-spacing:2.5px;text-transform:uppercase;color:${COLOR.product};">${escapeHtml(area)}</td>`,
+        `<td valign="middle" style="padding:0 10px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td width="1" height="${LOGO.height}" class="ks-divider" bgcolor="${COLOR.divider}" style="width:1px;height:${LOGO.height}px;line-height:${LOGO.height}px;font-size:0;background-color:${COLOR.divider};">&nbsp;</td></tr></table></td>`,
+        `<td valign="middle" class="ks-product" style="font-family:${FONT};font-size:13px;line-height:${LOGO.height}px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${COLOR.product};">${escapeHtml(area)}</td>`,
       ]
     : [];
   return [
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>`,
-    `<td valign="middle" style="padding-right:10px;">`,
-    `<table role="presentation" cellpadding="0" cellspacing="0" border="0">`,
-    `<tr><td width="26" height="6" bgcolor="${COLOR.red}" style="width:26px;height:6px;line-height:6px;font-size:0;background-color:${COLOR.red};">&nbsp;</td></tr>`,
-    `<tr><td width="26" height="4" style="width:26px;height:4px;line-height:4px;font-size:0;">&nbsp;</td></tr>`,
-    `<tr><td width="26" height="6" bgcolor="${COLOR.oxblood}" style="width:26px;height:6px;line-height:6px;font-size:0;background-color:${COLOR.oxblood};">&nbsp;</td></tr>`,
-    `</table>`,
-    `</td>`,
-    `<td valign="middle" class="ks-ink" style="font-family:${FONT};font-size:18px;line-height:22px;font-weight:800;letter-spacing:3px;color:${COLOR.ink};">KITSTAK</td>`,
+    `<td valign="middle">${logoImg(LOGO.light, 'ks-logo-light', false)}${logoImg(LOGO.dark, 'ks-logo-dark', true)}</td>`,
     ...areaCells,
     `</tr></table>`,
   ].join('');
@@ -240,6 +254,8 @@ const TONE_DARK = (Object.keys(TONE) as EmailTone[])
 
 /** Dark mode for the mail clients that honor it. The inline light colors are the fallback. */
 const DARK_STYLES = [
+  // The brand display face for the clients that load web fonts (Apple Mail, iOS, Outlook for Mac).
+  `@font-face{font-family:'Bebas Neue';font-style:normal;font-weight:400;font-display:swap;src:url('${BRAND_ASSET_ORIGIN}/fonts/BebasNeue-Regular.woff2') format('woff2');}`,
   `:root{color-scheme:light dark;supported-color-schemes:light dark;}`,
   `@media (prefers-color-scheme: dark){`,
   `.ks-page{background-color:#0d0e10 !important;}`,
@@ -252,6 +268,8 @@ const DARK_STYLES = [
   `.ks-code{background-color:#1b2232 !important;}`,
   `.ks-divider{background-color:#3a3f47 !important;}`,
   `.ks-product{color:#9aa3b2 !important;}`,
+  `.ks-logo-light{display:none !important;}`,
+  `.ks-logo-dark{display:block !important;max-height:none !important;overflow:visible !important;}`,
   TONE_DARK,
   `}`,
   `@media only screen and (max-width: 620px){.ks-card-pad{padding:24px 20px !important;}}`,

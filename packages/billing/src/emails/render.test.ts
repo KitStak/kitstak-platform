@@ -60,8 +60,18 @@ describe('every email template', () => {
           expect(email.text).toContain(block.text);
         }
       }
-      // No image, no script, no tracking pixel.
-      expect(email.html).not.toMatch(/<img|<script|<link/i);
+      // No script, no tracking pixel. The only images are the two KitStak lockups (light and dark),
+      // and every remote file (images and the brand font) comes from kitstak.com.
+      expect(email.html).not.toMatch(/<script|<link/i);
+      const images = [...email.html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/g)].map((match) => match[1]);
+      expect(images).toEqual([
+        'https://kitstak.com/brand/kitstak-lockup-navy.png',
+        'https://kitstak.com/brand/kitstak-lockup-cream.png',
+      ]);
+      expect(email.html.match(/<img\b/g)).toHaveLength(2);
+      expect(email.html).toMatch(/<img[^>]+alt="KitStak"/);
+      const remote = [...email.html.matchAll(/(?:src="|url\(')(https?:[^"')]+)/g)].map((match) => match[1]!);
+      for (const address of remote) expect(address.startsWith('https://kitstak.com/')).toBe(true);
     },
   );
 

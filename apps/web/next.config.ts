@@ -16,6 +16,15 @@ const nextConfig: NextConfig = {
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
         ],
       },
+      {
+        // The brand display face, loaded by KitStak emails (packages/billing/src/emails/layout.ts).
+        // A web font from another origin needs CORS in mail clients and webmail.
+        source: '/fonts/:file*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
     ];
   },
 };
