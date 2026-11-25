@@ -96,8 +96,9 @@ function Row({ line, months, metric, program, layout }: { readonly line: TrendsL
       <th scope="row" style={{ width: layout.left, minWidth: layout.left, maxWidth: layout.left }} className={cn(FROZEN_LEFT, fill, 'border-b border-border-subtle px-3 py-2 text-left font-normal')}>
         <span className="flex min-w-0 items-center gap-2">
           {program ? <ProgramIcon icon={program.icon} color={program.color} size={18} /> : null}
-          <span className={cn('truncate', strong ? 'font-semibold text-fg' : 'text-fg')} title={line.name}>{line.name}</span>
-          {line.key ? <span className="shrink-0 font-key text-xs text-fg-muted">{line.key}</span> : null}
+          {/* The name keeps its room; the key gives way first and hides on phones. */}
+          <span className={cn('min-w-0 shrink truncate', strong ? 'font-semibold text-fg' : 'text-fg')} title={line.key ? `${line.name} (${line.key})` : line.name}>{line.name}</span>
+          {line.key ? <span className="min-w-0 shrink-[4] truncate font-key text-xs text-fg-muted max-sm:hidden">{line.key}</span> : null}
         </span>
       </th>
       {months.map((month, index) => (

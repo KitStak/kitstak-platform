@@ -36,9 +36,61 @@ export function draftStepText(step: number, skipsStart = false): string {
 /** The chip text for a saved draft. */
 export const draftStep = (draft: Pick<WizardDraftDTO, 'step' | 'payload'>): string => draftStepText(draft.step, draftSkipsStart(draft));
 
+type DraftPayload = {
+  readonly start?: { readonly mode?: unknown; readonly crmItemTitle?: unknown; readonly templateName?: unknown; readonly copyKey?: unknown };
+  readonly basics?: { readonly key?: unknown };
+};
+
+const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+/** How the draft started, in plain words ("From a deal", "Copy of GLOVE"), or '' when not picked yet. */
+export function draftStartText(payload: WizardDraftDTO['payload']): string {
+  const start = (payload as DraftPayload).start;
+  switch (start?.mode) {
+    case 'deal':
+      return text(start.crmItemTitle) ? `From the deal ${text(start.crmItemTitle)}` : 'From a deal';
+    case 'template':
+      return text(start.templateName) ? `From the template ${text(start.templateName)}` : 'From a template';
+    case 'copy':
+      return text(start.copyKey) ? `Copy of ${text(start.copyKey)}` : 'Copy of a program';
+    case 'quick':
+      return 'Quick setup';
+    case 'scratch':
+      return 'From scratch';
+    default:
+      return '';
+  }
+}
+
+export interface DraftHint {
+  /** The key it will get and how it started ("GLOV2, From a deal"), or ''. */
+  readonly text: string;
+  /** A short id ("#1A2B"), only when two drafts would still read the same. */
+  readonly shortId: string | null;
+}
+
+/** What tells drafts apart before you click Resume. */
+export function draftHints(drafts: readonly Pick<WizardDraftDTO, 'id' | 'title' | 'payload'>[]): ReadonlyMap<string, DraftHint> {
+  const base = new Map<string, string>();
+  for (const draft of drafts) {
+    const key = text((draft.payload as DraftPayload).basics?.key).toUpperCase();
+    base.set(draft.id, [key, draftStartText(draft.payload)].filter(Boolean).join(', '));
+  }
+  const signature = (draft: Pick<WizardDraftDTO, 'id' | 'title'>) => `${draft.title.trim().toLowerCase()}|${base.get(draft.id)}`;
+  const seen = new Map<string, number>();
+  for (const draft of drafts) seen.set(signature(draft), (seen.get(signature(draft)) ?? 0) + 1);
+  const hints = new Map<string, DraftHint>();
+  for (const draft of drafts) {
+    const shortId = (seen.get(signature(draft)) ?? 0) > 1 ? `#${draft.id.replace(/-/g, '').slice(-4).toUpperCase()}` : null;
+    hints.set(draft.id, { text: base.get(draft.id) ?? '', shortId });
+  }
+  return hints;
+}
+
 export function DraftsStrip({ drafts, className }: { readonly drafts: readonly WizardDraftDTO[]; readonly className?: string }) {
   const hydrated = useHydrated();
   const queryClient = useQueryClient();
+  const hints = draftHints(drafts);
   const remove = async (draft: WizardDraftDTO) => {
     queryClient.setQueryData<WizardDraftDTO[]>(qk.programDrafts(), (old) => (old ?? []).filter((entry) => entry.id !== draft.id));
     const result = await deleteProgramDraftAction({ id: draft.id });
@@ -63,15 +115,25 @@ export function DraftsStrip({ drafts, className }: { readonly drafts: readonly W
       </span>
       <ul className="flex min-w-0 flex-wrap items-center gap-1.5">
         {drafts.slice(0, 6).map((draft) => (
-          <li key={draft.id} className="flex min-h-7 max-w-full items-center rounded-md border border-border-subtle bg-panel shadow-xs sm:max-w-[440px]">
+          <li key={draft.id} className="flex min-h-7 max-w-full items-center rounded-md border border-border-subtle bg-panel shadow-xs sm:max-w-[560px]">
             <Link
               href={routes.newProgram({ draft: draft.id })}
-              title={`${draft.title || 'Untitled program'}, ${draftStep(draft).toLowerCase()}`}
+              title={[draft.title || 'Untitled program', hints.get(draft.id)?.shortId, hints.get(draft.id)?.text, draftStep(draft).toLowerCase()].filter(Boolean).join(', ')}
               className="flex min-w-0 flex-wrap items-center gap-x-1.5 rounded-l-md py-1 pr-1 pl-2.5 text-xs outline-none hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus sm:flex-nowrap"
               data-testid="draft-chip"
             >
               {/* The title keeps its room; the step and saved time give way first. */}
               <span className="max-w-full min-w-0 shrink-0 truncate font-medium text-fg max-sm:basis-full sm:max-w-[220px]">{draft.title || 'Untitled program'}</span>
+              {hints.get(draft.id)?.shortId ? <span className="shrink-0 font-key text-2xs text-fg-muted max-sm:hidden" data-testid="draft-id">{hints.get(draft.id)?.shortId}</span> : null}
+              {hints.get(draft.id)?.text ? (
+                <>
+                  <span aria-hidden className="text-fg-muted max-sm:hidden">·</span>
+                  <span className="max-w-[180px] min-w-0 truncate text-fg-secondary" data-testid="draft-hint">
+                    {hints.get(draft.id)?.shortId ? <span className="font-key text-2xs text-fg-muted sm:hidden">{hints.get(draft.id)?.shortId} </span> : null}
+                    {hints.get(draft.id)?.text}
+                  </span>
+                </>
+              ) : null}
               <span aria-hidden className="text-fg-muted max-sm:hidden">·</span>
               <span className="shrink-0 whitespace-nowrap text-fg-secondary">{draftStep(draft)}</span>
               <span aria-hidden className="text-fg-muted">·</span>

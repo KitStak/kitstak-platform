@@ -9,6 +9,7 @@
  * project template, or "Start a program" from a program template, a copy of another program, or
  * the deal's own lines. The server side is src/server/integrations/record-triggers.ts.
  */
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUpRight, Copy, FolderKanban, LayoutTemplate, Package, Plus, ReceiptText, RefreshCw, Trash2 } from 'lucide-react';
@@ -21,6 +22,11 @@ import {
   DialogContent,
   DialogFooter,
   DialogHeader,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
   EmptyState,
   Field,
   IconButton,
@@ -49,6 +55,7 @@ import {
   runRecordTriggersAction,
   updateRecordTriggerAction,
 } from '@/server/actions/record-triggers';
+import { routes } from '@/lib/routes';
 import { useShell } from '@/features/shell/shell-context';
 import { SiblingAppMark } from '@/features/integrations/record-chip';
 
@@ -112,6 +119,46 @@ const PROGRAM_STARTS: readonly {
   { value: 'template', label: 'A template', text: 'A saved program template.', emptyTip: 'No program templates yet', icon: LayoutTemplate },
   { value: 'copy', label: 'Another program', text: 'Copy its variants, rates and schedules.', emptyTip: 'No programs to copy yet', icon: Copy },
 ];
+
+/** The program path that opens "Save as template" for that program in the directory. */
+export const saveProgramTemplateHref = (key: string): string => `${routes.programs()}?saveTemplate=${encodeURIComponent(key)}`;
+
+/**
+ * Shown while there are no program templates: a way to make one. It opens "Save as template" for
+ * the program you pick in a new tab; the template list here refreshes when you come back.
+ */
+function TemplateHelp({ programs }: { readonly programs: readonly { readonly id: string; readonly key: string; readonly name: string }[] }) {
+  if (programs.length === 0) {
+    return (
+      <p className="-mt-2 text-xs text-fg-muted" data-testid="template-help">
+        To start from a template or another program, first{' '}
+        <Link href={routes.newProgram()} className="font-medium text-fg-link hover:underline">create a program</Link>.
+      </p>
+    );
+  }
+  return (
+    <p className="-mt-2 flex flex-wrap items-center gap-x-1 text-xs text-fg-muted" data-testid="template-help">
+      No program templates yet.
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="inline-flex items-center gap-1 rounded-sm font-medium text-fg-link outline-none hover:underline focus-visible:outline-2 focus-visible:outline-focus" data-testid="save-program-template">
+            Save a program as a template
+            <ArrowUpRight aria-hidden className="size-3" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-h-72 w-64 overflow-y-auto">
+          <DropdownMenuLabel>Save which program?</DropdownMenuLabel>
+          {programs.map((program) => (
+            <DropdownMenuItem key={program.id} onSelect={() => window.open(saveProgramTemplateHref(program.key), '_blank', 'noopener')}>
+              <span className="min-w-0 flex-1 truncate">{program.name}</span>
+              <span className="shrink-0 font-key text-2xs text-fg-muted">{program.key}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </p>
+  );
+}
 
 /** The library, with the deal won recipe worded for both actions. */
 const RECIPES: readonly RecordTriggerRecipe[] = RECORD_TRIGGER_RECIPES.map((recipe) =>
@@ -310,6 +357,9 @@ function RecipeDialog({ draft, onClose }: { readonly draft: Draft | null; readon
                   </div>
                 )}
               </Field>
+              {!programTemplates.isLoading && (programTemplates.data ?? []).length === 0 ? (
+                <TemplateHelp programs={(programs.data ?? []).filter((program) => !program.archivedAt)} />
+              ) : null}
               {state.programStart === 'template' ? (
                 <Field label="Program template" error={errors.programTemplateId}>
                   {({ inputId, describedBy, invalid }) => (

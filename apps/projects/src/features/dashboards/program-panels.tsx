@@ -51,9 +51,22 @@ const qty = (value: string | null | undefined): bigint => {
 /** A 0 to 1 ratio for drawing only. */
 const ratio = (part: bigint, whole: bigint): number => (whole > BigInt(0) ? Number((part * BigInt(10000)) / whole) / 10000 : 0);
 
-function seriesColor(color: string | null, index: number): string {
-  const tone = paletteColor(color, (['blue', 'green', 'orange', 'purple', 'teal', 'pink'] as const)[index % 6]);
-  return `var(--label-${tone})`;
+const SERIES_TONES = ['blue', 'green', 'orange', 'purple', 'teal', 'pink'] as const;
+
+/**
+ * One distinct tone per program for the stacked chart: a program keeps its own color unless an
+ * earlier program already took it, then it gets the next free tone so two stacks never look alike.
+ */
+function seriesTones(programs: readonly { readonly id: string; readonly color: string | null }[]): ReadonlyMap<string, string> {
+  const used = new Set<string>();
+  const tones = new Map<string, string>();
+  programs.forEach((program, index) => {
+    let tone: string = paletteColor(program.color, SERIES_TONES[index % SERIES_TONES.length]);
+    if (used.has(tone)) tone = SERIES_TONES.find((candidate) => !used.has(candidate)) ?? tone;
+    used.add(tone);
+    tones.set(program.id, `var(--label-${tone})`);
+  });
+  return tones;
 }
 
 function RevenueByMonth({ data }: { readonly data: ProgramsDashboardData }) {
@@ -72,6 +85,8 @@ function RevenueByMonth({ data }: { readonly data: ProgramsDashboardData }) {
   const totals = allTotals.slice(start);
   const cellAt = (program: ProgramsDashboardData['programs'][number], index: number) => program.cells[start + index] ?? { units: '0', revenueCents: '0' };
   const max = totals.reduce((best, total) => (total > best ? total : best), BigInt(0));
+  const tones = seriesTones(programs);
+  const tone = (id: string) => tones.get(id) ?? 'var(--chart-1)';
   const text = (amount: bigint) => (metric === 'revenue' ? formatCents(amount) : `${formatQty(fromScaled(amount, 3))} ${unitPick}`);
   const height = 180;
   return (
@@ -95,10 +110,10 @@ function RevenueByMonth({ data }: { readonly data: ProgramsDashboardData }) {
               <Tooltip key={month} content={<span className="flex flex-col gap-0.5"><span className="font-semibold">{monthLabel(month)} · {text(total)}</span>{programs.map((program) => { const v = value(cellAt(program, index)); return v > BigInt(0) ? <span key={program.id}>{program.key} {text(v)}</span> : null; })}</span>}>
                 <div tabIndex={0} className={cn('relative flex h-full min-w-0 flex-1 flex-col-reverse rounded-t-sm outline-none focus-visible:outline-2 focus-visible:outline-focus', month === data.month && 'bg-sunken/60')} aria-label={`${monthLabel(month)} ${text(total)}`}>
                   {total > BigInt(0) ? <span className="absolute inset-x-0 text-center text-2xs font-semibold whitespace-nowrap text-fg tabular-nums" style={{ bottom: `${ratio(total, max) * (height - 28) + 4}px` }}>{metric === 'revenue' ? formatCents(total, { compact: true }) : formatQty(fromScaled(total, 3))}</span> : null}
-                  {programs.map((program, at) => {
+                  {programs.map((program) => {
                     const v = value(cellAt(program, index));
                     if (v <= BigInt(0)) return null;
-                    return <span key={program.id} style={{ height: `${ratio(v, max) * (height - 28)}px`, background: seriesColor(program.color, at) }} className="w-full first:rounded-b-none last:rounded-t-sm" />;
+                    return <span key={program.id} style={{ height: `${ratio(v, max) * (height - 28)}px`, background: tone(program.id) }} className="w-full first:rounded-b-none last:rounded-t-sm" />;
                   })}
                 </div>
               </Tooltip>
@@ -114,9 +129,9 @@ function RevenueByMonth({ data }: { readonly data: ProgramsDashboardData }) {
           ))}
         </div>
         <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-secondary">
-          {programs.map((program, index) => (
+          {programs.map((program) => (
             <li key={program.id} className="inline-flex items-center gap-1.5">
-              <span aria-hidden className="size-2 rounded-full" style={{ background: seriesColor(program.color, index) }} />
+              <span aria-hidden className="size-2 rounded-full" style={{ background: tone(program.id) }} />
               {program.name}
             </li>
           ))}
@@ -133,6 +148,9 @@ function RevenueByMonth({ data }: { readonly data: ProgramsDashboardData }) {
 function UnitsByVariant({ data }: { readonly data: ProgramsDashboardData }) {
   const top = data.variants.slice(0, 10);
   const max = top.reduce((best, variant) => (qty(variant.units) > best ? qty(variant.units) : best), BigInt(0));
+  // A variant with no color of its own takes its program's color, so the dot matches the program chip.
+  const programColor = new Map(data.programs.map((program) => [program.key, program.color]));
+  const colorOf = (variant: (typeof top)[number]) => paletteColor(variant.color ?? programColor.get(variant.programKey) ?? null);
   return (
     <Panel title="Units by variant">
       {top.length === 0 ? (
@@ -142,13 +160,13 @@ function UnitsByVariant({ data }: { readonly data: ProgramsDashboardData }) {
           {top.map((variant) => (
             <li key={`${variant.programKey}-${variant.name}`} className="flex flex-col gap-1">
               <span className="flex items-center gap-2 text-sm">
-                <VariantDot color={variant.color} />
+                <VariantDot color={colorOf(variant)} />
                 <span className="min-w-0 flex-1 truncate text-fg" title={variant.name}>{variant.name}</span>
                 <span className="shrink-0 font-key text-2xs text-fg-muted">{variant.programKey}</span>
                 <span className="w-24 shrink-0 text-right text-xs font-medium text-fg tabular-nums">{unitLabel(variant.units, variant.unit)}</span>
               </span>
               <span className="h-1.5 overflow-hidden rounded-full bg-sunken">
-                <span className="block h-full rounded-full bg-[var(--chart-1)] opacity-80" style={{ width: `${Math.max(2, ratio(qty(variant.units), max) * 100)}%` }} />
+                <span className="block h-full rounded-full" style={{ width: `${Math.max(2, ratio(qty(variant.units), max) * 100)}%`, background: `var(--label-${colorOf(variant)})` }} />
               </span>
             </li>
           ))}

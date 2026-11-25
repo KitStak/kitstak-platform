@@ -5,8 +5,8 @@
  * (surface `programs`), a drafts strip, and every state (loading, empty org, no results, error,
  * permission limited, money hidden). Prefs are remembered under `ks-programs:directory`.
  */
-import { useRouter } from 'next/navigation';
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -119,6 +119,33 @@ function useDirectoryPrefs(): [DirectoryPrefs, (patch: Partial<DirectoryPrefs>) 
   return [prefs, set];
 }
 
+const LAYOUTS: readonly DirectoryPrefs['layout'][] = ['cards', 'table', 'trends'];
+
+/**
+ * The layout lives in the URL (?view=table), so Table and Trends can be shared and bookmarked. With
+ * no ?view the last layout this person used is kept. Other prefs stay in this browser only.
+ */
+function useDirectoryView(): [DirectoryPrefs, (patch: Partial<DirectoryPrefs>) => void] {
+  const [stored, setStored] = useDirectoryPrefs();
+  const router = useRouter();
+  const pathname = usePathname() ?? '/programs';
+  const params = useSearchParams();
+  const fromUrl = LAYOUTS.find((layout) => layout === params?.get('view'));
+  const prefs = useMemo(() => (fromUrl && fromUrl !== stored.layout ? { ...stored, layout: fromUrl } : stored), [fromUrl, stored]);
+  const set = useCallback(
+    (patch: Partial<DirectoryPrefs>) => {
+      setStored(patch);
+      if (patch.layout && patch.layout !== fromUrl) {
+        const next = new URLSearchParams(params?.toString() ?? '');
+        next.set('view', patch.layout);
+        router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+      }
+    },
+    [fromUrl, params, pathname, router, setStored],
+  );
+  return [prefs, set];
+}
+
 export interface ProgramsDirectoryProps {
   readonly initialPrograms: readonly ProgramListItemDTO[];
   readonly initialDrafts: readonly WizardDraftDTO[];
@@ -132,12 +159,29 @@ export function ProgramsDirectory({ initialPrograms, initialDrafts, savedViews, 
   const programsQuery = usePrograms({ archived: true }, { initialData: [...initialPrograms], initialDataUpdatedAt: loadedAt, staleTime: 30_000 });
   const drafts = useProgramDrafts({ initialData: [...initialDrafts], initialDataUpdatedAt: loadedAt });
   const ops = useProgramOps();
-  const [prefs, setPrefs] = useDirectoryPrefs();
+  const [prefs, setPrefs] = useDirectoryView();
   const defaultView = savedViews.find((view) => view.isDefault) ?? null;
   const [activeViewId, setActiveViewId] = useState<string | null>(defaultView?.id ?? null);
   const [filters, setFilters] = useState<DirectoryFilters>(() => (defaultView ? readFilters((defaultView.config as Record<string, unknown>).filters) : DEFAULT_FILTERS));
   const [deleting, setDeleting] = useState<ProgramListItemDTO | null>(null);
   const [templating, setTemplating] = useState<ProgramListItemDTO | null>(null);
+  const searchParams = useSearchParams();
+  const pathname = usePathname() ?? '/programs';
+  // ?saveTemplate=GLOVE (from the deal won recipe) opens "Save as template" once, then the param goes.
+  const saveTemplateKey = searchParams?.get('saveTemplate') ?? null;
+  const [handledSaveTemplate, setHandledSaveTemplate] = useState<string | null>(null);
+  if (saveTemplateKey && saveTemplateKey !== handledSaveTemplate) {
+    const target = initialPrograms.find((program) => program.key === saveTemplateKey.toUpperCase());
+    setHandledSaveTemplate(saveTemplateKey);
+    if (target) setTemplating(target);
+  }
+  useEffect(() => {
+    if (!saveTemplateKey) return;
+    const next = new URLSearchParams(searchParams?.toString() ?? '');
+    next.delete('saveTemplate');
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [saveTemplateKey, searchParams, pathname, router]);
   const [explainer, setExplainer] = useState(false);
 
   const all = useMemo(() => programsQuery.data ?? [], [programsQuery.data]);
