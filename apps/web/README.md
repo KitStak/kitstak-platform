@@ -196,6 +196,7 @@ before the page ships.
   generated or served from this app. Add a new page to `src/app/sitemap.ts`; articles join it on their own.
 - Search Console and Bing: set `GOOGLE_SITE_VERIFICATION` and `BING_SITE_VERIFICATION` on the Vercel
   project and redeploy. With none set, no tag is written. Then submit `https://kitstak.com/sitemap.xml`.
+  Vercel builds through Turbo, which hides undeclared variables, so both are listed in `apps/web/turbo.json`.
 - Security headers (CSP, HSTS, COOP and the rest) are in `next.config.ts`.
 
 ## Social preview images
