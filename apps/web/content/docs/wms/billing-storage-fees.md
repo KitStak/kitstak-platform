@@ -10,7 +10,7 @@ Storage fees bill the inventory a client holds in the warehouse. KitStak takes a
 ## Before you start
 
 - The billing form must be in **Draft**.
-- Snapshots start the night after stock is received. You can see them in the **Inventory Snapshot Report**. See [Inventory reports](/docs/wms/report-inventory-reports).
+- Snapshots start the night after stock is received. You can see them in the **Inventory Snapshot Report**. See [Inventory reports](/docs/wms/analytics-inventory-grids).
 
 ## Create a storage fee
 
@@ -84,4 +84,4 @@ A storage fee can be limited with conditions on **Location**, **LP** and **Produ
 
 - [Add fees to a billing form](/docs/wms/billing-fees)
 - [Calculate, review and approve bills](/docs/wms/billing-calculate-and-approve-bills)
-- [Inventory reports](/docs/wms/report-inventory-reports)
+- [Inventory reports](/docs/wms/analytics-inventory-grids)

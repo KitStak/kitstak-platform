@@ -87,4 +87,4 @@ The **Customers** and **Retailers** lists have **Export As Excel**. The file cov
 
 - [Client details page](/docs/wms/client-details)
 - [Create a client](/docs/wms/client-create-a-client)
-- [Export and schedule reports](/docs/wms/report-export-and-schedule)
+- [Export and schedule reports](/docs/wms/analytics-export-and-schedule)
