@@ -97,6 +97,19 @@ NEXT_PUBLIC_SITE_URL=$WEB
 BODY
       ;;
   esac
+  # The Portal has its own email block above (with the dev outbox). Every other app sends invites,
+  # and WMS also sends password resets and report links, through the same Resend account.
+  if [ "$app" != "portal" ]; then
+    cat <<'BODY'
+
+# Email (KitStak's Resend account, packages/mail). Leave empty to keep mail off locally.
+# To try real sends: a Resend key, EMAIL_FROM=KitStak <onboarding@resend.dev>, and send to
+# delivered@resend.dev or the address on your Resend account.
+# RESEND_API_KEY=
+# EMAIL_FROM=
+# EMAIL_REPLY_TO=
+BODY
+  fi
 }
 
 for app in $ALL_APPS; do

@@ -9,12 +9,12 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { AppDb } from '@/server/api/db';
 import { hashResetToken } from '@/server/auth/password-reset';
 import * as s from '@/server/db/schema';
-import { INVITE_TTL_HOURS, inviteEmail, type MailTransport } from '@/lib/grid-defs/admin/company-mail';
+import { INVITE_TTL_HOURS, inviteEmail, type MailDelivery } from '@/lib/grid-defs/admin/company-mail';
 import { sendCompanyMail } from './company-mail';
 import { withWriteTx } from '@/server/db/sql';
 
 export interface InviteResult {
-  readonly transport: MailTransport;
+  readonly transport: MailDelivery;
   readonly delivered: boolean;
   readonly expiresAt: string;
 }

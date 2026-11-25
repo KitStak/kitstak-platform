@@ -33,6 +33,7 @@
     "@kitstak/auth": "workspace:*",
     "@kitstak/db": "workspace:*",
     "@kitstak/entitlements": "workspace:*",
+    "@kitstak/mail": "workspace:*",
     "better-auth": "^1.7.18",
     "stripe": "23.2.0"
   },

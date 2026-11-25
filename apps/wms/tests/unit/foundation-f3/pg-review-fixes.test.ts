@@ -160,6 +160,18 @@ describe('read-then-write paths are race-safe without the synchronous driver', (
     expect(out.filter((o) => o.status === 'fulfilled')).toHaveLength(1);
   });
 
+  it('a failed reset email answers like success, so it never tells which accounts exist', async () => {
+    s = await seededDb();
+    const send = vi.fn(async () => {
+      throw new Error('KitStak email could not send this message. Resend answered 403.');
+    });
+    setMailAdapter({ send });
+    await expect(
+      requestPasswordReset(s.db, { email: 'admin@kitstak.io', baseUrl: 'http://localhost:3000/' }),
+    ).resolves.toBeUndefined();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it('concurrent first reads create the company row once and both succeed', async () => {
     e = await createTestDb();
     const out = await Promise.allSettled([getCompany(e.db), getCompany(e.db)]);

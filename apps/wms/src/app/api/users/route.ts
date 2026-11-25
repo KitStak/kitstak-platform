@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { defineRoute } from '@/server/api/define-route';
 import { created, listResult } from '@/server/api/envelope';
+import type { MailDelivery } from '@/lib/grid-defs/admin/company-mail';
 import { log } from '@/server/log';
 import { createUser, listUsers, parseUserSave } from '@/server/repositories/users';
 import { sendUserInvite } from '@/server/repositories/users-invite';
@@ -33,7 +34,7 @@ export const POST = defineRoute({
     // Dedicated invite (own template, 72 h link) via the company mail transport. The response
     // says what really happened so the toast never claims an email that wasn't sent.
     const welcomeRequested = Boolean(body.sendWelcomeEmail && body.isActive);
-    let welcome: { transport: 'smtp' | 'log' | null; delivered: boolean; error: string | null } = {
+    let welcome: { transport: MailDelivery | null; delivered: boolean; error: string | null } = {
       transport: null,
       delivered: false,
       error: null,
@@ -52,7 +53,7 @@ export const POST = defineRoute({
           entityId: user.id,
           detail: {
             email: user.email,
-            delivery: r.delivered ? 'smtp' : 'server log only',
+            delivery: r.delivered ? r.transport : 'server log only',
             linkExpires: r.expiresAt,
           },
         });
