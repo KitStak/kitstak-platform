@@ -34,7 +34,7 @@ Select a field, type the new value and press `Enter` to save (`Esc` cancels).
 | Setting | Options |
 | --- | --- |
 | **Theme** | **Light**, **Dark** or **System**. System follows your operating system |
-| **Language** | The interface language |
+| **Language** | Your language and region, such as **English (United States)** or **Deutsch (Deutschland)** |
 | **Date format** | `MM/DD/YYYY`, `DD/MM/YYYY` or `YYYY-MM-DD` |
 | **Time format** | The preview shows the current time in the format you pick |
 | **Week starts on** | **Sunday** or **Monday** |
