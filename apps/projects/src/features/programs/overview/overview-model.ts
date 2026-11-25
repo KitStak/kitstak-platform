@@ -145,18 +145,34 @@ export interface MinimumKpi {
   readonly value: string;
   readonly line: string | null;
   readonly tone: 'success' | 'warning' | 'neutral' | 'muted';
+  /** Why the month's minimum is not the card's, e.g. "$3,000.00 on the card, cut for the Nov 2 start". */
+  readonly reason: string | null;
+}
+
+/**
+ * Why this month's minimum differs from the card's monthly minimum: the program started (or ends)
+ * inside the month, so the engine counts only the days it runs. Null when they match or the card has none.
+ */
+export function minimumReason(monthCents: string, cardCents: string | null | undefined, month: IsoMonth, startDate: IsoDate | null, endDate: IsoDate | null = null): string | null {
+  if (!cardCents || BigInt(cardCents) === BigInt(monthCents)) return null;
+  const card = formatCents(cardCents, { cents: true });
+  const first = `${month}-01`;
+  if (startDate && startDate > first && startDate.slice(0, 7) === month) return `${card} on the card, cut for the ${shortDate(startDate)} start`;
+  if (endDate && endDate.slice(0, 7) === month) return `${card} on the card, cut for the ${shortDate(endDate)} end`;
+  return `${card} on the card, sized to the days in this month`;
 }
 
 /** The Minimum KPI: Met, Below minimum by X so far (on track), May miss it by X, or Not set. */
-export function minimumKpi(result: MonthResultDTO, forecast: ForecastResultDTO): MinimumKpi {
+export function minimumKpi(result: MonthResultDTO, forecast: ForecastResultDTO, context: { readonly cardMinimumCents?: string | null; readonly month?: IsoMonth; readonly startDate?: IsoDate | null; readonly endDate?: IsoDate | null } = {}): MinimumKpi {
   const minimum = result.minimum;
-  if (!minimum || minimum.status === 'none') return { value: 'Not set', line: 'No monthly minimum on the card', tone: 'muted' };
+  if (!minimum || minimum.status === 'none') return { value: 'Not set', line: 'No monthly minimum on the card', tone: 'muted', reason: null };
+  const reason = context.month ? minimumReason(minimum.minimumCents, context.cardMinimumCents, context.month, context.startDate ?? null, context.endDate ?? null) : null;
   const gap = BigInt(minimum.gapSoFarCents);
   const projected = forecast.projectedGapCents ? BigInt(forecast.projectedGapCents) : BigInt(0);
   const of = `of ${formatCents(minimum.minimumCents, { cents: true })}`;
-  if (minimum.status === 'met' || gap <= BigInt(0)) return { value: 'Met', line: `Work charges are over the ${formatCents(minimum.minimumCents, { cents: true })} minimum`, tone: 'success' };
-  if (projected > BigInt(0)) return { value: `May miss it by ${formatCents(projected, { cents: true })}`, line: `Below minimum by ${formatCents(gap, { cents: true })} so far ${of}`, tone: 'warning' };
-  return { value: `Below minimum by ${formatCents(gap, { cents: true })} so far`, line: 'on track to meet it', tone: 'neutral' };
+  if (minimum.status === 'met' || gap <= BigInt(0)) return { value: 'Met', line: `Work charges are over the ${formatCents(minimum.minimumCents, { cents: true })} minimum`, tone: 'success', reason };
+  if (projected > BigInt(0)) return { value: `May miss it by ${formatCents(projected, { cents: true })}`, line: `Below minimum by ${formatCents(gap, { cents: true })} so far ${of}`, tone: 'warning', reason };
+  return { value: `Below minimum by ${formatCents(gap, { cents: true })} so far`, line: 'on track to meet it', tone: 'neutral', reason };
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -266,6 +282,14 @@ export function variantChartColor(color: string | null | undefined, index: numbe
   if (index < CHART_VARS.length) return CHART_VARS[index] as string;
   const label = LABEL_COLORS[(index - CHART_VARS.length) % LABEL_COLORS.length];
   return `var(--label-${label})`;
+}
+
+/**
+ * One color per variant for every program screen (Overview, Today's run, Variants): its own
+ * label color, else the chart palette by its place in the variants list.
+ */
+export function variantColorMap(variants: readonly { readonly id: string; readonly color: string | null }[]): Map<string, string> {
+  return new Map(variants.map((variant, index) => [variant.id, variantChartColor(variant.color, index)]));
 }
 
 /* ---------------------------------------------------------------------------------------------- */

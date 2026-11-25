@@ -20,7 +20,8 @@ import type { AttributeDTO, VariantDTO } from '@/lib/program-types';
 import { deleteVariantAction, linkVariantKitAction, reorderVariantsAction, restoreVariantAction, retireVariantAction, updateVariantAction } from '@/server/actions/variants';
 import { deleteVersionAction, requestReviewAction } from '@/server/actions/price-cards';
 import { useCurrentProgram } from '../program-context';
-import { PriceFromChip, VariantDot } from '../kit/chips';
+import { PriceFromChip } from '../kit/chips';
+import { variantColorMap } from '../overview/overview-model';
 import { readQty, trimQty } from '../kit/qty-input';
 import { useProgramOverlays } from '../overlays/overlay-params';
 import { BUILD_FILTER_PARAM, DEFAULT_BUILD_FILTERS, formatBuildFilters } from '../builds/builds-model';
@@ -249,6 +250,7 @@ export function VariantsTab({ kitItems }: { readonly kitItems: readonly KitItem[
   const unlink = useServerAction(linkVariantKitAction, { successMessage: 'Kit unlinked.', errorTitle: "Couldn't unlink the kit", onSuccess: refresh });
   const reorder = useServerAction(reorderVariantsAction, { errorTitle: "Couldn't save the order", onSuccess: refresh, onError: () => setOrder(null) });
   const byId = useMemo(() => new Map(variants.map((variant) => [variant.id, variant])), [variants]);
+  const colors = useMemo(() => variantColorMap(variants), [variants]);
   const ordered = useMemo(() => (order ? order.map((id) => byId.get(id)).filter((variant): variant is VariantDTO => Boolean(variant)) : variants), [order, byId, variants]);
   const needle = query.trim().toLowerCase();
   const shown = ordered.filter((variant) => (showRetired || variant.status === 'active') && (!needle || variant.name.toLowerCase().includes(needle) || variant.key.toLowerCase().includes(needle) || (variant.sku ?? '').toLowerCase().includes(needle)));
@@ -331,7 +333,58 @@ export function VariantsTab({ kitItems }: { readonly kitItems: readonly KitItem[
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border-subtle bg-panel shadow-xs">
+        <>
+        <ul className="flex flex-col divide-y divide-border-subtle rounded-xl border border-border-subtle bg-panel shadow-xs sm:hidden" data-testid="variants-cards">
+          {shown.length === 0 ? <li className="px-4 py-6 text-center text-sm text-fg-muted">No variants match your search.</li> : null}
+          {shown.map((variant) => {
+            const retired = variant.status !== 'active';
+            const chips = attributeChips(variant, attributes.data ?? []);
+            return (
+              <li key={variant.id}>
+                <button
+                  type="button"
+                  disabled={!canEdit || retired}
+                  onClick={() => setDialog({ kind: 'edit', variant })}
+                  className="flex w-full flex-col gap-1.5 px-4 py-3 text-left outline-none enabled:hover:bg-hover focus-visible:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+                  data-testid="variant-card"
+                >
+                  <span className="flex items-center gap-2">
+                    <span aria-hidden className="inline-block size-2 shrink-0 rounded-full" style={{ background: colors.get(variant.id) }} />
+                    <span className={cn('min-w-0 flex-1 truncate text-sm font-medium', retired ? 'text-fg-muted' : 'text-fg')}>{variant.name}</span>
+                    <Badge tone={retired ? 'neutral' : 'success'} size="sm">
+                      {retired ? 'Retired' : 'Active'}
+                    </Badge>
+                  </span>
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-4 text-xs">
+                    <span className="font-key text-fg-secondary">{variant.key}</span>
+                    {chips.map((chip) => (
+                      <span key={chip.id} className="rounded-sm bg-muted px-1.5 text-2xs leading-[18px] font-medium text-fg-secondary">
+                        {chip.text}
+                      </span>
+                    ))}
+                  </span>
+                  <span className="flex flex-wrap items-center justify-between gap-2 pl-4 text-xs">
+                    {moneyHidden ? (
+                      <span />
+                    ) : variant.currentRate ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-medium text-fg tabular-nums">{formatUnitPrice(variant.currentRate.unitPrice)}</span>
+                        <PriceFromChip source={variant.currentRate.source === 'none' ? 'none' : variant.currentRate.source} ruleText={variant.currentRate.ruleText} />
+                      </span>
+                    ) : (
+                      <span className="text-fg-muted">No price</span>
+                    )}
+                    <span className="text-right whitespace-nowrap text-fg-secondary tabular-nums">
+                      This month {unitLabel(variant.monthUnits, unit)}
+                      {moneyHidden ? '' : ` · ${formatCents(variant.monthRevenueCents, { cents: true })}`}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden overflow-x-auto rounded-xl border border-border-subtle bg-panel shadow-xs sm:block">
           <table className="w-full min-w-[1120px] text-sm" data-testid="variants-table">
             <thead>
               <tr className="h-9 border-b border-border-subtle text-left text-xs text-fg-muted">
@@ -346,7 +399,7 @@ export function VariantsTab({ kitItems }: { readonly kitItems: readonly KitItem[
                 {moneyHidden ? null : <th scope="col" className="px-1.5 font-medium">Rate</th>}
                 {moneyHidden ? null : <th scope="col" className="px-1.5 text-right font-medium">Material</th>}
                 <th scope="col" className="px-1.5 font-medium">Kit</th>
-                <th scope="col" className="px-1.5 text-right font-medium">This month</th>
+                <th scope="col" className="px-1.5 text-right font-medium whitespace-nowrap">This month</th>
                 <th scope="col" className="px-1.5 font-medium">Status</th>
                 <th scope="col" className="sticky right-0 w-10 bg-panel" aria-label="Actions" />
               </tr>
@@ -396,7 +449,7 @@ export function VariantsTab({ kitItems }: { readonly kitItems: readonly KitItem[
                     </td>
                     <td className="max-w-[220px]">
                       <span className="flex items-center gap-1">
-                        <VariantDot color={variant.color} className="ml-1 shrink-0" />
+                        <span aria-hidden className="ml-1 inline-block size-2 shrink-0 rounded-full" style={{ background: colors.get(variant.id) }} />
                         <InlineCell value={variant.name} label={`${variant.name} name`} disabled={!canEdit || retired} onSave={(name) => save(variant, { name })} validate={(text) => (text.trim() ? null : 'Name the variant.')} />
                       </span>
                     </td>
@@ -548,6 +601,7 @@ export function VariantsTab({ kitItems }: { readonly kitItems: readonly KitItem[
             </tbody>
           </table>
         </div>
+        </>
       )}
       <PendingBar />
       {dialog?.kind === 'matrix' ? <VariantMatrixDialog mode={dialog.mode} open onOpenChange={(open) => (open ? null : setDialog(null))} /> : null}

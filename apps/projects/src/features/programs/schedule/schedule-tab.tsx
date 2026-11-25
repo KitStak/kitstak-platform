@@ -1,8 +1,8 @@
 'use client';
 /**
  * Schedule tab (docs/programs/SPEC.md 5.13): one card per schedule (rule, lines summary, status,
- * the next 3 runs, how far builds are made, and Edit, Pause or Resume, Skip a date, Run now, End,
- * Delete), "New schedule" with the shared editor plus Default status, and a month calendar that
+ * the next 3 runs, how far builds are made, and Edit, Pause or Resume, Skip a date, Run now and
+ * End), "New schedule" with the shared editor plus Default status, and a month calendar that
  * dots each schedule's runs, crosses skipped days and labels days off.
  */
 import { useMemo, useState } from 'react';
@@ -387,7 +387,7 @@ export function ScheduleTab({ initialSchedules }: { readonly initialSchedules: r
         <EmptyState
           visual={<CalendarClock aria-hidden className="size-10 text-icon" />}
           title="No schedules"
-          description={activeVariants.length === 0 ? 'Add variants first. A schedule makes builds of them on the days you pick.' : 'No schedules. Builds are only made when you plan them.'}
+          description={activeVariants.length === 0 ? 'Add variants first. A schedule makes builds of them on the days you pick.' : 'Builds are only made when you plan them.'}
           actions={capabilities.canPlan && activeVariants.length > 0 ? <Button onClick={() => setCreating(true)}>New schedule</Button> : null}
         />
       ) : (

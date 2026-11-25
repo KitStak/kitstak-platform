@@ -28,7 +28,6 @@ import { StatusUpdateComposer, UpdateHistory } from '@/features/projects/status-
 import { LinkPulseJobDialog } from '@/features/integrations/link-pulse-job-dialog';
 import { LinkedRecordChip } from '@/features/integrations/record-chip';
 import { useCurrentProgram } from '../program-context';
-import { VariantChip } from '../kit/chips';
 import { QtyProgress, RunRing } from '../kit/numbers';
 import { useHydrated } from '../kit/use-hydrated';
 import { doneOfText, qtyOfText } from '../kit/format';
@@ -36,17 +35,24 @@ import { statementFileHref, statementHref } from '../frame/program-menu';
 import { useProgramOverlays } from '../overlays/overlay-params';
 import { RunMenu } from '../builds/run-menu';
 import { AdjustmentDialog } from '../adjustments/adjustment-dialog';
-import { CHARGE_GROUP_ORDER, groupLabel, weekdayDate, type ChargeGroup } from './overview-model';
+import { CHARGE_GROUP_ORDER, groupLabel, variantColorMap, weekdayDate, type ChargeGroup } from './overview-model';
 
 /* ---------------------------------------------------------------------------------------------- */
 /* Today's run                                                                                    */
 /* ---------------------------------------------------------------------------------------------- */
 
 function RunBlock({ run, unit }: { readonly run: RunDTO; readonly unit: UnitLabel }) {
-  const { key, statusById, today } = useCurrentProgram();
+  const { key, statusById, today, variants } = useCurrentProgram();
   const drawer = useTaskDrawer();
   const builds = useProgramBuilds(key, { from: run.date, to: run.date, limit: 500 });
-  const items = (builds.data?.items ?? []).filter((item) => item.build.runId === run.id);
+  const colors = useMemo(() => variantColorMap(variants), [variants]);
+  // Variant order, the same as the Variants tab and the statement; the build key breaks ties.
+  const items = useMemo(() => {
+    const order = new Map(variants.map((variant, index) => [variant.id, index]));
+    return (builds.data?.items ?? [])
+      .filter((item) => item.build.runId === run.id)
+      .sort((a, b) => (order.get(a.build.variantId ?? '') ?? 999) - (order.get(b.build.variantId ?? '') ?? 999) || a.key.localeCompare(b.key, 'en', { numeric: true }));
+  }, [builds.data, run.id, variants]);
   return (
     <div className="flex flex-col" data-testid="today-run">
       <div className="flex items-center gap-2.5 px-4 py-2.5">
@@ -79,7 +85,14 @@ function RunBlock({ run, unit }: { readonly run: RunDTO; readonly unit: UnitLabe
                   >
                     <StatusIcon category={item.statusCategory} color={status?.color} label={status?.name} />
                     <span className="flex min-w-0 items-center gap-1.5">
-                      {item.build.variantName ? <VariantChip name={item.build.variantName} color={item.build.variantColor} /> : <span className="truncate text-sm text-fg">{item.title}</span>}
+                      {item.build.variantName ? (
+                        <span className="inline-flex h-5 max-w-full min-w-0 items-center gap-1.5 rounded-full bg-sunken px-2 text-2xs font-medium text-fg">
+                          <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: colors.get(item.build.variantId ?? '') ?? 'var(--label-gray)' }} />
+                          <span className="min-w-0 truncate">{item.build.variantName}</span>
+                        </span>
+                      ) : (
+                        <span className="truncate text-sm text-fg">{item.title}</span>
+                      )}
                       {over > 0 ? <Badge tone="warning" size="sm">{`${unitLabel(String(over), unit)} over`}</Badge> : null}
                       {item.build.locked && run.date < today ? <Badge tone="neutral" size="sm">Locked</Badge> : null}
                     </span>

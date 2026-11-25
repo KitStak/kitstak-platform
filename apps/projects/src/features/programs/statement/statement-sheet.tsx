@@ -19,9 +19,12 @@ import { qk } from '@/lib/query-keys';
 import type { IsoMonth, StatementDTO } from '@/lib/program-types';
 import { deleteOneTimeChargeAction } from '@/server/actions/price-cards';
 import { useCurrentProgram } from '../program-context';
+import { MoneyHiddenNote } from '../kit';
 import { statementFileHref } from '../frame/program-menu';
 import { AdjustmentDialog } from '../adjustments/adjustment-dialog';
 import { ReopenMonthDialog } from '../close/reopen-dialog';
+import { BeforeStartNotice, monthBeforeStart } from '../close/before-start';
+import { keepOpenForToasts } from '../close/close-sheet';
 import { CHARGE_GROUP_ORDER, chargeGroupOf, groupLabel, monthLong, monthShortName, type ChargeGroup } from '../overview/overview-model';
 
 export const statementKey = (key: string, month: IsoMonth) => [...qk.program(key), 'statement', month] as const;
@@ -41,6 +44,52 @@ interface Row {
   readonly chargeId: string | null;
 }
 
+/** "Oct 2026", for the short title on small screens. */
+const monthShortYear = (month: IsoMonth) => `${monthShortName(month).slice(0, 3)} ${month.slice(0, 4)}`;
+
+/**
+ * A shared statement link opened by someone who does not see money: the panel still opens, so the
+ * link does not look broken, and says who to ask.
+ */
+export function StatementHiddenSheet({ month }: { readonly month: IsoMonth }) {
+  const { key, program } = useCurrentProgram();
+  const router = useRouter();
+  const pathname = usePathname() ?? '';
+  const params = useSearchParams();
+  const dismiss = () => {
+    const next = new URLSearchParams(params?.toString() ?? '');
+    next.delete('statement');
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+  return (
+    <SidePanel open onOpenChange={(open) => (open ? null : dismiss())}>
+      <SidePanelContent
+        width={600}
+        title={
+          <>
+            <span className="sm:hidden">Statement · {monthShortYear(month)}</span>
+            <span className="hidden sm:inline">
+              {key} statement · {monthLong(month)}
+            </span>
+          </>
+        }
+        description={program.name}
+      >
+        <div className="flex flex-col items-start gap-3 px-4 py-5 sm:px-6" data-testid="statement-hidden">
+          <div className="flex w-full flex-col gap-1 rounded-xl border border-border-subtle bg-sunken px-4 py-4">
+            <MoneyHiddenNote className="text-sm font-medium text-fg" />
+            <p className="text-xs text-fg-muted">Ask an owner for the {monthLong(month)} statement. You can still see units built on the Overview and Builds tabs.</p>
+          </div>
+          <Button size="sm" variant="secondary" onClick={dismiss}>
+            Back to Overview
+          </Button>
+        </div>
+      </SidePanelContent>
+    </SidePanel>
+  );
+}
+
 /** Close date in plain words: "Dec 2". */
 function closedOn(iso: string | null): string {
   if (!iso) return '';
@@ -54,9 +103,10 @@ export function StatementSheet({ month }: { readonly month: IsoMonth }) {
   const params = useSearchParams();
   const queryClient = useQueryClient();
   const people = usePeopleMap();
-  const statement = useStatement(key, month);
-  const close = useCloseChecklist(key, month);
-  const charges = useOneTimeCharges(key, month);
+  const beforeStart = monthBeforeStart(month, program.startDate);
+  const statement = useStatement(key, month, !beforeStart);
+  const close = useCloseChecklist(key, month, { enabled: !beforeStart });
+  const charges = useOneTimeCharges(key, month, { enabled: !beforeStart });
   const [adding, setAdding] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -111,12 +161,20 @@ export function StatementSheet({ month }: { readonly month: IsoMonth }) {
     <SidePanel open onOpenChange={(open) => (open ? null : dismiss())}>
       <SidePanelContent
         width={720}
-        title={`${key} statement · ${monthLong(month)}`}
+        onPointerDownOutside={keepOpenForToasts}
+        title={
+          <>
+            <span className="sm:hidden">Statement · {monthShortYear(month)}</span>
+            <span className="hidden sm:inline">
+              {key} statement · {monthLong(month)}
+            </span>
+          </>
+        }
         description={program.customer ? `${program.name} · ${program.customer.name}` : program.name}
       >
         <style>{'@media print { body * { visibility: hidden !important; } [data-statement-print], [data-statement-print] * { visibility: visible !important; } [data-statement-print] { position: absolute; inset: 0; padding: 24px; } }'}</style>
         <div className="flex flex-col gap-5 px-4 py-5 sm:px-6" data-statement-print data-testid="statement-sheet">
-          <div className="-mt-1 flex flex-wrap items-center justify-end gap-1 print:hidden">
+          <div className={cn('-mt-1 flex flex-wrap items-center justify-end gap-1 print:hidden', beforeStart && 'hidden')}>
             <a href={statementFileHref(key, month, 'csv')} download className={buttonVariants({ variant: 'secondary', size: 'sm' })} data-testid="statement-csv">
               <FileSpreadsheet aria-hidden />
               Export CSV
@@ -143,7 +201,7 @@ export function StatementSheet({ month }: { readonly month: IsoMonth }) {
                 </Button>
               ) : null}
             </div>
-          ) : ended && capabilities.canClose ? (
+          ) : ended && capabilities.canClose && !beforeStart ? (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary-subtle/40 px-3 py-2.5 text-sm print:hidden">
               <CalendarCheck2 aria-hidden className="size-4 text-primary-text" />
               <span className="min-w-0 flex-1 text-fg">{monthName} has ended. Close it to lock its numbers and save the total.</span>
@@ -152,7 +210,9 @@ export function StatementSheet({ month }: { readonly month: IsoMonth }) {
               </Button>
             </div>
           ) : null}
-          {statement.isLoading ? (
+          {beforeStart && program.startDate ? (
+            <BeforeStartNotice programKey={key} month={month} startDate={program.startDate} what="bill" />
+          ) : statement.isLoading ? (
             <div className="flex flex-col gap-3">
               <Skeleton height={64} rounded="lg" />
               <Skeleton height={220} rounded="lg" />

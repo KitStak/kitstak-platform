@@ -21,11 +21,11 @@ import { useHydrated } from '../kit/use-hydrated';
 import { targetTone } from '../kit/format';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { useProgramOverlays } from '../overlays/overlay-params';
-import { alertViews, avgPerDayText, compareWithLastMonth, minimumKpi, monthChart, monthLong, workDaysSoFar, type AlertView, type ChartMetric } from './overview-model';
+import { alertViews, avgPerDayText, compareWithLastMonth, minimumKpi, minimumReason, monthChart, monthLong, workDaysSoFar, type AlertView, type ChartMetric } from './overview-model';
 import { ByVariantPanel } from './by-variant-panel';
 import { DailyColumns } from './daily-columns';
 import { DetailsTabsPanel, LinkedWorkPanel, PriceCardPanel, PulsePanel, StatementPanel, TodayRunPanel, UpdatesPanel } from './overview-panels';
-import { StatementSheet } from '../statement/statement-sheet';
+import { StatementHiddenSheet, StatementSheet } from '../statement/statement-sheet';
 import { CloseSheet } from '../close/close-sheet';
 
 const DISMISS_KEY = (key: string) => `ks-programs:setup-dismissed:${key}`;
@@ -218,7 +218,8 @@ function KpiRow({ summary, lastMonth }: { readonly summary: ProgramSummaryDTO; r
     );
   }
   const compare = compareWithLastMonth(summary.byDay, lastMonth?.byDay, summary.asOf);
-  const minimum = minimumKpi(summary.result, summary.forecast);
+  const cardMinimum = program.currentVersion?.lines.find((line) => line.kind === 'monthly_minimum')?.amountCents ?? null;
+  const minimum = minimumKpi(summary.result, summary.forecast, { cardMinimumCents: cardMinimum, month: monthOf(summary.asOf), startDate: program.startDate, endDate: program.endDate });
   const target = program.month.targetCents;
   return (
     <section aria-label="This month" id="month" className={grid} data-testid="program-kpis-money">
@@ -239,7 +240,20 @@ function KpiRow({ summary, lastMonth }: { readonly summary: ProgramSummaryDTO; r
           </div>
         }
       />
-      <Kpi testId="kpi-minimum" label="Minimum" value={<span className={cn('whitespace-normal', minimum.tone === 'success' && 'text-success-text', minimum.tone === 'warning' && 'text-warning-text', minimum.tone === 'muted' && 'text-fg-muted', minimum.value.length > 12 && 'text-base')}>{minimum.value}</span>} line={minimum.line} lineTone={minimum.tone === 'neutral' ? 'neutral' : 'muted'} />
+      <Kpi testId="kpi-minimum" label="Minimum" value={<span className={cn('whitespace-normal', minimum.tone === 'success' && 'text-success-text', minimum.tone === 'warning' && 'text-warning-text', minimum.tone === 'muted' && 'text-fg-muted', minimum.value.length > 12 && 'text-base')}>{minimum.value}</span>} line={
+          minimum.reason ? (
+            <>
+              {minimum.line}
+              <span className="mt-0.5 block text-fg-muted" data-testid="kpi-minimum-reason">
+                {minimum.reason}
+              </span>
+            </>
+          ) : (
+            minimum.line
+          )
+        }
+        lineTone={minimum.tone === 'neutral' ? 'neutral' : 'muted'}
+      />
     </section>
   );
 }
@@ -276,7 +290,8 @@ function MonthChartPanel({ month, onMonth, summary, loading }: { readonly month:
         ...(data.target ? [{ id: 'target', label: 'Target', color: 'var(--warning)', values: data.target, dashed: true }] : []),
       ]
     : [];
-  const references = data?.minimum ? [{ id: 'minimum', label: 'Minimum', value: data.minimum[0] ?? 0, color: 'var(--danger)', dashed: true }] : [];
+  const partMonth = Boolean(summary?.result.minimum && minimumReason(summary.result.minimum.minimumCents, program.currentVersion?.lines.find((line) => line.kind === 'monthly_minimum')?.amountCents ?? null, month, program.startDate, program.endDate));
+  const references = data?.minimum ? [{ id: 'minimum', label: partMonth ? 'Minimum this month' : 'Minimum', value: data.minimum[0] ?? 0, color: 'var(--danger)', dashed: true }] : [];
   const money = (value: number) => formatCents(Math.round(value * 100));
   const qty = (value: number) => `${Math.round(value).toLocaleString('en-US')}`;
   return (
@@ -397,7 +412,7 @@ export function OverviewTab({ initialSummary, updateDraft, loadedAt }: OverviewT
         {summary.pulse && summary.pulse.state !== 'unavailable' && summary.pulse.available ? <PulsePanel parity={summary.pulse} /> : null}
         <DetailsTabsPanel />
       </div>
-      {statementMonth && /^\d{4}-\d{2}$/.test(statementMonth) && !moneyHidden ? <StatementSheet month={statementMonth} /> : null}
+      {statementMonth && /^\d{4}-\d{2}$/.test(statementMonth) ? moneyHidden ? <StatementHiddenSheet month={statementMonth} /> : <StatementSheet month={statementMonth} /> : null}
       {closeMonth && /^\d{4}-\d{2}$/.test(closeMonth) && capabilities.canClose ? <CloseSheet month={closeMonth} /> : null}
     </div>
   );

@@ -60,13 +60,21 @@ function absoluteUrl(url: string): string {
   return typeof window === 'undefined' ? url : `${window.location.origin}${url}`;
 }
 
+/** Cached statuses come in lowercase from some apps ("active"); show them as labels ("Active"). */
+function withStatusLabel(link: LinkedRecordDTO): LinkedRecordDTO {
+  const status = link.status;
+  if (!status || status !== status.toLowerCase()) return link;
+  const label = status.replace(/_/g, ' ');
+  return { ...link, status: `${label.charAt(0).toUpperCase()}${label.slice(1)}` };
+}
+
 function LinkRow({ link, canEdit, onRemove }: { readonly link: LinkedRecordDTO; readonly canEdit: boolean; readonly onRemove: (link: LinkedRecordDTO) => void }) {
   const url = liveProgramUrl(link.url);
   const external = Boolean(url && /^https?:\/\//.test(url));
   return (
     <li className="flex flex-wrap items-center gap-2 px-4 py-2.5" data-testid="linked-row" data-type={link.type}>
       <span className="min-w-0 flex-1">
-        <LinkedRecordChip record={link} />
+        <LinkedRecordChip record={withStatusLabel(link)} />
       </span>
       <span className="flex shrink-0 items-center gap-1.5 text-xs text-fg-muted">
         {link.source !== 'record_links' ? <Badge tone="outline" size="sm">Older link</Badge> : null}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DayRollupDTO, ForecastResultDTO, MonthResultDTO } from '@/lib/program-types';
-import { alertViews, avgPerDayText, chargeGroupOf, compareWithLastMonth, cumulativeThrough, groupTotals, minimumKpi, monthChart, monthLong, variantChartColor, weekdayDate } from './overview-model';
+import { alertViews, avgPerDayText, chargeGroupOf, compareWithLastMonth, cumulativeThrough, groupTotals, minimumKpi, minimumReason, monthChart, monthLong, variantChartColor, weekdayDate } from './overview-model';
 
 const unit = { singular: 'kit', plural: 'kits' };
 const day = (date: string, units: string, cumulative: string, planned = '0.000'): DayRollupDTO => ({ date, units, plannedUnits: planned, workCents: '0', feeCents: '0', cumulativeCents: cumulative });
@@ -47,7 +47,7 @@ describe('KPIs', () => {
   it('words the minimum', () => {
     expect(minimumKpi(result(null), forecast(null)).value).toBe('Not set');
     expect(minimumKpi(result({ minimumCents: '3000000', gapSoFarCents: '0', topUpCents: '0', status: 'met', statusText: '' }), forecast('0')).value).toBe('Met');
-    expect(minimumKpi(result({ minimumCents: '3000000', gapSoFarCents: '152960', topUpCents: '0', status: 'pending', statusText: '' }), forecast('0'))).toEqual({ value: 'Below minimum by $1,529.60 so far', line: 'on track to meet it', tone: 'neutral' });
+    expect(minimumKpi(result({ minimumCents: '3000000', gapSoFarCents: '152960', topUpCents: '0', status: 'pending', statusText: '' }), forecast('0'))).toEqual({ value: 'Below minimum by $1,529.60 so far', line: 'on track to meet it', tone: 'neutral', reason: null });
     expect(minimumKpi(result({ minimumCents: '3000000', gapSoFarCents: '152960', topUpCents: '0', status: 'pending', statusText: '' }), forecast('124000')).value).toBe('May miss it by $1,240.00');
   });
 });
@@ -83,5 +83,14 @@ describe('words', () => {
     expect(weekdayDate('2026-11-25')).toBe('Wed Nov 25');
     expect(variantChartColor('blue', 0)).toBe('var(--label-blue)');
     expect(variantChartColor(null, 1)).toBe('var(--chart-2)');
+  });
+});
+
+describe('minimumReason', () => {
+  it('explains a minimum cut for a mid month start for a mid month start', () => {
+    expect(minimumReason('290000', '300000', '2026-11', '2026-11-02')).toBe('$3,000.00 on the card, cut for the Nov 2 start');
+    expect(minimumReason('300000', '300000', '2026-11', '2026-11-02')).toBeNull();
+    expect(minimumReason('300000', null, '2026-11', '2026-11-02')).toBeNull();
+    expect(minimumReason('150000', '300000', '2026-12', '2026-11-02', '2026-12-15')).toBe('$3,000.00 on the card, cut for the Dec 15 end');
   });
 });

@@ -10,12 +10,12 @@ import { useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowRight, CalendarClock, ChevronDown, Copy, EyeOff, FilePlus2, GitCompare, Lock, MoreHorizontal, Pencil, Plus, Receipt, Send, Trash2, Undo2 } from 'lucide-react';
-import { addDays, formatCents, formatUnitPrice, shortDate } from '@kitstak/programs-engine';
+import { addDays, changeBp, formatCents, formatUnitPrice, lastDayOfMonth, monthOf, mulQuantityPrice, shortDate } from '@kitstak/programs-engine';
 import { Badge, Button, ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, EmptyState, Field, IconButton, Input, IsoDatePicker, Select, Skeleton, Textarea, cn, toast } from '@/components/ui';
 import { PersonAvatar } from '@/components/pm';
 import { Panel } from '@/components/layout/page';
 import { useServerAction, unwrap } from '@/lib/hooks/use-action';
-import { useAttributes, useCardPreview, useOtherPrices, usePriceCard } from '@/lib/hooks/use-programs';
+import { useAttributes, useCardPreview, useOtherPrices, usePriceCard, useProgramBuilds, useProgramSummary } from '@/lib/hooks/use-programs';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { qk } from '@/lib/query-keys';
 import type { CardImpactDTO, CardVersionDTO } from '@/lib/program-types';
@@ -237,8 +237,96 @@ function DeltaRow({ label, before, after, deltaCents, deltaBp }: { readonly labe
   );
 }
 
-function ImpactRail({ impact, loading, children }: { readonly impact: CardImpactDTO | undefined; readonly loading: boolean; readonly children?: React.ReactNode }) {
-  const { variantById } = useCurrentProgram();
+type MonthDelta = CardImpactDTO['thisMonth'];
+
+/**
+ * This month's forecast before and after the draft: the forecast from `/summary`, plus the change
+ * so far, plus the planned units still to build from the start day (or today) to the month end at
+ * the new rate minus the old rate. Builds with their own rate keep it.
+ */
+interface ForecastDelta {
+  readonly month: MonthDelta;
+  /** This month's forecast change per variant (so far plus still to build), keyed by variant id. */
+  readonly byVariant: ReadonlyMap<string | null, bigint>;
+}
+
+function useForecastDelta(impact: CardImpactDTO | undefined, effectiveFrom: string): ForecastDelta | null {
+  const { key, today, moneyHidden } = useCurrentProgram();
+  const month = monthOf(today);
+  const end = lastDayOfMonth(month);
+  const from = effectiveFrom > today ? effectiveFrom : today;
+  const summary = useProgramSummary(key, month, { enabled: !moneyHidden });
+  const builds = useProgramBuilds(key, { from, to: end, limit: 500 }, { enabled: !moneyHidden && from <= end });
+  return useMemo(() => {
+    const base = summary.data?.forecast.forecastCents;
+    if (!impact || base === null || base === undefined) return null;
+    if (from <= end && !builds.data) return null;
+    const prices = new Map(impact.byVariant.map((row) => [row.variantId, row]));
+    const byVariant = new Map<string | null, bigint>(impact.byVariant.map((row) => [row.variantId, BigInt(row.deltaCents)]));
+    let change = BigInt(impact.thisMonth.deltaCents);
+    for (const build of from <= end ? (builds.data?.items ?? []) : []) {
+      const block = build.build;
+      if (block.rateOverride || block.closedShort || build.statusCategory === 'cancelled' || block.buildDate < from || block.buildDate > end) continue;
+      const row = prices.get(block.variantId);
+      if (!row || row.beforePrice === row.afterPrice) continue;
+      const remaining = Number(block.remainingQty) > 0 ? block.remainingQty : '0';
+      const delta = mulQuantityPrice(remaining, row.afterPrice ?? '0') - mulQuantityPrice(remaining, row.beforePrice ?? '0');
+      change += delta;
+      byVariant.set(row.variantId, (byVariant.get(row.variantId) ?? BigInt(0)) + delta);
+    }
+    const before = BigInt(base);
+    const after = before + change;
+    return { month: { beforeCents: before.toString(), afterCents: after.toString(), deltaCents: change.toString(), deltaBp: changeBp(after, before) }, byVariant };
+  }, [impact, summary.data, builds.data, from, end]);
+}
+
+const signedCents = (value: bigint) => (value === BigInt(0) ? formatCents('0', { cents: true }) : `${value > BigInt(0) ? '+' : '-'}${formatCents((value < BigInt(0) ? -value : value).toString(), { cents: true })}`);
+const deltaTone = (value: bigint) => (value > BigInt(0) ? 'text-success-text' : value < BigInt(0) ? 'text-danger-text' : 'text-fg-muted');
+
+/**
+ * By variant: the rate change and this month's forecast change per variant (output so far plus
+ * planned units still to build at the new rate minus the old one), so the rows add up to the
+ * "This month forecast" change above. Before the forecast loads it shows the change so far.
+ */
+function VariantImpactTable({ impact, forecast }: { readonly impact: CardImpactDTO; readonly forecast: ForecastDelta | null }) {
+  const rows = impact.byVariant.filter((row) => row.deltaCents !== '0' || row.beforePrice !== row.afterPrice || (forecast?.byVariant.get(row.variantId) ?? BigInt(0)) !== BigInt(0));
+  const valueOf = (row: CardImpactDTO['byVariant'][number]) => (forecast ? (forecast.byVariant.get(row.variantId) ?? BigInt(0)) : BigInt(row.deltaCents));
+  const total = rows.reduce((sum, row) => sum + valueOf(row), BigInt(0));
+  return (
+    <table className="mt-1 w-full text-xs" data-testid="impact-by-variant">
+      <thead>
+        <tr className="text-left text-fg-muted">
+          <th scope="col" className="py-1 pr-2 font-medium">Variant</th>
+          <th scope="col" className="py-1 pr-2 text-right font-medium">Rate</th>
+          <th scope="col" className="py-1 text-right font-medium">{forecast ? 'Forecast change' : 'Change so far'}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.variantId ?? row.name} className="border-t border-border-subtle">
+            <td className="max-w-[110px] truncate py-1 pr-2 text-fg" title={row.name}>{row.name}</td>
+            <td className="py-1 pr-2 text-right whitespace-nowrap text-fg-secondary tabular-nums">
+              {formatUnitPrice(row.beforePrice)} to {formatUnitPrice(row.afterPrice)}
+            </td>
+            <td className={cn('py-1 text-right tabular-nums', deltaTone(valueOf(row)))} data-testid="impact-variant-change">{signedCents(valueOf(row))}</td>
+          </tr>
+        ))}
+      </tbody>
+      {rows.length > 1 ? (
+        <tfoot>
+          <tr className="border-t border-border-default font-medium">
+            <td className="py-1 text-fg" colSpan={2}>{forecast ? 'This month forecast' : 'So far this month'}</td>
+            <td className={cn('py-1 text-right tabular-nums', deltaTone(total))} data-testid="impact-variant-total">{signedCents(total)}</td>
+          </tr>
+        </tfoot>
+      ) : null}
+    </table>
+  );
+}
+
+function ImpactRail({ impact, forecast, loading, children }: { readonly impact: CardImpactDTO | undefined; readonly forecast: ForecastDelta | null; readonly loading: boolean; readonly children?: React.ReactNode }) {
+  const { variantById, program } = useCurrentProgram();
+  const lockedNote = impact?.lockedDays && !(program.startDate && impact.lockedDays.through < program.startDate) ? impact.lockedDays : null;
   return (
     <aside className="flex flex-col gap-3 lg:sticky lg:top-4" aria-label="Impact" data-testid="impact-rail">
       <section className="rounded-xl border border-border-subtle bg-panel shadow-xs">
@@ -254,7 +342,8 @@ function ImpactRail({ impact, loading, children }: { readonly impact: CardImpact
         ) : (
           <div className="flex flex-col px-4 pb-3">
             <div className="divide-y divide-border-subtle">
-              <DeltaRow label="This month" before={impact.thisMonth.beforeCents} after={impact.thisMonth.afterCents} deltaCents={impact.thisMonth.deltaCents} deltaBp={impact.thisMonth.deltaBp} />
+              <DeltaRow label="So far this month" before={impact.thisMonth.beforeCents} after={impact.thisMonth.afterCents} deltaCents={impact.thisMonth.deltaCents} deltaBp={impact.thisMonth.deltaBp} />
+              {forecast ? <DeltaRow label="This month forecast" before={forecast.month.beforeCents} after={forecast.month.afterCents} deltaCents={forecast.month.deltaCents} deltaBp={forecast.month.deltaBp} /> : null}
               <DeltaRow label="Next month forecast" before={impact.nextMonth.beforeCents} after={impact.nextMonth.afterCents} deltaCents={impact.nextMonth.deltaCents} deltaBp={impact.nextMonth.deltaBp} />
               <div className="flex flex-col gap-0.5 py-2">
                 <span className="text-xs text-fg-muted">Minimum gap</span>
@@ -264,28 +353,7 @@ function ImpactRail({ impact, loading, children }: { readonly impact: CardImpact
               </div>
             </div>
             {impact.byVariant.some((row) => row.deltaCents !== '0' || row.beforePrice !== row.afterPrice) ? (
-              <table className="mt-1 w-full text-xs" data-testid="impact-by-variant">
-                <thead>
-                  <tr className="text-left text-fg-muted">
-                    <th scope="col" className="py-1 font-medium">Variant</th>
-                    <th scope="col" className="py-1 text-right font-medium">Rate</th>
-                    <th scope="col" className="py-1 text-right font-medium">Change</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {impact.byVariant
-                    .filter((row) => row.deltaCents !== '0' || row.beforePrice !== row.afterPrice)
-                    .map((row) => (
-                      <tr key={row.variantId ?? row.name} className="border-t border-border-subtle">
-                        <td className="max-w-[110px] truncate py-1 text-fg">{row.name}</td>
-                        <td className="py-1 text-right whitespace-nowrap text-fg-secondary tabular-nums">
-                          {formatUnitPrice(row.beforePrice)} to {formatUnitPrice(row.afterPrice)}
-                        </td>
-                        <td className={cn('py-1 text-right tabular-nums', BigInt(row.deltaCents) > BigInt(0) ? 'text-success-text' : BigInt(row.deltaCents) < BigInt(0) ? 'text-danger-text' : 'text-fg-muted')}>{formatCents(row.deltaCents, { cents: true })}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+              <VariantImpactTable impact={impact} forecast={forecast} />
             ) : null}
             {impact.rules.length ? (
               <ul className="mt-2 flex flex-col gap-1 border-t border-border-subtle pt-2 text-xs text-fg-secondary">
@@ -298,10 +366,10 @@ function ImpactRail({ impact, loading, children }: { readonly impact: CardImpact
             ) : null}
             <div className="mt-2 flex flex-col gap-1 border-t border-border-subtle pt-2 text-xs">
               <span className="text-fg-secondary">{impact.openDays ? `Updates prices on ${impact.openDays.count} open ${impact.openDays.count === 1 ? 'day' : 'days'} from ${shortDate(impact.openDays.from)}.` : 'No days with output change yet.'}</span>
-              {impact.lockedDays ? (
+              {lockedNote ? (
                 <span className="inline-flex items-center gap-1 text-fg-muted">
                   <Lock aria-hidden className="size-3" />
-                  Days through {shortDate(impact.lockedDays.through)} are closed{impact.lockedDays.reason === 'pulse' ? ' in Pulse' : ''} and keep their old price.
+                  Days through {shortDate(lockedNote.through)} are closed{lockedNote.reason === 'pulse' ? ' in Pulse' : ''} and keep their old price.
                 </span>
               ) : null}
             </div>
@@ -421,7 +489,9 @@ function DraftEditor({ version, onDone }: { readonly version: CardVersionDTO; re
   const valid = Object.keys(problems).length === 0 && !dateProblem;
   const pastOpen = impact?.openDays && effectiveFrom < today ? impact.openDays : null;
   const variantRows = activeVariants.map((variant) => ({ key: variant.key, name: variant.name, color: variant.color, hint: variant.currentRate?.ruleText ?? null }));
-  const ruleUse = useMemo(() => new Map((impact?.rules ?? []).map((rule) => [rule.ruleId, rule.variants])), [impact?.rules]);
+  // Keyed by the editor's own rule ids: count the active variants each rule's attribute value matches.
+  const ruleUse = useMemo(() => new Map(rules.map((rule) => [rule.id, activeVariants.filter((variant) => variant.attributes[rule.attributeId] === rule.valueId).length])), [rules, activeVariants]);
+  const forecast = useForecastDelta(impact, effectiveFrom);
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div className="flex min-w-0 flex-col gap-4">
@@ -465,7 +535,7 @@ function DraftEditor({ version, onDone }: { readonly version: CardVersionDTO; re
           </a>
         </p>
       </div>
-      <ImpactRail impact={impact} loading={preview.isFetching}>
+      <ImpactRail impact={impact} forecast={forecast} loading={preview.isFetching}>
         <div className="flex flex-col gap-2 rounded-xl border border-border-subtle bg-panel p-3 shadow-xs">
           {capabilities.canPrice ? (
             <Button onClick={() => setPublishing(true)} disabled={!valid || busy} data-testid="publish-version">
@@ -503,7 +573,7 @@ function DraftEditor({ version, onDone }: { readonly version: CardVersionDTO; re
           impact ? (
             <span className="flex flex-col gap-1.5">
               <span>
-                Starts {shortDate(effectiveFrom)}. This month {formatCents(impact.thisMonth.beforeCents, { cents: true })} to {formatCents(impact.thisMonth.afterCents, { cents: true })} ({deltaText(impact.thisMonth.deltaCents, impact.thisMonth.deltaBp)}). Next month {formatCents(impact.nextMonth.beforeCents, { cents: true })} to {formatCents(impact.nextMonth.afterCents, { cents: true })}.
+                Starts {shortDate(effectiveFrom)}. So far this month {formatCents(impact.thisMonth.beforeCents, { cents: true })} to {formatCents(impact.thisMonth.afterCents, { cents: true })} ({deltaText(impact.thisMonth.deltaCents, impact.thisMonth.deltaBp)}).{forecast ? ` This month forecast ${formatCents(forecast.month.beforeCents, { cents: true })} to ${formatCents(forecast.month.afterCents, { cents: true })} (${deltaText(forecast.month.deltaCents, forecast.month.deltaBp)}).` : ''} Next month {formatCents(impact.nextMonth.beforeCents, { cents: true })} to {formatCents(impact.nextMonth.afterCents, { cents: true })}.
               </span>
               {pastOpen ? <span>This updates prices on {pastOpen.count} open {pastOpen.count === 1 ? 'day' : 'days'} from {shortDate(pastOpen.from)}.</span> : null}
               <span>A published version never changes. To change it later, make a new version.</span>
@@ -718,7 +788,7 @@ export function PriceCardTab({ initialVersions }: { readonly initialVersions: re
       ) : (
         <>
           <VersionsRail versions={versions} selectedId={current?.id ?? null} onSelect={select} onNew={(from) => setCreating(from)} onAction={onAction} />
-          <main className="flex min-w-0 flex-col gap-4">
+          <section aria-label="Selected version" className="flex min-w-0 flex-col gap-4">
             {current ? (
               <>
                 <header className="flex flex-wrap items-center gap-2">
@@ -794,7 +864,7 @@ export function PriceCardTab({ initialVersions }: { readonly initialVersions: re
               </>
             ) : null}
             <OtherPrices />
-          </main>
+          </section>
         </>
       )}
       {creating ? (
