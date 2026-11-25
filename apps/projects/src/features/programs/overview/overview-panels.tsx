@@ -297,18 +297,13 @@ function minutesAgo(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const ms = Date.now() - Date.parse(iso.replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00'));
   if (!Number.isFinite(ms)) return null;
-  const minutes = Math.max(0, Math.round(ms / 60_000));
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
   if (minutes < 1) return 'just now';
   if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
+  // Floor, the same rounding as the Pulse job page ("Synced 4 hours ago" at 4 h 42 min).
+  const hours = Math.floor(minutes / 60);
   if (hours < 48) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
-  return `${Math.round(hours / 24)} days ago`;
-}
-
-interface PulseVariantRow {
-  readonly revenueCents?: string;
-  readonly laborCents?: string;
-  readonly materialCents?: string;
+  return `${Math.floor(hours / 24)} days ago`;
 }
 
 export function PulsePanel({ parity }: { readonly parity: PulseParityDTO }) {
@@ -318,14 +313,11 @@ export function PulsePanel({ parity }: { readonly parity: PulseParityDTO }) {
   const hydrated = useHydrated();
   const [linking, setLinking] = useState(false);
   const job = pulse.data?.job ?? null;
-  const cost = useMemo(() => {
-    const rows = (pulse.data?.stamped?.byVariant ?? []) as readonly PulseVariantRow[];
-    if (rows.length === 0 || rows.every((row) => row.laborCents === undefined)) return null;
-    return rows.reduce((sum, row) => sum + BigInt(row.laborCents ?? '0') + BigInt(row.materialCents ?? '0'), BigInt(0));
-  }, [pulse.data]);
+  // This month's revenue is what Pulse stamped for the program (it matches Projects to the cent).
+  // Cost, profit and margin are the job's own totals to date, read from the same Pulse numbers the
+  // job page shows, so the two apps never show two different margins for one job.
   const revenue = pulse.data?.stamped?.totalCents ? BigInt(pulse.data.stamped.totalCents) : null;
-  const profit = revenue !== null && cost !== null ? revenue - cost : null;
-  const margin = revenue !== null && profit !== null && revenue > BigInt(0) ? Number((profit * BigInt(10000)) / revenue) : null;
+  const totals = pulse.data?.jobTotals ?? null;
   if (!parity.job && parity.state === 'no_job') {
     return (
       <Panel title="Pulse">
@@ -373,21 +365,36 @@ export function PulsePanel({ parity }: { readonly parity: PulseParityDTO }) {
           {moneyHidden ? null : pulse.isLoading ? (
             <Skeleton height={36} />
           ) : (
-            <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
-              {(
-                [
-                  ['Revenue', formatCents(revenue, { cents: true, empty: 'None yet' })],
-                  ['Cost', formatCents(cost, { cents: true, empty: 'None yet' })],
-                  ['Profit', formatCents(profit, { cents: true, empty: 'None yet' })],
-                  ['Margin', formatMarginBp(margin, { empty: 'None yet' })],
-                ] as const
-              ).map(([label, value]) => (
-                <div key={label} className="flex min-w-0 flex-col">
-                  <dt className="text-fg-muted">{label}</dt>
-                  <dd className="truncate text-sm font-semibold text-fg tabular-nums">{value}</dd>
+            <div className="flex flex-col gap-2">
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                <div className="flex min-w-0 flex-col">
+                  <dt className="text-fg-muted">Revenue this month</dt>
+                  <dd className="truncate text-sm font-semibold text-fg tabular-nums">{formatCents(revenue, { cents: true, empty: 'None yet' })}</dd>
                 </div>
-              ))}
-            </dl>
+              </dl>
+              {totals ? (
+                <>
+                  <p className="text-2xs font-medium tracking-wide text-fg-muted uppercase">Job to date, as Pulse shows it</p>
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4" data-testid="pulse-job-totals">
+                    {(
+                      [
+                        ['Revenue earned', formatCents(totals.revenueCents, { cents: true })],
+                        ['Cost so far', formatCents(totals.costCents, { cents: true })],
+                        ['Profit', formatCents(totals.profitCents, { cents: true })],
+                        ['Margin', formatMarginBp(totals.marginBp, { empty: 'No revenue' })],
+                      ] as const
+                    ).map(([label, value]) => (
+                      <div key={label} className="flex min-w-0 flex-col">
+                        <dt className="text-fg-muted">{label}</dt>
+                        <dd className="truncate text-sm font-semibold text-fg tabular-nums">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </>
+              ) : (
+                <p className="text-xs text-fg-muted">Cost, profit and margin show on the Pulse job once it has numbers.</p>
+              )}
+            </div>
           )}
         </div>
       ) : null}

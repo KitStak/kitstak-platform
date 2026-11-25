@@ -74,7 +74,10 @@ export function draftHints(drafts: readonly Pick<WizardDraftDTO, 'id' | 'title' 
   const base = new Map<string, string>();
   for (const draft of drafts) {
     const key = text((draft.payload as DraftPayload).basics?.key).toUpperCase();
-    base.set(draft.id, [key, draftStartText(draft.payload)].filter(Boolean).join(', '));
+    const start = draftStartText(draft.payload);
+    // After the key the start reads as one sentence: "GSS, from the deal Gripwell".
+    const startAfterKey = key && start ? `${start.charAt(0).toLowerCase()}${start.slice(1)}` : start;
+    base.set(draft.id, [key, startAfterKey].filter(Boolean).join(', '));
   }
   const signature = (draft: Pick<WizardDraftDTO, 'id' | 'title'>) => `${draft.title.trim().toLowerCase()}|${base.get(draft.id)}`;
   const seen = new Map<string, number>();
@@ -115,7 +118,7 @@ export function DraftsStrip({ drafts, className }: { readonly drafts: readonly W
       </span>
       <ul className="flex min-w-0 flex-wrap items-center gap-1.5">
         {drafts.slice(0, 6).map((draft) => (
-          <li key={draft.id} className="flex min-h-7 max-w-full items-center rounded-md border border-border-subtle bg-panel shadow-xs sm:max-w-[560px]">
+          <li key={draft.id} className="flex min-h-7 max-w-full items-center rounded-md border border-border-subtle bg-panel shadow-xs sm:max-w-[760px]">
             <Link
               href={routes.newProgram({ draft: draft.id })}
               title={[draft.title || 'Untitled program', hints.get(draft.id)?.shortId, hints.get(draft.id)?.text, draftStep(draft).toLowerCase()].filter(Boolean).join(', ')}
@@ -128,7 +131,7 @@ export function DraftsStrip({ drafts, className }: { readonly drafts: readonly W
               {hints.get(draft.id)?.text ? (
                 <>
                   <span aria-hidden className="text-fg-muted max-sm:hidden">·</span>
-                  <span className="max-w-[180px] min-w-0 truncate text-fg-secondary" data-testid="draft-hint">
+                  <span className="max-w-[420px] min-w-0 truncate text-fg-secondary" data-testid="draft-hint">
                     {hints.get(draft.id)?.shortId ? <span className="font-key text-2xs text-fg-muted sm:hidden">{hints.get(draft.id)?.shortId} </span> : null}
                     {hints.get(draft.id)?.text}
                   </span>
@@ -137,7 +140,7 @@ export function DraftsStrip({ drafts, className }: { readonly drafts: readonly W
               <span aria-hidden className="text-fg-muted max-sm:hidden">·</span>
               <span className="shrink-0 whitespace-nowrap text-fg-secondary">{draftStep(draft)}</span>
               <span aria-hidden className="text-fg-muted">·</span>
-              <span className="min-w-0 truncate text-fg-muted" suppressHydrationWarning>{hydrated ? `saved ${formatRelative(draft.updatedAt)}` : 'saved'}</span>
+              <span className="shrink-0 whitespace-nowrap text-fg-muted" suppressHydrationWarning>{hydrated ? `saved ${formatRelative(draft.updatedAt)}` : 'saved'}</span>
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

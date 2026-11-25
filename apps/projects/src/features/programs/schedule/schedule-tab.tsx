@@ -8,16 +8,16 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, CalendarOff, CalendarX2, ChevronLeft, ChevronRight, MoreHorizontal, Pause, Pencil, Play, Plus, Zap } from 'lucide-react';
+import { CalendarClock, CalendarOff, CalendarX2, ChevronLeft, ChevronRight, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, Zap } from 'lucide-react';
 import { addDays, monthOf, shiftMonth, shortDate, unitLabel } from '@kitstak/programs-engine';
-import { Badge, Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, EmptyState, Field, IconButton, IsoDatePicker, Select, Skeleton, Switch, Tooltip, cn, toast } from '@/components/ui';
+import { Badge, Button, ConfirmDialog, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, EmptyState, Field, IconButton, IsoDatePicker, Select, Skeleton, Switch, Tooltip, cn, toast } from '@/components/ui';
 import { Panel } from '@/components/layout/page';
 import { useServerAction } from '@/lib/hooks/use-action';
 import { useOrgCalendar, useSchedules } from '@/lib/hooks/use-programs';
 import { usePeople } from '@/lib/hooks/use-data';
 import { qk } from '@/lib/query-keys';
 import type { ScheduleDTO } from '@/lib/program-types';
-import { createScheduleAction, endScheduleAction, pauseScheduleAction, resumeScheduleAction, runScheduleNowAction, skipScheduleDateAction, updateScheduleAction } from '@/server/actions/schedules';
+import { createScheduleAction, deleteScheduleAction, endScheduleAction, pauseScheduleAction, resumeScheduleAction, runScheduleNowAction, skipScheduleDateAction, updateScheduleAction } from '@/server/actions/schedules';
 import { ScheduleEditor, scheduleProblems, type ScheduleEditorValue } from '../editors';
 import { useCurrentProgram } from '../program-context';
 import { variantChartColor, monthLong } from '../overview/overview-model';
@@ -150,7 +150,7 @@ function DateDialog({ title, description, label, confirmLabel, initial, pending,
 /* Card                                                                                           */
 /* ---------------------------------------------------------------------------------------------- */
 
-type CardDialog = 'edit' | 'skip' | 'end' | null;
+type CardDialog = 'edit' | 'skip' | 'end' | 'delete' | null;
 
 function ScheduleCard({ schedule, color, count }: { readonly schedule: ScheduleDTO; readonly color: string; readonly count: number }) {
   const { key, unit, program, capabilities, today } = useCurrentProgram();
@@ -169,6 +169,14 @@ function ScheduleCard({ schedule, color, count }: { readonly schedule: ScheduleD
   const end = useServerAction(endScheduleAction, {
     errorTitle: "Couldn't end the schedule",
     successMessage: `${schedule.name} ends as you asked.`,
+    onSuccess: async () => {
+      setDialog(null);
+      await refresh();
+    },
+  });
+  const remove = useServerAction(deleteScheduleAction, {
+    errorTitle: "Couldn't delete the schedule",
+    successMessage: (result) => `${schedule.name} is deleted. ${result.keptBuilds === 1 ? 'The 1 build it made stays.' : `The ${result.keptBuilds.toLocaleString('en-US')} builds it made stay.`}`,
     onSuccess: async () => {
       setDialog(null);
       await refresh();
@@ -239,6 +247,14 @@ function ScheduleCard({ schedule, color, count }: { readonly schedule: ScheduleD
                   </DropdownMenuItem>
                 </>
               ) : null}
+              {capabilities.canManage ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="danger" icon={<Trash2 aria-hidden />} description="Builds it made stay." onSelect={() => setDialog('delete')} data-testid="schedule-delete">
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              ) : null}
 
             </DropdownMenuContent>
           </DropdownMenu>
@@ -272,6 +288,16 @@ function ScheduleCard({ schedule, color, count }: { readonly schedule: ScheduleD
       {dialog === 'skip' ? (
         <DateDialog title={`Skip a date on ${schedule.name}`} description="No builds are made that day. Builds already made for it with no output are cancelled." label="Date" confirmLabel="Skip date" initial={schedule.nextDate ?? addDays(today, 1)} pending={skip.pending} onConfirm={(date) => void skip.run({ id: schedule.id, date })} onOpenChange={(open) => (open ? null : setDialog(null))} />
       ) : null}
+      <ConfirmDialog
+        open={dialog === 'delete'}
+        onOpenChange={(open) => (open ? null : setDialog(null))}
+        title={`Delete ${schedule.name}?`}
+        description="The schedule stops making builds and goes away. Builds it already made stay, with their output and money. This cannot be undone."
+        confirmLabel="Delete schedule"
+        destructive
+        loading={remove.pending}
+        onConfirm={() => void remove.run({ id: schedule.id })}
+      />
       {dialog === 'end' ? (
         <DateDialog title={`End ${schedule.name}`} description="The schedule makes no builds after this date. Builds already made stay." label="Last day" confirmLabel="End schedule" initial={today} pending={end.pending} onConfirm={(date) => void end.run({ id: schedule.id, endsOn: date })} onOpenChange={(open) => (open ? null : setDialog(null))} destructive />
       ) : null}

@@ -57,7 +57,13 @@ export type TaskEventType =
   /** Program sweep: every live build of a run is done (`run`). */
   | 'run_done'
   /** Program sweep: a run is below plan (`run.shortPercent`, `run.localTime`). */
-  | 'run_below_plan';
+  | 'run_below_plan'
+  /** Output logged on a build (`output.units` is what this batch added). */
+  | 'build_output_logged'
+  /** A build was marked done or closed short below its plan. */
+  | 'build_done_short'
+  /** A build's built units went over its plan. */
+  | 'build_over_plan';
 
 export interface TaskEvent {
   readonly type: TaskEventType;
@@ -84,6 +90,13 @@ export interface TaskEvent {
     readonly shortPercent: number;
     /** Program time now, HH:MM. */
     readonly localTime: string;
+  };
+  /** build_output_logged / build_done_short / build_over_plan: the build's units. */
+  readonly output?: {
+    readonly units: string;
+    readonly plannedUnits: string;
+    readonly builtUnits: string;
+    readonly date: string;
   };
   /**
    * Scheduled events can be seen many times; a rule runs at most once per (rule, task, key).
@@ -158,7 +171,18 @@ export function triggerMatches(trigger: AutomationTrigger, event: TaskEvent): bo
         event.run.shortPercent >= trigger.percent &&
         event.run.localTime >= trigger.at
       );
+    case 'build_output_logged':
+      return event.type === 'build_output_logged' && event.output !== undefined && (trigger.minUnits === null || trigger.minUnits === undefined || Number(event.output.units) >= trigger.minUnits);
+    case 'build_done_short':
+      return event.type === 'build_done_short' && event.output !== undefined;
+    case 'build_over_plan':
+      return event.type === 'build_over_plan' && event.output !== undefined;
   }
+}
+
+/** Run and build triggers are about builds by nature: workspace rules never need the build condition. */
+export function isBuildNativeTrigger(type: AutomationTrigger['type']): boolean {
+  return type === 'run_done' || type === 'run_below_plan' || type === 'build_output_logged' || type === 'build_done_short' || type === 'build_over_plan';
 }
 
 export function conditionMatches(condition: AutomationCondition, task: EngineTask, today: string): boolean {
@@ -219,7 +243,7 @@ export function planAutomations(event: TaskEvent, rules: readonly EngineRule[], 
     if (rule.projectId && rule.projectId !== event.task.projectId) continue;
     // Workspace wide rules skip builds unless they ask for them (docs/programs/SPEC.md 4.1).
     // Run triggers are about builds by nature, so they never need the condition.
-    const runTrigger = rule.trigger.type === 'run_done' || rule.trigger.type === 'run_below_plan';
+    const runTrigger = isBuildNativeTrigger(rule.trigger.type);
     if (!rule.projectId && event.task.kind === 'build' && !runTrigger && !rule.conditions.some((c) => c.field === 'workKind' && c.op === 'is' && c.value === 'build')) continue;
     if (!triggerMatches(rule.trigger, event)) continue;
     if (!rule.conditions.every((condition) => conditionMatches(condition, event.task, today))) continue;
@@ -299,6 +323,12 @@ export function describeTrigger(trigger: AutomationTrigger, lookups: DescribeLoo
       return 'all builds of a run are done';
     case 'run_below_plan':
       return `a run is below plan by ${trigger.percent}% or more at ${trigger.at}`;
+    case 'build_output_logged':
+      return trigger.minUnits ? `output of ${trigger.minUnits.toLocaleString('en-US')} or more is logged on a build` : 'output is logged on a build';
+    case 'build_done_short':
+      return 'a build is done short of plan';
+    case 'build_over_plan':
+      return 'a build goes over plan';
   }
 }
 
@@ -457,5 +487,11 @@ export function automationEventHeadline(event: TaskEvent | undefined, taskLabel:
       return `Every build of ${event.run?.name ?? 'a run'} is done (${taskLabel})`;
     case 'run_below_plan':
       return `${event.run?.name ?? 'A run'} is ${event.run?.shortPercent ?? 0}% below plan (${taskLabel})`;
+    case 'build_output_logged':
+      return `${Number(event.output?.units ?? 0).toLocaleString('en-US')} logged on ${taskLabel}`;
+    case 'build_done_short':
+      return `${taskLabel} is done at ${Number(event.output?.builtUnits ?? 0).toLocaleString('en-US')} of ${Number(event.output?.plannedUnits ?? 0).toLocaleString('en-US')}`;
+    case 'build_over_plan':
+      return `${taskLabel} is over plan at ${Number(event.output?.builtUnits ?? 0).toLocaleString('en-US')} of ${Number(event.output?.plannedUnits ?? 0).toLocaleString('en-US')}`;
   }
 }

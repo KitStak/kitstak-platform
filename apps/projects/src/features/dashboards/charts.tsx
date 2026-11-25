@@ -392,9 +392,6 @@ export function LineChart({
             {references.map((r) => (
               <g key={r.id} data-testid={`chart-reference-${r.id}`}>
                 <line x1={PAD.left} x2={PAD.left + innerW} y1={y(r.value)} y2={y(r.value)} stroke={r.color ?? 'var(--chart-axis)'} strokeWidth="1.25" strokeDasharray={r.dashed === false ? undefined : '6 4'} />
-                <text x={PAD.left + innerW} y={y(r.value) - 4} textAnchor="end" fontSize="10" fontWeight="600" fill={r.color ?? 'var(--chart-axis)'}>
-                  {r.label} · {text(r.value)}
-                </text>
               </g>
             ))}
             {series.map((s) =>
@@ -411,6 +408,13 @@ export function LineChart({
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
+            ))}
+            {/* Reference labels sit at the left end, above their line, drawn after the series with a
+                halo in the panel color, so the Today marker (right side) and the lines never cross them. */}
+            {references.map((r) => (
+              <text key={`${r.id}-label`} x={PAD.left + 4} y={y(r.value) - 5} textAnchor="start" fontSize="10" fontWeight="600" fill={r.color ?? 'var(--chart-axis)'} stroke="var(--surface-panel)" strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
+                {r.label} · {text(r.value)}
+              </text>
             ))}
             {active !== null ? (
               <g>

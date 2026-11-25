@@ -644,6 +644,10 @@ describe('inferAxes never makes an axis from a stray cell', () => {
     expect(result.unmatched[0]?.why).toBe('Row 2 has more cells than the header. It has 4 cells and the header has 3. Put "1,200" in quotes, or type it as 1200.');
     expect(result.axes.map((axis) => axis.values.map((value) => value.label))).toEqual([['Small'], ['Yellow']]);
   });
+  it('a decimal rate split by a comma gets the plain fix, not the 1,200 hint', () => {
+    const result = inferAxes({ text: 'Size,Color,Qty\nLarge,Brown,2.10,5\nSmall,Yellow,100' });
+    expect(result.unmatched[0]?.why).toBe('Row 2 has more cells than the header. It has 4 cells and the header has 3. Take out the extra comma, or put a cell that has a comma in quotes.');
+  });
   it('a stray text cell gets the plain fix', () => {
     const result = inferAxes({ text: 'Size\tColor\nSmall\tBrown\tOops\nSmall\tYellow' });
     expect(result.unmatched[0]?.why).toBe('Row 2 has more cells than the header. It has 3 cells and the header has 2. Take out the extra tab.');

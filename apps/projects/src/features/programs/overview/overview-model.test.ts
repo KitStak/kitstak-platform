@@ -57,7 +57,8 @@ describe('KPIs', () => {
   it('words the minimum', () => {
     expect(minimumKpi(result(null), forecast(null)).value).toBe('Not set');
     expect(minimumKpi(result({ minimumCents: '3000000', gapSoFarCents: '0', topUpCents: '0', status: 'met', statusText: '' }), forecast('0')).value).toBe('Met');
-    expect(minimumKpi(result({ minimumCents: '3000000', gapSoFarCents: '152960', topUpCents: '0', status: 'pending', statusText: '' }), forecast('0'))).toEqual({ value: 'Below minimum by $1,529.60 so far', line: 'on track to meet it', tone: 'neutral', reason: null });
+    expect(minimumKpi(result({ minimumCents: '290000', gapSoFarCents: '0', topUpCents: '0', status: 'pending', statusText: '' }), forecast('0'))).toEqual({ value: 'Met so far', line: 'Work charges are over the $2,900.00 minimum. The month is still open.', tone: 'success', reason: null });
+    expect(minimumKpi(result({ minimumCents: '3000000', gapSoFarCents: '152960', topUpCents: '0', status: 'pending', statusText: '' }), forecast('0'))).toEqual({ value: 'Below minimum by $1,529.60 so far', line: 'On track to meet it.', tone: 'neutral', reason: null });
     expect(minimumKpi(result({ minimumCents: '3000000', gapSoFarCents: '152960', topUpCents: '0', status: 'pending', statusText: '' }), forecast('124000')).value).toBe('May miss it by $1,240.00');
   });
 });

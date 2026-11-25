@@ -7,6 +7,7 @@
  */
 import { useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Pencil } from 'lucide-react';
+import { PRORATE_SWITCH_HELP } from '@kitstak/programs-engine/month';
 import { Checkbox, Input, Switch, cn } from '@/components/ui';
 import type { UnitLabel } from '@/lib/program-types';
 import { VariantDot } from '../kit/chips';
@@ -100,8 +101,8 @@ function LineRow({ title, help, on, onToggle, chip, error, children, disabled, t
   );
 }
 
-/** Appendix B.4 copy for the prorate switch on Monthly fee and Monthly minimum (exact text). */
-export const PRORATE_HELP = 'Off: charge the full amount for any month with work days. On: charge only for the days in the month that count.';
+/** Appendix B.1.4 copy for the prorate switch on Monthly fee and Monthly minimum, from the engine. */
+export const PRORATE_HELP = `${PRORATE_SWITCH_HELP.off} ${PRORATE_SWITCH_HELP.on}`;
 
 function FixedLine({ title, help, value, onChange, error, chip, disabled, testId, fallback }: { readonly title: string; readonly help: string; readonly value: FixedLineValue; readonly onChange: (value: FixedLineValue) => void; readonly error?: string; readonly chip?: ReactNode; readonly disabled?: boolean; readonly testId: string; readonly fallback: string }) {
   return (
@@ -112,7 +113,7 @@ function FixedLine({ title, help, value, onChange, error, chip, disabled, testId
         <span className="flex min-w-0 flex-col gap-0.5">
           <span>Charge part of it in a partial month</span>
           <span id={`${testId}-partial-help`} className="text-xs text-fg-muted">
-            {PRORATE_HELP}
+            {value.partialMonth ? PRORATE_SWITCH_HELP.on : PRORATE_SWITCH_HELP.off}
           </span>
         </span>
       </label>

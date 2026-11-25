@@ -13,7 +13,7 @@ import { readProgramMonth } from '@kitstak/db/programs';
 import { addDays, firstDayOfMonth, isWorkDay, monthOf, monthsBetween, shortDate } from '@kitstak/programs-engine/calendar';
 import { FORECAST_METHOD_LABELS } from '@kitstak/programs-engine/forecast';
 import { formatCents, formatQty, formatUnitPrice } from '@kitstak/programs-engine/format';
-import { minimumStatusLabel } from '@kitstak/programs-engine/month';
+import { fixedLineForMonth, minimumStatusLabel } from '@kitstak/programs-engine/month';
 import { avgUnitPrice, rollupByDay, rollupByVariant } from '@kitstak/programs-engine/rollup';
 import { fromScaled, quantityToScaled, ZERO } from '@kitstak/programs-engine/money';
 import { getProgramPulse } from '@kitstak/pulse-bridge/programs';
@@ -31,11 +31,13 @@ import type {
   ProgramSummaryDTO,
   PulseParityDTO,
   StatementDTO,
+  StatementLineDTO,
   TodayDTO,
   VariantRollupDTO,
 } from '@/lib/program-types';
 import type { DomainContext } from '../_shared';
-import { bridge, centsOut, monthName } from './_program';
+import { bridge, calendarFor, centsOut, monthName } from './_program';
+import { versionsFor } from './pricing';
 import { assertMoney, requireProgram, type ProgramAccess } from './access';
 import { listRuns } from './runs';
 import { programMonthStats, type ProgramMonthStats } from './stats';
@@ -267,10 +269,41 @@ export async function getStatement(ctx: DomainContext, key: string, month: IsoMo
     asOf: stats.asOf,
     closed: Boolean(close),
     byVariant: [...perVariant.entries()].map(([variantId, v]) => ({ variantId, name: variantId ? (names.get(variantId)?.name ?? 'Removed variant') : 'No variant', units: fromScaled(v.units, 3), avgUnitPrice: avgUnitPrice(v.cents, fromScaled(v.units, 3)), cents: v.cents.toString() })),
-    fees: read.ledger.map((row) => ({ ref: row.ref, kind: row.kind, date: row.chargeDate, label: row.label, quantity: row.quantity, unitPrice: row.unitPrice, cents: row.cents.toString(), variantId: row.variantId, variantName: row.variantId ? (names.get(row.variantId)?.name ?? null) : null })),
+    fees: await feeLines(ctx, program, month, read.ledger, names),
     totals: { units: fromScaled(units, 3), workCents: work.toString(), feesCents: fees.toString(), adjustmentsCents: adjustments.toString(), topUpCents: topUp.toString(), totalCents: (work + fees + adjustments + topUp).toString() },
     minimum: { minimumCents: stats.result.minimum.minimumCents.toString(), status: stats.result.minimum.status, statusText: minimumStatusLabel(stats.result.minimum.status) },
   };
+}
+
+type LedgerRead = Awaited<ReturnType<typeof readProgramMonth>>['ledger'];
+
+/**
+ * Statement charge lines. A monthly fee that changed during the month (a new price card version,
+ * a pause) shows its pieces from the engine's `fixedLineForMonth(...).segments`: one line per run
+ * of days at one amount, whose cents add up to the posted fee exactly (Appendix B.1.3).
+ */
+async function feeLines(ctx: DomainContext, program: ProgramAccess['program'], month: IsoMonth, ledger: LedgerRead, names: Map<string, { name: string }>): Promise<StatementLineDTO[]> {
+  const out: StatementLineDTO[] = [];
+  let pieces: ReturnType<typeof fixedLineForMonth> | null = null;
+  for (const row of ledger) {
+    const base: StatementLineDTO = { ref: row.ref, kind: row.kind, date: row.chargeDate, label: row.label, quantity: row.quantity, unitPrice: row.unitPrice, cents: row.cents.toString(), variantId: row.variantId, variantName: row.variantId ? (names.get(row.variantId)?.name ?? null) : null };
+    if (row.kind !== 'flat_monthly') {
+      out.push(base);
+      continue;
+    }
+    pieces ??= fixedLineForMonth({ month, calendar: await calendarFor(db, ctx, program), versions: await versionsFor(db, ctx, program.id), kind: 'flat_monthly' });
+    const segments = pieces.segments.filter((segment) => segment.cents !== ZERO);
+    const sum = segments.reduce((total, segment) => total + segment.cents, ZERO);
+    if (segments.length < 2 || sum !== row.cents) {
+      out.push(base);
+      continue;
+    }
+    segments.forEach((segment, index) => {
+      const days = segment.from === segment.to ? shortDate(segment.from) : `${shortDate(segment.from)} to ${shortDate(segment.to)}`;
+      out.push({ ...base, ref: `${row.ref}#${index + 1}`, date: segment.from, label: `${row.label}, ${days}`, cents: segment.cents.toString() });
+    });
+  }
+  return out;
 }
 
 function csvCell(value: string | number | null): string {

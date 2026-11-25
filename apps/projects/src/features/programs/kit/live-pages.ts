@@ -16,21 +16,21 @@ export type ProgramPage = 'workspace' | 'builds' | 'buildPage' | 'directory' | '
 /** Typed as plain booleans so code behind a false flag still type checks. */
 export const PROGRAM_PAGES: Readonly<Record<ProgramPage, boolean>> = {
   /** `app/(app)/programs/[key]/page.tsx`, the Overview tab (L4c). Gates every link to a program. */
-  workspace: false,
+  workspace: true,
   /** `app/(app)/programs/[key]/builds/**` (L4b). */
-  builds: false,
+  builds: true,
   /** `app/(app)/programs/[key]/[number]/page.tsx`, the full build page (L4b). */
-  buildPage: false,
+  buildPage: true,
   /** `app/(app)/programs/page.tsx`, the directory (L4a). Gates `G R` and "Programs" in the nav. */
-  directory: false,
+  directory: true,
   /** `app/(app)/programs/new/page.tsx`, the wizard (L4a). Gates every "New program". */
-  newProgram: false,
+  newProgram: true,
   /** `app/(app)/programs/today/page.tsx`, Floor today (L4b). Gates `G F` and "Floor today". */
-  floor: false,
+  floor: true,
   /** `ProgramOverlaysHost` mounted in `features/shell/app-shell.tsx` (L4b): `?log` and `?plan`. */
-  overlays: false,
+  overlays: true,
   /** Quick add reads `mode: 'build'` (L4b `features/quick-add`). Gates every "New build". */
-  buildQuickAdd: false,
+  buildQuickAdd: true,
 };
 
 export function programPageLive(page: ProgramPage): boolean {

@@ -195,6 +195,22 @@ function refusal(reason: LinkJobRefusal) {
   return conflict(LINK_JOB_MESSAGES[reason]);
 }
 
+/**
+ * Why a new job opened from a program will not link to it: the program already bills to a job.
+ * The new job form shows it, so the person knows before they save. Null when the program can take
+ * a job, or is not one this person can read.
+ */
+export const programJobTaken = scoped(async function programJobTaken(ctx: DomainContext, programId: string): Promise<{ key: string; name: string; jobNumber: string } | null> {
+  await requirePulse(ctx, 'job:manage');
+  if (!isUuid(programId) || !(await programsReady(ctx))) return null;
+  const program = (await readPrograms(ctx, [programId])).get(programId);
+  if (!program || program.deleted) return null;
+  const edge = await programEdgeOf(ctx, programId);
+  if (!edge || !isUuid(edge.jobId)) return null;
+  const [job] = await rows<{ number: string }>(db, sql`SELECT number FROM pulse.jobs WHERE id = ${edge.jobId}::uuid AND org_id = ${ctx.orgId}::uuid AND deleted_at IS NULL`);
+  return job ? { key: program.key, name: program.name, jobNumber: job.number } : null;
+});
+
 /** The program a new job form was opened from (`/jobs/new?program=`). Null when it cannot take a job. */
 export const programForNewJob = scoped(async function programForNewJob(ctx: DomainContext, programId: string): Promise<{ id: string; key: string; name: string; unitPlural: string; coreCustomerId: string | null } | null> {
   await requirePulse(ctx, 'job:manage');

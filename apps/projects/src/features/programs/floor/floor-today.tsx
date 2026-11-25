@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { CalendarRange, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardPen, Factory, ListFilter } from 'lucide-react';
-import { addDays, formatHours, formatQty, fromScaled, quantityToScaled, unitLabel } from '@kitstak/programs-engine';
+import { addDays, formatQty, fromScaled, quantityToScaled, unitLabel } from '@kitstak/programs-engine';
 import { Badge, Button, Checkbox, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, EmptyState, IconButton, Input, Popover, PopoverContent, PopoverTrigger, ProgressBar, Skeleton, ToggleGroup, cn, toast } from '@/components/ui';
 import { StatusIcon } from '@/components/pm';
 import { apiGet, apiPath } from '@/lib/api-client';
@@ -27,6 +27,17 @@ import { readQty, trimQty } from '../kit/qty-input';
 import { RUN_STATE_TEXT, RUN_STATE_TONE, dayLabel, doneOfText, qtyOfText } from '../kit/format';
 import { logHref } from '../overlays/overlay-params';
 import { closeDayCandidates } from '../log-output/log-model';
+
+/** Planned hours in one fixed format on this page: "2.4 h", "10.8 h", "0.0 h". */
+function formatHours(hours: string | number | null | undefined): string {
+  const value = Number(hours ?? 0);
+  return `${(Number.isFinite(value) ? value : 0).toFixed(1)} h`;
+}
+
+/** True when a planned hours string is above zero ("0.00" is no planned work). */
+function hasHours(hours: string | null | undefined): hours is string {
+  return Number(hours ?? 0) > 0;
+}
 
 type Result<T> = { readonly ok: true; readonly data: T } | { readonly ok: false; readonly error: { readonly message: string } };
 type FloorProgram = NonNullable<ReturnType<typeof useFloorToday>['data']>['programs'][number];
@@ -92,7 +103,7 @@ function ProgramPanel({ program, date, sheet, today }: { readonly program: Floor
         <ProgramChip program={{ key: program.key, name: program.name }} link={false} size="md" />
         <span className="text-sm text-fg-secondary tabular-nums">
           {qtyOfText(sumBy(program.runs, (run) => run.builtUnits), sumBy(program.runs, (run) => run.plannedUnits), program.unit)} · {doneOfText(done, builds, 'done')}
-          {program.estHours ? ` · ${formatHours(program.estHours)} planned` : ''}
+          {hasHours(program.estHours) ? ` · ${formatHours(program.estHours)} planned` : ''}
         </span>
         <span className="flex-1" />
         {pending.length ? (
@@ -151,7 +162,7 @@ function ProgramPanel({ program, date, sheet, today }: { readonly program: Floor
                   return (
                     <div key={row.buildId} role="row" className="flex min-h-11 items-center gap-3 border-t border-border-subtle py-1.5 pr-4 pl-11 max-sm:flex-wrap max-sm:pl-4" data-testid="floor-row">
                       <StatusIcon category={row.statusCategory} size={16} />
-                      <span className="w-[68px] shrink-0 font-key text-xs text-fg-muted">{row.key}</span>
+                      <span className="min-w-[68px] shrink-0 font-key text-xs whitespace-nowrap text-fg-muted">{row.key}</span>
                       <span className="min-w-0 flex-1">{row.variant ? <VariantChip name={row.variant.name} color={row.variant.color} size="md" /> : <span className="truncate text-sm">{row.title}</span>}</span>
                       <span aria-hidden className="hidden h-0 basis-full max-sm:block" />
                       <span className="w-44 shrink-0 max-sm:w-auto max-sm:flex-1 max-sm:pl-7">
@@ -239,7 +250,7 @@ function CloseAllDialog({ programs, sheets, date, onClose }: { readonly programs
                 return (
                   <div key={row.buildId} className="rounded-lg border border-border-subtle p-2.5">
                     <div className="flex items-center gap-2 text-sm">
-                      <span className="font-key text-xs text-fg-muted">{row.key}</span>
+                      <span className="font-key text-xs whitespace-nowrap text-fg-muted">{row.key}</span>
                       {row.variant ? <VariantChip name={row.variant.name} color={row.variant.color} /> : null}
                       <span className="ml-auto text-xs text-fg-secondary tabular-nums">{unitLabel(left, group.program.unit)} left</span>
                     </div>
@@ -308,7 +319,9 @@ export function FloorToday({ initialDate }: { readonly initialDate: IsoDate | nu
     return `${formatQty(built)} of ${formatQty(entry.units)} ${entry.unit}`;
   });
   const capacity = floor.data?.capacityHours ?? null;
-  const est = totals?.estHours ?? null;
+  // The total adds the rounded rows, so the rows below it always add up to it (1.9 + 10.8 + 7.3 = 20.0).
+  const shownHours = shown.filter((program) => hasHours(program.estHours));
+  const est = shownHours.length ? (shownHours.reduce((sum, program) => sum + Math.round(Number(Number(program.estHours).toFixed(1)) * 10), 0) / 10).toFixed(1) : (totals?.estHours ?? null);
 
   return (
     <div className="mx-auto w-full max-w-[1240px] px-4 py-6 sm:px-6" data-testid="floor-today">
@@ -381,7 +394,7 @@ export function FloorToday({ initialDate }: { readonly initialDate: IsoDate | nu
           </div>
           <div className="mt-2 flex flex-col gap-1.5">
             {shown
-              .filter((program) => program.estHours)
+              .filter((program) => hasHours(program.estHours))
               .map((program) => (
                 <div key={program.key} className="flex items-center gap-3 text-xs">
                   <span className="w-40 truncate text-fg-secondary">{program.name}</span>

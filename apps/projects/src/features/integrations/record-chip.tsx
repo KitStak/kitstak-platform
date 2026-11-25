@@ -73,8 +73,16 @@ export function RecordStatus({
 }) {
   if (!status) return null;
   return (
-    <StatusPill label={status} color={TONE_COLOR[statusTone(status)]} className={cn('shrink-0', className)} />
+    <StatusPill label={statusLabel(status)} color={TONE_COLOR[statusTone(status)]} className={cn('shrink-0', className)} />
   );
+}
+
+/** Cached statuses come in as stored ("active", "in_progress"); show them as words ("Active", "In progress"). */
+export function statusLabel(status: string): string {
+  const text = status.trim();
+  if (text === '' || /[A-Z]/.test(text)) return text;
+  const words = text.replace(/[_-]+/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function RecordChip({

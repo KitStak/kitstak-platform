@@ -17,6 +17,8 @@ import {
   generateVariants,
   quantityToScaled,
   rateConflictMessage,
+  rateTextMessage,
+  readQtyCell,
   readRateText,
   suggestCode,
   unitLabel,
@@ -316,15 +318,15 @@ export function rateCellProblem(text: string | null | undefined): string | null 
   if (!text || !text.trim()) return null;
   const read = readRateText(text);
   if (read.ok) return null;
-  return read.problem === 'too_many_decimals' ? 'Use up to 4 decimals for a rate.' : read.problem === 'below_zero' ? 'A rate cannot be less than $0.' : read.problem === 'too_large' ? 'The rate is too large.' : 'Type a rate like 1.95.';
+  return rateTextMessage(read.problem, text);
 }
 
 /** Problems with a typed default qty cell, or null. */
 export function qtyCellProblem(text: string | null | undefined): string | null {
   if (!text || !text.trim()) return null;
-  const clean = text.replace(/,/g, '').trim();
-  if (!/^\d{1,8}(\.\d{1,3})?$/.test(clean)) return 'Use a number with up to 3 decimals.';
-  if (quantityToScaled(clean) <= BigInt(0)) return 'Default qty must be more than 0.';
+  const read = readQtyCell(text, 'qty');
+  if ('why' in read) return read.why;
+  if (quantityToScaled(read.plain) <= BigInt(0)) return 'Default qty must be more than 0.';
   return null;
 }
 
@@ -340,6 +342,42 @@ export function rowConflicts(rows: readonly EditorRow[], existing: readonly { re
     if (!out.has(conflict.comboKey)) out.set(conflict.comboKey, conflictMessage(conflict));
   }
   return out;
+}
+
+type ExistingVariant = { readonly key: string; readonly name: string; readonly sku: string | null; readonly attributes: Record<string, string> };
+
+/** True when the row's attribute combination is one the program already has. */
+function matchesExisting(row: EditorRow, existing: readonly ExistingVariant[]): boolean {
+  const keys = Object.keys(row.attributes);
+  if (keys.length === 0) return false;
+  return existing.some((variant) => keys.length === Object.keys(variant.attributes).length && keys.every((key) => variant.attributes[key] === row.attributes[key]));
+}
+
+/**
+ * The combinations the program already has (Add variants, Edit attributes). With `lockedExisting`
+ * the generator shows them checked and locked with "Already a variant", and leaves them out of the
+ * new count and the conflict checks.
+ */
+export function existingComboKeys(rows: readonly EditorRow[], existing: readonly ExistingVariant[]): ReadonlySet<string> {
+  return new Set(rows.filter((row) => matchesExisting(row, existing)).map((row) => row.comboKey));
+}
+
+/** The included rows that would be new variants (not already in the program). */
+export function newRows(rows: readonly EditorRow[], existing: readonly ExistingVariant[]): EditorRow[] {
+  const locked = existingComboKeys(rows, existing);
+  return rows.filter((row) => row.include && !locked.has(row.comboKey));
+}
+
+/** "2 new variants · 200 kits per run at default qty · 8 already in the program". */
+export function newVariantsSummary(rows: readonly EditorRow[], existing: readonly ExistingVariant[], unit: UnitLabel): string {
+  const locked = existingComboKeys(rows, existing);
+  const fresh = rows.filter((row) => !locked.has(row.comboKey));
+  const included = fresh.filter((row) => row.include);
+  const total = included.reduce((sum, row) => sum + (row.defaultQty ? quantityToScaled(row.defaultQty) : BigInt(0)), BigInt(0));
+  const parts = [`${included.length} new ${included.length === 1 ? 'variant' : 'variants'}`];
+  if (total > BigInt(0)) parts.push(`${unitLabel(fromScaled(total, 3), unit)} per run at default qty`);
+  if (locked.size > 0) parts.push(`${locked.size} already in the program`);
+  return parts.join(' · ');
 }
 
 /* ---------------------------------------------------------------------------------------------- */

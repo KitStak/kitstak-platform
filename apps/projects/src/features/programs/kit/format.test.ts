@@ -37,7 +37,8 @@ describe('kit format', () => {
     expect(targetTone(9_200)).toBe('warning');
     expect(targetTone(8_100)).toBe('danger');
     expect(targetText(10_500)).toBe('105% of target');
-    expect(targetText(21_672)).toBe('217% of target');
+    expect(targetText(21_672)).toBe('216% of target');
+    expect(targetText(10_380)).toBe('103% of target');
   });
 
   it('explains health and locks', () => {

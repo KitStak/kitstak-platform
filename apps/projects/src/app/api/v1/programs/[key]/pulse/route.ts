@@ -15,6 +15,7 @@ export const GET = apiRoute<{ key: string }>(async ({ ctx, params, searchParams 
   return {
     ...result,
     moneyHidden: hidden,
+    jobTotals: hidden ? null : result.jobTotals,
     stamped: hidden ? { perUnitCents: null, feesCents: null, totalCents: null, byVariant: result.stamped.byVariant.map((v) => ({ variantId: v.variantId, units: v.units })) } : result.stamped,
     pendingSince: access.caps.seesSync ? result.pendingSince : null,
     lastSyncAt: access.caps.seesSync ? result.lastSyncAt : null,

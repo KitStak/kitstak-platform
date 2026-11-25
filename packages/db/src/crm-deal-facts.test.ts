@@ -116,9 +116,17 @@ describe('dealFactsFromRow', () => {
   it('reads the contract length as whole months only', () => {
     expect(dealFactsFromRow(row({ term_months: '12 months' })).rates.termMonths).toBe(12);
     expect(dealFactsFromRow(row({ term_months: ' 24 ' })).rates.termMonths).toBe(24);
-    for (const bad of ['1,2', '1.5', '12 weeks', 'a year', 0, 1.5]) {
+    for (const bad of ['1,2', '1.5', '12 weeks', 'a year', 0, 1.5, '1e5', '$-5', '2-3', '-12', '12mo3']) {
       expect(dealFactsFromRow(row({ term_months: bad })).rates.termMonths, String(bad)).toBeUndefined();
     }
+  });
+
+  it('refuses a value or fee too large for the money columns instead of storing it', () => {
+    const facts = dealFactsFromRow(row({ deal_value: { amount: 1e30 }, min: { amount: 1e30 }, monthly_fee: '10000000000000', setup: 1e13 - 1 }));
+    expect(facts.valueCents).toBeNull();
+    expect(facts.rates.monthlyMinimumCents).toBeUndefined();
+    expect(facts.rates.monthlyFeeCents).toBeUndefined();
+    expect(facts.rates.setupFeeCents).toBe(BigInt(1e13 - 1) * BigInt(100));
   });
 
   it('reads an account as its own account', () => {

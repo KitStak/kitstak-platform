@@ -40,6 +40,9 @@ export {
   updateBuild,
   moveBuild,
   splitBuild,
+  splitBuilds,
+  undoSplitBuilds,
+  finishBuild,
   closeShort,
   duplicateBuild,
   copyDay,
@@ -50,7 +53,7 @@ export {
 export { listRuns, getRun, moveRun, cancelRun, copyRun, closeRun, floorToday } from './runs';
 export { getOutputSheet, logOutput, undoLogOutput, deleteOutput, repriceOpenDays, UNDO_WINDOW_MS, type SignedUndoToken, type LogOutputResult } from './output';
 export { previewOutputImport, commitOutputImport, previewPlanImport, commitPlanImport } from './imports';
-export { listSchedules, createSchedule, updateSchedule, pauseSchedule, resumeSchedule, endSchedule, skipDate, previewSchedule, runScheduleGeneration } from './schedules';
+export { listSchedules, createSchedule, updateSchedule, pauseSchedule, resumeSchedule, endSchedule, deleteSchedule, skipDate, previewSchedule, runScheduleGeneration } from './schedules';
 export { refreshLedgerFor, settleDue } from './ledger';
 export { programLocks, isLocked, assertOpen } from './locks';
 export { getCloseChecklist, closeMonth, reopenMonth } from './closes';

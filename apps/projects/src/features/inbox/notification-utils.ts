@@ -22,6 +22,7 @@ export const KIND_LABEL: Readonly<Record<NotificationKind, string>> = {
   automation: 'Automation',
   integration: 'Linked app',
   project: 'Project update',
+  program: 'Program',
 };
 
 export type InboxDateGroup = 'Today' | 'Yesterday' | 'Earlier this week' | 'Last week' | 'Older';

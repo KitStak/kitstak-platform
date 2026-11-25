@@ -127,11 +127,9 @@ function MonthBlock({ program }: { readonly program: ProgramListItemDTO }) {
         <MoneyHiddenNote />
       ) : null}
       <div className="flex flex-col gap-1">
-        <div className="flex items-baseline justify-between gap-2 text-xs">
-          <span className="font-medium text-fg tabular-nums">{unitLabel(month.units, program.unit)} built</span>
-          <span className="text-fg-muted">Last 30 days</span>
-        </div>
+        <span className="text-xs font-medium text-fg tabular-nums">{unitLabel(month.units, program.unit)} built this month</span>
         <OutputSparkline points={program.sparkline} unit={program.unit} />
+        <span className="text-2xs text-fg-muted">Each day of the last 30 days</span>
       </div>
     </div>
   );

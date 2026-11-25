@@ -526,7 +526,9 @@ export function monthCharges(input: MonthInput): MonthResult {
   // A minimum in force with no billable day this month (paused all month with "Charge while
   // paused" off) is 0 cents, no gap and met, never pending and never "No minimum" (B.1.5). A $0
   // minimum never tops up, even when credits pass the work.
-  if (range && minimum.inForce && minimum.billableDays === 0) status = 'met';
+  // The same holds when the line only starts on days that do not count (added on Nov 20 while the
+  // program is paused Nov 20 to 30): no segment can charge, so it reads met with no gap.
+  if (range && minimum.inForce && (minimum.billableDays === 0 || minimum.segments.length === 0)) status = 'met';
   else if (range && minimum.inForce) {
     const forMinimum = workTotal + towardMinimumCents;
     gapSoFarCents = minimum.cents > ZERO && minimum.cents > forMinimum ? minimum.cents - forMinimum : ZERO;

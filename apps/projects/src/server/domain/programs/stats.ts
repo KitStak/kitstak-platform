@@ -10,7 +10,7 @@ import { loadProgramMonthInputs } from '@kitstak/db/programs';
 import { addDays, eachDay, firstDayOfMonth, isPlannableDay, lastDayOfMonth, monthOf } from '@kitstak/programs-engine/calendar';
 import { forecastMonth, programHealth, type ForecastResult } from '@kitstak/programs-engine/forecast';
 import { monthCharges, type MonthResult } from '@kitstak/programs-engine/month';
-import { fromScaled, maxCents, quantityToScaled, ZERO } from '@kitstak/programs-engine/money';
+import { fromScaled, maxCents, quantityToScaled, ratioBp, ZERO } from '@kitstak/programs-engine/money';
 import { resolveOrderCharge, resolveUnitPrice } from '@kitstak/programs-engine/price';
 import type { Cents, IsoDate, IsoMonth, ProgramCalendar } from '@kitstak/programs-engine/types';
 import type { Executor } from '@/server/db';
@@ -104,7 +104,7 @@ export async function programMonthStats(
     })
     .filter((row) => quantityToScaled(row.remainingQty) > ZERO);
   const trailingDaily = trailing.filter((day) => isPlannableDay(calendar, day.date)).slice(-20).map((day) => ({ date: day.date, workCents: BigInt(day.cents), units: day.units }));
-  const forecast = forecastMonth({
+  const rawForecast = forecastMonth({
     month,
     asOf,
     calendar,
@@ -115,6 +115,14 @@ export async function programMonthStats(
     oneTime: oneTime.map((row) => ({ id: row.id, kind: row.kind === 'adjustment' ? 'adjustment' : 'setup', chargeOn: row.charge_on, amountCents: row.amount_cents, label: row.label, variantId: row.variant_id, countsTowardMinimum: row.counts === true })),
     targetCents: settings.monthlyTargetCents ?? null,
   });
+  // Percent of target counts the work and fixed charges only, never the minimum top up: a top up is
+  // what the customer pays for missing the minimum, not progress toward the target. Every screen
+  // (Overview, directory card and table, goals, health) reads this one number.
+  const targetCents = settings.monthlyTargetCents === null || settings.monthlyTargetCents === undefined ? null : BigInt(settings.monthlyTargetCents);
+  const forecast: ForecastResult =
+    rawForecast.targetBp !== null && targetCents !== null && targetCents > ZERO && rawForecast.projectedGapCents > ZERO
+      ? { ...rawForecast, targetBp: ratioBp(rawForecast.forecastCents - rawForecast.projectedGapCents, targetCents) }
+      : rawForecast;
   // Health: money target, else unit target, else plan vs built over the last 5 work days with builds.
   const byDate = new Map<string, { planned: bigint; built: bigint }>();
   for (const row of plannedRows) {
@@ -127,7 +135,11 @@ export async function programMonthStats(
   const lastWorkDays = [...byDate.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, day]) => ({ planned: fromScaled(day.planned, 3), built: fromScaled(day.built, 3) }));
   const recentUnits = trailingDaily.slice(-10);
   const recentUnitsPerDay = recentUnits.length ? fromScaled(recentUnits.reduce((sum, d) => sum + quantityToScaled(d.units), ZERO) / BigInt(recentUnits.length), 3) : null;
-  const health = programHealth({ targetBp: forecast.targetBp, dailyTargetUnits: settings.dailyTargetUnits ?? null, recentUnitsPerDay, lastWorkDays });
+  const baseHealth = programHealth({ targetBp: forecast.targetBp, dailyTargetUnits: settings.dailyTargetUnits ?? null, recentUnitsPerDay, lastWorkDays });
+  // A projected minimum gap (the minimum_at_risk alert) never reads as On track: the forecast that
+  // meets the target only does so through the top up the customer is billed for missing the minimum.
+  const health: typeof baseHealth =
+    forecast.projectedGapCents > ZERO && (baseHealth === null || baseHealth.health === 'on_track') ? { health: 'at_risk', basis: baseHealth?.basis ?? 'money_target' } : baseHealth;
   // Is the stored ledger behind the engine for this month (a due charge not posted yet)?
   const engineRefs = new Map(result.charges.filter((c) => c.posted && c.kind !== 'per_unit' && c.cents !== ZERO).map((c) => [c.ref, c.cents]));
   const storedRefs = new Map(ledgerRows.map((r) => [r.ref, BigInt(r.cents)]));

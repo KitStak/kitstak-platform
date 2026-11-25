@@ -96,6 +96,12 @@ export interface ProgramPulse {
     readonly totalCents: string;
     readonly byVariant: readonly ProgramPulseVariant[];
   };
+  /**
+   * The bills-to job's own totals to date, the numbers its Pulse job page shows ("Revenue earned",
+   * "Cost so far"): from `pulse.job_stats`, cost is labor, material, other and shared cost. Null
+   * with no job, no stats yet, or money hidden.
+   */
+  readonly jobTotals: { readonly revenueCents: string; readonly costCents: string; readonly profitCents: string; readonly marginBp: number | null } | null;
   readonly pendingSync: boolean;
   readonly pendingSince: string | null;
   readonly lastSyncAt: string | null;
@@ -440,10 +446,25 @@ export async function getProgramPulse(
       lastSyncAt = pending?.last ?? null;
     }
     const money = access.seesMoney;
+    let jobTotals: ProgramPulse['jobTotals'] = null;
+    if (job && money && (await hasTable(db, 'pulse.job_stats'))) {
+      const stats = await queryOne<{ revenue: string; cost: string }>(
+        db,
+        sql`select coalesce(revenue_cents, 0)::text as revenue,
+                   (coalesce(labor_cents, 0) + coalesce(material_cents, 0) + coalesce(other_cents, 0) + coalesce(shared_cents, 0))::text as cost
+              from pulse.job_stats where job_id = ${job.id}::uuid and org_id = ${who.orgId}::uuid`,
+      ).catch(() => undefined);
+      if (stats) {
+        const revenue = big(stats.revenue);
+        const cost = big(stats.cost);
+        jobTotals = { revenueCents: revenue.toString(), costCents: cost.toString(), profitCents: (revenue - cost).toString(), marginBp: marginOf(revenue - cost, revenue) };
+      }
+    }
     return {
       available: true,
       moneyHidden: !money,
       job,
+      jobTotals,
       stamped: {
         perUnitCents: money ? perUnit.toString() : '0',
         feesCents: money ? fees.toString() : '0',

@@ -24,7 +24,7 @@ export function DueDate({
       className={cn(
         'inline-flex shrink-0 items-center gap-1 text-xs tabular-nums',
         overdue ? 'font-medium text-danger-text' : dueToday ? 'font-medium text-warning-text' : 'text-fg-secondary',
-        done && 'text-fg-muted line-through decoration-1',
+        done && 'text-fg-muted',
         className,
       )}
       title={overdue ? `Overdue (due ${date})` : `Due ${date}`}

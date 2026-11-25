@@ -3,7 +3,7 @@
  * 5.12). People type dollars; this turns them into card line inputs (whole cents, 4 decimal unit
  * prices) and back, and says what is wrong in plain words. Never uses Number for money. Tested.
  */
-import { decimalToCents, fromScaled, readRateText } from '@kitstak/programs-engine';
+import { decimalToCents, fromScaled, rateTextMessage, readRateText } from '@kitstak/programs-engine';
 import type { CardLineDTO, CardLineInput, IsoDate } from '@/lib/program-types';
 
 export interface FixedLineValue {
@@ -58,8 +58,7 @@ export function readPrice(text: string): { readonly ok: true; readonly price: st
   if (!text.trim()) return { ok: false, message: 'Add a price.' };
   const read = readRateText(text);
   if (read.ok) return { ok: true, price: read.price };
-  const message = read.problem === 'too_many_decimals' ? 'Use up to 4 decimals for a rate.' : read.problem === 'below_zero' ? 'A rate cannot be less than $0.' : read.problem === 'too_large' ? 'The rate is too large.' : 'Type a price like 1.95.';
-  return { ok: false, message };
+  return { ok: false, message: rateTextMessage(read.problem, text) };
 }
 
 export type PriceLineField = 'perUnit' | 'perOrder' | 'perHour' | 'monthlyFee' | 'minimum' | 'lines' | `variant:${string}`;

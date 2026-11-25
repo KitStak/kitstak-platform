@@ -176,7 +176,7 @@ export function minimumReason(monthCents: string, cardCents: string | null | und
   return `${card} on the card, sized to the days in this month`;
 }
 
-/** The Minimum KPI: Met, Below minimum by X so far (on track), May miss it by X, or Not set. */
+/** The Minimum KPI: Met, Met so far (month open), Below minimum by X so far (on track), May miss it by X, or Not set. */
 export function minimumKpi(result: MonthResultDTO, forecast: ForecastResultDTO, context: { readonly cardMinimumCents?: string | null; readonly month?: IsoMonth; readonly startDate?: IsoDate | null; readonly endDate?: IsoDate | null } = {}): MinimumKpi {
   const minimum = result.minimum;
   if (!minimum || minimum.status === 'none') return { value: 'Not set', line: 'No monthly minimum on the card', tone: 'muted', reason: null };
@@ -184,9 +184,13 @@ export function minimumKpi(result: MonthResultDTO, forecast: ForecastResultDTO, 
   const gap = BigInt(minimum.gapSoFarCents);
   const projected = forecast.projectedGapCents ? BigInt(forecast.projectedGapCents) : BigInt(0);
   const of = `of ${formatCents(minimum.minimumCents, { cents: true })}`;
-  if (minimum.status === 'met' || gap <= BigInt(0)) return { value: 'Met', line: `Work charges are over the ${formatCents(minimum.minimumCents, { cents: true })} minimum`, tone: 'success', reason };
-  if (projected > BigInt(0)) return { value: `May miss it by ${formatCents(projected, { cents: true })}`, line: `Below minimum by ${formatCents(gap, { cents: true })} so far ${of}`, tone: 'warning', reason };
-  return { value: `Below minimum by ${formatCents(gap, { cents: true })} so far`, line: 'on track to meet it', tone: 'neutral', reason };
+  // "Met" is final only once the month is over (or no day can charge, B.1.5). While it is open the
+  // statement says "Month still open", so the KPI says "Met so far" and the same thing.
+  const over = `Work charges are over the ${formatCents(minimum.minimumCents, { cents: true })} minimum.`;
+  if (minimum.status === 'met') return { value: 'Met', line: over, tone: 'success', reason: reason ? `${reason}.` : null };
+  if (gap <= BigInt(0)) return { value: 'Met so far', line: `${over} The month is still open.`, tone: 'success', reason: reason ? `${reason}.` : null };
+  if (projected > BigInt(0)) return { value: `May miss it by ${formatCents(projected, { cents: true })}`, line: `Below minimum by ${formatCents(gap, { cents: true })} so far ${of}.`, tone: 'warning', reason: reason ? `${reason}.` : null };
+  return { value: `Below minimum by ${formatCents(gap, { cents: true })} so far`, line: 'On track to meet it.', tone: 'neutral', reason: reason ? `${reason}.` : null };
 }
 
 /* ---------------------------------------------------------------------------------------------- */

@@ -20,7 +20,7 @@ export * from './job-tasks';
 export * from './job-program';
 export { programCloseCheck, type ProgramCloseCheck, type ProgramSettleRow } from './periods';
 export { syncPrograms, EDGE_READ_FAILED } from './sync-programs';
-export { linkProgramToJob, listProgramsToLink, programForNewJob } from './program-links';
+export { linkProgramToJob, listProgramsToLink, programForNewJob, programJobTaken } from './program-links';
 export * from './profit';
 export * from './recalc';
 export * from './reviews';

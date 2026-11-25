@@ -311,10 +311,11 @@ function Breadcrumb() {
         </li>
         {task.kind === 'build' && task.projectKind === 'program' ? (
           <>
-            <li aria-hidden className="shrink-0 text-fg-muted">
+            {/* On a phone the Builds crumb gives way, so the key and the task navigator keep their room. */}
+            <li aria-hidden className="shrink-0 text-fg-muted max-sm:hidden">
               <ChevronRight className="size-3.5" />
             </li>
-            <li className="flex shrink-0 items-center">
+            <li className="flex shrink-0 items-center max-sm:hidden">
               <Link href={routes.programBuilds(project.key)} className="rounded-sm px-1 py-0.5 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus">
                 Builds
               </Link>
@@ -342,7 +343,7 @@ function Breadcrumb() {
           <ChevronRight className="size-3.5" />
         </li>
         <li className="shrink-0">
-          <span aria-current="page" className="px-1 font-key text-xs font-medium text-fg">
+          <span aria-current="page" className="px-1 font-key text-xs font-medium whitespace-nowrap text-fg">
             {task.key}
           </span>
         </li>
@@ -405,7 +406,7 @@ function TaskNav({ onNavigate }: { readonly onNavigate: (key: string) => void })
         onClick={() => go(-1)}
         data-testid="task-prev"
       />
-      <span aria-hidden className="hidden min-w-12 text-center text-xs text-fg-muted tabular-nums sm:inline">
+      <span aria-hidden className="min-w-10 text-center text-xs whitespace-nowrap text-fg-muted tabular-nums sm:min-w-12">
         {nav.index + 1} / {nav.total}
       </span>
       <IconButton

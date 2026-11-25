@@ -299,8 +299,11 @@ export function describeProgramActivity(event: ActivityDTO, lookups: ActivityLoo
       return 'replaced a price card version that started the same day';
     case 'price_card.unpublished':
       return `moved price card v${typeof after.number === 'number' ? after.number : ''} back to a draft`;
-    case 'price_card.version_deleted':
+    case 'price_card.version_deleted': {
+      const from = typeof before.effectiveFrom === 'string' ? before.effectiveFrom : null;
+      if (before.status === 'draft') return from ? `discarded the price card draft for ${shortDay(from)}` : 'discarded a price card draft';
       return 'deleted a price card version';
+    }
     case 'price_card.variant_rate_changed': {
       const rates = Array.isArray(money.rates) ? (money.rates as { variantId?: string; unitPrice?: string | null }[]) : [];
       const one = rates.length === 1 ? rates[0] : undefined;
@@ -369,6 +372,8 @@ export function describeProgramActivity(event: ActivityDTO, lookups: ActivityLoo
       return `resumed the schedule ${str(after.name) ?? ''}`.trim();
     case 'schedule.ended':
       return `ended the schedule ${str(after.name) ?? ''}`.trim();
+    case 'schedule.deleted':
+      return `deleted the schedule ${str(before.name) ?? ''}`.trim();
     case 'schedule.generated':
       return typeof after.count === 'number' ? `planned ${after.count} ${after.count === 1 ? 'build' : 'builds'} from ${str(after.name) ?? 'a schedule'}` : 'planned builds from a schedule';
     case 'link.added':

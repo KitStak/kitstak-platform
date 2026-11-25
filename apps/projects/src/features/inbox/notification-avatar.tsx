@@ -10,6 +10,7 @@ import {
   FolderKanban,
   Link2,
   MessageSquare,
+  Repeat,
   UserPlus,
   Workflow,
 } from 'lucide-react';
@@ -29,6 +30,7 @@ export const KIND_ICON: Record<NotificationKind, typeof Bell> = {
   automation: Workflow,
   integration: Link2,
   project: FolderKanban,
+  program: Repeat,
 };
 
 export const KIND_TONE: Partial<Record<NotificationKind, string>> = {

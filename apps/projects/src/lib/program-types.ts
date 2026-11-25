@@ -307,6 +307,13 @@ export interface BuildBlockDTO {
   readonly posting: Posting;
   readonly pulseJob: { readonly id: string; readonly number: string } | null;
   readonly finishedOn: IsoDate | null;
+  /** First day the build entered done (kept when it is reopened). */
+  readonly firstFinishedOn?: IsoDate | null;
+  /**
+   * Set when marking this build done again needs the 5.8 choice: it finished earlier in a month
+   * that is still open. Send `chargeOn` with `finishBuildAction` ('first_finished' is the default).
+   */
+  readonly rechargeChoice?: { readonly firstFinishedOn: IsoDate; readonly firstText: string; readonly newText: string } | null;
   readonly batchFeeLocked: boolean;
   readonly runId: string;
   readonly scheduleId: string | null;
@@ -377,6 +384,12 @@ export interface OutputSheetRow {
   readonly priceSource: PriceSource;
   readonly assignee: PersonRef | null;
   readonly version: number;
+  /** Who logged the output of this day, null when nobody has yet (or the person left). The server always sends it. */
+  readonly enteredBy?: PersonRef | null;
+  /** Where this day's output came from (`manual`, `import`, `form`, ...), null when none. */
+  readonly source?: string | null;
+  /** The note on this day's output. */
+  readonly note?: string | null;
 }
 
 export interface OutputSheetDTO {
@@ -590,7 +603,7 @@ export interface LinkedRecordDTO {
 }
 
 export interface CloseChecklistItemDTO {
-  readonly key: 'month_over' | 'earlier_closed' | 'open_builds' | 'unpriced' | 'settled' | 'adjustments' | 'pulse';
+  readonly key: 'month_over' | 'earlier_closed' | 'open_builds' | 'timers' | 'unpriced' | 'settled' | 'adjustments' | 'pulse';
   readonly label: string;
   readonly ok: boolean;
   readonly required: boolean;
@@ -683,7 +696,8 @@ export interface TrendsDTO {
   readonly groupBy: 'program' | 'customer';
   readonly months: readonly IsoMonth[];
   readonly rows: readonly { readonly id: string; readonly key: string | null; readonly name: string; readonly unit: string; readonly cells: readonly { readonly month: IsoMonth; readonly units: string; readonly revenueCents: CentsString | null }[]; readonly totalUnits: string; readonly totalCents: CentsString | null; readonly moneyHidden: boolean }[];
-  readonly totals: readonly { readonly month: IsoMonth; readonly revenueCents: CentsString | null }[];
+  /** Revenue of the rows this viewer may see; null when every row's money is hidden. `moneyHidden` is true when some rows are left out. */
+  readonly totals: readonly { readonly month: IsoMonth; readonly revenueCents: CentsString | null; readonly moneyHidden: boolean }[];
 }
 
 export interface DashboardProgramsDTO {

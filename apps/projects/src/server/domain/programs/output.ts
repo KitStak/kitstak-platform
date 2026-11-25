@@ -59,6 +59,9 @@ interface SheetRaw {
   today_version: number | null;
   today_price: string | null;
   today_source: string | null;
+  today_entered_by: string | null;
+  today_input_source: string | null;
+  today_note: string | null;
 }
 
 async function sheetRows(executor: Executor, ctx: DomainContext, containerId: string, date: IsoDate, runId: string | null): Promise<SheetRaw[]> {
@@ -68,7 +71,8 @@ async function sheetRows(executor: Executor, ctx: DomainContext, containerId: st
                v.pack_qty::text as pack_qty, b.build_date::text as build_date, b.planned_qty::text as planned_qty, b.built_qty::text as built_qty,
                b.unplanned, b.schedule_id::text as schedule_id, b.version,
                o.id::text as today_id, o.qty::text as today_qty, o.scrap_qty::text as today_scrap, o.version as today_version,
-               o.unit_price::text as today_price, o.price_source as today_source
+               o.unit_price::text as today_price, o.price_source as today_source,
+               o.entered_by::text as today_entered_by, o.source as today_input_source, o.note as today_note
           from pm.builds b
           join pm.tasks t on t.id = b.task_id and t.deleted_at is null
           join pm.statuses s on s.id = t.status_id
@@ -96,7 +100,7 @@ async function outputSheet(executor: Executor, ctx: DomainContext, container: Bu
   const locks = await containerLocks(ctx, container, executor);
   const postings = await resolvePostings(executor, ctx, { programId: container.programId, buildIds: rows.map((row) => row.id) });
   const versions = await versionsFor(executor, ctx, container.programId);
-  const people = await getPeople(rows.map((row) => row.assignee_id).filter((id): id is string => Boolean(id)), executor);
+  const people = await getPeople(rows.flatMap((row) => [row.assignee_id, row.today_entered_by]).filter((id): id is string => Boolean(id)), executor);
   const hidden = !container.seesMoney;
   const goesToJob = [...postings.targets.values()].some((target) => target.posting === 'build_job' || target.posting === 'program_job');
   const reason = locks ? lockReason(locks, date, { goesToJob }) : null;
@@ -133,6 +137,9 @@ async function outputSheet(executor: Executor, ctx: DomainContext, container: Bu
       priceSource: source,
       assignee,
       version: Number(row.version),
+      enteredBy: row.today_entered_by ? (people.get(row.today_entered_by) ?? null) : null,
+      source: row.today_id ? (row.today_input_source ?? null) : null,
+      note: row.today_id ? (row.today_note ?? null) : null,
     });
   }
   // Day revenue straight from the stored snapshots.
@@ -276,8 +283,12 @@ async function lockedProgramLocks(tx: Executor, ctx: DomainContext, container: B
 export async function logOutput(ctx: DomainContext, key: string, input: LogOutputInput): Promise<LogOutputResult> {
   const container = await requireContainer(ctx, key, 'output:log');
   const today = checkLogInput(container, input);
+  const touched = [...new Set([...input.entries.flatMap((entry) => ('buildId' in entry ? [entry.buildId] : [])), ...(input.endOfDay?.decisions ?? []).map((d) => d.buildId)])];
+  const { buildUnits, fireBuildTriggers } = await import('./sweep');
+  const before = await buildUnits(touched);
   const outcome = await db.transaction((tx) => logOutputIn(tx, ctx, container, input, today));
   await emitProgramsChanged(ctx, [container.programId]);
+  await fireBuildTriggers(ctx, container.programId, before, await buildUnits([...touched, ...outcome.createdBuildIds]), input.date);
   const sheet = await outputSheet(db, ctx, container, input.date, null);
   return { sheet, undo: signUndo(ctx, container.project.id, outcome.undo), createdBuildIds: outcome.createdBuildIds };
 }

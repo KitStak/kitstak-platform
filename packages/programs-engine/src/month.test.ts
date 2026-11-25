@@ -531,6 +531,19 @@ describe('a minimum in force in a month paused all month', () => {
     expect(result.minimum).toEqual({ minimumCents: BigInt(1000000), gapSoFarCents: BigInt(1000000), topUpCents: ZERO, status: 'pending' });
     expect(result.fixed.monthlyFeeCents).toBe(BigInt(50000));
   });
+  it('B.1.5 a minimum that only starts on paused days that do not count reads as met while the month is open', () => {
+    // v1 has no minimum; v2 adds it on Nov 20, and the program is paused Nov 20 to 30 with
+    // "Charge while paused" off. B counts the unpaused days before the line existed, but no
+    // segment can charge, so the minimum is $0 and met, never pending.
+    const v1: CardVersion = { id: 'n1', number: 1, effectiveFrom: '2026-01-01', rules: [], lines: [line({ id: 'n1-unit', kind: 'per_unit', unitPrice: '1.95' })] };
+    const v2: CardVersion = { ...waived, id: 'n2', number: 2, effectiveFrom: '2026-11-20' };
+    const lateCalendar = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-20', to: '2026-11-30' }] };
+    const open = monthCharges(month({ month: '2026-11', asOf: '2026-11-25', calendar: lateCalendar, versions: [v1, v2], oneTime: [] }));
+    expect(open.minimum).toEqual({ minimumCents: ZERO, gapSoFarCents: ZERO, topUpCents: ZERO, status: 'met' });
+    expect(open.charges.some((charge) => charge.kind === 'minimum_top_up')).toBe(false);
+    const over = monthCharges(month({ month: '2026-11', asOf: '2026-12-01', calendar: lateCalendar, versions: [v1, v2], oneTime: [] }));
+    expect(over.minimum.status).toBe('met');
+  });
   it('a $0 minimum never tops up, even when a credit that counts toward it passes the work', () => {
     const credit: OneTimeCharge = { id: 'c1', kind: 'adjustment', chargeOn: '2026-11-10', amountCents: '-20000', label: 'Credit', variantId: null, countsTowardMinimum: true };
     const result = monthCharges(month({ month: '2026-11', asOf: '2026-12-01', calendar: pausedAllMonth, versions: [waived], oneTime: [credit] }));

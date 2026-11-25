@@ -43,7 +43,7 @@ rounded to the nearest percent and `Avg ... a work day` counts the work days bef
 does. The `(screen)` lines are what the Overview prints, from the same helpers the screen uses;
 the check fails when they differ from the 7.4 lines (any program) or when a program shows On track
 while its minimum alert is up. `Planned work still to come` leaves out a projected minimum top up;
-`Forecast incl. top up` splits a forecast that includes one (MAHCO).
+`Forecast incl. top up` splits a forecast that includes one (MAHCO). The percent of target counts work and fixed charges only, never a top up, on every screen (Overview, directory card and table, goals).
 
 ```
 Seed check for northwind-robotics on 2026-11-25
@@ -139,13 +139,13 @@ MAHCO
   vs last month at this point (screen): up 32% vs last month at this point
   vs last month at this point: up 32% vs last month at this point
   October through Oct 25: $6,151.50
-  Forecast: $12,000.00 · 100% of $12,000.00 target
+  Forecast: $12,000.00 · 78% of $12,000.00 target
   Forecast basis: Based on recent days
   Planned work still to come: $1,326.25
   Forecast incl. top up: $12,000.00 (work $9,419.75 plus a projected top up of $2,580.25)
   Minimum: Below minimum by $3,906.50 so far · projected gap $2,580.25
   Alerts: minimum_at_risk
-  Health: at_risk (money_target)
+  Health: off_track (money_target)
   Schedule window: builds made through 2026-12-02
   Deal line: Deal $144,000.00 over 12 months · on track for $138,800.00
 

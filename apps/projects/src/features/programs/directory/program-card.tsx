@@ -59,7 +59,7 @@ import {
   scaledQty,
   useHydrated,
 } from '@/features/programs/kit';
-import { minimumRiskText } from './directory-model';
+import { minimumRiskText, minimumRiskTitle } from './directory-model';
 import type { ProgramOps } from './program-ops';
 
 export interface ProgramMenuAccess {
@@ -263,9 +263,11 @@ export function ProgramCard({ program, ops, access, onDelete, onTemplate }: { re
         {program.health ? <span className="relative z-[1]"><HealthWithBasis health={program.health} basis={program.healthBasis} auto={program.healthAuto} size="sm" /></span> : null}
         <span className="flex-1" />
         {risk ? (
-          <Badge tone="warning" size="sm" icon={<TriangleAlert aria-hidden />} className="min-w-0">
-            <span className="truncate">{risk}</span>
-          </Badge>
+          <span className="relative z-[1] inline-flex shrink-0" title={minimumRiskTitle(program) ?? undefined}>
+            <Badge tone="warning" size="sm" icon={<TriangleAlert aria-hidden />} className="whitespace-nowrap">
+              {risk}
+            </Badge>
+          </span>
         ) : null}
       </div>
 

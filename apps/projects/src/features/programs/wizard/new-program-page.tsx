@@ -128,5 +128,9 @@ export async function NewProgramPage({ searchParams }: { readonly searchParams: 
     crmOn,
     pulseOn,
   };
-  return <NewProgramWizard data={data} />;
+  // Client navigation to this same route (Quick setup, Copy a program, Resume a draft, From a
+  // template or deal) keeps the wizard mounted, and its state is built once. A key made from the
+  // start params mounts a fresh wizard for each start, so it opens on the right step.
+  const startKey = JSON.stringify([mode, copy ?? null, include ?? null, template ?? null, crmItem ?? null, customer ?? null, name ?? null, draftId ?? null]);
+  return <NewProgramWizard key={startKey} data={data} />;
 }

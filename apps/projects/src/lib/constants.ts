@@ -50,6 +50,7 @@ export const NOTIFICATION_KINDS = [
   'automation',
   'integration',
   'project',
+  'program',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

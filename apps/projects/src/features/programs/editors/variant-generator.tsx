@@ -36,6 +36,7 @@ import {
   buildRows,
   canAddAxis,
   effectivePatterns,
+  existingComboKeys,
   generatorSummary,
   lineKeys,
   localId,
@@ -43,6 +44,7 @@ import {
   moveAxis,
   moveValue,
   newValue,
+  newVariantsSummary,
   patchOverrides,
   qtyCellProblem,
   rateCellProblem,
@@ -64,6 +66,11 @@ export interface VariantGeneratorProps {
   readonly cardRate?: string | null;
   /** The program's variants today, for conflict checks (Edit attributes, Add variants). */
   readonly existing?: readonly { readonly key: string; readonly name: string; readonly sku: string | null; readonly attributes: Record<string, string> }[];
+  /**
+   * Rows that match `existing` show checked and locked with an "Already a variant" tag, and are
+   * left out of the new count and of conflicts (the Variants tab's Add variants and Edit attributes).
+   */
+  readonly lockedExisting?: boolean;
   /** A kit cell per row (the wizard's "Kit found" chip and Link kit). */
   readonly renderKitCell?: (row: EditorRow) => ReactNode;
   readonly showRules?: boolean;
@@ -258,6 +265,8 @@ interface CellProps {
   readonly conflict: string | null;
   readonly rateConflict: string | null;
   readonly selected: boolean;
+  /** Already a variant of the program (locked, `lockedExisting`). */
+  readonly locked?: boolean;
   readonly unit: UnitLabel;
   readonly disabled?: boolean;
   readonly onPatch: (patch: { include?: boolean; defaultQty?: string | null; unitPrice?: string | null }) => void;
@@ -300,8 +309,13 @@ function QtyInput({ row, disabled, onPatch, label }: Pick<CellProps, 'row' | 'di
   );
 }
 
-function MatrixCell({ row, rate, conflict, rateConflict, selected, disabled, onPatch, onToggleSelect }: CellProps) {
-  const problem = conflict ?? rateConflict;
+function AlreadyTag() {
+  return <span className="inline-flex h-4 shrink-0 items-center rounded-sm bg-sunken px-1 text-[10px] font-medium text-fg-muted" data-testid="already-variant">Already a variant</span>;
+}
+
+function MatrixCell({ row, rate, conflict, rateConflict, selected, disabled: disabledProp, locked, onPatch, onToggleSelect }: CellProps) {
+  const problem = locked ? null : (conflict ?? rateConflict);
+  const disabled = disabledProp || locked;
   const card = (
     <div
       className={cn(
@@ -313,13 +327,16 @@ function MatrixCell({ row, rate, conflict, rateConflict, selected, disabled, onP
       data-combo={row.comboKey}
     >
       <div className="flex min-w-0 items-center gap-1.5">
-        <Checkbox checked={row.include} disabled={disabled} onCheckedChange={(checked) => onPatch({ include: checked === true })} aria-label={`Include ${row.name}`} />
-        <button type="button" onClick={onToggleSelect} className="min-w-0 flex-1 truncate text-left text-xs font-medium text-fg outline-none focus-visible:underline" title={`${row.name}. Click to select.`}>
+        <Checkbox checked={locked ? true : row.include} disabled={disabled} onCheckedChange={(checked) => onPatch({ include: checked === true })} aria-label={locked ? `${row.name} is already a variant` : `Include ${row.name}`} />
+        <button type="button" onClick={locked ? undefined : onToggleSelect} disabled={locked} className="min-w-0 flex-1 truncate text-left text-xs font-medium text-fg outline-none focus-visible:underline" title={locked ? `${row.name} is already a variant of this program.` : `${row.name}. Click to select.`}>
           {row.name}
         </button>
       </div>
-      <span className="truncate font-key text-[11px] text-fg-muted" title={row.sku ?? row.key}>
-        {row.sku ?? row.key}
+      <span className="flex min-w-0 items-center gap-1">
+        <span className="min-w-0 truncate font-key text-[11px] text-fg-muted" title={row.sku ?? row.key}>
+          {row.sku ?? row.key}
+        </span>
+        {locked ? <AlreadyTag /> : null}
       </span>
       <div className="mt-auto grid grid-cols-2 gap-1">
         <QtyInput row={row} disabled={disabled} onPatch={onPatch} label={`Default qty for ${row.name}`} />
@@ -368,13 +385,14 @@ function SetValuePopover({ label, placeholder, onApply }: { readonly label: stri
 /* The generator                                                                                  */
 /* ---------------------------------------------------------------------------------------------- */
 
-export function VariantGenerator({ value, onChange, programKey, unit, cardRate = null, existing = [], renderKitCell, showRules = true, disabled }: VariantGeneratorProps) {
+export function VariantGenerator({ value, onChange, programKey, unit, cardRate = null, existing = [], lockedExisting = false, renderKitCell, showRules = true, disabled }: VariantGeneratorProps) {
   const [patternsOpen, setPatternsOpen] = useState(!value.patternsEdited);
   const [selection, setSelection] = useState<readonly string[]>([]);
   const built = useMemo(() => buildRows(value, programKey), [value, programKey]);
   const rows = built.rows;
   const rates = useMemo(() => rowRates(rows, value.rules, value.axes, cardRate), [rows, value.rules, value.axes, cardRate]);
-  const conflicts = useMemo(() => rowConflicts(rows, existing), [rows, existing]);
+  const lockedKeys = useMemo(() => (lockedExisting ? existingComboKeys(rows, existing) : new Set<string>()), [lockedExisting, rows, existing]);
+  const conflicts = useMemo(() => rowConflicts(lockedExisting ? rows.filter((row) => !lockedKeys.has(row.comboKey)) : rows, existing), [rows, existing, lockedExisting, lockedKeys]);
   const patterns = effectivePatterns(value);
   const matrix = matrixKeys(rows, value.axes);
   const usedAxes = value.axes.filter((axis) => axis.values.length > 0 && axis.name.trim());
@@ -384,7 +402,10 @@ export function VariantGenerator({ value, onChange, programKey, unit, cardRate =
   const setAxes = (axes: readonly EditorAxis[]) => onChange({ ...value, axes: [...axes] });
   const patchRow = (comboKey: string, patch: Parameters<CellProps['onPatch']>[0]) => onChange({ ...value, overrides: patchOverrides(value.overrides, [comboKey], patch) });
   const patchSelection = (patch: Parameters<CellProps['onPatch']>[0]) => onChange({ ...value, overrides: patchOverrides(value.overrides, selection, patch) });
-  const toggle = (keys: readonly string[]) => setSelection((current) => (keys.every((key) => current.includes(key)) ? current.filter((key) => !keys.includes(key)) : [...new Set([...current, ...keys])]));
+  const toggle = (all: readonly string[]) => {
+    const keys = all.filter((key) => !lockedKeys.has(key));
+    setSelection((current) => (keys.every((key) => current.includes(key)) ? current.filter((key) => !keys.includes(key)) : [...new Set([...current, ...keys])]));
+  };
   const setPattern = (field: 'name' | 'key' | 'sku', text: string | null) => onChange({ ...value, patterns: { ...patterns, [field]: text }, patternsEdited: true });
   const rateFor = (row: EditorRow) => rates.rates.get(row.comboKey);
   const cellProps = (row: EditorRow): CellProps => ({
@@ -393,6 +414,7 @@ export function VariantGenerator({ value, onChange, programKey, unit, cardRate =
     conflict: conflicts.get(row.comboKey) ?? null,
     rateConflict: rates.conflicts.get(row.comboKey) ?? null,
     selected: selection.includes(row.comboKey),
+    locked: lockedKeys.has(row.comboKey),
     unit,
     disabled,
     onPatch: (patch) => patchRow(row.comboKey, patch),
@@ -561,25 +583,29 @@ export function VariantGenerator({ value, onChange, programKey, unit, cardRate =
                 <tbody>
                   {rows.map((row) => {
                     const props = cellProps(row);
-                    const problem = props.conflict ?? props.rateConflict;
+                    const problem = props.locked ? null : (props.conflict ?? props.rateConflict);
+                    const off = disabled || props.locked;
                     return (
-                      <tr key={row.comboKey} className={cn('border-t border-border-subtle', !row.include && 'opacity-60', props.selected && 'bg-selected', problem && 'bg-danger-subtle/50')} data-testid="variant-table-row">
+                      <tr key={row.comboKey} className={cn('border-t border-border-subtle', !row.include && !props.locked && 'opacity-60', props.selected && 'bg-selected', problem && 'bg-danger-subtle/50')} data-testid="variant-table-row">
                         <td className="px-3 py-1.5">
-                          <Checkbox checked={row.include} disabled={disabled} onCheckedChange={(checked) => props.onPatch({ include: checked === true })} aria-label={`Include ${row.name}`} />
+                          <Checkbox checked={props.locked ? true : row.include} disabled={off} onCheckedChange={(checked) => props.onPatch({ include: checked === true })} aria-label={props.locked ? `${row.name} is already a variant` : `Include ${row.name}`} />
                         </td>
                         <td className="px-2 py-1.5">
-                          <button type="button" onClick={props.onToggleSelect} className="truncate text-left font-medium text-fg outline-none focus-visible:underline" title={problem ?? undefined}>
-                            {row.name}
-                          </button>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <button type="button" onClick={props.locked ? undefined : props.onToggleSelect} disabled={props.locked} className="truncate text-left font-medium text-fg outline-none focus-visible:underline" title={problem ?? (props.locked ? `${row.name} is already a variant of this program.` : undefined)}>
+                              {row.name}
+                            </button>
+                            {props.locked ? <AlreadyTag /> : null}
+                          </span>
                           {problem ? <span className="block text-2xs text-danger-text">{problem}</span> : null}
                         </td>
                         <td className="px-2 py-1.5 font-key text-xs text-fg-secondary">{row.key}</td>
                         <td className="px-2 py-1.5 font-key text-xs text-fg-secondary">{row.sku ?? <span className="text-fg-muted">No SKU</span>}</td>
                         <td className="px-2 py-1.5">
-                          <QtyInput row={row} disabled={disabled} onPatch={props.onPatch} label={`Default qty for ${row.name}`} />
+                          <QtyInput row={row} disabled={off} onPatch={props.onPatch} label={`Default qty for ${row.name}`} />
                         </td>
                         <td className="px-2 py-1.5">
-                          <RateInput row={row} rate={props.rate} disabled={disabled} onPatch={props.onPatch} label={`Rate for ${row.name}`} />
+                          <RateInput row={row} rate={props.rate} disabled={off} onPatch={props.onPatch} label={`Rate for ${row.name}`} />
                         </td>
                         {renderKitCell ? <td className="px-2 py-1.5">{renderKitCell(row)}</td> : null}
                       </tr>
@@ -601,7 +627,7 @@ export function VariantGenerator({ value, onChange, programKey, unit, cardRate =
 
       {rows.length ? (
         <p className="border-t border-border-subtle pt-3 text-sm font-medium text-fg" data-testid="generator-summary">
-          {generatorSummary(rows, unit)}
+          {lockedExisting && lockedKeys.size ? newVariantsSummary(rows, existing, unit) : generatorSummary(rows, unit)}
           {conflicts.size ? <span className="ml-2 text-xs font-normal text-danger-text">{conflicts.size} to fix</span> : null}
         </p>
       ) : null}

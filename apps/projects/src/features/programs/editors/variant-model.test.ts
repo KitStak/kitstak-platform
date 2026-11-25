@@ -6,13 +6,16 @@ import {
   axisFromPreset,
   buildRows,
   effectivePatterns,
+  existingComboKeys,
   foundText,
   generatorSummary,
   lineKeys,
   matrixKeys,
   moveAxis,
   moveValue,
+  newRows,
   newValue,
+  newVariantsSummary,
   patchOverrides,
   qtyCellProblem,
   rateCellProblem,
@@ -87,13 +90,22 @@ describe('variant generator model', () => {
     expect(conflicts.get('a1=s|a2=brn')).toMatch(/Old small/);
   });
 
+  it('locks the combinations the program already has', () => {
+    const { rows } = buildRows(glove, 'GLOVE');
+    const existing = [{ key: 'S-BRN', name: 'Small Brown', sku: 'GLOVE-S-BRN', attributes: { a1: 's', a2: 'brn' } }];
+    expect([...existingComboKeys(rows, existing)]).toEqual(['a1=s|a2=brn']);
+    expect(newRows(rows, existing)).toHaveLength(7);
+    const withQty = rows.map((row) => ({ ...row, defaultQty: '100' }));
+    expect(newVariantsSummary(withQty, existing, kits)).toBe('7 new variants · 700 kits per run at default qty · 1 already in the program');
+  });
+
   it('checks typed cells', () => {
     expect(rateCellProblem('1.95')).toBeNull();
     expect(rateCellProblem('1.12345')).toBe('Use up to 4 decimals for a rate.');
-    expect(rateCellProblem('abc')).toBe('Type a rate like 1.95.');
+    expect(rateCellProblem('abc')).toBe('The rate abc is not a number.');
     expect(qtyCellProblem('100')).toBeNull();
     expect(qtyCellProblem('0')).toBe('Default qty must be more than 0.');
-    expect(qtyCellProblem('1.2345')).toBe('Use a number with up to 3 decimals.');
+    expect(qtyCellProblem('1.2345')).toBe('Use up to 3 decimals.');
   });
 
   it('edits axes: presets, codes, moving', () => {

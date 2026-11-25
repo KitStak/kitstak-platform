@@ -154,14 +154,18 @@ export function CardBody({ task, labels, links, ops, canEdit, interactive = true
           {editable ? (
             <Stop>
               <LazyPicker picker={(p) => <AssigneePicker value={task.assigneeId} onChange={(assigneeId) => void ops.updateTask(task.id, { assigneeId })} align="end" {...p}>{p.trigger}</AssigneePicker>}>
-                <button type="button" aria-label="Change assignee" className="rounded-full outline-none focus-visible:outline-2 focus-visible:outline-focus">
+                <button
+                  type="button"
+                  aria-label={task.assigneeId ? 'Change assignee' : 'Assign someone'}
+                  className={cn('rounded-full outline-none focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus', !task.assigneeId && 'opacity-0 transition-opacity group-hover/card:opacity-100')}
+                >
                   <PersonAvatar userId={task.assigneeId} size="xs" />
                 </button>
               </LazyPicker>
             </Stop>
-          ) : (
+          ) : task.assigneeId ? (
             <PersonAvatar userId={task.assigneeId} size="xs" />
-          )}
+          ) : null}
         </span>
       </div>
     </>

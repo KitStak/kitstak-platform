@@ -92,6 +92,8 @@ export interface ProgramPulseDTO {
   readonly moneyHidden?: boolean;
   readonly job?: { readonly id: string; readonly number: string; readonly name: string; readonly status: string; readonly unitLabel: string; readonly path: string } | null;
   readonly stamped?: { readonly perUnitCents: string | null; readonly feesCents: string | null; readonly totalCents: string | null; readonly byVariant: readonly { readonly variantId: string | null; readonly units: string; readonly revenueCents?: string; readonly marginBp?: number | null }[] };
+  /** The bills-to job's totals to date, the same numbers as its Pulse job page. Null when hidden or not yet computed. */
+  readonly jobTotals?: { readonly revenueCents: string; readonly costCents: string; readonly profitCents: string; readonly marginBp: number | null } | null;
   readonly pendingSync?: boolean;
   readonly pendingSince?: string | null;
   readonly lastSyncAt?: string | null;

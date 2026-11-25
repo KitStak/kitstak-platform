@@ -654,7 +654,10 @@ export function extraCellsMessage(cells: readonly string[], expected: ExpectedCe
       if (/^\$?[1-9]\d{0,2}$/.test(head) && plainNumber(joined) !== null) split = joined;
     }
     const columns = expected.kind === 'columns' ? expected.names.length : expected.cells;
-    const digits = cells.slice(columns, count).every((cell) => /^\d+(\.\d+)?$/.test(cell.trim()) || cell.trim() === '');
+    // The 1,200 hint only fits when the cells that split look like a thousands group (the last
+    // cell is exactly 3 digits). "2.10" then "5" is a decimal rate, not a number with a comma.
+    const extra = cells.slice(columns, count).map((cell) => cell.trim());
+    const digits = extra.length > 0 && extra.every((cell) => /^\d+(\.\d+)?$/.test(cell) || cell === '') && /^\d{3}$/.test(extra[extra.length - 1] ?? '');
     fix = split !== null ? `Put "${split}" in quotes, or type it as ${plainNumber(split)}.` : digits ? 'Put a number like 1,200 in quotes, or type it as 1200.' : 'Take out the extra comma, or put a cell that has a comma in quotes.';
   } else fix = delimiter === ';' ? 'Take out the extra semicolon.' : 'Take out the extra tab.';
   return `${want} ${fix}`;

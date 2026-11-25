@@ -14,7 +14,7 @@ import { nextWorkDay } from '@kitstak/programs-engine/schedule';
 import { linkRecords } from '@kitstak/db/record-links';
 import { db, type Executor } from '@/server/db';
 import { builds, programVariants, statuses, tasks, type Build, type Project, type ProgramSettingsRow, type Status } from '@/server/db/schema';
-import { invalid, locked, notFound } from '@/server/errors';
+import { conflict, invalid, locked, notFound } from '@/server/errors';
 import { PLANNED_FROM_LABELS, type PlannedFrom } from '@/lib/constants';
 import { routes } from '@/lib/routes';
 import { taskKey } from '@/lib/task-key';
@@ -190,6 +190,7 @@ interface FactsRow {
   rate_override: string | null;
   rate_override_reason: string | null;
   finished_on: string | null;
+  first_finished_on: string | null;
   schedule_id: string | null;
   version: number;
   revenue_cents: string | null;
@@ -204,7 +205,7 @@ async function buildFacts(executor: Executor, ctx: DomainContext, ids: readonly 
                v.name as variant_name, v.color as variant_color, b.build_date::text as build_date, b.planned_qty::text as planned_qty,
                b.planned_from, b.built_qty::text as built_qty, b.scrap_qty::text as scrap_qty, b.unplanned, b.closed_short, b.close_reason,
                b.split_from_id::text as split_from_id, sp.key || '-' || st.number::text as split_key,
-               b.rate_override::text as rate_override, b.rate_override_reason, b.finished_on::text as finished_on,
+               b.rate_override::text as rate_override, b.rate_override_reason, b.finished_on::text as finished_on, b.first_finished_on::text as first_finished_on,
                b.schedule_id::text as schedule_id, b.version, s.category as status_category,
                (select coalesce(sum(o.revenue_cents), 0)::text from pm.build_output o where o.build_id = b.task_id and o.deleted_at is null) as revenue_cents
           from pm.builds b
@@ -217,6 +218,18 @@ async function buildFacts(executor: Executor, ctx: DomainContext, ids: readonly 
          where b.org_id = ${ctx.orgId}::uuid and b.task_id in (${list})`,
   );
   return new Map((result as unknown as { rows: FactsRow[] }).rows.map((row) => [row.task_id, row]));
+}
+
+/**
+ * The Done confirmation choice (5.8): a build that is not done now but finished before, on an
+ * earlier day of a month that is still open, charges its batch fee on that first day unless the
+ * person picks the new date. Null when there is no choice to make.
+ */
+function rechargeChoice(fact: FactsRow, locks: ProgramLocks | null, today: IsoDate, goesToJob: boolean): BuildDTO['build']['rechargeChoice'] {
+  const first = fact.first_finished_on;
+  if (!first || fact.finished_on || fact.status_category === 'done' || fact.status_category === 'cancelled') return null;
+  if (first >= today || (locks && isLocked(locks, first, { goesToJob }))) return null;
+  return { firstFinishedOn: first, firstText: `Charge the batch fee on ${dayText(first)} (first finished)`, newText: 'Charge on the new date' };
 }
 
 /** BuildDTOs for task ids of one container, in the order given. */
@@ -276,6 +289,8 @@ export async function loadBuildDTOs(executor: Executor, ctx: DomainContext, cont
         posting: target.posting,
         pulseJob: job && target.jobId ? { id: target.jobId, number: job.facts?.number ?? '' } : null,
         finishedOn: fact.finished_on,
+        firstFinishedOn: fact.first_finished_on,
+        rechargeChoice: rechargeChoice(fact, theLocks, today, postings.programJob?.live === true),
         batchFeeLocked: Boolean(fact.finished_on && theLocks && isLocked(theLocks, fact.finished_on, { goesToJob: postings.programJob?.live === true })),
         runId: engineRunId({ scheduleId: fact.schedule_id, date: fact.build_date }),
         scheduleId: fact.schedule_id,
@@ -694,11 +709,42 @@ export async function closeShortIn(tx: Executor, ctx: DomainContext, container: 
 
 export async function closeShort(ctx: DomainContext, taskId: string, input: { readonly reason: string }): Promise<BuildDTO> {
   const { container } = await containerOfTask(ctx, taskId, 'output:log');
+  const { buildUnits, fireBuildTriggers } = await import('./sweep');
+  const before = await buildUnits([taskId]);
   await db.transaction(async (tx) => {
     await closeShortIn(tx, ctx, container, taskId, input.reason);
     if (container.programId) await refreshLedgerFor(tx, ctx, { programIds: [container.programId], dates: [todayInZone(container.timezone)] });
   });
   await emitProgramsChanged(ctx, [container.programId]);
+  await fireBuildTriggers(ctx, container.programId, before, await buildUnits([taskId]), todayInZone(container.timezone));
+  return getBuild(ctx, taskId);
+}
+
+/**
+ * Marks a build done with the 5.8 charge choice. `first_finished` (the default) keeps the batch
+ * fee on the first finish day; `new_date` moves `first_finished_on` to today first, so the finish
+ * trigger charges today. `statusId` picks a Done status when the program has more than one.
+ */
+export async function finishBuild(ctx: DomainContext, taskId: string, input: { readonly chargeOn: 'first_finished' | 'new_date'; readonly statusId?: string | null }): Promise<BuildDTO> {
+  const { container, build } = await containerOfTask(ctx, taskId, 'task:update');
+  const today = todayInZone(container.timezone);
+  const { buildUnits, fireBuildTriggers } = await import('./sweep');
+  const before = await buildUnits([taskId]);
+  await db.transaction(async (tx) => {
+    const list = await projectStatuses(tx, container.project.id);
+    const status = input.statusId ? list.find((s) => s.id === input.statusId) : list.find((s) => s.category === 'done');
+    if (!status || status.category !== 'done') throw invalid('Pick a Done status.', { statusId: 'Pick a Done status.' });
+    const first = build.firstFinishedOn;
+    if (input.chargeOn === 'new_date' && first && first < today && !build.finishedOn) {
+      const locks = await containerLocks(ctx, container, tx);
+      if (locks) assertOpen(locks, today, { goesToJob: false });
+      await tx.update(builds).set({ firstFinishedOn: today, version: sql`${builds.version} + 1`, updatedAt: new Date() }).where(eq(builds.taskId, taskId));
+    }
+    await setStatus(tx, ctx, container, taskId, status);
+    if (container.programId) await refreshLedgerFor(tx, ctx, { programIds: [container.programId], dates: [today, ...(first ? [first] : [])] });
+  });
+  await emitProgramsChanged(ctx, [container.programId]);
+  await fireBuildTriggers(ctx, container.programId, before, await buildUnits([taskId]), today);
   return getBuild(ctx, taskId);
 }
 
@@ -726,7 +772,8 @@ export async function splitBuildIn(tx: Executor, ctx: DomainContext, container: 
   const newPlanned = quantityToScaled(current.builtQty);
   await tx
     .update(builds)
-    .set({ plannedQty: fromScaled(newPlanned > ZERO ? newPlanned : ZERO, 3), closedShort: false, closeReason: `Moved ${qtyText.replace(/\.?0+$/, '')} to ${dayText(input.toDate)}`, version: sql`${builds.version} + 1`, updatedAt: new Date() })
+    // A build with nothing built is cancelled and keeps its plan (planned qty stays above 0).
+    .set({ plannedQty: newPlanned > ZERO ? fromScaled(newPlanned, 3) : current.plannedQty, closedShort: false, closeReason: `Moved ${qtyText.replace(/\.?0+$/, '')} to ${dayText(input.toDate)}`, version: sql`${builds.version} + 1`, updatedAt: new Date() })
     .where(eq(builds.taskId, taskId));
   const doneOrCancel = quantityToScaled(current.builtQty) > ZERO ? 'done' : 'cancelled';
   await setStatus(tx, ctx, container, taskId, await statusOf(tx, container.project.id, doneOrCancel));
@@ -755,6 +802,72 @@ export async function splitBuild(ctx: DomainContext, taskId: string, input: { re
   });
   await emitProgramsChanged(ctx, [container.programId]);
   return { newBuildId };
+}
+
+/**
+ * "Move the rest" for many builds at once (the close sheet): every build's remaining qty moves to
+ * a new build on `toDate` in one transaction. All or none: a refusal on one build changes nothing.
+ * Returns the new build ids in the order of `ids`; `undoSplitBuilds` takes them back.
+ */
+export async function splitBuilds(ctx: DomainContext, ids: readonly string[], input: { readonly toDate: IsoDate }): Promise<{ newBuildIds: string[] }> {
+  const unique = [...new Set(ids)].slice(0, MAX_ROWS);
+  if (unique.length === 0) return { newBuildIds: [] };
+  const first = await containerOfTask(ctx, unique[0]!, 'build:plan');
+  const container = first.container;
+  const newBuildIds = await db.transaction(async (tx) => {
+    const out: string[] = [];
+    for (const id of unique) {
+      const [task] = await tx.select({ projectId: tasks.projectId, kind: tasks.kind }).from(tasks).where(and(eq(tasks.id, id), eq(tasks.orgId, ctx.orgId), isNull(tasks.deletedAt)));
+      if (!task || task.kind !== 'build') throw notFound('That build');
+      if (task.projectId !== container.project.id) throw invalid('Move the rest works on builds of one program at a time.');
+      out.push(await splitBuildIn(tx, ctx, container, id, { toDate: input.toDate }));
+    }
+    if (container.programId) await refreshLedgerFor(tx, ctx, { programIds: [container.programId], dates: [todayInZone(container.timezone), input.toDate] });
+    return out;
+  });
+  await emitProgramsChanged(ctx, [container.programId]);
+  return { newBuildIds };
+}
+
+/**
+ * Undo for `splitBuilds` (and one `splitBuild`): each new build goes away and the build it came
+ * from opens again at its old planned qty. Refused with CONFLICT when a new build already has
+ * output or time, so nothing logged is lost.
+ */
+export async function undoSplitBuilds(ctx: DomainContext, newBuildIds: readonly string[]): Promise<{ reopened: number }> {
+  const unique = [...new Set(newBuildIds)].slice(0, MAX_ROWS);
+  if (unique.length === 0) return { reopened: 0 };
+  const first = await containerOfTask(ctx, unique[0]!, 'build:plan');
+  const container = first.container;
+  const reopened = await db.transaction(async (tx) => {
+    let count = 0;
+    const statuses = await projectStatuses(tx, container.project.id);
+    for (const id of unique) {
+      const [moved] = await tx.select().from(builds).where(and(eq(builds.taskId, id), eq(builds.containerId, container.project.id))).for('update');
+      if (!moved?.splitFromId) throw notFound('That moved build');
+      const used = await tx.execute(
+        sql`select (exists (select 1 from pm.build_output o where o.build_id = ${id}::uuid and o.deleted_at is null)
+                 or exists (select 1 from pm.time_entries te where te.task_id = ${id}::uuid and te.deleted_at is null)) as used`,
+      );
+      if ((used as unknown as { rows: { used: boolean }[] }).rows[0]?.used) throw conflict('A moved build already has output or time. Remove that first.');
+      const [original] = await tx.select().from(builds).where(eq(builds.taskId, moved.splitFromId)).for('update');
+      const [originalTask] = await tx.select().from(tasks).where(eq(tasks.id, moved.splitFromId));
+      if (!original || !originalTask || originalTask.deletedAt) throw notFound('The build it came from');
+      const built = quantityToScaled(original.builtQty);
+      // A build with output kept planned = built when it closed; one with none kept its plan.
+      const planned = built > ZERO ? fromScaled(built + quantityToScaled(moved.plannedQty), 3) : original.plannedQty;
+      await tx.update(builds).set({ plannedQty: planned, closedShort: false, closeReason: null, version: sql`${builds.version} + 1`, updatedAt: new Date() }).where(eq(builds.taskId, original.taskId));
+      const open = built > ZERO ? (statuses.find((s) => s.category === 'in_progress') ?? defaultStatus(statuses)) : defaultStatus(statuses);
+      if (open) await setStatus(tx, ctx, container, original.taskId, open);
+      await tx.update(tasks).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(tasks.id, id));
+      await logActivity(tx, ctx, { verb: 'build.updated', entityType: 'task', entityId: original.taskId, projectId: container.project.id, taskId: original.taskId, field: 'planned_qty', before: { plannedQty: original.plannedQty }, after: { plannedQty: planned, undone: 'split' } });
+      count += 1;
+    }
+    if (container.programId) await refreshLedgerFor(tx, ctx, { programIds: [container.programId], dates: [todayInZone(container.timezone)] });
+    return count;
+  });
+  await emitProgramsChanged(ctx, [container.programId]);
+  return { reopened };
 }
 
 export async function duplicateBuild(ctx: DomainContext, taskId: string, input: { readonly to: 'here' | 'tomorrow' | 'next_scheduled' | IsoDate }): Promise<BuildDTO> {

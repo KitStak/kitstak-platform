@@ -29,6 +29,17 @@ function assertMonth(month: string): void {
   if (!MONTH.test(month)) throw invalid('Pick a month.', { month: 'Pick a month.' });
 }
 
+function shortDay(day: string): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function timerDetail(timers: readonly { readonly who: string; readonly day: string }[]): string | null {
+  const first = timers[0];
+  if (!first) return null;
+  if (timers.length === 1) return `${first.who} has a timer running from ${shortDay(first.day)}. Stop it first.`;
+  return `${timers.length} timers are running from days in this month, the first from ${first.who} on ${shortDay(first.day)}. Stop them first.`;
+}
+
 async function checklist(ctx: DomainContext, access: ProgramAccess, month: IsoMonth, options: { readonly adjustmentsReviewed?: boolean } = {}): Promise<CloseChecklistDTO> {
   const { program, settings, caps } = access;
   const today = todayInZone(settings.timezone);
@@ -47,6 +58,16 @@ async function checklist(ctx: DomainContext, access: ProgramAccess, month: IsoMo
          order by b.build_date, t.position`,
   );
   const openBuilds = (open as unknown as { rows: { id: string; number: number; title: string; build_date: string; planned_qty: string; built_qty: string }[] }).rows;
+  // A timer still running from a day of this month could never be stopped once the month locks
+  // (time counts on the day it started), so it blocks the close until someone stops it.
+  const running = await db.execute(
+    sql`select coalesce(nullif(split_part(u.name, ' ', 1), ''), 'Someone') as who, (te.started_at at time zone ${settings.timezone})::date::text as day
+          from pm.time_entries te left join core."user" u on u.id = te.user_id
+         where te.org_id = ${ctx.orgId}::uuid and te.project_id = ${program.id}::uuid and te.ended_at is null and te.deleted_at is null
+           and (te.started_at at time zone ${settings.timezone})::date between ${from}::date and ${to}::date
+         order by te.started_at`,
+  );
+  const timers = (running as unknown as { rows: { who: string; day: string }[] }).rows;
   const stats = await programMonthStats(db, ctx, program, settings, month);
   const read = await readProgramMonth(shared(db), ctx.orgId, program.id, month);
   const units = read.output.reduce((sum, row) => sum + quantityToScaled(row.qty), ZERO);
@@ -57,6 +78,7 @@ async function checklist(ctx: DomainContext, access: ProgramAccess, month: IsoMo
     { key: 'month_over', label: `${monthName(month)} has ended`, ok: today > to, required: true, detail: today > to ? null : `${monthName(month)} ends on the ${Number(to.slice(8))}th.` },
     { key: 'earlier_closed', label: 'Every month before it is closed', ok: earlierOpen.length === 0, required: true, detail: earlierOpen.length ? `Close ${earlierOpen.map((m) => monthName(m)).join(', ')} first.` : null },
     { key: 'open_builds', label: 'No open builds', ok: openBuilds.length === 0, required: true, detail: openBuilds.length ? `${openBuilds.length} ${openBuilds.length === 1 ? 'build is' : 'builds are'} still open.` : null },
+    { key: 'timers', label: 'No timers running', ok: timers.length === 0, required: true, detail: timerDetail(timers) },
     { key: 'unpriced', label: `Every ${settings.unitSingular} has a price`, ok: quantityToScaled(stats.result.unpricedUnits) === ZERO, required: true, detail: quantityToScaled(stats.result.unpricedUnits) === ZERO ? null : `${formatQty(stats.result.unpricedUnits)} ${settings.unitPlural} have no price.` },
     { key: 'settled', label: 'Monthly charges are added', ok: settled, required: true, detail: settled ? null : 'This happens on its own a few minutes after the month ends.' },
     { key: 'adjustments', label: 'Adjustments reviewed', ok: Boolean(options.adjustmentsReviewed) || adjustments.length === 0, required: true, detail: adjustments.length ? `${adjustments.length} ${adjustments.length === 1 ? 'adjustment' : 'adjustments'} this month.` : null },

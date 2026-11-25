@@ -171,9 +171,22 @@ function priceOf(value: string | number | null): string | undefined {
   }
 }
 
+/** The most cents a deal value or fee can read as: under $10 trillion, the cap of the `pm` money columns. A larger cell is refused, never stored. */
+export const MAX_DEAL_CENTS: Cents = BigInt(10) ** BigInt(15);
+
+function boundedCents(value: string | number | null): Cents | null {
+  if (value === null) return null;
+  let cents: Cents | null;
+  try {
+    cents = dealValueToCents(value);
+  } catch {
+    return null;
+  }
+  return cents !== null && cents < MAX_DEAL_CENTS && cents > -MAX_DEAL_CENTS ? cents : null;
+}
+
 function centsOf(value: string | number | null): Cents | undefined {
-  if (value === null) return undefined;
-  const cents = dealValueToCents(value);
+  const cents = boundedCents(value);
   return cents !== null && cents >= BigInt(0) ? cents : undefined;
 }
 
@@ -232,7 +245,7 @@ export function dealFactsFromRow(row: CrmDealRow): CrmDealFacts {
     itemId: row.id,
     name: row.name,
     boardKind: isDeal ? 'deal' : 'account',
-    valueCents: valueNumber === null ? null : dealValueToCents(valueNumber),
+    valueCents: boundedCents(valueNumber),
     currency: cellCurrency(valueCell),
     won: stage ? isWonStage({ isDone: stage.isDone, name: stage.name }) : false,
     stageLabel: stage?.name ?? null,

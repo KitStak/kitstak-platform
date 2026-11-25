@@ -299,12 +299,20 @@ export function targetLine(program: ProgramListItemDTO): string | null {
   return `${formatPercentBp(program.month.targetBp)} of target`;
 }
 
-/** "May miss minimum by $1,240" when the projected gap is above 0, else null. */
+/** "Minimum gap $1,240" (short enough for a card chip) when the projected gap is above 0, else null. */
 export function minimumRiskText(program: ProgramListItemDTO): string | null {
   if (program.moneyHidden) return null;
   const gap = big(program.month.projectedGapCents);
   if (gap <= BigInt(0)) return null;
-  return `May miss minimum by ${formatCents(gap)}`;
+  return `Minimum gap ${formatCents(gap)}`;
+}
+
+/** The chip tooltip: "May miss the minimum by $1,240.00 this month". */
+export function minimumRiskTitle(program: ProgramListItemDTO): string | null {
+  if (program.moneyHidden) return null;
+  const gap = big(program.month.projectedGapCents);
+  if (gap <= BigInt(0)) return null;
+  return `May miss the minimum by ${formatCents(gap, { cents: true })} this month`;
 }
 
 function csvCell(value: string): string {

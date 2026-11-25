@@ -1,6 +1,6 @@
 'use server';
 import { z } from 'zod';
-import { createSchedule, endSchedule, pauseSchedule, resumeSchedule, runScheduleGeneration, skipDate, updateSchedule } from '@/server/domain/programs';
+import { createSchedule, deleteSchedule, endSchedule, pauseSchedule, resumeSchedule, runScheduleGeneration, skipDate, updateSchedule } from '@/server/domain/programs';
 import { getProgramDetail } from '@/server/domain/programs';
 import { runAction } from './_action';
 import { isoDate, programKey, scheduleInputSchema, uuid, version } from './program-schemas';
@@ -21,6 +21,11 @@ export async function pauseScheduleAction(input: z.input<typeof idOnly>) {
 }
 export async function resumeScheduleAction(input: z.input<typeof idOnly>) {
   return runAction(idOnly, input, (data, ctx) => resumeSchedule(ctx, data.id), { revalidate: false });
+}
+
+/** Owners only: the schedule goes away, builds it already made stay. */
+export async function deleteScheduleAction(input: z.input<typeof idOnly>) {
+  return runAction(idOnly, input, (data, ctx) => deleteSchedule(ctx, data.id), { revalidate: false });
 }
 
 const endSchema = z.object({ id: uuid, endsOn: isoDate });

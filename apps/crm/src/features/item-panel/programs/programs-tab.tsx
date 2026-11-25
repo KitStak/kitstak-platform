@@ -333,7 +333,7 @@ export function ProgramsTab({ itemId, term }: ProgramsTabProps) {
 
       {wonWaiting ? (
         <div
-          className="flex flex-col gap-3 rounded-lg border border-success/40 bg-success-subtle p-3 @min-[520px]:flex-row @min-[520px]:items-center"
+          className="flex flex-col gap-3 rounded-lg border border-success/40 bg-success-subtle p-3 @min-[640px]:flex-row @min-[640px]:items-center"
           role="status"
           data-testid="crm-programs-won-banner"
         >
@@ -341,11 +341,11 @@ export function ProgramsTab({ itemId, term }: ProgramsTabProps) {
             <PartyPopper aria-hidden className="size-4 text-success-text" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-balance text-fg">This deal is won. Start a program to track builds and revenue.</p>
+            <p className="text-sm font-semibold text-fg">This deal is won. Start a program to track builds and revenue.</p>
             <p className="mt-0.5 text-xs text-fg-secondary">
               {data.deal?.valueCents
-                ? `The program starts with this deal's customer${data.deal.accountName ? `, ${displayText(data.deal.accountName)},` : ''} and its value of ${money(data.deal.valueCents)}.`
-                : "The program starts with this deal's customer and value."}
+                ? `The program starts with this deal’s customer${data.deal.accountName ? `, ${displayText(data.deal.accountName)},` : ''} and its value of ${money(data.deal.valueCents)}.`
+                : 'The program starts with this deal’s customer and value.'}
             </p>
           </div>
           <div className="shrink-0">

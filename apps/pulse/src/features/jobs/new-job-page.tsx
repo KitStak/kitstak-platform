@@ -1,4 +1,5 @@
-import { FileSpreadsheet, PackagePlus } from 'lucide-react';
+import Link from 'next/link';
+import { FileSpreadsheet, Info, PackagePlus } from 'lucide-react';
 import { Page, Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { Teach } from '@/components/pulse/teach';
@@ -18,6 +19,7 @@ import {
   listSites,
   listVasServices,
   programForNewJob,
+  programJobTaken,
   todayInZone,
 } from '@/server/domain';
 import { pulsePage } from '@/server/page';
@@ -88,6 +90,8 @@ export async function NewJobPage({ searchParams }: { readonly searchParams?: Pro
   // Opened from a program (`?program=`): the program's customer picks the client when Pulse has it.
   const programId = first(query, 'program', 64);
   const program = programId ? await soft(programForNewJob(ctx, programId), null) : null;
+  // A program that already bills to a job cannot take this one: say so, with a link to that job.
+  const taken = programId && !program ? await soft(programJobTaken(ctx, programId), null) : null;
   const hint = first(query, 'clientHint', 64) || program?.coreCustomerId || '';
   const clientRef = {
     pulseClientId: first(query, 'client') || null,
@@ -117,6 +121,18 @@ export async function NewJobPage({ searchParams }: { readonly searchParams?: Pro
         </ButtonLink>
       }
     >
+      {taken ? (
+        <div role="status" className="mb-4 flex items-start gap-2 rounded-lg border border-border-subtle bg-sunken px-3 py-2.5 text-sm text-fg-secondary" data-testid="new-job-program-taken">
+          <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-icon" />
+          <p>
+            {taken.key} already bills to{' '}
+            <Link href={routes.job(taken.jobNumber)} className="font-medium text-fg-link hover:underline">
+              {taken.jobNumber}
+            </Link>
+            . This job will not link to it. A program bills to one job.
+          </p>
+        </div>
+      ) : null}
       <NewJobWizard
         clients={clients}
         jobTypes={jobTypes}

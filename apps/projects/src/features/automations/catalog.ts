@@ -38,6 +38,9 @@ export const TRIGGER_OPTIONS: readonly TriggerOption[] = [
   { type: 'task_overdue', label: 'a task becomes overdue', group: 'Dates', make: () => ({ type: 'task_overdue' }) },
   { type: 'run_done', label: 'all builds of a run are done', group: 'Programs', make: () => ({ type: 'run_done' }) },
   { type: 'run_below_plan', label: 'a run is below plan', group: 'Programs', make: () => ({ type: 'run_below_plan', percent: 20, at: '14:00' }) },
+  { type: 'build_output_logged', label: 'output is logged on a build', group: 'Programs', make: () => ({ type: 'build_output_logged', minUnits: null }) },
+  { type: 'build_done_short', label: 'a build is done short of plan', group: 'Programs', make: () => ({ type: 'build_done_short' }) },
+  { type: 'build_over_plan', label: 'a build goes over plan', group: 'Programs', make: () => ({ type: 'build_over_plan' }) },
   { type: 'crm_stage_changed', label: 'a linked CRM deal changes stage', group: 'Other KitStak apps', needs: 'crm', make: () => ({ type: 'crm_stage_changed' }) },
   { type: 'wms_order_shipped', label: 'a linked WMS order ships', group: 'Other KitStak apps', needs: 'wms', make: () => ({ type: 'wms_order_shipped' }) },
 ];
@@ -125,8 +128,12 @@ export const conditionOptionByKey = (key: string): ConditionOption =>
 /** Actions that never run on builds (5.17): builds stay in their program. */
 export const NOT_FOR_BUILDS: readonly AutomationActionType[] = ['move_to_project', 'move_to_section', 'create_subtask', 'complete_parent'];
 
-/** True for the triggers about program runs (they act on builds only). */
-export const isRunTrigger = (trigger: AutomationTrigger): boolean => trigger.type === 'run_done' || trigger.type === 'run_below_plan';
+/** True for the triggers about program runs and builds (they act on builds only). */
+export const isRunTrigger = (trigger: AutomationTrigger): boolean =>
+  trigger.type === 'run_done' || trigger.type === 'run_below_plan' || trigger.type === 'build_output_logged' || trigger.type === 'build_done_short' || trigger.type === 'build_over_plan';
+
+/** Smallest batch that fires "output is logged on a build" (the stepper's range and step). */
+export const OUTPUT_UNITS = { min: 1, max: 100_000, step: 10, start: 100 } as const;
 
 /**
  * True when a rule acts on builds: a run trigger, a rule that works in one program, a "the work type

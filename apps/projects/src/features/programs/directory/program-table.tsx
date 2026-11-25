@@ -153,7 +153,7 @@ export function ProgramTable({ programs, ops, access, sort, dir, onSort, hidden,
         ) : (
           <span title={targetText(program.month.targetBp)}>
             <Badge tone={targetTone(program.month.targetBp)} size="sm" className="tabular-nums">
-              {`${Math.round(program.month.targetBp / 100)}%`}
+              {formatPercentBp(program.month.targetBp)}
             </Badge>
           </span>
         );

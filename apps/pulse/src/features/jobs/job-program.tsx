@@ -185,7 +185,7 @@ function ProgramCard({ job, data }: { readonly job: JobDetailDTO; readonly data:
  * checked to stay apart on light and dark panels, so no two dots look alike and none fades into the card.
  */
 const dotColor = (color: string | null, index: number): string => (isLabelColor(color) ? labelColorVars(color).bg : seriesColor(index % 8));
-const LABOR_WORDS = 'Labor and time off job';
+const LABOR_WORDS = 'Labor and time not on a job';
 const LABOR_HINT = 'Labor cost of the hours, plus each line’s share of time not on a job. Profit shows the two apart.';
 
 function money(cents: number | null | undefined, hidden: boolean): string {
@@ -335,6 +335,8 @@ function VariantCards({ data, unitLabel, footer }: { readonly data: JobProgramDT
   const totals = data.totals;
   const several = data.blocks.length > 1;
   const unitWord = `${unitLabel.charAt(0).toUpperCase()}${unitLabel.slice(1)}`;
+  // The same columns as the desktop table; Material only when some variant has any.
+  const anyMaterial = data.blocks.some((block) => block.variants.some((row) => (row.materialCents ?? 0) !== 0));
   return (
     <div className="flex flex-col gap-2 p-3 sm:hidden" data-testid="job-by-variant-cards">
       {data.blocks.map((block) => (
@@ -359,6 +361,8 @@ function VariantCards({ data, unitLabel, footer }: { readonly data: JobProgramDT
                 {hidden ? null : (
                   <>
                     <CardFigure label="Revenue" value={money(row.revenueCents, hidden)} />
+                    <CardFigure label={LABOR_WORDS} value={money(row.laborCents, hidden)} />
+                    {anyMaterial ? <CardFigure label="Material" value={money(row.materialCents, hidden)} /> : null}
                     <CardFigure label="Profit" value={money(row.profitCents, hidden)} tone={(row.profitCents ?? 0) < 0 ? 'danger' : undefined} />
                     <CardFigure label="Margin" value={formatPercentBp(row.marginBp, { empty: 'No revenue' })} />
                   </>

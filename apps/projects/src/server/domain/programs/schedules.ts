@@ -216,6 +216,23 @@ export async function endSchedule(ctx: DomainContext, id: string, input: { reado
   return setStatus(ctx, id, 'ended', { endsOn: input.endsOn }, 'schedule.ended');
 }
 
+/**
+ * Deletes a schedule (owners only). Builds it already made stay as they are, with their output and
+ * money; nothing new is made from it. The run names on those builds keep the schedule's name.
+ */
+export async function deleteSchedule(ctx: DomainContext, id: string): Promise<{ id: string; keptBuilds: number }> {
+  const { row, program } = await loadSchedule(ctx, id);
+  await requireProgram(ctx, { id: program.id }, 'project:manage_members');
+  const kept = await db.transaction(async (tx) => {
+    await tx.update(buildSchedules).set({ status: 'ended', deletedAt: new Date(), version: row.version + 1, updatedAt: new Date() }).where(eq(buildSchedules.id, id));
+    const builds = await tx.execute(sql`select count(*)::int as n from pm.builds b join pm.tasks t on t.id = b.task_id and t.deleted_at is null where b.schedule_id = ${id}::uuid`);
+    const keptBuilds = Number((builds as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0);
+    await logActivity(tx, ctx, { verb: 'schedule.deleted', entityType: 'schedule', entityId: id, projectId: program.id, before: { name: row.name }, after: { keptBuilds } });
+    return keptBuilds;
+  });
+  return { id, keptBuilds: kept };
+}
+
 /** Skips one date of a schedule; an untouched build already made for it is removed. */
 export async function skipDate(ctx: DomainContext, id: string, date: IsoDate): Promise<ScheduleDTO> {
   const { row, program, settings } = await loadSchedule(ctx, id);

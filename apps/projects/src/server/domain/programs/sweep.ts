@@ -16,7 +16,7 @@ import { priceToScaled, quantityToScaled, ZERO } from '@kitstak/programs-engine/
 import { db } from '@/server/db';
 import { projectMembers, projects } from '@/server/db/schema';
 import { routes } from '@/lib/routes';
-import { RUN_TRIGGER_TYPES } from '@/lib/automation-types';
+import { BUILD_TRIGGER_TYPES, RUN_TRIGGER_TYPES } from '@/lib/automation-types';
 import type { TaskEvent } from '@/server/automations/engine';
 import { engineTaskFromSummary } from '../automation-sweep';
 import { selectTaskSummary } from '../task-queries';
@@ -183,6 +183,69 @@ export async function runTriggers(ctx: DomainContext, program: { readonly id: st
   const { runAutomationsForEvents } = await import('../automations');
   await runAutomationsForEvents({ ...ctx, orgRole: 'owner', userName: 'Automation' }, events);
   return events.length;
+}
+
+/** A build's units before and after a change, for the build triggers. */
+export interface BuildUnits {
+  readonly taskId: string;
+  readonly planned: string;
+  readonly built: string;
+  readonly done: boolean;
+}
+
+/** Reads planned and built units and the done flag of some builds (the input to `fireBuildTriggers`). */
+export async function buildUnits(taskIds: readonly string[]): Promise<Map<string, BuildUnits>> {
+  if (taskIds.length === 0) return new Map();
+  const result = await db.execute(
+    sql`select task_id::text as task_id, planned_qty::text as planned, built_qty::text as built, (finished_on is not null) as done
+          from pm.builds where task_id in (${sql.join(taskIds.map((id) => sql`${id}::uuid`), sql`, `)})`,
+  );
+  const rows = (result as unknown as { rows: { task_id: string; planned: string; built: string; done: boolean }[] }).rows;
+  return new Map(rows.map((row) => [row.task_id, { taskId: row.task_id, planned: row.planned, built: row.built, done: row.done }]));
+}
+
+/**
+ * Build triggers (5.17): "output is logged on a build" for each build that got units in this
+ * batch, "a build is done short of plan" when a build became done below its plan, and "a build
+ * goes over plan" when its built units crossed its plan. Each fires once per build per change
+ * (over plan once per build). Never throws: a rule problem never undoes the output.
+ */
+export async function fireBuildTriggers(ctx: DomainContext, programId: string | null, before: ReadonlyMap<string, BuildUnits>, after: ReadonlyMap<string, BuildUnits>, date: string): Promise<number> {
+  try {
+    const rules = await db.execute(
+      sql`select 1 from pm.automations
+           where org_id = ${ctx.orgId}::uuid and enabled and deleted_at is null
+             and trigger ->> 'type' in (${sql.join(BUILD_TRIGGER_TYPES.map((type) => sql`${type}`), sql`, `)})
+             and (project_id is null ${programId ? sql`or project_id = ${programId}::uuid` : sql``}) limit 1`,
+    );
+    if ((rules as unknown as { rows: unknown[] }).rows.length === 0) return 0;
+    const events: TaskEvent[] = [];
+    for (const [taskId, now] of after) {
+      const was = before.get(taskId) ?? { taskId, planned: now.planned, built: '0', done: false };
+      const added = quantityToScaled(now.built) - quantityToScaled(was.built);
+      const planned = quantityToScaled(now.planned);
+      const built = quantityToScaled(now.built);
+      const facts = (units: bigint) => ({ units: (Number(units) / 1000).toString(), plannedUnits: now.planned, builtUnits: now.built, date });
+      const kinds: TaskEvent['type'][] = [];
+      if (added > ZERO) kinds.push('build_output_logged');
+      if (now.done && !was.done && built < planned) kinds.push('build_done_short');
+      if (built > planned && quantityToScaled(was.built) <= planned) kinds.push('build_over_plan');
+      if (kinds.length === 0) continue;
+      const summary = await selectTaskSummary(taskId);
+      if (!summary) continue;
+      const task = engineTaskFromSummary(summary);
+      for (const type of kinds) {
+        events.push({ type, task, output: facts(added > ZERO ? added : ZERO), dedupeKey: type === 'build_over_plan' ? `build_over_plan:${taskId}` : undefined });
+      }
+    }
+    if (events.length === 0) return 0;
+    const { runAutomationsForEvents } = await import('../automations');
+    await runAutomationsForEvents(ctx, events);
+    return events.length;
+  } catch (error) {
+    console.error('Build triggers failed', error);
+    return 0;
+  }
 }
 
 /** One minimum note per program per week, whatever the amounts say. */

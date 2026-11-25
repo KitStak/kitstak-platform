@@ -22,6 +22,9 @@ import {
   ListChecks,
   ListPlus,
   MessageSquare,
+  Minus,
+  PackageCheck,
+  PackageMinus,
   Plus,
   Rows3,
   Signal,
@@ -30,6 +33,7 @@ import {
   Tags as TagsIcon,
   Trash2,
   TrendingDown,
+  TrendingUp,
   Truck,
   UserRound,
   Zap,
@@ -68,6 +72,7 @@ import {
   NOT_FOR_BUILDS,
   NOT_FOR_BUILD_TRIGGERS,
   buildWords,
+  OUTPUT_UNITS,
   RUN_BELOW_PERCENTS,
   RUN_CHECK_TIMES,
   actsOnBuilds,
@@ -383,6 +388,9 @@ function TriggerGlyph({ type }: { readonly type: AutomationTrigger['type'] }) {
     wms_order_shipped: Truck,
     run_done: Factory,
     run_below_plan: TrendingDown,
+    build_output_logged: PackageCheck,
+    build_done_short: PackageMinus,
+    build_over_plan: TrendingUp,
   }[type];
   return <Icon aria-hidden className={GLYPH} />;
 }
@@ -580,8 +588,56 @@ function TriggerSentence({
           />
         </>
       ) : null}
+      {trigger.type === 'build_output_logged' ? (
+        <>
+          <span className="text-fg-secondary">when the batch is</span>
+          <TokenSelect
+            label="Batch size"
+            value={trigger.minUnits === null ? 'any' : 'at_least'}
+            options={[
+              { value: 'any', label: 'any amount' },
+              { value: 'at_least', label: 'at least' },
+            ]}
+            placeholder="any amount"
+            onChange={(value) => onChange({ type: 'build_output_logged', minUnits: value === 'any' ? null : (trigger.minUnits ?? OUTPUT_UNITS.start) })}
+          />
+          {trigger.minUnits !== null ? (
+            <>
+              <UnitsStepper value={trigger.minUnits} onChange={(minUnits) => onChange({ type: 'build_output_logged', minUnits })} />
+              <span className="text-fg-secondary">units</span>
+            </>
+          ) : null}
+        </>
+      ) : null}
       {trigger.type === 'crm_stage_changed' ? <CrmStageToken trigger={trigger} onChange={onChange} /> : null}
     </Line>
+  );
+}
+
+/** The smallest batch for "output is logged on a build": type it or step by 10. */
+function UnitsStepper({ value, onChange }: { readonly value: number; readonly onChange: (value: number) => void }) {
+  const clamp = (next: number) => Math.min(OUTPUT_UNITS.max, Math.max(OUTPUT_UNITS.min, next));
+  return (
+    <span className="inline-flex h-7 items-center rounded-md border border-border-input bg-panel" role="group" aria-label="Units in the batch">
+      <button type="button" aria-label="Fewer units" disabled={value <= OUTPUT_UNITS.min} onClick={() => onChange(clamp(value - OUTPUT_UNITS.step))} className="grid size-7 place-items-center rounded-l-md text-icon hover:bg-hover disabled:opacity-40">
+        <Minus aria-hidden className="size-3.5" />
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        aria-label="Units in the batch"
+        value={value.toLocaleString('en-US')}
+        onChange={(event) => {
+          const next = Number.parseInt(event.target.value.replace(/\D/g, ''), 10);
+          if (Number.isFinite(next)) onChange(clamp(next));
+        }}
+        className="h-full w-16 bg-transparent text-center text-sm font-medium tabular-nums outline-none"
+        data-testid="automation-output-units"
+      />
+      <button type="button" aria-label="More units" disabled={value >= OUTPUT_UNITS.max} onClick={() => onChange(clamp(value + OUTPUT_UNITS.step))} className="grid size-7 place-items-center rounded-r-md text-icon hover:bg-hover disabled:opacity-40">
+        <Plus aria-hidden className="size-3.5" />
+      </button>
+    </span>
   );
 }
 

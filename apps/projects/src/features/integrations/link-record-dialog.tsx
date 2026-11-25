@@ -1,7 +1,7 @@
 'use client';
 /**
  * "Link a record" dialog: pick what kind of record (CRM deal, account, customer, WMS order,
- * work order, receipt, cycle count — only the kinds this workspace can use), search it live and
+ * work order, receipt, cycle count; only the kinds this workspace can use), search it live and
  * link it to a task or a project. Already-linked records are marked and can't be added twice.
  *
  *   <LinkRecordDialog open onOpenChange owner={{ taskId }} existing={task.links} onLinked={…} />

@@ -37,6 +37,14 @@ function cycleSentence(count: number, effectiveFrom: string | null): string {
   return `started and discarded ${what}${day ? ` for ${day}` : ''}`;
 }
 
+/**
+ * A build's title carries its day ("XL Yellow · Nov 27"). In a sentence that already says the
+ * day ("moved GLOVE-24 XL Yellow to Nov 27") the dated title reads twice, so the day comes off.
+ */
+function lineTitle(title: string): string {
+  return title.replace(/ · [A-Z][a-z]{2} \d{1,2}(,? \d{4})?( build)?$/, '');
+}
+
 /** The units inside a folded line: a started and discarded pair stays together. */
 function foldUnits<T extends ActivityDTO>(rows: readonly T[]): T[][] {
   const units: T[][] = [];
@@ -52,7 +60,7 @@ function foldUnits<T extends ActivityDTO>(rows: readonly T[]): T[][] {
 }
 
 export function ActivityTab() {
-  const { key, statusById, variantById, capabilities } = useCurrentProgram();
+  const { key, unit, statusById, variantById, capabilities } = useCurrentProgram();
   const people = usePeopleMap();
   const { openTask } = useTaskDrawer();
   const tasks = useProjectTasks(key);
@@ -65,7 +73,7 @@ export function ActivityTab() {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
   });
-  const lookups = useMemo(() => ({ personName: (id: string) => people.get(id)?.name, statusName: (id: string) => statusById.get(id)?.name, variantName: (id: string) => variantById.get(id)?.name }), [people, statusById, variantById]);
+  const lookups = useMemo(() => ({ personName: (id: string) => people.get(id)?.name, statusName: (id: string) => statusById.get(id)?.name, variantName: (id: string) => variantById.get(id)?.name, unit: { singular: unit.singular, plural: unit.plural } }), [people, statusById, variantById, unit.singular, unit.plural]);
   const rows = useMemo(() => (activity.data?.pages ?? []).flatMap((page) => page.items).filter((row) => matchesFilter(row, filter)), [activity.data, filter]);
   const groups = useMemo(() => dayGroups(rows), [rows]);
   const actorName = (row: ActivityDTO) => (row.actorKind === 'automation' ? 'Automation' : row.actorKind === 'system' ? 'KitStak' : row.actorId ? (people.get(row.actorId)?.name ?? 'Someone') : 'KitStak');
@@ -86,7 +94,7 @@ export function ActivityTab() {
       <>
         {parts.before}{' '}
         <button type="button" onClick={() => openTask(task.key)} className="rounded-sm text-left font-medium text-fg-link outline-none hover:underline focus-visible:outline-2 focus-visible:outline-focus">
-          {task.key} {task.title}
+          {task.key} {lineTitle(task.title)}
         </button>
         {parts.after ? ` ${parts.after}` : null}
       </>

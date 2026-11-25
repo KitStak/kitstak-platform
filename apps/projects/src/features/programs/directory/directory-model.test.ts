@@ -93,7 +93,7 @@ describe('totals and text', () => {
     expect(directorySubtitle([GLOVE, ECOMM, MAHCO])).toBe('2 running · 1 paused · $40,470 this month · 1 below target');
   });
   it('says when the minimum may be missed', () => {
-    expect(minimumRiskText(ECOMM)).toBe('May miss minimum by $1,240');
+    expect(minimumRiskText(ECOMM)).toBe('Minimum gap $1,240');
     expect(minimumRiskText(GLOVE)).toBeNull();
   });
   it('exports CSV with money as dollars and quotes commas', () => {

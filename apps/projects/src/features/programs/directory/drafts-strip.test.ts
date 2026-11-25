@@ -26,8 +26,8 @@ describe('draft chips tell look alike drafts apart', () => {
       { id: 'bbbb-2222', title: 'Glove kitting two', payload: { start: { mode: 'scratch' }, basics: { key: 'glov2' } } },
       { id: 'cccc-3333', title: 'Glove kitting two', payload: { start: { mode: 'deal' }, basics: { key: 'glov2' } } },
     ]);
-    expect(hints.get('aaaa-1111')).toEqual({ text: 'GLOV2, From scratch', shortId: '#1111' });
-    expect(hints.get('bbbb-2222')).toEqual({ text: 'GLOV2, From scratch', shortId: '#2222' });
-    expect(hints.get('cccc-3333')).toEqual({ text: 'GLOV2, From a deal', shortId: null });
+    expect(hints.get('aaaa-1111')).toEqual({ text: 'GLOV2, from scratch', shortId: '#1111' });
+    expect(hints.get('bbbb-2222')).toEqual({ text: 'GLOV2, from scratch', shortId: '#2222' });
+    expect(hints.get('cccc-3333')).toEqual({ text: 'GLOV2, from a deal', shortId: null });
   });
 });

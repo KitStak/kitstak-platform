@@ -25,7 +25,7 @@ export async function programTrends(ctx: DomainContext, input: { readonly from: 
   const programs = await listPrograms(ctx, { includeArchived: true });
   const ids = programs.map((p) => p.id);
   const money = await seesMoneyFor(ctx, ids);
-  if (ids.length === 0) return { from: input.from, to: input.to, groupBy: input.groupBy, months, rows: [], totals: months.map((month) => ({ month, revenueCents: '0' })) };
+  if (ids.length === 0) return { from: input.from, to: input.to, groupBy: input.groupBy, months, rows: [], totals: months.map((month) => ({ month, revenueCents: '0', moneyHidden: false })) };
   const list = sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `);
   const from = firstDayOfMonth(months[0]!);
   const to = lastDayOfMonth(months.at(-1)!);
@@ -72,7 +72,18 @@ export async function programTrends(ctx: DomainContext, input: { readonly from: 
     });
     return { id: group.id, key: group.key, name: group.name, unit: group.unit, cells, totalUnits: fromScaled(units, 3), totalCents: centsOut(cents, hidden), moneyHidden: hidden };
   });
-  return { from: input.from, to: input.to, groupBy: input.groupBy, months, rows: rows.sort((a, b) => a.name.localeCompare(b.name)), totals: months.map((month) => ({ month, revenueCents: (totals.get(month) ?? ZERO).toString() })) };
+  // Totals add only the rows this viewer may see. With every row hidden there is no total to show
+  // (null, never a $0.00 footer); with some hidden the total says so.
+  const allHidden = rows.length > 0 && rows.every((row) => row.moneyHidden);
+  const someHidden = rows.some((row) => row.moneyHidden);
+  return {
+    from: input.from,
+    to: input.to,
+    groupBy: input.groupBy,
+    months,
+    rows: rows.sort((a, b) => a.name.localeCompare(b.name)),
+    totals: months.map((month) => ({ month, revenueCents: allHidden ? null : (totals.get(month) ?? ZERO).toString(), moneyHidden: someHidden })),
+  };
 }
 
 function cell(value: string | null): string {

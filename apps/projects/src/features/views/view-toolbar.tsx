@@ -284,7 +284,7 @@ function FilterSearch({ state, placeholder }: { readonly state: FilterStateApi; 
   );
   return (
     <div className="flex flex-col gap-2 p-3">
-      <SearchInput size="sm" value={text} onValueChange={setText} autoFocus aria-label={placeholder} placeholder={placeholder} data-testid="view-search" />
+      <SearchInput size="sm" value={text} onValueChange={setText} escapeClears={false} autoFocus aria-label={placeholder} placeholder={placeholder} data-testid="view-search" />
       <p className="text-xs text-fg-muted">Matches the title and the key, like GLOVE-212.</p>
     </div>
   );

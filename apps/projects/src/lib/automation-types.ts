@@ -37,7 +37,13 @@ export type AutomationTrigger =
    * Program sweep: at `at` (HH:MM, program time) or later, a run's built units are below plan by
    * at least `percent` percent. Once per run per day.
    */
-  | { readonly type: 'run_below_plan'; readonly percent: number; readonly at: string };
+  | { readonly type: 'run_below_plan'; readonly percent: number; readonly at: string }
+  /** Output is logged on a build (optionally only when the batch adds at least `minUnits`). */
+  | { readonly type: 'build_output_logged'; readonly minUnits: number | null }
+  /** A build is marked done (or closed short) with fewer units than planned. */
+  | { readonly type: 'build_done_short' }
+  /** A build's built units go over its plan. Once per build. */
+  | { readonly type: 'build_over_plan' };
 
 export type AutomationTriggerType = AutomationTrigger['type'];
 
@@ -105,10 +111,16 @@ export const TRIGGER_PHRASES: Readonly<Record<AutomationTriggerType, string>> = 
   wms_order_shipped: 'a linked WMS order ships',
   run_done: 'all builds of a run are done',
   run_below_plan: 'a run is below plan',
+  build_output_logged: 'output is logged on a build',
+  build_done_short: 'a build is done short of plan',
+  build_over_plan: 'a build goes over plan',
 };
 
 /** Triggers about runs of builds: they act on the run's first build and apply to builds only. */
 export const RUN_TRIGGER_TYPES: readonly AutomationTriggerType[] = ['run_done', 'run_below_plan'];
+
+/** Triggers about one build's output: they act on that build and apply to builds only. */
+export const BUILD_TRIGGER_TYPES: readonly AutomationTriggerType[] = ['build_output_logged', 'build_done_short', 'build_over_plan'];
 
 /** Triggers checked on a schedule (or when a linked record changes) instead of on a task edit. */
 export const SCHEDULED_TRIGGER_TYPES: readonly AutomationTriggerType[] = ['due_date_approaching', 'task_overdue', 'crm_stage_changed', 'wms_order_shipped', 'run_done', 'run_below_plan'];

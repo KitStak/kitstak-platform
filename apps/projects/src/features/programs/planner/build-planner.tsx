@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CalendarRange, ChevronLeft, ChevronRight, ClipboardPaste, Eraser, FileUp, Lock, PanelRightClose, PanelRightOpen, Percent, Sparkles, Wand2, X } from 'lucide-react';
+import { AlertTriangle, CalendarCheck, CalendarRange, ChevronLeft, ChevronRight, ClipboardPaste, Eraser, FileUp, Lock, PanelRightClose, PanelRightOpen, Percent, Sparkles, Wand2, X } from 'lucide-react';
 import { addDays, formatCents, formatHours, formatQty, fromScaled, parsePlanCsv, parsePlanPaste, unitLabel } from '@kitstak/programs-engine';
 import {
   Button,
@@ -359,6 +359,11 @@ function PlannerBody({ programKey, initialMode, initialFrom, onClose }: { readon
         <Button size="sm" variant="ghost" onClick={() => setFrom(today)}>
           This week
         </Button>
+        <Tooltip content={<span className="flex items-center gap-1.5">Or click a cell and press <Kbd>{mod}</Kbd><Kbd>V</Kbd></span>}>
+          <Button size="sm" variant="secondary" leadingIcon={<ClipboardPaste aria-hidden />} onClick={() => setBringIn('paste')} data-testid="planner-paste">
+            Paste from spreadsheet
+          </Button>
+        </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="secondary" leadingIcon={<Wand2 aria-hidden />} data-testid="planner-actions">
@@ -535,8 +540,11 @@ function PlannerBody({ programKey, initialMode, initialFrom, onClose }: { readon
                             title={`${builds.map((build) => build.key).join(', ')} already planned`}
                             className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-border-subtle bg-panel px-1.5 py-0.5 text-2xs text-fg-secondary hover:border-border-default"
                           >
+                            {/* The qty is what the planner needs; the build key is in the tooltip and one click away. */}
+                            <CalendarCheck aria-hidden className="size-3 shrink-0 text-success" />
                             <span className="shrink-0 font-medium text-fg tabular-nums">{formatQty(builds.reduce((sum, build) => sum + Number(build.plannedQty), 0).toString())}</span>
-                            <span className="truncate font-key text-fg-muted">{builds.length > 1 ? `${builds.length} builds` : builds[0]!.key}</span>
+                            {builds.length > 1 ? <span className="truncate text-fg-muted">in {builds.length}</span> : null}
+                            <span className="sr-only">{builds.length > 1 ? `${builds.length} builds already planned` : `${builds[0]!.key} already planned`}</span>
                           </button>
                         ) : editing === key ? (
                           <input
@@ -660,7 +668,7 @@ function PlannerBody({ programKey, initialMode, initialFrom, onClose }: { readon
       <div className="flex h-16 shrink-0 items-center gap-3 border-t border-border-subtle px-5 max-sm:px-3">
         <span className="min-w-0 flex-1 truncate text-sm text-fg-secondary tabular-nums">
           {invalidCells ? <span className="font-medium text-danger-text">{invalidCells} {invalidCells === 1 ? 'cell is' : 'cells are'} not a number. </span> : null}
-          {plan.rows.length ? `${plan.rows.length} new ${plan.rows.length === 1 ? 'build' : 'builds'} · ${unitLabel(totals.units, unit)}` : 'Type planned qty in the cells, or use Fill.'}
+          {plan.rows.length ? `${plan.rows.length} new ${plan.rows.length === 1 ? 'build' : 'builds'} · ${unitLabel(totals.units, unit)}` : `Type planned qty in the cells, paste a range from a spreadsheet (${mod} V), or use Fill.`}
           {plan.alreadyExisted ? ` · ${plan.alreadyExisted} already planned` : ''}
         </span>
         <Button variant="ghost" onClick={onClose}>

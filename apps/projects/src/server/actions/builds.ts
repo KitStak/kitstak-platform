@@ -1,6 +1,6 @@
 'use server';
 import { z } from 'zod';
-import { cancelBuilds, closeShort, copyDay, createBuild, createBuilds, duplicateBuild, moveBuild, restoreBuilds, splitBuild, undoCreateBuilds, updateBuild } from '@/server/domain/programs';
+import { cancelBuilds, closeShort, copyDay, createBuild, createBuilds, duplicateBuild, finishBuild, moveBuild, restoreBuilds, splitBuild, splitBuilds, undoCreateBuilds, undoSplitBuilds, updateBuild } from '@/server/domain/programs';
 import { runAction } from './_action';
 import { containerKey, isoDate, price, programKey, qty, uuid, version } from './program-schemas';
 
@@ -63,6 +63,24 @@ export async function moveBuildAction(input: z.input<typeof moveSchema>) {
 const splitSchema = z.object({ taskId: uuid, qty: qty.nullable().optional(), toDate: isoDate });
 export async function splitBuildAction(input: z.input<typeof splitSchema>) {
   return runAction(splitSchema, input, (data, ctx) => splitBuild(ctx, data.taskId, { qty: data.qty, toDate: data.toDate }), { revalidate: false });
+}
+
+const splitManySchema = z.object({ ids: z.array(uuid).min(1).max(500), toDate: isoDate });
+/** Close sheet "Move the rest" for many builds in one transaction; returns the new build ids. */
+export async function splitBuildsAction(input: z.input<typeof splitManySchema>) {
+  return runAction(splitManySchema, input, (data, ctx) => splitBuilds(ctx, data.ids, { toDate: data.toDate }), { revalidate: false });
+}
+
+const undoSplitSchema = z.object({ newBuildIds: z.array(uuid).min(1).max(500) });
+/** Undo for Move the rest: removes the new builds and reopens the originals at their planned qty. */
+export async function undoSplitBuildsAction(input: z.input<typeof undoSplitSchema>) {
+  return runAction(undoSplitSchema, input, (data, ctx) => undoSplitBuilds(ctx, data.newBuildIds), { revalidate: false });
+}
+
+const finishSchema = z.object({ taskId: uuid, chargeOn: z.enum(['first_finished', 'new_date']).default('first_finished'), statusId: uuid.nullable().optional() });
+/** Done with the 5.8 charge choice ("Charge the batch fee on Nov 20 (first finished)" or "Charge on the new date"). */
+export async function finishBuildAction(input: z.input<typeof finishSchema>) {
+  return runAction(finishSchema, input, (data, ctx) => finishBuild(ctx, data.taskId, { chargeOn: data.chargeOn, statusId: data.statusId ?? null }), { revalidate: false });
 }
 
 const shortSchema = z.object({ taskId: uuid, reason: z.string().trim().min(1, 'Say why the build closed short.').max(500) });

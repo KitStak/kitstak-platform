@@ -3,7 +3,7 @@
  * quantity string comes from the engine format helpers, so Projects, Pulse and CRM print the same
  * numbers. No React here: these are unit tested in `format.test.ts`.
  */
-import { formatCents, formatQty, quantityToScaled, shortDate, unitLabel, weekday } from '@kitstak/programs-engine';
+import { formatCents, formatPercentBp, formatQty, quantityToScaled, shortDate, unitLabel, weekday } from '@kitstak/programs-engine';
 import type { Health, HealthBasis, IsoDate, RunState, UnitLabel } from '@/lib/program-types';
 import type { LabelColor } from '@/lib/constants';
 import { LABEL_COLORS } from '@/lib/constants';
@@ -91,9 +91,13 @@ export function targetTone(bp: number): TargetTone {
   return 'danger';
 }
 
-/** "105% of target" (whole percent, rounded half up). */
+/**
+ * "105% of target". Whole percent through the engine's formatPercentBp (rounds down, so a
+ * forecast never shows a band it has not reached). The Overview, directory cards and table all
+ * use this one rule, so the same program shows the same percent on every screen.
+ */
 export function targetText(bp: number): string {
-  return `${Math.round(bp / 100)}% of target`;
+  return `${formatPercentBp(bp)} of target`;
 }
 
 export const HEALTH_TEXT: Readonly<Record<Health, string>> = {
