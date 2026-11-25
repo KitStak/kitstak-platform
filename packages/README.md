@@ -1,26 +1,27 @@
-# KitStak workspace packages
+# Shared packages
 
-Shared packages per [`docs/integration/BLUEPRINT.md`](../docs/integration/BLUEPRINT.md) §4.
-All packages ship TypeScript source (exports point at `./src/*.ts(x)`) — there is no build step.
+Code that more than one KitStak app needs lives here. The design behind them is in
+[`docs/integration/BLUEPRINT.md`](../docs/integration/BLUEPRINT.md).
 
-> **App wiring note (next stage — do not edit apps in this stage):** each app's
-> `next.config.ts` must add
-> `transpilePackages: ['@kitstak/ui', '@kitstak/config']`
-> (extended with `@kitstak/auth`, `@kitstak/db`, `@kitstak/entitlements` as those land)
-> so Next compiles the source-shipped packages. Apps will also switch
-> `tsconfig.json` to `"extends": "@kitstak/config/tsconfig/base.json"` and import
-> `@kitstak/ui/styles/tokens.css` from their `globals.css`.
+Every package ships TypeScript source (its `exports` point at `./src/*.ts(x)`), so there's no build
+step. Each app lists the packages it uses under `transpilePackages` in its `next.config.ts`, and
+Next compiles them along with the app.
 
-## Packages
+| Package                 | What it's for                                                                                                                                                                     |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@kitstak/config`       | The shared tsconfig base and Vitest defaults.                                                                                                                                     |
+| `@kitstak/ui`           | Design tokens (`tokens.css`), the theme and its init script, logos, app icons and the app switcher.                                                                               |
+| `@kitstak/auth`         | The Better Auth setup every app uses, so one session works everywhere.                                                                                                            |
+| `@kitstak/db`           | The shared `core` schema, its migrations, and the lookup from an organization to its WMS schema.                                                                                  |
+| `@kitstak/entitlements` | Which organization can open which app (`crm`, `wms`, `projects`, `pulse`).                                                                                                        |
+| `@kitstak/billing`      | The one price catalog, quotes, plan state, the Stripe gateway, webhook sync into `core.entitlements`, and billing email. The catalog and quote are safe to import in the browser. |
+| `@kitstak/mail`         | Platform email through Resend. Server only.                                                                                                                                       |
+| `@kitstak/pm-bridge`    | Lets CRM and WMS read and link KitStak Projects data (the `pm` schema).                                                                                                           |
+| `@kitstak/pulse-bridge` | Lets Portal, CRM, WMS and Projects show Pulse job profit, client profit and deep links. See [its README](pulse-bridge/README.md).                                                 |
 
-| Package           | Purpose                                                        |
-| ----------------- | -------------------------------------------------------------- |
-| `@kitstak/config` | Shared tsconfig base and vitest defaults (thresholds, mocks).  |
-| `@kitstak/ui`     | Canonical `tokens.css`, unified theme constants + init script, app icons and the app switcher (Portal, CRM, WMS, Projects, Pulse). |
-| `@kitstak/auth`   | Shared Better Auth setup: one session across every app. |
-| `@kitstak/db`     | Shared `core` schema, migrations and the WMS tenant schema lookup. |
-| `@kitstak/entitlements` | Which org is licensed for which module (`crm`, `wms`, `projects`, `pulse`). |
-| `@kitstak/pm-bridge` | Shared-database bridge into KitStak Projects (the `pm` schema) for CRM and WMS. |
-| `@kitstak/pulse-bridge` | Shared-database bridge into KitStak Pulse (the `pulse` schema) for Portal, CRM, WMS and Projects: job profit for a linked record, client profit, workspace totals, a person's Pulse role, deep links and change events. See its README. |
+## Rules
 
-Dependency direction: `config ← ui ← apps`. No package imports from an app.
+- Dependencies point one way: apps import packages. A package never imports an app.
+- The bridges take a database handle from the app calling them. They don't open connections of
+  their own.
+- If two apps need the same thing, it belongs here, not copied into both.
