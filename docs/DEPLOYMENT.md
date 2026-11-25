@@ -168,9 +168,14 @@ Projects 0006 moves ahead of the CRM deploy because pm-bridge reads `pm.projects
 app read of a new column or table is also feature detected (SPEC 6.5), so a partial database or a
 different order never breaks a sibling app; panels hide until their tables exist.
 
-`0006_programs.sql` was edited in place during development. A database that applied an older copy
-of it needs the new file applied with `CREATE OR REPLACE` statements and its hash refreshed in
-`drizzle.__kitstak_projects_migrations`, or the change should ship as a new Projects migration.
+Production status (checked 2026-11-25): all three migrations are already applied, and the hashes in
+`drizzle.__kitstak_*_migrations` match the committed files, so the production deploy skips them.
+`0007_core_record_links` keeps its tag but sits at journal idx 12, after the billing files
+`0007_core_billing` to `0011_core_sign_in_round4`, because the two were written in parallel. A fresh
+database applies the billing files first, then the link graph. Never edit an applied migration: add a new one.
+
+Preview builds never migrate: every `db:migrate` script exits early when `VERCEL_ENV=preview`, because
+previews share the production database. Only production deploys apply migrations.
 
 ### Demo seeds
 
