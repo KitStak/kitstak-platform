@@ -200,3 +200,33 @@ export function articleLd(article: ArticleFacts): Thing {
     publisher: { '@id': ORG_ID },
   };
 }
+
+export interface DocFacts {
+  readonly title: string;
+  readonly description: string;
+  readonly path: string;
+  readonly section: string;
+  readonly app: string;
+  readonly updated: string;
+  readonly wordCount: number;
+}
+
+/** One docs page as a TechArticle, the type Google expects for product documentation. */
+export function techArticleLd(doc: DocFacts): Thing {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: doc.title,
+    description: doc.description,
+    url: absoluteUrl(doc.path),
+    mainEntityOfPage: absoluteUrl(doc.path),
+    dateModified: doc.updated,
+    datePublished: doc.updated,
+    articleSection: doc.section,
+    about: { '@type': 'SoftwareApplication', name: doc.app },
+    wordCount: doc.wordCount,
+    inLanguage: 'en-US',
+    author: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
+    publisher: { '@id': ORG_ID },
+  };
+}
