@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // The brand display face, loaded by KitStak emails (packages/billing/src/emails/layout.ts).
+        // The brand display face, loaded by KitStak emails (packages/mail/src/layout.ts).
         // A web font from another origin needs CORS in mail clients and webmail.
         source: '/fonts/:file*',
         headers: [
