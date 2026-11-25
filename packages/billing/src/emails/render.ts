@@ -4,7 +4,7 @@
  */
 import type { EmailPayloads, EmailTemplateId } from '../email-types';
 import { EMAIL_TEMPLATE_IDS } from '../email-types';
-import { renderContent, type EmailContent, type RenderedEmail } from './layout';
+import { renderContent, type EmailContent, type EmailStyle, type RenderedEmail } from './layout';
 import { invitation, resetPassword, verifyEmail } from './templates/account';
 import { graceEnding, paymentActionRequired, paymentFailed, receipt } from './templates/payment';
 import { cancelScheduled, paused, planEnded, planStarted } from './templates/plan';
@@ -30,16 +30,62 @@ const TEMPLATES: Readonly<Record<EmailTemplateId, (payload: unknown) => EmailCon
   plan_ended: planEnded,
 };
 
+const ACCOUNT = 'Account';
+const BILLING = 'Billing';
+
+/** How each kind of email looks (layout.ts `EmailTone`). The payload only picks label words. */
+const STYLES: Readonly<Record<EmailTemplateId, (payload: Readonly<Record<string, unknown>>) => EmailStyle>> =
+  {
+    verify_email: (p) => ({
+      tone: 'security',
+      eyebrow: p.purpose === 'sign_in' ? 'Sign-in code' : 'Verification code',
+      area: ACCOUNT,
+    }),
+    reset_password: () => ({ tone: 'security', eyebrow: 'Password reset', area: ACCOUNT }),
+    invitation: () => ({ tone: 'welcome', eyebrow: "You're invited", area: ACCOUNT }),
+    welcome: () => ({ tone: 'welcome', eyebrow: 'Free trial started', area: ACCOUNT }),
+    trial_ending: (p) => ({
+      tone: 'reminder',
+      eyebrow:
+        p.daysLeft === 1
+          ? 'Last day of your trial'
+          : typeof p.daysLeft === 'number'
+            ? `${p.daysLeft} days left`
+            : 'Trial reminder',
+      area: BILLING,
+    }),
+    trial_ended: () => ({ tone: 'reminder', eyebrow: 'Trial ended', area: BILLING }),
+    plan_started: () => ({ tone: 'receipt', eyebrow: 'Plan confirmed', area: BILLING }),
+    receipt: () => ({ tone: 'receipt', eyebrow: 'Receipt', area: BILLING }),
+    payment_failed: () => ({ tone: 'alert', eyebrow: 'Payment failed', area: BILLING }),
+    payment_action_required: () => ({ tone: 'alert', eyebrow: 'Approval needed', area: BILLING }),
+    grace_ending: () => ({ tone: 'alert', eyebrow: 'Last day to pay', area: BILLING }),
+    cancel_scheduled: () => ({ tone: 'notice', eyebrow: 'Cancellation scheduled', area: BILLING }),
+    paused: () => ({ tone: 'notice', eyebrow: 'Plan paused', area: BILLING }),
+    plan_ended: () => ({ tone: 'notice', eyebrow: 'Plan ended', area: BILLING }),
+  };
+
+function payloadRecord(payload: unknown): Readonly<Record<string, unknown>> {
+  return payload !== null && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+}
+
 export function isEmailTemplateId(value: unknown): value is EmailTemplateId {
   return typeof value === 'string' && (EMAIL_TEMPLATE_IDS as readonly string[]).includes(value);
 }
 
 /** The content blocks of an email, before layout. Tests and the copy rules read these. */
-export function emailContent<T extends EmailTemplateId>(template: T, payload: EmailPayloads[T]): EmailContent {
-  return TEMPLATES[template](payload);
+export function emailContent<T extends EmailTemplateId>(
+  template: T,
+  payload: EmailPayloads[T],
+): EmailContent {
+  const content = TEMPLATES[template](payload);
+  return { ...content, style: STYLES[template](payloadRecord(payload)) };
 }
 
-export function renderEmail<T extends EmailTemplateId>(template: T, payload: EmailPayloads[T]): RenderedEmail {
+export function renderEmail<T extends EmailTemplateId>(
+  template: T,
+  payload: EmailPayloads[T],
+): RenderedEmail {
   return renderContent(emailContent(template, payload));
 }
 
