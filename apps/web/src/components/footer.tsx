@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Logo } from './logo';
 import { PRODUCT_NAV } from './nav/nav-data';
-import { LINKS, PULSE_IS_LIVE, ROUTES, getStartedHref } from './site-links';
+import { HELP_LABEL, LINKS, PULSE_IS_LIVE, ROUTES, START_LABEL, startFreeHref } from './site-links';
 import styles from './footer.module.css';
 
 interface FooterLink {
@@ -23,11 +23,12 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
   {
     title: 'Get started',
     links: [
-      { href: ROUTES.getStarted, label: 'Set up your Stak' },
-      { href: getStartedHref('wms'), label: 'Start with the WMS' },
-      { href: getStartedHref('crm'), label: 'Start with the CRM' },
-      { href: getStartedHref('projects'), label: 'Start with Projects' },
-      ...(PULSE_IS_LIVE ? [{ href: getStartedHref('pulse'), label: 'Start with Pulse' }] : []),
+      { href: startFreeHref(), label: START_LABEL, external: true },
+      { href: ROUTES.getStarted, label: HELP_LABEL },
+      { href: startFreeHref('wms', 'product'), label: 'Start with the WMS', external: true },
+      { href: startFreeHref('crm', 'product'), label: 'Start with the CRM', external: true },
+      { href: startFreeHref('projects', 'product'), label: 'Start with Projects', external: true },
+      ...(PULSE_IS_LIVE ? [{ href: startFreeHref('pulse', 'product'), label: 'Start with Pulse', external: true }] : []),
       { href: ROUTES.demo, label: 'Book a walkthrough' },
     ],
   },
@@ -37,6 +38,8 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: ROUTES.platform, label: 'Platform' },
       { href: ROUTES.founder, label: 'Talk to the founder' },
       { href: ROUTES.contact, label: 'Contact' },
+      { href: ROUTES.terms, label: 'Terms' },
+      { href: ROUTES.privacy, label: 'Privacy' },
     ],
   },
   {
@@ -60,9 +63,9 @@ export function Footer() {
             <Logo height={22} />
           </Link>
           <p className={styles.tag}>CRM, WMS, Projects and Pulse on one stack.</p>
-          <Link href={ROUTES.getStarted} className={`btn btn-primary ${styles.cta}`}>
-            Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
-          </Link>
+          <a href={startFreeHref()} className={`btn btn-primary ${styles.cta}`}>
+            {START_LABEL} <span className="btn-arrow" aria-hidden>→</span>
+          </a>
         </div>
         <nav aria-label="Footer" className={styles.cols}>
           {COLUMNS.map((col) => (

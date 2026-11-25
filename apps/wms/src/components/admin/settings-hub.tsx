@@ -1,3 +1,4 @@
+import type * as React from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
@@ -5,11 +6,19 @@ import { NAV_ICONS, DEFAULT_NAV_ICON } from '@/components/layout/nav-icons';
 import type { SettingsHubSection } from './settings-hub-data';
 
 /** Settings overview: every section the user can open, grouped like the mega-menu. */
-export function SettingsHub({ sections }: { readonly sections: readonly SettingsHubSection[] }) {
+export function SettingsHub({
+  sections,
+  planCard = null,
+}: {
+  readonly sections: readonly SettingsHubSection[];
+  /** The organization's plan (rendered on the server from `@kitstak/billing`). */
+  readonly planCard?: React.ReactNode;
+}) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader breadcrumbs={[{ label: 'Settings' }]} title="Settings" />
       <div className="grid gap-6 px-6 pb-8 pt-2">
+        {planCard}
         {sections.map((section) => {
           const Icon = NAV_ICONS[section.icon] ?? DEFAULT_NAV_ICON;
           return (

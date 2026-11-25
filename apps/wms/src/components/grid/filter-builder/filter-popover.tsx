@@ -241,7 +241,7 @@ export function FilterPopover({
           </Button>
         )}
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[320px] p-3">
+      <PopoverContent align="start" className="w-[320px] p-3" data-plan-read="">
         <div className="mb-3 flex items-center justify-between gap-2">
           <SegmentedTabs
             size="sm"

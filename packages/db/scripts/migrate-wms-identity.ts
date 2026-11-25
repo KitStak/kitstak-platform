@@ -137,10 +137,16 @@ async function migrateUser(
         INSERT INTO core.account (id, account_id, provider_id, user_id, password, created_at, updated_at)
         VALUES (gen_random_uuid(), ${user.id}, 'credential', ${user.id}::uuid, ${user.password_hash}, now(), now())`;
     }
+    await sql`DELETE FROM core.sign_in_blocks WHERE user_id = ${user.id}::uuid`;
   } else {
     await sql`
       DELETE FROM core.account
       WHERE user_id = ${user.id}::uuid AND provider_id = 'credential'`;
+    // The fact every app reads (billing review round 4): without this row "Forgot password"
+    // would give an inactive person a new password.
+    await sql`
+      INSERT INTO core.sign_in_blocks (user_id, reason) VALUES (${user.id}::uuid, 'deactivated')
+      ON CONFLICT (user_id) DO NOTHING`;
   }
 
   const membership = await sql<{ id: string }[]>`

@@ -14,8 +14,8 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { withOrg } from '@/server/db/scope';
 import { toDomainContext, type DomainContext } from '@/server/domain/_shared';
-import { orgHasPulseModule } from '@/server/entitlements';
-import { DomainError, isDomainError, type ErrorCode } from '@/server/errors';
+import { assertPlanAllows } from '@/server/plan-gate';
+import { isDomainError, type ErrorCode } from '@/server/errors';
 import { requireActionContext } from '@/server/session';
 
 export interface ActionError {
@@ -29,6 +29,12 @@ export type ActionResult<T> = { readonly ok: true; readonly data: T } | { readon
 export interface RunActionOptions {
   /** Revalidate the whole app layout after success (default true). Pass false for chatty actions (autosave of a log row). */
   readonly revalidate?: boolean;
+  /**
+   * Marks an action that changes no business data: a preview, a lookup, a "seen" marker or a
+   * personal preference. It keeps working while the plan is view only (docs/billing/SPEC.md
+   * section 9.4). Every other action is refused in view only with code `plan.read_only`.
+   */
+  readonly read?: boolean;
 }
 
 function zodFields(error: z.ZodError): Record<string, string> {
@@ -61,9 +67,7 @@ export async function runAction<S extends z.ZodType, T>(
       return { ok: false, error: { code: 'VALIDATION', message: 'Some fields need another look.', fields: zodFields(parsed.error) } };
     }
     const context = await requireActionContext();
-    if (!(await orgHasPulseModule(context.org.id))) {
-      throw new DomainError('NOT_ENTITLED', 'KitStak Pulse is not turned on for this organization. Ask an admin to enable it in the Portal.');
-    }
+    await assertPlanAllows(context.org.id, { write: options.read !== true });
     const data = await withOrg(context.org.id, () => handler(parsed.data, toDomainContext(context)));
     if (options.revalidate !== false) revalidatePath('/', 'layout');
     return { ok: true, data };

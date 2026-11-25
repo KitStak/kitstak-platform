@@ -25,6 +25,7 @@ import { routes } from '@/features/shell/routes';
 import { startRouteProgress } from '@/features/shell/route-progress';
 import { useShellStore } from '@/features/shell/store';
 import { useOpenWizard } from '@/features/wizards/use-open-wizard';
+import { useHydrated } from '@/lib/hooks';
 import type { SetupGuideStepDto, SetupStepKey } from '@/server/services/setup-guide-model';
 import { ConfettiBurst } from './confetti-burst';
 import { ProgressRing } from './progress-ring';
@@ -183,11 +184,12 @@ export function SetupGuideCard({ workspaceId }: { readonly workspaceId: string |
   const { org } = useOrg();
   const canManage = useCan('org:update');
   const guide = useSetupGuide(org.id);
+  const hydrated = useHydrated();
   const action = useSetupGuideAction(org.id);
   const openers = useOpenWizard();
   const requestCreate = useShellStore((state) => state.requestCreate);
 
-  if (guide.isPending) {
+  if (!hydrated || guide.isPending) {
     return (
       <CardShell>
         <div className="flex flex-col gap-3 p-4" data-skeleton aria-hidden>

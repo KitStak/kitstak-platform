@@ -8,10 +8,12 @@
  */
 import 'server-only';
 import { createAuth, ipAddressFromTrustProxy, type KitstakAuth } from '@kitstak/auth';
+import { billingOrganizationOptions } from '@kitstak/billing/server';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { metadataTouchesKitstak, redactOrgMetadata } from '@/server/services/admin-policy';
 import { db } from '@/server/db';
 import * as schema from '@/server/db/schema';
+import { entitlementsAllowAll } from '@/server/entitlements';
 import { env, isProduction, trustedOrigins } from '@/server/env';
 
 /**
@@ -62,6 +64,15 @@ function buildAuth(): KitstakAuth {
     ...(env.AUTH_COOKIE_DOMAIN ? { cookieDomain: env.AUTH_COOKIE_DOMAIN } : {}),
     ...(ipAddress ? { ipAddress } : {}),
     hooks: kitstakOrgMetadataHooks,
+    // Billing rules for the shared organization endpoints (docs/billing/CONTRACTS.md section
+    // 15.2): the seat limit on invites and joins, and no deleting an org with a running plan.
+    organization: billingOrganizationOptions({
+      db,
+      portalUrl: (process.env.NEXT_PUBLIC_PORTAL_URL?.trim() || 'http://localhost:3300').replace(/\/+$/, ''),
+      allowAll: entitlementsAllowAll,
+      // Lets the invite link prove the mailbox, so an invited person is not asked for a code.
+      inviteSecret: env.BETTER_AUTH_SECRET,
+    }),
   });
 }
 

@@ -77,7 +77,8 @@ publicTest.describe('wizards', () => {
     async ({ page, context, baseURL, diagnostics }) => {
       await signUpFreshUser(page, baseURL ?? 'http://localhost:3100');
       {
-        await page.goto('/welcome', { timeout: 90_000 });
+        // The CRM's own setup. A plain /welcome points to the Portal when a Portal address is set.
+        await page.goto('/welcome?local=1', { timeout: 90_000 });
         const flow = page.getByTestId('onboarding-flow');
         await expect(flow).toBeVisible(SLOW);
         await expect(page.getByTestId('onboarding-step-count')).toHaveText('Step 1 of 6');

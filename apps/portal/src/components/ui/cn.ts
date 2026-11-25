@@ -3,7 +3,7 @@ import { extendTailwindMerge } from 'tailwind-merge';
 
 /**
  * tailwind-merge aware of our custom font-size scale so `text-sm` and `text-fg` are not treated
- * as conflicting (both start with `text-`). (Copied from apps/crm — portal shares the scale.)
+ * as conflicting (both start with `text-`). (Copied from apps/crm. The portal shares the scale.)
  */
 const twMerge = extendTailwindMerge({
   extend: {

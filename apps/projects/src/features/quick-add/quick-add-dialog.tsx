@@ -5,7 +5,8 @@
  * chips show what was understood and every field can still be set by hand. Enter saves,
  * ⌘/Ctrl+Shift+Enter saves and opens, "Add another" keeps the dialog open for the next one.
  */
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { askViewOnly } from '@kitstak/ui/view-only';
 import { usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Plus, Tags, TextQuote } from 'lucide-react';
@@ -43,7 +44,7 @@ import { qk } from '@/lib/query-keys';
 import { createLabelAction } from '@/server/actions/structure';
 import { LabelDot } from '@/features/views/field-pickers';
 import { OptionList } from '@/features/views/option-list';
-import { useShell } from '@/features/shell/shell-context';
+import { useShell, usePlanReadOnly } from '@/features/shell/shell-context';
 import { useShellStore } from '@/features/shell/store';
 import { SmartTitleInput, UnderstoodChips, type SmartTitleInputHandle } from './smart-title-input';
 
@@ -77,8 +78,18 @@ function cutToken(text: string, token: QuickAddToken): string {
 }
 
 export function QuickAddDialog() {
-  const open = useShellStore((state) => state.quickAdd.open);
+  const asked = useShellStore((state) => state.quickAdd.open);
   const close = useShellStore((state) => state.closeQuickAdd);
+  // View only: every way to start a task (the top bar, the home button, the C key, the command
+  // palette) asks through this store. The form never opens: the person sees why, and the banner's
+  // button, before they type anything.
+  const readOnly = usePlanReadOnly();
+  useEffect(() => {
+    if (!readOnly || !asked) return;
+    close();
+    askViewOnly();
+  }, [readOnly, asked, close]);
+  const open = asked && !readOnly;
   // Remount the form on every open so its state starts from the opener's defaults.
   const [session, setSession] = useState(0);
   const [wasOpen, setWasOpen] = useState(open);

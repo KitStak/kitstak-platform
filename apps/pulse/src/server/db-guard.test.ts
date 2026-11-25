@@ -61,6 +61,7 @@ const AS_SYSTEM_ALLOWED: Readonly<Record<string, string>> = {
   'server/db/scope.ts': 'defines it',
   'server/session.ts': 'sign in: finds the workspaces of a person before any workspace is known',
   'server/entitlements.ts': 'module entitlements live in core.entitlements, checked before the workspace is trusted',
+  'server/plan.ts': 'plan state (trial, subscription, billing roles) lives in core billing tables, read for the active workspace',
   'app/api/health/route.ts': 'health check: no workspace data',
   'app/no-workspace/page.tsx': 'a person with no workspace: invitations in core',
   'server/domain/cron.ts': 'cron fan out and daily cleanup across workspaces',

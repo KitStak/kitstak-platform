@@ -31,6 +31,7 @@
   --color-border-strong: var(--border-strong);
   --color-border-input: var(--border-input);
   --color-border-input-hover: var(--border-input-hover);
+  --color-control: var(--control-outline);
 
   --color-fg: var(--text-primary);
   --color-fg-secondary: var(--text-secondary);
@@ -164,6 +165,41 @@
   }
 }
 
+/*
+ * Two portal roles built from the shared tokens, so they follow light and dark by themselves.
+ *
+ * --control-outline: the resting edge of a control that has no label inside it (the track of a
+ *   switch that is off, the box of an empty checkbox). WCAG 1.4.11 asks for 3 to 1 against what is
+ *   around it. Measured: 3.9 to 1 on a white panel and 3.5 to 1 on the page in light, 4.2 to 1 on
+ *   a panel and 3.9 to 1 on a raised card in dark. --border-strong was 1.9 to 1.
+ * --field-focus: the edge of a text field that has focus. It is the text colour (18 to 1 in light,
+ *   15 to 1 in dark), so it never reads as an error. Red stays for errors.
+ */
+:root {
+  --control-outline: color-mix(in srgb, var(--text-muted) 80%, var(--surface-panel));
+  --field-focus: var(--text-primary);
+}
+
+/*
+ * The focus look of every text field, select and text area: the 1 px border turns to the text
+ * colour and a second 1 px ring is added, so the edge is 2 px and cannot be missed. Use it with a
+ * variant: `focus-within:field-focus` on a wrapper, `focus:field-focus` on the control itself.
+ */
+@utility field-focus {
+  border-color: var(--field-focus);
+  box-shadow: 0 0 0 1px var(--field-focus);
+  outline: none;
+}
+
+/* The same for a field with an error: red, with a soft halo so focus still shows on a red field. */
+@utility field-focus-danger {
+  border-color: var(--danger);
+  box-shadow:
+    0 0 0 1px var(--danger),
+    0 0 0 4px color-mix(in srgb, var(--danger) 24%, transparent);
+  outline: none;
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
@@ -230,6 +266,34 @@
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--border-strong) transparent;
+  }
+
+  /*
+   * Touch screens (docs/billing/SPEC.md section 13): every control is at least 44 px tall, and a
+   * button is at least 44 px wide. One rule for the whole Portal, so a new button cannot miss it.
+   * `:where` keeps the weight at zero: any utility class still wins. Links inside a sentence are
+   * `display: inline` and are not touched. Checkboxes, radios and switches keep their drawn size
+   * and get the room from their row or label instead.
+   */
+  @media (pointer: coarse) {
+    :where(
+        button:not([role='checkbox'], [role='radio'], [role='switch']),
+        [role='button'],
+        [role='tab'],
+        [role='menuitem'],
+        [role='option'],
+        select,
+        summary,
+        a[href]
+      ) {
+      min-height: 44px;
+      /* Centers the words of a block level link in its taller box. Flex rows center themselves. */
+      align-content: center;
+    }
+
+    :where(button:not([role='checkbox'], [role='radio'], [role='switch']), [role='button']) {
+      min-width: 44px;
+    }
   }
 }
 

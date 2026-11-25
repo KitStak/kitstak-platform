@@ -29,6 +29,7 @@ import { createItem } from './items';
 import { toViewDto } from './mappers';
 import { db as defaultDb, type Executor } from '@/server/db';
 import { env } from '@/server/env';
+import { orgCrmAccess } from '@/server/entitlements';
 
 const TOKEN_RE = /^[A-Za-z0-9_-]{32,80}$/;
 
@@ -153,6 +154,11 @@ export async function submitPublicForm(
   const settings = parseFormSettings(form.config.form, columns, `${form.boardName} intake`);
   const closed = formClosedReason(settings, todayUtc());
   if (closed) throw new ForbiddenError('This form is no longer accepting responses', { reason: closed });
+  // A public form writes into the org's boards. While the org's plan is view only, or the CRM is
+  // not in its plan, nothing may be written (docs/billing/SPEC.md section 9.4).
+  if ((await orgCrmAccess(form.orgId)) !== 'full') {
+    throw new ForbiddenError('This form is not accepting responses right now', { reason: 'plan' });
+  }
   const result = answersToValues(settings.questions, columns, input.answers);
   if (!result.ok) {
     throw new ValidationError(Object.entries(result.errors).map(([path, message]) => ({ path, message })));

@@ -25,6 +25,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { burnDummyPasswordVerify, createAuth, ipAddressFromTrustProxy, type KitstakAuth } from '@kitstak/auth';
+import { billingOrganizationOptions, type BillingDb } from '@kitstak/billing/server';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import {
   account,
@@ -41,6 +42,7 @@ import {
   verification,
 } from '@kitstak/db/schema';
 import { getPlatformDb, type AppDb } from '@/server/api/db';
+import { entitlementsAllowAll } from '@/server/auth/entitlements';
 import { users } from '@/server/db/schema';
 import { log } from '@/server/log';
 import { writeAudit } from './audit';
@@ -224,6 +226,16 @@ function buildAuth(db: AppDb): KitstakAuth {
     // trust decision (TRUST_PROXY env); see ipAddressFromTrustProxy for the contract.
     ...(ipAddress ? { ipAddress } : {}),
     hooks: { before: wmsSignInGate(db) },
+    // Billing rules for the shared organization endpoints (docs/billing/CONTRACTS.md section
+    // 15.2): the seat limit on invites and joins, and no deleting an org with a running plan.
+    // The platform handle serves the `core` tables these read.
+    organization: billingOrganizationOptions({
+      db: db as unknown as BillingDb,
+      portalUrl: (process.env.NEXT_PUBLIC_PORTAL_URL?.trim() || 'http://localhost:3300').replace(/\/+$/, ''),
+      allowAll: entitlementsAllowAll,
+      // Lets the invite link prove the mailbox, so an invited person is not asked for a code.
+      inviteSecret: betterAuthSecret(),
+    }),
     passwordPolicy: {
       loadPolicy: async () => await getPasswordPolicy(db),
       onAuditEvent: async (event) => {

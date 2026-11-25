@@ -4,6 +4,7 @@
  * whether it's in the plan and connected, what that unlocks, and how much is linked already.
  */
 import Link from 'next/link';
+import { billingLink } from '@kitstak/billing/links';
 import { ArrowUpRight, CheckCircle2, CircleDashed, Lock } from 'lucide-react';
 import { Badge, cn } from '@/components/ui';
 import { Panel } from '@/components/layout/page';
@@ -165,8 +166,8 @@ export function IntegrationsSection({ summary }: { readonly summary: Integration
           { value: summary.projectsWithClient, label: 'Projects for a client' },
           { value: summary.automationsUsingApps, label: 'CRM or WMS automations' },
         ]}
-        href={crmState === 'locked' ? `${appUrls.portal}/billing` : `${appUrls.crm}/${org.slug}`}
-        openLabel={crmState === 'locked' ? 'See CRM plans' : 'Open CRM'}
+        href={crmState === 'locked' ? billingLink(appUrls.portal, { to: 'add', product: 'crm' }, 'projects') : `${appUrls.crm}/${org.slug}`}
+        openLabel={crmState === 'locked' ? 'Add CRM to my plan' : 'Open CRM'}
         lockedHint={
           crmState === 'licensed'
             ? 'CRM is in your plan. Open it once to set up your boards and it connects here.'
@@ -193,8 +194,8 @@ export function IntegrationsSection({ summary }: { readonly summary: Integration
           { value: n('wms_receipt'), label: 'Linked receipts' },
           { value: n('wms_count'), label: 'Linked counts' },
         ]}
-        href={wmsState === 'locked' ? `${appUrls.portal}/billing` : appUrls.wms}
-        openLabel={wmsState === 'locked' ? 'See WMS plans' : 'Open WMS'}
+        href={wmsState === 'locked' ? billingLink(appUrls.portal, { to: 'add', product: 'wms' }, 'projects') : appUrls.wms}
+        openLabel={wmsState === 'locked' ? 'Add WMS to my plan' : 'Open WMS'}
         lockedHint={
           wmsState === 'licensed'
             ? 'WMS is in your plan but this workspace isn’t the warehouse workspace, so records can’t be linked here.'

@@ -15,6 +15,7 @@ import {
   type GridColumnDef,
   type RowAction,
 } from '@/components/grid';
+import { useShellPlan } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -307,6 +308,15 @@ export function WarehousesPage() {
     editId: null,
   });
   const [detailId, setDetailId] = React.useState<string | null>(null);
+  // The plan's warehouse limit is known before the form opens (docs/billing/SPEC.md 6.9). At the
+  // limit, "Create warehouse" shows the price and "Add to my plan" first, so nobody fills in the
+  // two step form and hears "not in your plan" at the last click. The server checks again on save.
+  const plan = useShellPlan();
+  const [limitOpen, setLimitOpen] = React.useState(false);
+  const openCreate = () => {
+    if (plan?.warehouseLimit) setLimitOpen(true);
+    else setDrawer({ open: true, editId: null });
+  };
   const [log, setLog] = React.useState<WarehouseRow | null>(null);
   const [deactivate, setDeactivate] = React.useState<readonly WarehouseRow[] | null>(null);
   const [activate, setActivate] = React.useState<readonly WarehouseRow[] | null>(null);
@@ -425,7 +435,8 @@ export function WarehousesPage() {
         helpHref="/locations/help#warehouses"
         actions={
           perms.create ? (
-            <Button variant="primary" onClick={() => setDrawer({ open: true, editId: null })}>
+            // `data-plan-write`: in view only this press opens the "view only" dialog (see ViewOnlyGuard).
+            <Button variant="primary" data-plan-write data-testid="warehouse-create" onClick={openCreate}>
               <Plus className="h-4 w-4" aria-hidden />
               Create warehouse
             </Button>
@@ -452,12 +463,26 @@ export function WarehousesPage() {
         }
         emptyAction={
           perms.create && !filtered ? (
-            <Button variant="primary" onClick={() => setDrawer({ open: true, editId: null })}>
+            <Button variant="primary" data-plan-write onClick={openCreate}>
               <Plus className="h-4 w-4" />
               Create warehouse
             </Button>
           ) : undefined
         }
+      />
+      <ConfirmDialog
+        open={limitOpen}
+        onOpenChange={setLimitOpen}
+        // An offer, not a warning: the calm header with no coloured band.
+        variant="offer"
+        title="This warehouse is not in your plan yet"
+        description={plan?.warehouseLimit?.message}
+        confirmLabel="Add to my plan"
+        cancelLabel="Not now"
+        onConfirm={() => {
+          // The Portal shows the price again and asks for a yes. Its "Back to WMS" link returns here.
+          if (plan?.warehouseLimit) window.location.assign(plan.warehouseLimit.planUrl);
+        }}
       />
       <WarehouseDrawer
         open={drawer.open}

@@ -482,6 +482,29 @@ async function dayRows(tx: Executor, ctx: DomainContext, jobId: string, workDate
 }
 
 /**
+ * Rows written in one save share one `created_at` (the clock of the transaction), so the database
+ * may hand them back in any order. Rows that tie on shift and time follow the order of the lines as
+ * they were sent (`ids`). Everything else keeps the order of the query.
+ */
+function inSentOrder(rows: readonly EntryRow[], ids: readonly string[]): EntryRow[] {
+  const sent = new Map(ids.map((id, position) => [id, position]));
+  const place = (row: EntryRow) => sent.get(row.id) ?? Number.MAX_SAFE_INTEGER;
+  const out: EntryRow[] = [];
+  let run: EntryRow[] = [];
+  const flush = () => {
+    out.push(...run.sort((a, b) => place(a) - place(b)));
+    run = [];
+  };
+  for (const row of rows) {
+    const last = run[run.length - 1];
+    if (last && (last.shift !== row.shift || last.createdAt.getTime() !== row.createdAt.getTime())) flush();
+    run.push(row);
+  }
+  flush();
+  return out;
+}
+
+/**
  * Saves a whole day of work on one job (the Work log form): every labor type line, the lines that
  * were taken off, all in one transaction. It never overwrites a day by accident:
  *
@@ -589,8 +612,7 @@ export const saveProductionDay = scoped(async function saveProductionDay(ctx: Do
       }
       await finishProduction(tx, ctx, ids, fixedJobs, touched);
       // Lines saved in one go share a timestamp, so the day comes back in the order its lines were sent.
-      const sent = new Map(ids.map((id, index) => [id, index]));
-      const after = (await dayRows(tx, ctx, job.id, input.workDate)).sort((a, b) => (sent.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (sent.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+      const after = inSentOrder(await dayRows(tx, ctx, job.id, input.workDate), ids);
       const removed = gone.length > 0 ? await listByIds(tx, ctx, gone.map((row) => row.id), access) : [];
       return { entries: dto(after), created, updated: ids.length - created, removed };
     });

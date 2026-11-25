@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { companySettings } from '@/server/db/schema';
 import type { AppDb } from '@/server/api/db';
 import { MAX_PASSWORD_BYTES } from './password';
+import { EASY_TO_GUESS_MESSAGE, isEasyToGuess } from '@kitstak/auth/weak-passwords';
 
 export const passwordPolicySchema = z.object({
   minLength: z.number().int().min(8).max(64).default(10),
@@ -55,6 +56,10 @@ export function validatePassword(
   const localPart = context.email?.split('@')[0]?.toLowerCase();
   if (localPart && localPart.length >= 3 && lowered.includes(localPart))
     issues.push('Do not include your email name.');
+  // The same check the shared sign in policy runs (`@kitstak/auth`): a password that is one piece
+  // repeated, a straight run, a common password or built around the product name is refused here
+  // too, so a password an admin sets cannot be weaker than one a person picks.
+  if (issues.length === 0 && isEasyToGuess(password)) issues.push(EASY_TO_GUESS_MESSAGE);
   return issues;
 }
 

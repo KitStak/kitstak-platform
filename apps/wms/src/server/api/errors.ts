@@ -20,6 +20,12 @@ export const ERROR_CODES = [
   'RATE_LIMITED',
   // The platform org is not entitled to the WMS module (BLUEPRINT.md §3.3) — HTTP 402.
   'ENTITLEMENT_MISSING',
+  // The plan is view only: reads work, every change is refused (docs/billing/SPEC.md 9.4). HTTP 402.
+  'PLAN_READ_ONLY',
+  // One more warehouse needs a bigger plan (docs/billing/SPEC.md 6.9). HTTP 402.
+  'PLAN_WAREHOUSE_LIMIT',
+  // One more person needs a bigger plan (docs/billing/SPEC.md 6.9). HTTP 402.
+  'PLAN_SEAT_LIMIT',
   // Another write held the app write lock for too long; safe to retry.
   'BUSY',
   // Platform codes (not domain): authentication, CSRF and unexpected failures.
@@ -41,6 +47,9 @@ export const ERROR_STATUS: Readonly<Record<ErrorCode, number>> = {
   DUPLICATE: 409,
   RATE_LIMITED: 429,
   ENTITLEMENT_MISSING: 402,
+  PLAN_READ_ONLY: 402,
+  PLAN_WAREHOUSE_LIMIT: 402,
+  PLAN_SEAT_LIMIT: 402,
   BUSY: 503,
   UNAUTHENTICATED: 401,
   CSRF: 403,

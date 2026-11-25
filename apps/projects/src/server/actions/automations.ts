@@ -66,7 +66,7 @@ export async function describeAutomationAction(input: z.input<typeof describeSch
         conditions: data.conditions as AutomationCondition[],
         actions: data.actions as unknown as AutomationAction[],
       }),
-    { revalidate: false },
+    { revalidate: false, read: true },
   );
 }
 

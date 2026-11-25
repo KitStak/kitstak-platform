@@ -6,6 +6,7 @@
  * Rendered by `<Toaster />` (toaster.tsx), top centre below the header, 5 s auto-dismiss, paused on hover.
  */
 import * as React from 'react';
+import { answerViewOnly } from '@kitstak/ui/view-only';
 
 export type ToastVariant = 'success' | 'error' | 'warning' | 'info';
 
@@ -62,6 +63,9 @@ function emit(next: readonly ToastItem[]): void {
 }
 
 export function showToast(input: ToastInput): string {
+  // A change the server refused because the plan is view only is answered by the view only dialog
+  // (the banner's words and its button), not by a toast with other words (docs/billing/SPEC.md 9.4).
+  if (input.variant === 'error' && answerViewOnly(input.title, input.message)) return '';
   counter += 1;
   const variant = input.variant ?? 'info';
   const item: ToastItem = {

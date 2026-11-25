@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
 import { PRODUCT_NAV } from '@/components/nav/nav-data';
-import { ROUTES } from '@/components/site-links';
+import { ROUTES, START_LABEL, startFreeHref } from '@/components/site-links';
 import styles from './not-found.module.css';
 
 export default function NotFound() {
@@ -25,7 +25,7 @@ export default function NotFound() {
                 <Link href={ROUTES.products}>Compare products</Link>
               </li>
               <li>
-                <Link href={ROUTES.getStarted}>Set up your Stak</Link>
+                <a href={startFreeHref()}>{START_LABEL}</a>
               </li>
               <li>
                 <Link href={ROUTES.home}>Home</Link>

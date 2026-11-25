@@ -47,6 +47,14 @@ export const TOPICS = [
     subject: 'Pricing question',
   },
   {
+    id: 'billing',
+    label: 'Billing help',
+    note: 'A charge, an invoice, a refund question or your card.',
+    prompt: 'What happened? Add your company name and the invoice number if you have one.',
+    action: 'Send message',
+    subject: 'Billing help',
+  },
+  {
     id: 'other',
     label: 'Something else',
     note: 'Anything at all.',

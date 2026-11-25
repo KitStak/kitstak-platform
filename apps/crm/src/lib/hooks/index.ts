@@ -8,3 +8,4 @@ export * from './use-platform';
 export * from './use-admin';
 export * from './use-board-stream';
 export { errorMessage, toastError } from './cache';
+export { useHydrated } from './use-hydrated';

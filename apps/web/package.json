@@ -7,15 +7,16 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "next dev -p 3400",
+    "dev": "next dev -p 3600",
     "sync:projects": "tsx --tsconfig scripts/tsconfig.sync.json scripts/sync-projects.ts",
     "prebuild": "pnpm run sync:projects",
     "build": "next build",
-    "start": "next start -p 3400",
+    "start": "next start -p 3600",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@kitstak/billing": "workspace:*",
     "@kitstak/ui": "workspace:*",
     "next": "16.4.5",
     "react": "19.3.0",

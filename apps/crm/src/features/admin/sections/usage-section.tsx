@@ -1,11 +1,15 @@
 'use client';
-/** Admin → Usage & billing: seats, content counts, automation runs, storage and the (demo) plan. */
-import { Boxes, FileStack, KeyRound, LayoutDashboard, Lock, Rows3, Sparkles, Zap } from 'lucide-react';
+/**
+ * Admin → Usage & billing: the "Plan and payment" row (rendered on the server from
+ * `@kitstak/billing` and passed in), then content counts, automation runs and storage.
+ */
+import type { ReactNode } from 'react';
+import { Boxes, FileStack, KeyRound, LayoutDashboard, Rows3, Zap } from 'lucide-react';
 import { ProgressBar, Skeleton } from '@/components/ui';
 import { ORG_ROLES } from '@/server/rbac/permissions';
 import { useUsage } from '../api';
-import { formatBytes, formatDate, formatNumber, formatStorage, meterTone, percent, pluralize, ROLE_LABEL } from '../format';
-import { DemoBadge, ErrorPanel, SectionHeader, SettingsCard, StatTile } from '../ui';
+import { formatBytes, formatNumber, formatStorage, meterTone, percent, pluralize, ROLE_LABEL } from '../format';
+import { ErrorPanel, SectionHeader, SettingsCard, StatTile } from '../ui';
 
 function Meter({ label, used, limit, format = formatNumber }: { readonly label: string; readonly used: number; readonly limit: number; readonly format?: (value: number) => string }) {
   const pct = percent(used, limit);
@@ -28,47 +32,20 @@ function Meter({ label, used, limit, format = formatNumber }: { readonly label: 
   );
 }
 
-export function UsageSection() {
+export function UsageSection({ planCard = null }: { readonly planCard?: ReactNode }) {
   const usage = useUsage();
   const data = usage.data;
   return (
     <>
       <SectionHeader title="Usage & billing" />
+      {planCard}
       {usage.isError ? (
         <SettingsCard>
           <ErrorPanel title="Couldn't load usage" onRetry={() => void usage.refetch()} />
         </SettingsCard>
       ) : (
         <>
-          <section
-            aria-label="Plan"
-            data-testid="plan-card"
-            className="relative overflow-hidden rounded-lg border border-border-subtle bg-panel p-5 shadow-xs"
-          >
-            <div className="relative flex flex-wrap items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-fg">
-                  <Sparkles aria-hidden className="size-5" />
-                </span>
-                <div>
-                  <p className="flex flex-wrap items-center gap-2 text-lg font-semibold text-fg">
-                    {data ? data.plan.name : <Skeleton width={160} height={18} rounded="full" />}
-                    <DemoBadge>Demo plan · not billed</DemoBadge>
-                  </p>
-                  <p className="mt-1 max-w-xl text-sm text-fg-secondary">
-                    This workspace runs on a demonstration plan. Nothing is charged and no payment details are stored.
-                    {data?.plan.renewsAt ? ` Usage counters reset ${formatDate(data.plan.renewsAt)}.` : ''}
-                  </p>
-                </div>
-              </div>
-              <p className="flex items-center gap-1.5 text-sm text-fg-muted">
-                <Lock aria-hidden className="size-3.5 text-icon" />
-                Only owners can change the plan
-              </p>
-            </div>
-          </section>
-
-          <SettingsCard title="Plan limits" description="Meters turn amber at 80% and red at 100%." testId="usage-meters">
+          <SettingsCard title="Fair use limits" description="Meters turn amber at 80% and red at 100%." testId="usage-meters">
             {!data ? (
               <div data-skeleton aria-busy="true" className="flex flex-col gap-5">
                 {[0, 1, 2].map((index) => (
@@ -80,7 +57,6 @@ export function UsageSection() {
               </div>
             ) : (
               <div className="flex flex-col gap-5">
-                <Meter label="Seats" used={data.seats.active} limit={data.seats.limit} />
                 <Meter label="Automation runs this month" used={data.automationRuns.thisMonth} limit={data.automationRuns.limit} />
                 <Meter label="File storage" used={data.files.bytes} limit={data.files.limitBytes} format={formatBytes} />
               </div>

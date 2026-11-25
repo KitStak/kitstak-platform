@@ -166,7 +166,7 @@ export function CustomizeDashboard({
           Customize
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[340px] p-3" aria-label="Customize dashboard">
+      <PopoverContent align="end" className="w-[340px] p-3" aria-label="Customize dashboard" data-plan-read="">
         <p className="text-sm font-semibold text-foreground">Cards</p>
         <p className="text-2xs text-faint">Show, hide and reorder. Saved to your account.</p>
         <ul className="mt-2 flex flex-col gap-0.5" aria-label="Dashboard cards">

@@ -62,7 +62,7 @@ export async function evaluateAlertsAction() {
 const readSchema = z.object({ ids: z.array(uuid).max(500).optional() });
 /** Marks notifications read: the given ids, or all when `ids` is left out. */
 export async function markNotificationsReadAction(input: z.input<typeof readSchema> = {}) {
-  return runAction(readSchema, input, (data, ctx) => markNotificationsRead(ctx, data.ids), { revalidate: false });
+  return runAction(readSchema, input, (data, ctx) => markNotificationsRead(ctx, data.ids), { revalidate: false, read: true });
 }
 
 const archiveSchema = z.object({ ids: z.array(uuid).min(1).max(500) });

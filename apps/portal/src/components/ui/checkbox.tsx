@@ -22,7 +22,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
         id={inputId}
         type="checkbox"
         className={cn(
-          'peer size-4 appearance-none rounded-xs border-[1.5px] border-border-strong bg-panel',
+          'peer size-4 appearance-none rounded-xs border-[1.5px] border-control bg-panel',
           'transition-[background-color,border-color,box-shadow] duration-[var(--duration-instant)] ease-out',
           'hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
           'checked:border-primary checked:bg-primary checked:hover:bg-primary-hover',
@@ -39,13 +39,14 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
     </span>
   );
   if (!label) return box;
+  // One label around the box and the words: the whole row is the tap target, 44 px tall on touch screens.
   return (
-    <div className="flex items-start gap-2">
+    <label htmlFor={inputId} className="flex cursor-pointer items-start gap-2 pointer-coarse:min-h-11 pointer-coarse:items-center">
       <span className="flex h-5 items-center">{box}</span>
-      <label htmlFor={inputId} className="cursor-pointer text-base text-fg">
+      <span className="text-base text-fg">
         {label}
         {description ? <span className="block text-sm text-fg-muted">{description}</span> : null}
-      </label>
-    </div>
+      </span>
+    </label>
   );
 });

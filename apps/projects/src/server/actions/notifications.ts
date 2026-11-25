@@ -7,11 +7,11 @@ import { uuid } from './schemas';
 const idsSchema = z.object({ ids: z.array(uuid).min(1).max(500), value: z.boolean().optional() });
 
 export async function markNotificationsReadAction(input: z.input<typeof idsSchema>) {
-  return runAction(idsSchema, input, (data, ctx) => markNotificationsRead(ctx, data.ids, data.value ?? true));
+  return runAction(idsSchema, input, (data, ctx) => markNotificationsRead(ctx, data.ids, data.value ?? true), { read: true });
 }
 
 export async function markAllNotificationsReadAction() {
-  return runAction(z.object({}), {}, (_data, ctx) => markAllNotificationsRead(ctx));
+  return runAction(z.object({}), {}, (_data, ctx) => markAllNotificationsRead(ctx), { read: true });
 }
 
 export async function archiveNotificationsAction(input: z.input<typeof idsSchema>) {

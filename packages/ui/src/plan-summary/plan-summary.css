@@ -1,0 +1,179 @@
+/*
+ * PlanSummaryCard: the "Plan and payment" row in each app's settings. tokens.css custom properties
+ * ONLY, so the card inherits each app's light and dark theme. This file ships with @kitstak/ui.
+ */
+
+.ks-plansummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+.ks-plansummary-main {
+  display: flex;
+  flex: 1 1 18rem;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ks-plansummary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ks-plansummary-title {
+  margin: 0;
+  font-size: var(--type-md);
+  line-height: var(--type-md-lh);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.ks-plansummary-badge {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-size: var(--type-xs);
+  line-height: var(--type-xs-lh);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.ks-plansummary-badge[data-badge='trial'] {
+  background: var(--info-subtle);
+  color: var(--info-text);
+}
+
+.ks-plansummary-badge[data-badge='active'],
+.ks-plansummary-badge[data-badge='included'] {
+  background: var(--success-subtle);
+  color: var(--success-text);
+}
+
+.ks-plansummary-badge[data-badge='past_due'] {
+  background: var(--warning-subtle);
+  color: var(--warning-text);
+}
+
+.ks-plansummary-badge[data-badge='view_only'] {
+  background: var(--danger-subtle);
+  color: var(--danger-text);
+}
+
+.ks-plansummary-line {
+  margin: 0;
+  font-size: var(--type-base);
+  line-height: var(--type-base-lh);
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.ks-plansummary-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--type-sm);
+  line-height: var(--type-sm-lh);
+  color: var(--text-muted);
+}
+
+.ks-plansummary-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ks-plansummary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1-5);
+  box-sizing: border-box;
+  min-height: var(--control-height-lg);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-size: var(--type-base);
+  line-height: var(--type-base-lh);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.ks-plansummary-button:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
+.ks-plansummary-link {
+  color: var(--text-primary);
+  font-size: var(--type-sm);
+  line-height: var(--type-sm-lh);
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ks-plansummary-button:focus-visible,
+.ks-plansummary-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (pointer: coarse) {
+  .ks-plansummary-button {
+    min-height: 44px;
+  }
+
+  .ks-plansummary-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 479px) {
+  .ks-plansummary {
+    padding: var(--space-4);
+  }
+
+  .ks-plansummary-actions {
+    width: 100%;
+  }
+
+  .ks-plansummary-button {
+    flex: 1;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-plansummary-button {
+    transition: none;
+  }
+}

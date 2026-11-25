@@ -28,6 +28,11 @@ export interface ApiFailure {
   readonly code: ErrorCode;
   readonly fieldErrors?: FieldErrors;
   readonly requestId?: string;
+  /**
+   * Only with `PLAN_WAREHOUSE_LIMIT` and `PLAN_SEAT_LIMIT`: the Portal plan picker opened at the
+   * right stepper, so the client can offer "Add to my plan" (docs/billing/SPEC.md section 6.9).
+   */
+  readonly planUrl?: string;
 }
 
 export type ApiEnvelope<T> = ApiSuccess<T> | ApiFailure;
@@ -51,6 +56,10 @@ export function failureBody(error: AppError, requestId?: string): ApiFailure {
     code: error.code,
     ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {}),
     ...(requestId ? { requestId } : {}),
+    ...((error.code === 'PLAN_WAREHOUSE_LIMIT' || error.code === 'PLAN_SEAT_LIMIT') &&
+    typeof error.details?.planUrl === 'string'
+      ? { planUrl: error.details.planUrl }
+      : {}),
   };
 }
 

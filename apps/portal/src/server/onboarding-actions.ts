@@ -8,13 +8,17 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { completeSignupIntent } from '@kitstak/billing/server';
 import { onboardingProgress } from '@kitstak/db/schema';
 import {
   BUSINESS_TYPES,
   SETUP_FOCUSES,
+  SETUP_PRODUCTS,
   START_MODES,
   TEAM_SIZES,
+  focusFromProducts,
   isSetupStepKey,
+  toSetupProducts,
 } from '@/lib/setup-model';
 import { db } from '@/server/db';
 import { getSession } from '@/server/session';
@@ -55,6 +59,8 @@ const profileSchema = z.object({
   businessType: z.enum(BUSINESS_TYPES as [string, ...string[]]),
   teamSize: z.enum(TEAM_SIZES as [string, ...string[]]),
   startMode: z.enum(START_MODES as [string, ...string[]]),
+  /** The apps picked at signup. Optional so older callers keep working. */
+  products: z.array(z.enum(SETUP_PRODUCTS as [string, ...string[]])).max(SETUP_PRODUCTS.length).optional(),
 });
 
 async function upsertOrgStep(
@@ -94,15 +100,49 @@ async function deleteOrgStep(orgId: string, stepKey: string): Promise<void> {
     );
 }
 
-/** Saves the welcome wizard's answers; completes the 'profile' step. */
+/** Closes the person's open signup. A failure here never undoes the step that was just saved. */
+async function closeSignup(userId: string): Promise<void> {
+  try {
+    await completeSignupIntent(db, userId);
+  } catch (error: unknown) {
+    console.error('[portal] could not close the signup intent', error);
+  }
+}
+
+/**
+ * Saves the welcome wizard's answers; completes the 'profile' step and closes the signup intent.
+ * With `products`, `focus` is derived from them, so the CRM and WMS guides (which read `focus`)
+ * keep working.
+ */
 export async function saveSetupProfile(input: unknown): Promise<ActionResult> {
   const context = await requireManager();
   if (!context) return NOT_ALLOWED;
   const parsed = profileSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: 'Those answers didn’t look right. Try again.' };
-  await upsertOrgStep(context, 'portal', 'profile', 'completed', parsed.data);
+  if (!parsed.success) return { ok: false, error: 'Those answers did not look right. Try again.' };
+  const { products: rawProducts, ...answers } = parsed.data;
+  const payload: Record<string, unknown> =
+    rawProducts === undefined
+      ? answers
+      : { ...answers, focus: focusFromProducts(toSetupProducts(rawProducts)), products: toSetupProducts(rawProducts) };
+  await upsertOrgStep(context, 'portal', 'profile', 'completed', payload);
+  await closeSignup(context.userId);
+  // The answers shape the setup guide (Organization settings) and the billing only redirect on home.
   revalidatePath(SETUP_GUIDE_PATH);
+  revalidatePath('/');
   revalidatePath('/welcome');
+  return { ok: true };
+}
+
+/**
+ * "Skip for now" on the welcome wizard. Nothing is saved as answered: the "Tell us about your
+ * business" step stays open in the setup guide. Only the signup is closed, so the person is not
+ * sent back to the wizard the next time they sign in.
+ */
+export async function skipWelcome(): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: 'Please sign in again.' };
+  await closeSignup(session.user.id);
+  revalidatePath('/');
   return { ok: true };
 }
 

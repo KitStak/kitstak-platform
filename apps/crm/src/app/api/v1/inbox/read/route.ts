@@ -5,6 +5,6 @@ import { svc } from '../../_lib/route-helpers';
 
 /** `{ updateIds, read }` marks threads/replies read (or unread) for the caller. */
 export const POST = withApi(
-  { permission: 'update:read', rateLimit: 'mutation', body: inboxReadSchema },
+  { permission: 'update:read', planRead: true, rateLimit: 'mutation', body: inboxReadSchema },
   (ctx) => markInboxRead(svc(ctx), ctx.body),
 );

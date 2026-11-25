@@ -204,7 +204,14 @@ export function TopBar() {
             badge={<CountBadge count={unread} ringClassName="ring-[var(--surface-panel)]" />}
           />
         </nav>
-        <AppSwitcher current="crm" urls={apps?.urls ?? APP_URLS} entitled={apps?.entitled} notInPlan={apps?.notInPlan} />
+        <AppSwitcher
+          current="crm"
+          urls={apps?.urls ?? APP_URLS}
+          entitled={apps?.entitled}
+          notInPlan={apps?.notInPlan}
+          planBadges={apps?.planBadges}
+          addHref={apps?.addHrefs ? (app) => (app === 'portal' ? undefined : apps.addHrefs?.[app]) ?? `${apps.urls.portal}/billing/plan?add=${app}` : undefined}
+        />
         <UserMenu />
       </div>
     </header>

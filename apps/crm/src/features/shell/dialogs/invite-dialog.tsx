@@ -15,6 +15,7 @@ import {
 } from '@/components/ui';
 import { organization } from '@/lib/auth-client';
 import { useOrg } from '../org-context';
+import { SeatLimitLink } from '../seat-limit-link';
 
 const emailSchema = z.email();
 const MAX_INVITES = 50;
@@ -209,6 +210,7 @@ export function InviteDialog({ open, onOpenChange }: InviteDialogProps) {
               {error}
             </p>
           ) : null}
+          <SeatLimitLink text={error} />
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>

@@ -7,7 +7,7 @@ import styles from '@/components/contact/contact.module.css';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
 import { PageEffects } from '@/components/page-effects';
-import { ROUTES } from '@/components/site-links';
+import { ROUTES, START_LABEL, startFreeHref } from '@/components/site-links';
 import { StakMark } from '@/components/stak-mark';
 
 export const metadata: Metadata = {
@@ -19,9 +19,9 @@ export const metadata: Metadata = {
 const PATHS = [
   {
     title: 'Set it up yourself',
-    body: 'Five questions, a price and a setup plan. No call needed.',
-    href: ROUTES.getStarted,
-    label: 'Set up your Stak',
+    body: 'Four fields, then pick your apps. No call needed.',
+    href: startFreeHref(),
+    label: START_LABEL,
   },
   {
     title: 'See what it costs',

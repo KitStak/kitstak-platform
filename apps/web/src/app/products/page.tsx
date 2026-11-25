@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { ClosingSection } from '@/components/closing/closing-section';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
@@ -10,8 +11,8 @@ import { SubNav } from '@/components/product/sub-nav';
 import type { SubNavSection } from '@/components/product/sub-nav';
 import { Compare, Lineup, StackHero, StartSteps } from '@/components/products/products-sections';
 import { BundleCalculator } from '@/components/stak/bundle-calculator';
-import { isAppLive } from '@/components/site-links';
-import { PRICING, formatUsd } from '@/lib/pricing';
+import { ROUTES, isAppLive } from '@/components/site-links';
+import { BUNDLE_OFF, TRIAL_DAYS, YEARLY_OFF, includedSeatsLabel, priceInWords } from '@/lib/pricing';
 import styles from './products.module.css';
 
 export const metadata: Metadata = {
@@ -53,11 +54,11 @@ const FAQ: readonly FaqItem[] = [
   },
   {
     question: 'How is each product priced?',
-    answer: `The CRM and Projects are priced per user and the WMS per warehouse. Pulse is ${formatUsd(PRICING.pulse.monthlyCents)} per organization per month, and that covers up to ${PRICING.pulse.includedSeats} seats. It is one flat price, not a price per user. Need more than ${PRICING.pulse.includedSeats} seats? Talk to us. Running two or more products takes a percentage off each, and paying yearly takes a further percentage off the total. The calculator on this page shows the arithmetic.`,
+    answer: `The CRM is ${priceInWords('crm')}. Projects is ${priceInWords('projects')}. The WMS is ${priceInWords('wms')}. Pulse is ${priceInWords('pulse')}. ${includedSeatsLabel('pulse')}. With two or more apps you save ${BUNDLE_OFF} on every app. Pay yearly and you save ${YEARLY_OFF} more. Every plan starts with ${TRIAL_DAYS} days free, and no card is needed. The calculator on this page shows the math.`,
   },
   {
     question: 'Do I have to talk to someone to get started?',
-    answer: `No. The setup wizard asks a few questions and builds a plan, and you create your own account at the end. If you would rather be walked through it, the founder will do that with you.${PULSE_SOON}`,
+    answer: `No. The setup wizard asks a few questions and builds a plan, and you create your own account at the end. Your free trial starts right away. If you would rather be walked through it, the founder will do that with you.${PULSE_SOON}`,
   },
   {
     question: 'Can I get help moving our data in?',
@@ -88,11 +89,14 @@ export default function ProductsPage() {
               Bundle and save.
             </h2>
             <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-              Switch the products on, set the size of your operation, and see the price. Then carry it
-              straight into setup.
+              Switch the apps on, set the size of your team, and see the price. Then start your free trial
+              with that plan.{' '}
+              <Link href={ROUTES.pricing} className="text-link">
+                See how billing works
+              </Link>
             </p>
             <div className={styles.calc} data-reveal>
-              <BundleCalculator />
+              <BundleCalculator source="pricing" />
             </div>
           </div>
         </section>

@@ -12,6 +12,9 @@ import { cn } from '@/lib/utils';
 import { authClient } from '@/lib/auth-client';
 import { validateLogin, type LoginField, type LoginFieldErrors } from './login-schema';
 
+/** The Portal, home of the one KitStak sign in page. Empty when the WMS runs without one. */
+const PORTAL_URL = (process.env.NEXT_PUBLIC_PORTAL_URL ?? '').trim().replace(/\/+$/, '');
+
 const INVALID_INPUT = 'border-danger focus:border-danger focus:ring-danger/20';
 
 /** Only allow same-origin relative paths as a post-login destination. */
@@ -232,6 +235,18 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
         </div>
 
         <SsoButton />
+        {/* The Portal sign in page has every other way in: a code by email, Google, Microsoft. */}
+        {hydrated && PORTAL_URL ? (
+          <p className="mt-4 text-center text-xs text-secondary">
+            <a
+              href={`${PORTAL_URL}/login?next=${encodeURIComponent(`${window.location.origin}${safeNextPath(searchParams.get('next'))}`)}`}
+              className="font-medium text-primary transition-colors hover:text-primary-hover hover:underline"
+              data-testid="login-other-ways"
+            >
+              Sign in with a code, Google or Microsoft
+            </a>
+          </p>
+        ) : null}
       </div>
 
       {showDemoCredentials ? (

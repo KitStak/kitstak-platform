@@ -1,10 +1,10 @@
 'use client';
 
 import type { Quote } from '@/lib/pricing';
-import { formatUsd } from '@/lib/pricing';
+import { formatMoney } from '@/lib/pricing';
 import { BUSINESS_TYPES, START_MODES, TEAM_SIZES } from '@/lib/stak';
 import type { StakAnswers } from '@/lib/stak';
-import { QuoteSummary, StakVisual } from '../stak/stak-parts';
+import { QuoteSummary, StakVisual, perPeriod } from '../stak/stak-parts';
 import styles from './wizard.module.css';
 
 interface WizardSummaryProps {
@@ -52,10 +52,10 @@ function SummaryBody({ answers, estimate }: WizardSummaryProps) {
       ) : null}
       {estimate ? (
         <div className={styles.estimate}>
-          <QuoteSummary quote={estimate} billing={answers.billing} seats={answers.seats} />
+          <QuoteSummary quote={estimate} />
         </div>
       ) : (
-        <p className={styles.empty}>Choose a product and your stack builds here.</p>
+        <p className={styles.empty}>Pick an app and your stack builds here.</p>
       )}
     </>
   );
@@ -78,7 +78,12 @@ export function WizardSummary({ answers, estimate }: WizardSummaryProps) {
             <span className={styles.stripStack}>{headline}</span>
           </span>
           <span className={styles.stripPrice}>
-            {estimate ? `${formatUsd(estimate.monthlyCents)}/mo` : ''}
+            {estimate ? (
+              <span className={styles.stripAmount}>
+                {formatMoney(estimate.totalCents)}
+                <span>{perPeriod(estimate.interval)}</span>
+              </span>
+            ) : null}
             <svg viewBox="0 0 10 6" width="10" height="6" aria-hidden>
               <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" />
             </svg>
