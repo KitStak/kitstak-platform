@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { ARTICLES } from '@/components/articles/articles-content';
+import { DOCS_UPDATED, allDocPages, docApps } from '@/lib/docs/docs';
 import { SITE_URL } from '@/lib/seo';
 
 /** The day the pages below last changed in a way a reader would notice. Bump it with real edits. */
@@ -33,6 +34,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: SITE_UPDATED,
       changeFrequency: page.changeFrequency,
       priority: page.priority,
+    })),
+    {
+      url: `${SITE_URL}/docs`,
+      lastModified: DOCS_UPDATED,
+      changeFrequency: 'weekly' as const,
+      priority: 0.8,
+    },
+    ...docApps().map((app) => ({
+      url: `${SITE_URL}${app.path}`,
+      lastModified: DOCS_UPDATED,
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    })),
+    ...allDocPages().map((page) => ({
+      url: `${SITE_URL}${page.path}`,
+      lastModified: page.updated,
+      changeFrequency: 'monthly' as const,
+      priority: 0.6,
     })),
     ...ARTICLES.map((article) => ({
       url: `${SITE_URL}/articles/${article.slug}`,

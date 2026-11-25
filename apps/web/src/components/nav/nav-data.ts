@@ -81,6 +81,7 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
 export const PRIMARY_NAV: readonly NavLink[] = [
   { href: ROUTES.platform, label: 'Platform' },
   { href: ROUTES.customers, label: 'Customers' },
+  { href: ROUTES.docs, label: 'Docs' },
   { href: ROUTES.articles, label: 'Articles' },
   { href: ROUTES.pricing, label: 'Pricing' },
   { href: ROUTES.contact, label: 'Contact' },

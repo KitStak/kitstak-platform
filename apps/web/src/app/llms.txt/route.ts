@@ -1,4 +1,5 @@
 import { ARTICLES } from '@/components/articles/articles-content';
+import { docApps } from '@/lib/docs/docs';
 import { SITE_URL } from '@/lib/seo';
 
 export const dynamic = 'force-static';
@@ -21,6 +22,7 @@ export function GET(): Response {
       '/customers/team-1',
       'How Team 1 moved 28 boards and 210 items off monday.com in one day.',
     ],
+    ['Docs', '/docs', 'Step by step guides for every feature in every app.'],
     ['Security', '/security', 'How KitStak protects accounts, data and payments.'],
     ['Contact', '/contact', 'Talk to the founder or book a walkthrough.'],
   ];
@@ -33,6 +35,14 @@ export function GET(): Response {
     '',
     ...pages.map(([name, path, note]) => `- [${name}](${SITE_URL}${path}): ${note}`),
     '',
+    '## Docs',
+    '',
+    ...docApps().flatMap((app) => [
+      `### ${app.title}`,
+      '',
+      ...app.pages.map((p) => `- [${p.title}](${SITE_URL}${p.path}): ${p.description}`),
+      '',
+    ]),
     '## Articles',
     '',
     ...ARTICLES.map((a) => `- [${a.title}](${SITE_URL}/articles/${a.slug}): ${a.description}`),

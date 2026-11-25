@@ -118,6 +118,7 @@ export const ROUTES = {
   privacy: '/privacy',
   security: '/security',
   articles: '/articles',
+  docs: '/docs',
   customers: '/customers',
   /** The Team 1 customer story. */
   team1: '/customers/team-1',

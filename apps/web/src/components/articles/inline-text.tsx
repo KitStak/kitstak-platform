@@ -2,18 +2,20 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 /**
- * The two inline marks the article copy uses: `[text](/path)` and `**bold**`. Anything else is
- * plain text. A link to another site opens normally, with no referrer.
+ * The inline marks the articles and the docs use: `[text](/path)`, `**bold**` and `` `code` ``.
+ * Anything else is plain text. A link to another site opens normally, with no referrer.
  */
 export function InlineText({ text }: { readonly text: string }) {
   const parts: ReactNode[] = [];
-  const pattern = /\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*/g;
+  const pattern = /\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*|`([^`]+)`/g;
   let last = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text)) !== null) {
     if (match.index > last) parts.push(text.slice(last, match.index));
-    const [, label, href, bold] = match;
-    if (bold !== undefined) {
+    const [, label, href, bold, code] = match;
+    if (code !== undefined) {
+      parts.push(<code key={match.index}>{code}</code>);
+    } else if (bold !== undefined) {
       parts.push(<strong key={match.index}>{bold}</strong>);
     } else if (label !== undefined && href !== undefined) {
       parts.push(

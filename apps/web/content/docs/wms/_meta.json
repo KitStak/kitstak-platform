@@ -1,0 +1,22 @@
+{
+  "title": "KitStak WMS",
+  "description": "Warehouse management from the dock to the door: products, receiving, locations, counts, picking, packing, shipping, returns, kitting, 3PL client billing and integrations.",
+  "sections": [
+    "Get started",
+    "Products",
+    "Inbound",
+    "Inventory and locations",
+    "Counts",
+    "Tasks",
+    "Outbound",
+    "Packing and shipping",
+    "Returns",
+    "Work orders and kitting",
+    "Automation",
+    "Clients",
+    "Billing",
+    "Integrations",
+    "Reports and analytics",
+    "Settings and admin"
+  ]
+}
