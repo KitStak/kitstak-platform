@@ -32,7 +32,7 @@ You can add overhead and more labor classes later under **Labor > Rates**. See [
 ## Step 2: Add a client
 
 1. In **Add a client**, type the **Client name**, like Acme Outdoor Co.
-2. Select **Add the client**. If a client with a close name exists, Pulse offers it, or you can pick **Add as a new client**.
+2. Select **Add the client**. If the name looks like a client you already have, Pulse says so. Select **Add as a new client** to add it anyway.
 
 ## Step 3: Add a job
 
