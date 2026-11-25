@@ -30,7 +30,7 @@ import { buildOf } from './builds-model';
 import { openBuildDialog } from './build-dialogs';
 import type { BuildActions } from './use-build-actions';
 
-type ItemProps = { readonly icon?: ReactNode; readonly onSelect?: (event: Event) => void; readonly variant?: 'default' | 'danger'; readonly children: ReactNode; readonly description?: ReactNode; readonly disabled?: boolean };
+type ItemProps = { readonly icon?: ReactNode; readonly onSelect?: (event: Event) => void; readonly variant?: 'default' | 'danger'; readonly children: ReactNode; readonly description?: ReactNode; readonly disabled?: boolean; readonly className?: string };
 
 interface Parts {
   readonly Item: ComponentType<ItemProps>;

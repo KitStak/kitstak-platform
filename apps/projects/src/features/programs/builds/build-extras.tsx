@@ -283,12 +283,12 @@ function DaySummary({ date, tasks }: { readonly date: IsoDate; readonly tasks: r
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs font-medium text-fg tabular-nums">
               {totals.builds} {totals.builds === 1 ? 'build' : 'builds'}
-              <span className="@max-[150px]:hidden"> · {unitLabel(totals.planned, unit)}</span>
+              <span className="@max-[125px]:hidden"> · {unitLabel(totals.planned, unit)}</span>
             </span>
             <span className="block truncate text-2xs text-fg-muted tabular-nums">
-              {formatQty(totals.built)} <span className="@max-[150px]:hidden">built</span>
-              <span className="@min-[150px]:hidden">of {formatQty(totals.planned)}</span>
-              <span className="@max-[150px]:hidden"> · {totals.done} done</span>
+              {formatQty(totals.built)} <span className="@max-[125px]:hidden">built</span>
+              <span className="@min-[125px]:hidden">of {formatQty(totals.planned)}</span>
+              <span className="@max-[125px]:hidden"> · {totals.done} done</span>
             </span>
           </span>
         </button>

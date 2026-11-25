@@ -227,7 +227,7 @@ export function BuildProperties() {
       </PropertyRow>
       {inProgram ? (
         <PropertyRow icon={<Repeat2 aria-hidden />} label="Run">
-          <Link href={`/programs/${encodeURIComponent(task.projectKey)}/builds/runs?range=${b.buildDate}`} className="truncate rounded-sm px-2 py-1 text-sm text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-focus">
+          <Link href={`/programs/${encodeURIComponent(task.projectKey)}/builds/runs?range=${b.buildDate}`} className="truncate rounded-sm px-2 py-1 text-sm text-fg-link underline decoration-border-strong underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-focus" data-testid="build-run-link">
             {runs.data?.find((run) => run.id === b.runId)?.name ?? (b.scheduleId ? 'Scheduled run' : 'Unscheduled')} · {dayLabel(b.buildDate)}
           </Link>
         </PropertyRow>
@@ -283,7 +283,7 @@ export function BuildProperties() {
       </PropertyRow>
       {b.scheduleId && inProgram ? (
         <PropertyRow icon={<Repeat2 aria-hidden />} label="Schedule">
-          <Link href={`/programs/${encodeURIComponent(task.projectKey)}/schedule`} className="rounded-sm px-2 py-1 text-sm text-fg-link hover:underline">
+          <Link href={`/programs/${encodeURIComponent(task.projectKey)}/schedule`} className="rounded-sm px-2 py-1 text-sm text-fg-link underline decoration-border-strong underline-offset-4 hover:decoration-current focus-visible:outline-2 focus-visible:outline-focus" data-testid="build-schedule-link">
             {scheduleName ? `Made by ${scheduleName}` : 'Made by a schedule'}
           </Link>
         </PropertyRow>
