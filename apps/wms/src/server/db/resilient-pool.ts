@@ -49,6 +49,13 @@ export interface ResilientPoolOptions {
   readonly idleResetMs: number;
   /** Budget for one statement or one connection acquisition. */
   readonly stallMs: number;
+  /**
+   * Budget for a statement that is instant on a live connection: a plain read, or the tenant
+   * layer's BEGIN / SET LOCAL / COMMIT. Silence this long means a dead connection, not a slow query.
+   */
+  readonly readStallMs?: number;
+  /** A statement slower than this (that still answered) is logged, with its SQL, as slow. */
+  readonly slowMs?: number;
   /** Budget for a whole transaction (many statements). */
   readonly transactionStallMs: number;
   readonly now?: () => number;
@@ -76,11 +83,29 @@ export function isRetryableRead(query: string): boolean {
   return READ_ONLY.test(query) && !SIDE_EFFECTS.test(query) && !query.includes(';');
 }
 
-/** Env knobs (milliseconds): DATABASE_IDLE_RESET_MS, DATABASE_STALL_MS, DATABASE_TX_STALL_MS. */
+const CONTROL = /^\s*(begin|commit|rollback|set\s+local)\b/i;
+
+/** True for a statement that answers at once on a live connection (gets the short read budget). */
+export function isQuickStatement(query: string): boolean {
+  return isRetryableRead(query) || (CONTROL.test(query) && !query.includes(';'));
+}
+
+/** The SQL for a log line: whitespace collapsed, cut short. Parameters are never logged. */
+export function sqlForLog(query: string): string {
+  const flat = query.replace(/\s+/g, ' ').trim();
+  return flat.length > 160 ? `${flat.slice(0, 160)}…` : flat;
+}
+
+/**
+ * Env knobs (milliseconds): DATABASE_IDLE_RESET_MS, DATABASE_STALL_MS, DATABASE_READ_STALL_MS,
+ * DATABASE_TX_STALL_MS, DATABASE_SLOW_MS.
+ */
 export function resilientDefaults(env: Readonly<Record<string, string | undefined>> = process.env): {
   idleResetMs: number;
   stallMs: number;
+  readStallMs: number;
   transactionStallMs: number;
+  slowMs: number;
 } {
   const num = (value: string | undefined, fallback: number): number => {
     const n = Number(value);
@@ -91,7 +116,11 @@ export function resilientDefaults(env: Readonly<Record<string, string | undefine
     idleResetMs: num(env.DATABASE_IDLE_RESET_MS, 15_000),
     // Past the server-side statement_timeout (30 s), so no statement the server would still run is cut.
     stallMs: num(env.DATABASE_STALL_MS, 35_000),
+    // Production 2026-11-25: a read on a fresh connection went silent for 35 s, then answered at
+    // once when retried. A plain read that quiet is a dead connection; fail over far sooner.
+    readStallMs: num(env.DATABASE_READ_STALL_MS, 8_000),
     transactionStallMs: num(env.DATABASE_TX_STALL_MS, 120_000),
+    slowMs: num(env.DATABASE_SLOW_MS, 3_000),
   };
 }
 
@@ -134,16 +163,24 @@ export function resilientPool(create: () => PgSqlLike, options: ResilientPoolOpt
   };
 
   /** Runs `start` with in-flight tracking; a stall replaces the pool and rejects. */
-  const guarded = async <T>(what: string, budgetMs: number, start: () => PromiseLike<T>): Promise<T> => {
+  const guarded = async <T>(
+    what: string,
+    budgetMs: number,
+    start: () => PromiseLike<T>,
+    sql?: string,
+  ): Promise<T> => {
     const startedOn = generation;
+    const startedAt = Date.now();
     inFlight += 1;
     lastActivity = now();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let stalled = false;
     try {
       const stall = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
+          stalled = true;
           // Only the first stall on a pool replaces it; later ones on the same dead pool just fail.
-          if (generation === startedOn) replace('stall', { what, ms: budgetMs });
+          if (generation === startedOn) replace('stall', { what, ms: budgetMs, ...(sql ? { sql } : {}) });
           reject(new DbStallError(options.name, what, budgetMs));
         }, budgetMs);
       });
@@ -152,6 +189,10 @@ export function resilientPool(create: () => PgSqlLike, options: ResilientPoolOpt
       clearTimeout(timer);
       inFlight -= 1;
       lastActivity = now();
+      const tookMs = Date.now() - startedAt;
+      if (!stalled && tookMs >= (options.slowMs ?? Number.POSITIVE_INFINITY)) {
+        log.warn('slow database statement', { pool: options.name, what, ms: tookMs, ...(sql ? { sql } : {}) });
+      }
     }
   };
 
@@ -182,16 +223,28 @@ export function resilientPool(create: () => PgSqlLike, options: ResilientPoolOpt
     retry: boolean,
   ): PgPendingQuery =>
     lazyQuery(async (arrayMode) => {
-      const once = (): Promise<unknown> =>
-        guarded('statement', options.stallMs, () => {
-          const q = target().unsafe(query, params, queryOptions);
-          return (arrayMode ? q.values() : q).execute();
-        });
+      const budget = isQuickStatement(query) ? (options.readStallMs ?? options.stallMs) : options.stallMs;
+      const sql = sqlForLog(query);
+      let startedOn = generation;
+      const once = (): Promise<unknown> => {
+        startedOn = generation;
+        return guarded(
+          'statement',
+          budget,
+          () => {
+            const q = target().unsafe(query, params, queryOptions);
+            return (arrayMode ? q.values() : q).execute();
+          },
+          sql,
+        );
+      };
       try {
         return await once();
       } catch (error) {
-        if (!(retry && error instanceof DbStallError && isRetryableRead(query))) throw error;
-        log.warn('retrying a read after a database stall', { pool: options.name });
+        // A stall, or the pool torn down under it by another statement's stall (CONNECTION_DESTROYED).
+        const poolFailed = error instanceof DbStallError || generation !== startedOn;
+        if (!(retry && poolFailed && isRetryableRead(query))) throw error;
+        log.warn('retrying a read after a database stall', { pool: options.name, sql });
         return await once();
       }
     });
