@@ -48,6 +48,12 @@ async function findSeed(): Promise<Seed | null> {
          join pulse.member_roles mr on mr.org_id = l.org_id and mr.role = 'owner'
          join core.member m on m.organization_id = mr.org_id and m.user_id = mr.user_id
         where l.target_type in ('crm_deal', 'wms_work_order')
+          -- One job per record, so the single and the batched reads must name the same job
+          -- whatever other processes add to the shared database (SPEC B.3).
+          and (select count(*) from pulse.job_links o
+                 join pulse.jobs oj on oj.id = o.job_id and oj.deleted_at is null
+                where o.org_id = l.org_id and o.target_type = l.target_type and o.target_id = l.target_id) = 1
+        order by l.org_id, l.target_type, l.target_id
         limit 1`,
     );
     const row = found.rows[0];

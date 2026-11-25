@@ -12,9 +12,10 @@
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { parseCsv } from '@/lib/csv/parse';
+import { addDaysIso } from '@/lib/dates';
 import { createTestOrg, databaseReady, type TestOrg } from '@/test/db';
 import type { PmTask } from '@/server/integrations/projects';
-import type { DomainContext } from './_shared';
+import { todayInZone, type DomainContext } from './_shared';
 
 const PROJECT = '00000000-0000-4000-8000-0000000000a1';
 const OTHER_PROJECT = '00000000-0000-4000-8000-0000000000a2';
@@ -73,7 +74,9 @@ describe.skipIf(!ready)('tasks on production entries', () => {
     const job = await createJob(owner, { name: 'Advent 2026', clientId: client.id, status: 'active', pricingModel: 'per_unit', unitPrice: '8.0300', plannedUnits: '18200' });
     jobId = job.id;
     jobNumber = job.number;
-    today = new Date().toISOString().slice(0, 10);
+    // Today at the job's site, the day the future day rule uses (a UTC date runs ahead of it).
+    const [site] = await org.query<{ timezone: string }>(`select s.timezone from pulse.jobs j join pulse.sites s on s.id = j.site_id where j.id = $1`, [job.id]);
+    today = todayInZone(site?.timezone ?? 'UTC');
     await addJobLink(owner, job.id, { targetType: 'pm_project', targetId: PROJECT, title: 'Advent 2026' });
   }, 60_000);
   afterAll(async () => {
@@ -157,7 +160,7 @@ describe.skipIf(!ready)('tasks on production entries', () => {
       await appendImportRows(owner, start.batch.id, parsed.rows.map((cells, index) => ({ n: parsed.rowNumbers[index] as number, cells })), { done: true });
       return checkImportBatch(owner, start.batch.id, {});
     };
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const yesterday = addDaysIso(today, -1);
     const checked = await upload(
       [
         'work_date,job_number,labor_class,task,units_good,people,labor_hours,task_units',
