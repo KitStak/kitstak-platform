@@ -291,7 +291,7 @@ export function CommandPalette({
                     <Lock aria-hidden className="size-4" />
                   )
                 }
-                meta={entitled.projects ? 'Projects, tasks and timelines' : 'Locked. View billing'}
+                meta={entitled.projects ? 'Projects, programs and tasks' : 'Locked. View billing'}
                 external={entitled.projects}
               >
                 Open Projects

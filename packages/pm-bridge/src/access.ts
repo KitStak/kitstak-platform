@@ -1,5 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm';
-import { queryOne, type BridgeExecutor } from './executor';
+import { pmAvailability, queryOne, type BridgeExecutor } from './executor';
 import { effectiveProjectRole, isProjectRole, parseOrgRole, type OrgRole, type ProjectRole } from './permissions';
 import type { BridgeActor } from './types';
 
@@ -52,6 +52,8 @@ export interface ProjectRow {
   readonly archived: boolean;
   readonly is_template: boolean;
   readonly member_role: string | null;
+  /** `project` or `program` (always `project` on a database older than Projects 0006). */
+  readonly kind: 'project' | 'program';
 }
 
 /** Loads a live project in the actor's org and the actor's effective role on it. */
@@ -62,9 +64,11 @@ export async function projectAccess(
   orgRole?: OrgRole | null,
 ): Promise<{ project: ProjectRow; role: ProjectRole | null }> {
   const role = orgRole === undefined ? await orgRoleOf(db, actor) : orgRole;
+  const { kinds } = await pmAvailability(db);
   const project = await queryOne<ProjectRow>(
     db,
     sql`select p.id, p.org_id, p.key, p.name, p.visibility, p.owner_id, p.archived_at is not null as archived, p.is_template,
+               ${kinds ? sql`p.kind` : sql`'project'`} as kind,
                (select m.role from pm.project_members m where m.project_id = p.id and m.user_id = ${actor.userId}::uuid) as member_role
           from pm.projects p
          where p.id = ${projectId}::uuid and p.org_id = ${actor.orgId}::uuid and p.deleted_at is null`,

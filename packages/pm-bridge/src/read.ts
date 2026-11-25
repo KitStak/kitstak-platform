@@ -78,7 +78,18 @@ interface ProjectQueryRow {
   overdue: number | string;
 }
 
+/** `and p.kind = 'project'` once Projects 0006 is applied (programs have their own panels, 6.2). */
+export function projectKindOnly(kinds: boolean, alias = 'p'): SQL {
+  return kinds ? sql`and ${sql.raw(alias)}.kind = 'project'` : sql``;
+}
+
+/** `and t.kind = 'task'` once Projects 0006 is applied (builds are not tasks for other apps). */
+export function taskKindOnly(kinds: boolean, alias = 't'): SQL {
+  return kinds ? sql`and ${sql.raw(alias)}.kind = 'task'` : sql``;
+}
+
 async function loadProjects(db: BridgeExecutor, orgId: string, where: SQL, urls: BridgeUrls): Promise<Omit<BridgeProject, 'linkId'>[]> {
+  const { kinds } = await pmAvailability(db);
   const rows = await query<ProjectQueryRow>(
     db,
     sql`select p.id, p.key, p.name, p.status, p.health, p.color, p.icon, p.due_date::text as due_date,
@@ -92,9 +103,9 @@ async function loadProjects(db: BridgeExecutor, orgId: string, where: SQL, urls:
                    count(*) filter (where s.category = 'done')::int as done,
                    count(*) filter (where s.category not in ('done', 'cancelled') and t.due_date < current_date)::int as overdue
               from pm.tasks t join pm.statuses s on s.id = t.status_id
-             where t.project_id = p.id and t.deleted_at is null and t.parent_task_id is null
+             where t.project_id = p.id and t.deleted_at is null and t.parent_task_id is null ${taskKindOnly(kinds)}
           ) pr on true
-         where p.org_id = ${orgId}::uuid and p.is_template = false and ${where}
+         where p.org_id = ${orgId}::uuid and p.is_template = false ${projectKindOnly(kinds)} and ${where}
          order by (p.archived_at is not null), (p.status = 'completed'), p.name
          limit 50`,
   );
@@ -141,6 +152,7 @@ interface TaskQueryRow {
 }
 
 export async function loadTasks(db: BridgeExecutor, orgId: string, where: SQL, urls: BridgeUrls, limit = 200): Promise<BridgeTask[]> {
+  const { kinds } = await pmAvailability(db);
   const rows = await query<TaskQueryRow>(
     db,
     sql`select l.id as link_id, t.id, t.number, t.title, t.priority, t.due_date::text as due_date,
@@ -153,7 +165,7 @@ export async function loadTasks(db: BridgeExecutor, orgId: string, where: SQL, u
           join pm.projects p on p.id = t.project_id
           join pm.statuses s on s.id = t.status_id
           left join core."user" a on a.id = t.assignee_id
-         where l.org_id = ${orgId}::uuid and t.deleted_at is null and ${where}
+         where l.org_id = ${orgId}::uuid and t.deleted_at is null ${taskKindOnly(kinds)} ${projectKindOnly(kinds)} and ${where}
          order by (s.category in ('done', 'cancelled')), t.due_date nulls last, t.created_at desc
          limit ${limit}`,
   );
@@ -245,10 +257,12 @@ export async function countLinkedWork(
   ids: readonly string[],
 ): Promise<Record<string, LinkedCounts>> {
   const wanted = [...new Set(ids.filter(Boolean))].slice(0, 500);
-  if (wanted.length === 0 || !(await pmAvailability(db)).installed) return {};
+  const availability = await pmAvailability(db);
+  if (wanted.length === 0 || !availability.installed) return {};
   try {
     const role = await orgRoleOf(db, actor);
     if (!role) return {};
+    const kinds = availability.kinds;
     const rows = await query<{ target_id: string; tasks: number | string; open_tasks: number | string; projects: number | string }>(
       db,
       sql`select l.target_id,
@@ -260,7 +274,8 @@ export async function countLinkedWork(
             left join pm.statuses s on s.id = t.status_id
             join pm.projects p on p.id = coalesce(l.project_id, t.project_id)
            where l.org_id = ${actor.orgId}::uuid and l.target_type = ${type} and l.target_id in ${list(wanted)}
-             and (l.task_id is null or t.deleted_at is null) and ${visibleProjects(role, actor.userId)}
+             and (l.task_id is null or (t.deleted_at is null ${taskKindOnly(kinds)})) ${projectKindOnly(kinds)}
+             and ${visibleProjects(role, actor.userId)}
            group by l.target_id`,
     );
     return Object.fromEntries(
@@ -278,7 +293,8 @@ export async function listWritableProjects(
   actor: BridgeActor,
   options: { readonly query?: string; readonly limit?: number } = {},
 ): Promise<WritableProject[]> {
-  if (!(await pmAvailability(db)).installed) return [];
+  const availability = await pmAvailability(db);
+  if (!availability.installed) return [];
   try {
     const role = await orgRoleOf(db, actor);
     if (!role) return [];
@@ -300,7 +316,7 @@ export async function listWritableProjects(
                  (select m.role from pm.project_members m where m.project_id = p.id and m.user_id = ${actor.userId}::uuid) as member_role
             from pm.projects p
             left join pm.spaces sp on sp.id = p.space_id and sp.deleted_at is null
-           where p.org_id = ${actor.orgId}::uuid and p.archived_at is null and p.is_template = false
+           where p.org_id = ${actor.orgId}::uuid and p.archived_at is null and p.is_template = false ${projectKindOnly(availability.kinds)}
              and p.status not in ('completed', 'archived') and ${visibleProjects(role, actor.userId)}
              ${term ? sql`and (p.name ilike ${like} or p.key ilike ${like})` : sql``}
            order by (select max(r.visited_at) from pm.recents r where r.user_id = ${actor.userId}::uuid and r.entity_id = p.id) desc nulls last,

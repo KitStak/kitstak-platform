@@ -43,7 +43,7 @@ const UPGRADE_COPY: Readonly<Record<Module, UpgradeCopy>> = {
   },
   projects: {
     name: 'KitStak Projects',
-    tagline: 'Projects, tasks and timelines',
+    tagline: 'Projects, programs and tasks',
     features: [
       'List, board, timeline, calendar and workload views',
       'Templates, goals, forms and automations',

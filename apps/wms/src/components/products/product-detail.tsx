@@ -74,6 +74,7 @@ import {
   PlanningTab,
   TransactionsTab,
 } from './product-detail-sections';
+import { ProductProgramsPanel } from './product-programs-panel';
 
 const TABS = [
   'overview',
@@ -541,7 +542,12 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
         {tab === 'inventory' ? <InventoryTab data={data} /> : null}
         {tab === 'orders' ? <OrdersTab data={data} /> : null}
         {tab === 'listings' ? <ListingsTab data={data} /> : null}
-        {tab === 'kits' ? <KitTab data={data} /> : null}
+        {tab === 'kits' ? (
+          <div className="flex flex-col gap-4">
+            <KitTab data={data} />
+            {isKit ? <ProductProgramsPanel productId={p.id} /> : null}
+          </div>
+        ) : null}
         {tab === 'planning' ? (
           <PlanningTab data={data} onEdit={can.edit ? () => setEditing(true) : undefined} />
         ) : null}

@@ -41,25 +41,38 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 export const isUuid = (value: unknown): value is string => typeof value === 'string' && UUID.test(value);
 
 const TTL_MS = 60_000;
+const NONE: BridgeAvailability = { installed: false, events: false, kinds: false, programs: false };
 const cache = new WeakMap<object, { readonly at: number; readonly value: BridgeAvailability }>();
 
 /**
- * Whether the Projects tables exist in this database (cached for a minute per executor).
- * Never throws: any error reads as "not installed".
+ * Whether the Projects tables exist in this database, whether `pm.projects.kind` exists (so
+ * reads can keep programs out of project lists) and whether the program tables exist (cached
+ * for a minute per executor; docs/programs/SPEC.md 6.5). Never throws: any error reads as
+ * "not installed".
  */
 export async function pmAvailability(db: BridgeExecutor): Promise<BridgeAvailability> {
   const cached = cache.get(db);
   if (cached && Date.now() - cached.at < TTL_MS) return cached.value;
-  let value: BridgeAvailability = { installed: false, events: false };
+  let value: BridgeAvailability = NONE;
   try {
-    const row = await queryOne<{ installed: boolean; events: boolean }>(
+    const row = await queryOne<{ installed: boolean; events: boolean; kinds: boolean; programs: boolean }>(
       db,
       sql`select (to_regclass('pm.tasks') is not null and to_regclass('pm.integration_links') is not null) as installed,
-                 to_regclass('pm.integration_events') is not null as events`,
+                 to_regclass('pm.integration_events') is not null as events,
+                 exists (select 1 from information_schema.columns
+                          where table_schema = 'pm' and table_name = 'projects' and column_name = 'kind') as kinds,
+                 (to_regclass('pm.build_output') is not null and to_regclass('pm.program_ledger') is not null
+                  and to_regclass('pm.program_settings') is not null and to_regclass('pm.builds') is not null) as programs`,
     );
-    value = { installed: row?.installed === true, events: row?.events === true };
+    const installed = row?.installed === true;
+    value = {
+      installed,
+      events: installed && row?.events === true,
+      kinds: installed && row?.kinds === true,
+      programs: installed && row?.kinds === true && row?.programs === true,
+    };
   } catch {
-    value = { installed: false, events: false };
+    value = NONE;
   }
   cache.set(db, { at: Date.now(), value });
   return value;

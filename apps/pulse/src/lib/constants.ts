@@ -178,7 +178,7 @@ export type FactKind = (typeof FACT_KINDS)[number];
 /** Kinds that count in profit. `billed_memo` never does. */
 export const PROFIT_KINDS: readonly FactKind[] = ['revenue_base', 'revenue_vas', 'revenue_other', 'labor', 'material', 'other', 'shared'];
 
-export const PROFIT_GROUPS = ['job', 'client', 'type', 'service', 'site', 'month', 'week', 'day'] as const;
+export const PROFIT_GROUPS = ['job', 'client', 'type', 'service', 'site', 'program', 'month', 'week', 'day'] as const;
 export type ProfitGroup = (typeof PROFIT_GROUPS)[number];
 
 export const SHARED_COST_RULE_VALUES = ['none', 'by_labor_hours', 'full', 'percent_of_labor'] as const;
