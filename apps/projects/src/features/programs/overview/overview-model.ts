@@ -3,7 +3,7 @@
  * from the summary DTO (engine cents); these helpers only compare, pick and word them. Money math
  * is bigint, never float (M7). Chart values are numbers only for drawing.
  */
-import { addDays, changeBp, dayNumber, formatCents, formatPercentBp, formatQty, lastDayOfMonth, monthOf, shortDate, unitLabel } from '@kitstak/programs-engine';
+import { addDays, changeBp, dayNumber, formatCents, formatQty, lastDayOfMonth, monthOf, shortDate, unitLabel } from '@kitstak/programs-engine';
 import type { DayRollupDTO, IsoDate, IsoMonth, MonthResultDTO, ForecastResultDTO, ProgramAlertDTO, UnitLabel } from '@/lib/program-types';
 import { LABEL_COLORS } from '@/lib/constants';
 
@@ -123,14 +123,28 @@ export function compareWithLastMonth(thisMonth: readonly DayRollupDTO[], lastMon
   if (now === null || then === null || then <= BigInt(0)) return null;
   const bp = changeBp(now, then);
   if (bp === null) return null;
-  if (bp === 0) return { text: 'same as last month at this point', tone: 'neutral' };
-  const pct = formatPercentBp(Math.abs(bp));
-  return bp > 0 ? { text: `up ${pct} vs last month at this point`, tone: 'success' } : { text: `down ${pct} vs last month at this point`, tone: 'danger' };
+  // SPEC 7.4 rounds the change to the nearest whole percent (26.5% reads "up 27%").
+  const pct = Math.round(Math.abs(bp) / 100);
+  if (pct === 0) return { text: SAME_AS_LAST_MONTH, tone: 'neutral' };
+  return bp > 0 ? { text: `up ${pct}% vs last month at this point`, tone: 'success' } : { text: `down ${pct}% vs last month at this point`, tone: 'danger' };
 }
+
+export const SAME_AS_LAST_MONTH = 'Same as last month at this point';
 
 /** Days with output, through `asOf`. */
 export function workDaysSoFar(byDay: readonly DayRollupDTO[], asOf: IsoDate): number {
   return byDay.filter((day) => day.date <= asOf && Number(day.units) > 0).length;
+}
+
+/**
+ * "Avg 801 a work day": units over the finished work days with output, through yesterday. Today is
+ * still running, so it is left out of both sides (SPEC 7.4: 13,612 kits over 17 days is 801).
+ * Null before the first finished work day.
+ */
+export function finishedDaysAverage(byDay: readonly DayRollupDTO[], asOf: IsoDate): string | null {
+  const days = byDay.filter((day) => day.date < asOf && Number(day.units) > 0);
+  const units = days.reduce((sum, day) => sum + Number(day.units), 0);
+  return avgPerDayText(units.toFixed(3), days.length);
 }
 
 /** "Avg 801 a work day" (whole units, rounded half up on the 3 decimal string). */

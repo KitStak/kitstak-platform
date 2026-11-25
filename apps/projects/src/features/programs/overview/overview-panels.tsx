@@ -41,10 +41,9 @@ import { CHARGE_GROUP_ORDER, groupLabel, variantColorMap, weekdayDate, type Char
 /* Today's run                                                                                    */
 /* ---------------------------------------------------------------------------------------------- */
 
-function RunBlock({ run, unit }: { readonly run: RunDTO; readonly unit: UnitLabel }) {
-  const { key, statusById, today, variants } = useCurrentProgram();
+function RunBlock({ run, unit, builds }: { readonly run: RunDTO; readonly unit: UnitLabel; readonly builds: ReturnType<typeof useProgramBuilds> }) {
+  const { statusById, today, variants } = useCurrentProgram();
   const drawer = useTaskDrawer();
-  const builds = useProgramBuilds(key, { from: run.date, to: run.date, limit: 500 });
   const colors = useMemo(() => variantColorMap(variants), [variants]);
   // Variant order, the same as the Variants tab and the statement; the build key breaks ties.
   const items = useMemo(() => {
@@ -80,7 +79,7 @@ function RunBlock({ run, unit }: { readonly run: RunDTO; readonly unit: UnitLabe
                   <button
                     type="button"
                     onClick={() => drawer.openTask(item.key)}
-                    className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-1 px-4 py-2 text-left outline-none hover:bg-hover focus-visible:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus sm:grid-cols-[auto_minmax(0,1fr)_120px_auto]"
+                    className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-1 px-4 py-2 text-left outline-none hover:bg-hover focus-visible:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]"
                     data-testid="today-build"
                   >
                     <StatusIcon category={item.statusCategory} color={status?.color} label={status?.name} />
@@ -96,7 +95,7 @@ function RunBlock({ run, unit }: { readonly run: RunDTO; readonly unit: UnitLabe
                       {over > 0 ? <Badge tone="warning" size="sm">{`${unitLabel(String(over), unit)} over`}</Badge> : null}
                       {item.build.locked && run.date < today ? <Badge tone="neutral" size="sm">Locked</Badge> : null}
                     </span>
-                    <QtyProgress built={item.build.builtQty} planned={item.build.plannedQty} unit={unit} className="col-span-2 col-start-2 sm:col-span-1 sm:col-start-auto" />
+                    <QtyProgress built={item.build.builtQty} planned={item.build.plannedQty} unit={unit} className="col-span-2 col-start-2 sm:col-span-1 sm:col-start-auto sm:justify-self-end" />
                     <span className="row-start-1 col-start-3 sm:col-start-auto sm:row-start-auto">{item.assigneeId ? <PersonAvatar userId={item.assigneeId} size="xs" /> : <span className="inline-block size-5" />}</span>
                   </button>
                 </li>
@@ -108,8 +107,10 @@ function RunBlock({ run, unit }: { readonly run: RunDTO; readonly unit: UnitLabe
 }
 
 export function TodayRunPanel({ today }: { readonly today: TodayDTO }) {
-  const { unit, capabilities, program } = useCurrentProgram();
+  const { key, unit, capabilities, program } = useCurrentProgram();
   const overlays = useProgramOverlays();
+  // One builds read for the whole day, shared by every run block (not one request per run).
+  const builds = useProgramBuilds(key, { from: today.date, to: today.date, limit: 500 }, { enabled: today.runs.length > 0 });
   return (
     <section id="today" className="rounded-xl border border-border-subtle bg-panel shadow-xs" aria-label="Today's run">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle px-4 py-3">
@@ -142,7 +143,7 @@ export function TodayRunPanel({ today }: { readonly today: TodayDTO }) {
       ) : (
         <div className="flex flex-col divide-y divide-border-subtle">
           {today.runs.map((run) => (
-            <RunBlock key={run.id} run={run} unit={unit} />
+            <RunBlock key={run.id} run={run} unit={unit} builds={builds} />
           ))}
         </div>
       )}

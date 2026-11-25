@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, BadgeInfo, CheckCircle2, ChevronLeft, ChevronRight, Circle, OctagonAlert, Target, X } from 'lucide-react';
-import { formatCents, formatPercentBp, lastDayOfMonth, shiftMonth, monthOf, unitLabel, workDaysInMonth } from '@kitstak/programs-engine';
+import { formatCents, formatPercentBp, lastDayOfMonth, ratioBp, shiftMonth, monthOf, unitLabel, workDaysInMonth } from '@kitstak/programs-engine';
 import { Badge, Button, IconButton, Popover, PopoverContent, PopoverTrigger, Skeleton, ToggleGroup, cn } from '@/components/ui';
 import { Panel } from '@/components/layout/page';
 import { useProgramSummary } from '@/lib/hooks/use-programs';
@@ -21,7 +21,7 @@ import { useHydrated } from '../kit/use-hydrated';
 import { targetTone } from '../kit/format';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { useProgramOverlays } from '../overlays/overlay-params';
-import { alertViews, avgPerDayText, compareWithLastMonth, minimumKpi, minimumReason, monthChart, monthLong, workDaysSoFar, type AlertView, type ChartMetric } from './overview-model';
+import { alertViews, compareWithLastMonth, finishedDaysAverage, minimumKpi, minimumReason, monthChart, monthLong, type AlertView, type ChartMetric } from './overview-model';
 import { ByVariantPanel } from './by-variant-panel';
 import { DailyColumns } from './daily-columns';
 import { DetailsTabsPanel, LinkedWorkPanel, PriceCardPanel, PulsePanel, StatementPanel, TodayRunPanel, UpdatesPanel } from './overview-panels';
@@ -199,10 +199,9 @@ function HowWeGotThis({ summary }: { readonly summary: ProgramSummaryDTO }) {
   );
 }
 
-function KpiRow({ summary, lastMonth }: { readonly summary: ProgramSummaryDTO; readonly lastMonth: ProgramSummaryDTO | undefined }) {
+function KpiRow({ summary, lastMonth, lastMonthLoading }: { readonly summary: ProgramSummaryDTO; readonly lastMonth: ProgramSummaryDTO | undefined; readonly lastMonthLoading: boolean }) {
   const { unit, program, moneyHidden, capabilities } = useCurrentProgram();
-  const days = workDaysSoFar(summary.byDay, summary.asOf);
-  const avg = avgPerDayText(summary.result.units, days);
+  const avg = finishedDaysAverage(summary.byDay, summary.asOf);
   const grid = 'grid grid-cols-2 divide-border-subtle rounded-xl border border-border-subtle bg-panel shadow-xs md:grid-cols-4 [&>*]:border-border-subtle max-md:[&>*:nth-child(-n+2)]:border-b md:divide-x max-md:[&>*:nth-child(odd)]:border-r';
   if (moneyHidden) {
     const today = summary.today;
@@ -221,9 +220,15 @@ function KpiRow({ summary, lastMonth }: { readonly summary: ProgramSummaryDTO; r
   const cardMinimum = program.currentVersion?.lines.find((line) => line.kind === 'monthly_minimum')?.amountCents ?? null;
   const minimum = minimumKpi(summary.result, summary.forecast, { cardMinimumCents: cardMinimum, month: monthOf(summary.asOf), startDate: program.startDate, endDate: program.endDate });
   const target = program.month.targetCents;
+  // The forecast can include a projected minimum top up. The target badge grades the work alone,
+  // so a program that meets its target only through the top up never shows a green 100%.
+  const topUp = summary.forecast.projectedGapCents && summary.result.minimum && summary.result.minimum.status !== 'none' ? BigInt(summary.forecast.projectedGapCents) : BigInt(0);
+  const workForecast = summary.forecast.forecastCents !== null ? BigInt(summary.forecast.forecastCents) - topUp : null;
+  const targetBp = summary.forecast.targetBp === null || !target ? null : topUp > BigInt(0) && workForecast !== null ? ratioBp(workForecast, target) : summary.forecast.targetBp;
+  const revenueLine = compare ? compare.text : lastMonthLoading ? <Skeleton height={14} width={180} rounded="sm" /> : 'First month with revenue';
   return (
     <section aria-label="This month" id="month" className={grid} data-testid="program-kpis-money">
-      <Kpi testId="kpi-revenue" label="Revenue this month" value={formatCents(summary.result.totalCents, { cents: true })} line={compare?.text ?? 'First month with revenue'} lineTone={compare?.tone === 'neutral' ? 'muted' : compare?.tone ?? 'muted'} />
+      <Kpi testId="kpi-revenue" label="Revenue this month" value={formatCents(summary.result.totalCents, { cents: true })} line={revenueLine} lineTone={compare?.tone === 'neutral' ? 'muted' : compare?.tone ?? 'muted'} />
       <Kpi testId="kpi-built" label="Built this month" value={unitLabel(summary.result.units, unit)} line={avg} />
       <Kpi
         testId="kpi-forecast"
@@ -231,14 +236,16 @@ function KpiRow({ summary, lastMonth }: { readonly summary: ProgramSummaryDTO; r
         value={formatCents(summary.forecast.forecastCents, { cents: true })}
         extra={
           <div className="flex flex-wrap items-center gap-1.5">
-            {summary.forecast.targetBp !== null && target ? (
-              <Badge tone={targetTone(summary.forecast.targetBp)} size="sm" icon={<Target aria-hidden />}>
-                {`${formatPercentBp(summary.forecast.targetBp)} of ${formatCents(target)} target`}
+            {targetBp !== null && target ? (
+              <Badge tone={topUp > BigInt(0) ? 'warning' : targetTone(targetBp)} size="sm" icon={<Target aria-hidden />}>
+                {`${formatPercentBp(targetBp)} of ${formatCents(target)} target`}
               </Badge>
             ) : null}
             <HowWeGotThis summary={summary} />
           </div>
         }
+        line={topUp > BigInt(0) ? `Includes a ${formatCents(topUp, { cents: true })} minimum top up` : undefined}
+        lineTone="warning"
       />
       <Kpi testId="kpi-minimum" label="Minimum" value={<span className={cn('whitespace-normal', minimum.tone === 'success' && 'text-success-text', minimum.tone === 'warning' && 'text-warning-text', minimum.tone === 'muted' && 'text-fg-muted', minimum.value.length > 12 && 'text-base')}>{minimum.value}</span>} line={
           minimum.reason ? (
@@ -398,7 +405,7 @@ export function OverviewTab({ initialSummary, updateDraft, loadedAt }: OverviewT
       <AlertsStrip alerts={alerts} onAction={onAlert} />
       <SetupChecklist />
       <div className="flex min-w-0 flex-col gap-4">
-        <KpiRow summary={summary} lastMonth={lastMonthQuery.data} />
+        <KpiRow summary={summary} lastMonth={lastMonthQuery.data} lastMonthLoading={lastMonthQuery.isPending && lastMonthQuery.fetchStatus !== 'idle'} />
         {moneyHidden ? <MoneyHiddenNote className="-mt-1 px-1" /> : null}
         <MonthChartPanel month={month} onMonth={setMonth} summary={chartSummary} loading={month !== thisMonth && chartQuery.isLoading} />
         <ByVariantPanel summary={summary} />

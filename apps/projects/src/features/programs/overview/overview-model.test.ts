@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DayRollupDTO, ForecastResultDTO, MonthResultDTO } from '@/lib/program-types';
-import { alertViews, avgPerDayText, chargeGroupOf, compareWithLastMonth, cumulativeThrough, groupTotals, minimumKpi, minimumReason, monthChart, monthLong, variantChartColor, weekdayDate } from './overview-model';
+import { alertViews, avgPerDayText, finishedDaysAverage, chargeGroupOf, compareWithLastMonth, cumulativeThrough, groupTotals, minimumKpi, minimumReason, monthChart, monthLong, variantChartColor, weekdayDate } from './overview-model';
 
 const unit = { singular: 'kit', plural: 'kits' };
 const day = (date: string, units: string, cumulative: string, planned = '0.000'): DayRollupDTO => ({ date, units, plannedUnits: planned, workCents: '0', feeCents: '0', cumulativeCents: cumulative });
@@ -39,6 +39,16 @@ describe('KPIs', () => {
     expect(cumulativeThrough(now, 2)).toBe(BigInt(12700));
     expect(compareWithLastMonth(now, then, '2026-11-02')).toEqual({ text: 'up 27% vs last month at this point', tone: 'success' });
     expect(compareWithLastMonth(now, [], '2026-11-02')).toBeNull();
+  });
+  it('rounds the change to a whole percent and says Same when it rounds to 0', () => {
+    const day = (date: string, cents: string) => ({ date, units: '1', plannedUnits: '1', workCents: cents, feeCents: '0', cumulativeCents: cents }) as never;
+    expect(compareWithLastMonth([day('2026-11-25', '2997040')], [day('2026-10-25', '2368500')], '2026-11-25')).toEqual({ text: 'up 27% vs last month at this point', tone: 'success' });
+    expect(compareWithLastMonth([day('2026-11-25', '2895300')], [day('2026-10-25', '2885000')], '2026-11-25')).toEqual({ text: 'Same as last month at this point', tone: 'neutral' });
+  });
+  it('averages over the finished work days only', () => {
+    const day = (date: string, units: string) => ({ date, units, plannedUnits: units, workCents: '0', feeCents: '0', cumulativeCents: '0' }) as never;
+    expect(finishedDaysAverage([day('2026-11-23', '800'), day('2026-11-24', '802'), day('2026-11-25', '10')], '2026-11-25')).toBe('Avg 801 a work day');
+    expect(finishedDaysAverage([day('2026-11-25', '10')], '2026-11-25')).toBeNull();
   });
   it('averages units per work day', () => {
     expect(avgPerDayText('14172.000', 18)).toBe('Avg 787 a work day');
