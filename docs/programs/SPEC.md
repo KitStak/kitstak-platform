@@ -2664,3 +2664,25 @@ Every blocker and major is resolved. Every minor is accepted. Where the fix diff
 - X5: the ledger holds fees only. Per unit revenue is already frozen per row in `pm.build_output` (M4), so it is not copied into the ledger.
 - X25: the money half of the fix is taken (explicit membership for `money:read`). The other half (programs private by default) is declined: floor staff log output without being added one by one, which is how kitting floors work; owners can still make a program private.
 - P12: "Dashboards widgets" are added as a Programs section of the existing dashboards page, because that page is a fixed set of report panels, not a widget builder.
+
+## Appendix B. Orchestrator rulings (binding, override any conflicting text above)
+
+These settle questions the L0 critic loop raised more than once. Builders implement them as written; critics treat them as the spec.
+
+### B.1 Fixed lines (monthly fee and monthly minimum), replaces the rounding and pause text of 3.5 step 5 and step 7
+
+1. **Billable days.** For a line, `B` = active days in the month, minus paused days when the line has `chargeWhilePaused = false`. If `B = 0` the line charges nothing this month.
+2. **Weighted total, one rounding per line per month.** Build segments over the billable days (contiguous runs where the same version is in force with the line). Merge neighboring segments that have the same amount, `prorate` and `chargeWhilePaused`. Let `W = sum(a_s * d_s)`. The line total is `divRound(W, D)` when `prorate = true` and `divRound(W, B)` when `prorate = false`. So: one version all month with prorate off is exactly `a`; a mid month price change splits by days and rounds once; prorate on pays the share of the month.
+3. **Segment pieces.** The total is split back over segments with `money.allocate` (largest remainder, weights `a_s * d_s`), so the pieces always add up to the total exactly. Statements show the pieces.
+4. **Prorate off means a whole month fee for any billable month.** With prorate off, pauses reduce the fee only when they leave no billable day (`B = 0`). To charge less for a partly paused month, set prorate on. This is intended, not a bug. The UI copy for the prorate switch says so: "Off: charge the full amount for any month with work days. On: charge only for the days in the month that count."
+5. **Minimum with no billable days.** If a `monthly_minimum` line is in force but `B = 0`, then `minimumCents = 0`, `gapSoFarCents = 0`, status `met`, and no top up or preview charge. Status `none` stays reserved for "no minimum line in force".
+
+### B.2 Imports
+
+1. A data row with more cells than the header is refused with a clear row error ("Row 4 has more cells than the header."). Never drop cells silently.
+2. In columns mode, a column whose every value is a number is read as the Qty column when no Qty header exists. It is never made into an attribute.
+3. The same rule gives the same words everywhere: imports, the variant generator and the planner share one message table for qty, scrap and rate problems.
+
+### B.3 Test environment
+
+The `packages/pulse-bridge` and other `*.db.test.ts` suites run against the shared local database that other layers and the running dev servers also use. A db test that fails because rows written by another process appear is a test isolation bug in that suite, owned by L1: L1 makes db tests isolate their data (unique org per run, or a transaction rolled back at the end). Until L1 lands, an L0 critic counts such a failure only if it also fails on the base commit with nothing else running.
