@@ -64,7 +64,7 @@ In an **Open workspace**, everyone in the organization can find and open its mai
 2. Type the workspace name in **Type the workspace name to confirm**.
 3. Select **Delete workspace**.
 
-Its boards, dashboards and folders move to the trash for 30 days, and members lose access immediately. You can’t delete the last workspace in the organization.
+Its boards, dashboards and folders move to the trash for 30 days, and members lose access immediately. Only admins and owners can delete a workspace, and you can’t delete the last workspace in the organization.
 
 ## Create a folder
 

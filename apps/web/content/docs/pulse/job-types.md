@@ -39,7 +39,7 @@ Each row has **Edit**, **Archive** and **Delete**.
 
 ## Where job type settings are used
 
-- **Target pace**: a job uses its own target pace first. Without one, it uses the best matching target pace row, then the job type. See [Set a target pace](/docs/pulse/target-pace).
+- **Target pace**: a job uses its own target pace first. Without one, it uses the best matching target pace row, then its plan, then the job type's target pace. See [Set a target pace](/docs/pulse/target-pace).
 - **Target margin**: a job uses its own target first, then its job type's, then its client's, then the company target in **Cost rules**.
 
 ## Import job types

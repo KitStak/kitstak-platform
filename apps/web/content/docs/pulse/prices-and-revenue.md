@@ -69,7 +69,7 @@ If the job had been completed after day 2, the **Fixed price true up** would be 
 
 ## Ready to bill
 
-The **Ready to bill** report lists work that is done and earned but not billed yet, by client and job, so you can hand it to accounting. See [Run a report](/docs/pulse/reports).
+The **Ready to bill** report lists work that is done and earned but not billed yet, by client and job, so you can hand it to accounting. See [Run a report](/docs/pulse/ready-made-library).
 
 ## Related
 

@@ -51,7 +51,7 @@ To act on many at once, tick them, or tick the header box to pick all, then use 
 
 ## Check now
 
-Pulse checks the rules on its own every few minutes. Select **Check now** to run them at once. It says how many new alerts came in and how many cleared on their own.
+Pulse checks the rules on its own every 15 minutes. Select **Check now** to run them at once. It says how many new alerts came in and how many cleared on their own.
 
 ## Alerts that clear on their own
 

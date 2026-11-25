@@ -18,7 +18,7 @@ Two read-only pages answer "how much do we have". **Total Inventory** shows one 
 2. Search with **Search by SKU**, or add filters.
 3. Select **Shortage** to show only rows where **Available UOM Qty** is below 0. Select it again to show every row.
 
-Products appear as soon as they are created, even before stock arrives. The SKU and the **Open SO Qty** link open the product and the open orders in a new tab. **By Location** opens the stock rows in **Inventory by Location**.
+Products appear as soon as they are created, even before stock arrives. The SKU and the **Open SO Qty** link open the product and the open orders in a new tab. **By Location** opens the stock rows in **Inventory by Location**, and **View by location** in the header opens that page.
 
 ## Total Inventory columns
 
@@ -58,6 +58,7 @@ The grid opens with the warehouse from the header context, or every warehouse yo
 | **On Hand Qty** | Every unit physically on hand, damaged included. |
 | **Sellable Qty** | Undamaged units in locations that sync inventory to channels, minus Open SO Qty. The quantity published to sales channels. |
 | **Pickable Qty** | Unallocated, undamaged stock in active, unlocked locations that allow allocation. |
+| **Unallocated SO Item Qty** | Open SO Qty minus Allocated SO Item Qty. Demand still waiting for stock. |
 
 Point at a column header to see its formula in the app.
 

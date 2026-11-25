@@ -1,6 +1,6 @@
 ---
 title: Timeline view
-description: Plan work as bars on a timeline: drag to move and resize tasks, link tasks that wait on each other, see milestones and the critical path, and zoom from days to quarters.
+description: Plan work as bars on a timeline, drag to move and resize tasks, link tasks that wait on each other, see the critical path and zoom from days to quarters.
 section: Views
 order: 50
 ---

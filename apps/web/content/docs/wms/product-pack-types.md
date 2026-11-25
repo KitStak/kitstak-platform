@@ -57,7 +57,7 @@ A pack card warns when length, width, height or weight is 0, and when the pack h
 
 - Scanning any pack type barcode identifies the pack.
 - A barcode can't be on two pack types of the same product.
-- A barcode has one meaning per client. If another product of the same client already uses it, the wizard shows **Barcode ... is already used by** with that SKU and pack type. Remove it to continue.
+- A barcode has one meaning per client. If another product of the same client already uses it, the wizard names that SKU and pack type, for example **Barcode 012345678905 is already used by MUG-11OZ-WHT (Unit). Remove it to continue.**
 
 ## Edit or delete a pack type
 

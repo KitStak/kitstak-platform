@@ -70,7 +70,7 @@ The **Activity log** tab lists every change to the item. Use **Filter by column*
 
 ## Subscribers
 
-Subscribers get notifications about new updates on the item.
+Subscribers are the people who follow the item: those in its people columns, its creator, people who posted updates and anyone added by hand.
 
 1. Select the subscriber avatars in the panel header.
 2. Select **Subscribe me** or **Unsubscribe me**.
