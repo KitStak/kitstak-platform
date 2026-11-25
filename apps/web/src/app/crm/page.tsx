@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/components/json-ld';
+import { breadcrumbLd, softwareApplicationLd } from '@/lib/seo';
 import { ClosingSection } from '@/components/closing/closing-section';
 import { BoardMorph } from '@/components/crm/board-morph';
 import {
@@ -49,6 +51,7 @@ export default function CrmPage() {
       <PageEffects />
       <Header />
       <main id="main">
+        <JsonLd data={[softwareApplicationLd('crm'), breadcrumbLd([{ name: 'KitStak CRM', path: '/crm' }])]} />
         <ProductHero
           product="KitStak CRM"
           app="crm"

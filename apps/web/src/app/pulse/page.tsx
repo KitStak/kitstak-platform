@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/components/json-ld';
+import { breadcrumbLd, softwareApplicationLd } from '@/lib/seo';
 import { ClosingSection } from '@/components/closing/closing-section';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
@@ -117,6 +119,7 @@ export default function PulsePage() {
       <PageEffects />
       <Header />
       <main id="main">
+        <JsonLd data={[softwareApplicationLd('pulse'), breadcrumbLd([{ name: 'KitStak Pulse', path: '/pulse' }])]} />
         <ProductHero
           product={HERO.product}
           app="pulse"

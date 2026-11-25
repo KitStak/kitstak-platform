@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/components/json-ld';
+import { breadcrumbLd, softwareApplicationLd } from '@/lib/seo';
 import { ClosingSection } from '@/components/closing/closing-section';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
@@ -51,6 +53,7 @@ export default function WmsPage() {
       <PageEffects />
       <Header />
       <main id="main">
+        <JsonLd data={[softwareApplicationLd('wms'), breadcrumbLd([{ name: 'KitStak WMS', path: '/wms' }])]} />
         <ProductHero
           product="KitStak WMS"
           app="wms"

@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/components/json-ld';
+import { breadcrumbLd } from '@/lib/seo';
 import { ClosingSection } from '@/components/closing/closing-section';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
@@ -41,6 +43,7 @@ export default function PricingPage() {
       <PageEffects />
       <Header />
       <main id="main">
+        <JsonLd data={breadcrumbLd([{ name: 'Pricing', path: '/pricing' }])} />
         <PricingExplorer />
         <BillingRules />
         <Faq items={PRICING_FAQ} title="Questions about price." />
