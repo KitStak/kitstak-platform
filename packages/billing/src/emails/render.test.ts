@@ -479,9 +479,10 @@ describe('the look of each kind of email', () => {
     ).toBe('Sign-in code');
   });
 
-  it('an alert puts its first paragraph in a callout; other kinds do not', () => {
+  it('an alert sets its first paragraph in bold red, with no tinted box; other kinds do not', () => {
     expect(sample('payment_failed').html).toContain('ks-tint-alert-text');
-    expect(sample('receipt').html).not.toContain('border-left:4px');
+    expect(sample('payment_failed').html).not.toContain('class="ks-tint-alert"');
+    expect(sample('receipt').html).not.toContain('class="ks-tint-alert-text"');
   });
 
   it('the text version is the same with or without a style', () => {

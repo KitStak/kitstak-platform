@@ -37,7 +37,7 @@ export interface EmailButton {
  *   welcome   invites and a new trial           KitStak red
  *   reminder  trial countdowns                  amber
  *   receipt   a plan confirmed, a payment made  green
- *   alert     a payment that needs the reader   danger red, with a tinted callout
+ *   alert     a payment that needs the reader   danger red, first paragraph in bold red
  *   notice    a plan canceled, paused or ended  slate blue
  */
 export type EmailTone = 'security' | 'welcome' | 'reminder' | 'receipt' | 'alert' | 'notice';
@@ -90,18 +90,16 @@ const COLOR = {
 } as const;
 
 /**
- * Tone colors from packages/ui tokens.css (light, then dark): `edge` is the accent bar, `tint` and
- * `text` the label (and the alert callout), each pair AA readable.
+ * Tone colors from packages/ui tokens.css: `edge` is the accent bar on the card, `text` the label and the
+ * alert line (AA readable on white), `darkText` the same in dark mode.
  */
-const TONE: Readonly<
-  Record<EmailTone, { edge: string; tint: string; text: string; darkTint: string; darkText: string }>
-> = {
-  security: { edge: '#0a1628', tint: '#eceef2', text: '#0a1628', darkTint: '#1f2633', darkText: '#ecedef' },
-  welcome: { edge: '#c8102e', tint: '#fdf0f2', text: '#8f122c', darkTint: '#3a0f1c', darkText: '#ff8b9c' },
-  reminder: { edge: '#f5b13d', tint: '#fff3df', text: '#8f4b04', darkTint: '#3a2b17', darkText: '#f5b968' },
-  receipt: { edge: '#0e8a52', tint: '#e3f5ec', text: '#0b6e41', darkTint: '#12302a', darkText: '#5fd39b' },
-  alert: { edge: '#b3112c', tint: '#fbe6e9', text: '#a30e27', darkTint: '#3a0f1c', darkText: '#ff8b9c' },
-  notice: { edge: '#2d5c94', tint: '#e7edf5', text: '#244d7f', darkTint: '#12264a', darkText: '#8db7ec' },
+const TONE: Readonly<Record<EmailTone, { edge: string; text: string; darkText: string }>> = {
+  security: { edge: '#0a1628', text: '#0a1628', darkText: '#ecedef' },
+  welcome: { edge: '#c8102e', text: '#8f122c', darkText: '#ff8b9c' },
+  reminder: { edge: '#f5b13d', text: '#8f4b04', darkText: '#f5b968' },
+  receipt: { edge: '#0e8a52', text: '#0b6e41', darkText: '#5fd39b' },
+  alert: { edge: '#b3112c', text: '#a30e27', darkText: '#ff8b9c' },
+  notice: { edge: '#2d5c94', text: '#244d7f', darkText: '#8db7ec' },
 };
 
 const FONT = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
@@ -136,15 +134,9 @@ export function safeUrl(value: string): string | null {
   }
 }
 
-/** The alert tone's first paragraph: the thing to act on, in a tinted panel with a red edge. */
+/** The alert tone's first paragraph: the thing to act on, as bold text in the alert color. */
 function calloutHtml(text: string): string {
-  const tone = TONE.alert;
-  return [
-    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 16px;">`,
-    `<tr><td class="ks-tint-alert" style="padding:14px 16px;background-color:${tone.tint};border-left:4px solid ${tone.edge};border-radius:0 10px 10px 0;">`,
-    `<p class="ks-tint-alert-text" style="margin:0;font-family:${FONT};font-size:16px;line-height:24px;font-weight:600;color:${tone.text};">${escapeHtml(text)}</p>`,
-    `</td></tr></table>`,
-  ].join('');
+  return `<p class="ks-tint-alert-text" style="margin:0 0 16px;font-family:${FONT};font-size:16px;line-height:24px;font-weight:600;color:${TONE.alert.text};">${escapeHtml(text)}</p>`;
 }
 
 function blockHtml(block: EmailBlock, callout = false): string {
@@ -241,12 +233,9 @@ function eyebrowHtml(style: EmailStyle): string {
   return `<p class="ks-tint-${style.tone}-text" style="margin:0 0 8px;font-family:${DISPLAY};font-size:16px;line-height:18px;letter-spacing:1.5px;text-transform:uppercase;color:${tone.text};">${escapeHtml(style.eyebrow)}</p>`;
 }
 
-/** Dark mode colors for the tone tints, one rule pair per tone. */
+/** Dark mode text colors, one rule per tone. */
 const TONE_DARK = (Object.keys(TONE) as EmailTone[])
-  .map(
-    (tone) =>
-      `.ks-tint-${tone}{background-color:${TONE[tone].darkTint} !important;}.ks-tint-${tone}-text{color:${TONE[tone].darkText} !important;}`,
-  )
+  .map((tone) => `.ks-tint-${tone}-text{color:${TONE[tone].darkText} !important;}`)
   .join('');
 
 /** Dark mode for the mail clients that honor it. The inline light colors are the fallback. */
@@ -271,7 +260,7 @@ const DARK_STYLES = [
 export function renderHtml(content: EmailContent): string {
   const title = escapeHtml(oneLine(content.subject));
   const style = content.style;
-  // An alert puts its first paragraph, the thing to act on, in a callout.
+  // An alert sets its first paragraph, the thing to act on, in bold alert red.
   const callout = style?.tone === 'alert' ? content.blocks.findIndex((block) => block.kind === 'text') : -1;
   return [
     `<!doctype html>`,
