@@ -40,7 +40,7 @@ test.describe('who can do what in billing', () => {
     await memberPage.goto('/billing');
     const card = memberPage.getByTestId('billing-member-card');
     await expect(card).toBeVisible({ timeout: 90_000 });
-    await expect(card).toContainText(`Ask ${owner.name} to manage billing.`);
+    await expect(card).toContainText(`${owner.name} manages billing for ${owner.company}.`);
     // No amounts, no invoices, no buttons.
     await expect(memberPage.getByTestId('billing-home')).toHaveCount(0);
     expect(await memberPage.locator('main').innerText()).not.toMatch(/\$\d/);

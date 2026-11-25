@@ -556,8 +556,14 @@ What the supervisor does for one app:
   real error is not hidden behind a restart loop.
 - Every 5 seconds it adds up the memory of the server and its helpers. Over the app's budget it restarts
   the server at a quiet moment (no request logged for 15 seconds), so a test that is running is not cut
-  off. It restarts at once only when it has to: the whole machine has less than 1.5 GB left and this is the
+  off. It restarts at once only when it has to: less than 1.5 GB is left for dev processes and this is the
   biggest dev server, or the server is at twice its budget.
+- "Left for dev processes" is the smaller of two numbers: what the machine has left, and what the memory
+  group (cgroup) of your shell has left. In the cloud dev container the group is the real limit. It is
+  about 13.4 GB for everything a shell started (the six dev servers, test runners and the browser), not the
+  16 GB the machine shows, and when it is full the system stops the biggest process in it. That is what
+  stopped the Portal and the WMS dev servers in earlier runs (`dmesg` says "Memory cgroup out of memory").
+  `deploy/dev/status.sh` prints the number on its last line.
 - A server that is over its budget three times in a row within minutes of a restart does not fit in that
   budget at all. The supervisor says so once and stops restarting it for memory.
 - Every start and restart is one line in the app's log and in `deploy/dev/.run/logs/supervisor.log`, with
@@ -565,6 +571,8 @@ What the supervisor does for one app:
 
 A restart drops the server's compile cache and nothing else. The database and your data are not touched.
 A request that arrives during a restart fails, so a browser test that runs at that second can fail once.
+The Portal browser suite waits up to 2 minutes for the Portal before it starts (`e2e/global-setup.ts`), so a
+restart in the gap between two specs costs nothing.
 That is the trade: a restart at a quiet moment, in place of the system stopping the browser or a server
 in the middle of a run. It is not the end of restarts. On the dev container, with two people running
 browser tests at once, the Portal's dev server went from fresh to 2.8 GB in about five minutes and was
@@ -578,7 +586,7 @@ not do today (secure cookies, no dev outbox), so it is not built.
 | `KITSTAK_DEV_MEM_MB_PORTAL`, `_WMS`, `_CRM`, `_PROJECTS`, `_PULSE`, `_WEB` | 3000, 2600, 2200, 2200, 1800, 1200 | The memory budget of one app, in MB. |
 | `KITSTAK_DEV_MEM_MB` | not set | One budget for every app that has none of its own. |
 | `KITSTAK_DEV_HEAP_MB` | 75% of the budget | The JavaScript heap cap (`--max-old-space-size`). `0` sets none. |
-| `KITSTAK_DEV_MIN_FREE_MB` | 1536 | Below this much free memory on the machine, the biggest dev server restarts at once. |
+| `KITSTAK_DEV_MIN_FREE_MB` | 1536 | Below this much memory left for dev processes, the biggest dev server restarts at once. |
 | `KITSTAK_DEV_QUIET_SECONDS` | 15 | How long no request must come in before a restart for memory. |
 | `KITSTAK_DEV_GRACE_SECONDS` | 90 | A server this young is not measured: it is still compiling its first pages. |
 | `KITSTAK_DEV_SUPERVISE` | 1 | `0` starts the bare `next dev` with no supervisor, as before review round 5. |

@@ -80,6 +80,8 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
   const [sendingCode, setSendingCode] = useState(false);
+  /** True when the last ask sent no new code, because the one before it is still good. */
+  const [noNewCode, setNoNewCode] = useState(false);
   const codeInput = useRef<HTMLInputElement | null>(null);
   /** The step the person just asked for. Its field gets the focus once that step is on the page. */
   const focusAfterStep = useRef<'code' | 'password' | null>(null);
@@ -226,6 +228,7 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
         setError(result.error ?? NO_NETWORK_MESSAGE);
       } else {
         setCode('');
+        setNoNewCode(lastCodeStillGood);
         if (lastCodeStillGood) setCodeError(result.error ?? null);
         // The code step gets its own entry in the history, with the address after the "#". Asking
         // for a new code on the step itself keeps the one entry.
@@ -310,13 +313,13 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
           <p className="text-base text-fg-secondary" role="status" data-testid="login-code-sent">
             {codeEmail ? (
               <>
-                If <span className="font-medium text-fg [overflow-wrap:anywhere]">{codeEmail}</span> has a KitStak account, a code is on its way.
+                If <span className="font-medium text-fg [overflow-wrap:anywhere]">{codeEmail}</span> has a KitStak account, {noNewCode ? 'we sent it a code a moment ago.' : 'a code is on its way.'}
               </>
             ) : (
               // The address is read from the link a moment after the page shows.
               'If that address has a KitStak account, a code is on its way.'
             )}{' '}
-            It works for 10 minutes.
+            {noNewCode ? null : 'It works for 10 minutes.'}
           </p>
           {/* The same pill as on the verify email and reset password screens. */}
           {devOutbox ? <OutboxHint testId="login-code-dev" /> : null}

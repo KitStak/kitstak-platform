@@ -95,6 +95,11 @@ test.describe('round 5: email codes can not be used to lock the owner out', () =
     const cookie = (await home.cookies(BASE_URL)).find((entry) => entry.name === KNOWN_DEVICE_COOKIE);
     expect(cookie, 'the known device cookie is set at sign in').toBeTruthy();
     expect(cookie?.httpOnly).toBe(true);
+    // A browser that was already signed in before this cookie existed gets it the next time its session is read.
+    await home.clearCookies({ name: KNOWN_DEVICE_COOKIE });
+    expect((await home.cookies(BASE_URL)).some((entry) => entry.name === KNOWN_DEVICE_COOKIE)).toBe(false);
+    await home.request.get(`${BASE_URL}/api/auth/get-session`);
+    expect((await home.cookies(BASE_URL)).some((entry) => entry.name === KNOWN_DEVICE_COOKIE)).toBe(true);
     await signOut(home);
     await resetRateLimits();
 

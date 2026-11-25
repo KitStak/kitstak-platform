@@ -34,3 +34,5 @@ for app in $ALL_APPS; do
     echo "DOWN  $(printf '%-8s' "$app")  port $port  (start: deploy/dev/app-start.sh $app)"
   fi
 done
+left="$(mem_available_mb)"
+[ -n "$left" ] && echo "Memory left for dev processes: ${left} MB (under ${KITSTAK_DEV_MIN_FREE_MB:-1536} MB the biggest dev server is restarted)"

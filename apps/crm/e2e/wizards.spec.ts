@@ -11,6 +11,7 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
+import pg from 'pg';
 import { expect, publicTest, waitForSettled } from './support/fixtures';
 
 const SLOW = { timeout: 120_000 };
@@ -25,27 +26,49 @@ let slug = existsSync(SLUG_PATH) && existsSync(STATE_PATH) ? readFileSync(SLUG_P
 async function signUpFreshUser(page: Page, baseURL: string): Promise<void> {
   // Sign-up is rate limited (5 per 10 min per IP); wait out a 429 on a busy shared machine.
   for (let attempt = 0; attempt < 12; attempt += 1) {
-    const status = await trySignUp(page, baseURL);
-    if (status < 400) return;
+    const { status, email } = await trySignUp(page, baseURL);
+    if (status < 400) {
+      await markEmailVerified(email);
+      return;
+    }
     expect(status, `sign-up status ${status}`).toBe(429);
     await page.waitForTimeout(60_000);
   }
   throw new Error('sign-up kept returning 429');
 }
 
-async function trySignUp(page: Page, baseURL: string): Promise<number> {
+/**
+ * Inviting needs a verified email at every door, the CRM's too (billing review round 5: the CRM
+ * dialog goes through the shared invite door). A person verifies with the emailed code in the
+ * Portal. This spec runs the CRM alone, so one statement on the local test database stands in for
+ * that step. Without it the wizard's invite step is refused with "Verify your email first."
+ */
+async function markEmailVerified(email: string): Promise<void> {
+  const client = new pg.Client({
+    connectionString: process.env.E2E_DATABASE_URL ?? process.env.DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:5544/kitstak',
+  });
+  await client.connect();
+  try {
+    await client.query(`UPDATE core."user" SET email_verified = true WHERE email = $1`, [email.toLowerCase()]);
+  } finally {
+    await client.end();
+  }
+}
+
+async function trySignUp(page: Page, baseURL: string): Promise<{ status: number; email: string }> {
   const suffix = randomBytes(6).toString('hex');
+  const email = `wizards-e2e-${suffix}@example.test`;
   const response = await page.request.post('/api/auth/sign-up/email', {
     timeout: 90_000,
     headers: { origin: baseURL, 'content-type': 'application/json' },
     data: {
       name: `Wizard Tester ${suffix}`,
-      email: `wizards-e2e-${suffix}@example.test`,
+      email,
       // Throwaway test password generated per run for a local dev account.
       password: `Kt-${randomBytes(12).toString('base64url')}9a`,
     },
   });
-  return response.status();
+  return { status: response.status(), email };
 }
 
 /** Open the template center by deep link and wait for the gallery payload, not a fixed delay. */
@@ -118,7 +141,7 @@ publicTest.describe('wizards', () => {
         expect(new Set(tops).size).toBe(2);
         await page
           .getByTestId('onboarding-team-size')
-          .getByRole('radio', { name: /6–20 people/ })
+          .getByRole('radio', { name: /6 to 20 people/ })
           .click();
         await page.screenshot({ path: '.qa/screens/wizr3-welcome-team-light.png' });
         await page.getByTestId('onboarding-next').click();

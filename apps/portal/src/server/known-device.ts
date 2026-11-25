@@ -1,7 +1,8 @@
 /**
  * "This browser signed in to this account before" (billing review round 5).
  *
- * At every new session the Portal adds the person's id to a signed cookie. The cookie gives no
+ * At every new session the Portal adds the person's id to a signed cookie (and once for a session
+ * that was already running when this was added, the next time it is read). The cookie gives no
  * access to anything. It only moves a request for an email code, and a try at one, onto counters
  * that strangers cannot fill (`@kitstak/billing/server` code-limits.ts). So nobody can lock the
  * owner of an account out of it by asking for codes, or guessing codes, in their name.
@@ -64,7 +65,10 @@ export function knownDevicePlugin(options: { secret: string; secure: boolean }):
         {
           matcher: () => true,
           handler: createAuthMiddleware(async (ctx) => {
-            const userId = ctx.context.newSession?.user.id;
+            // A new session by any road. Also a session that is simply read: a person who was already
+            // signed in when this cookie was introduced gets it without signing in again.
+            const read = ctx.path === '/get-session' ? (ctx.context.returned as { user?: { id?: unknown } } | null | undefined) : null;
+            const userId = ctx.context.newSession?.user.id ?? (read && !(read instanceof Error) ? read.user?.id : undefined);
             if (typeof userId !== 'string' || !UUID_SHAPE.test(userId)) return;
             try {
               const before = knownDeviceUserIds(ctx.headers?.get('cookie'), options.secret);
