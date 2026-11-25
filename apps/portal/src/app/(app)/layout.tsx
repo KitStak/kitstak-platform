@@ -7,8 +7,10 @@ import { requirePageSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
 import { mustChangePassword } from '@/server/password-change';
+import { BillingOrgScope } from '@/features/billing/org-scope';
 import { CommandPalette } from '@/features/shell/command-palette';
 import { OrgSwitcher } from '@/features/shell/org-switcher';
+import { ShellNotices } from '@/features/shell/shell-notices';
 import { UserMenu } from '@/features/shell/user-menu';
 
 /**
@@ -23,20 +25,25 @@ export default async function AppLayout({ children }: { readonly children: React
   const orgs = await listUserOrgs(session.user.id);
   const activeOrg = await resolveActiveOrg(session, orgs);
 
-  // Real entitlement reads for the command palette's app entries (BLUEPRINT.md §6); no org → all locked.
+  // The plan decides which apps the command palette opens (docs/billing/SPEC.md 9.5). No org: all locked.
   const moduleStates = activeOrg ? await getOrgModuleStates(activeOrg.id) : null;
   const entitledFor = (module: 'crm' | 'wms' | 'projects' | 'pulse'): boolean =>
     moduleStates?.modules.find((state) => state.module === module)?.entitled ?? false;
   const entitled = { crm: entitledFor('crm'), wms: entitledFor('wms'), projects: entitledFor('projects'), pulse: entitledFor('pulse') };
+  // A person who only manages billing has no seat in any app (review round 3). Their Portal has no
+  // "Apps" tab and no link into an app: Billing is their home.
+  const billingOnly = activeOrg?.role === 'billing';
 
   return (
     <div className="flex min-h-dvh flex-col bg-app">
+      {/* Which organization this render is for. Billing actions send it back and a stale tab is refused. */}
+      <BillingOrgScope orgId={activeOrg?.id ?? null} />
       <header className="sticky top-0 z-40 border-b border-border-subtle bg-panel/90 backdrop-blur">
         <div className="flex h-16 w-full items-center gap-3 px-4 sm:gap-4 sm:px-8">
           <Link
-            href="/"
+            href={billingOnly ? '/billing' : '/'}
             aria-label="KitStak Portal home"
-            className="inline-flex shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+            className="inline-flex shrink-0 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus pointer-coarse:min-w-11"
           >
             <Logo size={28} />
           </Link>
@@ -50,7 +57,7 @@ export default async function AppLayout({ children }: { readonly children: React
             >
               <Settings aria-hidden className="size-5" />
             </Link>
-            <UserMenu name={session.user.name} email={session.user.email} />
+            <UserMenu name={session.user.name} email={session.user.email} billingOnly={billingOnly} />
           </div>
           <CommandPalette
             orgs={orgs}
@@ -64,6 +71,8 @@ export default async function AppLayout({ children }: { readonly children: React
           />
         </div>
       </header>
+      {/* Test mode, the plan notice and the verify email notice. Above the page, never over content. */}
+      <ShellNotices />
       <main className="mx-auto w-full max-w-[1120px] flex-1 px-4 py-12 sm:px-6 sm:py-16">{children}</main>
     </div>
   );

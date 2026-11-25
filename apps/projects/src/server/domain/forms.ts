@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { organization } from '@kitstak/db/schema';
 import { db } from '@/server/db';
+import { orgProjectsAccess } from '@/server/entitlements';
 import { formSubmissions, forms, projects, tasks, type Form } from '@/server/db/schema';
 import { DomainError, invalid, notFound } from '@/server/errors';
 import { PRIORITIES, type Priority } from '@/lib/constants';
@@ -247,6 +248,11 @@ export async function submitForm(input: SubmitFormInput): Promise<{ confirmation
   if (!row || !row.form.enabled || row.project.archivedAt) throw notFound('This form');
   const { form, project } = row;
   if (!form.isPublic && !input.viewer?.orgIds.includes(form.orgId)) throw new DomainError('UNAUTHENTICATED', 'Sign in to fill out this form.');
+  // A form answer becomes a task. While the org's plan is view only, or Projects is not in its
+  // plan, nothing may be written (docs/billing/SPEC.md section 9.4).
+  if ((await orgProjectsAccess(form.orgId)) !== 'full') {
+    throw new DomainError('FORBIDDEN', 'This form is not taking answers right now. Please try again later.');
+  }
   const errors: Record<string, string> = {};
   const answers: Record<string, unknown> = {};
   for (const field of form.fields) {

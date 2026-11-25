@@ -10,6 +10,8 @@ export const ERROR_CODES = [
   'CONFLICT',
   'VALIDATION',
   'NOT_ENTITLED',
+  /** The plan is view only: reads work, every change is refused (docs/billing/SPEC.md section 9.4). */
+  'plan.read_only',
   'RATE_LIMITED',
   'LOCKED',
   'INTERNAL',
@@ -23,6 +25,7 @@ const STATUS: Readonly<Record<ErrorCode, number>> = {
   CONFLICT: 409,
   VALIDATION: 422,
   NOT_ENTITLED: 402,
+  'plan.read_only': 402,
   RATE_LIMITED: 429,
   LOCKED: 423,
   INTERNAL: 500,

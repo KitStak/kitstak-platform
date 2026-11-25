@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@kitstak/auth": "workspace:*",
+    "@kitstak/billing": "workspace:*",
     "@kitstak/db": "workspace:*",
     "@kitstak/entitlements": "workspace:*",
     "@kitstak/programs-engine": "workspace:*",

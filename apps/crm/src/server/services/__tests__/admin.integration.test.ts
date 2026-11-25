@@ -69,8 +69,27 @@ describe.skipIf(!available)('admin services (integration)', async () => {
       ForbiddenError,
     );
     await expect(createInvitation(owner, { email: 'x@other.test', role: 'member' })).rejects.toBeInstanceOf(ForbiddenError);
-    const invite = await createInvitation(owner, { email: 'new@eu.acme.test', role: 'member' });
-    expect(invite.email).toBe('new@eu.acme.test');
+    const inviteEmail = `new-${orgA.orgId.slice(0, 8)}@eu.acme.test`;
+    const invite = await createInvitation(owner, { email: inviteEmail, role: 'member' });
+    expect(invite.email).toBe(inviteEmail);
+
+    // Billing review round 5: the CRM door is the shared invite door. The invite email is written to
+    // the outbox with a link to the Portal's invite page that carries the proof of the mailbox...
+    const { sql } = await import('drizzle-orm');
+    const mailed = await owner.db.execute(
+      sql`SELECT template, payload->>'acceptUrl' AS url FROM core.billing_emails WHERE dedupe_key = ${`invite:${invite.id}`}`,
+    );
+    const mail = (mailed as unknown as { rows: { template: string; url: string }[] }).rows[0];
+    expect(mail?.template).toBe('invitation');
+    expect(mail?.url).toMatch(new RegExp(`/invite/${invite.id}\\?t=[A-Za-z0-9_-]{43}$`));
+    // ...and an inviter whose own email nobody verified is refused, as at every other door.
+    await owner.db.update(schema.user).set({ emailVerified: false, createdAt: new Date() }).where(eq(schema.user.id, owner.userId as string));
+    const refused = await createInvitation(owner, { email: `second-${orgA.orgId.slice(0, 8)}@eu.acme.test`, role: 'member' }).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(ForbiddenError);
+    expect((refused as { details?: { code?: string } }).details?.code).toBe('EMAIL_NOT_VERIFIED');
+    await owner.db.update(schema.user).set({ emailVerified: true }).where(eq(schema.user.id, owner.userId as string));
+    await owner.db.execute(sql`DELETE FROM core.billing_emails WHERE org_id = ${orgA.orgId}`);
+    await owner.db.execute(sql`DELETE FROM core.rate_limit WHERE key = ${`billing:invite-day:${orgA.orgId}`}`);
     await org.updateOrgPolicy(owner, { boardCreation: 'members', allowedEmailDomains: [] }, null);
   });
 

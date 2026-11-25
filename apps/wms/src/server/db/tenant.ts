@@ -24,6 +24,7 @@
 import { sql } from 'drizzle-orm';
 import { assertWmsSchemaName, isWmsSchemaName, WMS_PLATFORM_SCHEMA } from '@kitstak/db/wms-tenants';
 import type { AppDb } from '../api/db';
+import { DbStallError, isRetryableRead } from './resilient-pool';
 import * as schema from './schema';
 
 const QUOTED_WMS = /"wms"\./g;
@@ -115,6 +116,16 @@ function pipelinedQuery(
   let running: Promise<unknown> | null = null;
   const run = (): Promise<unknown> =>
     (running ??= (async () => {
+      try {
+        return await attempt();
+      } catch (error) {
+        // The pool (./resilient-pool.ts) replaced its dead connections; a plain read goes once more.
+        if (!(error instanceof DbStallError && isRetryableRead(query))) throw error;
+        return await attempt();
+      }
+    })());
+  const attempt = (): Promise<unknown> =>
+    (async () => {
       const conn = await base.reserve();
       try {
         // Started in order on one connection → pipelined in order, one round trip.
@@ -130,7 +141,7 @@ function pipelinedQuery(
       } finally {
         conn.release();
       }
-    })());
+    })();
   const pending: PgJsQuery = {
     values: () => {
       arrayMode = true;

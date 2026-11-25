@@ -5,11 +5,26 @@ import { AppIcon } from '@kitstak/ui/app-icon';
 import { filterApps, type SearchableApp } from '@/lib/app-search';
 import { cn } from '@/components/ui';
 
+/**
+ * One quiet line about the plan state of an app: days left in a free trial, a payment that is past
+ * due (the app still opens), or view only. The page writes the words from the plan.
+ */
+export interface LauncherPlanNote {
+  readonly text: string;
+  readonly tone: 'muted' | 'warning' | 'danger';
+}
+
 export interface LauncherApp extends SearchableApp {
   readonly href: string;
-  /** The plan's grace period: the app still opens, with a quiet warning on its tile. */
-  readonly pastDue: boolean;
+  /** null: the app is on and there is nothing to say. */
+  readonly planNote: LauncherPlanNote | null;
 }
+
+const NOTE_TONE: Readonly<Record<LauncherPlanNote['tone'], string>> = {
+  muted: 'text-fg-muted',
+  warning: 'font-medium text-warning-text',
+  danger: 'font-medium text-danger-text',
+};
 
 /** One app: its icon, name and tagline. The whole tile opens the app in a new tab. */
 function AppTile({ app }: { readonly app: LauncherApp }) {
@@ -18,6 +33,7 @@ function AppTile({ app }: { readonly app: LauncherApp }) {
       href={app.href}
       target="_blank"
       rel="noopener"
+      data-testid={`tile-${app.module}`}
       className={cn(
         'group flex items-center gap-5 rounded-2xl border border-border-default bg-panel p-5 sm:gap-6 sm:p-6',
         'transition-[border-color,box-shadow] duration-[var(--duration-fast)] ease-out',
@@ -31,7 +47,11 @@ function AppTile({ app }: { readonly app: LauncherApp }) {
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-lg font-semibold text-fg sm:text-xl">{app.name}</span>
         <span className="mt-0.5 text-sm text-fg-secondary sm:text-lg">{app.tagline}</span>
-        {app.pastDue ? <span className="mt-1 text-xs font-medium text-warning-text">Payment past due</span> : null}
+        {app.planNote ? (
+          <span data-testid={`tile-plan-${app.module}`} data-tone={app.planNote.tone} className={cn('mt-1 text-xs', NOTE_TONE[app.planNote.tone])}>
+            {app.planNote.text}
+          </span>
+        ) : null}
       </span>
       <ArrowRight
         aria-hidden

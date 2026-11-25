@@ -31,11 +31,13 @@ import {
   startLink,
   toStack,
   walkthroughHref,
+  LINKS,
+  startFreeHref,
 } from '@/components/site-links';
 import type { Stack } from '@/components/site-links';
 import { BundleCalculator } from '@/components/stak/bundle-calculator';
 import { StackStep } from '@/components/wizard/wizard-steps';
-import { DEFAULT_ANSWERS, applyPrefill, handoffUrl, parseAnswers, wizardHref } from './stak';
+import { DEFAULT_ANSWERS, applyPrefill, handoffUrl, parseAnswers, trialUrl, wizardHref } from './stak';
 
 const noop = () => {};
 
@@ -103,7 +105,8 @@ describe.skipIf(PULSE_IS_LIVE)('while Pulse is coming soon', () => {
     for (const stack of everyStack()) {
       const links = [
         getStartedHref(stack),
-        wizardHref({ stack, seats: 5, warehouses: 1, billing: 'annual' }),
+        wizardHref({ stack, seats: 5, warehouses: 1, billing: 'yearly' }),
+        trialUrl({ products: stack, seats: 5, warehouses: 1, interval: 'monthly' }, 'pricing'),
         handoffUrl({ ...DEFAULT_ANSWERS, products: stack }),
       ];
       expect(links.filter(isPulseStartLink)).toEqual([]);
@@ -116,7 +119,7 @@ describe.skipIf(PULSE_IS_LIVE)('while Pulse is coming soon', () => {
 
     expect(getStartedHref('pulse')).toBe(pulseWalkthrough);
     expect(getStartedHref(['pulse'])).toBe(pulseWalkthrough);
-    expect(wizardHref({ stack: ['pulse'], seats: 5, warehouses: 1, billing: 'annual' })).toBe(
+    expect(wizardHref({ stack: ['pulse'], seats: 5, warehouses: 1, billing: 'yearly' })).toBe(
       pulseWalkthrough,
     );
     expect(startLink('pulse')).toEqual({ href: pulseWalkthrough, label: 'Book a walkthrough' });
@@ -186,7 +189,9 @@ describe.skipIf(!PULSE_IS_LIVE)('once Pulse is open', () => {
   test('the normal start flow is back', () => {
     expect(getStartedHref('pulse')).toBe('/get-started?stack=pulse');
     expect(getStartedHref(FULL_STACK)).toBe('/get-started?stack=crm,wms,projects,pulse');
-    expect(startLink('pulse')).toEqual({ href: '/get-started?stack=pulse', label: 'Start with Pulse' });
+    // A product's own start button takes the short road: straight to portal sign-up with that app on.
+    expect(startLink('pulse')).toEqual({ href: startFreeHref('pulse', 'product'), label: 'Start with Pulse' });
+    expect(startFreeHref('pulse', 'product')).toBe(`${LINKS.portal}/signup?products=pulse&seats=1&warehouses=1&billing=monthly&src=product`);
     expect(STARTABLE_STACK).toEqual(FULL_STACK);
     expect(availabilityLabel('pulse')).toBeNull();
     expect(SURFACES['products cards']).toContain('Start with Pulse');
@@ -200,7 +205,7 @@ describe('availability in general', () => {
     for (const id of ['crm', 'wms', 'projects'] as const) {
       expect(isAppLive(id)).toBe(true);
       expect(availabilityLabel(id)).toBeNull();
-      expect(startLink(id).href).toBe(`/get-started?stack=${id}`);
+      expect(startLink(id).href).toBe(`${LINKS.portal}/signup?products=${id}&seats=1&warehouses=1&billing=monthly&src=product`);
     }
     expect(isAppLive('pulse')).toBe(PULSE_IS_LIVE);
   });

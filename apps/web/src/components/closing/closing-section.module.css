@@ -14,6 +14,8 @@
   line-height: 0.96;
   font-weight: 800;
   max-width: 13ch;
+  /* Lines break between the three sentences only (the words inside each are joined in the markup). */
+  text-wrap: balance;
 }
 .actions {
   margin-top: 48px;
@@ -25,4 +27,9 @@
   margin-top: 20px;
   font-size: var(--type-base);
   color: var(--on-brand-muted);
+}
+.note a {
+  color: var(--on-brand, inherit);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

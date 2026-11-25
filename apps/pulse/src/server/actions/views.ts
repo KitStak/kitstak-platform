@@ -19,10 +19,10 @@ export async function deleteViewAction(input: z.input<typeof viewIdSchema>) {
 const prefsSchema = z.object({ patch: z.record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,40}$/), z.unknown()) });
 /** Shallow merges into the caller's preferences (default site, pinned jobs, hidden tips). A null value removes a key. */
 export async function updateUserPrefsAction(input: z.input<typeof prefsSchema>) {
-  return runAction(prefsSchema, input, (data, ctx) => updateUserPrefs(ctx, data.patch), { revalidate: false });
+  return runAction(prefsSchema, input, (data, ctx) => updateUserPrefs(ctx, data.patch), { revalidate: false, read: true });
 }
 
 const jobIdSchema = z.object({ jobId: uuid });
 export async function recordRecentJobAction(input: z.input<typeof jobIdSchema>) {
-  return runAction(jobIdSchema, input, (data, ctx) => recordRecentJob(ctx, data.jobId), { revalidate: false });
+  return runAction(jobIdSchema, input, (data, ctx) => recordRecentJob(ctx, data.jobId), { revalidate: false, read: true });
 }

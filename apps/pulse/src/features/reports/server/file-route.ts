@@ -7,7 +7,7 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { toDomainContext } from '@/server/domain/_shared';
 import { assertAddressRefsReadable } from '@/server/domain/deleted';
-import { orgHasPulseModule } from '@/server/entitlements';
+import { assertPlanAllows } from '@/server/plan-gate';
 import { DomainError } from '@/server/errors';
 import { errorResponse, type ApiArgs } from '@/server/http/api';
 import { PRINT_PAGE_CONTENT_SECURITY_POLICY } from '@/server/http/csp';
@@ -18,7 +18,8 @@ export function fileRoute<P = Record<string, never>>(handler: (args: ApiArgs<P>)
     try {
       const context = await getApiContext(request);
       if (!context) throw new DomainError('UNAUTHENTICATED', 'Sign in to KitStak to continue.');
-      if (!(await orgHasPulseModule(context.org.id))) throw new DomainError('NOT_ENTITLED', 'KitStak Pulse is not turned on for this organization.');
+      // Downloads and print pages are reads: they keep working while the plan is view only.
+      await assertPlanAllows(context.org.id, { write: false });
       const params = route?.params ? await route.params : ({} as P);
       const ctx = toDomainContext(context);
       const searchParams = new URL(request.url).searchParams;

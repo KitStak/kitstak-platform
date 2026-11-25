@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
-import { LINKS, ROUTES } from '../site-links';
+import { LINKS, ROUTES, START_LABEL, startFreeHref } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import { PRIMARY_NAV, PRODUCT_NAV, isCurrentPath } from './nav-data';
@@ -112,12 +112,12 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
         </ul>
 
         <div className={styles.actions}>
-          <Link href={ROUTES.getStarted} className="btn btn-primary" onClick={onClose}>
-            Set up your Stak{' '}
+          <a href={startFreeHref()} className="btn btn-primary">
+            {START_LABEL}{' '}
             <span className="btn-arrow" aria-hidden>
               →
             </span>
-          </Link>
+          </a>
           <a href={LINKS.portal} className="btn btn-ghost">
             Sign in
           </a>

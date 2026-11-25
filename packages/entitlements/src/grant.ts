@@ -1,7 +1,7 @@
 /**
- * Manual entitlement writes. With Stripe integration deferred (owner decision), these
- * upserts are the ONLY production write path into `core.entitlements`; the grant CLI
- * (`scripts/grant.ts`) wraps them per org slug.
+ * Manual entitlement writes: the grant CLI (`scripts/grant.ts`) wraps them per org slug. Trials and
+ * the billing sync write through `setEntitlement` in `./write.ts`, which never overwrites a live
+ * manual grant made here.
  */
 import { entitlements, type EntitlementSource, type EntitlementStatus } from '@kitstak/db/schema';
 import type { EntitlementsDb } from './db';

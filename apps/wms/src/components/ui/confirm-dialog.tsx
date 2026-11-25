@@ -10,13 +10,18 @@
  */
 import * as React from 'react';
 import { AlertDialog } from 'radix-ui';
-import { AlertTriangle, Info, Trash2 } from 'lucide-react';
+import { AlertTriangle, Info, PackagePlus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
 import { overlayClass } from './dialog';
 import { Spinner } from './spinner';
 
-export type ConfirmVariant = 'danger' | 'attention' | 'info';
+/**
+ * `offer` is the calm one: no coloured band, a soft icon, the usual primary button. It is for a
+ * choice that is not a warning, such as "add this to my plan". The brand colour is red, so a
+ * coloured band there reads as an error.
+ */
+export type ConfirmVariant = 'danger' | 'attention' | 'info' | 'offer';
 
 export interface ConfirmColumn {
   readonly key: string;
@@ -54,12 +59,15 @@ const VARIANTS: Readonly<
       readonly band: string;
       readonly Icon: React.ComponentType<{ className?: string }>;
       readonly button: 'danger' | 'primary';
+      /** Set for a calm header: the icon sits in a soft circle of this colour. */
+      readonly iconWrap?: string;
     }
   >
 > = {
   danger: { band: 'bg-danger text-white', Icon: Trash2, button: 'danger' },
   attention: { band: 'bg-warning text-white', Icon: AlertTriangle, button: 'primary' },
   info: { band: 'bg-primary text-white', Icon: Info, button: 'primary' },
+  offer: { band: 'items-center bg-surface pb-0 pt-5 text-foreground', Icon: PackagePlus, button: 'primary', iconWrap: 'bg-info-soft text-info' },
 };
 
 const DEFAULT_MAX_ROWS = 50;
@@ -167,7 +175,13 @@ export function ConfirmDialog({
           }}
         >
           <div className={cn('flex items-start gap-2.5 px-5 py-3.5', style.band)}>
-            <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            {style.iconWrap ? (
+              <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full', style.iconWrap)}>
+                <Icon className="h-[18px] w-[18px]" aria-hidden />
+              </span>
+            ) : (
+              <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            )}
             <AlertDialog.Title className="text-base font-semibold leading-5">{title}</AlertDialog.Title>
           </div>
           <div className="px-5 py-4">

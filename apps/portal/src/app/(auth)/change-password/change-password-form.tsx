@@ -2,7 +2,7 @@
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
-import { Button, Field } from '@/components/ui';
+import { Button, EmailText, Field } from '@/components/ui';
 import { changePassword, signOut } from '@/lib/auth-client';
 import {
   AuthHeading,
@@ -10,9 +10,12 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   PasswordInput,
+  PasswordRules,
   StrengthMeter,
   authErrorMessage,
+  passwordFieldError,
 } from '../_components/form-parts';
+import { passwordIssue } from '@/features/signup/password-rules';
 
 const schema = z
   .object({
@@ -38,7 +41,8 @@ type FieldErrors = Partial<Record<FieldName, string>>;
 /** Friendly copy for the change-password errors the shared auth layer returns. */
 function changeErrorMessage(error: { readonly code?: string; readonly message?: string; readonly status?: number }): string {
   if (error.code === 'INVALID_PASSWORD') return 'That is not the password you were given. Check it and try again.';
-  return authErrorMessage(error);
+  // A password change allows 5 tries a minute, so the wait is 1 minute.
+  return authErrorMessage(error, 1);
 }
 
 export function ChangePasswordForm({
@@ -65,11 +69,14 @@ export function ChangePasswordForm({
     event.preventDefault();
     setError(null);
     const parsed = schema.safeParse(values);
-    if (!parsed.success) {
-      const flat = z.flattenError(parsed.error).fieldErrors;
+    // The same rules the server checks, said here first: every missing rule at once, the email
+    // name, and a password that is too easy to guess.
+    const issue = passwordIssue(values.newPassword, { email });
+    if (!parsed.success || issue) {
+      const flat: Partial<Record<FieldName, string[]>> = parsed.success ? {} : z.flattenError(parsed.error).fieldErrors;
       setFieldErrors({
         currentPassword: flat.currentPassword?.[0],
-        newPassword: flat.newPassword?.[0],
+        newPassword: issue ?? flat.newPassword?.[0],
         confirmPassword: flat.confirmPassword?.[0],
       });
       return;
@@ -111,7 +118,7 @@ export function ChangePasswordForm({
         title="Choose a new password"
         subtitle={
           <>
-            Your account <span className="font-semibold text-fg">{email}</span> was set up with a temporary
+            Your account <EmailText email={email} className="font-semibold text-fg" /> was set up with a temporary
             password. Replace it with one only you know to continue.
           </>
         }
@@ -131,23 +138,34 @@ export function ChangePasswordForm({
             />
           )}
         </Field>
-        <Field
-          label="New password"
-          error={fieldErrors.newPassword}
-          hint={`At least ${PASSWORD_MIN_LENGTH} characters, with an uppercase letter, a number and a symbol.`}
-        >
+        {/* The checklist under the field says every rule and marks what is missing, so the error is not printed twice. */}
+        <Field label="New password" error={fieldErrors.newPassword} errorHidden>
           {({ inputId, describedBy, invalid }) => (
-            <>
+            <div className="flex flex-col gap-2">
               <PasswordInput
                 id={inputId}
                 autoComplete="new-password"
                 value={values.newPassword}
-                onChange={(event) => setField('newPassword', event.target.value)}
-                aria-describedby={describedBy}
+                onChange={(event) => {
+                  setField('newPassword', event.target.value);
+                  // After a refusal the sentence follows what is typed, so it is never about an older try.
+                  if (fieldErrors.newPassword) {
+                    const issue = passwordIssue(event.target.value, { email }) ?? undefined;
+                    setFieldErrors((current) => ({ ...current, newPassword: issue }));
+                  }
+                }}
+                aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
                 invalid={invalid}
               />
-              <StrengthMeter password={values.newPassword} />
-            </>
+              <StrengthMeter password={values.newPassword} context={{ email }} />
+              <PasswordRules
+                password={values.newPassword}
+                id={`${inputId}-rules`}
+                showMissing={Boolean(fieldErrors.newPassword)}
+                error={passwordFieldError(values.newPassword, fieldErrors.newPassword)}
+                context={{ email }}
+              />
+            </div>
           )}
         </Field>
         <Field label="Confirm new password" error={fieldErrors.confirmPassword}>

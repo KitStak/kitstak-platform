@@ -5,7 +5,9 @@
  * quick add, task drawer (`?task=KEY`), the program overlays (`?log`, `?plan`, `?import`,
  * `?report`; docs/programs/SPEC.md 5.5) and the shortcuts sheet.
  */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CommandPalette } from '@/features/command/command-palette';
 import { OnboardingHost } from '@/features/onboarding/onboarding-host';
 import { QuickAddDialog } from '@/features/quick-add/quick-add-dialog';
@@ -17,6 +19,8 @@ import { MobileNav } from './mobile-nav';
 import { ShellProvider, type ShellContextValue } from './shell-context';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { Sidebar } from './sidebar';
+import { PlanBanner } from '@kitstak/ui/plan-banner';
+import { ViewOnlyGuard, ViewOnlyPage, isWritePath } from '@kitstak/ui/view-only';
 import { TopBar } from './top-bar';
 import { useShellHotkeys } from './use-shell-hotkeys';
 
@@ -42,7 +46,57 @@ function Hotkeys() {
   return null;
 }
 
-export function AppShell({ context, initialProjects, initialSpaces, initialUnread, initialPeople, peopleLoadedAt, children }: AppShellProps) {
+/**
+ * When Projects is not in the plan the server answers 402 to every data call. The shell still
+ * renders (the lock screen sits inside the app frame), so its data hooks are switched off here
+ * instead of asking for data that cannot come.
+ */
+function LockedQueries({ locked, children }: { readonly locked: boolean; readonly children: ReactNode }) {
+  const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { enabled: false, retry: false } } }));
+  if (!locked) return <>{children}</>;
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+/** Projects screens that start a change: the new project wizard. */
+const PROJECTS_WRITE_PATHS: readonly (string | RegExp)[] = [/^\/projects\/new$/];
+
+/**
+ * View only is told before a form opens (docs/billing/SPEC.md 9.4): "New project" and any control
+ * marked `data-plan-write` open one small dialog with the banner's words and button, so nobody
+ * fills in the three step wizard and hears "no" at the last click.
+ */
+function PlanViewOnly({ plan }: { readonly plan: ShellContextValue['plan'] }) {
+  const pathname = usePathname();
+  return <ViewOnlyGuard active={plan?.access === 'read_only'} notice={plan?.notice ?? null} pathname={pathname} writePaths={PROJECTS_WRITE_PATHS} writePage="inline" homeHref="/" />;
+}
+
+/**
+ * A create screen opened by its address while the plan is view only: the message takes the place
+ * of the form, inside the app frame. The top bar, the sidebar and the banner stay.
+ */
+function PlanPage({ plan, children }: { readonly plan: ShellContextValue['plan']; readonly children: ReactNode }) {
+  const pathname = usePathname();
+  if (plan?.access === 'read_only' && isWritePath(pathname, PROJECTS_WRITE_PATHS)) {
+    return (
+      <>
+        <ViewOnlyPage notice={plan.notice ?? null} homeHref="/" />
+        {/* The form stays in the tree, hidden and out of reach, so Next can still check the route in development. */}
+        <div hidden>{children}</div>
+      </>
+    );
+  }
+  return <>{children}</>;
+}
+
+export function AppShell(props: AppShellProps) {
+  return (
+    <LockedQueries locked={props.context.modules.projects === false}>
+      <ShellBody {...props} />
+    </LockedQueries>
+  );
+}
+
+function ShellBody({ context, initialProjects, initialSpaces, initialUnread, initialPeople, peopleLoadedAt, children }: AppShellProps) {
   return (
     <ShellProvider value={context}>
       <SeedPeople people={initialPeople} loadedAt={peopleLoadedAt} />
@@ -55,12 +109,16 @@ export function AppShell({ context, initialProjects, initialSpaces, initialUnrea
       </a>
       <div data-testid="app-shell" className="flex h-dvh min-h-[480px] flex-col overflow-hidden bg-app">
         <TopBar />
+        {/* Trial, payment and view only notices: above the page, never over content. */}
+        <PlanBanner notice={context.plan?.notice ?? null} dismissible />
         <div className="flex min-h-0 flex-1">
           <div className="hidden md:flex">
             <Sidebar initialProjects={initialProjects} initialSpaces={initialSpaces} initialUnread={initialUnread} />
           </div>
           <main id="main-content" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-app outline-none">
-            <div className="h-full overflow-auto">{children}</div>
+            <div className="h-full overflow-auto">
+              <PlanPage plan={context.plan}>{children}</PlanPage>
+            </div>
           </main>
         </div>
       </div>
@@ -71,6 +129,7 @@ export function AppShell({ context, initialProjects, initialSpaces, initialUnrea
       <ProgramOverlaysHost />
       <ShortcutsDialog />
       <OnboardingHost />
+      <PlanViewOnly plan={context.plan} />
     </ShellProvider>
   );
 }

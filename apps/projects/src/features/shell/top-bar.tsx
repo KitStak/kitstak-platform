@@ -68,7 +68,7 @@ function HelpMenu() {
 
 /** 56px top bar (CRM/WMS anatomy): menu (mobile), logo, org switcher, search, quick add, inbox, help, apps, theme, account. */
 export function TopBar() {
-  const { appUrls, modules, notInPlan, can } = useShell();
+  const { appUrls, modules, notInPlan, planBadges, addHrefs, can } = useShell();
   const router = useRouter();
   const mod = useModKey();
   const openPalette = useShellStore((state) => state.openPalette);
@@ -216,6 +216,8 @@ export function TopBar() {
           urls={appUrls}
           entitled={{ crm: modules.crm, wms: modules.wms, projects: modules.projects, pulse: modules.pulse }}
           notInPlan={notInPlan}
+          planBadges={planBadges}
+          addHref={addHrefs ? (app) => (app === 'portal' ? undefined : addHrefs[app]) ?? `${appUrls.portal}/billing/plan?add=${app}` : undefined}
         />
         <ThemeToggle className="hidden sm:inline-flex" />
         <UserMenu />

@@ -28,6 +28,8 @@ export interface OrgSummary {
   readonly slug: string;
   readonly logo: string | null;
   readonly role: OrgRole;
+  /** The raw `core.member.role` string (a comma list), as billing reads it. */
+  readonly roleString: string;
 }
 
 export interface ContextUser {
@@ -72,7 +74,7 @@ export async function listUserOrgs(userId: string): Promise<OrgSummary[]> {
   const out: OrgSummary[] = [];
   for (const row of rows) {
     const role = parseOrgRole(row.role);
-    if (role) out.push({ id: row.id, name: row.name, slug: row.slug, logo: row.logo, role });
+    if (role) out.push({ id: row.id, name: row.name, slug: row.slug, logo: row.logo, role, roleString: row.role });
   }
   return out;
 }

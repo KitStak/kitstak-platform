@@ -5,7 +5,7 @@
  *     return runAction(updateTaskSchema, input, (data, ctx) => updateTask(ctx, data.taskId, data.patch));
  *   }
  *
- * runAction: zod-validates the input, resolves the signed-in context + entitlement, calls the
+ * runAction: zod-validates the input, resolves the signed-in context + plan gate, calls the
  * domain function (which checks permissions), converts DomainErrors into a typed failure and
  * revalidates the app layout so server components refresh. Actions never throw to the client.
  */
@@ -13,8 +13,8 @@ import 'server-only';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { toDomainContext, type DomainContext } from '@/server/domain/_shared';
-import { orgHasProjectsModule } from '@/server/entitlements';
-import { DomainError, isDomainError, type ErrorCode } from '@/server/errors';
+import { isDomainError, type ErrorCode } from '@/server/errors';
+import { assertPlanAllows } from '@/server/plan-gate';
 import { requireActionContext } from '@/server/session';
 
 export interface ActionError {
@@ -28,6 +28,12 @@ export type ActionResult<T> = { readonly ok: true; readonly data: T } | { readon
 export interface RunActionOptions {
   /** Revalidate the whole app layout after success (default true). Pass false for chatty actions (timers, visits). */
   readonly revalidate?: boolean;
+  /**
+   * Marks an action that changes no business data: a preview, a lookup, a "seen" marker or a
+   * personal preference. It keeps working while the plan is view only (docs/billing/SPEC.md
+   * section 9.4). Every other action is refused in view only with code `plan.read_only`.
+   */
+  readonly read?: boolean;
 }
 
 function zodFields(error: z.ZodError): Record<string, string> {
@@ -60,9 +66,7 @@ export async function runAction<S extends z.ZodType, T>(
       return { ok: false, error: { code: 'VALIDATION', message: 'Some fields need another look.', fields: zodFields(parsed.error) } };
     }
     const context = await requireActionContext();
-    if (!(await orgHasProjectsModule(context.org.id))) {
-      throw new DomainError('NOT_ENTITLED', 'KitStak Projects is not turned on for this organization. Ask an admin to enable it in the Portal.');
-    }
+    await assertPlanAllows(context.org.id, { write: options.read !== true });
     const data = await handler(parsed.data, toDomainContext(context));
     if (options.revalidate !== false) revalidatePath('/', 'layout');
     return { ok: true, data };

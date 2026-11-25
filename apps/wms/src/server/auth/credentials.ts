@@ -10,8 +10,8 @@
  * shared `passwordCompat` verifier (`$2a$/$2b$/$2y$` → bcryptjs).
  */
 import { randomUUID } from 'node:crypto';
-import { and, eq, ne } from 'drizzle-orm';
-import { isBcryptHash } from '@kitstak/auth';
+import { and, eq, ne, sql } from 'drizzle-orm';
+import { blockSignIn, isBcryptHash, unblockSignIn, type RawSqlExecutor } from '@kitstak/auth';
 import { account, member, organization, passwordPolicyState, user, userProfiles } from '@kitstak/db/schema';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import bcrypt from 'bcryptjs';
@@ -97,6 +97,10 @@ async function findOrCreatePlatformOrg(db: AppDb, now: Date): Promise<string> {
 
 /** Org roles a WMS edit must never overwrite (they are granted in the portal, not here). */
 const PRESERVED_ORG_ROLES: ReadonlySet<string> = new Set(['owner', 'admin']);
+/** The role of a person who only manages billing in the Portal (`BILLING_ONLY_ROLE` in @kitstak/auth). */
+const BILLING_ONLY_ORG_ROLE = 'billing';
+/** Org roles that use no seat of a paid plan (`CATALOG.freeRoles` in @kitstak/billing). */
+const FREE_ORG_ROLES: ReadonlySet<string> = new Set(['guest', BILLING_ONLY_ORG_ROLE]);
 
 /**
  * True when the core identity belongs to NO organization other than the one owning this
@@ -114,6 +118,32 @@ export async function identityManagedHere(db: AppDb, userId: string): Promise<bo
       .limit(1)
   )[0];
   return !other;
+}
+
+/**
+ * True when the owner of this account has proven the mailbox (`core."user".email_verified`): with
+ * the emailed code in the Portal, or with the proof in an invite email. From then on the account
+ * is theirs: no warehouse admin may set or reset its password (billing review round 5). Before
+ * that, any password on it is removed at the first proof, with every session, by the Portal.
+ */
+export async function mailboxProven(db: AppDb, userId: string): Promise<boolean> {
+  const row = (
+    await db.select({ emailVerified: user.emailVerified }).from(user).where(eq(user.id, userId)).limit(1)
+  )[0];
+  return row?.emailVerified === true;
+}
+
+/** The one sentence an administrator reads when the password is the person's own to change. */
+export const PASSWORD_IS_THEIRS_MESSAGE =
+  'This person confirmed their email, so only they can change their password. They can use "Forgot password" on the sign in page.';
+
+/**
+ * Throws INVALID_STATE unless a warehouse admin may set this account's password: the identity is
+ * managed here (`identityManagedHere`) and its mailbox is not proven yet (`mailboxProven`).
+ */
+export async function assertAdminMaySetPassword(db: AppDb, userId: string, action: string): Promise<void> {
+  await assertIdentityManagedHere(db, userId, action);
+  if (await mailboxProven(db, userId)) throw new AppError('INVALID_STATE', PASSWORD_IS_THEIRS_MESSAGE);
 }
 
 /** Throws INVALID_STATE unless `identityManagedHere` (see there). */
@@ -171,6 +201,13 @@ export interface CoreIdentityInput {
    * previous seed's leftover). Application flows never set it — they refuse the clash.
    */
   readonly replaceEmailClash?: boolean;
+  /**
+   * Demo seed ONLY: the new identity is born with a verified email, so the demo logins behave like
+   * people who proved their mailbox. Application flows never set it (billing review round 5): an
+   * account one person makes for another person's address is born unverified, and only the
+   * mailbox can prove the mailbox (the emailed code, or the proof in an invite email).
+   */
+  readonly seedVerified?: boolean;
 }
 
 /**
@@ -213,17 +250,29 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
       id: input.userId,
       name: input.name,
       email,
-      emailVerified: true,
+      // Born unverified (billing review round 5). Nobody has shown they own this mailbox yet: the
+      // warehouse admin typed the address. `email_verified` is the proof every invite door trusts.
+      emailVerified: input.seedVerified === true,
       createdAt,
       updatedAt: createdAt,
     })
     .onConflictDoUpdate({
       target: user.id,
       // A shared identity's name/email are its owner's to change (no-op update).
-      set: shared ? { updatedAt: new Date() } : { name: input.name, email, updatedAt: new Date() },
+      set: shared
+        ? { updatedAt: new Date() }
+        : {
+            name: input.name,
+            email,
+            // A new address is a new mailbox nobody has proven. The flag never moves with it.
+            emailVerified: sql`CASE WHEN lower(${user.email}) = ${email} THEN ${user.emailVerified} ELSE false END`,
+            updatedAt: new Date(),
+          },
     });
 
-  if (hash !== null && !shared) {
+  // A password someone else types is only for an account whose mailbox nobody has proven yet. Once
+  // the owner proved it (the emailed code), the password is theirs alone (review round 5).
+  if (hash !== null && !shared && (input.seedVerified === true || !(await mailboxProven(db, input.userId)))) {
     await db
       .delete(account)
       .where(and(eq(account.userId, input.userId), eq(account.providerId, CREDENTIAL_PROVIDER)));
@@ -247,6 +296,10 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
   )[0];
   const orgRole = orgRoleForLegacy(input.legacyRole);
   if (!membership) {
+    // A new person in the organization uses a seat of its paid plan (docs/billing/SPEC.md P6).
+    // No limit during a free trial, with no paid plan, or on a plan with WMS alone.
+    const { assertSeatAvailable } = await import('@/server/auth/plan');
+    await assertSeatAvailable(db, orgId, orgRole);
     await db.insert(member).values({
       id: randomUUID(),
       organizationId: orgId,
@@ -256,7 +309,17 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
     });
   } else if (!membership.role.split(',').some((r) => PRESERVED_ORG_ROLES.has(r.trim()))) {
     // An owner/admin role granted in the portal is kept as is.
-    await db.update(member).set({ role: orgRole }).where(eq(member.id, membership.id));
+    const held = membership.role.split(',').map((r) => r.trim()).filter(Boolean);
+    const heldNoSeat = held.length > 0 && held.every((r) => FREE_ORG_ROLES.has(r));
+    if (heldNoSeat) {
+      // A guest, or a person who only manages billing, held no seat until now. Working in the
+      // warehouse uses one, so the plan must have room (billing review round 2).
+      const { assertSeatAvailable } = await import('@/server/auth/plan');
+      await assertSeatAvailable(db, orgId, orgRole);
+    }
+    // A billing manager stays one: the billing role is kept next to the new role.
+    const nextRole = held.includes(BILLING_ONLY_ORG_ROLE) ? `${orgRole},${BILLING_ONLY_ORG_ROLE}` : orgRole;
+    await db.update(member).set({ role: nextRole }).where(eq(member.id, membership.id));
   }
 
   await db
@@ -282,14 +345,22 @@ export async function upsertCoreIdentity(db: AppDb, input: CoreIdentityInput): P
     });
 }
 
-/** Keeps core."user" name/email in sync with a wms.users edit. */
+/**
+ * Keeps core."user" name/email in sync with a wms.users edit. A changed address is a new mailbox
+ * nobody has proven, so `email_verified` goes back to false with it (billing review round 5):
+ * otherwise a verified account could be moved onto an address someone else was invited with.
+ */
 export async function syncCoreUser(
   db: AppDb,
   userId: string,
   fields: { readonly email?: string; readonly name?: string },
 ): Promise<void> {
   const set: Record<string, unknown> = { updatedAt: new Date() };
-  if (fields.email !== undefined) set.email = fields.email.trim().toLowerCase();
+  if (fields.email !== undefined) {
+    const email = fields.email.trim().toLowerCase();
+    set.email = email;
+    set.emailVerified = sql`CASE WHEN lower(${user.email}) = ${email} THEN ${user.emailVerified} ELSE false END`;
+  }
   if (fields.name !== undefined) set.name = fields.name;
   await db.update(user).set(set).where(eq(user.id, userId));
 }
@@ -372,6 +443,26 @@ export async function deleteCredentialAccount(db: AppDb, userId: string): Promis
     .where(and(eq(account.userId, userId), eq(account.providerId, CREDENTIAL_PROVIDER)))
     .returning({ id: account.id });
   return removed.length > 0;
+}
+
+/**
+ * Switches a person's KitStak account off, for every app: the block row the shared sign in layer
+ * reads at every door (`core.sign_in_blocks`, see `@kitstak/auth` sign-in-block.ts), every session
+ * ended, and the password row removed as a second lock. Since billing review round 4 the block row
+ * is the fact; before it, a missing password row was, and "Forgot password" could bring the person
+ * back. Only for an identity this warehouse manages (`identityManagedHere`).
+ */
+export async function switchOffSignIn(db: AppDb, userId: string, blockedBy?: string | null): Promise<void> {
+  await deleteCredentialAccount(db, userId);
+  await blockSignIn(db as unknown as RawSqlExecutor, { userId, blockedBy: blockedBy ?? null });
+}
+
+/**
+ * Switches the account back on. The password is not brought back: an administrator resets it, or
+ * the person uses "Forgot password" in the Portal.
+ */
+export async function switchOnSignIn(db: AppDb, userId: string): Promise<void> {
+  await unblockSignIn(db as unknown as RawSqlExecutor, userId);
 }
 
 /** Clears the password-policy plugin's lockout row for an email. */

@@ -49,6 +49,7 @@
   font-size: clamp(72px, 9vw, 112px);
 }
 .per {
+  max-width: 20ch;
   padding-bottom: 8px;
   font-size: var(--type-base);
   line-height: 1.35;
@@ -87,10 +88,12 @@
   margin-top: 20px;
   font-size: var(--type-base);
 }
-.fine {
-  margin-top: 16px;
-  font-size: var(--type-xs);
-  color: var(--text-muted);
+.trust {
+  margin-top: 12px;
+  text-align: center;
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
 }
 @media (max-width: 900px) {
   .grid {

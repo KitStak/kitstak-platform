@@ -1,12 +1,11 @@
 import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
-import { AppShell, LockedScreen } from '@/features/shell';
+import { AppShell, LockedFrame } from '@/features/shell';
 import { loadShell } from '@/features/shell/shell-frame';
 import { getProjectDetail, listOrgPeople, resolveTaskKey } from '@/server/domain';
 import { requireProgram } from '@/server/domain/programs';
 import { isDomainError } from '@/server/errors';
 import { requirePageContext } from '@/server/session';
-import { canOrg } from '@/lib/permissions';
 
 /** Org people for the shell's people cache, stamped with when they were read (undefined on failure). */
 async function loadPeople(ctx: Parameters<typeof listOrgPeople>[0]) {
@@ -22,13 +21,9 @@ export default async function AppLayout({ children }: { readonly children: React
   const path = (await headers()).get('x-ks-path') ?? '/';
   const context = await requirePageContext(path);
   const shell = await loadShell(context);
-  if (!shell.entitled) {
-    return (
-      <AppShell context={shell.shellContext} initialProjects={[]} initialSpaces={[]} initialUnread={0}>
-        <LockedScreen orgName={context.org.name} portalUrl={shell.urls.portal} canManage={canOrg(context.orgRole, 'workspace:manage')} />
-      </AppShell>
-    );
-  }
+  // Not in the plan: the lock screen in the same quiet frame as the CRM and the WMS. No sidebar
+  // and no "New task" button, because nothing can be opened or made in a locked app.
+  if (shell.plan.lock) return <LockedFrame lock={shell.plan.lock} context={shell.shellContext} />;
   const { ctx, projects } = shell;
   // Org people ride along with the first HTML so names (goal owners, workload rows, assignees)
   // render on the server instead of a placeholder that swaps in on the client.

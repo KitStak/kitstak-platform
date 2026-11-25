@@ -379,7 +379,8 @@ const CLAIMS: readonly Claim[] = [
   },
   {
     claim: 'Two margins, before shared costs and after all costs',
-    spec: /Margin before shared costs/,
+    // The spec names it in running text, in lower case.
+    spec: /margin before shared costs/i,
     source: /Margin before shared costs/,
   },
   { claim: 'Drill down totals match the level above', spec: /[Tt]otals always match the level above/ },

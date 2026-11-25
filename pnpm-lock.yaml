@@ -34,6 +34,9 @@ importers:
       '@kitstak/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@kitstak/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@kitstak/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -257,6 +260,9 @@ importers:
       '@kitstak/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@kitstak/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@kitstak/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -296,6 +302,9 @@ importers:
       pg:
         specifier: ^8.23.1
         version: 8.23.1
+      radix-ui:
+        specifier: 1.8.1
+        version: 1.8.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -305,6 +314,9 @@ importers:
       server-only:
         specifier: ^0.0.1
         version: 0.0.1
+      stripe:
+        specifier: 23.2.0
+        version: 23.2.0(@types/node@24.19.2)
       tailwind-merge:
         specifier: ^3.7.0
         version: 3.7.0
@@ -315,6 +327,9 @@ importers:
       '@kitstak/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@playwright/test':
+        specifier: ^1.65.0
+        version: 1.65.0
       '@tailwindcss/turbopack':
         specifier: ^4
         version: 4.3.5
@@ -363,6 +378,9 @@ importers:
       '@kitstak/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@kitstak/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@kitstak/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -577,6 +595,9 @@ importers:
       '@kitstak/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@kitstak/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@kitstak/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -740,6 +761,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@kitstak/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@kitstak/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -795,12 +819,18 @@ importers:
       '@kitstak/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@kitstak/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@kitstak/db':
         specifier: workspace:*
         version: link:../../packages/db
       '@kitstak/entitlements':
         specifier: workspace:*
         version: link:../../packages/entitlements
+      '@kitstak/mail':
+        specifier: workspace:*
+        version: link:../../packages/mail
       '@kitstak/pm-bridge':
         specifier: workspace:*
         version: link:../../packages/pm-bridge
@@ -999,6 +1029,52 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  packages/billing:
+    dependencies:
+      '@kitstak/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@kitstak/db':
+        specifier: workspace:*
+        version: link:../db
+      '@kitstak/entitlements':
+        specifier: workspace:*
+        version: link:../entitlements
+      '@kitstak/mail':
+        specifier: workspace:*
+        version: link:../mail
+      better-auth:
+        specifier: ^1.7.18
+        version: 1.7.21(drizzle-kit@0.31.11)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(kysely@0.29.8)(pg@8.23.1)(postgres@3.4.9(patch_hash=fe75950e7983e2c23638bc301bfa5b3a20bb5a4ce050da5adf504b0e75114ee0)))(next@16.4.5(@playwright/test@1.65.0)(@types/node@22.20.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(pg@8.23.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.1.0)
+      stripe:
+        specifier: 23.2.0
+        version: 23.2.0(@types/node@22.20.5)
+    devDependencies:
+      '@kitstak/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.5
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(kysely@0.29.8)(pg@8.23.1)(postgres@3.4.9(patch_hash=fe75950e7983e2c23638bc301bfa5b3a20bb5a4ce050da5adf504b0e75114ee0))
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@types/node@22.20.5)(@vitest/coverage-v8@5.1.0)(jsdom@31.0.0(@noble/hashes@2.4.0))(vite@8.3.8(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+
   packages/config:
     devDependencies:
       typescript:
@@ -1069,6 +1145,21 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@types/node@22.20.5)(@vitest/coverage-v8@5.1.0)(jsdom@31.0.0(@noble/hashes@2.4.0))(vite@8.3.8(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+
+  packages/mail:
+    devDependencies:
+      '@kitstak/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.5
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -6181,6 +6272,15 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
 
+  stripe@23.2.0:
+    resolution: {integrity: sha512-0W0J4yA9qFO2rnF61v8Y62OiO2SmAR+Cv04VJaFUMpCxiq8lG5bxEYbeSMSpMDR9ofFZGd+Z/iUIgSFbOolmUw==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@types/node': '>=20'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   styled-jsx@5.1.6:
     resolution: {integrity: sha512-qSVyDTeMotdvQYoHWLNGwRFJHC+i+ZvdBRYosOFgC+Wg1vx4frN2/RG/NA7SYqqvKNLf39P2LSRA2pu6n0XYZA==}
     engines: {node: '>= 12.0.0'}
@@ -9219,6 +9319,36 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
+  better-auth@1.7.21(drizzle-kit@0.31.11)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(kysely@0.29.8)(pg@8.23.1)(postgres@3.4.9(patch_hash=fe75950e7983e2c23638bc301bfa5b3a20bb5a4ce050da5adf504b0e75114ee0)))(next@16.4.5(@playwright/test@1.65.0)(@types/node@22.20.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(pg@8.23.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.1.0):
+    dependencies:
+      '@better-auth/core': 1.7.21(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.17)(kysely@0.29.8)(nanostores@1.5.5)
+      '@better-auth/drizzle-adapter': 1.7.21(@better-auth/core@1.7.21(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.17)(kysely@0.29.8)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(kysely@0.29.8)(pg@8.23.1)(postgres@3.4.9(patch_hash=fe75950e7983e2c23638bc301bfa5b3a20bb5a4ce050da5adf504b0e75114ee0)))
+      '@better-auth/kysely-adapter': 1.7.21(@better-auth/core@1.7.21(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.17)(kysely@0.29.8)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(kysely@0.29.8)
+      '@better-auth/memory-adapter': 1.7.21(@better-auth/core@1.7.21(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.17)(kysely@0.29.8)(nanostores@1.5.5))(@better-auth/utils@0.5.1)
+      '@better-auth/mongo-adapter': 1.7.21(@better-auth/core@1.7.21(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.17)(kysely@0.29.8)(nanostores@1.5.5))(@better-auth/utils@0.5.1)
+      '@better-auth/prisma-adapter': 1.7.21(@better-auth/core@1.7.21(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.17)(kysely@0.29.8)(nanostores@1.5.5))(@better-auth/utils@0.5.1)
+      '@better-auth/telemetry': 1.7.21(@better-auth/core@1.7.21(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.17)(kysely@0.29.8)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)
+      '@better-auth/utils': 0.5.1
+      '@better-fetch/fetch': 1.3.3
+      '@noble/ciphers': 2.4.0
+      '@noble/hashes': 2.4.0
+      better-call: 1.4.5(zod@4.6.7)
+      defu: 6.1.7
+      jose: 6.2.17
+      kysely: 0.29.8
+      nanostores: 1.5.5
+      zod: 4.6.7
+    optionalDependencies:
+      drizzle-kit: 0.31.11
+      drizzle-orm: 0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(kysely@0.29.8)(pg@8.23.1)(postgres@3.4.9(patch_hash=fe75950e7983e2c23638bc301bfa5b3a20bb5a4ce050da5adf504b0e75114ee0))
+      next: 16.4.5(@playwright/test@1.65.0)(@types/node@22.20.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      pg: 8.23.1
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+      vitest: 5.1.0(@types/node@22.20.5)(@vitest/coverage-v8@5.1.0)(jsdom@31.0.0(@noble/hashes@2.4.0))(vite@8.3.8(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
   better-auth@1.7.21(drizzle-kit@0.31.11)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(kysely@0.29.8)(pg@8.23.1)(postgres@3.4.9(patch_hash=fe75950e7983e2c23638bc301bfa5b3a20bb5a4ce050da5adf504b0e75114ee0)))(next@16.4.5(@playwright/test@1.65.0)(@types/node@24.19.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(pg@8.23.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.1.0):
     dependencies:
       '@better-auth/core': 1.7.21(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.17)(kysely@0.29.8)(nanostores@1.5.5)
@@ -11682,6 +11812,14 @@ snapshots:
   strip-final-newline@2.0.0: {}
 
   strip-json-comments@3.1.1: {}
+
+  stripe@23.2.0(@types/node@22.20.5):
+    optionalDependencies:
+      '@types/node': 22.20.5
+
+  stripe@23.2.0(@types/node@24.19.2):
+    optionalDependencies:
+      '@types/node': 24.19.2
 
   styled-jsx@5.1.6(@babel/core@7.29.13)(react@19.3.0):
     dependencies:

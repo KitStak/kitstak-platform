@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CreditCard, LayoutGrid, LogOut, Moon, Settings2, Sun } from 'lucide-react';
+import { CreditCard, LayoutGrid, LogOut, Moon, Settings2, Sun, UserRound } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +20,16 @@ function initials(name: string, email: string): string {
   return source.slice(0, 2).toUpperCase();
 }
 
-export function UserMenu({ name, email }: { readonly name: string; readonly email: string }) {
+export function UserMenu({
+  name,
+  email,
+  billingOnly = false,
+}: {
+  readonly name: string;
+  readonly email: string;
+  /** A person who only manages billing has no apps: the "Apps" row is left out. */
+  readonly billingOnly?: boolean;
+}) {
   const router = useRouter();
 
   const onSignOut = async () => {
@@ -46,12 +55,14 @@ export function UserMenu({ name, email }: { readonly name: string; readonly emai
           <p className="truncate text-xs text-fg-muted">{email}</p>
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/">
-            <LayoutGrid aria-hidden className="size-4 text-icon" />
-            Apps
-          </Link>
-        </DropdownMenuItem>
+        {billingOnly ? null : (
+          <DropdownMenuItem asChild>
+            <Link href="/">
+              <LayoutGrid aria-hidden className="size-4 text-icon" />
+              Apps
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link href="/billing">
             <CreditCard aria-hidden className="size-4 text-icon" />
@@ -64,7 +75,14 @@ export function UserMenu({ name, email }: { readonly name: string; readonly emai
             Organization settings
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={toggleTheme}>
+        {/* Name, email and "Set a password" (review round 4). */}
+        <DropdownMenuItem asChild>
+          <Link href="/settings/account" data-testid="menu-account">
+            <UserRound aria-hidden className="size-4 text-icon" />
+            My account
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={toggleTheme} data-testid="menu-theme">
           <Sun aria-hidden className="size-4 text-icon dark:hidden" />
           <Moon aria-hidden className="hidden size-4 text-icon dark:inline" />
           Light or dark theme

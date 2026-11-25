@@ -1,0 +1,688 @@
+import { describe, expect, it } from 'vitest';
+import { PRODUCT_IDS, type ProductId } from './catalog';
+import {
+  type ModuleAccess,
+  type NoticeContext,
+  type PlanEntitlementInput,
+  type PlanPhase,
+  type PlanStateInput,
+  type PlanSubscriptionInput,
+  type PlanViewer,
+  cancelWords,
+  derivePlanState,
+  planBadgeFor,
+  planEndedLine,
+  planEndedWords,
+  planLockFor,
+  planNoticeFor,
+} from './plan-state';
+
+const NOW = new Date('2026-11-28T15:00:00.000Z');
+const DAY = 24 * 60 * 60 * 1000;
+const at = (days: number) => new Date(NOW.getTime() + days * DAY);
+const ORG = '22222222-2222-4222-8222-222222222222';
+
+const MANAGER: PlanViewer = { canManage: true, canView: true, ownerName: 'Maya Chen' };
+const ADMIN: PlanViewer = { canManage: false, canView: true, ownerName: 'Maya Chen' };
+const MEMBER: PlanViewer = { canManage: false, canView: false, ownerName: 'Maya Chen' };
+
+function row(status: PlanEntitlementInput['status'], source: PlanEntitlementInput['source'], access: ModuleAccess, periodEnd: Date | null = null): PlanEntitlementInput {
+  return { status, source, periodEnd, access };
+}
+
+function rows(partial: Partial<Record<ProductId, PlanEntitlementInput>>): Record<ProductId, PlanEntitlementInput | null> {
+  const out = {} as Record<ProductId, PlanEntitlementInput | null>;
+  for (const id of PRODUCT_IDS) out[id] = partial[id] ?? null;
+  return out;
+}
+
+function subscription(overrides: Partial<PlanSubscriptionInput> = {}): PlanSubscriptionInput {
+  return {
+    status: 'active',
+    interval: 'monthly',
+    seats: 5,
+    warehouses: 1,
+    items: [
+      { product: 'crm', quantity: 5, unitCents: 2320 },
+      { product: 'wms', quantity: 1, unitCents: 27920 },
+    ],
+    recurringCents: 39520,
+    currentPeriodEnd: at(25),
+    trialEnd: null,
+    cancelAtPeriodEnd: false,
+    cancelAt: null,
+    canceledAt: null,
+    endedAt: null,
+    pauseStartsAt: null,
+    pauseResumesAt: null,
+    pastDueSince: null,
+    amountDueCents: null,
+    nextPaymentAttempt: null,
+    paymentMethod: { brand: 'visa', last4: '4242', expMonth: 8, expYear: 2028 },
+    ...overrides,
+  };
+}
+
+function input(overrides: Partial<PlanStateInput> = {}): PlanStateInput {
+  return {
+    orgId: ORG,
+    mode: 'test_gateway',
+    now: NOW,
+    account: null,
+    subscription: null,
+    entitlements: rows({}),
+    usage: { seatsUsed: 4, pendingInvites: 1, warehousesUsed: 1 },
+    ...overrides,
+  };
+}
+
+const CART = { products: ['crm', 'wms'], seats: 5, warehouses: 1, interval: 'monthly' };
+const trialAccount = (endsInDays: number) => ({ cart: CART, trialStartedAt: at(endsInDays - 14), trialEndsAt: at(endsInDays) });
+const trialRows = (endsInDays: number) =>
+  rows({
+    crm: row('trialing', 'trial', endsInDays > 0 ? 'full' : 'read_only', at(endsInDays)),
+    wms: row('trialing', 'trial', endsInDays > 0 ? 'full' : 'read_only', at(endsInDays)),
+  });
+const paidRows = (access: ModuleAccess = 'full', status: PlanEntitlementInput['status'] = 'active') =>
+  rows({ crm: row(status, 'stripe', access, at(25)), wms: row(status, 'stripe', access, at(25)) });
+
+function context(viewer: PlanViewer, module: ProductId | null = null): NoticeContext {
+  return { module, viewer, portalUrl: 'https://kitstak.app', now: NOW };
+}
+
+describe('derivePlanState: every phase from rows', () => {
+  const cases: readonly [string, PlanStateInput, PlanPhase][] = [
+    ['nothing at all', input(), 'none'],
+    ['free trial running', input({ account: trialAccount(9), entitlements: trialRows(9) }), 'trial'],
+    ['free trial over, nothing paid', input({ account: trialAccount(-2), entitlements: trialRows(-2) }), 'trial_ended'],
+    ['paid plan', input({ subscription: subscription(), entitlements: paidRows() }), 'active'],
+    [
+      'card saved, first charge still ahead',
+      input({ account: trialAccount(9), subscription: subscription({ status: 'trialing', trialEnd: at(9), currentPeriodEnd: at(9) }), entitlements: paidRows() }),
+      'active',
+    ],
+    [
+      'payment failed, inside the grace days',
+      input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-2), amountDueCents: 39520, nextPaymentAttempt: at(1) }), entitlements: paidRows('full', 'past_due') }),
+      'past_due',
+    ],
+    [
+      'payment failed, grace over',
+      input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-8), amountDueCents: 39520 }), entitlements: paidRows('read_only', 'past_due') }),
+      'unpaid',
+    ],
+    ['gateway says unpaid', input({ subscription: subscription({ status: 'unpaid', pastDueSince: at(-20) }), entitlements: paidRows('read_only', 'canceled') }), 'unpaid'],
+    ['cancel at period end', input({ subscription: subscription({ cancelAtPeriodEnd: true, cancelAt: at(25) }), entitlements: paidRows() }), 'cancel_scheduled'],
+    [
+      'pause set, not started',
+      input({ subscription: subscription({ pauseStartsAt: at(25), pauseResumesAt: at(86) }), entitlements: paidRows('full', 'canceled') }),
+      'pause_scheduled',
+    ],
+    [
+      'inside a pause',
+      input({ subscription: subscription({ pauseStartsAt: at(-3), pauseResumesAt: at(58) }), entitlements: paidRows('read_only', 'canceled') }),
+      'paused',
+    ],
+    [
+      'canceled and past its last day',
+      input({ subscription: subscription({ status: 'canceled', endedAt: at(-5), canceledAt: at(-30) }), entitlements: paidRows('read_only', 'canceled') }),
+      'ended',
+    ],
+    [
+      'a first payment that never finished does not count as a plan',
+      input({ account: trialAccount(-2), subscription: subscription({ status: 'incomplete' }), entitlements: trialRows(-2) }),
+      'trial_ended',
+    ],
+  ];
+
+  it.each(cases)('%s', (_name, rowsIn, phase) => {
+    expect(derivePlanState(rowsIn).phase).toBe(phase);
+  });
+
+  it('is pure: the same rows give the same state', () => {
+    const rowsIn = input({ account: trialAccount(9), entitlements: trialRows(9) });
+    expect(derivePlanState(rowsIn)).toEqual(derivePlanState(rowsIn));
+  });
+});
+
+describe('derivePlanState: details', () => {
+  it('a running trial has dates, days left, no card and no seat limit', () => {
+    const state = derivePlanState(input({ account: trialAccount(9), entitlements: trialRows(9) }));
+    expect(state.trial).toEqual({ startedAt: at(-5), endsAt: at(9), daysLeft: 9 });
+    expect(state.hasSubscription).toBe(false);
+    expect(state.trialEligible).toBe(false);
+    expect(state.nextCharge).toBeNull();
+    expect(state.usage).toEqual({ seatsUsed: 4, seatsPaid: null, seatLimit: null, pendingInvites: 1, seatFloor: 5, warehousesUsed: 1, warehousesPaid: null });
+    expect(state.selection).toEqual(CART);
+    expect(state.quote.totalCents).toBe(39520);
+    expect(state.modules.crm).toEqual({ product: 'crm', access: 'full', inPlan: true, source: 'trial', quantity: 5 });
+    expect(state.modules.projects).toEqual({ product: 'projects', access: 'locked', inPlan: false, source: null, quantity: null });
+  });
+
+  it('an ended trial keeps its dates with 0 days left and view only apps', () => {
+    const state = derivePlanState(input({ account: trialAccount(-2), entitlements: trialRows(-2) }));
+    expect(state.trial?.daysLeft).toBe(0);
+    expect(state.modules.crm.access).toBe('read_only');
+    expect(state.modules.crm.inPlan).toBe(true);
+    expect(state.modules.pulse.access).toBe('locked');
+  });
+
+  it('a paid plan has the plan as its selection, a next charge and limits', () => {
+    const state = derivePlanState(
+      input({ account: { cart: { products: ['pulse'] }, trialStartedAt: at(-40), trialEndsAt: at(-26) }, subscription: subscription(), entitlements: paidRows() }),
+    );
+    expect(state.selection).toEqual(CART);
+    expect(state.hasSubscription).toBe(true);
+    expect(state.trial).toBeNull();
+    expect(state.nextCharge).toEqual({ amountCents: 39520, at: at(25), planCents: 39520, discountCents: 0, discountLabel: null, creditAppliedCents: 0 });
+    expect(state.creditCents).toBe(0);
+    expect(state.usage.seatLimit).toBe(5);
+    expect(state.usage.seatsPaid).toBe(5);
+    expect(state.usage.warehousesPaid).toBe(1);
+    expect(state.paymentMethod?.last4).toBe('4242');
+    expect(state.modules.wms).toEqual({ product: 'wms', access: 'full', inPlan: true, source: 'paid', quantity: 1 });
+  });
+
+  it('card saved in the trial: phase active with the trial still set and the first charge at its end', () => {
+    const state = derivePlanState(
+      input({ account: trialAccount(9), subscription: subscription({ status: 'trialing', trialEnd: at(9), currentPeriodEnd: at(9) }), entitlements: paidRows() }),
+    );
+    expect(state.phase).toBe('active');
+    expect(state.trial?.endsAt).toEqual(at(9));
+    expect(state.nextCharge).toMatchObject({ amountCents: 39520, at: at(9), planCents: 39520 });
+  });
+
+  it('a late payment has the amount, the retry date and the day access changes (7 days after the invoice)', () => {
+    const state = derivePlanState(
+      input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-2), amountDueCents: 39520, nextPaymentAttempt: at(1) }), entitlements: paidRows('full', 'past_due') }),
+    );
+    expect(state.pastDue).toEqual({ since: at(-2), amountDueCents: 39520, nextRetryAt: at(1), accessChangesAt: at(5) });
+    expect(state.nextCharge).toBeNull();
+  });
+
+  it('cancel, pause and ended carry their dates', () => {
+    expect(derivePlanState(input({ subscription: subscription({ cancelAtPeriodEnd: true }), entitlements: paidRows() })).cancelAt).toEqual(at(25));
+    expect(
+      derivePlanState(input({ subscription: subscription({ pauseStartsAt: at(25), pauseResumesAt: at(86) }), entitlements: paidRows() })).pause,
+    ).toEqual({ startsAt: at(25), resumesAt: at(86) });
+    const ended = derivePlanState(input({ subscription: subscription({ status: 'canceled', endedAt: at(-5) }), entitlements: paidRows('read_only', 'canceled') }));
+    expect(ended.endedAt).toEqual(at(-5));
+    expect(ended.hasSubscription).toBe(false);
+    expect(ended.trialEligible).toBe(false);
+  });
+
+  it('a brand new org may start a trial; a manual grant shows as its own source', () => {
+    const state = derivePlanState(input({ entitlements: rows({ pulse: row('active', 'manual', 'full') }) }));
+    expect(state.phase).toBe('none');
+    expect(state.trialEligible).toBe(true);
+    expect(state.modules.pulse).toEqual({ product: 'pulse', access: 'full', inPlan: false, source: 'manual', quantity: null });
+  });
+
+  it('a Pulse only plan allows 5 seats; a WMS only plan has no seat limit', () => {
+    const pulse = derivePlanState(
+      input({ subscription: subscription({ items: [{ product: 'pulse', quantity: 1, unitCents: 2900 }], recurringCents: 2900 }), entitlements: rows({ pulse: row('active', 'stripe', 'full') }) }),
+    );
+    expect(pulse.usage.seatLimit).toBe(5);
+    const wms = derivePlanState(
+      input({ subscription: subscription({ items: [{ product: 'wms', quantity: 2, unitCents: 34900 }], warehouses: 2, recurringCents: 69800 }), entitlements: rows({ wms: row('active', 'stripe', 'full') }) }),
+    );
+    expect(wms.usage.seatLimit).toBeNull();
+    expect(wms.usage.warehousesPaid).toBe(2);
+  });
+});
+
+function sentences(text: string): string[] {
+  return text.split(/(?<=[.?!])\s+/).filter((sentence) => sentence.length > 0);
+}
+
+describe('planNoticeFor: the words in SPEC 9.2', () => {
+  const trial9 = derivePlanState(input({ account: trialAccount(9), entitlements: trialRows(9) }));
+  const trial2 = derivePlanState(input({ account: trialAccount(2), entitlements: trialRows(2) }));
+  const trialToday = derivePlanState(input({ account: trialAccount(0.2), entitlements: trialRows(0.2) }));
+  const trialTomorrow = derivePlanState(input({ account: trialAccount(0.9), entitlements: trialRows(0.9) }));
+  const withCard = derivePlanState(
+    input({ account: trialAccount(9), subscription: subscription({ status: 'trialing', trialEnd: at(9), currentPeriodEnd: at(9) }), entitlements: paidRows() }),
+  );
+  const trialEnded = derivePlanState(input({ account: trialAccount(-2), entitlements: trialRows(-2) }));
+  const pastDue = derivePlanState(
+    input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-2), amountDueCents: 39520, nextPaymentAttempt: at(1) }), entitlements: paidRows('full', 'past_due') }),
+  );
+  const unpaid = derivePlanState(input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-8) }), entitlements: paidRows('read_only', 'past_due') }));
+  const canceling = derivePlanState(input({ subscription: subscription({ cancelAtPeriodEnd: true, cancelAt: at(25) }), entitlements: paidRows() }));
+  const pauseSoon = derivePlanState(input({ subscription: subscription({ pauseStartsAt: at(25), pauseResumesAt: at(86) }), entitlements: paidRows('full', 'canceled') }));
+  const paused = derivePlanState(input({ subscription: subscription({ pauseStartsAt: at(-3), pauseResumesAt: at(58) }), entitlements: paidRows('read_only', 'canceled') }));
+  const ended = derivePlanState(input({ subscription: subscription({ status: 'canceled', endedAt: at(-5) }), entitlements: paidRows('read_only', 'canceled') }));
+  const active = derivePlanState(input({ subscription: subscription(), entitlements: paidRows() }));
+
+  const table: readonly [string, ReturnType<typeof derivePlanState>, string, 'info' | 'warning' | 'danger', string, string, string][] = [
+    ['trial', trial9, 'trial', 'info', 'Free trial. 9 days left. Ends Dec 7.', 'Pick a plan', 'https://kitstak.app/billing/plan'],
+    ['trial ending', trial2, 'trial_ending', 'warning', 'Your free trial ends in 2 days, on Nov 30.', 'Pick a plan', 'https://kitstak.app/billing/plan'],
+    ['trial last day', trialToday, 'trial_ending', 'warning', 'Your free trial ends today.', 'Pick a plan', 'https://kitstak.app/billing/plan'],
+    ['trial ends tomorrow', trialTomorrow, 'trial_ending', 'warning', 'Your free trial ends tomorrow, on Nov 29.', 'Pick a plan', 'https://kitstak.app/billing/plan'],
+    ['trial with card', withCard, 'trial_with_card', 'info', 'Free trial. Your first payment of $395.20 is on Dec 7.', 'See my plan', 'https://kitstak.app/billing'],
+    ['trial ended', trialEnded, 'trial_ended', 'danger', 'Your free trial ended on Nov 26. Your data is safe. Pick a plan to keep working.', 'Pick a plan', 'https://kitstak.app/billing/plan'],
+    [
+      'payment failed',
+      pastDue,
+      'payment_failed',
+      'warning',
+      'We could not charge your Visa ending 4242 for $395.20. We will try again on Nov 29. Update your card by Dec 3 to keep full access.',
+      'Update card',
+      'https://kitstak.app/billing?fix=payment',
+    ],
+    ['unpaid', unpaid, 'unpaid', 'danger', 'Your payment is late, so your apps are view only. Update your card to turn them back on.', 'Update card', 'https://kitstak.app/billing?fix=payment'],
+    ['cancel scheduled', canceling, 'cancel_scheduled', 'info', 'Your plan ends on Dec 23. You keep everything until then.', 'Keep my plan', 'https://kitstak.app/billing'],
+    ['pause scheduled', pauseSoon, 'pause_scheduled', 'info', 'Your plan pauses on Dec 23 and starts again on Feb 22.', 'Undo pause', 'https://kitstak.app/billing'],
+    ['paused', paused, 'paused', 'danger', 'Your plan is paused, so your apps are view only. It starts again on Jan 25.', 'Start again now', 'https://kitstak.app/billing'],
+    ['ended', ended, 'ended', 'danger', 'Your plan ended on Nov 23. Your data is safe. Pick a plan to keep working.', 'Pick a plan', 'https://kitstak.app/billing/plan'],
+  ];
+
+  it.each(table)('%s (owner, in the portal)', (_name, state, kind, tone, text, label, href) => {
+    const notice = planNoticeFor(state, context(MANAGER));
+    expect(notice).toEqual({ kind, tone, text, action: { label, href }, testId: `plan-notice-${kind}` });
+  });
+
+  it.each(table)('%s: every sentence is 20 words or fewer, with no dash', (_name, state) => {
+    for (const viewer of [MANAGER, ADMIN, MEMBER]) {
+      for (const module of [null, 'crm', 'projects'] as const) {
+        const notice = planNoticeFor(state, context(viewer, module));
+        if (!notice) continue;
+        expect(notice.text).not.toMatch(/[\u2013\u2014]|-{2}/);
+        for (const sentence of sentences(notice.text)) expect(sentence.split(/\s+/).length, sentence).toBeLessThanOrEqual(20);
+      }
+    }
+  });
+
+  it('shows no trial banner on the first day of a trial, and shows it from the second day', () => {
+    const firstHour = derivePlanState(input({ account: trialAccount(13.97), entitlements: trialRows(13.97) }));
+    const secondDay = derivePlanState(input({ account: trialAccount(12.9), entitlements: trialRows(12.9) }));
+    expect(firstHour.phase).toBe('trial');
+    for (const module of [null, 'crm', 'wms'] as const) {
+      expect(planNoticeFor(firstHour, context(MANAGER, module))).toBeNull();
+      expect(planNoticeFor(firstHour, context(ADMIN, module))).toBeNull();
+    }
+    expect(planNoticeFor(secondDay, context(MANAGER))?.kind).toBe('trial');
+  });
+
+  it('shows nothing for a plan in good standing or for no plan', () => {
+    expect(planNoticeFor(active, context(MANAGER))).toBeNull();
+    expect(planNoticeFor(active, context(MEMBER, 'crm'))).toBeNull();
+    expect(planNoticeFor(derivePlanState(input()), context(MANAGER))).toBeNull();
+  });
+
+  it('admins see every kind, like owners', () => {
+    expect(planNoticeFor(trial9, context(ADMIN))?.kind).toBe('trial');
+    expect(planNoticeFor(pastDue, context(ADMIN))?.kind).toBe('payment_failed');
+  });
+
+  // Review round 4: an admin can see billing but cannot pay. A pay button would end on a page that
+  // says "only an owner can do this", so the banner names who can and has no pay button.
+  const adminTable: readonly [string, ReturnType<typeof derivePlanState>, string, string | null][] = [
+    ['trial', trial9, 'Free trial. 9 days left. Ends Dec 7.', 'See my plan'],
+    ['trial ending', trial2, 'Your free trial ends in 2 days, on Nov 30. Ask Maya Chen to pick a plan.', null],
+    ['trial with card', withCard, 'Free trial. Your first payment of $395.20 is on Dec 7.', 'See my plan'],
+    ['trial ended', trialEnded, 'Your free trial ended on Nov 26. Your data is safe. Ask Maya Chen to pick a plan.', null],
+    [
+      'payment failed',
+      pastDue,
+      'We could not charge the Visa ending 4242 for $395.20. We will try again on Nov 29. Ask Maya Chen to update the card by Dec 3 to keep full access.',
+      null,
+    ],
+    ['unpaid', unpaid, 'Your payment is late, so your apps are view only. Ask Maya Chen to update the card.', null],
+    ['cancel scheduled', canceling, 'Your plan ends on Dec 23. You keep everything until then.', 'See my plan'],
+    ['pause scheduled', pauseSoon, 'Your plan pauses on Dec 23 and starts again on Feb 22.', 'See my plan'],
+    ['paused', paused, 'Your plan is paused, so your apps are view only. It starts again on Jan 25. Ask Maya Chen to start it sooner.', null],
+    ['ended', ended, 'Your plan ended on Nov 23. Your data is safe. Ask Maya Chen to pick a plan.', null],
+  ];
+
+  it.each(adminTable)('%s (admin: sees billing, cannot pay)', (_name, state, text, label) => {
+    for (const module of [null, 'crm'] as const) {
+      const notice = planNoticeFor(state, context(ADMIN, module));
+      expect(notice?.text).toBe(text);
+      expect(notice?.action?.label ?? null).toBe(label);
+      // The only button an admin ever gets opens billing home, which an admin can read.
+      if (notice?.action) expect(notice.action.href).toBe(module ? 'https://kitstak.app/billing?from=crm' : 'https://kitstak.app/billing');
+    }
+    expect(planNoticeFor(state, context({ ...ADMIN, ownerName: null }))?.text).toBe(text.replace('Maya Chen', 'your organization owner'));
+  });
+
+  it('with every app open (the allow all switch) nothing says "view only"', () => {
+    const open = (viewer: PlanViewer, module: ProductId | null = null): NoticeContext => ({ ...context(viewer, module), appsOpen: true });
+    for (const state of [trial9, trial2, trialToday, withCard, trialEnded, pastDue, unpaid, canceling, pauseSoon, paused, ended]) {
+      for (const viewer of [MANAGER, ADMIN, MEMBER]) {
+        for (const module of [null, 'crm', 'projects'] as const) {
+          expect(planNoticeFor(state, open(viewer, module))?.text ?? '').not.toMatch(/view only/i);
+        }
+      }
+    }
+    expect(planNoticeFor(unpaid, open(MANAGER))).toMatchObject({
+      text: 'Your payment is late. Update your card to keep your apps open.',
+      action: { label: 'Update card' },
+    });
+    expect(planNoticeFor(unpaid, open(ADMIN))).toMatchObject({ text: 'Your payment is late. Ask Maya Chen to update the card.', action: null });
+    expect(planNoticeFor(paused, open(MANAGER))?.text).toBe('Your plan is paused. It starts again on Jan 25.');
+    // A member is told nothing: no app is held back for them.
+    for (const state of [trialEnded, unpaid, paused, ended]) expect(planNoticeFor(state, open(MEMBER, 'crm'))).toBeNull();
+  });
+
+  it('other members see a banner only when apps are view only, with no button', () => {
+    for (const quiet of [trial9, trial2, withCard, pastDue, canceling, pauseSoon]) {
+      expect(planNoticeFor(quiet, context(MEMBER, 'crm'))).toBeNull();
+    }
+    for (const [state, kind] of [
+      [trialEnded, 'trial_ended'],
+      [unpaid, 'unpaid'],
+      [paused, 'paused'],
+      [ended, 'ended'],
+    ] as const) {
+      expect(planNoticeFor(state, context(MEMBER, 'crm'))).toEqual({
+        kind,
+        tone: 'danger',
+        text: 'This app is view only right now. Ask Maya Chen to pick a plan.',
+        action: null,
+        testId: `plan-notice-${kind}`,
+      });
+    }
+    expect(planNoticeFor(trialEnded, context(MEMBER))?.text).toBe('Your apps are view only right now. Ask Maya Chen to pick a plan.');
+    expect(planNoticeFor(trialEnded, context({ ...MEMBER, ownerName: null }, 'wms'))?.text).toBe(
+      'This app is view only right now. Ask your organization owner to pick a plan.',
+    );
+  });
+
+  it('in an app, the banner shows only when that app is in the trial or the plan', () => {
+    expect(planNoticeFor(trial9, context(MANAGER, 'crm'))?.kind).toBe('trial');
+    expect(planNoticeFor(trial9, context(MANAGER, 'projects'))).toBeNull();
+    expect(planNoticeFor(trial9, context(MANAGER, 'crm'))?.action?.href).toBe('https://kitstak.app/billing/plan?from=crm');
+    const withManual = derivePlanState(
+      input({ account: trialAccount(-2), entitlements: { ...trialRows(-2), pulse: row('active', 'manual', 'full') } }),
+    );
+    expect(planNoticeFor(withManual, context(MANAGER, 'pulse'))).toBeNull();
+  });
+
+  it('an app that left the plan is view only and says how to add it back', () => {
+    const removed = derivePlanState(
+      input({
+        subscription: subscription({ items: [{ product: 'wms', quantity: 1, unitCents: 34900 }], recurringCents: 34900 }),
+        entitlements: rows({ wms: row('active', 'stripe', 'full', at(25)), crm: row('canceled', 'stripe', 'read_only', at(-1)) }),
+      }),
+    );
+    expect(removed.modules.crm).toMatchObject({ access: 'read_only', inPlan: false });
+    expect(planNoticeFor(removed, context(MANAGER, 'crm'))).toEqual({
+      kind: 'app_removed',
+      tone: 'warning',
+      text: 'CRM is view only because it is not in your plan. Add it to make changes.',
+      action: { label: 'Add CRM', href: 'https://kitstak.app/billing/plan?add=crm&from=crm' },
+      testId: 'plan-notice-app_removed',
+    });
+    expect(planNoticeFor(removed, context(MEMBER, 'crm'))?.text).toBe('This app is view only right now. Ask Maya Chen to add it.');
+    // An admin cannot change a paid plan: the banner names who can and has no button (review round 4).
+    expect(planNoticeFor(removed, context(ADMIN, 'crm'))).toEqual({
+      kind: 'app_removed',
+      tone: 'warning',
+      text: 'CRM is view only because it is not in your plan. Ask Maya Chen to add it.',
+      action: null,
+      testId: 'plan-notice-app_removed',
+    });
+    // With every app open, the app is not view only and the banner is not shown.
+    expect(planNoticeFor(removed, { ...context(MANAGER, 'crm'), appsOpen: true })).toBeNull();
+    expect(planBadgeFor(removed, 'crm')).toBe('view_only');
+  });
+
+  it('uses the viewer time zone for dates', () => {
+    const lateUtc = derivePlanState(
+      input({ account: { cart: CART, trialStartedAt: at(-5), trialEndsAt: new Date('2026-12-08T03:00:00.000Z') }, entitlements: trialRows(9) }),
+    );
+    expect(planNoticeFor(lateUtc, context(MANAGER))?.text).toContain('Ends Dec 8.');
+    expect(planNoticeFor(lateUtc, { ...context(MANAGER), timeZone: 'America/Chicago' })?.text).toContain('Ends Dec 7.');
+  });
+});
+
+describe('planLockFor: the lock screen in SPEC 9.3', () => {
+  const lockContext = (viewer: PlanViewer, module: ProductId) => ({ ...context(viewer, module), module });
+  const fresh = derivePlanState(input());
+  const inTrial = derivePlanState(input({ account: trialAccount(9), entitlements: trialRows(9) }));
+  const paid = derivePlanState(input({ subscription: subscription(), entitlements: paidRows() }));
+  const paidOne = derivePlanState(
+    input({ subscription: subscription({ items: [{ product: 'wms', quantity: 1, unitCents: 34900 }], recurringCents: 34900 }), entitlements: rows({ wms: row('active', 'stripe', 'full') }) }),
+  );
+
+  it('free trial still open to them', () => {
+    expect(planLockFor(fresh, lockContext(MANAGER, 'crm'))).toEqual({
+      kind: 'trial_available',
+      title: 'CRM is not in your plan yet',
+      body: 'Try it free for 14 days. No card needed.',
+      priceLine: 'After that, CRM is $29 per user each month.',
+      primary: { label: 'Start free trial', href: 'https://kitstak.app/billing/plan?add=crm&from=crm' },
+      secondary: { label: 'Back to Portal', href: 'https://kitstak.app' },
+      testId: 'plan-lock',
+    });
+    // Admins can start the free trial too.
+    expect(planLockFor(fresh, lockContext(ADMIN, 'crm')).primary?.label).toBe('Start free trial');
+  });
+
+  it('in a free trial', () => {
+    const lock = planLockFor(inTrial, lockContext(MANAGER, 'projects'));
+    expect(lock.title).toBe('Projects is not in your trial yet');
+    expect(lock.body).toBe('Add it now. It is free until Dec 7.');
+    expect(lock.priceLine).toBe('After your trial, Projects is $9.60 per user each month with your bundle discount.');
+    expect(lock.primary).toEqual({ label: 'Add Projects to my trial', href: 'https://kitstak.app/billing/plan?add=projects&from=projects' });
+    expect(lock.kind).toBe('trial_available');
+  });
+
+  it('paid plan: the price with the bundle discount', () => {
+    const lock = planLockFor(paid, lockContext(MANAGER, 'projects'));
+    expect(lock.kind).toBe('not_in_plan');
+    expect(lock.title).toBe('Projects is not in your plan yet');
+    expect(`${lock.body} ${lock.priceLine}`).toBe('Add Projects for $9.60 per user each month. That price includes your bundle discount.');
+    expect(lock.primary?.label).toBe('Add Projects to my plan');
+
+    const second = planLockFor(paidOne, lockContext(MANAGER, 'crm'));
+    expect(second.body).toBe('Add CRM for $23.20 per user each month.');
+    expect(second.priceLine).toBe('That price includes the bundle discount. Your other app gets 20% off too.');
+
+    const pulse = planLockFor(paid, lockContext(MANAGER, 'pulse'));
+    expect(pulse.body).toBe('Add Pulse for $23.20 each month for your whole team.');
+  });
+
+  it('cannot manage: who to ask, one button that leads to the ask, and the way back', () => {
+    for (const state of [fresh, inTrial, paid]) {
+      const lock = planLockFor(state, lockContext(MEMBER, 'crm'));
+      expect(lock).toMatchObject({ body: 'Ask Maya Chen to add it.', priceLine: null });
+      // Review round 5: a member is given a way to ask. The button opens their Billing page in the
+      // Portal with the ask for this app in focus.
+      expect(lock.primary?.label).toBe('Ask Maya to add CRM');
+      const href = new URL(lock.primary?.href ?? '');
+      expect(`${href.origin}${href.pathname}`).toBe('https://kitstak.app/billing');
+      expect(href.searchParams.get('ask')).toBe('crm');
+      expect(href.searchParams.get('from')).toBe('crm');
+      expect(lock.secondary).toEqual({ label: 'Back to Portal', href: 'https://kitstak.app' });
+    }
+    // An admin can change trial apps but not a paid plan.
+    expect(planLockFor(inTrial, lockContext(ADMIN, 'projects')).primary).not.toBeNull();
+    expect(planLockFor(paid, lockContext(ADMIN, 'projects')).primary).toBeNull();
+  });
+
+  it('every lock sentence is 20 words or fewer', () => {
+    for (const state of [fresh, inTrial, paid, paidOne]) {
+      for (const viewer of [MANAGER, ADMIN, MEMBER]) {
+        for (const module of PRODUCT_IDS) {
+          const lock = planLockFor(state, lockContext(viewer, module));
+          for (const sentence of sentences(`${lock.title}. ${lock.body} ${lock.priceLine ?? ''}`)) {
+            expect(sentence.split(/\s+/).length, sentence).toBeLessThanOrEqual(20);
+          }
+        }
+      }
+    }
+  });
+});
+
+describe('planBadgeFor', () => {
+  it('names each state', () => {
+    const trial = derivePlanState(input({ account: trialAccount(9), entitlements: { ...trialRows(9), pulse: row('active', 'manual', 'full') } }));
+    expect(planBadgeFor(trial, 'crm')).toBe('trial');
+    expect(planBadgeFor(trial, 'projects')).toBe('not_in_plan');
+    expect(planBadgeFor(trial, 'pulse')).toBe('included');
+
+    const paid = derivePlanState(input({ subscription: subscription(), entitlements: paidRows() }));
+    expect(planBadgeFor(paid, 'crm')).toBe('active');
+
+    const withCard = derivePlanState(
+      input({ account: trialAccount(9), subscription: subscription({ status: 'trialing', trialEnd: at(9) }), entitlements: paidRows() }),
+    );
+    expect(planBadgeFor(withCard, 'crm')).toBe('trial');
+
+    const late = derivePlanState(input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-2) }), entitlements: paidRows('full', 'past_due') }));
+    expect(planBadgeFor(late, 'wms')).toBe('past_due');
+
+    const ended = derivePlanState(input({ account: trialAccount(-2), entitlements: trialRows(-2) }));
+    expect(planBadgeFor(ended, 'crm')).toBe('view_only');
+  });
+});
+
+/* ===== review round 3 ===== */
+
+describe('a cancel that is set shows in every phase', () => {
+  const paid = rows({ crm: row('past_due', 'stripe', 'full', at(-2)), wms: row('past_due', 'stripe', 'full', at(-2)) });
+
+  it('late and set to end: the phase stays "payment due", and the end date is there for "Keep my plan"', () => {
+    const state = derivePlanState(
+      input({
+        subscription: subscription({ status: 'past_due', pastDueSince: at(-2), amountDueCents: 34880, cancelAtPeriodEnd: true, currentPeriodEnd: at(28) }),
+        entitlements: paid,
+      }),
+    );
+    expect(state.phase).toBe('past_due');
+    expect(state.cancelAt).toEqual(at(28));
+    expect(state.pastDue?.amountDueCents).toBe(34880);
+  });
+
+  it('view only and set to end, and paused and set to end', () => {
+    const unpaid = derivePlanState(
+      input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-9), amountDueCents: 34880, cancelAtPeriodEnd: true, currentPeriodEnd: at(21) }), entitlements: paid }),
+    );
+    expect(unpaid.phase).toBe('unpaid');
+    expect(unpaid.cancelAt).toEqual(at(21));
+    const paused = derivePlanState(input({ subscription: subscription({ pauseStartsAt: at(-3), pauseResumesAt: at(58), cancelAtPeriodEnd: true, cancelAt: at(27) }) }));
+    expect(paused.phase).toBe('paused');
+    expect(paused.cancelAt).toEqual(at(27));
+  });
+
+  it('no cancel set: no end date, in any phase', () => {
+    expect(derivePlanState(input({ subscription: subscription() })).cancelAt).toBeNull();
+    expect(derivePlanState(input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-2), amountDueCents: 100 }), entitlements: paid })).cancelAt).toBeNull();
+    expect(derivePlanState(input({ subscription: subscription({ status: 'canceled', cancelAtPeriodEnd: true, endedAt: at(-1) }) })).cancelAt).toBeNull();
+  });
+});
+
+describe('cancelWords: what the cancel page says before the button', () => {
+  it('a plan in good standing ends on the last paid day', () => {
+    const words = cancelWords(derivePlanState(input({ subscription: subscription() })), 'UTC');
+    expect(words).toEqual({
+      mode: 'period_end',
+      notice: 'Your plan will end on Dec 23, 2026. You keep everything until then. After that your apps are view only. Nothing is deleted.',
+      detail: null,
+      instead: null,
+      confirmLabel: 'Cancel my plan',
+      doneNotice: 'Your plan is set to end. You keep everything until then. You can undo this any time before that day.',
+      openBillCents: null,
+    });
+    const yearly = cancelWords(derivePlanState(input({ subscription: subscription({ interval: 'yearly', currentPeriodEnd: at(200) }) })), 'UTC');
+    expect(yearly.detail).toBe('You are paid up until Jun 16, 2027.');
+  });
+
+  it('a bill is open and the apps still work: the plan ends today and the bill is dropped', () => {
+    const state = derivePlanState(
+      input({ subscription: subscription({ status: 'past_due', pastDueSince: at(0), amountDueCents: 34880, currentPeriodEnd: at(30) }) }),
+    );
+    const words = cancelWords(state, 'UTC');
+    expect(words.mode).toBe('now');
+    expect(words.notice).toBe(
+      'You have an unpaid bill of $348.80. If you cancel now, your plan ends today and we will not charge the $348.80. Your apps become view only today. Nothing is deleted.',
+    );
+    expect(words.instead).toBe('Want to keep your plan? Pay the $348.80 and you have full access until Dec 28, 2026.');
+    expect(words.confirmLabel).toBe('End my plan today');
+    expect(words.doneNotice).toBe('Your plan has ended. We will not charge the $348.80. Your data is safe.');
+    expect(words.openBillCents).toBe(34880);
+  });
+
+  it('a bill is open and the apps are view only: never "you keep everything until"', () => {
+    const state = derivePlanState(
+      input({ subscription: subscription({ status: 'past_due', pastDueSince: at(-8), amountDueCents: 34880, currentPeriodEnd: at(22) }) }),
+    );
+    expect(state.phase).toBe('unpaid');
+    const words = cancelWords(state, 'UTC');
+    expect(words.mode).toBe('now');
+    expect(words.notice).toBe(
+      'You have an unpaid bill of $348.80, and your apps are view only now. If you cancel, your plan ends today and we will not charge the $348.80. Nothing is deleted.',
+    );
+    expect(`${words.notice} ${words.instead}`).not.toContain('You keep everything until');
+  });
+
+  it('a paused plan: it is view only now, and a cancel means it does not start again', () => {
+    const words = cancelWords(derivePlanState(input({ subscription: subscription({ pauseStartsAt: at(-3), pauseResumesAt: at(58) }) })), 'UTC');
+    expect(words.mode).toBe('period_end');
+    expect(words.notice).toBe(
+      'Your plan is paused, so your apps are view only now. If you cancel, it ends on Dec 23, 2026 and does not start again. Nothing more is charged. Nothing is deleted.',
+    );
+  });
+
+  it('a free trial with a card saved ends by itself and nothing is charged', () => {
+    const words = cancelWords(
+      derivePlanState(input({ account: { cart: null, trialStartedAt: at(-4), trialEndsAt: at(10) }, subscription: subscription({ status: 'trialing', trialEnd: at(10), currentPeriodEnd: at(10) }) })),
+      'UTC',
+    );
+    expect(words.mode).toBe('trial');
+    expect(words.notice).toBe('Your free trial still runs until Dec 8, 2026. After that your apps are view only. Nothing is charged. Nothing is deleted.');
+  });
+});
+
+describe('an ended plan says why', () => {
+  const ended = (over: Partial<PlanSubscriptionInput>) =>
+    derivePlanState(input({ subscription: subscription({ status: 'canceled', endedAt: at(-5), ...over }), entitlements: rows({ crm: row('canceled', 'stripe', 'read_only', at(-5)) }) }));
+
+  it('the gateway gave up after the last try', () => {
+    const state = ended({ endedReason: 'payment_failed', endedAmountCents: 16400, endedAttempts: 4 });
+    expect(state).toMatchObject({ phase: 'ended', endedReason: 'payment_failed', endedAmountCents: 16400, endedAttempts: 4 });
+    expect(planEndedLine(state, 'UTC')).toBe('We could not collect $164.00 after 4 tries, so your plan ended on Nov 23, 2026.');
+    const banner = planNoticeFor(state, context(MANAGER, 'crm'));
+    expect(banner?.text).toBe('We could not collect $164.00 after 4 tries, so your plan ended on Nov 23. Your data is safe. Pick a plan to keep working.');
+    expect(banner?.action?.label).toBe('Pick a plan');
+  });
+
+  it('the customer canceled with a bill open, or canceled and the paid time ran out', () => {
+    expect(planEndedLine(ended({ endedReason: 'canceled_unpaid', endedAmountCents: 34880 }), 'UTC')).toBe(
+      'You canceled, so your plan ended on Nov 23, 2026. We did not charge the $348.80.',
+    );
+    expect(planEndedLine(ended({ endedReason: 'canceled' }), 'UTC')).toBe('Your plan ended on Nov 23, 2026.');
+    // Rows from before the reason was stored.
+    expect(planEndedLine(ended({}), 'UTC')).toBe('Your plan ended on Nov 23, 2026.');
+    expect(planEndedLine(derivePlanState(input({ subscription: subscription() })), 'UTC')).toBeNull();
+  });
+
+  it('the words for the activity log carry no date, and never guess a missing number', () => {
+    expect(planEndedWords({ reason: 'payment_failed', amountCents: 16400, attempts: 4 }).audit).toBe('We could not collect $164.00 after 4 tries, so the plan ended.');
+    expect(planEndedWords({ reason: 'payment_failed', amountCents: 16400, attempts: 1 }).audit).toBe('We could not collect $164.00 after 1 try, so the plan ended.');
+    expect(planEndedWords({ reason: 'payment_failed', amountCents: null, attempts: null }).audit).toBe('We could not collect your payment, so the plan ended.');
+    expect(planEndedWords({ reason: 'canceled_unpaid', amountCents: 5800, attempts: 2 }).audit).toBe('The plan ended.');
+    expect(planEndedWords({ reason: null, amountCents: null, attempts: null }).line(null)).toBe('Your plan ended.');
+  });
+
+  it('a member is not shown the amount', () => {
+    const state = ended({ endedReason: 'payment_failed', endedAmountCents: 16400, endedAttempts: 4 });
+    expect(planNoticeFor(state, context(MEMBER, 'crm'))?.text).toBe('This app is view only right now. Ask Maya Chen to pick a plan.');
+  });
+});
+
+describe('a late payment banner never names a retry day that has passed', () => {
+  it('drops the "we will try again" sentence when that day is behind us', () => {
+    const state = derivePlanState(
+      input({
+        subscription: subscription({ status: 'past_due', pastDueSince: at(-2), amountDueCents: 39520, nextPaymentAttempt: at(-1) }),
+        entitlements: rows({ crm: row('past_due', 'stripe', 'full', at(-2)) }),
+      }),
+    );
+    const text = planNoticeFor(state, context(MANAGER, 'crm'))?.text ?? '';
+    expect(text).not.toContain('We will try again');
+    expect(text).toContain('Update your card by Dec 3 to keep full access.');
+  });
+});

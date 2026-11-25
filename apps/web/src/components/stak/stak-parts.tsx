@@ -1,16 +1,17 @@
+'use client';
+
 import Link from 'next/link';
+import { useId, useState } from 'react';
 import {
+  BUNDLE_OFF,
   MORE_SEATS_ACTION,
   OVER_SEATS_ACTION,
-  PRICING,
-  formatUsd,
-  isBundle,
+  YEARLY_OFF,
+  formatMoney,
   moreSeatsPrompt,
-  overSeatsNote,
-  percentLabel,
-  preliminaryPriceNote,
+  quoteSummaryLines,
 } from '@/lib/pricing';
-import type { Billing, Quote } from '@/lib/pricing';
+import type { BillingInterval, Quote } from '@/lib/pricing';
 import { PRODUCT_IDS, ROUTES } from '../site-links';
 import type { ProductId, Stack } from '../site-links';
 import styles from './stak-parts.module.css';
@@ -50,74 +51,98 @@ export function StakVisual({ stack, extras = [] }: StakVisualProps) {
 
 /* ------------------------------------------------------------------ Quote */
 
-interface QuoteSummaryProps {
-  readonly quote: Quote;
-  readonly billing: Billing;
-  /** The team size the visitor chose. Over a flat product's seat limit, the summary says so plainly. */
-  readonly seats?: number;
+/** "per month" or "per year": the period a quote's total covers. */
+export function perPeriod(interval: BillingInterval): string {
+  return interval === 'yearly' ? 'per year' : 'per month';
 }
 
-/** Line items, savings and the monthly figure. Sits on the navy brand surface. */
-export function QuoteSummary({ quote, billing, seats = 0 }: QuoteSummaryProps) {
+/** "You save $98.80 each month." Null when the quote has no discount in it. */
+export function savingsLine(quote: Quote): string | null {
+  const saved = quote.yearlySavingsCents + quote.bundleSavingsCents;
+  if (saved <= 0) return null;
+  return `You save ${formatMoney(saved)} each ${quote.interval === 'yearly' ? 'year' : 'month'}.`;
+}
+
+interface QuoteSummaryProps {
+  readonly quote: Quote;
+}
+
+const DISCOUNT_TEST_ID = { yearly: 'quote-yearly-discount', bundle: 'quote-bundle-discount' } as const;
+
+/**
+ * The price, the same way portal sign-up and billing show it: one math line per app, each discount
+ * as its own dollar line, then the total. Every number comes from the shared quote. Sits on the navy
+ * brand surface.
+ */
+export function QuoteSummary({ quote }: QuoteSummaryProps) {
+  if (quote.lines.length === 0) {
+    return <p className={styles.emptyQuote}>Pick an app to see your price.</p>;
+  }
+  const rows = quoteSummaryLines(quote);
+  const saved = savingsLine(quote);
   const products = quote.lines.map((line) => line.product);
-  const hasBundle = isBundle(products);
-  const preliminary = preliminaryPriceNote(products);
   // A flat product covers a set number of seats. Above that there is no listed price.
   const moreSeats = products.map(moreSeatsPrompt).find((prompt) => prompt !== null) ?? null;
-  // The team is bigger than the flat price covers. The total must not read as a quote for that team.
-  const overSeats = products.map((id) => overSeatsNote(id, seats)).find((note) => note !== null) ?? null;
   return (
-    <div aria-live="polite">
+    <div data-testid="quote-summary">
       <ul className={styles.lines}>
         {quote.lines.map((line) => (
-          <li key={line.product}>
-            <span>
-              {line.name}
-              <span className={styles.lineBasis}>{line.basisLabel}</span>
-            </span>
-            <span className={styles.lineAmount}>{formatUsd(line.subtotalCents)}</span>
+          <li key={line.product} data-testid={`quote-line-${line.product}`}>
+            {line.math}
           </li>
         ))}
-        {hasBundle ? (
-          <li className={styles.saving}>
-            <span>Bundle saving ({percentLabel(PRICING.bundleDiscount)})</span>
-            <span className={styles.lineAmount}>−{formatUsd(quote.bundleSavingsCents)}</span>
-          </li>
-        ) : null}
-        {billing === 'annual' ? (
-          <li className={styles.saving}>
-            <span>Yearly billing ({percentLabel(PRICING.annualDiscount)})</span>
-            <span className={styles.lineAmount}>−{formatUsd(quote.annualSavingsCents)}</span>
-          </li>
-        ) : null}
       </ul>
-      <div className={styles.total}>
-        <span className={`numeral ${styles.totalFigure}`}>{formatUsd(quote.monthlyCents)}</span>
-        <span className={styles.totalPer}>
-          per month
-          <br />
-          {billing === 'annual' ? 'billed yearly' : 'billed monthly'}
-        </span>
+      <dl className={styles.sums}>
+        {rows
+          .filter((row) => row.kind !== 'total')
+          .map((row) => (
+            <div key={row.label} data-kind={row.kind}>
+              <dt>{row.label}</dt>
+              <dd
+                data-testid={
+                  row.kind === 'list'
+                    ? 'quote-list'
+                    : row.label.startsWith('Yearly')
+                      ? DISCOUNT_TEST_ID.yearly
+                      : DISCOUNT_TEST_ID.bundle
+                }
+              >
+                {formatMoney(row.amountCents)}
+              </dd>
+            </div>
+          ))}
+      </dl>
+      {/* Only the total is read out when the price changes, once, not every line above it. */}
+      <div aria-live="polite" aria-atomic="true">
+        <p className={styles.total}>
+          <span className="visually-hidden">Total: </span>
+          <span className={`numeral ${styles.totalFigure}`} data-testid="quote-total">
+            {formatMoney(quote.totalCents)}
+          </span>
+          <span className={styles.totalPer}>{perPeriod(quote.interval)}</span>
+        </p>
+        {quote.periodMonths === 12 ? (
+          <p className={styles.monthly}>
+            That is{' '}
+            <span data-testid="quote-monthly-equivalent">{formatMoney(quote.monthlyEquivalentCents)}</span> per
+            month.
+          </p>
+        ) : null}
       </div>
-      {quote.totalSavingsCents > 0 ? (
-        <p className={styles.saved}>
-          You save {formatUsd(quote.totalSavingsCents * 12)} a year against list price.
-        </p>
-      ) : (
-        <p className={styles.saved}>
-          Add another product and take {percentLabel(PRICING.bundleDiscount)} off every one.
-        </p>
-      )}
-      {overSeats ? (
+      {saved ? (
+        <p className={styles.saved}>{saved}</p>
+      ) : quote.lines.length === 1 ? (
+        <p className={styles.saved}>Add a second app and save {BUNDLE_OFF} on both.</p>
+      ) : null}
+      {quote.pulseSeatNote ? (
         <p className={styles.overSeats}>
-          {overSeats} For more, <Link href={ROUTES.contact}>{OVER_SEATS_ACTION}</Link>.
+          {quote.pulseSeatNote} For a bigger team, <Link href={ROUTES.contact}>{OVER_SEATS_ACTION}</Link>.
         </p>
       ) : moreSeats ? (
         <p className={styles.fine}>
           {moreSeats} <Link href={ROUTES.contact}>{MORE_SEATS_ACTION}</Link>
         </p>
       ) : null}
-      {preliminary ? <p className={styles.fine}>{preliminary}</p> : null}
     </div>
   );
 }
@@ -125,65 +150,109 @@ export function QuoteSummary({ quote, billing, seats = 0 }: QuoteSummaryProps) {
 /* ------------------------------------------------------------------ Controls */
 
 interface StepperProps {
+  /** What is counted, in lower case and plural: "people", "warehouses". */
   readonly label: string;
   readonly value: number;
   readonly min?: number;
   readonly max: number;
   readonly onChange: (value: number) => void;
+  /** For tests: the field gets this id, the buttons get `-dec` and `-inc` after it. */
+  readonly testId?: string;
 }
 
-export function Stepper({ label, value, min = 1, max, onChange }: StepperProps) {
-  const set = (next: number) =>
-    onChange(Math.min(Math.max(Number.isFinite(next) ? Math.round(next) : min, min), max));
+/**
+ * A number with a minus and a plus button. The field can be typed in freely: the number is checked
+ * when focus leaves it, so clearing it to type a new one does not jump back to 1. Arrow keys work.
+ */
+export function Stepper({ label, value, min = 1, max, onChange, testId }: StepperProps) {
+  // What is in the field while a person types. Null means "show the real value".
+  const [draft, setDraft] = useState<string | null>(null);
+  const clamp = (next: number) => Math.min(Math.max(Number.isFinite(next) ? Math.round(next) : min, min), max);
+  const step = (by: number) => {
+    setDraft(null);
+    onChange(clamp(value + by));
+  };
+  const title = label.charAt(0).toUpperCase() + label.slice(1);
   return (
     <div className={styles.stepper}>
       <button
         type="button"
         aria-label={`Fewer ${label}`}
-        onClick={() => set(value - 1)}
+        data-testid={testId ? `${testId}-dec` : undefined}
+        onClick={() => step(-1)}
         disabled={value <= min}
       >
-        −
+        <span aria-hidden>−</span>
       </button>
       <input
         type="number"
         inputMode="numeric"
-        aria-label={label}
+        aria-label={title}
+        data-testid={testId}
         min={min}
         max={max}
-        value={value}
-        onChange={(event) => set(event.target.valueAsNumber)}
+        step={1}
+        value={draft ?? value}
+        onChange={(event) => {
+          const text = event.target.value;
+          setDraft(text);
+          const typed = Number(text);
+          // A number in range counts right away, so the price follows every keystroke.
+          if (text !== '' && Number.isInteger(typed) && typed >= min && typed <= max) onChange(typed);
+        }}
+        onBlur={() => {
+          if (draft !== null && draft !== '') onChange(clamp(Number(draft)));
+          setDraft(null);
+        }}
       />
       <button
         type="button"
         aria-label={`More ${label}`}
-        onClick={() => set(value + 1)}
+        data-testid={testId ? `${testId}-inc` : undefined}
+        onClick={() => step(1)}
         disabled={value >= max}
       >
-        +
+        <span aria-hidden>+</span>
       </button>
     </div>
   );
 }
 
 interface BillingToggleProps {
-  readonly value: Billing;
-  readonly onChange: (value: Billing) => void;
+  readonly value: BillingInterval;
+  readonly onChange: (value: BillingInterval) => void;
+  /** On the navy brand surface. */
+  readonly inverse?: boolean;
+  /** False for a second copy on the same page, so the test ids stay unique. */
+  readonly hasTestIds?: boolean;
 }
 
-export function BillingToggle({ value, onChange }: BillingToggleProps) {
+const INTERVAL_LABEL: Readonly<Record<BillingInterval, string>> = {
+  monthly: 'Monthly',
+  yearly: `Yearly, save ${YEARLY_OFF}`,
+};
+
+/** Monthly or yearly. A native radio group, so arrow keys move between the two. */
+export function BillingToggle({ value, onChange, inverse = false, hasTestIds = true }: BillingToggleProps) {
+  const name = useId();
   return (
-    <div className={styles.billing}>
-      {(['annual', 'monthly'] as const).map((option) => (
+    <div
+      className={styles.billing}
+      role="radiogroup"
+      aria-label="How often you pay"
+      data-inverse={inverse || undefined}
+    >
+      {(['monthly', 'yearly'] as const).map((option) => (
         <label key={option} data-checked={value === option || undefined}>
           <input
             type="radio"
-            name="billing-period"
+            name={name}
             className="visually-hidden"
+            data-testid={hasTestIds ? `plan-interval-${option}` : undefined}
             checked={value === option}
             onChange={() => onChange(option)}
           />
-          {option === 'annual' ? `Yearly · save ${percentLabel(PRICING.annualDiscount)}` : 'Monthly'}
+          {INTERVAL_LABEL[option]}
         </label>
       ))}
     </div>

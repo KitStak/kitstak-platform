@@ -46,7 +46,7 @@ const unique = (label: string) => `${label} ${Date.now().toString(36)}`;
 
 test.describe('smoke', () => {
   test('sign in lands on Home with the shell', async ({ page }) => {
-    await page.goto('/login');
+    await page.goto('/login?local=1');
     await page.locator('input[type="email"], input[name="email"]').first().fill('maya@northwind-robotics.example');
     await page.locator('input[type="password"]').fill('Northwind-Demo-2026!');
     await page.locator('button[type="submit"]').click();

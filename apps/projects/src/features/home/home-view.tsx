@@ -124,6 +124,8 @@ export function HomeView({
             <Button
               variant="secondary"
               leadingIcon={<FolderPlus aria-hidden />}
+              // In view only this press opens the "view only" dialog instead (see ViewOnlyGuard).
+              data-plan-write
               onClick={() => router.push(routes.newProject())}
             >
               New project

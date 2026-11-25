@@ -10,6 +10,7 @@ import { svc, uuidParams } from '../../../_lib/route-helpers';
 export const POST = withApi(
   {
     permission: 'dashboard:read',
+    planRead: true,
     rateLimit: 'default',
     params: uuidParams('dashboardId'),
     body: insightBatchSchema,

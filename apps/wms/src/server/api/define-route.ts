@@ -175,11 +175,13 @@ async function guard(
   const tenantSchema = session.ok ? session.user.tenantSchema : null;
   const db = tenantSchema && tenantSchema !== 'wms' ? await getTenantDbFor(tenantSchema) : platformDb;
 
-  // Module entitlement gate (BLUEPRINT.md §3.3): the request's org must hold the `wms`
-  // module. `auth: 'public'` routes and the exempt paths (health, cron tick, bootstrap)
-  // skip; dev/test default to allow-all (see @/server/auth/entitlements).
+  // Plan gate (docs/billing/CONTRACTS.md section 18): the request's org must have the `wms`
+  // module in its plan. View only (trial over, payment late, paused, plan ended) lets reads
+  // through and refuses every change with PLAN_READ_ONLY. `auth: 'public'` routes and the
+  // exempt paths (health, cron tick, bootstrap) skip; dev/test default to allow-all (see
+  // @/server/auth/entitlements).
   if (required && session.ok)
-    await requireWmsEntitlement(platformDb, session.user.orgId, new URL(request.url).pathname);
+    await requireWmsEntitlement(platformDb, session.user.orgId, new URL(request.url).pathname, request.method);
 
   const auth = session.ok
     ? await buildAuthContext(db, session.user, {

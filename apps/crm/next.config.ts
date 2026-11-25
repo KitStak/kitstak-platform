@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   // Workspace packages are shipped as TypeScript source; Next transpiles them.
-  transpilePackages: ['@kitstak/auth', '@kitstak/db', '@kitstak/entitlements', '@kitstak/pm-bridge', '@kitstak/programs-engine', '@kitstak/pulse-bridge', '@kitstak/ui'],
+  transpilePackages: ['@kitstak/auth', '@kitstak/billing', '@kitstak/mail', '@kitstak/db', '@kitstak/entitlements', '@kitstak/pm-bridge', '@kitstak/programs-engine', '@kitstak/pulse-bridge', '@kitstak/ui'],
   serverExternalPackages: ['pg', 'embedded-postgres'],
   turbopack: {
     rules: {

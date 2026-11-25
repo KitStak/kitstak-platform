@@ -166,7 +166,7 @@ export function ColumnChooser({ columns, prefs, onApply, onReset, size = 'md' }:
           </Button>
         </PopoverTrigger>
       </Tooltip>
-      <PopoverContent align="end" className="flex w-[300px] flex-col gap-2 p-3">
+      <PopoverContent align="end" className="flex w-[300px] flex-col gap-2 p-3" data-plan-read="">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-foreground">Columns</p>
           <span className="text-2xs text-faint">

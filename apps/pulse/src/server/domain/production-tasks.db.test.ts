@@ -12,7 +12,6 @@
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { parseCsv } from '@/lib/csv/parse';
-import { addDaysIso } from '@/lib/dates';
 import { createTestOrg, databaseReady, type TestOrg } from '@/test/db';
 import type { PmTask } from '@/server/integrations/projects';
 import { todayInZone, type DomainContext } from './_shared';
@@ -74,8 +73,8 @@ describe.skipIf(!ready)('tasks on production entries', () => {
     const job = await createJob(owner, { name: 'Advent 2026', clientId: client.id, status: 'active', pricingModel: 'per_unit', unitPrice: '8.0300', plannedUnits: '18200' });
     jobId = job.id;
     jobNumber = job.number;
-    // Today at the job's site, the day the future day rule uses (a UTC date runs ahead of it).
-    const [site] = await org.query<{ timezone: string }>(`select s.timezone from pulse.jobs j join pulse.sites s on s.id = j.site_id where j.id = $1`, [job.id]);
+    // Today at the site, not in UTC: work cannot be dated after the site's today, and the two differ in the evening.
+    const [site] = await org.query<{ timezone: string }>('select timezone from pulse.sites where org_id = $1 and deleted_at is null order by is_default desc limit 1', [org.orgId]);
     today = todayInZone(site?.timezone ?? 'UTC');
     await addJobLink(owner, job.id, { targetType: 'pm_project', targetId: PROJECT, title: 'Advent 2026' });
   }, 60_000);
@@ -160,7 +159,8 @@ describe.skipIf(!ready)('tasks on production entries', () => {
       await appendImportRows(owner, start.batch.id, parsed.rows.map((cells, index) => ({ n: parsed.rowNumbers[index] as number, cells })), { done: true });
       return checkImportBatch(owner, start.batch.id, {});
     };
-    const yesterday = addDaysIso(today, -1);
+    // The day before the site's today (see `today` above), so the file never lands on the day the tests above wrote to.
+    const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
     const checked = await upload(
       [
         'work_date,job_number,labor_class,task,units_good,people,labor_hours,task_units',

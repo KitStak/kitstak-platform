@@ -247,6 +247,20 @@ Enable RLS (no policies) on all of the above.
 
 ## 3. Stripe test-mode billing & per-module entitlements — `packages/entitlements`
 
+> **Replaced on 2026-11-23.** This section is kept as history. Signup and billing are now built to
+> `docs/billing/`: read `DECISIONS.md` (owner decisions), then `SPEC.md` (what a person sees) and
+> `CONTRACTS.md` (names, types, routes, tables, file ownership). Where this section and those files
+> disagree, `docs/billing/` wins. The main differences:
+>
+> - Prices are per app (CRM, WMS, Projects, Pulse) from one catalog in `packages/billing/src/catalog.ts`.
+>   There is no "KitStak Bundle" product and no `STRIPE_PRICE_*` env. Prices are found by lookup key.
+> - Billing code lives in `@kitstak/billing` (catalog, quote, plan state, the Stripe and test gateways,
+>   webhook sync). `@kitstak/entitlements` keeps the reads, the access rule and manual grants, and holds
+>   no gateway code. The files `src/sync.ts` and `src/stripe.ts` named below were never added there.
+> - The webhook route is `/api/billing/webhooks/stripe`, not `/api/stripe/webhook`.
+> - Access has three levels (full, view only, locked) instead of entitled or blocked.
+> - There are four modules: `crm`, `wms`, `projects`, `pulse`.
+
 ### 3.1 Stripe objects (test mode)
 
 Products: `KitStak CRM`, `KitStak WMS`, `KitStak Bundle`. Prices (monthly, test): referenced only via env — `STRIPE_PRICE_CRM_MONTHLY`, `STRIPE_PRICE_WMS_MONTHLY`, `STRIPE_PRICE_BUNDLE_MONTHLY`. Bundle price carries metadata `modules=crm,wms`; single-module prices `modules=crm` / `modules=wms`. One Stripe Customer per org (`core.stripe_customers`), metadata `org_id=<uuid>`.

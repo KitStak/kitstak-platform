@@ -4,8 +4,13 @@ import { invitation, member, organization, user } from '@kitstak/db/schema';
 import { db } from '@/server/db';
 import { requirePageSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
+import { getBillingContext } from '@/server/billing/context';
+import { getOrgPlan } from '@/server/entitlements';
+import { env } from '@/server/env';
+import { CATALOG, seatLimitFor } from '@kitstak/billing/catalog';
+import { usesSeats } from '@/features/billing/format';
 import { InviteMemberForm } from './invite-member-form';
-import { InvitationRow, MemberRow } from './member-rows';
+import { InvitationRow, MemberRemovedNotice, MemberRow } from './member-rows';
 import { LeaveOrgButton } from './leave-org-card';
 import { OrgProfileForm } from './org-profile-form';
 import { SetupGuide } from '@/features/setup/setup-guide';
@@ -102,7 +107,45 @@ export default async function OrganizationSettingsPage() {
       (row) => row.userId !== session.user.id && MANAGER_ROLES.has(row.role.split(',')[0]?.trim() ?? ''),
     )?.name ?? null;
 
-  const setup = await getSetupState(activeOrg);
+  // Seat facts for the invite form (docs/billing/SPEC.md 6.9). Limits apply on paid plans only.
+  const [billing, plan] = await Promise.all([getBillingContext(), getOrgPlan(activeOrg.id)]);
+  // A person who only manages billing sets up no app: no guide for them (review round 3).
+  const billingOnly = activeOrg.role === 'billing';
+  // A guest sets nothing up either: they see what the team adds them to (review round 5).
+  const roleParts = activeOrg.role.split(',').map((part) => part.trim().toLowerCase()).filter(Boolean);
+  const guestOnly = roleParts.length > 0 && roleParts.every((part) => part === 'guest');
+  const setup = billingOnly || guestOnly
+    ? null
+    : await getSetupState(activeOrg, { timeZone: billing?.timeZone, canManageBilling: billing?.access.canManage ?? false, canManageOrg: canManage });
+  // Seats in use: people whose role uses a seat, and open invites with such a role (the same count
+  // the server uses when it decides whether an invite may go out). Guests and people who only
+  // manage billing are free.
+  const freeRoles: readonly string[] = CATALOG.freeRoles;
+  const usesSeat = (role: string | null): boolean => {
+    const parts = (role ?? 'member').split(',').map((part) => part.trim().toLowerCase()).filter(Boolean);
+    if (parts.some((part) => part.startsWith('deactivated:'))) return false;
+    return parts.length === 0 || !parts.every((part) => freeRoles.includes(part));
+  };
+  const seatsUsed = members.filter((row) => usesSeat(row.role)).length + invitations.filter((invite) => !invite.expired && usesSeat(invite.role)).length;
+  const inviteSeats = {
+    canManageBilling: billing?.access.canManage ?? false,
+    paidSelection: plan.state.hasSubscription && usesSeats(plan.state.selection) ? plan.state.selection : null,
+    paid: plan.state.hasSubscription,
+    // What is true when no plan is paid for: a trial that runs, one that ended, or no plan at all.
+    unpaid: plan.state.phase === 'trial' ? ('trial' as const) : plan.state.phase === 'trial_ended' ? ('trial_ended' as const) : ('no_plan' as const),
+    limit: plan.state.hasSubscription ? seatLimitFor(plan.state.selection) : null,
+    used: seatsUsed,
+    ownerName: billing?.access.ownerName ?? null,
+    siteUrl: env.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, ''),
+  };
+
+  // What removing a person does to the bill, said in the confirm (review round 3). Removing never
+  // lowers the bill by itself: the paid seats stay until someone lowers them on the plan page.
+  const paidSeats = inviteSeats.limit;
+  const seatNoteFor = (role: string): string | null => {
+    if (paidSeats === null || !usesSeat(role)) return null;
+    return paidSeats === 1 ? 'You still pay for 1 seat.' : `You still pay for ${paidSeats} seats until you lower them.`;
+  };
 
   const [orgRow] = await db
     .select({ createdAt: organization.createdAt })
@@ -136,9 +179,16 @@ export default async function OrganizationSettingsPage() {
           </div>
         </section>
 
-        <div id="setup" className="scroll-mt-24">
-          <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManage} />
-        </div>
+        {guestOnly ? (
+          <p className="rounded-xl border border-border-default bg-panel px-6 py-4 text-sm text-fg-secondary shadow-xs" data-testid="org-guest-note">
+            You are a guest. You see what your team adds you to.
+          </p>
+        ) : null}
+                {setup && setup.quick.steps.length > 0 ? (
+          <div id="setup" className="scroll-mt-24">
+            <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManage} />
+          </div>
+        ) : null}
 
         <section
           aria-labelledby="org-members-heading"
@@ -154,6 +204,7 @@ export default async function OrganizationSettingsPage() {
               </p>
             </div>
           </div>
+          <MemberRemovedNotice />
           <ul className="divide-y divide-border-subtle">
             {members.map((row) => (
               <MemberRow
@@ -162,9 +213,11 @@ export default async function OrganizationSettingsPage() {
                 orgId={activeOrg.id}
                 name={row.name}
                 email={row.email}
-                role={row.role}
+                // A person who only manages billing is added and removed on the Billing team page.
+                role={row.role.trim() === 'billing' ? 'Billing only' : row.role}
                 isSelf={row.userId === session.user.id}
-                canManage={canManage}
+                canManage={canManage && row.role.trim() !== 'billing'}
+                seatNote={seatNoteFor(row.role)}
               />
             ))}
           </ul>
@@ -172,7 +225,12 @@ export default async function OrganizationSettingsPage() {
             <div className="border-t border-border-subtle px-6 py-5">
               <h3 className="text-sm font-semibold text-fg">Invite someone</h3>
               <div className="mt-3">
-                <InviteMemberForm orgId={activeOrg.id} />
+                <InviteMemberForm
+                  orgId={activeOrg.id}
+                  emailVerified={session.user.emailVerified === true}
+                  seats={inviteSeats}
+                  team={members.map((row) => ({ email: row.email, name: row.name }))}
+                />
               </div>
             </div>
           ) : (
@@ -238,7 +296,7 @@ export default async function OrganizationSettingsPage() {
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <dt className="text-fg-muted">Your role</dt>
-              <dd className="font-medium text-fg capitalize">{activeOrg.role}</dd>
+              <dd className={billingOnly ? 'font-medium text-fg' : 'font-medium text-fg capitalize'}>{billingOnly ? 'Billing only' : activeOrg.role}</dd>
             </div>
           </dl>
         </section>
@@ -251,7 +309,7 @@ export default async function OrganizationSettingsPage() {
             Danger zone
           </h2>
           <p className="mt-1 text-sm text-fg-muted">
-            Leaving removes your access to {activeOrg.name} in the portal, CRM and WMS.
+            Leaving removes your access to {activeOrg.name} in the Portal and in every KitStak app.
           </p>
           <div className="mt-4">
             <LeaveOrgButton orgId={activeOrg.id} orgName={activeOrg.name} isSoleOwner={isSoleOwner} />
