@@ -1,0 +1,20 @@
+{
+  "name": "@kitstak/mail",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KitStak platform mail: which provider is in use and one Resend send (fetch, no SDK, idempotent). Server only. Used by @kitstak/billing/emails for codes, invites and billing mail, and by WMS for password resets, invites and report links when a company has no SMTP of its own. TypeScript source-shipped (consumers transpile via Next transpilePackages).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@kitstak/config": "workspace:*",
+    "@types/node": "^22.10.0",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
+  }
+}

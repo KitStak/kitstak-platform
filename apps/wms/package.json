@@ -32,6 +32,7 @@
     "@kitstak/billing": "workspace:*",
     "@kitstak/db": "workspace:*",
     "@kitstak/entitlements": "workspace:*",
+    "@kitstak/mail": "workspace:*",
     "@kitstak/pm-bridge": "workspace:*",
     "@kitstak/pulse-bridge": "workspace:*",
     "@kitstak/ui": "workspace:*",

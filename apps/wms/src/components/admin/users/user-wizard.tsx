@@ -25,7 +25,7 @@ import {
   type UserFormValues,
 } from '@/lib/grid-defs/admin/users';
 import { USER_TYPES } from '@/lib/enums';
-import { welcomeToastText, type MailTransport } from '@/lib/grid-defs/admin/company-mail';
+import { welcomeToastText, type MailDelivery } from '@/lib/grid-defs/admin/company-mail';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
@@ -516,7 +516,7 @@ function Body({
         const { data } = await apiRequest<{
           name: string;
           welcomeRequested: boolean;
-          welcomeTransport: MailTransport | null;
+          welcomeTransport: MailDelivery | null;
           welcomeError: string | null;
         }>('/api/users', { method: 'POST', body, signal: controller.signal });
         const note = welcomeToastText({

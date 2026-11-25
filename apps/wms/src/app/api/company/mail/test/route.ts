@@ -21,7 +21,7 @@ export const POST = defineRoute({
         action: 'company.mail_test',
         entity: 'company',
         entityId: 'company',
-        detail: { to: body.to, delivery: result.delivered ? 'smtp' : 'server log only' },
+        detail: { to: body.to, delivery: result.delivered ? result.transport : 'server log only' },
       });
       return result;
     } catch (error: unknown) {

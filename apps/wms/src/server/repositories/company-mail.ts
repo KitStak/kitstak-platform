@@ -3,7 +3,8 @@
  *
  * - Settings live in `company_settings.defaults.mail`; the SMTP password is encrypted with the
  *   integration vault (AES-256-GCM) and never returned to the browser (only `••••last4`).
- * - Transport "log" writes the message to the server log (development). Transport "smtp" sends
+ * - Transport "log" means "no SMTP of our own": the message goes through KitStak's email service
+ *   (Resend) when the platform has it set up, else to the server log (development). Transport "smtp" sends
  *   through the configured server with a small built-in SMTP client: implicit TLS (465),
  *   STARTTLS (587) or plain (25, local relays only), AUTH PLAIN / LOGIN.
  * - `sendCompanyMail` reports what actually happened, so callers (welcome email, test send)
@@ -18,7 +19,9 @@ import type { AuthContext } from '@/server/auth/context';
 import * as s from '@/server/db/schema';
 import { decryptCredentials, encryptCredentials } from '@/server/integrations/crypto';
 import { log } from '@/server/log';
+import { resendReady, sendWithResend } from '@kitstak/mail';
 import type {
+  MailDelivery,
   MailSettingsInput,
   MailSettingsView,
   MailSecurity,
@@ -82,6 +85,7 @@ function view(m: StoredMail, version: number): MailSettingsView {
     passwordSet: password.length > 0,
     passwordHint: password ? password.slice(-2) : null,
     ready: m.transport === 'smtp' && Boolean(m.host && m.fromAddress),
+    platformMail: resendReady(),
     version,
   };
 }
@@ -155,8 +159,11 @@ export interface OutboundMail {
 }
 
 export interface MailResult {
-  /** "smtp" = accepted by the SMTP server; "log" = written to the server log only. */
-  readonly transport: MailTransport;
+  /**
+   * "smtp" = accepted by the company SMTP server; "resend" = accepted by KitStak's email service;
+   * "log" = written to the server log only.
+   */
+  readonly transport: MailDelivery;
   readonly delivered: boolean;
 }
 
@@ -315,14 +322,45 @@ async function smtpSend(m: StoredMail, password: string, mail: OutboundMail): Pr
   }
 }
 
-/** Sends one email with the company transport and reports what really happened. */
+/**
+ * Sends through KitStak's own mail service (Resend, `@kitstak/mail`). A refused send throws, the
+ * same as a refused SMTP send, so callers never report a delivery that did not happen.
+ */
+async function platformSend(mail: OutboundMail, replyTo: string): Promise<MailResult> {
+  const result = await sendWithResend({
+    to: mail.to,
+    subject: mail.subject,
+    text: mail.text,
+    ...(replyTo ? { replyTo } : {}),
+  });
+  if (!result.ok) {
+    log.warn('mail via KitStak email service failed', {
+      component: 'mail',
+      to: mail.to,
+      subject: mail.subject,
+      kind: result.kind,
+      err: result.error,
+    });
+    throw new AppError('INVALID_STATE', `KitStak email could not send this message. ${result.error}`);
+  }
+  log.info('mail sent', { component: 'mail', to: mail.to, subject: mail.subject, via: 'resend' });
+  return { transport: 'resend', delivered: true };
+}
+
+/**
+ * Sends one email and reports what really happened. Order: the company's own SMTP server when
+ * it is set up, else KitStak's email service when the platform has RESEND_API_KEY and
+ * EMAIL_FROM, else the server log (development).
+ */
 export async function sendCompanyMail(db: AppDb, input: OutboundMail): Promise<MailResult> {
   const m = await readStored(db);
   const footer = (await getBranding(db))?.emailFooter;
   const mail: OutboundMail = footer
     ? { ...input, text: `${input.text.trimEnd()}\n\n--\n${footer}\n` }
     : input;
-  if (m.transport !== 'smtp' || !m.host || !m.fromAddress) {
+  const smtpReady = m.transport === 'smtp' && Boolean(m.host && m.fromAddress);
+  if (!smtpReady && resendReady()) return platformSend(mail, m.fromAddress);
+  if (!smtpReady) {
     log.info('mail (server log; email delivery not set up)', {
       component: 'mail',
       to: mail.to,

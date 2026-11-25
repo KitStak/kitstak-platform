@@ -57,7 +57,7 @@ script pushes the other four apps exactly as before, so it keeps working until t
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | signup and billing. Both or neither. With neither, production billing is off and says so (it fails closed). Production target only |
 | `STRIPE_PORTAL_CONFIGURATION_ID`, `STRIPE_AUTOMATIC_TAX` | optional. The Billing Portal configuration from `pnpm -F @kitstak/billing stripe:setup apply`, and `1` to turn Stripe Tax on |
 | `CRON_SECRET` | required for billing. Vercel Cron sends it to `/api/billing/jobs/tick` every minute (`apps/portal/vercel.json`): queued emails, trial and late payment reminders, and a second look at plans a lost webhook could have left behind. Without it the route answers 503 and no email goes out |
-| `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | mail. With no key, production mail stays queued in `core.billing_emails` until a key is set |
+| `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO` | platform mail through Resend (`packages/mail`). With no key, production mail stays queued in `core.billing_emails` until a key is set. `push-env.mjs` also sends these three to CRM, WMS, Projects and Pulse (production only): invites leave at once from any app, and WMS sends password resets, welcome emails and report links through Resend when a company has no SMTP server of its own |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT_ID` | optional sign in buttons. Each shows only when its id and secret are both set |
 | `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_TERMS_URL`, `NEXT_PUBLIC_PRIVACY_URL` | optional links (marketing site, legal pages) |
 
