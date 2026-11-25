@@ -11,11 +11,16 @@
     "./schema/core/rate-limit": "./src/schema/core/rate-limit.ts",
     "./password-change": "./src/password-change.ts",
     "./wms-tenants": "./src/wms-tenants.ts",
+    "./wms-free-stock": "./src/wms-free-stock.ts",
+    "./record-links": "./src/record-links.ts",
+    "./crm-deal-facts": "./src/crm-deal-facts.ts",
+    "./programs": "./src/programs/index.ts",
     "./client-pg": "./src/client-pg.ts",
     "./client-postgres-js": "./src/client-postgres-js.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "migrate:wms-identity": "tsx scripts/migrate-wms-identity.ts"
   },

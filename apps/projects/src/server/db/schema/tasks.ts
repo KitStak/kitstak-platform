@@ -14,7 +14,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import { DEPENDENCY_KINDS, PRIORITIES } from '@/lib/constants';
+import { DEPENDENCY_KINDS, PRIORITIES, TASK_KINDS } from '@/lib/constants';
 import { createdAt, deletedAt, id, orgId, pmSchema, tstz, updatedAt } from './_shared';
 import { labels, milestones, projects, sections, statuses } from './projects';
 
@@ -45,6 +45,8 @@ export const tasks = pmSchema.table(
       .references(() => projects.id, { onDelete: 'cascade' }),
     /** Per-project sequence → human id `${project.key}-${number}`. */
     number: integer('number').notNull(),
+    /** `build` rows carry quantity and money in pm.builds; fixed after insert (KP103), never a subtask (KP101). */
+    kind: text('kind', { enum: TASK_KINDS }).notNull().default('task'),
     title: text('title').notNull(),
     /** Rich text (sanitized HTML). */
     description: text('description'),
@@ -86,6 +88,8 @@ export const tasks = pmSchema.table(
     index('tasks_parent_idx').on(t.parentTaskId),
     index('tasks_due_idx').on(t.orgId, t.dueDate),
     index('tasks_search_idx').using('gin', t.search),
+    index('tasks_org_kind_assignee_idx').on(t.orgId, t.kind, t.assigneeId).where(sql`${t.deletedAt} IS NULL`),
+    index('tasks_project_kind_due_idx').on(t.projectId, t.kind, t.dueDate).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

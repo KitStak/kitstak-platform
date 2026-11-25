@@ -7,6 +7,7 @@ import { boolean, date, index, integer, jsonb, primaryKey, text, uniqueIndex, uu
 import {
   CUSTOM_FIELD_TYPES,
   PROJECT_HEALTHS,
+  PROJECT_KINDS,
   PROJECT_ROLES,
   PROJECT_STATUSES,
   PROJECT_VISIBILITIES,
@@ -39,6 +40,8 @@ export const projects = pmSchema.table(
     spaceId: uuid('space_id').references(() => spaces.id, { onDelete: 'set null' }),
     /** Short uppercase key used in task ids (OPS-42). Unique per org among live projects. */
     key: text('key').notNull(),
+    /** `program` rows are Programs (recurring work under one price card); fixed after insert (KP102). */
+    kind: text('kind', { enum: PROJECT_KINDS }).notNull().default('project'),
     name: text('name').notNull(),
     /** Rich text (sanitized HTML from the editor). */
     description: text('description'),
@@ -77,6 +80,7 @@ export const projects = pmSchema.table(
     index('projects_space_idx').on(t.spaceId),
     index('projects_crm_item_idx').on(t.crmItemId),
     index('projects_crm_customer_idx').on(t.crmCustomerId),
+    index('projects_org_kind_idx').on(t.orgId, t.kind).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

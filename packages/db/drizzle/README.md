@@ -29,6 +29,7 @@ everything from zero, in journal order.
 | `0004_core_projects_module.sql` | idx 4 | Widens `core.entitlements_module_check` to `('crm', 'wms', 'projects')` for KitStak Projects. |
 | `0005_core_wms_tenants.sql` | idx 5 | `core.wms_tenants`: organization → the Postgres schema holding its WMS warehouse (`wms` for the platform org, `wms_<org hex>` for every other org). Registers the platform org's existing `wms` schema. Mirrored by `apps/wms/drizzle/0012_core_wms_tenants.sql`. |
 | `0006_core_pulse_module.sql` | idx 6 | Widens `core.entitlements_module_check` to `('crm', 'wms', 'projects', 'pulse')` for KitStak Pulse. `apps/pulse/drizzle/0000_pulse_init.sql` re-asserts the same four values, because `apps/projects/drizzle/0000_pm_init.sql` narrows the CHECK to three on a fresh database (Pulse migrates last). |
+| `0007_core_record_links.sql` | idx 7 | 0007 core record links: one link graph for any record to any record (programs, builds, jobs, customers, kits). `core.record_links` with closed type and relation lists, one edge per pair, `bills_to` and `uses_kit` shape checks, and partial unique indexes for one Pulse job per program, one per build, one program per job and one kit per variant. FKs to `core.organization` and `core."user"` are guarded like `0005`. RLS enabled, no policies (Pulse `0015` adds the `pulse_app` policy). |
 
 ## Conventions (§2.2)
 

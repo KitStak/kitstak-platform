@@ -120,6 +120,7 @@ export const timeEntries = pmSchema.table(
   (t) => [
     index('time_entries_task_idx').on(t.taskId),
     index('time_entries_user_idx').on(t.orgId, t.userId, t.startedAt),
+    index('time_entries_project_started_idx').on(t.projectId, t.startedAt).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

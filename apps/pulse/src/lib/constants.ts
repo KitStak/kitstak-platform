@@ -111,7 +111,7 @@ export type PlanLineCategory = (typeof PLAN_LINE_CATEGORIES)[number];
 export const PLAN_LINE_UNITS = ['unit', 'hour', 'each', 'flat'] as const;
 export type PlanLineUnit = (typeof PLAN_LINE_UNITS)[number];
 
-export const LINK_TARGET_TYPES = ['crm_deal', 'crm_account', 'wms_work_order', 'wms_shipment_order', 'wms_client', 'pm_project', 'pm_task'] as const;
+export const LINK_TARGET_TYPES = ['crm_deal', 'crm_account', 'wms_work_order', 'wms_shipment_order', 'wms_client', 'pm_project', 'pm_task', 'pm_program', 'pm_build'] as const;
 export type LinkTargetType = (typeof LINK_TARGET_TYPES)[number];
 
 export const STREAM_SOURCES = ['manual', 'csv', 'wms', 'crm', 'projects', 'punch', 'system', 'sample'] as const;

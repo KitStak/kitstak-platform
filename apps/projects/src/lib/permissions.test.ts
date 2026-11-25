@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canOrg, canProject, effectiveProjectRole, parseOrgRole, projectCapabilities } from './permissions';
+import { MONEY_READ_CASES } from '@kitstak/db/programs';
+import { canOrg, canProject, canReadMoney, canSeeSync, effectiveProjectRole, parseOrgRole, projectCapabilities } from './permissions';
 
 describe('permissions', () => {
   it('parses Better Auth role strings', () => {
@@ -40,5 +41,47 @@ describe('permissions', () => {
     expect(canOrg('member', 'project:create')).toBe(true);
     expect(canOrg('viewer', 'project:create')).toBe(false);
     expect(canOrg('member', 'workspace:manage')).toBe(false);
+  });
+
+  it('maps the program actions to their minimum roles', () => {
+    expect(canProject('editor', 'output:log')).toBe(true);
+    expect(canProject('editor', 'build:plan')).toBe(true);
+    expect(canProject('editor', 'schedule:manage')).toBe(true);
+    expect(canProject('editor', 'pricing:propose')).toBe(true);
+    expect(canProject('commenter', 'output:log')).toBe(false);
+    expect(canProject('viewer', 'pricing:propose')).toBe(false);
+    expect(canProject('editor', 'pricing:manage')).toBe(false);
+    expect(canProject('owner', 'pricing:manage')).toBe(true);
+    expect(canProject('editor', 'program:close')).toBe(false);
+    expect(canProject('owner', 'program:close')).toBe(true);
+  });
+
+  it('never lets the implicit role read money', () => {
+    const implicit = effectiveProjectRole({ orgRole: 'member', memberRole: null, visibility: 'org' });
+    expect(implicit).toBe('editor');
+    expect(canProject(implicit, 'money:read')).toBe(false);
+    expect(canReadMoney({ orgRole: 'member', memberRole: null, moneyMinRole: 'editor' })).toBe(false);
+    expect(canReadMoney({ orgRole: 'member', memberRole: null, moneyMinRole: 'viewer' })).toBe(false);
+    expect(projectCapabilities('editor')['money:read']).toBe(false);
+  });
+
+  it('never answers money by role rank, so an explicit owner guest cannot leak it', () => {
+    for (const role of ['owner', 'editor', 'commenter', 'viewer'] as const) {
+      expect(canProject(role, 'money:read')).toBe(false);
+      expect(projectCapabilities(role)['money:read']).toBe(false);
+    }
+    expect(canReadMoney({ orgRole: 'guest', memberRole: 'owner', isProjectOwner: false, moneyMinRole: 'viewer' })).toBe(false);
+    expect(canReadMoney({ orgRole: 'member', memberRole: 'owner', moneyMinRole: 'editor' })).toBe(true);
+  });
+
+  it.each(MONEY_READ_CASES)('money:read matches the shared table: $name', (row) => {
+    expect(canReadMoney(row)).toBe(row.expected);
+  });
+
+  it('shows sync details to org admins and program owners only', () => {
+    expect(canSeeSync({ orgRole: 'admin', role: 'owner' })).toBe(true);
+    expect(canSeeSync({ orgRole: 'member', role: 'owner' })).toBe(true);
+    expect(canSeeSync({ orgRole: 'member', role: 'editor' })).toBe(false);
+    expect(canSeeSync({ orgRole: 'guest', role: 'owner' })).toBe(false);
   });
 });

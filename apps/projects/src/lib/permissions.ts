@@ -98,7 +98,14 @@ export type ProjectAction =
   | 'view:save_shared'
   | 'automation:manage'
   | 'form:manage'
-  | 'file:upload';
+  | 'file:upload'
+  | 'money:read'
+  | 'pricing:propose'
+  | 'pricing:manage'
+  | 'output:log'
+  | 'build:plan'
+  | 'schedule:manage'
+  | 'program:close';
 
 const PROJECT_ACTION_MIN: Readonly<Record<ProjectAction, ProjectRole>> = {
   'project:read': 'viewer',
@@ -115,14 +122,62 @@ const PROJECT_ACTION_MIN: Readonly<Record<ProjectAction, ProjectRole>> = {
   'automation:manage': 'editor',
   'form:manage': 'editor',
   'file:upload': 'commenter',
+  // Programs (docs/programs/SPEC.md 8.1). `money:read` is never answered by role rank: canProject
+  // and projectCapabilities always return false for it. Callers must use canReadMoney.
+  'money:read': 'owner',
+  'pricing:propose': 'editor',
+  'pricing:manage': 'owner',
+  'output:log': 'editor',
+  'build:plan': 'editor',
+  'schedule:manage': 'editor',
+  'program:close': 'owner',
 };
 
+/**
+ * Role check for an action. Always false for `money:read`: a role alone cannot say who sees money
+ * (an org guest can hold an explicit owner role, and the implicit role never counts), so money
+ * goes through `canReadMoney` only.
+ */
 export function canProject(role: ProjectRole | null, action: ProjectAction): boolean {
-  if (!role) return false;
+  if (!role || action === 'money:read') return false;
   return PROJECT_ROLE_RANK[role] >= PROJECT_ROLE_RANK[PROJECT_ACTION_MIN[action]];
 }
 
-/** Every action a role allows (client capability maps). */
+export interface MoneyAccessInput {
+  readonly orgRole: OrgRole | null;
+  /** Explicit pm.project_members role, if any. The implicit org role never counts here. */
+  readonly memberRole: ProjectRole | null;
+  /** pm.projects.owner_id === user. */
+  readonly isProjectOwner?: boolean;
+  /** pm.program_settings.money_min_role (default editor). */
+  readonly moneyMinRole: ProjectRole;
+}
+
+/**
+ * `money:read` (A10): org owners and admins always pass; anyone else needs an explicit program role
+ * at or above the program's `money_min_role`, or to own the program. Guests never see money. Kept in
+ * lockstep with packages/pm-bridge/src/permissions.ts through the shared case table
+ * `MONEY_READ_CASES` (@kitstak/db/programs).
+ */
+export function canReadMoney(input: MoneyAccessInput): boolean {
+  const { orgRole, memberRole, isProjectOwner, moneyMinRole } = input;
+  if (!orgRole || orgRole === 'guest') return false;
+  if (orgRole === 'owner' || orgRole === 'admin') return true;
+  if (isProjectOwner) return true;
+  if (!memberRole) return false;
+  return PROJECT_ROLE_RANK[memberRole] >= PROJECT_ROLE_RANK[moneyMinRole];
+}
+
+/** Program owners and org owners and admins see sync details (parity, Sync now, sync alerts). */
+export function canSeeSync(input: { readonly orgRole: OrgRole | null; readonly role: ProjectRole | null }): boolean {
+  if (input.orgRole === 'owner' || input.orgRole === 'admin') return true;
+  return input.role === 'owner' && input.orgRole !== 'guest' && input.orgRole !== null;
+}
+
+/**
+ * Every action a role allows (client capability maps). `money:read` is always false here, so the
+ * map can never be used as the money rule: money visibility comes from canReadMoney only.
+ */
 export function projectCapabilities(role: ProjectRole | null): Readonly<Record<ProjectAction, boolean>> {
   const entries = (Object.keys(PROJECT_ACTION_MIN) as ProjectAction[]).map((action) => [action, canProject(role, action)]);
   return Object.fromEntries(entries) as Record<ProjectAction, boolean>;
