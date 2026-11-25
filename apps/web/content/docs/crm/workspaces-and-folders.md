@@ -71,7 +71,7 @@ Its boards, dashboards and folders move to the trash for 30 days, and members lo
 1. In the Workspaces menu, select the add button (**Add to workspace**) and choose **New folder**.
 2. Enter a **Folder name**, for example `Enterprise deals`, and pick a **Color**.
 3. Choose the **Workspace** and the **Location**: the **Workspace root** or another folder.
-4. Select the create button.
+4. Select **Create folder**.
 
 Then drag boards into the folder in the tree.
 
@@ -94,7 +94,7 @@ A folder can’t be moved inside itself, and a parent folder must be in the same
 
 ## Move boards in the tree
 
-Drag a board or folder to a new spot, or use **Move to** in its menu and search with **Search folders and workspaces**. With **Manual (drag to reorder)** sorting, the order you set is kept for everyone.
+Drag a board or folder to a new spot, or use **Move to** in its menu and search with **Search folders and workspaces**. Drag to reorder works when the tree uses **Manual (drag to reorder)** sorting.
 
 ## Related pages
 

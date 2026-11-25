@@ -54,15 +54,15 @@ Billing shows your usage. If you pay for more than you use, the **Usage** sectio
 | Where | What happens |
 | --- | --- |
 | Inviting in the Portal with every seat used | Owners and billing managers see the price and **Add seat and send invite**. See [Invite people](/docs/getting-started/invite-people). |
-| Inviting from another app with every seat used | The app says the seats are in use and links to the plan picker. |
-| Creating a warehouse in the WMS past your plan | The WMS shows the price and links to the picker with the warehouse count raised. |
+| Inviting from another app with every seat used | The app says **Add a seat in Billing, then invite again.** with a link to the plan picker. |
+| Creating a warehouse in the WMS past your plan | The WMS shows the price first, with **Add to my plan**. You confirm in the Portal and go back to the WMS. |
 | A member who cannot pay | The screen names who can add a seat. |
 
 During a free trial there are no seat or warehouse limits.
 
 ## Monthly and yearly
 
-Switch **How often you pay** and confirm. The new period starts at once. When you move from monthly to yearly, the unused part of the month comes off what you pay today. Yearly plans cannot be paused.
+Switch **How often you pay** and confirm. When you move from monthly to yearly, the unused part of the month comes off what you pay today. Yearly plans cannot be paused.
 
 ## Messages you may see
 

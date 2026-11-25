@@ -23,7 +23,7 @@ Quick add is the **New task** box. Type a task as one sentence, such as `Order p
 1. Type the task name with any details. See the [quick add syntax reference](/docs/projects/quick-add-syntax) for every word quick add understands.
 2. Check the chips under **We understood:**. Each chip shows a date, priority, person, label or project that was read out of your text.
 3. Optional: set or change **Project**, **Status**, **Assignee**, **Due date**, **Priority** and **Labels** with the pickers. A picker you change wins over the text, and the matching word leaves the name.
-4. Optional: select **Details** and add notes, links or steps.
+4. Optional: select **Add details** and add notes, links or steps.
 5. Select **Add task**, or press `Enter`.
 
 To add the task and open it straight away, select **Add and open** or press `Ctrl` `Shift` `Enter`. Tick **Add another** to keep the box open for the next task.
@@ -55,7 +55,7 @@ Select **×** on a chip to **Keep as plain text**: the words stay in the task na
 
 ## New labels
 
-When you can manage labels, a `#name` that matches no label becomes a new label when you save. People who cannot create labels see a warning chip instead, and the text stays in the name. In the **Labels** picker, type a name and select **Create label** to add one by hand.
+On a project where you are an editor or owner, a `#name` that matches no label becomes a new label when you save. Otherwise you see a warning chip, such as **No label called supplies**, and the text stays in the name. In the **Labels** picker, type a name and select **Create label** to add one by hand.
 
 ## Warehouse codes become links
 
