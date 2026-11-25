@@ -64,6 +64,6 @@ A long report shows its first 5,000 rows on screen. Narrow the dates to see the 
 
 ## Related
 
-- [Build a report on a schedule](/docs/pulse/build-on-a-schedule)
+- [Build a report on a schedule](/docs/pulse/scheduled-reports)
 - [Explore profit](/docs/pulse/profit-explorer)
 - [Close a month](/docs/pulse/close-a-month)

@@ -1,6 +1,6 @@
 ---
 title: Connect a carrier account
-description: Add UPS, FedEx, Stamps.com, EasyPost, Shippo, ShipStation, a Custom Carrier or the KitStak Sandbox carrier, then choose clients, services, packages and label settings.
+description: Add UPS, FedEx, Stamps.com, EasyPost, Shippo, ShipStation, a Custom Carrier or the sandbox carrier, then set clients, services and labels.
 section: Integrations
 order: 80
 ---

@@ -1,6 +1,6 @@
 ---
 title: Labor analytics and operational dashboards
-description: Turn on the analytics apps, then read task times, associate speed and volume, receiving rates and the fulfillment, inbound, management and productivity dashboards.
+description: Turn on the analytics apps, then read task times, associate speed, receiving rates and the fulfillment, inbound, management and productivity dashboards.
 section: Reports and analytics
 order: 60
 ---

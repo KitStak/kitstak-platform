@@ -44,7 +44,7 @@ Use **Saved exports** to keep a date range and filters you use often, and pick t
 | **Log work > All entries** | The filtered entries, ready to import back. |
 | **Goals** | The goals, in the Goals template. |
 | **Alerts** | The alerts in the list, as a CSV file. |
-| **Reports** | **Download CSV** on any report. See [Run a report](/docs/pulse/ready-made-library). |
+| **Reports** | **Download CSV** on any report. See [Run a report](/docs/pulse/reports). |
 | **Settings > Audit log** | The log as a CSV file. See [Read the audit log](/docs/pulse/audit-log). |
 | An import | The rows with problems, or the rows left out. |
 
@@ -52,4 +52,4 @@ Use **Saved exports** to keep a date range and filters you use often, and pick t
 
 - [CSV files and their columns](/docs/pulse/csv-templates)
 - [Import a CSV file](/docs/pulse/import-csv)
-- [Run a report](/docs/pulse/ready-made-library)
+- [Run a report](/docs/pulse/reports)

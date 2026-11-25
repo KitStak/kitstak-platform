@@ -141,7 +141,8 @@ describe('docs content', () => {
       `\\b(${CATALOG.bundlePercentOff}|${CATALOG.yearlyPercentOff})% off|save (${CATALOG.bundlePercentOff}|${CATALOG.yearlyPercentOff})%`,
       'i',
     );
-    const trial = new RegExp(`\\b${TRIAL_DAYS}[- ]day`, 'i');
+    // Only the trial itself: "14 day trial", "14 days free". A screen label like "the last 14 days" is fine.
+    const trial = new RegExp(`\\b${TRIAL_DAYS}[- ]days?\\s+(free|trial)|trial\\s+(of|lasts|is)\\s+${TRIAL_DAYS}`, 'i');
     const bad = pages
       .filter((p) => {
         // Pulse worked examples use made-up money for a customer's own job; they never name a KitStak plan.

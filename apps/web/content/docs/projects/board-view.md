@@ -60,7 +60,7 @@ Open **Display** in the filter bar.
 | **Order cards by** | **Manual (drag to reorder)**, **Priority**, **Due date**, **Newest first**, **Name (A to Z)** |
 | **Done tasks** | Show or hide cards in done columns |
 | **Subtasks as cards** | Show subtasks as their own cards |
-| **Only done in the last** two weeks | Hides done cards finished more than two weeks ago |
+| **Only done in the last 14 days** | Hides done cards finished more than 14 days ago |
 
 With swimlanes on, dragging a card into another lane changes that field too, such as its assignee. Lanes by a linked CRM customer or WMS status are for looking only: cards can't move between them, and each lane has **Show only this**.
 

@@ -46,6 +46,6 @@ For example: Job profit every Monday for last week, Ready to bill on the first o
 
 ## Related
 
-- [Run a report](/docs/pulse/ready-made-library)
+- [Run a report](/docs/pulse/reports)
 - [Work the alerts inbox](/docs/pulse/alerts-inbox)
 - [Roles and who sees money](/docs/pulse/roles-and-access)

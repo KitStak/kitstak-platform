@@ -95,7 +95,7 @@ On **Quote vs actual**, when the quote has lines, **Quote lines against actual**
 
 ## Reports
 
-The **Plan vs actual**, **Quote vs actual** and **Why profit changed** reports show the same numbers across many jobs. See [Run a report](/docs/pulse/ready-made-library).
+The **Plan vs actual**, **Quote vs actual** and **Why profit changed** reports show the same numbers across many jobs. See [Run a report](/docs/pulse/reports).
 
 ## Related
 

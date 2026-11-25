@@ -86,4 +86,4 @@ The top of the page shows **Job margin** and **Company margin** side by side. Se
 
 - [See how Pulse got a number](/docs/pulse/how-we-got-this)
 - [How Pulse does the math](/docs/pulse/how-pulse-does-the-math)
-- [Run a report](/docs/pulse/ready-made-library)
+- [Run a report](/docs/pulse/reports)

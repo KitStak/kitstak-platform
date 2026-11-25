@@ -38,7 +38,7 @@ Go to **Integrations > Channel Monitoring > Channel Setup Details**, then pick a
 | **Shipment order volumes** | Orders downloaded per day. |
 | **Success rate** | Successful against failed order downloads in the last 24 hours. |
 | **Integration methods** | The four methods and their state. |
-| **Call results (14 days)** | Successful and failed calls per day. |
+| **Call results** | Successful and failed calls per day over the last two weeks. |
 | **Missing shipment orders** | The latest orders that failed to import. |
 | **Workflow blocked shipment orders** | Orders a workflow is holding. |
 | **Product listing exceptions** | Listings that need a look. |
