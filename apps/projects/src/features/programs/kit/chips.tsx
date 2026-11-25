@@ -11,7 +11,7 @@ import { Badge, StatusPill, Tooltip, cn, labelColorStyle } from '@/components/ui
 import { ENTITY_ICONS } from '@/components/pm';
 import { POSTING_LABELS, PRICE_SOURCE_LABELS, PROGRAM_STATUS_LABELS, type LabelColor, type Posting, type PriceSource, type ProjectStatus } from '@/lib/constants';
 import type { Health, HealthBasis, IsoDate } from '@/lib/program-types';
-import { routes } from '@/lib/routes';
+import { programHref } from './live-pages';
 import { HEALTH_TEXT, healthBasisText, lockText, paletteColor, targetText, targetTone } from './format';
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -43,7 +43,10 @@ export interface ProgramChipProps {
 }
 
 /** Program key chip: icon, key in the key font, and the name. Links to the program. */
-export function ProgramChip({ program, link = true, showName = true, size = 'md', className }: ProgramChipProps) {
+export function ProgramChip({ program, link: wantLink = true, showName = true, size = 'md', className }: ProgramChipProps) {
+  // Links only once the program page exists (live-pages.ts).
+  const href = wantLink ? programHref(program.key) : null;
+  const link = href !== null;
   const body = (
     <>
       <ProgramIcon icon={program.icon} color={program.color} size={size === 'sm' ? 14 : 16} />
@@ -59,7 +62,7 @@ export function ProgramChip({ program, link = true, showName = true, size = 'md'
   );
   if (!link) return <span className={classes} title={program.name}>{body}</span>;
   return (
-    <Link href={routes.program(program.key)} className={classes} title={`Open ${program.name}`} data-testid={`program-chip-${program.key}`}>
+    <Link href={href} className={classes} title={`Open ${program.name}`} data-testid={`program-chip-${program.key}`}>
       {body}
     </Link>
   );

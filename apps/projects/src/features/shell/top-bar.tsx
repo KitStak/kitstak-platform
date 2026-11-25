@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { withThemeParam } from '@kitstak/ui/theme-handoff';
-import { Bell, BookOpen, CircleHelp, Compass, Keyboard, LayoutGrid, LifeBuoy, Menu, Plus, Rocket, Search } from 'lucide-react';
+import { Bell, BookOpen, Boxes, ChevronDown, CircleHelp, ClipboardList, Compass, FolderKanban, Keyboard, LayoutGrid, LifeBuoy, Menu, Plus, Repeat2, Rocket, Search, UserPlus, Workflow } from 'lucide-react';
 import { AppSwitcher } from '@kitstak/ui/app-switcher';
 import {
   Button,
@@ -23,6 +23,7 @@ import { Logo, ProjectsMark } from './logo';
 import { OrgSwitcher } from './org-switcher';
 import { useShell } from './shell-context';
 import { useOnboardingStore } from '@/features/onboarding/store';
+import { newBuildLive, newProgramHref } from '@/features/programs/kit/live-pages';
 import { RunningTimerPill } from '@/features/task/running-timer-pill';
 import { useShellStore } from './store';
 import { ThemeToggle } from './theme-toggle';
@@ -67,13 +68,16 @@ function HelpMenu() {
 
 /** 56px top bar (CRM/WMS anatomy): menu (mobile), logo, org switcher, search, quick add, inbox, help, apps, theme, account. */
 export function TopBar() {
-  const { appUrls, modules, notInPlan } = useShell();
+  const { appUrls, modules, notInPlan, can } = useShell();
+  const router = useRouter();
   const mod = useModKey();
   const openPalette = useShellStore((state) => state.openPalette);
   const openQuickAdd = useShellStore((state) => state.openQuickAdd);
   const setMobileNavOpen = useShellStore((state) => state.setMobileNavOpen);
   const unread = useUnreadCount();
   const count = unread.data?.count ?? 0;
+  // New build and New program show once their forms exist (features/programs/kit/live-pages.ts).
+  const newProgram = can('project:create') ? newProgramHref() : null;
 
   return (
     <header
@@ -124,19 +128,71 @@ export function TopBar() {
             </span>
           </button>
         </Tooltip>
-        <Tooltip content={<span className="flex items-center gap-1.5">New task <Kbd>C</Kbd></span>}>
-          <Button
-            size="sm"
-            leadingIcon={<Plus aria-hidden />}
-            onClick={() => openQuickAdd()}
-            data-testid="topbar-quick-add"
-            aria-keyshortcuts="C"
-            className="h-8"
-          >
-            <span className="hidden sm:inline">New task</span>
-            <span className="sr-only sm:hidden">New task</span>
-          </Button>
-        </Tooltip>
+        <div role="group" aria-label="Create" className="inline-flex items-stretch">
+          <Tooltip content={<span className="flex items-center gap-1.5">New task <Kbd>C</Kbd></span>}>
+            <Button
+              size="sm"
+              leadingIcon={<Plus aria-hidden />}
+              onClick={() => openQuickAdd()}
+              data-testid="topbar-quick-add"
+              aria-keyshortcuts="C"
+              className="h-8 sm:rounded-r-none"
+            >
+              <span className="hidden sm:inline">New task</span>
+              <span className="sr-only sm:hidden">New task</span>
+            </Button>
+          </Tooltip>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" aria-label="More ways to create" className="hidden h-8 rounded-l-none border-l border-l-white/30 px-1.5 sm:inline-flex" data-testid="topbar-create-menu">
+                <ChevronDown aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuItem icon={<Plus aria-hidden />} shortcut="C" description="One thing to do, with an owner" onSelect={() => openQuickAdd()}>
+                New task
+              </DropdownMenuItem>
+              {newBuildLive() ? (
+                <DropdownMenuItem icon={<Boxes aria-hidden />} description="A batch of one kit for one day" onSelect={() => openQuickAdd({ mode: 'build' })} data-testid="topbar-new-build">
+                  New build
+                </DropdownMenuItem>
+              ) : null}
+              {can('project:create') ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem icon={<FolderKanban aria-hidden />} description="Work with a start and a finish" onSelect={() => router.push(routes.newProject())} data-testid="topbar-new-project">
+                    New project
+                  </DropdownMenuItem>
+                  {newProgram ? (
+                    <DropdownMenuItem icon={<Repeat2 aria-hidden />} description="Repeat kitting for one customer" onSelect={() => router.push(newProgram)} data-testid="topbar-new-program">
+                      New program
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem icon={<ClipboardList aria-hidden />} description="Collect requests as tasks" onSelect={() => router.push(`${routes.forms()}?new=1`)} data-testid="topbar-new-form">
+                    New form
+                  </DropdownMenuItem>
+                  <DropdownMenuItem icon={<Workflow aria-hidden />} description="Let routine steps run on their own" onSelect={() => router.push(`${routes.automations()}?new=1`)} data-testid="topbar-new-automation">
+                    New automation
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+              {can('workspace:manage') ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    icon={<UserPlus aria-hidden />}
+                    description="Add teammates in the KitStak Portal"
+                    onSelect={() => window.open(withThemeParam(`${appUrls.portal}/settings/organization`), '_blank', 'noopener')}
+                    data-testid="topbar-invite"
+                  >
+                    Invite people
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <nav aria-label="Quick actions" className="flex shrink-0 items-center gap-0.5">
           <Link
             href={routes.inbox()}

@@ -7,7 +7,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ArrowRight, Clock, FolderKanban, History, MessageSquare, Search, Target, UserRound, X } from 'lucide-react';
+import { ArrowRight, Clock, FolderKanban, History, MessageSquare, Repeat2, Search, Target, UserRound, X } from 'lucide-react';
 import {
   Avatar,
   Badge,
@@ -37,7 +37,14 @@ import { usePeople, useProjects } from '@/lib/hooks/use-data';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { routes } from '@/lib/routes';
-import type { CommentSearchHit, FullSearchResults, FullSearchType, GoalDTO, OrgPerson, ProjectSummary, TaskSummary } from '@/lib/types';
+import type { CommentSearchHit, FullSearchResults, FullSearchTypeWithPrograms as FullSearchType, GoalDTO, OrgPerson, ProgramSearchHit, ProjectSummary, TaskSummary } from '@/lib/types';
+import { ProgramIcon, ProgramStatusPill } from '@/features/programs/kit/chips';
+import { qtyOfText } from '@/features/programs/kit/format';
+import { useHydrated } from '@/features/programs/kit/use-hydrated';
+import { programHref } from '@/features/programs/kit/live-pages';
+import { usePrograms } from '@/lib/hooks/use-programs';
+import { formatQty } from '@kitstak/programs-engine';
+import type { UnitLabel } from '@/lib/program-types';
 import { useShell } from '@/features/shell/shell-context';
 import { Highlight } from './highlight';
 import { searchParamsToQuery, type SearchParamsState } from './search-params';
@@ -98,6 +105,7 @@ const TYPE_LABEL: Record<FullSearchType, string> = {
   tasks: 'Tasks',
   comments: 'Comments',
   projects: 'Projects',
+  programs: 'Programs',
   people: 'People',
   goals: 'Goals',
 };
@@ -174,7 +182,8 @@ export function SearchView({ initialParams, initial }: { readonly initialParams:
   const focused = useFullSearch(state, state.type === 'all' ? 'all' : state.type, initial, initialParams);
   const data = state.type === 'all' ? overview.data : focused.data;
   const counts = overview.data?.counts;
-  const total = counts ? counts.tasks + counts.comments + counts.projects + counts.people + counts.goals : 0;
+  // Program hits always show. Only their link waits for the program page (features/programs/kit/live-pages.ts).
+  const total = counts ? counts.tasks + counts.comments + counts.projects + (counts.programs ?? 0) + counts.people + counts.goals : 0;
   const searching = state.q.length > 0 || Boolean(state.assignee || state.projectId);
   const loading = searching && (state.type === 'all' ? overview.isPending : focused.isPending);
   const fetching = overview.isFetching || focused.isFetching;
@@ -241,8 +250,8 @@ export function SearchView({ initialParams, initial }: { readonly initialParams:
             <Tabs value={state.type} onValueChange={(value) => set({ type: value as FullSearchType })}>
               <div className="-mx-1 overflow-x-auto px-1">
                 <TabsList aria-label="Result type" className="min-w-max">
-                  {(['all', 'tasks', 'comments', 'projects', 'people', 'goals'] as const).map((type) => (
-                    <TabsTrigger key={type} value={type} data-testid={`search-tab-${type}`} count={counts ? (type === 'all' ? total : counts[type]) : undefined}>
+                  {(['all', 'tasks', 'comments', 'projects', 'programs', 'people', 'goals'] as const).map((type) => (
+                    <TabsTrigger key={type} value={type} data-testid={`search-tab-${type}`} count={counts ? (type === 'all' ? total : (counts[type] ?? 0)) : undefined}>
                       {TYPE_LABEL[type]}
                     </TabsTrigger>
                   ))}
@@ -449,7 +458,7 @@ function Results({
   const projects = useProjects();
   const projectNames = useMemo(() => new Map((projects.data ?? []).map((p) => [p.id, p.name])), [projects.data]);
   const all = type === 'all';
-  const show = (t: Exclude<FullSearchType, 'all'>) => (all || type === t) && data.counts[t] > 0;
+  const show = (t: Exclude<FullSearchType, 'all'>) => (all || type === t) && (data.counts[t] ?? 0) > 0;
   return (
     <div className="flex flex-col gap-5" data-testid="search-results">
       {show('tasks') ? (
@@ -473,6 +482,13 @@ function Results({
           ))}
         </Section>
       ) : null}
+      {show('programs') && data.programs?.length ? (
+        <Section title="Programs" icon={<Repeat2 aria-hidden className="size-3.5" />} count={data.counts.programs ?? 0} shown={data.programs.length} onShowAll={all ? () => onShowAll('programs') : undefined}>
+          {data.programs.map((program) => (
+            <ProgramResult key={program.id} program={program} q={q} />
+          ))}
+        </Section>
+      ) : null}
       {show('people') ? (
         <Section title="People" icon={<UserRound aria-hidden className="size-3.5" />} count={data.counts.people} shown={data.people.length} onShowAll={all ? () => onShowAll('people') : undefined}>
           {data.people.map((person) => (
@@ -493,8 +509,17 @@ function Results({
 
 const ROW = 'flex w-full items-center gap-3 px-4 py-2.5 text-left outline-none hover:bg-hover focus-visible:bg-hover focus-visible:shadow-[inset_2px_0_0_var(--color-primary)]';
 
+/** "Small Brown · 60 of 100 kits" for a build result. */
+function buildMeta(build: NonNullable<TaskSummary['build']>, unit: UnitLabel | undefined): string {
+  const qty = unit ? qtyOfText(build.builtQty, build.plannedQty, unit) : `${formatQty(build.builtQty)} of ${formatQty(build.plannedQty)} built`;
+  return [build.variantName, qty].filter(Boolean).join(' · ');
+}
+
 function TaskResult({ task, q, projectName }: { readonly task: TaskSummary; readonly q: string; readonly projectName?: string }) {
   const { openTask } = useTaskDrawer();
+  const hydrated = useHydrated();
+  const programs = usePrograms({}, { staleTime: 60_000, enabled: task.kind === 'build' });
+  const unit = task.kind === 'build' && hydrated ? programs.data?.find((program) => program.id === task.projectId)?.unit : undefined;
   const done = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
   return (
     <li className="border-b border-border-subtle last:border-b-0">
@@ -503,9 +528,14 @@ function TaskResult({ task, q, projectName }: { readonly task: TaskSummary; read
         <span className="flex min-w-0 flex-1 flex-col">
           <Highlight text={task.title} query={q} className={cn('truncate text-sm', done ? 'text-fg-muted line-through' : 'text-fg')} />
           <span className="truncate text-xs text-fg-muted">
-            <Highlight text={task.key} query={q} /> · {projectName ?? task.projectKey}
+            <Highlight text={task.key} query={q} /> · {task.build ? buildMeta(task.build, unit) : (projectName ?? task.projectKey)}
           </span>
         </span>
+        {task.kind === 'build' ? (
+          <Badge tone="info" size="sm" className="shrink-0">
+            Build
+          </Badge>
+        ) : null}
         {task.priority !== 'none' ? <PriorityIcon priority={task.priority} /> : null}
         <DueDate date={task.dueDate} done={done} className="hidden sm:inline-flex" />
         <PersonAvatar userId={task.assigneeId} size="xs" />
@@ -553,6 +583,40 @@ function ProjectResult({ project, q }: { readonly project: ProjectSummary; reado
         <ProjectHealthMark project={project} className="max-sm:hidden" />
         <span className="w-10 text-right text-xs text-fg-muted tabular-nums">{project.progress.percent}%</span>
       </Link>
+    </li>
+  );
+}
+
+function ProgramResult({ program, q }: { readonly program: ProgramSearchHit; readonly q: string }) {
+  const hydrated = useHydrated();
+  const programs = usePrograms({}, { staleTime: 60_000 });
+  const item = hydrated ? programs.data?.find((p) => p.id === program.id) : undefined;
+  const href = programHref(program.key);
+  const meta = [item?.customer?.name, item && item.today.builds > 0 ? `${item.today.done} of ${item.today.builds} builds done today` : null].filter(Boolean).join(' · ');
+  const body = (
+    <>
+      <ProgramIcon icon={program.icon} color={program.color} size={28} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex min-w-0 items-center gap-2">
+          <Highlight text={program.name} query={q} className="truncate text-sm font-medium text-fg" />
+          <Highlight text={program.key} query={q} className="shrink-0 font-key text-xs text-fg-muted" />
+        </span>
+        <span className="truncate text-xs text-fg-muted">{meta || 'Program'}</span>
+      </span>
+      <ProgramStatusPill status={program.status} className="max-sm:hidden" />
+    </>
+  );
+  return (
+    <li className="border-b border-border-subtle last:border-b-0">
+      {href ? (
+        <Link href={href} data-search-result data-testid="search-program" className={ROW}>
+          {body}
+        </Link>
+      ) : (
+        <div data-testid="search-program" className={cn(ROW, 'hover:bg-transparent')}>
+          {body}
+        </div>
+      )}
     </li>
   );
 }

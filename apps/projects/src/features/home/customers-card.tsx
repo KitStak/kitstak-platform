@@ -7,7 +7,7 @@
  * waits). Hidden when neither CRM nor WMS is connected.
  */
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, BellOff, Building2, Check, ExternalLink, Handshake, PackageX, Plus, Warehouse } from 'lucide-react';
 import { Button, Skeleton, cn, toast } from '@/components/ui';
@@ -18,6 +18,34 @@ import { formatMoney } from '@/lib/money';
 import type { CustomerMismatchDTO, CustomerPulseDTO, CustomerPulseRowDTO } from '@/lib/types';
 import { setTaskDoneAction } from '@/server/actions/tasks';
 import { useShellStore } from '@/features/shell/store';
+import { usePrograms } from '@/lib/hooks/use-programs';
+import { ProgramIcon } from '@/features/programs/kit/chips';
+import { programHref } from '@/features/programs/kit/live-pages';
+import { useHydrated } from '@/features/programs/kit/use-hydrated';
+import { customerProgramText, programsByCustomer, type CustomerProgram } from './home-model';
+
+function ProgramLine({ program }: { readonly program: CustomerProgram }) {
+  const href = programHref(program.key);
+  const done = program.today.builds > 0 && program.today.done >= program.today.builds;
+  const body = (
+    <>
+      <ProgramIcon icon={program.icon} color={program.color} size={14} />
+      <span className="font-key text-fg-muted">{program.key}</span>
+      <span className={cn('truncate tabular-nums', done ? 'text-success-text' : 'text-fg-secondary')}>{customerProgramText(program)}</span>
+    </>
+  );
+  return (
+    <li className="inline-flex min-w-0 items-center gap-1.5" data-testid="home-customer-program">
+      {href ? (
+        <Link href={href} className="inline-flex min-w-0 items-center gap-1.5 hover:underline">
+          {body}
+        </Link>
+      ) : (
+        body
+      )}
+    </li>
+  );
+}
 
 /** The subtitle promises only what this org has: CRM deals, warehouse orders, or both. */
 export function customersSubtitle(sources: CustomerPulseDTO['sources']): string {
@@ -177,7 +205,7 @@ function closeText(closeDate: string | null, outcome: 'won' | 'lost' | 'open', t
   return `closes ${formatDue(closeDate, today)}`;
 }
 
-function CustomerRow({ row, today }: { readonly row: CustomerPulseRowDTO; readonly today: string }) {
+function CustomerRow({ row, today, programs }: { readonly row: CustomerPulseRowDTO; readonly today: string; readonly programs: readonly CustomerProgram[] }) {
   const openQuickAdd = useShellStore((state) => state.openQuickAdd);
   const openTasks = row.projects.reduce((sum, project) => sum + project.openTasks, 0);
   const overdue = row.projects.reduce((sum, project) => sum + project.overdue, 0);
@@ -229,7 +257,14 @@ function CustomerRow({ row, today }: { readonly row: CustomerPulseRowDTO; readon
           ) : null}
           {row.lateReceipts === 0 && row.exceptions === 0 && row.deal === null ? <li className="text-fg-muted">No open deal or warehouse issues</li> : null}
         </ul>
-        {row.projects.length <= 1 ? (
+        {programs.length ? (
+          <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs" data-testid="home-customer-programs">
+            {programs.map((program) => (
+              <ProgramLine key={program.id} program={program} />
+            ))}
+          </ul>
+        ) : null}
+        {row.projects.length === 0 && programs.length ? null : row.projects.length <= 1 ? (
           <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted" data-testid="home-customer-work">
             <span className={cn('font-medium', openTasks ? 'text-fg-secondary' : '')}>
               {openTasks} open {openTasks === 1 ? 'task' : 'tasks'}
@@ -273,6 +308,9 @@ function CustomerRow({ row, today }: { readonly row: CustomerPulseRowDTO; readon
 
 export function CustomersCard() {
   const pulse = useCustomerPulse();
+  const hydrated = useHydrated();
+  const programList = usePrograms({}, { staleTime: 60_000 });
+  const byCustomer = useMemo(() => programsByCustomer(hydrated ? (programList.data ?? []) : []), [hydrated, programList.data]);
   const today = todayIso();
   const data = pulse.data;
   const { snoozed, snooze, unsnooze } = useSnoozed();
@@ -330,7 +368,7 @@ export function CustomersCard() {
           {data.rows.length ? (
             <ul className="divide-y divide-border-subtle">
               {data.rows.slice(0, 6).map((row) => (
-                <CustomerRow key={row.key} row={row} today={today} />
+                <CustomerRow key={row.key} row={row} today={today} programs={byCustomer.get(row.key) ?? byCustomer.get(`name:${row.customerName.toLowerCase()}`) ?? []} />
               ))}
             </ul>
           ) : (

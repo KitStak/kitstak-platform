@@ -232,3 +232,6 @@ function LinkRecordBody({
     </>
   );
 }
+
+/** Program, build and project links through `core.record_links` (Program, Build, WMS shipment order and related Pulse job tabs). */
+export { RecordLinkDialog, type RecordLinkDialogProps, type RecordLinkKind } from './record-link-dialog';

@@ -14,7 +14,6 @@ import {
   ExternalLink,
   Flag,
   Lock,
-  Megaphone,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -36,7 +35,6 @@ import {
   ProgressBar,
   Select,
   Skeleton,
-  Textarea,
   Tooltip,
   cn,
   toast,
@@ -48,14 +46,10 @@ import { PulseProfitStrip } from '@/features/integrations/pulse-profit-strip';
 import {
   GOAL_HEALTH_LABELS,
   INTEGRATION_TARGET_LABELS,
-  PROJECT_HEALTHS,
-  PROJECT_HEALTH_LABELS,
   PROJECT_ROLE_LABELS,
-  PROJECT_STATUSES,
   PROJECT_STATUS_LABELS,
   type IntegrationTargetType,
   type ProjectHealth,
-  type ProjectStatus,
 } from '@/lib/constants';
 import { describeActivity, describeActivityParts } from '@/lib/activity-text';
 import { diffDays, formatRange, parseIsoDate, todayIso } from '@/lib/dates';
@@ -71,19 +65,20 @@ import type { Customer360 } from '@/server/integrations/customer360';
 import { apiGet, apiPath } from '@/lib/api-client';
 import { customer360Key } from '@/features/integrations/customer-360-strip';
 import { addLinkAction, refreshLinksAction, removeLinkAction } from '@/server/actions/links';
-import { postProjectUpdateAction } from '@/server/actions/portfolio';
 import { updateProjectAction } from '@/server/actions/projects';
 import { createMilestoneAction, deleteMilestoneAction, updateMilestoneAction } from '@/server/actions/structure';
 import { LocalTime } from '@/features/task/local-time';
 import { ProgressRing } from '@/features/dashboards/charts';
-import { HEALTH_HELP, HealthIcon } from './health';
 import { healthProgressTone } from '@/lib/health';
 import { withoutUpdateEchoes } from './project-activity';
 import { useCurrentProject } from './project-context';
 import { ProjectDescription } from './project-description';
+import { ProgramChip } from '@/features/programs/kit/chips';
+import { useProjectRecordLinks } from '@/lib/hooks/use-programs';
+import { formatQty } from '@kitstak/programs-engine';
+import { StatusUpdatesPanel } from './status-updates-panel';
 import { RecordPicker, TARGET_ICONS } from './record-picker';
 
-const HEALTH_COLOR: Readonly<Record<ProjectHealth, string>> = { on_track: 'var(--success)', at_risk: 'var(--warning)', off_track: 'var(--danger)' };
 
 function useRefreshProject() {
   const queryClient = useQueryClient();
@@ -92,139 +87,6 @@ function useRefreshProject() {
     void queryClient.invalidateQueries({ queryKey: qk.project(project.key) });
     void queryClient.invalidateQueries({ queryKey: qk.projects() });
   };
-}
-
-// --- Status updates -------------------------------------------------------------------------
-
-function HealthChoice({ value, onChange, disabled }: { readonly value: ProjectHealth; readonly onChange: (health: ProjectHealth) => void; readonly disabled?: boolean }) {
-  return (
-    <div role="radiogroup" aria-label="How is it going?" className="grid grid-cols-3 gap-2">
-      {PROJECT_HEALTHS.map((health) => {
-        const checked = value === health;
-        return (
-          <button
-            key={health}
-            type="button"
-            role="radio"
-            aria-checked={checked}
-            disabled={disabled}
-            onClick={() => onChange(health)}
-            data-testid={`health-${health}`}
-            className={cn(
-              'flex min-w-0 flex-col items-start gap-0.5 rounded-lg border px-3 py-2 text-left outline-none max-sm:px-2 transition-[border-color,background-color,box-shadow] duration-[var(--duration-fast)]',
-              'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:opacity-50',
-              checked ? 'shadow-xs' : 'border-border-subtle bg-panel hover:border-border-default',
-            )}
-            style={checked ? { borderColor: HEALTH_COLOR[health], background: `color-mix(in srgb, ${HEALTH_COLOR[health]} 9%, var(--surface-panel))` } : undefined}
-          >
-            <span className="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap max-sm:gap-1" style={{ color: checked ? HEALTH_COLOR[health] : undefined }}>
-              <HealthIcon health={health} className="size-4 shrink-0" />
-              {PROJECT_HEALTH_LABELS[health]}
-            </span>
-            <span className="hidden truncate text-2xs text-fg-muted sm:block">{HEALTH_HELP[health]}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function UpdateItem({ update, latest }: { readonly update: ProjectUpdateDTO; readonly latest?: boolean }) {
-  const people = usePeopleMap();
-  const author = update.authorId ? (people.get(update.authorId)?.name ?? 'Former member') : 'Automation';
-  return (
-    <li className="relative flex gap-3 pb-4 last:pb-0" data-testid="project-update">
-      <span aria-hidden className="absolute top-7 bottom-0 left-[11px] w-px bg-border-subtle group-last/updates:hidden" />
-      <span className="relative z-[1] mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full text-white" style={{ background: HEALTH_COLOR[update.health] }}>
-        <HealthIcon health={update.health} className="size-3.5" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-fg-secondary">
-          <span className="font-semibold text-fg">{author}</span> marked it <span className="font-medium" style={{ color: HEALTH_COLOR[update.health] }}>{PROJECT_HEALTH_LABELS[update.health].toLowerCase()}</span>
-          {update.status ? <> and moved it to <span className="font-medium text-fg">{PROJECT_STATUS_LABELS[update.status]}</span></> : null}
-          <span className="text-fg-muted"> · {update.progress}% done at the time · </span>
-          <LocalTime iso={update.createdAt} className="text-fg-muted" />
-          {latest ? <span className="ml-1.5 rounded-sm bg-primary-subtle px-1.5 py-px text-2xs font-semibold text-primary-text">Latest</span> : null}
-        </p>
-        {update.note ? <p className="mt-1 text-sm whitespace-pre-wrap text-fg">{update.note}</p> : null}
-      </div>
-    </li>
-  );
-}
-
-function StatusUpdatesPanel({ project, canEdit }: { readonly project: ProjectDetail; readonly canEdit: boolean }) {
-  const updates = useProjectUpdates(project.key);
-  const [health, setHealth] = useState<ProjectHealth>(project.health);
-  const [status, setStatus] = useState<ProjectStatus>(project.status);
-  const [note, setNote] = useState('');
-  const [showAll, setShowAll] = useState(false);
-  const post = useServerAction(postProjectUpdateAction, {
-    invalidate: [qk.project(project.key), qk.projects()],
-    successMessage: 'Update posted. The team will see it in their inbox.',
-    onSuccess: () => setNote(''),
-  });
-  const list = updates.data ?? [];
-  const shown = showAll ? list : list.slice(0, 3);
-  const changed = health !== project.health || status !== project.status || note.trim().length > 0;
-
-  return (
-    <Panel
-      title={
-        <span className="flex items-center gap-2">
-          <Megaphone aria-hidden className="size-4 text-icon" />
-          Status updates
-        </span>
-      }
-    >
-      {canEdit ? (
-        <form
-          className="flex flex-col gap-3"
-          data-testid="status-update-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void post.run({ projectId: project.id, health, note: note.trim() || null, status: status !== project.status ? status : undefined });
-          }}
-        >
-          <HealthChoice value={health} onChange={setHealth} />
-          <Textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} maxLength={2000} placeholder="What happened since the last update? Anything blocking you? What’s next?" aria-label="Update note" data-testid="status-update-note" />
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              aria-label="Project stage"
-              size="md"
-              value={status}
-              onValueChange={(value) => setStatus(value as ProjectStatus)}
-              options={PROJECT_STATUSES.filter((s) => s !== 'archived').map((s) => ({ value: s, label: PROJECT_STATUS_LABELS[s] }))}
-              className="w-40"
-            />
-            <span className="text-xs text-fg-muted">Members get a note in their inbox.</span>
-            <Button type="submit" className="ml-auto" loading={post.pending} disabled={!changed} data-testid="post-update">
-              Post update
-            </Button>
-          </div>
-        </form>
-      ) : null}
-      <div className={cn(canEdit && 'mt-4 border-t border-border-subtle pt-4')}>
-        {updates.isPending ? (
-          <Skeleton height={56} rounded="md" />
-        ) : list.length === 0 ? (
-          <p className="text-sm text-fg-muted">{project.healthNote ?? 'No updates yet. A short weekly update keeps everyone in the loop without a meeting.'}</p>
-        ) : (
-          <>
-            <ol className="group/updates flex flex-col" aria-label="Update history">
-              {shown.map((update, index) => (
-                <UpdateItem key={update.id} update={update} latest={index === 0} />
-              ))}
-            </ol>
-            {list.length > 3 ? (
-              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setShowAll(!showAll)}>
-                {showAll ? 'Show fewer' : `Show all ${list.length} updates`}
-              </Button>
-            ) : null}
-          </>
-        )}
-      </div>
-    </Panel>
-  );
 }
 
 // --- Progress --------------------------------------------------------------------------------
@@ -652,6 +514,8 @@ function GoalsPanel({ project }: { readonly project: ProjectDetail }) {
 
 function LinksPanel({ project, canEdit }: { readonly project: ProjectDetail; readonly canEdit: boolean }) {
   const links = useProjectLinks(project.key);
+  const recordLinks = useProjectRecordLinks(project.key, { staleTime: 60_000, retry: false });
+  const programs = recordLinks.data?.programs ?? [];
   const status = useIntegrationStatus();
   const queryClient = useQueryClient();
   const types = (status.data?.targetTypes ?? ['core_customer']) as IntegrationTargetType[];
@@ -684,6 +548,19 @@ function LinksPanel({ project, canEdit }: { readonly project: ProjectDetail; rea
       title="Linked records"
       action={list.length ? <IconButton label="Refresh linked records" icon={<RefreshCw aria-hidden />} size="sm" onClick={() => void refresh()} /> : null}
     >
+      {programs.length ? (
+        <div className="mb-3" data-testid="project-program-chips">
+          <p className="mb-1.5 text-xs font-medium text-fg-muted">Programs</p>
+          <ul className="flex flex-wrap gap-1.5">
+            {programs.map((program) => (
+              <li key={program.key} className="inline-flex max-w-full items-center gap-1.5">
+                <ProgramChip program={{ key: program.key, name: program.name }} size="sm" />
+                <span className="text-xs text-fg-muted tabular-nums">{formatQty(program.units)} built</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {links.isPending ? (
         <Skeleton height={40} rounded="md" />
       ) : list.length === 0 ? (

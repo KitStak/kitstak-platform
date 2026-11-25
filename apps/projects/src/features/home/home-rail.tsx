@@ -10,6 +10,7 @@ import { healthProgressTone } from '@/lib/health';
 import { ProjectHealthMark } from '@/features/projects/health';
 import { formatRelative } from '@/lib/dates';
 import { useRecents } from '@/lib/hooks/use-data';
+import { useHydrated } from '@/features/programs/kit/use-hydrated';
 import { routes } from '@/lib/routes';
 import type { GoalDTO, NotificationDTO, ProjectSummary } from '@/lib/types';
 import { useShell } from '@/features/shell/shell-context';
@@ -116,9 +117,12 @@ export function GoalsSnapshot({ goals }: { readonly goals: readonly GoalDTO[] })
 export function RecentProjects({ projects }: { readonly projects: readonly ProjectSummary[] }) {
   const { can } = useShell();
   const recents = useRecents({ staleTime: 60_000 });
+  // The server renders from the projects snapshot alone; visit order applies after hydration so both renders match.
+  const hydrated = useHydrated();
+  const recentData = hydrated ? recents.data : undefined;
   const ordered = useMemo(() => {
     const visited = new Map<string, string>();
-    for (const entry of recents.data ?? []) if (entry.entityType === 'project') visited.set(entry.entityId, entry.visitedAt);
+    for (const entry of recentData ?? []) if (entry.entityType === 'project') visited.set(entry.entityId, entry.visitedAt);
     return [...projects]
       .filter((p) => !p.archivedAt)
       .sort((a, b) => {
@@ -128,7 +132,7 @@ export function RecentProjects({ projects }: { readonly projects: readonly Proje
         return b.updatedAt.localeCompare(a.updatedAt);
       })
       .slice(0, 5);
-  }, [projects, recents.data]);
+  }, [projects, recentData]);
   return (
     <RailCard title="Recent projects" href={routes.projects()} linkLabel="All projects" testId="home-projects">
       {ordered.length === 0 ? (
