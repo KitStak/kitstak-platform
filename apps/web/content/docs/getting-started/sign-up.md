@@ -14,7 +14,7 @@ Signing up makes three things at once: your account, your organization, and your
 
 ## Step 1: your account
 
-1. Open the sign up page from the KitStak website, or select **Start your free trial** under the **Sign in** button on the sign in page.
+1. Open the sign up page from the KitStak website, or select **Start your free trial** next to **New to KitStak?** at the bottom of the sign in page.
 2. The page is titled **Start your free trial** and the step reads **Your account**.
 3. To use a Google or Microsoft account, select **Continue with Google** or **Continue with Microsoft** when those buttons are shown. You then name your organization on the next screen.
 4. Or fill in the four fields below the line **or use your email**.

@@ -84,8 +84,8 @@ Availability figures:
 | Figure | Meaning |
 | --- | --- |
 | **On hand** | Units physically in stock. |
-| **Unallocated** | On hand units not allocated to orders. |
-| **ATP** | Available to promise. See [Total inventory and available to promise](/docs/wms/total-inventory-and-atp). |
+| **Unallocated** | On hand minus allocated minus damaged. Stock no order has reserved yet. |
+| **ATP** | Undamaged on hand minus open order demand, allocated or not. See [Total inventory and available to promise](/docs/wms/total-inventory-and-atp). |
 | **Allocated** | Units allocated to orders. |
 | **Damaged** | Units with a damage reason. |
 | **Open order demand** | Units still to ship on open orders. |
