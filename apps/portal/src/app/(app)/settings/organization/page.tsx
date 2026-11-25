@@ -111,7 +111,10 @@ export default async function OrganizationSettingsPage() {
   const [billing, plan] = await Promise.all([getBillingContext(), getOrgPlan(activeOrg.id)]);
   // A person who only manages billing sets up no app: no guide for them (review round 3).
   const billingOnly = activeOrg.role === 'billing';
-  const setup = billingOnly
+  // A guest sets nothing up either: they see what the team adds them to (review round 5).
+  const roleParts = activeOrg.role.split(',').map((part) => part.trim().toLowerCase()).filter(Boolean);
+  const guestOnly = roleParts.length > 0 && roleParts.every((part) => part === 'guest');
+  const setup = billingOnly || guestOnly
     ? null
     : await getSetupState(activeOrg, { timeZone: billing?.timeZone, canManageBilling: billing?.access.canManage ?? false, canManageOrg: canManage });
   // Seats in use: people whose role uses a seat, and open invites with such a role (the same count
@@ -128,6 +131,8 @@ export default async function OrganizationSettingsPage() {
     canManageBilling: billing?.access.canManage ?? false,
     paidSelection: plan.state.hasSubscription && usesSeats(plan.state.selection) ? plan.state.selection : null,
     paid: plan.state.hasSubscription,
+    // What is true when no plan is paid for: a trial that runs, one that ended, or no plan at all.
+    unpaid: plan.state.phase === 'trial' ? ('trial' as const) : plan.state.phase === 'trial_ended' ? ('trial_ended' as const) : ('no_plan' as const),
     limit: plan.state.hasSubscription ? seatLimitFor(plan.state.selection) : null,
     used: seatsUsed,
     ownerName: billing?.access.ownerName ?? null,
@@ -174,7 +179,12 @@ export default async function OrganizationSettingsPage() {
           </div>
         </section>
 
-        {setup && setup.quick.steps.length > 0 ? (
+        {guestOnly ? (
+          <p className="rounded-xl border border-border-default bg-panel px-6 py-4 text-sm text-fg-secondary shadow-xs" data-testid="org-guest-note">
+            You are a guest. You see what your team adds you to.
+          </p>
+        ) : null}
+                {setup && setup.quick.steps.length > 0 ? (
           <div id="setup" className="scroll-mt-24">
             <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManage} />
           </div>

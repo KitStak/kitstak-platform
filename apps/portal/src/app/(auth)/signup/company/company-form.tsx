@@ -48,7 +48,7 @@ export function CompanyForm({ firstName, email }: { readonly firstName: string; 
         router.replace(result.next ?? '/signup/plan');
         return;
       }
-      setFormError(result.error ?? 'We could not set up your workspace. Try again.');
+      setFormError(result.error ?? 'We could not set up your organization. Try again.');
     } catch {
       setFormError(NO_NETWORK_MESSAGE);
     }
@@ -68,8 +68,8 @@ export function CompanyForm({ firstName, email }: { readonly firstName: string; 
   return (
     <>
       <AuthHeading
-        eyebrow={<StepEyebrow step={1} total={2} label="Your workspace" />}
-        title="Name your workspace"
+        eyebrow={<StepEyebrow step={1} total={2} label="Your organization" />}
+        title="Name your organization"
         subtitle={firstName ? `Good to meet you, ${firstName}. What is your company or team called?` : 'What is your company or team called?'}
       />
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5" data-testid="company-form" aria-busy={busy}>
@@ -97,7 +97,7 @@ export function CompanyForm({ firstName, email }: { readonly firstName: string; 
             />
           )}
         </Field>
-        <SubmitButton data-testid="company-submit" busyLabel={busy ? 'Setting up your workspace…' : null}>
+        <SubmitButton data-testid="company-submit" busyLabel={busy ? 'Setting up your organization…' : null}>
           Continue
         </SubmitButton>
       </form>

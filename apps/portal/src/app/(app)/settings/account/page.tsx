@@ -14,7 +14,7 @@ const PROVIDER_NAMES: Readonly<Record<string, string>> = { google: 'Google', mic
 /**
  * "My account" (review round 4): the person's name, their email, and how they sign in. It is the
  * one place to set a password for an account that has none: a person who signed up with "Email me
- * a code instead", or one whose password was removed because their email was never confirmed
+ * a code instead", or one whose password was removed because their email was never verified
  * before their first code sign in. The same account works in every KitStak app.
  */
 export default async function AccountPage({
@@ -50,7 +50,7 @@ export default async function AccountPage({
             ) : undefined
           }
         >
-          You are signed in. Your old password no longer works: this email was never confirmed before today, so we removed
+          You are signed in. Your old password no longer works: this email was never verified before today, so we removed
           that password to keep your account safe. Set a new one below, or keep signing in with a code.
         </Notice>
       ) : null}
@@ -66,17 +66,17 @@ export default async function AccountPage({
         <Eyebrow>Email</Eyebrow>
         <p className="mt-3 flex flex-wrap items-center gap-2 text-md font-medium text-fg" data-testid="account-email">
           <span className="min-w-0 [overflow-wrap:anywhere]">{facts.email}</span>
-          {facts.emailVerified ? <Badge tone="success">Confirmed</Badge> : <Badge tone="warning">Not confirmed</Badge>}
+          {facts.emailVerified ? <Badge tone="success">Verified</Badge> : <Badge tone="warning">Not verified</Badge>}
         </p>
         <p className="mt-1 text-sm text-fg-secondary">
           {facts.emailVerified
             ? 'You sign in with this email. Receipts and invites use it too.'
-            : 'Confirm your email with a 6 digit code. Then you can invite people and pay.'}
+            : 'Verify your email with a 6 digit code. Then you can invite people and pay.'}
         </p>
         {facts.emailVerified ? null : (
           <div className="mt-4">
             <LinkButton href="/verify-email?next=/settings/account" variant="secondary" size="lg" data-testid="account-verify">
-              Confirm my email
+              Verify my email
             </LinkButton>
           </div>
         )}

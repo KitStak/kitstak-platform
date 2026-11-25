@@ -6,9 +6,10 @@ import { member } from '@kitstak/db/schema';
 import { EmailText, LinkButton } from '@/components/ui';
 import { db } from '@/server/db';
 import { getSession } from '@/server/session';
-import { getInviteViewOnce } from '@/server/signup';
+import { devOutboxOn, getInviteViewOnce, inviteProofValid } from '@/server/signup';
 import { AuthHeading } from '../../_components/heading';
 import { InviteAccept } from './invite-accept';
+import { InviteCodeDoor } from './invite-code-door';
 import { InviteJoinForm } from './invite-join-form';
 import { InviteWrongAccount } from './invite-wrong-account';
 
@@ -126,6 +127,30 @@ export default async function InvitePage({
     <p className="mt-5 text-center text-xs text-fg-muted">This invite works until {formatDay(view.expiresAt)}.</p>
   );
   const invitePath = `/invite/${view.id}`;
+
+  // Did this browser come from the link in the invite email? Only that link proves the mailbox.
+  // Without it the join would be refused, so no form is drawn (review round 5): nobody types a
+  // name and a password for nothing. A person who already has an account can still sign in, and
+  // one whose email is verified needs no proof.
+  const needsProof = session ? session.user.emailVerified !== true && session.user.email.trim().toLowerCase() === view.email : !view.accountExists;
+  if (needsProof && !(await inviteProofValid(view.id, view.email))) {
+    // The way through on this same screen (review round 5): a code mailed to the invited address
+    // proves the mailbox just as the emailed link does. A copied link and a link from the CRM
+    // carry no proof, and the people who open them must still be able to join.
+    return (
+      <div data-testid="invite-needs-link">
+        {heading}
+        <InviteCodeDoor
+          invitationId={view.id}
+          email={view.email}
+          orgName={view.orgName}
+          mode={session ? 'accept' : 'join'}
+          devOutbox={devOutboxOn()}
+        />
+        {expires}
+      </div>
+    );
+  }
 
   if (!session) {
     return (

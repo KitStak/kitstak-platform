@@ -4,6 +4,8 @@
  */
 import {
   CATALOG,
+  MAX_SEATS,
+  MAX_WAREHOUSES,
   formatMoney,
   isBundle,
   priceTermsLabel,
@@ -101,6 +103,28 @@ export function oneSeatSavingCents(selection: PlanSelection): number {
 export function oneWarehouseSavingCents(selection: PlanSelection): number {
   if (selection.warehouses <= 1) return 0;
   return quote(selection).totalCents - quote({ ...selection, warehouses: selection.warehouses - 1 }).totalCents;
+}
+
+/**
+ * The plan billing home shows in its Plan and Cost cards (review round 5).
+ *
+ * A paid plan is shown as it is billed. With no paid plan (a free trial, a trial that ended, a plan
+ * that ended) the saved cart can be smaller than the team: people joined after the cart was saved.
+ * Nobody can buy that plan, so home shows what the picker and the review step open with: at least
+ * one seat for each person and open invite, and at least one warehouse for each one in use. The
+ * price is then a `quote()` of that plan, the same call the picker makes.
+ */
+export function planToShow(state: {
+  readonly phase: string;
+  readonly selection: PlanSelection;
+  readonly usage: { readonly seatFloor: number; readonly warehousesUsed: number | null };
+}): PlanSelection {
+  const cartOnly = state.phase === 'none' || state.phase === 'trial' || state.phase === 'trial_ended' || state.phase === 'ended';
+  if (!cartOnly) return state.selection;
+  const seats = Math.min(Math.max(state.selection.seats, state.usage.seatFloor, 1), MAX_SEATS);
+  const warehouses = Math.min(Math.max(state.selection.warehouses, state.usage.warehousesUsed ?? 0, 1), MAX_WAREHOUSES);
+  if (seats === state.selection.seats && warehouses === state.selection.warehouses) return state.selection;
+  return { ...state.selection, seats, warehouses };
 }
 
 export function usesSeats(selection: PlanSelection): boolean {

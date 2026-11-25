@@ -5,7 +5,7 @@
 import type { EmailPayloads, EmailTemplateId } from '../email-types';
 import { EMAIL_TEMPLATE_IDS } from '../email-types';
 import { renderContent, type EmailContent, type EmailStyle, type RenderedEmail } from './layout';
-import { invitation, resetPassword, verifyEmail } from './templates/account';
+import { appRequest, invitation, resetPassword, verifyEmail } from './templates/account';
 import { graceEnding, paymentActionRequired, paymentFailed, receipt } from './templates/payment';
 import { cancelScheduled, paused, planEnded, planStarted } from './templates/plan';
 import { trialEnded, trialEnding, welcome } from './templates/trial';
@@ -28,6 +28,7 @@ const TEMPLATES: Readonly<Record<EmailTemplateId, (payload: unknown) => EmailCon
   cancel_scheduled: cancelScheduled,
   paused,
   plan_ended: planEnded,
+  app_request: appRequest,
 };
 
 const ACCOUNT = 'Account';
@@ -63,6 +64,7 @@ const STYLES: Readonly<Record<EmailTemplateId, (payload: Readonly<Record<string,
     cancel_scheduled: () => ({ tone: 'notice', eyebrow: 'Cancellation scheduled', area: BILLING }),
     paused: () => ({ tone: 'notice', eyebrow: 'Plan paused', area: BILLING }),
     plan_ended: () => ({ tone: 'notice', eyebrow: 'Plan ended', area: BILLING }),
+    app_request: () => ({ tone: 'notice', eyebrow: 'App request', area: BILLING }),
   };
 
 function payloadRecord(payload: unknown): Readonly<Record<string, unknown>> {
@@ -108,6 +110,7 @@ const AUDIT_WORDS: Readonly<Record<EmailTemplateId, string | null>> = {
   cancel_scheduled: 'a cancel confirmation',
   paused: 'a pause confirmation',
   plan_ended: 'a plan ended notice',
+  app_request: 'a request for an app',
 };
 
 /** 'We emailed a receipt to billing@northwind.example.' or null when nothing should be logged. */

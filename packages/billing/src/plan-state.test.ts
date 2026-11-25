@@ -484,10 +484,17 @@ describe('planLockFor: the lock screen in SPEC 9.3', () => {
     expect(pulse.body).toBe('Add Pulse for $23.20 each month for your whole team.');
   });
 
-  it('cannot manage: who to ask, and only the way back', () => {
+  it('cannot manage: who to ask, one button that leads to the ask, and the way back', () => {
     for (const state of [fresh, inTrial, paid]) {
       const lock = planLockFor(state, lockContext(MEMBER, 'crm'));
-      expect(lock).toMatchObject({ body: 'Ask Maya Chen to add it.', primary: null, priceLine: null });
+      expect(lock).toMatchObject({ body: 'Ask Maya Chen to add it.', priceLine: null });
+      // Review round 5: a member is given a way to ask. The button opens their Billing page in the
+      // Portal with the ask for this app in focus.
+      expect(lock.primary?.label).toBe('Ask Maya to add CRM');
+      const href = new URL(lock.primary?.href ?? '');
+      expect(`${href.origin}${href.pathname}`).toBe('https://kitstak.app/billing');
+      expect(href.searchParams.get('ask')).toBe('crm');
+      expect(href.searchParams.get('from')).toBe('crm');
       expect(lock.secondary).toEqual({ label: 'Back to Portal', href: 'https://kitstak.app' });
     }
     // An admin can change trial apps but not a paid plan.

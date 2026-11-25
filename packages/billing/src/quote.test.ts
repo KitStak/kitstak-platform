@@ -84,9 +84,14 @@ describe('quote lines', () => {
     expect(q.lines.map((line) => line.math)).toEqual([
       'CRM: 5 users x $29 = $145 per month',
       'WMS: 1 warehouse x $349 = $349 per month',
-      'Pulse: $29 per month for your whole team, up to 5 seats',
+      // With CRM in the plan Pulse covers every seat, so the line names no limit (review round 5).
+      'Pulse: $29 per month for your whole team',
     ]);
     expect(q.lines.map((line) => line.unitLabel)).toEqual(['users', 'warehouse', 'organization']);
+    // Pulse alone, or with the WMS only, stops at its 5 seats and says so.
+    expect(quote({ products: ['pulse'], seats: 3, warehouses: 1, interval: 'monthly' }).lines[0].math).toBe('Pulse: $29 per month for your whole team, up to 5 seats');
+    expect(quote({ products: ['wms', 'pulse'], seats: 3, warehouses: 1, interval: 'monthly' }).lines[1].math).toBe('Pulse: $29 per month for your whole team, up to 5 seats');
+    expect(quote({ products: ['projects', 'pulse'], seats: 128, warehouses: 1, interval: 'monthly' }).lines[1].math).toBe('Pulse: $29 per month for your whole team');
   });
 
   it('uses bundle and yearly price keys when they apply', () => {

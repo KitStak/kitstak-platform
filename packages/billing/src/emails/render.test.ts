@@ -27,10 +27,11 @@ const EXPECTED: Readonly<Record<EmailTemplateId, { subject: string; button: stri
   cancel_scheduled: { subject: 'Your KitStak plan will end on Dec 23', button: 'Keep my plan' },
   paused: { subject: 'Your KitStak plan will pause on Dec 23', button: 'See my plan' },
   plan_ended: { subject: 'Your KitStak plan has ended. Your data is safe.', button: 'Pick a plan' },
+  app_request: { subject: 'Sofia Ramirez asked for Projects', button: 'Add Projects' },
 };
 
 describe('every email template', () => {
-  it('covers all 14 templates of the contract', () => {
+  it('covers all 15 templates of the contract', () => {
     expect(Object.keys(EXPECTED).sort()).toEqual([...EMAIL_TEMPLATE_IDS].sort());
     expect(Object.keys(SAMPLE_EMAIL_PAYLOADS).sort()).toEqual([...EMAIL_TEMPLATE_IDS].sort());
   });
@@ -464,6 +465,7 @@ describe('the look of each kind of email', () => {
     cancel_scheduled: 'notice',
     paused: 'notice',
     plan_ended: 'notice',
+    app_request: 'notice',
   };
 
   it.each(EMAIL_TEMPLATE_IDS)('%s has its tone, a label over the heading and the header area', (template) => {

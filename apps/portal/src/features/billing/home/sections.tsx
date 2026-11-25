@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { ArrowRight, CalendarClock, CreditCard, FileText, Layers, Receipt, UsersRound, Wallet } from 'lucide-react';
 import { AppIcon } from '@kitstak/ui/app-icon';
 import { CATALOG, PRODUCT_IDS, formatDay, formatMoney, percentLabel, type ProductId } from '@kitstak/billing/catalog';
+import { quote as quoteFor } from '@kitstak/billing/quote';
 import { PLAN_BADGE_LABELS, creditLine, type PlanBadge, type PlanState } from '@kitstak/billing/plan-state';
 import type { BillingManagerRow, BillingProfile, InvoiceRow } from '@kitstak/billing/server';
 import { Badge, Card, Eyebrow, LinkButton, cn } from '@/components/ui';
@@ -17,6 +18,7 @@ import {
   oneSeatSavingCents,
   oneWarehouseSavingCents,
   perPeriod,
+  planToShow,
   plural,
   usesSeats,
 } from '../format';
@@ -97,12 +99,15 @@ export function PlanCards({ state, copy, nextCharge, canManage, canStartTrial, b
   const included = PRODUCT_IDS.filter((id) => !state.modules[id].inPlan && state.modules[id].source === 'manual' && state.modules[id].access === 'full');
   const shown = inPlan.length > 0 ? inPlan : state.selection.products;
   const hasPlanShape = shown.length > 0 && state.phase !== 'none';
-  const quote = state.quote;
+  // With no paid plan the cards show the plan the team can buy: the saved cart, with a seat for
+  // every person. So home, the picker, the review step and the pay page all say one total.
+  const plan = planToShow(state);
+  const quote = plan === state.selection ? state.quote : quoteFor(plan);
   const facts: string[] = [];
   if (hasPlanShape) {
-    if (usesSeats(state.selection)) facts.push(plural(state.selection.seats, 'seat', 'seats'));
-    if (state.selection.products.includes('wms')) facts.push(plural(state.selection.warehouses, 'warehouse', 'warehouses'));
-    facts.push(state.selection.interval === 'yearly' ? 'Yearly' : 'Monthly');
+    if (usesSeats(plan)) facts.push(plural(plan.seats, 'seat', 'seats'));
+    if (plan.products.includes('wms')) facts.push(plural(plan.warehouses, 'warehouse', 'warehouses'));
+    facts.push(plan.interval === 'yearly' ? 'Yearly' : 'Monthly');
   }
   // Admins can read billing and can start or change a trial. Paid plans need an owner or a billing manager.
   const trialStep = copy.primary.id === 'start_trial' || copy.primary.id === 'change_apps';

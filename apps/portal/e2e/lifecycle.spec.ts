@@ -191,10 +191,10 @@ test.describe('the whole lifecycle, and the record it leaves', () => {
     expect(sent.filter((mail) => mail.template === 'cancel_scheduled')).toHaveLength(1);
   });
 
-  test('the template gallery renders all 14 emails and none of it exists for a signed out stranger to abuse', async ({ page }) => {
+  test('the template gallery renders all 15 emails and none of it exists for a signed out stranger to abuse', async ({ page }) => {
     await page.goto('/dev/outbox/templates');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Email templates');
-    for (const id of ['verify_email', 'reset_password', 'invitation', 'welcome', 'trial_ending', 'trial_ended', 'plan_started', 'receipt', 'payment_failed', 'payment_action_required', 'grace_ending', 'cancel_scheduled', 'paused', 'plan_ended']) {
+    for (const id of ['verify_email', 'reset_password', 'invitation', 'welcome', 'trial_ending', 'trial_ended', 'plan_started', 'receipt', 'payment_failed', 'payment_action_required', 'grace_ending', 'cancel_scheduled', 'paused', 'plan_ended', 'app_request']) {
       await page.getByTestId(`template-${id}`).click();
       await page.waitForURL(new RegExp(`t=${id}`));
       await expect(page.getByTestId('outbox-subject')).not.toHaveText('');

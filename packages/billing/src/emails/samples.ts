@@ -61,4 +61,5 @@ export const SAMPLE_EMAIL_PAYLOADS: { readonly [T in EmailTemplateId]: EmailPayl
   cancel_scheduled: { ...base, endsAt: '2026-12-23T15:00:00.000Z' },
   paused: { ...base, startsAt: '2026-12-23T15:00:00.000Z', resumesAt: '2027-02-23T15:00:00.000Z' },
   plan_ended: { ...base, endedAt: '2026-12-23T15:00:00.000Z', reason: 'canceled' },
+  app_request: { ...base, askerName: 'Sofia Ramirez', product: 'projects', priceLine: 'It adds $28.80 per month.' },
 };

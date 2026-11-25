@@ -21,6 +21,7 @@ import path from 'node:path';
 import * as schema from './schema';
 import type { AppDb } from '../api/db';
 import { applyMigrations, MIGRATIONS_FOLDER, sanitizeDatabaseUrl } from './migrate';
+import { resilientDefaults, resilientPool, type PgSqlLike } from './resilient-pool';
 import { buildTenantDb, type RawClient } from './tenant';
 
 export const DATA_DIR = path.join(/* turbopackIgnore: true */ process.cwd(), '.data');
@@ -81,11 +82,17 @@ export async function openPostgres(
     readonly searchPath?: string;
     /** Server-side statement_timeout in ms; null disables it (migrations, bootstrap, resets). */
     readonly statementTimeoutMs?: number | null;
+    /**
+     * Pool label: set for the long-lived APP pools only. It turns on the idle reset and stall guard
+     * (./resilient-pool.ts) so a dead connection can never wedge the pool. One-shot handles
+     * (migrations, bootstrap, resets) leave it out: they run long statements on purpose.
+     */
+    readonly resilient?: string;
   } = {},
 ): Promise<OpenDatabase> {
   const { default: postgres } = await import('postgres');
   const { drizzle } = await import('drizzle-orm/postgres-js');
-  const client = postgres(url, {
+  const makeClient = () => postgres(url, {
     // Supabase transaction-mode pooler: no server-side prepared statements. Stock postgres-js
     // then spends TWO network round trips on every parameterised query (describe, then
     // bind); patches/postgres@3.4.9.patch (repo root) removes the first one. Keep the patch
@@ -96,6 +103,8 @@ export async function openPostgres(
     // suspend (Vercel freezes the Lambda the moment the response ends, leaving the query
     // in flight and the pooled connection checked out forever — postgres-js has NO acquire
     // timeout, so later queries queue silently) must die within minutes, not wedge the pool.
+    // These timers do not run while an instance is frozen, and an idle close on a dead socket
+    // waits forever; the `resilient` wrapper (./resilient-pool.ts) covers that for app pools.
     idle_timeout: 20,
     connect_timeout: 10,
     max_lifetime: 300,
@@ -111,6 +120,10 @@ export async function openPostgres(
       ...(options.statementTimeoutMs === null ? {} : { statement_timeout: options.statementTimeoutMs ?? 30_000 }),
     },
   });
+  const pool = options.resilient
+    ? resilientPool(() => makeClient() as unknown as PgSqlLike, { name: options.resilient, ...resilientDefaults() })
+    : null;
+  const client = (pool ? pool.client : makeClient()) as unknown as ReturnType<typeof makeClient>;
   const db = drizzle(client, { schema });
   // After drizzle(): it installs its own (transparent) date parsers on the same table.
   (client.options.parsers as Record<string, (value: string) => unknown>)['20'] = parseInt8;
@@ -212,7 +225,7 @@ export async function openPglite(
 /** DATABASE_URL → postgres-js; otherwise the persisted local PGlite (auto-migrated). */
 export async function openDatabase(env: Env = process.env): Promise<OpenDatabase> {
   const url = databaseUrl(env);
-  if (url) return await openPostgres(url);
+  if (url) return await openPostgres(url, { resilient: 'platform' });
   // Vercel's file system is read-only: falling back to local PGlite would fail every request
   // with an opaque EROFS (e.g. a Preview deployment without DATABASE_URL). Fail clearly.
   if (env.VERCEL) {
@@ -258,7 +271,7 @@ async function tenantRawClient(): Promise<RawClient> {
     return (await (globalThis.__kitstakDb as Promise<OpenDatabase>)).raw;
   }
   if (!globalThis.__kitstakTenantPool) {
-    const opening = openPostgres(url, { searchPath: 'public' });
+    const opening = openPostgres(url, { searchPath: 'public', resilient: 'tenant' });
     globalThis.__kitstakTenantPool = opening;
     opening.catch(() => {
       if (globalThis.__kitstakTenantPool === opening) globalThis.__kitstakTenantPool = undefined;

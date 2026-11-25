@@ -87,7 +87,7 @@ function QuickActions({ workspaceId }: { readonly workspaceId: string | null }) 
 }
 
 export function HomePage() {
-  const { user, org } = useOrg();
+  const { user, org, role } = useOrg();
   const window = useMemo(() => weekWindow(new Date()), []);
   const home = useShellHome(org.id, window);
   const workspaceId = useActiveWorkspaceId();
@@ -121,7 +121,14 @@ export function HomePage() {
         <QuickActions workspaceId={workspaceId} />
       </header>
 
-      <SetupGuideCard workspaceId={workspaceId} />
+      {role === 'guest' ? (
+        // A guest sets nothing up: no "Getting started" steps they cannot do (billing review round 5).
+        <p className="rounded-xl border border-border-subtle bg-panel px-4 py-3 text-sm text-fg-secondary" data-testid="home-guest-note">
+          You are a guest. You see what your team adds you to.
+        </p>
+      ) : (
+        <SetupGuideCard workspaceId={workspaceId} />
+      )}
 
       <RecentSection
         recents={home.data?.recents ?? []}

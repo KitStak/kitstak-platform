@@ -3,7 +3,8 @@
  * The panel beside the form (1024 px and wider). It fits the page it sits beside (review round 3):
  *
  *   - Signing up (`SignupHero`): reasons to start, every one something the product already does.
- *     A real screenshot of the app the person chose, "Your free trial" with the chosen apps and
+ *     One line that says what the person gets, a real picture of the app they chose (light or
+ *     dark, like the page), four small pictures that are buttons and swap the big one, "Your free trial" with the chosen apps and
  *     the price that follows it when the link carried a cart, else the four list prices from the
  *     one catalog, and three promises.
  *   - Signing in, a forgotten or a new password (`SignInHero`): the screenshots and "One sign in
@@ -15,19 +16,41 @@
  * Which one shows is decided per route by the `@hero` slot of the (auth) layout, on the server.
  * No customer quote and no logo wall: there is no real one to show yet, and nothing here is made up.
  */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Check } from 'lucide-react';
 import { AppIcon } from '@kitstak/ui/app-icon';
+import { cn } from '@/components/ui';
 import { CATALOG, PRODUCT_IDS, formatMoney, percentLabel, priceTermsLabel, unitCents, type ProductId } from '@kitstak/billing/catalog';
 import { readHandoff, trialSummary } from '@/features/signup/cart';
 
-/** What each real screenshot shows. The pictures live in `public/signup/` (1120 x 630, WebP). */
-const SHOTS: Readonly<Record<ProductId, { readonly caption: string; readonly alt: string }>> = {
-  crm: { caption: 'Customers and deals', alt: 'KitStak CRM: a sales pipeline with deal stages and a forecast chart.' },
-  wms: { caption: 'Warehouse work', alt: 'KitStak WMS: a warehouse dashboard with open orders and progress for today.' },
-  projects: { caption: 'Tasks and plans', alt: 'KitStak Projects: a home page with tasks due today and a project list.' },
-  pulse: { caption: 'Profit on every job', alt: 'KitStak Pulse: revenue, cost and profit for the month, and the jobs that need a look.' },
+/**
+ * What each real picture shows. The pictures live in `public/signup/` (1120 x 630, WebP), one
+ * light and one dark for each app (review round 5). Each is one part of a real screen, cut close
+ * enough that its words can be read at the size of this panel. `line` is the one thing the person
+ * gets, said in plain words, and it is true for the picture under it.
+ */
+const SHOTS: Readonly<Record<ProductId, { readonly line: string; readonly caption: string; readonly alt: string }>> = {
+  crm: {
+    line: 'See every deal and what it is worth.',
+    caption: 'Your pipeline',
+    alt: 'KitStak CRM: deals by stage, from lead to won, with the value of each stage.',
+  },
+  wms: {
+    line: 'See every open order and how long it has waited.',
+    caption: 'Open orders',
+    alt: 'KitStak WMS: open orders and orders in progress, grouped by how many days old they are.',
+  },
+  projects: {
+    line: 'See what is due today and what is late.',
+    caption: 'My work',
+    alt: 'KitStak Projects: a task list grouped into overdue, today and upcoming.',
+  },
+  pulse: {
+    line: 'See the profit on every job.',
+    caption: 'This month',
+    alt: 'KitStak Pulse: what the jobs made this month, with revenue and cost.',
+  },
 };
 
 /** Promises the product keeps today (SPEC 5.3, 6.8 and 8.2). For a person who is about to start. */
@@ -40,47 +63,111 @@ const PROMISES: readonly string[] = [
 const CARD = 'rounded-xl border border-white/15 bg-white/[0.07] px-4 py-3.5';
 const EYEBROW = 'text-2xs font-semibold tracking-[0.08em] text-white/65 uppercase';
 
-function Shot({ product, small = false }: { readonly product: ProductId; readonly small?: boolean }) {
+/**
+ * One picture in the theme of the page: the light one, or the dark one in the dark theme. Both
+ * are lazy, so a browser fetches only the one it shows.
+ */
+function ShotImage({ product, alt, className }: { readonly product: ProductId; readonly alt: string; readonly className?: string }) {
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a small static picture, fetched only when it is shown */}
+      <img src={`/signup/${product}-light.webp`} alt={alt} width={1120} height={630} loading="lazy" decoding="async" className={cn('block h-auto w-full dark:hidden', className)} />
+      {/* eslint-disable-next-line @next/next/no-img-element -- the same picture in the dark theme */}
+      <img src={`/signup/${product}-dark.webp`} alt={alt} width={1120} height={630} loading="lazy" decoding="async" className={cn('hidden h-auto w-full dark:block', className)} />
+    </>
+  );
+}
+
+function Shot({ product }: { readonly product: ProductId }) {
   const shot = SHOTS[product];
   return (
-    <figure className={small ? 'min-w-0 flex-1' : undefined}>
-      <div className={small ? 'overflow-hidden rounded-md border border-white/15 bg-white' : 'overflow-hidden rounded-xl border border-white/15 bg-white shadow-modal'}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- a small static picture; the panel is not shown under 1024 px, so `loading="lazy"` keeps it off phones */}
-        <img src={`/signup/${product}.webp`} alt={small ? '' : shot.alt} width={1120} height={630} loading="lazy" decoding="async" className="block h-auto w-full" />
+    <figure>
+      <div className="overflow-hidden rounded-xl border border-white/15 bg-white shadow-modal dark:bg-[#0d0e10]">
+        <ShotImage product={product} alt={shot.alt} />
       </div>
-      <figcaption className={small ? 'mt-1.5 flex items-center gap-1.5 text-2xs font-medium text-white/75' : 'mt-2.5 flex items-center gap-2 text-sm text-white/80'}>
-        <span className={small ? 'flex size-4 shrink-0 items-center justify-center rounded-xs bg-white' : 'flex size-6 shrink-0 items-center justify-center rounded-md bg-white'}>
-          <AppIcon app={product} size={small ? 12 : 18} />
+      <figcaption className="mt-2.5 flex items-center gap-2 text-sm text-white/80">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-white">
+          <AppIcon app={product} size={18} />
         </span>
         <span className="min-w-0 truncate">
-          <span className="font-semibold text-white">{small ? CATALOG.products[product].shortName : CATALOG.products[product].name}</span>
-          {small ? null : <span className="text-white/65"> · {shot.caption}</span>}
+          <span className="font-semibold text-white">{CATALOG.products[product].name}</span>
+          <span className="text-white/65"> · {shot.caption}</span>
         </span>
       </figcaption>
     </figure>
   );
 }
 
-/** The frame of every panel: the screenshots on top (when there are any), then the page's own parts. */
+/** The frame of every panel: one line, the picture and its four buttons (when there are any), then the page's own parts. */
 function Panel({ products, testId, children }: { readonly products: readonly ProductId[]; readonly testId: string; readonly children: ReactNode }) {
-  // The first app leads. The other three follow as small pictures.
+  // The first app of the cart leads. The small pictures are buttons: each puts its app in the big
+  // picture. The apps of the cart come first, then the rest.
   const lead = products[0];
-  const rest = lead ? [...products.slice(1), ...PRODUCT_IDS.filter((id) => !products.includes(id))].slice(0, 3) : [];
+  const order = lead ? [...products, ...PRODUCT_IDS.filter((id) => !products.includes(id))] : [];
+  const [picked, setPicked] = useState<ProductId | null>(null);
+  const active = picked && order.includes(picked) ? picked : lead;
   return (
-    // Laptop screens are short: under 860 px of height the three small pictures step aside, and
-    // under 760 px the panel gets narrower, so nothing under the pictures is ever cut off.
-    <div data-testid={testId} className="relative flex w-full max-w-[520px] flex-col gap-6 text-white [@media(max-height:759px)]:max-w-[420px] [@media(max-height:759px)]:gap-4">
-      {lead ? (
-        <div data-testid="signup-shots">
-          <Shot product={lead} />
-          <div className="mt-4 flex gap-3 [@media(max-height:859px)]:hidden">
-            {rest.map((product) => (
-              <Shot key={product} product={product} small />
-            ))}
+    // Laptop screens are short: under 860 px of height the small pictures step aside and the panel
+    // gets narrower, and narrower again under 760 px, so nothing under the picture is ever cut off.
+    <div data-testid={testId} className="relative flex w-full max-w-[520px] flex-col gap-6 text-white [@media(max-height:859px)]:max-w-[440px] [@media(max-height:859px)]:gap-5 [@media(max-height:759px)]:max-w-[380px] [@media(max-height:759px)]:gap-4">
+      {active ? (
+        <div data-testid="signup-shots" data-app={active}>
+          <p data-testid="hero-line" aria-live="polite" className="mb-3 text-xl font-semibold tracking-[-0.01em] text-balance text-white">
+            {SHOTS[active].line}
+          </p>
+          <Shot product={active} />
+          <div role="group" aria-label="Pick an app to look at" className="mt-4 grid grid-cols-4 gap-3 [@media(max-height:859px)]:hidden">
+            {order.map((product) => {
+              const on = product === active;
+              return (
+                <button
+                  key={product}
+                  type="button"
+                  aria-pressed={on}
+                  aria-label={`Show ${CATALOG.products[product].name}`}
+                  data-testid={`hero-shot-${product}`}
+                  onClick={() => setPicked(product)}
+                  className={cn(
+                    'group min-w-0 cursor-pointer rounded-lg p-1 text-left transition-colors duration-[var(--duration-fast)] motion-reduce:transition-none',
+                    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
+                    on ? 'bg-white/[0.14]' : 'hover:bg-white/[0.08]',
+                  )}
+                >
+                  <span className={cn('block overflow-hidden rounded-md border bg-white dark:bg-[#0d0e10]', on ? 'border-white' : 'border-white/15 group-hover:border-white/40')}>
+                    <ShotImage product={product} alt="" />
+                  </span>
+                  <span className={cn('mt-1.5 flex items-center gap-1.5 text-2xs font-medium', on ? 'text-white' : 'text-white/75')}>
+                    <span className="flex size-4 shrink-0 items-center justify-center rounded-xs bg-white">
+                      <AppIcon app={product} size={12} />
+                    </span>
+                    <span className="min-w-0 truncate font-semibold">{CATALOG.products[product].shortName}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       ) : null}
       {children}
+    </div>
+  );
+}
+
+/**
+ * On a phone the brand panel is not shown. The signup form gets one quiet row instead: a small
+ * picture of the app the person chose and the one line that says what they get (review round 5).
+ * One row tall, so every field and the button stay on the first screen.
+ */
+export function SignupTeaser({ products, withCart = false }: { readonly products: readonly ProductId[]; readonly withCart?: boolean }) {
+  const product = products[0] ?? 'crm';
+  return (
+    // With a cart the form already starts with "Your free trial". On a short phone (under 780 px
+    // tall) the row then steps aside, so the button stays on the first screen (review round 3).
+    <div data-testid="signup-teaser" className={cn('mb-4 flex items-center gap-3 lg:hidden', withCart && '[@media(max-height:779px)]:hidden')}>
+      <span className="block w-[84px] shrink-0 overflow-hidden rounded-md border border-border-default bg-panel">
+        <ShotImage product={product} alt="" />
+      </span>
+      <p className="min-w-0 text-sm font-semibold text-pretty text-fg">{SHOTS[product].line}</p>
     </div>
   );
 }
@@ -187,7 +274,7 @@ const SIGN_IN_LINES: readonly string[] = [
   'Billing for all of them is in one place, the Portal.',
 ];
 
-/** /login without a cart, /forgot-password, /reset-password and /change-password. No hooks: server safe. */
+/** /login without a cart, /forgot-password, /reset-password and /change-password. */
 export function SignInHero() {
   return (
     <Panel products={['crm']} testId="hero-sign-in">

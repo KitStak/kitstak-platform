@@ -17,6 +17,7 @@
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
+import { useOptionalOrg } from './org-context';
 import type {
   BoardKind,
   BoardPrivacy,
@@ -60,9 +61,13 @@ export const shellKeys = {
 const UNREAD_POLL_MS = 60_000;
 
 export function useWorkspaces(orgId: string) {
+  // A guest may not list workspaces (the server answers 403). They see only the boards they are
+  // added to, so their list is empty and no refused request is made (billing review round 5).
+  const permissions = useOptionalOrg()?.permissions;
+  const canList = permissions?.includes('workspace:read') ?? true;
   return useQuery({
     queryKey: shellKeys.workspaces(orgId),
-    queryFn: ({ signal }) => apiRequest<WorkspaceDto[]>('/workspaces', { orgId, signal }),
+    queryFn: ({ signal }) => (canList ? apiRequest<WorkspaceDto[]>('/workspaces', { orgId, signal }) : Promise.resolve<WorkspaceDto[]>([])),
     staleTime: 60_000,
     refetchOnWindowFocus: true,
   });

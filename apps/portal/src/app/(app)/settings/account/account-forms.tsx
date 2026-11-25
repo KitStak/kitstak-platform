@@ -4,10 +4,11 @@
  * that has none. Both call server actions, so a refused value is an answer the form shows, not a
  * failed request in the console.
  */
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Field, Input, Notice } from '@/components/ui';
 import { signOut } from '@/lib/auth-client';
+import { PasswordInput, PasswordRules, StrengthMeter, passwordFieldError } from '@/app/(auth)/_components/form-parts';
 import { passwordIssue } from '@/features/signup/password-rules';
 import { setPasswordAction, updateNameAction } from '@/server/account-actions';
 
@@ -73,16 +74,16 @@ export function NameForm({ name }: { readonly name: string }) {
 export function SetPasswordForm({ email }: { readonly email: string }) {
   const router = useRouter();
   const [password, setPassword] = useState('');
-  const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsSignIn, setNeedsSignIn] = useState(false);
   const [done, setDone] = useState(false);
   const [pending, setPending] = useState(false);
+  const context = useMemo(() => ({ email }), [email]);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (pending) return;
-    const issue = passwordIssue(password, { email });
+    const issue = passwordIssue(password, context);
     if (issue) {
       setError(issue);
       return;
@@ -122,41 +123,44 @@ export function SetPasswordForm({ email }: { readonly email: string }) {
   }
 
   return (
-    <form noValidate onSubmit={onSubmit} className="flex flex-col gap-3" data-testid="account-password-form">
+    <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4" data-testid="account-password-form">
       {/* Lets a password manager file the new password under the right account. */}
       <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-        <div className="min-w-0 flex-1 sm:max-w-md">
-          <Field label="New password" error={error} hint="Use 15 characters or more. Or 10 with a capital letter, a number and a symbol.">
-            {({ inputId, describedBy, invalid }) => (
-              <Input
+      {/* The same field as signup, the invite and the reset: eye button, meter, the red line, then the rules. */}
+      <div className="sm:max-w-md">
+        <Field label="New password" error={error} errorHidden>
+          {({ inputId, describedBy, invalid }) => (
+            <div className="flex flex-col gap-2">
+              <PasswordInput
                 id={inputId}
-                size="lg"
-                type={visible ? 'text' : 'password'}
+                name="new-password"
                 value={password}
                 onChange={(event) => {
                   setPassword(event.target.value);
-                  if (error) setError(null);
+                  // After a refusal the sentence follows what is typed, so it is never about an older try.
+                  if (error) setError(passwordIssue(event.target.value, context));
                 }}
                 autoComplete="new-password"
-                spellCheck={false}
-                autoCapitalize="none"
-                autoCorrect="off"
-                aria-invalid={invalid}
-                aria-describedby={describedBy}
+                enterKeyHint="go"
+                invalid={invalid}
+                aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
                 data-testid="account-password"
               />
-            )}
-          </Field>
-        </div>
-        <Button type="submit" size="lg" loading={pending} className="sm:mt-[22px]" data-testid="account-password-save">
-          Set a password
-        </Button>
+              <StrengthMeter password={password} context={context} />
+              <PasswordRules
+                password={password}
+                id={`${inputId}-rules`}
+                showMissing={Boolean(error)}
+                error={passwordFieldError(password, error)}
+                context={context}
+              />
+            </div>
+          )}
+        </Field>
       </div>
-      <label className="inline-flex min-h-11 w-fit items-center gap-2 text-sm text-fg-secondary">
-        <input type="checkbox" checked={visible} onChange={(event) => setVisible(event.target.checked)} className="size-4" data-testid="account-password-show" />
-        Show password
-      </label>
+      <Button type="submit" size="lg" loading={pending} className="w-full sm:w-fit" data-testid="account-password-save">
+        Set a password
+      </Button>
       {needsSignIn ? (
         <Notice
           tone="warning"
