@@ -29,7 +29,7 @@ import { calendarFor, centsOut, dayText, lockSettings, shared, todayInZone, vers
 import { requireProgram, seesMoney } from './access';
 import { emitProgramsChanged } from './events';
 import { refreshLedgerFor } from './ledger';
-import { assertOpen, isLocked, programLocks, type ProgramLocks } from './locks';
+import { assertOpen, containerLocks, isLocked, type ProgramLocks } from './locks';
 import { jobPricesFor, resolvePostings } from './postings';
 import { restampOutput, versionsFor } from './pricing';
 
@@ -65,10 +65,6 @@ export async function requireContainer(
   const timezone = (zone as unknown as { rows: { timezone: string }[] }).rows[0]?.timezone ?? 'America/Chicago';
   // Builds in a project carry no card; money there is the build rate and the job price.
   return { project, settings: null, programId: null, seesMoney: ctx.actorKind !== 'user' || ctx.orgRole === 'owner' || ctx.orgRole === 'admin' || project.ownerId === ctx.userId, timezone };
-}
-
-async function containerLocks(ctx: DomainContext, container: BuildContainer, executor: Executor): Promise<ProgramLocks | null> {
-  return container.programId ? programLocks(ctx, container.project, executor) : null;
 }
 
 // --- Titles ----------------------------------------------------------------------------------------

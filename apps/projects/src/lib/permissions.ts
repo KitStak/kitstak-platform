@@ -107,7 +107,10 @@ export type ProjectAction =
   | 'schedule:manage'
   | 'program:close';
 
-const PROJECT_ACTION_MIN: Readonly<Record<ProjectAction, ProjectRole>> = {
+/** Actions a project role answers by rank. `money:read` is not one of them (see `canReadMoney`). */
+type RankedProjectAction = Exclude<ProjectAction, 'money:read'>;
+
+const PROJECT_ACTION_MIN: Readonly<Record<RankedProjectAction, ProjectRole>> = {
   'project:read': 'viewer',
   'project:update': 'editor',
   'project:delete': 'owner',
@@ -122,9 +125,9 @@ const PROJECT_ACTION_MIN: Readonly<Record<ProjectAction, ProjectRole>> = {
   'automation:manage': 'editor',
   'form:manage': 'editor',
   'file:upload': 'commenter',
-  // Programs (docs/programs/SPEC.md 8.1). `money:read` is never answered by role rank: canProject
-  // and projectCapabilities always return false for it. Callers must use canReadMoney.
-  'money:read': 'owner',
+  // Programs (docs/programs/SPEC.md 8.1). `money:read` has no minimum role here on purpose: an
+  // effective role (which folds in the implicit org role) can never answer it. Only an explicit
+  // membership at or above the program's `money_min_role` does, through canReadMoney.
   'pricing:propose': 'editor',
   'pricing:manage': 'owner',
   'output:log': 'editor',
@@ -179,6 +182,6 @@ export function canSeeSync(input: { readonly orgRole: OrgRole | null; readonly r
  * map can never be used as the money rule: money visibility comes from canReadMoney only.
  */
 export function projectCapabilities(role: ProjectRole | null): Readonly<Record<ProjectAction, boolean>> {
-  const entries = (Object.keys(PROJECT_ACTION_MIN) as ProjectAction[]).map((action) => [action, canProject(role, action)]);
-  return Object.fromEntries(entries) as Record<ProjectAction, boolean>;
+  const entries = (Object.keys(PROJECT_ACTION_MIN) as RankedProjectAction[]).map((action) => [action, canProject(role, action)]);
+  return { ...(Object.fromEntries(entries) as Record<RankedProjectAction, boolean>), 'money:read': false };
 }

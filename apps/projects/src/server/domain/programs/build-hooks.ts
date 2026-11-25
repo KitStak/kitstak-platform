@@ -15,7 +15,7 @@ import type { DomainContext } from '../_shared';
 import { lockSettings, monthsOf, todayInZone } from './_program';
 import { emitProgramChanged } from './events';
 import { refreshLedgerFor } from './ledger';
-import { assertOpen, isLocked, programLocks } from './locks';
+import { assertOpen, containerLocks, isLocked, programLocks, type ProgramLocks } from './locks';
 import { buildJobIds, programJobId } from './postings';
 
 interface BuildState {
@@ -41,6 +41,17 @@ async function programOf(executor: Executor, ctx: DomainContext, programId: stri
     .innerJoin(programSettings, eq(programSettings.programId, projects.id))
     .where(and(eq(projects.id, programId), eq(projects.orgId, ctx.orgId)));
   return row ?? null;
+}
+
+/** Locks for a build outside a program: only the Pulse closed months (its days that bill a job). */
+async function pulseOnlyLocks(executor: Executor, ctx: DomainContext, containerId: string): Promise<ProgramLocks> {
+  const [project] = await executor.select({ id: projects.id, key: projects.key }).from(projects).where(and(eq(projects.id, containerId), eq(projects.orgId, ctx.orgId)));
+  return containerLocks(ctx, { project: project ?? { id: containerId, key: '' }, programId: null }, executor);
+}
+
+async function orgTimezone(executor: Executor, ctx: DomainContext): Promise<string> {
+  const zone = await executor.execute(sql`select timezone from pm.org_calendar where org_id = ${ctx.orgId}::uuid`);
+  return (zone as unknown as { rows: { timezone: string }[] }).rows[0]?.timezone ?? 'America/Chicago';
 }
 
 /**
@@ -104,7 +115,7 @@ export async function afterStatusCategoryChange(tx: Executor, ctx: DomainContext
 export async function beforeDeleteTasks(tx: Executor, ctx: DomainContext, taskIds: readonly string[]): Promise<{ programIds: string[]; months: string[] }> {
   if (taskIds.length === 0) return { programIds: [], months: [] };
   const rows = await tx
-    .select({ taskId: builds.taskId, programId: builds.programId, finishedOn: builds.finishedOn })
+    .select({ taskId: builds.taskId, programId: builds.programId, containerId: builds.containerId, finishedOn: builds.finishedOn })
     .from(builds)
     .where(inArray(builds.taskId, [...taskIds]));
   if (rows.length === 0) return { programIds: [], months: [] };
@@ -127,6 +138,10 @@ export async function beforeDeleteTasks(tx: Executor, ctx: DomainContext, taskId
         if (row.finishedOn) months.add(monthOf(row.finishedOn));
         months.add(monthOf(todayInZone(program.timezone)));
       }
+    } else if (outputRows.some((o) => o.posting === 'build_job')) {
+      // A build in a plain project that billed a Pulse job: a month closed in Pulse keeps it.
+      const locks = await pulseOnlyLocks(tx, ctx, row.containerId);
+      if (outputRows.some((o) => isLocked(locks, o.work_date, { goesToJob: o.posting === 'build_job' }))) throw locked('This build has output in a closed month. Cancel it instead.');
     }
     if (outputRows.length > 0) await tx.execute(sql`update pm.build_output set deleted_at = now(), updated_at = now() where build_id = ${row.taskId}::uuid and deleted_at is null`);
   }
@@ -150,10 +165,10 @@ export async function restoreBuildOutput(tx: Executor, ctx: DomainContext, taskI
   );
   const rows = (deleted as unknown as { rows: { id: string; work_date: string; posting: string }[] }).rows;
   const program = state.programId ? await programOf(tx, ctx, state.programId) : null;
-  const locks = program ? await programLocks(ctx, program, tx) : null;
+  const locks = program ? await programLocks(ctx, program, tx) : await pulseOnlyLocks(tx, ctx, state.containerId);
   const months = new Set<string>();
   for (const row of rows) {
-    if (locks && isLocked(locks, row.work_date, { goesToJob: row.posting === 'program_job' || row.posting === 'build_job' })) continue;
+    if (isLocked(locks, row.work_date, { goesToJob: row.posting === 'program_job' || row.posting === 'build_job' })) continue;
     const live = await tx.execute(sql`select 1 from pm.build_output where build_id = ${taskId}::uuid and work_date = ${row.work_date}::date and deleted_at is null`);
     if ((live as unknown as { rows: unknown[] }).rows.length > 0) continue;
     await tx.execute(sql`update pm.build_output set deleted_at = null, updated_at = now() where id = ${row.id}::uuid`);
@@ -175,6 +190,8 @@ export async function restoreBuildOutput(tx: Executor, ctx: DomainContext, taskI
 
 export interface TimeScope {
   readonly programId: string | null;
+  /** The task's project (the program, or the plain project of a build that bills a job). */
+  readonly projectId: string;
   readonly timezone: string;
   /** Lock checks apply (the task is in a program, or a build that bills to a job). */
   readonly applies: boolean;
@@ -203,6 +220,7 @@ export async function timeScope(executor: Executor, ctx: DomainContext, taskId: 
     );
     return {
       programId: task.projectId,
+      projectId: task.projectId,
       timezone,
       applies: true,
       goesToJob: Boolean(jobs.get(task.id) ?? programJob),
@@ -212,7 +230,7 @@ export async function timeScope(executor: Executor, ctx: DomainContext, taskId: 
   }
   if (task.kind === 'build') {
     const jobs = await buildJobIds(executor, ctx, [task.id]);
-    if (jobs.size > 0) return { programId: null, timezone: 'America/Chicago', applies: true, goesToJob: true, key: task.key, billableDefault: false };
+    if (jobs.size > 0) return { programId: null, projectId: task.projectId, timezone: await orgTimezone(executor, ctx), applies: true, goesToJob: true, key: task.key, billableDefault: false };
   }
   return null;
 }
@@ -222,13 +240,44 @@ export function timeDay(scope: Pick<TimeScope, 'timezone'>, startedAt: Date): st
   return new Intl.DateTimeFormat('en-CA', { timeZone: scope.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(startedAt);
 }
 
-/** Refuses a time write on a locked day of the task's program (or its billed job). */
+/**
+ * Refuses a time write on a locked day of the task's program, or of the Pulse job it bills: a
+ * build in a plain project that bills a job (`build_job`) answers to the Pulse closed months too.
+ * Call it inside the transaction that writes, after `lockTimeScopes`.
+ */
 export async function assertTimeOpen(executor: Executor, ctx: DomainContext, scope: TimeScope | null, days: readonly Date[]): Promise<void> {
-  if (!scope?.applies || !scope.programId) return;
-  const program = await programOf(executor, ctx, scope.programId);
-  if (!program) return;
-  const locks = await programLocks(ctx, program, executor);
+  if (!scope?.applies) return;
+  let locks: ProgramLocks;
+  if (scope.programId) {
+    const program = await programOf(executor, ctx, scope.programId);
+    if (!program) return;
+    locks = await programLocks(ctx, program, executor);
+  } else {
+    if (!scope.goesToJob) return;
+    locks = await pulseOnlyLocks(executor, ctx, scope.projectId);
+  }
   for (const day of days) assertOpen(locks, timeDay(scope, day), { goesToJob: scope.goesToJob });
+}
+
+/**
+ * The time scope of a task read inside the writing transaction, with its program's settings row
+ * locked (8.4). The scope is read again after the lock: a task moved into or out of a program,
+ * or a job linked or unlinked, while this waited, is seen before the lock check and the write.
+ */
+export async function lockedTimeScopes(tx: Executor, ctx: DomainContext, taskIds: readonly (string | null | undefined)[]): Promise<(TimeScope | null)[]> {
+  const ids = taskIds.map((id) => id ?? null);
+  let scopes: (TimeScope | null)[] = [];
+  for (const id of ids) scopes.push(id ? await timeScope(tx, ctx, id) : null);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await lockTimeScopes(tx, scopes);
+    const again: (TimeScope | null)[] = [];
+    for (const id of ids) again.push(id ? await timeScope(tx, ctx, id) : null);
+    const same = again.every((scope, index) => (scope?.programId ?? null) === (scopes[index]?.programId ?? null));
+    scopes = again;
+    if (same) return scopes;
+  }
+  await lockTimeScopes(tx, scopes);
+  return scopes;
 }
 
 /**

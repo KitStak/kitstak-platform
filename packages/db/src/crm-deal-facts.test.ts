@@ -102,6 +102,25 @@ describe('dealFactsFromRow', () => {
     expect(dealFactsFromRow(row({ price_kit: ' 1.95 ' })).rates.unitPrice).toBe('1.9500');
   });
 
+  it('never reads 1,95 as 195: a decimal comma, extra decimals or a negative rate are refused, not guessed', () => {
+    // The engine import rules for a rate: commas group thousands only, at most 4 decimals, not below 0.
+    for (const bad of ['1,95', '2,5', '0,75', '1.95000001', '1.23456', '-1.95', '1,95 USD', 1.23456, -2]) {
+      expect(dealFactsFromRow(row({ price_kit: bad })).rates.unitPrice, String(bad)).toBeUndefined();
+    }
+    expect(dealFactsFromRow(row({ price_kit: '1,950' })).rates.unitPrice).toBe('1950.0000');
+    expect(dealFactsFromRow(row({ price_kit: '1.2345' })).rates.unitPrice).toBe('1.2345');
+    expect(dealFactsFromRow(row({ price_kit: '1.9500' })).rates.unitPrice).toBe('1.9500');
+    expect(dealFactsFromRow(row({ price_kit: 0.1 })).rates.unitPrice).toBe('0.1000');
+  });
+
+  it('reads the contract length as whole months only', () => {
+    expect(dealFactsFromRow(row({ term_months: '12 months' })).rates.termMonths).toBe(12);
+    expect(dealFactsFromRow(row({ term_months: ' 24 ' })).rates.termMonths).toBe(24);
+    for (const bad of ['1,2', '1.5', '12 weeks', 'a year', 0, 1.5]) {
+      expect(dealFactsFromRow(row({ term_months: bad })).rates.termMonths, String(bad)).toBeUndefined();
+    }
+  });
+
   it('reads an account as its own account', () => {
     const facts = dealFactsFromRow(row({}, { board_kind: 'accounts', name: 'Gripwell Safety Supply', columns: [], account_id: null, account_name: null, core_customer_id: '33333333-3333-4333-8333-333333333333' }));
     expect(facts).toMatchObject({ boardKind: 'account', accountItemId: '11111111-1111-4111-8111-111111111111', accountName: 'Gripwell Safety Supply', valueCents: null, won: false });

@@ -16,6 +16,10 @@ const undoSchema = z.object({
     date: isoDate,
     entries: z.array(z.object({ buildId: uuid, qty, scrapQty: qty, statusId: uuid })).max(500),
     createdBuildIds: z.array(uuid).max(500),
+    // The server signs every token it issues; undoLogOutput refuses any other (forged ids included).
+    after: z.array(z.object({ buildId: uuid, version: version.nullable(), statusId: uuid.nullable() })).max(1000),
+    issuedAt: z.number().int().nonnegative(),
+    sig: z.string().min(1).max(128),
   }),
 });
 export async function undoLogOutputAction(input: z.input<typeof undoSchema>) {

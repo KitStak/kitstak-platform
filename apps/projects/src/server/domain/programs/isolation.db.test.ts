@@ -142,11 +142,11 @@ describe.skipIf(!ready)('programs: isolation, sweeps, undo, goals and customers'
     const logged = await programs.logOutput(owner, 'GLOVE', { date, entries: [{ newBuild: { variantId: variant['XL-YE']! }, qty: '7' }] });
     expect(logged.createdBuildIds.length).toBe(1);
     const created = logged.createdBuildIds[0]!;
-    // A project's sheet cannot remove a program's output.
-    await expect(programs.undoLogOutput(owner, 'FRA', { date, entries: [], createdBuildIds: [created] })).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    // A planned build is not something a batch created.
+    // A project's sheet cannot remove a program's output: the token is signed for GLOVE.
+    await expect(programs.undoLogOutput(owner, 'FRA', logged.undo)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    // A planned build is not something a batch created: a token with other ids fails its signature.
     const planned = await one<{ id: string }>(`select task_id::text as id from pm.builds where program_id = $1 and planned_from = 'schedule' limit 1`, [programId]);
-    await expect(programs.undoLogOutput(owner, 'GLOVE', { date, entries: [], createdBuildIds: [planned.id] })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(programs.undoLogOutput(owner, 'GLOVE', { ...logged.undo, createdBuildIds: [planned.id] })).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect((await one<{ n: number }>(`select count(*)::int as n from pm.build_output where build_id = $1 and deleted_at is null`, [created])).n).toBe(1);
     await programs.undoLogOutput(owner, 'GLOVE', logged.undo);
     const after = await one<{ live: number; built: string; deleted: boolean }>(

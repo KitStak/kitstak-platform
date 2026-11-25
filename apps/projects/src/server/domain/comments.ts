@@ -147,24 +147,9 @@ export async function addComment(ctx: DomainContext, input: AddCommentInput): Pr
     const summary = await selectTaskSummary(task.id);
     if (summary) {
       const { runAutomationsForEvents } = await import('./automations');
-      await runAutomationsForEvents(ctx, [
-        {
-          type: 'comment_added',
-          task: {
-            id: summary.id,
-            projectId: summary.projectId,
-            title: summary.title,
-            statusId: summary.statusId,
-            statusCategory: summary.statusCategory,
-            priority: summary.priority,
-            assigneeId: summary.assigneeId,
-            sectionId: summary.sectionId,
-            dueDate: summary.dueDate,
-            labelIds: summary.labelIds,
-            parentTaskId: summary.parentTaskId,
-          },
-        },
-      ]);
+      // The shared snapshot carries kind and variant, so workspace rules never treat a build as a task.
+      const { engineTaskFromSummary } = await import('./automation-sweep');
+      await runAutomationsForEvents(ctx, [{ type: 'comment_added', task: engineTaskFromSummary(summary) }]);
     }
   }
   const [dto] = await toDTOs([row]);

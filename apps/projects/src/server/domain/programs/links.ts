@@ -26,7 +26,7 @@ import { bridge, centsOut, lockSettings, shared, todayInZone } from './_program'
 import { requireProgram } from './access';
 import { emitProgramChanged } from './events';
 import { monthsFrom, refreshLedgerFor } from './ledger';
-import { programLocks } from './locks';
+import { containerLocks } from './locks';
 import { restampOutput } from './pricing';
 
 export type LinkRef = { readonly type: 'pm_program' | 'pm_build' | 'pm_project'; readonly id: string };
@@ -299,7 +299,8 @@ export async function linkPulseJob(ctx: DomainContext, target: JobTarget, jobId:
       if (error instanceof RecordLinkError) throw error.code === 'TAKEN' ? conflict(error.message) : invalid(error.message);
       throw error;
     }
-    const locks = resolved.program ? await programLocks(ctx, resolved.program, tx) : null;
+    // A build in a plain project that bills a job still answers to the Pulse closed months.
+    const locks = await containerLocks(ctx, { project: resolved.container, programId: resolved.programId }, tx);
     const count = await restampOutput(tx, ctx, { containerId: resolved.container.id, programId: resolved.programId, locks, buildIds: resolved.kind === 'build' ? [resolved.ref.id] : undefined });
     if (resolved.programId && resolved.program) {
       const zone = await tx.execute(sql`select timezone from pm.program_settings where program_id = ${resolved.programId}::uuid`);
@@ -322,7 +323,8 @@ export async function unlinkPulseJob(ctx: DomainContext, target: JobTarget): Pro
     const edges = await listRecordLinks(shared(tx), ctx.orgId, resolved.ref, { relation: 'bills_to', otherType: 'pulse_job' });
     if (edges.length === 0) return 0;
     for (const edge of edges) await unlinkRecords(shared(tx), ctx.orgId, edge.id);
-    const locks = resolved.program ? await programLocks(ctx, resolved.program, tx) : null;
+    // A build in a plain project that bills a job still answers to the Pulse closed months.
+    const locks = await containerLocks(ctx, { project: resolved.container, programId: resolved.programId }, tx);
     const count = await restampOutput(tx, ctx, { containerId: resolved.container.id, programId: resolved.programId, locks, buildIds: resolved.kind === 'build' ? [resolved.ref.id] : undefined });
     if (resolved.programId && resolved.program) {
       const zone = await tx.execute(sql`select timezone from pm.program_settings where program_id = ${resolved.programId}::uuid`);

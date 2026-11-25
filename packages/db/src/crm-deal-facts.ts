@@ -12,7 +12,7 @@
 import { sql } from 'drizzle-orm';
 import { dealValueToCents, isWonStage, type DealRates } from '@kitstak/programs-engine/deal';
 import { fromScaled, toScaled, type Cents } from '@kitstak/programs-engine/money';
-import { plainNumber } from '@kitstak/programs-engine/variants';
+import { decimalProblem, plainNumber } from '@kitstak/programs-engine/variants';
 import { isUuid, queryFirst, queryRows, sqlUuidList, ttlCache, type Executor } from './programs/executor';
 
 export type { Executor } from './programs/executor';
@@ -149,11 +149,21 @@ function cellDate(cell: unknown): string | null {
 function priceOf(value: string | number | null): string | undefined {
   if (value === null) return undefined;
   try {
-    // The engine NUMBER grouping rule runs before anything is stripped (the same rule as
-    // dealValueToCents), so a European `1,95` or `1.234,56` and a stray `1,2,3` are refused
-    // instead of read 100 times too large.
-    const text = typeof value === 'string' ? plainNumber(value) : value;
-    if (text === null) return undefined;
+    // The engine import rules for a rate (variants.ts plainNumber and decimalProblem, the same
+    // grouping rule as dealValueToCents) run before anything is stripped: a European `1,95` or
+    // `1.234,56` and a stray `1,2,3` are refused instead of read 100 times too large, and a rate
+    // with more than 4 decimals or below 0 is refused instead of rounded quietly.
+    let text: string;
+    if (typeof value === 'string') {
+      const plain = plainNumber(value);
+      if (plain === null || decimalProblem(plain, 4, 'rate') !== null) return undefined;
+      text = plain;
+    } else {
+      if (!Number.isFinite(value) || value < 0) return undefined;
+      const scaled = value * 10_000;
+      if (Math.abs(scaled - Math.round(scaled)) > 1e-6) return undefined;
+      text = String(Math.round(scaled) / 10_000);
+    }
     const scaled = toScaled(text, 4);
     return scaled >= BigInt(0) && scaled < BigInt(10_000_000_000) ? fromScaled(scaled, 4) : undefined;
   } catch {
@@ -169,7 +179,9 @@ function centsOf(value: string | number | null): Cents | undefined {
 
 function termOf(value: string | number | null): number | undefined {
   if (value === null) return undefined;
-  const parsed = typeof value === 'number' ? value : Number(String(value).replace(/[^0-9.]/g, ''));
+  // Whole months only ("12", "12 months"): `1,2` or `1.5` are refused, never read as 12 or 15.
+  const match = typeof value === 'number' ? null : /^\s*(\d{1,3})\s*(months?|mos?\.?)?\s*$/i.exec(value);
+  const parsed = typeof value === 'number' ? value : match ? Number(match[1]) : Number.NaN;
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 600 ? parsed : undefined;
 }
 

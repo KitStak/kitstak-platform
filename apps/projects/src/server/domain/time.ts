@@ -9,7 +9,7 @@ import { timerMinutes } from '@/lib/dates';
 import { cleanText, toTimeEntryDTO, type DomainContext } from './_shared';
 import { requireTask } from './access';
 import { logActivity } from './activity';
-import { assertTimeOpen, lockTimeScopes, refreshTimeLedger, timeScope, type TimeScope } from './programs/build-hooks';
+import { assertTimeOpen, lockedTimeScopes, refreshTimeLedger, type TimeScope } from './programs/build-hooks';
 
 // A stopped timer logs at least one minute, with the same rounding the UI shows right away.
 const minutesBetween = (start: Date, end: Date): number => timerMinutes(end.getTime() - start.getTime());
@@ -29,16 +29,37 @@ export async function getRunningTimer(ctx: DomainContext): Promise<TimeEntryDTO 
   return { ...toTimeEntryDTO(row.entry), task };
 }
 
-/** Stops a running timer inside the caller's transaction (its per hour fees refresh with it). */
-async function stopRow(tx: Executor, ctx: DomainContext, row: TimeEntry, scope: TimeScope | null): Promise<TimeEntry> {
+/** The actor's running timer, read inside the caller's transaction. */
+async function runningTimerFor(tx: Executor, ctx: DomainContext): Promise<TimeEntry | null> {
+  const [row] = await tx
+    .select()
+    .from(timeEntries)
+    .where(and(eq(timeEntries.orgId, ctx.orgId), eq(timeEntries.userId, ctx.userId), isNull(timeEntries.endedAt), isNull(timeEntries.deletedAt)))
+    .limit(1);
+  return row ?? null;
+}
+
+/** A live time entry of the org, row locked, inside the caller's transaction (after the settings lock). */
+async function lockedEntry(tx: Executor, ctx: DomainContext, entryId: string): Promise<TimeEntry> {
+  const [row] = await tx.select().from(timeEntries).where(and(eq(timeEntries.id, entryId), eq(timeEntries.orgId, ctx.orgId), isNull(timeEntries.deletedAt))).for('update');
+  if (!row) throw notFound('That time entry');
+  return row;
+}
+
+/**
+ * Stops a running timer inside the caller's transaction (its per hour fees refresh with it). The
+ * caller holds the scope's settings lock (`lockedTimeScopes`). Null when it was stopped meanwhile.
+ */
+async function stopRow(tx: Executor, ctx: DomainContext, row: TimeEntry, scope: TimeScope | null): Promise<TimeEntry | null> {
   // Time counts on the day it started; a day closed while the timer ran stays frozen (4.3.4).
   await assertTimeOpen(tx, ctx, scope, [row.startedAt]);
   const ended = new Date();
   const updated = await tx
     .update(timeEntries)
     .set({ endedAt: ended, durationMinutes: minutesBetween(row.startedAt, ended), updatedAt: ended })
-    .where(eq(timeEntries.id, row.id))
+    .where(and(eq(timeEntries.id, row.id), isNull(timeEntries.endedAt), isNull(timeEntries.deletedAt)))
     .returning();
+  if (!updated[0]) return null;
   await logActivity(tx, ctx, {
     verb: 'time.logged',
     entityType: 'time_entry',
@@ -63,39 +84,32 @@ async function timeChanged(ctx: DomainContext, projectId: string): Promise<void>
  */
 export async function startTimer(ctx: DomainContext, taskId: string, note?: string | null): Promise<TimeEntryDTO> {
   const { task } = await requireTask(ctx, taskId, 'time:log');
-  const scope = await timeScope(db, ctx, taskId);
-  const [running] = await db
-    .select()
-    .from(timeEntries)
-    .where(and(eq(timeEntries.orgId, ctx.orgId), eq(timeEntries.userId, ctx.userId), isNull(timeEntries.endedAt), isNull(timeEntries.deletedAt)));
-  if (running && running.taskId === taskId) return toTimeEntryDTO(running);
-  const runningScope = running ? await timeScope(db, ctx, running.taskId) : null;
-  const row = await db.transaction(async (tx) => {
-    await lockTimeScopes(tx, [scope, runningScope]);
+  const result = await db.transaction(async (tx) => {
+    const running = await runningTimerFor(tx, ctx);
+    if (running && running.taskId === taskId) return { row: running, stopped: null };
+    // Settings rows first (sorted), then the lock checks, the writes and the per hour ledgers.
+    const [scope, runningScope] = await lockedTimeScopes(tx, ctx, [taskId, running?.taskId]);
     const startedAt = new Date();
-    await assertTimeOpen(tx, ctx, scope, [startedAt]);
-    if (running) await stopRow(tx, ctx, running, runningScope);
+    await assertTimeOpen(tx, ctx, scope ?? null, [startedAt]);
+    const stopped = running ? await stopRow(tx, ctx, running, runningScope ?? null) : null;
     const [inserted] = await tx
       .insert(timeEntries)
       .values({ orgId: ctx.orgId, projectId: task.projectId, taskId, userId: ctx.userId, startedAt, note: cleanText(note), source: 'timer', billable: scope?.billableDefault ?? false })
       .returning();
-    return inserted;
+    return { row: inserted, stopped };
   });
-  if (running) await timeChanged(ctx, running.projectId);
-  return toTimeEntryDTO(row);
+  if (result.stopped) await timeChanged(ctx, result.stopped.projectId);
+  return toTimeEntryDTO(result.row);
 }
 
 export async function stopTimer(ctx: DomainContext): Promise<TimeEntryDTO | null> {
-  const [running] = await db
-    .select()
-    .from(timeEntries)
-    .where(and(eq(timeEntries.orgId, ctx.orgId), eq(timeEntries.userId, ctx.userId), isNull(timeEntries.endedAt), isNull(timeEntries.deletedAt)));
-  if (!running) return null;
-  const scope = await timeScope(db, ctx, running.taskId);
   const stopped = await db.transaction(async (tx) => {
-    await lockTimeScopes(tx, [scope]);
-    return stopRow(tx, ctx, running, scope);
+    const running = await runningTimerFor(tx, ctx);
+    if (!running) return null;
+    const [scope] = await lockedTimeScopes(tx, ctx, [running.taskId]);
+    return stopRow(tx, ctx, running, scope ?? null);
   });
+  if (!stopped) return null;
   await timeChanged(ctx, stopped.projectId);
   return toTimeEntryDTO(stopped);
 }
@@ -111,9 +125,8 @@ export async function addManualTime(
   const start = input.date ? new Date(`${input.date}T09:00:00`) : new Date(Date.now() - input.minutes * 60_000);
   if (Number.isNaN(start.getTime())) throw invalid('Pick a valid date.');
   const end = new Date(start.getTime() + input.minutes * 60_000);
-  const scope = await timeScope(db, ctx, task.id);
   const [row] = await db.transaction(async (tx) => {
-    await lockTimeScopes(tx, [scope]);
+    const [scope = null] = await lockedTimeScopes(tx, ctx, [task.id]);
     await assertTimeOpen(tx, ctx, scope, [start]);
     const inserted = await tx
       .insert(timeEntries)
@@ -160,38 +173,41 @@ export async function updateTimeEntry(
   entryId: string,
   patch: { minutes?: number; note?: string | null; billable?: boolean },
 ): Promise<TimeEntryDTO> {
-  const current = await ownEntry(ctx, entryId);
-  const scope = await timeScope(db, ctx, current.taskId);
-  const set: Partial<typeof timeEntries.$inferInsert> = { updatedAt: new Date() };
-  if (patch.minutes !== undefined) {
-    if (patch.minutes <= 0 || patch.minutes > 24 * 60) throw invalid('Enter between 1 minute and 24 hours.');
-    set.durationMinutes = Math.round(patch.minutes);
-    set.endedAt = new Date(current.startedAt.getTime() + patch.minutes * 60_000);
-  }
-  if (patch.note !== undefined) set.note = cleanText(patch.note);
-  if (patch.billable !== undefined) set.billable = patch.billable;
+  const owned = await ownEntry(ctx, entryId);
+  if (patch.minutes !== undefined && (patch.minutes <= 0 || patch.minutes > 24 * 60)) throw invalid('Enter between 1 minute and 24 hours.');
   const row = await db.transaction(async (tx) => {
-    await lockTimeScopes(tx, [scope]);
-    await assertTimeOpen(tx, ctx, scope, [current.startedAt]);
-    const [updated] = await tx.update(timeEntries).set(set).where(and(eq(timeEntries.id, entryId), isNull(timeEntries.deletedAt))).returning();
+    // The scope, the entry and the lock check are all read inside the writing transaction, after
+    // the settings lock (8.4), so a month closed meanwhile is seen.
+    const [scope = null] = await lockedTimeScopes(tx, ctx, [owned.taskId]);
+    const entry = await lockedEntry(tx, ctx, entryId);
+    await assertTimeOpen(tx, ctx, scope, [entry.startedAt]);
+    const set: Partial<typeof timeEntries.$inferInsert> = { updatedAt: new Date() };
+    if (patch.minutes !== undefined) {
+      set.durationMinutes = Math.round(patch.minutes);
+      set.endedAt = new Date(entry.startedAt.getTime() + patch.minutes * 60_000);
+    }
+    if (patch.note !== undefined) set.note = cleanText(patch.note);
+    if (patch.billable !== undefined) set.billable = patch.billable;
+    const [updated] = await tx.update(timeEntries).set(set).where(and(eq(timeEntries.id, entry.id), isNull(timeEntries.deletedAt))).returning();
     if (!updated) throw notFound('That time entry');
-    await refreshTimeLedger(tx, ctx, scope, [current.startedAt]);
+    await refreshTimeLedger(tx, ctx, scope, [entry.startedAt]);
     return updated;
   });
-  await timeChanged(ctx, current.projectId);
+  await timeChanged(ctx, row.projectId);
   return toTimeEntryDTO(row);
 }
 
 export async function deleteTimeEntry(ctx: DomainContext, entryId: string): Promise<void> {
-  const current = await ownEntry(ctx, entryId);
-  const scope = await timeScope(db, ctx, current.taskId);
-  await db.transaction(async (tx) => {
-    await lockTimeScopes(tx, [scope]);
-    await assertTimeOpen(tx, ctx, scope, [current.startedAt]);
+  const owned = await ownEntry(ctx, entryId);
+  const projectId = await db.transaction(async (tx) => {
+    const [scope = null] = await lockedTimeScopes(tx, ctx, [owned.taskId]);
+    const entry = await lockedEntry(tx, ctx, entryId);
+    await assertTimeOpen(tx, ctx, scope, [entry.startedAt]);
     await tx.update(timeEntries).set({ deletedAt: new Date() }).where(eq(timeEntries.id, entryId));
-    await refreshTimeLedger(tx, ctx, scope, [current.startedAt]);
+    await refreshTimeLedger(tx, ctx, scope, [entry.startedAt]);
+    return entry.projectId;
   });
-  await timeChanged(ctx, current.projectId);
+  await timeChanged(ctx, projectId);
 }
 
 export async function listTaskTime(ctx: DomainContext, taskId: string): Promise<TimeEntryDTO[]> {

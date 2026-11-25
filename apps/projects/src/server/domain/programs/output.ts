@@ -5,6 +5,7 @@
  * delete and `repriceOpenDays`.
  */
 import 'server-only';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { runId as engineRunId } from '@kitstak/programs-engine/runs';
 import { monthOf } from '@kitstak/programs-engine/calendar';
@@ -12,7 +13,8 @@ import { fromScaled, maxCents, quantityToScaled, ZERO } from '@kitstak/programs-
 import { nextWorkDay } from '@kitstak/programs-engine/schedule';
 import { db, type Executor } from '@/server/db';
 import { builds, tasks, type Status } from '@/server/db/schema';
-import { DomainError, invalid, notFound } from '@/server/errors';
+import { DomainError, forbidden, invalid, notFound } from '@/server/errors';
+import { env } from '@/server/env';
 import type { IsoDate, LogOutputInput, OutputSheetDTO, OutputSheetRow, UndoToken } from '@/lib/program-types';
 import { taskKey } from '@/lib/task-key';
 import type { DomainContext } from '../_shared';
@@ -23,7 +25,7 @@ import { calendarFor, centsOut, lockSettings, pgError, todayInZone } from './_pr
 import { closeShortIn, insertBuild, requireContainer, splitBuildIn, type BuildContainer } from './builds';
 import { emitProgramsChanged } from './events';
 import { refreshLedgerFor } from './ledger';
-import { assertOpen, lockMessage, lockReason, programLocks, type ProgramLocks } from './locks';
+import { assertOpen, containerLocks, lockMessage, lockReason, type ProgramLocks } from './locks';
 import { resolvePostings } from './postings';
 import { restampOutput, snapshotFor, versionsFor } from './pricing';
 
@@ -91,7 +93,7 @@ export async function getOutputSheet(ctx: DomainContext, key: string, date: IsoD
 async function outputSheet(executor: Executor, ctx: DomainContext, container: BuildContainer, date: IsoDate, runId: string | null): Promise<OutputSheetDTO> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw invalid('Pick a valid date.', { date: 'Pick a valid date.' });
   const rows = await sheetRows(executor, ctx, container.project.id, date, runId);
-  const locks = container.programId ? await programLocks(ctx, container.project, executor) : null;
+  const locks = await containerLocks(ctx, container, executor);
   const postings = await resolvePostings(executor, ctx, { programId: container.programId, buildIds: rows.map((row) => row.id) });
   const versions = await versionsFor(executor, ctx, container.programId);
   const people = await getPeople(rows.map((row) => row.assignee_id).filter((id): id is string => Boolean(id)), executor);
@@ -181,9 +183,71 @@ async function moveStatus(tx: Executor, ctx: DomainContext, container: BuildCont
 
 export interface LogOutputResult {
   readonly sheet: OutputSheetDTO;
-  readonly undo: UndoToken;
+  readonly undo: SignedUndoToken;
   readonly createdBuildIds: string[];
 }
+
+// --- Undo tokens ---------------------------------------------------------------------------------
+
+/** How long the Undo of a batch stays good. */
+export const UNDO_WINDOW_MS = 10 * 60_000;
+
+/** One build of a batch as the batch left it: its output row version for the day and its status. */
+export interface UndoAfter {
+  readonly buildId: string;
+  readonly version: number | null;
+  readonly statusId: string | null;
+}
+
+/**
+ * The Undo of one batch, signed by the server (HMAC with `BETTER_AUTH_SECRET`). The signature
+ * binds the org, the container, the person who logged, the day, the before values, the builds the
+ * batch made and the versions it left, so a client can only hand back a token this exact log call
+ * issued, and only for a short while. `after` also stops a replay: once anything on those rows
+ * changes (the undo itself included), the versions no longer match.
+ */
+export interface SignedUndoToken extends UndoToken {
+  readonly after: readonly UndoAfter[];
+  readonly issuedAt: number;
+  readonly sig: string;
+}
+
+type UnsignedUndo = Omit<SignedUndoToken, 'sig' | 'issuedAt'>;
+
+function undoActor(ctx: DomainContext): string {
+  return ctx.actorKind === 'user' ? `user:${ctx.userId}` : ctx.actorKind;
+}
+
+function undoSignature(ctx: DomainContext, containerId: string, token: Omit<SignedUndoToken, 'sig'>): string {
+  const body = JSON.stringify([
+    'pm-output-undo-v1',
+    ctx.orgId,
+    containerId,
+    undoActor(ctx),
+    token.date,
+    token.entries.map((entry) => [entry.buildId, entry.qty, entry.scrapQty, entry.statusId]),
+    [...token.createdBuildIds],
+    token.after.map((row) => [row.buildId, row.version, row.statusId]),
+    token.issuedAt,
+  ]);
+  return createHmac('sha256', `${env.BETTER_AUTH_SECRET}:pm-output-undo`).update(body).digest('base64url');
+}
+
+function signUndo(ctx: DomainContext, containerId: string, token: UnsignedUndo): SignedUndoToken {
+  const issued = { ...token, issuedAt: Date.now() };
+  return { ...issued, sig: undoSignature(ctx, containerId, issued) };
+}
+
+/** Refuses a token this server did not issue for this container and person, or one that is too old. */
+function verifyUndo(ctx: DomainContext, containerId: string, token: SignedUndoToken): void {
+  const given = Buffer.from(typeof token.sig === 'string' ? token.sig : '');
+  const expected = Buffer.from(undoSignature(ctx, containerId, token));
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) throw forbidden('This undo does not belong to this sheet. Reload to see the latest output.');
+  const age = Date.now() - Number(token.issuedAt);
+  if (!Number.isFinite(age) || age < -60_000 || age > UNDO_WINDOW_MS) throw invalid('Undo has expired. Change the numbers on the sheet instead.');
+}
+
+const UNDO_STALE = 'Someone changed this output after it was logged. Change the numbers on the sheet instead.';
 
 function checkLogInput(container: BuildContainer, input: LogOutputInput): IsoDate {
   const date = input.date;
@@ -198,13 +262,14 @@ function checkLogInput(container: BuildContainer, input: LogOutputInput): IsoDat
 }
 
 /**
- * Settings row first, then the locks (4.3.3 step 2, M9): a month close takes the same row
- * `FOR UPDATE`, so the locks read after it are the ones in force until this transaction ends.
+ * Settings row first, then the locks (4.3.3 step 2, M9, 8.4): a month close takes the same row
+ * `FOR UPDATE`, so the locks read after it are the ones in force until this transaction ends. A
+ * plain project has no settings row; its builds that bill to a Pulse job still answer to the Pulse
+ * closed months.
  */
-async function lockedProgramLocks(tx: Executor, ctx: DomainContext, container: BuildContainer): Promise<ProgramLocks | null> {
-  if (!container.programId) return null;
-  await lockSettings(tx, [container.programId], 'update');
-  return programLocks(ctx, container.project, tx);
+async function lockedProgramLocks(tx: Executor, ctx: DomainContext, container: BuildContainer): Promise<ProgramLocks> {
+  if (container.programId) await lockSettings(tx, [container.programId], 'update');
+  return containerLocks(ctx, container, tx);
 }
 
 /** Logs a batch of output for one day (4.3.3). */
@@ -214,7 +279,7 @@ export async function logOutput(ctx: DomainContext, key: string, input: LogOutpu
   const outcome = await db.transaction((tx) => logOutputIn(tx, ctx, container, input, today));
   await emitProgramsChanged(ctx, [container.programId]);
   const sheet = await outputSheet(db, ctx, container, input.date, null);
-  return { sheet, undo: outcome.undo, createdBuildIds: outcome.createdBuildIds };
+  return { sheet, undo: signUndo(ctx, container.project.id, outcome.undo), createdBuildIds: outcome.createdBuildIds };
 }
 
 /** The body of `logOutput`, in the caller's transaction (undo runs it with its own steps). */
@@ -224,7 +289,7 @@ async function logOutputIn(
   container: BuildContainer,
   input: LogOutputInput,
   today: IsoDate,
-): Promise<{ createdBuildIds: string[]; undo: UndoToken; changedMonths: string[] }> {
+): Promise<{ createdBuildIds: string[]; undo: UnsignedUndo; changedMonths: string[] }> {
   const date = input.date;
   const locks = await lockedProgramLocks(tx, ctx, container);
   const statuses = await statusList(tx, container.project.id);
@@ -249,7 +314,7 @@ async function logOutputIn(
     }
   }
   const ids = [...new Set(resolved.map((row) => row.buildId))].sort();
-  if (ids.length === 0 && !input.endOfDay?.decisions.length) return { createdBuildIds, undo: { date, entries: [], createdBuildIds } as UndoToken, changedMonths: [] as string[] };
+  if (ids.length === 0 && !input.endOfDay?.decisions.length) return { createdBuildIds, undo: { date, entries: [], createdBuildIds, after: [] }, changedMonths: [] as string[] };
   const locked = ids.length
     ? await tx.select().from(builds).where(and(inArray(builds.taskId, ids), eq(builds.containerId, container.project.id))).orderBy(builds.taskId).for('update')
     : [];
@@ -267,16 +332,17 @@ async function logOutputIn(
     if (!task || task.deletedAt) throw notFound('That build');
     const target = postings.targets.get(buildId);
     const goesToJob = target?.posting === 'build_job' || target?.posting === 'program_job';
-    if (locks) assertOpen(locks, date, { goesToJob });
+    assertOpen(locks, date, { goesToJob });
     const e = entry as Extract<Entry, { buildId: string }>;
     const [existing] = await tx.execute(
       sql`select id::text as id, qty::text as qty, scrap_qty::text as scrap_qty, version, posting from pm.build_output
            where build_id = ${buildId}::uuid and work_date = ${date}::date and deleted_at is null`,
     ).then((r) => (r as unknown as { rows: { id: string; qty: string; scrap_qty: string; version: number; posting: string }[] }).rows);
-    if (existing && locks) assertOpen(locks, date, { goesToJob: existing.posting === 'program_job' || existing.posting === 'build_job' });
+    if (existing) assertOpen(locks, date, { goesToJob: existing.posting === 'program_job' || existing.posting === 'build_job' });
     const beforeQty = existing?.qty ?? '0.000';
     const beforeScrap = existing?.scrap_qty ?? '0.000';
-    undo.push({ buildId, qty: beforeQty, scrapQty: beforeScrap, statusId: task.statusId });
+    // The first entry of a build holds its before values; a later entry of the same build is not.
+    if (!undo.some((row) => row.buildId === buildId)) undo.push({ buildId, qty: beforeQty, scrapQty: beforeScrap, statusId: task.statusId });
     const addQty = quantityToScaled(e.qty);
     const addScrap = quantityToScaled(e.scrapQty ?? '0');
     let nextQty: bigint;
@@ -393,21 +459,43 @@ async function logOutputIn(
   await logActivity(tx, ctx, activity);
   const months = [monthOf(date), monthOf(today)];
   if (container.programId) await refreshLedgerFor(tx, ctx, { programIds: [container.programId], months });
-  return { createdBuildIds, undo: { date, entries: undo, createdBuildIds } as UndoToken, changedMonths: months };
+  return { createdBuildIds, undo: { date, entries: undo, createdBuildIds, after: await afterState(tx, ctx, container, date, ids) }, changedMonths: months };
+}
+
+/** Output row versions of the day and statuses of `ids`, as a batch leaves them (for Undo). */
+async function afterState(tx: Executor, ctx: DomainContext, container: BuildContainer, date: IsoDate, ids: readonly string[]): Promise<UndoAfter[]> {
+  if (ids.length === 0) return [];
+  const versions = await liveVersions(tx, ctx, container, date, ids);
+  const statusRows = await tx.select({ id: tasks.id, statusId: tasks.statusId }).from(tasks).where(inArray(tasks.id, [...ids]));
+  const statusById = new Map(statusRows.map((row) => [row.id, row.statusId]));
+  return [...ids].sort().map((buildId) => ({ buildId, version: versions.get(buildId) ?? null, statusId: statusById.get(buildId) ?? null }));
+}
+
+async function liveVersions(tx: Executor, ctx: DomainContext, container: BuildContainer, date: IsoDate, ids: readonly string[]): Promise<Map<string, number>> {
+  if (ids.length === 0) return new Map();
+  const result = await tx.execute(
+    sql`select build_id::text as build_id, version from pm.build_output
+         where org_id = ${ctx.orgId}::uuid and container_id = ${container.project.id}::uuid and work_date = ${date}::date and deleted_at is null
+           and build_id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`,
+  );
+  return new Map((result as unknown as { rows: { build_id: string; version: number }[] }).rows.map((row) => [row.build_id, Number(row.version)]));
 }
 
 /**
  * Puts a batch back to its before values (from `logOutput`'s `undo`), in one transaction. The
- * token comes from the client, so every id is checked against this container: builds made by the
- * batch must be unplanned "Add a row" builds of this container, and locked days are refused.
+ * token must be one this server signed for this container and this person, within
+ * `UNDO_WINDOW_MS`; every row it names must still be as the batch left it. Only builds that batch
+ * made are removed, and only their output on the batch's day.
  */
-export async function undoLogOutput(ctx: DomainContext, key: string, undo: UndoToken): Promise<OutputSheetDTO> {
+export async function undoLogOutput(ctx: DomainContext, key: string, undo: SignedUndoToken): Promise<OutputSheetDTO> {
   const container = await requireContainer(ctx, key, 'output:log');
+  verifyUndo(ctx, container.project.id, undo);
   const createdIds = [...new Set(undo.createdBuildIds)];
   const created = new Set(createdIds);
   const entries = undo.entries.filter((entry) => !created.has(entry.buildId));
   const today = checkLogInput(container, { date: undo.date, entries: entries.map((entry) => ({ buildId: entry.buildId, mode: 'set' as const, qty: entry.qty, scrapQty: entry.scrapQty, expectedVersion: null })) });
   if (entries.length === 0 && createdIds.length === 0) return outputSheet(db, ctx, container, undo.date, null);
+  const afterById = new Map(undo.after.map((row) => [row.buildId, row]));
   await db.transaction(async (tx) => {
     const locks = await lockedProgramLocks(tx, ctx, container);
     // One lock order for every build row this undo touches (8.4).
@@ -424,30 +512,37 @@ export async function undoLogOutput(ctx: DomainContext, key: string, undo: UndoT
       const row = ownedById.get(id)!;
       if (!row.unplanned || row.plannedFrom !== 'unplanned') throw notFound('That build');
     }
+    // Every row is still as the batch left it (no later log, edit or undo).
+    const live = await liveVersions(tx, ctx, container, undo.date, allIds);
+    for (const id of allIds) {
+      const after = afterById.get(id);
+      if (!after || (live.get(id) ?? null) !== after.version) throw new DomainError('CONFLICT', UNDO_STALE);
+    }
     if (entries.length > 0) {
-      const current = await tx.execute(
-        sql`select build_id::text as build_id, version from pm.build_output
-             where org_id = ${ctx.orgId}::uuid and container_id = ${container.project.id}::uuid and work_date = ${undo.date}::date and deleted_at is null
-               and build_id in (${sql.join(entries.map((entry) => sql`${entry.buildId}::uuid`), sql`, `)})`,
-      );
-      const versions = new Map((current as unknown as { rows: { build_id: string; version: number }[] }).rows.map((row) => [row.build_id, Number(row.version)]));
+      const ids = entries.map((entry) => entry.buildId);
+      const statusRows = await tx.select({ id: tasks.id, statusId: tasks.statusId }).from(tasks).where(and(inArray(tasks.id, ids), eq(tasks.projectId, container.project.id), isNull(tasks.deletedAt)));
+      const statusNow = new Map(statusRows.map((row) => [row.id, row.statusId]));
       await logOutputIn(
         tx,
         ctx,
         container,
         {
           date: undo.date,
-          entries: entries.map((entry) => ({ buildId: entry.buildId, mode: 'set' as const, qty: entry.qty, scrapQty: entry.scrapQty, expectedVersion: versions.get(entry.buildId) ?? null })),
+          entries: entries.map((entry) => ({ buildId: entry.buildId, mode: 'set' as const, qty: entry.qty, scrapQty: entry.scrapQty, expectedVersion: live.get(entry.buildId) ?? null })),
         },
         today,
       );
       for (const entry of entries) {
+        // A status someone set by hand since the batch stays.
+        if (statusNow.get(entry.buildId) !== afterById.get(entry.buildId)?.statusId) continue;
         const [task] = await tx.select().from(tasks).where(and(eq(tasks.id, entry.buildId), eq(tasks.projectId, container.project.id), isNull(tasks.deletedAt)));
         if (task && task.statusId !== entry.statusId) await applyTaskUpdate(tx, ctx, container.project, task, { statusId: entry.statusId });
       }
     }
     if (createdIds.length > 0) {
       const list = sql.join(createdIds.map((id) => sql`${id}::uuid`), sql`, `);
+      const liveTasks = await tx.execute(sql`select id from pm.tasks where org_id = ${ctx.orgId}::uuid and project_id = ${container.project.id}::uuid and id in (${list}) and deleted_at is null`);
+      if ((liveTasks as unknown as { rows: unknown[] }).rows.length !== createdIds.length) throw notFound('That build');
       // Undo removes the whole build, so it may only remove what this batch made. Output on
       // another day (maybe a closed day) or time on the build would silently drop with it.
       const otherDays = await tx.execute(
@@ -472,12 +567,10 @@ export async function undoLogOutput(ctx: DomainContext, key: string, undo: UndoT
              where org_id = ${ctx.orgId}::uuid and container_id = ${container.project.id}::uuid and build_id in (${list})
                and work_date = ${undo.date}::date and deleted_at is null`,
       );
-      if (locks) {
-        for (const row of (rows as unknown as { rows: { posting: string }[] }).rows) {
-          assertOpen(locks, undo.date, { goesToJob: row.posting === 'program_job' || row.posting === 'build_job' });
-        }
-        assertOpen(locks, undo.date, { goesToJob: false });
+      for (const row of (rows as unknown as { rows: { posting: string }[] }).rows) {
+        assertOpen(locks, undo.date, { goesToJob: row.posting === 'program_job' || row.posting === 'build_job' });
       }
+      assertOpen(locks, undo.date, { goesToJob: false });
       await tx.execute(
         sql`update pm.build_output set deleted_at = now(), updated_at = now()
              where org_id = ${ctx.orgId}::uuid and container_id = ${container.project.id}::uuid and build_id in (${list})
@@ -492,6 +585,11 @@ export async function undoLogOutput(ctx: DomainContext, key: string, undo: UndoT
       await tx.execute(
         sql`update pm.tasks set deleted_at = now(), updated_at = now()
              where org_id = ${ctx.orgId}::uuid and project_id = ${container.project.id}::uuid and id in (${list}) and deleted_at is null`,
+      );
+      await logActivity(
+        tx,
+        ctx,
+        createdIds.map((id) => ({ verb: 'build.output_undone', entityType: 'task', entityId: id, projectId: container.project.id, taskId: id, after: { date: undo.date, removedBuild: true } })),
       );
       if (container.programId) await refreshLedgerFor(tx, ctx, { programIds: [container.programId], dates: [undo.date, today] });
     }
@@ -508,10 +606,7 @@ export async function deleteOutput(ctx: DomainContext, outputId: string, expecte
   if (!row) throw notFound('That output');
   const container = await requireContainer(ctx, row.container_id, 'output:log');
   await db.transaction(async (tx) => {
-    if (container.programId) {
-      await lockSettings(tx, [container.programId], 'update');
-      assertOpen(await programLocks(ctx, container.project, tx), row.work_date, { goesToJob: row.posting === 'program_job' || row.posting === 'build_job' });
-    }
+    assertOpen(await lockedProgramLocks(tx, ctx, container), row.work_date, { goesToJob: row.posting === 'program_job' || row.posting === 'build_job' });
     await tx.select({ id: builds.taskId }).from(builds).where(eq(builds.taskId, row.build_id)).for('update');
     const removed = await tx.execute(sql`update pm.build_output set deleted_at = now(), updated_at = now() where id = ${outputId}::uuid and version = ${expectedVersion} and deleted_at is null returning id`);
     if ((removed as unknown as { rows: unknown[] }).rows.length === 0) throw new DomainError('CONFLICT', 'Someone else changed this. Reload to see their change.');
@@ -531,7 +626,7 @@ export async function deleteOutput(ctx: DomainContext, outputId: string, expecte
  * or a posting change). Internal: callers hold the transaction and refresh the ledger.
  */
 export async function repriceOpenDays(tx: Executor, ctx: DomainContext, program: { id: string; key: string }, from: IsoDate | null): Promise<number> {
-  const locks = await programLocks(ctx, program, tx);
+  const locks = await containerLocks(ctx, { project: program, programId: program.id }, tx);
   return restampOutput(tx, ctx, { containerId: program.id, programId: program.id, locks, from });
 }
 

@@ -69,6 +69,22 @@ export async function programLocks(ctx: DomainContext, program: Pick<Project, 'i
   };
 }
 
+/**
+ * The locks for a build container (M9, 8.3). A program gets `programLocks` (its settings row is
+ * locked first inside a transaction). A plain project has no program months, but its builds can
+ * bill to a Pulse job (`build_job`), so a month closed in Pulse still freezes those days: the
+ * answer carries the Pulse months with no program months.
+ */
+export async function containerLocks(
+  ctx: DomainContext,
+  container: { readonly project: Pick<Project, 'id' | 'key'>; readonly programId: string | null },
+  executor: Executor = db,
+): Promise<ProgramLocks> {
+  if (container.programId) return programLocks(ctx, container.project, executor);
+  const pulse = await pulseClosedMonths(ctx, executor);
+  return { programId: container.project.id, programKey: container.project.key, lockedThrough: null, programClosed: [], pulseClosed: pulse.months, pulseApplies: pulse.applies };
+}
+
 /** Why a date is locked, or null when it is open. */
 export function lockReason(locks: ProgramLocks, date: IsoDate, options: { readonly goesToJob: boolean }): 'program' | 'pulse' | null {
   const month = monthOf(date);

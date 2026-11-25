@@ -49,18 +49,24 @@ async function writeMonth(tx: Executor, ctx: DomainContext, program: ProgramRow,
   const goesToJob = fee.posting === 'program_job';
   const monthStart = firstDayOfMonth(month);
   if (isLocked(locks, monthStart, { goesToJob })) return { written: 0, removed: 0, skippedLocked: 1 };
-  const inputs = await loadProgramMonthInputs(shared(tx), ctx.orgId, program.id, month);
-  const result = monthCharges({ ...inputs, asOf: todayInZone(program.timezone) });
-  const rows = ledgerRows(result);
-  // Locked rows keep their posting (4.3.3): a stored row is locked when its day is locked under
-  // the posting it was written with (a month closed in Pulse stays closed for a program_job row
-  // after the job is unlinked), or under the posting it would get now.
+  // Locks are judged by both postings (4.3.3, 4.3.4): the posting the month's rows were written
+  // with and the posting they would get now. A month whose fees went to a Pulse job and that Pulse
+  // closed stays frozen as a whole after the job is unlinked: no row is rewritten, removed or added.
   const stored = await tx.execute(
     sql`select ref, charge_date::text as charge_date, posting from pm.program_ledger
          where org_id = ${ctx.orgId}::uuid and program_id = ${program.id}::uuid and month = ${monthStart}::date and deleted_at is null`,
   );
+  const storedRows = (stored as unknown as { rows: { ref: string; charge_date: string; posting: string }[] }).rows;
+  if (storedRows.some((row) => row.posting === 'program_job') && isLocked(locks, monthStart, { goesToJob: true })) {
+    return { written: 0, removed: 0, skippedLocked: 1 };
+  }
+  const inputs = await loadProgramMonthInputs(shared(tx), ctx.orgId, program.id, month);
+  const result = monthCharges({ ...inputs, asOf: todayInZone(program.timezone) });
+  const rows = ledgerRows(result);
+  // A stored row is locked when its day is locked under the posting it was written with, or
+  // under the posting it would get now.
   const lockedRefs = new Set(
-    (stored as unknown as { rows: { ref: string; charge_date: string; posting: string }[] }).rows
+    storedRows
       .filter((row) => isLocked(locks, row.charge_date, { goesToJob: row.posting === 'program_job' }) || isLocked(locks, row.charge_date, { goesToJob }))
       .map((row) => row.ref),
   );

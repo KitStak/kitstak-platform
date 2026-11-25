@@ -48,7 +48,7 @@ export {
   undoCreateBuilds,
 } from './builds';
 export { listRuns, getRun, moveRun, cancelRun, copyRun, closeRun, floorToday } from './runs';
-export { getOutputSheet, logOutput, undoLogOutput, deleteOutput, repriceOpenDays } from './output';
+export { getOutputSheet, logOutput, undoLogOutput, deleteOutput, repriceOpenDays, UNDO_WINDOW_MS, type SignedUndoToken, type LogOutputResult } from './output';
 export { previewOutputImport, commitOutputImport, previewPlanImport, commitPlanImport } from './imports';
 export { listSchedules, createSchedule, updateSchedule, pauseSchedule, resumeSchedule, endSchedule, skipDate, previewSchedule, runScheduleGeneration } from './schedules';
 export { refreshLedgerFor, settleDue } from './ledger';

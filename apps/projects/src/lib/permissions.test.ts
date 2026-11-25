@@ -74,6 +74,27 @@ describe('permissions', () => {
     expect(canReadMoney({ orgRole: 'member', memberRole: 'owner', moneyMinRole: 'editor' })).toBe(true);
   });
 
+  it('lets an explicit editor read money at the default money_min_role while an implicit org member cannot (8.1)', () => {
+    // An org member on an org visible program: implicit editor, can log output, never sees money.
+    expect(effectiveProjectRole({ orgRole: 'member', memberRole: null, visibility: 'org' })).toBe('editor');
+    expect(canReadMoney({ orgRole: 'member', memberRole: null, moneyMinRole: 'editor' })).toBe(false);
+    // The same person added as an explicit editor sees money at money_min_role editor (the default).
+    expect(canReadMoney({ orgRole: 'member', memberRole: 'editor', moneyMinRole: 'editor' })).toBe(true);
+    // Below the program's money_min_role, an explicit role does not pass; at or above it does.
+    expect(canReadMoney({ orgRole: 'member', memberRole: 'editor', moneyMinRole: 'owner' })).toBe(false);
+    expect(canReadMoney({ orgRole: 'member', memberRole: 'commenter', moneyMinRole: 'editor' })).toBe(false);
+    expect(canReadMoney({ orgRole: 'viewer', memberRole: 'viewer', moneyMinRole: 'viewer' })).toBe(true);
+    expect(canReadMoney({ orgRole: 'viewer', memberRole: 'viewer', moneyMinRole: 'commenter' })).toBe(false);
+    // Org owners and admins always pass; guests never do.
+    expect(canReadMoney({ orgRole: 'admin', memberRole: null, moneyMinRole: 'owner' })).toBe(true);
+    expect(canReadMoney({ orgRole: 'owner', memberRole: null, moneyMinRole: 'owner' })).toBe(true);
+    expect(canReadMoney({ orgRole: 'guest', memberRole: 'owner', moneyMinRole: 'viewer' })).toBe(false);
+    expect(canReadMoney({ orgRole: null, memberRole: 'owner', moneyMinRole: 'viewer' })).toBe(false);
+    // No effective role, implicit or explicit, answers money by rank.
+    expect(canProject(effectiveProjectRole({ orgRole: 'owner', memberRole: null, visibility: 'org' }), 'money:read')).toBe(false);
+    expect(Object.keys(projectCapabilities('owner'))).toContain('money:read');
+  });
+
   it.each(MONEY_READ_CASES)('money:read matches the shared table: $name', (row) => {
     expect(canReadMoney(row)).toBe(row.expected);
   });
