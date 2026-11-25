@@ -34,6 +34,10 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Activity, ArchiveRestore, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, FileText, Maximize2, MessageSquare, Minimize2, Paperclip, Repeat2, X } from 'lucide-react';
 import {
   Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   EmptyState,
   IconButton,
   Illustration,
@@ -442,9 +446,31 @@ function tabStart(strip: HTMLElement, tabs: readonly HTMLElement[], index: numbe
  * Horizontal tab strip that scrolls on narrow panels. It always rests on a whole tab at the left
  * edge, shows fades and chevrons where more tabs are hidden, and reveals the active tab.
  */
-function TabStrip({ active, children, className }: { readonly active: string; readonly children: ReactNode; readonly className?: string }) {
+/** One tab as the overflow menu lists it. */
+interface StripTab {
+  readonly value: string;
+  readonly label: string;
+  readonly icon: ReactNode;
+  readonly count?: number;
+}
+
+function TabStrip({
+  active,
+  children,
+  className,
+  tabs: menuTabs,
+  onSelect,
+}: {
+  readonly active: string;
+  readonly children: ReactNode;
+  readonly className?: string;
+  /** Every tab in the strip, in order: the ones hidden off screen are listed in the "N more" menu. */
+  readonly tabs: readonly StripTab[];
+  readonly onSelect: (value: string) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ left: false, right: false });
+  const [hidden, setHidden] = useState<readonly string[]>([]);
   const measure = useCallback(() => {
     const element = ref.current;
     if (!element) return;
@@ -454,12 +480,16 @@ function TabStrip({ active, children, className }: { readonly active: string; re
     // A tab that does not fit whole between the chevrons is hidden, so no label is ever cut.
     const viewStart = element.scrollLeft + (left ? TAB_EDGE : 0) - 1;
     const viewEnd = element.scrollLeft + element.clientWidth - (right ? TAB_EDGE : 0) + 1;
+    const off: string[] = [];
     for (const tab of stripTabs(element)) {
       const start = tabLeft(element, tab);
       const clipped = start < viewStart || start + tab.offsetWidth > viewEnd;
       if (clipped) tab.setAttribute('data-clipped', '');
       else tab.removeAttribute('data-clipped');
+      const value = tab.getAttribute('data-tab-value');
+      if (clipped && value) off.push(value);
     }
+    setHidden((current) => (current.length === off.length && current.every((value, i) => value === off[i]) ? current : off));
   }, []);
   useEffect(() => {
     const element = ref.current;
@@ -535,8 +565,10 @@ function TabStrip({ active, children, className }: { readonly active: string; re
     }
     if (target !== null) strip.scrollTo({ left: target, behavior: 'smooth' });
   }, [revealTarget]);
+  const overflow = menuTabs.filter((tab) => hidden.includes(tab.value));
   return (
-    <div className={cn('relative', className)}>
+    <div className={cn('flex items-center gap-1', className)}>
+    <div className="relative min-w-0 flex-1">
       <div ref={ref} onScroll={measure} className="ks-tab-strip overflow-x-auto overflow-y-hidden overscroll-x-contain">
         {children}
       </div>
@@ -564,6 +596,35 @@ function TabStrip({ active, children, className }: { readonly active: string; re
       >
         <ChevronRight aria-hidden className="size-4" />
       </button>
+    </div>
+      {overflow.length > 0 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={`${overflow.length} more ${overflow.length === 1 ? 'tab' : 'tabs'}`}
+              data-testid="tab-strip-more"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm px-2 text-sm font-medium whitespace-nowrap text-fg-secondary transition-colors duration-[var(--duration-instant)] hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus data-[state=open]:bg-selected data-[state=open]:text-fg"
+            >
+              {overflow.length} more
+              <ChevronDown aria-hidden className="size-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            {overflow.map((tab) => (
+              <DropdownMenuItem
+                key={tab.value}
+                icon={tab.icon}
+                onSelect={() => onSelect(tab.value)}
+                shortcut={tab.count ? String(tab.count) : undefined}
+                data-testid={`tab-strip-more-${tab.value}`}
+              >
+                {tab.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   );
 }
@@ -736,6 +797,15 @@ function PanelBody({
   const boardName = data.payload?.board.name ?? data.detail?.board.name ?? 'Board';
   const boardHref = org ? `/${org.slug}/boards/${data.boardId}` : null;
   const inner = expanded ? 'mx-auto w-full max-w-[880px]' : '';
+  const panelTabs: StripTab[] = [
+    { value: 'updates', label: 'Updates', icon: <MessageSquare aria-hidden />, count: updateCount },
+    { value: 'files', label: 'Files', icon: <Paperclip aria-hidden />, count: fileCount || undefined },
+    { value: 'activity', label: 'Activity log', icon: <Activity aria-hidden /> },
+    { value: 'card', label: `${data.term} card`, icon: <FileText aria-hidden /> },
+    ...(projectsAvailable ? [{ value: 'projects', label: 'Projects', icon: <ProjectsMark size={14} />, count: projectsCount || undefined }] : []),
+    ...(programsAvailable ? [{ value: 'programs', label: 'Programs', icon: <Repeat2 aria-hidden />, count: programsCount || undefined }] : []),
+    ...(pulseAvailable ? [{ value: 'pulse', label: 'Profit', icon: <PulseMark size={14} />, count: pulseCount || undefined }] : []),
+  ];
 
   const jumpToGroup = () => {
     const header = document.querySelector<HTMLElement>(`[data-kind="group-header"][data-group-id="${CSS.escape(item.groupId)}"]`);
@@ -749,7 +819,7 @@ function PanelBody({
         <DialogPrimitive.Title className="sr-only">{item.name}</DialogPrimitive.Title>
         <header className="flex flex-col border-b border-border-subtle">
           <div className={cn('flex h-12 items-center gap-1.5 pr-2 pl-4', inner)} data-print-hide>
-            <nav aria-label="Breadcrumb" className="min-w-[112px] flex-1 @min-[480px]:min-w-[140px]">
+            <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
               <ol className="flex min-w-0 items-center gap-1.5 text-sm text-fg-secondary">
                 <li className="flex min-w-[3ch] shrink-[3] items-center">
                   {boardHref ? (
@@ -885,35 +955,13 @@ function PanelBody({
         </header>
         <Tabs value={tab} onValueChange={(value) => setTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col">
           <div className="border-b border-border-subtle" data-print-hide>
-            <TabStrip active={tab} className={cn('px-2', inner)}>
+            <TabStrip active={tab} className={cn('px-2', inner)} tabs={panelTabs} onSelect={(value) => setTab(value as PanelTab)}>
               <TabsList aria-label={`${data.term} sections`} className={TAB_LIST}>
-                <TabsTrigger value="updates" icon={<MessageSquare aria-hidden />} count={updateCount} data-testid="tab-updates">
-                  Updates
-                </TabsTrigger>
-                <TabsTrigger value="files" icon={<Paperclip aria-hidden />} count={fileCount || undefined} data-testid="tab-files">
-                  Files
-                </TabsTrigger>
-                <TabsTrigger value="activity" icon={<Activity aria-hidden />} data-testid="tab-activity">
-                  Activity log
-                </TabsTrigger>
-                <TabsTrigger value="card" icon={<FileText aria-hidden />} data-testid="tab-card">
-                  {data.term} card
-                </TabsTrigger>
-                {projectsAvailable ? (
-                  <TabsTrigger value="projects" icon={<ProjectsMark size={14} />} count={projectsCount || undefined} data-testid="tab-projects">
-                    Projects
+                {panelTabs.map((entry) => (
+                  <TabsTrigger key={entry.value} value={entry.value} icon={entry.icon} count={entry.count} data-tab-value={entry.value} data-testid={`tab-${entry.value}`}>
+                    {entry.label}
                   </TabsTrigger>
-                ) : null}
-                {programsAvailable ? (
-                  <TabsTrigger value="programs" icon={<Repeat2 aria-hidden />} count={programsCount || undefined} data-testid="tab-programs">
-                    Programs
-                  </TabsTrigger>
-                ) : null}
-                {pulseAvailable ? (
-                  <TabsTrigger value="pulse" icon={<PulseMark size={14} />} count={pulseCount || undefined} data-testid="tab-pulse">
-                    Profit
-                  </TabsTrigger>
-                ) : null}
+                ))}
               </TabsList>
             </TabStrip>
           </div>

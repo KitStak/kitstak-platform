@@ -95,6 +95,10 @@ describe.skipIf(!ready)('pm-bridge programs (database)', () => {
     expect(program.moneyHidden).toBe(false);
     expect(program.cardSummary).toContain('$1.95 per kit');
     expect(program.today).toEqual({ date: '2026-11-25', builds: 0, done: 0 });
+    // The target the forecast percent is measured against, straight from the program row.
+    const [target] = await org.query<{ cents: string | null }>(`select monthly_target_cents::text as cents from pm.program_settings where program_id = $1`, [glove.programId]);
+    expect(program.month.targetCents).toBe(target?.cents ?? null);
+    expect(program.month.targetBp === null).toBe(program.month.targetCents === null);
     expect(result.moneyHidden).toBe(false);
   });
 
@@ -108,7 +112,7 @@ describe.skipIf(!ready)('pm-bridge programs (database)', () => {
   it('hides money for an implicit org member and shows it for an explicit editor', async () => {
     const member = await org.addUser('member');
     const hidden = await listLinkedPrograms(db, { orgId: org.orgId, userId: member }, [{ type: 'crm_account', id: accountId }], URLS, { now: NOW });
-    expect(hidden.available && hidden.programs[0]).toMatchObject({ moneyHidden: true, cardSummary: null, deal: null, month: { revenueCents: null, forecastCents: null, units: '13600.000' } });
+    expect(hidden.available && hidden.programs[0]).toMatchObject({ moneyHidden: true, cardSummary: null, deal: null, month: { revenueCents: null, forecastCents: null, targetCents: null, units: '13600.000' } });
     expect(hidden.available && hidden.moneyHidden).toBe(true);
     await org.query(`insert into pm.project_members (project_id, user_id, role, org_id) values ($1, $2, 'editor', $3)`, [glove.programId, member, org.orgId]);
     const shown = await listLinkedPrograms(db, { orgId: org.orgId, userId: member }, [{ type: 'crm_account', id: accountId }], URLS, { now: NOW });

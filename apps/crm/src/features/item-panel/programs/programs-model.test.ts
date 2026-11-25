@@ -14,7 +14,7 @@ const GLOVE: BridgeProgram = {
   unit: { singular: 'kit', plural: 'kits' },
   customerName: 'Gripwell Safety Supply',
   moneyHidden: false,
-  month: { month: '2026-11', units: '14172.000', revenueCents: '2997040', forecastCents: '3370840', forecastMethod: 'planned', targetBp: 10534 },
+  month: { month: '2026-11', units: '14172.000', revenueCents: '2997040', forecastCents: '3370840', forecastMethod: 'planned', targetBp: 10534, targetCents: '3200000' },
   today: { date: '2026-11-25', builds: 8, done: 5 },
   cardSummary: '$1.95 per kit · $1,500 monthly · $30,000 minimum',
   deal: { valueCents: '38640000', termMonths: 12, onTrackForCents: '39024400' },
@@ -29,7 +29,7 @@ describe('programs health line', () => {
     expect(programsHealthSummary({ ...base, programs: [GLOVE] })).toBe('1 program · $29,970 this month');
   });
   it('shows units when money is hidden', () => {
-    const hidden = { ...GLOVE, moneyHidden: true, month: { ...GLOVE.month, revenueCents: null, forecastCents: null, targetBp: null } };
+    const hidden = { ...GLOVE, moneyHidden: true, month: { ...GLOVE.month, revenueCents: null, forecastCents: null, targetBp: null, targetCents: null } };
     expect(programsHealthSummary({ ...base, moneyHidden: true, programs: [hidden] })).toBe('1 program · 14,172 kits this month');
   });
   it('nudges a won deal with no program, and says nothing otherwise', () => {

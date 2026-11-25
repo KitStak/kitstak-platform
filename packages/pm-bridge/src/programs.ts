@@ -63,6 +63,8 @@ export interface BridgeProgram {
     readonly forecastMethod: 'planned' | 'recent';
     /** Forecast over the monthly target in basis points, null with no target or hidden money. */
     readonly targetBp: number | null;
+    /** The program's monthly money target, null with no target or hidden money. */
+    readonly targetCents: string | null;
   };
   readonly today: { readonly date: IsoDate; readonly builds: number; readonly done: number };
   readonly cardSummary: string | null;
@@ -361,6 +363,7 @@ export async function listLinkedPrograms(
           forecastCents: cents(stats.forecast.forecastCents, hidden),
           forecastMethod: stats.forecast.method,
           targetBp: hidden ? null : stats.forecast.targetBp,
+          targetCents: hidden || !row.monthly_target_cents ? null : BigInt(row.monthly_target_cents).toString(),
         },
         today: { date: today, builds: Number(todayRow?.builds ?? 0), done: Number(todayRow?.done ?? 0) },
         cardSummary: hidden ? null : cardSummary(versionFor(stats.versions, today), unit.singular),

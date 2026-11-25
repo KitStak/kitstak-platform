@@ -143,7 +143,9 @@ function ProgramCard({ program }: { readonly program: BridgeProgram }) {
   const { month, today } = program;
   const units = `${formatQty(month.units)} ${month.units === '1.000' ? program.unit.singular : program.unit.plural}`;
   const todayPercent = today.builds === 0 ? 0 : Math.round((today.done / today.builds) * 100);
-  const forecastHint = [METHOD_TEXT[month.forecastMethod], month.targetBp !== null ? `${formatPercentBp(month.targetBp)} of target` : null].filter(Boolean).join(' · ');
+  const targetText =
+    month.targetBp === null ? null : month.targetCents ? `${formatPercentBp(month.targetBp)} of the ${dollars(month.targetCents)} target` : `${formatPercentBp(month.targetBp)} of target`;
+  const forecastHint = [METHOD_TEXT[month.forecastMethod], targetText].filter(Boolean).join(' · ');
   const subline = [program.customerName ? displayText(program.customerName) : null, program.cardSummary].filter(Boolean).join(' · ');
   return (
     <li
@@ -278,7 +280,7 @@ export function ProgramsTab({ itemId, term }: ProgramsTabProps) {
   const done = programs.reduce((sum, program) => sum + program.today.done, 0);
   const summary =
     programs.length === 0
-      ? 'Repeat builds for this customer under one price card'
+      ? `Repeat builds for ${data.kind === 'deal' ? 'this deal’s customer' : 'this customer'}, all billed from one price card`
       : [
           `${programs.length} ${programs.length === 1 ? 'program' : 'programs'}${running > 0 && running < programs.length ? ` · ${running} running` : ''}`,
           builds > 0 ? `${done} of ${builds} builds done today` : null,
