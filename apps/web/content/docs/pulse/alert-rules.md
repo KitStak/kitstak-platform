@@ -1,6 +1,6 @@
 ---
 title: Set alert rules
-description: Turn the twelve rules that come with Pulse on or off, add your own plain sentence rules with a line, scope, who gets told and quiet hours, and preview them first.
+description: Turn the twelve rules that come with Pulse on or off, and add your own plain sentence rules with a line, scope, who gets told and quiet hours.
 section: Alerts
 order: 20
 ---

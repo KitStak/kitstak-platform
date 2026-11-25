@@ -1,6 +1,6 @@
 ---
 title: How Pulse does the math
-description: The Pulse cost model in plain words: money in, the four buckets of money out, profit and margin, how time not on a job is shared, and job profit versus company profit.
+description: The Pulse cost model in plain words: money in, the four buckets of money out, profit and margin, shared time, and job versus company profit.
 section: Profit
 order: 30
 ---

@@ -1,6 +1,6 @@
 ---
 title: Price a job with the calculator
-description: Use the quote calculator to get the price for your target margin, the lowest price worth taking and the break even, test pace and price, and turn a scenario into a job.
+description: Get the price for your target margin, the lowest price worth taking and the break even, test pace and price, and turn a scenario into a job.
 section: Quote vs actual
 order: 30
 ---

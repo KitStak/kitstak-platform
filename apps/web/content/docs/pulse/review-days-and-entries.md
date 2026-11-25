@@ -17,10 +17,9 @@ Once the floor marks a day complete, a manager checks it before the numbers are 
 1. Go to **Log work** and open **Review the day**.
 2. Pick **To review** or **Approved**, and the site if you have more than one. The list covers the last 21 days, or pick a month.
 3. Open a day. Each day reads **Ready for review**, **Not marked complete** or **Sent back**.
-4. Read **Rows that look odd**, then either:
-   - Select **Fix rows here** to correct a row without leaving the page.
-   - Select **Approve** when the day is right.
-   - Select **Send back**, type **What needs fixing**, and confirm. The floor can change the day again and sees your note at the top.
+4. Read **Rows that look odd**. Select **Fix rows here** to correct a row without leaving the page.
+5. Select **Approve** when the day is right.
+6. Or select **Send back**, type **What needs fixing**, and confirm. The floor can change the day again and sees your note at the top.
 
 ## What counts as odd
 

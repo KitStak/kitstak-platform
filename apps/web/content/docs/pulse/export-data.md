@@ -1,6 +1,6 @@
 ---
 title: Export your data
-description: Download any of the 17 kinds of data as a CSV file in the columns of its import template, filter by dates, client, job type, site and status, or download everything as one zip.
+description: Download any of the 17 kinds of data as a CSV file in the columns of its import template, filter it, or download everything as one zip.
 section: Import and export
 order: 30
 ---
@@ -28,11 +28,7 @@ Select **Download everything (zip)**. The zip holds one CSV file for every kind 
 
 ## File names
 
-A file is named `pulse-` then the kind of data, your workspace and the dates, for example:
-
-```
-pulse-production-acme-2026-11-01-to-2026-11-30.csv
-```
+A file is named `pulse-` then the kind of data, your workspace and the dates, for example `pulse-production-acme-2026-11-01-to-2026-11-30.csv`.
 
 ## Save an export setup
 

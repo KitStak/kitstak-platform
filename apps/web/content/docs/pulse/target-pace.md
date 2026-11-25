@@ -1,6 +1,6 @@
 ---
 title: Set a target pace
-description: Set how many units one person should finish in an hour by job type, client, labor class or service, take a suggestion from your history, and track pace against it.
+description: Set how many units one person should finish in an hour by job type, client, labor class or service, use a suggestion, and track pace.
 section: Goals and pace
 order: 10
 ---

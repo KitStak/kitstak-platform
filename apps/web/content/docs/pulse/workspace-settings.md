@@ -1,6 +1,6 @@
 ---
 title: Workspace settings
-description: Set your currency, calendar, working days, shift length and job numbers, add sites, set labor defaults, catalogs, notifications, sample data and the danger zone.
+description: Set currency, calendar, working days, shift length and job numbers, add sites, and manage labor defaults, notifications and sample data.
 section: Settings and access
 order: 10
 ---

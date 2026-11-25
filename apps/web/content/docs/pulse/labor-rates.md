@@ -1,6 +1,6 @@
 ---
 title: Set labor classes and rates
-description: Build the real cost of an hour for each labor class from the wage, payroll taxes, benefits and overhead, see what a change does before you save, and date raises.
+description: Build the real cost of an hour for each labor class from the wage, taxes, benefits and overhead, see what a change does, and date raises.
 section: Costs and rates
 order: 10
 ---

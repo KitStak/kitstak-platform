@@ -42,7 +42,7 @@ Only people with these email domains can be invited. Leave the list empty to all
 
 1. Under **IP allow-list**, enter **Allowed addresses**: one IPv4 or IPv6 address or CIDR range per line, for example `203.0.113.0/24`.
 2. Turn on **Enforce allow-list**.
-3. Save. A toast confirms **IP allow-list is on**.
+3. Select **Save allow-list**. A toast confirms **IP allow-list is on**.
 
 When it is on, API and app requests from addresses outside these ranges are blocked. You can’t turn it on if your current address isn’t covered, so you don’t lock yourself out.
 

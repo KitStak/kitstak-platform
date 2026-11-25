@@ -27,7 +27,7 @@ The preview lists the **Steps every task moves through**, the tasks and subtasks
 | **Client onboarding** | Customer success | 30 days | 8 | 3 | 1 | 1 |
 | **Warehouse go-live** | Operations | 35 days | 11 | 3 | 2 | 0 |
 | **Sales deal handoff** | Sales | 21 days | 9 | 3 | 2 | 2 |
-| **Two-week sprint** | Engineering | 14 days | 6 | 0 | 0 | 1 |
+| **Two-week sprint** | Engineering | 2 weeks | 6 | 0 | 0 | 1 |
 | **Event plan** | Marketing | 60 days | 10 | 0 | 1 | 0 |
 | **Marketing campaign** | Marketing | 30 days | 7 | 3 | 0 | 1 |
 

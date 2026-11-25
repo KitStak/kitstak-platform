@@ -1,6 +1,6 @@
 ---
 title: Import a CSV file
-description: Bring a spreadsheet into Pulse in four steps, Upload, Match columns, Check and Done, read every counter on the check, fix problem rows and undo an import for 7 days.
+description: Bring a spreadsheet into Pulse in four steps, Upload, Match columns, Check and Done, read every counter on the check, and undo for 7 days.
 section: Import and export
 order: 10
 ---
@@ -30,12 +30,15 @@ Pulse reads CSV files up to 10 MB, 50,000 rows and 200 columns. An Excel file mu
 Pulse lines up your columns with its own by name, so `Units Good`, `units_good` and `Good units` all match. Each column shows sample values.
 
 1. Check each match. Pick **Do not import this column** for columns you do not need. The columns a row cannot be saved without are listed first.
-2. Under **Before you check**:
-   - **Use a saved mapping** to pick one you saved before.
-   - **Dates like 3/4/2026**: **Let Pulse work it out**, **Month first: March 4** or **Day first: April 3**. Dates like 2026-03-04 or Mar 4 2026 are always read the same way.
-   - **Add what is missing** (on by default): when the file names a client, job type or item Pulse does not have yet, add it. Each one is listed in the check.
-   - **Remember this mapping** so the next file with the same column names matches itself.
+2. Set the options under **Before you check**. See the table below.
 3. Select **Check the file**.
+
+| Option | What it does |
+| --- | --- |
+| **Use a saved mapping** | Picks a mapping you saved before for this kind of file. |
+| **Dates like 3/4/2026** | **Let Pulse work it out**, **Month first: March 4** or **Day first: April 3**. Dates like 2026-03-04 or Mar 4 2026 are always read the same way. |
+| **Add what is missing** | On by default. When the file names a client, job type or item Pulse does not have yet, add it. Each one is listed in the check. |
+| **Remember this mapping** | The next file with the same column names matches itself. |
 
 ## Step 3: Check every row
 

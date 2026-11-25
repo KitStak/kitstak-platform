@@ -1,6 +1,6 @@
 ---
 title: CSV files and their columns
-description: The 17 kinds of data Pulse reads and writes as CSV, with each file name, the columns a row needs, the other columns, and how a row is matched so it updates and does not duplicate.
+description: The 17 kinds of data Pulse reads and writes as CSV: each file name, the columns a row needs, the other columns, and how a row is matched.
 section: Import and export
 order: 20
 ---

@@ -30,7 +30,7 @@ A trigger is the **When** part of the sentence.
 
 | Trigger | Choices |
 | --- | --- |
-| **a due date is coming up** | **How soon**: **due today**, **due tomorrow**, or **due in 2, 3, 5, 7 or 14 days or less** |
+| **a due date is coming up** | **How soon**: **due today**, **due tomorrow**, or **due in** a number of days **or less** (2, 3, 5, 7 or 14) |
 | **a task becomes overdue** | |
 
 Projects checks dates every few minutes. Each task sets off a date rule once per due date, and done tasks are skipped.

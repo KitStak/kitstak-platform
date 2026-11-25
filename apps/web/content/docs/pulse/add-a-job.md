@@ -17,11 +17,14 @@ For the fastest way in, use **Quick add a job** at the top of the Jobs list. See
 ## Start the job
 
 1. Go to **Jobs** and select **New job**, or press `n`.
-2. If Pulse has something to start from, the **Start faster** panel offers it:
-   - **A won deal**: from your CRM. Brings the name, the client and the deal value.
-   - **A warehouse work order**: from your WMS. Brings the kit, the client and the units to build.
-   - **A past job**: copies the client, the price and the plan. No entries come along.
+2. If Pulse has something to start from, the **Start faster** panel offers it. See the table below.
 3. Pick one, or skip the panel and type the job in. A filled form says **Filled in from**, with **Start over** to clear it.
+
+| Start from | What it brings |
+| --- | --- |
+| **A won deal** | From your CRM. Brings the name, the client and the deal value. |
+| **A warehouse work order** | From your WMS. Brings the kit, the client and the units to build. |
+| **A past job** | Copies the client, the price and the plan. No entries come along. |
 
 ## Step 1: Basics
 

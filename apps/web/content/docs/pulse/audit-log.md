@@ -16,12 +16,15 @@ Every change in Pulse is written down: who did it, when, and what the value was 
 ## Find a change
 
 1. Type in **Search the audit log**: a job number, a name or a value.
-2. Narrow the list:
-   - **Who made the change**: one person.
-   - **What kind of change**: **Jobs**, **Production entries**, **Prices**, **Quotes and budgets**, **Labor rates**, **Costs**, **Revenue**, **Materials**, **Day reviews**, **Month close**, **Imports**, **Exports**, **Settings**, **Roles**, **Who sees money**, **Sample data** or **Deleted data**.
-   - The kind of record.
-   - **From date** and **To date**.
+2. Narrow the list with the filters in the table below.
 3. Select **Show the before and after** on a row to see each field's old and new value. **Show before and after** opens them on every row.
+
+| Filter | What it narrows |
+| --- | --- |
+| **Who made the change** | One person. |
+| **What kind of change** | **Jobs**, **Production entries**, **Prices**, **Quotes and budgets**, **Labor rates**, **Costs**, **Revenue**, **Materials**, **Day reviews**, **Month close**, **Imports**, **Exports**, **Settings**, **Roles**, **Who sees money**, **Sample data** or **Deleted data**. |
+| Kind of record | One kind of record. |
+| **From date** and **To date** | A date range. |
 
 ## Export the log
 
