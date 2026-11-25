@@ -305,6 +305,32 @@ export const prepTaskIds = scoped(async function prepTaskIds(ctx: DomainContext,
   return found.map((row) => row.id);
 });
 
+export interface ProgramTaskName {
+  readonly id: string;
+  /** `GLOVE-3`. */
+  readonly key: string;
+  readonly title: string;
+  readonly deleted: boolean;
+}
+
+/** Prep tasks of programs by id (live or soft deleted), for the words on a Cost by task row. Fail soft. */
+export const programTaskNames = scoped(async function programTaskNames(ctx: DomainContext, taskIds: readonly string[]): Promise<Map<string, ProgramTaskName>> {
+  const out = new Map<string, ProgramTaskName>();
+  if (taskIds.filter((id) => UUID.test(id)).length === 0) return out;
+  try {
+    const found = await rows<{ id: string; number: number; title: string; container_key: string; deleted: boolean }>(
+      siblingDb,
+      sql`select t.id::text as id, t.number, t.title, p.key as container_key, (t.deleted_at is not null or p.deleted_at is not null) as deleted
+            from pm.tasks t join pm.projects p on p.id = t.project_id
+           where t.org_id = ${ctx.orgId}::uuid and t.id in (${uuidList(taskIds)})`,
+    );
+    for (const row of found) out.set(row.id, { id: row.id, key: `${row.container_key}-${Number(row.number)}`, title: row.title, deleted: Boolean(row.deleted) });
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'programs.programTaskNames', error);
+  }
+  return out;
+});
+
 /* ------------------------------------------------------------ money reads */
 
 /** Stored money of one program month: output snapshots and posted fees. Strict. */
@@ -416,4 +442,41 @@ export const programBuildIds = scoped(async function programBuildIds(ctx: Domain
   );
   for (const row of found) out.set(row.program_id, [...(out.get(row.program_id) ?? []), row.build_id]);
   return out;
+});
+
+/** Programs and builds that bill to this job (`bills_to` edges). Strict when `throwOnError`. */
+export const edgesToJob = scoped(async function edgesToJob(ctx: DomainContext, jobId: string, options: { throwOnError?: boolean } = {}): Promise<{ fromType: 'pm_program' | 'pm_build'; fromId: string; title: string | null }[]> {
+  if (!UUID.test(jobId)) return [];
+  try {
+    if (!(await tableExists('core.record_links'))) return [];
+    const found = await rows<{ from_type: 'pm_program' | 'pm_build'; from_id: string; cached_title: string | null }>(
+      siblingDb,
+      sql`select from_type, from_id, cached_title from core.record_links
+           where org_id = ${ctx.orgId}::uuid and relation = 'bills_to' and to_type = 'pulse_job' and to_id = ${jobId}
+           order by (from_type = 'pm_program') desc, created_at`,
+    );
+    return found.map((row) => ({ fromType: row.from_type, fromId: row.from_id, title: row.cached_title }));
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'programs.edgesToJob', error);
+    if (options.throwOnError) throw error;
+    return [];
+  }
+});
+
+/** The price card version number in force on a day (`2` for v2), or null. Fail soft. */
+export const cardVersionInForce = scoped(async function cardVersionInForce(ctx: DomainContext, programId: string, date: IsoDate): Promise<number | null> {
+  if (!UUID.test(programId)) return null;
+  try {
+    const [row] = await rows<{ number: number | null }>(
+      siblingDb,
+      sql`select v.number from pm.price_card_versions v
+           where v.org_id = ${ctx.orgId}::uuid and v.program_id = ${programId}::uuid and v.status = 'published' and v.deleted_at is null
+             and v.effective_from <= ${date}::date
+           order by v.effective_from desc limit 1`,
+    );
+    return row?.number === null || row?.number === undefined ? null : Number(row.number);
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'programs.cardVersionInForce', error);
+    return null;
+  }
 });

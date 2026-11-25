@@ -276,13 +276,17 @@ export interface LedgerProps<Row extends { id: string; locked: boolean }> {
   readonly onDelete?: (rows: readonly Row[]) => void;
   /** Small marks after the first cell, like "From the warehouse". */
   readonly rowBadges?: (row: Row) => ReactNode;
+  /** Why a row that is not in a closed month still cannot change (it comes from another app), or null. Shown with a lock. */
+  readonly lockReason?: (row: Row) => string | null;
   readonly footer?: ReactNode;
   readonly lockedHint?: string;
   /** File name (no extension) for "Export CSV": the rows and columns on screen, as shown. Leave out for no export. */
   readonly exportName?: string;
 }
 
-export function Ledger<Row extends { id: string; locked: boolean }>({ testId, caption, columns, rows, loading, error, onRetry, empty, canEdit, rowName, onCommit, onDelete, rowBadges, footer, lockedHint = 'This month is closed, so this row cannot change.', exportName }: LedgerProps<Row>) {
+export function Ledger<Row extends { id: string; locked: boolean }>({ testId, caption, columns, rows, loading, error, onRetry, empty, canEdit, rowName, onCommit, onDelete, rowBadges, lockReason, footer, lockedHint = 'This month is closed, so this row cannot change.', exportName }: LedgerProps<Row>) {
+  const isLocked = (row: Row): boolean => row.locked || Boolean(lockReason?.(row));
+  const hintOf = (row: Row): string => (row.locked ? lockedHint : (lockReason?.(row) ?? lockedHint));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const tableRef = useRef<HTMLTableElement>(null);
   /** Saves the table as shown: same rows, same order, same words. Placeholders like "Add" come out blank. */
@@ -296,7 +300,7 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
   };
   const live = rows.filter((row) => selected.has(row.id));
   const selectable = canEdit && Boolean(onDelete);
-  const open = rows.filter((row) => !row.locked);
+  const open = rows.filter((row) => !isLocked(row));
   const allChecked = open.length > 0 && open.every((row) => selected.has(row.id));
   const toggle = (id: string, on: boolean) =>
     setSelected((current) => {
@@ -376,7 +380,7 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
             <tr className="border-b border-border-default text-xs text-fg-muted">
               {selectable ? (
                 <th scope="col" className="w-9 py-2 pr-0 pl-4">
-                  <Checkbox size="sm" aria-label="Pick every row" checked={allChecked ? true : live.length > 0 ? 'indeterminate' : false} onCheckedChange={(value) => setSelected(value === true ? new Set(open.map((row) => row.id)) : new Set())} />
+                  {open.length > 0 ? <Checkbox size="sm" aria-label="Pick every row" checked={allChecked ? true : live.length > 0 ? 'indeterminate' : false} onCheckedChange={(value) => setSelected(value === true ? new Set(open.map((row) => row.id)) : new Set())} /> : <span className="sr-only">Rows that can change</span>}
                 </th>
               ) : null}
               {columns.map((column) => (
@@ -392,9 +396,9 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
               <tr key={row.id} data-selected={selected.has(row.id) || undefined} data-testid={`${testId}-row`} className="group border-b border-border-subtle last:border-b-0 hover:bg-hover data-[selected=true]:bg-selected">
                 {selectable ? (
                   <td className="py-1.5 pr-0 pl-4">
-                    {row.locked ? (
-                      <Tooltip content={lockedHint}>
-                        <span className="inline-flex size-4 items-center justify-center text-fg-muted" role="img" aria-label="Locked">
+                    {isLocked(row) ? (
+                      <Tooltip content={hintOf(row)}>
+                        <span tabIndex={0} className="inline-flex size-4 items-center justify-center rounded-sm text-fg-muted focus-visible:outline-2 focus-visible:outline-focus" role="img" aria-label={hintOf(row)} data-testid={`${testId}-${row.id}-locked`}>
                           <Lock aria-hidden className="size-3.5" />
                         </span>
                       </Tooltip>
@@ -417,7 +421,7 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
                 ))}
                 {hasActions ? (
                   <td className={cn('sticky right-0 z-[1] w-10 max-w-10 min-w-10 px-1 py-1.5 text-right print:static', PINNED_CELL_SURFACE)}>
-                    {row.locked ? null : <IconButton label={`Delete ${rowName(row)}`} icon={<Trash2 aria-hidden />} variant="ghost" size="sm" onClick={() => onDelete?.([row])} data-testid={`${testId}-${row.id}-delete`} />}
+                    {isLocked(row) ? null : <IconButton label={`Delete ${rowName(row)}`} icon={<Trash2 aria-hidden />} variant="ghost" size="sm" onClick={() => onDelete?.([row])} data-testid={`${testId}-${row.id}-delete`} />}
                   </td>
                 ) : null}
               </tr>
@@ -434,9 +438,15 @@ export function Ledger<Row extends { id: string; locked: boolean }>({ testId, ca
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-fg">
                 {cell(row, primary, '-m')}
                 {rowBadges?.(row)}
-                {row.locked ? <Lock aria-label="Locked" role="img" className="size-3.5 text-fg-muted" /> : null}
+                {isLocked(row) ? (
+                  <Tooltip content={hintOf(row)}>
+                    <span tabIndex={0} className="inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-focus" role="img" aria-label={hintOf(row)}>
+                      <Lock aria-hidden className="size-3.5 text-fg-muted" />
+                    </span>
+                  </Tooltip>
+                ) : null}
               </div>
-              {canEdit && onDelete && !row.locked ? <IconButton label={`Delete ${rowName(row)}`} icon={<Trash2 aria-hidden />} variant="ghost" size="sm" onClick={() => onDelete([row])} /> : null}
+              {canEdit && onDelete && !isLocked(row) ? <IconButton label={`Delete ${rowName(row)}`} icon={<Trash2 aria-hidden />} variant="ghost" size="sm" onClick={() => onDelete([row])} /> : null}
             </div>
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm tabular-nums">
               {columns

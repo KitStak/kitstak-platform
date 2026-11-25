@@ -78,7 +78,9 @@ function openMonth(alias: string, dateColumn: string): SQL {
 
 /**
  * Restamps live production entries in open months that match `where` (written against alias `src`).
- * Fixed price jobs keep their base revenue here: `restampFixedJob` owns it.
+ * Fixed price jobs keep their base revenue here: `restampFixedJob` owns it. Lines from Projects
+ * builds (`pmb:` refs) are priced by their own snapshot only (docs/programs/SPEC.md 2.3), so a
+ * later job price change never moves them; Projects reprices those rows on open days instead.
  */
 export const restampProduction = scoped(async function restampProduction(executor: Executor, orgId: string, where: SQL): Promise<number> {
   const result = await executor.execute(sql`
@@ -93,11 +95,11 @@ export const restampProduction = scoped(async function restampProduction(executo
         (round((src.hours - src.overtime_hours) * r.wage_cents) + round(src.overtime_hours * r.wage_cents * r.mult))::bigint AS gross,
         (NOT r.found AND src.hours > 0) AS needs_rate,
         CASE j.pricing_model
-          WHEN 'per_unit' THEN round(src.units_good * COALESCE(pr.unit_price, 0) * 100)::bigint
+          WHEN 'per_unit' THEN round(src.units_good * (CASE WHEN src.source = 'projects' AND src.source_ref LIKE 'pmb:%' THEN COALESCE(src.unit_price, 0) ELSE COALESCE(src.unit_price, pr.unit_price, 0) END) * 100)::bigint
           WHEN 'hourly' THEN round(src.hours * COALESCE(pr.bill_rate_cents, r.bill_rate_cents, 0))::bigint
           ELSE src.base_revenue_cents END AS base_rev,
-        CASE WHEN j.material_method = 'standard' THEN round((src.units_good + src.units_scrap) * COALESCE(pr.material_cost_per_unit, 0) * 100)::bigint ELSE 0 END AS std_mat,
-        CASE WHEN j.material_method = 'standard' THEN round(src.units_scrap * COALESCE(pr.material_cost_per_unit, 0) * 100)::bigint ELSE 0 END AS std_scrap
+        CASE WHEN j.material_method = 'standard' THEN round((src.units_good + src.units_scrap) * COALESCE(src.material_cost_per_unit, pr.material_cost_per_unit, 0) * 100)::bigint ELSE 0 END AS std_mat,
+        CASE WHEN j.material_method = 'standard' THEN round(src.units_scrap * COALESCE(src.material_cost_per_unit, pr.material_cost_per_unit, 0) * 100)::bigint ELSE 0 END AS std_scrap
       FROM pulse.production_entries src
       JOIN pulse.jobs j ON j.id = src.job_id
       CROSS JOIN LATERAL pulse.rate_for(src.org_id, src.labor_class_id, src.site_id, src.work_date) r

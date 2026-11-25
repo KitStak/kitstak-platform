@@ -5,7 +5,7 @@
  * with what if sliders, linked records and the last entries.
  */
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ArrowRight,
   CircleAlert,
@@ -13,8 +13,10 @@ import {
   Copy,
   ExternalLink,
   Link2,
+  Lock,
   Pin,
   Plus,
+  Repeat,
   Unlink,
   Wrench,
 } from 'lucide-react';
@@ -27,6 +29,7 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
+  Tooltip,
   toast,
 } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
@@ -63,6 +66,7 @@ import { nextStepHref, planInUse, planToTotals, rowPace, singularUnit, statsToAc
 import { jobHeadlineFigures, paceYardsticks, planPace } from './job-figures';
 import { Explain, UnitsProgress } from './job-ui';
 import { JobWhatIf } from './job-whatif';
+import { JobProgramPanels, LinkProgramDialog } from './job-program';
 import { callAction, useJobActions } from './use-job-actions';
 
 export interface JobTabProps {
@@ -81,6 +85,8 @@ const LINK_WORDS: Readonly<Record<string, string>> = {
   wms_client: 'Warehouse client',
   pm_project: 'Project',
   pm_task: 'Project task',
+  pm_program: 'Program',
+  pm_build: 'Program build',
 };
 
 const BANNER: Readonly<Record<string, string>> = {
@@ -201,9 +207,12 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
         })),
     );
     const counted = days.filter((day) => day.counted);
+    const unitDays = days.filter((day) => day.unitsGood > 0);
     return {
       labels: counted.map((day) => shortDate(day.workDate)),
       values: counted.map((day) => unitsPerHour(day.unitsGood, day.paceHours)),
+      unitDays: unitDays.length,
+      unitsPerDay: unitDays.length > 0 ? unitDays.reduce((sum, day) => sum + day.unitsGood, 0) / unitDays.length : null,
     };
   }, [production.data]);
 
@@ -526,12 +535,21 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
           label={`${job.unitLabel.charAt(0).toUpperCase()}${job.unitLabel.slice(1)} done`}
           value={formatNumber(stats.unitsGood, { maxDigits: 0 })}
           footer={
-            <UnitsProgress
-              done={stats.unitsGood}
-              planned={job.plannedUnits}
-              pctBp={stats.pctCompleteBp}
-              unit={job.unitLabel}
-            />
+            Number(job.plannedUnits) > 0 ? (
+              <UnitsProgress
+                done={stats.unitsGood}
+                planned={job.plannedUnits}
+                pctBp={stats.pctCompleteBp}
+                unit={job.unitLabel}
+              />
+            ) : pace.unitsPerDay !== null ? (
+              <span className="text-xs text-fg-muted tabular-nums" data-testid="units-per-day">
+                {formatNumber(pace.unitsPerDay, { maxDigits: 0 })} {job.unitLabel} a work day on average, over{' '}
+                {pace.unitDays === 1 ? '1 day' : `${formatNumber(pace.unitDays)} days`}
+              </span>
+            ) : (
+              <span className="text-xs text-fg-muted">No planned total set</span>
+            )
           }
           explain={
             <Explain
@@ -551,7 +569,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
           }
         />
         <KpiTile
-          label="Pace"
+          label="Pace on days with hours"
           value={stats.uph === null ? null : formatPace(stats.uph)}
           emptyText="No counted day yet"
           footer={
@@ -580,7 +598,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
           explain={
             <Explain
               title="Pace"
-              rule={`Pace is ${job.unitLabel} per person per hour: good units over labor hours on the days that count. Setup hours and days with missing hours are left out so the pace is fair.`}
+              rule={`Pace is ${job.unitLabel} per person per hour: good units over labor hours on the days that count. Setup hours and days with missing hours are left out so the pace is fair. Units per hour in Profit divides all good units by all hours, so it can read a little different.`}
               rows={[
                 { label: 'Good units', value: formatNumber(stats.unitsGood) },
                 { label: 'Hours that count', value: formatHours(stats.paceHours) },
@@ -724,6 +742,9 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
         </p>
       ) : null}
 
+      {/* KitStak Programs: the Program card and By variant, for a job a program feeds. */}
+      <JobProgramPanels job={job} />
+
       {/* Charts. */}
       <div className="grid gap-5 lg:grid-cols-2">
         {seesMoney ? (
@@ -747,10 +768,14 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
             />
           </Panel>
         ) : null}
-        <Panel title="Pace against the target" bodyClassName="p-4 min-w-0">
+        <Panel title={stats.standardUph !== null ? 'Pace against the target' : 'Pace by day'} bodyClassName="p-4 min-w-0">
           <LineChart
             title={`${job.unitLabel} per person per hour, day by day`}
-            description="Each point is one day that counts. The dashed line is the target pace."
+            description={
+              stats.standardUph !== null
+                ? 'Each point is one day that counts. The dashed line is the target pace.'
+                : 'Each point is one day that counts. Set a target pace on the job to compare against it.'
+            }
             labels={pace.labels}
             series={[{ id: 'pace', label: 'Pace', values: pace.values }]}
             target={
@@ -964,8 +989,21 @@ function LinkedRecords({
       },
     });
   };
+  const shell = useShell();
+  const [linking, setLinking] = useState(false);
+  const canLinkProgram = canManage && shell.integrations.projects && !job.program;
   return (
-    <Panel title="Linked records">
+    <Panel
+      title="Linked records"
+      action={
+        canLinkProgram ? (
+          <Button size="sm" variant="ghost" leadingIcon={<Repeat aria-hidden />} onClick={() => setLinking(true)} data-testid="link-program">
+            Link a program
+          </Button>
+        ) : undefined
+      }
+    >
+      {canLinkProgram ? <LinkProgramDialog job={job} open={linking} onOpenChange={setLinking} /> : null}
       {job.links.length === 0 ? (
         <p className="flex items-start gap-2 text-sm text-fg-secondary" data-testid="job-links-empty">
           <Link2 aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-muted" />
@@ -1020,7 +1058,13 @@ function LinkedRecords({
                   <ExternalLink aria-hidden className="size-4" />
                 </a>
               ) : null}
-              {canManage ? (
+              {canManage && (link.targetType === 'pm_program' || link.targetType === 'pm_build') ? (
+                <Tooltip content="This link is kept in Projects. Remove it there.">
+                  <span tabIndex={0} className="inline-flex size-7 items-center justify-center rounded-md text-fg-muted focus-visible:outline-2 focus-visible:outline-focus" aria-label="This link is kept in Projects. Remove it there.">
+                    <Lock aria-hidden className="size-3.5" />
+                  </span>
+                </Tooltip>
+              ) : canManage ? (
                 <IconButton
                   label={`Remove the link to ${link.title ?? 'this record'}`}
                   icon={<Unlink aria-hidden />}

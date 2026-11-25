@@ -18,6 +18,7 @@ import {
   setJobPrice,
   setJobStatus,
   updateJob,
+  linkProgramToJob,
 } from '@/server/domain';
 import { runAction } from './_action';
 import {
@@ -78,7 +79,7 @@ const jobFields = {
   pinnedNote: text(1000).nullable().optional(),
 };
 
-const createJobSchema = z.object({ ...jobFields, createClient: z.boolean().optional(), quote: planInput.nullable().optional(), budget: planInput.nullable().optional(), links: z.array(jobLink).max(10).optional() }).refine((data) => Boolean(data.clientId) || Boolean(data.clientName), { message: 'Pick a client or type a new client name.', path: ['clientId'] });
+const createJobSchema = z.object({ ...jobFields, createClient: z.boolean().optional(), quote: planInput.nullable().optional(), budget: planInput.nullable().optional(), links: z.array(jobLink).max(10).optional(), linkProgramId: uuid.nullable().optional() }).refine((data) => Boolean(data.clientId) || Boolean(data.clientName), { message: 'Pick a client or type a new client name.', path: ['clientId'] });
 export type CreateJobActionInput = z.input<typeof createJobSchema>;
 /** The "More options" new job form: basics, price and plan, links. */
 export async function createJobAction(input: CreateJobActionInput) {
@@ -154,6 +155,12 @@ export async function deleteJobPriceAction(input: z.input<typeof priceIdSchema>)
 const addLinkSchema = z.object({ jobId: uuid, link: jobLink });
 export async function addJobLinkAction(input: z.input<typeof addLinkSchema>) {
   return runAction(addLinkSchema, input, (data, ctx) => addJobLink(ctx, data.jobId, data.link));
+}
+
+const linkProgramSchema = z.object({ jobId: uuid, programId: uuid, moveTypedUnits: z.boolean().optional() });
+/** Links a KitStak program to the job (a `bills_to` edge plus its mirror), after the checks. */
+export async function linkProgramAction(input: z.input<typeof linkProgramSchema>) {
+  return runAction(linkProgramSchema, input, (data, ctx) => linkProgramToJob(ctx, data.jobId, data.programId, { moveTypedUnits: data.moveTypedUnits }));
 }
 
 const linkIdSchema = z.object({ linkId: uuid });

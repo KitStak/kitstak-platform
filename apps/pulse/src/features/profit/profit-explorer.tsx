@@ -73,6 +73,7 @@ const EMPTY_COPY: Readonly<Record<ProfitGroup, { title: string; why: string }>> 
   client: { title: 'No client profit yet', why: 'See which clients make you money and which ones cost you. Each client adds up the revenue and cost of all its jobs and extra services.' },
   type: { title: 'No profit by job type yet', why: 'Group your jobs by the kind of work, like kitting or relabeling, to see which kind pays best and where your pace is strongest.' },
   service: { title: 'No profit from extra services yet', why: 'Extra services are the small billable things around a job, like labeling or rework. Each one has its own revenue, cost and margin here.' },
+  program: { title: 'No program profit yet', why: 'Jobs a KitStak program feeds add up here per program: units, revenue, labor, material, profit and margin. Link a program to a job to start.' },
   site: { title: 'No profit by site yet', why: 'With more than one site, this tab puts them side by side: margin, pace and time not on a job.' },
   month: { title: 'No monthly profit yet', why: 'Each month shows what your jobs made. Closed months are locked so the numbers stay put.' },
   week: { title: 'No weekly profit yet', why: 'Week by week revenue, cost and margin, so you can spot a bad week while there is still time to fix the month.' },
@@ -449,7 +450,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
           {comparing && before.isError ? <p className="text-sm text-danger-text">We could not load the period to compare with. The change columns are blank.</p> : null}
           {data && mode === 'table' ? (
             <p className="text-xs text-fg-muted">
-              Click {withArticle(VIEW_NOUN[by])} to go one level down. The total of each level matches the row you clicked. {seesMoney ? `Profit on this page is ${formatMoney(total?.profitCents ?? null)}.` : ''}
+              {by === 'program' ? 'Each program adds up the jobs it feeds. Open a job to see it by variant.' : `Click ${withArticle(VIEW_NOUN[by])} to go one level down. The total of each level matches the row you clicked.`} {seesMoney ? `Profit on this page is ${formatMoney(total?.profitCents ?? null)}.` : ''}
             </p>
           ) : null}
         </>

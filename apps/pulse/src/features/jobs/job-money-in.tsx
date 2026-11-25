@@ -21,6 +21,7 @@ import { cn } from '@/components/ui/cn';
 import { BarChart } from '@/components/charts/cartesian';
 import { KpiTile } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
+import { ProgramPricePanel } from './job-program';
 import { RevenueLedger } from '@/features/revenue/revenue-ledger';
 import { ServiceLedger } from '@/features/revenue/service-ledger';
 import { useShell } from '@/features/shell/shell-context';
@@ -142,6 +143,9 @@ export function JobMoneyIn({ job, today }: JobTabProps) {
         />
       </div>
 
+      {job.program ? (
+        <ProgramPricePanel job={job} />
+      ) : (
       <Panel
         title="Price"
         action={
@@ -216,6 +220,7 @@ export function JobMoneyIn({ job, today }: JobTabProps) {
           </p>
         </div>
       </Panel>
+      )}
 
       <Panel title="Earned by day" bodyClassName="p-4 min-w-0">
         <BarChart

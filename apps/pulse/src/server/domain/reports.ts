@@ -119,6 +119,8 @@ function dimension(by: ProfitGroup, weekStart: number): { key: SQL; label: SQL; 
       return { key: sql`f.vas_service_id::text`, label: sql`max(vs.name)`, sublabel: sql`max(vs.code)` };
     case 'site':
       return { key: sql`f.site_id::text`, label: sql`max(s.name)`, sublabel: sql`max(s.code)` };
+    case 'program':
+      return { key: sql`prog.program_id`, label: sql`COALESCE(max(prog.program_name), max(prog.program_key))`, sublabel: sql`max(prog.program_key)` };
     case 'month':
       return { key: sql`to_char(date_trunc('month', f.work_date), 'YYYY-MM-DD')`, label: sql`NULL::text`, sublabel: sql`NULL::text` };
     case 'week':
@@ -133,13 +135,21 @@ const PIVOT_JOINS = sql`
   LEFT JOIN pulse.clients c ON c.id = f.client_id
   LEFT JOIN pulse.job_types jt ON jt.id = f.job_type_id
   LEFT JOIN pulse.vas_services vs ON vs.id = f.vas_service_id
-  LEFT JOIN pulse.sites s ON s.id = f.site_id`;
+  LEFT JOIN pulse.sites s ON s.id = f.site_id
+  LEFT JOIN LATERAL (
+        SELECT CASE WHEN pl.target_type = 'pm_program' THEN pl.target_id ELSE pl.meta ->> 'programId' END AS program_id,
+               CASE WHEN pl.target_type = 'pm_program' THEN pl.meta ->> 'key' ELSE pl.meta ->> 'programKey' END AS program_key,
+               CASE WHEN pl.target_type = 'pm_program' THEN pl.meta ->> 'name' ELSE NULL END AS program_name
+          FROM pulse.job_links pl
+         WHERE pl.job_id = f.job_id AND pl.target_type IN ('pm_program', 'pm_build')
+         ORDER BY (pl.target_type = 'pm_program') DESC, pl.created_at LIMIT 1
+      ) prog ON true`;
 
 /** The row for revenue and costs typed in against a client with no job. It is not a job, so rankings leave it out. */
 const CLIENT_LEVEL_LABEL = 'Put on a client, not on a job';
 const CLIENT_LEVEL_TEXT = 'Chargebacks, freight, fees, credits and extra services typed in against a client with no job. They count in the total, but they are not a job, so the ranking leaves them out.';
 
-const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = { job: CLIENT_LEVEL_LABEL, client: 'No client', type: 'No job type', service: 'Core job work', site: 'No site', month: '', week: '', day: '' };
+const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = { job: CLIENT_LEVEL_LABEL, client: 'No client', type: 'No job type', service: 'Core job work', site: 'No site', program: 'Not fed by a program', month: '', week: '', day: '' };
 
 function factWhere(orgId: string, filters: ProfitFilters): SQL {
   const parts: SQL[] = [sql`f.org_id = ${orgId}`, sql`f.work_date BETWEEN ${filters.from}::date AND ${filters.to}::date`];

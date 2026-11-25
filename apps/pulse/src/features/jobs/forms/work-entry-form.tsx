@@ -8,7 +8,7 @@
  * form says so before anything is saved and offers to open that day. The server checks again.
  */
 import { useMemo, useRef, useState } from 'react';
-import { Check, Pencil, Plus, Trash2, TriangleAlert, X } from 'lucide-react';
+import { Check, Info, Pencil, Plus, Trash2, TriangleAlert, X } from 'lucide-react';
 import { Button, Field, IconButton, Input, IsoDatePicker, Select, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { applyField, crewQuestion, hoursEachFrom, parseTyped, tidy } from '@/features/log/log-math';
@@ -89,7 +89,10 @@ export function WorkEntryForm({
   onCancel,
   onOpenDay,
   onStale,
+  unitsFrom = null,
 }: {
+  /** Set on a job a KitStak program feeds: units come from builds, so the form takes hours and crew only. */
+  readonly unitsFrom?: string | null;
   readonly jobId: string;
   readonly unit: string;
   /** The day being edited. Leave it out to add a new day. */
@@ -252,8 +255,8 @@ export function WorkEntryForm({
       mode: day ? 'edit' : 'create',
       ...(day ? { fromDate: day.workDate, read: day.rows.map((row) => ({ id: row.id, version: row.version })) } : {}),
       lines: planDayLines({
-        unitsGood: fixed(good, 3),
-        unitsScrap: fixed(scrap, 3),
+        unitsGood: unitsFrom ? '0.000' : fixed(good, 3),
+        unitsScrap: unitsFrom ? '0.000' : fixed(scrap, 3),
         unitsRework: day ? day.rows.reduce((total, row) => total + Number(row.unitsRework), 0).toFixed(3) : '0',
         note: note.trim() || null,
         lines: lines.map((line) => ({
@@ -366,9 +369,10 @@ export function WorkEntryForm({
           {({ inputId }) => (
             <Input
               id={inputId}
-              value={good}
+              value={unitsFrom ? '' : good}
+              placeholder={unitsFrom ? 'From builds' : undefined}
               invalid={Boolean(errors.unitsGood)}
-              disabled={Boolean(clash)}
+              disabled={Boolean(clash) || Boolean(unitsFrom)}
               onChange={(event) => setGood(event.target.value)}
               inputMode="decimal"
               containerClassName={TOUCH}
@@ -380,9 +384,10 @@ export function WorkEntryForm({
           {({ inputId }) => (
             <Input
               id={inputId}
-              value={scrap}
+              value={unitsFrom ? '' : scrap}
+              placeholder={unitsFrom ? 'From builds' : undefined}
               invalid={Boolean(errors.unitsScrap)}
-              disabled={Boolean(clash)}
+              disabled={Boolean(clash) || Boolean(unitsFrom)}
               onChange={(event) => setScrap(event.target.value)}
               inputMode="decimal"
               containerClassName={TOUCH}
@@ -391,6 +396,13 @@ export function WorkEntryForm({
           )}
         </Field>
       </div>
+
+      {unitsFrom ? (
+        <p className="flex items-start gap-2 rounded-lg bg-sunken px-3 py-2 text-sm text-fg-secondary" data-testid="work-units-from-builds">
+          <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-muted" />
+          Units for this job come from builds in Projects ({unitsFrom}). Log hours and crew here.
+        </p>
+      ) : null}
 
       {clash ? (
         <div

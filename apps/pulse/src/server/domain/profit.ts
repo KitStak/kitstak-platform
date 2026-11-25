@@ -99,6 +99,16 @@ function groupSql(by: ProfitGroup, weekStart: number): { key: SQL; label: SQL; s
       return { key: sql`f.vas_service_id::text`, label: sql`max(vs.name)`, sublabel: sql`max(vs.code)`, joins: sql`LEFT JOIN pulse.vas_services vs ON vs.id = f.vas_service_id` };
     case 'site':
       return { key: sql`f.site_id::text`, label: sql`max(s.name)`, sublabel: sql`max(s.code)`, joins: sql`LEFT JOIN pulse.sites s ON s.id = f.site_id` };
+    case 'program':
+      // KitStak Programs: a job a program (or its builds) feeds counts toward that program.
+      return { key: sql`prog.program_id`, label: sql`COALESCE(max(prog.program_name), max(prog.program_key))`, sublabel: sql`max(prog.program_key)`, joins: sql.raw(`LEFT JOIN LATERAL (
+        SELECT CASE WHEN pl.target_type = 'pm_program' THEN pl.target_id ELSE pl.meta ->> 'programId' END AS program_id,
+               CASE WHEN pl.target_type = 'pm_program' THEN pl.meta ->> 'key' ELSE pl.meta ->> 'programKey' END AS program_key,
+               CASE WHEN pl.target_type = 'pm_program' THEN pl.meta ->> 'name' ELSE NULL END AS program_name
+          FROM pulse.job_links pl
+         WHERE pl.job_id = f.job_id AND pl.target_type IN ('pm_program', 'pm_build')
+         ORDER BY (pl.target_type = 'pm_program') DESC, pl.created_at LIMIT 1
+      ) prog ON true`) };
     case 'month':
       return { key: sql`to_char(date_trunc('month', f.work_date), 'YYYY-MM-DD')`, label: sql`NULL::text`, sublabel: sql`NULL::text`, joins: sql`` };
     case 'week':
@@ -114,6 +124,7 @@ const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = {
   type: 'No job type',
   service: 'Core job work',
   site: 'No site',
+  program: 'Not fed by a program',
   month: '',
   week: '',
   day: '',
@@ -274,7 +285,7 @@ async function trends(orgId: string, by: ProfitGroup, filters: ProfitFilters, we
     sql`SELECT ${group.key} AS key, to_char(${bucketExpr}, 'YYYY-MM-DD') AS b,
                COALESCE(sum(CASE WHEN f.kind IN ('revenue_base', 'revenue_vas', 'revenue_other') THEN f.amount_cents WHEN f.kind = 'billed_memo' THEN 0 ELSE -f.amount_cents END), 0)::text AS profit,
                COALESCE(sum(f.units_good) FILTER (WHERE f.kind = 'revenue_base'), 0)::text AS units
-          FROM pulse.fact_days f LEFT JOIN pulse.jobs j ON j.id = f.job_id
+          FROM pulse.fact_days f LEFT JOIN pulse.jobs j ON j.id = f.job_id ${group.joins}
          WHERE ${whereOf(orgId, filters)}
          GROUP BY 1, 2 ORDER BY 2`,
   );

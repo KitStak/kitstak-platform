@@ -46,6 +46,8 @@ export interface ProgramMirror {
   readonly path: string | null;
   /** Program key (`GLOVE`) for a program mirror, build key (`GLOVE-212`) for a build mirror. */
   readonly key: string | null;
+  /** The program's name, on a program mirror. */
+  readonly name: string | null;
   /** The program a build mirror belongs to, when it has one. */
   readonly programId: string | null;
   readonly programKey: string | null;
@@ -73,6 +75,7 @@ function toMirror(row: MirrorRow): ProgramMirror {
     title: row.cached_title,
     path: row.cached_url,
     key: text(meta.key),
+    name: text(meta.name),
     programId: row.target_type === 'pm_program' ? row.target_id : text(meta.programId),
     programKey: row.target_type === 'pm_program' ? text(meta.key) : text(meta.programKey),
     importsTime: row.imports_time,
@@ -123,3 +126,25 @@ export function feedOf(mirrors: readonly ProgramMirror[]): JobFeed {
 export const jobFeed = scoped(async function jobFeed(executor: Executor, ctx: DomainContext, jobId: string): Promise<JobFeed> {
   return feedOf(await jobProgramMirrors(executor, ctx, jobId));
 }, 1);
+
+/** Where a line the program sync owns came from, for the read only line in Pulse. Pure. */
+export interface ProgramLineOrigin {
+  readonly kind: 'build' | 'prep';
+  /** `GLOVE-212` for a build line, `GLOVE` for program time. */
+  readonly key: string | null;
+  readonly message: string;
+  /** Path in Projects. */
+  readonly path: string | null;
+}
+
+export function programLineOrigin(sourceRef: string | null | undefined, meta: Record<string, unknown> | null | undefined): ProgramLineOrigin | null {
+  if (!isBuildRef(sourceRef) && !isPrepRef(sourceRef)) return null;
+  const buildKey = text(meta?.buildKey);
+  const programKey = text(meta?.programKey);
+  if (isPrepRef(sourceRef)) return { kind: 'prep', key: programKey, message: `This line is time logged on ${programKey ?? 'a program'} in Projects.`, path: programKey ? `/programs/${encodeURIComponent(programKey)}` : null };
+  const split = buildKey ? buildKey.lastIndexOf('-') : -1;
+  const container = buildKey && split > 0 ? buildKey.slice(0, split) : null;
+  const number = buildKey && split > 0 ? buildKey.slice(split + 1) : null;
+  const path = container && number ? (programKey === container ? `/programs/${encodeURIComponent(container)}/${number}` : `/p/${encodeURIComponent(container)}/${number}`) : null;
+  return { kind: 'build', key: buildKey, message: `This line comes from build ${buildKey ?? 'a build'} in Projects.`, path };
+}

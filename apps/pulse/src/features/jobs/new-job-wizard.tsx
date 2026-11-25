@@ -16,6 +16,7 @@ import {
   Info,
   PackagePlus,
   Plus,
+  Repeat,
   Sparkles,
   Trash2,
   Warehouse,
@@ -120,6 +121,8 @@ interface FormState {
   readonly origin: 'typed' | 'crm_deal' | 'wms_contract';
   readonly originRef: string | null;
   readonly startedFrom: string | null;
+  /** A KitStak program to link on save (the form opened from a program in Projects). */
+  readonly program: { readonly id: string; readonly key: string; readonly name: string } | null;
 }
 
 export interface NewJobWizardProps {
@@ -157,6 +160,8 @@ export interface NewJobWizardProps {
     readonly workOrderId?: string;
     readonly projectId?: string;
     readonly copyJobId?: string;
+    /** Opened from a program: it bills to this job once the job is saved. */
+    readonly program?: { readonly id: string; readonly key: string; readonly name: string; readonly unitLabel: string | null } | null;
   };
 }
 
@@ -202,18 +207,20 @@ export function NewJobWizard(props: NewJobWizardProps) {
 
   const blank = (): FormState => {
     const laborClass = classFor(general);
+    const program = prefill.program ?? null;
     return {
       client: prefill.clientName ?? '',
       name: prefill.name ?? '',
       jobTypeId: general?.id ?? '',
-      kind: 'one_time',
+      // A program bills to one ongoing per unit job.
+      kind: program ? 'ongoing' : 'one_time',
       units: '',
-      unitLabel: general?.unitLabel ?? 'units',
+      unitLabel: program?.unitLabel || (general?.unitLabel ?? 'units'),
       startDate: defaults.today,
       dueDate: '',
       siteId: defaultSite?.id ?? '',
       ownerId: defaults.meId,
-      pricingModel: prefill.valueCents ? 'fixed' : (general?.defaultPricingModel ?? 'per_unit'),
+      pricingModel: program ? 'per_unit' : prefill.valueCents ? 'fixed' : (general?.defaultPricingModel ?? 'per_unit'),
       unitPrice: '',
       fixedPrice: dollars(prefill.valueCents),
       billRate: '',
@@ -238,7 +245,8 @@ export function NewJobWizard(props: NewJobWizardProps) {
         : [],
       origin: 'typed',
       originRef: null,
-      startedFrom: null,
+      startedFrom: program ? `the program ${program.key} in Projects` : null,
+      program: program ? { id: program.id, key: program.key, name: program.name } : null,
     };
   };
 
@@ -373,9 +381,9 @@ export function NewJobWizard(props: NewJobWizardProps) {
     setForm((current) => ({
       ...current,
       jobTypeId: id,
-      unitLabel: type?.unitLabel ?? current.unitLabel,
+      unitLabel: current.program ? current.unitLabel : (type?.unitLabel ?? current.unitLabel),
       pricingModel:
-        current.origin === 'crm_deal'
+        current.origin === 'crm_deal' || current.program
           ? current.pricingModel
           : (type?.defaultPricingModel ?? current.pricingModel),
       laborClassId: laborClass?.id ?? current.laborClassId,
@@ -561,6 +569,7 @@ export function NewJobWizard(props: NewJobWizardProps) {
         targetId: link.targetId,
         title: link.title,
       })),
+      linkProgramId: form.program?.id ?? null,
     };
     setSaving(true);
     const result = await createJobAction(input).catch(() => null);
@@ -579,7 +588,9 @@ export function NewJobWizard(props: NewJobWizardProps) {
     }
     toast.success(
       `Created ${result.data.number}`,
-      form.status === 'active'
+      form.program
+        ? `${form.program.key} now bills to it. Build output shows up here after Projects updates the program.`
+        : form.status === 'active'
         ? 'It is active. Log the first day of work when it happens.'
         : 'It is planned. Start it when the work begins.',
     );
@@ -732,6 +743,18 @@ export function NewJobWizard(props: NewJobWizardProps) {
 
         {step === 0 ? (
           <>
+            {form.program ? (
+              <p
+                className="flex items-start gap-2 rounded-lg border border-border-subtle bg-primary-subtle px-3 py-2.5 text-sm text-fg"
+                data-testid="wizard-program"
+              >
+                <Repeat aria-hidden className="mt-0.5 size-4 shrink-0 text-primary-text" />
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium">{form.program.key} {form.program.name}</span> bills to this job once you save it.
+                  Programs feed one ongoing per unit job, so units and prices come from the program in Projects.
+                </span>
+              </p>
+            ) : null}
             {deals.length > 0 || workOrders.length > 0 || recentJobs.length > 0 ? (
               <Panel title="Start faster">
                 <div className="flex flex-col gap-3">
@@ -1541,6 +1564,9 @@ export function NewJobWizard(props: NewJobWizardProps) {
                   value={`${form.client.trim()}${matchedClient ? '' : ' (new client)'}`}
                 />
                 <ReviewItem label="Job" value={form.name.trim()} />
+                {form.program ? (
+                  <ReviewItem label="Program" value={`${form.program.key} ${form.program.name}, linked on save`} />
+                ) : null}
                 <ReviewItem
                   label="Kind of work"
                   value={`${jobType?.name ?? 'General'}, ${form.kind === 'ongoing' ? 'ongoing' : 'one time'}`}
