@@ -3,8 +3,8 @@
 ## Note
 
 Turn the Portal search bar into one search for everything the org has: CRM, WMS, Projects and Pulse.
-That means documents, orders, projects, jobs, people, customers, deals, SKUs and so on.
-It should learn from each person: what they search for and click often moves to the top, and the
+That means files people uploaded, orders, projects, jobs, people, customers, deals, SKUs and so on.
+It understands plain English ("orders for Acme shipped last week"). It should learn from each person: what they search for and click often moves to the top, and the
 empty search box suggests what they will probably want next.
 
 ## What exists today
@@ -75,17 +75,57 @@ Predictive behavior:
 - Privacy: history is per user only, viewable and clearable in Portal settings ("Clear search history").
   Never shared with teammates. Events older than 180 days are deleted.
 
-### 3. UI
+### 3. Plain English search (v1)
+People can type a sentence instead of keywords: "orders for Acme shipped last week",
+"overdue tasks assigned to Maya", "invoices over $5k from October".
+
+- **When**: the query looks like a sentence (4+ words, or words like dates, "assigned to", "over",
+  "last week"). Short queries skip this and stay instant.
+- **How**: a fast Claude model turns the sentence into structured filters using a fixed schema built
+  from what the providers support:
+  ```ts
+  interface ParsedQuery {
+    text?: string;                       // leftover keywords
+    types?: string[];                    // ['order']
+    apps?: Array<'crm' | 'wms' | 'projects' | 'pulse'>;
+    entities?: { customer?: string; person?: string; project?: string };
+    status?: string[];                   // ['shipped']
+    dateField?: 'created' | 'updated' | 'due' | 'shipped';
+    dateRange?: { from: string; to: string };
+    amount?: { min?: number; max?: number };
+  }
+  ```
+  Each provider receives the filters it understands and ignores the rest.
+- **Shown to the user**: an editable chip row under the box ("Orders · Acme · Shipped · Nov 17 to 23"),
+  so they can see and fix what was understood.
+- **Speed**: the normal keyword search runs at the same time and shows first; the plain English results
+  replace it when ready (target under 1s). Same sentence is cached per org for 10 minutes.
+- **Privacy**: only the typed text and the filter schema go to the model, never records or file contents.
+- **Fallback**: if parsing fails or times out, keyword results stay. Picks on parsed results feed the
+  same personal ranking.
+
+### 4. UI
 - One component, `MasterSearch`, used by the home search box and the Ctrl/Cmd+K palette.
 - Groups: Top hit, then per type (Orders, Projects, Jobs, People, Documents...), each with an app badge.
 - Filters as chips or prefixes: `order:`, `project:`, `@person`, `in:wms`.
 - Keyboard first: arrows, Enter opens, Cmd+Enter opens in a new tab, Tab cycles groups.
 - Existing commands (open app, switch org, sign out) stay and rank alongside records.
 
-### 4. Later: shared index for speed
+### 5. Later: shared index for speed
 If fan-out gets slow, add `core.search_document` (tsvector + `pg_trgm`) that each app keeps up to date
 through its existing event outbox. Permission checks still run in the owning app on the final results.
 Only do this if fan-out p95 goes over about 600ms.
+
+### Files (uploaded documents)
+"Documents" means files people uploaded. v1 searches file name, type, uploader and the record it is
+attached to. Searching inside file contents (PDF text, OCR) is a later phase.
+
+| App | Table |
+| --- | --- |
+| CRM | `files` in `apps/crm/src/server/db/schema/collaboration.ts` |
+| Projects | `attachments` in `apps/projects/src/server/db/schema/collaboration.ts` |
+| WMS | `files`, `attachments` in `apps/wms/src/server/db/schema/platform.ts` |
+| Pulse | No uploads today |
 
 ## Plan
 
@@ -93,21 +133,25 @@ Only do this if fan-out p95 goes over about 600ms.
    - Create `packages/search` (types, signed token helpers, merge + rank functions with unit tests).
    - Build `MasterSearch` in the Portal; wire it into the home box and the Ctrl/Cmd+K palette.
 2. **Providers**, one app at a time, each behind its entitlement:
-   - Projects: projects, tasks, documents, people.
-   - CRM: deals, accounts, contacts.
-   - WMS: orders, work orders, receipts, SKUs, clients.
+   - Projects: projects, tasks, files, people.
+   - CRM: deals, accounts, contacts, files.
+   - WMS: orders, work orders, receipts, SKUs, clients, files.
    - Pulse: jobs, customers.
 3. **Personalization**
    - Migration for `search_event` + `search_affinity`; log picks; nightly rollup job plus live update on pick.
    - Recent, Suggested and prefix completions; settings page to view and clear history.
-4. **Polish**
+4. **Plain English**
+   - Query parser with the `ParsedQuery` schema, sentence detection, chip row, cache, timeout fallback.
+   - Providers accept structured filters (types, status, date range, amount, entity).
+   - Eval set of ~100 real style sentences per app to check parsing before launch.
+5. **Polish**
    - Filters/prefixes, timeouts and partial results, a11y, phone layout.
    - Analytics: `search_query`, `search_pick` (position, app, type), zero result queries.
    - E2E: an org with all four apps; a user without WMS access must never see WMS hits.
-5. **Optional**: shared index (section 4) if latency needs it.
+6. **Optional**: shared index (section 5) and searching inside file contents.
 
-## Open questions
+## Decisions
 
-- Should the same master search replace the per-app Ctrl/Cmd+K search inside CRM, WMS, Projects and Pulse too?
-- Which document types count first (Projects attachments, WMS BOL/labels, CRM files)?
-- Is AI style natural language ("orders for Acme shipped last week") wanted in v1, or later?
+- The master search lives in the Portal only. The search inside CRM, WMS, Projects and Pulse stays as is.
+- "Documents" means files people uploaded in any app.
+- Plain English search is in v1.
