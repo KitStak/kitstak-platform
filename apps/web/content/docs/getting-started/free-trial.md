@@ -45,7 +45,7 @@ To add one app from inside another app, select it in the app switcher, or select
 | Billing, Plan card | **Free trial.** with the days left and the end date |
 | Billing, Next charge card | **No charge planned** and **Pick a plan to keep your apps after** the end date |
 | Portal home tiles | The days left in your free trial |
-| A banner in each app | The end date and **Pick a plan**, from the second day of the trial. It turns to a warning color near the end. |
+| A banner in each app | The end date, with **Pick a plan** for owners and billing managers. It does not show on the first day. Near the end it turns to a warning, and on the last day it says **Your free trial ends today.** |
 | Email | A welcome email when it starts, and reminders before it ends while no card is on file |
 
 ## Add a card during the trial
