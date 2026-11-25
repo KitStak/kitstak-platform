@@ -17,6 +17,7 @@ import {
   Eye,
   FolderInput,
   Handshake,
+  Factory,
   Info,
   ListChecks,
   ListPlus,
@@ -28,6 +29,7 @@ import {
   Tag,
   Tags as TagsIcon,
   Trash2,
+  TrendingDown,
   Truck,
   UserRound,
   Zap,
@@ -344,6 +346,8 @@ function TriggerGlyph({ type }: { readonly type: AutomationTrigger['type'] }) {
     task_overdue: AlarmClock,
     crm_stage_changed: Handshake,
     wms_order_shipped: Truck,
+    run_done: Factory,
+    run_below_plan: TrendingDown,
   }[type];
   return <Icon aria-hidden className={GLYPH} />;
 }
