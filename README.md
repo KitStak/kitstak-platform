@@ -73,37 +73,25 @@ When two or more apps are on the same account they link up on their own:
 Under the hood it looks like this:
 
 ```mermaid
-flowchart LR
-  subgraph Apps
-    portal[Portal]
-    crm[CRM]
-    wms[WMS]
-    projects[Projects]
-    pulse[Pulse]
+flowchart TB
+  subgraph apps [Five apps, each deployed on its own]
+    direction LR
+    portal[Portal] ~~~ crm[CRM] ~~~ wms[WMS] ~~~ projects[Projects] ~~~ pulse[Pulse]
   end
 
   subgraph shared [Shared packages]
-    auth["@kitstak/auth<br/>one session"]
-    ent["@kitstak/entitlements<br/>who has which app"]
-    bridges["@kitstak/pm-bridge<br/>@kitstak/pulse-bridge"]
-    ui["@kitstak/ui<br/>tokens, icons, app switcher"]
+    direction LR
+    auth["auth<br/>one session"] ~~~ ent["entitlements<br/>who has which app"] ~~~ bridges["pm-bridge, pulse-bridge<br/>reads across apps"] ~~~ ui["ui<br/>tokens, icons, switcher"]
   end
 
-  subgraph Postgres
-    core[(core)]
-    crmdb[(crm)]
-    wmsdb[(wms per org)]
-    pm[(pm)]
-    pulsedb[(pulse)]
+  subgraph db [One Postgres database]
+    direction LR
+    core[(core)] ~~~ crmdb[(crm)] ~~~ wmsdb[(wms, one per org)] ~~~ pm[(pm)] ~~~ pulsedb[(pulse)]
   end
 
-  Apps --> auth --> core
-  Apps --> ent --> core
-  portal & crm & wms & projects --> bridges --> pm & pulsedb
-  crm --> crmdb
-  wms --> wmsdb
-  projects --> pm
-  pulse --> pulsedb
+  apps --> shared
+  shared -->|"core, pm, pulse"| db
+  apps -->|"each app's own schema"| db
 ```
 
 Sign-in is [Better Auth](https://www.better-auth.com), with one session cookie shared by every app.
