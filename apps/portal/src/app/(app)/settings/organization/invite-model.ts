@@ -99,6 +99,12 @@ export interface SeatFacts {
   readonly canManageBilling: boolean;
   /** The plan is Pulse alone: 5 seats are included and more cannot be bought. */
   readonly pulseOnly: boolean;
+  /**
+   * Why there is no paid plan, so the line says what is true now (review round 5): a free trial
+   * that is running, one that has ended, or no plan at all. Read only when `paid` is false.
+   * Left out means a running trial.
+   */
+  readonly unpaid?: 'trial' | 'trial_ended' | 'no_plan';
 }
 
 const people = (count: number): string => (count === 1 ? '1 person' : `${count} people`);
@@ -108,7 +114,11 @@ const seats = (count: number): string => (count === 1 ? '1 seat' : `${count} sea
 export function invitePlanLine(facts: SeatFacts, role: InviteRole, typed: number): string {
   const count = Math.max(1, typed);
   if (isFreeInviteRole(role)) return count === 1 ? 'A guest is free. This uses no seat.' : 'Guests are free. This uses no seats.';
-  if (!facts.paid) return 'No seat limit during your free trial. Seats are counted when you pick a plan.';
+  if (!facts.paid) {
+    if (facts.unpaid === 'trial_ended') return 'Your free trial has ended. Seats are counted when you pick a plan.';
+    if (facts.unpaid === 'no_plan') return 'You have no plan yet. Seats are counted when you pick one.';
+    return 'No seat limit during your free trial. Seats are counted when you pick a plan.';
+  }
   if (facts.limit === null) return 'Your plan has no seat limit. This does not change your bill.';
   const open = Math.max(0, facts.limit - facts.used);
   if (count <= open) return `Uses ${count} of your ${seats(open).replace('seat', 'open seat')}. Your bill stays the same.`;

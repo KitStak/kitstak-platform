@@ -53,7 +53,9 @@ export async function createTestOrgs(specs: ReadonlyArray<{ key: string; users: 
     for (const [userKey, role] of Object.entries(spec.users)) {
       const [created] = await db
         .insert(user)
-        .values({ name: `${userKey} ${spec.key}`, email: `${userKey}.${spec.key}.${suffix}@test.example` })
+        // People who proved their email, as the shared invite rule asks of an inviter (billing
+        // review round 5: the CRM invite door runs the same rules as every other door).
+        .values({ name: `${userKey} ${spec.key}`, email: `${userKey}.${spec.key}.${suffix}@test.example`, emailVerified: true })
         .returning();
       if (!created) throw new Error('user insert failed');
       userIds.push(created.id);

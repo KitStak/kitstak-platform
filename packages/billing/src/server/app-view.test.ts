@@ -127,7 +127,8 @@ describe.skipIf(!available)('app plan view, organization hooks, intents and prof
     expect(projects.access).toBe('locked');
     expect(projects.notice).toBeNull();
     expect(projects.lock).toMatchObject({ title: 'Projects is not in your trial yet', primary: { label: 'Add Projects to my trial' } });
-    expect((await view(org, 'projects', member!)).lock).toMatchObject({ body: 'Ask Maya Chen to add it.', primary: null });
+    // A member cannot add it. They get one button that leads to the ask (review round 5).
+    expect((await view(org, 'projects', member!)).lock).toMatchObject({ body: 'Ask Maya Chen to add it.', primary: { label: 'Ask Maya to add Projects' } });
 
     // Under the dev switch the real banner still shows, and access is full everywhere.
     const dev = await view(org, 'projects', owner!, true);

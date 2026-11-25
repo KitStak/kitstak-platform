@@ -306,8 +306,11 @@ email is not verified yet, else `/welcome`.
 - **Invite email.** Every invite, from the portal or from any app, now sends an email: "Maya Chen invited you
   to Northwind Robotics on KitStak", one button "Accept invite" to `/invite/<id>`, and the date it expires.
 - **`/invite/[invitationId]`.** Shows the organization name, who invited you and your role.
-  Signed out and new: a short form (full name, password; the email is fixed and shown) and "Join Northwind
-  Robotics". Signed out with an account: "Sign in to accept". Signed in with the invited email: one button
+  Signed out and new: a short form (full name; the email is fixed and shown) and "Join Northwind
+  Robotics". No password is asked for (review round 5): "Set a password" under the button opens the
+  password field for a person who wants one, and everyone else signs in with an emailed code. A link that
+  does not carry the proof from the invite email (a copied link, a link from the CRM) shows "Email me a
+  code" in place of the form: the code goes to the invited address and proves the mailbox. Signed out with an account: "Sign in to accept". Signed in with the invited email: one button
   "Accept invite". Signed in with another email: "This invite is for sam@northwind.example. Sign out and open
   the link again." Expired or used: "This invite is no longer active. Ask Maya Chen to send a new one."
   No free seat: "The team has no free seat. Ask Maya Chen to add one." After accepting, the organization
@@ -869,8 +872,12 @@ with its rendered HTML and text, newest first, so a person can read the code or 
 5. **CSRF.** All mutations are server actions (Next checks the origin). The only POST routes are the two
    webhooks (signature) and the job tick (bearer secret). This matches the portal's posture in CODEMAP 7.
 6. **Rate limits.** Better Auth rules for signup, sign in, codes and invites (stored in `core.rate_limit`).
-   Billing: 10 checkout sessions per organization per 10 minutes, 20 plan changes per hour, 5 code sends per
-   10 minutes.
+   Billing: 10 checkout sessions per organization per 10 minutes, 20 plan changes per hour. Email codes
+   (review round 5): sends are spaced per address and per kind of code (two at once, then one a minute, then
+   one every 10 minutes, then one every 30 minutes) and never walled for a day, so a stranger cannot stop
+   the owner of an address from getting a code. Tries at a code stay counted (5 per code, and per address
+   per 10 minutes and per day). A browser that signed in to the account before has counters of its own.
+   When no new code is sent, the screen says so with the real wait, the same for every address.
 7. **Money.** Integer cents everywhere. The catalog test proves every derived amount is a whole cent. The
    parity test proves the quote equals the gateway total for 9 carts.
 8. **Secrets.** Stripe and mail keys are read lazily from env, never logged, never in the repo. The marketing

@@ -40,6 +40,14 @@ describe('invitePlanLine', () => {
     expect(invitePlanLine({ ...PAID, paid: false }, 'member', 1)).toBe('No seat limit during your free trial. Seats are counted when you pick a plan.');
   });
 
+  test('after the trial, or with no plan, the line does not talk about a trial that is not running', () => {
+    expect(invitePlanLine({ ...PAID, paid: false, unpaid: 'trial' }, 'member', 1)).toBe('No seat limit during your free trial. Seats are counted when you pick a plan.');
+    expect(invitePlanLine({ ...PAID, paid: false, unpaid: 'trial_ended' }, 'member', 2)).toBe('Your free trial has ended. Seats are counted when you pick a plan.');
+    expect(invitePlanLine({ ...PAID, paid: false, unpaid: 'no_plan' }, 'member', 1)).toBe('You have no plan yet. Seats are counted when you pick one.');
+    // A guest is free whatever the plan is.
+    expect(invitePlanLine({ ...PAID, paid: false, unpaid: 'trial_ended' }, 'guest', 1)).toBe('A guest is free. This uses no seat.');
+  });
+
   test('open seats are used first and the bill stays the same', () => {
     expect(invitePlanLine(PAID, 'member', 1)).toBe('Uses 1 of your 3 open seats. Your bill stays the same.');
     expect(invitePlanLine({ ...PAID, used: 4 }, 'viewer', 0)).toBe('Uses 1 of your 1 open seat. Your bill stays the same.');

@@ -5,7 +5,7 @@ import { getSignupResume, stepHref } from '@/server/signup';
 import { firstNameOf } from '@/features/signup/fields';
 import { CompanyForm } from './company-form';
 
-export const metadata: Metadata = { title: 'Name your workspace' };
+export const metadata: Metadata = { title: 'Name your organization' };
 
 /**
  * For a person who has an account but no organization yet: they signed up with Google or

@@ -404,3 +404,49 @@ export function billingOrganizationOptions(input: {
     },
   };
 }
+
+/**
+ * The shared invite door for an app that writes `core.invitation` itself instead of calling the
+ * organization endpoint (the CRM "Invite members" dialog). Review round 5: that dialog skipped
+ * every shared rule and sent no email, so a person invited from the CRM could not join.
+ *
+ * `check` runs the very rules of `beforeCreateInvitation`: only an owner hands out the billing
+ * role, the inviter's own email must be verified, the plan must have a seat, and the day's count
+ * of invites. Call it before the row is written. It throws the same `APIError`s the endpoint gives.
+ * `send` mails the invite with the proof of the mailbox in its link, exactly as the endpoint does.
+ * Call it after the row is committed.
+ */
+export interface InviteDoor {
+  check(input: { orgId: string; inviterId: string; email: string; role: string }): Promise<void>;
+  send(input: { invitationId: string; orgId: string; orgName: string; email: string; inviterName: string; expiresAt: Date }): Promise<void>;
+}
+
+export function inviteDoor(input: Parameters<typeof billingOrganizationOptions>[0]): InviteDoor {
+  const shared = billingOrganizationOptions(input);
+  const before = shared.organizationHooks?.beforeCreateInvitation;
+  const mail = shared.sendInvitationEmail;
+  return {
+    async check({ orgId, inviterId, email, role }) {
+      if (!before) return;
+      // The hook reads the ids and the role, and everything else from the database.
+      await before({
+        invitation: { email: email.trim().toLowerCase(), role, organizationId: orgId, inviterId },
+        inviter: { id: inviterId },
+        organization: { id: orgId },
+      } as unknown as Parameters<typeof before>[0]);
+    },
+    async send({ invitationId, orgId, orgName, email, inviterName, expiresAt }) {
+      if (!mail) return;
+      await mail(
+        {
+          id: invitationId,
+          email: email.trim().toLowerCase(),
+          organization: { id: orgId, name: orgName },
+          inviter: { user: { name: inviterName } },
+          invitation: { id: invitationId, expiresAt },
+        } as unknown as Parameters<typeof mail>[0],
+        undefined as unknown as Parameters<typeof mail>[1],
+      );
+    },
+  };
+}

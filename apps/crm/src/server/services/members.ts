@@ -5,13 +5,15 @@
  */
 import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { invitation, member, team, teamMember, user } from '@/server/db/schema';
-import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@/server/http/errors';
+import { invitation, member, organization, team, teamMember, user } from '@/server/db/schema';
+import { AppError, BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@/server/http/errors';
 import { canManageRole, ORG_ROLES, parseRoles, primaryRole, type OrgRole } from '@/server/rbac';
 import { inTransaction, type ServiceContext } from './context';
 import { CATALOG } from '@kitstak/billing/catalog';
+import { inviteDoor, type BillingDb, type InviteDoor } from '@kitstak/billing/server';
+import { APIError } from 'better-auth/api';
 import { assertInviteEmailAllowed } from './admin-org';
-import { assertMayChangeBillingManager, assertSeatAvailable, keepBillingRole } from './seat-limit';
+import { assertMayChangeBillingManager, assertSeatAvailable, hasBillingTables, keepBillingRole } from './seat-limit';
 import type { InvitationDto, MemberDto, TeamDto } from './contracts/dto';
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -180,11 +182,38 @@ export async function listInvitations(ctx: ServiceContext): Promise<InvitationDt
   return rows.map(toInvitationDto);
 }
 
+/**
+ * The shared invite door (`@kitstak/billing/server` auth-hooks.ts), on this executor. Billing
+ * review round 5: this service used to write the invitation and stop. It skipped the shared rules
+ * (the inviter's email must be verified, the day's count of invites) and sent no email, so there
+ * was no link with the proof of the mailbox and a person invited from the CRM could not join.
+ */
+function sharedInviteDoor(ctx: ServiceContext): InviteDoor {
+  const env = process.env;
+  return inviteDoor({
+    db: ctx.db as unknown as BillingDb,
+    portalUrl: (env.NEXT_PUBLIC_PORTAL_URL?.trim() || 'http://localhost:3300').replace(/\/+$/, ''),
+    allowAll: () => false,
+    // The same secret the Portal checks the link's proof with.
+    ...(env.BETTER_AUTH_SECRET ? { inviteSecret: env.BETTER_AUTH_SECRET } : {}),
+  });
+}
+
+/** A refusal of the shared door, as this API's own error with the same sentence and code. */
+function fromSharedDoor(error: unknown): unknown {
+  if (!(error instanceof APIError)) return error;
+  const body = (error.body ?? {}) as { code?: unknown; message?: unknown };
+  const message = typeof body.message === 'string' && body.message.trim() !== '' ? body.message : 'This invite could not be sent.';
+  const details = typeof body.code === 'string' ? { code: body.code } : undefined;
+  return error.statusCode === 429 ? new AppError('RATE_LIMITED', message, { details }) : new ForbiddenError(message, details);
+}
+
 export async function createInvitation(
   ctx: ServiceContext,
   input: z.infer<typeof createInvitationSchema>,
 ): Promise<InvitationDto> {
-  return inTransaction(ctx, async (tx) => {
+  const billing = await hasBillingTables(ctx);
+  const created = await inTransaction(ctx, async (tx) => {
     if (!tx.userId) throw new ForbiddenError();
     const actor = actorRole(tx);
     if (!canManageRole(actor, input.role))
@@ -201,6 +230,15 @@ export async function createInvitation(
     // The plan's seat limit (no limit during a free trial). Inviting the same address again
     // replaces the open invite below, so that one is not counted twice.
     await assertSeatAvailable(tx, { role: input.role, ignoreInviteEmail: input.email });
+    // The rules every other invite door runs: a verified inviter, and the day's count (last, so a
+    // refused invite does not use it up). Inside the transaction, so a failed write counts nothing.
+    if (billing) {
+      try {
+        await sharedInviteDoor(tx).check({ orgId: tx.orgId, inviterId: tx.userId, email: input.email, role: input.role });
+      } catch (error: unknown) {
+        throw fromSharedDoor(error);
+      }
+    }
     await tx.db
       .update(invitation)
       .set({ status: 'canceled' })
@@ -224,8 +262,28 @@ export async function createInvitation(
       })
       .returning();
     if (!row) throw new Error('Invitation insert returned no row');
-    return toInvitationDto(row);
+    return row;
   });
+  // The invite email, with the link that proves the mailbox. After the commit, so the link never
+  // points at an invitation that was rolled back. A mail problem leaves the row queued for the
+  // job and never turns the invite into an error (the shared sender sees to both).
+  if (billing) {
+    const [names] = await ctx.db
+      .select({ orgName: organization.name, inviterName: user.name })
+      .from(organization)
+      .leftJoin(user, eq(user.id, created.inviterId))
+      .where(eq(organization.id, created.organizationId))
+      .limit(1);
+    await sharedInviteDoor(ctx).send({
+      invitationId: created.id,
+      orgId: created.organizationId,
+      orgName: names?.orgName ?? 'your team',
+      email: created.email,
+      inviterName: names?.inviterName?.trim() || 'A teammate',
+      expiresAt: created.expiresAt,
+    });
+  }
+  return toInvitationDto(created);
 }
 
 export async function revokeInvitation(ctx: ServiceContext, invitationId: string): Promise<{ id: string }> {

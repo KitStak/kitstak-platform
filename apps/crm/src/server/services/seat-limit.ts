@@ -27,7 +27,7 @@ let billingTablesSeen = false;
  * with `to_regclass`, which never fails, because a failed statement would abort the caller's open
  * transaction. A yes is remembered for the life of the process.
  */
-async function hasBillingTables(ctx: ServiceContext): Promise<boolean> {
+export async function hasBillingTables(ctx: ServiceContext): Promise<boolean> {
   if (billingTablesSeen) return true;
   const result = await ctx.db.execute(sql`SELECT to_regclass('core.billing_subscriptions') IS NOT NULL AS "ok"`);
   billingTablesSeen = rows<{ ok: boolean }>(result)[0]?.ok === true;

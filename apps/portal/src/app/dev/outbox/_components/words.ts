@@ -16,6 +16,7 @@ export const TEMPLATE_LABELS: Readonly<Record<EmailTemplateId, string>> = {
   cancel_scheduled: 'Cancel set',
   paused: 'Pause set',
   plan_ended: 'Plan ended',
+  app_request: 'Ask for an app',
 };
 
 export function templateLabel(template: string): string {

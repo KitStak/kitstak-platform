@@ -12,6 +12,14 @@
 #                                             deploy/dev/stripe-env.sh writes. Without the switch
 #                                             the Portal uses the built in test gateway (the default).
 #
+#   KITSTAK_DEV_MEM_MB_WMS=3000 deploy/dev/app-start.sh wms
+#                                             give one dev server another memory budget (in MB).
+#                                             Each server runs under deploy/dev/app-supervise.sh,
+#                                             which starts it again when it exits and restarts it
+#                                             when it grows over its budget, so a long test run does
+#                                             not end with the machine out of memory.
+#                                             KITSTAK_DEV_SUPERVISE=0 starts the bare server instead.
+#
 # Ports: portal 3300, crm 3100, wms 3000, projects 3400, pulse 3500, web 3600.
 # Logs:  deploy/dev/.run/logs/<app>.log
 # The script waits until the app answers a real page, so when it prints READY you can use it.
@@ -84,6 +92,7 @@ start_one() {
   fi
 
   : >"$log"
+  rm -f "$PID_DIR/$app.supervisor"
   (
     if [ "$want_mode" = "stripe" ]; then
       # Real Stripe TEST mode: the key, the local webhook secret and the proxy settings come from the
@@ -95,8 +104,14 @@ start_one() {
     cd "$REPO_ROOT/apps/$app"
     # setsid: the server gets its own process group, so it outlives this shell and
     # stop.sh can stop the whole group (next dev spawns helper processes).
-    NODE_ENV=development NEXT_TELEMETRY_DISABLED=1 \
-      setsid nohup pnpm exec next dev -p "$port" >>"$log" 2>&1 9>&- &
+    if [ "${KITSTAK_DEV_SUPERVISE:-1}" = "0" ]; then
+      NODE_ENV=development NEXT_TELEMETRY_DISABLED=1 \
+        setsid nohup pnpm exec next dev -p "$port" >>"$log" 2>&1 9>&- &
+    else
+      # The supervisor is the group leader. It keeps the server alive and inside its memory
+      # budget (deploy/dev/app-supervise.sh). The dev cache is cleaned by it at every (re)start.
+      setsid nohup "$DEV_DIR/app-supervise.sh" "$app" "$port" >/dev/null 2>&1 9>&- &
+    fi
     echo $! >"$PID_DIR/$app.pid"
   )
   pid="$(cat "$PID_DIR/$app.pid")"

@@ -66,12 +66,34 @@ test.describe('invited people and email addresses', () => {
     // id is not a secret, so by itself it no longer lets anyone join (it did until round 3, and an
     // admin could take an owner's billing invite that way). See round4-backend.spec.ts.
     await resetRateLimits();
+    // Review round 5: the page checks for the proof before it draws the join form. Without it the
+    // screen offers the one way through, a code mailed to the invited address, and no name or
+    // password field and no "Join" button that can only fail.
     await memberPage.goto(link.split('?')[0] ?? link);
+    const needsLink = memberPage.getByTestId('invite-needs-link');
+    await expect(needsLink.getByTestId('invite-code-door')).toBeVisible({ timeout: 90_000 });
+    await expect(needsLink.getByRole('heading')).toContainText('Join ');
+    await expect(memberPage.getByTestId('invite-email-code')).toBeVisible();
+    await expect(memberPage.getByTestId('invite-name')).toHaveCount(0);
+    await expect(memberPage.getByTestId('invite-password')).toHaveCount(0);
+    await expect(memberPage.getByTestId('invite-accept')).toHaveCount(0);
+    // A proof that is not the right one gets the same screen.
+    await memberPage.goto(`${link.split('?')[0] ?? link}?t=${'A'.repeat(43)}`);
+    await expect(memberPage.getByTestId('invite-needs-link')).toBeVisible({ timeout: 90_000 });
+    await expect(memberPage.getByTestId('invite-name')).toHaveCount(0);
+
+    // The server still refuses by itself. The form is drawn from the real link, then the proof is
+    // taken away (as a tab left open past the proof's life would have it) and the form is sent.
+    await memberPage.goto(link);
     await expect(memberPage.getByTestId('invite-org-name')).toBeVisible({ timeout: 90_000 });
+    await context.clearCookies();
     await memberPage.getByTestId('invite-name').fill(member.name);
+    await memberPage.getByTestId('invite-set-password').click();
     await memberPage.getByTestId('invite-password').fill(member.password);
     await memberPage.getByTestId('invite-accept').click();
-    await expect(memberPage.getByText('Open the link in your invite email to join. That shows the email is yours.')).toBeVisible({ timeout: 30_000 });
+    // And the page then shows the screen with the code door, with no form that can only fail.
+    await expect(memberPage.getByTestId('invite-needs-link')).toBeVisible({ timeout: 30_000 });
+    await expect(memberPage.getByTestId('invite-accept')).toHaveCount(0);
     expect(await sql('select 1 from core."user" where email = $1', [member.email])).toHaveLength(0);
     expect(await emailsTo(member.email, 'verify_email')).toHaveLength(0);
 
@@ -107,6 +129,15 @@ test.describe('invited people and email addresses', () => {
     const trial = await sql('select 1 from core.billing_accounts where org_id = $1 and trial_ends_at is not null', [orgId]);
     expect(trial).toHaveLength(1);
     expect(await emailsTo(person.email, 'verify_email')).toHaveLength(1);
+
+    // Review round 5: the welcome email of the trial was queued for the mistyped address, which may
+    // be a stranger's mailbox. It follows the person: nothing waits for the old address any more,
+    // and the right address gets the welcome email.
+    expect(await sql(`select 1 from core.billing_emails where to_email = $1 and status = 'queued'`, [person.email.toLowerCase()])).toHaveLength(0);
+    await page.request.post('/api/billing/jobs/tick');
+    await expect
+      .poll(async () => sql(`select status from core.billing_emails where org_id = $1 and template = 'welcome' and to_email = $2`, [orgId, right.toLowerCase()]), { timeout: 30_000 })
+      .toEqual([{ status: 'sent' }]);
 
     // The code that went to the new address verifies it.
     await verifyEmail(page, right, '/welcome');

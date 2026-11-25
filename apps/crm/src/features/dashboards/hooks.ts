@@ -9,6 +9,7 @@ import { useCallback } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui';
 import { apiRequest } from '@/lib/api';
+import { useOptionalOrg } from '@/features/shell/org-context';
 import { toastError, useOrgId } from '@/lib/hooks';
 import { queryKeys } from '@/lib/query-keys';
 import type { DashboardDto, DashboardWidgetDto, WidgetType } from '@/server/services/contracts/dto';
@@ -42,10 +43,16 @@ function post<T>(orgId: string, path: string, body: unknown, method: 'POST' | 'P
 
 export function useDashboardSources() {
   const orgId = useOrgId();
+  // A guest may not read dashboards (the server answers 403), and nothing a guest can open uses
+  // the sources. So the request is not made for them (billing review round 5). Outside the shell
+  // (dev harnesses) it runs as before.
+  const permissions = useOptionalOrg()?.permissions;
+  const canRead = permissions?.includes('dashboard:read') ?? true;
   return useQuery({
     queryKey: dashboardKeys.sources(orgId),
     queryFn: ({ signal }) => apiRequest<DashboardSourcesDto>('/dashboard-data/sources', { orgId, signal }),
     staleTime: 5 * 60_000,
+    enabled: canRead,
   });
 }
 

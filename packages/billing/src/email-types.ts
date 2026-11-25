@@ -18,7 +18,8 @@ export type EmailTemplateId =
   | 'grace_ending'
   | 'cancel_scheduled'
   | 'paused'
-  | 'plan_ended';
+  | 'plan_ended'
+  | 'app_request';
 
 export const EMAIL_TEMPLATE_IDS: readonly EmailTemplateId[] = [
   'verify_email',
@@ -35,6 +36,7 @@ export const EMAIL_TEMPLATE_IDS: readonly EmailTemplateId[] = [
   'cancel_scheduled',
   'paused',
   'plan_ended',
+  'app_request',
 ];
 
 interface Base {
@@ -58,6 +60,11 @@ export interface EmailPayloads {
   };
   reset_password: { readonly code: string; readonly minutes: number };
   invitation: Base & { readonly inviterName: string; readonly acceptUrl: string; readonly expiresAt: string };
+  /**
+   * A member asked the people who manage billing to add an app (review round 5). `priceLine` is a
+   * whole sentence from `quote()` ("It adds $28.80 per month."), or missing when there is no paid plan.
+   */
+  app_request: Base & { readonly askerName: string; readonly product: string; readonly priceLine?: string };
   welcome: Base & { readonly firstName: string; readonly products: Stack; readonly trialEndsAt: string };
   trial_ending: Base & {
     readonly daysLeft: 7 | 3 | 1;

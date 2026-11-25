@@ -7,14 +7,18 @@ import { planBadgeFor, type PlanBadge, type PlanState } from '@kitstak/billing/p
 import { getBillingProfile, getPlanState, listBillingHolders, listInvoices, retryPayment } from '@kitstak/billing/server';
 import { isDevAllowAll } from '@kitstak/entitlements';
 import { appReturnPath } from '@/lib/routes';
+import { appsAskedToday } from '@/server/ask';
 import { requireBillingContext } from '@/server/billing/context';
+import { firstNameOf } from '@/features/signup/fields';
 import { env, isProduction } from '@/server/env';
 import { Badge, Card, Notice } from '@/components/ui';
 import { BillingHeader, TestModeBadge } from '@/features/billing/billing-chrome';
 import { RememberAppReturn } from '@/features/billing/home/app-return';
 import { Flash, type FlashBackTargets, type FlashMessage } from '@/features/billing/home/flash';
+import { OpenCardForm } from '@/features/billing/home/open-card-form';
 import { PaymentFocus } from '@/features/billing/home/payment-focus';
 import { InviteReturn } from '@/features/billing/home/invite-return';
+import { MemberAsk } from '@/features/billing/home/member-ask';
 import { AppsSection, DetailsCard, InvoicesPreview, PlanCards, TeamCard, UsageSection } from '@/features/billing/home/sections';
 import { TestTools } from '@/features/billing/home/test-tools';
 import { memberLine, nextChargeCopy, phaseCopy } from '@/features/billing/phase-copy';
@@ -68,6 +72,19 @@ export default async function BillingPage({
 
   /* ----- a member without billing rights: one card, no amounts, no buttons ----- */
   if (!access.canView) {
+    // One click sends the ask (review round 5): the apps that are not in the plan, each with its
+    // own button. Under the allow all switch every app is open, so there is nothing to ask for.
+    const devOpen = isDevAllowAll();
+    const askedToday = devOpen ? [] : await appsAskedToday(org.id, context.session.user.id);
+    const askParam = first(params.ask);
+    const missing = devOpen
+      ? []
+      : PRODUCT_IDS.filter((id) => !state.modules[id].inPlan && !(state.modules[id].source === 'manual' && state.modules[id].access === 'full')).map((id) => ({
+          id,
+          name: CATALOG.products[id].shortName,
+          tagline: CATALOG.products[id].tagline,
+          askedToday: askedToday.includes(id),
+        }));
     return (
       <div className="mx-auto flex max-w-[560px] flex-col gap-6">
         <BillingHeader orgName={org.name} title="Billing" />
@@ -76,9 +93,9 @@ export default async function BillingPage({
             <ShieldQuestion aria-hidden className="size-5" />
           </span>
           <div>
-            <p className="text-base font-semibold text-fg">{memberLine(state, org.name, timeZone, { appsOpen: isDevAllowAll() })}</p>
+            <p className="text-base font-semibold text-fg">{memberLine(state, org.name, timeZone, { appsOpen: devOpen })}</p>
             <p className="mt-1 text-sm text-fg-secondary">
-              {access.ownerName ? `Ask ${access.ownerName} to manage billing.` : 'Ask your organization owner to manage billing.'}
+              {access.ownerName ? `${access.ownerName} manages billing for ${org.name}.` : `Your organization owner manages billing for ${org.name}.`}
             </p>
             <Link href="/" className="mt-4 inline-flex min-h-9 pointer-coarse:min-h-11 items-center gap-1 text-sm font-semibold text-fg hover:underline">
               Back to my apps
@@ -86,6 +103,11 @@ export default async function BillingPage({
             </Link>
           </div>
         </Card>
+        <MemberAsk
+          apps={missing}
+          askName={access.ownerName ? firstNameOf(access.ownerName) : null}
+          focus={askParam && isProductId(askParam) && missing.some((app) => app.id === askParam) ? askParam : null}
+        />
       </div>
     );
   }
@@ -139,7 +161,12 @@ export default async function BillingPage({
   const devAllowAll = isDevAllowAll();
   const copy = phaseCopy(state, timeZone, { appsOpen: devAllowAll });
   const billingOff = state.mode === 'unavailable';
-  const fixPayment = first(params.fix) === 'payment';
+  // `fix=payment` is the "Update card" button of an app banner and of the failed payment email.
+  // For a person who can change the card it opens the card form at once (review round 5). Everyone
+  // else, and `focus=payment` ("Pay the bill instead"), gets the Payment method card in view.
+  const fixPayment = first(params.fix) === 'payment' || first(params.focus) === 'payment';
+  const openCardForm =
+    first(params.fix) === 'payment' && access.canManage && !billingOff && state.hasSubscription && state.paymentMethod !== null && !flash;
   // Billing shows the plan as it is, with one exception: under the switch an app is never marked
   // "View only", because it opens in full. It keeps the badge the launcher gives it ("Included").
   const badges = Object.fromEntries(
@@ -196,7 +223,11 @@ export default async function BillingPage({
         billingOff={billingOff}
         highlightPayment={fixPayment}
       />
-      {fixPayment ? <PaymentFocus targetId="payment-method" /> : null}
+      {openCardForm ? (
+        <OpenCardForm targetId="payment-method" from={rememberFrom?.from ?? null} returnPath={rememberFrom?.returnPath ?? null} />
+      ) : fixPayment ? (
+        <PaymentFocus targetId="payment-method" />
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
         <div className="flex min-w-0 flex-col gap-6">

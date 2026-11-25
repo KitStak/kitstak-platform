@@ -7,6 +7,7 @@ import { appReturnPath } from '@/lib/routes';
 import { requireBillingContext } from '@/server/billing/context';
 import { LinkButton, Notice } from '@/components/ui';
 import { BackLink, BillingHeader, BillingMessage, TestModeBadge } from '@/features/billing/billing-chrome';
+import { RememberAppReturn } from '@/features/billing/home/app-return';
 import { PlanPicker, type PlanPickerProps } from '@/features/billing/plan-picker/plan-picker';
 
 export const metadata: Metadata = { title: 'Plan' };
@@ -125,6 +126,9 @@ export default async function PlanPage({
           Verify your email first. It takes one minute.
         </Notice>
       ) : null}
+      {/* Picking a plan to pay for goes through the pay page, which drops the link's `from`. The app
+          is kept for this tab, so "You are all set." can offer "Back to Pulse" (review round 5). */}
+      {cameFrom && mode === 'checkout' ? <RememberAppReturn from={cameFrom} returnPath={returnPath} /> : null}
       <PlanPicker
         // A new link (another app, another number) gives a fresh picker. The key is made from the
         // link only, never from the plan: when the plan changes under an open picker (a colleague
