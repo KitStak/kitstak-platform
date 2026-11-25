@@ -1,7 +1,8 @@
 'use client';
 /**
- * New to KitStak and invited: full name and a password. The email is the invited one, fixed and
- * shown. One server action makes the account and joins the team. It checks for a free seat first,
+ * New to KitStak and invited: a full name, and a password only if the person wants one (review
+ * round 5: the emailed link is the proof, and they sign in with an emailed code next time). The
+ * email is the invited one, fixed and shown. One server action makes the account and joins the team. It checks for a free seat first,
  * so a join that would be refused never leaves an account behind, and a person who came from the
  * invite email is not asked to verify that same address again. The form is a normal form with
  * `autocomplete="new-password"`, so password managers still offer to save.
@@ -19,6 +20,8 @@ import {
   NO_NETWORK_MESSAGE,
   PasswordInput,
   PasswordRules,
+  QuietRow,
+  ROW_LINK,
   StrengthMeter,
   SubmitButton,
   passwordFieldError,
@@ -46,6 +49,8 @@ export function InviteJoinForm({
   const router = useRouter();
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  // Off by default: joining needs no password. "Set a password" opens the field.
+  const [wantsPassword, setWantsPassword] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; password?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage>('idle');
@@ -71,7 +76,7 @@ export function InviteJoinForm({
 
     const issues = {
       name: nameIssue(name) ?? undefined,
-      password: passwordIssue(password, passwordContext) ?? undefined,
+      password: wantsPassword ? (passwordIssue(password, passwordContext) ?? undefined) : undefined,
     };
     setErrors(issues);
     if (issues.name) return nameInput.current?.focus();
@@ -81,7 +86,12 @@ export function InviteJoinForm({
     setStage('joining');
     try {
       const timezone = browserTimeZone();
-      const result = await joinInviteAction({ invitationId, name: name.trim(), password, ...(timezone ? { timezone } : {}) });
+      const result = await joinInviteAction({
+        invitationId,
+        name: name.trim(),
+        ...(wantsPassword ? { password } : {}),
+        ...(timezone ? { timezone } : {}),
+      });
       if (result.ok) {
         router.replace(result.next ?? '/');
         router.refresh();
@@ -136,7 +146,7 @@ export function InviteJoinForm({
             data-testid="invite-name"
             autoComplete="name"
             autoCapitalize="words"
-            enterKeyHint="next"
+            enterKeyHint={wantsPassword ? 'next' : 'go'}
             required
             value={name}
             onChange={(event) => {
@@ -151,43 +161,61 @@ export function InviteJoinForm({
         )}
       </Field>
       {/* The same order as signup: the field, its meter, the red line, then the rules. */}
-      <Field label="Password" error={errors.password} errorHidden>
-        {({ inputId, describedBy, invalid }) => (
-          <div className="flex flex-col gap-2">
-            <PasswordInput
-              id={inputId}
-              ref={passwordInput}
-              name="password"
-              data-testid="invite-password"
-              autoComplete="new-password"
-              enterKeyHint="go"
-              required
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value);
-                // After a refusal the sentence follows what is typed, so it is never about an older try.
-                if (errors.password) {
-                  const issue = passwordIssue(event.target.value, passwordContext) ?? undefined;
-                  setErrors((current) => ({ ...current, password: issue }));
-                }
-              }}
-              aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
-              invalid={invalid}
-            />
-            <StrengthMeter password={password} context={passwordContext} />
-            <PasswordRules
-              password={password}
-              id={`${inputId}-rules`}
-              showMissing={Boolean(errors.password)}
-              error={passwordFieldError(password, errors.password)}
-              context={passwordContext}
-            />
-          </div>
-        )}
-      </Field>
+      {wantsPassword ? (
+        <Field label="Password" error={errors.password} errorHidden>
+          {({ inputId, describedBy, invalid }) => (
+            <div className="flex flex-col gap-2">
+              <PasswordInput
+                id={inputId}
+                ref={passwordInput}
+                name="password"
+                data-testid="invite-password"
+                autoComplete="new-password"
+                enterKeyHint="go"
+                required
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  // After a refusal the sentence follows what is typed, so it is never about an older try.
+                  if (errors.password) {
+                    const issue = passwordIssue(event.target.value, passwordContext) ?? undefined;
+                    setErrors((current) => ({ ...current, password: issue }));
+                  }
+                }}
+                aria-describedby={[describedBy, `${inputId}-rules`].filter(Boolean).join(' ')}
+                invalid={invalid}
+              />
+              <StrengthMeter password={password} context={passwordContext} />
+              <PasswordRules
+                password={password}
+                id={`${inputId}-rules`}
+                showMissing={Boolean(errors.password)}
+                error={passwordFieldError(password, errors.password)}
+                context={passwordContext}
+              />
+            </div>
+          )}
+        </Field>
+      ) : null}
       <SubmitButton data-testid="invite-accept" busyLabel={busyLabel}>
         Join {orgName}
       </SubmitButton>
+      {wantsPassword ? null : (
+        <QuietRow lead="No password needed. We email you a code when you sign in." data-testid="invite-no-password">
+          <button
+            type="button"
+            className={ROW_LINK}
+            data-testid="invite-set-password"
+            onClick={() => {
+              setWantsPassword(true);
+              // The field is drawn after this render.
+              window.setTimeout(() => passwordInput.current?.focus(), 0);
+            }}
+          >
+            Set a password
+          </button>
+        </QuietRow>
+      )}
       <p className="sr-only" role="status" aria-live="polite">
         {busyLabel ?? ''}
       </p>

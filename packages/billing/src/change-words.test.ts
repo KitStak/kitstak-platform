@@ -258,9 +258,37 @@ describe('a change that ends the bundle discount', () => {
       lines: [line('crm', -8507), line('crm', 8507), line('wms', -20475)],
     });
     expect(words.creditNote).toBe(
-      `That is $289.82 for the 22 full days left at your old prices, less $85.07 for the same days at your new prices. ${STARTED_DAY_RULE}`,
+      `$289.82 back for the 22 full days left at your old prices. Less $85.07 for the same days at your new prices. ${STARTED_DAY_RULE}`,
     );
     expect(words.creditNote).not.toContain('what you add');
+    // Review round 5: no sentence is longer than 20 words.
+    for (const sentence of (words.creditNote ?? '').split(/(?<=\.)\s+/)) expect(sentence.split(/\s+/).length).toBeLessThanOrEqual(20);
+  });
+
+  it('adding an app and giving seats back names each amount for what it is (review round 5)', () => {
+    // CRM and Projects with 5 seats (the bundle is on before and after), then Pulse on and 2 seats off.
+    const before = plan(['crm', 'projects'], 5);
+    const after = plan(['crm', 'projects', 'pulse'], 3);
+    const words = changeWords({
+      ...base,
+      ...between(before, after),
+      daysLeft: 29,
+      direction: 'credit',
+      creditCents: 4485 - 2243,
+      lines: [line('crm', -2243), line('projects', -2242), line('pulse', 2243)],
+    });
+    expect(words.creditNote).toBe(`$44.85 back for 2 seats. $22.43 for Pulse. Both are for the 29 full days left. ${STARTED_DAY_RULE}`);
+    expect(words.creditNote).not.toContain('old prices');
+    // The same change when the lines do not say which app they are for: the plain sentences.
+    const unnamed = changeWords({
+      ...base,
+      ...between(before, after),
+      daysLeft: 29,
+      direction: 'credit',
+      creditCents: 4485 - 2243,
+      lines: [part(-4485), part(2243)],
+    });
+    expect(unnamed.creditNote).toBe(`$44.85 back for the 29 full days left at your old prices. Less $22.43 for the same days at your new prices. ${STARTED_DAY_RULE}`);
   });
 
   it('amounts that would not add up fall back to a sentence with no wrong reason', () => {

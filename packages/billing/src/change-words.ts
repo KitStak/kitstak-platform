@@ -204,6 +204,30 @@ function splitByApp(
   return sums;
 }
 
+/**
+ * '$44.85 back for 2 seats. $22.43 for Pulse. Both are for the 29 full days left.'
+ *
+ * Only for the one case where every word is true: an app is added, none is removed, the apps that
+ * stay keep their price, and seats or warehouses go down. The two amounts come from the prorated
+ * lines and must leave exactly the credit. null in every other case.
+ */
+function givenBackWords(input: ChangeWordsInput, diff: PlanDiff): string | null {
+  const { before, after } = input;
+  if (!before || !after || input.daysLeft === null) return null;
+  if (diff.added.length === 0 || diff.removed.length > 0) return null;
+  if (diff.kept.some((app) => app.oldUnitCents !== app.newUnitCents)) return null;
+  const keeps = (source: 'seats' | 'warehouses') => diff.kept.some((app) => CATALOG.products[app.product].quantityFrom === source);
+  const seats = keeps('seats') ? before.seats - after.seats : 0;
+  const warehouses = keeps('warehouses') ? before.warehouses - after.warehouses : 0;
+  if (seats < 0 || warehouses < 0 || seats + warehouses === 0) return null;
+  const split = splitByApp(input.lines, diff);
+  if (!split) return null;
+  const back = split.keptBack - split.keptPart;
+  if (back <= 0 || split.addedPart <= 0 || back - split.addedPart !== input.creditCents) return null;
+  const what = [seats > 0 ? plural(seats, 'seat', 'seats') : null, warehouses > 0 ? plural(warehouses, 'warehouse', 'warehouses') : null].filter(Boolean).join(' and ');
+  return `${formatMoney(back)} back for ${what}. ${formatMoney(split.addedPart)} for ${productListLabel(diff.added)}. Both are for the ${plural(input.daysLeft, 'full day', 'full days')} left.`;
+}
+
 function plainWords(input: ChangeWordsInput, diff: PlanDiff | null): Pick<ChangeWords, 'dueTodayNote' | 'creditNote'> {
   const money = formatMoney;
   // What the lines say, in three sums. The line "credit you already had" is not a proration line and
@@ -240,9 +264,15 @@ function plainWords(input: ChangeWordsInput, diff: PlanDiff | null): Pick<Change
       // "What you add" is only said when an app really was added and nothing else changed price
       // (review round 3). Otherwise the amount is the same days at the new prices.
       const onlyAdds = diff === null || (diff.added.length > 0 && diff.kept.every((app) => app.oldUnitCents === app.newUnitCents && app.sameQuantity));
-      creditNote = onlyAdds
-        ? `That is ${money(unused)} for ${fullDays} of what you take off, less ${money(part)} for what you add. ${STARTED_DAY_RULE}`
-        : `That is ${money(unused)} for ${fullDays} at your old prices, less ${money(part)} for the same days at your new prices. ${STARTED_DAY_RULE}`;
+      // Seats or warehouses given back while an app is added, at prices that stay as they are: each
+      // amount is named for what it is (review round 5: "$44.85 back for 2 seats. $22.43 for Pulse.").
+      const given = diff !== null ? givenBackWords(input, diff) : null;
+      creditNote = given
+        ? `${given} ${STARTED_DAY_RULE}`
+        : onlyAdds
+          ? `That is ${money(unused)} for ${fullDays} of what you take off, less ${money(part)} for what you add. ${STARTED_DAY_RULE}`
+          : // Two short sentences (20 words at most each).
+            `${money(unused)} back for ${fullDays} at your old prices. Less ${money(part)} for the same days at your new prices. ${STARTED_DAY_RULE}`;
     } else if (unused === input.creditCents) {
       creditNote = `That is for ${fullDays} in this period. ${STARTED_DAY_RULE}`;
     } else {

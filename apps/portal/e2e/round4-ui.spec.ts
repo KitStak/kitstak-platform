@@ -391,6 +391,17 @@ test.describe('review round 4: people and roles', () => {
     // What they can do is on the screen: start an organization of their own.
     await expect(caseyPage.getByLabel('Company or team')).toBeVisible();
     await expect(caseyPage.getByRole('button', { name: 'Create organization' })).toBeVisible();
+    // The CRM says the same sentence to a person who was removed (review round 5). Not "yet".
+    if (await appIsUp(caseyPage, `${APP_URLS.crm}/login`)) {
+      await caseyPage.goto(`${APP_URLS.crm}/welcome`, { timeout: 120_000 });
+      const crm = caseyPage.getByTestId('crm-no-organization');
+      await expect(crm.getByRole('heading')).toHaveText('You are no longer in an organization', { timeout: 120_000 });
+      await expect(crm).toContainText('Your account still works, but you are not on a team right now.');
+      await expect(crm).not.toContainText('not in an organization yet');
+      await expect(crm.getByRole('link', { name: 'Go to the Portal' })).toBeVisible();
+    } else {
+      test.info().annotations.push({ type: 'skipped part', description: 'The CRM is not running.' });
+    }
     expect(owner.email).not.toBe(casey.email);
     await caseyContext.close();
   });

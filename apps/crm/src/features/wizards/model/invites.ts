@@ -170,8 +170,15 @@ export function describeParseProblems(parsed: ParsedAddresses): string | null {
   return messages.length > 0 ? messages.join(' ') : null;
 }
 
-/** Accept page (src/app/(auth)/welcome/invite/[invitationId]): sign in, then join the org. */
-export function inviteLink(origin: string, invitationId: string): string {
+/**
+ * The link "Copy link" hands out. With a Portal address it is the Portal's invite page, the one
+ * page where a person joins (billing review round 5): it offers "Email me a code" when the link
+ * carries no proof of the mailbox, and a copied link never carries one, because the inviter can
+ * read it. Without a Portal address (the CRM running alone) it is the CRM's own accept page.
+ */
+export function inviteLink(origin: string, invitationId: string, portalUrl?: string | null): string {
+  const portal = portalUrl?.trim().replace(/\/+$/, '') ?? '';
+  if (portal !== '') return `${portal}/invite/${encodeURIComponent(invitationId)}`;
   return `${origin.replace(/\/$/, '')}/welcome/invite/${encodeURIComponent(invitationId)}`;
 }
 

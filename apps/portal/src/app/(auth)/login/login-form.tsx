@@ -219,10 +219,14 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
     setSendingCode(true);
     try {
       const result = await requestSignInCodeAction({ email: email.trim() });
-      if (!result.ok) {
+      // 'code_sent_recently': no new code went out, because the last one is still fresh and still
+      // works. The code step opens all the same and says so, with the real wait.
+      const lastCodeStillGood = !result.ok && result.code === 'code_sent_recently';
+      if (!result.ok && !lastCodeStillGood) {
         setError(result.error ?? NO_NETWORK_MESSAGE);
       } else {
         setCode('');
+        if (lastCodeStillGood) setCodeError(result.error ?? null);
         // The code step gets its own entry in the history, with the address after the "#". Asking
         // for a new code on the step itself keeps the one entry.
         const url = stepUrl('code', email.trim());

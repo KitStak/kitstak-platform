@@ -403,6 +403,8 @@ export async function joinFromInvite(page: Page, link: string, person: Person): 
   await page.goto(link);
   await expect(page.getByTestId('invite-org-name')).toBeVisible({ timeout: SLOW });
   await page.getByTestId('invite-name').fill(person.name);
+  // Joining needs no password since review round 5. These people set one, so they can sign in with it later.
+  await page.getByTestId('invite-set-password').click();
   await page.getByTestId('invite-password').fill(person.password);
   await page.getByTestId('invite-accept').click();
   await page.waitForURL((url) => !url.pathname.startsWith('/invite'), { timeout: SLOW });

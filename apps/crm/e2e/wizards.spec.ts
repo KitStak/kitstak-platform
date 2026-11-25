@@ -387,8 +387,14 @@ publicTest.describe('wizards', () => {
 
           await dialog.getByRole('button', { name: /copy invite link for cara@example.test/i }).click();
           const link = await page.evaluate(() => navigator.clipboard.readText());
-          expect(link).toMatch(/\/welcome\/invite\/[0-9a-f-]{36}$/);
-          await page.goto(link, { timeout: 90_000 });
+          // Billing review round 5: with a Portal address set, the copied link is the Portal's invite
+          // page, where a person can prove the mailbox with an emailed code. It never carries the
+          // proof itself. The CRM running alone still hands out its own accept page.
+          expect(link).toMatch(/\/(welcome\/)?invite\/[0-9a-f-]{36}$/);
+          expect(link).not.toContain('?');
+          const invitationId = link.split('/').pop() ?? '';
+          // An older copied link (the CRM's own page) still opens.
+          await page.goto(`/welcome/invite/${invitationId}`, { timeout: 90_000 });
           // Signed in as the owner, not Cara: the page explains instead of 404-ing.
           await expect(page.getByTestId('invite-accept')).toHaveAttribute('data-state', 'mismatch', SLOW);
           await page.screenshot({ path: '.qa/screens/wizr3-invite-accept-mismatch.png' });

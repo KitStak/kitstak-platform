@@ -1,15 +1,24 @@
 import type { Metadata } from 'next';
 import { CircleCheck, SearchX } from 'lucide-react';
 import { AppIcon } from '@kitstak/ui/app-icon';
-import { CATALOG, formatDay, formatMoney } from '@kitstak/billing/catalog';
+import { CATALOG, formatDay, formatMoney, type ProductId } from '@kitstak/billing/catalog';
 import { getBillingProfile, getPlanState, syncCheckoutSession } from '@kitstak/billing/server';
 import { requireBillingContext } from '@/server/billing/context';
 import { Card, LinkButton } from '@/components/ui';
 import { BillingMessage, TestModeBadge } from '@/features/billing/billing-chrome';
 import { FinishingUp } from '@/features/billing/checkout/finishing-up';
+import { SuccessActions } from '@/features/billing/checkout/success-actions';
+import { env } from '@/server/env';
 import { cardLabel, perPeriod, plural, usesSeats } from '@/features/billing/format';
 
 export const metadata: Metadata = { title: 'You are all set' };
+
+const APP_URL: Readonly<Record<ProductId, () => string>> = {
+  crm: () => env.NEXT_PUBLIC_CRM_URL,
+  wms: () => env.NEXT_PUBLIC_WMS_URL,
+  projects: () => env.NEXT_PUBLIC_PROJECTS_URL,
+  pulse: () => env.NEXT_PUBLIC_PULSE_URL,
+};
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -62,6 +71,11 @@ export default async function CheckoutSuccessPage({
   if (state.selection.products.includes('wms')) facts.push(plural(state.selection.warehouses, 'warehouse', 'warehouses'));
   facts.push(state.selection.interval === 'yearly' ? 'Yearly' : 'Monthly');
 
+  // The app a person came from to pick a plan, when this tab remembers one: "Back to Pulse".
+  const backTargets = Object.fromEntries(
+    state.selection.products.map((id) => [id, { label: `Back to ${CATALOG.products[id].shortName}`, base: APP_URL[id]() }]),
+  );
+
   return (
     // The two buttons sit right under the good news, so "Open my apps" is on the first screen at
     // 1280 by 800 and on a phone. The plan details follow as the record of what was bought.
@@ -77,14 +91,7 @@ export default async function CheckoutSuccessPage({
         <TestModeBadge mode={state.mode} />
       </div>
 
-      <div className="mt-5 flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-        <LinkButton href="/" size="xl" data-testid="checkout-success-open-apps">
-          Open my apps
-        </LinkButton>
-        <LinkButton href="/billing" variant="secondary" size="xl">
-          See my plan
-        </LinkButton>
-      </div>
+      <SuccessActions backTargets={backTargets} />
 
       <Card as="div" className="mt-6 w-full p-5 text-left">
         <div className="flex flex-wrap gap-1.5">

@@ -40,7 +40,8 @@ All live in `deploy/dev/`. All are safe to run again.
 | `db-setup.sh --migrate` | Migrations only. Use it after you add a migration. |
 | `db-setup.sh --reseed` | Migrations, then reload all demo data. Only the two demo orgs are rebuilt. Orgs you made by signing up stay. |
 | `env-init.sh` | Writes an untracked `.env.local` into each app that has none. Never overwrites one. `--print` shows what it would write. |
-| `app-start.sh <app> ...` | Starts each named app in the background and waits until it answers a real page. An app that is already listening is reused. A new start begins from a clean dev cache (`apps/<app>/.next/dev` is removed first). |
+| `app-start.sh <app> ...` | Starts each named app in the background and waits until it answers a real page. An app that is already listening is reused. A new start begins from a clean dev cache (`apps/<app>/.next/dev` is removed first). Each server runs under `app-supervise.sh`. |
+| `app-supervise.sh` | Not run by hand. Keeps one dev server alive and inside a memory budget: starts it again when it exits, restarts it when it grows too big. See "Memory budget" below. |
 | `stop.sh [apps or db]` | Stops apps, the database, or both. Waits until each server is really gone. |
 | `status.sh` | One line per service: up or down, URL, log file. |
 | `shot.mjs` | Signs in and takes screenshots in light and dark, desktop and phone. See below. |
@@ -330,7 +331,7 @@ who forgot a password is not. The page does not exist in production.
 **Sign in with a code.** "Email me a code instead" on http://localhost:3300/login mails a 6 digit code. Locally
 it is in the dev outbox like every other email, and the code step links there.
 
-**All templates.** http://localhost:3300/dev/outbox/templates renders all 14 emails with sample data. Nothing
+**All templates.** http://localhost:3300/dev/outbox/templates renders all 15 emails with sample data. Nothing
 is sent or saved. Use it to read copy and check the look.
 
 **The billing job.** In production Vercel Cron calls `/api/billing/jobs/tick` once a minute. Locally nothing
@@ -499,10 +500,11 @@ signed in. `/forgot-password` in every app goes to the Portal's too.
   the apps you test against, or they keep the old rules: `deploy/dev/stop.sh crm && deploy/dev/app-start.sh crm`.
 - **Use `localhost`, not `127.0.0.1`,** in the browser. The apps trust the `localhost`
   origins, and the shared cookie is tied to the host name.
-- **Memory.** All six apps together use about 6 GB, and a dev server that has compiled many routes can
-  grow past 4 GB by itself. When the machine runs short, the system stops the biggest one without a word:
-  pages stop loading and `deploy/dev/status.sh` shows it as DOWN. Start it again with `app-start.sh`.
-  Start only what you need.
+- **Memory.** All six apps together use about 6 GB when fresh, and a dev server that has compiled many
+  routes used to grow past 4 GB by itself. When the machine ran short, the system stopped the biggest
+  process without a word: a dev server, or the browser tab of the test that was running. Since review
+  round 5 every dev server runs under a supervisor with a memory budget. See "Memory budget" below.
+  `deploy/dev/status.sh` shows the memory and the restarts of each app. Start only what you need.
 - **A page reloads itself over and over.** That is a broken dev cache, not the product. A production
   build never does this. The dev server keeps its work in `apps/<app>/.next/dev`. With that folder in a bad
   state, the server sends "HMR hash mismatch" to the browser, the tab reloads about five times a second,
@@ -540,3 +542,59 @@ signed in. `/forgot-password` in every app goes to the Portal's too.
 - **A Stripe call from Node hangs or fails in the cloud container, and `curl` works.** Node ignores the
   proxy unless it is told. The process needs `STRIPE_HTTP_CLIENT=fetch` and `NODE_USE_ENV_PROXY=1`.
   The three Stripe scripts in `deploy/dev/` set both from `deploy/dev/.run/stripe.env`.
+
+## Memory budget
+
+`app-start.sh` starts each dev server under `deploy/dev/app-supervise.sh`. This is dev tooling only. No
+app code and nothing in production knows about it.
+
+What the supervisor does for one app:
+
+- It starts `next dev` with a cap on the JavaScript heap (three quarters of the app's budget).
+- When the server exits by itself (a crash, or the system stopped it), it starts it again. Pages answer
+  again in about 20 seconds. After three exits within 30 seconds of a start it gives up and says so, so a
+  real error is not hidden behind a restart loop.
+- Every 5 seconds it adds up the memory of the server and its helpers. Over the app's budget it restarts
+  the server at a quiet moment (no request logged for 15 seconds), so a test that is running is not cut
+  off. It restarts at once only when it has to: the whole machine has less than 1.5 GB left and this is the
+  biggest dev server, or the server is at twice its budget.
+- A server that is over its budget three times in a row within minutes of a restart does not fit in that
+  budget at all. The supervisor says so once and stops restarting it for memory.
+- Every start and restart is one line in the app's log and in `deploy/dev/.run/logs/supervisor.log`, with
+  the reason and the numbers.
+
+A restart drops the server's compile cache and nothing else. The database and your data are not touched.
+A request that arrives during a restart fails, so a browser test that runs at that second can fail once.
+That is the trade: a restart at a quiet moment, in place of the system stopping the browser or a server
+in the middle of a run. It is not the end of restarts. On the dev container, with two people running
+browser tests at once, the Portal's dev server went from fresh to 2.8 GB in about five minutes and was
+restarted three times in 35 minutes, the CRM, the WMS and Pulse once each. Nothing was stopped by the
+system in that time. The real cure is to serve the apps from production builds for QA (a built Portal
+uses about 170 MB). That needs each app to run in production mode on `http://localhost`, which they do
+not do today (secure cookies, no dev outbox), so it is not built.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `KITSTAK_DEV_MEM_MB_PORTAL`, `_WMS`, `_CRM`, `_PROJECTS`, `_PULSE`, `_WEB` | 3000, 2600, 2200, 2200, 1800, 1200 | The memory budget of one app, in MB. |
+| `KITSTAK_DEV_MEM_MB` | not set | One budget for every app that has none of its own. |
+| `KITSTAK_DEV_HEAP_MB` | 75% of the budget | The JavaScript heap cap (`--max-old-space-size`). `0` sets none. |
+| `KITSTAK_DEV_MIN_FREE_MB` | 1536 | Below this much free memory on the machine, the biggest dev server restarts at once. |
+| `KITSTAK_DEV_QUIET_SECONDS` | 15 | How long no request must come in before a restart for memory. |
+| `KITSTAK_DEV_GRACE_SECONDS` | 90 | A server this young is not measured: it is still compiling its first pages. |
+| `KITSTAK_DEV_SUPERVISE` | 1 | `0` starts the bare `next dev` with no supervisor, as before review round 5. |
+
+Set them on the command line of `app-start.sh`, for example
+`KITSTAK_DEV_MEM_MB_WMS=3200 deploy/dev/app-start.sh wms`. They are read when the app starts.
+`deploy/dev/stop.sh` stops the supervisor and its server together.
+
+Checked on the dev container: with a budget below what the app needs, the server was restarted and
+answered again each time, then the supervisor stopped restarting it and said why. A server stopped with
+`kill -9` (what the system does when memory runs out) answered again 18 seconds later.
+
+## Email code limits and local testing
+
+Sends of a 6 digit code are spaced per address and per kind of code (`packages/billing/src/server/code-limits.ts`):
+two at once, then one a minute, then one every 10 minutes, then one every 30 minutes. An hour with no send
+starts the count again. When you ask for a third code in a row on the sign in page, the screen says "We sent
+a code to this address a moment ago. Use that one, or ask for a new one in 58 seconds." That is the limit
+working. `deploy/dev/rate-limit-reset.sh` clears it, like every other counter.

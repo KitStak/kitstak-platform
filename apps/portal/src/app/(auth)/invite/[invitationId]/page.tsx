@@ -6,9 +6,10 @@ import { member } from '@kitstak/db/schema';
 import { EmailText, LinkButton } from '@/components/ui';
 import { db } from '@/server/db';
 import { getSession } from '@/server/session';
-import { getInviteViewOnce, inviteProofValid } from '@/server/signup';
+import { devOutboxOn, getInviteViewOnce, inviteProofValid } from '@/server/signup';
 import { AuthHeading } from '../../_components/heading';
 import { InviteAccept } from './invite-accept';
+import { InviteCodeDoor } from './invite-code-door';
 import { InviteJoinForm } from './invite-join-form';
 import { InviteWrongAccount } from './invite-wrong-account';
 
@@ -133,19 +134,20 @@ export default async function InvitePage({
   // one whose email is verified needs no proof.
   const needsProof = session ? session.user.emailVerified !== true && session.user.email.trim().toLowerCase() === view.email : !view.accountExists;
   if (needsProof && !(await inviteProofValid(view.id, view.email))) {
+    // The way through on this same screen (review round 5): a code mailed to the invited address
+    // proves the mailbox just as the emailed link does. A copied link and a link from the CRM
+    // carry no proof, and the people who open them must still be able to join.
     return (
       <div data-testid="invite-needs-link">
-        <Icon tone="muted" />
-        <AuthHeading
-          title={`Join ${view.orgName} from your invite email`}
-          subtitle="Open the link in your invite email to join. That shows the email is yours."
+        {heading}
+        <InviteCodeDoor
+          invitationId={view.id}
+          email={view.email}
+          orgName={view.orgName}
+          mode={session ? 'accept' : 'join'}
+          devOutbox={devOutboxOn()}
         />
-        <p className="text-base text-fg-secondary">
-          No email? Ask {view.inviterName} to send a new invite. Nothing was created.
-        </p>
-        <LinkButton href={session ? '/' : '/login'} size="lg" fullWidth className="mt-5 h-12 sm:h-11" variant="secondary">
-          {session ? 'Open KitStak' : 'Go to sign in'}
-        </LinkButton>
+        {expires}
       </div>
     );
   }

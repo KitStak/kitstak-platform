@@ -150,9 +150,12 @@ test.describe('round 4: a signed in person who is in no organization', () => {
         checked += 1;
       }
     }
-    // The Portal says the same, and offers to make one.
+    // The Portal is where one is made. A new person lands on the one screen for that, the signup
+    // step, whichever page they open (review round 5: before, the launcher had a second screen
+    // for the same step, with other words).
     await page.goto('/');
-    await expect(page.locator('main')).toContainText('You are not in an organization yet');
+    await page.waitForURL((url) => url.pathname === '/signup/company', { timeout: 90_000 });
+    await expect(page.getByRole('heading', { name: 'Name your organization' })).toBeVisible();
     expect(checked, 'at least one product app was checked').toBeGreaterThan(0);
   });
 });
@@ -499,8 +502,18 @@ test.describe('round 4: invites', () => {
     // Review round 5: the page checks before it draws anything to press. No "Accept invite" button.
     const thiefPage = await thief.newPage();
     await thiefPage.goto(`/invite/${invitationId}`);
-    await expect(thiefPage.getByTestId('invite-needs-link')).toContainText('Open the link in your invite email to join. That shows the email is yours.', { timeout: 90_000 });
+    // Review round 5, second pass: the screen offers a code, mailed to the invited address only. The
+    // thief has the account and not the mailbox, so the code never reaches them and a guess is refused.
+    await expect(thiefPage.getByTestId('invite-needs-link').getByTestId('invite-code-door')).toBeVisible({ timeout: 90_000 });
     await expect(thiefPage.getByTestId('invite-accept')).toHaveCount(0);
+    await resetRateLimits();
+    await thiefPage.getByTestId('invite-email-code').click();
+    await expect(thiefPage.getByTestId('invite-code-form')).toBeVisible({ timeout: 30_000 });
+    const mailed = await newestCode(bookkeeper.email, 'verify', new Date(Date.now() - 60_000));
+    await thiefPage.getByTestId('invite-code').fill(mailed === '000000' ? '000001' : '000000');
+    await thiefPage.getByTestId('invite-accept').click();
+    await expect(thiefPage.locator('#invite-code-error')).toContainText('That code is not right. Check it and try again.', { timeout: 30_000 });
+    expect(await sql(`SELECT email_verified FROM core."user" WHERE email = $1`, [bookkeeper.email])).toEqual([{ email_verified: false }]);
     expect(await sql(`SELECT 1 FROM core.member m JOIN core."user" u ON u.id = m.user_id WHERE u.email = $1`, [bookkeeper.email]), 'nothing was written').toHaveLength(0);
     expect(await sql(`SELECT status FROM core.invitation WHERE id = $1`, [invitationId])).toEqual([{ status: 'pending' }]);
     await thief.close();
@@ -513,12 +526,18 @@ test.describe('round 4: invites', () => {
     await resetRateLimits();
     // Review round 5: no form is drawn, so nobody fills in a name and a password for nothing.
     await noLinkPage.goto(`/invite/${invitationId}`);
-    await expect(noLinkPage.getByTestId('invite-needs-link')).toContainText('Open the link in your invite email to join. That shows the email is yours.', { timeout: 90_000 });
-    await expect(noLinkPage.getByTestId('invite-needs-link')).toContainText(`Ask ${owner.name} to send a new invite.`);
+    await expect(noLinkPage.getByTestId('invite-needs-link').getByTestId('invite-code-door')).toBeVisible({ timeout: 90_000 });
     await expect(noLinkPage.getByTestId('invite-name')).toHaveCount(0);
     await expect(noLinkPage.getByTestId('invite-password')).toHaveCount(0);
     await expect(noLinkPage.getByTestId('invite-accept')).toHaveCount(0);
-    await expect(noLinkPage.getByRole('link', { name: 'Go to sign in' })).toBeVisible();
+    // The code goes to the invited mailbox. A person who does not have it gets nowhere.
+    await noLinkPage.getByTestId('invite-email-code').click();
+    await expect(noLinkPage.getByTestId('invite-code-form')).toBeVisible({ timeout: 30_000 });
+    const sent = await newestCode(bookkeeper.email, 'sign_in', new Date(Date.now() - 60_000));
+    await noLinkPage.getByTestId('invite-name').fill('Not Riley');
+    await noLinkPage.getByTestId('invite-code').fill(sent === '000000' ? '000001' : '000000');
+    await noLinkPage.getByTestId('invite-accept').click();
+    await expect(noLinkPage.locator('#invite-code-error')).toContainText('That code is not right. Check it and try again.', { timeout: 30_000 });
     expect(await sql(`SELECT 1 FROM core."user" WHERE email = $1`, [bookkeeper.email]), 'no account was made').toHaveLength(0);
     await noLink.close();
 

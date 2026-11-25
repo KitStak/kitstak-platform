@@ -188,7 +188,7 @@ export function CancelFlow({ pauseOptions, canRemoveApp, confirmLabel = 'Cancel 
       ) : null}
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <LinkButton href={endsNow ? '/billing?fix=payment' : '/billing'} variant="secondary" size="xl" data-testid="cancel-back">
+        <LinkButton href={endsNow ? '/billing?focus=payment' : '/billing'} variant="secondary" size="xl" data-testid="cancel-back">
           {endsNow ? 'Pay the bill instead' : 'Keep my plan'}
         </LinkButton>
         <Button variant="danger" size="xl" data-testid="cancel-confirm" loading={busy === 'cancel'} disabled={busy === 'pause'} onClick={() => submit('cancel')}>

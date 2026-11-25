@@ -46,11 +46,13 @@ async function pressBannerButton(page: Page, app: AppId, kind: string, label: Re
   await expect(action, `${app} ${kind}: the banner button is at full strength`).toHaveCSS('opacity', '1');
   expect(await banner.evaluate((element) => element.querySelectorAll('[data-plan-write]').length), `${app} ${kind}: nothing in the banner is marked`).toBe(0);
 
+  // The address the button leaves with. It names the app, so the Portal can offer the way back.
+  const href = new URL((await action.getAttribute('href')) ?? '', page.url()).toString();
   // One press. No dialog in between.
   await action.click();
   await page.waitForURL(lands, { timeout: 120_000 });
   await expect(page.getByTestId('view-only-dialog')).toHaveCount(0);
-  return page.url();
+  return href;
 }
 
 test.describe('the plan banner button is the way out, in one press', () => {
@@ -147,7 +149,8 @@ test.describe('the plan banner button is the way out, in one press', () => {
     await runTestTool(page, 'run-due');
     await page.reload();
     await expectPhase(page, 'past_due');
-    await eachApp('payment_failed', /^Update card$/, /\/billing\?(.*&)?fix=payment/, false);
+    // Review round 5: "Update card" opens the card form itself, not billing home with one more button.
+    await eachApp('payment_failed', /^Update card$/, /\/test-gateway\/card\//, false);
 
     /* ----- not fixed in 7 days: view only, and "Update card" is still one press ----- */
     await openBilling(page);
@@ -161,7 +164,7 @@ test.describe('the plan banner button is the way out, in one press', () => {
       await expect(page.getByTestId('plan-notice-unpaid')).toContainText('Your payment is late, so your apps are view only. Update your card to turn them back on.');
       await expect(page.getByTestId('plan-notice-unpaid')).not.toContainText('Pay now');
     }
-    await eachApp('unpaid', /^Update card$/, /\/billing\?(.*&)?fix=payment/, true);
+    await eachApp('unpaid', /^Update card$/, /\/test-gateway\/card\//, true);
 
     /* ----- a new card pays the bill. Then a pause: "Start again now" ----- */
     await openBilling(page);

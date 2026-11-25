@@ -136,7 +136,7 @@ function Panels({ slots, orgSlug }: { readonly slots?: AppShellSlots; readonly o
 export function AppShell({ context, slots, children }: AppShellProps) {
   useShellHotkeys(context.org.slug);
   useShellRealtime(context.org.id);
-  useShellPrefetch(context.org.id);
+  useShellPrefetch(context.org.id, context.permissions);
   const layout = useShellLayout();
   const pathname = usePathname();
   return (

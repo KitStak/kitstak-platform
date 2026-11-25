@@ -84,7 +84,16 @@ function NoAppsOnPlan({ canSeeBilling, canStartTrial, askWho }: { readonly canSe
         >
           {canStartTrial ? 'Start free trial' : 'See plans'}
         </Link>
-      ) : null}
+      ) : (
+        // A member cannot add an app. Billing is where they ask for one, with one click (review round 5).
+        <Link
+          href="/billing"
+          data-testid="launcher-ask"
+          className="mt-5 inline-flex h-9 items-center rounded-md border border-border-default bg-panel px-4 text-sm font-medium text-fg hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus pointer-coarse:h-11"
+        >
+          Ask for an app
+        </Link>
+      )}
     </div>
   );
 }

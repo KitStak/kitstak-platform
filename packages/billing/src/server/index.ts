@@ -43,8 +43,21 @@ export {
 } from './profile';
 export { checkSeatAvailable, checkWarehouseAvailable, countBillableSeats, countWarehouses } from './usage';
 export { listAuditLog, recordAudit, recordAuditOnce, type AuditAction, type AuditEntry, type AuditRow } from './audit';
-export { billingRecipients, enqueueEmail, enqueueForBillingRecipients } from './outbox';
-export { enforceRateLimit } from './rate-limit';
+export { billingRecipients, enqueueEmail, enqueueForBillingRecipients, moveQueuedEmails } from './outbox';
+export { enforceRateLimit, enforceSpacedLimit, waitText } from './rate-limit';
+export {
+  CODE_SEND_GAPS,
+  CODE_SEND_MAX_WAIT_SECONDS,
+  CODE_SEND_QUIET_SECONDS,
+  CODE_SENT_RECENTLY,
+  CODE_TRIES,
+  CODE_TRIES_USED_UP,
+  codeSendKey,
+  codeSentRecentlyMessage,
+  countCodeTry,
+  reserveCodeSend,
+  type CodeKind,
+} from './code-limits';
 export { completeSignupIntent, getOpenSignupIntent, upsertSignupIntent, type SignupIntent } from './intents';
 export { processWebhook, type WebhookOutcome } from './webhook';
 export { applyInvoiceSnapshot, applySubscriptionSnapshot, clearBillingCaches, refreshFromGateway } from './sync';
@@ -55,6 +68,8 @@ export {
   guardBillingRoleChange,
   inviteEmailKey,
   inviteEmailStatus,
+  inviteDoor,
+  type InviteDoor,
   INVITE_NEEDS_PROVEN_MAILBOX_CODE,
   INVITE_NEEDS_PROVEN_MAILBOX_MESSAGE,
   INVITE_NEEDS_VERIFIED_EMAIL_SINCE,

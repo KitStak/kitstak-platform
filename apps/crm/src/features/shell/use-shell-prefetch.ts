@@ -12,7 +12,7 @@ import { apiRequest } from '@/lib/api';
 import { crmKeys } from '@/features/crm/api';
 import { dashboardKeys } from '@/features/dashboards/hooks';
 import { shellKeys } from './api';
-import { useOptionalOrg } from './org-context';
+import type { Permission } from '@/server/rbac/permissions';
 
 /** Mirrors each owning hook's staleTime so the prefetch never fights the hook's own refetch. */
 const STALE_MS = {
@@ -23,12 +23,12 @@ const STALE_MS = {
   dashboardSources: 5 * 60_000,
 } as const;
 
-export function useShellPrefetch(orgId: string): void {
+export function useShellPrefetch(orgId: string, permissions?: readonly Permission[]): void {
   const queryClient = useQueryClient();
   // A guest may not list workspaces or dashboard sources. Asking anyway is a refused request in
   // the console on every page (billing review round 5), so those two are only warmed for people
-  // who may read them. Outside the shell (dev harnesses) everything is warmed, as before.
-  const permissions = useOptionalOrg()?.permissions;
+  // who may read them. The shell passes the permissions (this hook runs above its provider).
+  // With none given (dev harnesses) everything is warmed, as before.
   const canWorkspaces = permissions?.includes('workspace:read') ?? true;
   const canDashboards = permissions?.includes('dashboard:read') ?? true;
   useEffect(() => {

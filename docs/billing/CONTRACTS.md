@@ -2032,7 +2032,7 @@ lanes reported as different from the sections above. All of it is in the code as
 
 | Lane | What | Detail |
 |:-|:-|:-|
-| signup | Email codes | `overrideDefaultEmailVerification` is off, so the email code plugin sends the signup code itself. Sign in by code is closed (`/sign-in/email-otp` answers 404). Codes are limited to 5 per 10 minutes and 20 per day per address. A reset by code clears the sign in lockout for that address. |
+| signup | Email codes | `overrideDefaultEmailVerification` is off, so the email code plugin sends the signup code itself. Sign in by code is closed (`/sign-in/email-otp` answers 404). Sends of a code are spaced per address and per kind of code, with no wall for a day (review round 5, `code-limits.ts`: two at once, then one a minute, then one every 10 minutes, then one every 30 minutes). A reset by code clears the sign in lockout for that address. |
 | signup | Password rules on reset by code | Checked in the Portal's own auth hook (`PASSWORD_POLICY`, 400), because the shared password plugin does not cover `/email-otp/reset-password`. |
 | signup | New actions | `resumeAfterSignInAction`, `skipWelcome`. `skipVerifyAction` takes an optional `next`. |
 | signup | Resume rules | `getSignupResume` sends a person to `/welcome` only while a signup intent is open. A signed in team that already has a trial or a plan and opens `/signup` with a cart goes to `/billing/plan?add=<first new app>`. |
@@ -2204,7 +2204,7 @@ What the backend lane changed for review round 3. Each row is live in code and h
 | `OrganizationPluginExtras.guardPlugins` | New in `@kitstak/auth`. `createAuth` mounts these right after the organization plugin, so no app has to opt in. | auth |
 | CRM member service | The CRM writes member roles itself. It now keeps the billing role next to a new role (`keepBillingRole`) and lets only an owner remove or deactivate a billing manager (`assertMayChangeBillingManager`). | crm |
 | Passwords that are easy to guess | `@kitstak/auth/weak-passwords` (pure, also used by the form): refused at every length when the password is almost one character, one piece repeated, mostly straight runs, a common password dressed up, or built around `kitstak` or the person's company. One line: "That one is too easy to guess. Try a few words that do not go together." `validatePassword` adds it when nothing else is wrong. `PasswordContext.company` is new. The WMS copy of the rule checks it too. | auth, portal, wms |
-| Sign in with an emailed code | "Email me a code instead" on `/login` and `/signup`. Two server actions: `requestSignInCodeAction` and `signInWithCodeAction`. The code signs the person in and marks the address verified. The raw endpoints stay closed (`/sign-in/email-otp` answers 404 outside `withSignInCode`). Only an account that still holds a credential gets a code, so a deactivated person gets none. Limits: 5 codes per 10 minutes and 20 per day per address, 5 guesses per code, 10 tries per 10 minutes and 30 per day per address. A signup with no password stores a long random one that nobody knows. | portal |
+| Sign in with an emailed code | "Email me a code instead" on `/login` and `/signup`. Two server actions: `requestSignInCodeAction` and `signInWithCodeAction`. The code signs the person in and marks the address verified. The raw endpoints stay closed (`/sign-in/email-otp` answers 404 outside `withSignInCode`). Only an account that still holds a credential gets a code, so a deactivated person gets none. Limits: sends are spaced per address (see `code-limits.ts`, review round 5), 5 guesses per code, 10 tries per 10 minutes and 30 per day per address, and a browser that signed in to the account before (`kitstak.known_device`) has send and try counters of its own. A signup with no password stores a long random one that nobody knows. | portal |
 | The page a signed out person asked for | The proxy writes the path and query into the request header `x-kitstak-return-to` (`@/lib/return-to`). `requirePageSession` and `requireBillingContext` send a signed out person to `/login?next=<that page>`, checked by `safeNextPath`. The buttons in the billing emails now land on their page. | portal |
 | Invite proof, checked again | The reviewer opened `/invite/<id>` without the `?t=` proof that the emailed link carries. With the emailed link the address is verified for every role. `billing-only.spec.ts` now proves it for the billing role. No code change. | portal |
 
@@ -2276,3 +2276,41 @@ What the real Stripe lane changed after the flow was run against the Stripe sand
 | A credit invoice reads as a credit | `invoiceStatus` answers the new label `Credit` for a paid invoice with a total below zero. `isCreditInvoice` and `invoiceOutcomeLine` are new in `apps/portal/src/features/billing/invoices/invoice-words.ts`. The invoice page shows "Added to your credit" in place of "Paid" and says "Nothing was charged." | portal |
 | Dev: real Stripe test mode | `KITSTAK_STRIPE=1 deploy/dev/app-start.sh portal`, `deploy/dev/stripe-env.sh`, `deploy/dev/stripe-events.sh` (`pnpm -F @kitstak/billing stripe:events`, `scripts/stripe-events-lib.ts`), `deploy/dev/stripe-sandbox-test.sh`. `deploy/dev/status.sh` shows the billing mode of the running Portal. See `DEV.md`, "Real Stripe test mode". | everyone who runs the dev stack |
 
+## Review round 5, second pass (server)
+
+What the focus pass on the round 5 backend blockers added. Everything here is additive.
+
+**`@kitstak/billing/server`**
+
+| Export | What it is |
+|:-|:-|
+| `enforceSpacedLimit(db, { key, gaps, quietSeconds, now? })` | A limit that slows down and never becomes a wall. Returns `{ allowed, retryAfterSeconds }`. A refused call changes nothing. |
+| `waitText(seconds)` | "41 seconds", "1 minute", "10 minutes". Rounded up. |
+| `reserveCodeSend(db, { email, kind, known })`, `countCodeTry(db, { email, kind, known })` | The two limits of the email codes. `kind` is `'sign-in' \| 'email-verification' \| 'forget-password'`. `known` puts the call on the counters of browsers the account knows. |
+| `codeSentRecentlyMessage(seconds)`, `CODE_SENT_RECENTLY`, `CODE_TRIES_USED_UP`, `CODE_SEND_GAPS`, `CODE_SEND_MAX_WAIT_SECONDS`, `CODE_TRIES` | The sentence, the error codes and the numbers. |
+| `inviteDoor(options)` | `{ check, send }`: the rules of `beforeCreateInvitation` and the invite email, for an app that writes `core.invitation` itself. The CRM calls it. |
+| `moveQueuedEmails(db, { orgIds, from, to })` | After "Change email": queued mail follows the person, a waiting code for the old address is skipped, a welcome email that already left is queued once more. |
+
+**Portal server actions (`apps/portal/src/server/signup-actions.ts`)**
+
+| Action | Change |
+|:-|:-|
+| `requestSignInCodeAction`, `requestPasswordResetAction` | Ask the send limit before they answer. Refused: `{ ok: false, code: 'code_sent_recently', retryAfterSeconds, error }`. The last code still works, so the form goes on to the code step and shows `error`. |
+| `joinInviteAction({ invitationId, name, password?, code?, timezone? })` | `password` is optional: without one the account has no password row. `code` is the 6 digit code from `requestInviteCodeAction`, for a link with no proof. |
+| `requestInviteCodeAction({ invitationId })` | New. Mails a code to the invited address only. Signed in with that address and unverified: the normal verification code. No account: a sign in code made for the join. Account exists and signed out: `code: 'account_exists'` (the sign in page has its own code door). |
+| `acceptInviteAction({ invitationId, code? })` | With `code`, a signed in person whose email was never verified proves it and joins. |
+
+**Portal sign in layer (`apps/portal/src/server/auth.ts`, `known-device.ts`)**: `guardEmailCodes` counts
+sends and tries through `code-limits.ts`. `knownDevicePlugin` writes the `kitstak.known_device` cookie at
+every new session. `reserveEmailCode`, `withCodeSendReserved`, `mailInviteJoinCode`, `createCodeOnlyUser`
+and `signInProvenMailbox` are the helpers the actions use.
+
+**WMS (`apps/wms/src/server/auth/credentials.ts`)**: `upsertCoreIdentity` makes a new identity with
+`email_verified = false` (`seedVerified` is for the demo seed only) and sets the flag back to false when
+the email changes, as does `syncCoreUser`. `mailboxProven`, `assertAdminMaySetPassword` and
+`PASSWORD_IS_THEIRS_MESSAGE` hold the rule that a verified account's password is its owner's alone.
+
+**CRM**: `createInvitation` (`apps/crm/src/server/services/members.ts`) runs `inviteDoor().check` inside
+its transaction and `inviteDoor().send` after the commit. `inviteLink(origin, id, portalUrl?)` gives the
+Portal's `/invite/<id>` when a Portal address is set. `/welcome/invite/<id>` sends a signed out person, and
+a signed in invitee whose email is not verified, to that Portal page.

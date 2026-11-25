@@ -45,6 +45,7 @@ import {
 } from '../_components/form-parts';
 import { LegalLine, type LegalUrls } from '../_components/legal-line';
 import { SocialButtons, socialErrorMessage } from '../_components/social-buttons';
+import { SignupTeaser } from '../_components/auth-hero';
 import { TrialSummaryInline } from '../_components/trial-summary-inline';
 import { prefersAutoFocus, useHashIdentity } from '../_components/use-hash-identity';
 
@@ -262,6 +263,8 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
 
   return (
     <>
+      {/* Phones have no brand panel: one small picture and one line say what the person gets. */}
+      {companyOnly ? null : <SignupTeaser products={summary?.products ?? ['crm']} withCart={Boolean(summary)} />}
       {summary ? <TrialSummaryInline summary={summary} /> : null}
       <AuthHeading
         eyebrow={<StepEyebrow step={1} total={2} label={companyOnly ? 'Your organization' : 'Your account'} />}

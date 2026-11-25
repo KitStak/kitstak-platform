@@ -5,7 +5,7 @@
 import type { EmailPayloads, EmailTemplateId } from '../email-types';
 import { EMAIL_TEMPLATE_IDS } from '../email-types';
 import { renderContent, type EmailContent, type RenderedEmail } from './layout';
-import { invitation, resetPassword, verifyEmail } from './templates/account';
+import { appRequest, invitation, resetPassword, verifyEmail } from './templates/account';
 import { graceEnding, paymentActionRequired, paymentFailed, receipt } from './templates/payment';
 import { cancelScheduled, paused, planEnded, planStarted } from './templates/plan';
 import { trialEnded, trialEnding, welcome } from './templates/trial';
@@ -28,6 +28,7 @@ const TEMPLATES: Readonly<Record<EmailTemplateId, (payload: unknown) => EmailCon
   cancel_scheduled: cancelScheduled,
   paused,
   plan_ended: planEnded,
+  app_request: appRequest,
 };
 
 export function isEmailTemplateId(value: unknown): value is EmailTemplateId {
@@ -62,6 +63,7 @@ const AUDIT_WORDS: Readonly<Record<EmailTemplateId, string | null>> = {
   cancel_scheduled: 'a cancel confirmation',
   paused: 'a pause confirmation',
   plan_ended: 'a plan ended notice',
+  app_request: 'a request for an app',
 };
 
 /** 'We emailed a receipt to billing@northwind.example.' or null when nothing should be logged. */

@@ -19,12 +19,21 @@ import { and, eq, isNotNull } from 'drizzle-orm';
 import { createAuth, ipAddressFromTrustProxy, isSignInBlocked, type KitstakAuth } from '@kitstak/auth';
 import { DEFAULT_PASSWORD_POLICY, validatePassword } from '@kitstak/auth/password-policy';
 import { sendEmailNow } from '@kitstak/billing/emails';
-import { billingOrganizationOptions, enforceRateLimit } from '@kitstak/billing/server';
+import {
+  billingOrganizationOptions,
+  CODE_SENT_RECENTLY,
+  CODE_TRIES_USED_UP,
+  codeSentRecentlyMessage,
+  countCodeTry,
+  reserveCodeSend,
+  type CodeKind,
+} from '@kitstak/billing/server';
 import * as schema from '@kitstak/db/schema';
 import { isDevAllowAll } from '@kitstak/entitlements';
-import { APIError, createAuthMiddleware } from 'better-auth/api';
+import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { emailOTP } from 'better-auth/plugins';
 import { socialProviderConfig } from '@/features/signup/social';
+import { knownDevicePlugin, knownDeviceUserIds } from '@/server/known-device';
 import { portalUrl } from '@/server/billing/runtime';
 import { db } from '@/server/db';
 import { env, isProduction, trustedOrigins } from '@/server/env';
@@ -73,10 +82,14 @@ const CODE_SEND_PATHS = new Set([
   '/forget-password/email-otp',
 ]);
 const OTP_RESET_PATH = '/email-otp/reset-password';
+const OTP_VERIFY_PATH = '/email-otp/verify-email';
 const SIGN_IN_CODE_PATH = '/sign-in/email-otp';
-// The short limit has a 10 minute window, so the wait it names is true.
-const TOO_MANY_TRIES = 'Too many tries. Wait 10 minutes and try again.';
-const TOO_MANY_TODAY = 'We sent many codes to this address today. Try again tomorrow.';
+/** Says whether a code is right without using it up. A try like any other. */
+const OTP_CHECK_PATH = '/email-otp/check-verification-otp';
+
+function checkedKind(type: string | null): CodeKind | null {
+  return type === 'sign-in' || type === 'email-verification' || type === 'forget-password' ? type : null;
+}
 
 function bodyText(body: unknown, key: string): string | null {
   if (!isObject(body)) return null;
@@ -84,41 +97,128 @@ function bodyText(body: unknown, key: string): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+/** The context of a global hook, as far as the code rules need it. */
+type HookContext = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
+
+/**
+ * True when the caller is known for this address: this browser signed in to that very account
+ * before (the signed cookie from `known-device.ts`), or is signed in to it right now. A known
+ * caller has counters of its own, so a stranger can never use them up (review round 5).
+ */
+async function isKnownCaller(ctx: HookContext, email: string): Promise<boolean> {
+  try {
+    const session = ctx.headers ? await getSessionFromCtx(ctx).catch(() => null) : null;
+    if (session?.user.email.trim().toLowerCase() === email) return true;
+  } catch {
+    // No session to read: the cookie below decides.
+  }
+  return knownFromHeaders(ctx.headers, email);
+}
+
+/** The cookie half of `isKnownCaller`, for code that has request headers only (server actions). */
+async function knownFromHeaders(requestHeaders: Headers | null | undefined, email: string): Promise<boolean> {
+  try {
+    const ids = knownDeviceUserIds(requestHeaders?.get('cookie'), env.BETTER_AUTH_SECRET);
+    if (ids.length === 0) return false;
+    const [row] = await db.select({ id: schema.user.id }).from(schema.user).where(eq(schema.user.email, email)).limit(1);
+    return row !== undefined && ids.includes(row.id);
+  } catch (error: unknown) {
+    console.error('[portal] could not tell whether this browser is known', error);
+    return false;
+  }
+}
+
+/**
+ * Set while the server signs in a person whose mailbox is already proven in this very request: the
+ * proof in the invite link checked out, or the emailed code was just checked (and counted). The
+ * code used inside this scope is one the server made a moment ago, so it is not a try at a code.
+ */
+const mailboxProvenDoor = new AsyncLocalStorage<true>();
+
+/** Set by an action that already asked `reserveEmailCode`, so the send it starts is not counted twice. */
+const codeSendReserved = new AsyncLocalStorage<true>();
+
+/** Runs `run` with the per address send limit already taken (see `reserveEmailCode`). */
+export function withCodeSendReserved<T>(run: () => Promise<T>): Promise<T> {
+  return codeSendReserved.run(true, run);
+}
+
+/**
+ * Asks the send limit for one code of this kind to this address, as the caller of `requestHeaders`.
+ * The actions for signed out people call it BEFORE they answer, so the screen can say the truth:
+ * a code is on its way, or the last one is still good and a new one can be asked for in N seconds.
+ * The answer is the same whether or not the address has an account.
+ */
+export async function reserveEmailCode(
+  kind: CodeKind,
+  email: string,
+  requestHeaders: Headers,
+): Promise<{ allowed: boolean; retryAfterSeconds: number; message: string }> {
+  const address = email.trim().toLowerCase();
+  const slot = await reserveCodeSend(db, { email: address, kind, known: await knownFromHeaders(requestHeaders, address) });
+  return { ...slot, message: slot.allowed ? '' : codeSentRecentlyMessage(slot.retryAfterSeconds) };
+}
+
+function tooMany(code: string, message: string, retryAfterSeconds?: number): APIError {
+  return new APIError('TOO_MANY_REQUESTS', { code, message, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) });
+}
+
+/** The kind of code a send path mails. null when the path sends none. */
+function sendKind(path: string, body: unknown): CodeKind | null {
+  if (path === '/email-otp/request-password-reset' || path === '/forget-password/email-otp') return 'forget-password';
+  if (path !== '/email-otp/send-verification-otp') return null;
+  const type = bodyText(body, 'type');
+  return type === 'sign-in' || type === 'email-verification' || type === 'forget-password' ? type : null;
+}
+
 /**
  * Rules for the email code endpoints. They sit in the global hooks so they hold for the HTTP
- * routes and for `auth.api` calls from server actions alike.
+ * routes and for `auth.api` calls from server actions alike. The numbers and the reasons are in
+ * `@kitstak/billing/server` code-limits.ts.
  */
-async function guardEmailCodes(path: string, body: unknown): Promise<void> {
+async function guardEmailCodes(ctx: HookContext): Promise<void> {
+  const path = ctx.path;
+  const body: unknown = ctx.body;
   // Signing in with an emailed code ("Email me a code instead", review round 3) has one door: the
   // two server actions in `signup-actions.ts`, which run inside `withSignInCode`. They check that
   // the account may sign in at all, count every try, and never say whether an address has an
   // account. The raw endpoints stay closed, so none of that can be skipped by calling them directly.
   const viaAction = signInCodeDoor.getStore() === true;
-  if (path === SIGN_IN_CODE_PATH) {
-    if (!viaAction) throw new APIError('NOT_FOUND', { message: 'Not found' });
-    const email = bodyText(body, 'email')?.trim().toLowerCase();
-    if (email) {
-      // A 6 digit code has a million values. Each code allows 5 guesses; on top of that, one address
-      // gets 10 tries per 10 minutes and 30 per day, right or wrong. A guesser gets nowhere, and the
-      // owner of the mailbox sees the code emails arrive.
-      const short = await enforceRateLimit(db, { key: `billing:code-signin:${email}`, windowSeconds: 600, max: 10 });
-      const day = await enforceRateLimit(db, { key: `billing:code-signin-day:${email}`, windowSeconds: 86_400, max: 30 });
-      if (!short || !day) throw new APIError('TOO_MANY_REQUESTS', { code: 'RATE_LIMITED', message: TOO_MANY_TRIES });
-    }
-  }
+  if (path === SIGN_IN_CODE_PATH && !viaAction) throw new APIError('NOT_FOUND', { message: 'Not found' });
   if (path === '/email-otp/send-verification-otp' && bodyText(body, 'type') === 'sign-in' && !viaAction) {
     throw new APIError('BAD_REQUEST', { message: 'Sign in with your password.' });
   }
 
-  if (CODE_SEND_PATHS.has(path)) {
+  // Every try at a code is counted for its address: 5 tries per code, and on top of that a count
+  // per 10 minutes and per day. A caller this account knows has counts of its own.
+  const tryKind: CodeKind | null =
+    path === SIGN_IN_CODE_PATH
+      ? 'sign-in'
+      : path === OTP_RESET_PATH
+        ? 'forget-password'
+        : path === OTP_VERIFY_PATH
+          ? 'email-verification'
+          : path === OTP_CHECK_PATH
+            ? checkedKind(bodyText(body, 'type'))
+            : null;
+  if (tryKind !== null && mailboxProvenDoor.getStore() !== true) {
     const email = bodyText(body, 'email')?.trim().toLowerCase();
-    if (!email) return;
-    // SPEC 12 item 6: 5 code sends per 10 minutes for one address. A day cap on top keeps a patient
-    // guesser from getting thousands of tries at a 6 digit code. Both count whether or not the
-    // address has an account, so the answer gives nothing away.
-    const short = await enforceRateLimit(db, { key: `billing:code:${email}`, windowSeconds: 600, max: 5 });
-    const day = await enforceRateLimit(db, { key: `billing:code-day:${email}`, windowSeconds: 86_400, max: 20 });
-    if (!short || !day) throw new APIError('TOO_MANY_REQUESTS', { code: 'RATE_LIMITED', message: day ? TOO_MANY_TRIES : TOO_MANY_TODAY });
+    if (email) {
+      const tries = await countCodeTry(db, { email, kind: tryKind, known: await isKnownCaller(ctx, email) });
+      if (!tries.allowed) throw tooMany(CODE_TRIES_USED_UP, tries.message);
+    }
+  }
+
+  // Every send of a code is spaced per address and per kind of code. It slows down and never
+  // becomes a wall for a day (review round 5). Counted whether or not the address has an account,
+  // so the answer gives nothing away.
+  if (CODE_SEND_PATHS.has(path) && codeSendReserved.getStore() !== true) {
+    const email = bodyText(body, 'email')?.trim().toLowerCase();
+    const kind = sendKind(path, body);
+    if (email && kind) {
+      const slot = await reserveCodeSend(db, { email, kind, known: await isKnownCaller(ctx, email) });
+      if (!slot.allowed) throw tooMany(CODE_SENT_RECENTLY, codeSentRecentlyMessage(slot.retryAfterSeconds), slot.retryAfterSeconds);
+    }
   }
 
   // The shared password policy plugin guards /sign-up, /change-password and /reset-password. The
@@ -273,7 +373,7 @@ async function sendVerificationOTP(data: { email: string; otp: string; type: str
  */
 const kitstakOrgMetadataHooks = {
   before: createAuthMiddleware(async (ctx) => {
-    await guardEmailCodes(ctx.path, ctx.body);
+    await guardEmailCodes(ctx);
     if (!ctx.path.startsWith('/organization/')) return;
     const body = (ctx.body ?? {}) as { data?: { metadata?: unknown }; metadata?: unknown };
     if (ctx.path === '/organization/update' && body.data?.metadata !== undefined) {
@@ -343,7 +443,8 @@ function buildAuth(): KitstakAuth {
       // The invite email goes out at once, with the checked mail settings.
       emailEnv: mailEnv(),
     }),
-    extraPlugins: [emailCodePlugin()],
+    // The known device cookie is written at every new session (see `known-device.ts`).
+    extraPlugins: [emailCodePlugin(), knownDevicePlugin({ secret: env.BETTER_AUTH_SECRET, secure: isProduction() })],
     ...(socialProviders ? { socialProviders } : {}),
   });
 }
@@ -379,9 +480,69 @@ export type AuthUser = AuthSession['user'];
  */
 export type EmailCodeApi = Pick<
   ReturnType<typeof emailOTP>['endpoints'],
-  'sendVerificationOTP' | 'verifyEmailOTP' | 'requestPasswordResetEmailOTP' | 'resetPasswordEmailOTP' | 'signInEmailOTP'
+  | 'sendVerificationOTP'
+  | 'verifyEmailOTP'
+  | 'requestPasswordResetEmailOTP'
+  | 'resetPasswordEmailOTP'
+  | 'signInEmailOTP'
+  | 'checkVerificationOTP'
+  | 'createVerificationOTP'
 >;
 
 export function emailCodeApi(): EmailCodeApi {
   return getAuth().api as unknown as EmailCodeApi;
+}
+
+/* ===== joining from an invite with no password (review round 5) ===== */
+
+/** A fresh sign in code for this address, made on the server and not mailed. Older ones are dropped. */
+async function newSignInCode(email: string): Promise<string> {
+  const address = email.trim().toLowerCase();
+  const context = await getAuth().$context;
+  await context.internalAdapter.deleteVerificationByIdentifier(`sign-in-otp-${address}`);
+  return emailCodeApi().createVerificationOTP({ body: { email: address, type: 'sign-in' } });
+}
+
+/**
+ * Mails a 6 digit code to an invited address that has no account yet. The normal send skips an
+ * address with no account, so this makes the code itself. The caller checks the invitation and the
+ * send limit first (`reserveEmailCode`).
+ */
+export async function mailInviteJoinCode(email: string): Promise<void> {
+  const address = email.trim().toLowerCase();
+  await sendVerificationOTP({ email: address, otp: await newSignInCode(address), type: 'sign-in' });
+}
+
+/**
+ * Makes an account with a proven email and no password, for a person who joins from an invite.
+ * They sign in with an emailed code from then on, and can set a password on their account page.
+ * Only call it after the mailbox is proven (the invite link's proof, or the emailed code).
+ */
+export async function createCodeOnlyUser(input: { name: string; email: string; timezone?: string }): Promise<string> {
+  const context = await getAuth().$context;
+  const created = await context.internalAdapter.createUser(
+    {
+      name: input.name,
+      email: input.email.trim().toLowerCase(),
+      emailVerified: true,
+      ...(input.timezone ? { timezone: input.timezone } : {}),
+    },
+    // The same source the email code plugin names when it makes an account.
+    { method: 'email-otp' },
+  );
+  return created.id;
+}
+
+/**
+ * Signs in a person whose mailbox is proven in this request, and answers with the response headers
+ * (they carry the new session cookie). With `code`, the emailed code they typed is used up here.
+ * Without, the server makes a code and uses it at once: nothing is mailed and nothing is guessed.
+ */
+export async function signInProvenMailbox(input: { email: string; code?: string; headers: Headers }): Promise<Headers> {
+  const email = input.email.trim().toLowerCase();
+  const otp = input.code ?? (await newSignInCode(email));
+  const signedIn = await mailboxProvenDoor.run(true, () =>
+    withSignInCode(() => emailCodeApi().signInEmailOTP({ body: { email, otp }, headers: input.headers, returnHeaders: true })),
+  );
+  return signedIn.headers;
 }

@@ -77,6 +77,47 @@ app_ready_path() {
   esac
 }
 
+# app_mem_cap_mb <app>: the memory budget of one dev server and its helpers, in MB. Over it,
+# app-supervise.sh restarts the server. KITSTAK_DEV_MEM_MB_<APP> sets one app, KITSTAK_DEV_MEM_MB
+# all of them. The defaults add up to 13 GB. A fresh server uses about a third of its budget, and when
+# the machine itself runs short the biggest server is restarted first (KITSTAK_DEV_MIN_FREE_MB), so six
+# apps and a browser fit in 16 GB.
+app_mem_cap_mb() {
+  local name value
+  name="KITSTAK_DEV_MEM_MB_$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+  value="${!name:-${KITSTAK_DEV_MEM_MB:-}}"
+  if [ -z "$value" ]; then
+    case "$1" in
+      portal) value=3000 ;;
+      wms) value=2600 ;;
+      crm | projects) value=2200 ;;
+      pulse) value=1800 ;;
+      *) value=1200 ;;
+    esac
+  fi
+  echo "$value"
+}
+
+# group_rss_mb <pgid>: memory in use by every process of a process group, in MB. 0 when it is gone.
+group_rss_mb() {
+  local pids total=0 rss
+  pids="$(pgrep -g "$1" 2>/dev/null | tr '\n' ',' | sed 's/,$//')"
+  [ -z "$pids" ] && { echo 0; return 0; }
+  for rss in $(ps -o rss= -p "$pids" 2>/dev/null); do total=$((total + rss)); done
+  echo $((total / 1024))
+}
+
+# mem_available_mb: memory the machine can still hand out, in MB. Empty where it cannot be read (macOS).
+mem_available_mb() {
+  [ -r /proc/meminfo ] || return 0
+  awk '/^MemAvailable:/ { printf "%d", $2 / 1024 }' /proc/meminfo
+}
+
+# file_mtime <file>: when the file last changed, in seconds since 1970 (Linux and macOS).
+file_mtime() {
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
+}
+
 port_open() {
   (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
 }

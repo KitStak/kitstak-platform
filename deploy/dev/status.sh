@@ -21,6 +21,14 @@ for app in $ALL_APPS; do
         own-keys) note="  billing: your own Stripe keys" ;;
       esac
     fi
+    # Memory in use, and what the supervisor did (deploy/dev/app-supervise.sh).
+    if [ -f "$PID_DIR/$app.pid" ]; then
+      used="$(group_rss_mb "$(cat "$PID_DIR/$app.pid")")"
+      [ "$used" -gt 0 ] && note="$note  memory: ${used} MB"
+      if [ -f "$PID_DIR/$app.supervisor" ]; then
+        note="$note of $(sed -n 's/^cap_mb=//p' "$PID_DIR/$app.supervisor") MB, restarts: $(sed -n 's/^restarts=//p' "$PID_DIR/$app.supervisor")"
+      fi
+    fi
     echo "UP    $(printf '%-8s' "$app")  http://localhost:$port  log: $LOG_DIR/$app.log$note"
   else
     echo "DOWN  $(printf '%-8s' "$app")  port $port  (start: deploy/dev/app-start.sh $app)"
