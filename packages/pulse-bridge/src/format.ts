@@ -3,24 +3,12 @@
  * and the browser print the same text. No math: these only turn a stored number into words.
  */
 
-/** Whole cents to money text: 1234567 becomes "$12,346" (or "$12,345.67" with `cents`). */
-export function formatCents(cents: number | null | undefined, options: { readonly cents?: boolean; readonly currency?: string; readonly empty?: string } = {}): string {
-  if (cents === null || cents === undefined || !Number.isFinite(cents)) return options.empty ?? 'Hidden';
-  const digits = options.cents ? 2 : 0;
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: options.currency ?? 'USD',
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(cents / 100);
-}
-
-/** Basis points to percent text: 3150 becomes "31.5%". */
-export function formatMarginBp(bp: number | null | undefined, options: { readonly empty?: string } = {}): string {
-  if (bp === null || bp === undefined || !Number.isFinite(bp)) return options.empty ?? 'No margin yet';
-  const tenths = Math.round(bp / 10) / 10;
-  return `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 }).format(tenths)}%`;
-}
+/**
+ * `formatCents` and `formatMarginBp` come from the shared engine (docs/programs/SPEC.md 3.12), so
+ * Pulse money shown in CRM, WMS and Projects prints exactly like program money. `formatCents`
+ * takes whole cents as a number, a `bigint` or an integer string.
+ */
+export { formatCents, formatMarginBp } from '@kitstak/programs-engine/format';
 
 /** A decimal string quantity to a whole or one decimal number text. */
 export function formatQuantity(value: string | number | null | undefined): string {

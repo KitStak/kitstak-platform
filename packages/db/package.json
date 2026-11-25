@@ -19,6 +19,9 @@
     "db:migrate": "tsx scripts/db-migrate.ts",
     "migrate:wms-identity": "tsx scripts/migrate-wms-identity.ts"
   },
+  "dependencies": {
+    "@kitstak/programs-engine": "workspace:*"
+  },
   "peerDependencies": {
     "drizzle-orm": "^0.45.4",
     "pg": "^8.23.1",
@@ -36,10 +39,12 @@
     "@kitstak/config": "workspace:*",
     "@types/node": "^22.10.0",
     "@types/pg": "^8.23.1",
+    "dotenv": "^18.0.9",
     "drizzle-orm": "^0.45.4",
     "pg": "^8.23.1",
     "postgres": "3.4.9",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.1.0"
   }
 }

@@ -22,5 +22,6 @@ All packages ship TypeScript source (exports point at `./src/*.ts(x)`) — there
 | `@kitstak/entitlements` | Which org is licensed for which module (`crm`, `wms`, `projects`, `pulse`). |
 | `@kitstak/pm-bridge` | Shared-database bridge into KitStak Projects (the `pm` schema) for CRM and WMS. |
 | `@kitstak/pulse-bridge` | Shared-database bridge into KitStak Pulse (the `pulse` schema) for Portal, CRM, WMS and Projects: job profit for a linked record, client profit, workspace totals, a person's Pulse role, deep links and change events. See its README. |
+| `@kitstak/programs-engine` | Pure money and planning engine for Programs: price resolution, accrual and posting, month charges, rollups, forecasts, variants, imports, schedules, runs, deal helpers, formatting and barcodes. No database, zero runtime dependencies. Pulse money and calendar math live here and Pulse re-exports them. See its README. |
 
 Dependency direction: `config ← ui ← apps`. No package imports from an app.

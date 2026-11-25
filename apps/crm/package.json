@@ -34,6 +34,7 @@
     "@kitstak/db": "workspace:*",
     "@kitstak/entitlements": "workspace:*",
     "@kitstak/pm-bridge": "workspace:*",
+    "@kitstak/programs-engine": "workspace:*",
     "@kitstak/pulse-bridge": "workspace:*",
     "@kitstak/ui": "workspace:*",
     "@next/env": "16.4.5",

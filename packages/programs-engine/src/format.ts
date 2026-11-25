@@ -71,19 +71,31 @@ const COMPACT_UNITS: readonly { readonly suffix: string; readonly dollars: bigin
   { suffix: 'K', dollars: BigInt('1000') },
 ];
 
-/** "1.2M", "38K" for amounts of a thousand dollars and up; null below that (shown in full). */
+const THOUSAND = BigInt(1000);
+
+/**
+ * "1.2M", "38K" for amounts that round to a thousand dollars and up; null below that (shown in
+ * full). One decimal under 10 of a unit, whole units from 10. When rounding reaches 1,000 of a unit and a
+ * bigger unit exists, the next unit is used, so $999,500 prints "1M", never "1,000K".
+ */
 function compactBody(absCents: bigint): string | null {
   const ten = BigInt(10);
-  const index = COMPACT_UNITS.findIndex((unit) => absCents >= unit.dollars * HUNDRED);
+  let index = COMPACT_UNITS.findIndex((unit) => absCents >= unit.dollars * HUNDRED);
+  // $999.99 rounds to $1,000, so it prints "$1K" like any other thousand.
+  if (index < 0 && divRound(absCents, HUNDRED) >= THOUSAND) index = COMPACT_UNITS.length - 1;
   if (index < 0) return null;
-  let unit = COMPACT_UNITS[index] as { suffix: string; dollars: bigint };
-  let tenths = divRound(absCents * ten, unit.dollars * HUNDRED);
-  if (tenths >= BigInt(10000) && index > 0) {
-    unit = COMPACT_UNITS[index - 1] as { suffix: string; dollars: bigint };
-    tenths = divRound(absCents * ten, unit.dollars * HUNDRED);
+  for (;;) {
+    const unit = COMPACT_UNITS[index] as { suffix: string; dollars: bigint };
+    const size = unit.dollars * HUNDRED;
+    const tenths = divRound(absCents * ten, size);
+    const whole = divRound(absCents, size);
+    if (whole >= THOUSAND && index > 0) {
+      index -= 1;
+      continue;
+    }
+    if (tenths >= BigInt(100)) return `${groupDigits(whole)}${unit.suffix}`;
+    return `${fromScaled(tenths, 1).replace(/\.0$/, '')}${unit.suffix}`;
   }
-  if (tenths >= BigInt(100)) return `${groupDigits(divRound(absCents, unit.dollars * HUNDRED))}${unit.suffix}`;
-  return `${fromScaled(tenths, 1).replace(/\.0$/, '')}${unit.suffix}`;
 }
 
 function readCents(value: Cents | number | string): bigint | null {
@@ -147,6 +159,18 @@ export function formatPercentBp(bp: number | bigint | null | undefined, options:
   return `${percent < ZERO ? '-' : ''}${groupDigits(absBig(percent))}%`;
 }
 
+/**
+ * Runs a scaling step and returns null when the value is not a number, so one bad stored value
+ * shows the empty text instead of breaking a whole page render (the same as `formatCents`).
+ */
+function safeScaled(scale: () => bigint): bigint | null {
+  try {
+    return scale();
+  } catch {
+    return null;
+  }
+}
+
 /** Trims trailing zeros of a fixed decimal string, keeping at least `keep` fraction digits. */
 function trimFraction(fraction: string, keep: number): string {
   let out = fraction;
@@ -161,7 +185,8 @@ function trimFraction(fraction: string, keep: number): string {
 export function formatUnitPrice(price: string | number | null | undefined, options: { readonly currency?: string; readonly empty?: string } = {}): string {
   if (price === null || price === undefined || (typeof price === 'string' && price.trim() === '')) return options.empty ?? 'No price';
   if (typeof price === 'number' && !Number.isFinite(price)) return options.empty ?? 'No price';
-  const scaled = priceToScaled(price);
+  const scaled = safeScaled(() => priceToScaled(price));
+  if (scaled === null) return options.empty ?? 'No price';
   const { negative, whole, fraction } = splitDecimal(fromScaled(scaled, 4));
   const body = `${groupDigits(BigInt(whole))}.${trimFraction(fraction, 2)}`;
   return withCurrency(negative && scaled !== ZERO, body, options.currency ?? 'USD');
@@ -171,15 +196,16 @@ export function formatUnitPrice(price: string | number | null | undefined, optio
 export function formatQty(qty: string | number | bigint | null | undefined, options: { readonly empty?: string } = {}): string {
   if (qty === null || qty === undefined || (typeof qty === 'string' && qty.trim() === '')) return options.empty ?? '0';
   if (typeof qty === 'number' && !Number.isFinite(qty)) return options.empty ?? '0';
-  const scaled = quantityToScaled(typeof qty === 'bigint' ? qty.toString() : qty);
+  const scaled = safeScaled(() => quantityToScaled(typeof qty === 'bigint' ? qty.toString() : qty));
+  if (scaled === null) return options.empty ?? '0';
   const { negative, whole, fraction } = splitDecimal(fromScaled(scaled, 3));
   const trimmed = trimFraction(fraction, 0);
   return `${negative && scaled !== ZERO ? '-' : ''}${groupDigits(BigInt(whole))}${trimmed ? `.${trimmed}` : ''}`;
 }
 
-/** A count with its unit word: "1 kit", "1,200 kits", "2.5 kits". */
+/** A count with its unit word: "1 kit", "1,200 kits", "2.5 kits". Text that is not a number counts as 0. */
 export function unitLabel(n: string | number | bigint, unit: { readonly singular: string; readonly plural: string }): string {
-  const scaled = quantityToScaled(typeof n === 'bigint' ? n.toString() : n);
+  const scaled = safeScaled(() => quantityToScaled(typeof n === 'bigint' ? n.toString() : n)) ?? ZERO;
   const one = BigInt(1000);
   return `${formatQty(fromScaled(scaled, 3))} ${scaled === one || scaled === -one ? unit.singular : unit.plural}`;
 }
@@ -188,7 +214,8 @@ export function unitLabel(n: string | number | bigint, unit: { readonly singular
 export function formatHours(hours: string | number | null | undefined, options: { readonly empty?: string } = {}): string {
   if (hours === null || hours === undefined || (typeof hours === 'string' && hours.trim() === '')) return options.empty ?? '0 h';
   if (typeof hours === 'number' && !Number.isFinite(hours)) return options.empty ?? '0 h';
-  const scaled = toScaled(hours, 2);
+  const scaled = safeScaled(() => toScaled(hours, 2));
+  if (scaled === null) return options.empty ?? '0 h';
   const { negative, whole, fraction } = splitDecimal(fromScaled(scaled, 2));
   const trimmed = trimFraction(fraction, 0);
   return `${negative && scaled !== ZERO ? '-' : ''}${groupDigits(BigInt(whole))}${trimmed ? `.${trimmed}` : ''} h`;
