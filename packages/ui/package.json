@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./app-icon": "./src/app-icon/index.ts",
     "./app-switcher": "./src/app-switcher/index.ts",
+    "./dashboard": "./src/dashboard/index.ts",
     "./logo": "./src/logo/index.ts",
     "./styles/tokens.css": "./src/styles/tokens.css",
     "./theme": "./src/theme/index.ts",

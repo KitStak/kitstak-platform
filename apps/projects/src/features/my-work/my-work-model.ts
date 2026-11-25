@@ -14,6 +14,27 @@ export const WHEN_GROUPS: readonly { readonly key: WhenGroup; readonly label: st
   { key: 'done', label: 'Done lately', hint: 'Finished in the last 7 days' },
 ];
 
+/** The `when` filter on My work: one due-date group, or everything. */
+export type WhenFilter = 'all' | 'overdue' | 'today' | 'upcoming' | 'done';
+
+export const WHEN_FILTERS: readonly { readonly value: WhenFilter; readonly label: string }[] = [
+  { value: 'all', label: 'Any due date' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'today', label: 'Due today' },
+  { value: 'upcoming', label: 'Next 7 days' },
+  { value: 'done', label: 'Done lately' },
+];
+
+/**
+ * True when the task belongs to the `when` filter. A task finished during this visit (`keepIds`)
+ * stays in the group it was in, so checking it off does not make it jump away.
+ */
+export function matchesWhen(task: TaskSummary, when: WhenFilter, today: IsoDate = todayIso(), keepIds: ReadonlySet<string> = new Set()): boolean {
+  if (when === 'all') return true;
+  const group = keepIds.has(task.id) && when !== 'done' ? whenGroup({ ...task, statusCategory: 'todo' }, today) : whenGroup(task, today);
+  return group === when;
+}
+
 export const SORT_LABELS: Readonly<Record<MyWorkSort, string>> = {
   due: 'Due date',
   priority: 'Priority',

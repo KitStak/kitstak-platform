@@ -13,6 +13,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { Check, EllipsisVertical, Lock, PartyPopper, Undo2 } from 'lucide-react';
+import { Pill } from '@kitstak/ui/dashboard';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -51,7 +52,15 @@ function allowed(perms: ReadonlySet<string> | null, keys: readonly string[]): bo
   return perms === null || hasPermission(perms, keys, 'any');
 }
 
-function StepMarker({ step, index }: { readonly step: SetupStepState; readonly index: number }) {
+function StepMarker({
+  step,
+  index,
+  current,
+}: {
+  readonly step: SetupStepState;
+  readonly index: number;
+  readonly current: boolean;
+}) {
   const base = 'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold';
   if (step.status === 'done')
     return (
@@ -74,7 +83,10 @@ function StepMarker({ step, index }: { readonly step: SetupStepState; readonly i
         'tabular-nums',
         step.status === 'skipped'
           ? 'border border-dashed border-border-strong bg-transparent text-fg-muted'
-          : 'bg-primary-soft text-primary',
+          : // The current step is marked by a solid neutral number and the words "Next step", not by color.
+            current
+            ? 'bg-fg text-fg-inverse'
+            : 'border border-border-strong text-fg-muted',
       )}
       aria-hidden
     >
@@ -87,15 +99,19 @@ function CtaLink({
   link,
   stepKey,
   enabled,
+  current,
 }: {
   readonly link: SetupStepLink;
   readonly stepKey: SetupStepState['key'];
   readonly enabled: boolean;
+  readonly current: boolean;
 }) {
+  // The page keeps no crimson button here: the current step gets the outline button, the rest a quiet one.
+  const variant = current ? 'secondary' : 'ghost';
   if (!enabled)
     return (
       <DisabledReason reason={CTA_REASON}>
-        <Button size="sm" variant="primary" disabled>
+        <Button size="sm" variant={variant} disabled>
           {link.label}
         </Button>
       </DisabledReason>
@@ -103,7 +119,7 @@ function CtaLink({
   return (
     <Link
       href={setupStepHref(link.href, stepKey)}
-      className={buttonVariants({ variant: 'primary', size: 'sm' })}
+      className={buttonVariants({ variant, size: 'sm' })}
     >
       {link.label}
     </Link>
@@ -113,20 +129,23 @@ function CtaLink({
 interface StepRowProps {
   readonly step: SetupStepState;
   readonly index: number;
+  /** The first ready step: the one the guide points at next. */
+  readonly current: boolean;
   readonly perms: ReadonlySet<string> | null;
   readonly canManage: boolean;
   readonly busy: boolean;
   readonly onAction: (vars: GuideAction) => void;
 }
 
-function StepRow({ step, index, perms, canManage, busy, onAction }: StepRowProps) {
+function StepRow({ step, index, current, perms, canManage, busy, onAction }: StepRowProps) {
   return (
     <li
       className="group flex items-center gap-3 px-5 py-3"
       data-testid={`setup-step-${step.key}`}
       data-status={step.status}
+      data-current={current || undefined}
     >
-      <StepMarker step={step} index={index} />
+      <StepMarker step={step} index={index} current={current} />
       <div className="min-w-0 flex-1">
         <p
           className={cn(
@@ -143,12 +162,20 @@ function StepRow({ step, index, perms, canManage, busy, onAction }: StepRowProps
         ) : step.status === 'skipped' ? (
           <p className="mt-0.5 text-xs text-fg-muted">Skipped. Live data still checks this off.</p>
         ) : step.status === 'ready' ? (
-          <p className="mt-0.5 text-xs text-secondary">{step.description}</p>
+          <p className="mt-0.5 text-xs text-secondary">
+            {current ? (
+              <>
+                <span className="font-medium text-fg">Next step</span>
+                <span aria-hidden> · </span>
+              </>
+            ) : null}
+            {step.description}
+          </p>
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {step.status === 'done' ? (
-          <span className="text-xs font-medium text-success-text">Done · detected</span>
+          <Pill tone="positive">Done, detected</Pill>
         ) : step.status === 'ready' ? (
           <>
             {canManage ? (
@@ -172,12 +199,17 @@ function StepRow({ step, index, perms, canManage, busy, onAction }: StepRowProps
             {step.secondary && allowed(perms, step.secondary.permission) ? (
               <Link
                 href={setupStepHref(step.secondary.href, step.key)}
-                className="hidden text-xs font-medium text-primary hover:underline sm:inline"
+                className="hidden text-xs font-medium text-fg-secondary hover:text-fg hover:underline sm:inline"
               >
                 {step.secondary.label}
               </Link>
             ) : null}
-            <CtaLink link={step.cta} stepKey={step.key} enabled={allowed(perms, step.cta.permission)} />
+            <CtaLink
+              link={step.cta}
+              stepKey={step.key}
+              enabled={allowed(perms, step.cta.permission)}
+              current={current}
+            />
           </>
         ) : step.status === 'skipped' && canManage ? (
           <Button
@@ -285,6 +317,7 @@ export function SetupGuidePanel({ initial = null }: { readonly initial?: SetupGu
   const canManage = allowed(perms, [MANAGE_PERMISSION]);
   const busy = mutation.isPending;
   const onAction = (vars: GuideAction) => mutation.mutate(vars);
+  const currentKey = guide.steps.find((step) => step.status === 'ready')?.key ?? null;
 
   return (
     <section
@@ -302,8 +335,8 @@ export function SetupGuidePanel({ initial = null }: { readonly initial?: SetupGu
               max={guide.totalCount}
               size={44}
               thickness={5}
-              // One progress treatment (contract): primary until 100%, success only at 100%.
-              tone={guide.settledCount === guide.totalCount ? 'success' : 'primary'}
+              // One progress treatment (contract): the dashboard data color until 100%, success only at 100%.
+              tone={guide.settledCount === guide.totalCount ? 'success' : 'data'}
               label="Setup progress"
             />
             <div className="min-w-0 flex-1">
@@ -340,6 +373,7 @@ export function SetupGuidePanel({ initial = null }: { readonly initial?: SetupGu
                   key={step.key}
                   step={step}
                   index={index}
+                  current={step.key === currentKey}
                   perms={perms}
                   canManage={canManage}
                   busy={busy}

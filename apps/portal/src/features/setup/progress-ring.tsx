@@ -48,7 +48,7 @@ export function ProgressRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={clamped === 100 ? 'var(--success)' : 'var(--primary)'}
+          stroke={clamped === 100 ? 'var(--success)' : 'var(--dash-data, var(--chart-5))'}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}

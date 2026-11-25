@@ -39,7 +39,7 @@
         "apps/web",
         "dev"
       ],
-      "port": 3400
+      "port": 3600
     },
     {
       "name": "pulse",
@@ -50,6 +50,16 @@
         "dev"
       ],
       "port": 3500
+    },
+    {
+      "name": "projects",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--dir",
+        "apps/projects",
+        "dev"
+      ],
+      "port": 3400
     }
   ]
 }

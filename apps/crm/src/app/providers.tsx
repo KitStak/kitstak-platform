@@ -1,8 +1,10 @@
 'use client';
 import { useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiClientError } from '@/lib/api';
 import { ThemeHandoff } from '@kitstak/ui/theme-handoff';
+import { DashboardLinkProvider, type DashLinkProps } from '@kitstak/ui/dashboard';
 import { Toaster, TooltipProvider, toast } from '@/components/ui';
 import { ThemeProvider, useTheme } from '@/features/shell/theme';
 
@@ -48,6 +50,15 @@ function createQueryClient(): QueryClient {
   });
 }
 
+/** Dashboard pieces (tiles, rows, section actions) navigate client side through next/link. */
+function DashboardNextLink({ href, children, ...rest }: DashLinkProps) {
+  return (
+    <Link href={href} {...rest}>
+      {children}
+    </Link>
+  );
+}
+
 function ThemedToaster() {
   const { resolved } = useTheme();
   return <Toaster theme={resolved} />;
@@ -61,7 +72,7 @@ export function Providers({ children }: { readonly children: ReactNode }) {
         <TooltipProvider delayDuration={400} skipDelayDuration={200}>
           {/* Carries the stored theme on links into Portal/WMS (stores are per origin). */}
           <ThemeHandoff appUrls={SIBLING_APP_URLS} />
-          {children}
+          <DashboardLinkProvider component={DashboardNextLink}>{children}</DashboardLinkProvider>
           <ThemedToaster />
         </TooltipProvider>
       </QueryClientProvider>

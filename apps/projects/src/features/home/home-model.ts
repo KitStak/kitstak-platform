@@ -1,6 +1,7 @@
 /** Pure Home logic: greeting, task buckets, summary stats and the getting-started checklist. */
-import { addDaysIso, startOfWeekIso, todayIso, type IsoDate } from '@/lib/dates';
-import type { TaskSummary } from '@/lib/types';
+import type { PillTone } from '@kitstak/ui/dashboard';
+import { addDaysIso, diffDays, startOfWeekIso, todayIso, type IsoDate } from '@/lib/dates';
+import type { CustomerPulseRowDTO, TaskSummary } from '@/lib/types';
 import type { ProgramListItemDTO, RunDTO } from '@/lib/program-types';
 
 /** The shared KitStak greeting (same boundaries as CRM). */
@@ -171,4 +172,25 @@ export function programsByCustomer(programs: readonly ProgramListItemDTO[]): Rea
 /** One run that holds the whole day: its counts would only repeat the day line above it. */
 export function sameAsDay(run: Pick<RunDTO, 'builds' | 'plannedUnits' | 'builtUnits'>, builds: number, plannedUnits: string, builtUnits: string): boolean {
   return run.builds === builds && run.plannedUnits === plannedUnits && run.builtUnits === builtUnits;
+}
+
+/* Customers on Home ----------------------------------------------------------------------------- */
+
+export interface CustomerRowState {
+  readonly tone: PillTone;
+  readonly text: string;
+}
+
+/**
+ * The one state pill a customer row may carry, worst first: late receipts, overdue work, a close
+ * date that passed, warehouse exceptions, then the deal outcome. Null when nothing needs saying.
+ */
+export function customerRowState(row: Pick<CustomerPulseRowDTO, 'lateReceipts' | 'exceptions' | 'deal' | 'projects'>, today: string = todayIso()): CustomerRowState | null {
+  if (row.lateReceipts > 0) return { tone: 'critical', text: 'Receipts late' };
+  if (row.projects.some((project) => project.overdue > 0)) return { tone: 'critical', text: 'Work overdue' };
+  if (row.deal && row.deal.outcome === 'open' && row.deal.closeDate && diffDays(today, row.deal.closeDate) < 0) return { tone: 'caution', text: 'Close date passed' };
+  if (row.exceptions > 0) return { tone: 'caution', text: 'Warehouse exceptions' };
+  if (row.deal?.outcome === 'won') return { tone: 'positive', text: 'Deal won' };
+  if (row.deal?.outcome === 'lost') return { tone: 'neutral', text: 'Deal lost' };
+  return null;
 }

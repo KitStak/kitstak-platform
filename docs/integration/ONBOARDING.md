@@ -18,8 +18,10 @@ ready**. Live detection always beats a stale skip row.
 - `locked`: a prerequisite is neither done NOR skipped (skipping a prerequisite
   **unlocks** its dependents; the destination screens carry their own empty states).
   UI: lock chip + `Unlocks after <prerequisite title>`.
-- `ready`: actionable. One primary CTA on the current/next step, secondary-style CTA on
-  the rest. `Skip` is a ghost action: hover/focus-revealed on fine pointers, always
+- `ready`: actionable. The current/next step gets the emphasized CTA (outline style; the
+  page header keeps the only crimson button, see `docs/design/UI-CLEANUP.md`), the rest get
+  a quiet text action. The current step is marked by its number and the words "Next step",
+  never by a highlighted band. `Skip` is a ghost action: hover/focus-revealed on fine pointers, always
   visible (reduced emphasis) on coarse pointers.
 
 ## Progress + celebration (identical in all three apps)
@@ -29,7 +31,9 @@ ready**. Live detection always beats a stale skip row.
 - Ring/bar percent = settled (done+skipped) / total, but **celebration requires
   `doneCount === total`**. All-settled-with-skips shows a quiet "wrapped up, N steps
   skipped" row with undo affordances, never confetti. Celebrations do not lie.
-- One progress treatment: circular progress ring, primary tone until 100%, then success.
+- One progress treatment: circular progress ring in the app's data color (`--dash-data`,
+  docs/design/UI-CLEANUP.md section 3) until 100%, then success. Never crimson: progress is
+  a quantity, not an action.
 - One celebration: PartyPopper icon + confetti burst (token colors, hidden under
   `prefers-reduced-motion`) + headline + **secondary** Dismiss button. No raw emoji in
   headings.

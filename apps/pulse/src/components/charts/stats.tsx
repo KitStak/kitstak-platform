@@ -5,7 +5,8 @@
  * health as icon plus words, so it reads the same for color blind people).
  */
 import type { ReactNode } from 'react';
-import { ArrowDownRight, ArrowUpRight, CircleCheck, CircleHelp, Eye, Minus, TrendingDown, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { CircleCheck, CircleHelp, Eye, TrendingDown, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { Delta, Pill, StatTile, type DeltaProps, type PillTone } from '@kitstak/ui/dashboard';
 import { cn } from '@/components/ui/cn';
 import { PULSE_STATUS_LABELS, type PulseStatus } from '@/lib/constants';
 import { deltaDirection, deltaTone, formatPercentBp } from '@/lib/format';
@@ -31,28 +32,25 @@ export interface DeltaBadgeProps {
 const DELTA_WORD = { up: 'Up', down: 'Down', flat: 'No change' } as const;
 const TONE_WORD = { good: 'better', bad: 'worse', neutral: '' } as const;
 
-export function DeltaBadge({ delta, text, goodWhen = 'up', label, size = 'md', className }: DeltaBadgeProps) {
+/** The shared change mark (colored text and an arrow, no chip) for a Pulse change. */
+export function toDelta({ delta, text, goodWhen = 'up' }: Pick<DeltaBadgeProps, 'delta' | 'text' | 'goodWhen'>): DeltaProps {
   const missing = delta === null || delta === undefined;
   // A change too small to show ("0 points", "$0") reads as no change: no arrow and no good or bad color.
   const rounded = missing || /[1-9]/.test(text) ? delta : 0;
   const direction = deltaDirection(rounded);
   const tone = deltaTone(rounded, goodWhen);
-  const Icon = direction === 'up' ? ArrowUpRight : direction === 'down' ? ArrowDownRight : Minus;
+  return {
+    text: missing ? 'No change yet' : text,
+    direction,
+    tone,
+    srLabel: missing ? 'Nothing to compare yet' : `${DELTA_WORD[direction]}${TONE_WORD[tone] ? `, ${TONE_WORD[tone]}` : ''}:`,
+  };
+}
+
+export function DeltaBadge({ delta, text, goodWhen = 'up', label, size = 'md', className }: DeltaBadgeProps) {
   return (
     <span className={cn('inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5', size === 'sm' ? 'text-2xs' : 'text-xs', className)}>
-      <span
-        className={cn(
-          'inline-flex max-w-full items-center gap-0.5 rounded-sm font-semibold tabular-nums',
-          size === 'sm' ? 'min-h-[18px] px-1' : 'min-h-5 px-1.5',
-          tone === 'good' && 'bg-success-subtle text-success-text',
-          tone === 'bad' && 'bg-danger-subtle text-danger-text',
-          tone === 'neutral' && 'bg-muted text-fg-secondary',
-        )}
-      >
-        <Icon aria-hidden className="size-3 shrink-0" strokeWidth={2.5} />
-        <span className="sr-only">{missing ? 'Nothing to compare yet' : `${DELTA_WORD[direction]}${TONE_WORD[tone] ? `, ${TONE_WORD[tone]}` : ''}:`}</span>
-        {missing ? 'No change yet' : text}
-      </span>
+      <Delta {...toDelta({ delta, text, goodWhen })} />
       {label ? <span className="whitespace-nowrap text-fg-muted">{label}</span> : null}
     </span>
   );
@@ -70,12 +68,13 @@ export const MARGIN_HEALTH_LABELS: Readonly<Record<MarginHealth, string>> = {
   none: 'Not enough data',
 };
 
-const HEALTH_STYLE: Readonly<Record<MarginHealth, { icon: LucideIcon; className: string }>> = {
-  healthy: { icon: CircleCheck, className: 'bg-success-subtle text-success-text' },
-  watch: { icon: Eye, className: 'bg-[var(--label-yellow-subtle)] text-[var(--label-yellow-text)]' },
-  at_risk: { icon: TriangleAlert, className: 'bg-warning-subtle text-warning-text' },
-  losing: { icon: TrendingDown, className: 'bg-danger-subtle text-danger-text' },
-  none: { icon: CircleHelp, className: 'bg-muted text-fg-secondary' },
+/** Five pill tones, no more (docs/design/UI-CLEANUP.md). Watch is neutral: the eye and the word carry it. */
+const HEALTH_STYLE: Readonly<Record<MarginHealth, { icon: LucideIcon; tone: PillTone }>> = {
+  healthy: { icon: CircleCheck, tone: 'positive' },
+  watch: { icon: Eye, tone: 'neutral' },
+  at_risk: { icon: TriangleAlert, tone: 'caution' },
+  losing: { icon: TrendingDown, tone: 'critical' },
+  none: { icon: CircleHelp, tone: 'neutral' },
 };
 
 const STATUS_HEALTH: Readonly<Record<PulseStatus, MarginHealth>> = { on_track: 'healthy', heads_up: 'watch', at_risk: 'at_risk', losing: 'losing', no_data: 'none' };
@@ -111,24 +110,24 @@ export interface MarginPillProps {
   readonly className?: string;
 }
 
-export function MarginPill({ health, status, marginBp, label, size = 'md', className }: MarginPillProps) {
+/** The shared pill (one size everywhere, so `size` is kept only for old call sites). */
+export function MarginPill({ health, status, marginBp, label, className }: MarginPillProps) {
   const resolved: MarginHealth = health ?? (status ? healthFromStatus(status) : 'none');
-  const { icon: Icon, className: tone } = HEALTH_STYLE[resolved];
+  const { icon: Icon, tone } = HEALTH_STYLE[resolved];
   const words = label ?? (status ? PULSE_STATUS_LABELS[status] : MARGIN_HEALTH_LABELS[resolved]);
   const margin = marginBp === null || marginBp === undefined ? null : formatPercentBp(marginBp);
   return (
-    <span className={cn('inline-flex max-w-full items-center gap-1 rounded-sm font-medium whitespace-nowrap', size === 'sm' ? 'h-[18px] px-1.5 text-2xs' : 'h-5 px-2 text-xs', tone, className)}>
-      <Icon aria-hidden className="size-3 shrink-0" strokeWidth={2.25} />
+    <Pill tone={tone} icon={<Icon strokeWidth={2.25} />} className={className}>
       {margin ? (
         <>
           <span className="font-semibold tabular-nums">{margin}</span>
           <span aria-hidden className="opacity-60">
-            ·
+            {' · '}
           </span>
         </>
       ) : null}
-      <span className="truncate">{words}</span>
-    </span>
+      {words}
+    </Pill>
   );
 }
 
@@ -154,53 +153,70 @@ export interface KpiTileProps {
   readonly loading?: boolean;
   /** A plain sentence when the number could not load. */
   readonly error?: string | null;
+  /**
+   * Where the number goes: the list or report it sums up. On Home and other summary pages every
+   * tile needs one (no dead ends). Leave it out only on the page the number already explains.
+   */
+  readonly href?: string | null;
+  /** Leave out the "vs before" words when the page header already says what the change is against. */
+  readonly hideDeltaLabel?: boolean;
   readonly className?: string;
 }
 
-export function KpiTile({ label, value, delta, deltaPending, sparkline, explain, footer, emptyText = 'No data yet', loading, error, className }: KpiTileProps) {
+/**
+ * One headline number, drawn by the shared StatTile (`@kitstak/ui/dashboard`) so it looks the same
+ * as every KitStak app. The "how we got this" control sits in the corner, outside the tile link.
+ */
+export function KpiTile({ label, value, delta, deltaPending, sparkline, explain, footer, emptyText = 'No data yet', loading, error, href = null, hideDeltaLabel = false, className }: KpiTileProps) {
   if (loading) {
     return (
-      <div role="status" aria-busy="true" className={cn('flex min-h-[124px] flex-col gap-3 rounded-lg border border-border-subtle bg-panel p-4', className)}>
-        <span className="sr-only">{`Loading ${label}`}</span>
-        <span aria-hidden className="ks-skeleton block h-3 w-24 rounded-full" />
-        <span aria-hidden className="ks-skeleton block h-7 w-32 rounded-md" />
-        <span aria-hidden className="ks-skeleton block h-3 w-40 max-w-full rounded-full" />
+      <div role="status" aria-busy="true" data-testid="kpi-tile" className={cn('ks-dash-stat min-h-[112px]', className)}>
+        <span className="ks-dash-stat-link">
+          <span className="sr-only">{`Loading ${label}`}</span>
+          <span aria-hidden className="ks-skeleton block h-3 w-24 rounded-full" />
+          <span aria-hidden className="ks-skeleton mt-1 block h-7 w-32 rounded-md" />
+          <span aria-hidden className="ks-skeleton mt-1 block h-3 w-40 max-w-full rounded-full" />
+        </span>
       </div>
     );
   }
+  if (error) {
+    return (
+      <StatTile
+        data-testid="kpi-tile"
+        className={className}
+        label={label}
+        href={null}
+        explain={explain}
+        value={
+          <span role="alert" className="text-sm font-normal whitespace-normal text-danger-text">
+            {error}
+          </span>
+        }
+      />
+    );
+  }
+  const shown = value !== null;
+  const pending = !delta && deltaPending && shown ? <span aria-hidden data-testid="kpi-delta-pending" className="ks-skeleton inline-block h-4 w-32 max-w-full rounded-sm align-middle" /> : null;
   return (
-    <section aria-label={label} className={cn('@container flex min-h-[124px] min-w-0 flex-col rounded-lg border border-border-subtle bg-panel p-4', className)}>
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="line-clamp-2 min-w-0 text-xs font-medium text-fg-secondary">{label}</h3>
-        {explain ? <div className="-mt-1 -mr-1.5 shrink-0">{explain}</div> : null}
-      </div>
-      {error ? (
-        <p role="alert" className="mt-2 text-sm text-danger-text">
-          {error}
-        </p>
-      ) : (
-        <>
-          <div className="mt-1.5 flex items-end justify-between gap-3">
-            {/* A long number ("$12,345,679") steps down in size in a narrow tile so it is never cut off. */}
-            <p
-              title={typeof value === 'string' ? value : undefined}
-              className={cn(
-                'min-w-0 truncate font-semibold tracking-tight',
-                value === null ? 'text-md text-fg-muted' : typeof value === 'string' && value.length > 9 ? 'text-md text-fg @[11.5rem]:text-lg @[14rem]:text-xl' : typeof value === 'string' && value.length > 7 ? 'text-lg text-fg @[11rem]:text-xl' : 'text-xl text-fg',
-              )}
-            >
-              {value ?? emptyText}
-            </p>
-            {sparkline && value !== null ? <Sparkline values={sparkline.values} label={sparkline.label ?? `${label} trend`} format={sparkline.format} tone={sparkline.tone} width={88} height={30} className="mb-0.5 hidden shrink-0 @[15.5rem]:block" /> : null}
-          </div>
-          {(delta && value !== null) || (deltaPending && value !== null) || footer ? (
-            <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2.5">
-              {delta && value !== null ? <DeltaBadge {...delta} /> : deltaPending && value !== null ? <span aria-hidden data-testid="kpi-delta-pending" className="ks-skeleton block h-5 w-32 max-w-full rounded-sm" /> : null}
-              {footer}
-            </div>
-          ) : null}
-        </>
-      )}
-    </section>
+    <StatTile
+      data-testid="kpi-tile"
+      className={cn('min-h-[112px]', className)}
+      label={label}
+      href={href}
+      explain={explain}
+      value={shown ? <span title={value}>{value}</span> : <span className="text-md font-medium text-fg-muted">{emptyText}</span>}
+      trend={sparkline && shown ? <Sparkline values={sparkline.values} label={sparkline.label ?? `${label} trend`} format={sparkline.format} tone={sparkline.tone} width={88} height={28} /> : undefined}
+      delta={delta && shown ? toDelta(delta) : undefined}
+      deltaLabel={delta && shown && !hideDeltaLabel ? delta.label : undefined}
+      caption={
+        pending || footer ? (
+          <>
+            {pending}
+            {footer}
+          </>
+        ) : undefined
+      }
+    />
   );
 }

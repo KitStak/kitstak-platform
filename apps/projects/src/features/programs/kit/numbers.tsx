@@ -83,16 +83,18 @@ export interface RunRingProps {
   /** Show "5/8" style count inside? No: rings show a check when done, else nothing inside; the text sits beside. */
   readonly className?: string;
   readonly label?: string;
+  /** Color of a partly done ring. Dashboards pass their data color (`var(--dash-data)`). */
+  readonly color?: string;
 }
 
 /** A done ratio ring. Text always sits next to it ("5 of 8 done"); the ring adds a glance. */
-export function RunRing({ done, total, size = 20, className, label }: RunRingProps) {
+export function RunRing({ done, total, size = 20, className, label, color: partColor = 'var(--info)' }: RunRingProps) {
   const stroke = Math.max(2, Math.round(size / 8));
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const ratio = total > 0 ? Math.min(1, done / total) : 0;
   const full = total > 0 && done >= total;
-  const color = full ? 'var(--success)' : done > 0 ? 'var(--info)' : 'var(--border-strong)';
+  const color = full ? 'var(--success)' : done > 0 ? partColor : 'var(--border-strong)';
   return (
     <span className={cn('relative inline-flex shrink-0 items-center justify-center', className)} style={{ width: size, height: size }} role="img" aria-label={label ?? doneOfText(done, total)} data-testid="run-ring">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden className="-rotate-90">
@@ -172,10 +174,12 @@ export interface OutputSparklineProps {
   readonly unit: UnitLabel;
   readonly height?: number;
   readonly className?: string;
+  /** Bar color. Dashboards pass their data color (`var(--dash-data)`). */
+  readonly color?: string;
 }
 
 /** Daily output as small bars, today's bar in full ink. The label says the total and the best day. */
-export function OutputSparkline({ points, unit, height = 28, className }: OutputSparklineProps) {
+export function OutputSparkline({ points, unit, height = 28, className, color = 'var(--chart-1, var(--info))' }: OutputSparklineProps) {
   const values = points.map((point) => scaledQty(point.units));
   const max = values.reduce((best, value) => (value > best ? value : best), BigInt(0));
   const total = values.reduce((sum, value) => sum + value, BigInt(0));
@@ -192,7 +196,7 @@ export function OutputSparkline({ points, unit, height = 28, className }: Output
       {values.map((value, index) => {
         const h = max > BigInt(0) ? Math.max(value > BigInt(0) ? 2 : 1, Number((value * BigInt(1000)) / max) / 1000 * height) : 1;
         const last = index === values.length - 1;
-        return <rect key={points[index]?.date ?? index} x={index * 6} y={height - h} width={6 - gap} height={h} rx={1} fill={last ? 'var(--logo-ink)' : value > BigInt(0) ? 'var(--chart-1, var(--info))' : 'var(--border-subtle)'} opacity={last || value === BigInt(0) ? 1 : 0.55} />;
+        return <rect key={points[index]?.date ?? index} x={index * 6} y={height - h} width={6 - gap} height={h} rx={1} fill={last ? 'var(--logo-ink)' : value > BigInt(0) ? color : 'var(--border-subtle)'} opacity={last || value === BigInt(0) ? 1 : 0.55} />;
       })}
     </svg>
   );

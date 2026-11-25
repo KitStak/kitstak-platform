@@ -1,8 +1,8 @@
 'use client';
 /** Right rail of the home page: inbox preview, favorites and the template rail. */
 import Link from 'next/link';
-import { Bell, LayoutTemplate, Star } from 'lucide-react';
-import { Avatar, CountBadge, Skeleton, cn } from '@/components/ui';
+import { Count, DashSection, EmptyNote } from '@kitstak/ui/dashboard';
+import { Avatar, Skeleton, cn } from '@/components/ui';
 import { useBoardTemplates, useFavorites, useHydrated, useNotifications, useUnreadCount } from '@/lib/hooks';
 import { describeNotification, notificationHref } from '@/features/notifications/describe';
 import { EntityIcon } from '@/features/shell/entity-icon';
@@ -10,7 +10,12 @@ import { useCan, useOrg } from '@/features/shell/org-context';
 import { entityHref, routes } from '@/features/shell/routes';
 import { useShellStore } from '@/features/shell/store';
 import { formatRelativeTime } from './format';
-import { SeeAll, SectionCard } from './home-sections';
+
+/** Template center deep link (handled by WizardDeepLink in the app shell). */
+function templateCenterHref(orgSlug: string, templateId?: string): string {
+  const base = `${routes.home(orgSlug)}?wizard=templates`;
+  return templateId ? `${base}&template=${encodeURIComponent(templateId)}` : base;
+}
 
 const INBOX_PREVIEW = 4;
 const TEMPLATE_LIMIT = 4;
@@ -32,17 +37,14 @@ export function InboxPreview() {
   // The top bar loads the same data first. Until this card is live it shows what the server drew.
   const hydrated = useHydrated();
   const entries = (notifications.data?.pages.flatMap((page) => page.items) ?? []).slice(0, INBOX_PREVIEW);
+  const empty = hydrated && notifications.isSuccess && entries.length === 0;
   return (
-    <SectionCard
-      id="home-inbox"
-      icon={<Bell aria-hidden />}
+    <DashSection
       title="Inbox"
-      aside={
-        <span className="flex items-center gap-2">
-          {hydrated && unread.data ? <CountBadge count={unread.data} tone="primary" label={`${unread.data} unread`} /> : null}
-          <SeeAll href={routes.inbox(org.slug)}>Open</SeeAll>
-        </span>
-      }
+      // Unread is news, not a fault: a neutral count.
+      aside={hydrated && unread.data ? <Count value={unread.data} label="unread" /> : undefined}
+      action={empty ? undefined : { label: 'Open inbox', href: routes.inbox(org.slug) }}
+      flush
     >
       {!hydrated || notifications.isPending ? (
         <RowSkeletons rows={3} />
@@ -55,7 +57,9 @@ export function InboxPreview() {
           Couldn&apos;t load notifications. Retry
         </button>
       ) : entries.length === 0 ? (
-        <p className="px-4 py-8 text-center text-sm text-fg-muted">You&apos;re all caught up.</p>
+        <EmptyNote action={{ label: 'Open my work', href: routes.myWork(org.slug) }}>
+          You&apos;re all caught up. Mentions and assignments show up here.
+        </EmptyNote>
       ) : (
         <ul className="flex flex-col py-1">
           {entries.map((entry) => {
@@ -84,7 +88,7 @@ export function InboxPreview() {
                     <span className="text-xs text-fg-muted">{formatRelativeTime(entry.createdAt)}</span>
                   </span>
                   {entry.readAt ? null : (
-                    <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
+                    <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-[var(--info)]" />
                   )}
                 </Link>
               </li>
@@ -92,23 +96,29 @@ export function InboxPreview() {
           })}
         </ul>
       )}
-    </SectionCard>
+    </DashSection>
   );
 }
 
-export function FavoritesCard() {
+export function FavoritesCard({ workspaceId }: { readonly workspaceId: string | null }) {
   const { org } = useOrg();
   const favorites = useFavorites();
   const hydrated = useHydrated();
   const list = (favorites.data ?? []).filter((favorite) => entityHref(org.slug, favorite.entityType, favorite.entityId));
   return (
-    <SectionCard id="home-favorites" icon={<Star aria-hidden />} title="Favorites">
+    <DashSection title="Favorites" flush>
       {!hydrated || favorites.isPending ? (
         <RowSkeletons rows={2} />
       ) : list.length === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-fg-muted">
+        <EmptyNote
+          action={
+            workspaceId
+              ? { label: 'Browse your boards', href: routes.workspace(org.slug, workspaceId) }
+              : { label: 'Open my work', href: routes.myWork(org.slug) }
+          }
+        >
           Star a board from its “…” menu to pin it here.
-        </p>
+        </EmptyNote>
       ) : (
         <ul className="flex flex-col p-1.5">
           {list.map((favorite) => (
@@ -124,11 +134,12 @@ export function FavoritesCard() {
           ))}
         </ul>
       )}
-    </SectionCard>
+    </DashSection>
   );
 }
 
 export function TemplatesRail({ workspaceId }: { readonly workspaceId: string | null }) {
+  const { org } = useOrg();
   const templates = useBoardTemplates();
   const hydrated = useHydrated();
   const requestCreate = useShellStore((state) => state.requestCreate);
@@ -136,37 +147,41 @@ export function TemplatesRail({ workspaceId }: { readonly workspaceId: string | 
   const list = (templates.data ?? []).filter((template) => template.category !== 'blank').slice(0, TEMPLATE_LIMIT);
   if (!canCreate) return null;
   return (
-    <SectionCard id="home-templates" icon={<LayoutTemplate aria-hidden />} title="Start from a template">
+    <DashSection title="Start from a template" action={{ label: 'All templates', href: templateCenterHref(org.slug) }} flush>
       {!hydrated || templates.isPending ? (
         <RowSkeletons rows={3} />
       ) : list.length === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-fg-muted">No templates available.</p>
+        <EmptyNote action={{ label: 'Start a blank board', href: `${routes.home(org.slug)}?wizard=new-board` }}>
+          No templates available right now.
+        </EmptyNote>
       ) : (
         <ul className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
           {list.map((template) => (
             <li key={template.id}>
-              <button
-                type="button"
-                disabled={!workspaceId}
+              {/* A real link (open in a new tab, copy) into the template center; a plain click opens
+                  the same dialog in place with the active workspace already picked. */}
+              <Link
+                href={templateCenterHref(org.slug, template.id)}
                 data-testid="home-template"
-                onClick={() =>
-                  workspaceId &&
-                  requestCreate({ kind: 'board', workspaceId, mode: 'templates', templateId: template.id, name: template.name })
-                }
-                className="group flex h-full w-full items-start gap-3 rounded-lg border border-border-subtle bg-panel p-3 text-left transition-[border-color,box-shadow,background-color] duration-[var(--duration-fast)] hover:border-primary hover:bg-highlight hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus active:shadow-none disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={(event) => {
+                  if (!workspaceId || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                  event.preventDefault();
+                  requestCreate({ kind: 'board', workspaceId, mode: 'templates', templateId: template.id, name: template.name });
+                }}
+                className="group flex h-full w-full items-start gap-3 rounded-lg border border-border-subtle bg-panel p-3 text-left transition-[border-color,background-color] duration-[var(--duration-fast)] hover:border-border-strong hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sunken [&_svg]:size-[18px]">
                   <EntityIcon type="board" boardKind={template.kind} />
                 </span>
                 <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-sm font-semibold text-fg group-hover:text-primary-text">{template.name}</span>
+                  <span className="truncate text-sm font-semibold text-fg underline-offset-2 group-hover:underline">{template.name}</span>
                   <span className="line-clamp-2 text-xs text-fg-muted">{template.description}</span>
                 </span>
-              </button>
+              </Link>
             </li>
           ))}
         </ul>
       )}
-    </SectionCard>
+    </DashSection>
   );
 }
