@@ -401,3 +401,19 @@ export const buildBillsToJob = scoped(async function buildBillsToJob(ctx: Domain
     return false;
   }
 });
+
+/** Live builds of the given programs (ids only), for labor on days with time and no output. Strict. */
+export const programBuildIds = scoped(async function programBuildIds(ctx: DomainContext, programIds: readonly string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (programIds.filter((id) => UUID.test(id)).length === 0) return out;
+  const found = await rows<{ program_id: string; build_id: string }>(
+    siblingDb,
+    sql`select b.program_id::text as program_id, b.task_id::text as build_id
+          from pm.builds b
+          join pm.tasks t on t.id = b.task_id and t.deleted_at is null
+          join pm.projects p on p.id = t.project_id and p.deleted_at is null
+         where b.org_id = ${ctx.orgId}::uuid and b.program_id in (${uuidList(programIds)})`,
+  );
+  for (const row of found) out.set(row.program_id, [...(out.get(row.program_id) ?? []), row.build_id]);
+  return out;
+});
