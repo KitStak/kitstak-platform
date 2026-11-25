@@ -63,6 +63,7 @@ import {
 } from '@/server/domain';
 import { asSeed, ensureDemoLogin, orgMembers } from '../context';
 import type { ClassSpec, JobSpec, OrgPlan } from './types';
+import { assertParity, seedProgramJobs } from './programs';
 
 /* ------------------------------------------------------------------ small helpers */
 
@@ -686,6 +687,11 @@ export const seedRich = asSeed(async function seedRich(ctx: DomainContext, plan:
   // Statuses read the warehouse shortage flag set after the job was made.
   const shortage = sims.filter((sim) => sim.spec.wmsShortage).map((sim) => sim.jobId);
   if (shortage.length > 0) await recomputeJobs(db, ctx, shortage);
+
+  /* 5b. Jobs fed by Projects programs, synced before any month closes (SPEC 7.3) */
+  const programJobs = await seedProgramJobs(ctx, plan, { clientIds, typeIds, siteId: mainSiteId, laborClassId: classIds.get(defaultClass.code)!, today, log });
+  if (programJobs.jobIds.length > 0) await recomputeJobs(db, ctx, programJobs.jobIds);
+  assertParity(programJobs.parity);
 
   /* 6. Day reviews, then close the old months */
   const lastMonth = startOfMonth(addDays(startOfMonth(today), -1));
