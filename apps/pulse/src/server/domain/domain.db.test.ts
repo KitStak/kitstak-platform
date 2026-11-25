@@ -302,6 +302,10 @@ describe.skipIf(!ready)('pulse domain (database)', () => {
       const live = await domain.getCloseDetail(owner, '2025-08');
       expect(live).toMatchObject({ saved: false, revenueCents: 100000, costCents: 25000, profitCents: 75000, marginBp: 7500, companyProfitCents: bridge.companyProfitCents });
       expect(live.companyProfitCents).toBeLessThan(live.profitCents!);
+      // Every fix link opens on August, not on the last few days.
+      for (const item of live.items) if (item.href && item.key !== 'rates') expect(item.href).toMatch(/2025-08/);
+      const reviews = live.items.find((item) => item.key === 'reviews')!;
+      if (reviews.href) expect(reviews.href).toBe('/log/review?month=2025-08');
       expect(live.companyMarginBp).toBe(Math.round((bridge.companyProfitCents! * 10000) / 100000));
       expect(live.bridge).toMatchObject({ jobProfitCents: 75000, missingCostCents: 4000, overheadGapCents: 15000, companyCostCents: 20000, overheadAbsorbedCents: 5000, hasCompanyCosts: true, companyProfitCents: bridge.companyProfitCents });
       const row = async (who: DomainContext) => (await domain.getCloseBoard(who)).months.find((month) => month.periodMonth === '2025-08-01')!;

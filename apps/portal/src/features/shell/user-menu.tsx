@@ -42,15 +42,12 @@ export function UserMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Account menu"
-        // The circle stays 32 px. On touch screens the button around it grows to 44 px.
         className={cn(
-          'group inline-flex size-8 items-center justify-center rounded-full',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+          'inline-flex size-9 items-center justify-center rounded-full bg-inverse text-xs font-bold text-fg-inverse',
+          'hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         )}
       >
-        <span className="inline-flex size-8 items-center justify-center rounded-full bg-inverse text-2xs font-bold text-fg-inverse group-hover:opacity-90">
-          {initials(name, email)}
-        </span>
+        {initials(name, email)}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <div className="px-2.5 py-2">
@@ -85,12 +82,10 @@ export function UserMenu({
             My account
           </Link>
         </DropdownMenuItem>
-        {/* Phones only: the top bar has no room for the theme button there. */}
-        <DropdownMenuItem onSelect={toggleTheme} className="sm:hidden" data-testid="menu-theme">
+        <DropdownMenuItem onSelect={toggleTheme} data-testid="menu-theme">
           <Sun aria-hidden className="size-4 text-icon dark:hidden" />
           <Moon aria-hidden className="hidden size-4 text-icon dark:inline" />
-          <span className="dark:hidden">Dark theme</span>
-          <span className="hidden dark:inline">Light theme</span>
+          Light or dark theme
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

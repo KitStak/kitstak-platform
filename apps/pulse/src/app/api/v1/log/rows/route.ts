@@ -45,12 +45,12 @@ export async function PUT(request: Request): Promise<NextResponse> {
       return NextResponse.json({ data: await saveProductionEntry(ctx, input, { requireVersion: true, knownDayIds: seen ?? [] }) });
     } catch (error) {
       if (isDomainError(error) && error.code === 'CONFLICT') {
-        // The row as it is now: by id, or (a line the editor thought was new) by job, day, shift and labor class.
+        // The row as it is now: by id, or (a line the editor thought was new) by job, day, shift, labor class and task.
         const sameDay = await listProduction(ctx, { jobId: input.jobId, from: input.workDate, to: input.workDate, includeDeleted: Boolean(input.id) });
         const shift = input.shift?.trim() || 'day';
         const fresh = input.id
           ? sameDay.find((row) => row.id === input.id)
-          : sameDay.find((row) => row.deletedAt === null && row.shift === shift && row.laborClassId === (input.laborClassId ?? null));
+          : sameDay.find((row) => row.deletedAt === null && row.shift === shift && row.laborClassId === (input.laborClassId ?? null) && row.pmTaskId === (input.pmTaskId ?? null));
         const dayChanged = error.message === DAY_CHANGED;
         return NextResponse.json(
           {

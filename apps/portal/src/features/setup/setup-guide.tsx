@@ -1,42 +1,20 @@
 'use client';
 /**
- * The launcher's guided-setup card: live progress ring and the quick start, the 3 to 5 steps the
- * welcome screen promised (docs/billing/SPEC.md 5.7). The next step is open with its one filled
- * button; the others are one line each, so the app tiles stay on the first screen. The deeper
- * steps of each app sit behind "Show 3 more steps for later". Auto-detected ticks, deep links into the exact
- * screens, skip and undo, and a celebration when the first steps are done. Re-checks on window focus so steps completed in
+ * The guided-setup card in Organization settings: live progress ring and the quick start, the 3 to 5
+ * steps the welcome screen promised (docs/billing/SPEC.md 5.7). The next step is open with its one
+ * filled button; the others are one line each. The deeper steps of each app sit behind "Show 3 more
+ * steps for later". Auto-detected ticks, deep links into the exact screens, skip and undo, and a
+ * celebration when the first steps are done. Re-checks on window focus so steps completed in
  * CRM/WMS check themselves off when the user comes back.
  */
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  Lock,
-  MoreHorizontal,
-  PartyPopper,
-  RotateCcw,
-} from 'lucide-react';
-import {
-  Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  buttonVariants,
-  cn,
-} from '@/components/ui';
+import { ArrowUpRight, Check, ChevronDown, Lock, PartyPopper, RotateCcw } from 'lucide-react';
+import { Button, buttonVariants, cn } from '@/components/ui';
 import type { SetupState, SetupStepView } from '@/server/onboarding';
-import {
-  dismissSetupGuide,
-  restoreSetupGuide,
-  skipSetupStep,
-  unskipSetupStep,
-} from '@/server/onboarding-actions';
-import { ConfettiBurst } from './confetti';
-import { moreStepsLabel, otherStepsLabel } from './step-labels';
+import { skipSetupStep, unskipSetupStep } from '@/server/onboarding-actions';
+import { moreStepsLabel } from './step-labels';
 import { ProgressRing } from './progress-ring';
 
 const COLLAPSE_KEY = 'kitstak.portal.setupGuide.collapsed';
@@ -62,8 +40,6 @@ export interface SetupGuideProps {
   readonly orgName: string;
   readonly state: SetupState;
   readonly canManage: boolean;
-  /** 'home' is the launcher card; 'settings' is the always-on copy in Organization settings. */
-  readonly placement?: 'home' | 'settings';
 }
 
 interface StepRowProps {
@@ -75,11 +51,9 @@ interface StepRowProps {
   readonly pending: boolean;
   readonly onSkip: (key: string) => void;
   readonly onUnskip: (key: string) => void;
-  /** On a phone this row waits behind "Show the other 4 steps", so the app tiles stay on the first screen. */
-  readonly foldOnPhone?: boolean;
 }
 
-function StepStatusIcon({ step, index, isNext, justDone }: Omit<StepRowProps, 'canManage' | 'pending' | 'onSkip' | 'onUnskip' | 'foldOnPhone'>) {
+function StepStatusIcon({ step, index, isNext, justDone }: Omit<StepRowProps, 'canManage' | 'pending' | 'onSkip' | 'onUnskip'>) {
   if (step.status === 'done') {
     return (
       <span
@@ -118,14 +92,14 @@ function StepStatusIcon({ step, index, isNext, justDone }: Omit<StepRowProps, 'c
   );
 }
 
-function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, onUnskip, foldOnPhone = false }: StepRowProps) {
+function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, onUnskip }: StepRowProps) {
   const settled = step.status !== 'todo';
   const locked = step.status === 'todo' && step.lockedBy !== null;
   const actionable = step.status === 'todo' && !locked;
   // The wizard writes org-level answers; members without a managing role can't take it.
   const canShowCta = step.key !== 'profile' || canManage;
   // The next step is open: its description shows and its button is the one filled button of the
-  // card. Every other row is one quiet line, so the whole quick start fits above the app tiles.
+  // card. Every other row is one quiet line.
   // On a phone a row with a link is two lines: the title on the first, the link under it. A title
   // such as "Create your CRM workspace" then has the whole width and never wraps beside its link.
   const stacked = isNext || (actionable && canShowCta);
@@ -172,7 +146,6 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
         isNext ? 'gap-y-2 bg-sunken/60 py-3.5' : 'min-h-11 py-1.5',
         stacked && 'max-sm:grid-cols-[auto_minmax(0,1fr)]',
         stacked && !isNext && 'max-sm:pt-2.5 max-sm:pb-1',
-        foldOnPhone && 'max-sm:hidden',
       )}
       aria-current={isNext ? 'step' : undefined}
     >
@@ -275,7 +248,7 @@ function MoreSteps({
   );
 }
 
-export function SetupGuide({ orgName, state, canManage, placement = 'home' }: SetupGuideProps) {
+export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [collapsed, setCollapsed] = useState(false);
@@ -288,8 +261,6 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
   const { steps, summary } = state.quick;
   const moreSteps = state.more;
   const [moreOpen, setMoreOpen] = useState(false);
-  // Phones only: the quick start rows other than the open one. A separate fold from the later steps.
-  const [quickOpen, setQuickOpen] = useState(false);
 
   // Read the saved preference after mount (localStorage is client only) so SSR markup matches.
   useEffect(() => {
@@ -350,33 +321,11 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
     });
   };
 
-  const inSettings = placement === 'settings';
-  // In settings the guide always shows; the button only decides whether it is also on the home page.
-  const homeToggle = canManage ? (
-    inSettings ? (
-      state.dismissed ? (
-        <Button variant="secondary" size="sm" loading={pending} onClick={() => run(restoreSetupGuide)}>
-          Show on home
-        </Button>
-      ) : (
-        <Button variant="ghost" size="sm" loading={pending} onClick={() => run(dismissSetupGuide)}>
-          Hide from home
-        </Button>
-      )
-    ) : (
-      <Button variant="secondary" size="sm" loading={pending} onClick={() => run(dismissSetupGuide)}>
-        Dismiss guide
-      </Button>
-    )
-  ) : null;
   const errorLine = error ? (
     <p role="alert" className="mt-3 text-sm text-danger-text">
       {error}
     </p>
   ) : null;
-
-  // Phones, on the launcher: every quick start row but the open one waits behind "Show the other 4 steps".
-  const foldsOnPhone = !inSettings && summary.nextKey !== null;
 
   const rowProps = {
     canManage,
@@ -392,7 +341,6 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
         aria-label="Setup complete"
         className="relative overflow-hidden rounded-2xl border border-border-default bg-panel shadow-xs animate-fade-in"
       >
-        {inSettings ? null : <ConfettiBurst />}
         <div className="relative flex flex-wrap items-center gap-4 p-6">
           <span className="flex size-11 items-center justify-center rounded-full bg-success-subtle text-success-text">
             <PartyPopper aria-hidden className="size-5" />
@@ -405,7 +353,6 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
               {moreSteps.some((step) => step.status === 'todo') ? 'Your first steps are done.' : 'Every setup step is done.'}
             </p>
           </div>
-          {homeToggle}
         </div>
         {error ? <div className="px-6 pb-4">{errorLine}</div> : null}
         <MoreSteps steps={moreSteps} open={moreOpen} onToggle={() => setMoreOpen((current) => !current)} rowProps={rowProps} offset={steps.length} />
@@ -445,7 +392,6 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
                   Undo skip
                 </Button>
               ))}
-              {homeToggle}
             </div>
           ) : null}
         </div>
@@ -459,23 +405,10 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
       aria-label="Setup guide"
       className="overflow-hidden rounded-2xl border border-border-default bg-panel shadow-xs animate-fade-in"
     >
-      {state.dismissed && !inSettings ? (
-        <div className="flex items-center justify-between gap-3 border-b border-border-subtle bg-sunken px-5 py-2.5">
-          <p className="text-xs text-fg-muted">
-            This guide is hidden from your home page. It stays in Organization settings.
-          </p>
-          {canManage ? (
-            <Button variant="secondary" size="sm" loading={pending} onClick={() => run(restoreSetupGuide)}>
-              Show it again
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
       {/*
-        Phones: the ring, the title and the two small buttons share the first line. The progress
-        line gets the full width under the title, so "Set up Harbor Supply Co" and "2 of 5 done ·
-        about 7 min left" never wrap into three or four short lines. In settings, "Hide from home"
-        sits on its own line under them. From 640 px up it is one row.
+        Phones: the ring, the title and the fold button share the first line. The progress line gets
+        the full width under the title, so "Set up Harbor Supply Co" and "2 of 5 done · about 7 min
+        left" never wrap into three or four short lines. From 640 px up it is one row.
       */}
       <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 px-5 py-4 sm:flex sm:gap-4">
         <div className="max-sm:row-span-2 max-sm:self-start">
@@ -492,44 +425,21 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
             ) : null}
           </p>
         </div>
-        {inSettings && homeToggle ? (
-          <div className="max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-3 max-sm:-ml-2.5 max-sm:justify-self-start">{homeToggle}</div>
-        ) : null}
-        <div className="flex shrink-0 items-center gap-1 max-sm:col-start-3 max-sm:row-start-1">
-          {!inSettings && canManage ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                aria-label="Setup guide options"
-                className="flex size-8 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-              >
-                <MoreHorizontal aria-hidden className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => run(dismissSetupGuide)}>
-                  <span className="flex flex-col">
-                    <span>Dismiss setup guide</span>
-                    <span className="text-xs text-fg-muted">It moves to Organization settings and keeps checking off steps.</span>
-                  </span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? 'Expand setup guide' : 'Collapse setup guide'}
-            className="flex size-8 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          >
-            <ChevronDown
-              aria-hidden
-              className={cn(
-                'size-4 transition-transform duration-[var(--duration-fast)]',
-                collapsed && '-rotate-90',
-              )}
-            />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expand setup guide' : 'Collapse setup guide'}
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus max-sm:col-start-3 max-sm:row-start-1"
+        >
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              'size-4 transition-transform duration-[var(--duration-fast)]',
+              collapsed && '-rotate-90',
+            )}
+          />
+        </button>
       </header>
       {error ? <div className="px-5 pb-3">{errorLine}</div> : null}
       {collapsed ? null : (
@@ -542,35 +452,16 @@ export function SetupGuide({ orgName, state, canManage, placement = 'home' }: Se
                 index={index}
                 isNext={step.key === summary.nextKey}
                 justDone={justDoneKeys.includes(step.key)}
-                // Phones, on the launcher: only the open step shows until "Show the other steps" is
-                // pressed, so the person's own app tile is on the first screen under the guide.
-                foldOnPhone={foldsOnPhone && !quickOpen && step.key !== summary.nextKey}
                 {...rowProps}
               />
             ))}
           </ol>
-          {foldsOnPhone && steps.length > 1 ? (
-            // Phones: one row that shows the rest of the quick start. It counts what the header
-            // counts ("2 of 5 done", so "the other 4 steps"). The steps for later keep their own row
-            // below, and that row only shows once these are open, so a phone starts with one row.
-            <button
-              type="button"
-              onClick={() => setQuickOpen((current) => !current)}
-              aria-expanded={quickOpen}
-              data-testid="setup-phone-toggle"
-              className="flex min-h-11 w-full items-center justify-between gap-3 border-t border-border-subtle px-5 text-left text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus sm:hidden"
-            >
-              <span>{quickOpen ? 'Show only the next step' : otherStepsLabel(steps.length - 1)}</span>
-              <ChevronDown aria-hidden className={cn('size-4 shrink-0 transition-transform duration-[var(--duration-fast)] motion-reduce:transition-none', quickOpen && 'rotate-180')} />
-            </button>
-          ) : null}
           <MoreSteps
             steps={moreSteps}
             open={moreOpen}
             onToggle={() => setMoreOpen((current) => !current)}
             rowProps={rowProps}
             offset={steps.length}
-            className={cn(foldsOnPhone && steps.length > 1 && !quickOpen && 'max-sm:hidden')}
           />
         </>
       )}

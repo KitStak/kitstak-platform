@@ -159,7 +159,7 @@ deploy/dev/stop.sh portal crm projects pulse
 ENTITLEMENTS_DEV_ALLOW_ALL=0 deploy/dev/app-start.sh portal crm projects pulse
 ```
 
-What the switch changes in the Portal: launcher tiles and the app switcher show "Included" for everything.
+What the switch changes in the Portal: the home page shows a tile for every app, and no tile says "View only".
 Trials, checkout, plan changes, the seat limit on invites, emails and the billing pages work the same either
 way, so most billing work does not need it off. In the product apps the switch decides whether an app that
 is not in the plan shows its lock screen, so those need it off to test plans.

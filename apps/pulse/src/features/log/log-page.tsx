@@ -6,7 +6,7 @@ import { PageBlocked } from '@/features/access/page-blocked';
 import { isIsoDate, todayIso } from '@/lib/dates';
 import { routes } from '@/lib/routes';
 import { getJob, getLogGrid, getReviewQueue, getSettings, listLaborClasses, listSites } from '@/server/domain';
-import type { DomainContext } from '@/server/domain/_shared';
+import { monthName, type DomainContext } from '@/server/domain/_shared';
 import { pulsePage, type PulsePage } from '@/server/page';
 import { BulkView } from './bulk-view';
 import { EntriesView } from './entries-view';
@@ -112,12 +112,15 @@ export async function LogPage({
 }
 
 /** Review the day: the manager queue of days, with their odd rows and missing jobs. */
-export async function LogReviewPage() {
-  const page = await pulsePage(routes.logReview(), 'log');
+export async function LogReviewPage({ searchParams }: { readonly searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
+  const params = (await searchParams) ?? {};
+  // `?month=2026-01` (from the month close) lists that month's days instead of the last 21.
+  const month = typeof params.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month) ? params.month : null;
+  const page = await pulsePage(routes.logReview({ month: month ?? undefined }), 'log');
   if (page.blocked || !page.can('day:review'))
     return <PageBlocked title="Review the day" role={page.access.role} />;
   const [queue, sites, laborClasses, settings] = await Promise.all([
-    getReviewQueue(page.ctx, { days: 21 }),
+    getReviewQueue(page.ctx, month ? { month } : { days: 21 }),
     listSites(page.ctx),
     listLaborClasses(page.ctx, { includeArchived: true }),
     getSettings(page.ctx),
@@ -126,6 +129,7 @@ export async function LogReviewPage() {
     <Frame page={page} view="review" subtitle="Check each day, fix odd rows, then approve.">
       <ReviewView
         initial={queue}
+        month={month ? { value: month, label: `${monthName(`${month}-01`)} ${month.slice(0, 4)}` } : null}
         sites={sites}
         laborClasses={laborClasses}
         thresholds={{ watchBp: settings.productivityWatchBp, riskBp: settings.productivityRiskBp }}

@@ -271,26 +271,27 @@ test.describe('review round 4: the plan picker on a paid plan', () => {
 });
 
 test.describe('review round 4: the setup guide on a phone', () => {
-  test('the fold row counts what the header counts, and the quiet links line up with the step titles', async ({ browser }) => {
+  test('the guide is in Organization settings only, the list shows what the header counts, and the quiet links line up with the step titles', async ({ browser }) => {
     test.setTimeout(300_000);
     const context = await browser.newContext(PHONE);
     const page = await context.newPage();
     await trialAccount(page, 'guidephone', CART_CRM_WMS);
+    // The home page is the apps and a search box. The guide is not on it, with or without the old query.
     await page.goto('/?setup=1');
+    await expect(page.getByTestId('tile-crm')).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByTestId('setup-progress')).toHaveCount(0);
+    await expect(page.getByTestId('setup-steps')).toHaveCount(0);
+
+    // The guide lives in Organization settings.
+    await page.goto('/settings/organization#setup');
     const progress = page.getByTestId('setup-progress');
     await expect(progress).toBeVisible({ timeout: 90_000 });
     const [, done, total] = /(\d+) of (\d+) done/.exec((await progress.textContent()) ?? '') ?? [];
     expect(Number(total)).toBeGreaterThanOrEqual(3);
     expect(Number(done)).toBeLessThan(Number(total));
 
-    // One fold row at first, in the header's own terms: 5 steps, one open, "the other 4".
-    const toggle = page.getByTestId('setup-phone-toggle');
-    await expect(toggle).toHaveText(`Show the other ${Number(total) - 1} steps`);
-    await expect(page.getByTestId('setup-more-toggle')).toBeHidden();
+    // Every quick start row is open, also on a phone: the list shows what the header counts.
     await expect(page.getByText(/Show all steps/)).toHaveCount(0);
-
-    await toggle.click();
-    await expect(toggle).toHaveText('Show only the next step');
     await expect(page.locator('[data-testid=setup-steps] > li:visible')).toHaveCount(Number(total));
     // The steps for later keep their own row and their own count.
     const more = page.getByTestId('setup-more-toggle');
@@ -331,14 +332,9 @@ test.describe('review round 4: the setup guide on a phone', () => {
     // then. It must not push the link to the right (this is where the 54 px came from).
     const narrow = await browser.newContext({ viewport: { width: 390, height: 844 }, storageState: await context.storageState() });
     const narrowPage = await narrow.newPage();
-    await narrowPage.goto('/?setup=1');
-    await expect(narrowPage.getByTestId('setup-phone-toggle')).toBeVisible({ timeout: 90_000 });
-    await narrowPage.getByTestId('setup-phone-toggle').click();
-    expect(await expectLinksLineUp(narrowPage, 'narrow window with a mouse')).toBeGreaterThanOrEqual(2);
-    // Organization settings shows the same guide, with every row open.
-    await narrowPage.goto('/settings/organization');
+    await narrowPage.goto('/settings/organization#setup');
     await expect(narrowPage.getByTestId('setup-steps')).toBeVisible({ timeout: 90_000 });
-    expect(await expectLinksLineUp(narrowPage, 'Organization, narrow window')).toBeGreaterThanOrEqual(2);
+    expect(await expectLinksLineUp(narrowPage, 'Organization, narrow window with a mouse')).toBeGreaterThanOrEqual(2);
     await narrow.close();
     await context.close();
   });

@@ -5,7 +5,7 @@ import { AppIcon } from './app-icon';
 import type { AppIconId } from './app-icon';
 
 const render = (app: AppIconId, size?: number): string => renderToStaticMarkup(createElement(AppIcon, { app, size }));
-const rectCount = (markup: string): number => markup.match(/<rect /g)?.length ?? 0;
+const shapeCount = (markup: string): number => markup.match(/<(rect|polygon) /g)?.length ?? 0;
 
 describe('AppIcon', () => {
   test.each<[AppIconId, number]>([
@@ -13,9 +13,17 @@ describe('AppIcon', () => {
     ['crm', 3],
     ['wms', 8],
     ['projects', 3],
-    ['pulse', 3],
+    ['pulse', 2],
   ])('draws the %s icon with the same number of shapes as the brand file', (app, shapes) => {
-    expect(rectCount(render(app))).toBe(shapes);
+    expect(shapeCount(render(app))).toBe(shapes);
+  });
+
+  test('draws the Pulse icon as the two notched bars from the brand file', () => {
+    const markup = render('pulse');
+
+    expect(markup).toContain('points="40,71 82,71 100,53 118,71 160,71 160,101 118,101 100,83 82,101 40,101" fill="#C8102E"');
+    expect(markup).toContain('points="40,117 82,117 100,99 118,117 160,117 160,147 118,147 100,129 82,147 40,147" fill="#D65A6E"');
+    expect(markup).not.toContain('<rect ');
   });
 
   test('keeps the brand artboard and scales to the requested size', () => {

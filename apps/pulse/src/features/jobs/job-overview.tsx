@@ -124,6 +124,13 @@ const NEEDS: readonly {
     tab: 'work',
   },
   {
+    key: 'untaggedLines',
+    text: (count) =>
+      `${count} ${count === 1 ? 'line of work has' : 'lines of work have'} no task, so the cost by task is not complete.`,
+    action: 'Pick the tasks',
+    tab: 'work',
+  },
+  {
     key: 'serviceNoPrice',
     text: (count) => `${count} extra service ${count === 1 ? 'entry has' : 'entries have'} no price set yet.`,
     action: 'Set the price',

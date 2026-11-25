@@ -33,13 +33,12 @@ export function usePulseProfit(projectKey: string) {
 
 const external = { target: '_blank', rel: 'noopener noreferrer' } as const;
 
-/** Rect for rect from the official brand file `kitstak-icon-pulse.svg`. */
+/** Shape for shape from the official brand file `kitstak-icon-pulse.svg`: two notched bars. */
 function PulseMark({ size = 16 }: { readonly size?: number }) {
   return (
-    <svg aria-hidden width={size} height={size} viewBox="32 44 136 112" className="shrink-0">
-      <rect x="40" y="62" width="120" height="30" fill="#C8102E" />
-      <rect x="40" y="108" width="120" height="30" fill="#D65A6E" opacity="0.35" />
-      <rect x="40" y="108" width="84" height="30" fill="#D65A6E" />
+    <svg aria-hidden width={size} height={size} viewBox="32 45 136 110" className="shrink-0">
+      <polygon points="40,71 82,71 100,53 118,71 160,71 160,101 118,101 100,83 82,101 40,101" fill="#C8102E" />
+      <polygon points="40,117 82,117 100,99 118,117 160,117 160,147 118,147 100,129 82,147 40,147" fill="#D65A6E" />
     </svg>
   );
 }

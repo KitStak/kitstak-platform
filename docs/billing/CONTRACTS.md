@@ -1877,7 +1877,7 @@ Rules for all four:
 | `test-tools`, `test-tool-shift-<days>`, `test-tool-fail-next`, `test-tool-run-due` | test tools panel on billing home |
 | `plan-notice-<kind>`, `plan-notice-action` | `PlanBanner` in every app |
 | `plan-lock`, `plan-lock-primary`, `plan-lock-secondary` | `PlanLockScreen` in every app |
-| `tile-<id>`, `tile-badge-<id>`, `tile-action-<id>` | launcher tiles |
+| `tile-<id>`, `tile-plan-<id>` | home tiles: the tile of an app the organization can open, and its one plan line (trial, payment past due, view only) |
 | `activity-row`, `outbox-row`, `outbox-open-<id>` | activity page, dev outbox |
 
 ## 22. Done checks per lane

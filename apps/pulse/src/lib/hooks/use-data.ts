@@ -58,6 +58,7 @@ import type {
   UserPrefsDTO,
   VasEntryDTO,
   VasServiceDTO,
+  JobTaskCostsDTO,
 } from '@/lib/types';
 
 export type Opts<T> = Omit<UseQueryOptions<T, Error, T, readonly unknown[]>, 'queryKey' | 'queryFn'>;
@@ -162,6 +163,9 @@ export const useJobPrices = (ref: string | null | undefined, opts?: Opts<JobPric
 /** A job's numbers per day, week or month over its whole life. */
 export const useJobDays = (ref: string | null | undefined, by: 'day' | 'week' | 'month' = 'day', opts?: Opts<ProfitResponse>) =>
   useQuery({ queryKey: qk.jobDays(ref ?? '', by), queryFn: get<ProfitResponse>(`jobs/${encodeURIComponent(ref ?? '')}/days`, { by }), enabled: Boolean(ref), staleTime: SHORT, ...opts });
+/** Hours, labor cost and task units of a job by Projects task (0014). Empty rows when the job has no project. */
+export const useJobTaskCosts = (ref: string | null | undefined, opts?: Opts<JobTaskCostsDTO>) =>
+  useQuery({ queryKey: qk.jobTaskCosts(ref ?? ''), queryFn: get<JobTaskCostsDTO>(`jobs/${encodeURIComponent(ref ?? '')}/tasks/costs`), enabled: Boolean(ref), staleTime: SHORT, ...opts });
 
 /* ---------------------------------------------------------------- daily streams */
 

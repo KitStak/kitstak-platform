@@ -1,10 +1,13 @@
 /**
  * Object storage for uploaded bytes (file attachments, admin image assets).
  *
- * Two backends behind one interface:
- *   - local disk under `UPLOAD_DIR` (development, self-hosting)
- *   - a private Vercel Blob store, selected when its credentials are present. Serverless
- *     hosts have a read-only, per-instance filesystem, so disk storage cannot work there.
+ * Three backends behind one interface, picked in this order:
+ *   - Supabase Storage (private `crm-files` bucket), when SUPABASE_URL and
+ *     SUPABASE_SERVICE_ROLE_KEY are set. The preferred store: data and files with one provider.
+ *   - a private Vercel Blob store, when its credentials are present.
+ *   - local disk under `UPLOAD_DIR` (development, self-hosting). Serverless hosts have a
+ *     read-only, per-instance filesystem, so on Vercel without either store, writes fail with a
+ *     clear configuration error instead of an opaque EROFS.
  *
  * Keys are server-generated relative paths (`<org>/<uuid>`, `assets/<uuid>.<ext>`). Callers
  * validate their own key shape; this module only guarantees a key cannot escape the root.
@@ -13,6 +16,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { del, get, put } from '@vercel/blob';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { env } from '@/server/env';
 
 export interface ObjectStore {
@@ -83,6 +87,67 @@ export function createBlobStore(): ObjectStore {
   };
 }
 
+export const SUPABASE_FILES_BUCKET = 'crm-files';
+
+/** The storage part of a Supabase client; narrowed so tests can pass a fake. */
+export type SupabaseStorageApi = Pick<SupabaseClient['storage'], 'from' | 'createBucket'>;
+
+/**
+ * Supabase Storage adapter: a private bucket reached with the service-role key, server only.
+ * Keys already start with the org id (`<org>/<uuid>`), so each workspace's files sit in their
+ * own folder. Bytes are only ever served through the app's authorised routes.
+ */
+export function createSupabaseStore(
+  storageApi: () => Promise<SupabaseStorageApi>,
+  bucket: string = SUPABASE_FILES_BUCKET,
+): ObjectStore {
+  return {
+    async put(key, bytes, contentType) {
+      assertKey(key);
+      const s = await storageApi();
+      const upload = () => s.from(bucket).upload(key, bytes, { contentType, upsert: false });
+      let { error } = await upload();
+      if (error && /bucket not found/i.test(error.message)) {
+        // First upload in a new project: make the bucket (private) and try once more.
+        await s.createBucket(bucket, { public: false });
+        ({ error } = await upload());
+      }
+      if (error) throw new Error(`The file could not be stored: ${error.message}`);
+    },
+    async get(key) {
+      assertKey(key);
+      const { data, error } = await (await storageApi()).from(bucket).download(key);
+      if (error || !data) return null;
+      return new Uint8Array(await data.arrayBuffer());
+    },
+    async delete(key) {
+      assertKey(key);
+      await (await storageApi()).from(bucket).remove([key]);
+    },
+  };
+}
+
+function supabaseStorageFromEnv(): () => Promise<SupabaseStorageApi> {
+  let client: Promise<SupabaseStorageApi> | undefined;
+  return () => {
+    client ??= import('@supabase/supabase-js').then(
+      ({ createClient }) =>
+        createClient(env.SUPABASE_URL ?? '', env.SUPABASE_SERVICE_ROLE_KEY ?? '', {
+          auth: { persistSession: false, autoRefreshToken: false },
+        }).storage,
+    );
+    return client;
+  };
+}
+
+/** A store that refuses writes with a clear message (serverless host, nothing configured). */
+function unconfiguredStore(local: ObjectStore): ObjectStore {
+  const fail = async (): Promise<never> => {
+    throw new Error('File storage is not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+  };
+  return { put: fail, get: (key) => local.get(key).catch(() => null), delete: async () => undefined };
+}
+
 /** Absolute local upload root (runtime-configured, so the bundler must not trace it). */
 export function uploadRoot(): string {
   return path.resolve(/*turbopackIgnore: true*/ process.cwd(), env.UPLOAD_DIR);
@@ -90,9 +155,30 @@ export function uploadRoot(): string {
 
 let store: ObjectStore | undefined;
 
-/** The store for this process: Vercel Blob when configured, otherwise local disk. */
+/** Which store this process uses, by the credentials present. */
+export function storeKind(e: Partial<Record<string, string | undefined>>): 'supabase' | 'blob' | 'local' | 'unconfigured' {
+  if (e.SUPABASE_URL?.trim() && e.SUPABASE_SERVICE_ROLE_KEY?.trim()) return 'supabase';
+  if (e.BLOB_READ_WRITE_TOKEN || e.BLOB_STORE_ID) return 'blob';
+  return e.VERCEL ? 'unconfigured' : 'local';
+}
+
+/** The store for this process: Supabase, then Vercel Blob, then local disk. */
 export function objectStore(): ObjectStore {
-  store ??=
-    env.BLOB_READ_WRITE_TOKEN || env.BLOB_STORE_ID ? createBlobStore() : createLocalStore(uploadRoot());
+  if (store) return store;
+  const kind = storeKind({
+    SUPABASE_URL: env.SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+    BLOB_READ_WRITE_TOKEN: env.BLOB_READ_WRITE_TOKEN,
+    BLOB_STORE_ID: env.BLOB_STORE_ID,
+    VERCEL: process.env.VERCEL,
+  });
+  store =
+    kind === 'supabase'
+      ? createSupabaseStore(supabaseStorageFromEnv())
+      : kind === 'blob'
+        ? createBlobStore()
+        : kind === 'unconfigured'
+          ? unconfiguredStore(createLocalStore(uploadRoot()))
+          : createLocalStore(uploadRoot());
   return store;
 }

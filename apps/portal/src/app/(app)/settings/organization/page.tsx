@@ -176,7 +176,7 @@ export default async function OrganizationSettingsPage() {
 
         {setup && setup.quick.steps.length > 0 ? (
           <div id="setup" className="scroll-mt-24">
-            <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManage} placement="settings" />
+            <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManage} />
           </div>
         ) : null}
 

@@ -56,7 +56,7 @@ describe('stream definitions', () => {
     expect(keys('jobs')).toEqual(['job_number', 'name', 'client_code', 'job_type_code', 'site_code', 'kind', 'status', 'pricing_model', 'unit_label', 'planned_units', 'unit_price', 'fixed_price', 'bill_rate_per_hour', 'material_method', 'material_cost_per_unit', 'parts_owner', 'labor_class', 'units_per_labor_hour_standard', 'target_margin_pct', 'start_date', 'due_date', 'completed_date', 'po_number', 'owner_email', 'kit_sku', 'notes', 'wms_work_order', 'crm_deal_id', 'project_key', 'quote_units', 'quote_revenue', 'quote_labor_hours', 'quote_labor_cost', 'quote_material_cost', 'quote_other_cost']);
     expect(templateHeaders('job_plans')).toEqual(['job_number', 'plan', 'units', 'revenue', 'labor_hours', 'labor_cost', 'setup_hours', 'setup_cost', 'material_cost', 'other_cost']);
     expect(templateHeaders('job_plans', { layout: 'lines' })).toEqual(['job_number', 'plan', 'category', 'description', 'quantity', 'unit', 'unit_amount', 'amount', 'labor_class', 'service_code', 'item_sku']);
-    expect(keys('production')).toEqual(['entry_id', 'work_date', 'job_number', 'shift', 'labor_class', 'units_good', 'units_scrap', 'units_rework', 'people', 'hours_each', 'labor_hours', 'overtime_hours', 'setup_hours', 'note']);
+    expect(keys('production')).toEqual(['entry_id', 'work_date', 'job_number', 'shift', 'labor_class', 'task', 'units_good', 'units_scrap', 'units_rework', 'people', 'hours_each', 'labor_hours', 'overtime_hours', 'setup_hours', 'task_units', 'note']);
     expect(keys('labor_rates')).toEqual(['labor_class_code', 'labor_class_name', 'kind', 'site_code', 'effective_from', 'wage_per_hour', 'payroll_tax_pct', 'benefits_pct', 'other_burden_pct', 'overhead_per_hour', 'overtime_multiplier', 'bill_rate_per_hour', 'note']);
     expect(keys('indirect_time')).toEqual(['entry_id', 'work_date', 'site_code', 'labor_class', 'reason', 'people', 'labor_hours', 'overtime_hours', 'note']);
     expect(keys('paid_hours')).toEqual(['work_date', 'site_code', 'labor_class', 'paid_hours', 'paid_amount']);
@@ -198,7 +198,7 @@ describe('templates', () => {
     expect(howToFillRows('costs').find((row) => row.column === 'category')?.allowedValues).toBe('freight, packaging, equipment, outside_service, rework, supplies, storage, rent, utilities, salaried_staff, insurance, other');
   });
   it('gives the production template the documented shape', () => {
-    expect(templateExampleRows('production')[0]).toEqual(['', '2026-11-02', 'J-1042', 'day', 'PACK', '600', '12', '', '3', '8', '', '', '', 'First day of the run']);
+    expect(templateExampleRows('production')[0]).toEqual(['', '2026-11-02', 'J-1042', 'day', 'PACK', '', '600', '12', '', '3', '8', '', '', '', '', 'First day of the run']);
     const read = readStreamCsv('production', templateCsv('production'));
     expect(read.rows[0]?.record).toEqual({
       entryId: null,
@@ -206,6 +206,7 @@ describe('templates', () => {
       jobNumber: 'J-1042',
       shift: 'day',
       laborClass: 'PACK',
+      task: null,
       unitsGood: '600.000',
       unitsScrap: '12.000',
       unitsRework: null,
@@ -214,6 +215,7 @@ describe('templates', () => {
       laborHours: '24.00', // blank in the file: people x hours each
       overtimeHours: null,
       setupHours: null,
+      taskUnits: null,
       note: 'First day of the run',
     });
     expect(read.rows[1]?.record).toMatchObject({ laborHours: '24.00', overtimeHours: '4.00', unitsRework: '8.000' });
@@ -422,8 +424,8 @@ describe('reading real world files', () => {
 describe('entry id help says what a blank entry id does', () => {
   const help = (stream: StreamId): string => anyStreamDef(stream).columns.find((column) => column.key === 'entry_id')?.help ?? '';
 
-  it('says a blank id with the same job, day, shift and labor class updates that entry', () => {
-    expect(help('production')).toBe('Leave blank and a row with the same job, day, shift and labor class updates that entry. No match adds a new one. Exports fill it in, so a file you export and import again updates the same rows.');
+  it('says a blank id with the same job, day, shift, labor class and task updates that entry', () => {
+    expect(help('production')).toBe('Leave blank and a row with the same job, day, shift, labor class and task updates that entry. No match adds a new one. Exports fill it in, so a file you export and import again updates the same rows.');
   });
 
   it('never claims a blank id always means a new row', () => {

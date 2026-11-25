@@ -78,6 +78,7 @@ test.describe('checkout: adding a card during the free trial', () => {
     await page.getByTestId('checkout-success-open-apps').click();
     await page.waitForURL((url) => url.pathname === '/');
     await expect(page.getByTestId('tile-crm')).toBeVisible();
+    await expect(page.getByTestId('tile-plan-crm')).toHaveText(/^Free trial\. First payment on [A-Z][a-z]{2} \d{1,2}\.$/);
 
     // Billing home answers the five questions: plan, cost, next charge, card, invoices.
     await openBilling(page);

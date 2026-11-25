@@ -78,9 +78,11 @@ export const LINKS: AppOrigins = resolveAppOrigins(
 );
 
 /**
- * Whether customers can open the Pulse app. It is open: Pulse is sold through the same sign-up as
- * the other three apps (docs/billing/DECISIONS.md). This stays the one switch for a product whose
- * app is closed. Set to false, every start link leaves Pulse out and its buttons book a walkthrough.
+ * Whether customers can open the Pulse app. It is open: Pulse is live at pulse.kitstak.app and is
+ * sold through the same sign-up as the other three apps (docs/billing/DECISIONS.md), so it gets
+ * "Start with Pulse", the wizard row and the sign in link like the other apps. This stays the one
+ * switch for a product whose app is closed. Set to false, every start link leaves Pulse out, its
+ * buttons book a walkthrough, and the site labels Pulse "Coming soon".
  */
 export const PULSE_IS_LIVE: boolean = true;
 

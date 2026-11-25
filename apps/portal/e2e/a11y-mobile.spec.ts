@@ -187,24 +187,26 @@ test.describe('phones, keyboards and reduced motion', () => {
     expect(rows.map((row) => [row.module, row.status, row.source])).toEqual([['crm', 'trialing', 'trial']]);
   });
 
-  test('reduced motion: the success page shows no confetti, and still says the plan is set', async ({ browser }) => {
+  test('reduced motion: nothing moves on the success page, and it still says the plan is set', async ({ browser }) => {
     const context = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1280, height: 800 } });
     const page = await context.newPage();
     await trialAccount(page, 'calm', CART_PULSE);
     await payAndSucceed(page);
     await expect(page.getByTestId('checkout-success')).toContainText('You are all set.');
-    await page.waitForTimeout(600);
-    // The pieces are in the page but their holder is hidden, so nothing moves.
-    const moving = await page.locator('.animate-confetti-fall').evaluateAll((nodes) => nodes.filter((node) => (node as HTMLElement).offsetParent !== null).length);
-    expect(moving).toBe(0);
+    // The only motion on the page is the pop of the check mark. With reduced motion it does not run.
+    /** How many elements of the success page have an animation that runs. */
+    const animated = (onPage: Page) =>
+      onPage.getByTestId('checkout-success').evaluate((root) => [root, ...root.querySelectorAll('*')].filter((node) => getComputedStyle(node).animationName !== 'none').length);
+    expect(await animated(page)).toBe(0);
     await context.close();
 
-    // With motion allowed the burst is there, so the check above tests something real.
+    // With motion allowed the check mark pops, so the check above tests something real.
     const lively = await browser.newContext({ reducedMotion: 'no-preference', viewport: { width: 1280, height: 800 } });
     const second = await lively.newPage();
     await trialAccount(second, 'lively', CART_PULSE);
     await payAndSucceed(second);
-    await expect(second.locator('.animate-confetti-fall').first()).toBeAttached({ timeout: 5_000 });
+    await expect(second.getByTestId('checkout-success')).toContainText('You are all set.');
+    expect(await animated(second)).toBeGreaterThan(0);
     await lively.close();
   });
 });

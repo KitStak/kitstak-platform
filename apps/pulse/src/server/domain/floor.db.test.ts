@@ -603,6 +603,17 @@ describe.skipIf(!ready)('production team domain (database)', () => {
       );
     });
 
+    it('lists the days of one month when asked for a month, for the month close link', async () => {
+      const month = today.slice(0, 7);
+      const queue = await getReviewQueue(owner, { month });
+      expect(queue.length).toBeGreaterThan(0);
+      expect(queue.every((item) => item.date.startsWith(month) && item.date <= today)).toBe(true);
+      // An older month the job never ran in has nothing, and a month after today has nothing.
+      expect(await getReviewQueue(owner, { month: '2001-01' })).toEqual([]);
+      const nextYear = `${Number(today.slice(0, 4)) + 1}${today.slice(4, 7)}`;
+      expect(await getReviewQueue(owner, { month: nextYear })).toEqual([]);
+    });
+
     it('measures pace against each job target with counted hours only', async () => {
       const board = await getPaceBoard(owner, { from: addDaysForTest(today, -2), to: today });
       const b = board.byJob.find((row) => row.jobId === jobB)!;

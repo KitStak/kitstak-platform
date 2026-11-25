@@ -242,7 +242,8 @@ export function WelcomeWizard({ firstName, orgName, products, billing, trialEnds
         setSaving(false);
         return;
       }
-      router.replace('/');
+      // The answers shape the setup guide, which lives in Organization settings.
+      router.replace('/settings/organization#setup');
       router.refresh();
     } catch {
       setError(NO_NETWORK);

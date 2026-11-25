@@ -53,7 +53,8 @@ test.describe('the free trial ends with no card', () => {
     // The launcher still opens: a view only app is never a wall.
     await page.goto('/');
     await expect(page.getByTestId('tile-crm')).toBeVisible();
-    await expect(page.getByTestId('tile-badge-crm')).toHaveText(/View only|Included/);
+    if (await portalAppsOpen(page)) await expect(page.getByTestId('tile-plan-crm')).toHaveCount(0);
+    else await expect(page.getByTestId('tile-plan-crm')).toHaveText('View only. Pick a plan to make changes.');
 
     // "Pick a plan" from the banner: the picker with the old cart, then the pay page. Two clicks to
     // the card field. Charged today.

@@ -44,6 +44,8 @@ export interface CommandPaletteProps {
   readonly entitled: { readonly crm: boolean; readonly wms: boolean; readonly projects?: boolean; readonly pulse?: boolean };
   /** A person who only manages billing: no app rows, no launcher and no setup guide. */
   readonly billingOnly?: boolean;
+  /** false: no button in the bar; the palette still opens with Ctrl/⌘+K and '/'. */
+  readonly showTrigger?: boolean;
 }
 
 const groupClass =
@@ -112,7 +114,17 @@ function PaletteItem({
   );
 }
 
-export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl, pulseUrl, entitled, billingOnly = false }: CommandPaletteProps) {
+export function CommandPalette({
+  orgs,
+  activeOrgId,
+  crmUrl,
+  wmsUrl,
+  projectsUrl,
+  pulseUrl,
+  entitled,
+  billingOnly = false,
+  showTrigger = true,
+}: CommandPaletteProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -191,22 +203,24 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, projectsUrl,
 
   return (
     <>
-      <button
-        type="button"
-        data-search-trigger
-        onClick={() => setOpen(true)}
-        aria-label="Open command palette"
-        className={cn(
-          'inline-flex h-8 items-center gap-2 rounded-md px-2 text-sm text-fg-muted',
-          'hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-        )}
-      >
-        <Search aria-hidden className="size-4" />
-        <span className="hidden items-center gap-1 xl:inline-flex">
-          <Kbd>Ctrl</Kbd>
-          <Kbd>K</Kbd>
-        </span>
-      </button>
+      {showTrigger ? (
+        <button
+          type="button"
+          data-search-trigger
+          onClick={() => setOpen(true)}
+          aria-label="Open command palette"
+          className={cn(
+            'inline-flex h-8 items-center gap-2 rounded-md px-2 text-sm text-fg-muted',
+            'hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+          )}
+        >
+          <Search aria-hidden className="size-4" />
+          <span className="hidden items-center gap-1 md:inline-flex">
+            <Kbd>Ctrl</Kbd>
+            <Kbd>K</Kbd>
+          </span>
+        </button>
+      ) : null}
       <Command.Dialog
         open={open}
         onOpenChange={(value) => (value ? setOpen(true) : close())}

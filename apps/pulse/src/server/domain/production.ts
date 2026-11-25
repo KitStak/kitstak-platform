@@ -8,12 +8,13 @@ import 'server-only';
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
 import { scoped } from '@/server/db/scope';
-import { clients, dayReviews, jobStats, jobs, productionEntries } from '@/server/db/schema';
+import { clients, dayReviews, jobLinks, jobStats, jobs, productionEntries } from '@/server/db/schema';
+import { pickableTasks, tasksOfProjects } from '@/server/integrations/projects';
 import { conflict, DomainError, forbidden, invalid, notFound } from '@/server/errors';
 import { SUPERVISOR_EDIT_DAYS, type JobStatusValue, type StreamSource } from '@/lib/constants';
 import { canPulse } from '@/lib/permissions';
 import { addDays } from '@/lib/profit';
-import type { LogGridDTO, LogGridRowDTO, PreviousCrewDTO, ProductionEntryDTO, SaveProductionResult } from '@/lib/types';
+import type { LogGridDTO, LogGridRowDTO, LogGridTaskDTO, PreviousCrewDTO, ProductionEntryDTO, SaveProductionResult } from '@/lib/types';
 import { assertEntryDate, assertVersion, cleanText, defined, diff, inTx, iso, isoRequired, isUuid, moneyOut, monthStart, rows, todayInZone, type DomainContext } from './_shared';
 import { isTypedSource } from '@/lib/entry-dates';
 import { requirePulse, type PulseAccess } from './access';
@@ -49,6 +50,8 @@ export function toProductionDTO(row: EntryRow, job: { number: string; name: stri
     setupHours: row.setupHours,
     hoursConfirmed: row.hoursConfirmed,
     note: row.note,
+    pmTaskId: row.pmTaskId,
+    taskUnits: row.taskUnits,
     rateCents: moneyOut(money, row.rateCents),
     overtimeRateCents: moneyOut(money, row.overtimeRateCents),
     laborCostCents: moneyOut(money, row.laborCostCents),
@@ -111,6 +114,13 @@ export interface ProductionInput {
   setupHours?: string;
   hoursConfirmed?: boolean;
   note?: string | null;
+  /**
+   * The Projects task the hours were for (0014). It must belong to a project linked to the job.
+   * Part of the line key: a day can hold one line per labor class and task.
+   */
+  pmTaskId?: string | null;
+  /** Optional count of the task's output. Never part of the job's units, progress, revenue or pace. */
+  taskUnits?: string | null;
   /** The version the editor read (autosave). A mismatch is a CONFLICT. */
   version?: number | null;
   source?: StreamSource;
@@ -140,7 +150,9 @@ const STALE_ROW = 'Someone else changed this row. Here is the new one.';
 export const DAY_CHANGED = 'Someone else added work to this job on this day. Check the day, then save this line again.';
 export const FUTURE_DAY = 'Work cannot be dated after today. Pick today or an earlier day.';
 const ZERO_PEOPLE = 'Hours need people. Type how many people worked, or leave People empty.';
-const SAME_LINE_TWICE = 'This labor class is already on this day. Put its people and hours on one line.';
+const SAME_LINE_TWICE = 'This labor class and task are already on this day. Put their people and hours on one line.';
+export const TASK_NOT_ON_JOB = 'That task is not in a project linked to this job. Pick a task from the list.';
+const TASK_UNITS_NEED_TASK = 'Task units need a task. Pick the task, or leave Task units empty.';
 
 /**
  * Work that was done cannot be dated after today at the site (SPEC 5.3), nor more than 10 years
@@ -151,8 +163,25 @@ export function assertNotFutureDay(timezone: string, workDate: string, field = '
   assertEntryDate('work', timezone, workDate, { field, before });
 }
 
-/** One row per job, day, shift and labor type: the key two lines of one save may not share. */
-const lineKey = (jobId: string, workDate: string, shift: string, laborClassId: string | null): string => `${jobId}|${workDate}|${shift}|${laborClassId ?? ''}`;
+/** One row per job, day, shift, labor type and task: the key two lines of one save may not share. */
+const lineKey = (jobId: string, workDate: string, shift: string, laborClassId: string | null, pmTaskId: string | null): string => `${jobId}|${workDate}|${shift}|${laborClassId ?? ''}|${pmTaskId ?? ''}`;
+
+/** The Projects projects linked to a job (`pm_project` links). */
+export const linkedProjectIds = scoped(async function linkedProjectIds(executor: Executor, ctx: DomainContext, jobId: string): Promise<string[]> {
+  const found = await executor
+    .select({ targetId: jobLinks.targetId })
+    .from(jobLinks)
+    .where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, jobId), eq(jobLinks.targetType, 'pm_project')));
+  return found.map((row) => row.targetId);
+}, 1);
+
+/** Refuses a task that is not in a project linked to the job. Deleted tasks are refused for new picks. */
+async function assertTaskOnJob(executor: Executor, ctx: DomainContext, jobId: string, pmTaskId: string, field: string): Promise<void> {
+  if (!isUuid(pmTaskId)) throw invalid(TASK_NOT_ON_JOB, { [field]: TASK_NOT_ON_JOB });
+  const projectIds = await linkedProjectIds(executor, ctx, jobId);
+  const tasks = projectIds.length > 0 ? await tasksOfProjects(ctx, projectIds) : [];
+  if (!tasks.some((task) => task.id === pmTaskId)) throw invalid(TASK_NOT_ON_JOB, { [field]: TASK_NOT_ON_JOB });
+}
 
 const num = (value: string | null | undefined): number => Number(value ?? 0);
 
@@ -188,6 +217,7 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
   const site = await getSiteRow(ctx, job.siteId, tx);
   const shift = cleanText(input.shift) ?? existing?.shift ?? 'day';
   const laborClassId = input.laborClassId === undefined ? (existing?.laborClassId ?? null) : input.laborClassId;
+  const pmTaskId = input.pmTaskId === undefined ? (existing?.pmTaskId ?? null) : input.pmTaskId || null;
   if (!existing) {
     [existing] = await tx
       .select()
@@ -199,6 +229,7 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
           eq(productionEntries.workDate, input.workDate),
           eq(productionEntries.shift, shift),
           laborClassId ? eq(productionEntries.laborClassId, laborClassId) : isNull(productionEntries.laborClassId),
+          pmTaskId ? eq(productionEntries.pmTaskId, pmTaskId) : isNull(productionEntries.pmTaskId),
           isNull(productionEntries.deletedAt),
         ),
       )
@@ -207,8 +238,8 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
   if (seen) {
     // Two lines of one save for the same job, day, shift and labor type would land on one row and
     // the first line's hours would be lost. Refuse, and say which line.
-    const key = existing ? `id:${existing.id}` : lineKey(job.id, input.workDate, shift, laborClassId);
-    const target = lineKey(job.id, input.workDate, shift, laborClassId);
+    const key = existing ? `id:${existing.id}` : lineKey(job.id, input.workDate, shift, laborClassId, pmTaskId);
+    const target = lineKey(job.id, input.workDate, shift, laborClassId, pmTaskId);
     if (seen.has(key) || seen.has(target)) throw invalid(`Line ${index + 1}: ${SAME_LINE_TWICE}`, { [at('laborClassId')]: SAME_LINE_TWICE });
     seen.set(key, index);
     seen.set(target, index);
@@ -224,6 +255,11 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
   const overtimeHours = input.overtimeHours ?? existing?.overtimeHours ?? '0';
   const setupHours = input.setupHours ?? existing?.setupHours ?? '0';
   checkHours(hours, overtimeHours, setupHours);
+  // A task picked now (or moved to another job) must be on that job. A row that keeps the task it had keeps it.
+  if (pmTaskId && (pmTaskId !== existing?.pmTaskId || job.id !== existing?.jobId)) await assertTaskOnJob(tx, ctx, job.id, pmTaskId, at('pmTaskId'));
+  const taskUnits = input.taskUnits === undefined ? (existing?.taskUnits ?? null) : cleanText(input.taskUnits);
+  if (taskUnits !== null && (!Number.isFinite(Number(taskUnits)) || Number(taskUnits) < 0)) throw invalid('Task units must be 0 or more.', { [at('taskUnits')]: 'Type 0 or more.' });
+  if (taskUnits !== null && !pmTaskId) throw invalid(TASK_UNITS_NEED_TASK, { [at('taskUnits')]: TASK_UNITS_NEED_TASK });
   const people = input.headcount === undefined ? (existing?.headcount ?? null) : input.headcount;
   // "0 people" with hours is a typing slip that still costs money. Old rows can be edited on other fields.
   const wasZeroPeople = Boolean(existing && existing.headcount !== null && num(existing.headcount) === 0 && num(existing.hours) === num(hours));
@@ -244,6 +280,8 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
     setupHours,
     hoursConfirmed: input.hoursConfirmed ?? (existing ? existing.hoursConfirmed || num(hours) > 0 : true),
     note: input.note === undefined ? (existing?.note ?? null) : cleanText(input.note),
+    pmTaskId,
+    taskUnits,
   };
   let row: EntryRow;
   let created = false;
@@ -281,7 +319,7 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
       entityId: row.id,
       jobId: job.id,
       clientId: job.clientId,
-      after: defined({ workDate: row.workDate, shift: row.shift, laborClassId: row.laborClassId, unitsGood: row.unitsGood, unitsScrap: row.unitsScrap, headcount: row.headcount, hours: row.hours, overtimeHours: row.overtimeHours, setupHours: row.setupHours }),
+      after: defined({ workDate: row.workDate, shift: row.shift, laborClassId: row.laborClassId, unitsGood: row.unitsGood, unitsScrap: row.unitsScrap, headcount: row.headcount, hours: row.hours, overtimeHours: row.overtimeHours, setupHours: row.setupHours, pmTaskId: row.pmTaskId, taskUnits: row.taskUnits }),
     });
   }
   touched.jobIds.add(job.id);
@@ -390,6 +428,9 @@ export interface ProductionDayLine {
   setupHours?: string;
   hoursConfirmed?: boolean;
   note?: string | null;
+  /** Kept from the row when left out. */
+  pmTaskId?: string | null;
+  taskUnits?: string | null;
 }
 
 export interface ProductionDayInput {
@@ -548,6 +589,8 @@ export const saveProductionDay = scoped(async function saveProductionDay(ctx: Do
               setupHours: line.setupHours,
               hoursConfirmed: line.hoursConfirmed,
               note: line.note,
+              pmTaskId: line.pmTaskId,
+              taskUnits: line.taskUnits,
               version: row?.version ?? null,
             },
             touched,
@@ -568,6 +611,7 @@ export const saveProductionDay = scoped(async function saveProductionDay(ctx: Do
         }
       }
       await finishProduction(tx, ctx, ids, fixedJobs, touched);
+      // Lines saved in one go share a timestamp, so the day comes back in the order its lines were sent.
       const after = inSentOrder(await dayRows(tx, ctx, job.id, input.workDate), ids);
       const removed = gone.length > 0 ? await listByIds(tx, ctx, gone.map((row) => row.id), access) : [];
       return { entries: dto(after), created, updated: ids.length - created, removed };
@@ -736,6 +780,30 @@ export const getLogGrid = scoped(async function getLogGrid(ctx: DomainContext, o
       ),
     )
     .orderBy(asc(clients.name), asc(jobs.number));
+  // Projects tasks each job can tag (0014): one read of the links, one read of the tasks.
+  const links = jobRows.length > 0
+    ? await db.select({ jobId: jobLinks.jobId, projectId: jobLinks.targetId }).from(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.targetType, 'pm_project'), inArray(jobLinks.jobId, jobRows.map((item) => item.job.id))))
+    : [];
+  const taggedIds = [...new Set(entries.map((item) => item.row.pmTaskId).filter((id): id is string => Boolean(id)))];
+  const allTasks = links.length > 0 ? await tasksOfProjects(ctx, [...new Set(links.map((link) => link.projectId))], taggedIds) : [];
+  const linkedJobIds = [...new Set(links.map((link) => link.jobId))];
+  const lastTasks = linkedJobIds.length > 0
+    ? await rows<{ job_id: string; pm_task_id: string }>(
+        db,
+        sql`SELECT DISTINCT ON (job_id) job_id::text AS job_id, pm_task_id::text AS pm_task_id
+              FROM pulse.production_entries
+             WHERE org_id = ${ctx.orgId} AND deleted_at IS NULL AND pm_task_id IS NOT NULL AND work_date <= ${date}::date
+               AND job_id IN (${sql.join(linkedJobIds.map((id) => sql`${id}::uuid`), sql`, `)})
+             ORDER BY job_id, work_date DESC, updated_at DESC`,
+      )
+    : [];
+  const lastTaskOf = new Map(lastTasks.map((row) => [row.job_id, row.pm_task_id]));
+  const keptTaskIds = new Set(taggedIds);
+  const tasksOfJob = (jobId: string): LogGridTaskDTO[] => {
+    const projects = new Set(links.filter((link) => link.jobId === jobId).map((link) => link.projectId));
+    // Floor tasks only when the project has a Floor section; done tasks only where a line of the day still uses one.
+    return pickableTasks(allTasks.filter((task) => projects.has(task.projectId)), keptTaskIds).map((task) => ({ id: task.id, ref: `${task.projectKey}-${task.number}`, title: task.title, done: task.done, gone: task.gone }));
+  };
   const gridRows: LogGridRowDTO[] = jobRows.map(({ job, clientName, standardUph, unitsDone }) => ({
     jobId: job.id,
     jobNumber: job.number,
@@ -749,6 +817,10 @@ export const getLogGrid = scoped(async function getLogGrid(ctx: DomainContext, o
     plannedUnits: job.plannedUnits,
     unitsDone: unitsDone ?? '0',
     entries: entries.filter((item) => item.row.jobId === job.id).map((item) => toProductionDTO(item.row, item, access, closed)),
+    // Only a project with tasks to pick turns tagging on: a linked project with no tasks shows nothing.
+    hasProject: tasksOfJob(job.id).some((task) => !task.gone),
+    tasks: tasksOfJob(job.id),
+    lastTaskId: lastTaskOf.get(job.id) ?? null,
   }));
   const [indirect, paid, reviewRows] = await Promise.all([
     listIndirect(ctx, { siteId: site.id, from: date, to: date }),

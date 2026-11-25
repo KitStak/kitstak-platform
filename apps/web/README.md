@@ -127,14 +127,15 @@ organization, not a price per user. The owner confirmed it and it is final.
   up to 5 seats. For a bigger team, talk to us." (`pulseSeatNote` on the shared quote), so the total never
   reads as a Pulse price for a bigger team. Do not add a higher tier without the owner.
 
-### Pulse is open
+### Pulse availability (`PULSE_IS_LIVE`)
 
-`PULSE_IS_LIVE` in `src/components/site-links.ts` is true: Pulse is sold through the same sign-up as the
-other three apps (docs/billing/DECISIONS.md, CONTRACTS.md section 19). Every Pulse button starts a trial or
-opens the wizard, and the footer links to the Pulse sign-in.
+Pulse is live. `PULSE_IS_LIVE` in `src/components/site-links.ts` is true: Pulse is sold through the same
+sign-up as the other three apps (docs/billing/DECISIONS.md, CONTRACTS.md section 19). Pulse has "Start with
+Pulse", a wizard row, the footer link to the Pulse sign-in and no "Coming soon" label. Every Pulse button
+starts a trial or opens the wizard.
 
-The flag stays as the one switch for a product whose app is closed. Set it to false and the site labels
-Pulse as not open, every start link leaves Pulse out (`startLink`, `getStartedHref`, `pricingHref`,
+The flag stays as the one switch for a product whose app is closed, so the site can be switched back if
+the Pulse app ever has to close to new customers. Set it to false and the site labels Pulse as not open, every start link leaves Pulse out (`startLink`, `getStartedHref`, `pricingHref`,
 `wizardHref`, `trialUrl`, `handoffUrl`), a Pulse only stack goes to the walkthrough form, and the wizard
 shows Pulse as a labeled row with no box to tick. `src/lib/pulse-availability.test.ts` holds the checks for
 both positions of the switch. The checks for the closed position are skipped while the flag is true.

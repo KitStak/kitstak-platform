@@ -26,6 +26,10 @@ export const productionEntries = pulseSchema.table('production_entries', {
   setupHours: hrs('setup_hours').notNull().default('0'),
   hoursConfirmed: boolean('hours_confirmed').notNull().default(true),
   note: text('note'),
+  /** Projects task the hours were for (0014). Checked against the job's linked projects on save. */
+  pmTaskId: uuid('pm_task_id'),
+  /** Optional count of that step's output. Never part of units_good, progress, revenue or pace. */
+  taskUnits: qty('task_units'),
   ...laborStamps(),
   laborCostCents: cents('labor_cost_cents').notNull().default(BigInt(0)),
   sharedCents: cents('shared_cents').notNull().default(BigInt(0)),

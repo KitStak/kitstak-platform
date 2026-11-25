@@ -42,6 +42,12 @@ Visibility rule: `visible = !dismissed && (!allDone || seenRow)`. An install/org
 already fully set up before this feature shipped never sees the guide or a surprise
 celebration.
 
+**Portal exception:** the Portal's guide lives only in Organization settings
+(`/settings/organization#setup`), where it always shows, with no dismiss control and no
+confetti. The Portal home page (the app launcher) carries no setup card, so the Portal no
+longer writes or reads the seen and dismissed markers. The welcome wizard sends owners and
+admins to that settings section when they finish. CRM and WMS keep the rule above.
+
 ## Canonical step names
 
 Portal is the contract; CRM/WMS echo it exactly where steps correspond:

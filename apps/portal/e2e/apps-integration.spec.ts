@@ -111,15 +111,16 @@ test.describe('one suite: the same banner and lock screen in every app', () => {
       checked.push(`${firstLocked}: added from its lock screen in ${clicks} clicks`);
     }
 
-    /* ----- the portal's own tiles and app switcher follow the plan ----- */
+    /* ----- the portal's own tiles follow the plan ----- */
     await page.goto('/');
     await expect(page.getByTestId('tile-crm')).toBeVisible({ timeout: 90_000 });
     if (await allowAllIsOn(page)) {
-      skipped.push('portal tiles: the portal runs with the allow all switch on, so every tile says Included');
+      skipped.push('portal tiles: the portal runs with the allow all switch on, so every app has a tile');
     } else {
-      await expect(page.getByTestId('tile-badge-crm')).toHaveText(/Trial/);
+      // An app in the trial says so in one quiet line. An app that is not in the plan has no tile.
+      await expect(page.getByTestId('tile-plan-crm')).toHaveText(/left in your free trial/);
       const notAdded = (['wms', 'projects', 'pulse'] as const).find((app) => app !== firstLocked);
-      if (notAdded) await expect(page.getByTestId(`tile-badge-${notAdded}`)).toHaveText(/Not in your plan/);
+      if (notAdded) await expect(page.getByTestId(`tile-${notAdded}`)).toHaveCount(0);
       checked.push('portal: tiles follow the plan');
     }
 

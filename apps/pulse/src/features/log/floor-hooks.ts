@@ -9,8 +9,8 @@ import type { Opts } from '@/lib/hooks/use-data';
 import type { DayQueueDTO, DeviceLinkDTO, PaceBoardDTO, PaceSuggestionRowDTO, PunchDTO } from '@/lib/types';
 
 export const floorKeys = {
-  reviewQueue: (siteId?: string | null, days?: number) =>
-    ['streams', 'review-queue', siteId ?? 'all', days ?? 14] as const,
+  reviewQueue: (siteId?: string | null, days?: number, month?: string | null) =>
+    ['streams', 'review-queue', siteId ?? 'all', days ?? 14, month ?? 'recent'] as const,
   paceBoard: (params: { from: string; to: string; siteId?: string | null }) =>
     ['streams', 'pace-board', params] as const,
   suggestions: () => ['standards', 'suggest-all'] as const,
@@ -20,12 +20,12 @@ export const floorKeys = {
 };
 
 export const useReviewQueue = (
-  params: { siteId?: string | null; days?: number } = {},
+  params: { siteId?: string | null; days?: number; month?: string | null } = {},
   opts?: Opts<DayQueueDTO[]>,
 ) =>
   useQuery({
-    queryKey: floorKeys.reviewQueue(params.siteId, params.days),
-    queryFn: () => apiGet<DayQueueDTO[]>(apiPath('review-queue', { site: params.siteId, days: params.days })),
+    queryKey: floorKeys.reviewQueue(params.siteId, params.days, params.month),
+    queryFn: () => apiGet<DayQueueDTO[]>(apiPath('review-queue', { site: params.siteId, days: params.days, month: params.month })),
     staleTime: 15_000,
     ...opts,
   });

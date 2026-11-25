@@ -1,7 +1,7 @@
 'use server';
 /**
- * Guided-setup writes (server actions): the welcome wizard's answers, step skips and
- * guide dismissal. Everything acts on the session's ACTIVE org (never a client-supplied
+ * Guided-setup writes (server actions): the welcome wizard's answers and step skips.
+ * Everything acts on the session's ACTIVE org (never a client-supplied
  * org id), requires an owner/admin membership, and upserts org-level rows
  * (user_id IS NULL) against the partial unique index from 0002_core_onboarding.
  */
@@ -23,7 +23,9 @@ import {
 import { db } from '@/server/db';
 import { getSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
-import { GUIDE_STEP_KEY } from '@/server/onboarding';
+
+/** The setup guide lives in Organization settings. */
+const SETUP_GUIDE_PATH = '/settings/organization';
 
 const MANAGER_ROLES = new Set(['owner', 'admin']);
 
@@ -124,6 +126,8 @@ export async function saveSetupProfile(input: unknown): Promise<ActionResult> {
       : { ...answers, focus: focusFromProducts(toSetupProducts(rawProducts)), products: toSetupProducts(rawProducts) };
   await upsertOrgStep(context, 'portal', 'profile', 'completed', payload);
   await closeSignup(context.userId);
+  // The answers shape the setup guide (Organization settings) and the billing only redirect on home.
+  revalidatePath(SETUP_GUIDE_PATH);
   revalidatePath('/');
   revalidatePath('/welcome');
   return { ok: true };
@@ -151,7 +155,7 @@ export async function skipSetupStep(stepKey: string): Promise<ActionResult> {
   }
   const scope = stepKey.startsWith('crm_') ? 'crm' : stepKey.startsWith('wms_') ? 'wms' : 'portal';
   await upsertOrgStep(context, scope, stepKey, 'skipped');
-  revalidatePath('/');
+  revalidatePath(SETUP_GUIDE_PATH);
   return { ok: true };
 }
 
@@ -163,24 +167,6 @@ export async function unskipSetupStep(stepKey: string): Promise<ActionResult> {
     return { ok: false, error: 'Unknown setup step.' };
   }
   await deleteOrgStep(context.orgId, stepKey);
-  revalidatePath('/');
-  return { ok: true };
-}
-
-/** Hides the setup guide for the whole org (restorable from the command palette). */
-export async function dismissSetupGuide(): Promise<ActionResult> {
-  const context = await requireManager();
-  if (!context) return NOT_ALLOWED;
-  await upsertOrgStep(context, 'portal', GUIDE_STEP_KEY, 'dismissed');
-  revalidatePath('/');
-  return { ok: true };
-}
-
-/** Brings a dismissed guide back; the row flips to 'completed' so the seen marker survives. */
-export async function restoreSetupGuide(): Promise<ActionResult> {
-  const context = await requireManager();
-  if (!context) return NOT_ALLOWED;
-  await upsertOrgStep(context, 'portal', GUIDE_STEP_KEY, 'completed');
-  revalidatePath('/');
+  revalidatePath(SETUP_GUIDE_PATH);
   return { ok: true };
 }

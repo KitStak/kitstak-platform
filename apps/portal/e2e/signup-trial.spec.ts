@@ -106,15 +106,23 @@ test.describe('signup to free trial', () => {
     await expect(page.getByTestId('welcome-finish')).toHaveText(/Looks good/);
     await expect(page.getByTestId('welcome-steps')).toBeVisible();
     await page.getByTestId('welcome-finish').click();
-    await page.waitForURL((url) => url.pathname === '/', { timeout: 90_000 });
-    await expect(page.getByTestId('tile-crm')).toBeVisible({ timeout: 90_000 });
+    // The wizard ends on the setup guide, which lives in Organization settings.
+    await page.waitForURL((url) => url.pathname === '/settings/organization', { timeout: 90_000 });
+    // The quick start is the 5 steps the welcome screen promised, with the answers already ticked.
+    await expect(page.getByTestId('setup-steps').locator('li')).toHaveCount(5, { timeout: 90_000 });
+    await expect(page.getByTestId('setup-progress')).toContainText('1 of 5 done');
+
+    // Home: "Your apps", one tile for each app of the trial, and no setup guide.
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1, name: 'Your apps' })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByTestId('tile-crm')).toBeVisible();
     await expect(page.getByTestId('tile-wms')).toBeVisible();
+    await expect(page.getByTestId('setup-steps')).toHaveCount(0);
 
     // First session: nobody is asked to pick a plan a minute into a "no card needed" trial. The
     // tiles say the trial is running. The banner starts on the second day.
     await expect(page.getByTestId('plan-notice-trial')).toHaveCount(0);
-    // The quick start is the 5 steps the welcome screen promised, with the answers already ticked.
-    await expect(page.getByTestId('setup-steps').locator('li')).toHaveCount(5);
-    await expect(page.getByTestId('setup-progress')).toContainText('1 of 5 done');
+    await expect(page.getByTestId('tile-plan-crm')).toHaveText('14 days left in your free trial');
+    await expect(page.getByTestId('tile-plan-wms')).toHaveText('14 days left in your free trial');
   });
 });

@@ -1,13 +1,12 @@
 /**
- * KitStak Pulse app mark, rect for rect from the official brand file (`kitstak-icon-pulse.svg`):
- * a full bar over a meter with a faded track.
+ * KitStak Pulse app mark, shape for shape from the official brand file (`kitstak-icon-pulse.svg`):
+ * two notched bars, red over pink. The view box crops the file's padding to 8 units a side.
  */
 export function PulseMark({ size = 16, className }: { readonly size?: number; readonly className?: string }) {
   return (
-    <svg aria-hidden width={size} height={size} viewBox="32 44 136 112" className={className}>
-      <rect x="40" y="62" width="120" height="30" fill="#C8102E" />
-      <rect x="40" y="108" width="120" height="30" fill="#D65A6E" opacity="0.35" />
-      <rect x="40" y="108" width="84" height="30" fill="#D65A6E" />
+    <svg aria-hidden width={size} height={size} viewBox="32 45 136 110" className={className}>
+      <polygon points="40,71 82,71 100,53 118,71 160,71 160,101 118,101 100,83 82,101 40,101" fill="#C8102E" />
+      <polygon points="40,117 82,117 100,99 118,117 160,117 160,147 118,147 100,129 82,147 40,147" fill="#D65A6E" />
     </svg>
   );
 }

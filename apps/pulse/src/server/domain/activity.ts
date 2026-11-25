@@ -66,7 +66,7 @@ export const logActivity = scoped(async function logActivity(executor: Executor,
 /** Fields a reader without `money:read` may see in `before` and `after`, per entity type. */
 export const ACTIVITY_SAFE_FIELDS: Readonly<Record<string, readonly string[]>> = {
   job: ['number', 'name', 'clientId', 'jobTypeId', 'siteId', 'kind', 'status', 'pricingModel', 'unitLabel', 'plannedUnits', 'materialMethod', 'partsOwner', 'defaultLaborClassId', 'usualCrew', 'standardUph', 'startDate', 'dueDate', 'completedDate', 'poNumber', 'ownerId', 'description', 'kitSku', 'kitName', 'pinnedNote', 'archivedAt'],
-  production: ['jobId', 'workDate', 'shift', 'laborClassId', 'unitsGood', 'unitsScrap', 'unitsRework', 'headcount', 'hours', 'overtimeHours', 'setupHours', 'hoursConfirmed', 'note', 'siteId'],
+  production: ['jobId', 'workDate', 'shift', 'laborClassId', 'unitsGood', 'unitsScrap', 'unitsRework', 'headcount', 'hours', 'overtimeHours', 'setupHours', 'hoursConfirmed', 'note', 'siteId', 'pmTaskId', 'taskUnits'],
   indirect: ['workDate', 'laborClassId', 'reason', 'headcount', 'hours', 'overtimeHours', 'note', 'siteId'],
   paid_hours: ['workDate', 'laborClassId', 'paidHours', 'siteId'],
   material: ['jobId', 'usageDate', 'itemId', 'itemSku', 'itemName', 'quantityUsed', 'quantityScrapped', 'quantityPlanned', 'uom', 'lot', 'suppliedBy', 'note'],

@@ -8,7 +8,6 @@ import { Card, LinkButton } from '@/components/ui';
 import { BillingMessage, TestModeBadge } from '@/features/billing/billing-chrome';
 import { FinishingUp } from '@/features/billing/checkout/finishing-up';
 import { cardLabel, perPeriod, plural, usesSeats } from '@/features/billing/format';
-import { ConfettiBurst } from '@/features/setup/confetti';
 
 export const metadata: Metadata = { title: 'You are all set' };
 
@@ -67,7 +66,6 @@ export default async function CheckoutSuccessPage({
     // The two buttons sit right under the good news, so "Open my apps" is on the first screen at
     // 1280 by 800 and on a phone. The plan details follow as the record of what was bought.
     <section data-testid="checkout-success" className="relative mx-auto flex max-w-[560px] flex-col items-center py-2 text-center sm:py-4">
-      <ConfettiBurst pieceCount={36} />
       <span className="inline-flex size-14 items-center justify-center rounded-full bg-success-subtle text-success-text motion-safe:animate-check-pop">
         <CircleCheck aria-hidden className="size-8" />
       </span>

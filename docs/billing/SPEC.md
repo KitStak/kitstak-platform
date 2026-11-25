@@ -386,9 +386,9 @@ The same check runs when a signed in person opens `/login`, `/signup` or `/welco
   It is "Tell us about your business", then the first step of each area in turn, then "Pick your plan". The
   pick does not change as steps are done. The next step is open with the one filled button. The other rows
   are one line each. Every other step sits behind "Show 3 more steps for later" and does not move the count.
-  On a phone the launcher shows the open step and one row, "Show the other 4 steps", counted in the
-  header's own terms (5 steps, one open). The steps for later keep their own row under them. A quiet link
-  of a step starts where the step title starts.
+  The guide lives only in Organization settings (the Portal home is the apps and a search box, main #48),
+  and the welcome wizard ends there. Every quick start row is open, also on a phone. The steps for later
+  keep their own row under them. A quiet link of a step starts where the step title starts.
 - Answers given on the marketing site count as done even when the person presses "Skip for now" on the
   welcome screen.
 - The guide still lists 3 to 5 steps tied to the chosen apps and still follows ONBOARDING.md.
@@ -539,7 +539,7 @@ link after email verification, and old links.
 - **Success** `/billing/checkout/success?session_id=`: the server checks the session with the gateway and
   applies it (the same code the webhook runs). The page shows "You are all set." with the plan summary, the
   first charge date, the receipt note ("We emailed a receipt to billing@northwind.example."), and the button
-  "Open my apps". A small confetti burst plays (not under reduced motion). If the gateway has not confirmed
+  "Open my apps". The check mark pops once (not under reduced motion). If the gateway has not confirmed
   yet, the page says "Finishing up. This takes a few seconds." and checks again each second for up to 10
   seconds, then offers "Refresh". A visit with a session that is not paid never grants anything.
 - **Back or closed** `/billing/checkout/canceled`: "No charge was made. Your cart is saved." with "Go back to
@@ -790,8 +790,15 @@ error codes per app. If a path cannot be made view only safely, it is locked, ne
 
 - **App switcher.** Each row shows its badge: Trial, Active, Payment due, View only, Not in your plan,
   Included. A row that is not in the plan opens the picker with that app turned on.
-- **Launcher tiles (portal).** Same badges. A trial tile adds "9 days left". A tile not in the plan shows the
-  price it would add and "Add to plan" or "Start free trial". A view only tile opens the app.
+- **Home tiles (portal).** The home page is "Your apps": one tile for each app the organization can open,
+  and a search box (main #48). A tile has no badge. One quiet line under the tagline carries the plan
+  state: "9 days left in your free trial", "Payment past due. Open until Dec 3." or "View only. Pick a
+  plan to make changes." (an admin and a member read who to ask). An app that is on and paid says nothing.
+  An app that is not in the plan has no tile. Billing lists it. With no app at all the page says "No apps
+  on your plan yet" with a button to Billing, or who to ask. A view only tile opens the app. The plan
+  notice above the page (9.1) is the same in the Portal as in every app.
+- **Top bar (portal).** Logo, organization switcher, a settings gear and the avatar. Billing, My account
+  and the light or dark switch are in the avatar menu. There is no app switcher in the Portal bar.
 - **Admin pages.** CRM admin, WMS settings (labeled "Plan" there), Projects settings and Pulse settings each
   get a "Plan and payment" row with the badge, the next charge line and a link to billing home.
 - **Pulse.** Flat price. Its settings row and the picker show "Up to 5 seats" and the note in P8.
@@ -925,7 +932,7 @@ rules.
   elements, a real URL change after signup and login so password managers offer to save and fill.
 - **Slow networks.** Every button shows a busy state within 100 ms and cannot be sent twice. Server actions
   are safe to retry. Pages render skeletons that match the final layout.
-- **Reduced motion.** With `prefers-reduced-motion`, no confetti, no slide or pop animations; changes still
+- **Reduced motion.** With `prefers-reduced-motion`, no slide or pop animations; changes still
   show, without movement.
 - **Themes.** Light and dark, with the theme handoff between apps as today. Tokens only.
 - **Empty, loading and error states** are listed with each screen above. No screen is ever blank.
@@ -986,7 +993,7 @@ Run with `ENTITLEMENTS_DEV_ALLOW_ALL=0` in the portal and the product apps. Each
 | `roles.spec.ts` | A billing manager who is a plain member can pay, change and download. A member sees the small card only. An admin can read but not change. |
 | `webhook-replay.spec.ts` | Post the same signed test event twice and a bad signature once (CONTRACTS 12.2 results). |
 | `apps-integration.spec.ts` | In CRM, WMS, Projects and Pulse: the trial banner text matches the portal's; an app not in the plan shows the lock screen with the price; adding WMS from the CRM takes 3 clicks. In a view only CRM, "New board", "Invite" and "Import" open the view only dialog and no form, and nothing is created. |
-| `a11y-mobile.spec.ts` | At 360 px: no sideways scroll on signup, picker, review, billing home, cancel. Keyboard only run of signup to trial. Reduced motion: no confetti node. |
+| `a11y-mobile.spec.ts` | At 360 px: no sideways scroll on signup, picker, review, billing home, cancel. Keyboard only run of signup to trial. Reduced motion: nothing on the success page is animated. |
 | `billing-off.spec.ts` | Portal started in production mode with no key (a second run config): pay buttons are disabled with the plain message; trial start still works. |
 
 Visual checks: `deploy/dev/shot.mjs` for every new route in light and dark, desktop and phone.

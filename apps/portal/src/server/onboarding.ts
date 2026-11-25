@@ -1,8 +1,8 @@
 /**
  * Guided-setup reads: live signals from the shared database + explicit state from
  * core.onboarding_progress, combined through the pure model (src/lib/setup-model.ts).
- * Cross-schema counts follow product-stats.ts: defensive raw SQL, any failure → null,
- * the guide degrades instead of breaking the launcher.
+ * Cross-schema counts are defensive raw SQL: any failure → null, so the guide degrades
+ * instead of breaking the page.
  */
 import 'server-only';
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
@@ -31,13 +31,10 @@ import {
   type SetupSignals,
   type SetupSummary,
   readProgressRows,
-  GUIDE_STEP_KEY,
   type ProgressState,
 } from '@/lib/setup-model';
 
 const DEACTIVATED_PREFIX = 'deactivated:';
-
-export { GUIDE_STEP_KEY };
 
 async function countOrNull(query: ReturnType<typeof sql>, label: string): Promise<number | null> {
   try {
@@ -299,21 +296,6 @@ async function getProgressRows(orgId: string): Promise<ProgressState> {
     .from(onboardingProgress)
     .where(and(eq(onboardingProgress.orgId, orgId), isNull(onboardingProgress.userId)));
   return readProgressRows(rows);
-}
-
-/**
- * Rollout-guard marker: records that this org has SEEN the guide in an incomplete state.
- * Fire-and-forget from `after()` only — never awaited inside a render (pool rule).
- */
-export async function markGuideSeen(orgId: string): Promise<void> {
-  try {
-    await db
-      .insert(onboardingProgress)
-      .values({ orgId, userId: null, scope: 'portal', stepKey: GUIDE_STEP_KEY, status: 'completed' })
-      .onConflictDoNothing();
-  } catch (error: unknown) {
-    console.error('[portal] markGuideSeen failed', error);
-  }
 }
 
 /** The org's full guided-setup state for the launcher and the welcome wizard. */

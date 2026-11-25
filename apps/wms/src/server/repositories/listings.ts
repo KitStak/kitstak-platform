@@ -224,7 +224,6 @@ export async function listListings(
       (SELECT p.name FROM products p WHERE p.id = ${l.productId}) AS "productName", ${l.neverSync} AS "neverSync",
       ${e.productType} AS "productType", ${e.productGroup} AS "productGroup", ${l.linkedAt} AS "linkedAt",
       ${e.exception} AS exception, ${l.createdAt} AS "createdAt", ${l.version} AS version,
-      ${suggestionSql('id')} AS "suggestedProductId",
       (SELECT p.image_url FROM products p WHERE p.id = ${l.productId}) AS "productImageUrl",
       (SELECT p.description FROM products p WHERE p.id = ${l.productId}) AS "productDescription",
       (SELECT p.status FROM products p WHERE p.id = ${l.productId}) AS "productStatus"
@@ -235,7 +234,28 @@ export async function listListings(
           )
         ).sort((a, b) => (position.get(String(a.id)) ?? 0) - (position.get(String(b.id)) ?? 0));
   const ids = raw.map((r) => String(r.id));
-  // Suggested product details in one lookup (the SKU match itself runs once per visible row).
+  // Suggestions for the page's unlinked rows in one set-based join (same rule as `suggestionSql`).
+  // As a per-row subquery the lower(sku) match scanned the client's whole catalog once per
+  // visible row; joined, the catalog is read once for the page.
+  const unlinkedIds = raw.filter((r) => r.productId === null).map((r) => String(r.id));
+  const suggestionByListing = new Map(
+    unlinkedIds.length === 0
+      ? []
+      : (
+          await dbAll<{ id: string; productId: string }>(
+            db,
+            sql`SELECT DISTINCT ON (${l.id}) ${l.id} AS id, p.id AS "productId"
+    FROM ${l} JOIN products p ON p.client_id = ${l.clientId} AND lower(p.sku) = lower(${l.sellerSku})
+    WHERE ${l.id} IN (${sql.join(
+      unlinkedIds.map((id) => sql`${id}`),
+      sql`, `,
+    )}) AND ${l.productId} IS NULL
+      AND lower(p.sku) IS DISTINCT FROM lower(COALESCE(${dismissedSkuSql()}, ''))
+    ORDER BY ${l.id}, p.sku`,
+          )
+        ).map((x) => [String(x.id), x.productId] as const),
+  );
+  for (const r of raw) r.suggestedProductId = suggestionByListing.get(String(r.id)) ?? null;
   const suggestedIds = [
     ...new Set(raw.map((r) => r.suggestedProductId).filter((v): v is string => typeof v === 'string')),
   ];

@@ -22,6 +22,13 @@ test.describe('a payment fails at renewal', () => {
     await expect(page.getByTestId('plan-notice-action').first()).toHaveText(/Update card/);
     await expect(page.getByTestId('billing-plan-card')).toContainText('We could not charge your Visa ending 0341 for $29.00.');
 
+    // Home says it in one quiet line on the tile. The app still opens.
+    await page.goto('/');
+    await expect(page.getByTestId('tile-pulse')).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByTestId('tile-plan-pulse')).toHaveText(/^Payment past due\. Open until [A-Z][a-z]{2} \d{1,2}\.$/);
+    await expect(page.getByTestId('plan-notice-payment_failed')).toBeVisible();
+    await openBilling(page);
+
     // The email says the same four things.
     await page.request.post('/api/billing/jobs/tick');
     const failed = await emailsTo(person.email, 'payment_failed');
@@ -104,6 +111,12 @@ test.describe('a payment fails at renewal', () => {
     );
     // The sentence and the button use one name for the fix (review round 4).
     await expect(page.getByTestId('plan-notice-unpaid')).not.toContainText('Pay now');
+    // Home: the tile is still there (a view only app opens) and names the same fix.
+    await page.goto('/');
+    await expect(page.getByTestId('tile-pulse')).toBeVisible({ timeout: 90_000 });
+    if (appsOpen) await expect(page.getByTestId('tile-plan-pulse')).toHaveCount(0);
+    else await expect(page.getByTestId('tile-plan-pulse')).toHaveText('View only. Update your card to make changes.');
+    await openBilling(page);
     expect((await entitlementsOf(orgId)).map((row) => row.module)).toEqual(['pulse']);
     expect((await invoicesOf(orgId)).filter((invoice) => invoice.status === 'open')).toHaveLength(1);
 

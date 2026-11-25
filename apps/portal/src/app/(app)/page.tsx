@@ -1,27 +1,18 @@
 import type { Metadata } from 'next';
-import { after } from 'next/server';
-import { CalendarDays, ClipboardPen, CreditCard, FolderKanban, LayoutGrid, ListChecks, Package, PackagePlus, Plus, Settings2, Users, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { Module } from '@kitstak/entitlements';
-import { env, isProduction } from '@/server/env';
+import { formatDayShort } from '@kitstak/billing/catalog';
+import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
-import { getOrgGlance, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
-import { CATALOG, formatDayShort } from '@kitstak/billing/catalog';
+import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getBillingContext } from '@/server/billing/context';
 import { getOrgPlan, type ModuleState } from '@/server/entitlements';
-import { addAppPriceNote, plural, viewOnlyAsk, viewOnlyFix } from '@/features/billing/format';
-import { getCustomerWork, getLauncherStats, getPulseAttention } from '@/server/product-stats';
-import { CustomerWorkPanel } from '@/features/launcher/customer-work';
-import { PulseAttentionPanel } from '@/features/launcher/pulse-attention';
-import { getSetupState, markGuideSeen } from '@/server/onboarding';
 import { wasInOrganization } from '@/server/signup';
+import { plural, viewOnlyAsk, viewOnlyFix } from '@/features/billing/format';
+import { AppLauncher, type LauncherApp, type LauncherPlanNote } from '@/features/launcher/app-launcher';
 import { CreateOrgForm } from '@/features/launcher/create-org-form';
-import { ProductTile } from '@/features/launcher/product-tile';
-import { SetupGuide } from '@/features/setup/setup-guide';
 import { LogoMark } from '@/features/shell/logo';
-import { AppIcon } from '@kitstak/ui/app-icon';
-import { Badge, cn } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Apps' };
 
@@ -31,22 +22,10 @@ interface ProductCopy {
 }
 
 const PRODUCTS: Readonly<Record<Module, ProductCopy>> = {
-  crm: {
-    name: 'KitStak CRM',
-    tagline: 'Pipelines, boards and automations',
-  },
-  wms: {
-    name: 'KitStak WMS',
-    tagline: 'Warehouse operations',
-  },
-  projects: {
-    name: 'KitStak Projects',
-    tagline: 'Projects, tasks and timelines',
-  },
-  pulse: {
-    name: 'KitStak Pulse',
-    tagline: 'Know which jobs make money',
-  },
+  crm: { name: 'KitStak CRM', tagline: 'Deals and pipelines' },
+  wms: { name: 'KitStak WMS', tagline: 'Warehouse operations' },
+  projects: { name: 'KitStak Projects', tagline: 'Projects and tasks' },
+  pulse: { name: 'KitStak Pulse', tagline: 'Job performance and profitability' },
 };
 
 function productUrl(module: Module): string {
@@ -62,343 +41,134 @@ function productUrl(module: Module): string {
   }
 }
 
-/** Where the tile's empty-state CTA deep-links: straight to the screen that creates the first record. */
-function emptyStateUrl(module: Module, orgSlug: string): string {
-  switch (module) {
-    case 'crm':
-      return `${env.NEXT_PUBLIC_CRM_URL}/${orgSlug}/crm/pipeline`;
-    case 'wms':
-      return `${env.NEXT_PUBLIC_WMS_URL}/orders`;
-    case 'projects':
-      return `${env.NEXT_PUBLIC_PROJECTS_URL}/projects/new`;
-    case 'pulse':
-      return `${env.NEXT_PUBLIC_PULSE_URL}/jobs/new`;
-  }
-}
-
-function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] || name;
-}
-
-interface QuickLink {
-  readonly label: string;
-  readonly href: string;
-  readonly icon: LucideIcon;
-  readonly external: boolean;
-}
-
-const glanceDateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' });
-
-interface GlanceItem {
-  readonly label: string;
-  readonly value: string;
-  readonly icon: LucideIcon;
-}
-
-function GlanceCell({ item }: { readonly item: GlanceItem }) {
-  const Icon = item.icon;
+/**
+ * Two kinds of people are in no organization. A new one (signed up, no workspace yet) is asked to
+ * name it. One who was in an organization before (removed, or left) is told so, in the same words
+ * wherever they land: Billing and every signup step send them here (review round 4).
+ */
+function NoOrganization({ former }: { readonly former: boolean }) {
   return (
-    <div className="flex items-center gap-3 px-5 py-4">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sunken">
-        <Icon aria-hidden className="size-4 text-icon" />
-      </span>
-      <div className="flex min-w-0 flex-col">
-        <span className="truncate text-md font-semibold text-fg tabular-nums">{item.value}</span>
-        <span className="text-xs text-fg-muted">{item.label}</span>
+    <section data-testid={former ? 'no-org-former' : 'no-org-new'} className="flex flex-col items-center py-20 text-center">
+      <LogoMark size={40} />
+      <h1 className="mt-8 text-2xl font-semibold tracking-[-0.02em] text-balance text-fg">
+        {former ? 'You are no longer in an organization' : 'Create your organization'}
+      </h1>
+      <p className="mt-2 max-w-md text-md text-pretty text-fg-secondary">
+        {former
+          ? 'Your account still works, but you are not on a team right now. Ask a teammate to invite you again. Or start your own organization below.'
+          : 'You are not in an organization yet. Create one, or ask a teammate for an invitation.'}
+      </p>
+      <div className="mt-8 flex w-full justify-center">
+        <CreateOrgForm />
       </div>
+    </section>
+  );
+}
+
+/**
+ * No app opens for this organization: no trial or plan yet, or none of its apps is left. A person
+ * who can see billing gets the way to plans. A member is told who to ask, because Billing is closed
+ * to them.
+ */
+function NoAppsOnPlan({ canSeeBilling, canStartTrial, askWho }: { readonly canSeeBilling: boolean; readonly canStartTrial: boolean; readonly askWho: string }) {
+  return (
+    <div data-testid="launcher-no-apps" className="rounded-2xl border border-dashed border-border-default px-6 py-12 text-center">
+      <p className="text-md font-semibold text-fg">No apps on your plan yet</p>
+      <p className="mt-1 text-sm text-fg-secondary">
+        {canSeeBilling
+          ? 'Add CRM, WMS, Projects or Pulse to start using them here.'
+          : `Ask ${askWho} to add CRM, WMS, Projects or Pulse. They will show up here.`}
+      </p>
+      {canSeeBilling ? (
+        <Link
+          href="/billing"
+          data-testid="launcher-see-plans"
+          className="mt-5 inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-fg hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
+          {canStartTrial ? 'Start free trial' : 'See plans'}
+        </Link>
+      ) : null}
     </div>
   );
 }
 
-function QuickLinkChip({ link }: { readonly link: QuickLink }) {
-  const Icon = link.icon;
-  const className = cn(
-    'inline-flex h-9 items-center gap-2 rounded-lg border border-border-default bg-panel px-3',
-    'text-sm font-medium text-fg-secondary shadow-xs',
-    'transition-colors duration-[var(--duration-fast)] hover:border-border-strong hover:text-fg',
-    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-  );
-  if (link.external) {
-    return (
-      <a href={link.href} target="_blank" rel="noopener" className={className}>
-        <Icon aria-hidden className="size-4 text-icon" />
-        {link.label}
-      </a>
-    );
-  }
-  return (
-    <Link href={link.href} className={className}>
-      <Icon aria-hidden className="size-4 text-icon" />
-      {link.label}
-    </Link>
-  );
-}
-
-/** The launcher: org-aware product tiles with live operational signal (BLUEPRINT.md §6). */
-export default async function LauncherPage({
-  searchParams,
-}: {
-  readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+/** The launcher: the apps this organization can open, and a search box (BLUEPRINT.md §6). */
+export default async function LauncherPage() {
   const session = await requirePageSession('/');
   const orgs = await listUserOrgs(session.user.id);
   const activeOrg = await resolveActiveOrg(session, orgs);
-
-  if (!activeOrg) {
-    // Two kinds of people are in no organization. A new one (signed up, no workspace yet) is asked
-    // to name it. One who was in an organization before (removed, or left) is told so, in the same
-    // words wherever they land: Billing and every signup step send them here (review round 4).
-    const former = await wasInOrganization(session.user.id, session.user.email);
-    return (
-      <section data-testid={former ? 'no-org-former' : 'no-org-new'} className="flex flex-col items-center py-20 text-center">
-        <LogoMark size={40} />
-        <h1 className="mt-8 text-2xl font-semibold tracking-[-0.02em] text-balance text-fg">
-          {former ? 'You are no longer in an organization' : 'Create your organization'}
-        </h1>
-        <p className="mt-2 max-w-md text-md text-pretty text-fg-secondary">
-          {former
-            ? 'Your account still works, but you are not on a team right now. Ask a teammate to invite you again. Or start your own organization below.'
-            : 'You are not in an organization yet. Create one, or ask a teammate for an invitation.'}
-        </p>
-        <div className="mt-8 flex w-full justify-center">
-          <CreateOrgForm />
-        </div>
-      </section>
-    );
-  }
+  if (!activeOrg) return <NoOrganization former={await wasInOrganization(session.user.id, session.user.email)} />;
 
   // A person who only manages billing has no apps to open (review round 2). Billing is their home.
   if (activeOrg.role === 'billing') redirect('/billing');
 
-  // A member's guide lists only steps a member can do: no welcome answers, no inviting.
-  const canManageSetup = activeOrg.role === 'owner' || activeOrg.role === 'admin';
-  // The billing context is cached per request: the setup guide needs it to know who may pay.
-  const billing = await getBillingContext();
-  const [{ devAllowAll, modules, state: plan }, stats, customerWork, pulseAttention, glance, setup, params] = await Promise.all([
-    getOrgPlan(activeOrg.id),
-    getLauncherStats(activeOrg.id, session.user.id),
-    getCustomerWork(activeOrg.id),
-    getPulseAttention(activeOrg.id, session.user.id),
-    getOrgGlance(activeOrg.id),
-    getSetupState(activeOrg, { timeZone: billing?.timeZone, canManageBilling: billing?.access.canManage ?? false, canManageOrg: canManageSetup }),
-    searchParams,
-  ]);
-  const forceSetupGuide = params.setup === '1';
-  // Rollout guard (ONBOARDING.md): an org that was already fully set up before ever
-  // seeing the guide never gets a surprise card or celebration. The guide on the launcher is the
-  // quick start (3 to 5 steps), so "set up" means those steps.
-  const showSetupGuide =
-    setup.quick.steps.length > 0 && (forceSetupGuide || (!setup.dismissed && (!setup.quick.summary.allDone || setup.seen)));
-  if (showSetupGuide && !setup.quick.summary.allDone && !setup.seen) {
-    after(() => markGuideSeen(activeOrg.id));
-  }
-  const entitledFor = (module: Module): boolean =>
-    modules.find((state) => state.module === module)?.entitled ?? false;
-
-  // Plan words on each tile (docs/billing/SPEC.md 9.5). The same PlanState drives billing home.
+  // The billing context is cached per request: the shell notices read the same one.
+  const [billing, { modules, state: plan }] = await Promise.all([getBillingContext(), getOrgPlan(activeOrg.id)]);
   const access = billing?.access ?? null;
   const timeZone = billing?.timeZone ?? 'UTC';
-  const mayAdd =
-    access !== null && (access.canManage || (access.canStartTrial && (plan.phase === 'trial' || plan.phase === 'none')));
   const askWho = access?.ownerName ?? 'your organization owner';
-  const planNoteFor = (state: ModuleState): string | null => {
+
+  /**
+   * The one quiet line under an app's tagline (docs/billing/SPEC.md 9.5). The same PlanState drives
+   * billing home and the plan notice above the page, so the words never disagree. An app that is
+   * simply on and paid for says nothing.
+   */
+  const planNoteFor = (state: ModuleState): LauncherPlanNote | null => {
     switch (state.badge) {
       case 'trial':
         if (!plan.trial) return null;
-        return plan.phase === 'active'
-          ? `Free trial. First payment on ${formatDayShort(plan.nextCharge?.at ?? plan.trial.endsAt, timeZone)}.`
-          : `${plural(plan.trial.daysLeft, 'day', 'days')} left in your free trial`;
+        return {
+          tone: 'muted',
+          text:
+            plan.phase === 'active'
+              ? `Free trial. First payment on ${formatDayShort(plan.nextCharge?.at ?? plan.trial.endsAt, timeZone)}.`
+              : `${plural(plan.trial.daysLeft, 'day', 'days')} left in your free trial`,
+        };
       case 'past_due':
-        return plan.pastDue ? `Payment due. Open until ${formatDayShort(plan.pastDue.accessChangesAt, timeZone)}.` : 'Payment due';
+        return {
+          tone: 'warning',
+          text: plan.pastDue ? `Payment past due. Open until ${formatDayShort(plan.pastDue.accessChangesAt, timeZone)}.` : 'Payment past due',
+        };
       case 'view_only':
-        // The same fix the plan banner names for this state ("Pick a plan", "Update card", "Start again now").
+        // The same fix the plan notice names for this state ("Pick a plan", "Update card", "Start again now").
         // A person who can pay reads the fix. An admin, who can see billing but cannot pay, reads who to ask.
-        if (access?.canManage) return `View only. ${viewOnlyFix(plan.phase)}`;
-        return access?.canView ? `View only. ${viewOnlyAsk(plan.phase, askWho)}` : `View only. Ask ${askWho} to pick a plan.`;
+        return {
+          tone: 'danger',
+          text: access?.canManage
+            ? `View only. ${viewOnlyFix(plan.phase)}`
+            : access?.canView
+              ? `View only. ${viewOnlyAsk(plan.phase, askWho)}`
+              : `View only. Ask ${askWho} to pick a plan.`,
+        };
       case 'not_in_plan':
-        return mayAdd ? addAppPriceNote(plan, state.module) : `Ask ${askWho} to add it.`;
       case 'included':
       case 'active':
         return null;
     }
   };
-  const addActionFor = (state: ModuleState) =>
-    state.badge === 'not_in_plan' && mayAdd
-      ? {
-          label: plan.phase === 'none' && plan.trialEligible ? 'Start free trial' : plan.phase === 'trial' ? `Add ${CATALOG.products[state.module].shortName}` : 'Add to plan',
-          href: `/billing/plan?add=${state.module}`,
-        }
-      : null;
 
-  const quickLinks: readonly QuickLink[] = [
-    ...(entitledFor('crm')
-      ? [
-          {
-            label: 'New deal',
-            href: `${env.NEXT_PUBLIC_CRM_URL}/${activeOrg.slug}/crm/pipeline`,
-            icon: Plus,
-            external: true,
-          },
-        ]
-      : []),
-    ...(entitledFor('wms')
-      ? [{ label: 'Orders', href: `${env.NEXT_PUBLIC_WMS_URL}/orders`, icon: Package, external: true }]
-      : []),
-    ...(entitledFor('projects')
-      ? [
-          { label: 'New project', href: `${env.NEXT_PUBLIC_PROJECTS_URL}/projects/new`, icon: FolderKanban, external: true },
-          { label: 'My work', href: `${env.NEXT_PUBLIC_PROJECTS_URL}/my-work`, icon: ListChecks, external: true },
-        ]
-      : []),
-    ...(entitledFor('pulse')
-      ? [
-          { label: 'New job', href: `${env.NEXT_PUBLIC_PULSE_URL}/jobs/new`, icon: PackagePlus, external: true },
-          { label: 'Log work', href: `${env.NEXT_PUBLIC_PULSE_URL}/log`, icon: ClipboardPen, external: true },
-        ]
-      : []),
-    { label: 'Billing', href: '/billing', icon: CreditCard, external: false },
-    { label: 'Org settings', href: '/settings/organization', icon: Settings2, external: false },
-  ];
-
-  const ownTiles = modules.filter((state) => state.badge !== 'not_in_plan');
-  const moreTiles = modules.filter((state) => state.badge === 'not_in_plan');
-  const renderTile = (state: ModuleState, index: number, count: number) => {
-    const copy = PRODUCTS[state.module];
-    // An odd last tile spans the row so the grid never ends on a lonely half-width card.
-    const spanRow = count % 2 === 1 && index === count - 1;
-    return (
-      <ProductTile
-        key={state.module}
-        className={spanRow ? 'sm:col-span-2' : undefined}
-        module={state.module}
-        name={copy.name}
-        tagline={copy.tagline}
-        href={productUrl(state.module)}
-        entitled={state.entitled}
-        badge={state.badge}
-        planNote={planNoteFor(state)}
-        addAction={addActionFor(state)}
-        stats={stats[state.module]}
-        emptyStateHref={emptyStateUrl(state.module, activeOrg.slug)}
-      />
-    );
-  };
+  // Apps that are not on the plan are left out; Billing lists them. A view only app still opens.
+  const apps: readonly LauncherApp[] = modules
+    .filter((state) => state.entitled)
+    .map((state) => ({
+      module: state.module,
+      ...PRODUCTS[state.module],
+      href: productUrl(state.module),
+      planNote: planNoteFor(state),
+    }));
 
   return (
-    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-8">
-      <section className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-fg-muted">{activeOrg.name}</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-fg">
-            Good to see you, {firstName(session.user.name)}
-          </h1>
-        </div>
-        {/*
-          The apps this person has, one press away at the very top, above the setup guide. On a
-          laptop and on a phone the app they signed up for is on the first screen, whatever the
-          guide and the banners above the tiles take.
-        */}
-        {ownTiles.length > 0 ? (
-          <nav aria-label="Open an app" data-testid="launcher-open" className="flex flex-wrap gap-2">
-            {ownTiles.map((state) => (
-              <a
-                key={state.module}
-                href={productUrl(state.module)}
-                target="_blank"
-                rel="noopener"
-                data-testid={`launcher-open-${state.module}`}
-                className={cn(
-                  'inline-flex h-10 items-center gap-2 rounded-lg border border-border-default bg-panel pr-3.5 pl-2 text-sm font-semibold text-fg shadow-xs pointer-coarse:h-11',
-                  'transition-colors duration-[var(--duration-fast)] hover:border-border-strong hover:bg-muted',
-                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-                )}
-              >
-                <AppIcon app={state.module} size={22} />
-                Open {CATALOG.products[state.module].shortName}
-              </a>
-            ))}
-          </nav>
-        ) : null}
-      </section>
-
-      {showSetupGuide ? (
-        <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManageSetup} />
-      ) : null}
-
-      {/*
-        The apps this organization has (in its trial or its plan) come first, so the app a person
-        signed up for is on the first screen under the guide, also on a phone. The rest sit below
-        under "More apps", each with its price. An organization with no plan yet sees all four.
-      */}
-      <section aria-label="Your apps" data-testid="launcher-apps" className="grid gap-4 sm:grid-cols-2">
-        {(ownTiles.length > 0 ? ownTiles : moreTiles).map((state, index, list) => renderTile(state, index, list.length))}
-      </section>
-
-      {ownTiles.length > 0 && moreTiles.length > 0 ? (
-        <section aria-labelledby="more-apps-heading" data-testid="launcher-more-apps">
-          <h2 id="more-apps-heading" className="text-2xs font-semibold tracking-[0.08em] text-fg-muted uppercase">
-            More apps
-          </h2>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">{moreTiles.map((state, index, list) => renderTile(state, index, list.length))}</div>
-        </section>
-      ) : null}
-
-      {entitledFor('pulse') && pulseAttention ? (
-        <PulseAttentionPanel attention={pulseAttention} pulseUrl={env.NEXT_PUBLIC_PULSE_URL} />
-      ) : null}
-
-      {entitledFor('projects') ? (
-        <CustomerWorkPanel rows={customerWork} projectsUrl={env.NEXT_PUBLIC_PROJECTS_URL} />
-      ) : null}
-
-      <section aria-label="Quick links">
-        <h2 className="text-2xs font-semibold tracking-[0.08em] text-fg-muted uppercase">Quick links</h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {quickLinks.map((link) => (
-            <QuickLinkChip key={link.label} link={link} />
-          ))}
-        </div>
-      </section>
-
-      {glance ? (
-        <section aria-label="Organization at a glance">
-          <h2 className="text-2xs font-semibold tracking-[0.08em] text-fg-muted uppercase">
-            {activeOrg.name} at a glance
-          </h2>
-          <div className="mt-3 grid grid-cols-1 divide-y divide-border-subtle rounded-xl border border-border-default bg-panel shadow-xs sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            <GlanceCell
-              item={{
-                label: glance.memberCount === 1 ? 'Member' : 'Members',
-                value: String(glance.memberCount),
-                icon: Users,
-              }}
-            />
-            <GlanceCell
-              item={{
-                // Counts the licensed apps (CRM, WMS, Projects, Pulse); the Portal itself is always on.
-                label: 'Apps on your plan',
-                value: `${modules.filter((state) => state.entitled).length} of ${modules.length} apps`,
-                icon: LayoutGrid,
-              }}
-            />
-            <GlanceCell
-              item={{
-                label: 'Org created',
-                value: glanceDateFormat.format(glance.createdAt),
-                icon: CalendarDays,
-              }}
-            />
-          </div>
-        </section>
-      ) : null}
-
-      {devAllowAll && !isProduction() ? (
-        // For the people who build KitStak, on their own machines. Never on a customer page.
-        <p className="flex items-center gap-2 text-xs text-fg-muted">
-          <Badge tone="info">Dev</Badge>
-          Every app is open on this environment. In production, access follows your plan.
-        </p>
-      ) : null}
+    <div className="mx-auto flex w-full max-w-[1110px] flex-col gap-8">
+      <h1 className="text-2xl font-semibold tracking-[-0.02em] text-fg sm:text-[40px] sm:leading-[48px]">Your apps</h1>
+      {apps.length > 0 ? (
+        <AppLauncher apps={apps} />
+      ) : (
+        <NoAppsOnPlan
+          canSeeBilling={access?.canView ?? false}
+          canStartTrial={(access?.canStartTrial ?? false) && plan.phase === 'none' && plan.trialEligible}
+          askWho={askWho}
+        />
+      )}
     </div>
   );
 }
