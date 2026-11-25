@@ -67,7 +67,7 @@ An order with a packing warning type shows its warning when the order is display
 
 Complete closes the open package for you. The result panel shows the status, tracking number and print status. Select **Pack next order** to open the next order from the same tote or cart, or **Scan next**.
 
-If the order type ships automatically, a packed order with a label is shipped straight away.
+If the order has **Is Auto Ship** set, a packed order that reaches **Ready to Ship** with a label is shipped straight away.
 
 ## Messages you may see
 
