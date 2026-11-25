@@ -1,6 +1,6 @@
 ---
 title: Receive returns at the return station
-description: Set up the return station, scan an RMA, order code or tracking number, receive each item with a condition, close a return short, or receive a manual return with no RMA.
+description: Set up the return station, scan an RMA or tracking number, receive each item with a condition, close a return short, or receive a manual return.
 section: Returns
 order: 30
 ---

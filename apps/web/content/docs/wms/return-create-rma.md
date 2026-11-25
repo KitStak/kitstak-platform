@@ -1,6 +1,6 @@
 ---
 title: Create an RMA
-description: Create a return order from a shipped shipment order, choose the items and quantities, add return reasons, and buy a prepaid return label or record the customer's.
+description: Create a return order from a shipped order, choose the items and quantities, add return reasons, and buy a return label or record the customer's tracking.
 section: Returns
 order: 20
 ---

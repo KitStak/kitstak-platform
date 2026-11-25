@@ -1,6 +1,6 @@
 ---
 title: Picking job types and batch templates
-description: Set up picking job types for single-item batches, identical-order batches, multi-item sort, putwall and retailer flows, with batch sizes, conditions and pick sequence.
+description: Set up picking job types for single-item, identical-order, multi-item, putwall and retailer flows, with batch sizes, conditions and pick sequence.
 section: Outbound
 order: 70
 ---

@@ -1,6 +1,6 @@
 ---
 title: Return rules and dispositions
-description: The eight Return Process rules KitStak enforces on every return receipt, the messages they show, and where Restock, Damaged, Quarantine and Dispose put the stock.
+description: The eight Return Process rules KitStak enforces on every return receipt, their messages, and where Restock, Damaged, Quarantine and Dispose put stock.
 section: Returns
 order: 40
 ---
