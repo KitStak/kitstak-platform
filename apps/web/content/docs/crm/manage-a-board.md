@@ -71,7 +71,7 @@ You can also duplicate from the board’s menu in the Workspaces tree.
 
 ## Archive or delete a board
 
-- **Archive board** keeps the board but makes it read-only. A banner says **This board is archived. It’s read-only until you restore it.** People with edit access can select **Restore board**.
+- **Archive board** keeps the board but makes it read-only. You return to Home, and a toast offers **Undo**. A banner says **This board is archived. It’s read-only until you restore it.** People with edit access can select **Restore board**.
 - **Delete board…** asks you to confirm **Delete board**. The board and all its items move to the trash. You can undo right after, or restore it from the trash for 30 days.
 
 If someone else deletes a board while you have it open, you see that it is in the trash and that a board owner can restore it.

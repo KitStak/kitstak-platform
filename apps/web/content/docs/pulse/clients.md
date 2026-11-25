@@ -9,7 +9,7 @@ A client is a company you do work for. Every job belongs to one client, so profi
 
 ## Before you start
 
-- Adding and editing clients needs an admin or the owner, in **Settings > Catalogs**. A manager can also add a client while adding a job: type a new name and Pulse adds it.
+- Adding and editing clients needs a manager, admin or owner, in **Settings > Catalogs**. You can also add a client while adding a job: type a new name and Pulse adds it.
 - Client money shows only to people who see money.
 
 ## Add a client

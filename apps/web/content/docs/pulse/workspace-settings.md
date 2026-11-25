@@ -9,7 +9,7 @@ order: 10
 
 ## Before you start
 
-- Only an admin or the owner can change settings. Others see **Only an admin can change these settings.**
+- Only an admin or the owner can change most settings. Others see **Only an admin can change these settings.** Managers can also change job types and catalogs.
 - Supervisors do not see Settings.
 
 ## The Workspace sections

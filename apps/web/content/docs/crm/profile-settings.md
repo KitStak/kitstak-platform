@@ -12,7 +12,7 @@ Your profile tells teammates who you are when you are assigned, mentioned or lis
 1. Select your avatar in the top bar.
 2. Select **My profile** (or **Preferences**).
 
-The page is **My profile**. Its tabs are **Personal info**, **Preferences**, **Notifications**, **Password & sessions** and **API tokens**.
+The page is **My profile**. Its tabs are **Personal info**, **Preferences**, **Notifications**, **Password & sessions** and, when your role can create tokens, **API tokens**.
 
 ## Personal info
 

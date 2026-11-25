@@ -11,7 +11,7 @@ Every workspace starts with the built in job type **General**. Quick add uses it
 
 ## Before you start
 
-- Adding and changing job types needs an admin or the owner, because they live in Settings.
+- Adding and changing job types needs a manager, admin or owner.
 
 ## Add a job type
 

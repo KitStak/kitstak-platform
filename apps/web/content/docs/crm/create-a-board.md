@@ -57,7 +57,7 @@ A toast confirms the workspace is ready, with the number of connected boards cre
 
 ## Save a board as a template
 
-Open a board’s menu (**More board actions**) and select **Save as template**. You need edit access to the board.
+Open a board’s menu (**More board actions**) and select **Save as template**. You need edit access to the board. KitStak makes a copy of the board’s structure named after it, for example `Q3 enterprise pipeline template`, and a toast confirms **Saved as a template**. The copy keeps the columns, groups and views, without items.
 
 ## Rules
 

@@ -5,7 +5,7 @@ section: Jobs
 order: 10
 ---
 
-The **Jobs** page lists every job, with the ones at risk or losing money first. Use it each morning to see which open jobs need you, and why. The number on the **Jobs** link in the top bar counts the open jobs at risk or losing money.
+The **Jobs** page lists every job, with the ones at risk or losing money first. Use it each morning to see which open jobs need you, and why. The number on the **Jobs** link in the top bar counts the open jobs that need you.
 
 ## Before you start
 

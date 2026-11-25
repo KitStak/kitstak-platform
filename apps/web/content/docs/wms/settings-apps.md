@@ -32,7 +32,7 @@ To deactivate, select **Activated** on the card and confirm with **Yes, deactiva
 | **Scale** | Live weight capture at the packing station with USB scales in Chrome and Edge, and weight variance warnings before a label prints. | **Scale unit**, **Variance warning above** (percent), **Capture automatically when the reading is stable**, **Baud rate**. |
 | **Custom Branding** | Your accent color across the app, on printouts and in emails, and your logo on printouts and a sign-in page message. | **Accent color**, **Use the accent color in the app**, **Show the company logo on printouts**, **Use the accent color for printout headings**, **Sign-in page message**, **Email footer**. |
 | **Single sign-on (SSO)** | The SSO button on the sign-in page, SAML 2.0 service provider metadata and the option to require SSO. | See [Single sign-on with OpenID Connect and SAML](/docs/wms/sso-single-sign-on). |
-| **API User** | API users with token access for integrations. **Open** shows the API users on the **Users** list. | **Token lifetime**: 1 to 365 days. |
+| **API User** | API users with token access for integrations. **Show API users** opens them on the **Users** list. | **Token lifetime**: 1 to 365 days. |
 | **Two Boxes** | Ship one order in two boxes from the packing station, with two labels and box level contents. | **Max boxes per order**: 2 to 10. |
 | **AI Jobs** | The AI Job type in Wave Rules, built by walking distance and cart capacity. | **Max orders per AI job** (1 to 500), **Optimize for**. |
 
