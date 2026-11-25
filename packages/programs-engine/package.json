@@ -20,6 +20,7 @@
     "./projection": "./src/projection.ts",
     "./deal": "./src/deal.ts",
     "./format": "./src/format.ts",
+    "./messages": "./src/messages.ts",
     "./barcode": "./src/barcode.ts",
     "./types": "./src/types.ts"
   },

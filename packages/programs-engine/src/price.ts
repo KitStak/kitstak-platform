@@ -5,6 +5,7 @@
  * scaled `bigint`.
  */
 import { formatCents, formatUnitPrice } from './format';
+import { type ValueProblem, valueMessage } from './messages';
 import { type Cents, ZERO, fromScaled, priceToScaled, toCents } from './money';
 import type { CardLine, CardVersion, IsoDate, JobPriceRow, PriceLineKind, PriceSource, RateRule } from './types';
 
@@ -89,13 +90,14 @@ export const MAX_AMOUNT_CENTS = BigInt('10000000000000');
 export const MAX_HOUR_RATE_CENTS = 10000000;
 
 const PLAIN_DECIMAL = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
-const GROUPED_WHOLE = /^\d{1,3}(,\d{3})+$/;
+const GROUPED_WHOLE = /^[1-9]\d{0,2}(,\d{3})+$/;
 
 /**
  * Reads a rate the way people type it: `2.05`, `$2.05`, `$ 2.05`, `2,050.00` or `-$1.00`. A
  * comma must group thousands (`1,5` is refused, so a European decimal comma is never read as 15).
- * More than 4 decimals is refused unless the extra digits are zeros (`1.23450` is fine), a value
- * below $0 is refused (unless `allowNegative`, for an "add" rate rule that takes off), and a
+ * A leading zero group (`0,500`, a European 0.5) is refused too, never read as 500. More than 4
+ * decimals is refused unless the extra digits are zeros (`1.23450` is fine), a value below $0 is
+ * refused (unless `allowNegative`, for an "add" rate rule that takes off), and a
  * value at or above $1,000,000 (the database CHECK) is refused. Nothing is rounded quietly.
  */
 export function readRateText(text: string | number, options: { readonly allowNegative?: boolean } = {}): { readonly ok: true; readonly scaled: bigint; readonly price: string } | { readonly ok: false; readonly problem: RateTextProblem } {
@@ -125,46 +127,41 @@ export function readRateText(text: string | number, options: { readonly allowNeg
   return { ok: true, scaled, price: fromScaled(scaled, 4) };
 }
 
-/** UI copy for a build rate below $0 (the same floor the card rate rules use). */
-export const NEGATIVE_BUILD_RATE_MESSAGE = 'A build rate cannot be less than $0.';
-/** UI copy for a build rate with more than 4 decimals. */
-export const BUILD_RATE_DECIMALS_MESSAGE = 'Use up to 4 decimals for a build rate.';
-/** UI copy for any price card line below $0 (per unit, per batch, per hour, monthly fee or minimum). */
-export const NEGATIVE_RATE_MESSAGE = 'A rate cannot be less than $0.';
-/** UI copy for a card rate with more than 4 decimals. */
-export const RATE_DECIMALS_MESSAGE = 'Use up to 4 decimals for a rate.';
-/** UI copy for a rate above what the database holds. */
-export const RATE_TOO_LARGE_MESSAGE = 'The rate is too large. Use up to $999,999.9999.';
-
-/** UI copy for a typed rate that cannot be read (`readRateText`). */
-export function rateTextMessage(problem: RateTextProblem, text: string | number): string {
+/** The message table problem for a `readRateText` problem. */
+export function rateTextProblem(problem: RateTextProblem): ValueProblem {
   switch (problem) {
     case 'not_number':
-      return `The rate ${String(text).trim()} is not a number.`;
+      return 'not_a_number';
     case 'too_many_decimals':
-      return RATE_DECIMALS_MESSAGE;
+      return 'decimals';
     case 'below_zero':
-      return NEGATIVE_RATE_MESSAGE;
+      return 'negative';
     case 'too_large':
-      return RATE_TOO_LARGE_MESSAGE;
+      return 'too_large';
   }
+}
+
+/** UI copy for a build rate below $0 (the same floor the card rate rules use). */
+export const NEGATIVE_BUILD_RATE_MESSAGE = valueMessage('build_rate', 'negative');
+/** UI copy for a build rate with more than 4 decimals. */
+export const BUILD_RATE_DECIMALS_MESSAGE = valueMessage('build_rate', 'decimals');
+/** UI copy for any price card line below $0 (per unit, per batch, per hour, monthly fee or minimum). */
+export const NEGATIVE_RATE_MESSAGE = valueMessage('rate', 'negative');
+/** UI copy for a card rate with more than 4 decimals. */
+export const RATE_DECIMALS_MESSAGE = valueMessage('rate', 'decimals');
+/** UI copy for a rate above what the database holds. */
+export const RATE_TOO_LARGE_MESSAGE = valueMessage('rate', 'too_large');
+
+/** UI copy for a typed rate that cannot be read (`readRateText`), from the shared message table. `where` names a grid cell. */
+export function rateTextMessage(problem: RateTextProblem, text: string | number, where?: string): string {
+  return valueMessage('rate', rateTextProblem(problem), where, String(text));
 }
 
 /** What is wrong with a build rate someone typed, as UI copy, or null when it is blank or fine. `$2.05` and `2,050.00` are fine. */
 export function buildRateProblem(rate: string | null | undefined): string | null {
   if (isBlank(rate)) return null;
   const read = readRateText(rate);
-  if (read.ok) return null;
-  switch (read.problem) {
-    case 'not_number':
-      return `The build rate ${rate.trim()} is not a number.`;
-    case 'too_many_decimals':
-      return BUILD_RATE_DECIMALS_MESSAGE;
-    case 'below_zero':
-      return NEGATIVE_BUILD_RATE_MESSAGE;
-    case 'too_large':
-      return RATE_TOO_LARGE_MESSAGE;
-  }
+  return read.ok ? null : valueMessage('build_rate', rateTextProblem(read.problem), undefined, rate);
 }
 
 function wholeCentsProblem(amount: string, what: string): string | null {

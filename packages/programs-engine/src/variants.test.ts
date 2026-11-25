@@ -637,23 +637,23 @@ describe('inferAxes never makes an axis from a stray cell', () => {
       [{ Size: 'Small', Color: 'Yellow' }, '100'],
       [{ Size: 'Large', Color: 'Brown' }, '1200'],
     ]);
-    expect(result.unmatched).toEqual([{ line: 2, raw: 'Small,Brown,0,500', why: 'This row has 4 cells. The header has 3. Put a number like 1,200 in quotes, or type it as 1200.' }]);
+    expect(result.unmatched).toEqual([{ line: 2, raw: 'Small,Brown,0,500', why: 'Row 2 has more cells than the header. It has 4 cells and the header has 3. Put a number like 1,200 in quotes, or type it as 1200.' }]);
   });
   it('names a split thousands number', () => {
     const result = inferAxes({ text: 'Size,Color,Qty\nSmall,Brown,1,200\nSmall,Yellow,100' });
-    expect(result.unmatched[0]?.why).toBe('This row has 4 cells. The header has 3. Put "1,200" in quotes, or type it as 1200.');
+    expect(result.unmatched[0]?.why).toBe('Row 2 has more cells than the header. It has 4 cells and the header has 3. Put "1,200" in quotes, or type it as 1200.');
     expect(result.axes.map((axis) => axis.values.map((value) => value.label))).toEqual([['Small'], ['Yellow']]);
   });
   it('a stray text cell gets the plain fix', () => {
     const result = inferAxes({ text: 'Size\tColor\nSmall\tBrown\tOops\nSmall\tYellow' });
-    expect(result.unmatched[0]?.why).toBe('This row has 3 cells. The header has 2. Take out the extra tab.');
+    expect(result.unmatched[0]?.why).toBe('Row 2 has more cells than the header. It has 3 cells and the header has 2. Take out the extra tab.');
     expect(result.rows).toHaveLength(1);
   });
   it('with no header, a row longer than most rows is listed instead of adding a column', () => {
     const result = inferAxes({ text: 'Small,Brown,100\nSmall,Yellow,100\nMedium,Brown,0,500' });
     expect(result.axes).toHaveLength(2);
     expect(result.rows).toHaveLength(2);
-    expect(result.unmatched).toEqual([{ line: 3, raw: 'Medium,Brown,0,500', why: 'This row has 4 cells. Most rows have 3. Put a number like 1,200 in quotes, or type it as 1200.' }]);
+    expect(result.unmatched).toEqual([{ line: 3, raw: 'Medium,Brown,0,500', why: 'Row 3 has more cells than most rows. It has 4 cells and most rows have 3. Put a number like 1,200 in quotes, or type it as 1200.' }]);
   });
   it('the qty words match the imports', () => {
     const result = inferAxes({ text: 'Size,Color,Qty\nSmall,Brown,-4\nSmall,Yellow,ten' });

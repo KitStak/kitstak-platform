@@ -408,7 +408,7 @@ function readLongRows(
   const limit = expected.kind === 'header' ? expected.cells : Math.max(...used.map((column) => column.index)) + 1;
   for (const row of body) {
     if (filledWidth(row.cells) > limit) {
-      unmatched.push({ line: row.line, raw: row.raw, why: extraCellsMessage(row.cells, expected, sheet.delimiter) });
+      unmatched.push({ line: row.line, raw: row.raw, why: extraCellsMessage(row.cells, expected, sheet.delimiter, row.line) });
       continue;
     }
     const dateCell = row.cells[columns.date] ?? '';
@@ -491,7 +491,7 @@ function readGrid(
   for (const row of sheet.rows.slice(1)) {
     // A row with more cells than the header would put its qtys under the wrong dates, so it is left out.
     if (filledWidth(row.cells) > headerCells) {
-      unmatched.push({ line: row.line, raw: row.raw, why: extraCellsMessage(row.cells, { kind: 'header', cells: headerCells }, sheet.delimiter) });
+      unmatched.push({ line: row.line, raw: row.raw, why: extraCellsMessage(row.cells, { kind: 'header', cells: headerCells }, sheet.delimiter, row.line) });
       continue;
     }
     const token = row.cells[0] ?? '';

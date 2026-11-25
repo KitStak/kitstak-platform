@@ -8,6 +8,7 @@ export * from './types';
 export * from './money';
 export * from './calendar';
 export * from './format';
+export * from './messages';
 export * from './price';
 export * from './accrual';
 export * from './month';

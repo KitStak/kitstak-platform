@@ -96,7 +96,7 @@ describe('parseOutputCsv', () => {
       [5, 'This row has no qty.'],
       [6, 'The qty ten is not a number.'],
       [7, 'The qty cannot be less than 0.'],
-      [8, 'This row has 4 cells. A row needs 3: date, SKU or variant, and qty. Take out the extra comma, or put a cell that has a comma in quotes.'],
+      [8, 'Row 8 has more cells than the columns read. It has 4 cells and a row needs 3: date, SKU or variant, and qty. Take out the extra comma, or put a cell that has a comma in quotes.'],
     ]);
   });
   it('adds up lines for the same variant and day and says which lines were combined', () => {
@@ -446,15 +446,15 @@ describe('a leading zero thousands group is never a number', () => {
 });
 
 describe('a row with more cells than the sheet has columns is never read in part', () => {
-  const SPLIT = 'This row has 4 cells. The header has 3. Put "1,200" in quotes, or type it as 1200.';
-  const LIKE = 'This row has 4 cells. The header has 3. Put a number like 1,200 in quotes, or type it as 1200.';
+  const SPLIT = (line: number): string => `Row ${line} has more cells than the header. It has 4 cells and the header has 3. Put "1,200" in quotes, or type it as 1200.`;
+  const LIKE = (line: number): string => `Row ${line} has more cells than the header. It has 4 cells and the header has 3. Put a number like 1,200 in quotes, or type it as 1200.`;
   it('an output CSV with an unquoted 1,200 or 0,500 lists the row, with the header', () => {
     const text = ['date,sku,qty', '2026-11-02,GLOVE-S-BRN,1,200', '2026-11-02,GLOVE-S-YLW,0,500', '2026-11-02,GLOVE-M-BRN,"1,200"'].join('\n');
     const result = parseOutputCsv({ text, variants: MATCHES });
     expect(result.rows).toEqual([{ workDate: '2026-11-02', variantId: 'v-M-BRN', qty: '1200.000', scrapQty: '0.000' }]);
     expect(result.unmatched).toEqual([
-      { line: 2, raw: '2026-11-02,GLOVE-S-BRN,1,200', why: SPLIT },
-      { line: 3, raw: '2026-11-02,GLOVE-S-YLW,0,500', why: LIKE },
+      { line: 2, raw: '2026-11-02,GLOVE-S-BRN,1,200', why: SPLIT(2) },
+      { line: 3, raw: '2026-11-02,GLOVE-S-YLW,0,500', why: LIKE(3) },
     ]);
   });
   it('a plan CSV with an unquoted 1,200 or 0,500 lists the row, with the header', () => {
@@ -462,8 +462,8 @@ describe('a row with more cells than the sheet has columns is never read in part
     const result = parsePlanCsv({ text, variants: MATCHES });
     expect(result.rows).toEqual([{ buildDate: '2026-11-30', variantId: 'v-M-BRN', qty: '1200.000' }]);
     expect(result.unmatched.map((row) => [row.line, row.why])).toEqual([
-      [2, SPLIT],
-      [3, LIKE],
+      [2, SPLIT(2)],
+      [3, LIKE(3)],
     ]);
   });
   it('without a header the row is held to the columns read', () => {
@@ -473,12 +473,12 @@ describe('a row with more cells than the sheet has columns is never read in part
       ['v-M-BRN', '7.000', '0.000'],
     ]);
     expect(output.unmatched.map((row) => [row.line, row.why])).toEqual([
-      [2, 'This row has 4 cells. A row needs 3: date, SKU or variant, and qty. Put "1,200" in quotes, or type it as 1200.'],
-      [4, 'This row has 4 cells. A row needs 3: date, SKU or variant, and qty. Put a number like 1,200 in quotes, or type it as 1200.'],
+      [2, 'Row 2 has more cells than the columns read. It has 4 cells and a row needs 3: date, SKU or variant, and qty. Put "1,200" in quotes, or type it as 1200.'],
+      [4, 'Row 4 has more cells than the columns read. It has 4 cells and a row needs 3: date, SKU or variant, and qty. Put a number like 1,200 in quotes, or type it as 1200.'],
     ]);
     const plan = parsePlanCsv({ text: ['2026-11-30,GLOVE-S-BRN,10', '2026-11-30,GLOVE-S-YLW,1,200'].join('\n'), variants: MATCHES });
     expect(plan.rows).toEqual([{ buildDate: '2026-11-30', variantId: 'v-S-BRN', qty: '10.000' }]);
-    expect(plan.unmatched[0]?.why).toBe('This row has 4 cells. A row needs 3: date, SKU or variant, and qty. Put "1,200" in quotes, or type it as 1200.');
+    expect(plan.unmatched[0]?.why).toBe('Row 2 has more cells than the columns read. It has 4 cells and a row needs 3: date, SKU or variant, and qty. Put "1,200" in quotes, or type it as 1200.');
   });
   it('a scrap column every row fills is still read', () => {
     const result = parseOutputCsv({ text: ['2026-11-02,GLOVE-S-BRN,10,1', '2026-11-02,GLOVE-S-YLW,7,0'].join('\n'), variants: MATCHES });
@@ -494,13 +494,13 @@ describe('a row with more cells than the sheet has columns is never read in part
       { buildDate: '2026-11-30', variantId: 'v-S-YLW', qty: '10.000' },
       { buildDate: '2026-12-01', variantId: 'v-S-YLW', qty: '20.000' },
     ]);
-    expect(result.unmatched.map((row) => [row.line, row.why])).toEqual([[2, 'This row has 4 cells. The header has 3. Put "1,200" in quotes, or type it as 1200.']]);
+    expect(result.unmatched.map((row) => [row.line, row.why])).toEqual([[2, 'Row 2 has more cells than the header. It has 4 cells and the header has 3. Put "1,200" in quotes, or type it as 1200.']]);
   });
   it('a tab or semicolon sheet names the extra delimiter', () => {
     const tabs = parsePlanPaste({ text: ['date\tsku\tqty', '2026-11-30\tGLOVE-S-BRN\t10\t5'].join('\n'), variants: MATCHES, dates: WEEK });
-    expect(tabs.unmatched[0]?.why).toBe('This row has 4 cells. The header has 3. Take out the extra tab.');
+    expect(tabs.unmatched[0]?.why).toBe('Row 2 has more cells than the header. It has 4 cells and the header has 3. Take out the extra tab.');
     const semis = parseOutputCsv({ text: ['date;sku;qty', '2026-11-30;GLOVE-S-BRN;10;5'].join('\n'), variants: MATCHES });
-    expect(semis.unmatched[0]?.why).toBe('This row has 4 cells. The header has 3. Take out the extra semicolon.');
+    expect(semis.unmatched[0]?.why).toBe('Row 2 has more cells than the header. It has 4 cells and the header has 3. Take out the extra semicolon.');
   });
   it('blank cells past the header are fine', () => {
     const result = parseOutputCsv({ text: ['date,sku,qty', '2026-11-02,GLOVE-S-BRN,10,,'].join('\n'), variants: MATCHES });

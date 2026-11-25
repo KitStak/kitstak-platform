@@ -3,7 +3,7 @@ import { eachDay, isWorkDay, workDaysInMonth } from './calendar';
 import { CALENDAR, OPEN_CALENDAR, PROGRAM_ID, SETUP, VARIANTS, VERSIONS, line, outputFor, seeded } from './glove.fixture';
 import { type MonthInput, accrueRow, buildDayRef, feeRef, fixedLineForMonth, laborRef, ledgerRows, minimumStatusLabel, monthCharges, parseRef } from './month';
 import { fromScaled } from './money';
-import type { CardVersion, FinishedBuild, IsoDate, OneTimeCharge, TimeDay } from './types';
+import type { CardVersion, FinishedBuild, IsoDate, IsoMonth, OneTimeCharge, TimeDay } from './types';
 
 const ZERO = BigInt(0);
 
@@ -96,7 +96,7 @@ describe('GLOVE months (E14 to E16)', () => {
   });
 });
 
-describe('fixed lines across versions', () => {
+describe('fixed lines across versions (Appendix B.1)', () => {
   const fee = (id: string, from: IsoDate, cents: string | null, prorate: boolean, chargeWhilePaused = true): CardVersion => ({
     id,
     number: null,
@@ -104,215 +104,190 @@ describe('fixed lines across versions', () => {
     rules: [],
     lines: cents === null ? [line({ id: `${id}-unit`, kind: 'per_unit', unitPrice: '1.00' })] : [line({ id: `${id}-fee`, kind: 'flat_monthly', amountCents: cents, prorate, chargeWhilePaused })],
   });
-  it('E19 a change on day 16 splits the fee by days', () => {
-    const result = fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions: [fee('a', '2026-11-01', '150000', true), fee('b', '2026-11-16', '180000', true)], kind: 'flat_monthly' });
+  const run = (calendar: typeof OPEN_CALENDAR, versions: CardVersion[], monthKey: IsoMonth = '2026-11') => fixedLineForMonth({ month: monthKey, calendar, versions, kind: 'flat_monthly' });
+  const pieces = (result: ReturnType<typeof run>) => result.segments.map((segment) => [segment.versionIds.join('+'), segment.from, segment.to, segment.days, segment.cents]);
+  const PAUSED_9_TO_15 = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-09', to: '2026-11-15' }] };
+
+  it('E19 a change on day 16 splits the fee by days and rounds once', () => {
+    const result = run(OPEN_CALENDAR, [fee('a', '2026-11-01', '150000', true), fee('b', '2026-11-16', '180000', true)]);
     expect(result.cents).toBe(BigInt(165000));
-    expect(result.segments.map((segment) => [segment.versionId, segment.from, segment.to, segment.days, segment.cents])).toEqual([
+    expect(result.billableDays).toBe(30);
+    expect(pieces(result)).toEqual([
       ['a', '2026-11-01', '2026-11-15', 15, BigInt(75000)],
       ['b', '2026-11-16', '2026-11-30', 15, BigInt(90000)],
     ]);
+    expect(result.segments[0]).toMatchObject({ versionId: 'a', lineId: 'a-fee', amountCents: BigInt(150000), prorate: true, chargeWhilePaused: true });
   });
   it('E33 mixed options never charge more than one month', () => {
-    const result = fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions: [fee('v1', '2026-11-01', '150000', false), fee('v3', '2026-11-16', '180000', true)], kind: 'flat_monthly' });
-    expect(result.cents).toBe(BigInt(165000));
+    expect(run(OPEN_CALENDAR, [fee('v1', '2026-11-01', '150000', false), fee('v3', '2026-11-16', '180000', true)]).cents).toBe(BigInt(165000));
   });
-  it('E34 a fee that starts mid month', () => {
-    const result = fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions: [fee('v1', '2026-11-01', null, true), fee('v2', '2026-11-16', '180000', false)], kind: 'flat_monthly' });
+  it('E34 a fee that starts mid month pays its share of the billable days', () => {
+    // B = 30 (every active day counts, with or without the line), so divRound(180000 * 15, 30).
+    const result = run(OPEN_CALENDAR, [fee('v1', '2026-11-01', null, true), fee('v2', '2026-11-16', '180000', false)]);
     expect(result.cents).toBe(BigInt(90000));
+    expect(result.billableDays).toBe(30);
   });
-  it('E35 a program that starts Sep 15 with the full fee', () => {
+  it('E35 a program that starts Sep 15 with prorate off pays the full fee', () => {
     const result = fixedLineForMonth({ month: '2026-09', calendar: CALENDAR, versions: [fee('v1', '2026-09-01', '150000', false)], kind: 'flat_monthly' });
     expect(result.cents).toBe(BigInt(150000));
+    expect(result.billableDays).toBe(16);
   });
-  it('E36 paused days and charge while paused', () => {
-    const paused = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-09', to: '2026-11-15' }] };
-    expect(fixedLineForMonth({ month: '2026-11', calendar: paused, versions: [fee('v1', '2026-11-01', '150000', true, false)], kind: 'flat_monthly' }).cents).toBe(BigInt(115000));
-    expect(fixedLineForMonth({ month: '2026-11', calendar: paused, versions: [fee('v1', '2026-11-01', '150000', true, true)], kind: 'flat_monthly' }).cents).toBe(BigInt(150000));
+  it('E36 paused days and charge while paused, prorate on', () => {
+    expect(run(PAUSED_9_TO_15, [fee('v1', '2026-11-01', '150000', true, false)]).cents).toBe(BigInt(115000));
+    expect(run(PAUSED_9_TO_15, [fee('v1', '2026-11-01', '150000', true, true)]).cents).toBe(BigInt(150000));
   });
-  it('prorate off, charge while paused off, paused Nov 9 to 15 = 115000 (prorate never changes how a pause bills)', () => {
-    const paused = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-09', to: '2026-11-15' }] };
-    // Active all month, so A = D = 30 and prorate has no effect: the 7 paused days leave d only.
-    expect(fixedLineForMonth({ month: '2026-11', calendar: paused, versions: [fee('v1', '2026-11-01', '150000', false, false)], kind: 'flat_monthly' }).cents).toBe(BigInt(115000));
-    // Paused Nov 2 to 30 leaves one day that charges: divRound(150000 * 1, 30) = 5000, with prorate on or off.
-    const most = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-02', to: '2026-11-30' }] };
-    expect(fixedLineForMonth({ month: '2026-11', calendar: most, versions: [fee('v1', '2026-11-01', '150000', false, false)], kind: 'flat_monthly' }).cents).toBe(BigInt(5000));
-    expect(fixedLineForMonth({ month: '2026-11', calendar: most, versions: [fee('v1', '2026-11-01', '150000', true, false)], kind: 'flat_monthly' }).cents).toBe(BigInt(5000));
-    // With charge while paused on the pause bills nothing less.
-    expect(fixedLineForMonth({ month: '2026-11', calendar: most, versions: [fee('v1', '2026-11-01', '150000', false, true)], kind: 'flat_monthly' }).cents).toBe(BigInt(150000));
-    // A program that starts Nov 15 with prorate off has A = 16: a pause Nov 20 to 23 leaves 12 of 16 days.
+
+  it('B.1.1 billable days: active days less paused days when the line does not charge while paused', () => {
+    expect(run(PAUSED_9_TO_15, [fee('v1', '2026-11-01', '150000', true, false)]).billableDays).toBe(23);
+    expect(run(PAUSED_9_TO_15, [fee('v1', '2026-11-01', '150000', true, true)]).billableDays).toBe(30);
     const startsMid = { ...OPEN_CALENDAR, activeFrom: '2026-11-15', paused: [{ from: '2026-11-20', to: '2026-11-23' }] };
-    expect(fixedLineForMonth({ month: '2026-11', calendar: startsMid, versions: [fee('v1', '2026-11-01', '150000', false, false)], kind: 'flat_monthly' }).cents).toBe(BigInt(112500));
+    expect(run(startsMid, [fee('v1', '2026-11-01', '150000', false, false)]).billableDays).toBe(12);
   });
-  it('a program that ends mid month and a month fully paused', () => {
-    const ending = { ...OPEN_CALENDAR, activeTo: '2026-11-10' };
-    expect(fixedLineForMonth({ month: '2026-11', calendar: ending, versions: [fee('v1', '2026-11-01', '150000', true)], kind: 'flat_monthly' }).cents).toBe(BigInt(50000));
+
+  it('B.1.4 prorate off is the whole fee for any month with a billable day, whatever the pause', () => {
+    expect(run(PAUSED_9_TO_15, [fee('v1', '2026-11-01', '150000', false, false)]).cents).toBe(BigInt(150000));
+    // Paused Nov 2 to 30 leaves one billable day: the full fee with prorate off, a 30th with it on.
+    const most = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-02', to: '2026-11-30' }] };
+    expect(run(most, [fee('v1', '2026-11-01', '150000', false, false)]).cents).toBe(BigInt(150000));
+    expect(run(most, [fee('v1', '2026-11-01', '150000', true, false)]).cents).toBe(BigInt(5000));
+    expect(run(most, [fee('v1', '2026-11-01', '150000', false, true)]).cents).toBe(BigInt(150000));
+    // Starts Nov 15, paused Nov 20 to 23: B = 12. Prorate off is the full fee, prorate on 12 of 30 days.
+    const startsMid = { ...OPEN_CALENDAR, activeFrom: '2026-11-15', paused: [{ from: '2026-11-20', to: '2026-11-23' }] };
+    expect(run(startsMid, [fee('v1', '2026-11-01', '150000', false, false)]).cents).toBe(BigInt(150000));
+    expect(run(startsMid, [fee('v1', '2026-11-01', '150000', true, false)]).cents).toBe(BigInt(60000));
+  });
+
+  it('B.1.1 a month with no billable day charges nothing, but the line is still in force', () => {
     const allPaused = { ...OPEN_CALENDAR, paused: [{ from: '2026-10-20', to: null }] };
-    // Nothing charges, but the line is still in force (a minimum reads as met, not "No minimum").
-    expect(fixedLineForMonth({ month: '2026-11', calendar: allPaused, versions: [fee('v1', '2026-11-01', '150000', true, false)], kind: 'flat_monthly' })).toEqual({ cents: ZERO, segments: [], inForce: true });
-    expect(fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions: [fee('v1', '2026-11-01', null, true)], kind: 'flat_monthly' })).toEqual({ cents: ZERO, segments: [], inForce: false });
+    for (const prorate of [true, false]) {
+      expect(run(allPaused, [fee('v1', '2026-11-01', '150000', prorate, false)])).toEqual({ cents: ZERO, segments: [], inForce: true, billableDays: 0 });
+    }
+    // With charge while paused on, every paused day counts.
+    expect(run(allPaused, [fee('v1', '2026-11-01', '150000', false, true)]).cents).toBe(BigInt(150000));
+    expect(run(OPEN_CALENDAR, [fee('v1', '2026-11-01', null, true)])).toEqual({ cents: ZERO, segments: [], inForce: false, billableDays: 30 });
+    const ending = { ...OPEN_CALENDAR, activeTo: '2026-11-10' };
+    expect(run(ending, [fee('v1', '2026-11-01', '150000', true)]).cents).toBe(BigInt(50000));
+    expect(run(ending, [fee('v1', '2026-11-01', '150000', false)]).cents).toBe(BigInt(150000));
+    const before = { ...OPEN_CALENDAR, activeFrom: '2026-12-01' };
+    expect(run(before, [fee('v1', '2026-11-01', '150000', true)])).toEqual({ cents: ZERO, segments: [], inForce: false, billableDays: 0 });
   });
-  it('the parts of a month add back to the whole month to the cent', () => {
+
+  it('B.1.2 neighbors on the same terms merge, so a version that only changes other lines never moves the fee', () => {
     const three = [fee('a', '2026-11-01', '100001', true), fee('b', '2026-11-11', '100001', true), fee('c', '2026-11-21', '100001', true)];
-    const result = fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions: three, kind: 'flat_monthly' });
-    expect(result.segments).toHaveLength(3);
+    const result = run(OPEN_CALENDAR, three);
     expect(result.cents).toBe(BigInt(100001));
-    expect(sum(result.segments.map((segment) => segment.cents))).toBe(BigInt(100001));
-    const uneven = [fee('a', '2026-11-01', '100001', true), fee('b', '2026-11-08', '100001', true), fee('c', '2026-11-19', '100001', true)];
-    expect(fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions: uneven, kind: 'flat_monthly' }).cents).toBe(BigInt(100001));
-  });
-  it('a same fee version change on day 16 bills exactly one month', () => {
-    const result = fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions: [fee('a', '2026-11-01', '150001', true), fee('b', '2026-11-16', '150001', true)], kind: 'flat_monthly' });
-    expect(result.cents).toBe(BigInt(150001));
-    expect(result.segments.map((segment) => segment.cents)).toEqual([BigInt(75001), BigInt(75000)]);
-  });
-  it('equal versions without proration and with paused days bill the same as one version', () => {
-    const paused = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-09', to: '2026-11-15' }] };
-    const off = [fee('a', '2026-11-01', '100001', false, false), fee('b', '2026-11-11', '100001', false, false), fee('c', '2026-11-21', '100001', false, false)];
-    const one = fixedLineForMonth({ month: '2026-11', calendar: paused, versions: [fee('a', '2026-11-01', '100001', false, false)], kind: 'flat_monthly' });
-    // 23 of 30 days charge: divRound(100001 * 23, 30) = 76667, split over the three versions.
-    expect(one.cents).toBe(BigInt(76667));
-    const three = fixedLineForMonth({ month: '2026-11', calendar: paused, versions: off, kind: 'flat_monthly' });
-    expect(three.cents).toBe(BigInt(76667));
-    expect(sum(three.segments.map((segment) => segment.cents))).toBe(BigInt(76667));
-    const startsMid = { ...OPEN_CALENDAR, activeFrom: '2026-11-15' };
-    const on = [fee('a', '2026-11-01', '100001', true), fee('b', '2026-11-20', '100001', true), fee('c', '2026-11-25', '100001', true)];
-    expect(fixedLineForMonth({ month: '2026-11', calendar: startsMid, versions: on, kind: 'flat_monthly' }).cents).toBe(BigInt(53334));
-  });
-  it('proposed E48: a 31 day month split 10 and 21 days rounds each part once, then adds (SPEC 3.5 step 5)', () => {
-    // $1,500.00 for Dec 1 to 10, then $1,800.00 for Dec 11 to 31:
-    // divRound(150000 * 10, 31) = 48387 (48387.10) and divRound(180000 * 21, 31) = 121935 (121935.48).
-    const result = fixedLineForMonth({ month: '2026-12', calendar: OPEN_CALENDAR, versions: [fee('a', '2026-12-01', '150000', true), fee('b', '2026-12-11', '180000', true)], kind: 'flat_monthly' });
-    expect(result.cents).toBe(BigInt(170322));
-    expect(result.segments.map((segment) => [segment.versionId, segment.days, segment.cents])).toEqual([
-      ['a', 10, BigInt(48387)],
-      ['b', 21, BigInt(121935)],
-    ]);
-    expect(sum(result.segments.map((segment) => segment.cents))).toBe(result.cents);
-  });
-  it('proposed E49: paused Nov 1 to 15 under a line that does not charge while paused, then a prorate off line from Nov 16, charges half a month (150000)', () => {
-    // v1 ($1,000.00) charges nothing Nov 1 to 15 (paused, charge while paused off). v2 ($3,000.00,
-    // prorate off) has the whole active month as its frame (A = 30), so its 15 days are
-    // divRound(300000 * 15, 30) = 150000. Paused days only ever leave d.
-    const paused = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-01', to: '2026-11-15' }] };
-    const versions = [fee('a', '2026-11-01', '100000', true, false), fee('b', '2026-11-16', '300000', false, true)];
-    const result = fixedLineForMonth({ month: '2026-11', calendar: paused, versions, kind: 'flat_monthly' });
-    expect(result.cents).toBe(BigInt(150000));
-    expect(result.segments.map((segment) => [segment.versionId, segment.from, segment.to, segment.days, segment.cents])).toEqual([['b', '2026-11-16', '2026-11-30', 15, BigInt(150000)]]);
-    // The same v2 with charge while paused off bills the same: none of its days are paused.
-    const offToo = [fee('a', '2026-11-01', '100000', true, false), fee('b', '2026-11-16', '300000', false, false)];
-    expect(fixedLineForMonth({ month: '2026-11', calendar: paused, versions: offToo, kind: 'flat_monthly' }).cents).toBe(BigInt(150000));
-  });
-  it('each line rounds with its own frame: prorate on over D, prorate off over A', () => {
-    const paused = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-09', to: '2026-11-15' }] };
-    // v1 prorate off, does not charge while paused: d = 8 (Nov 1 to 10 less the paused Nov 9 and
-    // 10) over A = 30 (active all month) gives divRound(150000 * 8, 30) = 40000.
-    // v2 prorate on, charges while paused: d = 20 (Nov 11 to 30) gives divRound(180000 * 20, 30) = 120000.
-    const versions = [fee('v1', '2026-11-01', '150000', false, false), fee('v2', '2026-11-11', '180000', true, true)];
-    const result = fixedLineForMonth({ month: '2026-11', calendar: paused, versions, kind: 'flat_monthly' });
-    expect(result.segments.map((segment) => [segment.versionId, segment.days, segment.cents])).toEqual([
-      ['v1', 8, BigInt(40000)],
-      ['v2', 20, BigInt(120000)],
-    ]);
-    expect(result.cents).toBe(BigInt(160000));
-    // A program that starts Nov 5: A = 26 and D = 30, so the two flags now give two frames.
-    const startsMid = { ...OPEN_CALENDAR, activeFrom: '2026-11-05', paused: [{ from: '2026-11-09', to: '2026-11-15' }] };
-    const mid = fixedLineForMonth({ month: '2026-11', calendar: startsMid, versions, kind: 'flat_monthly' });
-    // v1: d = 4 (Nov 5 to 8, Nov 9 and 10 paused) over 26 = divRound(600000, 26) = 23077; v2: 120000.
-    expect(mid.segments.map((segment) => [segment.versionId, segment.days, segment.cents])).toEqual([
-      ['v1', 4, BigInt(23077)],
-      ['v2', 20, BigInt(120000)],
-    ]);
-  });
-  it('a split into many same terms parts adds back to exactly one month, for every amount', () => {
+    expect(pieces(result)).toEqual([['a+b+c', '2026-11-01', '2026-11-30', 30, BigInt(100001)]]);
+    const twice = run(OPEN_CALENDAR, [fee('a', '2026-11-01', '150001', true), fee('b', '2026-11-16', '150001', true)]);
+    expect(pieces(twice)).toEqual([['a+b', '2026-11-01', '2026-11-30', 30, BigInt(150001)]]);
+    // Thirty daily versions with the same fee: one segment, exactly the fee, for every amount.
     for (const amount of ['100001', '150001', '99999', '1', '2', '29', '31', '2500000']) {
       const daily = eachDay('2026-11-01', '2026-11-30').map((date) => fee(`v-${date}`, date, amount, true));
-      const result = fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions: daily, kind: 'flat_monthly' });
-      // Thirty daily versions with the same fee are one rounding group, so the month is exactly the fee.
-      expect(result.cents).toBe(BigInt(amount));
-      expect(result.segments).toHaveLength(30);
-      expect(sum(result.segments.map((segment) => segment.cents))).toBe(BigInt(amount));
-      // The cents spread by days: no two parts differ by more than one cent.
-      const values = result.segments.map((segment) => segment.cents);
-      const high = values.reduce((top, value) => (value > top ? value : top), ZERO);
-      const low = values.reduce((bottom, value) => (value < bottom ? value : bottom), high);
-      expect(high - low <= BigInt(1)).toBe(true);
+      const merged = run(OPEN_CALENDAR, daily);
+      expect(merged.cents).toBe(BigInt(amount));
+      expect(merged.segments).toHaveLength(1);
+      expect(merged.segments[0]?.versionIds).toHaveLength(30);
     }
+    // December: versions of 2, 2 and 27 days on the same terms are one piece of exactly 150000.
+    const december = run(OPEN_CALENDAR, [fee('a', '2026-01-01', '150000', true), fee('b', '2026-12-03', '150000', true), fee('c', '2026-12-05', '150000', true)], '2026-12');
+    expect(pieces(december)).toEqual([['a+b+c', '2026-12-01', '2026-12-31', 31, BigInt(150000)]]);
   });
-  it('three same fee versions in December (2, 2 and 27 days) bill exactly 150000', () => {
-    // Rounded one by one these would be 9677 + 9677 + 130645 = 149999. They share terms, so they
-    // round once as one group: divRound(150000 * 31, 31) = 150000, split 2 : 2 : 27.
-    const versions = [fee('a', '2026-01-01', '150000', true), fee('b', '2026-12-03', '150000', true), fee('c', '2026-12-05', '150000', true)];
-    const result = fixedLineForMonth({ month: '2026-12', calendar: OPEN_CALENDAR, versions, kind: 'flat_monthly' });
-    expect(result.cents).toBe(BigInt(150000));
+
+  it('B.1.2 a different prorate or charge while paused setting keeps its own segment, and still rounds once', () => {
+    const cwp = run(OPEN_CALENDAR, [fee('a', '2026-01-01', '150000', true), fee('b', '2026-12-03', '150000', true, false), fee('c', '2026-12-05', '150000', true)], '2026-12');
+    expect(cwp.cents).toBe(BigInt(150000));
+    expect(cwp.segments.map((segment) => segment.days)).toEqual([2, 2, 27]);
+    expect(sum(cwp.segments.map((segment) => segment.cents))).toBe(BigInt(150000));
+    const prorate = run(OPEN_CALENDAR, [fee('a', '2026-01-01', '150000', true), fee('b', '2026-12-03', '150000', false), fee('c', '2026-12-05', '150000', true)], '2026-12');
+    expect(prorate.cents).toBe(BigInt(150000));
+    expect(sum(prorate.segments.map((segment) => segment.cents))).toBe(BigInt(150000));
+  });
+
+  it('B.1.2 a paused day that does not count stays inside its segment', () => {
+    const result = run(PAUSED_9_TO_15, [fee('a', '2026-11-01', '150000', true, false)]);
+    expect(pieces(result)).toEqual([['a', '2026-11-01', '2026-11-30', 23, BigInt(115000)]]);
+  });
+
+  it('B.1.2 a 31 day month split 10 and 21 days rounds once, not per part', () => {
+    // W = 150000 * 10 + 180000 * 21 = 5280000, divRound(5280000, 31) = 170323 (170322.58).
+    // Rounded per part it would be 48387 + 121935 = 170322.
+    const result = run(OPEN_CALENDAR, [fee('a', '2026-12-01', '150000', true), fee('b', '2026-12-11', '180000', true)], '2026-12');
+    expect(result.cents).toBe(BigInt(170323));
     expect(result.segments.map((segment) => [segment.versionId, segment.days, segment.cents])).toEqual([
-      ['a', 2, BigInt(9678)],
-      ['b', 2, BigInt(9677)],
-      ['c', 27, BigInt(130645)],
+      ['a', 10, BigInt(48387)],
+      ['b', 21, BigInt(121936)],
     ]);
   });
-  it('same fee versions with random flags, no pauses and active all month always add back to the fee', () => {
-    const random = seeded(31);
-    for (const monthKey of ['2026-11', '2026-12', '2027-02'] as const) {
-      const days = eachDay(`${monthKey}-01` as IsoDate, `${monthKey}-${monthKey === '2027-02' ? '28' : monthKey === '2026-11' ? '30' : '31'}` as IsoDate);
-      for (let run = 0; run < 1500; run += 1) {
-        const amount = String(1 + Math.floor(random() * 5000000));
-        const count = 1 + Math.floor(random() * 12);
-        const starts = [...new Set(['2026-01-01' as IsoDate, ...Array.from({ length: count }, () => days[Math.floor(random() * days.length)] as IsoDate)])].sort();
-        // The flags are random per version. With no pauses and the program active all month,
-        // prorate and "Charge while paused" give the same frame (D == A), so they never split.
-        const versions = starts.map((from, index) => fee(`s${index}`, from, amount, random() < 0.5, random() < 0.5));
-        const result = fixedLineForMonth({ month: monthKey, calendar: OPEN_CALENDAR, versions, kind: 'flat_monthly' });
-        expect(result.cents).toBe(BigInt(amount));
-        expect(sum(result.segments.map((segment) => segment.cents))).toBe(BigInt(amount));
-      }
-    }
+
+  it('B.1.3 the pieces always add up to the total, split by a times d', () => {
+    // Prorate off, 3 versions, amounts 100000, 120000, 90000 over 10, 10, 10 days:
+    // W = 3100000, divRound(W, 30) = 103333; pieces by 10 : 12 : 9.
+    const result = run(OPEN_CALENDAR, [fee('a', '2026-11-01', '100000', false), fee('b', '2026-11-11', '120000', false), fee('c', '2026-11-21', '90000', false)]);
+    expect(result.cents).toBe(BigInt(103333));
+    expect(result.segments.map((segment) => segment.cents)).toEqual([BigInt(33333), BigInt(40000), BigInt(30000)]);
   });
-  it('a flag with no effect that month never splits the rounding (no pauses, chargeWhilePaused differs)', () => {
-    // b does not charge while paused, but nothing is paused, so all three have frame 31 and round
-    // once: 150000, not 9677 + 9677 + 130645 = 149999.
-    const versions = [fee('a', '2026-01-01', '150000', true), fee('b', '2026-12-03', '150000', true, false), fee('c', '2026-12-05', '150000', true)];
-    const result = fixedLineForMonth({ month: '2026-12', calendar: OPEN_CALENDAR, versions, kind: 'flat_monthly' });
-    expect(result.cents).toBe(BigInt(150000));
-    expect(sum(result.segments.map((segment) => segment.cents))).toBe(BigInt(150000));
-    expect(result.segments.map((segment) => segment.days)).toEqual([2, 2, 27]);
+
+  it('a pause under a line that does not charge while paused, then a prorate off line, is the whole later fee', () => {
+    // Paused Nov 1 to 15 under v1 (charge while paused off): those days do not count, so B = 15.
+    // v2 ($3,000.00, prorate off) has all 15 billable days: divRound(300000 * 15, 15) = 300000.
+    const paused = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-01', to: '2026-11-15' }] };
+    const result = run(paused, [fee('a', '2026-11-01', '100000', true, false), fee('b', '2026-11-16', '300000', false, true)]);
+    expect(result.billableDays).toBe(15);
+    expect(pieces(result)).toEqual([['b', '2026-11-16', '2026-11-30', 15, BigInt(300000)]]);
   });
-  it('a flag with no effect that month never splits the rounding (active all month, prorate differs)', () => {
-    // b has prorate off, but the program is active all month, so A == D == 31 and all three round once.
-    const versions = [fee('a', '2026-01-01', '150000', true), fee('b', '2026-12-03', '150000', false), fee('c', '2026-12-05', '150000', true)];
-    const result = fixedLineForMonth({ month: '2026-12', calendar: OPEN_CALENDAR, versions, kind: 'flat_monthly' });
-    expect(result.cents).toBe(BigInt(150000));
-    expect(sum(result.segments.map((segment) => segment.cents))).toBe(BigInt(150000));
-  });
-  it('proposed E50: a line that does not charge while paused is not charged more for a pause before it', () => {
-    // Paused Nov 1 to 10. v1 ($1,500.00, prorate off, charges while paused) is in force Nov 1 to
-    // 15, so its paused days charge: divRound(150000 * 15, 30) = 75000. v2 ($1,000.00, prorate
-    // off, does not charge while paused) from Nov 16 has no paused days of its own, so its 15 days
-    // are divRound(100000 * 15, 30) = 50000: the same as in a month with no pauses.
+
+  it('a pause under a line that charges while paused counts toward B for the line after it', () => {
+    // Paused Nov 1 to 10 under v1 (prorate off, charges while paused): B = 30.
+    // W = 150000 * 15 + 100000 * 15, divRound(W, 30) = 125000, pieces 75000 and 50000.
     const paused = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-01', to: '2026-11-10' }] };
     const versions = [fee('v1', '2026-11-01', '150000', false, true), fee('v2', '2026-11-16', '100000', false, false)];
-    const result = fixedLineForMonth({ month: '2026-11', calendar: paused, versions, kind: 'flat_monthly' });
+    const result = run(paused, versions);
     expect(result.segments.map((segment) => [segment.versionId, segment.days, segment.cents])).toEqual([
       ['v1', 15, BigInt(75000)],
       ['v2', 15, BigInt(50000)],
     ]);
     expect(result.cents).toBe(BigInt(125000));
-    const unpaused = fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions, kind: 'flat_monthly' });
-    expect(unpaused.segments[1]?.cents).toBe(BigInt(50000));
+    // Two versions on the same terms that both skip the pause: B = 20, one piece, the whole fee.
+    const both = run(paused, [fee('v1', '2026-11-01', '100000', false, false), fee('v2', '2026-11-16', '100000', false, false)]);
+    expect(pieces(both)).toEqual([['v1+v2', '2026-11-11', '2026-11-30', 20, BigInt(100000)]]);
   });
-  it('proposed E50b: two versions that both skip paused days bill the 20 days that charge', () => {
-    // Paused Nov 1 to 10, both versions $1,000.00 with prorate off and the option off: A = 30,
-    // v1 has 5 days that charge and v2 15. Same amount and frame, so one group:
-    // divRound(100000 * 20, 30) = 66667, split 5 : 15 as 16667 + 50000.
-    const paused = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-01', to: '2026-11-10' }] };
-    const versions = [fee('v1', '2026-11-01', '100000', false, false), fee('v2', '2026-11-16', '100000', false, false)];
-    const result = fixedLineForMonth({ month: '2026-11', calendar: paused, versions, kind: 'flat_monthly' });
+
+  it('mixed prorate keeps each segment on its own frame and rounds once', () => {
+    // v1 prorate off, charge while paused off, Nov 1 to 10 (Nov 9 and 10 paused): d = 8.
+    // v2 prorate on, charges while paused, Nov 11 to 30: d = 20. B = 28 (Nov 9 and 10 do not count).
+    // Exact: 150000 * 8 / 28 + 180000 * 20 / 30 = 42857.14 + 120000 = 162857.14, so 162857.
+    const versions = [fee('v1', '2026-11-01', '150000', false, false), fee('v2', '2026-11-11', '180000', true, true)];
+    const result = run(PAUSED_9_TO_15, versions);
+    expect(result.billableDays).toBe(28);
+    expect(result.cents).toBe(BigInt(162857));
     expect(result.segments.map((segment) => [segment.versionId, segment.days, segment.cents])).toEqual([
-      ['v1', 5, BigInt(16667)],
-      ['v2', 15, BigInt(50000)],
+      ['v1', 8, BigInt(42857)],
+      ['v2', 20, BigInt(120000)],
     ]);
-    expect(result.cents).toBe(BigInt(66667));
-    // The same as one version over the same days.
-    expect(fixedLineForMonth({ month: '2026-11', calendar: paused, versions: [versions[0]!], kind: 'flat_monthly' }).cents).toBe(BigInt(66667));
+    // Starts Nov 5: B = 24. 150000 * 4 / 24 + 180000 * 20 / 30 = 25000 + 120000.
+    const startsMid = { ...OPEN_CALENDAR, activeFrom: '2026-11-05', paused: [{ from: '2026-11-09', to: '2026-11-15' }] };
+    const mid = run(startsMid, versions);
+    expect(mid.cents).toBe(BigInt(145000));
+    expect(mid.segments.map((segment) => [segment.versionId, segment.days, segment.cents])).toEqual([
+      ['v1', 4, BigInt(25000)],
+      ['v2', 20, BigInt(120000)],
+    ]);
+  });
+
+  it('same fee versions with random flags, no pauses and active all month always add back to the fee', () => {
+    const random = seeded(31);
+    for (const monthKey of ['2026-11', '2026-12', '2027-02'] as const) {
+      const days = eachDay(`${monthKey}-01` as IsoDate, `${monthKey}-${monthKey === '2027-02' ? '28' : monthKey === '2026-11' ? '30' : '31'}` as IsoDate);
+      for (let index = 0; index < 1500; index += 1) {
+        const amount = String(1 + Math.floor(random() * 5000000));
+        const count = 1 + Math.floor(random() * 12);
+        const starts = [...new Set(['2026-01-01' as IsoDate, ...Array.from({ length: count }, () => days[Math.floor(random() * days.length)] as IsoDate)])].sort();
+        // With no pauses and the program active all month, B == D, so the flags never change the total.
+        const versions = starts.map((from, position) => fee(`s${position}`, from, amount, random() < 0.5, random() < 0.5));
+        const result = run(OPEN_CALENDAR, versions, monthKey);
+        expect(result.cents).toBe(BigInt(amount));
+        expect(sum(result.segments.map((segment) => segment.cents))).toBe(BigInt(amount));
+      }
+    }
   });
 });
 
@@ -539,9 +514,22 @@ describe('a minimum in force in a month paused all month', () => {
     expect(result.totalCents).toBe(ZERO);
     expect(ledgerRows(result)).toEqual([]);
   });
-  it('reads as pending while the month is open', () => {
+  it('B.1.5 reads as met while the month is open too, with no preview charge', () => {
     const result = monthCharges(month({ month: '2026-11', asOf: '2026-11-25', calendar: pausedAllMonth, versions: [waived], oneTime: [] }));
-    expect(result.minimum).toEqual({ minimumCents: ZERO, gapSoFarCents: ZERO, topUpCents: ZERO, status: 'pending' });
+    expect(result.minimum).toEqual({ minimumCents: ZERO, gapSoFarCents: ZERO, topUpCents: ZERO, status: 'met' });
+    expect(result.charges.some((charge) => charge.kind === 'minimum_top_up')).toBe(false);
+  });
+  it('B.1.5 work logged in a month with no billable day still never makes a gap', () => {
+    const rows = outputFor(['2026-11-02']);
+    const result = monthCharges(month({ month: '2026-11', asOf: '2026-12-01', calendar: pausedAllMonth, versions: [waived], output: rows.slice(0, 1), oneTime: [] }));
+    expect(result.minimum).toEqual({ minimumCents: ZERO, gapSoFarCents: ZERO, topUpCents: ZERO, status: 'met' });
+  });
+  it('B.1.5 a minimum with billable days left in an open month is still pending', () => {
+    const partly = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-01', to: '2026-11-20' }] };
+    const result = monthCharges(month({ month: '2026-11', asOf: '2026-11-25', calendar: partly, versions: [waived], oneTime: [] }));
+    // B = 10 and the lines prorate: 10 of 30 days, and the month is open.
+    expect(result.minimum).toEqual({ minimumCents: BigInt(1000000), gapSoFarCents: BigInt(1000000), topUpCents: ZERO, status: 'pending' });
+    expect(result.fixed.monthlyFeeCents).toBe(BigInt(50000));
   });
   it('a $0 minimum never tops up, even when a credit that counts toward it passes the work', () => {
     const credit: OneTimeCharge = { id: 'c1', kind: 'adjustment', chargeOn: '2026-11-10', amountCents: '-20000', label: 'Credit', variantId: null, countsTowardMinimum: true };
@@ -556,7 +544,7 @@ describe('a minimum in force in a month paused all month', () => {
   });
 });
 
-describe('A6 fixed lines never charge more than one month', () => {
+describe('A6 fixed lines never charge more than one month (Appendix B.1 property tests)', () => {
   const version = (id: string, from: IsoDate, cents: string, prorate: boolean, chargeWhilePaused: boolean): CardVersion => ({
     id,
     number: null,
@@ -569,63 +557,54 @@ describe('A6 fixed lines never charge more than one month', () => {
     const paused = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-09', to: '2026-11-15' }] };
     const versions = [version('v1', '2026-01-01', '150000', false, true), version('v2', '2026-11-16', '150000', false, false)];
     const fee = fixedLineForMonth({ month: '2026-11', calendar: paused, versions, kind: 'flat_monthly' });
-    // v1 charges Nov 1 to 15, paused days too: divRound(150000 * 15, 30) = 75000. v2 does not
-    // charge while paused, but none of its days are paused, so its 15 days are 75000 too.
+    // v1 charges while paused, so every day counts: B = 30, W = 150000 * 30, the whole fee.
     expect(fee.cents).toBe(BigInt(150000));
     expect(fee.segments.map((segment) => segment.cents)).toEqual([BigInt(75000), BigInt(75000)]);
-    expect(sum(fee.segments.map((segment) => segment.cents))).toBe(BigInt(150000));
     // The minimum uses the same function, so the top up is never too high either.
     const result = monthCharges(month({ month: '2026-11', calendar: paused, versions, oneTime: [], asOf: '2026-12-01' }));
     expect(result.minimum.minimumCents).toBe(BigInt(150000));
     expect(result.minimum.topUpCents).toBe(BigInt(150000));
   });
 
-  it('a paused stretch leaves only d, never the frame', () => {
+  it('a paused stretch that does not count leaves the later prorate off fee whole', () => {
+    // v1 does not charge while paused, so Nov 1 to 10 do not count: B = 20. v2 (prorate off) has
+    // all 20: divRound(180000 * 20, 20) = 180000.
     const paused = { ...OPEN_CALENDAR, paused: [{ from: '2026-11-01', to: '2026-11-10' }] };
-    // v1 does not charge while paused, so Nov 1 to 10 charge nothing; v2's 20 days are
-    // divRound(180000 * 20, 30) = 120000.
     const versions = [version('v1', '2026-01-01', '150000', false, false), version('v2', '2026-11-11', '180000', false, true)];
-    expect(fixedLineForMonth({ month: '2026-11', calendar: paused, versions, kind: 'flat_monthly' }).cents).toBe(BigInt(120000));
+    expect(fixedLineForMonth({ month: '2026-11', calendar: paused, versions, kind: 'flat_monthly' }).cents).toBe(BigInt(180000));
   });
 
   /**
-   * An oracle that shares nothing with the code: the exact share of the month in rationals, day by
-   * day. Each active day that charges adds `a / frame` of the version in force that day, with
-   * frame `D` (30) when its line has prorate on and `A` (the active days, paused days included)
-   * when it is off. A paused day charges only when the line charges while paused. It returns the
-   * exact amount as `numerator / denominator`, the amounts in force, and how many segments
-   * (runs of one version) charge, which bounds how many roundings the code may make.
+   * An oracle that shares nothing with the code: B.1 in rationals, day by day. A day counts
+   * (is in B) when it is active and not paused, or paused under a line that charges while paused.
+   * Each day that counts under a line adds `a / D` with prorate on and `a / B` with it off. The
+   * exact amount is `numerator / (D * B)`; the code rounds it once.
    */
-  const exactShare = (calendar: typeof OPEN_CALENDAR, versions: readonly CardVersion[], kind: 'flat_monthly' | 'monthly_minimum'): { numerator: bigint; denominator: bigint; segments: number; amounts: bigint[] } => {
+  const exactShare = (calendar: typeof OPEN_CALENDAR, versions: readonly CardVersion[], kind: 'flat_monthly' | 'monthly_minimum'): { numerator: bigint; denominator: bigint; billable: number; amounts: bigint[]; prorateOffAll: boolean } => {
     const monthDays = 30;
     const from = calendar.activeFrom ?? '2026-11-01';
     const to = calendar.activeTo ?? '2026-11-30';
     const active = eachDay('2026-11-01', '2026-11-30').filter((date) => date >= from && date <= to);
     const isPaused = (date: IsoDate): boolean => calendar.paused.some((range) => date >= range.from && (range.to === null || date <= range.to));
     const inForce = (date: IsoDate): CardVersion | undefined => [...versions].filter((row) => row.effectiveFrom <= date).sort((x, y) => (x.effectiveFrom < y.effectiveFrom ? 1 : -1))[0];
-    const denominator = BigInt(monthDays * Math.max(1, active.length));
+    const counted = active.map((date) => {
+      const fixed = inForce(date)?.lines.find((item) => item.kind === kind);
+      return { date, fixed, counts: !isPaused(date) || fixed?.chargeWhilePaused === true };
+    });
+    const billable = counted.filter((day) => day.counts).length;
+    const denominator = BigInt(monthDays * Math.max(1, billable));
     let numerator = ZERO;
     const amounts: bigint[] = [];
-    const charging = new Set<string>();
-    let segment = 0;
-    let previous: string | null = null;
-    for (const date of active) {
-      const row = inForce(date);
-      const fixed = row?.lines.find((item) => item.kind === kind);
-      if (!row || !fixed) {
-        previous = null;
-        continue;
-      }
-      if (row.id !== previous) segment += 1;
-      previous = row.id;
-      const amount = BigInt(fixed.amountCents!);
+    let prorateOffAll = true;
+    for (const day of counted) {
+      if (!day.fixed) continue;
+      const amount = BigInt(day.fixed.amountCents!);
       amounts.push(amount);
-      if (isPaused(date) && !fixed.chargeWhilePaused) continue;
-      charging.add(String(segment));
-      const frame = fixed.prorate ? monthDays : active.length;
-      numerator += amount * (denominator / BigInt(frame));
+      if (!day.counts) continue;
+      if (day.fixed.prorate) prorateOffAll = false;
+      numerator += amount * (denominator / BigInt(day.fixed.prorate ? monthDays : billable));
     }
-    return { numerator, denominator, segments: charging.size, amounts };
+    return { numerator, denominator, billable, amounts, prorateOffAll };
   };
 
   const randomCase = (random: () => number, options: { readonly allMonth?: boolean } = {}): { calendar: typeof OPEN_CALENDAR; versions: CardVersion[]; sameAmount: boolean; firstOnTime: boolean } => {
@@ -645,62 +624,90 @@ describe('A6 fixed lines never charge more than one month', () => {
     return { calendar, versions, sameAmount, firstOnTime: (starts[0] as string) <= '2026-11-01' };
   };
 
-  it('stays within half a cent per rounding of the exact rational share, over random versions, options, pauses and active ranges', () => {
+  it('rounds the exact B.1 share once (within half a cent), over random versions, options, pauses and active ranges', () => {
     const random = seeded(20261125);
     let wholeMonths = 0;
+    let wholePaused = 0;
+    let empty = 0;
     let checked = 0;
-    for (let run = 0; run < 4000; run += 1) {
+    for (let index = 0; index < 4000; index += 1) {
       const { calendar, versions, sameAmount, firstOnTime } = randomCase(random);
       for (const kind of ['flat_monthly', 'monthly_minimum'] as const) {
         const result = fixedLineForMonth({ month: '2026-11', calendar, versions, kind });
         const exact = exactShare(calendar, versions, kind);
-        // |result - exact| <= segments * 0.5 cent, in whole numbers: |2 * (result * den - num)| <= segments * den.
-        const diff = result.cents * exact.denominator - exact.numerator;
-        const distance = diff < ZERO ? -diff : diff;
-        expect(BigInt(2) * distance <= BigInt(exact.segments) * exact.denominator).toBe(true);
+        expect(result.billableDays).toBe(exact.billable);
+        if (exact.billable === 0) {
+          expect(result.cents).toBe(ZERO);
+          expect(result.segments).toEqual([]);
+          empty += 1;
+        } else {
+          // One rounding: |result - exact| <= 0.5 cent, in whole numbers |2 * (result * den - num)| <= den.
+          const diff = result.cents * exact.denominator - exact.numerator;
+          const distance = diff < ZERO ? -diff : diff;
+          expect(BigInt(2) * distance <= exact.denominator).toBe(true);
+        }
         // Never more than one month of the largest amount in force (A6), never below 0.
         const largest = exact.amounts.reduce((top, amount) => (amount > top ? amount : top), ZERO);
         expect(result.cents <= largest).toBe(true);
         expect(result.cents >= ZERO).toBe(true);
         expect(sum(result.segments.map((segment) => segment.cents))).toBe(result.cents);
         checked += 1;
-        // Every version the same amount, in force from before the month, active all month and
-        // nothing paused: exactly one month, whatever the flags.
+        // Same amount in force from before the month on every billable day and prorate off
+        // everywhere: exactly one month, whatever the pauses (B.1.4).
+        const first = versions[0]!.lines[0]!.amountCents!;
+        if (sameAmount && firstOnTime && exact.prorateOffAll && exact.billable > 0) {
+          expect(result.cents).toBe(BigInt(first));
+          if (calendar.paused.length > 0) wholePaused += 1;
+        }
+        // Same amount, active all month, nothing paused: exactly one month, whatever the flags.
         if (sameAmount && firstOnTime && calendar.activeFrom === null && calendar.activeTo === null && calendar.paused.length === 0) {
-          expect(result.cents).toBe(BigInt(versions[0]!.lines[0]!.amountCents!));
+          expect(result.cents).toBe(BigInt(first));
           wholeMonths += 1;
         }
       }
     }
     expect(checked).toBe(8000);
     expect(wholeMonths).toBeGreaterThan(50);
+    expect(wholePaused).toBeGreaterThan(20);
+    expect(empty).toBeGreaterThan(0);
   });
 
-  it('A6: prorate has no effect when the program is active all month, over random pauses', () => {
+  it('A6: prorate has no effect when the program is active all month and nothing is paused', () => {
     const random = seeded(606);
     const flip = (versions: readonly CardVersion[], prorate: boolean): CardVersion[] => versions.map((row) => ({ ...row, lines: row.lines.map((item) => ({ ...item, prorate })) }));
-    let paused = 0;
-    for (let run = 0; run < 3000; run += 1) {
-      const { calendar, versions } = randomCase(random, { allMonth: true });
-      if (calendar.paused.length > 0) paused += 1;
+    for (let index = 0; index < 3000; index += 1) {
+      const { versions } = randomCase(random, { allMonth: true });
       for (const kind of ['flat_monthly', 'monthly_minimum'] as const) {
-        const on = fixedLineForMonth({ month: '2026-11', calendar, versions: flip(versions, true), kind });
-        const off = fixedLineForMonth({ month: '2026-11', calendar, versions: flip(versions, false), kind });
-        const mixed = fixedLineForMonth({ month: '2026-11', calendar, versions, kind });
+        const on = fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions: flip(versions, true), kind });
+        const off = fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions: flip(versions, false), kind });
+        const mixed = fixedLineForMonth({ month: '2026-11', calendar: OPEN_CALENDAR, versions, kind });
         expect(off.cents).toBe(on.cents);
         expect(mixed.cents).toBe(on.cents);
         expect(off.segments.map((segment) => segment.cents)).toEqual(on.segments.map((segment) => segment.cents));
       }
     }
-    expect(paused).toBeGreaterThan(1000);
+  });
+
+  it('B.1.4 one version with prorate off is exactly its amount for any month with a billable day', () => {
+    const random = seeded(44);
+    const days = eachDay('2026-11-01', '2026-11-30');
+    for (let index = 0; index < 2000; index += 1) {
+      const amount = String(1 + Math.floor(random() * 5000000));
+      const from = days[Math.floor(random() * 30)] as IsoDate;
+      const to = days[Math.min(29, days.indexOf(from) + Math.floor(random() * 30))] as IsoDate;
+      const activeFrom = random() < 0.3 ? (days[Math.floor(random() * 15)] as IsoDate) : null;
+      const calendar = { ...OPEN_CALENDAR, activeFrom, paused: [{ from, to }] };
+      const result = fixedLineForMonth({ month: '2026-11', calendar, versions: [version('one', '2026-10-01', amount, false, false)], kind: 'flat_monthly' });
+      expect(result.cents).toBe(result.billableDays === 0 ? ZERO : BigInt(amount));
+    }
   });
 
   it('every prorate off mix adds up to at most one month', () => {
     const random = seeded(7);
     const days = eachDay('2026-11-01', '2026-11-30');
-    for (let run = 0; run < 3000; run += 1) {
+    for (let index = 0; index < 3000; index += 1) {
       const starts = [...new Set(['2026-10-01', ...Array.from({ length: 1 + Math.floor(random() * 3) }, () => days[Math.floor(random() * 30)] as IsoDate)])].sort();
-      const versions = starts.map((from, index) => version(`p${index}`, from, String(100000 + Math.floor(random() * 200000)), false, random() < 0.5));
+      const versions = starts.map((from, position) => version(`p${position}`, from, String(100000 + Math.floor(random() * 200000)), false, random() < 0.5));
       const from = days[Math.floor(random() * 30)] as IsoDate;
       const calendar = { ...OPEN_CALENDAR, paused: [{ from, to: days[Math.min(29, days.indexOf(from) + Math.floor(random() * 10))] as IsoDate }] };
       const result = fixedLineForMonth({ month: '2026-11', calendar, versions, kind: 'flat_monthly' });

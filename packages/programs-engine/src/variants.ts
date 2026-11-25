@@ -3,7 +3,8 @@
  * make a matrix), name, key and SKU patterns, conflict checks, value codes, and reading a pasted
  * list of kits back into attributes. Pure functions.
  */
-import { RATE_TOO_LARGE_MESSAGE } from './price';
+import { type ValueProblem, placeNote, valueMessage } from './messages';
+import { RATE_TOO_LARGE_MESSAGE, rateTextMessage, readRateText } from './price';
 
 /** An attribute axis with its values, in the order people set. */
 export interface AttributeAxis {
@@ -561,39 +562,26 @@ export function decimalProblem(plain: string, decimals: 3 | 4, what: 'qty' | 'ra
     const problem = qtyNumberProblem(plain);
     return problem === null ? null : qtyMessage(problem, 'qty');
   }
-  if (plain.startsWith('-') && /[1-9]/.test(plain)) return 'A rate cannot be less than $0.';
+  if (plain.startsWith('-') && /[1-9]/.test(plain)) return valueMessage('rate', 'negative');
   const [whole = '', frac = ''] = plain.replace(/^[+-]/, '').split('.');
-  if (frac.length > decimals && /[1-9]/.test(frac.slice(decimals))) return 'Use up to 4 decimals for a rate.';
-  if (wholeDigits(whole) > MAX_RATE_WHOLE_DIGITS) return RATE_TOO_LARGE;
+  if (frac.length > decimals && /[1-9]/.test(frac.slice(decimals))) return valueMessage('rate', 'decimals');
+  if (wholeDigits(whole) > MAX_RATE_WHOLE_DIGITS) return valueMessage('rate', 'too_large');
   return null;
 }
 
-/** What can be wrong with a qty or scrap cell. */
-export type QtyProblem = 'not_a_number' | 'price' | 'negative' | 'decimals' | 'too_large';
+/** What can be wrong with a qty or scrap cell (the shared `ValueProblem`). */
+export type QtyProblem = ValueProblem;
 
 /**
- * Every qty and scrap message, built in one place so the variant paste, the plan paste and the
- * CSV imports use the same words. `where` names the cell of a grid ("Nov 30") and goes in with
- * `placeNote`; `cell` is the text as typed, for the messages that quote it.
- * "The qty 5. is not a number (Nov 30).", "The qty $10 looks like a price. Type only how many
+ * Every qty and scrap message, from the one message table (`valueMessage` in messages), so the
+ * variant paste, the plan paste, the planner and the CSV imports use the same words. `where`
+ * names the cell of a grid ("Nov 30"); `cell` is the text as typed, for the messages that quote
+ * it. "The qty 5. is not a number (Nov 30).", "The qty $10 looks like a price. Type only how many
  * units.", "The qty cannot be less than 0.", "Use up to 3 decimals for scrap." and "The qty is
  * too large (Nov 30). Use up to 99,999,999."
  */
 export function qtyMessage(problem: QtyProblem, what: 'qty' | 'scrap', where?: string, cell = ''): string {
-  const at = placeNote(where);
-  const text = cell.trim();
-  switch (problem) {
-    case 'not_a_number':
-      return `The ${what} ${text} is not a number${at}.`;
-    case 'price':
-      return `The ${what} ${text} looks like a price${at}. Type only how many units.`;
-    case 'negative':
-      return `The ${what} cannot be less than 0${at}.`;
-    case 'decimals':
-      return what === 'qty' ? `Use up to 3 decimals${at}.` : `Use up to 3 decimals for scrap${at}.`;
-    case 'too_large':
-      return `The ${what} is too large${at}. Use up to 99,999,999.`;
-  }
+  return valueMessage(what, problem, where, cell);
 }
 
 /** What is wrong with a plain number as a qty: below 0, more than 3 decimals, or 100,000,000 or more. */
@@ -636,14 +624,22 @@ function listWords(words: readonly string[]): string {
 }
 
 /**
- * Why a row with more cells than the sheet has columns is left out, with the fix. A comma file
- * most often has a number such as 1,200 typed without quotes, which splits it in two, so that is
- * named when the row shows it: "This row has 4 cells. The header has 3. Put "1,200" in quotes, or
- * type it as 1200." Nothing in such a row is read, so no part of a number is ever saved alone.
+ * Why a row with more cells than the sheet has columns is refused (SPEC Appendix B.2.1), with the
+ * fix. Cells are never dropped quietly: the whole row is refused and nothing in it is read, so no
+ * part of a number is ever saved alone. A comma file most often has a number such as 1,200 typed
+ * without quotes, which splits it in two, so that is named when the row shows it: "Row 4 has more
+ * cells than the header. It has 4 cells and the header has 3. Put "1,200" in quotes, or type it as
+ * 1200." `line` is the row's line in the pasted text or file (the header is line 1).
  */
-export function extraCellsMessage(cells: readonly string[], expected: ExpectedCells, delimiter: SheetDelimiter): string {
+export function extraCellsMessage(cells: readonly string[], expected: ExpectedCells, delimiter: SheetDelimiter, line?: number): string {
   const count = filledWidth(cells);
-  const want = expected.kind === 'columns' ? `A row needs ${expected.names.length}: ${listWords(expected.names)}.` : expected.kind === 'header' ? `The header has ${expected.cells}.` : `Most rows have ${expected.cells}.`;
+  const row = line === undefined ? 'This row' : `Row ${line}`;
+  const want =
+    expected.kind === 'columns'
+      ? `${row} has more cells than the columns read. It has ${count} cells and a row needs ${expected.names.length}: ${listWords(expected.names)}.`
+      : expected.kind === 'header'
+        ? `${row} has more cells than the header. It has ${count} cells and the header has ${expected.cells}.`
+        : `${row} has more cells than most rows. It has ${count} cells and most rows have ${expected.cells}.`;
   let fix: string;
   if (delimiter === ',') {
     let split: string | null = null;
@@ -661,7 +657,7 @@ export function extraCellsMessage(cells: readonly string[], expected: ExpectedCe
     const digits = cells.slice(columns, count).every((cell) => /^\d+(\.\d+)?$/.test(cell.trim()) || cell.trim() === '');
     fix = split !== null ? `Put "${split}" in quotes, or type it as ${plainNumber(split)}.` : digits ? 'Put a number like 1,200 in quotes, or type it as 1200.' : 'Take out the extra comma, or put a cell that has a comma in quotes.';
   } else fix = delimiter === ';' ? 'Take out the extra semicolon.' : 'Take out the extra tab.';
-  return `This row has ${count} cells. ${want} ${fix}`;
+  return `${want} ${fix}`;
 }
 
 /** The most whole digits a qty can have (`pm.builds.planned_qty` and `pm.build_output.qty` are CHECK `< 100000000`). */
@@ -680,11 +676,8 @@ export function priceInQtyMessage(cell: string, what: 'qty' | 'scrap', where?: s
   return qtyMessage('price', what, where, cell);
 }
 
-/** " (Nov 30)" for a message about one cell of a grid, or "" when no place is given. */
-export function placeNote(where?: string): string {
-  const text = where?.trim() ?? '';
-  return text === '' ? '' : ` (${text})`;
-}
+/** " (Nov 30)" for a message about one cell of a grid (from the shared message table). */
+export { placeNote };
 
 /** Whole digits of a plain number's whole part, leading zeros aside. */
 export function wholeDigits(whole: string): number {
@@ -757,17 +750,25 @@ function inferColumns(lines: { line: number; raw: string }[], delimiter: SheetDe
   // axisNameProblem only checks that an axis with values has a fine, unique name, so one stand in value is enough.
   const STAND_IN = [{ id: '', label: '', code: '' }];
   const attributeNames = (): Pick<AttributeAxis, 'name' | 'values'>[] => columns.filter((column) => column.role === 'attribute').map((column) => ({ name: column.name, values: STAND_IN }));
+  // Roles a header names, so a number column is never read as a Qty (or Rate) the header has elsewhere.
+  const headerRoles = new Set<ColumnRole>(header ? first.cells.slice(0, width).map((cell) => roleOf(cell)) : []);
   for (let index = 0; index < width; index += 1) {
     const title = header ? (first.cells[index] ?? '').trim().replace(/\s+/g, ' ') : '';
     let role: ColumnRole = header ? roleOf(title) : 'attribute';
-    if (!header) {
-      // With no header, a column of plain numbers is a qty or a rate, never an attribute.
+    if (role === 'attribute') {
+      // A column whose every value is a number is never an attribute (B.2.2). It is the Qty column
+      // when no Qty header exists (a Rate column when its cells look like prices: a `$` or more
+      // than 3 decimals), with or without a header row. When that role is taken it is left out
+      // with the reason.
       const numbers = numberColumnRole(body.map((row) => row.cells[index] ?? ''));
       if (numbers !== null) {
-        const free = (want: 'qty' | 'rate'): boolean => !columns.some((column) => column.role === want);
-        const pick = free(numbers) ? numbers : numbers === 'qty' && free('rate') ? 'rate' : null;
+        const free = (want: 'qty' | 'rate'): boolean => !headerRoles.has(want) && !columns.some((column) => column.role === want);
+        // With no header, a second column of plain numbers is the rate ("Small,Brown,100,1.95").
+        // Under a header it is not: a column called Pack with 12 and 24 is no price.
+        const pick = free(numbers) ? numbers : !header && numbers === 'qty' && free('rate') ? 'rate' : null;
         if (pick === null) {
-          unmatched.push({ line: first.line, raw: first.raw, why: `Column ${index + 1} has only numbers and was left out.` });
+          const which = title === '' ? `Column ${index + 1}` : `The column ${title}`;
+          unmatched.push({ line: first.line, raw: first.raw, why: `${which} has only numbers and was left out. An attribute needs words, such as Small or Brown.` });
           continue;
         }
         role = pick;
@@ -801,7 +802,7 @@ function inferColumns(lines: { line: number; raw: string }[], delimiter: SheetDe
   const comboLines = new Map<string, number>();
   for (const row of body) {
     if (filledWidth(row.cells) > width) {
-      unmatched.push({ line: row.line, raw: row.raw, why: extraCellsMessage(row.cells, expected, delimiter) });
+      unmatched.push({ line: row.line, raw: row.raw, why: extraCellsMessage(row.cells, expected, delimiter, row.line) });
       continue;
     }
     if (rows.length >= MAX_PASTE_ROWS) {
@@ -835,16 +836,13 @@ function inferColumns(lines: { line: number; raw: string }[], delimiter: SheetDe
       continue;
     }
     const qty = qtyRead === null ? null : qtyRead.plain;
-    const rate = rateText === null ? null : plainNumber(rateText);
-    if (rateText !== null && rate === null) {
-      unmatched.push({ line: row.line, raw: row.raw, why: `The rate ${rateText} is not a number.` });
+    // A rate cell is read the way the price card reads a typed rate, with the same words.
+    const rateRead = rateText === null ? null : readRateText(rateText);
+    if (rateRead !== null && !rateRead.ok) {
+      unmatched.push({ line: row.line, raw: row.raw, why: rateTextMessage(rateRead.problem, rateText as string) });
       continue;
     }
-    const rateProblem = rate === null ? null : decimalProblem(rate, 4, 'rate');
-    if (rateProblem !== null) {
-      unmatched.push({ line: row.line, raw: row.raw, why: rateProblem });
-      continue;
-    }
+    const rate = rateText === null ? null : (plainNumber(rateText) ?? (rateRead?.ok ? rateRead.price : null));
     // The same SKU or the same values twice would make the same variant twice, so the later row goes to unmatched.
     const upperSku = sku === null ? null : sku.toUpperCase();
     const skuLine = upperSku === null ? undefined : skuLines.get(upperSku);
