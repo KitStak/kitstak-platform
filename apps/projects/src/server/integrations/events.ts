@@ -14,6 +14,7 @@
  * released for retry (max 5 attempts) with its error recorded.
  */
 import 'server-only';
+import { routes } from '@/lib/routes';
 import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { after } from 'next/server';
 import { db } from '@/server/db';
@@ -99,7 +100,7 @@ async function statusChanges(ctx: DomainContext, events: readonly EventRow[]): P
 async function notifyAssignees(ctx: DomainContext, event: EventRow, taskIds: readonly string[]): Promise<void> {
   if (taskIds.length === 0 || !event.afterStatus) return;
   const rows = await db
-    .select({ id: tasks.id, number: tasks.number, title: tasks.title, assigneeId: tasks.assigneeId, projectId: tasks.projectId, key: projects.key })
+    .select({ id: tasks.id, number: tasks.number, title: tasks.title, assigneeId: tasks.assigneeId, projectId: tasks.projectId, key: projects.key, kind: projects.kind })
     .from(tasks)
     .innerJoin(statuses, eq(statuses.id, tasks.statusId))
     .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -121,7 +122,7 @@ async function notifyAssignees(ctx: DomainContext, event: EventRow, taskIds: rea
       kind: 'integration',
       title: `${name} moved to ${event.afterStatus}`.slice(0, 300),
       body: `${label} linked to ${key}: ${row.title}${event.beforeStatus ? ` · was ${event.beforeStatus}` : ''} · updated in ${SOURCE_NAMES[event.source] ?? 'another app'}`,
-      url: `/p/${row.key}/${row.number}`,
+      url: routes.taskAny(row.kind, row.key, row.number),
       projectId: row.projectId,
       taskId: row.id,
     });

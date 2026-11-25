@@ -29,6 +29,7 @@ import type { GoalDTO, ProjectSummary, TaskSummary } from '@/lib/types';
 import { useShell } from '@/features/shell/shell-context';
 import { useShellStore } from '@/features/shell/store';
 import { CustomersCard } from './customers-card';
+import { ProgramsTodayCard } from './programs-today-card';
 import { GettingStartedCard } from './getting-started';
 import { GoalsSnapshot, InboxPreview, RecentProjects } from './home-rail';
 import { useGreeting } from '@kitstak/ui/text';
@@ -279,6 +280,7 @@ export function HomeView({
               )}
             </div>
           </section>
+          <ProgramsTodayCard />
           <CustomersCard />
           <RecentProjects projects={projects.data ?? []} />
         </div>

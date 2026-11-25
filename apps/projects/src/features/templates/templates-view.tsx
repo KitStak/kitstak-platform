@@ -55,6 +55,8 @@ import {
 } from '@/server/actions/templates';
 import { useShell } from '@/features/shell/shell-context';
 import { SaveAsTemplateDialog, TEMPLATE_CATEGORIES } from './save-as-template-dialog';
+import { ProgramTemplates } from './program-templates';
+import type { ProgramTemplateDTO } from '@/lib/program-types';
 import { TemplatePreview } from './template-preview';
 
 const TEAM = 'Your team';
@@ -277,9 +279,11 @@ function EditTemplateDialog({
 export function TemplatesView({
   templates,
   projects,
+  programTemplates = [],
 }: {
   readonly templates: TemplateDTO[];
   readonly projects: ProjectSummary[];
+  readonly programTemplates?: readonly ProgramTemplateDTO[];
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? '/templates';
@@ -467,6 +471,8 @@ export function TemplatesView({
           ) : null}
         </ul>
       )}
+
+      <ProgramTemplates templates={programTemplates} canUse={canUse} />
 
       <Sheet open={Boolean(preview)} onOpenChange={(open) => !open && setParam('preview', null)}>
         {preview ? <TemplatePreview template={preview} canUse={canUse} /> : null}

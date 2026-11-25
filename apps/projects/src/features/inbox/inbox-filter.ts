@@ -1,5 +1,5 @@
 /** Inbox tabs, shared by the server page (reads `?filter=`) and the client view. */
-export const INBOX_FILTERS = ['all', 'unread', 'mentions', 'assigned', 'comments', 'due', 'archived'] as const;
+export const INBOX_FILTERS = ['all', 'unread', 'mentions', 'assigned', 'comments', 'due', 'programs', 'archived'] as const;
 
 export type InboxFilter = (typeof INBOX_FILTERS)[number];
 

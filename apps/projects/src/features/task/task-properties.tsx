@@ -420,6 +420,9 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
         </PriorityPicker>
       </PropertyRow>
 
+      {/* Builds keep their day in the Build block; estimates and dates do not apply (SPEC 5.8). */}
+      {task.kind === 'build' ? null : (
+        <>
       <PropertyRow icon={<CalendarClock aria-hidden />} label="Start date">
         <DuePicker
           value={task.startDate}
@@ -473,6 +476,8 @@ export function TaskProperties({ compact = false }: { readonly compact?: boolean
       <PropertyRow icon={<Gauge aria-hidden />} label="Estimate">
         <EstimateEditor />
       </PropertyRow>
+        </>
+      )}
 
       <PropertyRow
         icon={<Tag aria-hidden />}

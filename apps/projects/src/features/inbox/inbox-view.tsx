@@ -49,6 +49,7 @@ const FILTERS: readonly { value: InboxFilter; label: string }[] = [
   { value: 'assigned', label: 'Assigned' },
   { value: 'comments', label: 'Comments' },
   { value: 'due', label: 'Due dates' },
+  { value: 'programs', label: 'Programs' },
   { value: 'archived', label: 'Archive' },
 ];
 
@@ -64,6 +65,10 @@ const EMPTY: Record<InboxFilter, { title: string; description?: string }> = {
   due: {
     title: 'No due-date reminders',
     description: 'Reminders show here when a task of yours is due today, tomorrow, or is late.',
+  },
+  programs: {
+    title: 'No program news',
+    description: 'Missing output, price cards waiting for review, minimums at risk and months ready to close show here.',
   },
   archived: { title: 'Nothing archived' },
 };

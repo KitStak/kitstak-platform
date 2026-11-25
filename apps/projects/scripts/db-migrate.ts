@@ -116,6 +116,11 @@ function isDirectRun(): boolean {
 }
 
 if (isDirectRun()) {
+  if (process.env.VERCEL_ENV === 'preview') {
+    // Preview deploys share the production database. Unmerged branches must never change it.
+    process.stdout.write('db:migrate - skipped on a Vercel preview build (production deploys apply migrations).\n');
+    process.exit(0);
+  }
   loadDotenv({ path: path.join(APP_ROOT, '.env.local'), quiet: true });
   loadDotenv({ path: path.join(APP_ROOT, '.env'), quiet: true });
   const url = process.argv[2]?.trim() || process.env.DIRECT_URL?.trim() || process.env.DATABASE_URL?.trim();

@@ -1,4 +1,5 @@
-import { FileSpreadsheet, PackagePlus } from 'lucide-react';
+import Link from 'next/link';
+import { FileSpreadsheet, Info, PackagePlus } from 'lucide-react';
 import { Page, Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { Teach } from '@/components/pulse/teach';
@@ -17,6 +18,8 @@ import {
   listOrgPeople,
   listSites,
   listVasServices,
+  programForNewJob,
+  programJobTaken,
   todayInZone,
 } from '@/server/domain';
 import { pulsePage } from '@/server/page';
@@ -41,7 +44,9 @@ async function soft<T>(read: Promise<T>, fallback: T): Promise<T> {
 
 /**
  * New job: basics, price and plan, review. Prefills from `?crmDeal=`, `?wmsWorkOrder=`,
- * `?project=`, `?client=`, `?coreCustomerId=`, `?crmAccountItemId=`, `?name=` and `?value=`.
+ * `?project=`, `?client=`, `?coreCustomerId=`, `?crmAccountItemId=`, `?name=` and `?value=`, and
+ * from a KitStak program (`?program=&name=&clientHint=&unitLabel=`): an ongoing per unit job that
+ * links the program on save.
  */
 export async function NewJobPage({ searchParams }: { readonly searchParams?: Promise<Query> }) {
   const query = (await searchParams) ?? {};
@@ -82,15 +87,22 @@ export async function NewJobPage({ searchParams }: { readonly searchParams?: Pro
     ? await soft(getProfit(ctx, 'month', { from: shiftDate(today, -89), to: today }), null)
     : null;
 
+  // Opened from a program (`?program=`): the program's customer picks the client when Pulse has it.
+  const programId = first(query, 'program', 64);
+  const program = programId ? await soft(programForNewJob(ctx, programId), null) : null;
+  // A program that already bills to a job cannot take this one: say so, with a link to that job.
+  const taken = programId && !program ? await soft(programJobTaken(ctx, programId), null) : null;
+  const hint = first(query, 'clientHint', 64) || program?.coreCustomerId || '';
   const clientRef = {
     pulseClientId: first(query, 'client') || null,
-    coreCustomerId: first(query, 'coreCustomerId') || null,
+    coreCustomerId: first(query, 'coreCustomerId') || (hint && !first(query, 'crmAccountItemId') ? hint : null),
     crmAccountItemId: first(query, 'crmAccountItemId') || null,
   };
-  const prefillClient =
+  let prefillClient =
     clientRef.pulseClientId || clientRef.coreCustomerId || clientRef.crmAccountItemId
       ? await soft(findClientByRef(ctx, clientRef), null)
       : null;
+  if (!prefillClient && hint) prefillClient = await soft(findClientByRef(ctx, { pulseClientId: null, coreCustomerId: null, crmAccountItemId: hint }), null);
   const valueCents = readCents(first(query, 'value', 20));
 
   return (
@@ -109,6 +121,18 @@ export async function NewJobPage({ searchParams }: { readonly searchParams?: Pro
         </ButtonLink>
       }
     >
+      {taken ? (
+        <div role="status" className="mb-4 flex items-start gap-2 rounded-lg border border-border-subtle bg-sunken px-3 py-2.5 text-sm text-fg-secondary" data-testid="new-job-program-taken">
+          <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-icon" />
+          <p>
+            {taken.key} already bills to{' '}
+            <Link href={routes.job(taken.jobNumber)} className="font-medium text-fg-link hover:underline">
+              {taken.jobNumber}
+            </Link>
+            . This job will not link to it. A program bills to one job.
+          </p>
+        </div>
+      ) : null}
       <NewJobWizard
         clients={clients}
         jobTypes={jobTypes}
@@ -138,11 +162,14 @@ export async function NewJobPage({ searchParams }: { readonly searchParams?: Pro
         }}
         prefill={{
           clientName: prefillClient?.name,
-          name: first(query, 'name') || undefined,
           valueCents,
           dealId: first(query, 'crmDeal', 64) || undefined,
           workOrderId: first(query, 'wmsWorkOrder', 64) || undefined,
           projectId: first(query, 'project', 64) || undefined,
+          program: program
+            ? { id: program.id, key: program.key, name: program.name, unitLabel: first(query, 'unitLabel', 40) || program.unitPlural }
+            : null,
+          name: first(query, 'name') || (program ? program.name : undefined),
         }}
       />
     </Page>

@@ -50,11 +50,14 @@ function assertTarget(link: BridgeLinkSnapshot): void {
   }
 }
 
-async function requireInstalled(db: BridgeExecutor): Promise<{ events: boolean }> {
+async function requireInstalled(db: BridgeExecutor): Promise<{ events: boolean; kinds: boolean }> {
   const availability = await pmAvailability(db);
   if (!availability.installed) throw new BridgeError('UNAVAILABLE', 'KitStak Projects isn’t set up for this workspace yet.');
-  return { events: availability.events };
+  return { events: availability.events, kinds: availability.kinds };
 }
+
+/** Shown when another app tries to add a task to, or link a record to, a program (4.1). */
+export const PROGRAM_REFUSAL = 'Programs take builds, not tasks from other apps.';
 
 async function actorName(db: BridgeExecutor, userId: string): Promise<string> {
   const row = await queryOne<{ name: string | null; email: string }>(db, sql`select name, email from core."user" where id = ${userId}::uuid`);
@@ -128,7 +131,7 @@ export async function createTaskFromExternal(
   input: CreateExternalTaskInput,
   urls: BridgeUrls,
 ): Promise<CreatedExternalTask> {
-  const { events } = await requireInstalled(db);
+  const { events, kinds } = await requireInstalled(db);
   assertTarget(input.link);
   if (!isUuid(input.projectId)) throw new BridgeError('VALIDATION', 'Pick a project.', { projectId: 'Pick a project.' });
   const title = input.title.replace(/\s+/g, ' ').trim();
@@ -144,6 +147,7 @@ export async function createTaskFromExternal(
   const orgRole = await orgRoleOf(db, actor);
   if (!orgRole) throw new BridgeError('FORBIDDEN', 'You’re not a member of this workspace.');
   const { project, role } = await projectAccess(db, actor, input.projectId, orgRole);
+  if (project.kind === 'program') throw new BridgeError('VALIDATION', PROGRAM_REFUSAL, { projectId: 'Pick a project.' });
   if (!canEditProject(role)) throw new BridgeError('FORBIDDEN', `You can view ${project.name} but not add tasks to it. Ask a project owner for edit access.`);
   if (project.archived) throw new BridgeError('VALIDATION', `${project.name} is archived. Restore it in Projects to add tasks.`);
   const assigneeId = input.assigneeId || null;
@@ -177,10 +181,10 @@ export async function createTaskFromExternal(
     const task = await queryOne<{ id: string }>(
       tx,
       sql`insert into pm.tasks (org_id, project_id, number, title, description, status_id, priority, assignee_id, reporter_id,
-                                start_date, due_date, position, completed_at, created_by)
+                                start_date, due_date, position, completed_at, created_by${kinds ? sql`, kind` : sql``})
           values (${actor.orgId}::uuid, ${project.id}::uuid, ${number}, ${title}, ${plainTextToHtml(input.description)},
                   ${status.id}::uuid, ${priority}, ${assigneeId}::uuid, ${actor.userId}::uuid,
-                  ${startDate}::date, ${dueDate}::date, ${position}, ${closed ? sql`now()` : sql`null`}, ${actor.userId}::uuid)
+                  ${startDate}::date, ${dueDate}::date, ${position}, ${closed ? sql`now()` : sql`null`}, ${actor.userId}::uuid${kinds ? sql`, 'task'` : sql``})
           returning id`,
     );
     if (!task) throw new BridgeError('VALIDATION', 'The task couldn’t be created. Try again.');
@@ -255,6 +259,7 @@ export async function linkProjectToRecord(
   assertTarget(link);
   if (!isUuid(projectId)) throw new BridgeError('VALIDATION', 'Pick a project.');
   const { project, role } = await projectAccess(db, actor, projectId);
+  if (project.kind === 'program') throw new BridgeError('VALIDATION', PROGRAM_REFUSAL, { projectId: 'Pick a project.' });
   if (!canEditProject(role)) throw new BridgeError('FORBIDDEN', `You can view ${project.name} but not change it.`);
   return db.transaction(async (tx) => {
     const result = await insertLink(tx, actor, { projectId: project.id }, link);

@@ -25,7 +25,7 @@ export function jobPageTitle(ref: string, tab: JobTab): string {
   return tab === 'overview' ? ref.toUpperCase() : `${ref.toUpperCase()} · ${JOB_TAB_LABELS[tab]}`;
 }
 
-export const PROFIT_VIEWS = ['job', 'client', 'type', 'service', 'site', 'month', 'week', 'day'] as const;
+export const PROFIT_VIEWS = ['job', 'client', 'type', 'service', 'site', 'program', 'month', 'week', 'day'] as const;
 export type ProfitView = (typeof PROFIT_VIEWS)[number];
 
 export const LABOR_TABS = ['rates', 'time', 'cost'] as const;

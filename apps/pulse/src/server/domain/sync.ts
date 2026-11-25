@@ -41,6 +41,7 @@ import { pullWmsUsage } from './ledger';
 import { deleteProductionEntries, saveProductionEntry } from './production';
 import { assertOpen, closedMonths, finishWrite, newTouched, restampFixedJob, restampProduction, touchDay, touchJob } from './recalc';
 import { loadSettings } from './settings';
+import { syncPrograms } from './sync-programs';
 import { applyWmsContractPrices, pullWmsServices } from './wms-services';
 
 const SOURCES: readonly SiblingApp[] = ['crm', 'wms', 'projects'];
@@ -414,7 +415,13 @@ async function syncCrm(ctx: DomainContext, tally: Tally): Promise<void> {
 const PROJECT_HEALTH: Readonly<Record<string, string>> = { on_track: 'On track', at_risk: 'At risk', off_track: 'Off track' };
 const PROJECT_STATUS: Readonly<Record<string, string>> = { planning: 'Planning', active: 'Active', on_hold: 'On hold', completed: 'Completed', archived: 'Archived' };
 
+/** The Projects run: linked projects (copies and logged time), then programs (docs/programs/SPEC.md 6.1). */
 async function syncProjects(ctx: DomainContext, tally: Tally): Promise<void> {
+  await syncProjectLinks(ctx, tally);
+  await syncPrograms(ctx, tally);
+}
+
+async function syncProjectLinks(ctx: DomainContext, tally: Tally): Promise<void> {
   const settings = await loadSettings(ctx.orgId);
   const links = await linkRows(ctx, ['pm_project']);
   const projects = await getProjects(ctx, links.map((link) => link.target_id));
@@ -615,7 +622,7 @@ export const syncIfStale = scoped(async function syncIfStale(ctx: DomainContext,
   }
 });
 
-const EVENT_SOURCE: Readonly<Record<string, SiblingApp>> = { wms_work_order_changed: 'wms', crm_deal_stage_changed: 'crm', pm_time_logged: 'projects' };
+const EVENT_SOURCE: Readonly<Record<string, SiblingApp>> = { wms_work_order_changed: 'wms', crm_deal_stage_changed: 'crm', pm_time_logged: 'projects', pm_program_changed: 'projects' };
 
 /** A note is tried this many times, then parked with its last error. */
 export const BRIDGE_EVENT_MAX_ATTEMPTS = 5;

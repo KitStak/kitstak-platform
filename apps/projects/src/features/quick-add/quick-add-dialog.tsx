@@ -47,6 +47,8 @@ import { OptionList } from '@/features/views/option-list';
 import { useShell, usePlanReadOnly } from '@/features/shell/shell-context';
 import { useShellStore } from '@/features/shell/store';
 import { SmartTitleInput, UnderstoodChips, type SmartTitleInputHandle } from './smart-title-input';
+import { BuildQuickAddForm } from './build-quick-add';
+import { looksLikeBuild } from '@/lib/nl-parse-build';
 
 const LAST_PROJECT_KEY = 'kitstak-projects:last-quick-add-project';
 
@@ -97,14 +99,25 @@ export function QuickAddDialog() {
     setWasOpen(open);
     if (open) setSession((n) => n + 1);
   }
+  const defaultsMode = useShellStore((state) => state.quickAdd.defaults.mode);
+  const defaultsText = useShellStore((state) => state.quickAdd.defaults.text);
+  // Build mode: opened as "New build", or switched on by typing "build " (docs/programs/SPEC.md 5.17).
+  const [mode, setMode] = useState<{ session: number; kind: 'task' | 'build'; text: string } | null>(null);
+  const current = mode && mode.session === session ? mode : { session, kind: defaultsMode === 'build' ? ('build' as const) : ('task' as const), text: defaultsText ?? '' };
   return (
     <Dialog open={open} onOpenChange={(value) => (value ? undefined : close())}>
-      {open ? <QuickAddForm key={session} /> : null}
+      {open ? (
+        current.kind === 'build' ? (
+          <BuildQuickAddForm key={`b${session}`} initialText={current.text} onTaskMode={(text) => setMode({ session, kind: 'task', text })} />
+        ) : (
+          <QuickAddForm key={`t${session}:${current.text}`} initialText={current.text} onBuildMode={(text) => setMode({ session, kind: 'build', text })} />
+        )
+      ) : null}
     </Dialog>
   );
 }
 
-function QuickAddForm() {
+function QuickAddForm({ initialText, onBuildMode }: { readonly initialText?: string; readonly onBuildMode?: (text: string) => void }) {
   const pathname = usePathname() ?? '';
   const mod = useModKey();
   const queryClient = useQueryClient();
@@ -118,7 +131,18 @@ function QuickAddForm() {
   const today = todayIso();
 
   const editable = useMemo(() => (projects.data ?? []).filter((p) => !p.archivedAt && (p.role === 'owner' || p.role === 'editor')), [projects.data]);
-  const [title, setTitle] = useState(defaults.text ?? '');
+  const [title, setTitleRaw] = useState(initialText || defaults.text || '');
+  // Typing "build " switches to build mode with the same text (docs/programs/SPEC.md 5.17).
+  const setTitle = useCallback(
+    (next: string | ((text: string) => string)) => {
+      if (typeof next === 'string' && onBuildMode && looksLikeBuild(next)) {
+        onBuildMode(next);
+        return;
+      }
+      setTitleRaw(next);
+    },
+    [onBuildMode],
+  );
   const [ignore, setIgnore] = useState<readonly string[]>([]);
   /** New #label names the user confirmed with "Create label …". */
   const [createLabels, setCreateLabels] = useState<readonly string[]>([]);

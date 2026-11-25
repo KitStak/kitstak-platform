@@ -442,6 +442,22 @@ export interface JobListItemDTO extends JobDTO {
   readonly stats: JobStatsDTO;
   /** Labor hours of the plan in use (budget, else quote). */
   readonly planLaborHours: DecimalString | null;
+  /** Set when a KitStak program (or its builds) feeds this job (docs/programs/SPEC.md 6.1). */
+  readonly program?: JobProgramTagDTO | null;
+}
+
+/** The Program badge of a job fed by Projects. */
+export interface JobProgramTagDTO {
+  /** `program`: a program bills to the job. `builds`: only single builds do. */
+  readonly kind: 'program' | 'builds';
+  /** The program key (`GLOVE`), or the first build key when only builds feed the job. */
+  readonly key: string | null;
+  readonly name: string | null;
+  readonly programId: string | null;
+  /** Builds that bill to the job on their own. */
+  readonly buildCount: number;
+  /** Path in the Projects app. */
+  readonly path: string | null;
 }
 
 /** A job in the Deleted list: the job as it was, and who deleted it (`deletedAt` says when). */
@@ -590,6 +606,17 @@ export interface ProductionEntryDTO extends StreamRowBase {
   readonly stdScrapCents: MoneyCents;
   readonly needsRate: boolean;
   readonly enteredBy: string | null;
+  /** Set on a line the program sync owns (a Projects build day or program time). Read only in Pulse. */
+  readonly fromProjects?: ProgramLineOriginDTO | null;
+}
+
+/** Where a read only line came from in Projects (docs/programs/SPEC.md 6.1). */
+export interface ProgramLineOriginDTO {
+  readonly kind: 'build' | 'prep';
+  readonly key: string | null;
+  readonly message: string;
+  /** Path in the Projects app. */
+  readonly path: string | null;
 }
 
 export interface IndirectEntryDTO extends StreamRowBase {
@@ -657,6 +684,8 @@ export interface RevenueEntryDTO extends StreamRowBase {
   readonly vasServiceId: string | null;
   readonly serviceLabel: string | null;
   readonly approved: boolean;
+  /** Set on a fee or adjustment copied from a Projects program ledger. Read only in Pulse. */
+  readonly fromProgram?: { readonly key: string | null; readonly message: string; readonly path: string | null } | null;
 }
 
 export interface VasEntryDTO extends StreamRowBase {
@@ -924,6 +953,14 @@ export interface CloseChecklistDTO {
   readonly servicesNoPrice: number;
   readonly daysNotReviewed: number;
   readonly payrollGapCents: MoneyCents;
+  /** KitStak programs that feed a job of this workspace (docs/programs/SPEC.md 6.1). */
+  readonly programsFeeding?: number;
+  /** Keys of programs that have not added this month's charges yet. */
+  readonly programsUnsettled?: readonly string[];
+  /** No program changes waiting and the last Projects sync ran after the month ended. */
+  readonly programsSynced?: boolean;
+  /** Program change notes from Projects still waiting for the sync. */
+  readonly programsPending?: number;
   readonly ready: boolean;
 }
 
@@ -1046,6 +1083,8 @@ export interface JobListFilters {
   readonly risk?: readonly PulseStatus[];
   readonly includeArchived?: boolean;
   readonly includeDeleted?: boolean;
+  /** Only jobs a KitStak program or its builds feed. */
+  readonly fedByProgram?: boolean;
   readonly limit?: number;
 }
 
@@ -1514,4 +1553,103 @@ export interface JobTaskCostsDTO {
   readonly untaggedEntries: number;
   readonly untaggedHours: DecimalString;
   readonly moneyHidden: boolean;
+}
+
+/* ---- KitStak Programs on a job (docs/programs/SPEC.md 6.1) ---- */
+
+export interface JobProgramVariantDTO {
+  readonly variantId: string | null;
+  /** The variant name from Projects, "Removed variant" for one that is gone, "No variant" for time only lines. */
+  readonly name: string;
+  readonly key: string | null;
+  readonly color: string | null;
+  readonly units: DecimalString;
+  readonly hours: DecimalString;
+  readonly revenueCents: MoneyCents;
+  /** Labor cost plus the line's share of time not on a job. */
+  readonly laborCents: MoneyCents;
+  readonly materialCents: MoneyCents;
+  readonly profitCents: MoneyCents;
+  readonly marginBp: number | null;
+  /** Share of the program revenue on this job, in basis points. */
+  readonly shareBp: number | null;
+}
+
+/** One program that feeds the job: its own job (`program_job`) or builds billed one by one (`build_job`). */
+export interface JobProgramBlockDTO {
+  readonly programId: string;
+  /** The price card version in force today (`2` for v2), or null. */
+  readonly cardVersion: number | null;
+  readonly key: string;
+  readonly name: string;
+  /** Path in the Projects app. */
+  readonly path: string;
+  readonly role: 'program_job' | 'build_job';
+  readonly unitSingular: string;
+  readonly unitPlural: string;
+  readonly timezone: string;
+  /** This month, from Pulse stamps. */
+  readonly monthUnits: DecimalString;
+  readonly monthRevenueCents: MoneyCents;
+  /** This month, from the rows Projects stored. Null when Projects could not be read. */
+  readonly projectsMonthUnits: DecimalString | null;
+  readonly projectsMonthCents: MoneyCents;
+  /** Pulse and Projects agree to the cent this month. Null when Projects could not be read. */
+  readonly matches: boolean | null;
+  /** Projects minus Pulse, cents. */
+  readonly diffCents: MoneyCents;
+  readonly variants: readonly JobProgramVariantDTO[];
+  /** Fee and adjustment rows copied from the program ledger, all time. */
+  readonly feesCents: MoneyCents;
+  readonly feeRows: number;
+  /** Build lines plus fees, all time. */
+  readonly revenueCents: MoneyCents;
+}
+
+export interface JobProgramDTO {
+  /** False when no program or build feeds this job, or Projects is not there. */
+  readonly available: boolean;
+  readonly jobId: string;
+  /** The month of the card, `YYYY-MM`, in the program's time zone. */
+  readonly month: string | null;
+  readonly blocks: readonly JobProgramBlockDTO[];
+  /** Footer rows of the By variant table; with the blocks they add up to the job's numbers. */
+  readonly totals: {
+    readonly prepRevenueCents: MoneyCents;
+    readonly prepLaborCents: MoneyCents;
+    readonly prepMaterialCents: MoneyCents;
+    readonly prepHours: DecimalString;
+    readonly otherRevenueCents: MoneyCents;
+    readonly otherCostCents: MoneyCents;
+    readonly revenueCents: MoneyCents;
+    readonly costCents: MoneyCents;
+    readonly profitCents: MoneyCents;
+    readonly marginBp: number | null;
+    readonly units: DecimalString;
+  } | null;
+  readonly moneyHidden: boolean;
+  readonly pendingSync: boolean;
+  readonly pendingSince: string | null;
+  readonly lastSyncAt: string | null;
+  /** The reader may run "Sync now". */
+  readonly canSync: boolean;
+}
+
+/** A program in the Link a program picker, with why it cannot be linked to this job. */
+export interface ProgramToLinkDTO {
+  readonly id: string;
+  readonly key: string;
+  readonly name: string;
+  readonly status: string;
+  readonly unitPlural: string;
+  readonly customerName: string | null;
+  /** The program's customer is this job's client. */
+  readonly sameCustomer: boolean;
+  /** The program already bills to this job. */
+  readonly linkedHere: boolean;
+  /** Why it cannot be linked here, in UI words. Null when it can. */
+  readonly refusal: string | null;
+  readonly refusalReason: 'not_per_unit' | 'not_ongoing' | 'work_order_fed' | 'has_typed_units' | 'other_program' | 'other_job' | null;
+  /** Path in the Projects app. */
+  readonly path: string;
 }

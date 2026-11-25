@@ -1,5 +1,5 @@
 /** URL model of the /search page (shared by the server page and the client view). */
-import type { FullSearchType } from '@/lib/types';
+import type { FullSearchTypeWithPrograms as FullSearchType } from '@/lib/types';
 
 export interface SearchParamsState {
   readonly q: string;
@@ -10,7 +10,7 @@ export interface SearchParamsState {
   readonly assignee: string | null;
 }
 
-export const SEARCH_TYPES: readonly FullSearchType[] = ['all', 'tasks', 'comments', 'projects', 'people', 'goals'];
+export const SEARCH_TYPES: readonly FullSearchType[] = ['all', 'tasks', 'comments', 'projects', 'programs', 'people', 'goals'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const one = (value: string | string[] | null | undefined): string => (Array.isArray(value) ? (value[0] ?? '') : (value ?? ''));

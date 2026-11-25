@@ -60,7 +60,7 @@ function MismatchDot({ size }: { readonly size: 'xs' | 'sm' | 'md' }) {
     <span
       aria-hidden
       data-testid="health-mismatch-dot"
-      className={cn('absolute -top-0.5 -right-0.5 rounded-full bg-warning ring-2 ring-[var(--surface-panel)]', size === 'xs' ? 'size-1.5 ring-1' : size === 'sm' ? 'size-2' : 'size-2.5')}
+      className={cn('pointer-events-none absolute -top-1 -right-1 rounded-full bg-warning ring-2 ring-[var(--surface-panel)]', size === 'xs' ? 'size-1.5 ring-1' : size === 'sm' ? 'size-2' : 'size-2.5')}
     />
   );
 }

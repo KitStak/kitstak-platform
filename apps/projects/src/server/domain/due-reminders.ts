@@ -28,13 +28,14 @@ export async function ensureDueReminders(ctx: DomainContext, options: { readonly
         left join pm.user_prefs p on p.org_id = ${ctx.orgId} and p.user_id = ${ctx.userId}
       ),
       candidates as (
-        select t.id as task_id, t.project_id, t.title, t.number, t.due_date, p.key as project_key,
+        select t.id as task_id, t.project_id, t.title, t.number, t.due_date, p.key as project_key, p.kind as project_kind,
           case when t.due_date < current_date then 'overdue' else 'due_soon' end as kind
         from pm.tasks t
         join pm.projects p on p.id = t.project_id
         join pm.statuses s on s.id = t.status_id
         where t.org_id = ${ctx.orgId}
           and t.assignee_id = ${ctx.userId}
+          and t.kind = 'task'
           and t.deleted_at is null and p.deleted_at is null and p.archived_at is null
           and s.category not in ('done', 'cancelled')
           and t.due_date is not null
@@ -48,7 +49,7 @@ export async function ensureDueReminders(ctx: DomainContext, options: { readonly
           else c.project_key || '-' || c.number || ' is due tomorrow'
         end,
         left(c.title, 300),
-        '/p/' || c.project_key || '/' || c.number
+        case when c.project_kind = 'program' then '/programs/' else '/p/' end || c.project_key || '/' || c.number
       from candidates c, prefs
       where coalesce((prefs.toggles ->> c.kind)::boolean, true)
         and not exists (

@@ -96,12 +96,14 @@ export interface SearchInputProps extends Omit<InputProps, 'leadingIcon' | 'type
   readonly onValueChange: (value: string) => void;
   /** Called on Escape when the field is already empty (e.g. close the search). */
   readonly onEscape?: () => void;
+  /** Escape clears the text first (default). Off inside a panel that Escape closes: the text stays. */
+  readonly escapeClears?: boolean;
   readonly clearLabel?: string;
 }
 
 /** Search field with leading magnifier, clear button and Escape-to-clear. */
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(function SearchInput(
-  { value, onValueChange, onEscape, onKeyDown, clearLabel = 'Clear search', placeholder = 'Search', ...props },
+  { value, onValueChange, onEscape, onKeyDown, escapeClears = true, clearLabel = 'Clear search', placeholder = 'Search', ...props },
   ref,
 ) {
   return (
@@ -117,7 +119,11 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
       onChange={(event) => onValueChange(event.target.value)}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
-          if (value) {
+          if (!escapeClears) {
+            // Stops the browser's own clear of a search field; the panel closes, the text stays.
+            event.preventDefault();
+            onEscape?.();
+          } else if (value) {
             event.preventDefault();
             event.stopPropagation();
             onValueChange('');

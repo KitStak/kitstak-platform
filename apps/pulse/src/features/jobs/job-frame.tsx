@@ -54,6 +54,7 @@ import { JobMaterials } from './job-materials';
 import { JobMoneyIn } from './job-money-in';
 import { JobOverview } from './job-overview';
 import { JobPlan } from './job-plan';
+import { ProgramBadge } from './job-program';
 import { JobStatusBadge, RiskPill } from './job-ui';
 import { JobWork } from './job-work';
 import { STATUS_MOVES, callAction, statusMoveLabel, useJobActions } from './use-job-actions';
@@ -127,7 +128,20 @@ export function JobFrame({
   return (
     <Page
       title={job.name}
-      subtitle={`${job.number} · ${job.clientName} · ${job.jobTypeName}${job.siteName ? ` · ${job.siteName}` : ''}`}
+      subtitle={
+        <>
+          {job.number} ·{' '}
+          <Link
+            href={routes.client(job.clientId)}
+            className="text-fg-secondary hover:text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            data-testid="job-client-link"
+          >
+            {job.clientName}
+          </Link>{' '}
+          · {job.jobTypeName}
+          {job.siteName ? ` · ${job.siteName}` : ''}
+        </>
+      }
       breadcrumbs={[{ label: 'Jobs', href: routes.jobs() }, { label: job.number }]}
       actions={
         <>
@@ -185,6 +199,13 @@ export function JobFrame({
                 <DropdownMenuItem
                   variant="danger"
                   icon={<Trash2 aria-hidden />}
+                  // Projects owns the program link, so the server refuses the delete until it is gone (SPEC 6.1).
+                  disabled={Boolean(job.program)}
+                  description={
+                    job.program
+                      ? `${job.program.key ?? 'A program'} bills to this job. Remove the link in Projects first.`
+                      : undefined
+                  }
                   onSelect={() => actions.askRemove(job)}
                   data-testid="job-delete"
                 >
@@ -234,6 +255,7 @@ export function JobFrame({
               </span>
             ) : null}
             <RiskPill job={job} />
+            {job.program ? <ProgramBadge program={job.program} /> : null}
 
             {canManage ? (
               <DropdownMenu>
@@ -349,14 +371,9 @@ export function JobFrame({
               </span>
             ) : null}
 
-            <Link
-              href={routes.client(job.clientId)}
-              className="inline-flex h-7 items-center rounded-md px-1.5 text-sm text-primary-text hover:underline pointer-coarse:h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            >
-              {job.clientName}
-            </Link>
             {job.links
-              .filter((link) => link.url || link.title)
+              // The Program badge above already names the program and its builds.
+              .filter((link) => (link.url || link.title) && !(job.program && (link.targetType === 'pm_program' || link.targetType === 'pm_build')))
               .slice(0, 3)
               .map((link) =>
                 link.url ? (

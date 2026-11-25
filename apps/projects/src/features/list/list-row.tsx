@@ -20,6 +20,7 @@ import { LinkChip, cleanTitle } from '@/features/views/link-chips';
 import { INTEGRATION_TARGET_LABELS } from '@/lib/constants';
 import { CollapsingRow } from './collapsing-row';
 import { TaskMenuItems } from '@/features/views/task-menu';
+import { useCardExtras } from '@/features/views/card-extras';
 import { toggleDoneWithUndo } from '@/features/task/done-toggle';
 import type { TaskOps } from '@/features/views/use-task-ops';
 
@@ -63,6 +64,8 @@ const cellButton = 'inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 roun
 export const ListRow = memo(function ListRow(props: ListRowProps) {
   const { id, task, group, depth, status, labels, links, selected, selectMode, expanded, canEdit, draggable, ops, onOpen, onSelect, onToggleExpand, onAddSubtask, onKeyNav } = props;
   const people = usePeopleMap();
+  const extras = useCardExtras();
+  const extraCells = extras.renderRowCells ? extras.renderRowCells(task) : null;
   const [editing, setEditing] = useState(false);
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, data: { type: 'row', taskId: task.id, group }, disabled: !draggable || editing });
   const done = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
@@ -242,6 +245,7 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
               </>
             )}
           </div>
+          {extraCells}
           <Cell className="w-32 max-lg:hidden">
             <LazyPicker disabled={!canEdit} picker={(p) => <StatusPicker value={task.statusId} onChange={(statusId) => void ops.updateTask(task.id, { statusId })} disabled={!canEdit} {...p}>{p.trigger}</StatusPicker>}>
               <button type="button" aria-label={`Status: ${status?.name ?? ''}. Change status`} className={cellButton} data-testid="row-status">
@@ -279,14 +283,14 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
                   <MoreHorizontal aria-hidden className="size-4" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className={task.kind === 'build' ? 'w-[280px]' : 'w-56'}>
                 <TaskMenuItems task={task} ops={ops} kind="dropdown" />
               </DropdownMenuContent>
             </DropdownMenu>
           </Cell>
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-56">
+      <ContextMenuContent className={task.kind === 'build' ? 'w-[280px]' : 'w-56'}>
         <TaskMenuItems task={task} ops={ops} kind="context" />
       </ContextMenuContent>
     </ContextMenu>

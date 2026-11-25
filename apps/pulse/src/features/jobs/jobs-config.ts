@@ -5,7 +5,7 @@
 import { JOB_TABS, PULSE_STATUSES, type JobTab, type PulseStatus } from '@/lib/constants';
 import { DEFAULT_COLUMNS, JOB_COLUMNS, SORT_OPTIONS, type ColumnId, type SortKey } from './jobs-columns';
 
-export type GroupKey = 'none' | 'client' | 'type' | 'site' | 'owner' | 'risk' | 'status';
+export type GroupKey = 'none' | 'client' | 'type' | 'site' | 'owner' | 'risk' | 'status' | 'program';
 
 export const GROUP_OPTIONS: readonly { readonly value: GroupKey; readonly label: string }[] = [
   { value: 'none', label: 'No grouping' },
@@ -15,6 +15,7 @@ export const GROUP_OPTIONS: readonly { readonly value: GroupKey; readonly label:
   { value: 'site', label: 'Site' },
   { value: 'owner', label: 'Owner' },
   { value: 'status', label: 'Stage' },
+  { value: 'program', label: 'Program' },
 ];
 
 /** Everything a saved view remembers. */
@@ -27,6 +28,8 @@ export interface JobsViewConfig {
   readonly ownerId: string | null;
   readonly dueFrom: string | null;
   readonly dueTo: string | null;
+  /** Only jobs a KitStak program (or its builds) feeds. */
+  readonly fedByProgram: boolean;
   readonly sort: SortKey;
   readonly dir: 'asc' | 'desc';
   readonly group: GroupKey;
@@ -43,6 +46,7 @@ export const DEFAULT_VIEW: JobsViewConfig = {
   ownerId: null,
   dueFrom: null,
   dueTo: null,
+  fedByProgram: false,
   sort: 'worst',
   dir: 'asc',
   group: 'none',
@@ -97,6 +101,7 @@ export function toViewConfig(
     ownerId: text(raw.ownerId),
     dueFrom: text(raw.dueFrom),
     dueTo: text(raw.dueTo),
+    fedByProgram: raw.fedByProgram === true,
     sort:
       SORT_OPTIONS.some((option) => option.value === sortText) || known.has(sortText)
         ? (sortText as SortKey)

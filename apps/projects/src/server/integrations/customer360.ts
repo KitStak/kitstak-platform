@@ -24,6 +24,8 @@ import { db } from '@/server/db';
 import { appUrls } from '@/server/env';
 import { integrationLinks } from '@/server/db/schema';
 import type { DomainContext } from '@/server/domain/_shared';
+import { routes } from '@/lib/routes';
+import type { ProgramListItemDTO } from '@/lib/program-types';
 import { crmItemUrl } from './crm';
 import { getCustomers } from './customers';
 import { integrationAvailability, tableExists, wmsSchemaFor, wmsTableExists } from './detect';
@@ -115,7 +117,60 @@ export interface Customer360 {
     readonly lastReceipt: Customer360Receipt | null;
   } | null;
   readonly risks: readonly Customer360Risk[];
+  /** Programs for this customer (docs/programs/SPEC.md 4.1), same numbers as the program directory. */
+  readonly programs: readonly CustomerProgram[];
   readonly checkedAt: string;
+}
+
+/** One program on a customer strip. Money is null when the viewer cannot see it. */
+export interface CustomerProgram {
+  readonly id: string;
+  readonly key: string;
+  readonly name: string;
+  readonly status: string;
+  readonly health: ProgramListItemDTO['health'];
+  readonly unit: ProgramListItemDTO['unit'];
+  readonly month: string;
+  readonly monthUnits: string;
+  readonly revenueCents: string | null;
+  readonly targetBp: number | null;
+  readonly today: ProgramListItemDTO['today'];
+  readonly moneyHidden: boolean;
+  readonly url: string;
+}
+
+export function toCustomerProgram(item: ProgramListItemDTO): CustomerProgram {
+  return {
+    id: item.id,
+    key: item.key,
+    name: item.name,
+    status: item.status,
+    health: item.health,
+    unit: item.unit,
+    month: item.month.month,
+    monthUnits: item.month.units,
+    revenueCents: item.moneyHidden ? null : item.month.revenueCents,
+    targetBp: item.moneyHidden ? null : item.month.targetBp,
+    today: item.today,
+    moneyHidden: item.moneyHidden,
+    url: routes.program(item.key),
+  };
+}
+
+/** Live programs whose customer is this core customer or CRM account. Fails soft to none. */
+export async function programsForCustomer(ctx: DomainContext, ids: { readonly customerId: string | null; readonly accountId: string | null }): Promise<CustomerProgram[]> {
+  if (!ids.customerId && !ids.accountId) return [];
+  try {
+    const { listPrograms } = await import('@/server/domain/programs');
+    const items = ids.customerId ? await listPrograms(ctx, { customerId: ids.customerId }) : await listPrograms(ctx);
+    return items
+      .filter((item) => item.status !== 'completed' && item.status !== 'archived')
+      .filter((item) => (ids.customerId ? true : item.customer?.id === ids.accountId))
+      .map(toCustomerProgram);
+  } catch (error) {
+    console.error('[projects] customer 360 programs read failed', error);
+    return [];
+  }
 }
 
 type DealRow = {
@@ -541,7 +596,10 @@ export async function customer360(
   customerId = customerId ?? crm.customerFromAccount;
   const customer = customerId ? ((await getCustomers(ctx, [customerId])).get(customerId) ?? null) : null;
   const wms = customer && availability.wms ? await wmsPart(ctx, customer) : null;
-  const risks = await risksFor(project.id, crm.crm, wms, checkedAt.slice(0, 10));
+  const [risks, programs] = await Promise.all([
+    risksFor(project.id, crm.crm, wms, checkedAt.slice(0, 10)),
+    programsForCustomer(ctx, { customerId: customer?.id ?? null, accountId: crm.account?.id ?? null }),
+  ]);
   return {
     available: { crm: availability.crm, wms: availability.wms },
     urls: { crm: `${appUrls().crm}/${ctx.orgSlug}`, wms: appUrls().wms, crmTemplates: `${appUrls().crm}/${ctx.orgSlug}/workspaces?templates=1` },
@@ -551,6 +609,7 @@ export async function customer360(
     crm: crm.crm,
     wms,
     risks,
+    programs,
     checkedAt,
   };
 }

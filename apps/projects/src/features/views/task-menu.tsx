@@ -5,7 +5,7 @@
  * delete with undo. One definition rendered as a DropdownMenu or a ContextMenu.
  */
 import type { ComponentType, ReactNode } from 'react';
-import { ArrowRightLeft, CalendarCheck2, CalendarX2, Copy, ExternalLink, Link2, Signal, SquareCheckBig, Trash2, UserRoundCheck, UserX } from 'lucide-react';
+import { ArrowRightLeft, Bell, CalendarCheck2, CalendarX2, Check, Copy, ExternalLink, Link2, Signal, SquareCheckBig, Tag, Trash2, UserRoundCheck, UserRoundPlus, UserX } from 'lucide-react';
 import {
   ContextMenuItem,
   ContextMenuSeparator,
@@ -17,17 +17,23 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
+  Avatar,
+  toast,
 } from '@/components/ui';
 import { PriorityIcon, StatusIcon } from '@/components/pm';
 import { PRIORITIES, PRIORITY_LABELS } from '@/lib/constants';
 import { addDaysIso, todayIso } from '@/lib/dates';
 import { useProjects } from '@/lib/hooks/use-data';
+import { usePeopleMap } from '@/lib/hooks/use-people';
+import { setWatchingAction } from '@/server/actions/tasks';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import type { TaskSummary } from '@/lib/types';
 import { useCurrentProject } from '@/features/projects/project-context';
 import { useShell } from '@/features/shell/shell-context';
 import { toggleDoneWithUndo } from '@/features/task/done-toggle';
 import type { TaskOps } from './use-task-ops';
+import { useCardExtras } from './card-extras';
+import { LabelDot } from './field-pickers';
 
 type ItemProps = { readonly icon?: ReactNode; readonly onSelect?: (event: Event) => void; readonly variant?: 'default' | 'danger'; readonly children: ReactNode; readonly disabled?: boolean; readonly shortcut?: string };
 
@@ -67,15 +73,49 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
   const otherProjects = (projects.data ?? []).filter((entry) => entry.id !== project.id && !entry.archivedAt && !entry.isTemplate && (entry.role === 'owner' || entry.role === 'editor'));
   const today = todayIso();
   const done = statuses.find((status) => status.category === 'done');
+  const extras = useCardExtras();
+  const hidden = new Set(extras.hideTaskMenuItems?.(task) ?? []);
+  const extraItems = extras.renderMenuItems?.(task, { kind });
+  const dangerItems = extras.renderMenuDanger?.(task, { kind });
+  const people = usePeopleMap();
+  // Builds get the full task items (docs/programs/SPEC.md 5.7): Assign, Labels and Watch.
+  const isBuild = task.kind === 'build';
+  const members = project.members
+    .map((member) => ({ id: member.userId, name: people.get(member.userId)?.name ?? 'Former member', image: people.get(member.userId)?.image ?? null }))
+    .sort((a, b) => (a.id === user.id ? -1 : b.id === user.id ? 1 : a.name.localeCompare(b.name)));
+  const watch = async () => {
+    const result = await setWatchingAction({ taskId: task.id, watching: true });
+    if (!result.ok) {
+      toast.error("Couldn't watch this", result.error.message);
+      return;
+    }
+    toast.undo(`You will get updates on ${task.key}`, {
+      undoLabel: 'Stop watching',
+      onUndo: async () => {
+        await setWatchingAction({ taskId: task.id, watching: false });
+      },
+    });
+  };
 
   return (
     <>
+      {extraItems ? (
+        <>
+          {extraItems}
+          <Separator />
+        </>
+      ) : null}
       <Item icon={<ExternalLink aria-hidden />} onSelect={() => openTask(task.key)} shortcut="Enter">
-        Open task
+        {task.kind === 'build' ? 'Open build' : 'Open task'}
       </Item>
       <Item icon={<Link2 aria-hidden />} onSelect={() => void ops.copyLink(task)}>
         Copy link
       </Item>
+      {isBuild ? (
+        <Item icon={<Bell aria-hidden />} onSelect={() => void watch()}>
+          Watch
+        </Item>
+      ) : null}
       {canEdit ? (
         <>
           <Separator />
@@ -104,7 +144,48 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
               ))}
             </SubContent>
           </Sub>
-          {task.assigneeId === user.id ? (
+          {isBuild ? (
+            <Sub>
+              <SubTrigger icon={<UserRoundPlus aria-hidden />}>Assign</SubTrigger>
+              <SubContent className="max-h-80 w-60 overflow-y-auto">
+                {members.map((person) => (
+                  <Item key={person.id} icon={<Avatar name={person.name} src={person.image ?? undefined} size="xs" />} onSelect={() => person.id !== task.assigneeId && void ops.updateTask(task.id, { assigneeId: person.id })}>
+                    <span className="flex w-full items-center justify-between gap-2">
+                      {person.id === user.id ? `${person.name} (you)` : person.name}
+                      {person.id === task.assigneeId ? <Check aria-label="assigned now" className="size-4 text-primary-text" /> : null}
+                    </span>
+                  </Item>
+                ))}
+                {task.assigneeId ? (
+                  <>
+                    <Separator />
+                    <Item icon={<UserX aria-hidden />} onSelect={() => void ops.updateTask(task.id, { assigneeId: null })}>
+                      Unassign
+                    </Item>
+                  </>
+                ) : null}
+              </SubContent>
+            </Sub>
+          ) : null}
+          {isBuild && project.labels.length ? (
+            <Sub>
+              <SubTrigger icon={<Tag aria-hidden />}>Labels</SubTrigger>
+              <SubContent className="max-h-80 w-56 overflow-y-auto">
+                {project.labels.map((label) => {
+                  const on = task.labelIds.includes(label.id);
+                  return (
+                    <Item key={label.id} icon={<LabelDot color={label.color} />} onSelect={() => void ops.setLabels(task, on ? task.labelIds.filter((id) => id !== label.id) : [...task.labelIds, label.id])}>
+                      <span className="flex w-full items-center justify-between gap-2">
+                        {label.name}
+                        {on ? <Check aria-label="on" className="size-4 text-primary-text" /> : null}
+                      </span>
+                    </Item>
+                  );
+                })}
+              </SubContent>
+            </Sub>
+          ) : null}
+          {isBuild ? null : task.assigneeId === user.id ? (
             <Item icon={<UserX aria-hidden />} onSelect={() => void ops.updateTask(task.id, { assigneeId: null })}>
               Unassign me
             </Item>
@@ -113,7 +194,7 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
               Assign to me
             </Item>
           )}
-          <Sub>
+          {hidden.has('due') ? null : <Sub>
             <SubTrigger icon={<CalendarCheck2 aria-hidden />}>Due date</SubTrigger>
             <SubContent className="w-48">
               <Item onSelect={() => void ops.updateTask(task.id, { dueDate: today })}>Today</Item>
@@ -125,16 +206,16 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
                 </Item>
               ) : null}
             </SubContent>
-          </Sub>
+          </Sub>}
         </>
       ) : null}
-      {canCreate || (canEdit && otherProjects.length > 0) ? <Separator /> : null}
-      {canCreate ? (
+      {(canCreate && !hidden.has('duplicate')) || (canEdit && otherProjects.length > 0 && !hidden.has('move')) ? <Separator /> : null}
+      {canCreate && !hidden.has('duplicate') ? (
         <Item icon={<Copy aria-hidden />} onSelect={() => void ops.duplicate(task)}>
           Duplicate
         </Item>
       ) : null}
-      {canEdit && otherProjects.length > 0 ? (
+      {canEdit && otherProjects.length > 0 && !hidden.has('move') ? (
         <Sub>
           <SubTrigger icon={<ArrowRightLeft aria-hidden />}>Move to project</SubTrigger>
           <SubContent className="max-h-72 w-60 overflow-y-auto">
@@ -146,12 +227,18 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
           </SubContent>
         </Sub>
       ) : null}
-      {canDelete ? (
+      {canDelete && !hidden.has('delete') ? (
         <>
           <Separator />
           <Item icon={<Trash2 aria-hidden />} variant="danger" onSelect={() => void ops.deleteTasks([task.id], `Deleted ${task.key}`)} shortcut="Del">
             Delete
           </Item>
+        </>
+      ) : null}
+      {dangerItems ? (
+        <>
+          <Separator />
+          {dangerItems}
         </>
       ) : null}
     </>

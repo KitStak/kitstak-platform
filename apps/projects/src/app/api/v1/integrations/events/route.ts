@@ -7,6 +7,7 @@ import { orgsWithScheduledAutomations, sweepAutomations } from '@/server/domain/
 import { env } from '@/server/env';
 import { drainIntegrationEvents, orgsWithPendingEvents } from '@/server/integrations/events';
 import { orgsWithRecordTriggers } from '@/server/integrations/record-triggers';
+import { runProgramSweep } from '@/server/domain/programs';
 
 /**
  * The scheduler's heartbeat (Vercel Cron, every 5 minutes, with CRON_SECRET set):
@@ -34,13 +35,24 @@ async function orgContext(orgId: string): Promise<DomainContext | null> {
   return { orgId, orgSlug: org.slug, userId: org.user_id, userName: 'KitStak', orgRole: 'owner', actorKind: 'integration' };
 }
 
+/** Orgs with at least one live program. */
+async function orgsWithPrograms(): Promise<string[]> {
+  try {
+    const result = await db.execute<{ org_id: string }>(sql`select distinct org_id::text as org_id from pm.projects where kind = 'program' and deleted_at is null limit 500`);
+    return result.rows.map((row) => row.org_id);
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ error: { code: 'UNAUTHENTICATED', message: 'This route is for the scheduler.' } }, { status: 401 });
   }
-  const [eventOrgs, ruleOrgs, recipeOrgs] = await Promise.all([orgsWithPendingEvents(), orgsWithScheduledAutomations(), orgsWithRecordTriggers()]);
+  const [eventOrgs, ruleOrgs, recipeOrgs, programOrgs] = await Promise.all([orgsWithPendingEvents(), orgsWithScheduledAutomations(), orgsWithRecordTriggers(), orgsWithPrograms()]);
   const pending = new Set(eventOrgs);
-  const orgIds = [...new Set([...eventOrgs, ...ruleOrgs, ...recipeOrgs])];
+  const programSet = new Set(programOrgs);
+  const orgIds = [...new Set([...eventOrgs, ...ruleOrgs, ...recipeOrgs, ...programOrgs])];
   let handled = 0;
   let checked = 0;
   for (const orgId of orgIds) {
@@ -48,6 +60,14 @@ export async function GET(request: Request) {
     if (!ctx) continue;
     if (pending.has(orgId)) handled += await drainIntegrationEvents(ctx, { force: true });
     checked += await sweepAutomations(ctx, { force: true });
+    // Programs (docs/programs/SPEC.md 4.9): schedules, due charges and reminders, with nobody signed in.
+    if (programSet.has(orgId)) {
+      try {
+        await runProgramSweep(ctx);
+      } catch (error) {
+        console.warn('[projects] program sweep failed', error instanceof Error ? error.message : error);
+      }
+    }
   }
   return NextResponse.json({ data: { orgs: orgIds.length, handled, checked } }, { headers: { 'Cache-Control': 'no-store' } });
 }

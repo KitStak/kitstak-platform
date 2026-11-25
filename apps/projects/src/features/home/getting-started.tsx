@@ -17,7 +17,10 @@ import { updatePrefsAction } from '@/server/actions/prefs';
 import { useUsedSearch } from '@/features/command/usage-flags';
 import { useShell } from '@/features/shell/shell-context';
 import { useShellStore } from '@/features/shell/store';
-import { gettingStartedSteps, type GettingStartedStepId } from './home-model';
+import { gettingStartedSteps, requiredSteps, type GettingStartedStepId } from './home-model';
+import { usePrograms } from '@/lib/hooks/use-programs';
+import { useHydrated } from '@/features/programs/kit/use-hydrated';
+import { newProgramHref } from '@/features/programs/kit/live-pages';
 
 function ProgressRing({ done, total }: { readonly done: number; readonly total: number }) {
   const r = 18;
@@ -59,6 +62,9 @@ export function GettingStartedCard({
   const openQuickAdd = useShellStore((state) => state.openQuickAdd);
   const openPalette = useShellStore((state) => state.openPalette);
   const people = usePeople();
+  const programs = usePrograms({}, { staleTime: 60_000, enabled: can('project:create') });
+  const hydrated = useHydrated();
+  const newProgram = newProgramHref();
   const usedSearch = useUsedSearch();
   const [hidden, setHidden] = useState(dismissed && !force);
 
@@ -68,9 +74,13 @@ export function GettingStartedCard({
     tasks,
     usedSearch,
     peopleCount: people.data?.length ?? 1,
+    programCount: hydrated ? programs.data?.length : undefined,
+    // The program step shows once the wizard exists (features/programs/kit/live-pages.ts).
+    canCreateProgram: can('project:create') && newProgram !== null,
   });
-  const doneCount = steps.filter((step) => step.done).length;
-  if (hidden || (doneCount === steps.length && !force)) return null;
+  const required = requiredSteps(steps);
+  const doneCount = required.filter((step) => step.done).length;
+  if (hidden || (doneCount === required.length && !force)) return null;
 
   const hide = async () => {
     setHidden(true);
@@ -89,6 +99,7 @@ export function GettingStartedCard({
     due: { label: 'Add a dated task', run: () => openQuickAdd({ assigneeId: user.id, dueDate: addDaysIso(todayIso(), 1) }) },
     done: { label: 'Open My work', run: () => router.push(routes.myWork()) },
     search: { label: 'Try search', run: () => openPalette() },
+    program: can('project:create') && newProgram ? { label: 'Set up a program', run: () => router.push(newProgram) } : null,
     team: { label: 'Invite people', run: () => window.open(withThemeParam(`${appUrls.portal}/settings/organization`), '_blank', 'noopener') },
   };
 
@@ -96,16 +107,16 @@ export function GettingStartedCard({
     <section className="rounded-xl border border-border-subtle bg-panel shadow-xs" aria-labelledby="getting-started-title" data-testid="getting-started">
       <header className="flex items-center gap-4 px-5 pt-4 pb-3">
         <span className="relative flex items-center justify-center">
-          <ProgressRing done={doneCount} total={steps.length} />
+          <ProgressRing done={doneCount} total={required.length} />
           <span className="absolute text-xs font-semibold text-fg tabular-nums">
-            {doneCount}/{steps.length}
+            {doneCount}/{required.length}
           </span>
         </span>
         <div className="min-w-0 flex-1">
           <h2 id="getting-started-title" className="text-base font-semibold text-fg">
-            {doneCount === steps.length ? 'You’re all set!' : 'Get started with KitStak Projects'}
+            {doneCount === required.length ? 'You’re all set!' : 'Get started with KitStak Projects'}
           </h2>
-          {doneCount === steps.length ? null : <p className="text-sm text-fg-muted">Each step takes under a minute.</p>}
+          {doneCount === required.length ? null : <p className="text-sm text-fg-muted">Each step takes under a minute.</p>}
         </div>
         <IconButton label="Hide checklist" icon={<X aria-hidden />} onClick={() => void hide()} data-testid="getting-started-hide" />
       </header>
@@ -130,6 +141,7 @@ export function GettingStartedCard({
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className={cn('text-sm font-medium', step.done ? 'text-fg-muted line-through decoration-1' : 'text-fg')}>
                   {step.title}
+                  {step.optional ? <span className="ml-1.5 rounded-sm bg-muted px-1.5 py-px align-[1px] text-2xs font-medium text-fg-muted no-underline">Optional</span> : null}
                   <span className="sr-only">{step.done ? ' (done)' : ' (to do)'}</span>
                 </span>
                 <span className="text-xs text-fg-muted">{step.description}</span>

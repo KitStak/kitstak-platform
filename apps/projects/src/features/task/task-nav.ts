@@ -5,7 +5,7 @@
  * page (board columns left to right, list/table top to bottom). On a page without a task list
  * (Home, the full task page) we fall back to the project's top-level tasks by status, then rank.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { compareRank } from '@/lib/rank';
 import { useProjectTasks } from '@/lib/hooks/use-data';
 import type { StatusDTO } from '@/lib/types';
@@ -28,6 +28,21 @@ export function visibleTaskKeys(): string[] {
   return out;
 }
 
+/**
+ * The list a page shows when its rows are not all on screen (a program's builds in the range and
+ * filters, while runs are folded or the calendar shows day stacks). Used before the project list.
+ */
+let pageList: readonly string[] | null = null;
+const pageListeners = new Set<() => void>();
+export function setPageTaskList(keys: readonly string[] | null): void {
+  pageList = keys;
+  for (const listener of pageListeners) listener();
+}
+function subscribePageList(listener: () => void) {
+  pageListeners.add(listener);
+  return () => pageListeners.delete(listener);
+}
+
 export interface TaskNeighbours {
   readonly index: number;
   readonly total: number;
@@ -41,7 +56,8 @@ export function useTaskNeighbours(
   statuses: readonly StatusDTO[],
   { preferPage = true }: { readonly preferPage?: boolean } = {},
 ): TaskNeighbours & { refreshList: () => string[] } {
-  const [domKeys, setDomKeys] = useState<string[]>([]);
+  const [shown, setShown] = useState<readonly string[]>([]);
+  const page = useSyncExternalStore(subscribePageList, () => pageList, () => null);
   const tasks = useProjectTasks(projectKey, { staleTime: 30_000 });
 
   const fallback = useMemo(() => {
@@ -57,9 +73,10 @@ export function useTaskNeighbours(
 
   const refreshList = useCallback(() => {
     const keys = preferPage ? visibleTaskKeys() : [];
-    setDomKeys(keys);
-    return keys.includes(taskKey) ? keys : fallback;
-  }, [fallback, preferPage, taskKey]);
+    const list = keys.includes(taskKey) ? keys : preferPage && page?.includes(taskKey) ? [...page] : null;
+    setShown(list ?? []);
+    return list ?? fallback;
+  }, [fallback, page, preferPage, taskKey]);
 
   useEffect(() => {
     // Reads the rendered page (an external system) after each change of task / list.
@@ -67,7 +84,7 @@ export function useTaskNeighbours(
     refreshList();
   }, [refreshList]);
 
-  const list = domKeys.includes(taskKey) ? domKeys : fallback;
+  const list = shown.includes(taskKey) ? shown : fallback;
   const index = list.indexOf(taskKey);
   return {
     index,

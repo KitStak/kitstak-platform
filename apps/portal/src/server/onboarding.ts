@@ -171,30 +171,62 @@ async function getSetupSignals(
 
 /**
  * KitStak Projects signals (pm schema). Guarded by to_regclass so an environment without
- * Projects installed reads as "no data" quietly instead of logging a failed query.
+ * Projects installed reads as "no data" quietly instead of logging a failed query. Once
+ * `pm.projects.kind` exists (Projects 0006, docs/programs/SPEC.md 6.4) projects and tasks count
+ * only `kind = 'project'` and `kind = 'task'`, and programs are counted on their own.
  */
-async function projectsSignals(orgId: string): Promise<{ projects: number; assigned: number; links: number } | null> {
+async function projectsSignals(orgId: string): Promise<{ projects: number; programs: number; assigned: number; links: number } | null> {
   try {
-    const result = await db.execute<{ installed: boolean; projects: unknown; assigned: unknown; links: unknown }>(sql`
-      select to_regclass('pm.projects') is not null as installed`);
+    const result = await db.execute<{ installed: boolean; kinds: boolean }>(sql`
+      select to_regclass('pm.projects') is not null as installed,
+             exists (select 1 from information_schema.columns
+                      where table_schema = 'pm' and table_name = 'projects' and column_name = 'kind') as kinds`);
     if (!result.rows[0]?.installed) return null;
-    const counts = await db.execute<{ projects: unknown; assigned: unknown; links: unknown }>(sql`
+    const kinds = result.rows[0]?.kinds === true;
+    const projectKind = kinds ? sql`and p.kind = 'project'` : sql``;
+    const taskKind = kinds ? sql`and t.kind = 'task'` : sql``;
+    const counts = await db.execute<{ projects: unknown; programs: unknown; assigned: unknown; links: unknown }>(sql`
       select
         (select count(*) from pm.projects p
-          where p.org_id = ${orgId} and p.deleted_at is null and p.is_template = false
+          where p.org_id = ${orgId} and p.deleted_at is null and p.is_template = false ${projectKind}
             and coalesce(p.settings ->> 'sample', 'false') <> 'true') as projects,
+        ${
+          kinds
+            ? sql`(select count(*) from pm.projects p
+                    where p.org_id = ${orgId} and p.deleted_at is null and p.is_template = false and p.kind = 'program')`
+            : sql`0`
+        } as programs,
         (select count(*) from pm.tasks t join pm.projects p on p.id = t.project_id
-          where t.org_id = ${orgId} and t.deleted_at is null and t.assignee_id is not null
+          where t.org_id = ${orgId} and t.deleted_at is null and t.assignee_id is not null ${taskKind} ${projectKind}
             and coalesce(p.settings ->> 'sample', 'false') <> 'true') as assigned,
         (select count(*) from pm.integration_links l
           where l.org_id = ${orgId} and l.target_type <> 'core_customer') as links`);
     const row = counts.rows[0];
     const n = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0);
-    return { projects: n(row?.projects), assigned: n(row?.assigned), links: n(row?.links) };
+    return { projects: n(row?.projects), programs: n(row?.programs), assigned: n(row?.assigned), links: n(row?.links) };
   } catch (error: unknown) {
     console.error('[portal] setup signal query failed (projects)', error);
     return null;
   }
+}
+
+/** "9 projects · 4 programs" (programs only when there are some); null when there is nothing yet. */
+export function projectsCardLabel(counts: { readonly projects: number; readonly programs: number }): string | null {
+  const parts: string[] = [];
+  if (counts.projects > 0) parts.push(`${counts.projects} ${counts.projects === 1 ? 'project' : 'projects'}`);
+  if (counts.programs > 0) parts.push(`${counts.programs} ${counts.programs === 1 ? 'program' : 'programs'}`);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/**
+ * The counts on the Projects card of the app launcher ("9 projects · 4 programs"). Null when
+ * Projects is not installed or nothing has been made yet. Never throws.
+ */
+export async function getProjectsCardCounts(orgId: string): Promise<{ projects: number; programs: number; label: string } | null> {
+  const signals = await projectsSignals(orgId);
+  if (!signals) return null;
+  const label = projectsCardLabel(signals);
+  return label ? { projects: signals.projects, programs: signals.programs, label } : null;
 }
 
 export interface SetupStepView extends SetupStep {

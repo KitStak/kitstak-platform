@@ -76,6 +76,7 @@ const SIBLING_ALLOWED = new Set([
   'server/integrations/index.ts',
   'server/integrations/crm.ts',
   'server/integrations/projects.ts',
+  'server/integrations/programs.ts',
   'server/integrations/wms.ts',
   'server/domain/access.ts',
   'server/domain/people.ts',

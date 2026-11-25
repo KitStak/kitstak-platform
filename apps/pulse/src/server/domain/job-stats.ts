@@ -94,6 +94,7 @@ interface JobRow {
   l30_hours: string;
   l30_entry_days: number;
   has_project: boolean;
+  fed_by_program: boolean;
 }
 
 interface ProdRow {
@@ -201,7 +202,8 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
            l30.l30_revenue::text, l30.l30_labor::text, l30.l30_material::text, l30.l30_other::text, l30.l30_shared::text, l30.l30_units::text, l30.l30_hours::text,
            (SELECT count(DISTINCT p.work_date)::int FROM pulse.production_entries p
              WHERE p.job_id = j.id AND p.deleted_at IS NULL AND p.work_date > (now() AT TIME ZONE s.timezone)::date - 30) AS l30_entry_days,
-           EXISTS (SELECT 1 FROM pulse.job_links jl WHERE jl.org_id = j.org_id AND jl.job_id = j.id AND jl.target_type = 'pm_project') AS has_project
+           EXISTS (SELECT 1 FROM pulse.job_links jl WHERE jl.org_id = j.org_id AND jl.job_id = j.id AND jl.target_type = 'pm_project') AS has_project,
+           EXISTS (SELECT 1 FROM pulse.job_links jl WHERE jl.org_id = j.org_id AND jl.job_id = j.id AND jl.target_type IN ('pm_program', 'pm_build')) AS fed_by_program
       FROM pulse.jobs j
       JOIN pulse.job_types jt ON jt.id = j.job_type_id
       JOIN pulse.clients c ON c.id = j.client_id
@@ -376,8 +378,9 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
         hours: job.l30_hours,
       },
     });
+    // A job a KitStak program feeds is priced by the card of the program: every build line carries its own price.
     const noPrice =
-      (job.pricing_model === 'per_unit' && job.unit_price === null) ||
+      (job.pricing_model === 'per_unit' && job.unit_price === null && !job.fed_by_program) ||
       (job.pricing_model === 'fixed' && job.fixed_price_cents === null) ||
       (job.pricing_model === 'hourly' && job.bill_rate_cents === null && entries.some((row) => Number(row.hours) > 0 && B(row.base_revenue_cents) === BigInt(0)));
     const needsRateCount = entries.filter((row) => row.needs_rate).length + job.vas_needs_rate;
@@ -385,8 +388,11 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
     // project has no tasks is never asked. Projects time rows come in untagged by design.
     const usesTasks = job.has_project && entries.some((row) => row.pm_task_id !== null);
     const untaggedLines = usesTasks ? entries.filter((row) => row.pm_task_id === null && Number(row.hours) > 0 && row.source !== 'projects').length : 0;
-    // D1: warehouse rows that still need crew hours, plus typed days with units and no hours at all.
-    const missingDays = daysMissingHours(days) + days.filter((day) => !day.missingHours && Number(day.unitsGood) > 0 && Number(day.hours) === 0).length;
+    // D1: warehouse rows that still need crew hours, plus typed days with units and no hours at all. A job a program
+    // feeds gets units from each finished build during the day and its hours at the end of the day, so the site's
+    // today is still open and is left out. Past days still count here and on the close checklist.
+    const hoursDays = job.fed_by_program ? days.filter((day) => day.workDate < today) : days;
+    const missingDays = daysMissingHours(hoursDays) + hoursDays.filter((day) => !day.missingHours && Number(day.unitsGood) > 0 && Number(day.hours) === 0).length;
     const lastEntry = entries.length > 0 ? entries[entries.length - 1]!.work_date : null;
     const targetMargin = targetMarginBp({ job: job.target_margin_bp, jobType: job.type_margin_bp, client: job.client_margin_bp, orgDefault: settings.defaultTargetMarginBp });
     const risk = assessRisk({

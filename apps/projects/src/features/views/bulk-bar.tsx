@@ -28,6 +28,7 @@ import { OptionList } from './option-list';
 import type { Selection } from './use-selection';
 import type { TaskOps } from './use-task-ops';
 import { useViewSelectionCommands } from '@/features/command/use-view-selection-commands';
+import { useCardExtras } from './card-extras';
 
 interface BarButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly icon: ReactNode;
@@ -35,7 +36,7 @@ interface BarButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly danger?: boolean;
 }
 
-const BarButton = forwardRef<HTMLButtonElement, BarButtonProps>(function BarButton({ icon, label, danger, className, ...rest }, ref) {
+export const BarButton = forwardRef<HTMLButtonElement, BarButtonProps>(function BarButton({ icon, label, danger, className, ...rest }, ref) {
   return (
     <button
       ref={ref}
@@ -58,13 +59,15 @@ const BarButton = forwardRef<HTMLButtonElement, BarButtonProps>(function BarButt
 export function BulkBar({ selection, tasks, ops }: { readonly selection: Selection; readonly tasks: readonly TaskSummary[]; readonly ops: TaskOps }) {
   const { project, capabilities } = useCurrentProject();
   const projects = useProjects();
+  const extras = useCardExtras();
   const chosen = useMemo(() => tasks.filter((task) => selection.has(task.id)), [selection, tasks]);
   useViewSelectionCommands(chosen, ops, selection.clear);
   if (selection.count === 0) return null;
   const ids = chosen.map((task) => task.id);
   const canEdit = capabilities['task:update'];
   const canDelete = capabilities['task:delete'];
-  const noun = ids.length === 1 ? 'task' : 'tasks';
+  const noun = extras.noun ? (ids.length === 1 ? extras.noun.singular : extras.noun.plural) : ids.length === 1 ? 'task' : 'tasks';
+  const extraActions = extras.renderBulkActions ? extras.renderBulkActions(ids, () => selection.clear()) : null;
   const otherProjects = (projects.data ?? []).filter((entry) => entry.id !== project.id && !entry.archivedAt && !entry.isTemplate && (entry.role === 'owner' || entry.role === 'editor'));
 
   // Labels: checked when every selected task has it, tinted when some do.
@@ -89,13 +92,24 @@ export function BulkBar({ selection, tasks, ops }: { readonly selection: Selecti
           {ids.length}
         </span>
         <span className="flex flex-col gap-0.5 max-sm:hidden">
-          <span className="text-md font-medium whitespace-nowrap text-fg">{ids.length === 1 ? 'Task selected' : 'Tasks selected'}</span>
+          <span className="text-md font-medium whitespace-nowrap text-fg">{`${noun.charAt(0).toUpperCase()}${noun.slice(1)} selected`}</span>
           <span className="text-xs whitespace-nowrap text-fg-muted">
             <Kbd>Shift</Kbd> + click to select a range
           </span>
         </span>
       </div>
-      {canEdit ? (
+      {extraActions}
+      {canEdit && extraActions ? (
+        <>
+          <StatusPicker value={null} onChange={(statusId) => void ops.bulkUpdate(ids, { statusId })}>
+            <BarButton icon={<CircleDashed aria-hidden />} label="Status" data-testid="bulk-status" />
+          </StatusPicker>
+          <AssigneePicker value={null} onChange={(assigneeId) => void ops.bulkUpdate(ids, { assigneeId })}>
+            <BarButton icon={<UserRound aria-hidden />} label="Assign" data-testid="bulk-assignee" />
+          </AssigneePicker>
+        </>
+      ) : null}
+      {canEdit && !extraActions ? (
         <>
           <StatusPicker value={null} onChange={(statusId) => void ops.bulkUpdate(ids, { statusId })}>
             <BarButton icon={<CircleDashed aria-hidden />} label="Status" data-testid="bulk-status" />
@@ -172,7 +186,7 @@ export function BulkBar({ selection, tasks, ops }: { readonly selection: Selecti
           </DropdownMenu>
         </>
       ) : null}
-      {canDelete ? (
+      {canDelete && !extraActions ? (
         <BarButton
           icon={<Trash2 aria-hidden />}
           label="Delete"

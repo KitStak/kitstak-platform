@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canEditProject, effectiveProjectRole, parseOrgRole } from './permissions';
+import { MONEY_READ_CASES, canReadProgramMoney } from '@kitstak/db/programs';
+import { canEditProject, canSeeProgramMoney, effectiveProjectRole, parseOrgRole } from './permissions';
 import { plainTextToHtml } from './write';
 import { rowsOf } from './executor';
 
@@ -52,5 +53,30 @@ describe('helpers', () => {
     expect(rowsOf([{ a: 1 }])).toEqual([{ a: 1 }]);
     expect(rowsOf({ rows: [{ a: 2 }] })).toEqual([{ a: 2 }]);
     expect(rowsOf(undefined)).toEqual([]);
+  });
+});
+
+describe('canSeeProgramMoney (shared table with Projects)', () => {
+  it.each(MONEY_READ_CASES.map((entry) => [entry.name, entry] as const))('%s', (_name, entry) => {
+    expect(
+      canSeeProgramMoney({
+        orgRole: entry.orgRole,
+        memberRole: entry.memberRole,
+        isProjectOwner: entry.isProjectOwner,
+        moneyMinRole: entry.moneyMinRole,
+      }),
+    ).toBe(entry.expected);
+  });
+  it('agrees with the shared rule for every role combination', () => {
+    const orgRoles = ['owner', 'admin', 'member', 'viewer', 'guest', null] as const;
+    const projectRoles = ['owner', 'editor', 'commenter', 'viewer', null] as const;
+    const minimums = ['owner', 'editor', 'commenter', 'viewer'] as const;
+    for (const orgRole of orgRoles)
+      for (const memberRole of projectRoles)
+        for (const moneyMinRole of minimums)
+          for (const isProjectOwner of [true, false]) {
+            const input = { orgRole, memberRole, moneyMinRole, isProjectOwner };
+            expect(canSeeProgramMoney(input)).toBe(canReadProgramMoney(input));
+          }
   });
 });

@@ -34,7 +34,10 @@ import {
 import { PersonAvatar, StatusIcon } from '@/components/pm';
 import { addDaysIso, diffDays, formatRange, todayIso, type IsoDate } from '@/lib/dates';
 import { qk } from '@/lib/query-keys';
-import { useProjectDependencies, useProjectTasks, type DependencyRow } from '@/lib/hooks/use-data';
+import { useProjectDependencies, type DependencyRow } from '@/lib/hooks/use-data';
+import { useTaskSource } from '@/features/views/task-source';
+import { useCardExtras } from '@/features/views/card-extras';
+import { usePageFilter, useQuickFilterState } from '@/features/views/view-toolbar';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { useTaskMutations } from '@/lib/hooks/use-task-mutations';
@@ -92,6 +95,9 @@ interface TimelinePrefs {
   readonly viewId: string | null;
 }
 
+/** Defaults on program pages (builds). */
+const PAGE_DEFAULTS: Partial<TimelinePrefs> = { zoom: 'day', showDependencies: false };
+
 /** The options a saved timeline view keeps. */
 type TimelineViewOptions = Pick<TimelinePrefs, 'zoom' | 'groupBy' | 'colorBy' | 'showDependencies' | 'showCritical' | 'showSubtasks' | 'showCompleted' | 'showWeekends'>;
 
@@ -108,6 +114,7 @@ const DEFAULT_PREFS: TimelinePrefs = {
   collapsed: [],
   viewId: null,
 };
+const PAGE_DEFAULT_PREFS: TimelinePrefs = { ...DEFAULT_PREFS, ...PAGE_DEFAULTS };
 
 function viewOptions(prefs: TimelinePrefs): TimelineViewOptions {
   const { zoom, groupBy, colorBy, showDependencies, showCritical, showSubtasks, showCompleted, showWeekends } = prefs;
@@ -135,21 +142,30 @@ export function TimelineSkeleton() {
   );
 }
 
+const NO_TASKS: readonly TaskSummary[] = [];
+
 export function TimelineView() {
   const { project, statuses, statusById, capabilities } = useCurrentProject();
-  const tasksQuery = useProjectTasks(project.key);
+  const tasksQuery = useTaskSource();
+  const extras = useCardExtras();
+  /** A page (Programs) supplies its own lead and trail: one compact row without task-only controls. */
+  const pageToolbar = Boolean(extras.toolbarLead);
+  const extraFilter = extras.filter;
   const depsQuery = useProjectDependencies(project.key);
   const people = usePeopleMap();
   const queryClient = useQueryClient();
   const { openTask } = useTaskDrawer();
   const openQuickAdd = useShellStore((state) => state.openQuickAdd);
   const { updateTask, createTask } = useTaskMutations({ statusCategory: (id) => statusById.get(id)?.category });
-  const [prefs, setPrefs] = useViewPrefs<TimelinePrefs>(`timeline:${project.key}`, DEFAULT_PREFS);
+  // Builds are mostly one day long: pages open on the Days zoom so each bar reads well.
+  const [prefs, setPrefs] = useViewPrefs<TimelinePrefs>(`timeline:${project.key}`, pageToolbar ? PAGE_DEFAULT_PREFS : DEFAULT_PREFS);
   const narrow = useIsNarrow();
+  const quickState = useQuickFilterState();
+  const pageFilter = usePageFilter(quickState, tasksQuery.data ?? NO_TASKS, { compact: narrow, enabled: pageToolbar });
   const markerId = useId().replace(/:/g, '');
   const today = todayIso();
   const canEdit = capabilities['task:update'];
-  const canCreate = capabilities['task:create'];
+  const canCreate = capabilities['task:create'] && !extras.hideCreate;
   const canMoveMilestones = capabilities['structure:manage'];
 
   const [search, setSearch] = useState('');
@@ -189,9 +205,12 @@ export function TimelineView() {
       if (!prefs.showCompleted && isClosed(task)) return false;
       if (!prefs.showSubtasks && task.parentTaskId) return false;
       if (q && !task.title.toLowerCase().includes(q) && !task.key.toLowerCase().includes(q)) return false;
+      if (extraFilter && !extraFilter(task)) return false;
       return true;
     });
-  }, [allTasks, prefs.showCompleted, prefs.showSubtasks, search]);
+  }, [allTasks, extraFilter, prefs.showCompleted, prefs.showSubtasks, search]);
+  const timelineGroup = extras.timelineGroup;
+  const customRows = useMemo(() => (timelineGroup ? { groups: timelineGroup.order(tasks).map((id) => ({ id, title: timelineGroup.title(id) })), keyOf: (task: (typeof tasks)[number]) => timelineGroup.keyOf(task) } : null), [tasks, timelineGroup]);
   const taskById = useMemo(() => new Map(allTasks.map((task) => [task.id, task])), [allTasks]);
 
   // Saved spans (from the server/cache) and the live spans while a gesture is in progress.
@@ -249,9 +268,10 @@ export function TimelineView() {
         personName: (id) => people.get(id)?.name ?? 'Former member',
         collapsed,
         milestonesRow: milestones.length > 0,
-        canCreate: canCreate && !search,
+        canCreate: canCreate && !search && !extras.hideCreate,
+        custom: customRows,
       }),
-    [tasks, savedSpans, prefs.groupBy, statuses, project.sections, people, collapsed, milestones.length, canCreate, search],
+    [tasks, savedSpans, prefs.groupBy, statuses, project.sections, people, collapsed, milestones.length, canCreate, search, extras.hideCreate, customRows],
   );
   const rowIndex = useMemo(() => {
     const map = new Map<string, number>();
@@ -264,8 +284,8 @@ export function TimelineView() {
   const unscheduled = useMemo(() => tasks.filter((task) => !savedSpans.has(task.id)), [tasks, savedSpans]);
   const deps = useMemo(() => depsQuery.data ?? [], [depsQuery.data]);
   const critical = useMemo(
-    () => (prefs.showCritical ? criticalPath(spans, deps) : { tasks: new Set<string>(), edges: new Set<string>() }),
-    [prefs.showCritical, spans, deps],
+    () => (prefs.showCritical && !pageToolbar ? criticalPath(spans, deps) : { tasks: new Set<string>(), edges: new Set<string>() }),
+    [pageToolbar, prefs.showCritical, spans, deps],
   );
 
   // --- Scrolling ------------------------------------------------------------------------------
@@ -775,7 +795,8 @@ export function TimelineView() {
       );
     }
 
-    const inside = width >= Math.min(task.title.length * 6.4 + 28, 160);
+    const barTitle = extras.calendarChipLabel ? `${task.key} · ${extras.calendarChipLabel(task)}` : task.title;
+    const inside = width >= Math.min(barTitle.length * 6.4 + 28, 160);
     return (
       // Very short tasks still get a bar wide enough to see, grab and read (at least 28px).
       <div className="group/bar absolute top-1/2 z-[3] -translate-y-1/2" style={{ left, width: Math.max(width, MIN_BAR_W), ...labelColorStyle(color) }} onPointerLeave={() => unmute(task.id)}>
@@ -807,7 +828,7 @@ export function TimelineView() {
             {inside ? (
               <span className={cn('relative flex min-w-0 items-center gap-1.5 pr-2 pl-2.5', done && 'line-through decoration-1')}>
                 {overdue ? <span aria-label="Past its due date" className="size-1.5 shrink-0 rounded-full bg-danger ring-1 ring-panel" /> : null}
-                <span className="truncate">{task.title}</span>
+                <span className="truncate">{barTitle}</span>
               </span>
             ) : null}
             {canEdit ? (
@@ -832,7 +853,7 @@ export function TimelineView() {
         {!inside && left + Math.max(width, MIN_BAR_W) > viewX - 4 ? (
           <span className={cn('pointer-events-none absolute top-1/2 left-full z-[3] ml-4 flex max-w-64 -translate-y-1/2 items-center gap-1.5 rounded-sm bg-[color-mix(in_srgb,var(--surface-panel)_90%,transparent)] px-1 text-xs leading-5 font-medium whitespace-nowrap text-fg', dimmed && 'opacity-50', done && 'text-fg-muted')}>
             {overdue ? <span aria-label="Past its due date" className="size-1.5 shrink-0 rounded-full bg-danger" /> : null}
-            <span className="truncate">{task.title}</span>
+            <span className="truncate">{barTitle}</span>
           </span>
         ) : null}
       </div>
@@ -1101,16 +1122,25 @@ export function TimelineView() {
 
   return (
     <div className="flex h-full min-h-[460px] flex-col" data-testid="timeline-view">
-      <ViewToolbar testId="timeline-toolbar">
-        <SavedViewsMenu<TimelineViewOptions>
-          kind="timeline"
-          options={viewOptions(prefs)}
-          defaults={viewOptions(DEFAULT_PREFS)}
-          activeId={prefs.viewId}
-          onApply={(options, viewId) => setPrefs({ ...options, viewId, collapsed: [] })}
-        />
+      <ViewToolbar testId="timeline-toolbar" className={pageToolbar ? 'h-12 flex-nowrap overflow-x-auto py-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0' : undefined}>
+        {extras.toolbarLead ? (
+          <>
+            {extras.toolbarLead}
+            <span aria-hidden className="mx-0.5 h-5 w-px bg-border-subtle" />
+            {pageFilter.button}
+          </>
+        ) : null}
+        {pageToolbar ? null : (
+          <SavedViewsMenu<TimelineViewOptions>
+            kind="timeline"
+            options={viewOptions(prefs)}
+            defaults={viewOptions(DEFAULT_PREFS)}
+            activeId={prefs.viewId}
+            onApply={(options, viewId) => setPrefs({ ...options, viewId, collapsed: [] })}
+          />
+        )}
         <Button variant="secondary" size="sm" leadingIcon={<Crosshair aria-hidden />} onClick={() => scrollToDay(today)} aria-label="Jump to today" data-testid="timeline-today-button">
-          <span className="max-[639px]:sr-only">Today</span>
+          <span className={pageToolbar ? 'max-2xl:sr-only' : 'max-[639px]:sr-only'}>Today</span>
         </Button>
         {narrow ? (
           <span className="w-28">
@@ -1119,9 +1149,10 @@ export function TimelineView() {
         ) : (
           <ToggleGroup size="sm" label="Zoom" value={zoom} onValueChange={setZoom} options={TIMELINE_ZOOMS.map((z) => ({ value: z, label: ZOOM_LABELS[z] }))} />
         )}
-        <Button variant="ghost" size="sm" leadingIcon={<Maximize2 aria-hidden />} onClick={fitAll} disabled={savedSpans.size === 0} aria-label="Fit all bars on screen">
+        <Button variant="ghost" size="sm" leadingIcon={<Maximize2 aria-hidden />} onClick={fitAll} disabled={savedSpans.size === 0} aria-label="Fit all bars on screen" className="shrink-0">
           <span className="max-[1535px]:sr-only">Fit</span>
         </Button>
+        {pageToolbar ? null : (
         <Button
           variant="ghost"
           size="sm"
@@ -1134,20 +1165,24 @@ export function TimelineView() {
         >
           <span className="max-[1279px]:sr-only">Critical path</span>
         </Button>
+        )}
         <ToolbarSpacer />
-        <span className="hidden text-xs whitespace-nowrap text-fg-muted tabular-nums 2xl:inline">
+        <span className={cn('hidden text-xs whitespace-nowrap text-fg-muted tabular-nums', !pageToolbar && '2xl:inline')}>
           {scheduledCount} of {tasks.length} scheduled
         </span>
-        <span className="w-40 max-[639px]:w-32 2xl:w-48">
-          <SearchInput size="sm" value={search} onValueChange={setSearch} placeholder="Find a task" aria-label="Find a task" />
-        </span>
-        <OptionsMenu title="Timeline options" testId="timeline-options">
+        {pageToolbar ? null : (
+          <span className="w-40 max-[639px]:w-32 2xl:w-48">
+            <SearchInput size="sm" value={search} onValueChange={setSearch} placeholder="Find a task" aria-label="Find a task" />
+          </span>
+        )}
+        {extras.toolbarTrail}
+        <OptionsMenu title="Timeline options" testId="timeline-options" iconOnly={pageToolbar}>
           <OptionSelect<TimelineGroupBy>
             label="Group by"
             value={prefs.groupBy}
             onChange={(groupBy) => setPrefs({ groupBy, collapsed: [] })}
             options={[
-              { value: 'section', label: 'Section' },
+              { value: 'section', label: extras.timelineGroup?.label ?? 'Section' },
               { value: 'status', label: 'Status' },
               { value: 'assignee', label: 'Person' },
               { value: 'none', label: 'No groups' },
@@ -1163,11 +1198,13 @@ export function TimelineView() {
             ]}
           />
           <OptionsDivider />
-          <OptionSwitch label="Show links between tasks" description="Arrows from a task to the tasks waiting on it." checked={prefs.showDependencies} onChange={(showDependencies) => setPrefs({ showDependencies })} />
-          <OptionSwitch label="Show subtasks" checked={prefs.showSubtasks} onChange={(showSubtasks) => setPrefs({ showSubtasks })} />
-          <OptionSwitch label="Show finished tasks" checked={prefs.showCompleted} onChange={(showCompleted) => setPrefs({ showCompleted })} />
+          {pageToolbar ? null : <OptionSwitch label="Show links between tasks" description="Arrows from a task to the tasks waiting on it." checked={prefs.showDependencies} onChange={(showDependencies) => setPrefs({ showDependencies })} />}
+          {pageToolbar ? null : <OptionSwitch label="Show subtasks" checked={prefs.showSubtasks} onChange={(showSubtasks) => setPrefs({ showSubtasks })} />}
+          <OptionSwitch label={`Show finished ${extras.noun?.plural ?? 'tasks'}`} checked={prefs.showCompleted} onChange={(showCompleted) => setPrefs({ showCompleted })} />
           <OptionSwitch label="Shade weekends" checked={prefs.showWeekends} onChange={(showWeekends) => setPrefs({ showWeekends })} />
         </OptionsMenu>
+        {pageToolbar ? null : (
+        <>
         <Button
           variant={prefs.trayOpen ? 'secondary' : 'ghost'}
           size="sm"
@@ -1192,8 +1229,11 @@ export function TimelineView() {
             { icon: <Keyboard />, text: 'With a bar selected, arrow keys move it a day. Hold Shift to change its due date.' },
           ]}
         />
+        </>
+        )}
       </ViewToolbar>
-      {prefs.showCritical ? (
+      {pageToolbar && pageFilter.chips ? <div className="shrink-0 border-b border-border-subtle bg-panel pt-2.5">{pageFilter.chips}</div> : null}
+      {prefs.showCritical && !pageToolbar ? (
         <div role="status" data-testid="timeline-critical-banner" className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border-subtle bg-danger-subtle/60 px-4 py-1.5 text-xs text-fg-secondary sm:px-6">
           <Route aria-hidden className="size-3.5 text-danger-text" />
           <span className="font-semibold text-danger-text">Critical path</span>
@@ -1254,7 +1294,7 @@ export function TimelineView() {
             {/* Header */}
             <div role="row" className="sticky top-0 z-[var(--z-header)] flex" style={{ height: HEADER_H }}>
               <div role="columnheader" className="sticky left-0 z-[1] flex shrink-0 items-end justify-between border-r border-b border-border-default bg-panel px-3 pb-2 text-xs font-semibold text-fg-muted" style={{ width: nameWidth }}>
-                <span>Task</span>
+                <span>{extras.noun ? extras.noun.singular.charAt(0).toUpperCase() + extras.noun.singular.slice(1) : 'Task'}</span>
                 {!narrow && rows.some((r) => r.kind === 'group') ? (
                   <button
                     type="button"

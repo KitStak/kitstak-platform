@@ -52,6 +52,7 @@ import {
 import { MyWorkRow, TASK_DRAG_TYPE } from './my-work-row';
 import { copyTaskLink, letterKeysPaused, setDateWithUndo, writeWithUndo } from '@/features/task/task-keys';
 import { useCompleteTask } from './use-complete-task';
+import { MyWorkBuilds } from './my-work-builds';
 
 type Scope = 'assigned' | 'created' | 'watching';
 
@@ -108,7 +109,9 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
   const listRef = useRef<HTMLDivElement>(null);
   const today = todayIso();
 
-  const all = useMemo(() => tasks.data ?? [], [tasks.data]);
+  // Builds have their own group below (by run); task groups and Focus mode hold tasks only.
+  const all = useMemo(() => (tasks.data ?? []).filter((task) => task.kind !== 'build'), [tasks.data]);
+  const showBuilds = params.get('builds') !== '0';
   const filtered = useMemo(
     () => all.filter((task) => (!projectFilter || task.projectId === projectFilter) && matchesText(task, text, projectName)),
     [all, projectFilter, text, projectName],
@@ -282,6 +285,7 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
           options={SORTS.map((value) => ({ value, label: `Sort: ${SORT_LABELS[value]}` }))}
         />
         <Checkbox label="Show done" checked={showDone} onCheckedChange={(value) => setParam({ done: value === true ? '1' : null })} className="ml-1" />
+        {scope === 'assigned' ? <Checkbox label="Show builds" checked={showBuilds} onCheckedChange={(value) => setParam({ builds: value === true ? null : '0' })} className="ml-1" /> : null}
       </div>
 
       {tasks.isPending ? (
@@ -373,6 +377,7 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
               </section>
             );
           })}
+          {showBuilds && scope === 'assigned' ? <MyWorkBuilds userId={user.id} collapsed={collapsed.has('builds')} onToggle={() => toggleGroup('builds')} /> : null}
           <p className="hidden flex-wrap items-center gap-1 px-1 text-xs text-fg-muted md:flex">
             <Kbd>J</Kbd>
             <Kbd>K</Kbd> move · <Kbd>Enter</Kbd> open · <Kbd>{mod}</Kbd>

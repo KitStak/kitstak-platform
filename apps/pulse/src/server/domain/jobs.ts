@@ -7,6 +7,7 @@ import 'server-only';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
 import { scoped } from '@/server/db/scope';
+import { edgesToJob } from '@/server/integrations/programs';
 import { activity, clients, jobLinks, jobPlanLines, jobPlans, jobPrices, jobStats, jobTypes, jobs, sites, type UsualCrewLine } from '@/server/db/schema';
 import { appUrls } from '@/server/env';
 import { orgModuleFlags, type ModuleFlags } from '@/server/entitlements';
@@ -25,7 +26,7 @@ import {
   type StreamSource,
 } from '@/lib/constants';
 import { NEXT_STEP_LABELS, riskHeadline, riskSentence, type NextStep, type RiskRule } from '@/lib/profit';
-import type { DeletedJobDTO, JobDetailDTO, JobDTO, JobLinkDTO, JobListFilters, JobListItemDTO, JobPriceDTO, JobStatsDTO, RiskReasonDTO } from '@/lib/types';
+import type { DeletedJobDTO, JobDetailDTO, JobDTO, JobLinkDTO, JobListFilters, JobListItemDTO, JobPriceDTO, JobProgramTagDTO, JobStatsDTO, RiskReasonDTO } from '@/lib/types';
 import { assertVersion, cleanText, defined, diff, hideUnless, inTx, iso, isoRequired, isUuid, moneyOut, monthYear, rows, singular, todayInZone, type DomainContext } from './_shared';
 import { restoreRow, softDeleteRow } from './_crud';
 import { canPulse } from '@/lib/permissions';
@@ -37,7 +38,9 @@ import { recomputeJobs } from './job-stats';
 import { filterOrgMembers, getPeople } from './people';
 import { loadPlans, upsertPlan, type PlanInput } from './plans';
 import { assertOpen, closedMonths, finishWrite, newTouched, restampFixedJob, restampProduction, restampUsage, touchDay } from './recalc';
+import { feedOf, jobDeleteRefused, jobFeed, jobPricesFromProgram, jobProgramMirrors, modelChangeRefused, programMirrorsByJob, workOrderRefused, type ProgramMirror } from './program-feed';
 import { generalJobTypeId, loadSettings } from './settings';
+import { attachProgramInTx } from './program-links';
 
 export type JobRow = typeof jobs.$inferSelect;
 type StatsRow = typeof jobStats.$inferSelect;
@@ -225,12 +228,14 @@ export const listJobs = scoped(async function listJobs(ctx: DomainContext, filte
   if (risk.length > 0) where.push(inArray(jobStats.riskStatus, risk));
   const q = cleanText(filters.q)?.toLowerCase().replace(/[%_\\]/g, '');
   if (q) where.push(sql`(lower(${jobs.number}) like ${`${q}%`} or lower(${jobs.name}) like ${`%${q}%`} or lower(${clients.name}) like ${`%${q}%`} or lower(coalesce(${jobs.poNumber}, '')) like ${`${q}%`})`);
+  if (filters.fedByProgram) where.push(sql`EXISTS (SELECT 1 FROM pulse.job_links pl WHERE pl.job_id = ${jobs.id} AND pl.target_type IN ('pm_program', 'pm_build'))`);
   const found = await joined(db)
     .where(and(...where))
     .orderBy(...(tab === 'open' ? [RISK_ORDER, sql`${jobStats.projectedProfitCents} asc nulls last`, asc(jobs.dueDate)] : [desc(jobs.createdAt)]), asc(jobs.number))
     .limit(Math.min(filters.limit ?? 1000, 5000));
   const hours = await planHours(db, ctx.orgId, found.map((row) => row.job.id));
-  return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: hours.get(row.job.id) ?? null }));
+  const mirrors = await programMirrorsByJob(db, ctx, found.map((row) => row.job.id));
+  return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: hours.get(row.job.id) ?? null, program: programTag(mirrors.get(row.job.id) ?? []) }));
 });
 
 /** Losing and at risk jobs, worst first (Home "Jobs that need you", the bridge, the wall). */
@@ -295,6 +300,30 @@ async function linkModules(ctx: DomainContext): Promise<Pick<ModuleFlags, 'crm' 
   } catch {
     return { crm: false, wms: false, projects: false };
   }
+}
+
+/**
+ * Whether a program or a build bills to the job, by its edge in `core.record_links` or its mirror
+ * in `pulse.job_links`, and the key to name in a refusal.
+ */
+async function billingProgramLabel(executor: Executor, ctx: DomainContext, jobId: string): Promise<{ linked: boolean; label: string | null }> {
+  const feed = await jobFeed(executor, ctx, jobId);
+  if (feed.fed) return { linked: true, label: feed.label };
+  const edges = await edgesToJob(ctx, jobId);
+  if (edges.length === 0) return { linked: false, label: null };
+  const title = edges[0]?.title ?? null;
+  return { linked: true, label: title ? (title.split(' ')[0] ?? null) : null };
+}
+
+/** The Program badge from the program and build mirrors of a job. Null when Projects does not feed it. */
+function programTag(mirrors: readonly ProgramMirror[]): JobProgramTagDTO | null {
+  if (mirrors.length === 0) return null;
+  const feed = feedOf(mirrors);
+  const program = feed.programMirror;
+  const builds = mirrors.filter((mirror) => mirror.targetType === 'pm_build');
+  if (program) return { kind: 'program', key: program.key, name: program.name, programId: program.targetId, buildCount: builds.length, path: program.path };
+  const first = builds[0]!;
+  return { kind: 'builds', key: first.programKey ?? first.key, name: null, programId: first.programId, buildCount: builds.length, path: first.programKey ? `/programs/${encodeURIComponent(first.programKey)}` : first.path };
 }
 
 type PricedJob = Pick<JobRow, 'pricingModel' | 'unitPrice' | 'fixedPriceCents'>;
@@ -383,6 +412,7 @@ async function detail(ctx: DomainContext, jobId: string, access: Access, executo
     budget: plans.budget,
     links: links.map((link) => toLinkDTO(link, modules, row.job, access)),
     owner: row.job.ownerId ? (people.get(row.job.ownerId) ?? null) : null,
+    program: programTag(await jobProgramMirrors(executor, ctx, jobId)),
   };
 }
 
@@ -464,6 +494,8 @@ export interface JobInput {
   quote?: PlanInput | null;
   budget?: PlanInput | null;
   links?: JobLinkInput[];
+  /** A KitStak program to link on save (the new job form opened from a program). */
+  linkProgramId?: string | null;
   source?: StreamSource;
   sourceRef?: string | null;
   isSample?: boolean;
@@ -481,7 +513,10 @@ async function insertLinks(tx: Executor, ctx: DomainContext, jobId: string, link
     // A deleted job must not keep a work order (or a project's time) to itself: the record is
     // freed first, so it can be tied to a live job. Otherwise the link fails with "another job
     // is already linked" and the other job is one nobody can open.
+    if (link.targetType === 'pm_program' || link.targetType === 'pm_build') throw invalid('Link a program with Link a program, so the link is checked first.');
     if (link.targetType === 'wms_work_order') {
+      const billing = await billingProgramLabel(tx, ctx, jobId);
+      if (billing.linked) throw conflict(workOrderRefused(billing.label));
       await tx.execute(sql`DELETE FROM pulse.job_links l USING pulse.jobs j
                             WHERE l.org_id = ${ctx.orgId} AND l.target_type = 'wms_work_order' AND l.target_id = ${targetId}
                               AND j.id = l.job_id AND j.deleted_at IS NOT NULL AND l.job_id <> ${jobId}`);
@@ -579,6 +614,8 @@ export const createJob = scoped(async function createJob(ctx: DomainContext, inp
     if (options.guardLookAlike && !input.clientId && !input.createClient) await assertClientNameNotLookAlike(tx, ctx, input.clientName, ['clientId', 'clientName']);
     const job = await insertJob(tx, ctx, input);
     if (account) await adoptCrmAccount(tx, ctx, job.clientId, account);
+    // Opened from a program: the job and its program link are saved together or not at all.
+    if (input.linkProgramId) await attachProgramInTx(tx, ctx, job.id, input.linkProgramId);
     await recomputeJobs(tx, ctx, [job.id]);
     return detail(ctx, job.id, access, tx);
   });
@@ -720,6 +757,10 @@ export const updateJob = scoped(async function updateJob(ctx: DomainContext, job
     });
     const change = diff(before as unknown as Record<string, unknown>, values as Record<string, unknown>);
     if (!change) return detail(ctx, before.id, access, tx);
+    if ('pricingModel' in change.after && change.after.pricingModel !== 'per_unit') {
+      const billing = await billingProgramLabel(tx, ctx, before.id);
+      if (billing.linked) throw conflict(modelChangeRefused(billing.label));
+    }
     if ('siteId' in change.after) {
       const [used] = await rows<{ n: number }>(tx, sql`SELECT count(*)::int AS n FROM pulse.production_entries WHERE org_id = ${ctx.orgId} AND job_id = ${before.id} AND deleted_at IS NULL`);
       if ((used?.n ?? 0) > 0) throw conflict('This job already has work logged at its site. Copy the job to run it at another site.');
@@ -899,6 +940,9 @@ export const deleteJob = scoped(async function deleteJob(ctx: DomainContext, job
   await requirePulse(ctx, 'job:manage');
   await inTx(async (tx) => {
     const before = await getJobRow(ctx, jobId, tx);
+    // A program or build bills to this job: Projects owns that link, so it goes first (SPEC 6.1).
+    const billing = await billingProgramLabel(tx, ctx, before.id);
+    if (billing.linked) throw conflict(jobDeleteRefused(billing.label));
     const closed = await closedMonths(tx, ctx.orgId);
     if (closed.size > 0) {
       const [hit] = await rows<{ m: string }>(
@@ -973,6 +1017,8 @@ export const setJobPrice = scoped(async function setJobPrice(ctx: DomainContext,
   const access = await requirePulse(ctx, 'revenue:manage');
   return inTx(async (tx) => {
     const job = await getJobRow(ctx, jobId, tx);
+    const billing = await billingProgramLabel(tx, ctx, job.id);
+    if (billing.linked) throw conflict(jobPricesFromProgram(billing.label));
     const site = await resolveSite(ctx, job.siteId, tx);
     const wanted = input.effectiveFrom ?? todayInZone(site.timezone);
     const closed = await closedMonths(tx, ctx.orgId);
@@ -1016,6 +1062,8 @@ export const deleteJobPrice = scoped(async function deleteJobPrice(ctx: DomainCo
     const [price] = isUuid(priceId) ? await tx.select().from(jobPrices).where(and(eq(jobPrices.orgId, ctx.orgId), eq(jobPrices.id, priceId))) : [];
     if (!price) throw notFound('That price');
     if (price.effectiveFrom === '0001-01-01') throw conflict('The first price of a job cannot be deleted. Edit it instead.');
+    const billing = await billingProgramLabel(tx, ctx, price.jobId);
+    if (billing.linked) throw conflict(jobPricesFromProgram(billing.label));
     await assertOpen(tx, ctx.orgId, [price.effectiveFrom]);
     await tx.delete(jobPrices).where(eq(jobPrices.id, price.id));
     const [newest] = await tx.select().from(jobPrices).where(eq(jobPrices.jobId, price.jobId)).orderBy(desc(jobPrices.effectiveFrom)).limit(1);
@@ -1046,6 +1094,11 @@ export const addJobLink = scoped(async function addJobLink(ctx: DomainContext, j
 export const removeJobLink = scoped(async function removeJobLink(ctx: DomainContext, linkId: string): Promise<void> {
   await requirePulse(ctx, 'job:manage');
   await inTx(async (tx) => {
+    const [mirror] = isUuid(linkId) ? await tx.select({ targetType: jobLinks.targetType, meta: jobLinks.meta }).from(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.id, linkId))) : [];
+    if (mirror && (mirror.targetType === 'pm_program' || mirror.targetType === 'pm_build')) {
+      const key = typeof mirror.meta?.programKey === 'string' ? mirror.meta.programKey : typeof mirror.meta?.key === 'string' ? mirror.meta.key : null;
+      throw conflict(`${key ?? 'This program'} bills to this job from Projects. Remove the link in Projects.`);
+    }
     const [row] = isUuid(linkId) ? await tx.delete(jobLinks).where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.id, linkId))).returning() : [];
     if (!row) throw notFound('That link');
     await logActivity(tx, ctx, { verb: 'link.removed', entityType: 'link', entityId: row.id, jobId: row.jobId, before: { targetType: row.targetType, targetId: row.targetId } });
@@ -1070,7 +1123,8 @@ export const findJobsByLink = scoped(async function findJobsByLink(ctx: DomainCo
   if (ids.size === 0) return [];
   const found = await joined(db).where(and(eq(jobs.orgId, ctx.orgId), inArray(jobs.id, [...ids]), isNull(jobs.deletedAt))).orderBy(desc(jobs.createdAt));
   const hours = await planHours(db, ctx.orgId, found.map((row) => row.job.id));
-  return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: hours.get(row.job.id) ?? null }));
+  const mirrors = await programMirrorsByJob(db, ctx, found.map((row) => row.job.id));
+  return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: hours.get(row.job.id) ?? null, program: programTag(mirrors.get(row.job.id) ?? []) }));
 });
 
 /** Deleted jobs, newest first, for the "Recently deleted" list. */

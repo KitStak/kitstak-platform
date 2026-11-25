@@ -55,22 +55,62 @@ import {
 } from '@/server/actions/forms';
 import { LocalTime } from '@/features/task/local-time';
 import { SampleProjectButton } from '@/features/onboarding/sample-project-button';
+import { useShell } from '@/features/shell/shell-context';
+import { ProgramIcon } from '@/features/programs/kit';
 import { FORM_STARTERS, type FormStarter } from './form-starters';
+import { buildFormStarter, type FormProgram, type VariantQuestion } from './build-form';
+
+/** A program in the forms list (it hosts build forms). */
+function programShim(program: FormProgram, canEdit: boolean): ProjectSummary {
+  return {
+    id: program.id,
+    kind: 'program',
+    key: program.key,
+    name: program.name,
+    status: 'active',
+    health: 'on_track',
+    healthNote: null,
+    color: program.color ?? 'orange',
+    icon: program.icon ?? 'package',
+    spaceId: null,
+    ownerId: null,
+    startDate: null,
+    dueDate: null,
+    visibility: 'org',
+    crmCustomerId: null,
+    crmItemId: null,
+    isTemplate: false,
+    archivedAt: null,
+    completedAt: null,
+    createdAt: '',
+    updatedAt: '',
+    progress: { total: 0, done: 0, overdue: 0, percent: 0 },
+    memberCount: 0,
+    role: canEdit ? 'editor' : 'viewer',
+    starred: false,
+  };
+}
 import { FormBuilder, type BuilderTab } from './form-builder';
 
 function NewFormDialog({
   open,
   onOpenChange,
-  projects,
+  projects: allContainers,
+  programs = [],
   defaultProjectId,
   onCreated,
 }: {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly projects: readonly ProjectSummary[];
+  readonly programs?: readonly FormProgram[];
   readonly defaultProjectId?: string;
   readonly onCreated: (form: FormDTO) => void;
 }) {
+  const projects = allContainers.filter((container) => container.kind !== 'program');
+  const [makes, setMakes] = useState<'tasks' | 'builds'>('tasks');
+  const [programId, setProgramId] = useState<string | undefined>(programs[0]?.id);
+  const [variantQuestion, setVariantQuestion] = useState<VariantQuestion>('list');
   const [starter, setStarter] = useState<FormStarter>(FORM_STARTERS[0]);
   const [projectId, setProjectId] = useState<string | undefined>(defaultProjectId ?? projects[0]?.id);
   const [name, setName] = useState(FORM_STARTERS[0].formName);
@@ -89,7 +129,23 @@ function NewFormDialog({
       );
     }
   }
+  const program = programs.find((entry) => entry.id === programId);
   const create = async () => {
+    if (makes === 'builds') {
+      if (!program) return;
+      const made = buildFormStarter(program, variantQuestion);
+      setSaving(true);
+      const result = await createFormAction({ projectId: program.id, name: name.trim() || `${program.name} order`, description: `Tell us what to build for ${program.name}.`, fields: made.fields.map((field) => ({ ...field, options: field.options ? [...field.options] : undefined })), settings: made.settings as Record<string, unknown>, isPublic: true });
+      setSaving(false);
+      if (!result.ok) {
+        toast.error("Couldn't create the form", result.error.message);
+        return;
+      }
+      toast.success('Build form created', `Each response makes a build in ${program.key}.`);
+      onCreated(result.data);
+      onOpenChange(false);
+      return;
+    }
     if (!projectId) return;
     setSaving(true);
     const result = await createFormAction({
@@ -121,9 +177,40 @@ function NewFormDialog({
             </span>
           }
           title="New intake form"
-          description="Each response becomes a task."
+          description={makes === 'builds' ? 'Each response becomes a build.' : 'Each response becomes a task.'}
         />
         <DialogBody className="flex flex-col gap-4 pb-4">
+          {programs.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-3" data-testid="new-form-makes">
+              <span className="text-sm font-medium text-fg">Each response makes</span>
+              <div role="radiogroup" aria-label="Each response makes" className="inline-flex rounded-md border border-border-subtle bg-sunken p-0.5">
+                {(['tasks', 'builds'] as const).map((value) => (
+                  <button key={value} type="button" role="radio" aria-checked={makes === value} onClick={() => { setMakes(value); if (value === 'builds' && program) setName(`${program.name} order`); else if (value === 'tasks') setName(starter.formName); }} className={cn('h-7 rounded-sm px-3 text-sm font-medium outline-none focus-visible:outline-2 focus-visible:outline-focus', makes === value ? 'bg-panel text-fg shadow-xs' : 'text-fg-secondary hover:text-fg')}>
+                    {value === 'tasks' ? 'A task' : 'A build in a program'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {makes === 'builds' && program ? (
+            <div className="grid gap-4 sm:grid-cols-2" data-testid="new-build-form">
+              <Field label="Builds go into">
+                {({ inputId }) => (
+                  <Select id={inputId} value={programId} onValueChange={(id) => { setProgramId(id); const next = programs.find((entry) => entry.id === id); if (next) setName(`${next.name} order`); }} options={programs.map((entry) => ({ value: entry.id, label: entry.name, description: `${entry.variants.length} ${entry.variants.length === 1 ? 'kit' : 'kits'}`, icon: <ProgramIcon icon={entry.icon} color={entry.color} size={16} /> }))} aria-label="Builds go into" />
+                )}
+              </Field>
+              <Field label="The kit question">
+                {({ inputId }) => (
+                  <Select id={inputId} value={variantQuestion} onValueChange={(value) => setVariantQuestion(value as VariantQuestion)} options={[{ value: 'list', label: `A list of the ${program.variants.length} kits`, description: 'People pick one' }, { value: 'sku', label: 'A typed SKU', description: 'Matched by SKU, key or name' }]} aria-label="The kit question" />
+                )}
+              </Field>
+              <Field label="Form name" required className="sm:col-span-2">
+                {({ inputId }) => <Input id={inputId} value={name} maxLength={120} onChange={(e) => setName(e.target.value)} data-testid="new-form-name" />}
+              </Field>
+              <p className="text-xs text-fg-muted sm:col-span-2">Starts with the kit, how many {program.unit.plural} and the day. Each response makes one build in {program.key}.</p>
+            </div>
+          ) : (
+          <>
           <fieldset>
             <legend className="mb-2 text-sm font-medium text-fg">Start with</legend>
             <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Start with">
@@ -181,6 +268,8 @@ function NewFormDialog({
               )}
             </Field>
           </div>
+          </>
+          )}
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -189,7 +278,7 @@ function NewFormDialog({
           <Button
             onClick={() => void create()}
             loading={saving}
-            disabled={!projectId || !name.trim()}
+            disabled={(makes === 'builds' ? !program : !projectId) || !name.trim()}
             data-testid="new-form-create"
           >
             Create form
@@ -339,11 +428,16 @@ function FormCard({
 
 export function FormsView({
   forms,
-  projects,
+  projects: projectList,
+  programs = [],
 }: {
   readonly forms: FormDTO[];
   readonly projects: ProjectSummary[];
+  readonly programs?: readonly FormProgram[];
 }) {
+  const { can } = useShell();
+  // Programs host build forms: they join the list as containers (kind program).
+  const projects = useMemo(() => [...projectList, ...programs.map((program) => programShim(program, can('project:create')))], [projectList, programs, can]);
   const router = useRouter();
   const pathname = usePathname() ?? '/forms';
   const params = useSearchParams();
@@ -402,6 +496,7 @@ export function FormsView({
         key={current.id}
         form={current}
         project={byId.get(current.projectId)}
+        program={programs.find((program) => program.id === current.projectId)}
         tab={tab}
         onTab={(next) => setParams({ tab: next === 'questions' ? null : next })}
         onBack={() => setParams({ form: null, tab: null }, 'push')}
@@ -553,6 +648,7 @@ export function FormsView({
         open={newOpen}
         onOpenChange={setNewOpen}
         projects={editable}
+        programs={programs}
         defaultProjectId={projectFilter !== 'all' ? projectFilter : undefined}
         onCreated={(form) => {
           setCreated((list) => [form, ...list]);

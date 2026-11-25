@@ -9,7 +9,7 @@ import { db } from '@/server/db';
 import { comments, projects, statuses, tasks } from '@/server/db/schema';
 import { commentPlainText, excerptAround } from '@/lib/search-text';
 import { parseTaskKey, taskKey } from '@/lib/task-key';
-import type { CommentSearchHit, FullSearchResults, FullSearchType } from '@/lib/types';
+import type { CommentSearchHit, FullSearchResults, FullSearchTypeWithPrograms } from '@/lib/types';
 import type { DomainContext } from './_shared';
 import { visibleProjectsWhere } from './access';
 import { listGoals } from './goals';
@@ -18,7 +18,7 @@ import { listProjects } from './projects';
 import { selectTaskSummaries } from './task-queries';
 
 export interface FullSearchOptions {
-  readonly type?: FullSearchType;
+  readonly type?: FullSearchTypeWithPrograms;
   /** Limit tasks and comments to one project (id). */
   readonly projectId?: string | null;
   /** Task state. Default 'any'. */
@@ -48,7 +48,7 @@ export async function searchFull(ctx: DomainContext, rawQuery: string, options: 
   if (!query && !browse) return EMPTY;
   const type = browse ? 'tasks' : (options.type ?? 'all');
   const limit = Math.min(Math.max(options.limit ?? (type === 'all' ? 8 : 50), 1), 200);
-  const want = (t: Exclude<FullSearchType, 'all'>) => type === 'all' || type === t;
+  const want = (t: Exclude<FullSearchTypeWithPrograms, 'all'>) => type === 'all' || type === t;
   const term = escapeLike(query);
   const ref = parseTaskKey(query);
   const words = query
@@ -62,7 +62,7 @@ export async function searchFull(ctx: DomainContext, rawQuery: string, options: 
   // --- Tasks --------------------------------------------------------------------------------
   const taskConditions: SQL[] = [
     eq(tasks.orgId, ctx.orgId),
-    visibleProjectsWhere(ctx),
+    visibleProjectsWhere(ctx, { kind: 'any' }),
     isNull(projects.archivedAt),
   ];
   if (!browse) {
@@ -94,13 +94,20 @@ export async function searchFull(ctx: DomainContext, rawQuery: string, options: 
     isNull(tasks.deletedAt),
     isNull(projects.deletedAt),
     isNull(projects.archivedAt),
-    visibleProjectsWhere(ctx),
+    visibleProjectsWhere(ctx, { kind: 'any' }),
     ilike(comments.body, term),
   ];
   if (options.projectId) commentConditions.push(eq(comments.projectId, options.projectId));
   const commentWhere = and(...commentConditions);
 
-  const [taskRows, taskTotal, commentRows, commentTotal, projectRows, people, goals] = await Promise.all([
+  const programHits = want('programs') && !options.projectId
+    ? db
+        .select({ id: projects.id, key: projects.key, name: projects.name, color: projects.color, icon: projects.icon, status: projects.status })
+        .from(projects)
+        .where(and(visibleProjectsWhere(ctx, { kind: 'program' }), eq(projects.isTemplate, false), isNull(projects.archivedAt), or(ilike(projects.name, term), ilike(projects.key, term))))
+        .orderBy(projects.name)
+    : Promise.resolve([]);
+  const [taskRows, taskTotal, commentRows, commentTotal, projectRows, people, goals, programRows] = await Promise.all([
     want('tasks') ? selectTaskSummaries(taskWhere, { limit, orderBy: taskOrder }) : Promise.resolve([]),
     want('tasks')
       ? db
@@ -144,6 +151,7 @@ export async function searchFull(ctx: DomainContext, rawQuery: string, options: 
     want('projects') && !options.projectId ? listProjects(ctx, { search: query }) : Promise.resolve([]),
     want('people') ? listOrgPeople(ctx) : Promise.resolve([]),
     want('goals') ? listGoals(ctx) : Promise.resolve([]),
+    programHits,
   ]);
 
   const lower = query.toLowerCase();
@@ -168,12 +176,14 @@ export async function searchFull(ctx: DomainContext, rawQuery: string, options: 
     query,
     tasks: taskRows,
     projects: projectRows.slice(0, limit),
+    programs: programRows.slice(0, limit),
     comments: commentHits,
     people: matchedPeople.slice(0, limit),
     goals: matchedGoals.slice(0, limit),
     counts: {
       tasks: taskTotal,
       projects: projectRows.length,
+      programs: programRows.length,
       comments: commentTotal,
       people: matchedPeople.length,
       goals: matchedGoals.length,

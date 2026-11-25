@@ -169,6 +169,10 @@ export const wipeOrg = asSeed(async function wipeOrg(orgId: string, options: { r
     await tx.execute(sql`SET LOCAL pulse.allow_purge = 'on'`);
     for (const table of WIPE_ORDER) await tx.execute(sql`DELETE FROM pulse.${sql.raw(table)} WHERE org_id = ${orgId}`);
     if (options.roles) await tx.execute(sql`DELETE FROM pulse.member_roles WHERE org_id = ${orgId}`);
+    // Links to the jobs just removed (a program's bills_to and related edges), so the Pulse seed
+    // runs again on its own without "already bills to another job".
+    const links = await tx.execute<{ ok: boolean }>(sql`SELECT to_regclass('core.record_links') IS NOT NULL AS ok`);
+    if (links.rows[0]?.ok) await tx.execute(sql`DELETE FROM core.record_links WHERE org_id = ${orgId}::uuid AND (from_type = 'pulse_job' OR to_type = 'pulse_job')`);
   });
 });
 

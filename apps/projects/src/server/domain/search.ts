@@ -12,7 +12,7 @@ import { selectTaskSummaries } from './task-queries';
 
 export async function search(ctx: DomainContext, rawQuery: string, limit = 8): Promise<SearchResults> {
   const query = rawQuery.trim().slice(0, 200);
-  if (!query) return { tasks: [], projects: [], people: [], goals: [] };
+  if (!query) return { tasks: [], projects: [], programs: [], people: [], goals: [] };
   const term = `%${query.replace(/[%_]/g, (m) => `\\${m}`)}%`;
   const ref = parseTaskKey(query);
   const words = query
@@ -26,15 +26,22 @@ export async function search(ctx: DomainContext, rawQuery: string, limit = 8): P
     words ? sql`${tasks.search} @@ to_tsquery('simple', ${words})` : undefined,
     ref ? and(eq(projects.key, ref.projectKey), eq(tasks.number, ref.number)) : undefined,
   );
-  const [taskRows, projectRows, people, goalRows] = await Promise.all([
-    selectTaskSummaries(and(eq(tasks.orgId, ctx.orgId), visibleProjectsWhere(ctx), taskMatch), {
+  const live = and(eq(projects.isTemplate, false), isNull(projects.archivedAt), or(ilike(projects.name, term), ilike(projects.key, term)));
+  const [taskRows, projectRows, programRows, people, goalRows] = await Promise.all([
+    selectTaskSummaries(and(eq(tasks.orgId, ctx.orgId), visibleProjectsWhere(ctx, { kind: 'any' }), isNull(projects.archivedAt), taskMatch), {
       limit,
       orderBy: sql`(${statusOpenOrder}) , ${tasks.updatedAt} desc`,
     }),
     db
       .select({ id: projects.id, key: projects.key, name: projects.name, color: projects.color, icon: projects.icon, status: projects.status })
       .from(projects)
-      .where(and(visibleProjectsWhere(ctx), eq(projects.isTemplate, false), or(ilike(projects.name, term), ilike(projects.key, term))))
+      .where(and(visibleProjectsWhere(ctx, { kind: 'project' }), live))
+      .orderBy(projects.name)
+      .limit(limit),
+    db
+      .select({ id: projects.id, key: projects.key, name: projects.name, color: projects.color, icon: projects.icon, status: projects.status })
+      .from(projects)
+      .where(and(visibleProjectsWhere(ctx, { kind: 'program' }), live))
       .orderBy(projects.name)
       .limit(limit),
     listOrgPeople(ctx),
@@ -62,8 +69,11 @@ export async function search(ctx: DomainContext, rawQuery: string, limit = 8): P
       statusCategory: task.statusCategory,
       projectName: projectNames.get(task.projectId) ?? task.projectKey,
       assigneeId: task.assigneeId,
+      kind: task.kind,
+      projectKind: task.projectKind,
     })),
     projects: projectRows,
+    programs: programRows,
     people: people.filter((p) => p.name.toLowerCase().includes(lower) || p.email.toLowerCase().includes(lower)).slice(0, limit),
     goals: goalRows,
   };

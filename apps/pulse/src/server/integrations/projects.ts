@@ -49,6 +49,28 @@ export const projectsReady = scoped(async function projectsReady(ctx: DomainCont
   }
 });
 
+const KIND_TTL_MS = 5 * 60_000;
+let kindCache: { ready: boolean; at: number } | null = null;
+
+/**
+ * True when `pm.projects.kind` and `pm.tasks.kind` exist (Projects 0006). Programs and builds are
+ * rows of the same tables; with the columns there, project surfaces leave them out. Cached, fail soft.
+ */
+async function kindColumns(ctx: DomainContext): Promise<boolean> {
+  if (kindCache && Date.now() - kindCache.at < KIND_TTL_MS) return kindCache.ready;
+  try {
+    const result = await siblingDb.execute<{ ready: boolean }>(
+      sql`select (select count(*) from information_schema.columns
+                    where table_schema = 'pm' and table_name in ('projects', 'tasks') and column_name = 'kind') = 2 as ready`,
+    );
+    kindCache = { ready: Boolean(result.rows[0]?.ready), at: Date.now() };
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'projects.kindColumns', error);
+    kindCache = { ready: false, at: Date.now() };
+  }
+  return kindCache.ready;
+}
+
 /** Projects the reader can see in Projects itself: owners and admins all, others the org visible ones plus their own. */
 function visible(ctx: DomainContext): SQL {
   if (ctx.actorKind !== 'user' || ctx.orgRole === 'owner' || ctx.orgRole === 'admin') return sql`true`;
@@ -57,6 +79,8 @@ function visible(ctx: DomainContext): SQL {
 }
 
 async function projectRows(ctx: DomainContext, where: SQL, limit: number): Promise<PmProject[]> {
+  // Programs live in the same table; they link to a job through the Program link, never as a project.
+  const onlyProjects = (await kindColumns(ctx)) ? sql`p.kind = 'project'` : sql`true`;
   const found = await rows<{
     id: string;
     key: string;
@@ -76,7 +100,7 @@ async function projectRows(ctx: DomainContext, where: SQL, limit: number): Promi
                (select count(*)::int from pm.tasks t join pm.statuses s on s.id = t.status_id
                  where t.project_id = p.id and t.deleted_at is null and t.parent_task_id is null and s.category = 'done') as done
           from pm.projects p
-         where p.org_id = ${ctx.orgId} and p.deleted_at is null and p.is_template = false and ${visible(ctx)} and ${where}
+         where p.org_id = ${ctx.orgId} and p.deleted_at is null and p.is_template = false and ${onlyProjects} and ${visible(ctx)} and ${where}
          order by (p.status in ('completed', 'archived')), p.updated_at desc
          limit ${limit}`,
   );
@@ -178,16 +202,19 @@ export function pickableTasks(tasks: readonly PmTask[], keepIds: ReadonlySet<str
 }
 
 /**
- * The tasks of the given projects, for tagging production entries (0014). Read as the system:
- * the job's link to the project already decides who works on it, so the picker is the same for
- * everyone who can log the job. Deleted tasks are left out unless their id is in `keepIds`
- * (an entry already points at it, so its name must still show). Fail soft: an empty list.
+ * The tasks of the given projects (or programs), for tagging production entries (0014). Read as
+ * the system: the job's link to the project already decides who works on it, so the picker is the
+ * same for everyone who can log the job. Deleted tasks are left out unless their id is in
+ * `keepIds` (an entry already points at it, so its name must still show). `include: 'tasks'`
+ * (the Log work picker) leaves builds out, since build lines come from Projects; `'all'` (checks)
+ * keeps them. Fail soft: an empty list.
  */
-export const tasksOfProjects = scoped(async function tasksOfProjects(ctx: DomainContext, projectIds: readonly string[], keepIds: readonly string[] = []): Promise<PmTask[]> {
+export const tasksOfProjects = scoped(async function tasksOfProjects(ctx: DomainContext, projectIds: readonly string[], keepIds: readonly string[] = [], options: { include?: 'tasks' | 'all' } = {}): Promise<PmTask[]> {
   const clean = [...new Set(projectIds.filter((id) => UUID.test(id)))];
   if (clean.length === 0 || !(await projectsReady(ctx))) return [];
   const keep = [...new Set(keepIds.filter((id) => UUID.test(id)))];
   const kept = keep.length > 0 ? sql`or t.id in (${sql.join(keep.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``;
+  const kinds = (options.include ?? 'tasks') === 'tasks' && (await kindColumns(ctx)) ? sql`and t.kind <> 'build'` : sql``;
   try {
     const found = await rows<{ id: string; project_id: string; key: string; number: number; title: string; done: boolean; gone: boolean; section_name: string | null }>(
       siblingDb,
@@ -199,7 +226,7 @@ export const tasksOfProjects = scoped(async function tasksOfProjects(ctx: Domain
             left join pm.sections sec on sec.id = t.section_id
            where t.org_id = ${ctx.orgId}
              and t.project_id in (${sql.join(clean.map((id) => sql`${id}::uuid`), sql`, `)})
-             and (t.deleted_at is null ${kept})
+             and (t.deleted_at is null ${kept}) ${kinds}
            order by p.key, t.position, t.number`,
     );
     return found.map((row) => ({ id: row.id, projectId: row.project_id, projectKey: row.key, number: Number(row.number), title: row.title, done: Boolean(row.done), gone: Boolean(row.gone), sectionName: row.section_name ?? null }));

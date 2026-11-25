@@ -34,6 +34,7 @@
     "@kitstak/entitlements": "workspace:*",
     "@kitstak/mail": "workspace:*",
     "@kitstak/pm-bridge": "workspace:*",
+    "@kitstak/programs-engine": "workspace:*",
     "@kitstak/pulse-bridge": "workspace:*",
     "@kitstak/ui": "workspace:*",
     "@supabase/supabase-js": "2.118.0",

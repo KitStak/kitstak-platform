@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarCheck2, CircleAlert, CircleCheck, History, Lock, LockOpen, TriangleAlert } from 'lucide-react';
+import { CalendarCheck2, CircleAlert, CircleCheck, Clock, History, Lock, LockOpen, TriangleAlert } from 'lucide-react';
 import { Badge, Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Field, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { ScrollX } from '@/components/ui/scroll-x';
@@ -36,9 +36,10 @@ const keys = {
   events: () => ['periods', 'events'] as const,
 };
 
-const ITEM_ICON = { ok: CircleCheck, fix: CircleAlert, check: TriangleAlert } as const;
-const ITEM_TONE = { ok: 'text-success', fix: 'text-danger-text', check: 'text-warning-text' } as const;
-const ITEM_WORD = { ok: 'Done', fix: 'Fix this first', check: 'Worth a look' } as const;
+const ITEM_ICON = { ok: CircleCheck, fix: CircleAlert, check: TriangleAlert, wait: Clock } as const;
+const ITEM_TONE = { ok: 'text-success', fix: 'text-danger-text', check: 'text-warning-text', wait: 'text-fg-muted' } as const;
+const ITEM_WORD = { ok: 'Done', fix: 'Fix this first', check: 'Worth a look', wait: 'Waiting for month end' } as const;
+const ITEM_BADGE = { ok: 'success', fix: 'danger', check: 'warning', wait: 'neutral' } as const;
 
 const money = (cents: number | null, hidden: boolean): string => (cents === null ? (hidden ? 'Hidden' : 'No numbers yet') : Math.abs(cents) >= 1_000_000 ? formatMoneyWhole(cents) : formatMoney(cents));
 
@@ -550,7 +551,7 @@ function ChecklistItem({ item, closed }: { readonly item: CloseItemDTO; readonly
         </p>
       </div>
       {item.state !== 'ok' ? (
-        <Badge tone={item.state === 'fix' ? 'danger' : 'warning'} className="mt-0.5">
+        <Badge tone={ITEM_BADGE[item.state]} className="mt-0.5">
           {ITEM_WORD[item.state]}
         </Badge>
       ) : null}

@@ -7,8 +7,10 @@ import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
 import {
   attachments,
+  builds,
   comments,
   integrationLinks,
+  programVariants,
   projects,
   statuses,
   taskDependencies,
@@ -16,6 +18,7 @@ import {
   tasks,
 } from '@/server/db/schema';
 import { taskKey } from '@/lib/task-key';
+import type { TaskKind } from '@/lib/constants';
 import type { TaskRef, TaskSummary } from '@/lib/types';
 import { isoRequired, iso } from './_shared';
 
@@ -29,8 +32,13 @@ const blockedBySql = sql<number>`(select count(*)::int from ${taskDependencies} 
 const blockingSql = sql<number>`(select count(*)::int from ${taskDependencies} d where d.blocking_task_id = ${tasks.id})`;
 const linkCountSql = sql<number>`(select count(*)::int from ${integrationLinks} l where l.task_id = ${tasks.id})`;
 
+/** Live output of the build today and in total, for the posting chip. */
+const buildPostingSql = sql<string | null>`(select bo.posting from pm.build_output bo where bo.build_id = ${tasks.id} and bo.deleted_at is null order by bo.work_date desc limit 1)`;
+
 export const taskSummaryColumns = {
   id: tasks.id,
+  kind: tasks.kind,
+  projectKind: projects.kind,
   projectId: tasks.projectId,
   projectKey: projects.key,
   number: tasks.number,
@@ -61,6 +69,15 @@ export const taskSummaryColumns = {
   blockedByCount: blockedBySql,
   blockingCount: blockingSql,
   linkCount: linkCountSql,
+  buildVariantId: builds.variantId,
+  buildVariantName: programVariants.name,
+  buildVariantColor: programVariants.color,
+  buildDate: builds.buildDate,
+  buildPlannedQty: builds.plannedQty,
+  buildBuiltQty: builds.builtQty,
+  buildUnplanned: builds.unplanned,
+  buildPosting: buildPostingSql,
+  buildProgramId: builds.programId,
 };
 
 function summaryQuery(executor: Executor) {
@@ -68,7 +85,9 @@ function summaryQuery(executor: Executor) {
     .select(taskSummaryColumns)
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
-    .innerJoin(statuses, eq(statuses.id, tasks.statusId));
+    .innerJoin(statuses, eq(statuses.id, tasks.statusId))
+    .leftJoin(builds, eq(builds.taskId, tasks.id))
+    .leftJoin(programVariants, eq(programVariants.id, builds.variantId));
 }
 
 type SummaryRow = Awaited<ReturnType<ReturnType<typeof summaryQuery>['execute']>>[number];
@@ -76,6 +95,8 @@ type SummaryRow = Awaited<ReturnType<ReturnType<typeof summaryQuery>['execute']>
 function toSummary(row: SummaryRow): TaskSummary {
   return {
     id: row.id,
+    kind: row.kind,
+    projectKind: row.projectKind,
     projectId: row.projectId,
     projectKey: row.projectKey,
     number: row.number,
@@ -107,16 +128,31 @@ function toSummary(row: SummaryRow): TaskSummary {
     blockedByCount: Number(row.blockedByCount ?? 0),
     blockingCount: Number(row.blockingCount ?? 0),
     linkCount: Number(row.linkCount ?? 0),
+    build:
+      row.kind === 'build' && row.buildDate
+        ? {
+            programId: row.buildProgramId ?? null,
+            variantId: row.buildVariantId ?? null,
+            variantName: row.buildVariantName ?? null,
+            variantColor: row.buildVariantColor ?? null,
+            buildDate: row.buildDate,
+            plannedQty: row.buildPlannedQty ?? '0',
+            builtQty: row.buildBuiltQty ?? '0',
+            unplanned: row.buildUnplanned ?? false,
+            posting: (row.buildPosting as NonNullable<TaskSummary['build']>['posting'] | null) ?? null,
+          }
+        : null,
   };
 }
 
 /** TaskSummary rows for an arbitrary WHERE (always excludes soft-deleted tasks and projects). */
 export async function selectTaskSummaries(
   where: SQL | undefined,
-  options: { readonly limit?: number; readonly orderBy?: SQL; readonly executor?: Executor } = {},
+  options: { readonly limit?: number; readonly orderBy?: SQL; readonly executor?: Executor; readonly kind?: TaskKind | 'all' } = {},
 ): Promise<TaskSummary[]> {
   const executor = options.executor ?? db;
-  const base = and(isNull(tasks.deletedAt), isNull(projects.deletedAt), where);
+  const kind = options.kind && options.kind !== 'all' ? eq(tasks.kind, options.kind) : undefined;
+  const base = and(isNull(tasks.deletedAt), isNull(projects.deletedAt), where, kind);
   const query = summaryQuery(executor)
     .where(base)
     .orderBy(options.orderBy ?? sql`${tasks.position} COLLATE "C"`);

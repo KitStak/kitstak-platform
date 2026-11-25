@@ -63,6 +63,13 @@ describe('pulseUrls', () => {
     );
   });
 
+  it('prefills a new ongoing job from a program (docs/programs/SPEC.md 6.1)', () => {
+    expect(urls.newJobFromProgram({ programId: 'p1', name: 'Glove kits', clientHint: 'c1', unitLabel: 'kits' })).toBe(
+      'http://localhost:3500/jobs/new?program=p1&name=Glove+kits&clientHint=c1&unitLabel=kits',
+    );
+    expect(urls.newJobFromProgram({ programId: 'p1' })).toBe('http://localhost:3500/jobs/new?program=p1');
+  });
+
   it('links a client by whichever id is known', () => {
     expect(urls.client({ pulseClientId: 'p1' })).toBe('http://localhost:3500/clients/p1');
     expect(urls.client({ coreCustomerId: 'c1' })).toBe('http://localhost:3500/clients/by-link?coreCustomerId=c1');

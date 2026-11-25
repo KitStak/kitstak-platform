@@ -24,6 +24,8 @@ export const TARGET_WORDS: Readonly<Record<LinkTargetType, string>> = {
   wms_client: 'Warehouse client',
   pm_project: 'Project',
   pm_task: 'Project task',
+  pm_program: 'Program',
+  pm_build: 'Program build',
 };
 
 /** Record kinds a person can search for and link to a job. */

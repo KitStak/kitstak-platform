@@ -29,6 +29,8 @@ describe.skipIf(!available)('admin services (integration)', async () => {
   let workspaceId: string;
 
   beforeAll(async () => {
+    // Integration flows, not the billing gate: keep modules open even under ENTITLEMENTS_DEV_ALLOW_ALL=0.
+    vi.stubEnv('ENTITLEMENTS_DEV_ALLOW_ALL', '1');
     fixture = await createTestOrgs([
       { key: 'adm', users: { owner: 'owner', admin: 'admin', rep: 'member', viewer: 'viewer' } },
     ]);
@@ -38,6 +40,7 @@ describe.skipIf(!available)('admin services (integration)', async () => {
   });
 
   afterAll(async () => {
+    vi.unstubAllEnvs();
     org.__test.policyCache.clear();
     await fixture?.cleanup();
   });

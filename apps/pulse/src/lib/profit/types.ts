@@ -7,9 +7,12 @@
  * rounded to their stated places on the way out; percents are whole basis points (2500 = 25%);
  * dates are `YYYY-MM-DD` strings.
  */
+import type { IsoDate, SharedSpread } from '@kitstak/programs-engine/types';
 import type { Cents, Decimal } from '../money';
 
 export type { Cents, Decimal };
+/** `YYYY-MM-DD` dates and shared cost spreads live in the shared engine (docs/programs/SPEC.md 3.1). */
+export type { IsoDate, SharedSpread };
 
 export const PRICING_MODELS = ['per_unit', 'fixed', 'hourly'] as const;
 export type PricingModel = (typeof PRICING_MODELS)[number];
@@ -37,8 +40,7 @@ export type SharedCostRule = (typeof SHARED_COST_RULES)[number];
 export const COMPANY_COST_SPREADS = ['calendar', 'work_days'] as const;
 export type CompanyCostSpreadMode = (typeof COMPANY_COST_SPREADS)[number];
 
-export const SHARED_SPREADS = ['day', 'week', 'month'] as const;
-export type SharedSpread = (typeof SHARED_SPREADS)[number];
+export const SHARED_SPREADS = ['day', 'week', 'month'] as const satisfies readonly SharedSpread[];
 
 /** How a job is judged (4.13). */
 export const JOB_MODES = ['projected', 'actuals', 'final'] as const;
@@ -55,9 +57,6 @@ export const CONFIDENCE_LABELS: Readonly<Record<Confidence, string>> = {
   good: 'Good read',
   solid: 'Solid',
 };
-
-/** `YYYY-MM-DD`. */
-export type IsoDate = string;
 
 /**
  * Totals of a quote or a budget (`pulse.job_plans`). Blank totals count as 0.

@@ -16,7 +16,7 @@ import {
   type OrgAction,
   type ProjectAction,
 } from '@/lib/permissions';
-import type { ProjectRole } from '@/lib/constants';
+import type { ProjectKind, ProjectRole } from '@/lib/constants';
 import type { Capabilities } from '@/lib/types';
 import type { DomainContext } from './_shared';
 
@@ -31,6 +31,14 @@ export interface TaskAccess extends ProjectAccess {
 }
 
 export type ProjectRefInput = { readonly id: string } | { readonly key: string };
+
+/** Which containers a read or write may touch. `'any'` means projects and programs. */
+export type KindFilter = ProjectKind | 'any';
+
+export interface RequireProjectOptions {
+  /** Default `'any'`, so links, comments, files and time keep working on programs. */
+  readonly kind?: KindFilter;
+}
 
 export function requireOrg(ctx: DomainContext, action: OrgAction): void {
   if (!canOrg(ctx.orgRole, action)) throw forbidden();
@@ -57,13 +65,15 @@ export async function roleForProject(ctx: DomainContext, project: Project, execu
   });
 }
 
-async function loadProject(executor: Executor, ctx: DomainContext, ref: ProjectRefInput): Promise<Project | null> {
+async function loadProject(executor: Executor, ctx: DomainContext, ref: ProjectRefInput, kind: KindFilter = 'any'): Promise<Project | null> {
   const where =
     'id' in ref
       ? and(eq(projects.id, ref.id), eq(projects.orgId, ctx.orgId), isNull(projects.deletedAt))
       : and(eq(projects.key, ref.key.toUpperCase()), eq(projects.orgId, ctx.orgId), isNull(projects.deletedAt));
   const [row] = await executor.select().from(projects).where(where);
-  return row ?? null;
+  if (!row) return null;
+  if (kind !== 'any' && row.kind !== kind) return null;
+  return row;
 }
 
 /** Load a live project the actor can see, checking `action`. Throws NOT_FOUND / FORBIDDEN. */
@@ -72,9 +82,11 @@ export async function requireProject(
   ref: ProjectRefInput,
   action: ProjectAction = 'project:read',
   executor: Executor = db,
+  options: RequireProjectOptions = {},
 ): Promise<ProjectAccess> {
-  const project = await loadProject(executor, ctx, ref);
-  if (!project) throw notFound('That project');
+  const kind = options.kind ?? 'any';
+  const project = await loadProject(executor, ctx, ref, kind);
+  if (!project) throw notFound(kind === 'program' ? 'That program' : 'That project');
   const role = await roleForProject(ctx, project, executor);
   if (!role) throw notFound('That project');
   if (!canProject(role, action)) throw forbidden(forbiddenMessage(action));
@@ -101,9 +113,13 @@ export async function requireTask(
  * WHERE fragment selecting the live projects the actor can see (lists, search, My Work).
  * Mirrors `effectiveProjectRole`: admins see everything; members/viewers see org-visible projects
  * plus private ones they belong to; guests only see projects they were added to.
+ * `kind` defaults to `'project'` (docs/programs/SPEC.md 4.1): program surfaces pass `'program'`,
+ * cross work places (My Work, search tasks, links) pass `'any'`.
  */
-export function visibleProjectsWhere(ctx: DomainContext): SQL {
-  const base = and(eq(projects.orgId, ctx.orgId), isNull(projects.deletedAt)) as SQL;
+export function visibleProjectsWhere(ctx: DomainContext, options: { readonly kind?: KindFilter } = {}): SQL {
+  const kind = options.kind ?? 'project';
+  const live = and(eq(projects.orgId, ctx.orgId), isNull(projects.deletedAt)) as SQL;
+  const base = kind === 'any' ? live : (and(live, eq(projects.kind, kind)) as SQL);
   if (ctx.actorKind !== 'user' || ctx.orgRole === 'owner' || ctx.orgRole === 'admin') return base;
   const isMember = sql`exists (select 1 from ${projectMembers} pm_m where pm_m.project_id = "pm"."projects"."id" and pm_m.user_id = ${ctx.userId})`;
   const access =

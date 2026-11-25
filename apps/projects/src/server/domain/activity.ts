@@ -9,6 +9,25 @@
  *   task.link_added | task.link_removed | comment.added | comment.edited | comment.deleted
  *   attachment.added | attachment.deleted | time.logged | status.* | section.* | label.* |
  *   field.* | milestone.* | goal.* | automation.* | automation.ran | form.submitted | view.*
+ *
+ * Programs (docs/programs/SPEC.md 4.10):
+ *   program.created | program.updated | program.status_changed | program.archived | program.restored |
+ *   program.deleted | program.copied | program.settings_changed | program.month_closed |
+ *   program.month_reopened | program.update_posted | variant.created | variant.updated |
+ *   variant.retired | variant.restored | variant.deleted | variant.kit_linked | attributes.changed |
+ *   price_card.draft_created | price_card.version_published | price_card.version_replaced |
+ *   price_card.unpublished | price_card.version_deleted | price_card.variant_rate_changed |
+ *   price_card.review_requested | price_card.sent_back | one_time.added | one_time.updated |
+ *   one_time.deleted | build.created (kept as task.created with after.kind 'build') | build.planned |
+ *   build.updated | build.moved | build.split | build.closed_short | build.rate_override_set |
+ *   build.output_logged | build.output_deleted | build.repriced | run.moved | run.cancelled |
+ *   run.copied | run.closed | schedule.created | schedule.updated | schedule.paused |
+ *   schedule.resumed | schedule.ended | schedule.generated | link.added | link.removed |
+ *   program.pulse_job_linked | program.pulse_job_unlinked | calendar.updated
+ *
+ * Money in an activity row lives only under a `money` key (`before.money`, `after.money`,
+ * `meta.money`); `toDTO` callers strip those keys for readers without `money:read` on the
+ * activity's program.
  */
 import 'server-only';
 import { and, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
@@ -80,7 +99,31 @@ export interface ActivityPage {
   readonly nextCursor: string | null;
 }
 
-async function page(where: SQL, before: string | undefined, limit: number): Promise<ActivityPage> {
+/** Removes `money` keys from a JSON value (one level, as written by the program domain). */
+function withoutMoney(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  if (!('money' in (value as Record<string, unknown>))) return value;
+  const { money: _money, ...rest } = value as Record<string, unknown>;
+  void _money;
+  return rest;
+}
+
+/** Strips money from rows of programs the reader may not see money on (4.10). */
+export async function stripActivityMoney(ctx: DomainContext, items: readonly ActivityDTO[]): Promise<ActivityDTO[]> {
+  const projectIds = [...new Set(items.map((item) => item.projectId).filter((id): id is string => Boolean(id)))];
+  if (projectIds.length === 0) return [...items];
+  const { programIdsAmong, seesMoneyFor } = await import('./programs/access');
+  const programs = await programIdsAmong(ctx, projectIds);
+  if (programs.size === 0) return [...items];
+  const allowed = await seesMoneyFor(ctx, [...programs]);
+  return items.map((item) =>
+    item.projectId && programs.has(item.projectId) && !allowed.has(item.projectId)
+      ? { ...item, before: withoutMoney(item.before), after: withoutMoney(item.after), meta: withoutMoney(item.meta) as typeof item.meta }
+      : item,
+  );
+}
+
+async function page(where: SQL, before: string | undefined, limit: number, ctx?: DomainContext): Promise<ActivityPage> {
   const conditions = before ? and(where, lt(activity.createdAt, new Date(before))) : where;
   const rows = await db
     .select()
@@ -88,8 +131,9 @@ async function page(where: SQL, before: string | undefined, limit: number): Prom
     .where(conditions)
     .orderBy(desc(activity.createdAt))
     .limit(limit + 1);
-  const items = rows.slice(0, limit).map(toDTO);
-  return { items, nextCursor: rows.length > limit ? (items.at(-1)?.createdAt ?? null) : null };
+  const raw = rows.slice(0, limit).map(toDTO);
+  const items = ctx ? await stripActivityMoney(ctx, raw) : raw;
+  return { items, nextCursor: rows.length > limit ? (raw.at(-1)?.createdAt ?? null) : null };
 }
 
 export async function listProjectActivity(
@@ -100,7 +144,7 @@ export async function listProjectActivity(
   await requireProject(ctx, { id: projectId });
   const base = and(eq(activity.orgId, ctx.orgId), eq(activity.projectId, projectId)) as SQL;
   const where = options.verbs?.length ? (and(base, inArray(activity.verb, [...options.verbs])) as SQL) : base;
-  return page(where, options.before, Math.min(options.limit ?? 50, 200));
+  return page(where, options.before, Math.min(options.limit ?? 50, 200), ctx);
 }
 
 export async function listTaskActivity(
@@ -120,6 +164,7 @@ export async function listTaskActivity(
     ) as SQL,
     options.before,
     Math.min(options.limit ?? 100, 300),
+    ctx,
   );
 }
 
@@ -131,5 +176,5 @@ export async function listMyActivity(ctx: DomainContext, limit = 30): Promise<re
     .where(and(eq(activity.orgId, ctx.orgId), eq(activity.actorId, ctx.userId)))
     .orderBy(desc(activity.createdAt))
     .limit(limit);
-  return rows.map(toDTO);
+  return stripActivityMoney(ctx, rows.map(toDTO));
 }

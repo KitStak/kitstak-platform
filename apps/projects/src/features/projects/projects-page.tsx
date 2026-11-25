@@ -1,6 +1,6 @@
 import { and, eq, isNotNull } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { integrationLinks } from '@/server/db/schema';
+import { integrationLinks, projects as projectsTable } from '@/server/db/schema';
 import { listProjects, listSpaces } from '@/server/domain';
 import { getCustomers } from '@/server/integrations/customers';
 import { pageContext } from '@/server/page';
@@ -17,6 +17,8 @@ export async function ProjectsPage({ space, customer, health }: { readonly space
       db
         .select({ projectId: integrationLinks.projectId })
         .from(integrationLinks)
+        // Projects only: programs have their own directory (docs/programs/SPEC.md 4.1).
+        .innerJoin(projectsTable, and(eq(projectsTable.id, integrationLinks.projectId), eq(projectsTable.kind, 'project')))
         .where(and(eq(integrationLinks.orgId, ctx.orgId), eq(integrationLinks.targetType, 'core_customer'), eq(integrationLinks.targetId, customer), isNotNull(integrationLinks.projectId))),
     ]);
     const projectIds = new Set(links.map((link) => link.projectId).filter((id): id is string => Boolean(id)));

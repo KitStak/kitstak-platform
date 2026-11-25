@@ -10,6 +10,7 @@ import { db, type Executor } from '@/server/db';
 import { scoped } from '@/server/db/scope';
 import { clients, dayReviews, jobLinks, jobStats, jobs, productionEntries } from '@/server/db/schema';
 import { pickableTasks, tasksOfProjects } from '@/server/integrations/projects';
+import { buildBillsToJob, readBuilds } from '@/server/integrations/programs';
 import { conflict, DomainError, forbidden, invalid, notFound } from '@/server/errors';
 import { SUPERVISOR_EDIT_DAYS, type JobStatusValue, type StreamSource } from '@/lib/constants';
 import { canPulse } from '@/lib/permissions';
@@ -26,6 +27,7 @@ import { assertOpen, closedMonths, finishWrite, newTouched, restampFixedJob, res
 import { toDayReviewDTO } from './reviews';
 import { listIndirect, listPaidHours } from './time';
 import { loadSettings } from './settings';
+import { buildLineReadOnly, isBuildRef, isProgramRef, jobFeed, prepLineReadOnly, programLineOrigin, TYPED_UNITS_REFUSED } from './program-feed';
 
 type EntryRow = typeof productionEntries.$inferSelect;
 type Access = Pick<PulseAccess, 'seesMoney'>;
@@ -71,6 +73,7 @@ export function toProductionDTO(row: EntryRow, job: { number: string; name: stri
     deletedAt: iso(row.deletedAt),
     locked: closed.has(monthStart(row.workDate)),
     moneyHidden: !money,
+    fromProjects: programLineOrigin(row.sourceRef, row.meta as Record<string, unknown> | null),
   };
 }
 
@@ -167,21 +170,43 @@ export function assertNotFutureDay(timezone: string, workDate: string, field = '
 const lineKey = (jobId: string, workDate: string, shift: string, laborClassId: string | null, pmTaskId: string | null): string => `${jobId}|${workDate}|${shift}|${laborClassId ?? ''}|${pmTaskId ?? ''}`;
 
 /** The Projects projects linked to a job (`pm_project` links). */
-export const linkedProjectIds = scoped(async function linkedProjectIds(executor: Executor, ctx: DomainContext, jobId: string): Promise<string[]> {
+export const linkedProjectIds = scoped(async function linkedProjectIds(executor: Executor, ctx: DomainContext, jobId: string, types: readonly ('pm_project' | 'pm_program')[] = ['pm_project']): Promise<string[]> {
   const found = await executor
     .select({ targetId: jobLinks.targetId })
     .from(jobLinks)
-    .where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, jobId), eq(jobLinks.targetType, 'pm_project')));
+    .where(and(eq(jobLinks.orgId, ctx.orgId), eq(jobLinks.jobId, jobId), inArray(jobLinks.targetType, [...types])));
   return found.map((row) => row.targetId);
 }, 1);
 
-/** Refuses a task that is not in a project linked to the job. Deleted tasks are refused for new picks. */
+/**
+ * Refuses a task that is not on the job. A build (a `kind='build'` task of Projects Programs)
+ * passes when it, or its program, bills to this job. Any other task must be in a project or
+ * program linked to the job. Deleted tasks are refused for new picks.
+ */
 async function assertTaskOnJob(executor: Executor, ctx: DomainContext, jobId: string, pmTaskId: string, field: string): Promise<void> {
   if (!isUuid(pmTaskId)) throw invalid(TASK_NOT_ON_JOB, { [field]: TASK_NOT_ON_JOB });
-  const projectIds = await linkedProjectIds(executor, ctx, jobId);
-  const tasks = projectIds.length > 0 ? await tasksOfProjects(ctx, projectIds) : [];
+  const build = (await readBuilds(ctx, [pmTaskId])).get(pmTaskId);
+  if (build) {
+    if (!build.deleted && (await buildBillsToJob(ctx, build, jobId))) return;
+    throw invalid(TASK_NOT_ON_JOB, { [field]: TASK_NOT_ON_JOB });
+  }
+  const projectIds = await linkedProjectIds(executor, ctx, jobId, ['pm_project', 'pm_program']);
+  const tasks = projectIds.length > 0 ? await tasksOfProjects(ctx, projectIds, [], { include: 'all' }) : [];
   if (!tasks.some((task) => task.id === pmTaskId)) throw invalid(TASK_NOT_ON_JOB, { [field]: TASK_NOT_ON_JOB });
 }
+
+/** Fields of a line copied from Projects that only Projects may change. */
+const PROGRAM_LINE_FIELDS = ['jobId', 'workDate', 'shift', 'laborClassId', 'unitsGood', 'unitsScrap', 'unitsRework', 'headcount', 'hours', 'overtimeHours', 'setupHours', 'pmTaskId'] as const;
+
+/** The words for a line the program sync owns. */
+function programLineRefusal(row: EntryRow): string {
+  const meta = (row.meta ?? {}) as Record<string, unknown>;
+  if (isBuildRef(row.sourceRef)) return buildLineReadOnly(typeof meta.buildKey === 'string' ? meta.buildKey : null);
+  return prepLineReadOnly(typeof meta.programKey === 'string' ? meta.programKey : null);
+}
+
+/** The program sync writes its own lines (SQL in sync-programs.ts); a person never does. */
+const isProgramSync = (ctx: DomainContext, source: string | null | undefined): boolean => ctx.actorKind === 'integration' && source === 'projects';
 
 const num = (value: string | null | undefined): number => Number(value ?? 0);
 
@@ -283,6 +308,16 @@ async function writeEntry(tx: Executor, ctx: DomainContext, access: PulseAccess,
     pmTaskId,
     taskUnits,
   };
+  // Jobs fed by Projects builds: build lines are read only, and typed lines carry hours and crew only.
+  if (!isProgramSync(ctx, input.source ?? existing?.source)) {
+    if (existing && isProgramRef(existing.sourceRef)) {
+      const before = existing as unknown as Record<string, unknown>;
+      const after = values as unknown as Record<string, unknown>;
+      if (PROGRAM_LINE_FIELDS.some((field) => String(before[field] ?? '') !== String(after[field] ?? '') && !(Number.isFinite(Number(before[field])) && Number(before[field]) === Number(after[field]) && before[field] !== null && after[field] !== null))) throw conflict(programLineRefusal(existing));
+    } else if (num(values.unitsGood) > 0 && (!existing || num(existing.unitsGood) !== num(values.unitsGood) || existing.jobId !== job.id) && (await jobFeed(tx, ctx, job.id)).fed) {
+      throw invalid(TYPED_UNITS_REFUSED, { [at('unitsGood')]: TYPED_UNITS_REFUSED });
+    }
+  }
   let row: EntryRow;
   let created = false;
   if (existing) {
@@ -472,13 +507,15 @@ export interface SaveProductionDayResult {
   readonly removed: ProductionEntryDTO[];
 }
 
+/** The lines of a day the Work log form owns. Lines from Projects builds and program time are not its to change. */
 async function dayRows(tx: Executor, ctx: DomainContext, jobId: string, workDate: string): Promise<EntryRow[]> {
-  return tx
+  const found = await tx
     .select()
     .from(productionEntries)
     .where(and(eq(productionEntries.orgId, ctx.orgId), eq(productionEntries.jobId, jobId), eq(productionEntries.workDate, workDate), isNull(productionEntries.deletedAt)))
     .orderBy(asc(productionEntries.shift), asc(productionEntries.createdAt))
     .for('update');
+  return found.filter((row) => !isProgramRef(row.sourceRef));
 }
 
 /**
@@ -550,7 +587,8 @@ export const saveProductionDay = scoped(async function saveProductionDay(ctx: Do
       let created = 0;
       // Rows taken off the day go first, so a line may take over the labor type of a removed row.
       const kept = new Set(input.lines.map((line) => line.id).filter((id): id is string => Boolean(id)));
-      const gone = current.filter((row) => !kept.has(row.id));
+      // Lines from Projects builds and program time are not the form's to take off: they stay.
+      const gone = current.filter((row) => !kept.has(row.id) && !isProgramRef(row.sourceRef));
       if (gone.length > 0) {
         await assertOpen(tx, ctx.orgId, gone.map((row) => row.workDate));
         for (const row of gone) {
@@ -635,6 +673,9 @@ async function removeEntries(ctx: DomainContext, ids: readonly string[], restore
     const found = await tx.select({ row: productionEntries, job: jobs }).from(productionEntries).innerJoin(jobs, eq(jobs.id, productionEntries.jobId)).where(and(eq(productionEntries.orgId, ctx.orgId), inArray(productionEntries.id, unique)));
     const targets = found.filter((item) => (restore ? item.row.deletedAt !== null : item.row.deletedAt === null));
     if (targets.length === 0) throw notFound(unique.length === 1 ? 'That entry' : 'Those entries');
+    // Lines copied from Projects builds and program time come and go with Projects, never by hand.
+    const owned = ctx.actorKind === 'integration' ? undefined : targets.find((item) => isProgramRef(item.row.sourceRef));
+    if (owned) throw conflict(programLineRefusal(owned.row));
     await assertOpen(tx, ctx.orgId, targets.map((item) => item.row.workDate));
     const touched = newTouched();
     const fixedJobs = new Set<string>();

@@ -95,7 +95,16 @@ const jobs: JobSpec[] = [
   { n: 'J-1025', name: 'Highline Freight spare kits for the first quarter', client: 'HIGHLINE', type: 'SPARE', status: 'planned', start: 8, len: 10, crew: 0, pace: 9, planned: 1800, qm: 0.32, mat: 8.5 },
 ];
 
+/** Jobs fed by the Projects programs (SPEC 7.3). ECOMM has no Pulse job. */
+const programJobs: OrgPlan['programJobs'] = [
+  { n: 'J-1040', name: 'Gripwell glove kitting program', client: 'GRIPWELL', type: 'PROGRAM', program: 'GLOVE', relation: 'bills_to', pricing: 'per_unit', unitPrice: '1.9500', plan: { units: 17_600, revenueCents: 3_200_000 }, crew: 2, hours: 7.5, pinned: 'Revenue comes from the GLOVE program in Projects, built and priced there.' },
+  { n: 'J-1041', name: 'Dude Brothers grooming kits', client: 'DUDEBRO', type: 'PROGRAM', program: 'DUDE', relation: 'bills_to', pricing: 'per_unit', unitPrice: '3.4000', plan: { units: 9_750, revenueCents: 3_600_000 }, crew: 3, hours: 7 },
+  { n: 'J-1042', name: 'Mahco hardware packs', client: 'MAHCO', type: 'PACKS', program: 'MAHCO', relation: 'bills_to', pricing: 'per_unit', unitPrice: '0.9500', plan: { units: 8_000, revenueCents: 1_200_000 }, crew: 1, hours: 6 },
+  { n: 'J-1077', name: 'Liner retool', client: 'GRIPWELL', type: 'PROGRAM', program: 'GLOVE', relation: 'related', pricing: 'fixed', fixedCents: 420_000, revenue: { cents: 420_000, desc: 'Liner retool for the glove line', invoice: 'INV-2377' } },
+];
+
 export const northwindPlan: OrgPlan = {
+  programJobs,
   seed: 'northwind-2026',
   sites: [{ code: 'AUS1', name: 'Austin build cell', timezone: 'America/Chicago' }],
   defaultPartsOwner: 'us',
@@ -122,6 +131,8 @@ export const northwindPlan: OrgPlan = {
     { code: 'RETRO', name: 'Retrofit kit', unit: 'kits', target: 3000, color: 'indigo', icon: 'wrench', pace: 2.4, cls: 'BUILD' },
     { code: 'DEMO', name: 'Demo unit prep', unit: 'units', target: 2500, color: 'berry', icon: 'cpu', pace: 0.5, cls: 'TECH' },
     { code: 'REWORK', name: 'Rework', unit: 'units', target: 2500, color: 'orange', icon: 'undo', pace: 5, cls: 'BUILD' },
+    { code: 'PROGRAM', name: 'Program kitting', unit: 'kits', target: 3000, color: 'amber', icon: 'repeat', pace: 50, cls: 'BUILD' },
+    { code: 'PACKS', name: 'Hardware packs', unit: 'packs', target: 3000, color: 'gray', icon: 'boxes', pace: 110, cls: 'BUILD' },
   ],
   services: [
     { code: 'LABEL', name: 'Labeling', unit: 'labels', price: '0.4500', cost: '0.0400', uph: 150, color: 'blue' },
@@ -144,6 +155,10 @@ export const northwindPlan: OrgPlan = {
     { code: 'HIGHLINE', crmAccount: 'Highline Freight', name: 'Highline Freight', contact: 'Sam Whitaker', email: 'sam.whitaker@highlinefreight.example', color: 'teal' },
     { code: 'BLUESTONE', crmAccount: 'Bluestone Foods', name: 'Bluestone Foods', contact: 'Ines Duarte', email: 'ines.duarte@bluestonefoods.example', color: 'sky' },
     { code: 'DRIFTWOOD', crmAccount: 'Driftwood Freight', name: 'Driftwood Freight', contact: 'Paul Becker', email: 'paul.becker@driftwoodfreight.example', color: 'brown' },
+    { code: 'GRIPWELL', crmAccount: 'Gripwell Safety Supply', name: 'Gripwell Safety Supply', contact: 'Carla Jennings', email: 'carla.jennings@gripwellsafety.example', target: 3000, color: 'orange', notes: 'Glove kitting program, eight kits every work day. Billed from the Projects program.' },
+    { code: 'DUDEBRO', crmAccount: 'Dude Brothers Outfitters', name: 'Dude Brothers Outfitters', contact: 'Marcus Dude', email: 'marcus.dude@dudebrothers.example', color: 'blue' },
+    { code: 'MAHCO', crmAccount: 'Mahco Hardware Supply', name: 'Mahco Hardware Supply', contact: 'Priya Natarajan', email: 'priya.natarajan@mahcohardware.example', color: 'gray' },
+    { code: 'BRIGHTCART', crmAccount: 'Brightcart Online', name: 'Brightcart Online', contact: 'Jordan Ellis', email: 'jordan.ellis@brightcart.example', color: 'green' },
   ],
   items: [
     { sku: 'RK-HARNESS', name: 'Retrofit wiring harness', cost: '19.5000', by: 'us' },

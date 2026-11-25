@@ -23,6 +23,7 @@ import {
   MoreHorizontal,
   Package,
   PackagePlus,
+  Repeat,
   SearchX,
   Trash2,
   UserRound,
@@ -299,9 +300,10 @@ export function JobsView({
       if (view.ownerId && job.ownerId !== view.ownerId) return false;
       if (view.dueFrom && (!job.dueDate || job.dueDate < view.dueFrom)) return false;
       if (view.dueTo && (!job.dueDate || job.dueDate > view.dueTo)) return false;
+      if (view.fedByProgram && !job.program) return false;
       return true;
     });
-  }, [all, view.q, view.clientId, view.jobTypeId, view.siteId, view.ownerId, view.dueFrom, view.dueTo]);
+  }, [all, view.q, view.clientId, view.jobTypeId, view.siteId, view.ownerId, view.dueFrom, view.dueTo, view.fedByProgram]);
 
   const riskCounts = useMemo(() => {
     const counts: Record<PulseStatus, number> = {
@@ -341,6 +343,10 @@ export function JobsView({
                 ? [job.ownerId ?? 'none', peopleName(job.ownerId) || 'No owner']
                 : view.group === 'status'
                   ? [job.status, JOB_STATUS_LABELS[job.status]]
+                  : view.group === 'program'
+                    ? job.program
+                      ? [`program:${job.program.programId ?? job.program.key ?? ''}`, job.program.name ? `${job.program.key} ${job.program.name}` : (job.program.key ?? 'Program')]
+                      : ['none', 'Not fed by a program']
                   : [
                       job.stats.riskStatus ?? 'none',
                       job.stats.riskStatus ? PULSE_STATUS_LABELS[job.stats.riskStatus] : 'No status yet',
@@ -378,6 +384,7 @@ export function JobsView({
     view.ownerId,
     view.dueFrom,
     view.dueTo,
+    view.fedByProgram,
   ].filter(Boolean).length;
   const anyFilter = filterCount > 0 || view.risk.length > 0 || view.q.trim() !== '';
   const clearFilters = () => {
@@ -391,6 +398,7 @@ export function JobsView({
       ownerId: null,
       dueFrom: null,
       dueTo: null,
+      fedByProgram: false,
     });
   };
 
@@ -623,6 +631,14 @@ export function JobsView({
                   )}
                 </Field>
               </div>
+              {shell.integrations.projects ? (
+                <Checkbox
+                  checked={view.fedByProgram}
+                  onCheckedChange={(value) => patch({ fedByProgram: value === true })}
+                  label="Fed by a program"
+                  data-testid="filter-fed-by-program"
+                />
+              ) : null}
               {tab !== 'all' ? (
                 <Checkbox
                   checked={showArchived}
@@ -643,6 +659,7 @@ export function JobsView({
                       ownerId: null,
                       dueFrom: null,
                       dueTo: null,
+                      fedByProgram: false,
                     })
                   }
                 >
@@ -987,6 +1004,12 @@ export function JobsView({
                             {columns.some((column) => column.id === 'client') ? (
                               <span className="min-w-0 truncate xl:hidden">· {job.clientName}</span>
                             ) : null}
+                            {job.program ? (
+                              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-primary-subtle px-1 text-2xs font-medium text-primary-text" data-testid="job-program-chip">
+                                <Repeat aria-hidden className="size-2.5" />
+                                {job.program.kind === 'program' ? (job.program.key ?? 'Program') : `${job.program.key ?? 'Program'} builds`}
+                              </span>
+                            ) : null}
                             {job.archivedAt ? (
                               <span className="rounded-sm bg-muted px-1 text-2xs font-medium text-fg-secondary">
                                 Archived
@@ -1034,8 +1057,15 @@ export function JobsView({
                           className="min-w-0 flex-1 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                         >
                           <span className="block truncate font-medium text-fg">{job.name}</span>
-                          <span className="block truncate text-xs text-fg-muted">
-                            {job.number} · {job.clientName}
+                          <span className="flex min-w-0 items-center gap-1.5 text-xs text-fg-muted">
+                            <span className="shrink-0">{job.number}</span>
+                            {job.program ? (
+                              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-primary-subtle px-1 text-2xs font-medium text-primary-text" data-testid="job-card-program-chip">
+                                <Repeat aria-hidden className="size-2.5" />
+                                {job.program.kind === 'program' ? (job.program.key ?? 'Program') : `${job.program.key ?? 'Program'} builds`}
+                              </span>
+                            ) : null}
+                            <span className="min-w-0 truncate">· {job.clientName}</span>
                           </span>
                         </Link>
                         <RowMenu job={job} canManage={canManage} actions={actions} />

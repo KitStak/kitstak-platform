@@ -33,6 +33,7 @@ import { TaskContextProvider, useTaskContext } from './task-context';
 import { TASK_PANEL_ATTR, useTaskNeighbours } from './task-nav';
 import { TaskProperties } from './task-properties';
 import { TimeSection } from './time-section';
+import { BuildKitSection, BuildLinkedSection, BuildOutputSection, BuildProperties } from './build-sections';
 import { useTaskUploads } from './use-task-uploads';
 import { WatchersButton } from './watchers';
 import { letterKeysPaused, setDateWithUndo, taskKeyAction, startLetterKeyGuard, writeWithUndo } from './task-keys';
@@ -301,13 +302,26 @@ function Breadcrumb() {
       <ol className="flex min-w-0 items-center gap-1 text-sm text-fg-secondary">
         <li className="flex min-w-0 shrink items-center">
           <Link
-            href={routes.project(project.key)}
+            href={task.projectKind === 'program' ? routes.program(project.key) : routes.project(project.key)}
             className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
           >
             <EntityIcon icon={project.icon} color={project.color} size={18} />
-            <span className="truncate">{project.name}</span>
+            <span className="truncate">{task.projectKind === 'program' ? project.key : project.name}</span>
           </Link>
         </li>
+        {task.kind === 'build' && task.projectKind === 'program' ? (
+          <>
+            {/* On a phone the Builds crumb gives way, so the key and the task navigator keep their room. */}
+            <li aria-hidden className="shrink-0 text-fg-muted max-sm:hidden">
+              <ChevronRight className="size-3.5" />
+            </li>
+            <li className="flex shrink-0 items-center max-sm:hidden">
+              <Link href={routes.programBuilds(project.key)} className="rounded-sm px-1 py-0.5 hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus">
+                Builds
+              </Link>
+            </li>
+          </>
+        ) : null}
         {task.parent ? (
           <>
             <li aria-hidden className="shrink-0 text-fg-muted">
@@ -329,7 +343,7 @@ function Breadcrumb() {
           <ChevronRight className="size-3.5" />
         </li>
         <li className="shrink-0">
-          <span aria-current="page" className="px-1 font-key text-xs font-medium text-fg">
+          <span aria-current="page" className="px-1 font-key text-xs font-medium whitespace-nowrap text-fg">
             {task.key}
           </span>
         </li>
@@ -392,7 +406,7 @@ function TaskNav({ onNavigate }: { readonly onNavigate: (key: string) => void })
         onClick={() => go(-1)}
         data-testid="task-prev"
       />
-      <span aria-hidden className="hidden min-w-12 text-center text-xs text-fg-muted tabular-nums sm:inline">
+      <span aria-hidden className="min-w-10 text-center text-xs whitespace-nowrap text-fg-muted tabular-nums sm:min-w-12">
         {nav.index + 1} / {nav.total}
       </span>
       <IconButton
@@ -468,11 +482,22 @@ function TaskBody({
     <div className="flex min-w-0 flex-col gap-5">
       <BlockedBanner />
       <TaskTitle />
+      {task.kind === 'build' ? <BuildProperties /> : null}
       {wide ? null : (
         <div className="-mt-1">
           <TaskProperties compact />
         </div>
       )}
+      {task.kind === 'build' ? (
+        <Section>
+          <BuildOutputSection />
+        </Section>
+      ) : null}
+      {task.kind === 'build' && task.projectKind === 'program' ? (
+        <SectionIfContent>
+          <BuildKitSection />
+        </SectionIfContent>
+      ) : null}
       <DescriptionEditor />
       <Section>
         <SubtasksSection />
@@ -480,7 +505,13 @@ function TaskBody({
       <Section>
         <DependenciesSection />
       </Section>
-      <LinksBlock />
+      {task.kind === 'build' ? (
+        <Section>
+          <BuildLinkedSection />
+        </Section>
+      ) : (
+        <LinksBlock />
+      )}
       <FilesBlock uploads={uploads} />
       {wide ? null : <TimeBlock />}
       <Section>

@@ -128,7 +128,7 @@ const APPS: readonly AppMeta[] = [
   { id: 'portal', name: 'KitStak Portal', descriptor: 'Launcher, billing and organization' },
   { id: 'crm', name: 'KitStak CRM', descriptor: 'Pipelines, boards and automations' },
   { id: 'wms', name: 'KitStak WMS', descriptor: 'Receiving, inventory and shipping' },
-  { id: 'projects', name: 'KitStak Projects', descriptor: 'Projects, tasks and timelines' },
+  { id: 'projects', name: 'KitStak Projects', descriptor: 'Projects, programs and tasks' },
   { id: 'pulse', name: 'KitStak Pulse', descriptor: 'Profit by job, client and service' },
 ];
 

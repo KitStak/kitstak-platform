@@ -2,7 +2,15 @@
  * In-app URL builders. Use these instead of string literals so routes stay consistent.
  * Project pages are keyed by project key (`/p/OPS`), tasks by key + number (`/p/OPS/42`).
  */
-import type { ViewType } from './constants';
+import type { ProjectKind, ViewType } from './constants';
+import type { BuildView, ProgramTab } from './program-types';
+
+export type { BuildView, ProgramTab } from './program-types';
+
+export const PROGRAM_TABS: readonly ProgramTab[] = ['overview', 'builds', 'variants', 'price-card', 'schedule', 'linked', 'activity', 'settings'];
+export const BUILD_VIEWS: readonly BuildView[] = ['runs', 'board', 'list', 'table', 'calendar', 'timeline'];
+
+export type NewProgramMode = 'scratch' | 'deal' | 'template' | 'copy' | 'quick';
 
 export type ProjectTab =
   | 'overview'
@@ -54,6 +62,30 @@ export const routes = {
   projectTriage: (key: string) => `/p/${encodeURIComponent(key)}/triage`,
   /** Full-page task. Views open the drawer with `?task=OPS-42` instead (see taskDrawerParam). */
   task: (projectKey: string, number: number) => `/p/${encodeURIComponent(projectKey)}/${number}`,
+  /** Programs directory, Floor today and the program workspace (docs/programs/SPEC.md 4.8). */
+  programs: () => '/programs',
+  programsToday: (date?: string) => (date ? `/programs/today?date=${encodeURIComponent(date)}` : '/programs/today'),
+  newProgram: (opts?: { mode?: NewProgramMode; crmItem?: string; template?: string; copy?: string; customer?: string; name?: string; draft?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.mode) params.set('mode', opts.mode);
+    if (opts?.crmItem) params.set('crmItem', opts.crmItem);
+    if (opts?.template) params.set('template', opts.template);
+    if (opts?.copy) params.set('copy', opts.copy);
+    if (opts?.customer) params.set('customer', opts.customer);
+    if (opts?.name) params.set('name', opts.name);
+    if (opts?.draft) params.set('draft', opts.draft);
+    const query = params.toString();
+    return query ? `/programs/new?${query}` : '/programs/new';
+  },
+  program: (key: string) => `/programs/${encodeURIComponent(key)}`,
+  programTab: (key: string, tab: ProgramTab) => (tab === 'overview' ? `/programs/${encodeURIComponent(key)}` : `/programs/${encodeURIComponent(key)}/${tab}`),
+  programBuilds: (key: string, view: BuildView = 'runs') => `/programs/${encodeURIComponent(key)}/builds/${view}`,
+  /** Full page build: `/programs/GLOVE/212`. */
+  build: (key: string, number: number) => `/programs/${encodeURIComponent(key)}/${number}`,
+  /** A task or build page by the container kind. */
+  taskAny: (kind: ProjectKind | null | undefined, key: string, number: number) =>
+    kind === 'program' ? `/programs/${encodeURIComponent(key)}/${number}` : `/p/${encodeURIComponent(key)}/${number}`,
+  calendarSettings: () => '/settings/calendar',
   goals: () => '/goals',
   goal: (id: string) => `/goals?goal=${encodeURIComponent(id)}`,
   dashboards: () => '/dashboards',
@@ -71,6 +103,9 @@ export const routes = {
 
 /** Search param that opens the task drawer over any view: `?task=OPS-42`. */
 export const TASK_DRAWER_PARAM = 'task';
+
+/** Program overlay params (4.8): `?log=2026-11-25[&run=]`, `?plan=week|day`, `?version=<id>`, `?statement=2026-11`, `?close=2026-10`, `?import=output|plan`, `?report=<runId|week>`. */
+export const PROGRAM_OVERLAY_PARAMS = ['log', 'run', 'plan', 'version', 'statement', 'close', 'import', 'report'] as const;
 
 /** Only allow same-origin relative redirects (prevents open redirects via ?next=). */
 export function safeNextPath(next: string | null | undefined, fallback = '/'): string {

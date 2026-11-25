@@ -30,6 +30,14 @@ export const productionEntries = pulseSchema.table('production_entries', {
   pmTaskId: uuid('pm_task_id'),
   /** Optional count of that step's output. Never part of units_good, progress, revenue or pace. */
   taskUnits: qty('task_units'),
+  /** Per row price snapshot (0015). Concrete on every `pmb:` row from a Projects build; null on typed rows. */
+  unitPrice: price('unit_price'),
+  /** The variant's standard material cost at write time (0015, `pmb:` rows). */
+  materialCostPerUnit: price('material_cost_per_unit'),
+  /** The Projects program the row came from (0015). Null for a build outside a program and for typed rows. */
+  pmProgramId: uuid('pm_program_id'),
+  /** The program variant of the build (0015). */
+  pmVariantId: uuid('pm_variant_id'),
   ...laborStamps(),
   laborCostCents: cents('labor_cost_cents').notNull().default(BigInt(0)),
   sharedCents: cents('shared_cents').notNull().default(BigInt(0)),
@@ -133,6 +141,10 @@ export const revenueEntries = pulseSchema.table('revenue_entries', {
   serviceLabel: text('service_label'),
   approved: boolean('approved').notNull().default(true),
   note: text('note'),
+  /** The Projects program a `pmf:` fee row came from (0015). */
+  pmProgramId: uuid('pm_program_id'),
+  /** The program variant of an adjustment, when it has one (0015). */
+  pmVariantId: uuid('pm_variant_id'),
   ...stream(),
 });
 

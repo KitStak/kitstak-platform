@@ -1,8 +1,8 @@
 /** Per-user preferences, favorites (stars) and recents. */
 import 'server-only';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { favorites, recents, userPrefs, type FavoriteEntityType, type RecentEntityType } from '@/server/db/schema';
+import { favorites, projects, recents, userPrefs, type FavoriteEntityType, type RecentEntityType } from '@/server/db/schema';
 import type { NotificationKind } from '@/lib/constants';
 import { rankAfter } from '@/lib/rank';
 import type { DomainContext } from './_shared';
@@ -51,14 +51,24 @@ export interface FavoriteRef {
   readonly entityType: FavoriteEntityType;
   readonly entityId: string;
   readonly position: string;
+  /** For project favorites: `project` or `program`, so the sidebar shows programs with their icon and route. */
+  readonly kind?: 'project' | 'program' | null;
+}
+
+async function kindsOf(ctx: DomainContext, ids: readonly string[]): Promise<Map<string, 'project' | 'program'>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db.select({ id: projects.id, kind: projects.kind }).from(projects).where(and(eq(projects.orgId, ctx.orgId), inArray(projects.id, [...ids])));
+  return new Map(rows.map((row) => [row.id, row.kind]));
 }
 
 export async function listFavorites(ctx: DomainContext): Promise<FavoriteRef[]> {
-  return db
+  const rows = await db
     .select({ entityType: favorites.entityType, entityId: favorites.entityId, position: favorites.position })
     .from(favorites)
     .where(and(eq(favorites.orgId, ctx.orgId), eq(favorites.userId, ctx.userId)))
     .orderBy(sql`${favorites.position} COLLATE "C"`);
+  const kinds = await kindsOf(ctx, rows.filter((row) => row.entityType === 'project').map((row) => row.entityId));
+  return rows.map((row) => ({ ...row, kind: row.entityType === 'project' ? (kinds.get(row.entityId) ?? 'project') : null }));
 }
 
 export async function setFavorite(
@@ -96,10 +106,16 @@ export async function listRecents(
   ctx: DomainContext,
   entityType?: RecentEntityType,
   limit = 12,
-): Promise<{ entityType: RecentEntityType; entityId: string; visitedAt: string }[]> {
+): Promise<{ entityType: RecentEntityType; entityId: string; visitedAt: string; kind: 'project' | 'program' | null }[]> {
   const where = entityType
     ? and(eq(recents.orgId, ctx.orgId), eq(recents.userId, ctx.userId), eq(recents.entityType, entityType))
     : and(eq(recents.orgId, ctx.orgId), eq(recents.userId, ctx.userId));
   const rows = await db.select().from(recents).where(where).orderBy(desc(recents.visitedAt)).limit(limit);
-  return rows.map((row) => ({ entityType: row.entityType, entityId: row.entityId, visitedAt: row.visitedAt.toISOString() }));
+  const kinds = await kindsOf(ctx, rows.filter((row) => row.entityType === 'project').map((row) => row.entityId));
+  return rows.map((row) => ({
+    entityType: row.entityType,
+    entityId: row.entityId,
+    visitedAt: row.visitedAt.toISOString(),
+    kind: row.entityType === 'project' ? (kinds.get(row.entityId) ?? 'project') : null,
+  }));
 }

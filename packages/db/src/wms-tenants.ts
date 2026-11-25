@@ -57,3 +57,6 @@ export async function findWmsTenantSchema(db: AnyPgDb, orgId: string): Promise<s
 export function wmsTable(schemaName: string, table: string) {
   return sql`${sql.identifier(assertWmsSchemaName(schemaName))}.${sql.identifier(table)}`;
 }
+
+// The shared WMS free stock reader lives beside the tenant helpers it builds on.
+export { freeStockSql, freeStockRows, mapFreeStockRows, type FreeStockFilter, type FreeStockRow, type FreeStockSqlRow } from './wms-free-stock';

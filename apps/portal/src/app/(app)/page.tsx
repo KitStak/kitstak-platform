@@ -11,6 +11,7 @@ import { getOrgPlan, type ModuleState } from '@/server/entitlements';
 import { wasInOrganization } from '@/server/signup';
 import { plural, viewOnlyAsk, viewOnlyFix } from '@/features/billing/format';
 import { AppLauncher, type LauncherApp, type LauncherPlanNote } from '@/features/launcher/app-launcher';
+import { getProjectsCardCounts } from '@/server/onboarding';
 import { CreateOrgForm } from '@/features/launcher/create-org-form';
 import { LogoMark } from '@/features/shell/logo';
 
@@ -24,7 +25,7 @@ interface ProductCopy {
 const PRODUCTS: Readonly<Record<Module, ProductCopy>> = {
   crm: { name: 'KitStak CRM', tagline: 'Deals and pipelines' },
   wms: { name: 'KitStak WMS', tagline: 'Warehouse operations' },
-  projects: { name: 'KitStak Projects', tagline: 'Projects and tasks' },
+  projects: { name: 'KitStak Projects', tagline: 'Projects, programs and tasks' },
   pulse: { name: 'KitStak Pulse', tagline: 'Job performance and profitability' },
 };
 
@@ -158,12 +159,18 @@ export default async function LauncherPage() {
     }
   };
 
+  // The Projects card says what is in it ("9 projects · 4 programs") once anything is.
+  const projectsCounts = modules.some((state) => state.module === 'projects' && state.entitled)
+    ? await getProjectsCardCounts(activeOrg.id)
+    : null;
+
   // Apps that are not on the plan are left out; Billing lists them. A view only app still opens.
   const apps: readonly LauncherApp[] = modules
     .filter((state) => state.entitled)
     .map((state) => ({
       module: state.module,
       ...PRODUCTS[state.module],
+      ...(state.module === 'projects' && projectsCounts ? { tagline: projectsCounts.label } : {}),
       href: productUrl(state.module),
       planNote: planNoteFor(state),
     }));

@@ -4,7 +4,7 @@
  * question first and undo after, the daily units and pace against the target, and a CSV export.
  */
 import { useMemo, useRef, useState } from 'react';
-import { ClipboardPen, Download, Lock, Pencil, Trash2 } from 'lucide-react';
+import { ClipboardPen, Download, Lock, Pencil, Repeat, Trash2 } from 'lucide-react';
 import {
   Button,
   ConfirmDialog,
@@ -16,6 +16,7 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
+  Tooltip,
   toast,
 } from '@/components/ui';
 import { ComboChart } from '@/components/charts/cartesian';
@@ -36,7 +37,7 @@ import {
   formatPace,
 } from '@/lib/format';
 import { laborCostPerUnit, paceDays, unitsPerHour } from '@/lib/profit';
-import { toCents } from '@/lib/money';
+import { fromScaled, HOURS_SCALE, hoursToScaled, QUANTITY_SCALE, quantityToScaled, toCents, ZERO } from '@/lib/money';
 import { shortDate, weekdayName } from '@/lib/profit/calendar';
 import { routes } from '@/lib/routes';
 import { deleteProductionEntriesAction, restoreProductionEntriesAction } from '@/server/actions/log';
@@ -74,6 +75,15 @@ function download(fileName: string, text: string): void {
 const dayLabel = (date: string, today: string): string =>
   date.slice(0, 4) === today.slice(0, 4) ? shortDate(date) : `${shortDate(date)}, ${date.slice(0, 4)}`;
 
+interface DayLine {
+  readonly key: string;
+  readonly label: string;
+  readonly hours: string;
+  readonly headcount: string | null;
+  /** Units of a folded Projects build line; null for typed lines. */
+  readonly units: string | null;
+}
+
 const people = (count: string | null | undefined): string =>
   `${formatNumber(count)} ${Number(count) === 1 ? 'person' : 'people'}`;
 
@@ -92,8 +102,43 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
   const canEditAny = shell.can('production:edit_any');
   const classNames = useMemo(() => new Map(laborClasses.map((item) => [item.id, item.name])), [laborClasses]);
   const oldest = shiftDate(today, -SUPERVISOR_EDIT_DAYS);
+  /** Lines of a day that come from Projects (build days, program time). Read only here. */
+  const fromProjects = (day: WorkDay) => day.rows.filter((row) => row.fromProjects);
+  const projectsHref = (path: string | null | undefined) =>
+    path && shell.modules.projects ? `${shell.appUrls.projects.replace(/\/+$/, '')}${path}` : null;
   const canEdit = (day: WorkDay) =>
-    canLog && !day.locked && (canEditAny || day.workDate >= oldest);
+    canLog && !day.locked && fromProjects(day).length === 0 && (canEditAny || day.workDate >= oldest);
+  /** "From Projects": the chip that replaces Edit on a day whose lines come from builds. */
+  const projectsChip = (day: WorkDay, compact = false) => {
+    const lines = fromProjects(day);
+    const first = lines[0]?.fromProjects;
+    if (!first) return null;
+    const keys = [...new Set(lines.map((row) => row.fromProjects?.key).filter(Boolean))];
+    const words = lines.length === 1 ? first.message : `These lines come from ${keys.length === 1 ? keys[0] : `${keys.length} builds`} in Projects.`;
+    const href = projectsHref(first.kind === 'build' && lines.length > 1 && first.path ? first.path.replace(/\/\d+$/, '') : first.path);
+    return (
+      <Tooltip content={`${words} Change them there.`}>
+        {href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border-subtle bg-panel px-2 text-xs font-medium text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus pointer-coarse:h-10"
+            data-testid={`work-projects-${day.workDate}`}
+          >
+            <Repeat aria-hidden className="size-3.5" />
+            {compact ? 'Projects' : 'Open in Projects'}
+            <span className="sr-only">(opens in a new tab). {words}</span>
+          </a>
+        ) : (
+          <span tabIndex={0} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-fg-muted" data-testid={`work-projects-${day.workDate}`}>
+            <Repeat aria-hidden className="size-3.5" />
+            From Projects
+          </span>
+        )}
+      </Tooltip>
+    );
+  };
   const jobOpen = job.status === 'active' || job.status === 'on_hold' || job.status === 'planned';
 
   // A row with nothing on it (every box cleared on Log work) is not a day of work: it stays out.
@@ -104,14 +149,47 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
   );
 
   const days = useMemo(() => groupWorkDays(rows), [rows]);
+  // The form checks a new day against typed days only: lines from Projects builds are not its own.
+  const typedDays = useMemo(() => groupWorkDays(rows.filter((row) => !row.fromProjects)), [rows]);
   const editingDay = days.find((day) => day.workDate === editingId) ?? null;
   const className = (id: string | null) => (id ? (classNames.get(id) ?? 'Labor class') : 'Not set');
   const crewNames = (day: WorkDay) => day.laborClassIds.map(className).join(', ');
-  /** "Machine operator, night shift" when the day has lines on more than one shift. */
-  const lineName = (day: WorkDay, row: WorkDay['rows'][number]) => {
-    const shift = hasShifts(day.rows) ? (shiftWords(row.shift) ?? 'Day shift').toLowerCase() : null;
-    return shift ? `${className(row.laborClassId)}, ${shift}` : className(row.laborClassId);
+  /**
+   * The lines of a day in words. Typed lines show their labor class ("Machine operator, night
+   * shift" when the typed lines are on more than one shift). Lines from Projects builds fold into
+   * one line, "From 5 builds in Projects", and prep time from Projects into another.
+   */
+  const dayLines = (day: WorkDay): DayLine[] => {
+    const typed = day.rows.filter((row) => !row.fromProjects);
+    const shifts = hasShifts(typed);
+    const lines: DayLine[] = typed.map((row) => {
+      const shift = shifts ? (shiftWords(row.shift) ?? 'Day shift').toLowerCase() : null;
+      return { key: row.id, label: shift ? `${className(row.laborClassId)}, ${shift}` : className(row.laborClassId), hours: row.hours, headcount: row.headcount, units: null };
+    });
+    const fold = (key: string, list: WorkDay['rows'], label: string, withUnits: boolean): DayLine => {
+      const hours = fromScaled(list.reduce((total, row) => total + hoursToScaled(row.hours), ZERO), HOURS_SCALE);
+      const units = fromScaled(list.reduce((total, row) => total + quantityToScaled(row.unitsGood), ZERO), QUANTITY_SCALE);
+      const crew = list.map((row) => row.headcount).filter((value): value is string => value !== null);
+      return { key, label, hours, headcount: crew.length > 0 ? String(crew.reduce((total, value) => total + Number(value), 0)) : null, units: withUnits ? units : null };
+    };
+    const builds = day.rows.filter((row) => row.fromProjects?.kind === 'build');
+    if (builds.length > 0) {
+      const keys = [...new Set(builds.map((row) => row.fromProjects?.key).filter(Boolean))];
+      lines.push(fold('builds', builds, keys.length === 1 ? `From ${keys[0]} in Projects` : `From ${formatNumber(builds.length)} builds in Projects`, true));
+    }
+    const prep = day.rows.filter((row) => row.fromProjects?.kind === 'prep');
+    if (prep.length > 0) lines.push(fold('prep', prep, 'Prep time from Projects', false));
+    return lines;
   };
+  /** Hours, units and crew of one line, for the small print after its name. */
+  const lineDetail = (line: DayLine): string =>
+    [
+      Number(line.hours) > 0 || line.units === null ? formatHours(line.hours) : null,
+      line.units !== null && Number(line.units) > 0 ? `${formatNumber(line.units, { maxDigits: 0 })} ${Number(line.units) === 1 ? unit : job.unitLabel.toLowerCase()}` : null,
+      line.headcount ? people(line.headcount) : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
   /**
    * After a save or a Cancel, the keyboard goes back to the Edit button of that day in the list
    * (the table on a wide screen, the card below 1024px), the control that opened the edit.
@@ -308,7 +386,7 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
           }
         />
         <KpiTile
-          label="Pace"
+          label="Pace on days with hours"
           explain={
             <Explain
               title="Pace"
@@ -400,7 +478,8 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
               jobId={job.id}
               unit={job.unitLabel}
               day={editingDay}
-              days={days}
+              days={typedDays}
+              unitsFrom={job.program ? (job.program.key ?? 'a program') : null}
               today={today}
               startDate={job.startDate}
               shiftHours={settings.defaultShiftHours}
@@ -537,18 +616,17 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
                         ) : null}
                       </TableCell>
                       <TableCell className="text-fg-secondary">
-                        {day.rows.length > 1 ? (
+                        {dayLines(day).length > 1 ? (
                           <ul className="flex flex-col">
-                            {day.rows.map((row) => (
-                              <li key={row.id} className="whitespace-nowrap">
-                                {lineName(day, row)}{' '}
-                                <span className="text-2xs text-fg-muted tabular-nums">
-                                  {formatHours(row.hours)}
-                                  {row.headcount ? `, ${people(row.headcount)}` : ''}
-                                </span>
+                            {dayLines(day).map((line) => (
+                              <li key={line.key} className="whitespace-nowrap">
+                                {line.label}{' '}
+                                <span className="text-2xs text-fg-muted tabular-nums">{lineDetail(line)}</span>
                               </li>
                             ))}
                           </ul>
+                        ) : dayLines(day)[0]?.key === 'builds' || dayLines(day)[0]?.key === 'prep' ? (
+                          dayLines(day)[0]!.label
                         ) : (
                           crewNames(day)
                         )}
@@ -624,6 +702,8 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
                             <Lock aria-hidden className="size-3.5" />
                             Closed
                           </span>
+                        ) : fromProjects(day).length > 0 ? (
+                          projectsChip(day)
                         ) : canEdit(day) ? (
                           <span className="inline-flex gap-1.5">
                             <IconButton
@@ -667,11 +747,8 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
                         </span>
                       </p>
                       <p className="mt-0.5 text-xs text-fg-secondary tabular-nums">
-                        {day.rows
-                          .map(
-                            (row) =>
-                              `${lineName(day, row)} ${formatHours(row.hours)}${row.headcount ? `, ${people(row.headcount)}` : ''}`,
-                          )
+                        {dayLines(day)
+                          .map((line) => `${line.label} ${lineDetail(line)}`)
                           .join(' · ')}
                       </p>
                       {day.notes.length > 0 ? (
@@ -680,6 +757,8 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
                     </div>
                     {day.locked ? (
                       <Lock aria-label="This month is closed" className="mt-1 size-4 text-fg-muted" />
+                    ) : fromProjects(day).length > 0 ? (
+                      <div className="shrink-0">{projectsChip(day, true)}</div>
                     ) : canEdit(day) ? (
                       <div className="flex shrink-0 gap-1.5">
                         <IconButton

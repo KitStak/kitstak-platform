@@ -17,6 +17,7 @@ Next compiles them along with the app.
 | `@kitstak/billing`      | The one price catalog, quotes, plan state, the Stripe gateway, webhook sync into `core.entitlements`, and billing email. The catalog and quote are safe to import in the browser. |
 | `@kitstak/mail`         | Platform email through Resend. Server only.                                                                                                                                       |
 | `@kitstak/pm-bridge`    | Lets CRM and WMS read and link KitStak Projects data (the `pm` schema).                                                                                                           |
+| `@kitstak/programs-engine` | The money and planning engine for Programs: prices, accrual, month charges, rollups, forecasts, variants, imports and schedules. No database. See [its README](programs-engine/README.md). |
 | `@kitstak/pulse-bridge` | Lets Portal, CRM, WMS and Projects show Pulse job profit, client profit and deep links. See [its README](pulse-bridge/README.md).                                                 |
 
 ## Rules

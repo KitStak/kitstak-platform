@@ -43,12 +43,18 @@ export interface BuildRowsInput {
   readonly collapsed: ReadonlySet<string>;
   readonly milestonesRow: boolean;
   readonly canCreate: boolean;
+  /** Page rows (programs group builds by variant); used when `groupBy` is `section`. */
+  readonly custom?: { readonly groups: readonly { readonly id: string; readonly title: string }[]; keyOf(task: TaskSummary): string } | null;
 }
 
 const ALL: TimelineGroup = { id: 'all', title: 'All tasks', color: 'gray', defaults: {} };
 
 function groupsFor(input: BuildRowsInput): { groups: TimelineGroup[]; keyOf: (task: TaskSummary) => string } {
   const { groupBy, tasks } = input;
+  if (groupBy === 'section' && input.custom) {
+    const custom = input.custom;
+    return { groups: custom.groups.map((group) => ({ id: group.id, title: group.title, color: 'gray' as LabelColor, defaults: {} })), keyOf: (task) => custom.keyOf(task) };
+  }
   if (groupBy === 'section' && input.sections.length > 0) {
     const groups: TimelineGroup[] = [...input.sections]
       .sort((a, b) => compareRank(a.position, b.position))
@@ -108,7 +114,8 @@ export function buildTimelineRows(input: BuildRowsInput): TimelineRow[] {
   const grouped = input.groupBy !== 'none' && groups.length > 0 && groups[0] !== ALL;
 
   for (const group of groups) {
-    const list = (roots.get(group.id) ?? []).sort((a, b) => compareRank(a.position, b.position));
+    // Page rows (builds by variant) read in date order; other groups keep the manual order.
+    const list = (roots.get(group.id) ?? []).sort((a, b) => (input.custom ? (spans.get(a.id)?.start ?? '').localeCompare(spans.get(b.id)?.start ?? '') || compareRank(a.position, b.position) : compareRank(a.position, b.position)));
     // Empty real groups stay (you can drag-create into them); empty catch-all groups don't.
     if (grouped && list.length === 0 && (!input.canCreate || group.id === 'none')) continue;
     const groupCollapsed = grouped && collapsed.has(`g:${group.id}`);

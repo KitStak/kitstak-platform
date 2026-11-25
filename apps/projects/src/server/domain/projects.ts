@@ -9,6 +9,8 @@ import { db, type Executor } from '@/server/db';
 import {
   customFields,
   favorites,
+  orgCalendar,
+  programSettings,
   labels,
   milestones,
   projectMembers,
@@ -22,8 +24,11 @@ import {
 import { conflict, invalid, notFound } from '@/server/errors';
 import { sanitizeRichText } from '@/server/sanitize';
 import {
+  DEFAULT_PROGRAM_STATUSES,
+  DEFAULT_PROGRAM_TIMEZONE,
   DEFAULT_STATUSES,
   PROJECT_KEY_PATTERN,
+  type ProjectKind,
   type ProjectHealth,
   type ProjectRole,
   type ProjectStatus,
@@ -44,7 +49,7 @@ import {
   toStatusDTO,
   type DomainContext,
 } from './_shared';
-import { requireOrg, requireProject, roleForProject, visibleProjectsWhere } from './access';
+import { requireOrg, requireProject, roleForProject, visibleProjectsWhere, type KindFilter } from './access';
 import { logActivity } from './activity';
 import { notify } from './notifications';
 import { getPeople, isOrgMember } from './people';
@@ -106,6 +111,7 @@ function toSummary(
 ): ProjectSummary {
   return {
     id: row.id,
+    kind: row.kind,
     key: row.key,
     name: row.name,
     status: row.status,
@@ -140,11 +146,13 @@ export interface ListProjectsOptions {
   readonly status?: readonly ProjectStatus[];
   readonly ids?: readonly string[];
   readonly search?: string;
+  /** Default `'project'`: programs have their own directory (`listPrograms`). */
+  readonly kind?: KindFilter;
 }
 
 /** Every project the actor can see (directory, sidebar, pickers). */
 export async function listProjects(ctx: DomainContext, options: ListProjectsOptions = {}): Promise<ProjectSummary[]> {
-  const conditions: SQL[] = [visibleProjectsWhere(ctx), eq(projects.isTemplate, false)];
+  const conditions: SQL[] = [visibleProjectsWhere(ctx, { kind: options.kind ?? 'project' }), eq(projects.isTemplate, false)];
   if (!options.includeArchived) conditions.push(isNull(projects.archivedAt));
   if (options.spaceId !== undefined) {
     conditions.push(options.spaceId === null ? isNull(projects.spaceId) : eq(projects.spaceId, options.spaceId));
@@ -325,6 +333,17 @@ export interface CreateProjectInput {
   readonly skipDefaults?: boolean;
   readonly templateId?: string | null;
   readonly settings?: Record<string, unknown>;
+  /** Default `'project'`. Only `domain/programs/programs.ts` passes `'program'`. */
+  readonly kind?: ProjectKind;
+  /** Programs: the `pm.program_settings` row values (time zone defaults to the workspace calendar). */
+  readonly program?: Partial<Omit<typeof programSettings.$inferInsert, 'programId' | 'orgId'>>;
+}
+
+/** Refusal for generic project writes that a program does through its own settings (4.1). */
+export const USE_PROGRAM_SETTINGS = 'Use the program settings.';
+
+function assertNotProgram(project: Pick<Project, 'kind'>): void {
+  if (project.kind === 'program') throw invalid(USE_PROGRAM_SETTINGS);
 }
 
 function validateDates(start: string | null | undefined, due: string | null | undefined): void {
@@ -361,6 +380,7 @@ export async function insertProject(tx: Executor, ctx: DomainContext, input: Cre
       .where(and(eq(customers.id, input.crmCustomerId), eq(customers.orgId, ctx.orgId)));
     if (!customer) throw invalid('That customer is not in this workspace.');
   }
+  const kind: ProjectKind = input.kind ?? 'project';
   const ownerId = input.ownerId ?? ctx.userId;
   if (ownerId !== ctx.userId && !(await isOrgMember(ctx, ownerId, tx))) throw invalid('The owner has to be in this workspace.');
   const [last] = await tx
@@ -373,7 +393,8 @@ export async function insertProject(tx: Executor, ctx: DomainContext, input: Cre
     .insert(projects)
     .values({
       orgId: ctx.orgId,
-      spaceId: input.spaceId ?? null,
+      kind,
+      spaceId: kind === 'program' ? null : (input.spaceId ?? null),
       key,
       name,
       description: sanitizeRichText(input.description ?? null),
@@ -383,7 +404,7 @@ export async function insertProject(tx: Executor, ctx: DomainContext, input: Cre
       startDate: input.startDate ?? null,
       dueDate: input.dueDate ?? null,
       color: input.color ?? 'blue',
-      icon: input.icon ?? 'folder-kanban',
+      icon: input.icon ?? (kind === 'program' ? 'repeat' : 'folder-kanban'),
       visibility: input.visibility ?? 'org',
       crmCustomerId: input.crmCustomerId ?? null,
       crmItemId: input.crmItemId ?? null,
@@ -405,33 +426,44 @@ export async function insertProject(tx: Executor, ctx: DomainContext, input: Cre
       .map(([userId, role]) => ({ projectId: project.id, userId, orgId: ctx.orgId, role, addedBy: ctx.userId })),
   );
   if (!input.skipDefaults) {
-    const ranks = ranksBetween(DEFAULT_STATUSES.length);
+    const defaults = kind === 'program' ? DEFAULT_PROGRAM_STATUSES : DEFAULT_STATUSES;
+    const ranks = ranksBetween(defaults.length);
+    const hasDefault = defaults.some((status) => 'isDefault' in status && status.isDefault);
     await tx.insert(statuses).values(
-      DEFAULT_STATUSES.map((status, index) => ({
+      defaults.map((status, index) => ({
         orgId: ctx.orgId,
         projectId: project.id,
         name: status.name,
         category: status.category,
         color: status.color,
         position: ranks[index],
-        isDefault: index === 0,
+        isDefault: hasDefault ? Boolean('isDefault' in status && status.isDefault) : index === 0,
       })),
     );
   }
+  if (kind === 'program') {
+    const [calendar] = await tx.select({ timezone: orgCalendar.timezone }).from(orgCalendar).where(eq(orgCalendar.orgId, ctx.orgId));
+    await tx.insert(programSettings).values({
+      ...(input.program ?? {}),
+      programId: project.id,
+      orgId: ctx.orgId,
+      timezone: input.program?.timezone ?? calendar?.timezone ?? DEFAULT_PROGRAM_TIMEZONE,
+    });
+  }
   await logActivity(tx, ctx, {
-    verb: 'project.created',
+    verb: kind === 'program' ? 'program.created' : 'project.created',
     entityType: 'project',
     entityId: project.id,
     projectId: project.id,
-    after: { name, key, templateId: input.templateId ?? null },
+    after: { name, key, kind, templateId: input.templateId ?? null },
   });
   const others = [...memberRows.keys()].filter((id) => id !== ctx.userId && validIds.has(id));
   if (others.length) {
     await notify(tx, ctx, {
       recipients: others,
       kind: 'project',
-      title: `${ctx.userName} added you to the project ${name}`,
-      url: `/p/${key}`,
+      title: kind === 'program' ? `${ctx.userName} added you to the program ${name}` : `${ctx.userName} added you to the project ${name}`,
+      url: kind === 'program' ? `/programs/${key}` : `/p/${key}`,
       projectId: project.id,
     });
   }
@@ -489,6 +521,10 @@ const PROJECT_FIELDS = [
 export async function updateProject(ctx: DomainContext, projectId: string, patch: UpdateProjectInput): Promise<ProjectDetail> {
   const needsOwner = patch.visibility !== undefined || patch.ownerId !== undefined || patch.key !== undefined;
   const { project } = await requireProject(ctx, { id: projectId }, needsOwner ? 'project:manage_members' : 'project:update');
+  if (project.kind === 'program') {
+    const programOwned = (['startDate', 'dueDate', 'status', 'visibility', 'spaceId'] as const).some((field) => patch[field] !== undefined);
+    if (programOwned) throw invalid(USE_PROGRAM_SETTINGS);
+  }
   const next: Record<string, unknown> = {};
   if (patch.name !== undefined) {
     const name = cleanText(patch.name);
@@ -564,6 +600,7 @@ export async function updateProject(ctx: DomainContext, projectId: string, patch
 
 export async function archiveProject(ctx: DomainContext, projectId: string, archived = true): Promise<ProjectDetail> {
   const { project } = await requireProject(ctx, { id: projectId }, 'project:update');
+  assertNotProgram(project);
   await db.transaction(async (tx) => {
     await tx
       .update(projects)
@@ -585,7 +622,8 @@ export async function archiveProject(ctx: DomainContext, projectId: string, arch
 
 /** Soft delete (owners only). Undo with `restoreProject` from the toast. */
 export async function deleteProject(ctx: DomainContext, projectId: string): Promise<void> {
-  await requireProject(ctx, { id: projectId }, 'project:delete');
+  const { project } = await requireProject(ctx, { id: projectId }, 'project:delete');
+  assertNotProgram(project);
   await db.transaction(async (tx) => {
     await tx.update(projects).set({ deletedAt: new Date() }).where(eq(projects.id, projectId));
     await logActivity(tx, ctx, { verb: 'project.deleted', entityType: 'project', entityId: projectId, projectId });
@@ -595,6 +633,7 @@ export async function deleteProject(ctx: DomainContext, projectId: string): Prom
 export async function restoreProject(ctx: DomainContext, projectId: string): Promise<ProjectDetail> {
   const [row] = await db.select().from(projects).where(and(eq(projects.id, projectId), eq(projects.orgId, ctx.orgId)));
   if (!row) throw notFound('That project');
+  assertNotProgram(row);
   const role = await roleForProject(ctx, { ...row, deletedAt: null });
   if (role !== 'owner') throw notFound('That project');
   if (!(await isProjectKeyAvailable(ctx, row.key))) {
@@ -714,6 +753,7 @@ export async function duplicateProject(
 ): Promise<ProjectDetail> {
   requireOrg(ctx, 'project:create');
   const source = await getProjectDetail(ctx, { id: projectId });
+  if (source.kind === 'program') throw invalid(USE_PROGRAM_SETTINGS);
   const { templateFromProject, instantiateTemplatePayload } = await import('./templates');
   const payload = await templateFromProject(ctx, projectId, { includeTasks: options.includeTasks ?? true });
   const created = await instantiateTemplatePayload(ctx, payload, {

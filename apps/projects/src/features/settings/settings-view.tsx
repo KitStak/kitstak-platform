@@ -5,7 +5,9 @@
  */
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { Blocks, Building2, Keyboard, Palette, UserRound } from 'lucide-react';
+import Link from 'next/link';
+import { Blocks, Building2, CalendarDays, Keyboard, Palette, UserRound } from 'lucide-react';
+import { routes } from '@/lib/routes';
 import { cn } from '@/components/ui';
 import { Page } from '@/components/layout/page';
 import type { NotificationKind } from '@/lib/constants';
@@ -107,6 +109,21 @@ export function SettingsView({
                 </li>
               );
             })}
+            <li className="shrink-0">
+              <Link
+                href={routes.calendarSettings()}
+                data-testid="settings-nav-calendar"
+                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-fg transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+              >
+                <span className="shrink-0 text-icon">
+                  <CalendarDays aria-hidden className="size-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block whitespace-nowrap">Work calendar</span>
+                  <span className="hidden truncate text-xs font-normal text-fg-muted md:block">Work days, holidays, capacity</span>
+                </span>
+              </Link>
+            </li>
           </ul>
         </nav>
         <section className="min-w-0 flex-1" aria-labelledby="settings-section-title">

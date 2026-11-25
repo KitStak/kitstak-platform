@@ -1,13 +1,13 @@
 import { apiRoute } from '@/server/http/api';
 import { searchFull } from '@/server/domain';
-import type { FullSearchType } from '@/lib/types';
+import type { FullSearchTypeWithPrograms } from '@/lib/types';
 
-const TYPES: readonly FullSearchType[] = ['all', 'tasks', 'projects', 'comments', 'people', 'goals'];
+const TYPES: readonly FullSearchTypeWithPrograms[] = ['all', 'tasks', 'projects', 'programs', 'comments', 'people', 'goals'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** GET /api/v1/search/full?q&type&project&status=open|done&assignee=me|none|<id>&limit */
 export const GET = apiRoute(async ({ ctx, searchParams }) => {
-  const type = searchParams.get('type') as FullSearchType | null;
+  const type = searchParams.get('type') as FullSearchTypeWithPrograms | null;
   const status = searchParams.get('status');
   const assignee = searchParams.get('assignee');
   const project = searchParams.get('project');
