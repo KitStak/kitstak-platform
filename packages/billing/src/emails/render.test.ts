@@ -463,7 +463,7 @@ describe('the look of each kind of email', () => {
     expect(['Account', 'Billing']).toContain(content.style?.area);
     const html = sample(template).html;
     expect(html).toContain(escapeHtml(content.style!.eyebrow));
-    expect(html).toContain(`class="ks-tint-${TONES[template]}"`);
+    expect(html).toContain(`class="ks-tint-${TONES[template]}-text"`);
     expect(copyProblems(content.style!.eyebrow), content.style!.eyebrow).toEqual([]);
   });
 

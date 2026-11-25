@@ -238,12 +238,7 @@ function logoHtml(area?: string): string {
 /** The tone's small label over the heading. */
 function eyebrowHtml(style: EmailStyle): string {
   const tone = TONE[style.tone];
-  return [
-    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;"><tr>`,
-    `<td class="ks-tint-${style.tone}" style="padding:5px 10px 4px;background-color:${tone.tint};border-radius:999px;">`,
-    `<span class="ks-tint-${style.tone}-text" style="font-family:${DISPLAY};font-size:15px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;color:${tone.text};">${escapeHtml(style.eyebrow)}</span>`,
-    `</td></tr></table>`,
-  ].join('');
+  return `<p class="ks-tint-${style.tone}-text" style="margin:0 0 8px;font-family:${DISPLAY};font-size:16px;line-height:18px;letter-spacing:1.5px;text-transform:uppercase;color:${tone.text};">${escapeHtml(style.eyebrow)}</p>`;
 }
 
 /** Dark mode colors for the tone tints, one rule pair per tone. */
