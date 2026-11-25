@@ -9,7 +9,9 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { AppDb } from '@/server/api/db';
 import { hashResetToken } from '@/server/auth/password-reset';
 import * as s from '@/server/db/schema';
-import { INVITE_TTL_HOURS, inviteEmail, type MailDelivery } from '@/lib/grid-defs/admin/company-mail';
+import { INVITE_TTL_HOURS, type MailDelivery } from '@/lib/grid-defs/admin/company-mail';
+import { userInviteEmail } from '@/server/mail/templates';
+import { renderText } from '@kitstak/mail/layout';
 import { sendCompanyMail } from './company-mail';
 import { withWriteTx } from '@/server/db/sql';
 
@@ -47,12 +49,18 @@ export async function sendUserInvite(
       .values({ userId: user.id, tokenHash: hashResetToken(token), expiresAt });
   });
   const link = `${input.baseUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
-  const mail = inviteEmail({
-    companyName: company?.displayName ?? 'KitStaks',
+  const content = userInviteEmail({
+    companyName: company?.displayName ?? '',
     firstName: user.firstName ?? user.name.split(' ')[0] ?? '',
     invitedBy: input.invitedBy,
     link,
+    hours: INVITE_TTL_HOURS,
   });
-  const result = await sendCompanyMail(db, { to: user.email, ...mail });
+  const result = await sendCompanyMail(db, {
+    to: user.email,
+    subject: content.subject,
+    text: renderText(content),
+    content,
+  });
   return { ...result, expiresAt };
 }

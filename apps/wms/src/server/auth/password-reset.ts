@@ -22,6 +22,8 @@ import { setCredentialPassword } from './credentials';
 import { getPasswordPolicy, validatePassword } from './password-policy';
 import { bumpSessionVersion } from './session-store';
 import { sendCompanyMail } from '@/server/repositories/company-mail';
+import { passwordResetEmail } from '@/server/mail/templates';
+import { renderText, type EmailContent } from '@kitstak/mail/layout';
 
 export const RESET_TOKEN_TTL_MINUTES = 30;
 
@@ -29,7 +31,10 @@ export const RESET_TOKEN_TTL_MINUTES = 30;
 export interface MailMessage {
   readonly to: string;
   readonly subject: string;
+  /** The plain text version (always carries the link). */
   readonly text: string;
+  /** The designed email; the company transport sends it as HTML with the text as fallback. */
+  readonly content?: EmailContent;
 }
 export interface MailAdapter {
   send(message: MailMessage): Promise<void>;
@@ -123,10 +128,12 @@ export async function requestPasswordReset(
   );
   const link = `${input.baseUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
   try {
+    const content = passwordResetEmail({ link, minutes: RESET_TOKEN_TTL_MINUTES });
     await adapterFor(db).send({
       to: user.email,
-      subject: 'Reset your KitStak password',
-      text: `Use this link within ${RESET_TOKEN_TTL_MINUTES} minutes to set a new password:\n${link}\nIf you did not ask for this, ignore this email.`,
+      subject: content.subject,
+      text: renderText(content),
+      content,
     });
   } catch (error) {
     // A mail failure must look exactly like success to the caller. An error here only for real

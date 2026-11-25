@@ -44,6 +44,8 @@ import { PO_RECEIVING_DEF, USER_PERFORMANCE_DEF } from '@/lib/grid-defs/reports/
 import { AGING_DEF, UTILIZATION_DEF } from '@/lib/grid-defs/reports/analysis';
 import { ORDER_LINES_DEF } from '@/lib/grid-defs/reports/order-lines';
 import { sendCompanyMail } from './company-mail';
+import { scheduledReportEmail } from '@/server/mail/templates';
+import { renderText } from '@kitstak/mail/layout';
 import type { ReportLister } from './reports-api';
 import { reportZoneOffset } from './reports-grid';
 import { listAging, listUtilization } from './reports-analysis';
@@ -480,21 +482,22 @@ export async function deliverSchedule(
       fileId: file.id,
       finishedAt: new Date(Math.max(Date.now(), now.getTime())).toISOString(),
     });
-    const link = `${deps.baseUrl ?? process.env.APP_URL ?? 'http://localhost:3000'}/api/files/${file.id}`;
-    const text = [
-      `${entry.def.title}: ${s.name}`,
-      `${rows.length.toLocaleString('en-US')} rows, ${s.format.toUpperCase()}, ${cadenceLabel(s)}.`,
-      '',
-      `Download (sign-in required, kept 7 days): ${link}`,
-      `Open the report: ${deps.baseUrl ?? process.env.APP_URL ?? 'http://localhost:3000'}${entry.def.path.replace(/^\/api/, '')}${s.query ? `?${s.query}` : ''}`,
-    ].join('\n');
+    const appUrl = deps.baseUrl ?? process.env.APP_URL ?? 'http://localhost:3000';
+    const content = scheduledReportEmail({
+      reportTitle: entry.def.title,
+      scheduleName: s.name,
+      rows: rows.length,
+      format: s.format,
+      cadence: cadenceLabel(s),
+      downloadUrl: `${appUrl}/api/files/${file.id}`,
+      reportUrl: `${appUrl}${entry.def.path.replace(/^\/api/, '')}${s.query ? `?${s.query}` : ''}`,
+    });
+    const text = renderText(content);
     const mail = deps.mail ?? sendCompanyMail;
     let mailed = false;
     for (const to of s.recipients) {
       try {
-        mailed =
-          (await mail(db, { to, subject: `[KitStak] ${entry.def.title} - ${s.name}`, text })).delivered ||
-          mailed;
+        mailed = (await mail(db, { to, subject: content.subject, text, content })).delivered || mailed;
       } catch (e: unknown) {
         log.warn('scheduled report mail failed', { to, err: e });
       }
