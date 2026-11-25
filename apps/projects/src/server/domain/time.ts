@@ -1,7 +1,7 @@
 /** Time tracking: one running timer per person, manual entries, per-task and per-person totals. */
 import 'server-only';
 import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
-import { db } from '@/server/db';
+import { db, type Executor } from '@/server/db';
 import { projects, tasks, timeEntries, type TimeEntry } from '@/server/db/schema';
 import { forbidden, invalid, notFound } from '@/server/errors';
 import type { TimeEntryDTO } from '@/lib/types';
@@ -9,6 +9,7 @@ import { timerMinutes } from '@/lib/dates';
 import { cleanText, toTimeEntryDTO, type DomainContext } from './_shared';
 import { requireTask } from './access';
 import { logActivity } from './activity';
+import { assertTimeOpen, lockTimeScopes, refreshTimeLedger, timeScope, type TimeScope } from './programs/build-hooks';
 
 // A stopped timer logs at least one minute, with the same rounding the UI shows right away.
 const minutesBetween = (start: Date, end: Date): number => timerMinutes(end.getTime() - start.getTime());
@@ -28,43 +29,26 @@ export async function getRunningTimer(ctx: DomainContext): Promise<TimeEntryDTO 
   return { ...toTimeEntryDTO(row.entry), task };
 }
 
-async function stopRow(ctx: DomainContext, row: TimeEntry): Promise<TimeEntry> {
+/** Stops a running timer inside the caller's transaction (its per hour fees refresh with it). */
+async function stopRow(tx: Executor, ctx: DomainContext, row: TimeEntry, scope: TimeScope | null): Promise<TimeEntry> {
+  // Time counts on the day it started; a day closed while the timer ran stays frozen (4.3.4).
+  await assertTimeOpen(tx, ctx, scope, [row.startedAt]);
   const ended = new Date();
-  const [stopped] = await db.transaction(async (tx) => {
-    const updated = await tx
-      .update(timeEntries)
-      .set({ endedAt: ended, durationMinutes: minutesBetween(row.startedAt, ended), updatedAt: ended })
-      .where(eq(timeEntries.id, row.id))
-      .returning();
-    await logActivity(tx, ctx, {
-      verb: 'time.logged',
-      entityType: 'time_entry',
-      entityId: row.id,
-      projectId: row.projectId,
-      taskId: row.taskId,
-      after: { minutes: updated[0].durationMinutes, source: 'timer' },
-    });
-    return updated;
-  });
-  return stopped;
-}
-
-/** Starts a timer on a task, stopping any other running timer first. */
-export async function startTimer(ctx: DomainContext, taskId: string, note?: string | null): Promise<TimeEntryDTO> {
-  const { task } = await requireTask(ctx, taskId, 'time:log');
-  const [running] = await db
-    .select()
-    .from(timeEntries)
-    .where(and(eq(timeEntries.userId, ctx.userId), isNull(timeEntries.endedAt), isNull(timeEntries.deletedAt)));
-  if (running) {
-    if (running.taskId === taskId) return toTimeEntryDTO(running);
-    await stopRow(ctx, running);
-  }
-  const [row] = await db
-    .insert(timeEntries)
-    .values({ orgId: ctx.orgId, projectId: task.projectId, taskId, userId: ctx.userId, startedAt: new Date(), note: cleanText(note), source: 'timer' })
+  const updated = await tx
+    .update(timeEntries)
+    .set({ endedAt: ended, durationMinutes: minutesBetween(row.startedAt, ended), updatedAt: ended })
+    .where(eq(timeEntries.id, row.id))
     .returning();
-  return toTimeEntryDTO(row);
+  await logActivity(tx, ctx, {
+    verb: 'time.logged',
+    entityType: 'time_entry',
+    entityId: row.id,
+    projectId: row.projectId,
+    taskId: row.taskId,
+    after: { minutes: updated[0].durationMinutes, source: 'timer' },
+  });
+  await refreshTimeLedger(tx, ctx, scope, [row.startedAt]);
+  return updated[0];
 }
 
 /** Tell KitStak Pulse (when installed) that this project's logged time changed. Never throws. */
@@ -73,13 +57,45 @@ async function timeChanged(ctx: DomainContext, projectId: string): Promise<void>
   await notifyPulseOfTime(db, ctx.orgId, projectId);
 }
 
+/**
+ * Starts a timer on a task, stopping any other running timer first. On program work the lock
+ * check, the write and the per hour ledger refresh share one transaction (4.1, 4.3.2).
+ */
+export async function startTimer(ctx: DomainContext, taskId: string, note?: string | null): Promise<TimeEntryDTO> {
+  const { task } = await requireTask(ctx, taskId, 'time:log');
+  const scope = await timeScope(db, ctx, taskId);
+  const [running] = await db
+    .select()
+    .from(timeEntries)
+    .where(and(eq(timeEntries.orgId, ctx.orgId), eq(timeEntries.userId, ctx.userId), isNull(timeEntries.endedAt), isNull(timeEntries.deletedAt)));
+  if (running && running.taskId === taskId) return toTimeEntryDTO(running);
+  const runningScope = running ? await timeScope(db, ctx, running.taskId) : null;
+  const row = await db.transaction(async (tx) => {
+    await lockTimeScopes(tx, [scope, runningScope]);
+    const startedAt = new Date();
+    await assertTimeOpen(tx, ctx, scope, [startedAt]);
+    if (running) await stopRow(tx, ctx, running, runningScope);
+    const [inserted] = await tx
+      .insert(timeEntries)
+      .values({ orgId: ctx.orgId, projectId: task.projectId, taskId, userId: ctx.userId, startedAt, note: cleanText(note), source: 'timer', billable: scope?.billableDefault ?? false })
+      .returning();
+    return inserted;
+  });
+  if (running) await timeChanged(ctx, running.projectId);
+  return toTimeEntryDTO(row);
+}
+
 export async function stopTimer(ctx: DomainContext): Promise<TimeEntryDTO | null> {
   const [running] = await db
     .select()
     .from(timeEntries)
     .where(and(eq(timeEntries.orgId, ctx.orgId), eq(timeEntries.userId, ctx.userId), isNull(timeEntries.endedAt), isNull(timeEntries.deletedAt)));
   if (!running) return null;
-  const stopped = await stopRow(ctx, running);
+  const scope = await timeScope(db, ctx, running.taskId);
+  const stopped = await db.transaction(async (tx) => {
+    await lockTimeScopes(tx, [scope]);
+    return stopRow(tx, ctx, running, scope);
+  });
   await timeChanged(ctx, stopped.projectId);
   return toTimeEntryDTO(stopped);
 }
@@ -95,7 +111,10 @@ export async function addManualTime(
   const start = input.date ? new Date(`${input.date}T09:00:00`) : new Date(Date.now() - input.minutes * 60_000);
   if (Number.isNaN(start.getTime())) throw invalid('Pick a valid date.');
   const end = new Date(start.getTime() + input.minutes * 60_000);
+  const scope = await timeScope(db, ctx, task.id);
   const [row] = await db.transaction(async (tx) => {
+    await lockTimeScopes(tx, [scope]);
+    await assertTimeOpen(tx, ctx, scope, [start]);
     const inserted = await tx
       .insert(timeEntries)
       .values({
@@ -107,7 +126,7 @@ export async function addManualTime(
         endedAt: end,
         durationMinutes: Math.round(input.minutes),
         note: cleanText(input.note),
-        billable: input.billable ?? false,
+        billable: input.billable ?? scope?.billableDefault ?? false,
         source: 'manual',
       })
       .returning();
@@ -119,6 +138,7 @@ export async function addManualTime(
       taskId: task.id,
       after: { minutes: Math.round(input.minutes), source: 'manual' },
     });
+    await refreshTimeLedger(tx, ctx, scope, [start]);
     return inserted;
   });
   await timeChanged(ctx, task.projectId);
@@ -141,6 +161,7 @@ export async function updateTimeEntry(
   patch: { minutes?: number; note?: string | null; billable?: boolean },
 ): Promise<TimeEntryDTO> {
   const current = await ownEntry(ctx, entryId);
+  const scope = await timeScope(db, ctx, current.taskId);
   const set: Partial<typeof timeEntries.$inferInsert> = { updatedAt: new Date() };
   if (patch.minutes !== undefined) {
     if (patch.minutes <= 0 || patch.minutes > 24 * 60) throw invalid('Enter between 1 minute and 24 hours.');
@@ -149,14 +170,27 @@ export async function updateTimeEntry(
   }
   if (patch.note !== undefined) set.note = cleanText(patch.note);
   if (patch.billable !== undefined) set.billable = patch.billable;
-  const [row] = await db.update(timeEntries).set(set).where(eq(timeEntries.id, entryId)).returning();
+  const row = await db.transaction(async (tx) => {
+    await lockTimeScopes(tx, [scope]);
+    await assertTimeOpen(tx, ctx, scope, [current.startedAt]);
+    const [updated] = await tx.update(timeEntries).set(set).where(and(eq(timeEntries.id, entryId), isNull(timeEntries.deletedAt))).returning();
+    if (!updated) throw notFound('That time entry');
+    await refreshTimeLedger(tx, ctx, scope, [current.startedAt]);
+    return updated;
+  });
   await timeChanged(ctx, current.projectId);
   return toTimeEntryDTO(row);
 }
 
 export async function deleteTimeEntry(ctx: DomainContext, entryId: string): Promise<void> {
   const current = await ownEntry(ctx, entryId);
-  await db.update(timeEntries).set({ deletedAt: new Date() }).where(eq(timeEntries.id, entryId));
+  const scope = await timeScope(db, ctx, current.taskId);
+  await db.transaction(async (tx) => {
+    await lockTimeScopes(tx, [scope]);
+    await assertTimeOpen(tx, ctx, scope, [current.startedAt]);
+    await tx.update(timeEntries).set({ deletedAt: new Date() }).where(eq(timeEntries.id, entryId));
+    await refreshTimeLedger(tx, ctx, scope, [current.startedAt]);
+  });
   await timeChanged(ctx, current.projectId);
 }
 

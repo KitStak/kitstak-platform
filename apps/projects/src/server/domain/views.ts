@@ -26,8 +26,11 @@ function viewDTO(row: SavedView): SavedViewDTO {
 }
 
 /** Views visible to the actor: shared views of the project + their personal ones. */
-export async function listSavedViews(ctx: DomainContext, projectId: string | null): Promise<SavedViewDTO[]> {
+export async function listSavedViews(ctx: DomainContext, projectId: string | null, options: { readonly surface?: 'work' | 'programs' | 'floor' } = {}): Promise<SavedViewDTO[]> {
   if (projectId) await requireProject(ctx, { id: projectId });
+  // Surfaces (docs/programs/SPEC.md 4.1): My Work and project views are `work`; the programs
+  // directory and Floor today keep their own saved views.
+  const surface = options.surface ?? 'work';
   const rows = await db
     .select()
     .from(savedViews)
@@ -36,6 +39,7 @@ export async function listSavedViews(ctx: DomainContext, projectId: string | nul
         eq(savedViews.orgId, ctx.orgId),
         projectId ? eq(savedViews.projectId, projectId) : isNull(savedViews.projectId),
         or(isNull(savedViews.userId), eq(savedViews.userId, ctx.userId)),
+        eq(savedViews.surface, surface),
       ),
     )
     .orderBy(sql`${savedViews.position} COLLATE "C"`);
@@ -50,6 +54,8 @@ export interface SavedViewInput {
   /** Shared with everyone on the project (needs edit rights) or just for me. */
   readonly shared?: boolean;
   readonly isDefault?: boolean;
+  /** Default `work`; the programs directory saves `programs`, Floor today saves `floor`. */
+  readonly surface?: 'work' | 'programs' | 'floor';
 }
 
 export async function createSavedView(ctx: DomainContext, input: SavedViewInput): Promise<SavedViewDTO> {
@@ -80,6 +86,7 @@ export async function createSavedView(ctx: DomainContext, input: SavedViewInput)
         type: input.type,
         config: input.config,
         isDefault: input.isDefault ?? false,
+        surface: input.surface ?? 'work',
         position: rankAfter(existing[0]?.position),
         createdBy: ctx.userId,
       })

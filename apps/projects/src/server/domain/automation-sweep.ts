@@ -33,6 +33,9 @@ const CRM_TYPES: readonly IntegrationTargetType[] = ['crm_item', 'crm_account'];
 export function engineTaskFromSummary(summary: TaskSummary): TaskEvent['task'] {
   return {
     id: summary.id,
+    // Builds must say so, or workspace rules would treat them as tasks (docs/programs/SPEC.md 4.1).
+    kind: summary.kind ?? 'task',
+    variantId: summary.build?.variantId ?? null,
     projectId: summary.projectId,
     title: summary.title,
     statusId: summary.statusId,

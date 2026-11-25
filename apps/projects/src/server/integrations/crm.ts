@@ -91,3 +91,17 @@ export async function getCrmItems(ctx: DomainContext, ids: readonly string[]): P
     return new Map();
   }
 }
+
+/**
+ * Deal facts for the program wizard (docs/programs/SPEC.md 6.2): value, currency, won flag,
+ * account and the rates read from the deal's columns, through the shared reader in
+ * `@kitstak/db/crm-deal-facts`. Null when CRM is not installed or the deal is not in this org.
+ */
+export async function dealFactsFor(ctx: DomainContext, itemId: string): Promise<import('@kitstak/db/crm-deal-facts').CrmDealFacts | null> {
+  const { dealFacts } = await import('@kitstak/db/crm-deal-facts');
+  try {
+    return await dealFacts(db as unknown as import('@kitstak/db/crm-deal-facts').Executor, ctx.orgId, itemId);
+  } catch {
+    return null;
+  }
+}

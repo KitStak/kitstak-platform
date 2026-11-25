@@ -1,8 +1,9 @@
 import { headers } from 'next/headers';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { AppShell, LockedScreen } from '@/features/shell';
 import { loadShell } from '@/features/shell/shell-frame';
 import { getProjectDetail, listOrgPeople, resolveTaskKey } from '@/server/domain';
+import { requireProgram } from '@/server/domain/programs';
 import { isDomainError } from '@/server/errors';
 import { requirePageContext } from '@/server/session';
 import { canOrg } from '@/lib/permissions';
@@ -44,9 +45,35 @@ export default async function AppLayout({ children }: { readonly children: React
       throw error;
     };
     let exists = projects.some((project) => project.key.toUpperCase() === key);
-    if (!exists) exists = await getProjectDetail(ctx, { key }).then(() => true, found);
+    let programKey: string | null = null;
+    if (!exists) {
+      const detail = await getProjectDetail(ctx, { key }).catch((error: unknown) => (found(error), null));
+      exists = detail !== null;
+      if (detail?.kind === 'program') programKey = detail.key;
+    }
     if (!exists) notFound();
+    // A program under /p/KEY goes to /programs/KEY before anything streams (docs/programs/SPEC.md 4.1).
+    if (programKey) {
+      const rest = path.replace(/^\/p\/[^/?#]+/, '');
+      const tab = /^\/(board|list|table|calendar|timeline)(?:[/?#]|$)/.exec(rest);
+      redirect(tab ? `/programs/${programKey}/builds/${tab[1]}` : `/programs/${programKey}${rest}`);
+    }
     const number = match[2] ? Number(match[2]) : null;
+    if (number !== null && !(await resolveTaskKey(ctx, key, number).then(() => true, found))) notFound();
+  }
+  // Program URLs (docs/programs/SPEC.md 4.1): /programs/KEY and /programs/KEY/NUMBER must be a
+  // live program (a project key answers 404 here; /p/KEY redirects the other way).
+  const programMatch = /^\/programs\/([^/?#]+)(?:\/(\d+))?(?:[/?#]|$)/.exec(path);
+  const programKey = programMatch ? decodeURIComponent(programMatch[1] ?? '') : '';
+  if (programMatch && programKey !== 'new' && programKey !== 'today') {
+    const key = programKey.toUpperCase();
+    const found = (error: unknown) => {
+      if (isDomainError(error) && (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')) return false;
+      throw error;
+    };
+    const exists = await requireProgram(ctx, key).then(() => true, found);
+    if (!exists) notFound();
+    const number = programMatch[2] ? Number(programMatch[2]) : null;
     if (number !== null && !(await resolveTaskKey(ctx, key, number).then(() => true, found))) notFound();
   }
   const people = await peoplePromise;

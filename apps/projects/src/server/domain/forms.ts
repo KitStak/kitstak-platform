@@ -341,6 +341,33 @@ export async function submitForm(input: SubmitFormInput): Promise<{ confirmation
     });
     return { confirmation: form.settings.confirmationMessage ?? 'Thanks! Your request was sent to the team.' };
   }
+  // Build forms (docs/programs/SPEC.md 5.17): on a program, `settings.build` maps a variant
+  // question and a qty question, and each answer makes a build dated today (or the mapped date).
+  const buildMode = (form.settings as { build?: { variantFieldId?: string; qtyFieldId?: string; dateFieldId?: string } }).build;
+  if (project.kind === 'program' && buildMode?.variantFieldId && buildMode.qtyFieldId) {
+    const { formBuild } = await import('./programs/form-builds');
+    const created = await formBuild(ctx, project, {
+      variantAnswer: answerText(form.fields.find((f) => f.id === buildMode.variantFieldId)!, answers[buildMode.variantFieldId]),
+      qtyAnswer: String(answers[buildMode.qtyFieldId] ?? ''),
+      dateAnswer: buildMode.dateFieldId && isIsoDate(answers[buildMode.dateFieldId]) ? (answers[buildMode.dateFieldId] as string) : null,
+      title: titleField ? title : null,
+      description: descriptionParts.join('') || null,
+    });
+    await db.transaction(async (tx) => {
+      await tx.insert(formSubmissions).values({ orgId: form.orgId, formId: form.id, taskId: created.taskId, data: answers, submitterName: submitter, submitterEmail: email, submittedBy: input.viewer?.userId ?? null });
+      await tx.update(forms).set({ submissionCount: sql`${forms.submissionCount} + 1` }).where(eq(forms.id, form.id));
+      await logActivity(tx, ctx, { verb: 'form.submitted', entityType: 'form', entityId: form.id, projectId: project.id, taskId: created.taskId, meta: { submitter, email, build: true } });
+      await notify(tx, ctx, {
+        recipients: [...(form.settings.notifyUserIds ?? []), project.ownerId],
+        kind: 'project',
+        title: `New “${form.name}” response: ${taskKey(project.key, created.number)} planned`,
+        url: routes.taskAny(project.kind, project.key, created.number),
+        projectId: project.id,
+        taskId: created.taskId,
+      });
+    });
+    return { confirmation: form.settings.confirmationMessage ?? 'Thanks! Your request was sent to the team.' };
+  }
   const task = await db.transaction(async (tx) => {
     const created = await insertTask(
       tx,

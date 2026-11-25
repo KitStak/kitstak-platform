@@ -30,11 +30,18 @@ export type AutomationTrigger =
   /** A CRM deal/account linked to the task moves to a new stage (optionally a named one). */
   | { readonly type: 'crm_stage_changed'; readonly toStage?: string }
   /** A WMS order linked to the task ships (status becomes Shipped or Delivered). */
-  | { readonly type: 'wms_order_shipped' };
+  | { readonly type: 'wms_order_shipped' }
+  /** Program sweep: every live build of a run is done (docs/programs/SPEC.md 4.9, 5.17). Once per run. */
+  | { readonly type: 'run_done' }
+  /**
+   * Program sweep: at `at` (HH:MM, program time) or later, a run's built units are below plan by
+   * at least `percent` percent. Once per run per day.
+   */
+  | { readonly type: 'run_below_plan'; readonly percent: number; readonly at: string };
 
 export type AutomationTriggerType = AutomationTrigger['type'];
 
-export type AutomationConditionField = 'project' | 'priority' | 'assignee' | 'label' | 'status' | 'statusCategory' | 'section' | 'dueDate' | 'title' | 'isSubtask';
+export type AutomationConditionField = 'project' | 'priority' | 'assignee' | 'label' | 'status' | 'statusCategory' | 'section' | 'dueDate' | 'title' | 'isSubtask' | 'workKind' | 'variant';
 
 export interface AutomationCondition {
   readonly field: AutomationConditionField;
@@ -96,10 +103,15 @@ export const TRIGGER_PHRASES: Readonly<Record<AutomationTriggerType, string>> = 
   task_overdue: 'a task becomes overdue',
   crm_stage_changed: 'a linked CRM deal changes stage',
   wms_order_shipped: 'a linked WMS order ships',
+  run_done: 'all builds of a run are done',
+  run_below_plan: 'a run is below plan',
 };
 
+/** Triggers about runs of builds: they act on the run's first build and apply to builds only. */
+export const RUN_TRIGGER_TYPES: readonly AutomationTriggerType[] = ['run_done', 'run_below_plan'];
+
 /** Triggers checked on a schedule (or when a linked record changes) instead of on a task edit. */
-export const SCHEDULED_TRIGGER_TYPES: readonly AutomationTriggerType[] = ['due_date_approaching', 'task_overdue', 'crm_stage_changed', 'wms_order_shipped'];
+export const SCHEDULED_TRIGGER_TYPES: readonly AutomationTriggerType[] = ['due_date_approaching', 'task_overdue', 'crm_stage_changed', 'wms_order_shipped', 'run_done', 'run_below_plan'];
 
 /** WMS order statuses that count as "shipped". */
 export const WMS_SHIPPED_STATUSES: readonly string[] = ['shipped', 'delivered'];

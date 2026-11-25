@@ -15,6 +15,7 @@ import type { CustomFieldDTO, LabelDTO, MilestoneDTO, SectionDTO, StatusDTO } fr
 import { cleanText, iso, toCustomFieldDTO, toLabelDTO, toSectionDTO, toStatusDTO, type DomainContext } from './_shared';
 import { requireOrg, requireProject } from './access';
 import { logActivity } from './activity';
+import { afterStatusCategoryChange } from './programs/build-hooks';
 
 function requiredName(value: string | undefined, what: string): string {
   const name = cleanText(value);
@@ -82,6 +83,11 @@ export async function updateStatus(
         .where(eq(tasks.statusId, statusId));
     }
     const [updated] = await tx.update(statuses).set(set).where(eq(statuses.id, statusId)).returning();
+    if (patch.category !== undefined && patch.category !== current.category) {
+      // Builds in this status changed category: keep finished_on and the ledger in step (4.1, A7).
+      await tx.execute(sql`update pm.tasks set completed_at = completed_at where status_id = ${statusId}::uuid and kind = 'build'`);
+      await afterStatusCategoryChange(tx, ctx, current.projectId);
+    }
     await logActivity(tx, ctx, {
       verb: 'status.updated',
       entityType: 'status',
@@ -114,6 +120,7 @@ export async function deleteStatus(ctx: DomainContext, statusId: string, moveToS
         .where(eq(tasks.statusId, statusId));
     }
     await tx.delete(statuses).where(eq(statuses.id, statusId));
+    if (Number(n) > 0) await afterStatusCategoryChange(tx, ctx, current.projectId);
     if (current.isDefault) {
       const next = siblings.filter((s) => s.id !== statusId).sort((a, b) => (a.position < b.position ? -1 : 1))[0];
       if (next) await tx.update(statuses).set({ isDefault: true }).where(eq(statuses.id, next.id));
