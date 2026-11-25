@@ -24,7 +24,8 @@ Decision: Pulse gets a **Programs** section, the same way Projects has Programs 
 4. **Pulse owns cost and margin only.** It never stores a program plan, a price or a forecast of its own.
 5. **Quotes and budgets on a program job are ignored, not deleted.** They stay in `pulse.job_plans` so nothing is lost, and the job page says they are not used.
 6. **No money moves.** Sync, posting, stamping and month close stay as they are. This is a read model plus small write paths (track a program, convert a job).
-7. **Program jobs leave the Jobs list by default.** The Jobs list gets a "Programs" chip filter that shows them. Opening a program job goes to its program page, with a link "Open the job" for people who need the raw rows.
+7. **Programs are their own section in the top bar.** Program jobs leave the Jobs list. They live only under Programs. Opening a program job goes to its program page, with a link "Open the job" for people who need the raw rows.
+8. **Target margin is set per customer.** A program uses its customer's target margin, so every program and job for that customer is judged the same way.
 
 ## 2. Data
 
@@ -47,7 +48,7 @@ Everything the tracker shows already exists:
 Small and additive:
 
 - `pulse.jobs.program_job boolean NOT NULL DEFAULT false`: true for a job that a `pm_program` link points at. Kept by the sync (set on mirror, cleared when the mirror goes). It drives list filters and redirects without a join. Backfill: `UPDATE pulse.jobs SET program_job = true WHERE id IN (SELECT job_id FROM pulse.job_links WHERE target_type = 'pm_program')`.
-- `pulse.program_prefs` (one row per org and program): `org_id`, `pm_program_id uuid`, `target_margin_bp integer NULL`, `labor_split text NOT NULL DEFAULT 'by_units' CHECK (labor_split IN ('by_units','by_standard','as_logged'))`, `standard_minutes jsonb NOT NULL DEFAULT '{}'` (minutes per kit by variant id), `version integer NOT NULL DEFAULT 1`, timestamps, `UNIQUE (org_id, pm_program_id)`, RLS enabled with the `pulse_app` policy like other Pulse tables. Pulse only settings: Projects never reads them.
+- `pulse.program_prefs` (one row per org and program): `org_id`, `pm_program_id uuid`, `labor_split text NOT NULL DEFAULT 'by_units' CHECK (labor_split IN ('by_units','by_standard','as_logged'))`, `standard_minutes jsonb NOT NULL DEFAULT '{}'` (minutes per kit by variant id), `version integer NOT NULL DEFAULT 1`, timestamps, `UNIQUE (org_id, pm_program_id)`, RLS enabled with the `pulse_app` policy like other Pulse tables. Pulse only settings: Projects never reads them.
 
 Preview builds skip it (the `db:migrate` guard). Production applies it on deploy.
 
@@ -108,7 +109,7 @@ When there is no cost yet, forecast margin is null and the screen says "Not enou
 
 ### 3.5 Target margin
 
-The first of these that is set: `program_prefs.target_margin_bp`, the program job's `target_margin_bp`, the client's, the org default. This is the same order the job uses today.
+Per customer. The first of these that is set: the client's `target_margin_bp` (the Pulse client the program job belongs to), then the org default. A target typed on the program job itself is ignored, so every program for a customer is judged the same way. The Settings tab shows the customer's target with "Change it on the client" linking to the client page.
 
 ## 4. Server (`apps/pulse/src/server/domain/programs.ts`)
 
@@ -121,7 +122,7 @@ Reads use `requirePulse`. Money is hidden through `moneyOut` exactly as on jobs:
 | `getProgramVariants(ctx, key, month)` | `byVariant` with planned units per variant and the `notTiedToVariant` row. |
 | `getProgramMonths(ctx, key, { from, to })` | One row per month: units, revenue, cost, profit, margin, target, minimum met or missed, closed or open. |
 | `getProgramDays(ctx, key, month)` | One row per work day: planned units, units, scrap, hours, units per hour, revenue, cost, profit. |
-| `getProgramPrefs` / `saveProgramPrefs` | Target margin, labor split, standard minutes. `saveProgramPrefs` needs `rate:manage` and checks `version`. |
+| `getProgramPrefs` / `saveProgramPrefs` | Labor split and standard minutes. `saveProgramPrefs` needs `rate:manage` and checks `version`. |
 | `trackProgram(ctx, programId)` | Makes the program job when the program has none: `kind='ongoing'`, `pricing_model='per_unit'`, unit label from the program, client matched by core customer or CRM account (else asks), no quote, no budget, no typed price, `program_job = true`. Writes the `bills_to` edge through `@kitstak/db/record-links` and the mirror in one transaction, runs `canLinkJob` first, and queues a program sync. Needs `job:manage`. |
 | `convertToProgramJob(ctx, jobId)` | For a job already linked (all 8 in production): sets `program_job = true` and writes one activity line "J-26131 is now tracked as the GLOVE program." Plans and typed price are left in place but unused. Idempotent. The sync also does this on its own for every linked job, so no one has to click anything. |
 
@@ -153,7 +154,7 @@ When `program_job` is true:
 
 ### 5.4 Jobs list, search, home, profit
 
-- Jobs list hides `program_job` jobs by default. A new chip "Programs" shows them. The existing "Fed by a program" filter stays for jobs that only take billed builds.
+- Jobs list leaves out `program_job` jobs. A muted line under the list says "8 programs are tracked under Programs." with a link. The existing "Fed by a program" filter stays for jobs that only take billed builds.
 - Search: a program key or name returns the program first ("GLOVE · Ultra Glove Program · Program"), then its job.
 - Home: a "Programs this month" card (top 5 by revenue: name, revenue, margin against target, a dot for health) when the org tracks any program.
 - Profit page: group by "Program" stays. Each program row links to its program page.
@@ -181,7 +182,7 @@ Plain 8th grade copy. No em dashes or double dashes anywhere.
 
 ### 7.1 Navigation
 
-A new "Programs" item between Jobs and Profit, icon `Repeat2` (same as Projects). Shortcut `G R`. Hidden when Projects is not entitled or the program tables are missing (`programsReady`). Command palette: "Go to Programs" and each tracked program by key.
+A new "Programs" item in the top bar (`features/shell/top-nav.tsx`, `lib/nav.ts` group `main`) between Jobs and Profit, icon `Repeat2` (same as Projects). Shortcut `G R`. Hidden when Projects is not entitled or the program tables are missing (`programsReady`). Command palette: "Go to Programs" and each tracked program by key.
 
 ### 7.2 Programs list (`/programs`)
 
@@ -208,9 +209,20 @@ Tabs:
 3. **By month**: last 12 months. Units, revenue, cost, profit, margin, target margin, minimum met or missed, closed or open. Clicking a month opens that month on the Overview.
 4. **Days**: the month by work day. Planned, built, scrap, hours, units per hour, revenue, cost, profit. Days with kits and no hours are flagged with an "Add hours" link to the daily log, prefilled for the program job.
 5. **Labor**: hours and cost by labor class and by person for the month, and prep labor from Projects (`pmt:` rows) on its own row "Prep work in Projects".
-6. **Settings** (`rate:manage`): target margin (placeholder shows the value it inherits and where from), labor split, standard minutes per variant.
+6. **Settings** (`rate:manage`): the customer's target margin (read only here, "Change it on the client"), labor split, standard minutes per variant.
 
-### 7.4 States
+### 7.4 Monthly program report
+
+A printable report per program and month, from the program page ("Print report") and from the Programs list row menu. Built like the Pulse reports that exist today (`features/reports`), with Print, PDF and CSV.
+
+Two versions, picked in the dialog:
+
+- **Internal** (default for people with money rights): header (program, customer, month, card version in force), totals (kits, revenue, labor, material, profit, margin against the customer's target), By variant table, By day table, notes on missed minimum and alerts that fired.
+- **For the customer**: the same header, kits built against planned by variant and by day, revenue by variant, fees and the minimum. No cost, labor, profit or margin. The dialog says "Cost and margin are left out."
+
+A closed month prints as final. An open month prints with "Month still open. Numbers can change." in the header. Totals equal the program page to the cent.
+
+### 7.5 States
 
 Loading skeletons per section. Errors use the existing Pulse error block. When the program is deleted in Projects: "This program was deleted in Projects. Its past months stay here." and the page is read only. When Projects is not entitled: the nav item and pages are hidden and program jobs show as normal jobs.
 
@@ -227,6 +239,7 @@ The 8 programs in production (GLOVE, BULLET, EXPLOR, BIGFAC, FOAM, DUDE, MAHCO, 
 ## 9. Tests and acceptance
 
 - Unit tests for `programMonthFigures` (splits add up to the cent in all 3 modes, a day with cost and no units, a variant with no standard), `programMonthPlan` (matches Projects' forecast for the seed GLOVE November), the cost forecast, and each program alert rule (fires and does not fire).
+- Report tests: internal and customer versions total to the program page to the cent; the customer version never contains cost, labor, profit or margin.
 - DB tests: `trackProgram` (makes the job and edge once, refuses a second, refuses a non per unit job), `convertToProgramJob` (idempotent), sync sets and clears `program_job`, money hidden for a viewer on every read.
 - Risk tests: a `program_job` never gets W7, W8, D4 or "Add a quote or a budget", even with a typed quote present.
 - Seed acceptance (Northwind, 2026-11-25): `/programs` shows GLOVE with the SPEC 7.4 numbers ($29,970.40 revenue month to date, 560 of 800 kits today, forecast equal to Projects), DUDE and MAHCO rows, and ECOMM and TEES under "Not tracked yet".
@@ -242,13 +255,16 @@ Disjoint file ownership, each layer ends with typecheck, tests and a commit.
 | T1 Data | `apps/pulse/drizzle/0016_program_tracker.sql`, journal, schema files, `sync-programs.ts` step 1 | Migration applies twice cleanly; backfill sets the 8 production jobs; sync keeps the flag |
 | T2 Math | `lib/profit/program.ts`, `lib/profit/program-risk.ts` and tests | All unit tests in 9 pass |
 | T3 Server | `server/domain/programs.ts`, `server/actions/programs.ts`, API routes, `job-stats.ts` and `risk.ts` changes in 5.2 | DB and risk tests pass; reads hide money |
-| T4 Screens | `app/(app)/programs/**`, `features/programs/**`, nav, palette, home card | Seed acceptance and screenshots pass the critic |
+| T4 Screens | `app/(app)/programs/**`, `features/programs/**` (including the report), nav, palette, home card | Seed acceptance and screenshots pass the critic |
 | T5 Job page and lists | `features/jobs/**` changes in 5.3 and 5.4, search | J-26131 redirects; no quote prompts on program jobs |
 | T6 Check | Before and after money check script, docs | Money unchanged, parity holds for all seeded programs |
 
-## 11. Open questions
+## 11. Decided
 
-1. Should the program job stay visible in the Jobs list, or only behind the "Programs" chip? This spec hides it by default.
-2. Is the default labor split "by kits" right, or do you track standard minutes per SKU today?
-3. Should the target margin live per program (this spec) or per customer?
-4. Do you want a printable monthly program report (revenue, cost, margin by variant) for the customer review, or is the screen enough for now?
+1. Programs are their own section in the top bar, and program jobs leave the Jobs list.
+2. Target margin is set per customer.
+3. A printable monthly report is in scope, with an internal and a customer version.
+
+## 12. Open question
+
+Hours typed in Pulse (crew timesheets from the CSV import, the daily log, the kiosk) are logged against the program job, not against a variant. In November, GLOVE has 1,448 such hours and every one has no variant. To show profit per variant, Pulse has to split them. The default in this spec is by kits built that day. If you know the standard minutes per kit for each SKU, Pulse can split by that instead (Settings, per program).
