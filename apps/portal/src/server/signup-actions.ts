@@ -50,7 +50,7 @@ const NEEDS_INVITE_LINK = INVITE_NEEDS_PROVEN_MAILBOX_MESSAGE;
 // Every limit that answers with this sentence has a 10 minute window, so the wait it names is true.
 const TOO_MANY_TRIES = 'Too many tries. Wait 10 minutes and try again.';
 const NO_NETWORK = 'We could not reach KitStak. Check your connection and try again.';
-const WORKSPACE_FAILED = 'Your account is ready, but we could not set up your workspace. Try again.';
+const WORKSPACE_FAILED = 'Your account is ready, but we could not set up your organization. Try again.';
 const CODE_WRONG = 'That code is not right. Check it and try again.';
 const CODE_OLD = 'That code is too old. Send a new one.';
 const CODE_USED_UP = 'Too many tries with that code. Send a new one.';

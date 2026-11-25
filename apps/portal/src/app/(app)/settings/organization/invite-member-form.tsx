@@ -18,6 +18,8 @@ export interface InviteSeatInfo {
   readonly paidSelection: PlanSelection | null;
   /** A paid plan is live (with or without a seat price). */
   readonly paid: boolean;
+  /** With no paid plan: a running free trial, one that ended, or no plan at all. */
+  readonly unpaid?: 'trial' | 'trial_ended' | 'no_plan';
   /** Seats the paid plan covers. null: no limit (a trial, no plan, or a plan with no seat limit). */
   readonly limit: number | null;
   /** Seats in use now: people with a seat role, and open invites with one. */
@@ -295,7 +297,7 @@ export function InviteMemberForm({
   const offerPeople = offer?.emails.length ?? 0;
   const restoredLine = restored ? `${notInvitedYet(restored)} ` : '';
   const planLine = invitePlanLine(
-    { paid: seats.paid, limit: seats.limit, used: seats.used, canManageBilling: seats.canManageBilling, pulseOnly: seats.paid && seats.paidSelection === null && seats.limit !== null },
+    { paid: seats.paid, limit: seats.limit, used: seats.used, canManageBilling: seats.canManageBilling, pulseOnly: seats.paid && seats.paidSelection === null && seats.limit !== null, unpaid: seats.unpaid },
     role,
     countTyped(email),
   );

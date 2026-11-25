@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import type { PlanSelection } from '@kitstak/billing/catalog';
-import { describeChange, pickerPriceWords, rebaseSelection, viewOnlyAsk, viewOnlyFix } from './format';
+import { quote } from '@kitstak/billing/quote';
+import { describeChange, pickerPriceWords, planToShow, rebaseSelection, viewOnlyAsk, viewOnlyFix } from './format';
 
 const plan = (over: Partial<PlanSelection> = {}): PlanSelection => ({ products: ['crm'], seats: 7, warehouses: 1, interval: 'monthly', ...over });
 
@@ -69,5 +70,40 @@ describe('viewOnlyFix: the launcher names the same fix as the plan banner', () =
     expect(viewOnlyFix('ended')).toBe('Pick a plan to make changes.');
     expect(viewOnlyFix('unpaid')).toBe('Update your card to make changes.');
     expect(viewOnlyFix('paused')).toBe('Start your plan again to make changes.');
+  });
+});
+
+describe('planToShow: billing home never shows a plan the team cannot buy (review round 5)', () => {
+  const usage = (seatFloor: number, warehousesUsed: number | null = null) => ({ seatFloor, warehousesUsed });
+
+  test('a trial that ended with 3 people and a cart of 2 seats shows 3 seats, at the price the picker opens with', () => {
+    const cart = plan({ seats: 2 });
+    const shown = planToShow({ phase: 'trial_ended', selection: cart, usage: usage(3) });
+    expect(shown.seats).toBe(3);
+    // CRM is $29 a seat: $87, not the $58 of the saved cart.
+    expect(quote(shown).totalCents).toBe(8700);
+    expect(quote(cart).totalCents).toBe(5800);
+  });
+
+  test('a running trial and a plan that ended follow the same rule, and open invites hold a seat', () => {
+    expect(planToShow({ phase: 'trial', selection: plan({ seats: 1 }), usage: usage(4) }).seats).toBe(4);
+    expect(planToShow({ phase: 'ended', selection: plan({ seats: 2 }), usage: usage(5) }).seats).toBe(5);
+  });
+
+  test('warehouses in use count too', () => {
+    const shown = planToShow({ phase: 'trial', selection: plan({ products: ['wms'], seats: 1, warehouses: 1 }), usage: usage(1, 3) });
+    expect(shown.warehouses).toBe(3);
+  });
+
+  test('a cart that already fits the team is returned as it is', () => {
+    const cart = plan({ seats: 7 });
+    expect(planToShow({ phase: 'trial', selection: cart, usage: usage(3) })).toBe(cart);
+  });
+
+  test('a paid plan is shown as it is billed, also with more people than seats', () => {
+    const paid = plan({ seats: 2 });
+    for (const phase of ['active', 'past_due', 'unpaid', 'cancel_scheduled', 'pause_scheduled', 'paused']) {
+      expect(planToShow({ phase, selection: paid, usage: usage(3) })).toBe(paid);
+    }
   });
 });

@@ -6,7 +6,7 @@ import { member } from '@kitstak/db/schema';
 import { EmailText, LinkButton } from '@/components/ui';
 import { db } from '@/server/db';
 import { getSession } from '@/server/session';
-import { getInviteViewOnce } from '@/server/signup';
+import { getInviteViewOnce, inviteProofValid } from '@/server/signup';
 import { AuthHeading } from '../../_components/heading';
 import { InviteAccept } from './invite-accept';
 import { InviteJoinForm } from './invite-join-form';
@@ -126,6 +126,29 @@ export default async function InvitePage({
     <p className="mt-5 text-center text-xs text-fg-muted">This invite works until {formatDay(view.expiresAt)}.</p>
   );
   const invitePath = `/invite/${view.id}`;
+
+  // Did this browser come from the link in the invite email? Only that link proves the mailbox.
+  // Without it the join would be refused, so no form is drawn (review round 5): nobody types a
+  // name and a password for nothing. A person who already has an account can still sign in, and
+  // one whose email is verified needs no proof.
+  const needsProof = session ? session.user.emailVerified !== true && session.user.email.trim().toLowerCase() === view.email : !view.accountExists;
+  if (needsProof && !(await inviteProofValid(view.id, view.email))) {
+    return (
+      <div data-testid="invite-needs-link">
+        <Icon tone="muted" />
+        <AuthHeading
+          title={`Join ${view.orgName} from your invite email`}
+          subtitle="Open the link in your invite email to join. That shows the email is yours."
+        />
+        <p className="text-base text-fg-secondary">
+          No email? Ask {view.inviterName} to send a new invite. Nothing was created.
+        </p>
+        <LinkButton href={session ? '/' : '/login'} size="lg" fullWidth className="mt-5 h-12 sm:h-11" variant="secondary">
+          {session ? 'Open KitStak' : 'Go to sign in'}
+        </LinkButton>
+      </div>
+    );
+  }
 
   if (!session) {
     return (

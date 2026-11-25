@@ -385,7 +385,7 @@ test.describe('review round 4: people and roles', () => {
       await expect(screen).toContainText('Your account still works, but you are not on a team right now.');
       await expect(screen).toContainText('Ask a teammate to invite you again. Or start your own organization below.');
       await expect(caseyPage.getByText('Good to meet you')).toHaveCount(0);
-      await expect(caseyPage.getByText('Name your workspace')).toHaveCount(0);
+      await expect(caseyPage.getByText('Name your organization')).toHaveCount(0);
       expect(new URL(caseyPage.url()).pathname, `${path} ends on the launcher`).toBe('/');
     }
     // What they can do is on the screen: start an organization of their own.

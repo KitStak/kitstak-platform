@@ -311,12 +311,20 @@ test.describe('round 4: sign in with a code, again and again', () => {
     await page.getByTestId('menu-account').click();
     await page.waitForURL((url) => url.pathname === '/settings/account', { timeout: 60_000 });
     await expect(page.getByTestId('account-email')).toContainText(person.email);
-    await expect(page.getByTestId('account-email')).toContainText('Confirmed');
+    await expect(page.getByTestId('account-email')).toContainText('Verified');
     await expect(page.getByTestId('account-no-password')).toBeVisible();
     // A weak one is refused in plain words, and nothing is saved.
     await page.getByTestId('account-password').fill('short');
     await page.getByTestId('account-password-save').click();
-    await expect(page.getByTestId('account-password-form').getByRole('alert')).toBeVisible();
+    // The same password field as signup (review round 5): the eye button, the meter and the rules,
+    // and the rules that are still missing turn red. No browser checkbox.
+    const passwordForm = page.getByTestId('account-password-form');
+    await expect(passwordForm.getByRole('alert')).toHaveText(/.+/);
+    await expect(passwordForm.getByTestId('password-rules').locator('[data-state="missing"]').first()).toBeVisible();
+    await expect(passwordForm.getByText('Password strength:')).toBeAttached();
+    await expect(passwordForm.locator('input[type="checkbox"]')).toHaveCount(0);
+    await passwordForm.getByRole('button', { name: 'Show password' }).click();
+    await expect(page.getByTestId('account-password')).toHaveAttribute('type', 'text');
     expect(await passwordRows(person.email)).toBe(0);
     const fresh = `Quiet-Harbor-${Date.now().toString(36)}-73!`;
     await page.getByTestId('account-password').fill(fresh);
@@ -488,10 +496,11 @@ test.describe('round 4: invites', () => {
       message: 'Open the link in your invite email to join. That shows the email is yours.',
     });
     // The Portal's own invite page, opened by id only (no proof from the email): the same sentence.
+    // Review round 5: the page checks before it draws anything to press. No "Accept invite" button.
     const thiefPage = await thief.newPage();
     await thiefPage.goto(`/invite/${invitationId}`);
-    await thiefPage.getByTestId('invite-accept').click();
-    await expect(thiefPage.getByText('Open the link in your invite email to join. That shows the email is yours.')).toBeVisible({ timeout: 30_000 });
+    await expect(thiefPage.getByTestId('invite-needs-link')).toContainText('Open the link in your invite email to join. That shows the email is yours.', { timeout: 90_000 });
+    await expect(thiefPage.getByTestId('invite-accept')).toHaveCount(0);
     expect(await sql(`SELECT 1 FROM core.member m JOIN core."user" u ON u.id = m.user_id WHERE u.email = $1`, [bookkeeper.email]), 'nothing was written').toHaveLength(0);
     expect(await sql(`SELECT status FROM core.invitation WHERE id = $1`, [invitationId])).toEqual([{ status: 'pending' }]);
     await thief.close();
@@ -502,12 +511,14 @@ test.describe('round 4: invites', () => {
     const noLink = await browser.newContext();
     const noLinkPage = await noLink.newPage();
     await resetRateLimits();
+    // Review round 5: no form is drawn, so nobody fills in a name and a password for nothing.
     await noLinkPage.goto(`/invite/${invitationId}`);
-    await expect(noLinkPage.getByTestId('invite-org-name')).toBeVisible({ timeout: 90_000 });
-    await noLinkPage.getByTestId('invite-name').fill(bookkeeper.name);
-    await noLinkPage.getByTestId('invite-password').fill(bookkeeper.password);
-    await noLinkPage.getByTestId('invite-accept').click();
-    await expect(noLinkPage.getByText('Open the link in your invite email to join. That shows the email is yours.')).toBeVisible({ timeout: 30_000 });
+    await expect(noLinkPage.getByTestId('invite-needs-link')).toContainText('Open the link in your invite email to join. That shows the email is yours.', { timeout: 90_000 });
+    await expect(noLinkPage.getByTestId('invite-needs-link')).toContainText(`Ask ${owner.name} to send a new invite.`);
+    await expect(noLinkPage.getByTestId('invite-name')).toHaveCount(0);
+    await expect(noLinkPage.getByTestId('invite-password')).toHaveCount(0);
+    await expect(noLinkPage.getByTestId('invite-accept')).toHaveCount(0);
+    await expect(noLinkPage.getByRole('link', { name: 'Go to sign in' })).toBeVisible();
     expect(await sql(`SELECT 1 FROM core."user" WHERE email = $1`, [bookkeeper.email]), 'no account was made').toHaveLength(0);
     await noLink.close();
 

@@ -12,6 +12,7 @@ import { apiRequest } from '@/lib/api';
 import { crmKeys } from '@/features/crm/api';
 import { dashboardKeys } from '@/features/dashboards/hooks';
 import { shellKeys } from './api';
+import { useOptionalOrg } from './org-context';
 
 /** Mirrors each owning hook's staleTime so the prefetch never fights the hook's own refetch. */
 const STALE_MS = {
@@ -24,6 +25,12 @@ const STALE_MS = {
 
 export function useShellPrefetch(orgId: string): void {
   const queryClient = useQueryClient();
+  // A guest may not list workspaces or dashboard sources. Asking anyway is a refused request in
+  // the console on every page (billing review round 5), so those two are only warmed for people
+  // who may read them. Outside the shell (dev harnesses) everything is warmed, as before.
+  const permissions = useOptionalOrg()?.permissions;
+  const canWorkspaces = permissions?.includes('workspace:read') ?? true;
+  const canDashboards = permissions?.includes('dashboard:read') ?? true;
   useEffect(() => {
     const prefetch = (queryKey: readonly unknown[], path: string, staleTime: number) =>
       queryClient.prefetchQuery({
@@ -33,10 +40,10 @@ export function useShellPrefetch(orgId: string): void {
       });
     void Promise.all([
       prefetch(shellKeys.me(orgId), '/me', STALE_MS.me),
-      prefetch(shellKeys.workspaces(orgId), '/workspaces', STALE_MS.workspaces),
+      canWorkspaces ? prefetch(shellKeys.workspaces(orgId), '/workspaces', STALE_MS.workspaces) : null,
       prefetch(shellKeys.favorites(orgId), '/favorites', STALE_MS.favorites),
       prefetch(crmKeys.boards(orgId), '/crm/boards', STALE_MS.crmBoards),
-      prefetch(dashboardKeys.sources(orgId), '/dashboard-data/sources', STALE_MS.dashboardSources),
+      canDashboards ? prefetch(dashboardKeys.sources(orgId), '/dashboard-data/sources', STALE_MS.dashboardSources) : null,
     ]);
-  }, [orgId, queryClient]);
+  }, [orgId, queryClient, canWorkspaces, canDashboards]);
 }

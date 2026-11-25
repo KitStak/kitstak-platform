@@ -95,8 +95,9 @@ export function InviteJoinForm({
         passwordInput.current?.focus();
       } else {
         setFormError(result.error ?? 'This invite is no longer active.');
-        // The page itself has the right screen for these two: "Sign in to accept" and "no free seat".
-        if (result.code === 'account_exists' || result.code === 'no_seat') router.refresh();
+        // The page itself has the right screen for these: "Sign in to accept", "no free seat" and
+        // "open the link in your invite email".
+        if (result.code === 'account_exists' || result.code === 'no_seat' || result.code === 'needs_invite_link') router.refresh();
       }
     } catch {
       setFormError(NO_NETWORK_MESSAGE);

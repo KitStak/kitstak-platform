@@ -52,7 +52,7 @@ type Stage = 'idle' | 'account' | 'workspace';
 
 const BUSY_LABEL: Readonly<Record<Exclude<Stage, 'idle'>, string>> = {
   account: 'Creating your account…',
-  workspace: 'Setting up your workspace…',
+  workspace: 'Setting up your organization…',
 };
 
 const EMPTY: SignupValues = { name: '', email: '', password: '', company: '' };
@@ -184,7 +184,7 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
         router.replace(result.next ?? '/signup/plan');
         return true;
       }
-      setFormError(result.error ?? 'Your account is ready, but we could not set up your workspace. Try again.');
+      setFormError(result.error ?? 'Your account is ready, but we could not set up your organization. Try again.');
     } catch {
       setFormError(NO_NETWORK_MESSAGE);
     }
@@ -264,8 +264,8 @@ export function SignupForm({ handoff, providers, legal, providerError }: SignupF
     <>
       {summary ? <TrialSummaryInline summary={summary} /> : null}
       <AuthHeading
-        eyebrow={<StepEyebrow step={1} total={2} label={companyOnly ? 'Your workspace' : 'Your account'} />}
-        title={companyOnly ? 'Name your workspace' : 'Start your free trial'}
+        eyebrow={<StepEyebrow step={1} total={2} label={companyOnly ? 'Your organization' : 'Your account'} />}
+        title={companyOnly ? 'Name your organization' : 'Start your free trial'}
         subtitle={
           companyOnly ? 'Your account is ready. One more thing and you are in.' : `${CATALOG.trialDays} days free. No card needed.`
         }

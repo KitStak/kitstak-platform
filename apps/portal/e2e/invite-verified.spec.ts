@@ -66,12 +66,32 @@ test.describe('invited people and email addresses', () => {
     // id is not a secret, so by itself it no longer lets anyone join (it did until round 3, and an
     // admin could take an owner's billing invite that way). See round4-backend.spec.ts.
     await resetRateLimits();
+    // Review round 5: the page checks for the proof before it draws the form. One sentence, the
+    // team's name, no fields and no button that can only fail.
     await memberPage.goto(link.split('?')[0] ?? link);
+    const needsLink = memberPage.getByTestId('invite-needs-link');
+    await expect(needsLink).toContainText('Open the link in your invite email to join. That shows the email is yours.', { timeout: 90_000 });
+    await expect(needsLink.getByRole('heading')).toContainText('Join ');
+    await expect(memberPage.getByTestId('invite-name')).toHaveCount(0);
+    await expect(memberPage.getByTestId('invite-password')).toHaveCount(0);
+    await expect(memberPage.getByTestId('invite-accept')).toHaveCount(0);
+    // A proof that is not the right one gets the same screen.
+    await memberPage.goto(`${link.split('?')[0] ?? link}?t=${'A'.repeat(43)}`);
+    await expect(memberPage.getByTestId('invite-needs-link')).toBeVisible({ timeout: 90_000 });
+    await expect(memberPage.getByTestId('invite-name')).toHaveCount(0);
+
+    // The server still refuses by itself. The form is drawn from the real link, then the proof is
+    // taken away (as a tab left open past the proof's life would have it) and the form is sent.
+    await memberPage.goto(link);
     await expect(memberPage.getByTestId('invite-org-name')).toBeVisible({ timeout: 90_000 });
+    await context.clearCookies();
     await memberPage.getByTestId('invite-name').fill(member.name);
     await memberPage.getByTestId('invite-password').fill(member.password);
     await memberPage.getByTestId('invite-accept').click();
-    await expect(memberPage.getByText('Open the link in your invite email to join. That shows the email is yours.')).toBeVisible({ timeout: 30_000 });
+    await expect(memberPage.getByText('Open the link in your invite email to join. That shows the email is yours.').first()).toBeVisible({ timeout: 30_000 });
+    // And the page then shows the calm screen, with no form to try again forever.
+    await expect(memberPage.getByTestId('invite-needs-link')).toBeVisible({ timeout: 30_000 });
+    await expect(memberPage.getByTestId('invite-accept')).toHaveCount(0);
     expect(await sql('select 1 from core."user" where email = $1', [member.email])).toHaveLength(0);
     expect(await emailsTo(member.email, 'verify_email')).toHaveLength(0);
 
