@@ -6,7 +6,7 @@
  * with the reason instead of an input.
  */
 import { forwardRef, useState, type KeyboardEvent } from 'react';
-import { cn, Tooltip } from '@/components/ui';
+import { cn } from '@/components/ui';
 import { LockIcon } from './chips';
 import { readQty, remainingText } from './qty-input';
 
@@ -65,7 +65,7 @@ export const OutputCell = forwardRef<HTMLInputElement, OutputCellProps>(function
     }
   };
 
-  const input = (
+  return (
     <input
       ref={ref}
       type="text"
@@ -73,6 +73,7 @@ export const OutputCell = forwardRef<HTMLInputElement, OutputCellProps>(function
       autoComplete="off"
       aria-label={label}
       aria-invalid={error ? true : undefined}
+      title={error ?? undefined}
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
@@ -84,18 +85,12 @@ export const OutputCell = forwardRef<HTMLInputElement, OutputCellProps>(function
       data-testid={testId}
       className={cn(
         'w-full rounded-md border bg-panel text-right font-medium text-fg tabular-nums outline-none transition-[border-color,box-shadow] duration-[var(--duration-instant)]',
-        'placeholder:text-fg-muted hover:border-border-strong focus-visible:border-focus focus-visible:shadow-[0_0_0_3px_var(--focus-ring)]',
+        'placeholder:text-fg-muted hover:border-border-input-hover focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]',
         'disabled:cursor-not-allowed disabled:bg-sunken disabled:text-fg-muted',
         size === 'sm' ? 'h-7 px-2 text-xs' : size === 'lg' ? 'h-12 px-3 text-2xl' : 'h-8 px-2 text-sm',
         error ? 'border-danger' : 'border-border-input',
         className,
       )}
     />
-  );
-  if (!error) return input;
-  return (
-    <Tooltip content={error} open>
-      {input}
-    </Tooltip>
   );
 });
