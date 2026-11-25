@@ -122,11 +122,18 @@ export async function requestPasswordReset(
     now,
   );
   const link = `${input.baseUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
-  await adapterFor(db).send({
-    to: user.email,
-    subject: 'Reset your KitStak password',
-    text: `Use this link within ${RESET_TOKEN_TTL_MINUTES} minutes to set a new password:\n${link}\nIf you did not ask for this, ignore this email.`,
-  });
+  try {
+    await adapterFor(db).send({
+      to: user.email,
+      subject: 'Reset your KitStak password',
+      text: `Use this link within ${RESET_TOKEN_TTL_MINUTES} minutes to set a new password:\n${link}\nIf you did not ask for this, ignore this email.`,
+    });
+  } catch (error) {
+    // A mail failure must look exactly like success to the caller. An error here only for real
+    // accounts would tell anyone which emails have one (no account enumeration). The person can
+    // ask again, and the failure is in the server log.
+    log.warn('password reset email failed', { component: 'auth', userId: user.id, err: error });
+  }
 }
 
 export interface ResetInput {

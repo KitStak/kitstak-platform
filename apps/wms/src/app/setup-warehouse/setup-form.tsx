@@ -11,6 +11,7 @@
  */
 import * as React from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
+import { WarehouseSetupLoader } from '@/components/setup/warehouse-setup-loader';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { errorTextClass, helpTextClass, labelClass } from '@/components/ui/control-styles';
@@ -50,6 +51,27 @@ const COUNTRY = 'United States';
 
 /** On a touch screen every field is 44 px tall with 16 px text, so iOS does not zoom the page. */
 const TOUCH_FIELD = 'pointer-coarse:h-11 pointer-coarse:text-md';
+
+/** Longest we keep the setup screen up while the new warehouse's first page loads. */
+const WARM_UP_TIMEOUT_MS = 60_000;
+
+/**
+ * Loads the dashboard once in the background so the setup screen stays up until the new
+ * warehouse can actually render, instead of handing over to a bare skeleton. Best effort:
+ * on any failure or timeout we navigate anyway.
+ */
+async function warmUpDashboard(): Promise<void> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), WARM_UP_TIMEOUT_MS);
+  try {
+    const res = await fetch('/dashboard', { cache: 'no-store', credentials: 'same-origin', signal: controller.signal });
+    await res.text();
+  } catch {
+    // The navigation that follows loads the page for real; nothing to report here.
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 /** A code suggestion from the org name: its letters/digits, upper case, at most 6 + "1". */
 function suggestCode(orgName: string): string {
@@ -99,6 +121,7 @@ export function SetupWarehouseForm({ offers }: { readonly offers: readonly Offer
   const [errors, setErrors] = React.useState<Partial<Record<string, string>>>({});
   const [failure, setFailure] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [stage, setStage] = React.useState<'building' | 'opening'>('building');
   const formRef = React.useRef<HTMLFormElement | null>(null);
 
   // The browser knows the time zone. Set after mount, so the server and the first paint agree.
@@ -132,12 +155,15 @@ export function SetupWarehouseForm({ offers }: { readonly offers: readonly Offer
       return;
     }
     setErrors({});
+    setStage('building');
     setBusy(true);
     try {
       await apiFetch('/api/tenancy/warehouse', {
         method: 'POST',
         body: { orgId, warehouse: { ...values, country: COUNTRY, timezone } },
       });
+      setStage('opening');
+      await warmUpDashboard();
       // A full navigation: the new warehouse is now the open one (org cookie).
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign('/');
@@ -194,7 +220,8 @@ export function SetupWarehouseForm({ offers }: { readonly offers: readonly Offer
   };
 
   return (
-    <form ref={formRef} className="mt-6 space-y-5" onSubmit={submit} noValidate data-testid="setup-form">
+    <form ref={formRef} className="mt-6 space-y-5" onSubmit={submit} noValidate inert={busy} data-testid="setup-form">
+      {busy ? <WarehouseSetupLoader warehouseName={values.name.trim() || undefined} stage={stage} /> : null}
       {offers.length > 1 ? (
         <div className="space-y-1.5">
           <label className={labelClass} htmlFor="setup-org">

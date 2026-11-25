@@ -15,7 +15,7 @@
  * production/preview/development. Secrets are added with --sensitive.
  *
  * Signup and billing (docs/billing/GO-LIVE.md). The portal is the only app that talks to Stripe
- * and sends mail, so these go to the portal project only, and only when they are in
+ * and runs the billing mail job, so these go to the portal project only, and only when they are in
  * deploy/secrets.env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PORTAL_CONFIGURATION_ID,
  * STRIPE_AUTOMATIC_TAX, CRON_SECRET, EMAIL_PROVIDER, RESEND_API_KEY, EMAIL_FROM, EMAIL_REPLY_TO,
  * GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET,
@@ -23,6 +23,11 @@
  * The payment, mail and sign in secrets go to the production target ONLY and are removed from
  * preview and development, so a preview build can never charge a card or send real mail. Values
  * are never printed.
+ *
+ * Platform mail (packages/mail). RESEND_API_KEY, EMAIL_FROM and EMAIL_REPLY_TO also go to the
+ * CRM, WMS, Projects and Pulse projects (production only, when in deploy/secrets.env): invites
+ * sent from those apps leave at once, and WMS sends password resets, welcome emails and report
+ * links through Resend whenever a company has no SMTP server of its own.
  *
  * ENTITLEMENTS_DEV_ALLOW_ALL stays `1` in all five product projects until billing is enforced.
  * To enforce it (GO-LIVE.md step 11) add `ENFORCE_ENTITLEMENTS=1` to deploy/secrets.env and run
@@ -103,6 +108,13 @@ if (Boolean(s.GOOGLE_CLIENT_ID) !== Boolean(s.GOOGLE_CLIENT_SECRET))
 if (Boolean(s.MICROSOFT_CLIENT_ID) !== Boolean(s.MICROSOFT_CLIENT_SECRET))
   fail('Set both MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET, or neither.');
 
+/** Platform mail for every product app (packages/mail). Production target only. */
+const platformMail = [
+  ...optional('RESEND_API_KEY', true, PRODUCTION_ONLY),
+  ...optional('EMAIL_FROM', false, PRODUCTION_ONLY),
+  ...optional('EMAIL_REPLY_TO', false, PRODUCTION_ONLY),
+];
+
 /** Signup and billing, portal only. Payment, mail and sign in secrets: production target only. */
 const portalBilling = [
   ...optional('STRIPE_SECRET_KEY', true, PRODUCTION_ONLY),
@@ -112,9 +124,7 @@ const portalBilling = [
   // Vercel Cron sends it to /api/billing/jobs/tick every minute. Without it the route answers 503.
   ...optional('CRON_SECRET', true, PRODUCTION_ONLY),
   ...optional('EMAIL_PROVIDER', false, PRODUCTION_ONLY),
-  ...optional('RESEND_API_KEY', true, PRODUCTION_ONLY),
-  ...optional('EMAIL_FROM', false, PRODUCTION_ONLY),
-  ...optional('EMAIL_REPLY_TO', false, PRODUCTION_ONLY),
+  ...platformMail,
   ...optional('GOOGLE_CLIENT_ID', false, PRODUCTION_ONLY),
   ...optional('GOOGLE_CLIENT_SECRET', true, PRODUCTION_ONLY),
   ...optional('MICROSOFT_CLIENT_ID', false, PRODUCTION_ONLY),
@@ -155,6 +165,7 @@ const PLANS = {
     ['TRUSTED_ORIGINS', trusted(urls.portal, urls.wms, urls.projects, ...pulseOrigin), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
     ...allowAllVar,
+    ...platformMail,
   ],
   [s.PROJECT_WMS]: [
     ['DATABASE_URL', pooled, true],
@@ -172,6 +183,7 @@ const PLANS = {
     ['TRUSTED_ORIGINS', trusted(urls.portal, urls.crm, urls.projects, ...pulseOrigin), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
     ...allowAllVar,
+    ...platformMail,
   ],
   // KitStak Projects (Root Directory apps/projects). Reads CRM/WMS through the shared database;
   // WMS data is offered only to the org that owns the single-tenant WMS install.
@@ -189,6 +201,7 @@ const PLANS = {
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
     ['WMS_PLATFORM_ORG_SLUG', s.WMS_PLATFORM_ORG_SLUG || 'kitstak', false],
     ...allowAllVar,
+    ...platformMail,
     // Vercel Cron authenticates with this (drains CRM/WMS events into Projects automations).
     ...(s.CRON_SECRET ? [['CRON_SECRET', s.CRON_SECRET, true]] : []),
     // Attachments go to Vercel Blob when set (else stored in the database).
@@ -214,6 +227,7 @@ const PLANS = {
           ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
           // Same posture as the other apps until billing is enforced (docs/billing/GO-LIVE.md step 11).
           ...allowAllVar,
+          ...platformMail,
           // Vercel Cron authenticates with this. Without it the three Pulse crons answer 503:
           // sibling sync and alerts then run only while someone has Pulse open.
           ...(s.CRON_SECRET ? [['CRON_SECRET', s.CRON_SECRET, true]] : []),

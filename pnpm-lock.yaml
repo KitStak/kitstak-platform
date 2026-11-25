@@ -813,6 +813,9 @@ importers:
       '@kitstak/entitlements':
         specifier: workspace:*
         version: link:../../packages/entitlements
+      '@kitstak/mail':
+        specifier: workspace:*
+        version: link:../../packages/mail
       '@kitstak/pm-bridge':
         specifier: workspace:*
         version: link:../../packages/pm-bridge
@@ -1019,6 +1022,9 @@ importers:
       '@kitstak/entitlements':
         specifier: workspace:*
         version: link:../entitlements
+      '@kitstak/mail':
+        specifier: workspace:*
+        version: link:../mail
       better-auth:
         specifier: ^1.7.18
         version: 1.7.21(drizzle-kit@0.31.11)(drizzle-orm@0.45.4(@electric-sql/pglite@0.5.11)(@types/pg@8.23.1)(kysely@0.29.8)(pg@8.23.1)(postgres@3.4.9(patch_hash=fe75950e7983e2c23638bc301bfa5b3a20bb5a4ce050da5adf504b0e75114ee0)))(next@16.4.5(@playwright/test@1.65.0)(@types/node@22.20.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(pg@8.23.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@5.1.0)
@@ -1111,6 +1117,21 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^5.1.0
+        version: 5.1.0(@types/node@22.20.5)(@vitest/coverage-v8@5.1.0)(jsdom@31.0.0(@noble/hashes@2.4.0))(vite@8.3.8(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+
+  packages/mail:
+    devDependencies:
+      '@kitstak/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.5
       typescript:
         specifier: ^5
         version: 5.9.3

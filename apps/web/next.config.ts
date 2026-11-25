@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   // @kitstak/ui ships TypeScript/CSS source; Next transpiles it.
-  transpilePackages: ['@kitstak/billing', '@kitstak/ui'],
+  transpilePackages: ['@kitstak/billing', '@kitstak/mail', '@kitstak/ui'],
   async headers() {
     return [
       {
