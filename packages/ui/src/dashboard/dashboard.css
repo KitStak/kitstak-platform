@@ -11,6 +11,8 @@
 
 /* ---- Frame and per-app feel ------------------------------------------------------------- */
 
+/* Every var(--dash-*) below falls back to these defaults, so a tile or a row used outside a
+   DashboardFrame (the Pulse Profit page, for one) keeps its padding and type sizes. */
 .ks-dash {
   --dash-data: var(--chart-5);
   --dash-gap: var(--space-4);
@@ -22,7 +24,7 @@
   --dash-pill-col: 8rem;
   display: flex;
   flex-direction: column;
-  gap: var(--dash-gap);
+  gap: var(--dash-gap, var(--space-4));
   min-width: 0;
   font-family: var(--font-ui);
   color: var(--text-primary);
@@ -91,7 +93,7 @@
 
 .ks-dash-title {
   margin: 0;
-  font-size: var(--dash-title-size);
+  font-size: var(--dash-title-size, 24px);
   line-height: 1.15;
   font-weight: var(--weight-semibold);
   letter-spacing: -0.01em;
@@ -123,14 +125,14 @@
 .ks-dash-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--dash-gap);
+  gap: var(--dash-gap, var(--space-4));
   min-width: 0;
 }
 
 .ks-dash-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--dash-gap);
+  gap: var(--dash-gap, var(--space-4));
   align-items: start;
 }
 
@@ -145,7 +147,7 @@
 .ks-dash-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: var(--dash-gap);
+  gap: var(--dash-gap, var(--space-4));
 }
 
 @media (min-width: 640px) {
@@ -183,7 +185,7 @@
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
-  padding: var(--dash-pad);
+  padding: var(--dash-pad, var(--space-4));
   color: inherit;
   text-decoration: none;
   outline: none;
@@ -215,8 +217,8 @@ a.ks-dash-stat-link::after {
 .ks-dash-stat-explain {
   position: absolute;
   z-index: 1;
-  top: calc(var(--dash-pad) - 6px);
-  right: calc(var(--dash-pad) - 6px);
+  top: calc(var(--dash-pad, var(--space-4)) - 6px);
+  right: calc(var(--dash-pad, var(--space-4)) - 6px);
   color: var(--text-muted);
 }
 
@@ -253,7 +255,7 @@ a.ks-dash-stat-link::after {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dash-value-size);
+  font-size: var(--dash-value-size, 24px);
   line-height: 1.2;
   font-weight: var(--weight-semibold);
   font-variant-numeric: tabular-nums;
@@ -265,7 +267,7 @@ a.ks-dash-stat-link::after {
   flex-shrink: 0;
   width: 88px;
   height: 28px;
-  color: var(--dash-data);
+  color: var(--dash-data, var(--chart-5));
 }
 
 .ks-dash-stat-trend > svg {
@@ -503,7 +505,7 @@ a.ks-dash-stat-link::after {
   align-items: center;
   gap: var(--space-3);
   min-height: 52px;
-  padding: var(--space-2) var(--dash-pad);
+  padding: var(--space-2) var(--dash-pad, var(--space-4));
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -567,7 +569,7 @@ a.ks-dash-stat-link::after {
 }
 
 .ks-dash-section-body {
-  padding: var(--dash-pad);
+  padding: var(--dash-pad, var(--space-4));
   min-width: 0;
 }
 
@@ -576,7 +578,7 @@ a.ks-dash-stat-link::after {
 }
 
 .ks-dash-section-foot {
-  padding: var(--space-2) var(--dash-pad);
+  padding: var(--space-2) var(--dash-pad, var(--space-4));
   border-top: 1px solid var(--border-subtle);
   font-size: 12px;
   line-height: 16px;
@@ -597,10 +599,10 @@ a.ks-dash-stat-link::after {
 
 .ks-dash-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--dash-value-col) var(--dash-pill-col);
+  grid-template-columns: minmax(0, 1fr) var(--dash-value-col, 8.5rem) var(--dash-pill-col, 8rem);
   align-items: center;
   gap: var(--space-4);
-  padding: var(--dash-row-y) var(--dash-pad);
+  padding: var(--dash-row-y, 12px) var(--dash-pad, var(--space-4));
   color: inherit;
   text-decoration: none;
   transition: background-color var(--duration-fast) ease;
@@ -611,7 +613,7 @@ a.ks-dash-stat-link::after {
 }
 
 .ks-dash-row[data-shape='pill'] {
-  grid-template-columns: minmax(0, 1fr) var(--dash-pill-col);
+  grid-template-columns: minmax(0, 1fr) var(--dash-pill-col, 8rem);
 }
 
 .ks-dash-row[data-shape='plain'] {
@@ -750,7 +752,7 @@ a.ks-dash-stat-link::after {
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-6) var(--dash-pad);
+  padding: var(--space-6) var(--dash-pad, var(--space-4));
   text-align: center;
 }
 
