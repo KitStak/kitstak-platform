@@ -1,6 +1,6 @@
 # Pulse Programs: a program tracker in Pulse
 
-Status: draft for review. Builds on `docs/programs/SPEC.md` (Programs v2). Where the two disagree, this file wins for Pulse.
+Status: built. Builds on `docs/programs/SPEC.md` (Programs v2). Where the two disagree, this file wins for Pulse.
 
 ## 0. Why
 
@@ -175,7 +175,7 @@ Plain 8th grade copy. No em dashes or double dashes anywhere.
 
 ### 7.1 Navigation
 
-A new "Programs" item in the top bar (`features/shell/top-nav.tsx`, `lib/nav.ts` group `main`) between Jobs and Profit, icon `Repeat2` (same as Projects). Shortcut `G R`. Hidden when Projects is not entitled or the program tables are missing (`programsReady`). Command palette: "Go to Programs" and each tracked program by key.
+A new "Programs" item in the top bar (`features/shell/top-nav.tsx`, `lib/nav.ts` group `main`) between Jobs and Profit, icon `Repeat2` (same as Projects). Shortcut `G R`, as in Projects (Reports moves to `G E`). Hidden when Projects is not entitled or the program tables are missing (`programsReady`). Command palette: "Go to Programs" and each tracked program by key.
 
 ### 7.2 Programs list (`/programs`)
 
