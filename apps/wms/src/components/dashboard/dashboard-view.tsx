@@ -8,7 +8,7 @@
 import * as React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, ChevronDown, RefreshCw, SlidersHorizontal } from 'lucide-react';
-import { PageHeader } from '@/components/layout/page-header';
+import { Count, DashboardFrame, DashboardHeader } from '@kitstak/ui/dashboard';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useApiQuery } from '@/lib/query-client';
@@ -203,159 +203,165 @@ export function DashboardView({
   const visibleCards = layout.order.filter((id) => !layout.hidden.includes(id));
   const spans = cardSpans(visibleCards);
 
+  const day = data?.businessDay;
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-10">
-      <PageHeader
+    <DashboardFrame app="wms" className="flex-1 px-6 pt-4 pb-10">
+      <DashboardHeader
         title="Dashboard"
-        actions={
-          <div className="flex items-center gap-2">
-            {data?.businessDay ? (
-              <span
-                className="hidden text-2xs text-faint tabular-nums md:inline"
-                data-testid="business-day"
-                title={
-                  data.businessDay.mixedZones
-                    ? `The selected warehouses are in different time zones; "today" uses ${data.businessDay.zoneWarehouse ?? 'the first warehouse'}'s zone (${data.businessDay.timeZone}). Select one warehouse for its own day.`
-                    : `"Today" and "Tomorrow" are warehouse days in ${data.businessDay.timeZone}.`
-                }
-              >
-                {businessDayLabel(data.businessDay.date)} ·{' '}
-                {data.businessDay.timeZone.split('/').pop()?.replace(/_/g, ' ')} time
-                {data.businessDay.mixedZones ? '*' : ''}
-              </span>
-            ) : null}
-            <span className="text-2xs text-faint tabular-nums" aria-live="polite">
-              {updated ? `Updated ${updated}` : ''}
+        eyebrow={
+          day ? (
+            <span
+              className="tabular-nums"
+              data-testid="business-day"
+              title={
+                day.mixedZones
+                  ? `The selected warehouses are in different time zones; "today" uses ${day.zoneWarehouse ?? 'the first warehouse'}'s zone (${day.timeZone}). Select one warehouse for its own day.`
+                  : `"Today" and "Tomorrow" are warehouse days in ${day.timeZone}.`
+              }
+            >
+              {businessDayLabel(day.date)} · {day.timeZone.split('/').pop()?.replace(/_/g, ' ')} time
+              {day.mixedZones ? '*' : ''}
+            </span>
+          ) : undefined
+        }
+        subtitle={
+          <span className="inline-flex items-center gap-1">
+            <span className="tabular-nums" aria-live="polite">
+              {updated ? `Updated ${updated}, refreshes every minute` : 'Live warehouse activity'}
             </span>
             <Button
-              size="icon"
+              size="icon-sm"
               variant="ghost"
               aria-label="Refresh dashboard"
               title="Refresh now (auto every 60 s)"
               onClick={() => void q.refetch()}
               disabled={q.isFetching}
             >
-              <RefreshCw className={cn('h-4 w-4', q.isFetching && 'animate-spin')} aria-hidden />
+              <RefreshCw className={cn('h-3.5 w-3.5', q.isFetching && 'animate-spin')} aria-hidden />
             </Button>
-          </div>
+          </span>
+        }
+        controls={
+          <>
+            {/* Phones: ~300px of filter chrome would push every card below the fold, so the whole
+                row collapses behind one "Filters" toggle (selection count shown); >=768px unchanged. */}
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+              aria-controls="dashboard-filters"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-secondary transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus md:hidden"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+              Filters
+              <Count value={shownWh.length + shownCl.length} label="selected" />
+              <ChevronDown
+                className={cn('h-3.5 w-3.5 text-faint transition-transform', filtersOpen && 'rotate-180')}
+                aria-hidden
+              />
+            </button>
+            <div
+              id="dashboard-filters"
+              className={cn('w-full flex-wrap items-center gap-2 md:flex md:w-auto', filtersOpen ? 'flex' : 'hidden')}
+            >
+              <DashboardFilterBar
+                warehouses={warehouses}
+                clients={clients}
+                warehouseIds={shownWh}
+                clientIds={shownCl}
+                onChange={onChange}
+              />
+              <CustomizeDashboard
+                layout={layout}
+                onSave={(next) => void saveLayout(next)}
+                warehouses={warehouses}
+                clients={clients}
+              />
+            </div>
+          </>
         }
       />
-      <div className="px-6 pt-3">
-        {/* Phones: ~300px of filter chrome would push every KPI below the fold, so the whole
-            row collapses behind one "Filters" toggle (selection count shown); >=768px unchanged. */}
-        <button
-          type="button"
-          onClick={() => setFiltersOpen((v) => !v)}
-          aria-expanded={filtersOpen}
-          aria-controls="dashboard-filters"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-secondary transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:hidden"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-          Filters
-          {shownWh.length + shownCl.length > 0 ? (
-            <span className="rounded-full bg-primary-soft px-1.5 text-2xs font-semibold text-primary">
-              {shownWh.length + shownCl.length}
-            </span>
-          ) : null}
-          <ChevronDown
-            className={cn('h-3.5 w-3.5 text-faint transition-transform', filtersOpen && 'rotate-180')}
-            aria-hidden
-          />
-        </button>
+      {setup}
+      {q.error && !data ? (
         <div
-          id="dashboard-filters"
-          className={cn(
-            'flex-wrap items-center justify-end gap-2 max-md:mt-2 md:flex',
-            filtersOpen ? 'flex' : 'hidden',
-          )}
+          role="alert"
+          className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface py-12 text-center"
         >
-          <DashboardFilterBar
-            warehouses={warehouses}
-            clients={clients}
-            warehouseIds={shownWh}
-            clientIds={shownCl}
-            onChange={onChange}
-          />
-          <CustomizeDashboard
-            layout={layout}
-            onSave={(next) => void saveLayout(next)}
-            warehouses={warehouses}
-            clients={clients}
-          />
+          <AlertTriangle className="h-6 w-6 text-danger" aria-hidden />
+          <p className="text-base font-semibold">The dashboard could not load</p>
+          <p className="text-xs text-secondary">{q.error.message}</p>
+          <ErrorReference error={q.error} />
+          <Button onClick={() => void q.refetch()}>Retry</Button>
         </div>
-      </div>
-      <div className={cn('space-y-4 px-6 pt-4 transition-opacity', q.isFetching && data && 'opacity-80')}>
-        {setup}
-        {q.error && !data ? (
+      ) : !data ? (
+        <DashboardSkeleton />
+      ) : (
+        <PanelFreshnessContext.Provider value={freshness}>
+          <SnapshotGapAlert gaps={data.snapshotGaps ?? []} />
           <div
-            role="alert"
-            className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface py-12 text-center"
+            className={cn(
+              'grid grid-cols-1 items-stretch gap-[var(--dash-gap)] transition-opacity md:grid-cols-12',
+              q.isFetching && 'opacity-80',
+            )}
+            data-testid="dashboard-cards"
           >
-            <AlertTriangle className="h-6 w-6 text-danger" aria-hidden />
-            <p className="text-base font-semibold">The dashboard could not load</p>
-            <p className="text-xs text-secondary">{q.error.message}</p>
-            <ErrorReference error={q.error} />
-            <Button onClick={() => void q.refetch()}>Retry</Button>
+            {visibleCards.map((id) => (
+              <div
+                key={id}
+                data-card={id}
+                className={cn('col-span-1 flex min-w-0 md:col-span-12 [&>*]:flex-1', spans[id])}
+              >
+                <DashboardCard id={id} data={data} />
+              </div>
+            ))}
           </div>
-        ) : !data ? (
-          <DashboardSkeleton />
-        ) : (
-          <PanelFreshnessContext.Provider value={freshness}>
-            <SnapshotGapAlert gaps={data.snapshotGaps ?? []} />
-            <div
-              className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-12"
-              data-testid="dashboard-cards"
-            >
-              {visibleCards.map((id) => {
-                let card: React.ReactNode;
-                if (id === 'progress') card = <ProgressTodayCard data={data} />;
-                else if (id === 'unfulfilled') card = <UnfulfilledCard data={data} />;
-                else if (id === 'breakdown') card = <StatusBreakdownCard data={data} />;
-                else if (id === 'channels')
-                  card = <RankCard icon="store" title="Channels" rows={data.ranks.channels} />;
-                else if (id === 'clients')
-                  card = <RankCard icon="users" title="Clients" rows={data.ranks.clients} />;
-                else if (id === 'carriers') {
-                  card = (
-                    <RankCard
-                      icon="truck"
-                      title="Carriers"
-                      rows={data.ranks.carriers}
-                      modes={[
-                        {
-                          key: 'shipped',
-                          label: 'Shipped 7 days',
-                          description: 'Orders shipped per carrier in the last 7 days',
-                          rows: data.ranks.carriersShipped ?? [],
-                          empty: 'No orders shipped in the last 7 days.',
-                        },
-                        {
-                          key: 'backlog',
-                          label: 'Backlog',
-                          description: 'Backlog orders per assigned carrier',
-                          rows: data.ranks.carriers,
-                          empty: 'No backlog orders in this selection.',
-                        },
-                      ]}
-                    />
-                  );
-                } else if (id === 'countries')
-                  card = <RankCard icon="globe" title="Order By Country" rows={data.ranks.countries} />;
-                else card = <JobsCard data={data} />;
-                return (
-                  <div
-                    key={id}
-                    data-card={id}
-                    className={cn('col-span-1 flex min-w-0 md:col-span-12 [&>*]:flex-1', spans[id])}
-                  >
-                    {card}
-                  </div>
-                );
-              })}
-            </div>
-          </PanelFreshnessContext.Provider>
-        )}
-      </div>
-    </div>
+        </PanelFreshnessContext.Provider>
+      )}
+    </DashboardFrame>
   );
+}
+
+/** One card by id. Empty rank modes name their next step. */
+function DashboardCard({ id, data }: { readonly id: DashboardCardId; readonly data: LiveDashboard }) {
+  switch (id) {
+    case 'progress':
+      return <ProgressTodayCard data={data} />;
+    case 'unfulfilled':
+      return <UnfulfilledCard data={data} />;
+    case 'breakdown':
+      return <StatusBreakdownCard data={data} />;
+    case 'channels':
+      return <RankCard title="Channels" rows={data.ranks.channels} />;
+    case 'clients':
+      return <RankCard title="Clients" rows={data.ranks.clients} />;
+    case 'carriers':
+      return (
+        <RankCard
+          title="Carriers"
+          rows={data.ranks.carriers}
+          modes={[
+            {
+              key: 'shipped',
+              label: 'Shipped 7 days',
+              description: 'Orders shipped per carrier in the last 7 days',
+              rows: data.ranks.carriersShipped ?? [],
+              empty: 'No orders shipped in the last 7 days.',
+              emptyAction: { label: 'Shipments', href: '/shipments' },
+            },
+            {
+              key: 'backlog',
+              label: 'Backlog',
+              description: 'Backlog orders per assigned carrier',
+              rows: data.ranks.carriers,
+              empty: 'No backlog orders in this selection.',
+              emptyAction: { label: 'All orders', href: '/orders' },
+            },
+          ]}
+        />
+      );
+    case 'countries':
+      return <RankCard title="Order by country" rows={data.ranks.countries} />;
+    default:
+      return <JobsCard data={data} />;
+  }
 }

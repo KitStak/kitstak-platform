@@ -6,8 +6,13 @@
  * Progress is a circular ring (settled / total); the celebration fires ONLY when every
  * step is genuinely done, while all-settled-with-skips gets a quiet "wrapped up" row.
  * Owners/admins can skip steps or dismiss the guide; viewers get a read-only card.
+ *
+ * Look (docs/design/UI-CLEANUP.md): the current step is a plain row marked by its number and
+ * the words "Next step", never a tinted band, and its action is an outline button so the
+ * page keeps one crimson button ("New board"). Done steps carry a positive Pill.
  */
 import { useRouter } from 'next/navigation';
+import { Pill } from '@kitstak/ui/dashboard';
 import { Check, EllipsisVertical, Lock, PartyPopper, RotateCcw, X } from 'lucide-react';
 import {
   Button,
@@ -83,7 +88,8 @@ function StepStatusChip({
     <span
       className={cn(
         'flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold tabular-nums',
-        current ? 'border-primary bg-primary-subtle text-primary-text' : 'border-border-strong text-fg-muted',
+        // The current step is marked by a solid neutral number, not by color.
+        current ? 'border-fg bg-fg text-fg-inverse' : 'border-border-strong text-fg-muted',
       )}
       aria-hidden
     >
@@ -118,7 +124,9 @@ function StepCta({
   const needsWorkspace = step.action === 'dashboards' && !workspaceId;
   const button = (
     <Button
-      variant={current ? 'primary' : 'secondary'}
+      // The page's one primary is "New board": the current step gets the outline button, the
+      // rest a quiet text button.
+      variant={current ? 'secondary' : 'tertiary'}
       size="sm"
       data-testid={`setup-guide-cta-${step.key}`}
       disabled={needsWorkspace}
@@ -280,10 +288,8 @@ export function SetupGuideCard({ workspaceId }: { readonly workspaceId: string |
               <div
                 data-testid={`setup-guide-step-${step.key}`}
                 data-status={step.status}
-                className={cn(
-                  'group flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition-colors duration-[var(--duration-fast)]',
-                  current ? 'bg-primary-subtle/60' : 'hover:bg-hover',
-                )}
+                data-current={current || undefined}
+                className="group flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition-colors duration-[var(--duration-fast)] hover:bg-hover"
               >
                 <StepStatusChip step={step} index={index} current={current} />
                 <div className="min-w-0 flex-1">
@@ -296,6 +302,7 @@ export function SetupGuideCard({ workspaceId }: { readonly workspaceId: string |
                       step.status === 'skipped' && 'text-fg-muted line-through decoration-border-strong',
                       step.status === 'locked' && 'text-fg-muted',
                       step.status === 'ready' && 'text-fg',
+                      current && 'font-semibold',
                     )}
                   >
                     {step.title}
@@ -314,14 +321,19 @@ export function SetupGuideCard({ workspaceId }: { readonly workspaceId: string |
                     <p className="hidden truncate text-xs text-fg-muted md:block">
                       Skipped. You can finish this any time.
                     </p>
+                  ) : current ? (
+                    <p className="truncate text-xs text-fg-muted">
+                      <span className="font-medium text-fg-secondary">Next step</span>
+                      <span className="hidden md:inline"> · {step.description}</span>
+                    </p>
                   ) : step.status === 'ready' ? (
                     <p className="hidden truncate text-xs text-fg-muted md:block">{step.description}</p>
                   ) : null}
                 </div>
                 {step.status === 'done' ? (
-                  <span className="shrink-0 text-xs font-medium text-success-text">
+                  <Pill tone="positive" className="shrink-0">
                     Done{step.auto ? ' · detected' : ''}
-                  </span>
+                  </Pill>
                 ) : step.status === 'ready' ? (
                   <>
                     {canManage ? (

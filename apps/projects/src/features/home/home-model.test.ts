@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskSummary } from '@/lib/types';
 import type { ProgramListItemDTO } from '@/lib/program-types';
-import { customerProgramText, gettingStartedSteps, greetingFor, homeBuckets, homeStats, programsByCustomer, requiredSteps, sameAsDay, summarySentence } from './home-model';
+import { customerProgramText, customerRowState, gettingStartedSteps, greetingFor, homeBuckets, homeStats, programsByCustomer, requiredSteps, sameAsDay, summarySentence } from './home-model';
 
 const TODAY = '2026-11-11'; // Wednesday
 
@@ -158,5 +158,28 @@ describe('programs on home', () => {
   it('spots a single run that is the whole day', () => {
     expect(sameAsDay({ builds: 8, plannedUnits: '800.000', builtUnits: '500.000' }, 8, '800.000', '500.000')).toBe(true);
     expect(sameAsDay({ builds: 5, plannedUnits: '500.000', builtUnits: '500.000' }, 8, '800.000', '500.000')).toBe(false);
+  });
+});
+
+describe('customerRowState', () => {
+  const base = { lateReceipts: 0, exceptions: 0, deal: null, projects: [] };
+  const deal = (patch: Partial<NonNullable<Parameters<typeof customerRowState>[0]['deal']>>) => ({ name: 'D', stage: null, outcome: 'open' as const, closeDate: null, amount: null, currency: null, url: '#', ...patch });
+  const project = (overdue: number) => ({ id: 'p', key: 'OPS', name: 'Ops', openTasks: 3, overdue });
+
+  it('says nothing when nothing needs saying', () => {
+    expect(customerRowState(base, TODAY)).toBeNull();
+    expect(customerRowState({ ...base, deal: deal({ closeDate: '2026-12-01' }) }, TODAY)).toBeNull();
+  });
+
+  it('picks the worst single state', () => {
+    expect(customerRowState({ ...base, lateReceipts: 2, exceptions: 1, projects: [project(1)] }, TODAY)).toEqual({ tone: 'critical', text: 'Receipts late' });
+    expect(customerRowState({ ...base, exceptions: 1, projects: [project(1)] }, TODAY)).toEqual({ tone: 'critical', text: 'Work overdue' });
+    expect(customerRowState({ ...base, exceptions: 1, deal: deal({ closeDate: '2026-11-01' }) }, TODAY)).toEqual({ tone: 'caution', text: 'Close date passed' });
+    expect(customerRowState({ ...base, exceptions: 1 }, TODAY)).toEqual({ tone: 'caution', text: 'Warehouse exceptions' });
+  });
+
+  it('names the deal outcome last', () => {
+    expect(customerRowState({ ...base, deal: deal({ outcome: 'won' }) }, TODAY)).toEqual({ tone: 'positive', text: 'Deal won' });
+    expect(customerRowState({ ...base, deal: deal({ outcome: 'lost' }) }, TODAY)).toEqual({ tone: 'neutral', text: 'Deal lost' });
   });
 });

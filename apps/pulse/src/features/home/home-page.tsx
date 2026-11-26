@@ -11,7 +11,7 @@ import { compareRange } from '@/lib/reports';
 import { routes } from '@/lib/routes';
 import { getProfit, getSettings, getSummary, listJobsNeedingAttention, listSites, todayInZone } from '@/server/domain';
 import { pulsePage } from '@/server/page';
-import { HomeView } from './home-view';
+import { HomePeriodPicker, HomeView } from './home-view';
 
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? '';
@@ -59,11 +59,15 @@ export async function HomePage({ searchParams }: { readonly searchParams?: Promi
       subtitle={page.access.seesMoney ? `How ${page.context.org.name} is doing, and which jobs need you.` : `How the floor at ${page.context.org.name} is doing, and which jobs need you.`}
       width="full"
       actions={
-        page.can('job:manage') ? (
-          <ButtonLink href={routes.newJob()} icon={<PackagePlus aria-hidden />} testId="home-new-job">
-            New job
-          </ButtonLink>
-        ) : null
+        <>
+          <HomePeriodPicker today={today} weekStart={weekStart} />
+          {/* Secondary: the top bar already holds the one primary action (Log work). */}
+          {page.can('job:manage') ? (
+            <ButtonLink href={routes.newJob()} variant="secondary" icon={<PackagePlus aria-hidden />} testId="home-new-job">
+              New job
+            </ButtonLink>
+          ) : null}
+        </>
       }
     >
       <HomeView today={today} weekStart={weekStart} targetMarginBp={page.access.seesMoney ? (settings?.defaultTargetMarginBp ?? 3000) : null} initialSummary={summary} initialTrend={trend} initialBefore={before} initialAttention={attention} initialRange={range} />

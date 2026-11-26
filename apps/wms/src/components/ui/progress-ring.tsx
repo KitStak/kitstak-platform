@@ -3,7 +3,11 @@ import { Truck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { clampPercent, type ProgressTone } from './progress-bar';
 
-const STROKE: Readonly<Record<ProgressTone, string>> = {
+/** `data`: the dashboard data color (teal in WMS); progress on a dashboard is a quantity, never crimson. */
+export type ProgressRingTone = ProgressTone | 'data';
+
+const STROKE: Readonly<Record<ProgressRingTone, string>> = {
+  data: 'var(--dash-data, var(--chart-2))',
   primary: 'var(--primary)',
   success: 'var(--success)',
   warning: 'var(--warning)',
@@ -15,7 +19,7 @@ export interface ProgressRingProps {
   readonly max?: number;
   readonly size?: number;
   readonly thickness?: number;
-  readonly tone?: ProgressTone;
+  readonly tone?: ProgressRingTone;
   /** Centre content: "percent" (default), "truck" (Progress Today), or custom node. */
   readonly center?: 'percent' | 'truck' | React.ReactNode;
   readonly label?: string;
