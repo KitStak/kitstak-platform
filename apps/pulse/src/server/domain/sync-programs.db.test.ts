@@ -88,6 +88,10 @@ describe.skipIf(!ready)('programs feed Pulse jobs with the money Projects stored
       [org.orgId, jobId],
     );
 
+  /** Jobs of the org flagged `program_job`, with `updated_at` to prove a second sync writes nothing. */
+  const programJobs = () =>
+    q<{ id: string; updated_at: string }>(`select id::text, updated_at::text from pulse.jobs where org_id = $1 and program_job order by id`, [org.orgId]);
+
   beforeAll(async () => {
     org = await createTestOrg('pulse-programs');
     owner = await org.member('owner', 'Program Owner');
@@ -143,6 +147,8 @@ describe.skipIf(!ready)('programs feed Pulse jobs with the money Projects stored
     await ledger(`pmf:${glove.programId}:adj:${randomUUID()}`, 'adjustment', '2026-11-10', -2500, 'Damaged cartons credit', { variantId: glove.variants['S-BRN'] });
     await ledger(`pmf:${glove.programId}:hours:2026-11-12`, 'per_hour', '2026-11-12', 9000, 'Hourly work', { quantity: '2.000', unitPrice: '45.0000' });
     await repost(j1.id);
+    // The link alone does not flag the job: the sync does.
+    expect(await programJobs()).toEqual([]);
   }, 60_000);
 
   it('copies every build day and fee, and Pulse stamps equal Projects to the cent, per variant', async () => {
@@ -156,6 +162,8 @@ describe.skipIf(!ready)('programs feed Pulse jobs with the money Projects stored
     );
     const [result] = await domain.runSync(owner, 'projects');
     expect(result?.status, result?.message).toBe('ok');
+    // Step 1 flags the job the program mirror points at, and only that job.
+    expect((await programJobs()).map((row) => row.id)).toEqual([j1.id]);
     const projects = await projectsByVariant(j1.id);
     expect(projects.length).toBe(8);
     expect(await pulseByVariant(j1.id)).toEqual(projects);
@@ -179,8 +187,12 @@ describe.skipIf(!ready)('programs feed Pulse jobs with the money Projects stored
   }, 120_000);
 
   it('runs again as a no op', async () => {
+    const before = await programJobs();
     const [result] = await domain.runSync(owner, 'projects');
     expect(result).toMatchObject({ status: 'ok', created: 0, updated: 0 });
+    // The flag stays true and the job row is not written again.
+    expect(before.map((row) => row.id)).toEqual([j1.id]);
+    expect(await programJobs()).toEqual(before);
   }, 120_000);
 
   it('writes one prep labor row per task per day when the link asks for task time (MAHCO)', async () => {
@@ -253,6 +265,8 @@ describe.skipIf(!ready)('programs feed Pulse jobs with the money Projects stored
       { target_type: 'pm_build', job_id: j2.id },
       { target_type: 'pm_program', job_id: j1.id },
     ]);
+    // A build mirror does not make its job a program job.
+    expect((await programJobs()).map((row) => row.id)).toEqual([j1.id]);
   }, 120_000);
 
   it('keeps closed month rows and counts them as skipped', async () => {
@@ -342,5 +356,7 @@ describe.skipIf(!ready)('programs feed Pulse jobs with the money Projects stored
     expect(fees.every((fee) => fee.ref.includes(':setup:'))).toBe(true);
     const mirrors = await q(`select 1 from pulse.job_links where org_id = $1 and target_type in ('pm_program', 'pm_build')`, [org.orgId]);
     expect(mirrors).toHaveLength(0);
+    // With the mirrors gone, no job is a program job any more.
+    expect(await programJobs()).toEqual([]);
   }, 120_000);
 });

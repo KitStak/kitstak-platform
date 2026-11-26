@@ -5,7 +5,8 @@
  * (`pm.program_ledger`), both through the shared loader. Every step is safe to run again.
  *
  *  1. Mirror every `bills_to` edge into `pulse.job_links` (`pm_program`, `pm_build`) and remove
- *     mirrors whose edge is gone, only after the edge read succeeded.
+ *     mirrors whose edge is gone, only after the edge read succeeded. `jobs.program_job` is then
+ *     set on every job with a `pm_program` mirror and cleared on every other job.
  *  2. Guard: a program job that is not per unit, or takes units from a WMS work order, is skipped
  *     with an alert. A time zone that differs from the job's site raises a note.
  *  3. One production line per build per day (`pmb:<buildId>:<date>`, shift `projects`) with the
@@ -220,7 +221,8 @@ async function jobsById(ctx: DomainContext, ids: readonly string[]): Promise<Map
 
 /**
  * Step 1: the mirrors. Removes mirrors whose edge is gone first (a program that moved jobs must
- * leave its old job before the one program per job index lets it in), then upserts the rest.
+ * leave its old job before the one program per job index lets it in), then upserts the rest, then
+ * brings `jobs.program_job` in line with the mirrors.
  */
 async function mirrorEdges(ctx: DomainContext, edges: readonly ProgramEdge[], jobs: ReadonlyMap<string, JobRow>, programs: ReadonlyMap<string, ProgramFeed>, builds: ReadonlyMap<string, BuildFeed>, have: readonly MirrorRow[], tally: ProgramSyncTally): Promise<void> {
   const want = new Map<string, { edge: ProgramEdge; title: string; status: string | null; path: string; meta: Record<string, unknown>; importsTime: boolean }>();
@@ -284,6 +286,21 @@ async function mirrorEdges(ctx: DomainContext, edges: readonly ProgramEdge[], jo
       } else tally.updated += 1;
     });
   }
+  await syncProgramJobFlags(ctx);
+}
+
+/**
+ * `jobs.program_job` follows the mirrors: true for every job with a `pm_program` mirror, false for
+ * every other job of the org. Only jobs whose flag is wrong are written, so a second run writes
+ * nothing. It looks at the whole org, so a flag left behind by a link removed outside the sync is
+ * cleared too.
+ */
+async function syncProgramJobFlags(ctx: DomainContext): Promise<void> {
+  await db.execute(
+    sql`UPDATE pulse.jobs j SET program_job = NOT j.program_job, updated_at = now()
+         WHERE j.org_id = ${ctx.orgId}
+           AND j.program_job <> EXISTS (SELECT 1 FROM pulse.job_links l WHERE l.org_id = j.org_id AND l.job_id = j.id AND l.target_type = 'pm_program')`,
+  );
 }
 
 /** One batch: the lines and fees of one job and one month, in one transaction. */

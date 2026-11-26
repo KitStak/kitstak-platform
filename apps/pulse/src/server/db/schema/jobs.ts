@@ -39,6 +39,8 @@ export const jobs = pulseSchema.table('jobs', {
   kitSku: text('kit_sku'),
   kitName: text('kit_name'),
   wmsShortage: boolean('wms_shortage').notNull().default(false),
+  /** True while a `pm_program` link points at this job. The program sync keeps it (0016). */
+  programJob: boolean('program_job').notNull().default(false),
   pinnedNote: text('pinned_note'),
   archivedAt: tstz('archived_at'),
   ...stream(),
