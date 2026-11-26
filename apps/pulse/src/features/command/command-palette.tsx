@@ -210,7 +210,7 @@ function RecordGroup({
 export function CommandPalette() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { org, orgs, appUrls, modules, pulseRole, seesMoney, can } = useShell();
+  const { org, orgs, appUrls, modules, pulseRole, seesMoney, can, programs } = useShell();
   const open = useShellStore((state) => state.paletteOpen);
   const query = useShellStore((state) => state.paletteQuery);
   const setOpen = useShellStore((state) => state.setPaletteOpen);
@@ -263,7 +263,7 @@ export function CommandPalette() {
 
   const typed = query.trim();
   const typing = typed.length > 0;
-  const pages = navFor(pulseRole, seesMoney);
+  const pages = navFor(pulseRole, seesMoney, { programs });
   const hasAccess = pulseRole !== 'none';
   const lookup = useDebouncedValue(typed, RECORD_DEBOUNCE_MS);
   const recordsOn = open && hasAccess && typed.length >= RECORD_MIN_CHARS;
@@ -285,7 +285,7 @@ export function CommandPalette() {
     if (strong || selected === '' || selected.startsWith(ALWAYS)) setSelected(top);
   }
   // Pages that already have a row under "Do something" are not listed twice.
-  const subPages = subPagesFor(pulseRole, seesMoney).filter((page) => !ACTION_PAGES.has(page.id));
+  const subPages = subPagesFor(pulseRole, seesMoney, { programs }).filter((page) => !ACTION_PAGES.has(page.id));
   // A page with its own row wins over the section it sits under, so the section drops that keyword.
   const subLabels = new Set(subPages.map((page) => page.label.toLowerCase()));
   const seesReports = pages.some((entry) => entry.id === 'reports');

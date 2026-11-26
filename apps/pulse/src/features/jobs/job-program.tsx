@@ -13,14 +13,16 @@ import { labelColorVars, isLabelColor } from '@/components/ui/label-color';
 import { seriesColor } from '@/components/charts/chart-format';
 import '@/components/charts/charts.css';
 import { Panel } from '@/components/layout/page';
+import { ButtonLink } from '@/components/pulse/button-link';
 import { RelativeTime } from '@/components/pulse/local-time';
 import { useShell } from '@/features/shell/shell-context';
-import { formatMoney, formatNumber, formatPercentBp } from '@/lib/format';
+import { formatMoney, formatNumber, formatPercentBp, formatUnitPrice } from '@/lib/format';
 import { useJobProgram, useProgramsToLink } from '@/lib/hooks/use-data';
 import type { JobDetailDTO, JobProgramBlockDTO, JobProgramDTO, JobProgramTagDTO, ProgramToLinkDTO } from '@/lib/types';
 import { linkProgramAction } from '@/server/actions/jobs';
 import { syncNowAction } from '@/server/actions/integrations';
 import { useRefreshJob } from './job-data';
+import { programJobBanner, programPlanLines, programPriceLine, type JobProgramPageDTO } from './program-job';
 import { callAction } from './use-job-actions';
 
 const MONTH = new Intl.DateTimeFormat('en-US', { month: 'long', timeZone: 'UTC' });
@@ -102,7 +104,7 @@ function Parity({ block, data, onSync, syncing }: { readonly block: JobProgramBl
   );
 }
 
-function ProgramCard({ job, data }: { readonly job: JobDetailDTO; readonly data: JobProgramDTO }) {
+function ProgramCard({ job, data, holdsProgram }: { readonly job: JobDetailDTO; readonly data: JobProgramDTO; readonly holdsProgram: boolean }) {
   const projectsHref = useProjectsHref();
   const refresh = useRefreshJob();
   const [syncing, setSyncing] = useState(false);
@@ -150,8 +152,9 @@ function ProgramCard({ job, data }: { readonly job: JobDetailDTO; readonly data:
                   </div>
                 </div>
                 {href ? (
-                  <a href={href} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'no-underline')} data-testid="open-program">
-                    Open program
+                  <a href={href} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'no-underline')} data-testid={holdsProgram ? 'open-program-in-projects' : 'open-program'}>
+                    {/* A program job has "Open program" in its banner, to the program page here. */}
+                    {holdsProgram ? 'Open in Projects' : 'Open program'}
                     <ExternalLink aria-hidden className="size-3.5" />
                     <span className="sr-only">(opens in a new tab)</span>
                   </a>
@@ -449,13 +452,13 @@ function BlockRows({ block, hidden, heading }: { readonly block: JobProgramBlock
 }
 
 /** The program panels of a job page. Renders nothing for a job no program feeds. */
-export function JobProgramPanels({ job }: { readonly job: JobDetailDTO }) {
+export function JobProgramPanels({ job, holdsProgram = false }: { readonly job: JobDetailDTO; readonly holdsProgram?: boolean }) {
   const query = useJobProgram(job.program ? job.number : null);
   const data = query.data;
   if (!job.program || !data?.available || data.blocks.length === 0) return null;
   return (
     <div className="flex flex-col gap-5" data-testid="job-program">
-      <ProgramCard job={job} data={data} />
+      <ProgramCard job={job} data={data} holdsProgram={holdsProgram} />
       <ByVariant data={data} unitLabel={job.unitLabel.charAt(0).toUpperCase() + job.unitLabel.slice(1)} />
     </div>
   );
@@ -569,8 +572,91 @@ export function LinkProgramDialog({ job, open, onOpenChange }: { readonly job: J
   );
 }
 
+/**
+ * The top of a program job's page (`/jobs/J-1040?view=job`, PULSE_PROGRAMS_SPEC 5.3): what the
+ * job is for, and "Open program" to the program page in Pulse.
+ */
+export function ProgramJobBanner({ program }: { readonly program: JobProgramPageDTO['program'] }) {
+  return (
+    <section
+      aria-label={`${program.key} program`}
+      className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary-subtle px-4 py-3"
+      data-testid="program-job-banner"
+    >
+      <p className="flex min-w-0 flex-1 items-start gap-2 text-sm text-fg">
+        <Repeat aria-hidden className="mt-0.5 size-4 shrink-0 text-primary-text" />
+        <span>{programJobBanner(program.key)}</span>
+      </p>
+      <ButtonLink href={program.path} size="sm" icon={<Repeat aria-hidden />} testId="program-job-open">
+        Open program
+      </ButtonLink>
+    </section>
+  );
+}
+
+/**
+ * In place of the Quote and Budget and the Plan vs actual tabs of a program job: its plan comes
+ * from the program. A quote or budget typed on the job before is kept but not used.
+ */
+export function ProgramPlanNote({ job, program, className }: { readonly job: Pick<JobDetailDTO, 'quote' | 'budget'>; readonly program: JobProgramPageDTO['program']; readonly className?: string }) {
+  const [line, kept] = programPlanLines(program.key, { quote: Boolean(job.quote), budget: Boolean(job.budget) });
+  return (
+    <p className={cn('flex items-start gap-2 rounded-lg border border-border-subtle bg-sunken px-3.5 py-2.5 text-sm text-fg-secondary', className)} data-testid="program-plan-note">
+      <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-muted" />
+      <span>
+        {line}
+        {kept ? <span className="block text-fg-muted" data-testid="program-plan-kept">{kept}</span> : null}
+      </span>
+    </p>
+  );
+}
+
 /** The Price section of a job a program feeds: read only, the prices live on the program's price card. */
-export function ProgramPricePanel({ job }: { readonly job: JobDetailDTO }) {
+export function ProgramPricePanel({ job, program = null }: { readonly job: JobDetailDTO; readonly program?: JobProgramPageDTO | null }) {
+  if (program) return <ProgramJobPricePanel program={program} />;
+  return <FedJobPricePanel job={job} />;
+}
+
+/** A program job: "Varies by variant" (or the one card price), and which card the prices come from. */
+function ProgramJobPricePanel({ program }: { readonly program: JobProgramPageDTO }) {
+  const projectsHref = useProjectsHref();
+  const ref = program.program;
+  const href = ref.deleted ? null : projectsHref(`${ref.projectsPath}/price-card`);
+  const price = program.price;
+  return (
+    <Panel
+      title="Price"
+      action={
+        href ? (
+          <a href={href} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'no-underline')} data-testid="open-price-card">
+            Open price card
+            <ExternalLink aria-hidden className="size-3.5" />
+            <span className="sr-only">(opens in a new tab)</span>
+          </a>
+        ) : undefined
+      }
+    >
+      <div className="flex flex-col gap-2">
+        {price && price.kind !== 'none' ? (
+          <p className="text-sm text-fg-secondary">
+            Price for one:{' '}
+            <span className="text-md font-semibold text-fg tabular-nums" data-testid="price-current">
+              {price.kind === 'single' ? formatUnitPrice(price.unitPrice) : 'Varies by variant'}
+            </span>
+          </p>
+        ) : null}
+        <p className="flex items-start gap-2 text-sm text-fg-secondary" data-testid="price-from-program">
+          <Repeat aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-muted" />
+          <span>
+            {programPriceLine(ref.key, ref.cardVersion)} Each day of build output keeps the price it was made at, so a later change never moves a day that already counted.
+          </span>
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+function FedJobPricePanel({ job }: { readonly job: JobDetailDTO }) {
   const query = useJobProgram(job.program ? job.number : null);
   const projectsHref = useProjectsHref();
   const block = query.data?.blocks.find((item) => item.role === 'program_job') ?? query.data?.blocks[0] ?? null;

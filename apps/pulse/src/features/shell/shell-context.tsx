@@ -39,6 +39,11 @@ export interface ShellContextValue {
   readonly modules: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean; readonly pulse: boolean };
   /** Which sibling apps Pulse can read for this org (licensed and installed). */
   readonly integrations: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  /**
+   * The program tracker is on (Projects is entitled and its program tables exist): the Programs
+   * nav item, its shortcut, palette rows and the Home card show only then. Left out means off.
+   */
+  readonly programs?: boolean;
   readonly badges?: ShellBadges;
   /** Sibling apps this org cannot use on any plan (app switcher shows them as "Not in your plan"). */
   readonly notInPlan?: readonly ('crm' | 'wms' | 'projects')[];

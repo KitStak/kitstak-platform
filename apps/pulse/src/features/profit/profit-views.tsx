@@ -68,6 +68,8 @@ function pageHref(by: ProfitGroup, row: ProfitRowDTO): { href: string; label: st
   if (by === 'job') return { href: routes.job(row.label), label: `Open the job page of ${row.label}` };
   if (by === 'client') return { href: routes.client(row.key), label: `Open the client page of ${row.label}` };
   if (by === 'service') return { href: routes.service(row.key), label: `Open the service page of ${row.label}` };
+  // A program row opens its program page (PULSE_PROGRAMS_SPEC 5.4). The key is the row's sublabel.
+  if (by === 'program' && row.sublabel) return { href: routes.program(row.sublabel), label: `Open the program page of ${row.sublabel}` };
   return null;
 }
 
@@ -120,6 +122,15 @@ function RowName({ by, row, onDrill, range }: { readonly by: ProfitGroup; readon
             <span className="truncate">{name}</span>
             <ChevronRight aria-hidden className="size-3.5 shrink-0 text-icon transition-transform group-hover/drill:translate-x-0.5" />
           </button>
+        ) : by === 'program' && page ? (
+          <Link
+            href={page.href}
+            onClick={(event) => event.stopPropagation()}
+            data-testid="profit-program-link"
+            className="inline-flex max-w-full items-center gap-1 rounded-sm font-medium text-fg hover:text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          >
+            <span className="truncate">{name}</span>
+          </Link>
         ) : (
           <Tooltip content={NONE_HINT[by] ?? 'There is nothing below this row.'}>
             <span tabIndex={0} className="inline-block max-w-full truncate rounded-sm font-medium text-fg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
@@ -235,7 +246,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
                   );
                 })}
               </dl>
-              {drill ? null : <p className="text-xs text-fg-muted">{NONE_HINT[by]}</p>}
+              {drill || (by === 'program' && row.key !== 'none') ? null : <p className="text-xs text-fg-muted">{NONE_HINT[by]}</p>}
             </li>
           );
         })}

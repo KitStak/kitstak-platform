@@ -8,8 +8,8 @@ const entry = (id: string) => {
 };
 
 describe('navigation', () => {
-  it('has seven main items and one More group', () => {
-    expect(NAV.filter((item) => item.group === 'main').map((item) => item.label)).toEqual(['Home', 'Jobs', 'Log work', 'Profit', 'Labor', 'Alerts', 'Reports']);
+  it('has eight main items and one More group', () => {
+    expect(NAV.filter((item) => item.group === 'main').map((item) => item.label)).toEqual(['Home', 'Jobs', 'Programs', 'Log work', 'Profit', 'Labor', 'Alerts', 'Reports']);
     expect(NAV.filter((item) => item.group === 'more').map((item) => item.label)).toEqual(['Target pace', 'Calculator', 'Goals', 'Import and export', 'Settings']);
   });
 
@@ -20,11 +20,26 @@ describe('navigation', () => {
     expect(navMatches(entry('log'), '/login')).toBe(false);
     expect(navMatches(entry('profit'), '/clients/abc')).toBe(true);
     expect(navMatches(entry('import'), '/export')).toBe(true);
+    expect(navMatches(entry('programs'), '/programs/GLOVE')).toBe(true);
+    expect(navMatches(entry('jobs'), '/programs')).toBe(false);
+  });
+
+  it('shows Programs only where the program tracker is on, between Jobs and Profit', () => {
+    expect(navFor('owner').map((item) => item.id)).not.toContain('programs');
+    expect(navFor('owner', true, { programs: false }).map((item) => item.id)).not.toContain('programs');
+    const ids = navFor('owner', true, { programs: true }).map((item) => item.id);
+    expect(ids.indexOf('programs')).toBe(ids.indexOf('jobs') + 1);
+    expect(ids.indexOf('programs')).toBeLessThan(ids.indexOf('profit'));
+    expect(navFor('viewer', false, { programs: true }).map((item) => item.id)).toContain('programs');
+    expect(chordTargets('owner', true, { programs: true })).toMatchObject({ r: '/programs', e: '/reports' });
+    expect(chordTargets('owner')).not.toHaveProperty('r');
   });
 
   it('shows supervisors only the floor pages', () => {
     expect(navFor('supervisor').map((item) => item.id)).toEqual(['jobs', 'log', 'labor', 'alerts', 'target-pace', 'import']);
-    expect(navFor('viewer')).toHaveLength(NAV.length);
+    expect(navFor('supervisor', false, { programs: true }).map((item) => item.id)).toEqual(['jobs', 'programs', 'log', 'labor', 'alerts', 'target-pace', 'import']);
+    expect(navFor('viewer')).toHaveLength(NAV.length - 1);
+    expect(navFor('viewer', true, { programs: true })).toHaveLength(NAV.length);
     expect(navFor('none')).toEqual([]);
     expect(navFor('viewer', false).map((item) => item.id)).not.toContain('profit');
     expect(chordTargets('viewer', false)).not.toHaveProperty('p');
@@ -36,7 +51,11 @@ describe('navigation', () => {
   });
 
   it('builds go to shortcuts per role', () => {
-    expect(chordTargets('owner')).toEqual({ h: '/', j: '/jobs', l: '/log', p: '/profit', a: '/alerts', b: '/labor', r: '/reports', t: '/target-pace', c: '/calculator', o: '/goals', i: '/import', s: '/settings' });
+    expect(chordTargets('owner')).toEqual({ h: '/', j: '/jobs', l: '/log', p: '/profit', a: '/alerts', b: '/labor', e: '/reports', t: '/target-pace', c: '/calculator', o: '/goals', i: '/import', s: '/settings' });
+    expect(chordTargets('owner', true, { programs: true })).toHaveProperty('r', '/programs');
+    // Every chord is used once.
+    const chords = NAV.map((item) => item.chord).filter(Boolean);
+    expect(new Set(chords).size).toBe(chords.length);
     expect(chordTargets('supervisor')).toEqual({ j: '/jobs', l: '/log', a: '/alerts', b: '/labor', t: '/target-pace', i: '/import' });
   });
 

@@ -35,7 +35,7 @@ import { singularUnit } from './job-math';
 import type { JobTabProps } from './job-overview';
 import { Explain, LoadError } from './job-ui';
 
-export function JobMoneyIn({ job, today }: JobTabProps) {
+export function JobMoneyIn({ job, today, program = null }: JobTabProps) {
   const shell = useShell();
   const refresh = useRefreshJob();
   const canRevenue = shell.can('revenue:manage');
@@ -144,7 +144,7 @@ export function JobMoneyIn({ job, today }: JobTabProps) {
       </div>
 
       {job.program ? (
-        <ProgramPricePanel job={job} />
+        <ProgramPricePanel job={job} program={program} />
       ) : (
       <Panel
         title="Price"

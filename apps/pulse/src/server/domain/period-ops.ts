@@ -17,7 +17,8 @@ import { fullMonthViewWords, monthName, rows, todayInZone, type DomainContext } 
 import { requirePulse } from './access';
 import { listActivity } from './activity';
 import { getPeople } from './people';
-import { closeFixCounts, getCloseChecklist, listPeriods } from './periods';
+import { listProgramJobLinks } from './jobs';
+import { closeFixCounts, getCloseChecklist, listPeriods, programCloseCheck } from './periods';
 import { getCompanyBridge, getProfit } from './profit';
 import { loadSettings } from './settings';
 
@@ -159,6 +160,18 @@ export interface CloseItemDTO {
   readonly hrefLabel: string | null;
   /** Money behind the step, in cents (the payroll gap, the company costs). Null when hidden or not money. */
   readonly amountCents: number | null;
+  /** `programs_settled`: one row per program, each linking to its program page when Pulse tracks it (PULSE_PROGRAMS_SPEC 5.4). */
+  readonly programs?: readonly CloseProgramRowDTO[];
+}
+
+/** One program on the month close checklist. */
+export interface CloseProgramRowDTO {
+  readonly key: string;
+  readonly name: string;
+  /** The program added the month's charges. */
+  readonly settled: boolean;
+  /** The program page for this month, or null when only its builds bill here (no program page yet). */
+  readonly href: string | null;
 }
 
 export interface CloseDetailDTO {
@@ -291,6 +304,14 @@ export const getCloseDetail = scoped(async function getCloseDetail(ctx: DomainCo
     // Programs settle and sync on their own after the month ends: while it runs, that is a wait, not a fix.
     const running = end >= todayInZone((await loadSettings(ctx.orgId)).timezone);
     const late = checklist.programsUnsettled ?? [];
+    const [check, tracked] = await Promise.all([programCloseCheck(ctx, start), listProgramJobLinks(ctx).catch(() => [])]);
+    const trackedKeys = new Set(tracked.map((link) => link.key.toUpperCase()));
+    const programRows: CloseProgramRowDTO[] = check.programs.map((program) => ({
+      key: program.key,
+      name: program.name,
+      settled: program.settled,
+      href: trackedKeys.has(program.key.toUpperCase()) ? routes.program(program.key, { month: start }) : null,
+    }));
     const lateWords = late.length <= 2 ? late.join(' and ') : `${late.slice(0, -1).join(', ')} and ${late[late.length - 1]}`;
     items.push(
       {
@@ -307,6 +328,7 @@ export const getCloseDetail = scoped(async function getCloseDetail(ctx: DomainCo
         href: null,
         hrefLabel: null,
         amountCents: null,
+        programs: programRows,
       },
       {
         key: 'programs_synced',

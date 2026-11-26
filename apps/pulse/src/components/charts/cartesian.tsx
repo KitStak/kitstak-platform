@@ -19,6 +19,8 @@ export interface ChartSeries {
   readonly gapText?: readonly (string | null)[];
   /** A CSS color. Leave it out to take the next palette slot. */
   readonly color?: string;
+  /** Lines only: a dashed line (a forecast or a plan next to the real line). */
+  readonly dashed?: boolean;
 }
 
 export interface ChartTarget {
@@ -46,7 +48,7 @@ function toCategories({ labels, dates, bucket = 'day' }: ChartXProps): { categor
 }
 
 function withColors(series: readonly ChartSeries[], offset = 0): XYSeries[] {
-  return series.map((item, index) => ({ id: item.id, label: item.label, values: item.values, gapText: item.gapText, color: item.color ?? seriesColor(index + offset) }));
+  return series.map((item, index) => ({ id: item.id, label: item.label, values: item.values, gapText: item.gapText, color: item.color ?? seriesColor(index + offset), dashed: item.dashed }));
 }
 
 // --- Line and area ------------------------------------------------------------------------

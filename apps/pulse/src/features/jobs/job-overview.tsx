@@ -66,7 +66,8 @@ import { nextStepHref, planInUse, planToTotals, rowPace, singularUnit, statsToAc
 import { jobHeadlineFigures, paceYardsticks, planPace } from './job-figures';
 import { Explain, UnitsProgress } from './job-ui';
 import { JobWhatIf } from './job-whatif';
-import { JobProgramPanels, LinkProgramDialog } from './job-program';
+import { JobProgramPanels, LinkProgramDialog, ProgramPlanNote } from './job-program';
+import type { JobProgramPageDTO } from './program-job';
 import { callAction, useJobActions } from './use-job-actions';
 
 export interface JobTabProps {
@@ -75,7 +76,12 @@ export interface JobTabProps {
   readonly settings: SettingsDTO;
   readonly laborClasses: readonly LaborClassDTO[];
   readonly services: readonly VasServiceDTO[];
+  /** Set for a program job: its plan and prices come from the program, never from a typed quote. */
+  readonly program?: JobProgramPageDTO | null;
 }
+
+/** Things to fix and next steps a program job never gets: it has no quote or budget of its own (PULSE_PROGRAMS_SPEC 5.2, 5.3). */
+const PROGRAM_JOB_SKIPS: ReadonlySet<string> = new Set(['noPlan', 'add_plan', 'update_plan']);
 
 const LINK_WORDS: Readonly<Record<string, string>> = {
   crm_deal: 'CRM deal',
@@ -144,7 +150,7 @@ const NEEDS: readonly {
   },
 ];
 
-export function JobOverview({ job, today, settings, laborClasses, services }: JobTabProps) {
+export function JobOverview({ job, today, settings, laborClasses, services, program = null }: JobTabProps) {
   const shell = useShell();
   const refresh = useRefreshJob();
   const actions = useJobActions();
@@ -155,10 +161,12 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
   const daily = useJobDaily(job.number, seesMoney);
 
   const actual = statsToActual(stats);
-  // A plan with only a price says nothing about cost, so it gives no "should cost".
-  const pricedPlan = planToTotals(planInUse(job));
+  // A plan with only a price says nothing about cost, so it gives no "should cost". A program
+  // job's plan comes from the program: a quote typed on it is kept but never used.
+  const pricedPlan = program ? null : planToTotals(planInUse(job));
   const plan = planHasCosts(pricedPlan) ? pricedPlan : null;
-  const figures = jobHeadlineFigures(stats, job.plannedUnits);
+  const plannedUnits = program ? null : job.plannedUnits;
+  const figures = jobHeadlineFigures(stats, plannedUnits);
   const yardsticks = paceYardsticks({
     uph: stats.uph,
     targetPace: stats.standardUph,
@@ -220,11 +228,13 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
     const raw = stats.needs[item.key];
     const count = typeof raw === 'number' ? raw : raw === true ? 1 : 0;
     return { ...item, count };
-  }).filter((item) => item.count > 0 && job.status !== 'cancelled');
+  }).filter((item) => item.count > 0 && job.status !== 'cancelled' && !(program && PROGRAM_JOB_SKIPS.has(item.key)));
   const steps = stats.riskReasons
     .filter(
       (reason, index, all) =>
-        reason.nextStep && all.findIndex((other) => other.nextStep === reason.nextStep) === index,
+        reason.nextStep &&
+        !(program && PROGRAM_JOB_SKIPS.has(reason.nextStep)) &&
+        all.findIndex((other) => other.nextStep === reason.nextStep) === index,
     )
     .slice(0, 3);
   const recent = latestWorkByDay(production.data ?? []);
@@ -535,10 +545,10 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
           label={`${job.unitLabel.charAt(0).toUpperCase()}${job.unitLabel.slice(1)} done`}
           value={formatNumber(stats.unitsGood, { maxDigits: 0 })}
           footer={
-            Number(job.plannedUnits) > 0 ? (
+            plannedUnits !== null && Number(plannedUnits) > 0 ? (
               <UnitsProgress
                 done={stats.unitsGood}
-                planned={job.plannedUnits}
+                planned={plannedUnits}
                 pctBp={stats.pctCompleteBp}
                 unit={job.unitLabel}
               />
@@ -561,7 +571,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                 { label: 'Reworked', value: formatNumber(stats.unitsRework), kind: 'note' },
                 {
                   label: 'Planned',
-                  value: Number(job.plannedUnits) > 0 ? formatNumber(job.plannedUnits) : 'Not set',
+                  value: program ? `From ${program.program.key}` : Number(job.plannedUnits) > 0 ? formatNumber(job.plannedUnits) : 'Not set',
                   kind: 'note',
                 },
               ]}
@@ -634,7 +644,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
                   <span className="text-xs text-fg-muted">the plan says {formatMoney(planCostPerUnit)}</span>
                 ) : (
                   <span className="text-xs text-fg-muted">
-                    {plan ? 'Shows up after the first units' : 'Add a plan to see what it should cost'}
+                    {plan ? 'Shows up after the first units' : program ? `Plans come from ${program.program.key}` : 'Add a plan to see what it should cost'}
                   </span>
                 )
               }
@@ -708,7 +718,7 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
               }
               value={formatHours(stats.hours, { maxDigits: 0 })}
               footer={
-                job.planLaborHours ? (
+                job.planLaborHours && !program ? (
                   <span className="text-xs text-fg-muted">
                     plan {formatHours(job.planLaborHours, { maxDigits: 0 })}
                   </span>
@@ -742,8 +752,11 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
         </p>
       ) : null}
 
+      {/* A program job: its plan comes from the program, not a quote or a budget. */}
+      {program ? <ProgramPlanNote job={job} program={program.program} /> : null}
+
       {/* KitStak Programs: the Program card and By variant, for a job a program feeds. */}
-      <JobProgramPanels job={job} />
+      <JobProgramPanels job={job} holdsProgram={Boolean(program)} />
 
       {/* Charts. */}
       <div className="grid gap-5 lg:grid-cols-2">
@@ -821,7 +834,8 @@ export function JobOverview({ job, today, settings, laborClasses, services }: Jo
         </Panel>
       ) : null}
 
-      {seesMoney ? (
+      {/* What if moves one typed price; a program job is priced by its card, variant by variant. */}
+      {seesMoney && !program ? (
         <JobWhatIf job={job} today={today} settings={settings} laborClasses={laborClasses} />
       ) : null}
 

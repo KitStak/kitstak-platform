@@ -7,7 +7,7 @@ import 'server-only';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
 import { scoped } from '@/server/db/scope';
-import { edgesToJob } from '@/server/integrations/programs';
+import { edgesToJob, programsReady } from '@/server/integrations/programs';
 import { activity, clients, jobLinks, jobPlanLines, jobPlans, jobPrices, jobStats, jobTypes, jobs, sites, type UsualCrewLine } from '@/server/db/schema';
 import { appUrls } from '@/server/env';
 import { orgModuleFlags, type ModuleFlags } from '@/server/entitlements';
@@ -229,6 +229,8 @@ export const listJobs = scoped(async function listJobs(ctx: DomainContext, filte
   const q = cleanText(filters.q)?.toLowerCase().replace(/[%_\\]/g, '');
   if (q) where.push(sql`(lower(${jobs.number}) like ${`${q}%`} or lower(${jobs.name}) like ${`%${q}%`} or lower(${clients.name}) like ${`%${q}%`} or lower(coalesce(${jobs.poNumber}, '')) like ${`${q}%`})`);
   if (filters.fedByProgram) where.push(sql`EXISTS (SELECT 1 FROM pulse.job_links pl WHERE pl.job_id = ${jobs.id} AND pl.target_type IN ('pm_program', 'pm_build'))`);
+  // Program jobs live under Programs (PULSE_PROGRAMS_SPEC 5.4), while programs can be shown.
+  if (filters.programJobs === 'exclude' && (await hidesProgramJobs(ctx))) where.push(eq(jobs.programJob, false));
   const found = await joined(db)
     .where(and(...where))
     .orderBy(...(tab === 'open' ? [RISK_ORDER, sql`${jobStats.projectedProfitCents} asc nulls last`, asc(jobs.dueDate)] : [desc(jobs.createdAt)]), asc(jobs.number))
@@ -238,19 +240,57 @@ export const listJobs = scoped(async function listJobs(ctx: DomainContext, filte
   return found.map((row) => ({ ...toJobDTO(row, access), stats: toJobStatsDTO(row.stats, access, row.job.unitLabel), planLaborHours: hours.get(row.job.id) ?? null, program: programTag(mirrors.get(row.job.id) ?? []) }));
 });
 
-/** Losing and at risk jobs, worst first (Home "Jobs that need you", the bridge, the wall). */
+/**
+ * Whether lists leave program jobs out: true while programs can be shown here (`programsReady`,
+ * cached). When Projects goes away, program jobs show as normal jobs again (spec 7.5).
+ */
+export const hidesProgramJobs = scoped(async function hidesProgramJobs(ctx: DomainContext): Promise<boolean> {
+  return programsReady(ctx);
+});
+
+/**
+ * Losing and at risk jobs, worst first (Home "Jobs that need you", the bridge, the wall). Program
+ * jobs are left out: a program is judged by its own alerts under Programs (spec 1.7, 6).
+ */
 export const listJobsNeedingAttention = scoped(async function listJobsNeedingAttention(ctx: DomainContext, limit = 10): Promise<JobListItemDTO[]> {
-  const all = await listJobs(ctx, { tab: 'open', risk: ['losing', 'at_risk', 'no_data'], limit: Math.min(Math.max(limit, 1), 100) });
+  const all = await listJobs(ctx, { tab: 'open', risk: ['losing', 'at_risk', 'no_data'], programJobs: 'exclude', limit: Math.min(Math.max(limit, 1), 100) });
   return all;
+});
+
+/** One tracked program and the job that holds it (the `pm_program` mirrors). Empty when programs are not shown here. */
+export interface ProgramJobLink {
+  readonly programId: string;
+  readonly key: string;
+  readonly name: string;
+  readonly jobId: string;
+  readonly jobNumber: string;
+}
+
+/** The program jobs of the workspace by their program key, for links from month close and lists. Never money. */
+export const listProgramJobLinks = scoped(async function listProgramJobLinks(ctx: DomainContext): Promise<ProgramJobLink[]> {
+  await requirePulse(ctx, 'pulse:read');
+  if (!(await programsReady(ctx))) return [];
+  const found = await rows<{ program_id: string; key: string | null; name: string | null; job_id: string; number: string }>(
+    db,
+    sql`SELECT l.target_id AS program_id, l.meta ->> 'key' AS key, l.meta ->> 'name' AS name, j.id AS job_id, j.number
+          FROM pulse.job_links l JOIN pulse.jobs j ON j.id = l.job_id AND j.deleted_at IS NULL
+         WHERE l.org_id = ${ctx.orgId} AND l.target_type = 'pm_program'
+         ORDER BY l.meta ->> 'key'`,
+  );
+  return found
+    .filter((row) => Boolean(row.key))
+    .map((row) => ({ programId: row.program_id, key: row.key as string, name: row.name ?? (row.key as string), jobId: row.job_id, jobNumber: row.number }));
 });
 
 /** Counts per status for the filter chips on the Jobs page. */
 export const countJobsByRisk = scoped(async function countJobsByRisk(ctx: DomainContext, filters: Pick<JobListFilters, 'clientId' | 'jobTypeId' | 'siteId'> = {}): Promise<Record<PulseStatus | 'none', number>> {
   await requirePulse(ctx, 'pulse:read');
+  // The same jobs as the Jobs list: program jobs live under Programs.
+  const hide = await hidesProgramJobs(ctx);
   const found = await rows<{ risk: string | null; n: number }>(
     db,
     sql`SELECT st.risk_status AS risk, count(*)::int AS n FROM pulse.jobs j LEFT JOIN pulse.job_stats st ON st.job_id = j.id
-         WHERE j.org_id = ${ctx.orgId} AND j.deleted_at IS NULL AND j.archived_at IS NULL AND j.status IN ('active', 'on_hold')
+         WHERE j.org_id = ${ctx.orgId} AND j.deleted_at IS NULL AND j.archived_at IS NULL AND j.status IN ('active', 'on_hold') ${hide ? sql`AND NOT j.program_job` : sql``}
            ${filters.clientId ? sql`AND j.client_id = ${filters.clientId}` : sql``} ${filters.jobTypeId ? sql`AND j.job_type_id = ${filters.jobTypeId}` : sql``}
            ${filters.siteId ? sql`AND j.site_id = ${filters.siteId}` : sql``}
          GROUP BY st.risk_status`,

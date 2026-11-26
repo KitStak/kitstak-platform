@@ -8,6 +8,7 @@ import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { scoped } from '@/server/db/scope';
+import { programsReady } from '@/server/integrations/programs';
 import { invalid } from '@/server/errors';
 import { PROFIT_GROUPS, type FactKind, type ProfitGroup, type PulseStatus } from '@/lib/constants';
 import { marginBp } from '@/lib/money';
@@ -525,11 +526,13 @@ export const getCompanyBridge = scoped(async function getCompanyBridge(ctx: Doma
 export const getBadges = scoped(async function getBadges(ctx: DomainContext): Promise<BadgesDTO> {
   const access = await requirePulse(ctx, 'pulse:read').catch(() => null);
   if (!access) return { jobsAtRisk: 0, openAlerts: 0, unreadNotifications: 0 };
+  // The Jobs badge counts the jobs the Jobs list shows: program jobs live under Programs.
+  const hideProgramJobs = await programsReady(ctx);
   const [row] = await rows<{ risk: number; alerts: number; unread: number }>(
     db,
     sql`SELECT
           (SELECT count(*) FROM pulse.job_stats st JOIN pulse.jobs j ON j.id = st.job_id
-            WHERE st.org_id = ${ctx.orgId} AND st.risk_status IN ('losing', 'at_risk') AND j.deleted_at IS NULL AND j.archived_at IS NULL AND j.status = 'active')::int AS risk,
+            WHERE st.org_id = ${ctx.orgId} AND st.risk_status IN ('losing', 'at_risk') AND j.deleted_at IS NULL AND j.archived_at IS NULL AND j.status = 'active' ${hideProgramJobs ? sql`AND NOT j.program_job` : sql``})::int AS risk,
           (SELECT count(*) FROM pulse.alerts a WHERE a.org_id = ${ctx.orgId} AND a.status = 'open')::int AS alerts,
           (SELECT count(*) FROM pulse.notifications n WHERE n.org_id = ${ctx.orgId} AND n.user_id = ${ctx.userId} AND n.read_at IS NULL AND n.archived_at IS NULL)::int AS unread`,
   );
