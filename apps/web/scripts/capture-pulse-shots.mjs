@@ -265,7 +265,8 @@ const SLOTS = [
     // The window is tall, so the whole panel fits under its button.
     views: { desktop: { height: 1200, element: 'dialog', scale: 3 }, tablet: null, phone: null },
     prepare: async (page) => {
-      await page.getByRole('button', { name: 'How we got company profit' }).click();
+      // The button in the "Your jobs made ..." line. The margin card has one too, for the same panel.
+      await page.getByTestId('company-bridge').getByRole('button', { name: 'How we got company profit' }).click();
       await page.getByRole('dialog').waitFor();
       await page.waitForTimeout(700);
     },
