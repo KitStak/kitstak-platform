@@ -174,6 +174,13 @@ export interface RiskInput {
   readonly entryDays30?: number;
   /** Actuals mode: the plan totals are "per month", so the labor and due date rules apply. */
   readonly hasMonthlyPlan?: boolean;
+  /**
+   * The job holds a KitStak program (`jobs.program_job`, docs/programs/PULSE_PROGRAMS_SPEC.md 5.2):
+   * its plan is the program's month plan, never a quote or a budget, so W7 (no cost plan), D4 (no
+   * plan), W8 (past planned units) and the "Add a quote or a budget" next step never fire. The
+   * program alerts (P1 to P7) take their place.
+   */
+  readonly programJob?: boolean;
 }
 
 function nonPositive(value: Cents): Cents {
@@ -277,8 +284,9 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   const costUnknown = mode === 'projected' && !p.costKnown;
   // Hours left with no cost of an hour on a job that does have a cost plan: the rate is what is missing.
   if (input.needsRate || (costUnknown && costPlan)) add('D3', {});
+  const programJob = input.programJob === true;
   // D4: no cost plan (none, or only a price) and nothing to project the rest of the job from.
-  if (costUnknown && !costPlan) add('D4', { priceOnly: input.plan ? 1 : 0 });
+  if (costUnknown && !costPlan && !programJob) add('D4', { priceOnly: input.plan ? 1 : 0 });
 
   // Heads up
   if (pm !== null && pm < target && !fired.has('R1') && !fired.has('R2')) add('W1', { marginBp: pm, targetBp: target }, profit - mulBp(revenue, target));
@@ -304,8 +312,8 @@ export function assessRisk(input: RiskInput): RiskAssessment {
     if (daysLeft <= 3) add('W6', { dueDate: input.dueDate, pctBp: p.pctCompleteBp, calendarDays: daysBetween(input.today, input.dueDate) });
   }
   // W7: nothing to compare with. D4 already says it more strongly when it fired.
-  if (!costPlan && !fired.has('D4')) add('W7', input.plan ? { priceOnly: 1 } : {});
-  if (mode !== 'final' && plannedUnits > ZERO && unitsGood > plannedUnits) add('W8', { unitsGood: Number(unitsGood) / 1000, plannedUnits: Number(plannedUnits) / 1000 });
+  if (!costPlan && !fired.has('D4') && !programJob) add('W7', input.plan ? { priceOnly: 1 } : {});
+  if (!programJob && mode !== 'final' && plannedUnits > ZERO && unitsGood > plannedUnits) add('W8', { unitsGood: Number(unitsGood) / 1000, plannedUnits: Number(plannedUnits) / 1000 });
 
   const status = STATUS_ORDER.find((candidate) => reasons.some((reason) => reason.status === candidate)) ?? 'on_track';
   const order = (reason: RiskReason): number => RISK_RULES.indexOf(reason.rule);

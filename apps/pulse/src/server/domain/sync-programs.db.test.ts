@@ -147,8 +147,8 @@ describe.skipIf(!ready)('programs feed Pulse jobs with the money Projects stored
     await ledger(`pmf:${glove.programId}:adj:${randomUUID()}`, 'adjustment', '2026-11-10', -2500, 'Damaged cartons credit', { variantId: glove.variants['S-BRN'] });
     await ledger(`pmf:${glove.programId}:hours:2026-11-12`, 'per_hour', '2026-11-12', 9000, 'Hourly work', { quantity: '2.000', unitPrice: '45.0000' });
     await repost(j1.id);
-    // The link alone does not flag the job: the sync does.
-    expect(await programJobs()).toEqual([]);
+    // The link flags the job in the same transaction (the sync keeps it after).
+    expect((await programJobs()).map((row) => row.id)).toEqual([j1.id]);
   }, 60_000);
 
   it('copies every build day and fee, and Pulse stamps equal Projects to the cent, per variant', async () => {
