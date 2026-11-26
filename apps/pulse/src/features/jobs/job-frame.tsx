@@ -54,7 +54,8 @@ import { JobMaterials } from './job-materials';
 import { JobMoneyIn } from './job-money-in';
 import { JobOverview } from './job-overview';
 import { JobPlan } from './job-plan';
-import { ProgramBadge } from './job-program';
+import { ProgramBadge, ProgramJobBanner, ProgramPlanNote } from './job-program';
+import { programJobTabs, type JobProgramPageDTO } from './program-job';
 import { JobStatusBadge, RiskPill } from './job-ui';
 import { JobWork } from './job-work';
 import { STATUS_MOVES, callAction, statusMoveLabel, useJobActions } from './use-job-actions';
@@ -70,6 +71,8 @@ export interface JobFrameProps {
   readonly laborClasses: readonly LaborClassDTO[];
   readonly services: readonly VasServiceDTO[];
   readonly jobTypes: readonly JobTypeDTO[];
+  /** Set for a program job (PULSE_PROGRAMS_SPEC 5.3): it lives under Programs, and its plan and prices come from the program. */
+  readonly program?: JobProgramPageDTO | null;
 }
 
 export function JobFrame({
@@ -80,6 +83,7 @@ export function JobFrame({
   laborClasses,
   services,
   jobTypes,
+  program = null,
 }: JobFrameProps) {
   const shell = useShell();
   const router = useRouter();
@@ -121,8 +125,11 @@ export function JobFrame({
     });
   };
 
-  const tabs = JOB_TABS.filter((id) => shell.seesMoney || !MONEY_TABS.includes(id));
-  const tabProps = { job, today, settings, laborClasses, services };
+  // A program job has no Plan vs actual: its plan comes from the program in Projects.
+  const tabs = programJobTabs(JOB_TABS, Boolean(program)).filter((id) => shell.seesMoney || !MONEY_TABS.includes(id));
+  const tabProps = { job, today, settings, laborClasses, services, program };
+  // The front page of a program job goes to its program, so its Overview tab keeps `?view=job`.
+  const tabHref = (id: JobTab): string => (program && id === 'overview' ? routes.programJob(job.number) : routes.jobTab(job.number, id));
   const ownerName = people.data?.find((person) => person.id === job.ownerId)?.name;
 
   return (
@@ -142,7 +149,11 @@ export function JobFrame({
           {job.siteName ? ` · ${job.siteName}` : ''}
         </>
       }
-      breadcrumbs={[{ label: 'Jobs', href: routes.jobs() }, { label: job.number }]}
+      breadcrumbs={
+        program
+          ? [{ label: 'Programs', href: routes.programs() }, { label: program.program.key, href: program.program.path }, { label: job.number }]
+          : [{ label: 'Jobs', href: routes.jobs() }, { label: job.number }]
+      }
       actions={
         <>
           {shell.can('production:log') && job.status !== 'completed' && job.status !== 'cancelled' ? (
@@ -404,13 +415,14 @@ export function JobFrame({
           <RouteTabs
             label="Job sections"
             active={tab}
-            tabs={tabs.map((id) => ({ id, label: JOB_TAB_LABELS[id], href: routes.jobTab(job.number, id) }))}
+            tabs={tabs.map((id) => ({ id, label: JOB_TAB_LABELS[id], href: tabHref(id) }))}
           />
         </div>
       }
     >
+      {program ? <ProgramJobBanner program={program.program} /> : null}
       {tab === 'overview' ? <JobOverview {...tabProps} /> : null}
-      {tab === 'plan' ? <JobPlan {...tabProps} /> : null}
+      {tab === 'plan' ? program ? <ProgramPlanNote job={job} program={program.program} /> : <JobPlan {...tabProps} /> : null}
       {tab === 'work' ? <JobWork {...tabProps} /> : null}
       {tab === 'materials' ? <JobMaterials {...tabProps} /> : null}
       {tab === 'money-in' ? <JobMoneyIn {...tabProps} /> : null}

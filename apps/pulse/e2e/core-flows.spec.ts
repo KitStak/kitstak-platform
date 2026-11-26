@@ -231,7 +231,7 @@ test('7. the command palette and the go to keys reach every screen', async ({ pa
   }
   await open(page, '/');
   await page.getByTestId('app-shell').click({ position: { x: 600, y: 300 } });
-  for (const [key, path] of [['r', '/reports'], ['b', '/labor'], ['t', '/target-pace'], ['c', '/calculator'], ['o', '/goals'], ['i', '/import'], ['s', '/settings'], ['a', '/alerts'], ['p', '/profit'], ['h', '/']] as const) {
+  for (const [key, path] of [['e', '/reports'], ['b', '/labor'], ['t', '/target-pace'], ['c', '/calculator'], ['o', '/goals'], ['i', '/import'], ['s', '/settings'], ['a', '/alerts'], ['p', '/profit'], ['h', '/']] as const) {
     await page.keyboard.press('g');
     await page.keyboard.press(key);
     await page.waitForURL((url) => url.pathname === path, { timeout: 30_000 });

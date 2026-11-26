@@ -584,3 +584,72 @@ export async function loadPrepTimeByDay(
   );
   return rows.map((row) => ({ taskId: row.task_id, workDate: row.work_date, minutes: Number(row.minutes), people: Number(row.people) }));
 }
+
+/**
+ * One `pm.builds` row of a program in a date range, as the month plan reads it (SPEC 3.8): a build
+ * whose task is live and whose status is not cancelled, with `build_date` in the range.
+ */
+export interface ProgramBuildRow {
+  /** `task_id`. */
+  readonly id: string;
+  /** `build_date`. */
+  readonly date: IsoDate;
+  /** `planned_qty`, 3 places. */
+  readonly planned: string;
+  /** `built_qty`, 3 places. */
+  readonly built: string;
+  readonly variantId: string | null;
+  /** `rate_override`, or null. */
+  readonly rate: string | null;
+}
+
+/** Builds of a program dated in `range` (the planned builds of a month), oldest first. */
+export async function loadProgramBuilds(db: Executor, orgId: string, programId: string, range: { from: IsoDate; to: IsoDate }): Promise<ProgramBuildRow[]> {
+  if (!isUuid(orgId) || !isUuid(programId) || !isIsoDate(range.from) || !isIsoDate(range.to)) return [];
+  if (!(await programsAvailable(db)).tables) return [];
+  const rows = await queryRows<{ id: string; date: string; planned: string; built: string; variant_id: string | null; rate: string | null }>(
+    db,
+    sql`select b.task_id::text as id, b.build_date::text as date, b.planned_qty::text as planned, b.built_qty::text as built,
+               b.variant_id::text as variant_id, b.rate_override::text as rate
+          from pm.builds b
+          join pm.tasks t on t.id = b.task_id and t.deleted_at is null
+          join pm.statuses s on s.id = t.status_id
+         where b.org_id = ${orgId}::uuid and b.program_id = ${programId}::uuid
+           and b.build_date between ${range.from}::date and ${range.to}::date and s.category <> 'cancelled'
+         order by b.build_date, b.task_id`,
+  );
+  return rows.map((row) => ({ id: row.id, date: row.date, planned: row.planned, built: row.built, variantId: row.variant_id, rate: textOrNull(row.rate) }));
+}
+
+/** One day of recent program revenue: output of live builds plus `per_order` and `per_hour` ledger rows. */
+export interface ProgramTrailingDay {
+  readonly date: IsoDate;
+  /** Good units that day, 3 places. */
+  readonly units: string;
+  /** Whole cents as text. */
+  readonly cents: string;
+}
+
+/**
+ * Revenue per day of a program from `from` up to the day before `before` (the forecast's recent
+ * days, SPEC 3.8): output snapshots of live builds plus per batch and per hour ledger rows, summed
+ * per day, oldest first. The caller keeps the plannable days and the last 20.
+ */
+export async function loadTrailingDays(db: Executor, orgId: string, programId: string, range: { from: IsoDate; before: IsoDate }): Promise<ProgramTrailingDay[]> {
+  if (!isUuid(orgId) || !isUuid(programId) || !isIsoDate(range.from) || !isIsoDate(range.before)) return [];
+  if (!(await programsAvailable(db)).tables) return [];
+  const rows = await queryRows<{ date: string; units: string; cents: string }>(
+    db,
+    sql`select d.date::text as date, coalesce(sum(d.units), 0)::text as units, coalesce(sum(d.cents), 0)::text as cents from (
+          select o.work_date as date, o.qty as units, o.revenue_cents as cents
+            from pm.build_output o join pm.tasks t on t.id = o.build_id and t.deleted_at is null
+           where o.org_id = ${orgId}::uuid and o.program_id = ${programId}::uuid and o.deleted_at is null
+             and o.work_date >= ${range.from}::date and o.work_date < ${range.before}::date
+          union all
+          select l.charge_date, 0, l.cents from pm.program_ledger l
+           where l.org_id = ${orgId}::uuid and l.program_id = ${programId}::uuid and l.deleted_at is null
+             and l.kind in ('per_order', 'per_hour') and l.charge_date >= ${range.from}::date and l.charge_date < ${range.before}::date
+        ) d group by 1 order by 1`,
+  );
+  return rows.map((row) => ({ date: row.date, units: row.units, cents: textOf(row.cents) }));
+}

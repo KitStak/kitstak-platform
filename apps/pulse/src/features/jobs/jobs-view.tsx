@@ -101,6 +101,7 @@ import { DEFAULT_VIEW, GROUP_OPTIONS, type GroupKey, type JobsViewConfig } from 
 import { JobsViewsBar } from './jobs-views-bar';
 import { DeleteJobDialog } from './delete-job-dialog';
 import { QuickAddJob } from './quick-add';
+import { trackedProgramsLine } from './program-job';
 import { STATUS_MOVES, statusMoveLabel, useJobActions } from './use-job-actions';
 
 const EMPTY: Readonly<
@@ -172,6 +173,29 @@ export interface JobsViewProps {
   readonly sites: readonly SiteDTO[];
   readonly today: string;
   readonly initialViewId?: string | null;
+  /** Programs tracked under Programs. Their jobs are not in this list (PULSE_PROGRAMS_SPEC 5.4). */
+  readonly trackedPrograms?: number;
+}
+
+/** "3 programs are tracked under Programs." under the list, with a link to Programs. */
+function TrackedProgramsNote({ count }: { readonly count: number }) {
+  const line = trackedProgramsLine(count);
+  if (!line) return null;
+  const [before] = line.split('Programs.');
+  return (
+    <p className="text-xs text-fg-muted" data-testid="jobs-programs-note">
+      <Repeat aria-hidden className="mr-1 inline size-3.5 align-[-2px]" />
+      {before}
+      <Link
+        href={routes.programs()}
+        className="rounded-sm font-medium text-fg-secondary underline-offset-2 hover:text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        data-testid="jobs-programs-link"
+      >
+        Programs
+      </Link>
+      .
+    </p>
+  );
 }
 
 export function JobsView({
@@ -184,6 +208,7 @@ export function JobsView({
   sites,
   today,
   initialViewId,
+  trackedPrograms = 0,
 }: JobsViewProps) {
   const shell = useShell();
   const router = useRouter();
@@ -235,7 +260,7 @@ export function JobsView({
   }, [view.risk, view.q]);
 
   const jobsQuery = useJobs(
-    { tab, includeArchived: showArchived || undefined },
+    { tab, includeArchived: showArchived || undefined, programJobs: 'exclude' },
     { initialData: !showArchived && initialJobs ? [...initialJobs] : undefined },
   );
   const trendQuery = useProfit('job', { from: shiftDate(today, -83), to: today, trend: true });
@@ -482,6 +507,7 @@ export function JobsView({
             }
           />
         </Panel>
+        <TrackedProgramsNote count={trackedPrograms} />
       </div>
     );
   }
@@ -1131,6 +1157,7 @@ export function JobsView({
           : `${sorted.length} of ${all.length} jobs`}
         {trendQuery.isError ? '. Trends could not load.' : ''}
       </p>
+      <TrackedProgramsNote count={trackedPrograms} />
       <DeleteJobDialog actions={actions} />
     </div>
   );

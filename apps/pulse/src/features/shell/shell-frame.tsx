@@ -1,7 +1,7 @@
 import 'server-only';
 import { AppShell } from './app-shell';
 import type { ShellContextValue } from './shell-context';
-import { getBadges, pulseAccessFor, toDomainContext } from '@/server/domain';
+import { getBadges, getProgramsAvailability, pulseAccessFor, toDomainContext } from '@/server/domain';
 import { orgModuleFlags } from '@/server/entitlements';
 import { appUrls } from '@/server/env';
 import { integrationAvailability } from '@/server/integrations';
@@ -27,6 +27,8 @@ export async function loadShell(context: PulseContext) {
   const urls = appUrls();
   // Counts for the Jobs entry and the bell. Never blocks the shell: a failed read shows no badge.
   const counts = entitled && access.role !== 'none' ? await getBadges(ctx).catch(() => null) : null;
+  // Programs in the top bar only when the tracker can be shown here. Never blocks the shell either.
+  const programs = entitled && access.role !== 'none' ? await getProgramsAvailability(ctx).then((state) => state.available).catch(() => false) : false;
   const shellContext: ShellContextValue = {
     user: context.user,
     org: context.org,
@@ -38,6 +40,7 @@ export async function loadShell(context: PulseContext) {
     appUrls: urls,
     modules: { ...modules, pulse: entitled },
     integrations,
+    programs,
     // One separate warehouse per organization: any org may hold WMS; the entitlement flags
     // drive the switcher, so nothing is "not in plan".
     notInPlan: [],

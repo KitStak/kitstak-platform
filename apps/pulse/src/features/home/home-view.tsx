@@ -22,9 +22,11 @@ import { formatHours, formatMoney, formatMoneyWhole, formatNumber, formatPace, f
 import { useAlerts, useJobsNeedingAttention, useProfit, useSummary } from '@/lib/hooks/use-data';
 import { CONFIDENCE_LABELS } from '@/lib/profit/types';
 import { companyMarginBp, companySentence, companyWords } from './company-margin';
+import { HomeProgramsCard } from './home-programs-card';
 import { suggestBucket } from '@/lib/profit/trends';
 import { compareRange, rangeLabel, type RangePreset } from '@/lib/reports';
 import { routes, type ProfitView } from '@/lib/routes';
+import type { ProgramListDTO } from '@/lib/program-types';
 import type { JobListItemDTO, ProfitResponse, ProfitRowDTO, SummaryDTO } from '@/lib/types';
 import { parsePeriod, periodQuery } from '@/features/profit/period';
 import { PeriodPicker, type PeriodChange } from '@/features/profit/period-picker';
@@ -81,11 +83,13 @@ export interface HomeViewProps {
   /** The period right before, for the "vs before" chips. */
   readonly initialBefore?: ProfitResponse;
   readonly initialAttention?: JobListItemDTO[];
+  /** Tracked programs this month, for "Programs this month" (only where the program tracker is on). */
+  readonly initialPrograms?: ProgramListDTO;
   /** The period the server read, so its data is only used for that period. */
   readonly initialRange: { readonly from: string; readonly to: string };
 }
 
-export function HomeView({ today, weekStart, targetMarginBp, initialSummary, initialTrend, initialBefore, initialAttention, initialRange }: HomeViewProps) {
+export function HomeView({ today, weekStart, targetMarginBp, initialSummary, initialTrend, initialBefore, initialAttention, initialPrograms, initialRange }: HomeViewProps) {
   const { seesMoney, can } = useShell();
   const { get } = useQueryState();
   const period = useMemo(() => parsePeriod(get, today, weekStart), [get, today, weekStart]);
@@ -349,6 +353,9 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
               </div>
             )}
           </DashSection>
+
+          {/* Programs this month: program jobs are not in Jobs that need you, so they show here. */}
+          <HomeProgramsCard initial={initialPrograms} />
 
           {/* Open alerts */}
           <DashSection

@@ -6,7 +6,7 @@
  */
 import 'server-only';
 import { sql } from 'drizzle-orm';
-import { loadProgramMonthInputs } from '@kitstak/db/programs';
+import { loadProgramBuilds, loadProgramMonthInputs, loadTrailingDays } from '@kitstak/db/programs';
 import { addDays, eachDay, firstDayOfMonth, isPlannableDay, lastDayOfMonth, monthOf } from '@kitstak/programs-engine/calendar';
 import { forecastMonth, programHealth, type ForecastResult } from '@kitstak/programs-engine/forecast';
 import { monthCharges, type MonthResult } from '@kitstak/programs-engine/month';
@@ -62,22 +62,8 @@ export async function programMonthStats(
                    where o.program_id = ${program.id}::uuid and o.deleted_at is null and o.work_date between ${from}::date and ${to}::date) as output,
                  (select coalesce(sum(cents), 0)::text from pm.program_ledger where program_id = ${program.id}::uuid and deleted_at is null and month = ${from}::date) as ledger`,
     ),
-    rows<{ date: string; units: string; cents: string }>(
-      executor,
-      sql`select d.date::text as date, coalesce(sum(d.units), 0)::text as units, coalesce(sum(d.cents), 0)::text as cents from (
-            select o.work_date as date, o.qty as units, o.revenue_cents as cents from pm.build_output o join pm.tasks t on t.id = o.build_id and t.deleted_at is null
-             where o.program_id = ${program.id}::uuid and o.deleted_at is null and o.work_date >= ${trailingFrom}::date and o.work_date < ${asOf}::date
-            union all
-            select l.charge_date, 0, l.cents from pm.program_ledger l
-             where l.program_id = ${program.id}::uuid and l.deleted_at is null and l.kind in ('per_order', 'per_hour') and l.charge_date >= ${trailingFrom}::date and l.charge_date < ${asOf}::date
-          ) d group by 1 order by 1`,
-    ),
-    rows<{ id: string; date: string; planned: string; built: string; variant_id: string | null; rate: string | null }>(
-      executor,
-      sql`select b.task_id::text as id, b.build_date::text as date, b.planned_qty::text as planned, b.built_qty::text as built, b.variant_id::text as variant_id, b.rate_override::text as rate
-            from pm.builds b join pm.tasks t on t.id = b.task_id and t.deleted_at is null join pm.statuses s on s.id = t.status_id
-           where b.program_id = ${program.id}::uuid and b.build_date between ${from}::date and ${to}::date and s.category <> 'cancelled'`,
-    ),
+    loadTrailingDays(shared(executor), ctx.orgId, program.id, { from: trailingFrom, before: asOf }),
+    loadProgramBuilds(shared(executor), ctx.orgId, program.id, { from, to }).then((builds) => builds.map((build) => ({ id: build.id, date: build.date, planned: build.planned, built: build.built, variant_id: build.variantId, rate: build.rate }))),
     rows<{ id: string; kind: string; charge_on: string; amount_cents: string; label: string; variant_id: string | null; counts: boolean }>(
       executor,
       sql`select id::text as id, kind, charge_on::text as charge_on, amount_cents::text as amount_cents, label, variant_id::text as variant_id, counts_toward_minimum as counts

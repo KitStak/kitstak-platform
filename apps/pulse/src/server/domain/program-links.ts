@@ -2,8 +2,9 @@
  * Linking a KitStak program to a job from Pulse (docs/programs/SPEC.md 6.1, "Link a program").
  * The job is checked with the engine's `canLinkJob` (per unit, ongoing, no WMS work order, no
  * typed units in an open month, no other program), then the `bills_to` edge is written into
- * `core.record_links` through `@kitstak/db/record-links` and mirrored into `pulse.job_links`,
- * in one transaction as `pulse_app` (0015 grants it the table for its own org only).
+ * `core.record_links` through `@kitstak/db/record-links`, mirrored into `pulse.job_links` and
+ * `jobs.program_job` is set, in one transaction as `pulse_app` (0015 grants it the table for its
+ * own org only).
  *
  * Nothing is sent to Projects: Projects reads the edge itself and moves the program's open days
  * to the job on its next change or sweep, and the next Pulse sync copies them in.
@@ -21,6 +22,7 @@ import { inTx, isUuid, rows, type DomainContext } from './_shared';
 import { requirePulse } from './access';
 import { logActivity } from './activity';
 import { getJob, getJobRow } from './jobs';
+import { recomputeJobs } from './job-stats';
 import { closedMonths, finishWrite, newTouched, restampProduction, touchDay, touchJob } from './recalc';
 
 interface LinkFacts {
@@ -131,7 +133,11 @@ async function moveTypedUnits(tx: Executor, ctx: DomainContext, jobId: string, p
 export const linkProgramToJob = scoped(async function linkProgramToJob(ctx: DomainContext, jobRef: string, programId: string, options: { moveTypedUnits?: boolean } = {}): Promise<JobDetailDTO> {
   await requirePulse(ctx, 'job:manage');
   const job0 = await getJobRow(ctx, jobRef);
-  await inTx((tx) => attachProgramInTx(tx, ctx, job0.id, programId, options)).catch(mapLinkError);
+  await inTx(async (tx) => {
+    await attachProgramInTx(tx, ctx, job0.id, programId, options);
+    // The plan and the rules of a program job change with the flag (5.2).
+    await recomputeJobs(tx, ctx, [job0.id]);
+  }).catch(mapLinkError);
   return getJob(ctx, job0.id);
 });
 
@@ -188,6 +194,8 @@ export const attachProgramInTx = scoped(async function attachProgramInTx(tx: Exe
         ON CONFLICT (job_id, target_type, target_id) DO UPDATE SET cached_title = EXCLUDED.cached_title, cached_status = EXCLUDED.cached_status,
           cached_url = EXCLUDED.cached_url, cached_at = now(), meta = EXCLUDED.meta, updated_at = now()`,
   );
+  // The job now holds the program (PULSE_PROGRAMS_SPEC 2.2): flag it with the mirror, in the same transaction.
+  await tx.execute(sql`UPDATE pulse.jobs SET program_job = true, updated_at = now() WHERE org_id = ${ctx.orgId} AND id = ${job.id} AND NOT program_job`);
   await logActivity(tx, ctx, { verb: 'link.added', entityType: 'job', entityId: job.id, jobId: job.id, clientId: job.clientId, after: { targetType: 'pm_program', targetId: programId, key: program.key }, meta: { via: 'link_program' } });
 }, 1);
 

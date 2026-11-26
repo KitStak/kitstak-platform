@@ -1,5 +1,7 @@
 /**
- * Record search for the command palette and `/search`: jobs, clients, job types and extra services.
+ * Record search for the command palette and `/search`: tracked programs, jobs, clients, job types
+ * and extra services. A program key or name finds the program first, then the job that holds it
+ * (PULSE_PROGRAMS_SPEC 5.4); that job opens as a job (`?view=job`), not its program.
  * No extension needed (SPEC 5.2): every typed word must appear (case blind) in the record's text,
  * scoped to the org, with a small LIMIT per kind. Hits never carry money. Client, job type and extra
  * service pages need money and the Profit pages: without them a client opens its job list instead,
@@ -9,6 +11,7 @@ import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { scoped } from '@/server/db/scope';
+import { programsReady } from '@/server/integrations/programs';
 import { JOB_STATUS_LABELS, type JobStatusValue } from '@/lib/constants';
 import { navFor } from '@/lib/nav';
 import { routes } from '@/lib/routes';
@@ -24,6 +27,7 @@ const MAX_PER_KIND = 25;
 const SCORE = { exact: 100, number: 95, prefix: 80, word: 60, contains: 40 } as const;
 /** Ties go to the kind people look for most. */
 const KIND_ORDER: Readonly<Record<SearchHitDTO['type'], number>> = {
+  program: -1,
   job: 0,
   client: 1,
   jobType: 2,
@@ -82,13 +86,20 @@ export const searchAll = scoped(async function searchAll(ctx: DomainContext, que
   const seesCatalog = access.seesMoney && navFor(access.role).some((entry) => entry.id === 'profit');
   const numberPrefix = `${likeEscape(phrase)}%`;
 
-  const jobHaystack = sql`lower(concat_ws(' ', j.number, j.name, c.name, c.code, j.kit_name, j.kit_sku, j.po_number, jt.name))`;
-  const jobsQuery = rows<{ id: string; number: string; name: string; client: string; status: string }>(
+  // Programs show only where the tracker is on; otherwise a program job is a normal job (spec 7.5).
+  const programs = await programsReady(ctx);
+  // The program a job holds (its `pm_program` mirror), so its key and name find the job too.
+  const heldProgram = sql`LEFT JOIN LATERAL (
+          SELECT pl.target_id AS program_id, pl.meta ->> 'key' AS key, pl.meta ->> 'name' AS name FROM pulse.job_links pl
+           WHERE pl.job_id = j.id AND pl.target_type = 'pm_program' ORDER BY pl.created_at LIMIT 1) pp ON ${programs ? sql`true` : sql`false`}`;
+  const jobHaystack = sql`lower(concat_ws(' ', j.number, j.name, c.name, c.code, j.kit_name, j.kit_sku, j.po_number, jt.name, pp.key, pp.name))`;
+  const jobsQuery = rows<{ id: string; number: string; name: string; client: string; status: string; program_id: string | null; program_key: string | null }>(
     db,
-    sql`SELECT j.id, j.number, j.name, c.name AS client, j.status
+    sql`SELECT j.id, j.number, j.name, c.name AS client, j.status, pp.program_id, pp.key AS program_key
           FROM pulse.jobs j
           JOIN pulse.clients c ON c.id = j.client_id
           LEFT JOIN pulse.job_types jt ON jt.id = j.job_type_id
+          ${heldProgram}
          WHERE j.org_id = ${ctx.orgId} AND j.deleted_at IS NULL AND (${allWords(jobHaystack, words)})
          ORDER BY (lower(j.number) LIKE ${numberPrefix}) DESC, (j.status IN ('active', 'on_hold')) DESC, j.created_at DESC
          LIMIT ${cap}`,
@@ -119,30 +130,61 @@ export const searchAll = scoped(async function searchAll(ctx: DomainContext, que
              ORDER BY s.active DESC, lower(s.name) LIMIT ${cap}`,
       )
     : Promise.resolve([]);
-  const [jobs, clients, types, services] = await Promise.all([
+  const programsQuery = programs
+    ? rows<{ id: string; key: string; name: string | null; client: string }>(
+        db,
+        sql`SELECT l.target_id AS id, l.meta ->> 'key' AS key, l.meta ->> 'name' AS name, c.name AS client
+              FROM pulse.job_links l
+              JOIN pulse.jobs j ON j.id = l.job_id AND j.deleted_at IS NULL
+              JOIN pulse.clients c ON c.id = j.client_id
+             WHERE l.org_id = ${ctx.orgId} AND l.target_type = 'pm_program' AND l.meta ->> 'key' IS NOT NULL
+               AND (${allWords(sql`lower(concat_ws(' ', l.meta ->> 'key', l.meta ->> 'name'))`, words)})
+             ORDER BY lower(l.meta ->> 'key') LIMIT ${cap}`,
+      )
+    : Promise.resolve([]);
+  const [jobs, clients, types, services, found] = await Promise.all([
     jobsQuery,
     clientsQuery,
     typesQuery,
     servicesQuery,
+    programsQuery,
   ]);
 
-  const ranked: Ranked[] = [
-    ...jobs.map((job, index): Ranked => ({
-      hit: {
-        type: 'job',
-        id: job.id,
-        title: `${job.number} ${job.name}`,
-        subtitle: `${job.client}, ${statusWord(job.status)}`,
-        href: routes.job(job.number),
-      },
-      // A job named after its client should not beat the client when the client's name is what was typed.
-      score: job.number.toLowerCase().startsWith(phrase)
-        ? SCORE.number
-        : job.client.toLowerCase().startsWith(phrase)
-          ? SCORE.contains
+  const jobRanks: Ranked[] = jobs.map((job, index): Ranked => ({
+    hit: {
+      type: 'job',
+      id: job.id,
+      title: `${job.number} ${job.name}`,
+      // A program job opens as a job here: its program has a hit of its own.
+      subtitle: job.program_key ? `${job.client}, ${statusWord(job.status)}, ${job.program_key} program job` : `${job.client}, ${statusWord(job.status)}`,
+      href: job.program_key ? routes.programJob(job.number) : routes.job(job.number),
+    },
+    // A job named after its client should not beat the client when the client's name is what was typed.
+    score: job.number.toLowerCase().startsWith(phrase)
+      ? SCORE.number
+      : job.client.toLowerCase().startsWith(phrase)
+        ? SCORE.contains
+        : job.program_key
+          ? Math.max(score(job.name, phrase), score(job.program_key, phrase) - 1)
           : score(job.name, phrase),
+    order: index,
+  }));
+  const programRanks: Ranked[] = found.map((program, index): Ranked => {
+    const name = program.name ?? program.key;
+    const own = Math.max(program.key.toLowerCase() === phrase ? SCORE.exact : score(program.key, phrase), score(name, phrase));
+    // "GLOVE" finds the program first, then the job that holds it.
+    const job = jobs.findIndex((row) => row.program_id === program.id);
+    const jobScore = job >= 0 ? (jobRanks[job]?.score ?? 0) : 0;
+    return {
+      hit: { type: 'program', id: program.id, title: `${program.key} · ${name}`, subtitle: `Program, ${program.client}`, href: routes.program(program.key) },
+      score: Math.max(own, jobScore),
       order: index,
-    })),
+    };
+  });
+
+  const ranked: Ranked[] = [
+    ...programRanks,
+    ...jobRanks,
     ...clients.map((client, index): Ranked => ({
       hit: {
         type: 'client',

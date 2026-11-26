@@ -8,8 +8,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   loadBuildHoursByDay,
   loadPrepTimeByDay,
+  loadProgramBuilds,
   loadProgramFacts,
   loadProgramMonthInputs,
+  loadTrailingDays,
   programsAvailable,
   readBuildOutput,
   readProgramMonth,
@@ -202,6 +204,38 @@ describe.skipIf(!ready)('loadProgramMonthInputs (GLOVE fixture)', () => {
     ]);
     const folded = await loadPrepTimeByDay(org.db, org.orgId, { programId: glove.programId, timezone: 'America/Chicago', from: '2026-11-01', to: '2026-11-30', perTaskIds: [] });
     expect(folded).toEqual([{ taskId: null, workDate: '2026-11-23', minutes: 51, people: 2 }]);
+  });
+
+  it('planned builds and recent days: live, not cancelled, in range, with per batch and per hour ledger rows', async () => {
+    const ids = await org.query<{ task_id: string }>(
+      `select b.task_id from pm.builds b join pm.tasks t on t.id = b.task_id
+        where b.program_id = $1 and b.build_date = '2026-11-20' order by b.task_id limit 4`,
+      [glove.programId],
+    );
+    const [, cancelled, , deleted] = ids.map((row) => row.task_id);
+    const builds = await loadProgramBuilds(org.db, org.orgId, glove.programId, { from: '2026-11-01', to: '2026-11-30' });
+    // 17 work days of 8 builds, less the cancelled one and the deleted one from the case above.
+    expect(builds).toHaveLength(17 * 8 - 2);
+    expect(builds.some((build) => build.id === cancelled || build.id === deleted)).toBe(false);
+    expect(builds[0]).toMatchObject({ date: '2026-11-02', planned: '100.000', built: '100.000', rate: null });
+    expect(builds.every((build) => build.date >= '2026-11-01' && build.date <= '2026-11-30')).toBe(true);
+    expect(await loadProgramBuilds(org.db, org.orgId, glove.programId, { from: '2026-12-01', to: '2026-12-31' })).toEqual([]);
+
+    await org.query(
+      `insert into pm.program_ledger (org_id, program_id, ref, kind, charge_date, month, cents, quantity, unit_price, label, posting)
+       values ($1, $2, $3, 'per_hour', '2026-11-20', '2026-11-01', 9000, 2, 45, 'Hourly work', 'program')`,
+      [org.orgId, glove.programId, `pmf:${glove.programId}:hours:2026-11-20`],
+    );
+    const days = await loadTrailingDays(org.db, org.orgId, glove.programId, { from: '2026-11-18', before: '2026-11-21' });
+    // The deleted build's output is left out; the cancelled build's output still counts; the monthly fee does not.
+    const [{ cents: day20 }] = await org.query<{ cents: string }>(
+      `select sum(o.revenue_cents)::text as cents from pm.build_output o join pm.tasks t on t.id = o.build_id and t.deleted_at is null
+        where o.program_id = $1 and o.deleted_at is null and o.work_date = '2026-11-20'`,
+      [glove.programId],
+    ) as [{ cents: string }];
+    expect(days.map((day) => day.date)).toEqual(['2026-11-18', '2026-11-19', '2026-11-20']);
+    expect(days[2]).toEqual({ date: '2026-11-20', units: '700.000', cents: String(BigInt(day20) + BigInt(9000)) });
+    expect(days[0]?.units).toBe('800.000');
   });
 
   it('returns empty inputs for an unknown program or a bad month', async () => {

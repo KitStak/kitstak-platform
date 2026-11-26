@@ -1085,12 +1085,19 @@ export interface JobListFilters {
   readonly includeDeleted?: boolean;
   /** Only jobs a KitStak program or its builds feed. */
   readonly fedByProgram?: boolean;
+  /**
+   * `exclude` leaves out program jobs (`jobs.program_job`), which live under Programs
+   * (PULSE_PROGRAMS_SPEC 5.4). Only while programs can be shown; otherwise they list as normal
+   * jobs. The default `include` keeps them, so pickers that log hours still find them.
+   */
+  readonly programJobs?: 'include' | 'exclude';
   readonly limit?: number;
 }
 
 /** One search hit for the command palette and `/search`. Never carries money. */
 export interface SearchHitDTO {
-  readonly type: 'job' | 'client' | 'jobType' | 'service';
+  /** `program`: a tracked KitStak program, linking to its program page. */
+  readonly type: 'program' | 'job' | 'client' | 'jobType' | 'service';
   readonly id: string;
   readonly title: string;
   readonly subtitle: string | null;

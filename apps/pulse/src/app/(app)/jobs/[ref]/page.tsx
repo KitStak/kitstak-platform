@@ -8,6 +8,7 @@ export async function generateMetadata({ params }: { readonly params: Params }):
   return { title: jobPageTitle(decodeURIComponent((await params).ref), 'overview') };
 }
 
-export default function Page({ params }: { readonly params: Params }) {
-  return <JobPage params={params} tab="overview" />;
+export default function Page({ params, searchParams }: { readonly params: Params; readonly searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  // `?view=job` keeps a program job here instead of going to its program (PULSE_PROGRAMS_SPEC 5.3).
+  return <JobPage params={params} tab="overview" searchParams={searchParams} />;
 }

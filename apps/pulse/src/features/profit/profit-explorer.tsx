@@ -450,7 +450,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
           {comparing && before.isError ? <p className="text-sm text-danger-text">We could not load the period to compare with. The change columns are blank.</p> : null}
           {data && mode === 'table' ? (
             <p className="text-xs text-fg-muted">
-              {by === 'program' ? 'Each program adds up the jobs it feeds. Open a job to see it by variant.' : `Click ${withArticle(VIEW_NOUN[by])} to go one level down. The total of each level matches the row you clicked.`} {seesMoney ? `Profit on this page is ${formatMoney(total?.profitCents ?? null)}.` : ''}
+              {by === 'program' ? 'Each program adds up the jobs it feeds. Open a program to see it by variant and by day.' : `Click ${withArticle(VIEW_NOUN[by])} to go one level down. The total of each level matches the row you clicked.`} {seesMoney ? `Profit on this page is ${formatMoney(total?.profitCents ?? null)}.` : ''}
             </p>
           ) : null}
         </>

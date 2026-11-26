@@ -1,7 +1,8 @@
 /**
  * The Pulse navigation, in one place. The sidebar, the mobile drawer, the command palette, the
  * shortcut sheet and the search page all read this list, so a page is added or renamed once.
- * Spec: docs/pulse/SPEC.md section 6. Seven items and one group ("More"), no more.
+ * Spec: docs/pulse/SPEC.md section 6. Eight items and one group ("More"), no more. Programs shows
+ * only where the program tracker is available (docs/programs/PULSE_PROGRAMS_SPEC.md 7.1).
  * Pure module: icons are mapped in src/features/shell/nav-icons.tsx.
  */
 import { canPulse, type PulseAction, type PulseRole } from './permissions';
@@ -10,6 +11,7 @@ import { routes } from './routes';
 export type NavId =
   | 'home'
   | 'jobs'
+  | 'programs'
   | 'log'
   | 'profit'
   | 'labor'
@@ -41,6 +43,13 @@ export interface NavEntry {
   readonly money?: boolean;
   /** Which live count shows as a badge on this entry. */
   readonly badge?: 'jobsAtRisk';
+  /** Shown only when this part of Pulse is on for the org: `programs` needs Projects and its program tables. */
+  readonly requires?: 'programs';
+}
+
+/** Parts of Pulse that depend on the org (`NavEntry.requires`). Left out, they are off. */
+export interface NavFeatures {
+  readonly programs?: boolean;
 }
 
 export const NAV: readonly NavEntry[] = [
@@ -65,6 +74,17 @@ export const NAV: readonly NavEntry[] = [
     keywords: ['open jobs', 'at risk', 'losing money', 'work orders', 'quotes'],
     chord: 'J',
     badge: 'jobsAtRisk',
+  },
+  {
+    id: 'programs',
+    group: 'main',
+    label: 'Programs',
+    description: 'Recurring work under one price card, by month and by variant.',
+    href: routes.programs(),
+    prefixes: ['/programs'],
+    keywords: ['recurring', 'price card', 'variants', 'monthly', 'kits', 'forecast'],
+    chord: 'R',
+    requires: 'programs',
   },
   {
     id: 'log',
@@ -116,7 +136,7 @@ export const NAV: readonly NavEntry[] = [
     href: routes.reports(),
     prefixes: ['/reports'],
     keywords: ['print', 'csv', 'schedule', 'month close', 'ready to bill'],
-    chord: 'R',
+    chord: 'E',
     hiddenFor: ['supervisor'],
   },
   {
@@ -179,10 +199,13 @@ export function navMatches(entry: NavEntry, pathname: string): boolean {
   return entry.prefixes.some((prefix) => (prefix === '/' ? pathname === '/' : pathname === prefix || pathname.startsWith(`${prefix}/`)));
 }
 
-/** The entries a role may see, in order. People with no role see nothing; `seesMoney` false drops the money pages. */
-export function navFor(role: PulseRole, seesMoney = true): readonly NavEntry[] {
+/**
+ * The entries a role may see, in order. People with no role see nothing; `seesMoney` false drops
+ * the money pages; an entry that `requires` a part of Pulse shows only when `features` turns it on.
+ */
+export function navFor(role: PulseRole, seesMoney = true, features: NavFeatures = {}): readonly NavEntry[] {
   if (role === 'none') return [];
-  return NAV.filter((entry) => !entry.hiddenFor?.includes(role) && (seesMoney || !entry.money));
+  return NAV.filter((entry) => !entry.hiddenFor?.includes(role) && (seesMoney || !entry.money) && (!entry.requires || features[entry.requires] === true));
 }
 
 /** Where a role lands after sign in: supervisors go straight to the log. */
@@ -191,9 +214,9 @@ export function landingPath(role: PulseRole): string {
 }
 
 /** Go to shortcuts (`g` then the letter) as a map of lowercase letter to path. */
-export function chordTargets(role: PulseRole, seesMoney = true): Readonly<Record<string, string>> {
+export function chordTargets(role: PulseRole, seesMoney = true, features: NavFeatures = {}): Readonly<Record<string, string>> {
   const out: Record<string, string> = {};
-  for (const entry of navFor(role, seesMoney)) {
+  for (const entry of navFor(role, seesMoney, features)) {
     if (entry.chord) out[entry.chord.toLowerCase()] = entry.href;
   }
   return out;
@@ -251,7 +274,7 @@ export const SUB_PAGES: readonly SubPage[] = [
 ];
 
 /** The sub pages a role may open. `seesMoney` drops the money only ones. */
-export function subPagesFor(role: PulseRole, seesMoney: boolean): readonly SubPage[] {
-  const parents = new Set(navFor(role, seesMoney).map((entry) => entry.id));
+export function subPagesFor(role: PulseRole, seesMoney: boolean, features: NavFeatures = {}): readonly SubPage[] {
+  const parents = new Set(navFor(role, seesMoney, features).map((entry) => entry.id));
   return SUB_PAGES.filter((page) => parents.has(page.parent) && (!page.needs || canPulse(role, page.needs)) && (!page.money || seesMoney));
 }

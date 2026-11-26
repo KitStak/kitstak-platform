@@ -18,13 +18,23 @@ import { sql } from 'drizzle-orm';
 import {
   loadBuildHoursByDay,
   loadPrepTimeByDay,
+  loadProgramBuilds,
+  loadProgramFacts,
+  loadProgramMonthInputs,
+  loadPublishedVersions,
+  loadTrailingDays,
   programsAvailable,
   readBuildOutput,
+  safeTimezone,
   readProgramMonth,
   type Executor as ProgramsExecutor,
+  type ProgramBuildRow,
+  type ProgramFacts,
+  type ProgramMonthInputs,
   type ProgramMonthRead,
+  type ProgramTrailingDay,
 } from '@kitstak/db/programs';
-import type { IsoDate, IsoMonth, OutputRow } from '@kitstak/programs-engine/types';
+import type { CardVersion, IsoDate, IsoMonth, OutputRow } from '@kitstak/programs-engine/types';
 import { scoped } from '@/server/db/scope';
 import { rows, type DomainContext } from '@/server/domain/_shared';
 import { siblingDb, tableExists } from './detect';
@@ -479,4 +489,152 @@ export const cardVersionInForce = scoped(async function cardVersionInForce(ctx: 
     logSoftFail(ctx.orgId, 'programs.cardVersionInForce', error);
     return null;
   }
+});
+
+/* --------------------------------------------------------- tracker reads */
+
+export interface ProgramDirectoryRow {
+  readonly id: string;
+  readonly key: string;
+  readonly name: string;
+  readonly status: string;
+  /** Soft deleted in Projects. Pulse keeps its past months, read only. */
+  readonly deleted: boolean;
+  readonly timezone: string;
+  readonly unitSingular: string;
+  readonly unitPlural: string;
+  readonly startDate: IsoDate | null;
+  /** `pm.program_settings.monthly_target_cents`, whole cents as text. */
+  readonly monthlyTargetCents: string | null;
+  readonly coreCustomerId: string | null;
+  readonly crmItemId: string | null;
+  readonly customerName: string | null;
+  /** The Pulse job a `bills_to` edge of the program points at, if any. */
+  readonly billsToJobId: string | null;
+  /** Path in Projects (`/programs/GLOVE`). */
+  readonly path: string;
+}
+
+/**
+ * Every program of the org (not templates), live or soft deleted, with its settings, its
+ * customer and the job it bills to: the tracker's list and its key lookups. With `key` only the
+ * programs with that key (case insensitive) are read. Strict when `throwOnError`, else empty.
+ */
+export const programDirectory = scoped(async function programDirectory(ctx: DomainContext, options: { key?: string | null; ids?: readonly string[]; throwOnError?: boolean } = {}): Promise<ProgramDirectoryRow[]> {
+  if (!(await programsReady(ctx))) return [];
+  const key = options.key?.trim().slice(0, 12) ?? null;
+  const ids = options.ids ? options.ids.filter((id) => UUID.test(id)) : null;
+  if (ids && ids.length === 0) return [];
+  try {
+    const found = await rows<{ id: string; key: string; name: string; status: string; deleted: boolean; timezone: string | null; unit_singular: string | null; unit_plural: string | null; start_date: string | null; target: string | null; core_customer_id: string | null; crm_item_id: string | null; customer_name: string | null; job_id: string | null }>(
+      siblingDb,
+      sql`select p.id::text as id, p.key, p.name, p.status, (p.deleted_at is not null) as deleted, ps.timezone, ps.unit_singular, ps.unit_plural,
+                 p.start_date::text as start_date, ps.monthly_target_cents::text as target, p.crm_customer_id::text as core_customer_id,
+                 p.crm_item_id::text as crm_item_id, c.name as customer_name,
+                 (select l.to_id from core.record_links l where l.org_id = p.org_id and l.relation = 'bills_to' and l.from_type = 'pm_program'
+                     and l.from_id = p.id::text and l.to_type = 'pulse_job' order by l.created_at limit 1) as job_id
+            from pm.projects p
+            left join pm.program_settings ps on ps.program_id = p.id
+            left join core.customers c on c.id = p.crm_customer_id
+           where p.org_id = ${ctx.orgId}::uuid and p.kind = 'program' and p.is_template = false
+             ${key ? sql`and upper(p.key) = upper(${key})` : sql``}
+             ${ids ? sql`and p.id in (${uuidList(ids)})` : sql``}
+           order by (p.deleted_at is not null), p.deleted_at desc nulls first, p.name, p.key`,
+    );
+    return found.map((row) => ({
+      id: row.id,
+      key: row.key,
+      name: row.name,
+      status: row.status,
+      deleted: Boolean(row.deleted),
+      timezone: row.timezone || 'America/Chicago',
+      unitSingular: row.unit_singular || 'unit',
+      unitPlural: row.unit_plural || 'units',
+      startDate: row.start_date,
+      monthlyTargetCents: row.target,
+      coreCustomerId: row.core_customer_id,
+      crmItemId: row.crm_item_id,
+      customerName: row.customer_name,
+      billsToJobId: row.job_id && UUID.test(row.job_id) ? row.job_id : null,
+      path: `/programs/${encodeURIComponent(row.key)}`,
+    }));
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'programs.programDirectory', error);
+    if (options.throwOnError) throw error;
+    return [];
+  }
+});
+
+export interface ProgramPlanSource {
+  readonly facts: ProgramFacts;
+  readonly monthInputs: ProgramMonthInputs;
+  readonly builds: ProgramBuildRow[];
+  readonly trailing: ProgramTrailingDay[];
+}
+
+/**
+ * Everything `programMonthPlan` reads from Projects for one month, read as of `asOf` (today in
+ * the program zone, or the first day of a month not started yet), through the shared loader so
+ * it is what Projects reads. Null when the program is not there. Strict: a failed read throws.
+ */
+export const programPlanSource = scoped(async function programPlanSource(ctx: DomainContext, programId: string, month: IsoMonth, asOf: IsoDate): Promise<ProgramPlanSource | null> {
+  if (!UUID.test(programId)) return null;
+  const facts = await loadProgramFacts(shared, ctx.orgId, programId);
+  if (!facts) return null;
+  const from = `${month}-01`;
+  const to = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  const readAsOf = asOf < from ? from : asOf;
+  const trailingFrom = new Date(Date.parse(`${readAsOf}T00:00:00Z`) - 45 * 86_400_000).toISOString().slice(0, 10);
+  const [monthInputs, builds, trailing] = await Promise.all([
+    loadProgramMonthInputs(shared, ctx.orgId, programId, month),
+    loadProgramBuilds(shared, ctx.orgId, programId, { from, to }),
+    loadTrailingDays(shared, ctx.orgId, programId, { from: trailingFrom, before: readAsOf }),
+  ]);
+  return { facts, monthInputs, builds, trailing };
+});
+
+export interface ProgramPersonTime {
+  readonly userId: string;
+  readonly name: string;
+  /** `build`: time on builds of the program. `prep`: time on its other tasks. */
+  readonly kind: 'build' | 'prep';
+  readonly minutes: number;
+}
+
+/**
+ * Time logged in Projects on a program's tasks in a date range, per person and per kind, in the
+ * program zone (the same filters as the build and prep labor rows). Fail soft: empty.
+ */
+export const programTimeByPerson = scoped(async function programTimeByPerson(ctx: DomainContext, input: { programId: string; timezone: string; from: IsoDate; to: IsoDate }): Promise<ProgramPersonTime[]> {
+  if (!UUID.test(input.programId)) return [];
+  const zone = safeTimezone(input.timezone);
+  try {
+    const found = await rows<{ user_id: string; name: string | null; kind: string; minutes: string | number }>(
+      siblingDb,
+      sql`select te.user_id::text as user_id, u.name, case when t.kind = 'build' then 'build' else 'prep' end as kind, sum(te.duration_minutes)::bigint as minutes
+            from pm.time_entries te
+            join pm.tasks t on t.id = te.task_id and t.deleted_at is null
+            join pm.projects p on p.id = t.project_id and p.deleted_at is null
+            left join core."user" u on u.id = te.user_id
+           where te.org_id = ${ctx.orgId}::uuid and (t.project_id = ${input.programId}::uuid
+                 or t.id in (select b.task_id from pm.builds b where b.org_id = ${ctx.orgId}::uuid and b.program_id = ${input.programId}::uuid))
+             and te.deleted_at is null and te.ended_at is not null and te.duration_minutes > 0
+             and te.started_at >= (${input.from}::date::timestamp at time zone ${zone})
+             and te.started_at < ((${input.to}::date + 1)::timestamp at time zone ${zone})
+           group by 1, 2, 3
+           order by 4 desc, 2`,
+    );
+    return found.map((row) => ({ userId: row.user_id, name: row.name || 'Someone in Projects', kind: row.kind === 'build' ? 'build' : 'prep', minutes: Number(row.minutes) }));
+  } catch (error) {
+    logSoftFail(ctx.orgId, 'programs.programTimeByPerson', error);
+    return [];
+  }
+});
+
+/** The program's merged calendar and money settings plus its published card versions. Null when the program is not there. Strict. */
+export const programCardFacts = scoped(async function programCardFacts(ctx: DomainContext, programId: string): Promise<{ facts: ProgramFacts; versions: CardVersion[] } | null> {
+  if (!UUID.test(programId)) return null;
+  const facts = await loadProgramFacts(shared, ctx.orgId, programId);
+  if (!facts) return null;
+  return { facts, versions: await loadPublishedVersions(shared, ctx.orgId, programId) };
 });

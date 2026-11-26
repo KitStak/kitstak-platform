@@ -177,6 +177,20 @@ database applies the billing files first, then the link graph. Never edit an app
 Preview builds never migrate: every `db:migrate` script exits early when `VERCEL_ENV=preview`, because
 previews share the production database. Only production deploys apply migrations.
 
+### Pulse program tracker (0016)
+
+The Pulse Programs section (docs/programs/PULSE_PROGRAMS_SPEC.md) adds one Pulse migration,
+`0016_program_tracker`: the column `pulse.jobs.program_job` with a backfill from `pm_program` links.
+It moves no money. The production Pulse deploy applies it like any other Pulse migration.
+
+Check that money did not move:
+
+1. Before the deploy, run `docs/programs/pulse-tracker-money-check.sql` (read only) against
+   production and save the output.
+2. After the deploy and the first program sync, run it again. Every row must match. Rows can only
+   grow when a new build posts between the two runs, so run them close together.
+3. Check that `select number from pulse.jobs where program_job` lists exactly the program jobs.
+
 ### Demo seeds
 
 The seeds build on each other. Run them in this order, every time:

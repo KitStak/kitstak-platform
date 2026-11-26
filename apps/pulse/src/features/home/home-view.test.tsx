@@ -10,8 +10,8 @@ vi.mock('@/components/charts/charts.css', () => ({}));
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined, replace: () => undefined }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
 
-const shell = { seesMoney: true };
-vi.mock('@/features/shell/shell-context', () => ({ useShell: () => ({ seesMoney: shell.seesMoney, can: () => true, user: { id: 'u1' } }) }));
+const shell = { seesMoney: true, programs: false };
+vi.mock('@/features/shell/shell-context', () => ({ useShell: () => ({ seesMoney: shell.seesMoney, programs: shell.programs, can: () => true, user: { id: 'u1' } }) }));
 
 const row = (key: string, label: string, money: boolean, patch: Partial<ProfitRowDTO> = {}): ProfitRowDTO => {
   const m = <T,>(value: T): T | null => (money ? value : null);
@@ -39,6 +39,10 @@ vi.mock('@/lib/hooks/use-data', () => ({
   useExplain: () => ({ data: undefined, isError: false }),
 }));
 
+const programRow = (key: string, revenueCents: number, health: string, money: boolean) => ({ programId: key, key, name: `${key} program`, customerName: null, status: 'active', statusLabel: 'Running', deleted: false, unit: { singular: 'kit', plural: 'kits' }, jobId: null, jobNumber: null, units: '800.000', plannedUnits: '1000.000', hours: '10.00', unitsPerHour: '80.000', revenueCents: money ? revenueCents : null, costCents: money ? 1000 : null, profitCents: money ? revenueCents - 1000 : null, marginBp: money ? 6800 : null, targetMarginBp: money ? 3000 : null, forecastRevenueCents: null, forecastMarginBp: null, health, healthReason: null, lastActivityDate: null, path: `/programs/${key}`, projectsPath: `/programs/${key}` });
+let programList: unknown = undefined;
+vi.mock('@/features/programs/use-programs', () => ({ useProgramList: () => ok(programList) }));
+
 const { HomeView } = await import('./home-view');
 
 const render = (): string => renderToStaticMarkup(<HomeView today="2026-11-17" weekStart={1} targetMarginBp={3000} initialRange={{ from: '2026-11-01', to: '2026-11-17' }} />);
@@ -46,7 +50,25 @@ const render = (): string => renderToStaticMarkup(<HomeView today="2026-11-17" w
 describe('Home', () => {
   beforeEach(() => {
     shell.seesMoney = true;
+    shell.programs = false;
+    programList = undefined;
     data = fixtures(true);
+  });
+
+  it('shows Programs this month, top 5 by revenue, only where programs are tracked', () => {
+    expect(render()).not.toContain('Programs this month');
+    shell.programs = true;
+    const programs = ['A1', 'B2', 'C3', 'D4', 'E5', 'F6'].map((key, index) => programRow(key, (index + 1) * 100000, index === 5 ? 'at_risk' : 'on_track', true));
+    programList = { available: true, reason: null, month: '2026-11', programs, notTracked: [], totals: {}, canTrack: true, moneyHidden: false };
+    const html = render();
+    expect(html).toContain('Programs this month');
+    expect(html).toContain('All 6 programs');
+    expect(html).toContain('$6,000');
+    expect(html).not.toContain('A1 program');
+    expect(html).toContain('68%');
+    expect(html).toContain('of 30% target');
+    programList = { available: true, reason: null, month: '2026-11', programs: [], notTracked: [], totals: {}, canTrack: true, moneyHidden: false };
+    expect(render()).not.toContain('Programs this month');
   });
 
   it('gives a money reader the two line answer, the money tiles and the bridge', () => {

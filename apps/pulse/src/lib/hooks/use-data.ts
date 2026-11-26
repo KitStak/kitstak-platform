@@ -130,6 +130,8 @@ export interface JobListParams {
   risk?: readonly PulseStatus[];
   includeArchived?: boolean;
   includeDeleted?: boolean;
+  /** `exclude`: leave out program jobs, as the Jobs list does (they live under Programs). */
+  programJobs?: 'include' | 'exclude';
   limit?: number;
 }
 const jobQuery = (params: JobListParams): Query => ({
@@ -143,6 +145,7 @@ const jobQuery = (params: JobListParams): Query => ({
   risk: list(params.risk),
   archived: params.includeArchived,
   deleted: params.includeDeleted,
+  programJobs: params.programJobs,
   limit: params.limit,
 });
 export const useJobs = (params: JobListParams = {}, opts?: Opts<JobListItemDTO[]>) =>

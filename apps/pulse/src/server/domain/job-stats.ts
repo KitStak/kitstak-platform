@@ -20,15 +20,19 @@ import {
   paceOverall,
   planHasCosts,
   productivityBp,
+  programTargetMargin,
   projectJob,
   targetMarginBp,
   targetPace,
   type ActualTotals,
   type PaceRow,
   type PlanTotals,
+  type ProgramMonthPlan,
   type StandardRow,
 } from '@/lib/profit';
+import { programDirectory } from '@/server/integrations/programs';
 import { centsOut, rows, todayInZone, uuidArray, type DomainContext } from './_shared';
+import { loadProgramPlanSoft } from './program-plan';
 import { loadSettings, type SettingsRow } from './settings';
 import { scoped } from '@/server/db/scope';
 
@@ -95,6 +99,10 @@ interface JobRow {
   l30_entry_days: number;
   has_project: boolean;
   fed_by_program: boolean;
+  /** `jobs.program_job`: the job holds a KitStak program (PULSE_PROGRAMS_SPEC 5.2). */
+  program_job: boolean;
+  /** The program a `pm_program` link on the job points at. */
+  program_id: string | null;
 }
 
 interface ProdRow {
@@ -203,7 +211,9 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
            (SELECT count(DISTINCT p.work_date)::int FROM pulse.production_entries p
              WHERE p.job_id = j.id AND p.deleted_at IS NULL AND p.work_date > (now() AT TIME ZONE s.timezone)::date - 30) AS l30_entry_days,
            EXISTS (SELECT 1 FROM pulse.job_links jl WHERE jl.org_id = j.org_id AND jl.job_id = j.id AND jl.target_type = 'pm_project') AS has_project,
-           EXISTS (SELECT 1 FROM pulse.job_links jl WHERE jl.org_id = j.org_id AND jl.job_id = j.id AND jl.target_type IN ('pm_program', 'pm_build')) AS fed_by_program
+           EXISTS (SELECT 1 FROM pulse.job_links jl WHERE jl.org_id = j.org_id AND jl.job_id = j.id AND jl.target_type IN ('pm_program', 'pm_build')) AS fed_by_program,
+           j.program_job,
+           (SELECT jl.target_id FROM pulse.job_links jl WHERE jl.org_id = j.org_id AND jl.job_id = j.id AND jl.target_type = 'pm_program' ORDER BY jl.created_at LIMIT 1) AS program_id
       FROM pulse.jobs j
       JOIN pulse.job_types jt ON jt.id = j.job_type_id
       JOIN pulse.clients c ON c.id = j.client_id
@@ -245,6 +255,7 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
      WHERE j.org_id = ${ctx.orgId} AND j.id = ANY(${idList})`,
   );
   if (jobs.length === 0) return;
+  const programPlans = await programPlansFor(ctx, jobs);
   const production = await rows<ProdRow>(
     executor,
     sql`SELECT job_id, to_char(work_date, 'YYYY-MM-DD') AS work_date, units_good::text, units_scrap::text, units_rework::text, hours::text, overtime_hours::text,
@@ -312,7 +323,12 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
     const overall = paceOverall(days);
     const window = lastEvidenceWindow(days);
     const evidenceDays = evidenceDayCount(days);
-    const plan: PlanTotals | null = job.has_plan
+    // A program job is judged against the program's month plan from Projects, never a quote or a budget (5.2).
+    const programJob = job.program_job;
+    const programPlan = programJob ? (programPlans.get(job.id) ?? null) : null;
+    const plan: PlanTotals | null = programJob
+      ? programPlanTotals(programPlan)
+      : job.has_plan
       ? {
           units: job.plan_units,
           revenueCents: B(job.plan_revenue_cents),
@@ -325,6 +341,7 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
           sharedCents: B(job.plan_shared_cents),
         }
       : null;
+    const plannedUnits = programJob ? (programPlan?.plannedUnits ?? '0') : job.planned_units;
     const pace = targetPace({
       jobStandardUph: job.standard_uph,
       standards,
@@ -349,7 +366,7 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
       status,
       kind: job.kind as 'one_time' | 'ongoing',
       pricingModel: job.pricing_model as 'per_unit' | 'fixed' | 'hourly',
-      plannedUnits: job.planned_units,
+      plannedUnits,
       plan,
       actual,
       serviceRevenueCents: vasRevenue,
@@ -394,13 +411,16 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
     const hoursDays = job.fed_by_program ? days.filter((day) => day.workDate < today) : days;
     const missingDays = daysMissingHours(hoursDays) + hoursDays.filter((day) => !day.missingHours && Number(day.unitsGood) > 0 && Number(day.hours) === 0).length;
     const lastEntry = entries.length > 0 ? entries[entries.length - 1]!.work_date : null;
-    const targetMargin = targetMarginBp({ job: job.target_margin_bp, jobType: job.type_margin_bp, client: job.client_margin_bp, orgDefault: settings.defaultTargetMarginBp });
+    // A program is judged by its customer's target, then the org default; a target on the job is ignored (3.5).
+    const targetMargin = programJob
+      ? programTargetMargin({ clientTargetMarginBp: job.client_margin_bp, orgDefaultBp: settings.defaultTargetMarginBp }).targetMarginBp
+      : targetMarginBp({ job: job.target_margin_bp, jobType: job.type_margin_bp, client: job.client_margin_bp, orgDefault: settings.defaultTargetMarginBp });
     const risk = assessRisk({
       status,
       projection,
       actual,
       plan,
-      plannedUnits: job.planned_units,
+      plannedUnits,
       targetMarginBp: targetMargin,
       thresholds,
       evidenceDays,
@@ -416,7 +436,8 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
       needsRate: needsRateCount > 0,
       workDaysSinceLastEntry: workDaysQuiet(job, lastEntry, today, settings.workingDays),
       entryDays30: job.l30_entry_days,
-      hasMonthlyPlan: job.kind === 'ongoing' && job.has_plan,
+      hasMonthlyPlan: programJob ? plan !== null : job.kind === 'ongoing' && job.has_plan,
+      programJob,
     });
     const hasMode = projection.mode !== null;
     values.push({
@@ -468,7 +489,7 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
         daysMissingHours: missingDays,
         serviceNoPrice: job.vas_no_price,
         untaggedLines,
-        noPlan: !planHasCosts(plan),
+        noPlan: programJob ? false : !planHasCosts(plan),
         summary: risk.summary,
       },
       firstEntryDate: entries[0]?.work_date ?? null,
@@ -484,4 +505,30 @@ async function recomputeChunk(executor: Executor, ctx: DomainContext, ids: reado
     set[key] = sql.raw(`excluded."${column.name}"`);
   }
   await executor.insert(jobStats).values(values).onConflictDoUpdate({ target: jobStats.jobId, set });
+}
+
+/** A program's month plan as plan totals (5.2): units are the planned units, revenue is the forecast, and there is no labor or cost plan. */
+function programPlanTotals(plan: ProgramMonthPlan | null): PlanTotals | null {
+  if (!plan) return null;
+  return { units: plan.plannedUnits, revenueCents: plan.forecastCents, laborHours: null, laborCents: null, setupHours: null, setupCents: null, materialCents: null, otherCents: null, sharedCents: null };
+}
+
+/**
+ * This month's plan of every program job in the batch, read from Projects once per job per
+ * recompute (one directory read for the batch, then one plan per program). Fail soft: a job whose
+ * plan cannot be read gets none, and its quote or budget is still never used.
+ */
+async function programPlansFor(ctx: DomainContext, jobs: readonly JobRow[]): Promise<Map<string, ProgramMonthPlan>> {
+  const out = new Map<string, ProgramMonthPlan>();
+  const programJobs = jobs.filter((job) => job.program_job && job.program_id);
+  if (programJobs.length === 0) return out;
+  const directory = await programDirectory(ctx, { ids: programJobs.map((job) => job.program_id as string) });
+  const byId = new Map(directory.map((program) => [program.id, program]));
+  for (const job of programJobs) {
+    const program = byId.get(job.program_id as string);
+    if (!program || program.deleted) continue;
+    const loaded = await loadProgramPlanSoft(ctx, program);
+    if (loaded) out.set(job.id, loaded.plan);
+  }
+  return out;
 }

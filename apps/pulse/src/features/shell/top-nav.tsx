@@ -1,6 +1,7 @@
 'use client';
 /**
- * Primary navigation in the top bar (lg and up): Home, Jobs, Log work, Profit, Labor, Alerts and
+ * Primary navigation in the top bar (lg and up): Home, Jobs, Programs (where the program tracker
+ * is on), Log work, Profit, Labor, Alerts and
  * Reports as links, then a More menu with Target pace, Calculator, Goals, Import and export and
  * Settings. The list comes from src/lib/nav.ts, filtered by the person's Pulse role.
  *
