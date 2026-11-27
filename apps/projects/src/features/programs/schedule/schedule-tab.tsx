@@ -201,7 +201,7 @@ function ScheduleCard({ schedule, color, count }: { readonly schedule: ScheduleD
         <div className="min-w-0 flex-1">
           <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold text-fg">
             {schedule.name}
-            <Badge tone={STATUS_TONE[schedule.status]} size="sm">
+            <Badge tone={STATUS_TONE[schedule.status]}>
               {STATUS_TEXT[schedule.status]}
             </Badge>
           </h3>

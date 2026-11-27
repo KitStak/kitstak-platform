@@ -325,7 +325,7 @@ function Totals({ items }: { readonly items: readonly CaptureItem[] }) {
         <ProgressBar
           value={t.scanned}
           max={t.expected}
-          tone={t.scanned >= t.expected ? 'success' : 'primary'}
+          tone={t.scanned >= t.expected ? 'success' : 'data'}
           className="w-32"
         />
       ) : null}

@@ -74,7 +74,7 @@ export function DashboardsList() {
     <div className="h-full overflow-y-auto" data-testid="dashboards-list">
       <div className="mx-auto flex max-w-[1440px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
         <header className="flex flex-wrap items-center gap-4">
-          <span aria-hidden className="flex size-10 items-center justify-center rounded-lg bg-primary-subtle text-primary-text [&_svg]:size-5">
+          <span aria-hidden className="flex size-10 items-center justify-center rounded-lg border border-border-subtle bg-panel text-icon [&_svg]:size-5">
             <LayoutDashboard />
           </span>
           <div className="min-w-0 flex-1">

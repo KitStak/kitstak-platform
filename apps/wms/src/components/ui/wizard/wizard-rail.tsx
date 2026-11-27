@@ -44,7 +44,7 @@ export function WizardRail({
           value={percent}
           size={56}
           thickness={5}
-          tone={percent >= 100 ? 'success' : 'primary'}
+          tone={percent >= 100 ? 'success' : 'data'}
           label="Completion"
         />
         <div className="min-w-0">

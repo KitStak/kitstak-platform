@@ -3,24 +3,20 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ArrowLeft, FlaskConical } from 'lucide-react';
 import type { BillingMode } from '@kitstak/billing/plan-state';
+import { Pill } from '@kitstak/ui/dashboard';
 import { cn } from '@/components/ui';
 
 export function isTestMode(mode: BillingMode): boolean {
   return mode === 'stripe_test' || mode === 'test_gateway';
 }
 
-/** The small "Test mode" badge beside a billing title. The strip under the top bar carries the test id. */
+/** The small "Test mode" pill beside a billing title (the shared flat pill: no border, sentence case). The strip under the top bar carries the test id. */
 export function TestModeBadge({ mode, testId }: { readonly mode: BillingMode; readonly testId?: string }) {
   if (!isTestMode(mode)) return null;
   return (
-    <span
-      data-testid={testId}
-      title="No real money moves."
-      className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning-subtle px-2 py-0.5 text-2xs font-semibold tracking-[0.06em] text-warning-text uppercase"
-    >
-      <FlaskConical aria-hidden className="size-3" />
+    <Pill tone="caution" icon={<FlaskConical aria-hidden />} title="No real money moves." data-testid={testId}>
       Test mode
-    </span>
+    </Pill>
   );
 }
 

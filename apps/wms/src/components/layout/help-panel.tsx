@@ -256,7 +256,7 @@ function ArticleView({ id, onNavigate }: { readonly id: string; readonly onNavig
   const { article, category } = found;
   return (
     <article className="flex flex-col gap-3">
-      <Badge tone="neutral" size="sm" className="self-start">
+      <Badge tone="neutral" className="self-start">
         {category.title}
       </Badge>
       <p className="text-sm text-secondary">{article.summary}</p>
@@ -293,7 +293,7 @@ export function WhatsNewList({ limit }: { readonly limit?: number }) {
   return (
     <ol className="space-y-3">
       {WHATS_NEW.slice(0, limit).map((entry) => (
-        <li key={entry.title} className="border-l-2 border-primary pl-3">
+        <li key={entry.title} className="border-l-2 border-border-strong pl-3">
           <p className="flex items-center gap-1.5 text-2xs text-faint">
             <time>{entry.date}</time>
             <span aria-hidden>·</span>

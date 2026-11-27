@@ -12,10 +12,7 @@ import { useShellStore } from '@/features/shell/store';
 import { formatRelativeTime } from './format';
 
 /** Template center deep link (handled by WizardDeepLink in the app shell). */
-function templateCenterHref(orgSlug: string, templateId?: string): string {
-  const base = `${routes.home(orgSlug)}?wizard=templates`;
-  return templateId ? `${base}&template=${encodeURIComponent(templateId)}` : base;
-}
+const templateCenterHref = routes.templates;
 
 const INBOX_PREVIEW = 4;
 const TEMPLATE_LIMIT = 4;

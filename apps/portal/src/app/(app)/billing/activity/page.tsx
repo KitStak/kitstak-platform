@@ -49,12 +49,16 @@ function hrefFor(filter: ActivityFilter, before?: string): string {
   return `/billing/activity${query ? `?${query}` : ''}`;
 }
 
+/**
+ * Event icons sit in one neutral circle (docs/design/UI-CLEANUP.md: no tinted icon tiles). Only the
+ * glyph of a payment that worked or failed takes its status color.
+ */
 const TONE_CLASS: Readonly<Record<ActivityTone, string>> = {
-  success: 'border-success/25 bg-success-subtle text-success-text',
-  danger: 'border-danger/25 bg-danger-subtle text-danger-text',
-  warning: 'border-warning/25 bg-warning-subtle text-warning-text',
-  info: 'border-info/25 bg-info-subtle text-info-text',
-  neutral: 'border-border-default bg-sunken text-fg-secondary',
+  success: 'border-border-subtle bg-sunken text-success-text',
+  danger: 'border-border-subtle bg-sunken text-danger-text',
+  warning: 'border-border-subtle bg-sunken text-icon',
+  info: 'border-border-subtle bg-sunken text-icon',
+  neutral: 'border-border-subtle bg-sunken text-icon',
 };
 
 function iconFor(action: string): LucideIcon {

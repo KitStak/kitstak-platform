@@ -33,17 +33,12 @@ export const KIND_ICON: Record<NotificationKind, typeof Bell> = {
   program: Repeat,
 };
 
+/**
+ * Text color for a kind's glyph and word. Everything is neutral ink except overdue, the one kind
+ * that means something is late (docs/design/UI-CLEANUP.md: no crimson on data, no tinted circles).
+ */
 export const KIND_TONE: Partial<Record<NotificationKind, string>> = {
-  mention: 'text-primary-text',
   overdue: 'text-danger-text',
-  due_soon: 'text-warning-text',
-};
-
-const SYSTEM_BG: Partial<Record<NotificationKind, string>> = {
-  overdue: 'bg-danger-subtle text-danger-text',
-  due_soon: 'bg-warning-subtle text-warning-text',
-  automation: 'bg-info-subtle text-info-text',
-  integration: 'bg-info-subtle text-info-text',
 };
 
 /** Who (or what) the notification came from: the person with a kind badge, or a kind glyph for reminders. */
@@ -51,8 +46,8 @@ export function NotificationAvatar({ item, size = 'md' }: { readonly item: Notif
   const Icon = KIND_ICON[item.kind] ?? Bell;
   if (!item.actorId) {
     return (
-      <span className={cn('mt-0.5 flex shrink-0 items-center justify-center rounded-full', size === 'md' ? 'size-8' : 'size-6', SYSTEM_BG[item.kind] ?? 'bg-sunken text-icon')}>
-        <Icon aria-hidden className={size === 'md' ? 'size-4' : 'size-3.5'} />
+      <span className={cn('mt-0.5 flex shrink-0 items-center justify-center rounded-full bg-sunken', size === 'md' ? 'size-8' : 'size-6')}>
+        <Icon aria-hidden className={cn(size === 'md' ? 'size-4' : 'size-3.5', KIND_TONE[item.kind] ?? 'text-icon')} />
       </span>
     );
   }

@@ -56,8 +56,8 @@ const fromWarehouse = (row: VasEntryDTO): boolean => row.source === 'wms';
 /** Where a row came from, when it was not typed in: a link back to the warehouse record when there is one. */
 function SourceMark({ row }: { readonly row: VasEntryDTO }) {
   if (row.source === 'manual') return null;
-  if (row.source !== 'wms') return <Badge size="sm" tone="neutral">{row.source === 'csv' ? 'Imported' : 'Synced'}</Badge>;
-  if (!row.sourceUrl) return <Badge size="sm" tone="neutral">From the warehouse</Badge>;
+  if (row.source !== 'wms') return <Badge tone="neutral">{row.source === 'csv' ? 'Imported' : 'Synced'}</Badge>;
+  if (!row.sourceUrl) return <Badge tone="neutral">From the warehouse</Badge>;
   return <WarehouseSourceLink entry={row} testId={`service-source-${row.id}`} />;
 }
 
@@ -106,7 +106,7 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
             { id: 'unitPrice', header: 'Price of one', numeric: true, render: (row) =>
                 row.noPrice ? (
                   <span className="inline-flex items-center gap-1.5" data-testid={`service-no-price-${row.id}`}>
-                    <Badge size="sm" tone="warning">No price yet</Badge>
+                    <Badge tone="warning">No price yet</Badge>
                     {/* The cell itself is the edit button: say what a click does. */}
                     {canEdit && !row.locked && !row.moneyHidden ? <span className="text-xs font-medium text-fg-link underline underline-offset-2">Set the price</span> : null}
                   </span>
@@ -235,7 +235,7 @@ export function ServiceLedger({ jobId, clientId, serviceId, from, to, today, tit
               />
             </span>
           ) : null}
-          {noPrice > 0 ? <Badge tone="warning" size="sm">{noPrice} with no price</Badge> : null}
+          {noPrice > 0 ? <Badge tone="warning">{noPrice} with no price</Badge> : null}
         </span>
       }
       action={

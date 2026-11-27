@@ -413,11 +413,7 @@ export function PoImportPage({
         </Link>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-lg font-semibold text-foreground">Import purchase orders</h1>
-          {!def.configured ? (
-            <Badge tone="warning" size="sm">
-              Not configured
-            </Badge>
-          ) : null}
+          {!def.configured ? <Badge tone="warning">Not configured</Badge> : null}
         </div>
         <div role="tablist" aria-label="Import type" className="flex gap-1 border-b border-border">
           {defs.map((d) => (

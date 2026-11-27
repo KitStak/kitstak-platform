@@ -1,7 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { Badge, Chip, CountBadge, StatusPill } from './badge';
 import { LABEL_COLORS, colorForString, isLabelColor, labelColorStyle, toLabelColor } from './label-color';
 import { initialsFor } from './avatar';
 import { cn } from './cn';
@@ -192,5 +195,59 @@ describe('cn', () => {
     expect(cn('text-sm', 'text-fg')).toBe('text-sm text-fg');
     expect(cn('text-sm', 'text-base')).toBe('text-base');
     expect(cn('px-2', false, 'px-3')).toBe('px-3');
+  });
+});
+
+/**
+ * The pill recipe (docs/design/UI-CLEANUP.md, "Pills"): Badge draws the shared Pill or Tag, counts
+ * are the shared Count, and nothing a person sees as a state is crimson.
+ */
+describe('badge recipe', () => {
+  const html = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
+
+  it.each([
+    ['neutral', 'neutral'],
+    ['success', 'positive'],
+    ['warning', 'caution'],
+    ['danger', 'critical'],
+    ['info', 'info'],
+  ] as const)('draws tone %s as the shared %s Pill', (tone, pillTone) => {
+    const markup = html(createElement(Badge, { tone, children: 'Active' }));
+    expect(markup).toContain('class="ks-dash-pill"');
+    expect(markup).toContain(`data-tone="${pillTone}"`);
+  });
+
+  it('draws outline as the shared Tag, an identity with no marker', () => {
+    const markup = html(createElement(Badge, { tone: 'outline', icon: createElement('svg'), children: 'You' }));
+    expect(markup).toContain('class="ks-dash-tag"');
+    expect(markup).not.toContain('<svg');
+  });
+
+  it('carries at most one marker and no crimson, border or ring', () => {
+    const markup = html(createElement(Badge, { tone: 'info', icon: createElement('svg'), children: 'Recommended' }));
+    expect(markup.match(/ks-dash-pill-icon/g)).toHaveLength(1);
+    expect(markup).not.toContain('ks-dash-pill-dot');
+    expect(markup).not.toMatch(/primary|border|ring-/);
+  });
+
+  it('draws counts with the shared Count: neutral by default, critical on request, nothing for 0', () => {
+    expect(html(createElement(CountBadge, { count: 3 }))).toContain('data-tone="neutral"');
+    expect(html(createElement(CountBadge, { count: 3, tone: 'critical' }))).toContain('data-tone="critical"');
+    expect(html(createElement(CountBadge, { count: 240 }))).toContain('99+');
+    expect(html(createElement(CountBadge, { count: 0 }))).toBe('');
+    expect(html(createElement(CountBadge, { count: 7, ringClassName: 'ring-[var(--surface-panel)]' }))).not.toContain('primary');
+  });
+
+  it('keeps label pills at 20 px with one dot and no border', () => {
+    const markup = html(createElement(StatusPill, { label: 'Working on it', color: 'orange' }));
+    expect(markup).toContain('h-5');
+    expect(markup).not.toMatch(/h-\[22px\]|border/);
+    expect(markup.match(/rounded-full bg-\[var\(--lc-bg\)\]/g)).toHaveLength(1);
+  });
+
+  it('marks a selected chip without a crimson ring', () => {
+    const markup = html(createElement(Chip, { selected: true, onClick: () => undefined, children: 'Enterprise' }));
+    expect(markup).toContain('ring-border-strong');
+    expect(markup).not.toContain('ring-primary');
   });
 });

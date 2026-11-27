@@ -223,7 +223,7 @@ export function CostLedger({ scope, jobId, clientId, from, to, today, title, cla
         rowName={(row) => `the ${COST_CATEGORY_LABELS[row.category].toLowerCase()} cost of ${shortDate(row.costDate)}`}
         onCommit={onCommit}
         onDelete={(picked) => void actions.removeRows(picked)}
-        rowBadges={(row) => (row.source !== 'manual' ? <Badge size="sm" tone="neutral">{row.source === 'csv' ? 'Imported' : row.source === 'wms' ? 'Warehouse' : 'Synced'}</Badge> : null)}
+        rowBadges={(row) => (row.source !== 'manual' ? <Badge tone="neutral">{row.source === 'csv' ? 'Imported' : row.source === 'wms' ? 'Warehouse' : 'Synced'}</Badge> : null)}
       />
       <BulkAddDialog<SaveCostActionInput>
         open={bulk}

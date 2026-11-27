@@ -338,6 +338,10 @@ a.ks-dash-stat-link::after {
   background: var(--dash-data, var(--chart-5));
 }
 
+.ks-dash-meter[data-size='thick'] {
+  height: 8px;
+}
+
 .ks-dash-meter[data-tone='quiet'] .ks-dash-meter-fill {
   background: var(--text-muted);
 }
@@ -464,6 +468,17 @@ a.ks-dash-stat-link::after {
   color: var(--danger-text);
 }
 
+/* On an icon: solid so it reads as a badge on any bar. Neutral ink, or danger for broken things. */
+.ks-dash-count[data-placement='icon'] {
+  background: var(--text-secondary);
+  color: var(--text-inverse);
+}
+
+.ks-dash-count[data-placement='icon'][data-tone='critical'] {
+  background: var(--danger);
+  color: var(--text-inverse);
+}
+
 .ks-dash-legend {
   display: flex;
   flex-wrap: wrap;
@@ -483,9 +498,42 @@ a.ks-dash-stat-link::after {
 }
 
 .ks-dash-legend-dot {
+  box-sizing: border-box;
   width: 8px;
   height: 8px;
   border-radius: 2px;
+}
+
+.ks-dash-legend-dot[data-hidden] {
+  border: 1.5px solid;
+  background: transparent;
+}
+
+.ks-dash-legend-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: -2px -4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ks-dash-legend-toggle:hover {
+  color: var(--text-primary);
+}
+
+.ks-dash-legend-toggle[aria-pressed='false'] {
+  color: var(--text-muted);
+}
+
+.ks-dash-legend-toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 /* ---- Section ---------------------------------------------------------------------------- */
@@ -515,6 +563,9 @@ a.ks-dash-stat-link::after {
 }
 
 .ks-dash-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
   font-size: 14px;
   line-height: 20px;
@@ -551,6 +602,18 @@ a.ks-dash-stat-link::after {
 .ks-dash-section-action:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.ks-dash-section-title[data-help] {
+  cursor: help;
+}
+
+.ks-dash-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .ks-dash-arrow {

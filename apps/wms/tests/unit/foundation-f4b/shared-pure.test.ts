@@ -205,7 +205,7 @@ describe('tags, change log, timeline, printouts', () => {
         fromValue: '',
         toValue: 'Ready To Count',
       }),
-    ).toBe('Status is modified. None → Ready to Count');
+    ).toBe('Status is modified. None → Ready to count');
     expect(
       changeLogMessage(
         { ...base, message: 'Loading Started At is modified.  --> 2026-11-10T09:26:15.767Z' },

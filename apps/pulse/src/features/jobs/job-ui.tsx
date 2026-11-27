@@ -18,6 +18,7 @@ import {
   RotateCw,
   type LucideIcon,
 } from 'lucide-react';
+import { Pill, type PillTone } from '@kitstak/ui/dashboard';
 import { Button, Popover, PopoverContent, PopoverTrigger } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { MarginPill } from '@/components/charts/stats';
@@ -26,18 +27,15 @@ import { formatMoney, formatNumber } from '@/lib/format';
 import type { JobListItemDTO } from '@/lib/types';
 import { nextStepHref } from './job-math';
 
-const STATUS_STYLE: Readonly<Record<JobStatusValue, { icon: LucideIcon; className: string }>> = {
-  planned: { icon: Clock3, className: 'bg-[var(--label-blue-subtle)] text-[var(--label-blue-text)]' },
-  active: { icon: PlayCircle, className: 'bg-success-subtle text-success-text' },
-  on_hold: {
-    icon: CirclePause,
-    className: 'bg-[var(--label-yellow-subtle)] text-[var(--label-yellow-text)]',
-  },
-  completed: { icon: CircleCheck, className: 'bg-muted text-fg-secondary' },
-  cancelled: { icon: CircleSlash, className: 'bg-muted text-fg-muted' },
+const STATUS_STYLE: Readonly<Record<JobStatusValue, { icon: LucideIcon; tone: PillTone }>> = {
+  planned: { icon: Clock3, tone: 'info' },
+  active: { icon: PlayCircle, tone: 'positive' },
+  on_hold: { icon: CirclePause, tone: 'caution' },
+  completed: { icon: CircleCheck, tone: 'neutral' },
+  cancelled: { icon: CircleSlash, tone: 'neutral' },
 };
 
-/** Where the job is in its life: icon and word, never color alone. */
+/** Where the job is in its life: the shared Pill with an icon and a word, never color alone. */
 export function JobStatusBadge({
   status,
   className,
@@ -45,18 +43,11 @@ export function JobStatusBadge({
   readonly status: JobStatusValue;
   readonly className?: string;
 }) {
-  const { icon: Icon, className: tone } = STATUS_STYLE[status];
+  const { icon: Icon, tone } = STATUS_STYLE[status];
   return (
-    <span
-      className={cn(
-        'inline-flex h-5 items-center gap-1 rounded-sm px-2 text-xs font-medium whitespace-nowrap',
-        tone,
-        className,
-      )}
-    >
-      <Icon aria-hidden className="size-3 shrink-0" strokeWidth={2.25} />
+    <Pill tone={tone} icon={<Icon strokeWidth={2.25} />} className={className}>
       {JOB_STATUS_LABELS[status]}
-    </span>
+    </Pill>
   );
 }
 
@@ -121,7 +112,7 @@ export function RiskPill({
           {step?.nextStepLabel ? (
             <Link
               href={nextStepHref(step.nextStep, job)}
-              className="inline-flex items-center gap-1.5 self-start rounded-md text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              className="inline-flex items-center gap-1.5 self-start rounded-md text-sm font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
               {step.nextStepLabel}
               <ArrowRight aria-hidden className="size-3.5" />
@@ -237,7 +228,7 @@ export function UnitsProgress({
           aria-valuenow={Math.round(pct)}
           className="block h-1.5 w-full overflow-hidden rounded-full bg-muted"
         >
-          <span className="block h-full rounded-full bg-info" style={{ width: `${pct}%` }} />
+          <span className="block h-full rounded-full bg-[var(--dash-data,var(--pulse-series-1))]" style={{ width: `${pct}%` }} />
         </span>
       ) : null}
     </div>

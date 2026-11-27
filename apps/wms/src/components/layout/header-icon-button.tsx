@@ -1,10 +1,9 @@
 'use client';
 
 import * as React from 'react';
+import { Count } from '@kitstak/ui/dashboard';
 import { Tooltip } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-
-const MAX_BADGE = 99;
 
 export interface HeaderIconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   readonly label: string;
@@ -13,7 +12,7 @@ export interface HeaderIconButtonProps extends React.ButtonHTMLAttributes<HTMLBu
   readonly pulse?: boolean;
 }
 
-/** Round icon button in the indigo header, with a tooltip and optional count badge. */
+/** Round icon button in the header, with a tooltip and an optional neutral count. */
 export const HeaderIconButton = React.forwardRef<HTMLButtonElement, HeaderIconButtonProps>(
   ({ label, badge, pulse, className, children, ...props }, ref) => (
     <Tooltip content={label} side="bottom">
@@ -30,9 +29,10 @@ export const HeaderIconButton = React.forwardRef<HTMLButtonElement, HeaderIconBu
         {/* Named by content: sr-only label, then the visible badge, so the name contains the visible text. */}
         <span className="sr-only">{label}</span>
         {children}
+        {/* An unread count is neutral (UI-CLEANUP "Pills" rule 6): the shared Count, with a ring cut out of the icon. */}
         {badge ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-2xs font-bold leading-none text-white ring-2 ring-panel">
-            {badge > MAX_BADGE ? `${MAX_BADGE}+` : badge}
+          <span className="absolute -right-1 -top-1 flex rounded-full ring-2 ring-panel">
+            <Count value={badge} placement="icon" />
           </span>
         ) : null}
         {pulse && !badge ? (

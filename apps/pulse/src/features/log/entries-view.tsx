@@ -397,7 +397,7 @@ export function EntriesView({
             role="region"
             aria-label="Change the chosen entries"
             data-testid="bulk-bar"
-            className="flex flex-wrap items-center gap-2 border-b border-border-subtle bg-primary-subtle px-3 py-2"
+            className="flex flex-wrap items-center gap-2 border-b border-border-subtle bg-selected px-3 py-2"
           >
             <span className="text-sm font-medium text-fg">
               {chosen.length} chosen
@@ -683,7 +683,7 @@ export function EntriesView({
                         <TableCell numeric>{day.headcount ? formatNumber(day.headcount) : ''}</TableCell>
                         <TableCell numeric>
                           {!day.hoursConfirmed ? (
-                            <Badge tone="warning" size="sm">
+                            <Badge tone="warning">
                               Needs hours
                             </Badge>
                           ) : (
@@ -696,7 +696,7 @@ export function EntriesView({
                         {shell.seesMoney ? (
                           <TableCell numeric>
                             {day.needsRate ? (
-                              <Badge tone="warning" size="sm">
+                              <Badge tone="warning">
                                 No rate
                               </Badge>
                             ) : (

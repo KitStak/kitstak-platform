@@ -8,10 +8,10 @@
 import Link from 'next/link';
 import { useCallback, useMemo } from 'react';
 import { CircleCheck, ClipboardPen, PackagePlus, Rocket } from 'lucide-react';
-import { ActionList, ActionRow, DashboardFrame, DashSection, EmptyNote, Meter, StatRow } from '@kitstak/ui/dashboard';
+import { ActionList, ActionRow, DashboardFrame, DashSection, EmptyNote, Meter, StatRow, StatTile, type StatTileProps } from '@kitstak/ui/dashboard';
 import { BarChart, ComboChart } from '@/components/charts/cartesian';
 import { DonutChart, ProgressRing } from '@/components/charts/radial';
-import { KpiTile, MarginPill } from '@/components/charts/stats';
+import { DeltaPending, MarginPill, StatSparkline, StatTileLoading, statValue, toDelta, type DeltaBadgeProps } from '@/components/charts/stats';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { ExplainNumber } from '@/components/pulse/explain';
 import { ExplainStatic } from '@/components/pulse/explain';
@@ -260,19 +260,19 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
       {/* Headline numbers against the period before */}
       {seesMoney ? (
         <StatRow label="Headline numbers" data-testid="home-tiles">
-          <KpiTile label="Revenue" href={profitFor(bucket, period)} hideDeltaLabel loading={loadingTiles} deltaPending={deltaPending} value={total ? formatMoneyWhole(total.revenueCents) : null} delta={total ? moneyDelta(total.revenueCents, previous?.revenueCents, 'up', vs) : undefined} sparkline={spark((row) => row.revenueCents)} explain={<ExplainNumber metric="revenue" scope={scope} />} />
-          <KpiTile label="Cost" href={profitFor(bucket, period)} hideDeltaLabel loading={loadingTiles} deltaPending={deltaPending} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, previous?.costCents, 'down', vs) : undefined} sparkline={spark((row) => row.costCents)} explain={<ExplainNumber metric="cost" scope={scope} />} />
-          <KpiTile label="Profit on jobs" href={profitFor('job', period)} hideDeltaLabel loading={loadingTiles} deltaPending={deltaPending} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, previous?.profitCents, 'up', vs) : undefined} sparkline={spark((row) => row.profitCents)} explain={<ExplainNumber metric="profit" scope={scope} />} />
-          <KpiTile label="Job margin" href={profitFor('job', period)} hideDeltaLabel loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined} sparkline={spark((row) => row.marginBp)} explain={<ExplainNumber metric="margin" scope={scope} />} footer={companyMargin !== null ? <span data-testid="home-company-margin">Company margin <span className="font-medium text-fg tabular-nums">{formatPercentBp(companyMargin)}</span></span> : undefined} />
-          <KpiTile label="Labor as % of revenue" href={routes.labor('cost', period)} hideDeltaLabel loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPercentBp(total.laborPctBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.laborPctBp, previous?.laborPctBp, 'down', vs) : undefined} sparkline={spark((row) => row.laborPctBp)} explain={<ExplainNumber metric="labor_pct" scope={scope} />} />
-          <KpiTile label="Units per person per hour" href={routes.labor('time', period)} hideDeltaLabel loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
+          <HomeTile label="Revenue" href={profitFor(bucket, period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatMoneyWhole(total.revenueCents) : null)} delta={total ? moneyDelta(total.revenueCents, previous?.revenueCents, 'up', vs) : undefined} sparkline={spark((row) => row.revenueCents)} explain={<ExplainNumber metric="revenue" scope={scope} />} />
+          <HomeTile label="Cost" href={profitFor(bucket, period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatMoneyWhole(total.costCents) : null)} delta={total ? moneyDelta(total.costCents, previous?.costCents, 'down', vs) : undefined} sparkline={spark((row) => row.costCents)} explain={<ExplainNumber metric="cost" scope={scope} />} />
+          <HomeTile label="Profit on jobs" href={profitFor('job', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatMoneyWhole(total.profitCents) : null)} delta={total ? moneyDelta(total.profitCents, previous?.profitCents, 'up', vs) : undefined} sparkline={spark((row) => row.profitCents)} explain={<ExplainNumber metric="profit" scope={scope} />} />
+          <HomeTile label="Job margin" href={profitFor('job', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null)} delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined} sparkline={spark((row) => row.marginBp)} explain={<ExplainNumber metric="margin" scope={scope} />} caption={companyMargin !== null ? <span data-testid="home-company-margin">Company margin <span className="font-medium text-fg tabular-nums">{formatPercentBp(companyMargin)}</span></span> : undefined} />
+          <HomeTile label="Labor as % of revenue" href={routes.labor('cost', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatPercentBp(total.laborPctBp, { empty: 'No revenue yet' }) : null)} delta={total ? pointsDelta(total.laborPctBp, previous?.laborPctBp, 'down', vs) : undefined} sparkline={spark((row) => row.laborPctBp)} explain={<ExplainNumber metric="labor_pct" scope={scope} />} />
+          <HomeTile label="Units per person per hour" href={routes.labor('time', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatPace(total.uph, { empty: 'No hours yet' }) : null)} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
         </StatRow>
       ) : (
         <StatRow label="Headline numbers" data-testid="home-tiles-floor">
-          <KpiTile label="Units finished" href={routes.logEntries({ from: period.from, to: period.to })} hideDeltaLabel loading={loadingTiles} deltaPending={deltaPending} value={total ? formatNumber(total.unitsGood, { maxDigits: 0 }) : null} delta={total ? numberDelta(num(total.unitsGood), previous ? num(previous.unitsGood) : undefined, 'up', vs) : undefined} sparkline={spark((row) => num(row.unitsGood))} explain={<ExplainNumber metric="units" scope={scope} />} />
-          <KpiTile label="Labor hours" href={routes.labor('time', period)} loading={loadingTiles} deltaPending={deltaPending} value={total ? formatHours(total.hours, { maxDigits: 0 }) : null} sparkline={spark((row) => num(row.hours))} explain={<ExplainNumber metric="hours" scope={scope} />} />
-          <KpiTile label="Units per person per hour" href={routes.labor('time', period)} hideDeltaLabel loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
-          <KpiTile label="Share of paid time spent on jobs" href={routes.report('paid-time-not-on-any-job')} explain={<ExplainStatic title="Share of paid time spent on jobs" rule="Hours on jobs divided by paid hours. When no paid hours are typed for these days, it is hours on jobs divided by hours on jobs plus time not on a job." rows={bridge ? [{ label: 'Hours on jobs', value: formatHours(bridge.directHours) }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours) }, { label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Share on jobs', value: formatPercentBp(bridge.utilizationBp, { empty: 'No hours yet' }), kind: 'total' }] : []} />} loading={!data} value={data ? formatPercentBp(bridge?.utilizationBp ?? null, { empty: 'No hours yet' }) : null} footer={bridge ? <span>{formatHours(bridge.indirectHours, { maxDigits: 0 })} hours not on a job</span> : undefined} />
+          <HomeTile label="Units finished" href={routes.logEntries({ from: period.from, to: period.to })} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatNumber(total.unitsGood, { maxDigits: 0 }) : null)} delta={total ? numberDelta(num(total.unitsGood), previous ? num(previous.unitsGood) : undefined, 'up', vs) : undefined} sparkline={spark((row) => num(row.unitsGood))} explain={<ExplainNumber metric="units" scope={scope} />} />
+          <HomeTile label="Labor hours" href={routes.labor('time', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatHours(total.hours, { maxDigits: 0 }) : null)} sparkline={spark((row) => num(row.hours))} explain={<ExplainNumber metric="hours" scope={scope} />} />
+          <HomeTile label="Units per person per hour" href={routes.labor('time', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatPace(total.uph, { empty: 'No hours yet' }) : null)} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
+          <HomeTile label="Share of paid time spent on jobs" href={routes.report('paid-time-not-on-any-job')} explain={<ExplainStatic title="Share of paid time spent on jobs" rule="Hours on jobs divided by paid hours. When no paid hours are typed for these days, it is hours on jobs divided by hours on jobs plus time not on a job." rows={bridge ? [{ label: 'Hours on jobs', value: formatHours(bridge.directHours) }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours) }, { label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Share on jobs', value: formatPercentBp(bridge.utilizationBp, { empty: 'No hours yet' }), kind: 'total' }] : []} />} loading={!data} value={statValue(data ? formatPercentBp(bridge?.utilizationBp ?? null, { empty: 'No hours yet' }) : null)} caption={bridge ? <span>{formatHours(bridge.indirectHours, { maxDigits: 0 })} hours not on a job</span> : undefined} />
         </StatRow>
       )}
 
@@ -500,9 +500,9 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
       {/* Money waiting and things to fix */}
       <div className="grid gap-4 lg:grid-cols-3">
         {seesMoney ? (
-          <KpiTile label="Not billed yet" href={routes.report('ready-to-bill')} explain={<ExplainNumber metric="not_billed" scope={scope} />} loading={!data} value={data ? formatMoneyWhole(data.notBilledYetCents) : null} footer="Finished work that is not on an invoice" emptyText="Nothing waiting" />
+          <HomeTile label="Not billed yet" href={routes.report('ready-to-bill')} explain={<ExplainNumber metric="not_billed" scope={scope} />} loading={!data} value={statValue(data ? formatMoneyWhole(data.notBilledYetCents) : null, 'Nothing waiting')} caption="Finished work that is not on an invoice" />
         ) : null}
-        <KpiTile label="Paid time not on any job" href={routes.report('paid-time-not-on-any-job')} explain={<ExplainStatic title="Paid time not on any job" rule="For each site and day: paid hours, less hours on jobs, less time not on a job. It is never below zero." rows={bridge ? [{ label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Hours on jobs', value: formatHours(bridge.directHours), kind: 'minus' }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours), kind: 'minus' }, { label: 'Paid, on no job', value: formatHours(bridge.missingHours), kind: 'total' }] : []} footnote="Worked out day by day, so the lines above may not subtract to the total." />} loading={!bridge} value={bridge ? formatHours(bridge.missingHours, { style: 'unit', maxDigits: 0 }) : null} footer={seesMoney && bridge?.missingCostCents ? <span className="tabular-nums">{formatMoney(bridge.missingCostCents, { cents: false })} of pay nobody logged</span> : <span>Hours paid that nobody logged</span>} />
+        <HomeTile label="Paid time not on any job" href={routes.report('paid-time-not-on-any-job')} explain={<ExplainStatic title="Paid time not on any job" rule="For each site and day: paid hours, less hours on jobs, less time not on a job. It is never below zero." rows={bridge ? [{ label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Hours on jobs', value: formatHours(bridge.directHours), kind: 'minus' }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours), kind: 'minus' }, { label: 'Paid, on no job', value: formatHours(bridge.missingHours), kind: 'total' }] : []} footnote="Worked out day by day, so the lines above may not subtract to the total." />} loading={!bridge} value={statValue(bridge ? formatHours(bridge.missingHours, { style: 'unit', maxDigits: 0 }) : null)} caption={seesMoney && bridge?.missingCostCents ? <span className="tabular-nums">{formatMoney(bridge.missingCostCents, { cents: false })} of pay nobody logged</span> : <span>Hours paid that nobody logged</span>} />
         <DashSection title="Things to fix" className={cn(!seesMoney && 'lg:col-span-2')} flush data-testid="home-fix">
           {!fix ? (
             <div className="p-4">
@@ -542,5 +542,35 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
       ) : null}
     </div>
     </DashboardFrame>
+  );
+}
+
+type HomeTileProps = Omit<StatTileProps, 'delta' | 'trend'> & {
+  readonly loading: boolean;
+  /** True while the period before loads: keeps room for the change so the tile does not grow later. */
+  readonly deltaPending?: boolean;
+  readonly delta?: DeltaBadgeProps;
+  readonly sparkline?: { readonly values: readonly (number | null)[] };
+};
+
+/** A home headline: the shared StatTile, with a skeleton of the same size while the period loads. */
+function HomeTile({ loading, deltaPending, delta, sparkline, caption, ...tile }: HomeTileProps) {
+  if (loading) return <StatTileLoading label={tile.label} data-testid="kpi-tile" />;
+  const pending = !delta && deltaPending ? <DeltaPending /> : null;
+  return (
+    <StatTile
+      data-testid="kpi-tile"
+      {...tile}
+      delta={delta ? toDelta(delta) : undefined}
+      trend={sparkline ? <StatSparkline values={sparkline.values} label={`${tile.label} trend`} /> : undefined}
+      caption={
+        pending || caption ? (
+          <>
+            {pending}
+            {caption}
+          </>
+        ) : undefined
+      }
+    />
   );
 }

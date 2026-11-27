@@ -295,7 +295,7 @@ function Editor({
                 Turn all on
               </Button>
             ) : null}
-            <Badge tone={on === RETURN_RULE_KEYS.length ? 'success' : 'neutral'} size="sm" shape="pill">
+            <Badge tone={on === RETURN_RULE_KEYS.length ? 'success' : 'neutral'}>
               {on}/{RETURN_RULE_KEYS.length} on
             </Badge>
           </span>

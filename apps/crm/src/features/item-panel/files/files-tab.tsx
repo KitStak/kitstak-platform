@@ -86,7 +86,7 @@ function UploadRow({ entry, onRetry, onDismiss }: { readonly entry: UploadEntry;
             {entry.error}
           </p>
         ) : (
-          <ProgressBar value={Math.round(entry.progress * 100)} size="sm" tone={entry.status === 'done' ? 'success' : 'primary'} label={`Uploading ${entry.file.name}`} className="mt-1" />
+          <ProgressBar value={Math.round(entry.progress * 100)} size="sm" tone={entry.status === 'done' ? 'success' : 'data'} label={`Uploading ${entry.file.name}`} className="mt-1" />
         )}
       </div>
       {entry.status === 'error' ? <IconButton size="sm" label="Retry upload" icon={<RotateCw aria-hidden />} onClick={onRetry} /> : null}

@@ -9,7 +9,7 @@
  */
 import { useState } from 'react';
 import { Megaphone } from 'lucide-react';
-import { Button, Select, Skeleton, Textarea, cn } from '@/components/ui';
+import { Badge, Button, Select, Skeleton, Textarea, cn } from '@/components/ui';
 import { Panel } from '@/components/layout/page';
 import { PROJECT_HEALTHS, PROJECT_HEALTH_LABELS, PROJECT_STATUSES, PROJECT_STATUS_LABELS, type ProjectHealth, type ProjectStatus } from '@/lib/constants';
 import { useServerAction } from '@/lib/hooks/use-action';
@@ -71,7 +71,7 @@ export function UpdateItem({ update, latest }: { readonly update: ProjectUpdateD
           {update.status ? <> and moved it to <span className="font-medium text-fg">{PROJECT_STATUS_LABELS[update.status]}</span></> : null}
           <span className="text-fg-muted"> · {update.progress}% done at the time · </span>
           <LocalTime iso={update.createdAt} className="text-fg-muted" />
-          {latest ? <span className="ml-1.5 rounded-sm bg-primary-subtle px-1.5 py-px text-2xs font-semibold text-primary-text">Latest</span> : null}
+          {latest ? <Badge className="ml-1.5">Latest</Badge> : null}
         </p>
         {update.note ? <p className="mt-1 text-sm whitespace-pre-wrap text-fg">{update.note}</p> : null}
       </div>

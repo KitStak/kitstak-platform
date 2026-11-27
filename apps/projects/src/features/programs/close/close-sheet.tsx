@@ -288,7 +288,7 @@ export function CloseSheet({ month }: { readonly month: IsoMonth }) {
                             <li key={adjustment.id} className="flex items-center justify-between gap-2">
                               <span className="min-w-0 truncate text-fg">
                                 {shortDate(adjustment.chargeOn)} · {adjustment.label}
-                                {adjustment.countsTowardMinimum ? <Badge tone="info" size="sm" className="ml-1.5">Counts toward minimum</Badge> : null}
+                                {adjustment.countsTowardMinimum ? <Badge tone="info" className="ml-1.5">Counts toward minimum</Badge> : null}
                               </span>
                               <span className="shrink-0 text-fg tabular-nums">{formatCents(adjustment.amountCents, { cents: true })}</span>
                             </li>

@@ -903,8 +903,8 @@ function LastTime({ query, hasType, summary, onUse }: { readonly query: ReturnTy
                 </Link>
                 <p className="flex flex-wrap items-center gap-x-2 text-xs text-fg-muted">
                   {job.clientName}
-                  {job.sameClient ? <Badge tone="primary" size="sm">Same client</Badge> : null}
-                  {job.laborMissing ? <Badge tone="warning" size="sm">Hours missing</Badge> : null}
+                  {job.sameClient ? <Badge tone="info">Same client</Badge> : null}
+                  {job.laborMissing ? <Badge tone="warning">Hours missing</Badge> : null}
                   {job.lastEntryDate ? <span>Last worked {shortDate(job.lastEntryDate)}</span> : null}
                 </p>
               </div>

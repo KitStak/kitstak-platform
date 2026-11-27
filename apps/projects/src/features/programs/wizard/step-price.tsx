@@ -27,7 +27,7 @@ export function StepPrice({ state, set, data, problems, showErrors, env, onLater
   const deal = state.start.mode === 'deal' ? data.deal : null;
   const callout = deal ? dealCallout({ valueCents: deal.valueCents === null ? null : BigInt(deal.valueCents), termMonths: deal.termMonths }) : null;
   const currencyNote = deal ? dealPrefill({ deal: { currency: deal.currency, valueCents: deal.valueCents === null ? null : BigInt(deal.valueCents), rates: {} }, programCurrency: 'USD' }).currencyNote : null;
-  const fromDeal = <Badge tone="info" size="sm" icon={<Handshake aria-hidden />}>From deal</Badge>;
+  const fromDeal = <Badge tone="info" icon={<Handshake aria-hidden />}>From deal</Badge>;
   const errors = showErrors ? problems : {};
 
   if (state.price.later) {

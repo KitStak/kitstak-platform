@@ -532,7 +532,7 @@ function TaskResult({ task, q, projectName }: { readonly task: TaskSummary; read
           </span>
         </span>
         {task.kind === 'build' ? (
-          <Badge tone="info" size="sm" className="shrink-0">
+          <Badge tone="outline" className="shrink-0">
             Build
           </Badge>
         ) : null}
@@ -655,9 +655,9 @@ function GoalResult({ goal, q }: { readonly goal: GoalDTO; readonly q: string })
           </span>
           <ProgressBar value={goal.progress} size="sm" tone={healthProgressTone(goal.health)} label={`${goal.name} progress`} className="max-w-56" />
         </span>
-        <Badge tone={HEALTH_TONE[goal.health]} size="sm" className="hidden sm:inline-flex">
-          {GOAL_HEALTH_LABELS[goal.health]}
-        </Badge>
+        <span className="hidden sm:inline-flex">
+          <Badge tone={HEALTH_TONE[goal.health]}>{GOAL_HEALTH_LABELS[goal.health]}</Badge>
+        </span>
         <span className="w-10 text-right text-xs text-fg-muted tabular-nums">{Math.round(goal.progress)}%</span>
       </Link>
     </li>

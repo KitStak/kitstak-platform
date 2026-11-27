@@ -42,7 +42,7 @@ function PlanBar({ label, planCents, actualCents }: { readonly label: string; re
           <span className={cn('font-medium', over && 'text-danger')}>{formatCents(actualCents)}</span> of {formatCents(planCents)} planned
         </span>
       </div>
-      <ProgressBar value={actualCents} max={planCents} size="sm" tone={over ? 'danger' : 'primary'} label={`${label}: ${formatCents(actualCents)} spent of ${formatCents(planCents)} planned`} />
+      <ProgressBar value={actualCents} max={planCents} size="sm" tone={over ? 'danger' : 'data'} label={`${label}: ${formatCents(actualCents)} spent of ${formatCents(planCents)} planned`} />
     </div>
   );
 }
@@ -64,7 +64,7 @@ function JobBlock({ job, data }: { readonly job: WorkOrderPulseJob; readonly dat
           <ProgressBar
             value={done}
             size="sm"
-            tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'primary'}
+            tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'data'}
             label={`${job.number} is ${done} percent done`}
           />
         )}

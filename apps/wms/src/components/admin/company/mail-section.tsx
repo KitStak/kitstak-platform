@@ -359,17 +359,11 @@ export function MailSection({
       <div className="flex items-center gap-2 text-xs text-secondary">
         Status:
         {m.ready ? (
-          <Badge tone="success" size="sm" shape="pill">
-            Sending through {m.host}
-          </Badge>
+          <Badge tone="success">Sending through {m.host}</Badge>
         ) : m.platformMail ? (
-          <Badge tone="success" size="sm" shape="pill">
-            Sending through KitStak email
-          </Badge>
+          <Badge tone="success">Sending through KitStak email</Badge>
         ) : (
-          <Badge tone="warning" size="sm" shape="pill">
-            Server log only
-          </Badge>
+          <Badge tone="warning">Server log only</Badge>
         )}
       </div>
       <Editor key={m.version} settings={m} canEdit={canEdit} defaultTo={defaultTo} />

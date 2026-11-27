@@ -36,12 +36,6 @@ import { YesNoToggle } from '@/components/ui/yes-no-toggle';
 const COUNTRY_OPTIONS = countryOptions();
 type A = OrgAddressInput;
 
-const USAGE_TONE: Readonly<Record<string, 'info' | 'primary' | 'warning'>> = {
-  Shipping: 'info',
-  Billing: 'primary',
-  Return: 'warning',
-};
-
 export function addressLines(
   a: Pick<A, 'line1' | 'line2' | 'city' | 'state' | 'postalCode' | 'country'>,
 ): string[] {
@@ -340,19 +334,14 @@ export function AddressesEditor({
               )}
             >
               <div className="flex items-center gap-1.5">
-                <Badge tone={USAGE_TONE[a.usageType ?? 'Shipping'] ?? 'info'} size="sm" shape="pill">
-                  {a.usageType}
-                </Badge>
+                {/* Address usage is a type, not a state: a neutral pill. */}
+                <Badge tone="neutral">{a.usageType}</Badge>
                 {a.isDefault ? (
-                  <Badge tone="solid" size="sm" shape="pill" icon={Star}>
+                  <Badge tone="info" icon={Star}>
                     Default
                   </Badge>
                 ) : null}
-                {a.isActive === false ? (
-                  <Badge tone="outline" size="sm" shape="pill">
-                    Inactive
-                  </Badge>
-                ) : null}
+                {a.isActive === false ? <Badge tone="outline">Inactive</Badge> : null}
                 <span className="ml-auto" />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

@@ -5,6 +5,8 @@
  * "Job status in Pending, Started", and the bulk menus. Job code opens `/jobs/[id]`
  * (Logiwa has no job page).
  */
+import { Pill } from '@kitstak/ui/dashboard';
+import { statusLabel } from '@/lib/status-colors';
 import * as React from 'react';
 import Link from 'next/link';
 import { CalendarClock, Eye, ListChecks, Settings2, Sparkles, Workflow } from 'lucide-react';
@@ -31,16 +33,8 @@ function LabelPill({ value }: { readonly value: unknown }) {
   const v = String(value ?? '');
   if (!v) return <Dash />;
   const tone =
-    v === 'Labeled' || v === 'Printed'
-      ? 'bg-[var(--label-green-subtle)] text-success'
-      : v.startsWith('Partially')
-        ? 'bg-[#FFF3D6] text-[#9A6700]'
-        : 'bg-[var(--border-default)] text-[var(--text-muted)]';
-  return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-2xs font-semibold leading-4 ${tone}`}>
-      {v}
-    </span>
-  );
+    v === 'Labeled' || v === 'Printed' ? 'positive' : v.startsWith('Partially') ? 'caution' : 'neutral';
+  return <Pill tone={tone}>{statusLabel(v)}</Pill>;
 }
 
 function TaskCountLink({ row, value }: { readonly row: JobRow; readonly value: unknown }) {
@@ -71,12 +65,9 @@ const COLUMNS = buildColumns<JobRow>(JOB_COLUMNS, {
       return (
         <span className="flex flex-wrap items-center gap-1">
           {short ? (
-            <span
-              className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-[var(--label-brown-subtle)] px-1.5 py-px text-2xs font-semibold leading-4 text-[var(--label-brown-text)] dark:bg-[#3A2116] dark:text-[#F5B38F]"
-              title="Open pick short"
-            >
+            <Pill tone="caution" title="Open pick short" className="shrink-0">
               Short
-            </span>
+            </Pill>
           ) : null}
           {overdue ? <OverduePill /> : null}
         </span>
@@ -86,7 +77,7 @@ const COLUMNS = buildColumns<JobRow>(JOB_COLUMNS, {
       const v = getValue() as string | null;
       if (!v) return <Dash />;
       return Number(row.original.overdue) ? (
-        <span className="flex min-w-0 items-center gap-1.5 font-semibold text-[var(--danger-text)] dark:text-[var(--label-red-light)]">
+        <span className="flex min-w-0 items-center gap-1.5 font-semibold text-danger-text">
           <DateCell value={v} />
           <OverduePill />
         </span>
@@ -142,7 +133,7 @@ function JobTypesLink() {
 export function JobsListPage() {
   return (
     <ListShell<JobRow>
-      title="Job Management"
+      title="Job management"
       tabs="jobs"
       actions={<JobTypesLink />}
       gridKey={JOBS_GRID.gridKey}

@@ -156,11 +156,7 @@ export function DryRunDialog({
                       ? 'would be short'
                       : 'would fail'}
                 </span>
-                {result.rule ? (
-                  <Badge tone="info" size="sm">
-                    Rule · {result.rule}
-                  </Badge>
-                ) : null}
+                {result.rule ? <Badge tone="info">Rule · {result.rule}</Badge> : null}
               </div>
               {result.message ? <Callout variant="attention">{result.message}</Callout> : null}
               <div className="overflow-hidden rounded-lg border border-border">

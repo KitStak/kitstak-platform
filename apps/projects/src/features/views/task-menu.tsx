@@ -152,7 +152,7 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
                   <Item key={person.id} icon={<Avatar name={person.name} src={person.image ?? undefined} size="xs" />} onSelect={() => person.id !== task.assigneeId && void ops.updateTask(task.id, { assigneeId: person.id })}>
                     <span className="flex w-full items-center justify-between gap-2">
                       {person.id === user.id ? `${person.name} (you)` : person.name}
-                      {person.id === task.assigneeId ? <Check aria-label="assigned now" className="size-4 text-primary-text" /> : null}
+                      {person.id === task.assigneeId ? <Check aria-label="assigned now" className="size-4 text-fg" /> : null}
                     </span>
                   </Item>
                 ))}
@@ -177,7 +177,7 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
                     <Item key={label.id} icon={<LabelDot color={label.color} />} onSelect={() => void ops.setLabels(task, on ? task.labelIds.filter((id) => id !== label.id) : [...task.labelIds, label.id])}>
                       <span className="flex w-full items-center justify-between gap-2">
                         {label.name}
-                        {on ? <Check aria-label="on" className="size-4 text-primary-text" /> : null}
+                        {on ? <Check aria-label="on" className="size-4 text-fg" /> : null}
                       </span>
                     </Item>
                   );

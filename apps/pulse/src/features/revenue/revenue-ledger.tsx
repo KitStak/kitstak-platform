@@ -221,17 +221,17 @@ export function RevenueLedger({ jobId, clientId, from, to, today, title = 'Invoi
         }
         rowBadges={(row) =>
           row.kind === 'fixed_true_up' ? (
-            <Badge size="sm" tone="neutral">By Pulse</Badge>
+            <Badge tone="neutral">By Pulse</Badge>
           ) : row.fromProgram ? (
             <Tooltip content={`${row.fromProgram.message} Change it there.`}>
               <span tabIndex={0} className="rounded-sm focus-visible:outline-2 focus-visible:outline-focus" data-testid="revenue-from-program">
-                <Badge size="sm" tone="primary">
+                <Badge tone="info">
                   {row.fromProgram.key ? `${row.fromProgram.key} price card` : 'Price card'}
                 </Badge>
               </span>
             </Tooltip>
           ) : row.source !== 'manual' ? (
-            <Badge size="sm" tone="neutral">{row.source === 'csv' ? 'Imported' : 'Synced'}</Badge>
+            <Badge tone="neutral">{row.source === 'csv' ? 'Imported' : 'Synced'}</Badge>
           ) : null
         }
       />

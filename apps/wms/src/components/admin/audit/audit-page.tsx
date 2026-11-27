@@ -6,7 +6,6 @@
  * grid toolkit (filters, saved views, Export As Excel) and 24 h counters on top.
  */
 import * as React from 'react';
-import { AlertTriangle, LogIn, ShieldAlert, ShieldX } from 'lucide-react';
 import { DataGrid, DateCell, GridToolbar, useGrid, type GridColumnDef } from '@/components/grid';
 import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -16,24 +15,22 @@ import { Switch } from '@/components/ui/switch';
 import { useApiQuery } from '@/lib/query-client';
 import { useFormat } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
 import { AUDIT_FIELDS, AUDIT_GRID_KEY, kpiFilters, type AuditCategory } from '@/lib/grid-defs/admin/audit';
 import type { AuditRow } from '@/server/repositories/audit';
 import { DetailList, Muted, toFilterFields, useAdminOptions } from '../admin-shared';
 
-const CATEGORY_TONE: Readonly<
-  Record<AuditCategory, 'success' | 'info' | 'warning' | 'danger' | 'primary' | 'neutral'>
-> = {
-  'Sign-in': 'info',
-  Session: 'neutral',
-  Password: 'warning',
-  'CSRF rejected': 'danger',
-  'Permission denied': 'danger',
-  'User change': 'primary',
-  'Role change': 'primary',
-  'Settings change': 'primary',
-  Other: 'neutral',
-};
+const CATEGORY_TONE: Readonly<Record<AuditCategory, 'success' | 'info' | 'warning' | 'danger' | 'neutral'>> =
+  {
+    'Sign-in': 'info',
+    Session: 'neutral',
+    Password: 'warning',
+    'CSRF rejected': 'danger',
+    'Permission denied': 'danger',
+    'User change': 'info',
+    'Role change': 'info',
+    'Settings change': 'info',
+    Other: 'neutral',
+  };
 
 const hidden = { defaultVisible: false } as const;
 
@@ -65,11 +62,7 @@ function columns(onOpen: (r: AuditRow) => void): GridColumnDef<AuditRow>[] {
       id: 'category',
       header: 'Event type',
       size: 122,
-      cell: ({ row }) => (
-        <Badge tone={CATEGORY_TONE[row.original.category]} size="sm" shape="pill">
-          {row.original.category}
-        </Badge>
-      ),
+      cell: ({ row }) => <Badge tone={CATEGORY_TONE[row.original.category]}>{row.original.category}</Badge>,
     },
     {
       id: 'action',
@@ -79,12 +72,7 @@ function columns(onOpen: (r: AuditRow) => void): GridColumnDef<AuditRow>[] {
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate text-body">{row.original.actionLabel}</span>
           {row.original.repeatCount > 1 ? (
-            <Badge
-              tone="neutral"
-              size="sm"
-              shape="pill"
-              title={`${row.original.repeatCount} identical events on this day`}
-            >
+            <Badge tone="neutral" title={`${row.original.repeatCount} identical events on this day`}>
               ×{row.original.repeatCount}
             </Badge>
           ) : null}
@@ -97,13 +85,9 @@ function columns(onOpen: (r: AuditRow) => void): GridColumnDef<AuditRow>[] {
       size: 92,
       cell: ({ row }) =>
         row.original.outcome === 'success' ? (
-          <Badge tone="success" size="sm" shape="pill">
-            Success
-          </Badge>
+          <Badge tone="success">Success</Badge>
         ) : (
-          <Badge tone="danger" size="sm" shape="pill">
-            Failure
-          </Badge>
+          <Badge tone="danger">Failure</Badge>
         ),
     },
     {
@@ -177,32 +161,24 @@ function StatTiles({
       key: 'in',
       label: 'Sign-ins',
       value: s?.signIns,
-      icon: LogIn,
-      tone: 'text-info bg-info-soft',
       onClick: () => onFilter('Sign-in'),
     },
     {
       key: 'fail',
       label: 'Failed sign-ins',
       value: s?.failedSignIns,
-      icon: AlertTriangle,
-      tone: 'text-warning bg-warning-soft',
       onClick: () => onFilter('Sign-in', 'failure'),
     },
     {
       key: 'deny',
       label: 'Permission denials',
       value: s?.denied,
-      icon: ShieldX,
-      tone: 'text-danger bg-danger-soft',
       onClick: () => onFilter('Permission denied'),
     },
     {
       key: 'csrf',
       label: 'CSRF rejects',
       value: s?.csrf,
-      icon: ShieldAlert,
-      tone: 'text-danger bg-danger-soft',
       onClick: () => onFilter('CSRF rejected'),
     },
   ];
@@ -213,11 +189,8 @@ function StatTiles({
           key={t.key}
           type="button"
           onClick={t.onClick}
-          className="group flex items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left shadow-xs transition hover:-translate-y-px hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="flex items-center rounded-xl border border-border-subtle bg-panel px-3 py-2.5 text-left transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30 active:bg-muted"
         >
-          <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', t.tone)}>
-            <t.icon className="h-4 w-4" aria-hidden />
-          </span>
           <span className="min-w-0">
             <span className="block text-2xs text-faint">{t.label} · last 24 h</span>
             {q.isPending ? (

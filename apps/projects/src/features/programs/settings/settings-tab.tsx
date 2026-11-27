@@ -487,7 +487,7 @@ function MonthRow({ month, onReopen }: { readonly month: IsoMonth; readonly onRe
   return (
     <li className="flex flex-wrap items-center gap-3 px-4 py-2.5" data-testid={`close-month-${month}`}>
       <span className="w-36 text-sm font-medium text-fg">{monthLong(month)}</span>
-      <Badge tone={closed || pulse ? 'neutral' : ready ? 'success' : 'outline'} size="sm" icon={closed || pulse ? <Lock aria-hidden /> : ready ? <CheckCircle2 aria-hidden /> : undefined}>
+      <Badge tone={closed || pulse ? 'neutral' : ready ? 'success' : 'neutral'} icon={closed || pulse ? <Lock aria-hidden /> : ready ? <CheckCircle2 aria-hidden /> : undefined}>
         {state}
       </Badge>
       {data?.totalCents && (closed || ended) ? <span className="text-xs text-fg-muted tabular-nums">{formatCents(data.totalCents, { cents: true })}</span> : null}
@@ -674,7 +674,7 @@ function PulseCheckSection() {
                 <td className="px-3 py-1.5 text-right text-fg-secondary tabular-nums">{formatQty(row.units)}</td>
                 <td className="px-3 py-1.5 text-right text-fg tabular-nums">{formatCents(row.projects, { cents: true })}</td>
                 <td className="px-3 py-1.5 text-right text-fg tabular-nums">{formatCents(row.pulse, { cents: true, empty: 'Not synced' })}</td>
-                <td className="px-3 py-1.5">{row.match ? <Badge tone="success" size="sm">Matches</Badge> : <Badge tone="warning" size="sm">Different</Badge>}</td>
+                <td className="px-3 py-1.5">{row.match ? <Badge tone="success">Matches</Badge> : <Badge tone="warning">Different</Badge>}</td>
               </tr>
             ))}
           </tbody>

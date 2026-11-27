@@ -50,6 +50,9 @@
      border-default step; the shine stays near-white so the shimmer sweep reads. */
   --surface-skeleton: #e0d9c7;
   --surface-skeleton-shine: #f4f1e9;
+  /* The WMS data color (docs/design/UI-CLEANUP.md): shared Meters and StatTiles outside a
+     DashboardFrame (list and detail pages) draw quantities in teal, never crimson. */
+  --dash-data: var(--chart-2);
 }
 
 :root[data-theme='dark'] {

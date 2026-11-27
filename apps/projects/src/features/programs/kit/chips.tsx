@@ -7,9 +7,9 @@
 import Link from 'next/link';
 import { createElement, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, CircleDollarSign, EyeOff, Lock, OctagonAlert, Repeat2, Target, Ban, Briefcase, Receipt, Tag, Hand } from 'lucide-react';
-import { Badge, StatusPill, Tooltip, cn, labelColorStyle } from '@/components/ui';
+import { Badge, Tooltip, cn, labelColorStyle, type BadgeTone } from '@/components/ui';
 import { ENTITY_ICONS } from '@/components/pm';
-import { POSTING_LABELS, PRICE_SOURCE_LABELS, PROGRAM_STATUS_LABELS, type LabelColor, type Posting, type PriceSource, type ProjectStatus } from '@/lib/constants';
+import { POSTING_LABELS, PRICE_SOURCE_LABELS, PROGRAM_STATUS_LABELS, type Posting, type PriceSource, type ProjectStatus } from '@/lib/constants';
 import type { Health, HealthBasis, IsoDate } from '@/lib/program-types';
 import { programHref } from './live-pages';
 import { HEALTH_TEXT, healthBasisText, lockText, paletteColor, targetText, targetTone } from './format';
@@ -68,25 +68,21 @@ export function ProgramChip({ program, link: wantLink = true, showName = true, s
   );
 }
 
-const STATUS_COLOR: Readonly<Record<ProjectStatus, LabelColor>> = {
-  planning: 'gray',
-  active: 'green',
-  on_hold: 'orange',
-  completed: 'gray',
-  archived: 'gray',
+const STATUS_TONE: Readonly<Record<ProjectStatus, BadgeTone>> = {
+  planning: 'neutral',
+  active: 'success',
+  on_hold: 'warning',
+  completed: 'neutral',
+  archived: 'neutral',
 };
 
-/** Running (green), Paused (orange), Setting up, Ended (outline) or Archived. */
+/** Running (positive), Paused (caution), Setting up, Ended or Archived (neutral): the shared Pill. */
 export function ProgramStatusPill({ status, className }: { readonly status: ProjectStatus; readonly className?: string }) {
-  const label = PROGRAM_STATUS_LABELS[status];
-  if (status === 'completed' || status === 'archived') {
-    return (
-      <Badge tone="outline" className={cn('h-[22px] rounded-full', className)}>
-        {label}
-      </Badge>
-    );
-  }
-  return <StatusPill label={label} color={STATUS_COLOR[status]} className={className} />;
+  return (
+    <Badge tone={STATUS_TONE[status]} className={className}>
+      {PROGRAM_STATUS_LABELS[status]}
+    </Badge>
+  );
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -142,8 +138,8 @@ export function VariantChip({ name, color, sku, size = 'sm', onClick, className 
 /* Money facts                                                                                    */
 /* ---------------------------------------------------------------------------------------------- */
 
-const PRICE_FROM_TONE: Readonly<Record<PriceSource, 'primary' | 'info' | 'neutral' | 'success' | 'warning'>> = {
-  build: 'primary',
+const PRICE_FROM_TONE: Readonly<Record<PriceSource, BadgeTone>> = {
+  build: 'info',
   variant: 'info',
   card: 'neutral',
   job: 'success',
@@ -167,12 +163,12 @@ const PRICE_FROM_TIP: Readonly<Record<PriceSource, string>> = {
 };
 
 /** "Price from" chip: Build rate, Variant rate, Card rate, Job price or No price. */
-export function PriceFromChip({ source, ruleText, size = 'sm', className }: { readonly source: PriceSource; readonly ruleText?: string | null; readonly size?: 'sm' | 'md'; readonly className?: string }) {
+export function PriceFromChip({ source, ruleText, className }: { readonly source: PriceSource; readonly ruleText?: string | null; readonly className?: string }) {
   const tip = ruleText ? `${PRICE_FROM_TIP[source]} ${ruleText}.` : PRICE_FROM_TIP[source];
   return (
     <Tooltip content={tip}>
       <span tabIndex={0} className="inline-flex rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-focus" aria-label={`Price from: ${PRICE_SOURCE_LABELS[source]}. ${tip}`}>
-        <Badge tone={PRICE_FROM_TONE[source]} size={size} icon={PRICE_FROM_ICON[source]} className={className}>
+        <Badge tone={PRICE_FROM_TONE[source]} icon={PRICE_FROM_ICON[source]} className={className}>
           {PRICE_SOURCE_LABELS[source]}
         </Badge>
       </span>
@@ -191,7 +187,7 @@ export interface RevenueGoesToChipProps {
 }
 
 /** Where a build day's revenue goes: a Pulse job, this program, or Not billed (warning). */
-export function RevenueGoesToChip({ posting, jobNumber, programKey, size = 'sm', className }: RevenueGoesToChipProps) {
+export function RevenueGoesToChip({ posting, jobNumber, programKey, className }: RevenueGoesToChipProps) {
   const label = posting === 'unbilled' ? POSTING_LABELS.unbilled : posting === 'program' ? (programKey ? `${programKey} program` : POSTING_LABELS.program) : jobNumber ? `Pulse job ${jobNumber}` : POSTING_LABELS[posting];
   const tone = posting === 'unbilled' ? 'warning' : posting === 'program' ? 'neutral' : 'success';
   const tip =
@@ -205,7 +201,7 @@ export function RevenueGoesToChip({ posting, jobNumber, programKey, size = 'sm',
   return (
     <Tooltip content={tip}>
       <span tabIndex={0} className="inline-flex rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-focus" aria-label={`Revenue goes to ${label}. ${tip}`}>
-        <Badge tone={tone} size={size} icon={posting === 'unbilled' ? <AlertTriangle aria-hidden /> : posting === 'program' ? <Repeat2 aria-hidden /> : <CircleDollarSign aria-hidden />} className={className}>
+        <Badge tone={tone} icon={posting === 'unbilled' ? <AlertTriangle aria-hidden /> : posting === 'program' ? <Repeat2 aria-hidden /> : <CircleDollarSign aria-hidden />} className={className}>
           {label}
         </Badge>
       </span>
@@ -214,10 +210,10 @@ export function RevenueGoesToChip({ posting, jobNumber, programKey, size = 'sm',
 }
 
 /** "105% of target" in success, warning or danger. The number is always in the text. */
-export function TargetChip({ targetBp, size = 'sm', className }: { readonly targetBp: number; readonly size?: 'sm' | 'md'; readonly className?: string }) {
+export function TargetChip({ targetBp, className }: { readonly targetBp: number; readonly className?: string }) {
   const tone = targetTone(targetBp);
   return (
-    <Badge tone={tone} size={size} icon={<Target aria-hidden />} className={className}>
+    <Badge tone={tone} icon={<Target aria-hidden />} className={className}>
       {targetText(targetBp)}
     </Badge>
   );
@@ -238,14 +234,14 @@ export interface HealthWithBasisProps {
   readonly className?: string;
 }
 
-/** Health chip with a tip that says what it is based on; "Set by hand" when an owner chose it. */
-export function HealthWithBasis({ health, basis, auto, size = 'md', className }: HealthWithBasisProps) {
+/** Health chip with a tip that says what it is based on; ", set by hand" in its words when an owner chose it. */
+export function HealthWithBasis({ health, basis, auto, className }: HealthWithBasisProps) {
   const tip = healthBasisText(basis, auto);
   if (!health) {
     return (
       <Tooltip content={tip}>
         <span tabIndex={0} className="inline-flex rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-focus" aria-label={`No health yet. ${tip}`}>
-          <Badge tone="outline" size={size} className={className}>
+          <Badge tone="neutral" className={className}>
             No health yet
           </Badge>
         </span>
@@ -256,16 +252,13 @@ export function HealthWithBasis({ health, basis, auto, size = 'md', className }:
     <span className={cn('inline-flex items-center gap-1', className)}>
       <Tooltip content={tip}>
         <span tabIndex={0} className="inline-flex rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-focus" aria-label={`${HEALTH_TEXT[health]}. ${tip}`} data-testid="program-health" data-health={health}>
-          <Badge tone={HEALTH_TONE[health]} size={size} icon={<ProgramHealthIcon health={health} />}>
+          <Badge tone={HEALTH_TONE[health]} icon={<ProgramHealthIcon health={health} />}>
             {HEALTH_TEXT[health]}
+            {/* The second signal goes in the words, never as a second badge beside the pill. */}
+            {!auto ? <span className="font-normal">, set by hand</span> : null}
           </Badge>
         </span>
       </Tooltip>
-      {!auto ? (
-        <Badge tone="outline" size="sm">
-          Set by hand
-        </Badge>
-      ) : null}
     </span>
   );
 }
@@ -279,13 +272,13 @@ export interface LockBadgeProps {
 }
 
 /** "Closed through Oct 31" with a lock icon and a tip that names who closed it. */
-export function LockBadge({ lockedThrough, closedBy = ['program'], size = 'sm', className }: LockBadgeProps) {
+export function LockBadge({ lockedThrough, closedBy = ['program'], className }: LockBadgeProps) {
   const who = closedBy.includes('program') && closedBy.includes('pulse') ? 'this program and Pulse' : closedBy.includes('pulse') ? 'Pulse' : 'this program';
   const tip = `Months through ${lockText(lockedThrough).replace('Closed through ', '')} were closed in ${who}. Output, prices and fees on those days cannot change. An owner can reopen a month with a reason.`;
   return (
     <Tooltip content={tip}>
       <span tabIndex={0} className="inline-flex rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-focus" aria-label={`${lockText(lockedThrough)}. ${tip}`} data-testid="program-lock">
-        <Badge tone="neutral" size={size} icon={<Lock aria-hidden />} className={className}>
+        <Badge tone="neutral" icon={<Lock aria-hidden />} className={className}>
           {lockText(lockedThrough)}
         </Badge>
       </span>

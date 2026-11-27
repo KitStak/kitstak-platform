@@ -127,19 +127,16 @@ export function PoLabelPrintModal({
         <DialogHeader title="Print options · Product label" description={subtitle} />
         <DialogBody className="flex flex-col gap-4">
           <div
-            className="flex items-start gap-3 rounded-lg border border-primary bg-primary-soft p-3"
+            className="flex items-start gap-3 rounded-lg border border-border-strong bg-selected p-3"
             role="group"
             aria-label="Printout template"
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-white">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-icon">
               <FileText className="h-4 w-4" aria-hidden />
             </span>
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                Product label{' '}
-                <Badge tone="info" size="sm">
-                  Default
-                </Badge>
+                Product label <Badge tone="info">Default</Badge>
               </span>
               <span className="text-xs text-faint">SKU, barcode, name, pack type and lot</span>
             </span>

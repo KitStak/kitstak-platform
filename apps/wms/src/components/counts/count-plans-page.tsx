@@ -450,7 +450,7 @@ export function CountPlansPage() {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
-        title="Count Plan"
+        title="Count plan"
         tabs="counts"
         actions={
           <HeaderActions

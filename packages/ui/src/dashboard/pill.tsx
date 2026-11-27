@@ -50,10 +50,21 @@ export function Tag({ children, title, className }: { readonly children: React.R
   );
 }
 
-export function Count({ value, tone = 'neutral', label }: { readonly value: number; readonly tone?: 'neutral' | 'critical'; readonly label?: string }) {
+export interface CountProps {
+  readonly value: number;
+  readonly tone?: 'neutral' | 'critical';
+  readonly label?: string;
+  /**
+   * `inline` (default) beside a word, in a pale fill. `icon` when the count sits on an icon (a bell),
+   * where a pale fill would vanish into the bar: a solid neutral fill, still never crimson.
+   */
+  readonly placement?: 'inline' | 'icon';
+}
+
+export function Count({ value, tone = 'neutral', label, placement = 'inline' }: CountProps) {
   if (!Number.isFinite(value) || value <= 0) return null;
   return (
-    <span className="ks-dash-count" data-tone={tone}>
+    <span className="ks-dash-count" data-tone={tone} data-placement={placement === 'icon' ? 'icon' : undefined}>
       {value > 99 ? '99+' : value}
       {label ? <span className="ks-dash-sr"> {label}</span> : null}
     </span>
@@ -64,17 +75,48 @@ export interface LegendItem {
   readonly label: string;
   /** Any CSS color, normally a token: `var(--chart-1)`. */
   readonly color: string;
+  /** With `onToggle`: the series is switched off in the chart. */
+  readonly hidden?: boolean;
 }
 
-export function Legend({ items, className }: { readonly items: readonly LegendItem[]; readonly className?: string }) {
+export interface LegendProps {
+  readonly items: readonly LegendItem[];
+  /**
+   * Makes each entry a toggle button that shows or hides its series. It stays a dot and a word; a
+   * hidden series keeps its place with a hollow dot, so nothing moves.
+   */
+  readonly onToggle?: (label: string) => void;
+  readonly className?: string;
+}
+
+export function Legend({ items, onToggle, className }: LegendProps) {
   return (
     <ul className={cx('ks-dash-legend', className)}>
-      {items.map((item) => (
-        <li key={item.label}>
-          <span aria-hidden className="ks-dash-legend-dot" style={{ background: item.color }} />
-          {item.label}
-        </li>
-      ))}
+      {items.map((item) => {
+        const dot = (
+          <span
+            aria-hidden
+            className="ks-dash-legend-dot"
+            data-hidden={item.hidden ? '' : undefined}
+            style={item.hidden ? { borderColor: item.color } : { background: item.color }}
+          />
+        );
+        return (
+          <li key={item.label}>
+            {onToggle ? (
+              <button type="button" className="ks-dash-legend-toggle" aria-pressed={!item.hidden} onClick={() => onToggle(item.label)}>
+                {dot}
+                {item.label}
+              </button>
+            ) : (
+              <>
+                {dot}
+                {item.label}
+              </>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

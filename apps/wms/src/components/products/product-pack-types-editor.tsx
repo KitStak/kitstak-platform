@@ -129,7 +129,7 @@ export function PackHierarchy({
           <Boxes className="h-3.5 w-3.5 text-faint" aria-hidden />
           Irregular:
           {irregular.map((n) => (
-            <Badge key={n.key} tone="neutral" size="sm">
+            <Badge key={n.key} tone="neutral">
               {n.packType} · {n.uomQty} {unit}
             </Badge>
           ))}

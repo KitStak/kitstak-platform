@@ -5,7 +5,8 @@
  * last run, deep link to the board's automations center).
  */
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ArrowUpRight, CircleAlert, Zap } from 'lucide-react';
 import {
   Badge,
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui';
 import { errorMessage } from '@/lib/hooks';
 import { useOrg } from '@/features/shell/org-context';
+import { routes } from '@/features/shell/routes';
 import { PageFrame, PageSection } from '@/features/shell/pages/page-frame';
 import type {
   AutomationUsageDto,
@@ -30,6 +32,30 @@ import { Switch } from './components/switch';
 import { UsageMeter } from './components/usage-meter';
 
 type StatusFilter = 'all' | 'on' | 'off' | 'failing';
+
+const STATUS_FILTERS: readonly StatusFilter[] = ['all', 'on', 'off', 'failing'];
+
+function isStatusFilter(value: string | null | undefined): value is StatusFilter {
+  return (STATUS_FILTERS as readonly (string | null | undefined)[]).includes(value);
+}
+
+/**
+ * The status filter lives in `?status=` so a headline number (and Admin > Usage) can link to the
+ * filtered list. Native history keeps a change client only; Next syncs useSearchParams with it.
+ */
+function useStatusFilter(): readonly [StatusFilter, (next: StatusFilter) => void] {
+  const search = useSearchParams();
+  const raw = search?.get('status');
+  const status = isStatusFilter(raw) ? raw : 'all';
+  const setStatus = useCallback((next: StatusFilter) => {
+    const params = new URLSearchParams(window.location.search);
+    if (next === 'all') params.delete('status');
+    else params.set('status', next);
+    const qs = params.toString();
+    window.history.replaceState(null, '', qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+  }, []);
+  return [status, setStatus] as const;
+}
 
 const TICK_DAYS = [1, 8, 15, 22, 29] as const;
 
@@ -82,8 +108,8 @@ function DailyBars({ usage }: { readonly usage: AutomationUsageDto }) {
                       future
                         ? 'bg-sunken'
                         : today
-                          ? 'bg-primary group-hover/bar:bg-primary-hover'
-                          : 'bg-primary/45 group-hover/bar:bg-primary/75',
+                          ? 'bg-data'
+                          : 'bg-data/45 group-hover/bar:bg-data/75',
                     )}
                     style={{ height: future || runs === 0 ? '3px' : `${Math.max(4, (runs / max) * 100)}%` }}
                   />
@@ -103,7 +129,7 @@ function DailyBars({ usage }: { readonly usage: AutomationUsageDto }) {
             </span>
           ))}
           <span
-            className="absolute -translate-x-1/2 font-semibold text-primary-text"
+            className="absolute -translate-x-1/2 font-semibold text-fg-secondary"
             style={{ left: `${((usage.dayOfMonth - 0.5) / days) * 100}%`, top: '14px' }}
           >
             Today
@@ -133,17 +159,20 @@ function DailyBarsSkeleton() {
   );
 }
 
+/** A number in the usage card. With `href` it opens the list below, filtered to what it counts. */
 function Stat({
   label,
   value,
   tone,
+  href,
 }: {
   readonly label: string;
   readonly value: string;
   readonly tone?: 'danger';
+  readonly href?: string;
 }) {
-  return (
-    <div className="flex flex-col justify-end gap-0.5">
+  const body = (
+    <>
       <span className="text-xs leading-4 text-fg-secondary">{label}</span>
       <span
         className={cn(
@@ -153,7 +182,17 @@ function Stat({
       >
         {value}
       </span>
-    </div>
+    </>
+  );
+  if (!href) return <div className="flex flex-col justify-end gap-0.5">{body}</div>;
+  return (
+    <Link
+      href={href}
+      scroll={false}
+      className="-m-1 flex flex-col justify-end gap-0.5 rounded-sm p-1 transition-colors duration-[var(--duration-instant)] hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus active:bg-pressed"
+    >
+      {body}
+    </Link>
   );
 }
 
@@ -163,7 +202,7 @@ export function OrgAutomationsPage() {
   const toggle = useAutomationToggle();
   const overrides = useEnabledOverrides();
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<StatusFilter>('all');
+  const [status, setStatus] = useStatusFilter();
   const [boardFilter, setBoardFilter] = useState('all');
   const canWrite = permissions.includes('automation:write');
 
@@ -203,7 +242,6 @@ export function OrgAutomationsPage() {
     <PageFrame
       title="Automations"
       icon={<Zap />}
-      iconTone="solid"
       width="wide"
     >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
@@ -217,12 +255,14 @@ export function OrgAutomationsPage() {
               <Stat
                 label="Active automations"
                 value={rows.filter((row) => row.enabled).length.toLocaleString()}
+                href={routes.automations(org.slug, 'on')}
               />
               <Stat label="Boards" value={boards.length.toLocaleString()} />
               <Stat
                 label="Failed runs"
                 value={data.failuresThisMonth.toLocaleString()}
                 tone={data.failuresThisMonth > 0 ? 'danger' : undefined}
+                href={routes.automations(org.slug, 'failing')}
               />
             </div>
           ) : (
@@ -359,7 +399,7 @@ export function OrgAutomationsPage() {
                   />
                   <Link
                     href={href}
-                    className="min-w-0 truncate rounded-xs font-medium text-fg hover:text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-focus"
+                    className="min-w-0 truncate rounded-xs font-medium text-fg hover:underline focus-visible:outline-2 focus-visible:outline-focus"
                     title={row.name}
                   >
                     {row.name}
@@ -376,14 +416,14 @@ export function OrgAutomationsPage() {
                     </span>
                     <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken" aria-hidden>
                       <span
-                        className="block h-full rounded-full bg-primary"
+                        className="block h-full rounded-full bg-data"
                         style={{ width: `${(row.runsThisMonth / maxRuns) * 100}%` }}
                       />
                     </span>
                   </span>
                   <span className="col-start-2 text-sm md:col-start-auto md:text-right">
                     {row.failuresThisMonth > 0 ? (
-                      <Badge tone="danger" size="sm" icon={<CircleAlert aria-hidden />}>
+                      <Badge tone="danger" icon={<CircleAlert aria-hidden />}>
                         {row.failuresThisMonth} failed
                       </Badge>
                     ) : (

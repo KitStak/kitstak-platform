@@ -351,7 +351,7 @@ function RecentActivity({ project }: { readonly project: ProjectDetail }) {
             return (
               <li key={event.id} className="flex gap-2.5 text-sm">
                 {event.actorKind === 'automation' ? (
-                  <span aria-hidden className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-primary-text">
+                  <span aria-hidden className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-sunken text-icon">
                     <Zap className="size-3" />
                   </span>
                 ) : (

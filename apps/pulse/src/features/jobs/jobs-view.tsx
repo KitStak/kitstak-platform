@@ -64,6 +64,7 @@ import {
   IsoDatePicker,
 } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
+import { Count } from '@kitstak/ui/dashboard';
 import { MarginPill } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
@@ -534,17 +535,16 @@ export function JobsView({
               aria-pressed={on}
               data-testid={`risk-chip-${status}`}
               onClick={() => toggleRisk(status)}
+              aria-label={`${PULSE_STATUS_LABELS[status]}, ${riskCounts[status] === 1 ? '1 job' : `${riskCounts[status]} jobs`}`}
               className={cn(
-                'inline-flex h-8 items-center gap-2 rounded-full border px-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-                on
-                  ? 'border-primary bg-primary-subtle text-fg'
-                  : 'border-border-subtle bg-panel text-fg-secondary hover:bg-hover',
-                // An empty status stays readable (no dimming): a dashed outline and a quiet count say "none".
-                riskCounts[status] === 0 && !on && 'border-dashed bg-transparent',
+                // A plain toggle: the status Pill and a neutral Count. Selected is a neutral surface
+                // and aria-pressed, never a border or crimson (docs/design/UI-CLEANUP.md).
+                'inline-flex h-8 items-center gap-1.5 rounded-full px-1.5 text-sm transition-colors duration-[var(--duration-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+                on ? 'bg-selected hover:bg-selected-hover' : 'bg-transparent hover:bg-hover',
               )}
             >
-              <MarginPill status={status} size="sm" />
-              <span className={cn('tabular-nums', riskCounts[status] === 0 ? 'text-fg-muted' : 'font-semibold text-fg')}>{riskCounts[status]}</span>
+              <MarginPill status={status} />
+              {riskCounts[status] > 0 ? <Count value={riskCounts[status]} /> : <span className="px-1 text-xs text-fg-muted tabular-nums">0</span>}
             </button>
           );
         })}
@@ -834,7 +834,7 @@ export function JobsView({
           role="region"
           aria-label="Bulk actions"
           data-testid="jobs-bulk"
-          className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-primary bg-raised px-3 py-2 shadow-md"
+          className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border-strong bg-raised px-3 py-2 shadow-md"
         >
           <span className="text-sm font-medium text-fg">{selectedJobs.length} selected</span>
           {canManage ? (
@@ -1031,7 +1031,7 @@ export function JobsView({
                               <span className="min-w-0 truncate xl:hidden">· {job.clientName}</span>
                             ) : null}
                             {job.program ? (
-                              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-primary-subtle px-1 text-2xs font-medium text-primary-text" data-testid="job-program-chip">
+                              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-muted px-1 text-2xs font-medium text-fg-secondary" data-testid="job-program-chip">
                                 <Repeat aria-hidden className="size-2.5" />
                                 {job.program.kind === 'program' ? (job.program.key ?? 'Program') : `${job.program.key ?? 'Program'} builds`}
                               </span>
@@ -1086,7 +1086,7 @@ export function JobsView({
                           <span className="flex min-w-0 items-center gap-1.5 text-xs text-fg-muted">
                             <span className="shrink-0">{job.number}</span>
                             {job.program ? (
-                              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-primary-subtle px-1 text-2xs font-medium text-primary-text" data-testid="job-card-program-chip">
+                              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-muted px-1 text-2xs font-medium text-fg-secondary" data-testid="job-card-program-chip">
                                 <Repeat aria-hidden className="size-2.5" />
                                 {job.program.kind === 'program' ? (job.program.key ?? 'Program') : `${job.program.key ?? 'Program'} builds`}
                               </span>

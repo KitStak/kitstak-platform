@@ -260,11 +260,11 @@ export function ProgramCard({ program, ops, access, onDelete, onTemplate }: { re
 
       <div className="flex min-h-6 items-center gap-2">
         <ProgramStatusPill status={program.archivedAt ? 'archived' : program.status} />
-        {program.health ? <span className="relative z-[1]"><HealthWithBasis health={program.health} basis={program.healthBasis} auto={program.healthAuto} size="sm" /></span> : null}
+        {program.health ? <span className="relative z-[1]"><HealthWithBasis health={program.health} basis={program.healthBasis} auto={program.healthAuto} /></span> : null}
         <span className="flex-1" />
         {risk ? (
           <span className="relative z-[1] inline-flex shrink-0" title={minimumRiskTitle(program) ?? undefined}>
-            <Badge tone="warning" size="sm" icon={<TriangleAlert aria-hidden />} className="whitespace-nowrap">
+            <Badge tone="warning" icon={<TriangleAlert aria-hidden />} className="whitespace-nowrap">
               {risk}
             </Badge>
           </span>
@@ -291,7 +291,7 @@ export function ProgramCard({ program, ops, access, onDelete, onTemplate }: { re
           {program.pulseJob ? (
             <Tooltip content={`Pulse job ${program.pulseJob.number} · ${program.pulseJob.name}`}>
               <span tabIndex={0} className="relative z-[1] shrink-0 rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-focus">
-                <Badge tone="neutral" size="sm" className="font-key">{program.pulseJob.number}</Badge>
+                <Badge tone="outline">{program.pulseJob.number}</Badge>
               </span>
             </Tooltip>
           ) : null}

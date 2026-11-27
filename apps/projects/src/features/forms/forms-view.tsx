@@ -355,13 +355,13 @@ function FormCard({
               Made <LocalTime iso={form.createdAt} />
             </span>
             {form.isPublic ? (
-              <Badge size="sm" tone="info">
+              <Badge tone="info">
                 Public link
               </Badge>
             ) : (
-              <Badge size="sm">Workspace only</Badge>
+              <Badge>Workspace only</Badge>
             )}
-            {!form.enabled ? <Badge size="sm">Off</Badge> : null}
+            {!form.enabled ? <Badge>Off</Badge> : null}
           </div>
         </div>
       </div>

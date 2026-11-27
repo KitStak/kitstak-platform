@@ -20,7 +20,8 @@ import {
   toast,
 } from '@/components/ui';
 import { ComboChart } from '@/components/charts/cartesian';
-import { KpiTile } from '@/components/charts/stats';
+import { Pill, StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { statValue } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { PersonAvatar } from '@/components/pulse/person';
@@ -341,9 +342,10 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
 
   return (
     <div className="flex flex-col gap-5" data-testid="job-work">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiTile
+      <StatRow label="Work log numbers">
+        <StatTile
           label={`Good ${job.unitLabel}`}
+          href={null}
           explain={
             <Explain
               title={`Good ${job.unitLabel}`}
@@ -354,15 +356,16 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
               ]}
             />
           }
-          value={formatNumber(job.stats.unitsGood, { maxDigits: 0 })}
-          footer={
+          value={statValue(formatNumber(job.stats.unitsGood, { maxDigits: 0 }))}
+          caption={
             <span className="text-xs text-fg-muted">
               {formatNumber(job.stats.unitsScrap, { maxDigits: 0 })} scrapped
             </span>
           }
         />
-        <KpiTile
+        <StatTile
           label="Labor hours"
+          href={null}
           explain={
             <Explain
               title="Labor hours"
@@ -373,8 +376,8 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
               ]}
             />
           }
-          value={formatHours(job.stats.hours, { maxDigits: 0 })}
-          footer={
+          value={statValue(formatHours(job.stats.hours, { maxDigits: 0 }))}
+          caption={
             <span className="text-xs text-fg-muted">
               {job.planLaborHours
                 ? `plan ${formatHours(job.planLaborHours, { maxDigits: 0 })}`
@@ -385,8 +388,9 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
             </span>
           }
         />
-        <KpiTile
+        <StatTile
           label="Pace on days with hours"
+          href={null}
           explain={
             <Explain
               title="Pace"
@@ -397,9 +401,8 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
               ]}
             />
           }
-          value={job.stats.uph === null ? null : formatPace(job.stats.uph)}
-          emptyText="No counted day yet"
-          footer={
+          value={statValue(job.stats.uph === null ? null : formatPace(job.stats.uph), 'No counted day yet')}
+          caption={
             <span className="text-xs text-fg-muted">
               {job.stats.standardUph !== null
                 ? `target ${formatPace(job.stats.standardUph)}`
@@ -408,11 +411,11 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
           }
         />
         {seesMoney ? (
-          <KpiTile
+          <StatTile
             label={`Labor cost for one ${unit}`}
-            value={laborPerUnit === null ? null : formatMoney(laborPerUnit)}
-            emptyText="No units yet"
-            footer={
+            href={null}
+            value={statValue(laborPerUnit === null ? null : formatMoney(laborPerUnit), 'No units yet')}
+            caption={
               <span className="text-xs text-fg-muted">
                 {formatMoney(job.stats.laborCents, { cents: false })} of labor
               </span>
@@ -434,8 +437,9 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
             }
           />
         ) : (
-          <KpiTile
+          <StatTile
             label="Days logged"
+            href={null}
             explain={
               <Explain
                 title="Days logged"
@@ -443,15 +447,15 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
                 rows={[{ label: 'Days with work logged', value: formatNumber(chart.labels.length), kind: 'total' }]}
               />
             }
-            value={formatNumber(chart.labels.length)}
-            footer={
+            value={statValue(formatNumber(chart.labels.length))}
+            caption={
               <span className="text-xs text-fg-muted">
                 {job.stats.lastEntryDate ? `last on ${shortDate(job.stats.lastEntryDate)}` : 'none yet'}
               </span>
             }
           />
         )}
-      </div>
+      </StatRow>
 
       {canLog && (jobOpen || editingDay) ? (
         <div ref={formRef} className="scroll-mt-24">
@@ -659,9 +663,7 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
                             ) : null}
                           </>
                         ) : (
-                          <span className="rounded-sm bg-[var(--label-yellow-subtle)] px-1.5 py-0.5 text-xs font-medium text-[var(--label-yellow-text)]">
-                            Add hours
-                          </span>
+                          <Pill tone="caution">Add hours</Pill>
                         )}
                       </TableCell>
                       <TableCell numeric>
@@ -673,7 +675,7 @@ export function JobWork({ job, today, settings, laborClasses }: JobTabProps) {
                       {seesMoney ? (
                         <TableCell numeric>
                           {day.needsRate ? (
-                            <span className="text-[var(--label-yellow-text)]">No rate</span>
+                            <span className="text-warning-text">No rate</span>
                           ) : (
                             <span
                               title={

@@ -55,14 +55,14 @@ function BuildBadges({ build }: { readonly build: BuildBlockDTO }) {
   return (
     <>
       {build.unplanned ? (
-        <Badge tone="info" size="sm">
+        <Badge tone="info">
           Unplanned
         </Badge>
       ) : null}
       {build.closedShort ? (
         <Tooltip content={build.closeReason ? `Closed short: ${build.closeReason}` : 'Closed short of plan'}>
           <span tabIndex={0} className="inline-flex rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-focus">
-            <Badge tone="warning" size="sm">
+            <Badge tone="warning">
               Closed short
             </Badge>
           </span>

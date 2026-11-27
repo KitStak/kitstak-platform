@@ -16,7 +16,6 @@ import { StatusPill } from '@/components/ui/status-pill';
 import { DisabledReason } from '@/components/ui/tooltip';
 import { useFormat } from '@/lib/format';
 import { useApiQuery } from '@/lib/query-client';
-import { DARK_SAFE_PILL } from './returns-client';
 
 interface OpenRma {
   readonly id: string;
@@ -91,7 +90,7 @@ export function ExpectedReturns({
               <Link href={`/orders/returns/${r.id}`} className="font-semibold text-primary hover:underline">
                 {r.rmaCode}
               </Link>
-              <StatusPill status={r.status} domain="return" size="sm" className={DARK_SAFE_PILL} />
+              <StatusPill status={r.status} domain="return" size="sm" />
               <span
                 className="min-w-0 flex-1 truncate text-secondary"
                 title={[r.customerName, r.orderCode, r.clientName].filter(Boolean).join(' · ')}

@@ -126,7 +126,7 @@ export function ErrorPill({ code }: { readonly code: string }) {
         tabIndex={0}
         className="inline-flex min-w-0 max-w-full rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
-        <Badge tone="danger" size="sm" shape="pill" className="min-w-0 max-w-full">
+        <Badge tone="danger" className="min-w-0 max-w-full">
           <span className="min-w-0 truncate">{text}</span>
         </Badge>
       </span>
@@ -760,7 +760,7 @@ export function WorkflowBlockedPage() {
       header: 'Fully or partially',
       size: 140,
       cell: ({ row }) => (
-        <Badge size="sm" shape="pill" tone={row.original.blockType === 'Fully' ? 'danger' : 'warning'}>
+        <Badge tone={row.original.blockType === 'Fully' ? 'danger' : 'warning'}>
           {row.original.blockType}
         </Badge>
       ),
@@ -922,7 +922,7 @@ export function ListingExceptionsPage() {
       header: 'Issue type',
       size: 150,
       cell: ({ row }) => (
-        <Badge size="sm" shape="pill" tone={row.original.issueType === 'Multi Listing' ? 'warning' : 'info'}>
+        <Badge tone={row.original.issueType === 'Multi Listing' ? 'warning' : 'info'}>
           {row.original.issueType}
         </Badge>
       ),

@@ -74,11 +74,11 @@ import { OrderBulkMenus } from './bulk/order-bulk-menus';
 
 const COPY: Readonly<Record<OrderView, { readonly title: string; readonly gridKey: string }>> = {
   backlog: {
-    title: 'Shipment Orders',
+    title: 'Shipment orders',
     gridKey: SHIPMENT_ORDERS_GRID_KEY,
   },
   shipped: {
-    title: 'Shipped & Canceled Orders',
+    title: 'Shipped & canceled orders',
     gridKey: SHIPPED_ORDERS_GRID_KEY,
   },
 };

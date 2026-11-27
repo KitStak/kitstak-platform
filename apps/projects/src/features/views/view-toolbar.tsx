@@ -226,7 +226,7 @@ function AllFiltersPanel({ view, model }: { readonly view: FilterStateApi; reado
           >
             {FILTER_META[key].icon}
             <span className="flex-1 truncate">{FILTER_META[key].label}</span>
-            {summary[key] ? <span aria-label="active" className="size-1.5 rounded-full bg-primary" /> : null}
+            {summary[key] ? <span aria-label="active" className="size-1.5 rounded-full bg-icon-strong" /> : null}
           </button>
         ))}
         <div className="mt-auto p-1 max-sm:mt-0 max-sm:ml-auto">
@@ -372,7 +372,7 @@ function CategoryPanel({ categories, tab, onTab, onClearAll, anyActive }: { read
           >
             {category.icon}
             <span className="flex-1 truncate">{category.label}</span>
-            {category.chip ? <span aria-label="on" className="size-1.5 rounded-full bg-primary" /> : null}
+            {category.chip ? <span aria-label="on" className="size-1.5 rounded-full bg-icon-strong" /> : null}
           </button>
         ))}
         <div className="mt-auto p-1 max-sm:mt-0 max-sm:ml-auto">

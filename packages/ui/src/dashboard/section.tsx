@@ -9,10 +9,18 @@ import * as React from 'react';
 // Each piece imports the stylesheet itself: the package is side effect free apart from CSS, so a bundler may skip index.ts.
 import './dashboard.css';
 import { DashLink, type DashAction } from './link';
-import { cx, type PillTone } from './pill';
+import { Count, cx, type PillTone } from './pill';
 
 export interface DashSectionProps {
   readonly title: string;
+  /**
+   * How many things the section lists, shown next to the title. Hidden at 0 so an empty section
+   * does not shout. Only a count of overdue or broken things passes `countTone="critical"`.
+   */
+  readonly count?: number;
+  readonly countTone?: 'neutral' | 'critical';
+  /** How the section counts, as a short tooltip on the title. Not an info icon. */
+  readonly help?: string;
   readonly description?: React.ReactNode;
   /** The one header action ("All open jobs"). */
   readonly action?: DashAction;
@@ -27,14 +35,15 @@ export interface DashSectionProps {
   readonly 'data-testid'?: string;
 }
 
-export function DashSection({ title, description, action, aside, footer, flush = false, children, id, className, ...rest }: DashSectionProps) {
+export function DashSection({ title, count, countTone = 'neutral', help, description, action, aside, footer, flush = false, children, id, className, ...rest }: DashSectionProps) {
   const headingId = React.useId();
   return (
     <section id={id} className={cx('ks-dash-section', className)} aria-labelledby={headingId} data-testid={rest['data-testid']}>
       <header className="ks-dash-section-head">
         <div className="ks-dash-section-titles">
-          <h2 id={headingId} className="ks-dash-section-title">
+          <h2 id={headingId} className="ks-dash-section-title" title={help} data-help={help ? '' : undefined}>
             {title}
+            {count !== undefined ? <Count value={count} tone={countTone} /> : null}
           </h2>
           {description ? <p className="ks-dash-section-desc">{description}</p> : null}
         </div>
@@ -125,21 +134,35 @@ export function ActionRow({ href, title, tag, reason, meta, value, valueTone = '
   );
 }
 
+/** A next step that happens on this page (opens a dialog or a wizard) instead of going somewhere. */
+export interface DashButtonAction {
+  readonly label: string;
+  readonly onClick: () => void;
+}
+
 export interface EmptyNoteProps {
   readonly children: React.ReactNode;
-  /** The next step. Pass `null` only when there truly is none, and say why in the words. */
-  readonly action: DashAction | null;
+  /**
+   * The next step: a link, or a button for a step that opens on this page. Pass `null` only when
+   * there truly is none, and say why in the words.
+   */
+  readonly action: DashAction | DashButtonAction | null;
 }
 
 export function EmptyNote({ children, action }: EmptyNoteProps) {
   return (
     <div className="ks-dash-empty">
       <p>{children}</p>
-      {action ? (
+      {action && 'href' in action ? (
         <DashLink href={action.href} className="ks-dash-section-action">
           {action.label}
           <ArrowRight />
         </DashLink>
+      ) : action ? (
+        <button type="button" onClick={action.onClick} className="ks-dash-section-action ks-dash-button">
+          {action.label}
+          <ArrowRight />
+        </button>
       ) : null}
     </div>
   );

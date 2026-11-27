@@ -18,8 +18,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/lib/query-client';
 import { useMe } from '@/lib/permissions-client';
 import { cn } from '@/lib/utils';
-import { PillDot } from '@/components/ui/status-pill';
-import { pillClass, pillStyle, TONES, type StatusTone } from '@/lib/status-colors';
+import { Pill } from '@kitstak/ui/dashboard';
+import { TonePill } from '@/components/ui/status-pill';
+import { statusLabel, TONES, type StatusTone } from '@/lib/status-colors';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { FilterFieldDef } from '@/components/grid';
 import type { InventoryGridField } from '@/lib/grid-defs/inventory/fields';
@@ -112,20 +113,15 @@ export function InventoryStatusPill({
 }) {
   const tone = STATUS_TONE[status] ?? TONES.grey;
   return (
-    <span data-status={status} style={pillStyle(tone)} className={cn(pillClass(), className)}>
-      <PillDot tone={tone} />
-      <span className="truncate">{status}</span>
-    </span>
+    <TonePill status={status} tone={tone} className={className}>
+      {statusLabel(status)}
+    </TonePill>
   );
 }
 
 export function DamagePill({ reason }: { readonly reason: string | null }) {
   if (!reason) return <span className="text-faint">None</span>;
-  return (
-    <span className="inline-flex items-center rounded-full bg-[var(--label-brown-subtle)] px-2 py-0.5 text-2xs font-semibold leading-4 whitespace-nowrap text-[var(--label-brown-text)]">
-      {reason}
-    </span>
-  );
+  return <Pill tone="caution">{reason}</Pill>;
 }
 
 /* ---------------- product thumb ---------------- */

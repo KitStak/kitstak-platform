@@ -54,6 +54,11 @@ describe('stylesheet contract (docs/design/UI-CLEANUP.md)', () => {
     expect(rule('.ks-dash-meter-fill')).toMatch(/background: var\(--dash-data/);
   });
 
+  it('works outside a frame: every feel variable has a fallback', () => {
+    // List pages use tiles, sections and pills without a DashboardFrame around them.
+    expect(css).not.toMatch(/var\(--dash-[a-z-]+\)/);
+  });
+
   it('gives every app its own data color and nothing more', () => {
     for (const app of ['portal', 'crm', 'wms', 'projects', 'pulse']) {
       expect(rule(`.ks-dash[data-app='${app}']`)).toMatch(/--dash-data: var\(--(chart|label|pulse-series)-/);
@@ -144,6 +149,14 @@ describe('Pill, Tag, Count, Legend', () => {
     expect(renderToStaticMarkup(<Count value={250} tone="critical" />)).toContain('99+');
   });
 
+  it('gives a count on an icon a solid neutral fill, never crimson', () => {
+    expect(renderToStaticMarkup(<Count value={4} />)).not.toContain('data-placement');
+    expect(renderToStaticMarkup(<Count value={4} placement="icon" />)).toContain('data-placement="icon"');
+    const onIcon = rule(".ks-dash-count[data-placement='icon']");
+    expect(onIcon).toMatch(/background: var\(--text-secondary\);/);
+    expect(onIcon).not.toMatch(/primary/);
+  });
+
   it('draws a legend as dots and words', () => {
     const html = renderToStaticMarkup(<Legend items={[{ label: 'Open', color: 'var(--chart-1)' }]} />);
     expect(html).toContain('ks-dash-legend-dot');
@@ -184,7 +197,100 @@ describe('DashSection, ActionRow and EmptyNote', () => {
     const html = renderToStaticMarkup(<EmptyNote action={{ label: 'Open my work', href: '/my-work' }}>You are all caught up.</EmptyNote>);
     expect(html).toContain('href="/my-work"');
   });
+
+  it('can make the next step a button when it opens on this page', () => {
+    const element = EmptyNote({ action: { label: 'Add a step', onClick: () => undefined }, children: 'No steps yet.' });
+    const html = renderToStaticMarkup(element);
+    expect(html).toContain('<button type="button" class="ks-dash-section-action ks-dash-button">Add a step');
+    expect(html).not.toContain('<a');
+    const button = findElement(element, (node) => node.type === 'button');
+    let clicked = 0;
+    const onClick = () => {
+      clicked += 1;
+    };
+    const wired = findElement(EmptyNote({ action: { label: 'Add a step', onClick }, children: 'x' }), (node) => node.type === 'button');
+    expect(button).toBeTruthy();
+    (wired?.props as { onClick: () => void }).onClick();
+    expect(clicked).toBe(1);
+  });
+
+  it('shows a count next to the section title and hides it at zero', () => {
+    const counted = renderToStaticMarkup(
+      <DashSection title="Overdue" count={3} countTone="critical">
+        <p>body</p>
+      </DashSection>,
+    );
+    expect(counted).toMatch(/<h2[^>]*>Overdue<span class="ks-dash-count" data-tone="critical">3<\/span><\/h2>/);
+    const empty = renderToStaticMarkup(
+      <DashSection title="Overdue" count={0}>
+        <p>body</p>
+      </DashSection>,
+    );
+    expect(empty).not.toContain('ks-dash-count');
+  });
+
+  it('keeps the count neutral unless told otherwise, and puts help in a tooltip', () => {
+    const html = renderToStaticMarkup(
+      <DashSection title="Open jobs" count={12} help="Jobs with work logged this month">
+        <p>body</p>
+      </DashSection>,
+    );
+    expect(html).toContain('data-tone="neutral">12</span>');
+    expect(html).toContain('title="Jobs with work logged this month"');
+    expect(html).not.toContain('<svg aria-hidden="true" viewBox="0 0 16 16" class="ks-dash-info');
+  });
 });
+
+describe('Legend toggles', () => {
+  const items = [
+    { label: 'Open', color: 'var(--chart-1)' },
+    { label: 'Closed', color: 'var(--chart-2)', hidden: true },
+  ];
+
+  it('stays plain text without onToggle', () => {
+    expect(renderToStaticMarkup(<Legend items={items} />)).not.toContain('<button');
+  });
+
+  it('turns each entry into a pressed or unpressed toggle', () => {
+    const html = renderToStaticMarkup(<Legend items={items} onToggle={() => undefined} />);
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain('data-hidden=""');
+    expect(html).not.toContain('ks-dash-pill');
+  });
+
+  it('reports which series was toggled', () => {
+    const seen: string[] = [];
+    const element = Legend({ items, onToggle: (label) => seen.push(label) });
+    const buttons = findAll(element, (node) => node.type === 'button');
+    expect(buttons).toHaveLength(2);
+    (buttons[1]?.props as { onClick: () => void }).onClick();
+    expect(seen).toEqual(['Closed']);
+  });
+});
+
+describe('Meter size', () => {
+  it('is thin by default and thick when asked, in the same data color', () => {
+    expect(renderToStaticMarkup(<Meter value={0.5} label="Picked" />)).toContain('data-size="thin"');
+    expect(renderToStaticMarkup(<Meter value={0.5} label="Picked" size="thick" />)).toContain('data-size="thick"');
+    expect(rule(".ks-dash-meter[data-size='thick']")).toMatch(/height: 8px;/);
+  });
+});
+
+type AnyElement = React.ReactElement<{ children?: React.ReactNode; onClick?: () => void }>;
+
+function findAll(node: React.ReactNode, match: (element: AnyElement) => boolean): AnyElement[] {
+  if (!React.isValidElement(node)) {
+    return Array.isArray(node) ? node.flatMap((child) => findAll(child, match)) : [];
+  }
+  const element = node as AnyElement;
+  const own = match(element) ? [element] : [];
+  return [...own, ...React.Children.toArray(element.props.children).flatMap((child) => findAll(child, match))];
+}
+
+function findElement(node: React.ReactNode, match: (element: AnyElement) => boolean): AnyElement | undefined {
+  return findAll(node, match)[0];
+}
 
 describe('frame and links', () => {
   it('sets the app feel on the frame', () => {

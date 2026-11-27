@@ -27,7 +27,7 @@ export function stateText(version: Pick<CardVersionDTO, 'state' | 'effectiveFrom
   }
 }
 
-export const STATE_TONE = { draft: 'neutral', scheduled: 'info', in_force: 'success', ended: 'outline' } as const;
+export const STATE_TONE = { draft: 'neutral', scheduled: 'info', in_force: 'success', ended: 'neutral' } as const;
 
 /**
  * Date ranges for published versions, newest first: the in force one reads "Nov 1 to now", an

@@ -21,7 +21,6 @@ import {
   jobsAndShipmentsCount,
 } from '@/components/orders/detail/order-detail-page';
 import { hasDirtyFields } from '@/components/orders/wizard/order-wizard-shell';
-import { pillText } from '@/lib/status-colors';
 import { codeTakenMessage } from '@/components/orders/wizard/step-details';
 import { orderStatusTone } from '@/components/orders/order-status-pill';
 import { createWorld, orderInput, type World } from '../foundation/domain/fixtures';
@@ -221,15 +220,19 @@ describe('wizard', () => {
     expect(hasDirtyFields({ billing: { city: true } })).toBe(true);
     expect(codeTakenMessage('SO010873')).toBe('Order code SO010873 is already taken');
   });
-  it('status pill uses the shared label palette', () => {
+  it('status pill uses the five shared pill tones', () => {
     expect(orderStatusTone('Open')).toEqual({
-      bg: 'var(--label-green-subtle)',
-      fg: pillText('green'),
-      dot: 'var(--label-green)',
+      pill: 'info',
+      bg: 'var(--info-subtle)',
+      fg: 'var(--info-text)',
+      dot: 'var(--info)',
     });
     expect(orderStatusTone('Packing Started')).toBe(orderStatusTone('Ready to Pick'));
-    expect(orderStatusTone('Ready to Pick').fg).toBe(pillText('blue'));
-    expect(orderStatusTone('Ready to Ship').bg).toBe('var(--label-purple-subtle)');
-    expect(orderStatusTone('Shortage').fg).toBe(pillText('brown'));
+    expect(orderStatusTone('Ready to Pick').pill).toBe('info');
+    expect(orderStatusTone('Ready to Ship').pill).toBe('info');
+    expect(orderStatusTone('Shipped').pill).toBe('positive');
+    expect(orderStatusTone('Shortage').pill).toBe('caution');
+    expect(orderStatusTone('On Hold').pill).toBe('neutral');
+    expect(orderStatusTone('Cancelled').pill).toBe('critical');
   });
 });

@@ -153,7 +153,7 @@ export function RecordPicker({
                     <span className="truncate text-2xs text-fg-muted">{[record.meta?.code as string | undefined, record.status].filter(Boolean).join(' · ')}</span>
                   ) : null}
                 </span>
-                {value?.id === record.id ? <Check aria-hidden className="size-4 text-primary-text" /> : null}
+                {value?.id === record.id ? <Check aria-hidden className="size-4 text-fg" /> : null}
               </Command.Item>
             ))}
           </Command.List>

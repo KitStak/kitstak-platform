@@ -1,39 +1,61 @@
 import * as React from 'react';
-import { cva, type VariantProps } from 'class-variance-authority';
-import { cn } from '@/lib/utils';
+import { Pill, Tag, type PillTone } from '@kitstak/ui/dashboard';
 
-export const badgeVariants = cva('inline-flex items-center gap-1 whitespace-nowrap font-medium', {
-  variants: {
-    tone: {
-      neutral: 'bg-muted text-fg-secondary',
-      primary: 'bg-primary-subtle text-primary-text',
-      success: 'bg-success-subtle text-success-text',
-      warning: 'bg-warning-subtle text-warning-text',
-      danger: 'bg-danger-subtle text-danger-text',
-      info: 'bg-info-subtle text-info-text',
-      solid: 'bg-primary text-primary-fg',
-      outline: 'border border-border-default bg-transparent text-fg-secondary',
-    },
-    size: {
-      sm: 'h-[18px] rounded-sm px-1.5 text-2xs',
-      md: 'h-5 rounded-sm px-2 text-xs',
-    },
-    shape: { rounded: '', pill: 'rounded-full' },
-  },
-  defaultVariants: { tone: 'neutral', size: 'md', shape: 'rounded' },
-});
+/**
+ * Badge tones. `outline` is an identity (a code, a type, a role name) and draws as the shared
+ * neutral `Tag`; every other tone is a state and draws as the shared `Pill`
+ * (docs/design/UI-CLEANUP.md "Pills": five flat tones, one size, sentence case).
+ */
+export type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'outline';
 
-export interface BadgeProps
-  extends React.HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {
+const PILL_TONE: Readonly<Record<Exclude<BadgeTone, 'outline'>, PillTone>> = {
+  neutral: 'neutral',
+  success: 'positive',
+  warning: 'caution',
+  danger: 'critical',
+  info: 'info',
+};
+
+export interface BadgeProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'children' | 'color'> {
+  readonly tone?: BadgeTone | null;
   readonly icon?: React.ComponentType<{ className?: string }>;
+  readonly children: React.ReactNode;
 }
 
-/** Generic label/count badge. Statuses use `StatusPill` instead. */
-export function Badge({ className, tone, size, shape, icon: Icon, children, ...props }: BadgeProps) {
+/** Pill tone for a badge tone (`outline` reads as neutral where a pill is needed). */
+export function badgePillTone(tone: BadgeTone | null | undefined): PillTone {
+  return !tone || tone === 'outline' ? 'neutral' : PILL_TONE[tone];
+}
+
+/**
+ * Generic label/state badge, drawn with the shared pieces. Statuses use `StatusPill` instead.
+ * Extra attributes (`data-*`, `aria-*`, `role`) land on a `display: contents` wrapper, so they
+ * stay queryable without adding a box.
+ */
+export function Badge({ className, tone = 'neutral', icon: Icon, title, children, ...rest }: BadgeProps) {
+  const body =
+    tone === 'outline' ? (
+      <Tag title={title} className={className}>
+        {children}
+      </Tag>
+    ) : Icon ? (
+      <Pill
+        tone={badgePillTone(tone)}
+        icon={<Icon className="h-3 w-3" />}
+        title={title}
+        className={className}
+      >
+        {children}
+      </Pill>
+    ) : (
+      <Pill tone={badgePillTone(tone)} title={title} className={className}>
+        {children}
+      </Pill>
+    );
+  if (Object.keys(rest).length === 0) return body;
   return (
-    <span className={cn(badgeVariants({ tone, size, shape }), className)} {...props}>
-      {Icon ? <Icon className="h-3 w-3" aria-hidden /> : null}
-      {children}
+    <span className="contents" {...rest}>
+      {body}
     </span>
   );
 }

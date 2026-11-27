@@ -56,7 +56,7 @@ export function StatusCard({
           value={percent}
           size={64}
           thickness={5}
-          tone={percent >= 100 ? 'success' : 'primary'}
+          tone={percent >= 100 ? 'success' : 'data'}
           label="Required order data complete"
           center={<ClipboardCheck className="h-5 w-5 text-secondary" aria-hidden />}
         />

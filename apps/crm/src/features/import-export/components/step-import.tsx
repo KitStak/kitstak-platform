@@ -265,7 +265,6 @@ export function StepImport({ run, onAnother, onBackground }: StepImportProps) {
             value={run.status === 'preparing' ? undefined : percent}
             label="Import progress"
             showValue
-            tone="primary"
           />
           <p className="text-sm text-fg-secondary tabular-nums" data-testid="import-progress-text">
             {run.status === 'preparing'

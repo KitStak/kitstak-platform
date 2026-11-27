@@ -146,7 +146,7 @@ export function SitesSection({ canEdit }: { readonly canEdit: boolean }) {
               <div className="min-w-0 flex-1 basis-48">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-fg">
                   {site.name}
-                  {site.isDefault ? <Badge tone="primary">Main site</Badge> : null}
+                  {site.isDefault ? <Badge tone="info">Main site</Badge> : null}
                   {site.archivedAt ? <Badge>Archived</Badge> : null}
                 </p>
                 <p className="text-xs text-fg-muted">

@@ -50,11 +50,11 @@ export function ProgramAlertsView({ data }: { readonly data: ProgramAlertsDTO })
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <h3 className="text-sm font-semibold text-fg">
-                      <Link href={group.path} className="rounded-sm hover:text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="program-alert-program">
+                      <Link href={group.path} className="rounded-sm hover:text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="program-alert-program">
                         {group.key} · {group.name}
                       </Link>
                     </h3>
-                    <Badge tone={severity.tone} size="sm">
+                    <Badge tone={severity.tone}>
                       {severity.label}
                     </Badge>
                   </div>

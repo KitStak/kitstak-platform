@@ -74,12 +74,12 @@ export const RUN_STATE_TEXT: Readonly<Record<RunState, string>> = {
   cancelled: 'Cancelled',
 };
 
-export const RUN_STATE_TONE: Readonly<Record<RunState, 'neutral' | 'info' | 'success' | 'warning' | 'outline'>> = {
+export const RUN_STATE_TONE: Readonly<Record<RunState, 'neutral' | 'info' | 'success' | 'warning'>> = {
   planned: 'neutral',
   in_progress: 'info',
   done: 'success',
   short: 'warning',
-  cancelled: 'outline',
+  cancelled: 'neutral',
 };
 
 export type TargetTone = 'success' | 'warning' | 'danger';

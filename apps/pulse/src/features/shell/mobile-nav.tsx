@@ -25,7 +25,7 @@ function SheetLink({ entry, badge, active }: { readonly entry: NavEntry; readonl
       <Link href={entry.href} aria-label={drawerBadgeLabel(entry, badge)} aria-current={active ? 'page' : undefined} data-testid={`mobile-nav-${entry.id}`} className={rowClass}>
         <Icon aria-hidden className="size-[18px] shrink-0 text-icon" />
         <span className="min-w-0 flex-1 truncate">{entry.label}</span>
-        {badge > 0 ? <CountBadge count={badge} ringClassName="ring-transparent" /> : null}
+        {badge > 0 ? <CountBadge count={badge} /> : null}
       </Link>
     </li>
   );

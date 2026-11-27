@@ -296,11 +296,7 @@ export function PrintOptionsModal({
                     <span className="flex min-w-0 flex-col gap-0.5">
                       <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                         <span className="truncate">{t.name}</span>
-                        {t.isDefault ? (
-                          <Badge tone="info" size="sm">
-                            Default
-                          </Badge>
-                        ) : null}
+                        {t.isDefault ? <Badge tone="info">Default</Badge> : null}
                       </span>
                       <span className="text-xs text-faint">
                         {ready ? t.description || t.printerType : 'Not configured yet'}

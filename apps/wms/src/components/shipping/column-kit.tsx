@@ -7,9 +7,10 @@
  */
 import type { ColumnDef } from '@tanstack/react-table';
 import { DATE_TIME_COLUMN_WIDTH, DateCell, MoneyCell, QtyCell, YesNoPill } from '@/components/grid/cells';
-import { StatusPill } from '@/components/ui/status-pill';
+import { StatusPill, TonePill } from '@/components/ui/status-pill';
 import { formatGridDateTime } from '@/lib/format';
-import { pillStyle, statusTone } from '@/lib/status-colors';
+import { Tag } from '@kitstak/ui/dashboard';
+import { statusLabel, statusTone } from '@/lib/status-colors';
 
 /** One module-wide date-time format: zero-padded, no seconds ("11/05/2026 9:15 AM"). */
 export const shipDateTime = (value: string | Date | null | undefined): string =>
@@ -198,18 +199,10 @@ export function exportColumnsOf<T>(
   return specs.map((s) => ({ key: s.exportKey ?? s.id, label: s.label }));
 }
 
-/** Shipping label / Return label pill (blue / purple, BUILD_PLAN 0.5). */
+/** Shipping label / Return label: a type, so a neutral Tag (UI-CLEANUP "Pills"). */
 export function LabelTypePill({ type }: { readonly type: string }) {
   const isReturn = type.toLowerCase().startsWith('return');
-  const tone = statusTone(isReturn ? 'return' : 'shipping', 'labelType');
-  return (
-    <span
-      style={pillStyle(tone)}
-      className="inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold leading-4"
-    >
-      {isReturn ? 'Return label' : 'Shipping label'}
-    </span>
-  );
+  return <Tag>{isReturn ? 'Return label' : 'Shipping label'}</Tag>;
 }
 
 /** Active (green) / Voided (red) label status. */
@@ -217,13 +210,9 @@ export function LabelStatusPill({ status }: { readonly status: string }) {
   const tone =
     status === 'Voided' ? statusTone('cancelled', 'shipmentOrder') : statusTone('active', 'active');
   return (
-    <span
-      data-status={status}
-      style={pillStyle(tone)}
-      className="inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold leading-4"
-    >
-      {status}
-    </span>
+    <TonePill status={status} tone={tone}>
+      {statusLabel(status)}
+    </TonePill>
   );
 }
 

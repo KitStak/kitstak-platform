@@ -602,7 +602,7 @@ export async function customer360(
   ]);
   return {
     available: { crm: availability.crm, wms: availability.wms },
-    urls: { crm: `${appUrls().crm}/${ctx.orgSlug}`, wms: appUrls().wms, crmTemplates: `${appUrls().crm}/${ctx.orgSlug}/workspaces?templates=1` },
+    urls: { crm: `${appUrls().crm}/${ctx.orgSlug}`, wms: appUrls().wms, crmTemplates: `${appUrls().crm}/${ctx.orgSlug}?wizard=templates` },
     crmReady,
     customer: customer ? { id: customer.id, code: customer.code, name: customer.name } : null,
     account: crm.account,

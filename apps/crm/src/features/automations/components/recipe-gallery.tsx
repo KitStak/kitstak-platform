@@ -165,12 +165,12 @@ export function RecipeGallery({ term, columns, canEdit, onUse, onCustom }: Recip
                   <span className="flex min-h-5 items-center gap-2">
                     {/* Redundant when the gallery is already filtered to this one category. */}
                     {singleCategory ? null : (
-                      <Badge tone="neutral" size="sm">
+                      <Badge tone="neutral">
                         {category?.label}
                       </Badge>
                     )}
                     {needs.length > 0 ? (
-                      <Badge tone="warning" size="sm">
+                      <Badge tone="warning">
                         Needs a {needs.join(' and ')} column
                       </Badge>
                     ) : null}

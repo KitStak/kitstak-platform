@@ -555,7 +555,7 @@ export function WorkEntryForm({
           </p>
         ) : null}
         {questions.map((question) => (
-          <p key={question} className="font-medium text-[var(--label-yellow-text)]" data-testid="work-crew-question">
+          <p key={question} className="font-medium text-warning-text" data-testid="work-crew-question">
             {question}
           </p>
         ))}

@@ -172,10 +172,8 @@ export function JobsViewsBar({
                   type="button"
                   aria-label={`Options for the view ${view.name}`}
                   className={cn(
-                    'inline-flex h-7 w-6 items-center justify-center rounded-r-full border border-l-0 text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-                    activeId === view.id
-                      ? 'border-primary bg-primary-subtle'
-                      : 'border-border-subtle bg-panel',
+                    'inline-flex h-7 w-6 items-center justify-center rounded-r-full text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+                    activeId === view.id ? 'bg-selected' : 'bg-transparent',
                   )}
                 >
                   <MoreHorizontal aria-hidden className="size-3.5" />
@@ -281,11 +279,10 @@ function ViewChip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'inline-flex h-7 max-w-[220px] items-center gap-1.5 border px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+        // Selected is a neutral surface and aria-pressed, never crimson (docs/design/UI-CLEANUP.md).
+        'inline-flex h-7 max-w-[220px] items-center gap-1.5 px-2.5 text-xs font-medium transition-colors duration-[var(--duration-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         grouped ? 'rounded-l-full' : 'rounded-full',
-        active
-          ? 'border-primary bg-primary-subtle text-fg'
-          : 'border-border-subtle bg-panel text-fg-secondary hover:bg-hover hover:text-fg',
+        active ? 'bg-selected text-fg hover:bg-selected-hover' : 'bg-transparent text-fg-secondary hover:bg-hover hover:text-fg',
       )}
     >
       {shared ? <Users aria-hidden className="size-3 shrink-0" /> : null}

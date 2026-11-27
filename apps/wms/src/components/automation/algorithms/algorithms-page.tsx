@@ -88,15 +88,11 @@ export function AlgorithmsPage({ slug }: { readonly slug: AlgorithmSlug }) {
           >
             {row.original.name}
           </Link>
-          {row.original.isSystem ? (
-            <Badge size="sm" tone="neutral">
-              System
-            </Badge>
-          ) : null}
+          {row.original.isSystem ? <Badge tone="neutral">System</Badge> : null}
           {row.original.isDynamicReplenishment ? (
             <Tooltip content="Used for dynamic replenishment; never for putaway">
               <span>
-                <Badge size="sm" tone="info" icon={Repeat2}>
+                <Badge tone="info" icon={Repeat2}>
                   Replenishment
                 </Badge>
               </span>

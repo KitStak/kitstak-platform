@@ -202,7 +202,7 @@ function ProjectCard({
           value={percent}
           label={`${project.name} progress`}
           size="sm"
-          tone={percent === 100 ? 'success' : 'primary'}
+          tone={percent === 100 ? 'success' : 'data'}
           className="flex-1"
         />
         <span className="shrink-0 text-xs text-fg-secondary tabular-nums">{percent}%</span>

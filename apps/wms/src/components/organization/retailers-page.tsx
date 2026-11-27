@@ -170,9 +170,7 @@ const buildColumns = (openDetails: (id: string) => void): GridColumnDef<Retailer
     size: 110,
     cell: ({ row }) =>
       row.original.createCaseLabels ? (
-        <Badge tone="success" shape="pill">
-          On · ×{row.original.caseLabelPrintQty}
-        </Badge>
+        <Badge tone="success">On · ×{row.original.caseLabelPrintQty}</Badge>
       ) : (
         <span className="text-faint">Off</span>
       ),

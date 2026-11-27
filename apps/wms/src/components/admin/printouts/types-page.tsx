@@ -67,22 +67,14 @@ function TypeCard({ t }: { readonly t: PrintoutTypeInfo }) {
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <span className="truncate text-base font-semibold text-foreground">{t.name}</span>
-          {t.beta ? (
-            <Badge tone="info" size="sm">
-              BETA
-            </Badge>
-          ) : null}
+          {t.beta ? <Badge tone="info">Beta</Badge> : null}
         </span>
         <span className="mt-0.5 block text-xs text-secondary">{t.printerType}</span>
         <span className="mt-2 flex items-center gap-2 text-xs">
           <span className={cn('tabular-nums font-medium', t.count ? 'text-body' : 'text-faint')}>
             {t.count} {t.count === 1 ? 'template' : 'templates'}
           </span>
-          {!t.implemented ? (
-            <Badge tone="outline" size="sm">
-              Generic layout
-            </Badge>
-          ) : null}
+          {!t.implemented ? <Badge tone="outline">Generic layout</Badge> : null}
         </span>
       </span>
       <ChevronRight

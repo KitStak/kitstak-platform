@@ -88,7 +88,7 @@ export function BulkBar({ selection, tasks, ops }: { readonly selection: Selecti
       }}
     >
       <div className="flex h-16 shrink-0 items-center gap-3 border-r border-border-subtle pr-4 max-sm:h-12 max-sm:gap-2 max-sm:pr-2">
-        <span className="flex h-16 w-14 items-center justify-center rounded-l-lg bg-primary text-xl font-medium text-primary-fg tabular-nums max-sm:h-12 max-sm:w-11" data-testid="bulk-count">
+        <span className="flex h-16 w-14 items-center justify-center rounded-l-lg bg-selected text-xl font-medium text-fg tabular-nums max-sm:h-12 max-sm:w-11" data-testid="bulk-count">
           {ids.length}
         </span>
         <span className="flex flex-col gap-0.5 max-sm:hidden">

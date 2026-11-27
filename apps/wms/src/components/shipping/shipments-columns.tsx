@@ -1,6 +1,7 @@
 'use client';
 
 /** Carrier Shipment Details columns: the 41 Logiwa columns, one row per package / label. */
+import { Pill } from '@kitstak/ui/dashboard';
 import { LinkCell } from '@/components/grid/cells';
 import { StatusPill } from '@/components/ui/status-pill';
 import type { ShipmentListRow } from '@/server/repositories/shipping';
@@ -130,9 +131,9 @@ export const SHIPMENT_COLUMN_SPECS: readonly ColumnSpec<ShipmentRow>[] = [
           className="flex min-w-0 items-center gap-1.5"
           title={r.lastCarrierError ?? 'The carrier returned an error'}
         >
-          <span className="shrink-0 rounded-full border border-danger/40 bg-danger-soft px-1.5 text-2xs font-semibold text-danger">
+          <Pill tone="critical" className="shrink-0">
             Error
-          </span>
+          </Pill>
           <span className="truncate text-xs text-secondary">{r.lastCarrierError ?? ''}</span>
         </span>
       ) : (

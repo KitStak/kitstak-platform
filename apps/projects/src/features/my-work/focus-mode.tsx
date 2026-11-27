@@ -190,7 +190,7 @@ function FocusBody({
                 title={item.title}
                 className={cn(
                   'h-1.5 flex-1 rounded-full',
-                  outcomes[item.id] === 'done' ? 'bg-success' : outcomes[item.id] ? 'bg-border-strong' : i === index ? 'bg-primary' : 'bg-sunken',
+                  outcomes[item.id] === 'done' ? 'bg-success' : outcomes[item.id] ? 'bg-border-strong' : i === index ? 'bg-icon-strong' : 'bg-sunken',
                 )}
               >
                 <span className="sr-only">

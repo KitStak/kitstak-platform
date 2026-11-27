@@ -150,7 +150,7 @@ export function LocationLedgerTab({
                     <td className="px-3 py-2">
                       {t.type}
                       {t.reservation ? (
-                        <Badge tone="info" size="sm" className="ml-1.5">
+                        <Badge tone="info" className="ml-1.5">
                           Reservation
                         </Badge>
                       ) : null}

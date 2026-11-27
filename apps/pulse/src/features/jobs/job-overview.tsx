@@ -35,7 +35,8 @@ import {
 import { cn } from '@/components/ui/cn';
 import { AreaChart, LineChart } from '@/components/charts/cartesian';
 import { DonutChart } from '@/components/charts/radial';
-import { DeltaBadge, KpiTile, MarginPill, marginHealth } from '@/components/charts/stats';
+import { Pill, StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { DeltaBadge, MarginPill, marginHealth, statValue } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { LocalTime } from '@/components/pulse/local-time';
@@ -99,7 +100,7 @@ const BANNER: Readonly<Record<string, string>> = {
   losing: 'border-danger/40 bg-danger-subtle',
   at_risk: 'border-warning/40 bg-warning-subtle',
   no_data: 'border-border-default bg-sunken',
-  heads_up: 'border-[var(--label-yellow-bg)]/50 bg-[var(--label-yellow-subtle)]',
+  heads_up: 'border-border-default bg-sunken',
   on_track: 'border-success/40 bg-success-subtle',
 };
 
@@ -278,9 +279,7 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                 </span>
               )}
               {stats.laborMissing ? (
-                <span className="rounded-sm bg-[var(--label-yellow-subtle)] px-2 py-0.5 text-xs font-medium text-[var(--label-yellow-text)]">
-                  Profit not complete yet
-                </span>
+                <Pill tone="caution">Profit not complete yet</Pill>
               ) : null}
             </div>
             <p className="text-md font-semibold text-fg" data-testid="job-headline">
@@ -307,11 +306,12 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
             ) : null}
             {steps.length > 0 ? (
               <div className="flex flex-wrap gap-2 pt-1">
-                {steps.map((step, index) => (
+                {steps.map((step) => (
                   <ButtonLink
                     key={step.rule}
                     href={nextStepHref(step.nextStep, job)}
-                    variant={index === 0 ? 'primary' : 'secondary'}
+                    // The page header keeps the one crimson button (Log work), so next steps are outline.
+                    variant="secondary"
                     size="sm"
                     testId={`next-step-${step.nextStep}`}
                   >
@@ -398,7 +398,7 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                 <span className="min-w-0 flex-1">{item.text(item.count)}</span>
                 <Link
                   href={item.tab === 'labor' ? routes.labor('rates') : routes.jobTab(job.number, item.tab)}
-                  className="inline-flex items-center gap-1 rounded-sm font-medium text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                  className="inline-flex items-center gap-1 rounded-sm font-medium text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                 >
                   {item.action}
                   <ArrowRight aria-hidden className="size-3.5" />
@@ -410,13 +410,15 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
       ) : null}
 
       {/* Headline numbers. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="job-tiles">
+      <StatRow label="Job numbers" data-testid="job-tiles">
         {seesMoney ? (
-          <>
-            <KpiTile
+          [
+            <StatTile
+              key="revenue"
               label="Revenue earned"
-              value={formatMoney(stats.revenueCents, { cents: false })}
-              footer={
+              href={routes.jobTab(job.number, 'money-in')}
+              value={statValue(formatMoney(stats.revenueCents, { cents: false }))}
+              caption={
                 <span className="text-xs text-fg-muted">
                   Billed {formatMoney(stats.billedCents, { cents: false })}
                 </span>
@@ -441,11 +443,13 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                   ]}
                 />
               }
-            />
-            <KpiTile
+            />,
+            <StatTile
+              key="cost"
               label={job.status === 'completed' ? 'Final cost' : 'Cost so far'}
-              value={formatMoney(stats.costCents, { cents: false })}
-              footer={
+              href={routes.jobTab(job.number, 'work')}
+              value={statValue(formatMoney(stats.costCents, { cents: false }))}
+              caption={
                 costPerUnit !== null ? (
                   <span className="text-xs text-fg-muted">{formatMoneyPerUnit(costPerUnit, unit)}</span>
                 ) : undefined
@@ -476,11 +480,13 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                   ]}
                 />
               }
-            />
-            <KpiTile
+            />,
+            <StatTile
+              key="profit"
               label={job.status === 'completed' ? 'Final profit' : 'Profit so far'}
-              value={formatMoney(stats.profitCents, { cents: false })}
-              footer={
+              href={routes.jobTab(job.number, 'plan')}
+              value={statValue(formatMoney(stats.profitCents, { cents: false }))}
+              caption={
                 stats.mode === 'projected' ? (
                   <span className="text-xs text-fg-muted">
                     {stats.projectedProfitCents === null
@@ -505,12 +511,13 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                   }
                 />
               }
-            />
-            <KpiTile
+            />,
+            <StatTile
+              key="margin"
               label="Job margin"
-              value={stats.marginBp === null ? null : formatPercentBp(stats.marginBp)}
-              emptyText="No revenue yet"
-              footer={
+              href={routes.jobTab(job.number, 'plan')}
+              value={statValue(stats.marginBp === null ? null : formatPercentBp(stats.marginBp), 'No revenue yet')}
+              caption={
                 <>
                   {health ? <MarginPill health={health} size="sm" /> : null}
                   {stats.targetMarginBp !== null ? (
@@ -539,12 +546,13 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                 />
               }
             />
-          </>
+          ]
         ) : null}
-        <KpiTile
+        <StatTile
           label={`${job.unitLabel.charAt(0).toUpperCase()}${job.unitLabel.slice(1)} done`}
-          value={formatNumber(stats.unitsGood, { maxDigits: 0 })}
-          footer={
+          href={routes.jobTab(job.number, 'work')}
+          value={statValue(formatNumber(stats.unitsGood, { maxDigits: 0 }))}
+          caption={
             plannedUnits !== null && Number(plannedUnits) > 0 ? (
               <UnitsProgress
                 done={stats.unitsGood}
@@ -578,13 +586,13 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
             />
           }
         />
-        <KpiTile
+        <StatTile
           label="Pace on days with hours"
-          value={stats.uph === null ? null : formatPace(stats.uph)}
-          emptyText="No counted day yet"
-          footer={
+          href={routes.jobTab(job.number, 'work')}
+          value={statValue(stats.uph === null ? null : formatPace(stats.uph), 'No counted day yet')}
+          caption={
             stats.standardUph !== null ? (
-              <>
+              <span className="inline-flex flex-wrap items-center gap-x-1.5">
                 {stats.productivityBp !== null ? (
                   <DeltaBadge
                     delta={stats.productivityBp - 10000}
@@ -600,7 +608,7 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                     {recentDays(figures.paceRecent.days) ?? 'Lately'}: {figures.paceRecent.text}
                   </span>
                 ) : null}
-              </>
+              </span>
             ) : (
               <span className="text-xs text-fg-muted">No target pace set</span>
             )
@@ -624,14 +632,15 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
           }
         />
         {seesMoney ? (
-          <>
-            <KpiTile
+          [
+            <StatTile
+              key="cost-per-unit"
               label={`Cost for one ${unit} so far`}
-              value={costPerUnit === null ? null : formatMoney(costPerUnit)}
-              emptyText="No units yet"
-              footer={
+              href={routes.jobTab(job.number, 'plan')}
+              value={statValue(costPerUnit === null ? null : formatMoney(costPerUnit), 'No units yet')}
+              caption={
                 shouldCost !== null && costPerUnit !== null ? (
-                  <>
+                  <span className="inline-flex flex-wrap items-center gap-x-1.5">
                     <DeltaBadge
                       delta={subCents(costPerUnit, shouldCost)}
                       text={formatMoney(absBig(subCents(costPerUnit, shouldCost)))}
@@ -639,7 +648,7 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                       size="sm"
                     />
                     <span className="text-xs text-fg-muted">should cost {formatMoney(shouldCost)}</span>
-                  </>
+                  </span>
                 ) : planCostPerUnit !== null ? (
                   <span className="text-xs text-fg-muted">the plan says {formatMoney(planCostPerUnit)}</span>
                 ) : (
@@ -677,18 +686,13 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                   ]}
                 />
               }
-            />
-            <KpiTile
+            />,
+            <StatTile
+              key="not-billed"
               label="Not billed yet"
-              value={formatMoney(stats.notBilledYetCents, { cents: false })}
-              footer={
-                <Link
-                  href={routes.jobTab(job.number, 'money-in')}
-                  className="rounded-sm text-xs font-medium text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                >
-                  See invoices
-                </Link>
-              }
+              href={routes.jobTab(job.number, 'money-in')}
+              value={statValue(formatMoney(stats.notBilledYetCents, { cents: false }))}
+              caption={<span className="text-xs text-fg-muted">Earned, with no invoice to cover it</span>}
               explain={
                 <Explain
                   title="Not billed yet"
@@ -701,11 +705,13 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                 />
               }
             />
-          </>
+          ]
         ) : (
-          <>
-            <KpiTile
+          [
+            <StatTile
+              key="hours"
               label="Labor hours"
+              href={routes.jobTab(job.number, 'work')}
               explain={
                 <Explain
                   title="Labor hours"
@@ -716,17 +722,19 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                   ]}
                 />
               }
-              value={formatHours(stats.hours, { maxDigits: 0 })}
-              footer={
+              value={statValue(formatHours(stats.hours, { maxDigits: 0 }))}
+              caption={
                 job.planLaborHours && !program ? (
                   <span className="text-xs text-fg-muted">
                     plan {formatHours(job.planLaborHours, { maxDigits: 0 })}
                   </span>
                 ) : undefined
               }
-            />
-            <KpiTile
+            />,
+            <StatTile
+              key="last-entry"
               label="Last entry"
+              href={routes.jobTab(job.number, 'work')}
               explain={
                 <Explain
                   title="Last entry"
@@ -734,13 +742,12 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                   rows={[{ label: 'Rows on the work log', value: formatNumber(stats.entryCount), kind: 'total' }]}
                 />
               }
-              value={stats.lastEntryDate ? shortDate(stats.lastEntryDate) : null}
-              emptyText="None yet"
-              footer={<span className="text-xs text-fg-muted">{stats.entryCount} {stats.entryCount === 1 ? 'entry' : 'entries'}</span>}
+              value={statValue(stats.lastEntryDate ? shortDate(stats.lastEntryDate) : null, 'None yet')}
+              caption={<span className="text-xs text-fg-muted">{stats.entryCount} {stats.entryCount === 1 ? 'entry' : 'entries'}</span>}
             />
-          </>
+          ]
         )}
-      </div>
+      </StatRow>
 
       {yardsticks.conflict ? (
         <p
@@ -880,7 +887,7 @@ export function JobOverview({ job, today, settings, laborClasses, services, prog
                           {row.hoursConfirmed ? (
                             formatHours(row.hours)
                           ) : (
-                            <span className="text-[var(--label-yellow-text)]">Add hours</span>
+                            <span className="text-warning-text">Add hours</span>
                           )}
                         </TableCell>
                         <TableCell numeric className={seesMoney ? 'hidden sm:table-cell' : undefined}>

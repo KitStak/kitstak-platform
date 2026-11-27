@@ -85,7 +85,7 @@ export function ProgramDays({ programKey, month, initial }: { readonly programKe
                     </p>
                   </div>
                   {day.missingHours && day.addHoursPath ? (
-                    <Link href={day.addHoursPath} className="shrink-0 rounded-sm text-sm font-medium text-primary-text underline-offset-2 hover:underline">
+                    <Link href={day.addHoursPath} className="shrink-0 rounded-sm text-sm font-medium text-fg-link underline-offset-2 hover:underline">
                       Add hours
                     </Link>
                   ) : money && (day.revenueCents || day.costCents) ? (
@@ -143,7 +143,7 @@ export function ProgramDays({ programKey, month, initial }: { readonly programKe
                     ) : null}
                     <TableCell className="pr-4 text-right whitespace-nowrap">
                       {day.missingHours && day.addHoursPath ? (
-                        <Link href={day.addHoursPath} className="rounded-sm text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="day-add-hours">
+                        <Link href={day.addHoursPath} className="rounded-sm text-sm font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="day-add-hours">
                           Add hours
                         </Link>
                       ) : null}

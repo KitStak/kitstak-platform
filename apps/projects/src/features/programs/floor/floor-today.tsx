@@ -148,7 +148,7 @@ function ProgramPanel({ program, date, sheet, today }: { readonly program: Floor
                   {qtyOfText(run.builtUnits, run.plannedUnits, program.unit)} · {doneOfText(run.done, run.builds, 'done')}
                 </span>
               </span>
-              <Badge tone={RUN_STATE_TONE[run.state]} size="sm">
+              <Badge tone={RUN_STATE_TONE[run.state]}>
                 {RUN_STATE_TEXT[run.state]}
               </Badge>
             </button>

@@ -433,9 +433,7 @@ function BlockEditor({
               className="h-10 w-auto max-w-[120px] rounded border border-border object-contain"
             />
           ) : (
-            <Badge tone="neutral" size="sm">
-              Uses the company logo
-            </Badge>
+            <Badge tone="neutral">Uses the company logo</Badge>
           )}
           <input
             ref={fileRef}
@@ -1114,9 +1112,7 @@ export function DesignerStep({
       >
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-semibold text-foreground">Live preview</h3>
-          <Badge tone="neutral" size="sm">
-            {paperLabel(layout.paper)}
-          </Badge>
+          <Badge tone="neutral">{paperLabel(layout.paper)}</Badge>
           {tab !== 'canvas' && preview.loading ? (
             <Spinner className="h-3.5 w-3.5" label="Rendering preview" />
           ) : tab !== 'canvas' && preview.ms !== null ? (

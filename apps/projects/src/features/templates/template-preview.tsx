@@ -56,7 +56,7 @@ function TaskLine({ task, depth = 0 }: { readonly task: TemplateTask; readonly d
     <>
       <li className="flex items-center gap-2 py-1 text-sm" style={{ paddingLeft: depth * 20 }}>
         {task.isMilestone ? (
-          <Diamond aria-hidden className="size-3.5 shrink-0 text-primary-text" />
+          <Diamond aria-hidden className="size-3.5 shrink-0 text-icon" />
         ) : (
           <span
             aria-hidden
@@ -67,7 +67,7 @@ function TaskLine({ task, depth = 0 }: { readonly task: TemplateTask; readonly d
           {task.title}
         </span>
         {task.priority === 'urgent' || task.priority === 'high' ? (
-          <Badge size="sm" tone={task.priority === 'urgent' ? 'danger' : 'warning'}>
+          <Badge tone={task.priority === 'urgent' ? 'danger' : 'warning'}>
             {task.priority === 'urgent' ? 'Urgent' : 'High'}
           </Badge>
         ) : null}
@@ -136,7 +136,7 @@ export function TemplatePreview({
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle px-6 py-3">
         <Badge>{template.category}</Badge>
-        <Badge tone={template.builtIn ? 'neutral' : 'primary'}>
+        <Badge tone="neutral">
           {template.builtIn ? 'Built in' : 'Your team'}
         </Badge>
         {weeks(payload.durationDays) ? (
@@ -144,7 +144,7 @@ export function TemplatePreview({
         ) : null}
         <Badge icon={<ListChecks aria-hidden />}>{describeTemplateTaskCounts({ tasks: template.taskCount, subtasks: template.subtaskCount ?? 0 })}</Badge>
         {automations.length ? (
-          <Badge icon={<Zap aria-hidden />} tone="warning">
+          <Badge icon={<Zap aria-hidden />}>
             {automations.length} {automations.length === 1 ? 'automation' : 'automations'}
           </Badge>
         ) : null}
@@ -164,7 +164,7 @@ export function TemplatePreview({
         <ol className="flex flex-wrap items-center gap-1.5">
           {payload.statuses.map((status, index) => (
             <li key={status.key} className="flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-panel px-2.5 py-1 text-xs font-medium text-fg">
+              <span className="inline-flex h-5 items-center gap-1.5 rounded-sm bg-muted px-2 text-xs font-medium text-fg">
                 <StatusIcon category={status.category} color={status.color} size={12} />
                 {status.name}
                 {status.wipLimit ? <span className="text-fg-muted">· max {status.wipLimit}</span> : null}
@@ -203,7 +203,7 @@ export function TemplatePreview({
           <ul className="flex flex-col gap-1">
             {payload.milestones.map((milestone) => (
               <li key={milestone.key} className="flex items-center gap-2 text-sm text-fg">
-                <Diamond aria-hidden className="size-3.5 text-primary-text" />
+                <Diamond aria-hidden className="size-3.5 text-icon" />
                 <span className="flex-1">{milestone.name}</span>
                 {dayText(milestone.dueOffsetDays) ? (
                   <span className="text-xs text-fg-muted tabular-nums">
@@ -250,7 +250,7 @@ export function TemplatePreview({
             {(payload.customFields ?? []).map((field) => (
               <span
                 key={field.key}
-                className="inline-flex items-center gap-1 rounded-full border border-border-subtle px-2 py-0.5 text-xs text-fg-secondary"
+                className="inline-flex h-5 items-center gap-1 rounded-sm bg-muted px-2 text-xs text-fg-secondary"
               >
                 {field.name}{' '}
                 <span className="text-fg-muted">· {CUSTOM_FIELD_TYPE_LABELS[field.type] ?? field.type}</span>

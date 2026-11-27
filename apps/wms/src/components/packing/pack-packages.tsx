@@ -80,8 +80,8 @@ export function PackageBoxes({
           <Card
             key={b.seq}
             className={cn(
-              'overflow-hidden p-0 transition-shadow',
-              active && 'border-border-strong shadow-md ring-1 ring-foreground/10',
+              'overflow-hidden p-0 transition-colors',
+              active && 'border-border-strong',
               b.closed && 'bg-surface-sunken/40',
             )}
           >

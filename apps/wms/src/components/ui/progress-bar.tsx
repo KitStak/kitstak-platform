@@ -1,13 +1,19 @@
 import * as React from 'react';
+import { Meter, type MeterTone } from '@kitstak/ui/dashboard';
 import { cn } from '@/lib/utils';
 
-export type ProgressTone = 'primary' | 'success' | 'warning' | 'danger';
+/**
+ * `data` (the default) draws a quantity in the WMS data color (teal, `--dash-data`). Status tones
+ * are only for a value that crossed a line that matters (over budget, done). Never crimson: a red
+ * bar reads as an error (docs/design/UI-CLEANUP.md "Color is meaning").
+ */
+export type ProgressTone = 'data' | 'success' | 'warning' | 'danger';
 
-const TONE: Readonly<Record<ProgressTone, string>> = {
-  primary: 'bg-primary',
-  success: 'bg-success',
-  warning: 'bg-warning',
-  danger: 'bg-danger',
+const METER_TONE: Readonly<Record<ProgressTone, MeterTone>> = {
+  data: 'data',
+  success: 'positive',
+  warning: 'caution',
+  danger: 'critical',
 };
 
 export function clampPercent(value: number, max = 100): number {
@@ -19,6 +25,7 @@ export interface ProgressBarProps {
   readonly value: number;
   readonly max?: number;
   readonly tone?: ProgressTone;
+  /** `sm` is the thin 4 px meter; `md` the thick 8 px meter used in dense tables and cards. */
   readonly size?: 'sm' | 'md';
   /** Accessible name. */
   readonly label?: string;
@@ -27,10 +34,11 @@ export interface ProgressBarProps {
   readonly className?: string;
 }
 
+/** A quantity bar: the shared `Meter` with an optional value to its right. */
 export function ProgressBar({
   value,
   max = 100,
-  tone = 'primary',
+  tone = 'data',
   size = 'md',
   label = 'Progress',
   showValue,
@@ -39,22 +47,12 @@ export function ProgressBar({
   const pct = clampPercent(value, max);
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      <div
-        role="progressbar"
-        aria-label={label}
-        aria-valuemin={0}
-        aria-valuemax={max}
-        aria-valuenow={Math.round(Math.min(Math.max(value, 0), max))}
-        className={cn(
-          'relative w-full overflow-hidden rounded-full bg-neutral-soft',
-          size === 'sm' ? 'h-1' : 'h-1.5',
-        )}
-      >
-        <div
-          className={cn('h-full rounded-full transition-[width] duration-300 ease-out', TONE[tone])}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      <Meter
+        value={pct / 100}
+        label={label}
+        tone={METER_TONE[tone]}
+        size={size === 'sm' ? 'thin' : 'thick'}
+      />
       {showValue ? (
         <span className="shrink-0 text-2xs font-semibold tabular-nums text-secondary">
           {typeof showValue === 'string' ? showValue : `${Math.round(pct)}%`}

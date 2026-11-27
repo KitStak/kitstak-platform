@@ -352,11 +352,7 @@ function Body({
     id: r.id,
     label: r.name,
     description: r.description ?? `${r.category} role`,
-    badge: r.isSystem ? (
-      <Badge size="sm" tone="neutral">
-        System
-      </Badge>
-    ) : null,
+    badge: r.isSystem ? <Badge tone="neutral">System</Badge> : null,
   }));
   const warehouseItems = options.warehouses.map((w) => ({ id: w.id, label: w.name, description: w.code }));
   const policy = usePasswordPolicy();

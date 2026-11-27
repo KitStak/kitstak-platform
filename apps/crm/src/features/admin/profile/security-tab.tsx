@@ -22,7 +22,7 @@ import { formatDateTime, formatIp, passwordStrength, relativeTime } from '../for
 import { DemoBadge, ErrorPanel, SettingRow, SettingsCard, TableSkeleton } from '../ui';
 
 const DEVICE_ICON = { desktop: Monitor, mobile: Smartphone, tablet: Tablet, bot: Bot, unknown: Monitor } as const;
-const STRENGTH_TONE = { 0: 'danger', 1: 'danger', 2: 'warning', 3: 'primary', 4: 'success' } as const;
+const STRENGTH_TONE = { 0: 'danger', 1: 'danger', 2: 'warning', 3: 'data', 4: 'success' } as const;
 const MY_SESSIONS_KEY = ['me', 'sessions'] as const;
 
 interface SessionRow {
@@ -282,7 +282,7 @@ function MySessionsCard() {
                     <span className="font-medium text-fg">
                       {device.browser} on {device.os}
                     </span>
-                    {isCurrent ? <Badge tone="success" size="sm">This device</Badge> : null}
+                    {isCurrent ? <Badge tone="success">This device</Badge> : null}
                   </span>
                   <span className="block truncate text-sm text-fg-muted" title={`Signed in ${formatDateTime(iso(entry.createdAt))}`}>
                     {entry.ipAddress ? formatIp(entry.ipAddress) : 'Unknown IP'} · Active {relativeTime(iso(entry.updatedAt))}

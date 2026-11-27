@@ -6,6 +6,7 @@
  * Track; bulk Void labels and Reprint labels; package detail drawer on row click.
  */
 import * as React from 'react';
+import { Count } from '@kitstak/ui/dashboard';
 import { useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
@@ -412,7 +413,7 @@ export function ShipmentsPage() {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader title="Carrier Shipment Details" tabs="shipments" />
+      <PageHeader title="Carrier shipment details" tabs="shipments" />
       <GridToolbar
         {...g.toolbarProps}
         searchPlaceholder="Order code, tracking or master tracking, customer"
@@ -428,17 +429,17 @@ export function ShipmentsPage() {
               onClick={toggleErrors}
               data-testid="carrier-errors-filter"
               className={cn(
-                'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+                'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30',
                 errorsOn
-                  ? 'border-primary bg-primary text-white'
-                  : typeof errorCount === 'number' && errorCount > 0
-                    ? 'border-danger/40 bg-danger-soft text-danger hover:brightness-95'
-                    : 'border-border bg-surface text-body hover:bg-surface-sunken',
+                  ? 'border-border-strong bg-selected text-fg'
+                  : 'border-border bg-surface text-body hover:border-border-strong hover:bg-surface-sunken',
               )}
             >
-              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+              <AlertTriangle className="h-3.5 w-3.5 text-icon" aria-hidden />
               Carrier errors
-              {typeof errorCount === 'number' ? <span className="tabular-nums">{errorCount}</span> : null}
+              {typeof errorCount === 'number' ? (
+                <Count value={errorCount} tone="critical" label="failed" />
+              ) : null}
             </button>
             {canCreateLabel ? (
               <Button size="sm" onClick={() => setCreating(true)} data-testid="create-label">

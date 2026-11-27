@@ -232,7 +232,7 @@ function UpdateBody({
         <div className="flex min-h-7 items-center gap-2">
           <span className="truncate text-base font-semibold text-fg">{author?.name ?? 'Deleted user'}</span>
           {update.pinned && !isReply ? (
-            <Badge tone="primary" size="sm" icon={<Pin aria-hidden />}>
+            <Badge icon={<Pin aria-hidden />}>
               Pinned
             </Badge>
           ) : null}

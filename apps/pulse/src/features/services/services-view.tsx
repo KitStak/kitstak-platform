@@ -10,7 +10,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { CircleHelp, Download, FileSpreadsheet, MoreHorizontal, Pencil, Plus, Power, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
 import { Sparkline } from '@/components/charts/sparkline';
-import { KpiTile } from '@/components/charts/stats';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { StatTileLoading, statValue } from '@/components/charts/stats';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { ExplainNumber } from '@/components/pulse/explain';
 import { ExplainStatic } from '@/components/pulse/explain';
@@ -68,6 +69,14 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
   const { get, set } = useQueryState();
   const period = useMemo(() => parsePeriod(get, today, weekStart, DEFAULTS), [get, today, weekStart]);
   const scope = { from: period.from, to: period.to };
+  const byServiceHref = routes.profit({ by: 'service', from: period.from, to: period.to });
+  /** This page with one list picked, on the same days. */
+  const listHref = (pick: Show): string => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries({ ...periodQuery({ ...period, compare: 'none' }, DEFAULTS), show: pick === 'all' ? undefined : pick })) if (value) query.set(key, value);
+    const text = query.toString();
+    return text ? `${routes.services()}?${text}` : routes.services();
+  };
   const rawShow = get('show');
   const show: Show = rawShow === 'underpriced' || rawShow === 'off' || rawShow === 'no-price' ? rawShow : 'all';
   const noPriceAt = noPriceMonth(get('month'));
@@ -233,10 +242,18 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="services-tiles">
-        <KpiTile label="Revenue from extra services" explain={<ExplainStatic title="Revenue from extra services" rule="What every extra service entry in this period earned: how many times its price. Core job work is counted apart." rows={[{ label: 'Extra services', value: formatMoney(extras.revenue, { empty: 'Hidden' }), kind: 'total' }, { label: 'Core job work', value: core ? formatMoney(core.revenueCents, { empty: 'Hidden' }) : 'None', kind: 'note' }]} />} loading={!profit.data} value={profit.data ? formatMoneyWhole(extras.revenue) : null} footer={core ? <span className="text-xs text-fg-muted tabular-nums">{formatMoneyWhole(core.revenueCents)} from core job work</span> : undefined} />
-        <KpiTile
+      <StatRow label="Extra services numbers" data-testid="services-tiles">
+        {!profit.data ? (
+          <StatTileLoading label="Revenue from extra services" />
+        ) : (
+          <StatTile label="Revenue from extra services" href={byServiceHref} explain={<ExplainStatic title="Revenue from extra services" rule="What every extra service entry in this period earned: how many times its price. Core job work is counted apart." rows={[{ label: 'Extra services', value: formatMoney(extras.revenue, { empty: 'Hidden' }), kind: 'total' }, { label: 'Core job work', value: core ? formatMoney(core.revenueCents, { empty: 'Hidden' }) : 'None', kind: 'note' }]} />} value={statValue(formatMoneyWhole(extras.revenue))} caption={core ? <span className="tabular-nums">{formatMoneyWhole(core.revenueCents)} from core job work</span> : undefined} />
+        )}
+        {!profit.data ? (
+          <StatTileLoading label="Profit from extra services" />
+        ) : (
+        <StatTile
           label="Profit from extra services"
+          href={byServiceHref}
           explain={
             <ExplainStatic
               title="Profit from extra services"
@@ -248,13 +265,21 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
               ]}
             />
           }
-          loading={!profit.data}
-          value={profit.data ? formatMoneyWhole(extras.profit) : null}
-          footer={(extras.noCostRevenue ?? 0) > 0 ? <span className="text-xs text-fg-muted tabular-nums" data-testid="services-no-cost-in-total">Counts {formatMoneyWhole(extras.noCostRevenue)} with no known cost</span> : undefined}
+          value={statValue(formatMoneyWhole(extras.profit))}
+          caption={(extras.noCostRevenue ?? 0) > 0 ? <span className="tabular-nums" data-testid="services-no-cost-in-total">Counts {formatMoneyWhole(extras.noCostRevenue)} with no known cost</span> : undefined}
         />
-        <KpiTile label="Services in use" explain={<ExplainStatic title="Services in use" rule="Active services with at least one entry in this period." rows={[{ label: 'With entries in this period', value: formatNumber(lines.filter((line) => line.volume > 0).length), kind: 'total' }, { label: 'Active services', value: formatNumber(lines.filter((line) => line.service.active).length), kind: 'note' }]} />} loading={!services.data} value={services.data ? formatNumber(lines.filter((line) => line.volume > 0).length) : null} footer={<span className="text-xs text-fg-muted">of {lines.filter((line) => line.service.active).length} active</span>} />
-        <KpiTile
+        )}
+        {!services.data ? (
+          <StatTileLoading label="Services in use" />
+        ) : (
+          <StatTile label="Services in use" href={null} explain={<ExplainStatic title="Services in use" rule="Active services with at least one entry in this period." rows={[{ label: 'With entries in this period', value: formatNumber(lines.filter((line) => line.volume > 0).length), kind: 'total' }, { label: 'Active services', value: formatNumber(lines.filter((line) => line.service.active).length), kind: 'note' }]} />} value={statValue(formatNumber(lines.filter((line) => line.volume > 0).length))} caption={<span>of {lines.filter((line) => line.service.active).length} active</span>} />
+        )}
+        {!services.data || !profit.data ? (
+          <StatTileLoading label="Underpriced" />
+        ) : (
+        <StatTile
           label="Underpriced"
+          href={listHref('underpriced')}
           explain={
             <ExplainStatic
               title="Underpriced"
@@ -265,19 +290,11 @@ export function ServicesView({ initialServices, initialProfit, today, weekStart,
               ]}
             />
           }
-          loading={!services.data || !profit.data}
-          value={formatNumber(underpriced.length)}
-          footer={
-            underpriced.length > 0 ? (
-              <button type="button" onClick={() => set({ show: 'underpriced' })} className="rounded-sm text-xs font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="services-show-underpriced">
-                Show them
-              </button>
-            ) : (
-              <span className="text-xs text-fg-muted">Every price holds your {formatPercentBp(targetMarginBp)} target</span>
-            )
-          }
+          value={statValue(formatNumber(underpriced.length))}
+          caption={underpriced.length > 0 ? <span>Under your {formatPercentBp(targetMarginBp)} target margin</span> : <span>Every price holds your {formatPercentBp(targetMarginBp)} target</span>}
         />
-      </div>
+        )}
+      </StatRow>
 
       {show === 'no-price' ? (
         <NoPriceEntries month={noPriceAt} services={services.data ?? []} onShowAll={() => set({ show: null, month: null })} />

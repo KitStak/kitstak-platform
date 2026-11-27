@@ -616,7 +616,7 @@ function StepBody({
             description: option.description,
             badge:
               option.id === recommended ? (
-                <Badge tone="primary" size="sm" icon={<Sparkles aria-hidden />}>
+                <Badge tone="info" icon={<Sparkles aria-hidden />}>
                   Recommended
                 </Badge>
               ) : undefined,

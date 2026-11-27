@@ -510,7 +510,7 @@ export function PoListPage() {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
-        title="Purchase Orders"
+        title="Purchase orders"
         tabs="receiving"
         actions={
           <>

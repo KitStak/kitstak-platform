@@ -95,7 +95,7 @@ export function ProgressRing({
   const clamped = Math.max(0, Math.min(100, Math.round(percent)));
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const color = clamped === 100 ? 'var(--success)' : tone === 'primary' ? 'var(--logo-ink)' : `var(--${tone})`;
+  const color = clamped === 100 ? 'var(--success)' : tone === 'primary' ? 'var(--dash-data, var(--chart-4))' : `var(--${tone})`;
   return (
     <span className={cn('relative inline-flex shrink-0 items-center justify-center', className)} style={{ width: size, height: size }} role="img" aria-label={`${label}: ${clamped}%`}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden className="-rotate-90">
@@ -383,7 +383,7 @@ export function LineChart({
             ))}
             {markerIndex !== null && markerIndex !== undefined && markerIndex >= 0 && markerIndex < count ? (
               <g>
-                <line x1={x(markerIndex)} x2={x(markerIndex)} y1={PAD.top} y2={PAD.top + innerH} stroke="var(--primary)" strokeWidth="1.5" strokeDasharray="2 3" />
+                <line x1={x(markerIndex)} x2={x(markerIndex)} y1={PAD.top} y2={PAD.top + innerH} stroke="var(--text-muted)" strokeWidth="1.5" strokeDasharray="2 3" />
                 <text x={x(markerIndex)} y={PAD.top - 2} textAnchor={markerIndex > count * 0.85 ? 'end' : 'middle'} fontSize="10" fontWeight="600" fill="var(--primary-text)">
                   {markerLabel}
                 </text>
