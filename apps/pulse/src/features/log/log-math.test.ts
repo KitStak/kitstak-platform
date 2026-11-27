@@ -4,6 +4,8 @@ import {
   EMPTY_VALUES,
   applyField,
   crewQuestion,
+  freeSlot,
+  lineSlot,
   missingLaborWords,
   dailyGoal,
   hoursEachFrom,
@@ -359,5 +361,32 @@ describe('the live readout', () => {
         }),
       ]),
     ).toBeNull();
+  });
+});
+
+describe('lineSlot and freeSlot', () => {
+  it('treats no labor class as the job default', () => {
+    expect(lineSlot('day', null, null, 'c1')).toBe(lineSlot('day', 'c1', null, 'c1'));
+    expect(lineSlot('day', 'c1', 't1', 'c1')).not.toBe(lineSlot('day', 'c1', null, 'c1'));
+  });
+
+  it('puts the same class on no task when a build line from Projects holds it on a task', () => {
+    // Arrange: the only class is on two build lines, each on its own task.
+    const taken = new Set([lineSlot('day', 'c1', 'build-a', null), lineSlot('day', 'c1', 'build-b', null)]);
+    // Act
+    const slot = freeSlot({ taken, shift: 'day', defaultClassId: 'c1', classIds: ['c1'], taskIds: [null, null, 't1'] });
+    // Assert
+    expect(slot).toEqual({ laborClassId: 'c1', pmTaskId: null });
+  });
+
+  it('tries every class on a task before the next task', () => {
+    const taken = new Set([lineSlot('day', 'c1', 't1', null)]);
+    const slot = freeSlot({ taken, shift: 'day', defaultClassId: null, classIds: ['c1', 'c2'], taskIds: ['t1', null] });
+    expect(slot).toEqual({ laborClassId: 'c2', pmTaskId: 't1' });
+  });
+
+  it('returns null when every class and task is taken', () => {
+    const taken = new Set([lineSlot('day', 'c1', null, null)]);
+    expect(freeSlot({ taken, shift: 'day', defaultClassId: null, classIds: ['c1'], taskIds: [null] })).toBeNull();
   });
 });

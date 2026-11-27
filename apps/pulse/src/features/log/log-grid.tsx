@@ -30,6 +30,7 @@ import {
   Loader2,
   MoreHorizontal,
   Plus,
+  Repeat,
   RotateCcw,
   Trash2,
   TrendingDown,
@@ -60,6 +61,7 @@ import {
   formatPace,
   formatPercentBp,
 } from '@/lib/format';
+import { useShell } from '@/features/shell/shell-context';
 import { qk } from '@/lib/query-keys';
 import { routes } from '@/lib/routes';
 import type {
@@ -80,6 +82,8 @@ import {
   LINE_FIELDS,
   applyField,
   crewQuestion,
+  freeSlot,
+  lineSlot,
   missingLaborWords,
   isBlank,
   isBlockPaste,
@@ -163,6 +167,22 @@ function lineFromEntry(entry: ProductionEntryDTO, key = `e:${entry.id}`): Line {
 const busy = (line: Line): boolean =>
   line.status === 'dirty' || line.status === 'saving' || line.status === 'error';
 
+/**
+ * A line Projects owns: a build day or program time. Pulse refuses any change to it, so the grid
+ * shows it read only and the crew's own hours go on a line of their own.
+ */
+const fromProjects = (line: Line): boolean => Boolean(line.entry?.fromProjects);
+
+/** The spot a line takes on the day (see `lineSlot`). */
+const slotOf = (line: Line, row: LogGridRowDTO | undefined): string =>
+  lineSlot(line.shift, line.values.laborClassId, line.values.pmTaskId ?? null, row?.defaultLaborClassId ?? null);
+
+/** The tasks a new line of a job may take, most likely first. A job with no project has none. */
+const taskChoices = (row: LogGridRowDTO): (string | null)[] =>
+  row.hasProject
+    ? [row.lastTaskId ?? null, null, ...row.tasks.filter((task) => !task.gone && !task.done).map((task) => task.id)]
+    : [null];
+
 /** The line that carries the units comes first, then the job's own labor class, then the rest as logged. */
 function orderEntries(row: LogGridRowDTO): ProductionEntryDTO[] {
   const weight = (entry: ProductionEntryDTO): number =>
@@ -171,19 +191,42 @@ function orderEntries(row: LogGridRowDTO): ProductionEntryDTO[] {
   return [...row.entries].sort((a, b) => weight(a) - weight(b));
 }
 
-/** Lays fresh server data under the lines a person is still typing in. */
-function mergeLines(previous: readonly Line[], grid: LogGridDTO): Line[] {
+/** The saved row with the higher version: a refresh can leave before a save and come back after it. */
+const newer = (mine: ProductionEntryDTO | null, fresh: ProductionEntryDTO): ProductionEntryDTO =>
+  mine && mine.id === fresh.id && mine.version > fresh.version ? mine : fresh;
+
+/**
+ * Lays fresh server data under the lines a person is still typing in. `sending` holds the lines
+ * whose save is on its way: a new line can show up in a refresh before its save answers, and it
+ * is the same line, not a second one.
+ */
+function mergeLines(previous: readonly Line[], grid: LogGridDTO, sending: ReadonlySet<string> = new Set()): Line[] {
   const out: Line[] = [];
   for (const row of grid.rows) {
     const mine = previous.filter((line) => line.jobId === row.jobId);
     const used = new Set<string>();
     for (const entry of orderEntries(row)) {
-      const old = mine.find((line) => line.entry?.id === entry.id);
+      const old =
+        mine.find((line) => line.entry?.id === entry.id) ??
+        mine.find(
+          (line) =>
+            !line.entry &&
+            sending.has(line.key) &&
+            !used.has(line.key) &&
+            line.shift === entry.shift &&
+            line.values.laborClassId === entry.laborClassId &&
+            (line.values.pmTaskId ?? null) === (entry.pmTaskId ?? null),
+        );
       if (old) {
         used.add(old.key);
+        // The refresh is older than the line's last save: keep what the line holds.
+        if (old.entry && old.entry.version > entry.version) {
+          out.push(old);
+          continue;
+        }
         out.push(
           busy(old)
-            ? { ...old, entry: old.status === 'saving' ? old.entry : entry }
+            ? { ...old, entry: newer(old.entry, entry) }
             : {
                 ...lineFromEntry(entry, old.key),
                 undo: old.undo,
@@ -203,9 +246,20 @@ function mergeLines(previous: readonly Line[], grid: LogGridDTO): Line[] {
       }
       if (!old.entry && (busy(old) || !isBlank(old.values))) out.push(old);
     }
-    if (!out.some((line) => line.jobId === row.jobId)) {
+    // Every job keeps one line a person can type in, also when its only lines come from Projects.
+    if (!out.some((line) => line.jobId === row.jobId && !fromProjects(line))) {
       const spare = mine.find((line) => !line.entry);
-      out.push(spare ?? draftLine(row, row.defaultLaborClassId, {}, `d:${row.jobId}`));
+      if (spare) out.push(spare);
+      else {
+        const slot = freeSlot({
+          taken: new Set(out.filter((line) => line.jobId === row.jobId).map((line) => slotOf(line, row))),
+          shift: 'day',
+          defaultClassId: row.defaultLaborClassId,
+          classIds: [row.defaultLaborClassId],
+          taskIds: row.hasProject ? [row.lastTaskId ?? null, null] : [null],
+        });
+        if (slot) out.push(draftLine(row, slot.laborClassId, { pmTaskId: slot.pmTaskId }, `d:${row.jobId}`));
+      }
     }
   }
   return out;
@@ -468,6 +522,16 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
   // Lines whose save never reached the server (no connection). They are sent again by themselves.
   const offlineKeys = useRef(new Set<string>());
   const retryOffline = useRef<() => void>(() => undefined);
+  // Lines with a save on its way. Typing marks a line "dirty" again while it saves, so the status
+  // alone cannot stop a second save going out with the old version (the server then sends the row
+  // back and what was typed is lost). The answer to the first save sends the rest.
+  const sending = useRef(new Set<string>());
+  const shell = useShell();
+  const projectsHref = useCallback(
+    (path: string | null | undefined): string | null =>
+      path && shell.modules.projects ? `${shell.appUrls.projects.replace(/\/+$/, '')}${path}` : null,
+    [shell.appUrls.projects, shell.modules.projects],
+  );
   const canEdit = grid.canEdit;
   const classById = useMemo(() => new Map(laborClasses.map((item) => [item.id, item])), [laborClasses]);
   const liveClasses = useMemo(() => laborClasses.filter((item) => !item.archivedAt), [laborClasses]);
@@ -475,7 +539,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
 
   // Fresh data from the server is laid under whatever is still being typed.
   useEffect(() => {
-    setLines((previous) => mergeLines(previous, grid));
+    setLines((previous) => mergeLines(previous, grid, sending.current));
   }, [grid, setLines]);
 
   const update = useCallback(
@@ -506,7 +570,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
       if (pending) clearTimeout(pending);
       timers.current.delete(key);
       const line = linesRef.current.find((item) => item.key === key);
-      if (!line || line.status === 'saving' || !canEdit) return;
+      if (!line || line.status === 'saving' || sending.current.has(key) || !canEdit || fromProjects(line)) return;
       // Checked first: a bad "hours each" leaves the labor hours as they were, so the row can look unchanged.
       const problem = lineProblem(line.values);
       if (problem) {
@@ -526,38 +590,44 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
         void clearLineRef.current?.(line);
         return;
       }
-      // One line for each labor class: a second line with the same class would write over the first.
-      const classOf = (item: Line) => item.values.laborClassId ?? rowById.get(item.jobId)?.defaultLaborClassId ?? null;
+      // One line for each labor class and task: a second one would write over the first.
+      const row = rowById.get(line.jobId);
       const twin = linesRef.current.find(
-        (other) =>
-          other.key !== key &&
-          other.jobId === line.jobId &&
-          other.shift === line.shift &&
-          classOf(other) === classOf(line),
+        (other) => other.key !== key && other.jobId === line.jobId && slotOf(other, row) === slotOf(line, row),
       );
       if (twin) {
-        const name = classById.get(classOf(line) ?? '')?.name ?? 'that labor class';
+        const name = classById.get(line.values.laborClassId ?? row?.defaultLaborClassId ?? '')?.name ?? 'that labor class';
+        const what = line.values.pmTaskId ? `${name} on this task` : name;
+        const other = row?.hasProject ? 'another task or labor class' : 'another labor class';
         update(key, (item) => ({
           ...item,
           status: 'error',
-          message: `This job already has a line for ${name}. Pick another labor class, or add these people to that line.`,
+          message: fromProjects(twin)
+            ? `A line from Projects already holds ${what}. Pick ${other} for your crew.`
+            : `This job already has a line for ${what}. Pick ${other}, or add these people to that line.`,
         }));
         return;
       }
       const sent = line.values;
       offlineKeys.current.delete(key);
+      sending.current.add(key);
       update(key, (item) => ({ ...item, status: 'saving', message: null }));
-      const result = await putRow({
-        id: line.entry?.id ?? null,
-        jobId: line.jobId,
-        workDate: grid.date,
-        shift: line.shift,
-        version: line.entry?.version ?? null,
-        // A new line names the lines of this job the grid shows, so the server can tell when
-        // someone else added work to the day in the meantime (the day form follows the same rule).
-        seen: seenLines(linesRef.current, line.jobId),
-        ...toPayload(sent),
-      });
+      let result: Awaited<ReturnType<typeof putRow>>;
+      try {
+        result = await putRow({
+          id: line.entry?.id ?? null,
+          jobId: line.jobId,
+          workDate: grid.date,
+          shift: line.shift,
+          version: line.entry?.version ?? null,
+          // A new line names the lines of this job the grid shows, so the server can tell when
+          // someone else added work to the day in the meantime (the day form follows the same rule).
+          seen: seenLines(linesRef.current, line.jobId),
+          ...toPayload(sent),
+        });
+      } finally {
+        sending.current.delete(key);
+      }
       if (result.ok) {
         update(key, (item) => {
           const still = sameValues(item.values, sent);
@@ -591,7 +661,8 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
           saved: valuesFromEntry(fresh),
           undo: null,
           status: 'stale',
-          message: 'Someone else changed this row. Here is the new one.',
+          // The server says why: someone else changed the row, or the row belongs to Projects.
+          message: result.message || 'Someone else changed this row. Here is the new one.',
         }));
         return;
       }
@@ -877,7 +948,10 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
         block,
         visibleLines
           .filter((line) => {
-            if (linesRef.current.filter((other) => other.jobId === line.jobId)[0]?.key === line.key) return true;
+            // Lines from Projects take no paste: the server refuses them, and with them the whole block.
+            if (fromProjects(line)) return false;
+            if (linesRef.current.filter((other) => other.jobId === line.jobId && !fromProjects(other))[0]?.key === line.key)
+              return true;
             if (!line.entry) return false;
             // A column of units goes one job down each row: extra crew lines have no units cells to fill.
             const startsInUnits = field === 'unitsGood' || field === 'unitsScrap' || field === 'unitsRework';
@@ -968,28 +1042,34 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
 
   const addLine = useCallback(
     (row: LogGridRowDTO, copyFrom?: Line) => {
-      const used = new Set(
-        linesRef.current.filter((line) => line.jobId === row.jobId).map((line) => line.values.laborClassId),
-      );
-      const next = liveClasses.find((item) => !used.has(item.id));
-      if (!next) {
+      const jobLines = linesRef.current.filter((line) => line.jobId === row.jobId);
+      // A line is one labor class on one task. On a job with a project the same class can go on
+      // another task (or on no task), so a build line from Projects never blocks the crew's line.
+      const base = copyFrom ?? jobLines.find((line) => !fromProjects(line)) ?? jobLines[0];
+      const slot = freeSlot({
+        taken: new Set(jobLines.map((line) => slotOf(line, row))),
+        shift: 'day',
+        defaultClassId: row.defaultLaborClassId,
+        classIds: [base?.values.laborClassId ?? row.defaultLaborClassId, ...liveClasses.map((item) => item.id)],
+        taskIds: taskChoices(row),
+      });
+      if (!slot) {
         toast.info(
-          'Every labor class already has a line',
+          row.hasProject ? 'Every labor class and task already has a line' : 'Every labor class already has a line',
           'Add a labor class under Labor, Rates, then come back.',
         );
         return;
       }
-      const line = draftLine(
-        row,
-        next.id,
-        copyFrom
+      const line = draftLine(row, slot.laborClassId, {
+        pmTaskId: slot.pmTaskId,
+        ...(copyFrom
           ? {
               people: copyFrom.values.people,
               hoursEach: copyFrom.values.hoursEach,
               hours: copyFrom.values.hours,
             }
-          : {},
-      );
+          : {}),
+      });
       setLines((previous) => {
         const last = previous.map((item) => item.jobId).lastIndexOf(row.jobId);
         return [
@@ -1007,7 +1087,8 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
 
   const fillUsualCrew = useCallback(
     async (row: LogGridRowDTO) => {
-      const current = linesRef.current.filter((line) => line.jobId === row.jobId);
+      // Lines from Projects are read only: the crew goes on lines of its own.
+      const current = linesRef.current.filter((line) => line.jobId === row.jobId && !fromProjects(line));
       const changes = new Map<string, LineValues>();
       const added: Line[] = [];
       row.usualCrew.forEach((crew, index) => {
@@ -1119,8 +1200,8 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
     () => ({
       flush,
       focusJob: (jobId: string) => {
-        const line = linesRef.current.find((item) => item.jobId === jobId);
-        if (line) focusCell(line.key, 'unitsGood');
+        const line = linesRef.current.find((item) => item.jobId === jobId && !fromProjects(item));
+        if (line && !focusCell(line.key, 'unitsGood')) focusCell(line.key, 'people');
       },
       copyCrew: async (crew) => {
         const changes = new Map<string, LineValues>();
@@ -1129,8 +1210,10 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
         for (const previous of crew) {
           const row = rowById.get(previous.jobId);
           if (!row) continue;
-          const current = linesRef.current.filter((line) => line.jobId === row.jobId);
-          if (current.some((line) => (parseTyped(line.values.hours) ?? 0) > 0)) continue;
+          const all = linesRef.current.filter((line) => line.jobId === row.jobId);
+          if (all.some((line) => (parseTyped(line.values.hours) ?? 0) > 0)) continue;
+          // Lines from Projects are read only: the crew goes on lines of its own.
+          const current = all.filter((line) => !fromProjects(line));
           jobs += 1;
           // The biggest crew goes first, so the main line (the one that holds the units) keeps its
           // labor class and a helper such as a line lead lands on a line of its own.
@@ -1261,7 +1344,12 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
               {jobLines.map((line, index) => {
                 const first = index === 0;
                 const question = crewQuestion(line.values, grid.shiftHours);
-                const disabled = !canEdit || Boolean(line.entry?.locked);
+                const origin = line.entry?.fromProjects ?? null;
+                const menuDisabled = !canEdit || Boolean(line.entry?.locked);
+                const disabled = menuDisabled || Boolean(origin);
+                // The first line from Projects on a job says where its lines come from, once.
+                const firstFromProjects = Boolean(origin) && jobLines.find((item) => fromProjects(item))?.key === line.key;
+                const originHref = origin ? projectsHref(origin.path) : null;
                 const label = (field: LineField | 'setup') =>
                   `${FIELD_LABELS[field]} for ${row.jobNumber}${first ? '' : `, ${classById.get(line.values.laborClassId ?? '')?.name ?? 'crew line'}`}`;
                 const showUnits =
@@ -1327,7 +1415,15 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                         </div>
                       ) : (
                         <span className="flex items-center gap-1.5 text-xs text-fg-muted xl:justify-end xl:pr-2">
-                          <Users aria-hidden className="size-3.5" /> Crew line {index + 1}
+                          {origin ? (
+                            <>
+                              <Repeat aria-hidden className="size-3.5" /> From Projects
+                            </>
+                          ) : (
+                            <>
+                              <Users aria-hidden className="size-3.5" /> Crew line {index + 1}
+                            </>
+                          )}
                         </span>
                       )}
                     </div>
@@ -1410,7 +1506,7 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                             icon={<MoreHorizontal aria-hidden />}
                             size="sm"
                             variant="ghost"
-                            disabled={disabled}
+                            disabled={menuDisabled}
                           />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
@@ -1424,9 +1520,11 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                           <DropdownMenuItem icon={<Plus aria-hidden />} onSelect={() => addLine(row)}>
                             Add a crew line
                           </DropdownMenuItem>
-                          <DropdownMenuItem icon={<Copy aria-hidden />} onSelect={() => addLine(row, line)}>
-                            Duplicate this line
-                          </DropdownMenuItem>
+                          {origin ? null : (
+                            <DropdownMenuItem icon={<Copy aria-hidden />} onSelect={() => addLine(row, line)}>
+                              Duplicate this line
+                            </DropdownMenuItem>
+                          )}
                           {row.usualCrew.length > 0 ? (
                             <DropdownMenuItem
                               icon={<Users aria-hidden />}
@@ -1435,22 +1533,26 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                               Fill the usual crew
                             </DropdownMenuItem>
                           ) : null}
-                          <DropdownMenuItem
-                            icon={<Wrench aria-hidden />}
-                            onSelect={() =>
-                              update(line.key, (item) => ({ ...item, showMore: !item.showMore }))
-                            }
-                          >
-                            {line.showMore ? 'Hide setup hours' : 'Setup hours'}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            icon={<Trash2 aria-hidden />}
-                            variant="danger"
-                            onSelect={() => void clearLine(line)}
-                          >
-                            Clear this line
-                          </DropdownMenuItem>
+                          {origin ? null : (
+                            <>
+                              <DropdownMenuItem
+                                icon={<Wrench aria-hidden />}
+                                onSelect={() =>
+                                  update(line.key, (item) => ({ ...item, showMore: !item.showMore }))
+                                }
+                              >
+                                {line.showMore ? 'Hide setup hours' : 'Setup hours'}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                icon={<Trash2 aria-hidden />}
+                                variant="danger"
+                                onSelect={() => void clearLine(line)}
+                              >
+                                Clear this line
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -1476,6 +1578,30 @@ export const LogGrid = forwardRef<LogGridHandle, LogGridProps>(function LogGrid(
                           in the pace, so a setup day does not make the job look slow.
                         </p>
                       </div>
+                    ) : null}
+                    {firstFromProjects && origin ? (
+                      <p
+                        data-testid={`log-projects-note-${row.jobNumber}`}
+                        className="col-span-full flex items-start gap-1.5 text-xs text-fg-muted xl:pl-[204px]"
+                      >
+                        <Repeat aria-hidden className="mt-px size-3.5 shrink-0" />
+                        <span>
+                          {jobLines.filter((item) => fromProjects(item)).length === 1
+                            ? `${origin.message} Change it there.`
+                            : `${jobLines.filter((item) => fromProjects(item)).length} of these lines come from builds and program time in Projects. Change them there.`}{' '}
+                          Type your crew’s hours on a crew line.
+                          {originHref ? (
+                            <a
+                              href={originHref}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="ml-2 rounded-sm font-medium text-fg underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                            >
+                              Open in Projects
+                            </a>
+                          ) : null}
+                        </span>
+                      </p>
                     ) : null}
                     {line.message || question ? (
                       <p
