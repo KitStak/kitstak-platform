@@ -1,0 +1,164 @@
+# Portal master search
+
+## Note
+
+Turn the Portal search bar into one search for everything the org has: CRM, WMS, Projects and Pulse.
+That means files people uploaded, orders, projects, jobs, people, customers, deals, SKUs and so on.
+It understands plain English ("orders for Acme shipped last week"). It should learn from each person: what they search for and click often moves to the top, and the
+empty search box suggests what they will probably want next.
+
+## What exists today
+
+| Where | Today | Location |
+| --- | --- | --- |
+| Portal home | "Search apps..." box that only filters the app tiles | `apps/portal/src/features/launcher/app-launcher.tsx`, `apps/portal/src/lib/app-search.ts` |
+| Portal Ctrl/Cmd+K | Commands only: open apps, portal pages, switch org, sign out | `apps/portal/src/features/shell/command-palette.tsx` |
+| CRM | Global + shell search | `apps/crm/src/server/services/search.ts`, `shell-search.ts` |
+| WMS | Global search in the layout | `apps/wms/src/components/layout/global-search.tsx`, `apps/wms/src/server/search` |
+| Projects | Quick + full search | `apps/projects/src/server/domain/search.ts`, `search-full.ts` |
+| Pulse | Search page + API | `apps/pulse/src/server/domain/search.ts` |
+| Cross-app | Projects and Pulse already search CRM/WMS records for link pickers | `apps/projects/src/server/integrations/*`, `apps/pulse/src/server/integrations` |
+| Cross-app links | One link graph from any record to any record (`core.record_links`, added with Programs) | `packages/db/src/schema/core/record-links.ts`, `packages/db/src/record-links.ts` |
+
+`core.record_links` is useful for ranking and display: a hit can show what it is linked to
+("Order #1042 · linked to Acme deal"), and records linked to something the person just opened can
+rank higher. It is not a search index, and permission checks still belong to each app.
+
+All apps share one Postgres. WMS data lives in a per-org schema (`@kitstak/db/wms-tenants`).
+Every app already knows how to search its own records with its own permission checks.
+
+## Design
+
+### 1. Federated search (each app answers for itself)
+The Portal sends the query to every app the org is entitled to, in parallel, and merges the results.
+Each app stays the only judge of what a person may see, so nothing leaks across permissions.
+
+- Shared contract in a new `packages/search` package:
+  ```ts
+  interface SearchHit {
+    app: 'crm' | 'wms' | 'projects' | 'pulse' | 'portal';
+    type: string;          // 'order' | 'deal' | 'project' | 'job' | 'person' | 'document' | ...
+    id: string;
+    title: string;
+    subtitle?: string;     // "Order #1042 · Acme · Shipped"
+    url: string;           // deep link, opened with the theme handoff
+    score: number;         // 0..1 text match from the app
+    updatedAt?: string;
+  }
+  interface SearchProvider {
+    search(ctx, q: string, opts: { limit: number; types?: string[] }): Promise<SearchHit[]>;
+  }
+  ```
+- Each app adds a `GET /api/v1/portal-search?q=` endpoint that wraps its existing search service.
+  The Portal calls it server side with a short lived signed token (user id, org id, 30s expiry).
+- Per-app timeout (about 400ms). Slow or down apps are skipped and shown as "WMS didn't answer".
+- Results stream into the palette as each app replies.
+
+### 2. Personal ranking (the "smart" part)
+New tables in the core schema:
+
+- `core.search_event`: user, org, query, picked app/type/id, position clicked, time.
+- `core.search_affinity`: rolled up per user: record frecency (how often + how recently picked),
+  type weights (e.g. this person mostly opens orders), and top query prefixes.
+
+Final score per hit:
+```
+final = text_score * 0.55
+      + record_frecency * 0.25   // picked this exact record before
+      + type_affinity * 0.12     // picks this kind of thing often
+      + recency_of_update * 0.08
+```
+Weights live in one config so we can tune them from analytics.
+
+Predictive behavior:
+- **Empty box**: "Recent" (last picked records) and "Suggested" (highest frecency, plus items assigned
+  to them today across apps, e.g. due tasks, open orders).
+- **Typing**: prefix completions from their own past queries first, then org wide popular ones.
+- **Shortcuts**: learn query to record pairs, so typing "acme" jumps straight to the Acme record they
+  always open, shown as the top hit with Enter to open.
+- Frecency decays (half-life around 14 days) so old habits fade.
+- Privacy: history is per user only, viewable and clearable in Portal settings ("Clear search history").
+  Never shared with teammates. Events older than 180 days are deleted.
+
+### 3. Plain English search (v1)
+People can type a sentence instead of keywords: "orders for Acme shipped last week",
+"overdue tasks assigned to Maya", "invoices over $5k from October".
+
+- **When**: the query looks like a sentence (4+ words, or words like dates, "assigned to", "over",
+  "last week"). Short queries skip this and stay instant.
+- **How**: a fast Claude model turns the sentence into structured filters using a fixed schema built
+  from what the providers support:
+  ```ts
+  interface ParsedQuery {
+    text?: string;                       // leftover keywords
+    types?: string[];                    // ['order']
+    apps?: Array<'crm' | 'wms' | 'projects' | 'pulse'>;
+    entities?: { customer?: string; person?: string; project?: string };
+    status?: string[];                   // ['shipped']
+    dateField?: 'created' | 'updated' | 'due' | 'shipped';
+    dateRange?: { from: string; to: string };
+    amount?: { min?: number; max?: number };
+  }
+  ```
+  Each provider receives the filters it understands and ignores the rest.
+- **Shown to the user**: an editable chip row under the box ("Orders · Acme · Shipped · Nov 17 to 23"),
+  so they can see and fix what was understood.
+- **Speed**: the normal keyword search runs at the same time and shows first; the plain English results
+  replace it when ready (target under 1s). Same sentence is cached per org for 10 minutes.
+- **Privacy**: only the typed text and the filter schema go to the model, never records or file contents.
+- **Fallback**: if parsing fails or times out, keyword results stay. Picks on parsed results feed the
+  same personal ranking.
+
+### 4. UI
+- One component, `MasterSearch`, used by the home search box and the Ctrl/Cmd+K palette.
+- Groups: Top hit, then per type (Orders, Projects, Jobs, People, Documents...), each with an app badge.
+- Filters as chips or prefixes: `order:`, `project:`, `@person`, `in:wms`.
+- Keyboard first: arrows, Enter opens, Cmd+Enter opens in a new tab, Tab cycles groups.
+- Existing commands (open app, switch org, sign out) stay and rank alongside records.
+
+### 5. Later: shared index for speed
+If fan-out gets slow, add `core.search_document` (tsvector + `pg_trgm`) that each app keeps up to date
+through its existing event outbox. Permission checks still run in the owning app on the final results.
+Only do this if fan-out p95 goes over about 600ms.
+
+### Files (uploaded documents)
+"Documents" means files people uploaded. v1 searches file name, type, uploader and the record it is
+attached to. Searching inside file contents (PDF text, OCR) is a later phase.
+
+| App | Table |
+| --- | --- |
+| CRM | `files` in `apps/crm/src/server/db/schema/collaboration.ts` |
+| Projects | `attachments` in `apps/projects/src/server/db/schema/collaboration.ts` |
+| WMS | `files`, `attachments` in `apps/wms/src/server/db/schema/platform.ts` |
+| Pulse | No uploads today |
+
+## Plan
+
+1. **Contract + Portal shell**
+   - Create `packages/search` (types, signed token helpers, merge + rank functions with unit tests).
+   - Build `MasterSearch` in the Portal; wire it into the home box and the Ctrl/Cmd+K palette.
+2. **Providers**, one app at a time, each behind its entitlement:
+   - Projects: projects, Programs (`pm.projects.kind = 'program'`), tasks and builds
+     (`pm.tasks.kind = 'build'`), files, people. Programs and builds get their own `type` so they
+     group and filter apart from plain projects and tasks.
+   - CRM: deals, accounts, contacts, files.
+   - WMS: orders, work orders, receipts, SKUs, clients, files.
+   - Pulse: jobs, customers.
+3. **Personalization**
+   - Migration for `search_event` + `search_affinity`; log picks; nightly rollup job plus live update on pick.
+   - Recent, Suggested and prefix completions; settings page to view and clear history.
+4. **Plain English**
+   - Query parser with the `ParsedQuery` schema, sentence detection, chip row, cache, timeout fallback.
+   - Providers accept structured filters (types, status, date range, amount, entity).
+   - Eval set of ~100 real style sentences per app to check parsing before launch.
+5. **Polish**
+   - Filters/prefixes, timeouts and partial results, a11y, phone layout.
+   - Analytics: `search_query`, `search_pick` (position, app, type), zero result queries.
+   - E2E: an org with all four apps; a user without WMS access must never see WMS hits.
+6. **Optional**: shared index (section 5) and searching inside file contents.
+
+## Decisions
+
+- The master search lives in the Portal only. The search inside CRM, WMS, Projects and Pulse stays as is.
+- "Documents" means files people uploaded in any app.
+- Plain English search is in v1.
