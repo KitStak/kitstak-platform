@@ -162,6 +162,15 @@ describe.skipIf(!ready)('core.api_tokens (database)', () => {
     await expect(revokeApiToken(org.db, { orgId: org.orgId, tokenId: randomUUID(), actorId: a, actorIsManager: false })).rejects.toBeInstanceOf(ApiTokenError);
   });
 
+  it('has its own foreign keys, so deleting a person deletes their tokens', async () => {
+    const keys = await org.query("select conname from pg_constraint where conrelid = 'core.api_tokens'::regclass and contype = 'f' order by conname");
+    expect(keys.map((k) => k.conname)).toEqual(['core_api_tokens_org_id_fk', 'core_api_tokens_user_id_fk']);
+    const gone = await org.addUser('member');
+    const made = await createApiToken(org.db, { orgId: org.orgId, userId: gone, name: 'Gone', scopes: ['crm:read'], days: 7 });
+    await org.query('delete from core."user" where id = $1', [gone]);
+    expect(await org.query('select id from core.api_tokens where id = $1', [made.record.id])).toEqual([]);
+  });
+
   it('writes last used at most once a minute', async () => {
     const made = await createApiToken(org.db, { orgId: org.orgId, userId: org.userId, name: 'Touch', scopes: ['crm:read'], days: 7 });
     const now = new Date();

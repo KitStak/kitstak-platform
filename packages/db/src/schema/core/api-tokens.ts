@@ -1,10 +1,10 @@
 /**
- * core.api_tokens and core.api_token_events (drizzle/0012_core_api_tokens.sql): platform API tokens
+ * core.api_tokens and core.api_token_events (drizzle/0012_core_api_tokens.sql, keys in 0013): platform API tokens
  * that every app accepts, and the log of writes made with them. The SQL file is the source of truth;
  * this mirror is for typed reads. Read and write them through `../../api-tokens.ts`.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, jsonb, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, foreignKey, index, jsonb, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 import { coreSchema, createdAt } from '../_shared';
 import { organization, user } from './auth';
 
@@ -18,12 +18,9 @@ export const apiTokens = coreSchema.table(
   'api_tokens',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    orgId: uuid('org_id')
-      .notNull()
-      .references(() => organization.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    // Foreign keys are named in the table options: the default names clash with crm.api_tokens (0013).
+    orgId: uuid('org_id').notNull(),
+    userId: uuid('user_id').notNull(),
     name: text('name').notNull(),
     tokenHash: text('token_hash').notNull(),
     tokenPrefix: text('token_prefix').notNull(),
@@ -35,6 +32,8 @@ export const apiTokens = coreSchema.table(
     createdAt: createdAt(),
   },
   (t) => [
+    foreignKey({ name: 'core_api_tokens_org_id_fk', columns: [t.orgId], foreignColumns: [organization.id] }).onDelete('cascade'),
+    foreignKey({ name: 'core_api_tokens_user_id_fk', columns: [t.userId], foreignColumns: [user.id] }).onDelete('cascade'),
     unique('api_tokens_token_hash_unique').on(t.tokenHash),
     index('api_tokens_org_user_idx').on(t.orgId, t.userId),
     check('api_tokens_name_check', sql`char_length(btrim(${t.name})) BETWEEN 1 AND 80`),
