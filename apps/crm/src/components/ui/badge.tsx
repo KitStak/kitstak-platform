@@ -62,7 +62,7 @@ export function CountBadge({ count, tone = 'neutral', ringClassName, className, 
   if (count <= 0) return null;
   return (
     <span className={cn('inline-flex rounded-full', ringClassName && cn('ring-2', ringClassName), className)}>
-      <Count value={count} tone={tone} label={label} />
+      <Count value={count} tone={tone} label={label} placement={ringClassName ? 'icon' : 'inline'} />
     </span>
   );
 }
