@@ -149,6 +149,14 @@ describe('Pill, Tag, Count, Legend', () => {
     expect(renderToStaticMarkup(<Count value={250} tone="critical" />)).toContain('99+');
   });
 
+  it('gives a count on an icon a solid neutral fill, never crimson', () => {
+    expect(renderToStaticMarkup(<Count value={4} />)).not.toContain('data-placement');
+    expect(renderToStaticMarkup(<Count value={4} placement="icon" />)).toContain('data-placement="icon"');
+    const onIcon = rule(".ks-dash-count[data-placement='icon']");
+    expect(onIcon).toMatch(/background: var\(--text-secondary\);/);
+    expect(onIcon).not.toMatch(/primary/);
+  });
+
   it('draws a legend as dots and words', () => {
     const html = renderToStaticMarkup(<Legend items={[{ label: 'Open', color: 'var(--chart-1)' }]} />);
     expect(html).toContain('ks-dash-legend-dot');

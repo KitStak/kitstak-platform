@@ -50,10 +50,21 @@ export function Tag({ children, title, className }: { readonly children: React.R
   );
 }
 
-export function Count({ value, tone = 'neutral', label }: { readonly value: number; readonly tone?: 'neutral' | 'critical'; readonly label?: string }) {
+export interface CountProps {
+  readonly value: number;
+  readonly tone?: 'neutral' | 'critical';
+  readonly label?: string;
+  /**
+   * `inline` (default) beside a word, in a pale fill. `icon` when the count sits on an icon (a bell),
+   * where a pale fill would vanish into the bar: a solid neutral fill, still never crimson.
+   */
+  readonly placement?: 'inline' | 'icon';
+}
+
+export function Count({ value, tone = 'neutral', label, placement = 'inline' }: CountProps) {
   if (!Number.isFinite(value) || value <= 0) return null;
   return (
-    <span className="ks-dash-count" data-tone={tone}>
+    <span className="ks-dash-count" data-tone={tone} data-placement={placement === 'icon' ? 'icon' : undefined}>
       {value > 99 ? '99+' : value}
       {label ? <span className="ks-dash-sr"> {label}</span> : null}
     </span>

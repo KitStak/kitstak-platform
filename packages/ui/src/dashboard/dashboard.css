@@ -468,6 +468,17 @@ a.ks-dash-stat-link::after {
   color: var(--danger-text);
 }
 
+/* On an icon: solid so it reads as a badge on any bar. Neutral ink, or danger for broken things. */
+.ks-dash-count[data-placement='icon'] {
+  background: var(--text-secondary);
+  color: var(--text-inverse);
+}
+
+.ks-dash-count[data-placement='icon'][data-tone='critical'] {
+  background: var(--danger);
+  color: var(--text-inverse);
+}
+
 .ks-dash-legend {
   display: flex;
   flex-wrap: wrap;
