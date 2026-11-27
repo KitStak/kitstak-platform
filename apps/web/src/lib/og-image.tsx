@@ -18,13 +18,15 @@ const NAVY = '#0a1628';
 const CREAM = '#f4f1e9';
 const RED = '#c8102e';
 
-type OgApp = 'crm' | 'wms' | 'projects';
+type OgApp = 'crm' | 'wms' | 'projects' | 'crew' | 'ledger';
 
 /** The brand export names the WMS icon "warehouse" (see app-icon.tsx). */
 const APP_ICON: Readonly<Record<OgApp, string>> = {
   crm: 'apps/kitstak-icon-crm.svg',
   wms: 'apps/kitstak-icon-warehouse.svg',
   projects: 'apps/kitstak-icon-projects.svg',
+  crew: 'apps/kitstak-icon-crew.svg',
+  ledger: 'apps/kitstak-icon-ledger.svg',
 };
 
 const KITSTAK_LOCKUP = { file: 'kitstak-lockup-cream.png', type: 'image/png', ratio: 1200 / 228 };

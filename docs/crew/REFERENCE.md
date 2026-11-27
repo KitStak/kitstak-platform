@@ -137,15 +137,13 @@ the head in as the shoulders rise. In code it is named `crew`.
 
 - Shared icon: `AppIcon app="crew"` in `packages/ui/src/app-icon/app-icon.tsx`. It is not in any app list, launcher or switcher yet.
 - Files: `apps/web/public/brand/apps/kitstak-icon-crew.svg` and `apps/web/public/brand/loaders/kitstak-loader-crew.svg`.
-- The icon runs taller than the five live icons (y 44 to 156). Widen `APP_ICON_ARTWORK_BOX` before it goes into a lockup.
+- The icon was resized on 2026-11-27 to the same artwork box as the live icons (y 50 to 150), so it lines up in menus and lockups.
 - Still to do when the app is real: copies in `apps/crew/public/brand/`, `src/app/icon.*`, a `brand-loader.tsx`, the Portal launcher
   mark, and PNG exports at 512 and 1024.
 
-**To do on kitstak.com (not started):**
-
-- **A placeholder.** A "Coming soon" Crew card on the products page, with the icon, the one line pitch from section 1 and a "Tell me
-  when it's ready" link to the contact form. Keep it out of pricing, the price calculator and sign up until it can be bought.
-- **More documentation.** Site docs are Markdown in `apps/web/content/docs/<app>/` (how to write one: `apps/web/content/docs/README.md`),
-  and the app list is `DOC_APP_IDS` in `apps/web/src/lib/docs/docs.ts`. Add a `crew` folder when the app ships, with at least getting
-  started, people, shifts and the schedule, the time clock and kiosk, attendance, skills and labor planning. Until then, a short "What's
-  coming" page in `getting-started` can cover Crew and Ledger together.
+**On kitstak.com (2026-11-27).** A full product page at `/crew` ("Coming soon", screenshot placeholders in
+`ShotPlaceholder`), a "Coming soon" row in the Products menu, the drawer and the footer, cards on the home, products and pricing pages,
+and a "Tell me when it's ready" contact topic. The planned price is $4 per person each month, held in `PLANNED_PRODUCTS` in
+`packages/billing/src/catalog.ts`, which is outside `PRODUCT_IDS`, so sign-up, the calculator, Stripe and entitlements never see it.
+Site docs are in `apps/web/content/docs/crew/`, written as planned. When the app ships: move its price into `CATALOG.products`, swap
+the placeholders for real screenshots, and rewrite the docs against the real screens.

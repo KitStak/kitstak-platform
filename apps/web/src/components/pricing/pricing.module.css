@@ -155,6 +155,47 @@
   color: var(--text-primary);
 }
 
+/* ------------------------------------------------------------ Coming soon */
+.plannedBand {
+  padding-bottom: clamp(40px, 5vw, 64px);
+}
+.plannedTitle {
+  font-size: var(--type-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+}
+.plannedLead {
+  margin-top: 8px;
+  max-width: 62ch;
+  font-size: var(--type-base);
+  color: var(--text-secondary);
+}
+.plannedCards {
+  margin-top: 20px;
+}
+/* A dashed rule and no lift: these cards are a preview, not something to buy. */
+.card[data-planned] {
+  border-style: dashed;
+  box-shadow: none;
+  animation: none;
+}
+.card[data-planned] .cardHead {
+  flex-wrap: wrap;
+}
+.card[data-planned] .cardName {
+  white-space: nowrap;
+}
+.cardSoon {
+  margin-left: auto;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 /* ------------------------------------------------------------ Calculator */
 .calcBand {
   padding-top: clamp(40px, 5vw, 72px);

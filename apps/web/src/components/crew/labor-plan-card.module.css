@@ -1,0 +1,56 @@
+.card {
+  margin: 0;
+  padding: clamp(18px, 2.4vw, 28px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  background: var(--surface-panel);
+  box-shadow: var(--elevation-modal);
+}
+.formula {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken, var(--surface-hover));
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--type-xs);
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+.rows {
+  display: grid;
+  margin: 0;
+}
+.rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.rows dt {
+  color: var(--text-muted);
+}
+.rows dd {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+  text-align: right;
+}
+.rows > div[data-gap] {
+  border-bottom: 0;
+  margin-top: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--brand-red);
+  color: #fff;
+}
+.rows > div[data-gap] dt {
+  color: rgb(255 255 255 / 0.82);
+}
+.card figcaption {
+  margin-top: 14px;
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+  text-align: center;
+}

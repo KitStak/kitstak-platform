@@ -195,7 +195,9 @@ describe.skipIf(!PULSE_IS_LIVE)('once Pulse is open', () => {
     expect(STARTABLE_STACK).toEqual(FULL_STACK);
     expect(availabilityLabel('pulse')).toBeNull();
     expect(SURFACES['products cards']).toContain('Start with Pulse');
-    expect(Object.values(SURFACES).join('')).not.toContain('Coming soon');
+    // Crew and Ledger are labelled "Coming soon" on some of these surfaces. Pulse and the live apps never are.
+    expect(PRODUCT_NAV.every((product) => product.status === null)).toBe(true);
+    expect(Object.values(SURFACES).join('')).not.toMatch(/Pulse[^<.]{0,60}coming soon/i);
     expect(CLOSING.note).not.toMatch(/coming soon/i);
   });
 });

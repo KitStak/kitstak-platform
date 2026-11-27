@@ -1,6 +1,6 @@
 import { priceOf } from '@/lib/pricing';
-import { CONTACT, isAppLive, isProductId } from '../site-links';
-import type { ProductId } from '../site-links';
+import { CONTACT, NOTIFY_LABEL, isAppLive, isPlannedProductId, isProductId } from '../site-links';
+import type { SiteProductId } from '../site-links';
 
 export const TOPICS = [
   {
@@ -37,6 +37,14 @@ export const TOPICS = [
     prompt: 'What kind of jobs do you run, and how do you work out what each one made today?',
     action: 'Ask about Pulse',
     subject: 'KitStak Pulse',
+  },
+  {
+    id: 'notify',
+    label: NOTIFY_LABEL,
+    note: 'KitStak Crew and KitStak Ledger are coming soon. We will email you once when you can start.',
+    prompt: 'Which app are you waiting for, and what do you use for it today?',
+    action: 'Ask to be told',
+    subject: "Tell me when it's ready",
   },
   {
     id: 'sales',
@@ -79,16 +87,18 @@ export function parseTopic(value: string | null | undefined): TopicId {
 }
 
 /** Reads `?product=` from a walkthrough link. Null for anything that is not a product. */
-export function parseProduct(value: string | null | undefined): ProductId | null {
-  return value && isProductId(value) ? value : null;
+export function parseProduct(value: string | null | undefined): SiteProductId | null {
+  return value && (isProductId(value) || isPlannedProductId(value)) ? value : null;
 }
 
 /**
  * The first line of the message when a visitor books a walkthrough from one product page, so they
  * do not have to say which product they mean. Empty for every other way into the form.
  */
-export function starterMessage(topic: TopicId, product: ProductId | null): string {
-  if (topic !== 'demo' || product === null) return '';
+export function starterMessage(topic: TopicId, product: SiteProductId | null): string {
+  if (product === null) return '';
+  if (topic === 'notify') return `Please tell me when ${priceOf(product).name} is ready.`;
+  if (topic !== 'demo') return '';
   return `I would like a walkthrough of ${priceOf(product).name}.`;
 }
 

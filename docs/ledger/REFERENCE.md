@@ -139,15 +139,13 @@ then drops the stem in.
 
 - Shared icon: `AppIcon app="ledger"` in `packages/ui/src/app-icon/app-icon.tsx`. It is not in any app list, launcher or switcher yet.
 - Files: `apps/web/public/brand/apps/kitstak-icon-ledger.svg` and `apps/web/public/brand/loaders/kitstak-loader-ledger.svg`.
-- The icon runs taller than the five live icons (y 40 to 160). Widen `APP_ICON_ARTWORK_BOX` before it goes into a lockup.
+- The icon was resized on 2026-11-27 to the same artwork box as the live icons (y 50 to 150), so it lines up in menus and lockups.
 - Still to do when the app is real: copies in `apps/ledger/public/brand/`, `src/app/icon.*`, a `brand-loader.tsx`, the Portal launcher
   mark, and PNG exports at 512 and 1024.
 
-**To do on kitstak.com (not started):**
-
-- **A placeholder.** A "Coming soon" Ledger card on the products page, with the icon, the one line pitch from section 1 and a "Tell me
-  when it's ready" link to the contact form. Keep it out of pricing, the price calculator and sign up until it can be bought.
-- **More documentation.** Site docs are Markdown in `apps/web/content/docs/<app>/` (how to write one: `apps/web/content/docs/README.md`),
-  and the app list is `DOC_APP_IDS` in `apps/web/src/lib/docs/docs.ts`. Add a `ledger` folder when the app ships, with at least getting
-  started, invoices, collections, bills and payments, reconciliation and month-end close. Until then, a short "What's coming" page in
-  `getting-started` can cover Ledger and Crew together.
+**On kitstak.com (2026-11-27).** A full product page at `/ledger` ("Coming soon", screenshot placeholders in
+`ShotPlaceholder`), a "Coming soon" row in the Products menu, the drawer and the footer, cards on the home, products and pricing pages,
+and a "Tell me when it's ready" contact topic. The planned price is $49 each month for the whole team, up to 5 seats, held in `PLANNED_PRODUCTS` in
+`packages/billing/src/catalog.ts`, which is outside `PRODUCT_IDS`, so sign-up, the calculator, Stripe and entitlements never see it.
+Site docs are in `apps/web/content/docs/ledger/`, written as planned. When the app ships: move its price into `CATALOG.products`, swap
+the placeholders for real screenshots, and rewrite the docs against the real screens.

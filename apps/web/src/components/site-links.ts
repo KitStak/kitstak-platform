@@ -1,5 +1,7 @@
 import {
+  PLANNED_PRODUCT_IDS,
   PRODUCT_IDS,
+  isPlannedProductId,
   isProductId,
   parseStack,
   stackParam,
@@ -7,7 +9,7 @@ import {
   toggleProduct,
 } from '@kitstak/billing/catalog';
 import { normalizeSelection } from '@kitstak/billing/catalog';
-import type { ProductId, Stack } from '@kitstak/billing/catalog';
+import type { PlannedProductId, ProductId, Stack } from '@kitstak/billing/catalog';
 import { signupUrl } from '@kitstak/billing/handoff';
 import type { HandoffSource } from '@kitstak/billing/handoff';
 
@@ -86,8 +88,19 @@ export const LINKS: AppOrigins = resolveAppOrigins(
  */
 export const PULSE_IS_LIVE: boolean = true;
 
+/**
+ * Every app the site has a page for: the four you can buy, then Crew and Ledger, which are announced
+ * with a price but have no app yet (docs/crew/REFERENCE.md, docs/ledger/REFERENCE.md). A planned app
+ * never rides along in a start, sign-up or calculator link: those take `ProductId` only.
+ */
+export type SiteProductId = ProductId | PlannedProductId;
+export { PLANNED_PRODUCT_IDS, isPlannedProductId };
+export type { PlannedProductId };
+export const SITE_PRODUCT_IDS: readonly SiteProductId[] = [...PRODUCT_IDS, ...PLANNED_PRODUCT_IDS];
+
 /** False for a product whose app customers cannot open yet. Such a product gets no start button. */
-export function isAppLive(product: 'crm' | 'wms' | 'projects' | 'pulse'): boolean {
+export function isAppLive(product: SiteProductId): boolean {
+  if (isPlannedProductId(product)) return false;
   return product !== 'pulse' || PULSE_IS_LIVE;
 }
 
@@ -95,7 +108,7 @@ export function isAppLive(product: 'crm' | 'wms' | 'projects' | 'pulse'): boolea
 export const COMING_SOON = 'Coming soon';
 
 /** "Coming soon" for a product whose app is not open yet, otherwise null. */
-export function availabilityLabel(product: 'crm' | 'wms' | 'projects' | 'pulse'): string | null {
+export function availabilityLabel(product: SiteProductId): string | null {
   return isAppLive(product) ? null : COMING_SOON;
 }
 
@@ -108,7 +121,11 @@ export const ROUTES = {
   crm: '/crm',
   projects: '/projects',
   pulse: '/pulse',
+  crew: '/crew',
+  ledger: '/ledger',
   pricing: '/pricing',
+  /** The Crew and Ledger cards on the pricing page. */
+  pricingPlanned: '/pricing#coming-soon',
   /** The price calculator on the pricing page. */
   calculator: '/pricing#calculator',
   bundle: '/products#bundle',
@@ -124,7 +141,26 @@ export const ROUTES = {
   team1: '/customers/team-1',
   founder: '/contact?topic=founder',
   demo: '/contact?topic=demo',
+  notify: '/contact?topic=notify',
 } as const;
+
+/** The page for each app the site sells or announces. */
+export const PRODUCT_ROUTE: Readonly<Record<SiteProductId, string>> = {
+  crm: ROUTES.crm,
+  wms: ROUTES.wms,
+  projects: ROUTES.projects,
+  pulse: ROUTES.pulse,
+  crew: ROUTES.crew,
+  ledger: ROUTES.ledger,
+};
+
+/** The label on every button for an app that is announced but not open yet. */
+export const NOTIFY_LABEL = "Tell me when it's ready";
+
+/** The contact form, set to "Tell me when it's ready" and naming the planned app. */
+export function notifyHref(product: PlannedProductId): string {
+  return `${ROUTES.notify}&product=${product}`;
+}
 
 /**
  * The licensable apps and the stack helpers. They come from the shared catalog (`@kitstak/billing`),
@@ -211,8 +247,12 @@ export interface StartLink {
   readonly label: string;
 }
 
-/** The start button for one product: "Start with ..." when its app is open, a walkthrough when it is not. */
-export function startLink(product: ProductId): StartLink {
+/**
+ * The start button for one product: "Start with ..." when its app is open, a walkthrough when it is
+ * not, and "Tell me when it's ready" for a planned app, which has nothing to walk through yet.
+ */
+export function startLink(product: SiteProductId): StartLink {
+  if (isPlannedProductId(product)) return { href: notifyHref(product), label: NOTIFY_LABEL };
   return isAppLive(product)
     ? { href: startFreeHref(product, 'product'), label: `Start with ${START_NAME[product]}` }
     : { href: walkthroughHref(product), label: WALKTHROUGH_LABEL };

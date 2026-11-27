@@ -7,7 +7,7 @@ export interface NavLink {
 }
 
 export interface ProductNav {
-  readonly id: 'wms' | 'crm' | 'projects' | 'pulse';
+  readonly id: 'wms' | 'crm' | 'projects' | 'pulse' | 'crew' | 'ledger';
   readonly href: string;
   readonly name: string;
   readonly tag: string;
@@ -77,6 +77,32 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
   },
 ];
 
+/**
+ * Apps that are announced but not open yet (Crew, Ledger). They get their own "Coming soon" row in
+ * the Products menu and sit after the live apps in the drawer and the footer. No deep links: the
+ * pages are short and the visitor should land on the top.
+ */
+export const PLANNED_NAV: readonly ProductNav[] = [
+  {
+    id: 'crew',
+    href: ROUTES.crew,
+    name: 'KitStak Crew',
+    tag: 'Crew',
+    blurb: 'Shifts, a time clock and the labor plan for the floor.',
+    status: availabilityLabel('crew'),
+    links: [],
+  },
+  {
+    id: 'ledger',
+    href: ROUTES.ledger,
+    name: 'KitStak Ledger',
+    tag: 'Ledger',
+    blurb: 'Invoices, collections, bills and one month-end close.',
+    status: availabilityLabel('ledger'),
+    links: [],
+  },
+];
+
 /** Top-level header links (the Products menu is rendered separately, before these). */
 export const PRIMARY_NAV: readonly NavLink[] = [
   { href: ROUTES.platform, label: 'Platform' },
@@ -94,6 +120,8 @@ export const PRODUCT_PATHS: readonly string[] = [
   ROUTES.crm,
   ROUTES.projects,
   ROUTES.pulse,
+  ROUTES.crew,
+  ROUTES.ledger,
 ];
 
 /** True when `href` is the page at `pathname`. Links to a section (`#...`) are never "the page". */

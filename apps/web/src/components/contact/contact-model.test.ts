@@ -97,4 +97,11 @@ describe('buildMailto', () => {
 
     expect([...url.searchParams.keys()].sort()).toEqual(['body', 'subject']);
   });
+
+  test('a planned app link asks to be told when it is ready', () => {
+    expect(parseProduct('crew')).toBe('crew');
+    expect(parseProduct('ledger')).toBe('ledger');
+    expect(starterMessage('notify', 'crew')).toBe('Please tell me when KitStak Crew is ready.');
+    expect(starterMessage('notify', null)).toBe('');
+  });
 });

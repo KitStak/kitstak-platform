@@ -10,6 +10,8 @@ content/docs/
   wms/
   projects/
   pulse/
+  crew/              Planned app, not available yet (see "Planned apps" below)
+  ledger/            Planned app, not available yet (see "Planned apps" below)
 ```
 
 Each app folder has one `_meta.json` and any number of `<slug>.md` pages.
@@ -77,7 +79,7 @@ Only this. Anything else renders as plain text.
 
 - **Only what the app does today.** Every screen, field, button, status and rule must be in the app's
   code. Use the exact words on screen, in bold: **Receive**, **Ready to Pick**. If you cannot find it in
-  the code, leave it out. No roadmap, no "coming soon", no guesses.
+  the code, leave it out. No roadmap, no "coming soon", no guesses. (Planned apps follow their own rule: see **Planned apps** below.)
 - **No prices, percents of discount or trial lengths.** Link to `/pricing` instead.
 - **Navigation as the user sees it:** **Inventory > Locations**, then the tab, then the button.
 - **Plain words, short sentences.** Second person ("you"). No em dash, no en dash, no double dash.
@@ -85,6 +87,21 @@ Only this. Anything else renders as plain text.
 - **Links:** to pages in the same app by full path (`/docs/wms/cycle-counts`), to another app only at
   its root (`/docs/crm`), and to site pages (`/pricing`, `/security`). Every link must resolve; the
   test suite checks.
+
+## Planned apps
+
+`crew/` and `ledger/` describe apps that are not built yet. The owner asked for their docs early, so
+the "only what the app does today" rule above applies to live apps only. In a planned app's folder:
+
+- Every page opens with this callout as the first line of the body:
+  `> **Note:** Crew is planned and not available yet. This page describes how it is planned to work, and details may change before launch.`
+- Describe the planned app from its `docs/<app>/REFERENCE.md` (repo root), in plain words: "Crew is
+  planned to...". Nothing more than the reference says.
+- No bold UI labels and no menu paths. There are no screens yet, so there are no on-screen words.
+- Where the reference lists an open question, say it is still being decided. Never state it as fact.
+- `_meta.json` descriptions start with "Planned:".
+- When the app ships, rewrite every page against the real app's screens, drop the callout, and the
+  live-app rules apply in full.
 
 ## Checks
 

@@ -118,6 +118,47 @@
   transform: translateX(4px);
 }
 
+/* Crew and Ledger, coming soon: a slim row across the panel, under the four live products. */
+.planned {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+.plannedLabel {
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.plannedItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: -8px -12px;
+  border-radius: var(--radius-lg);
+  transition: background-color var(--duration-normal) var(--ease-out);
+}
+.plannedItem:hover,
+.plannedItem[aria-current='page'] {
+  background: var(--surface-hover);
+}
+.plannedName {
+  display: block;
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.01em;
+}
+.plannedBlurb {
+  display: block;
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+}
+
 /* Four products fill the row, so the bundle is a band underneath them. */
 .bundle {
   --stak-lower: #8f122c;

@@ -49,7 +49,7 @@ export function StackHero() {
             A CRM for the people who sell, a WMS for the people who ship, Projects for the work in between,
             and Pulse to show which jobs make money. Each one stands on its own. Stack two or more and they
             share one sign-in and one bill, and cost {BUNDLE_OFF} less.
-            {isAppLive('pulse') ? null : ' Pulse is coming soon.'}
+            {isAppLive('pulse') ? ' Crew and Ledger are coming soon.' : ' Pulse, Crew and Ledger are coming soon.'}
           </p>
           <div className={styles.heroActions}>
             <a href={startFreeHref()} className="btn btn-primary btn-lg">

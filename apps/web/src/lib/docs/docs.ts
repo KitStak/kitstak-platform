@@ -8,11 +8,11 @@ import type { DocBlock } from './markdown';
 import { parseMarkdown, plainText, splitFrontMatter } from './markdown';
 
 /** The folders under content/docs, in the order the docs home and the app switcher show them. */
-export const DOC_APP_IDS = ['getting-started', 'wms', 'crm', 'projects', 'pulse'] as const;
+export const DOC_APP_IDS = ['getting-started', 'wms', 'crm', 'projects', 'pulse', 'crew', 'ledger'] as const;
 export type DocAppId = (typeof DOC_APP_IDS)[number];
 
 /** The day the docs last changed. Bump it with real edits; it feeds dateModified and the sitemap. */
-export const DOCS_UPDATED = '2026-11-25';
+export const DOCS_UPDATED = '2026-11-27';
 
 export interface DocPage {
   readonly app: DocAppId;

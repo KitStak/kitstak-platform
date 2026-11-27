@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {
   BUNDLE_OFF,
   MORE_SEATS_ACTION,
+  PLANNED_PRICE_NOTE,
   TRIAL_LINE,
   YEARLY_OFF,
   includedSeatsLabel,
@@ -10,12 +11,13 @@ import {
   moreSeatsPrompt,
   priceOf,
 } from '@/lib/pricing';
-import type { ProductId } from '@/lib/pricing';
+import type { PricedProductId } from '@/lib/pricing';
 import { trialUrl } from '@/lib/stak';
 import {
   ROUTES,
   availabilityLabel,
   isAppLive,
+  isPlannedProductId,
   pricingHref,
   startLink,
   START_LABEL,
@@ -23,7 +25,7 @@ import {
 import styles from './price-band.module.css';
 
 interface PriceBandProps {
-  readonly product: ProductId;
+  readonly product: PricedProductId;
   readonly included: readonly string[];
 }
 
@@ -35,6 +37,7 @@ interface PriceBandProps {
 export function PriceBand({ product, included }: PriceBandProps) {
   const price = priceOf(product);
   const isOpen = isAppLive(product);
+  const isPlanned = isPlannedProductId(product);
   const walkthrough = startLink(product);
   const availability = availabilityLabel(product);
   const seats = includedSeatsLabel(product);
@@ -81,7 +84,8 @@ export function PriceBand({ product, included }: PriceBandProps) {
             when you pay yearly.
           </p>
           {/* A product whose app is not open yet gets a walkthrough, not a start button. */}
-          {isOpen ? (
+          {isPlanned ? <p className={styles.seats}>{PLANNED_PRICE_NOTE}</p> : null}
+          {isOpen && !isPlanned ? (
             <a
               href={trialUrl({ products: [product], seats: 1, warehouses: 1, interval: 'monthly' }, 'product')}
               className="btn btn-primary btn-lg btn-block"
@@ -100,8 +104,8 @@ export function PriceBand({ product, included }: PriceBandProps) {
             </Link>
           )}
           {isOpen ? <p className={styles.trust}>{TRIAL_LINE}</p> : null}
-          <Link href={pricingHref(product)} className={`text-link ${styles.calc}`}>
-            Price your stack{' '}
+          <Link href={isPlanned ? ROUTES.pricingPlanned : pricingHref(product)} className={`text-link ${styles.calc}`}>
+            {isPlanned ? 'See all prices' : 'Price your stack'}{' '}
             <span className="btn-arrow" aria-hidden>
               →
             </span>

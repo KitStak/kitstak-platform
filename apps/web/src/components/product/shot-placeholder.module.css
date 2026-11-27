@@ -1,0 +1,138 @@
+/* A screenshot stand-in, framed like the real screenshots in pulse-shot.module.css. */
+.shot {
+  position: relative;
+  margin: 0 auto;
+  width: 100%;
+}
+.shot[data-shape='narrow'] {
+  max-width: 460px;
+}
+
+.window {
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  background: var(--surface-panel);
+  box-shadow: var(--elevation-modal);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--type-sm);
+}
+.barName {
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+.barScreen {
+  color: var(--text-muted);
+}
+.barScreen::before {
+  content: '/';
+  margin-right: 10px;
+  color: var(--border-strong);
+}
+
+.body {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  padding: clamp(16px, 2.4vw, 28px);
+  /* A faint diagonal hatch: reads as "not a real screen" in both themes. */
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 14px,
+    color-mix(in srgb, var(--text-muted) 7%, transparent) 14px 15px
+  );
+}
+.shot[data-shape='narrow'] .body {
+  aspect-ratio: 4 / 5;
+}
+
+.rows {
+  display: grid;
+  gap: clamp(10px, 1.4vw, 16px);
+}
+.row {
+  display: flex;
+  gap: 4%;
+  padding-bottom: clamp(10px, 1.4vw, 16px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.row span {
+  display: block;
+  width: var(--w);
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+/* The first row is the table head: one step darker. */
+.row:first-child span {
+  background: color-mix(in srgb, var(--text-muted) 32%, transparent);
+}
+
+.stamp {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 14px 22px;
+  transform: translate(-50%, -50%);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-app);
+  text-align: center;
+  white-space: nowrap;
+}
+.stampKicker {
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.stampScreen {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 2.4vw, 30px);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.shot figcaption {
+  margin-top: 14px;
+  font-size: var(--type-sm);
+  line-height: 1.5;
+  color: var(--text-muted);
+  text-align: center;
+}
+.shot figcaption strong {
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+
+/* On the navy band: the frame keeps its own surface, the caption turns light. */
+.shot[data-on-brand] .window {
+  border-color: var(--on-brand-rule);
+}
+.shot[data-on-brand] figcaption {
+  color: var(--on-brand-muted);
+}
+.shot[data-on-brand] figcaption strong {
+  color: var(--brand-cream);
+}
+
+@media (max-width: 640px) {
+  .window {
+    border-radius: var(--radius-lg);
+  }
+  .body {
+    aspect-ratio: 4 / 3;
+  }
+}
