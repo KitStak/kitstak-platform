@@ -1,0 +1,2 @@
+# Runtime state of the local dev scripts (pid files, logs, screenshots, generated secret).
+.run/

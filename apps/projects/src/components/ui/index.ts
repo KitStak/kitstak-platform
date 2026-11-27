@@ -30,7 +30,6 @@ export * from './color-picker';
 export * from './date-picker';
 export * from './toggle-group';
 export * from './breadcrumbs';
-export * from './card';
 export * from './table';
 export * from './page-header';
 export * from './spinner';

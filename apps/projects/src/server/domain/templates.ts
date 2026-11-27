@@ -57,7 +57,8 @@ export async function listTemplates(ctx: DomainContext): Promise<TemplateDTO[]> 
   const rows = await db
     .select()
     .from(templates)
-    .where(and(eq(templates.orgId, ctx.orgId), isNull(templates.deletedAt)))
+    // The project gallery lists project templates only; program templates open in the program wizard.
+    .where(and(eq(templates.orgId, ctx.orgId), isNull(templates.deletedAt), eq(templates.kind, 'project')))
     .orderBy(desc(templates.updatedAt));
   const builtins: TemplateDTO[] = BUILTIN_TEMPLATES.map((template) => ({
     id: `builtin:${template.slug}`,
@@ -80,7 +81,7 @@ export async function getTemplate(ctx: DomainContext, id: string): Promise<Templ
     if (!builtin) throw notFound('That template');
     return (await listTemplates(ctx)).find((template) => template.id === id) as TemplateDTO;
   }
-  const [row] = await db.select().from(templates).where(and(eq(templates.id, id), eq(templates.orgId, ctx.orgId), isNull(templates.deletedAt)));
+  const [row] = await db.select().from(templates).where(and(eq(templates.id, id), eq(templates.orgId, ctx.orgId), isNull(templates.deletedAt), eq(templates.kind, 'project')));
   if (!row) throw notFound('That template');
   return orgTemplateDTO(row);
 }

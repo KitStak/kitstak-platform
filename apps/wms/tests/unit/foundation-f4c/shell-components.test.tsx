@@ -61,6 +61,20 @@ describe('MegaMenuBar', () => {
   });
 });
 
+/** The full trail (the `ol`, shown from `md` up) and the phone-only back link before it. */
+function breadcrumb(): { trail: string | null; back: { label: string | null; href: string | null } } {
+  const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
+  const trail = within(nav).getByRole('list');
+  const back = within(nav)
+    .getAllByRole('link')
+    .filter((a) => !trail.contains(a));
+  expect(back).toHaveLength(1);
+  return {
+    trail: trail.textContent,
+    back: { label: back[0]?.textContent ?? null, href: back[0]?.getAttribute('href') ?? null },
+  };
+}
+
 describe('PageHeader', () => {
   it('derives breadcrumbs and filters route tabs by permission', () => {
     render(
@@ -76,8 +90,10 @@ describe('PageHeader', () => {
         />
       </ShellProvider>,
     );
-    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(crumbs.textContent).toBe('HomeFulfillmentShipped & Canceled Orders');
+    expect(breadcrumb()).toEqual({
+      trail: 'HomeFulfillmentShipped & Canceled Orders',
+      back: { label: 'Home', href: '/dashboard' },
+    });
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Shipped Orders');
     const tabs = screen.getByRole('navigation', { name: 'orders sections' });
     expect(
@@ -93,11 +109,12 @@ describe('PageHeader', () => {
   it('accepts explicit breadcrumbs and a current-crumb override', () => {
     pathname = '/orders/abc';
     const { rerender } = render(<PageHeader title="Order" crumbLabel="SO010421" />);
-    expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toBe(
-      'HomeFulfillmentShipment OrdersSO010421',
-    );
+    expect(breadcrumb()).toEqual({
+      trail: 'HomeFulfillmentShipment OrdersSO010421',
+      back: { label: 'Shipment Orders', href: '/orders' },
+    });
     rerender(<PageHeader title="Custom" breadcrumbs={[{ label: 'A', href: '/a' }, { label: 'B' }]} />);
-    expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toBe('HomeAB');
+    expect(breadcrumb()).toEqual({ trail: 'HomeAB', back: { label: 'A', href: '/a' } });
   });
 });
 

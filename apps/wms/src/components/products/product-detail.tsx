@@ -35,7 +35,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton, SkeletonTable } from '@/components/ui/skeleton';
-import { StatTile } from '@/components/ui/stat-tile';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { InfoTip } from '@/components/ui/info-tip';
 import { UnderlineTabs } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/toast';
 import { apiFetch, apiRequest, isApiError } from '@/lib/api-client';
@@ -74,6 +75,7 @@ import {
   PlanningTab,
   TransactionsTab,
 } from './product-detail-sections';
+import { ProductProgramsPanel } from './product-programs-panel';
 
 const TABS = [
   'overview',
@@ -342,21 +344,9 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
         badges={
           <>
             {categoryBadge(p.productCategory)}
-            {p.kitType ? (
-              <Badge tone="info" size="sm">
-                {p.kitType}
-              </Badge>
-            ) : null}
-            {p.isHazmat ? (
-              <Badge tone="danger" size="sm">
-                Hazardous
-              </Badge>
-            ) : null}
-            {p.isDigital ? (
-              <Badge tone="neutral" size="sm">
-                Digital
-              </Badge>
-            ) : null}
+            {p.kitType ? <Badge tone="info">{p.kitType}</Badge> : null}
+            {p.isHazmat ? <Badge tone="danger">Hazardous</Badge> : null}
+            {p.isDigital ? <Badge tone="neutral">Digital</Badge> : null}
           </>
         }
         meta={
@@ -439,55 +429,64 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
       {/* Two availability figures, named apart so they never read as a mismatch:
           Unallocated = on hand − allocated − damaged (pickable now);
           ATP = undamaged on hand − all open order demand (allocated or not), as on the Inventory tab. */}
-      <div className="grid grid-cols-2 gap-3 px-6 md:grid-cols-4 xl:grid-cols-7">
-        <StatTile
-          label="On hand"
-          value={fmt.quantity(data.totals.onHand)}
-          sublabel={`${data.inventory.length} location bucket${data.inventory.length === 1 ? '' : 's'}`}
-        />
-        <StatTile
-          label="Unallocated"
-          value={fmt.quantity(data.totals.available)}
-          tone={data.totals.available > 0 ? 'success' : 'default'}
-          infoLabel="How Unallocated is calculated"
-          info={
-            <>
-              On hand − allocated − damaged = {fmt.quantity(data.totals.onHand)} −{' '}
-              {fmt.quantity(data.totals.allocated)} − {fmt.quantity(data.totals.damaged)}. Stock on shelves
-              that no order has reserved yet.
-            </>
-          }
-        />
-        <StatTile
-          label="ATP"
-          value={fmt.quantity(atpTotal)}
-          tone={atpTotal < 0 ? 'danger' : 'default'}
-          infoLabel="How ATP is calculated"
-          sublabel="Available to promise"
-          info={
-            <>
-              Undamaged on hand − open order demand = {fmt.quantity(undamagedTotal)} −{' '}
-              {fmt.quantity(data.totals.openSo)}. Unlike Unallocated, it also subtracts open orders that are
-              not allocated yet. Per warehouse on the Inventory tab.
-            </>
-          }
-        />
-        <StatTile label="Allocated" value={fmt.quantity(data.totals.allocated)} />
-        <StatTile
-          label="Damaged"
-          value={fmt.quantity(data.totals.damaged)}
-          tone={data.totals.damaged ? 'danger' : 'default'}
-        />
-        <StatTile
-          label="Open order demand"
-          value={fmt.quantity(data.totals.openSo)}
-          sublabel={`${data.openOrders.length} order${data.openOrders.length === 1 ? '' : 's'}`}
-        />
-        <StatTile
-          label="Inbound"
-          value={fmt.quantity(data.totals.openPo)}
-          sublabel={`${data.openPos.length} open PO${data.openPos.length === 1 ? '' : 's'}`}
-        />
+      <div className="px-6">
+        <StatRow label="Stock totals">
+          <StatTile
+            label="On hand"
+            value={fmt.quantity(data.totals.onHand)}
+            href={null}
+            caption={`${data.inventory.length} location bucket${data.inventory.length === 1 ? '' : 's'}`}
+          />
+          <StatTile
+            label="Unallocated"
+            value={fmt.quantity(data.totals.available)}
+            href={null}
+            explain={
+              <InfoTip
+                content={
+                  <>
+                    On hand − allocated − damaged = {fmt.quantity(data.totals.onHand)} −{' '}
+                    {fmt.quantity(data.totals.allocated)} − {fmt.quantity(data.totals.damaged)}. Stock on
+                    shelves that no order has reserved yet.
+                  </>
+                }
+                label="How Unallocated is calculated"
+              />
+            }
+          />
+          <StatTile
+            label="ATP"
+            value={fmt.quantity(atpTotal)}
+            href={null}
+            caption="Available to promise"
+            explain={
+              <InfoTip
+                content={
+                  <>
+                    Undamaged on hand − open order demand = {fmt.quantity(undamagedTotal)} −{' '}
+                    {fmt.quantity(data.totals.openSo)}. Unlike Unallocated, it also subtracts open orders that
+                    are not allocated yet. Per warehouse on the Inventory tab.
+                  </>
+                }
+                label="How ATP is calculated"
+              />
+            }
+          />
+          <StatTile label="Allocated" value={fmt.quantity(data.totals.allocated)} href={null} />
+          <StatTile label="Damaged" value={fmt.quantity(data.totals.damaged)} href={null} />
+          <StatTile
+            label="Open order demand"
+            value={fmt.quantity(data.totals.openSo)}
+            href={null}
+            caption={`${data.openOrders.length} order${data.openOrders.length === 1 ? '' : 's'}`}
+          />
+          <StatTile
+            label="Inbound"
+            value={fmt.quantity(data.totals.openPo)}
+            href={null}
+            caption={`${data.openPos.length} open PO${data.openPos.length === 1 ? '' : 's'}`}
+          />
+        </StatRow>
       </div>
 
       {/* Pointer clicks show only the active underline; the focus ring is for keyboard focus. */}
@@ -541,7 +540,12 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
         {tab === 'inventory' ? <InventoryTab data={data} /> : null}
         {tab === 'orders' ? <OrdersTab data={data} /> : null}
         {tab === 'listings' ? <ListingsTab data={data} /> : null}
-        {tab === 'kits' ? <KitTab data={data} /> : null}
+        {tab === 'kits' ? (
+          <div className="flex flex-col gap-4">
+            <KitTab data={data} />
+            {isKit ? <ProductProgramsPanel productId={p.id} /> : null}
+          </div>
+        ) : null}
         {tab === 'planning' ? (
           <PlanningTab data={data} onEdit={can.edit ? () => setEditing(true) : undefined} />
         ) : null}
@@ -671,7 +675,7 @@ function HeaderBarcode({
       Barcode <span className="font-mono">{value}</span>
       {source ? <span className="text-faint"> ({source})</span> : null}
       {conflict ? (
-        <Badge tone="warning" size="sm" className="ml-1.5">
+        <Badge tone="warning" className="ml-1.5">
           Conflict
         </Badge>
       ) : null}

@@ -1,4 +1,6 @@
-import { CONTACT } from '../site-links';
+import { priceOf } from '@/lib/pricing';
+import { CONTACT, isAppLive, isProductId } from '../site-links';
+import type { ProductId } from '../site-links';
 
 export const TOPICS = [
   {
@@ -12,7 +14,7 @@ export const TOPICS = [
   {
     id: 'demo',
     label: 'Book a walkthrough',
-    note: 'A guided tour of the WMS, the CRM, Projects or the whole stack, using an operation like yours.',
+    note: 'A guided tour of the WMS, the CRM, Projects, Pulse or the whole stack, using an operation like yours.',
     prompt: 'Which product do you want to see, and what does your operation look like?',
     action: 'Request a walkthrough',
     subject: 'Walkthrough request',
@@ -26,12 +28,31 @@ export const TOPICS = [
     subject: 'KitStak Projects',
   },
   {
+    id: 'pulse',
+    label: 'KitStak Pulse',
+    // Nobody can add Pulse to an account until its app is open.
+    note: isAppLive('pulse')
+      ? 'Add Pulse to an organization you already run, or ask how it fits the way you track job profit today.'
+      : 'Pulse is coming soon. Ask how it fits the way you track job profit today, or book a walkthrough.',
+    prompt: 'What kind of jobs do you run, and how do you work out what each one made today?',
+    action: 'Ask about Pulse',
+    subject: 'KitStak Pulse',
+  },
+  {
     id: 'sales',
     label: 'Pricing and bundles',
     note: 'Questions about price, the bundle, larger teams or more warehouses.',
     prompt: 'How many people and warehouses are you planning for?',
     action: 'Ask about pricing',
     subject: 'Pricing question',
+  },
+  {
+    id: 'billing',
+    label: 'Billing help',
+    note: 'A charge, an invoice, a refund question or your card.',
+    prompt: 'What happened? Add your company name and the invoice number if you have one.',
+    action: 'Send message',
+    subject: 'Billing help',
   },
   {
     id: 'other',
@@ -55,6 +76,20 @@ export interface ContactDraft {
 
 export function parseTopic(value: string | null | undefined): TopicId {
   return TOPICS.find((topic) => topic.id === value)?.id ?? 'other';
+}
+
+/** Reads `?product=` from a walkthrough link. Null for anything that is not a product. */
+export function parseProduct(value: string | null | undefined): ProductId | null {
+  return value && isProductId(value) ? value : null;
+}
+
+/**
+ * The first line of the message when a visitor books a walkthrough from one product page, so they
+ * do not have to say which product they mean. Empty for every other way into the form.
+ */
+export function starterMessage(topic: TopicId, product: ProductId | null): string {
+  if (topic !== 'demo' || product === null) return '';
+  return `I would like a walkthrough of ${priceOf(product).name}.`;
 }
 
 /** `mailto:` link that opens the visitor's own email app with the message filled in. */

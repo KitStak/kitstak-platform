@@ -2,10 +2,12 @@
 /**
  * Global shortcuts: c (new task, also from the task drawer), mod+k (palette), / (filter the current view like Linear and Jira;
  * the palette on pages without a view search), ? (help), [ (sidebar), mod+z (undo the
- * last change that showed an Undo toast), g then h/m/i/s/p/g/d/a/t (go to).
+ * last change that showed an Undo toast), g then h/m/i/s/p/g/d/a/t (go to), g r (Programs) and
+ * g f (Floor today).
  */
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { floorTodayHref, programsHref } from '@/features/programs/kit/live-pages';
 import { isEditableTarget, useHotkey } from '@/lib/hooks/use-hotkeys';
 import { routes } from '@/lib/routes';
 import { toast } from '@/components/ui';
@@ -93,6 +95,9 @@ export function useShellHotkeys(): void {
           d: routes.dashboards(),
           a: routes.automations(),
           t: routes.templates(),
+          // Programs and Floor today join once their pages exist (features/programs/kit/live-pages.ts).
+          r: programsHref() ?? undefined,
+          f: floorTodayHref() ?? undefined,
         }[key];
         if (target) {
           event.preventDefault();

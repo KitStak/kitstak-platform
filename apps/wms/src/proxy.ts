@@ -1,7 +1,7 @@
 /**
  * Next 16 Proxy (formerly middleware) — optimistic edge checks only:
- * pages without a `kitstak.session_token` cookie redirect to /login?next=…; APIs get a
- * 401 envelope. Real verification (Better Auth `core.session`) happens server-side in
+ * pages without a `kitstak.session_token` cookie redirect to /login?next=…, which then goes to the
+ * Portal sign in page, the one front door (`server/http/front-door.ts`); APIs get a 401 envelope. Real verification (Better Auth `core.session`) happens server-side in
  * `getSessionUser()` / `defineRoute()`. The `ks_csrf` double-submit cookie is retired
  * (blueprint §1.4): Better Auth guards /api/auth/*, `defineRoute` keeps the same-origin
  * check for every other mutation.
@@ -10,6 +10,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { extractThemeHandoff, THEME_COOKIE, THEME_COOKIE_MAX_AGE_SECONDS } from '@kitstak/ui/theme';
 import { hasKitstakSessionCookie } from '@kitstak/auth/session-cookie';
 import { documentStatusFor, isDocumentRequest } from '@/server/http/status-gates';
+import { landingRedirectFor } from '@/server/http/landing-gate';
+import { frontDoorRedirectFor, isFrontDoorPath } from '@/server/http/front-door';
 
 const PUBLIC_PREFIXES: readonly string[] = [
   '/login',
@@ -53,6 +55,24 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   const hasSession = hasKitstakSessionCookie(request);
 
+  // One front door: the WMS sign in and "Forgot password" pages go to the Portal's, which has
+  // every way in (see front-door.ts for the few cases that keep the WMS page).
+  if (isDocumentRequest(request.method, request.headers) && isFrontDoorPath(pathname)) {
+    const door = await frontDoorRedirectFor(pathname, request.nextUrl.searchParams, request.headers, hasSession);
+    if (door) return NextResponse.redirect(new URL(door, request.url));
+  }
+
+  if (hasSession && isDocumentRequest(request.method, request.headers) && !pathname.startsWith('/api/') && !isPublicPath(pathname)) {
+    // No warehouse yet, or the WMS is not in the plan: go to the right screen before any page
+    // renders (see landing-gate.ts). The (app) layout keeps the same redirect as a backstop.
+    const landing = await landingRedirectFor(pathname, request.headers);
+    if (landing) {
+      const target = request.nextUrl.clone();
+      target.pathname = landing;
+      target.search = '';
+      return NextResponse.redirect(target);
+    }
+  }
   if (hasSession && isDocumentRequest(request.method, request.headers)) {
     // Real 403/404 statuses for document loads; the page still renders its in-shell view.
     const status = await documentStatusFor(pathname, undefined, request.headers);

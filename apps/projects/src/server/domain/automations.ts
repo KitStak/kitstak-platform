@@ -513,15 +513,18 @@ export async function runAutomationsForEvents(ctx: DomainContext, events: readon
   for (const event of events) {
     const planned = planAutomations(event, rules, today);
     if (planned.length === 0) continue;
-    // Scheduled events repeat on every sweep: run each rule once per (task, key).
+    // Scheduled events repeat on every sweep: run each rule once per (task, key). Run events key
+    // on the run id alone, so a run whose first build changed or went away never fires twice.
     let alreadyRan = new Set<string>();
     if (event.dedupeKey) {
+      const byRun = event.type === 'run_done' || event.type === 'run_below_plan';
       const previous = await db
         .select({ automationId: automationRuns.automationId })
         .from(automationRuns)
         .where(
           and(
-            eq(automationRuns.taskId, event.task.id),
+            eq(automationRuns.orgId, ctx.orgId),
+            byRun ? undefined : eq(automationRuns.taskId, event.task.id),
             inArray(automationRuns.automationId, planned.map((p) => p.ruleId)),
             sql`${automationRuns.detail} ->> 'dedupe' = ${event.dedupeKey}`,
           ),

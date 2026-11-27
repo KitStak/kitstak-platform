@@ -562,7 +562,7 @@ export function ProjectTasksCard({
                 size="sm"
                 label={`${project.name} progress`}
                 className="mt-2"
-                tone={project.progress.percent === 100 ? 'success' : 'primary'}
+                tone={project.progress.percent === 100 ? 'success' : 'data'}
               />
               <p className="mt-1 text-xs text-secondary tabular-nums">
                 {project.progress.total === 0

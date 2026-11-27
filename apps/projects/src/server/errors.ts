@@ -10,7 +10,10 @@ export const ERROR_CODES = [
   'CONFLICT',
   'VALIDATION',
   'NOT_ENTITLED',
+  /** The plan is view only: reads work, every change is refused (docs/billing/SPEC.md section 9.4). */
+  'plan.read_only',
   'RATE_LIMITED',
+  'LOCKED',
   'INTERNAL',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -22,7 +25,9 @@ const STATUS: Readonly<Record<ErrorCode, number>> = {
   CONFLICT: 409,
   VALIDATION: 422,
   NOT_ENTITLED: 402,
+  'plan.read_only': 402,
   RATE_LIMITED: 429,
+  LOCKED: 423,
   INTERNAL: 500,
 };
 
@@ -46,6 +51,8 @@ export const notFound = (what = 'That item'): DomainError =>
 export const forbidden = (message = "You don't have permission to do that."): DomainError =>
   new DomainError('FORBIDDEN', message);
 export const conflict = (message: string): DomainError => new DomainError('CONFLICT', message);
+/** A write that would change money on a closed day (docs/programs/SPEC.md 4.3.4). */
+export const locked = (message: string): DomainError => new DomainError('LOCKED', message);
 export const invalid = (message: string, fields?: Record<string, string>): DomainError =>
   new DomainError('VALIDATION', message, fields);
 

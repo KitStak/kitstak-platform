@@ -2,7 +2,6 @@
 /** My work, dashboard overview, import entry point and Trash. */
 import Link from 'next/link';
 import {
-  BarChart3,
   CalendarCheck,
   FileSpreadsheet,
   LayoutDashboard,
@@ -10,7 +9,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { Badge, Button, EmptyState, Skeleton, cn } from '@/components/ui';
+import { Badge, Button, CountBadge, EmptyState, Skeleton, cn } from '@/components/ui';
 import { useBoardLifecycle, useBoards, useDashboard, useNotifications } from '@/lib/hooks';
 import { useOrg } from '@/features/shell/org-context';
 import { EntityIcon } from '@/features/shell/entity-icon';
@@ -49,7 +48,7 @@ export function MyWorkPage() {
   const entries = assigned.data?.pages.flatMap((page) => page.items) ?? [];
   return (
     <PageFrame title="My work" icon={<CalendarCheck />}>
-      <PageSection title="Assigned to me" aside={<Badge>{entries.length}</Badge>}>
+      <PageSection title="Assigned to me" aside={<CountBadge count={entries.length} />}>
         {assigned.isPending ? (
           <ListSkeleton />
         ) : assigned.isError ? (
@@ -140,7 +139,7 @@ export function DashboardPage({ dashboardId }: { readonly dashboardId: string })
             >
               <header className="flex items-center justify-between gap-2">
                 <h2 className="truncate text-md font-semibold text-fg">{widget.title}</h2>
-                <Badge tone="outline" icon={<BarChart3 />}>
+                <Badge tone="outline">
                   {WIDGET_LABEL[widget.type]}
                 </Badge>
               </header>
@@ -189,7 +188,7 @@ export function TrashPage() {
       description="Deleted boards are removed permanently after 30 days."
       icon={<Trash2 />}
     >
-      <PageSection title="Deleted boards" aside={<Badge>{boards.length}</Badge>}>
+      <PageSection title="Deleted boards" aside={<CountBadge count={boards.length} />}>
         {deleted.isPending ? (
           <ListSkeleton />
         ) : deleted.isError ? (

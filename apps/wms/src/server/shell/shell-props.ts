@@ -8,7 +8,8 @@ import { eq } from 'drizzle-orm';
 import type { InitialShellContext } from '@/lib/context-label';
 import { getAppDb, getPlatformDb, type AppDb } from '@/server/api/db';
 import { getAuthContext } from '@/server/auth/context';
-import { entitlementsAllowAll, wmsModuleEntitledForOrg } from '@/server/auth/entitlements';
+import { entitlementsAllowAll } from '@/server/auth/entitlements';
+import { getPlanView, warehouseLimitNotice, wmsPlanLink, type WarehouseLimitNotice } from '@/server/auth/plan';
 import { hasModule, type EntitlementsDb } from '@kitstak/entitlements';
 import { accessibleWmsOrgs } from '@/server/auth/session-store';
 import { getPasswordPolicy, isPasswordExpired } from '@/server/auth/password-policy';
@@ -17,6 +18,7 @@ import { getSessionIdleMinutes } from '@/server/repositories/company';
 import { brandAccentCss, getBranding } from '@/server/repositories/apps-branding';
 import { listActiveAppKeys } from './active-apps';
 import { loadInitialShellContext } from './initial-context';
+import type { AppPlanView } from '@kitstak/billing/server';
 
 /** Why the signed-in user must choose a new password before using the app (null = not required). */
 export type PasswordChangeReason = 'reset' | 'expired' | null;
@@ -39,21 +41,38 @@ export interface ShellProps {
   /** Custom Branding: CSS re-pointing the primary tokens at the brand accent (null = default theme). */
   readonly brandCss?: string | null;
   /** KitStak module unlock state for the request's org (shared app switcher). */
-  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean; readonly pulse?: boolean };
   /** The organization whose warehouse is open, and every org warehouse the user can switch to. */
   readonly org?: { readonly id: string; readonly name: string };
   readonly orgs?: readonly { readonly id: string; readonly name: string }[];
+  /** The organization's plan as the shell needs it (docs/billing/CONTRACTS.md section 18). */
+  readonly plan?: ShellPlan;
+}
+
+type ProductId = 'crm' | 'wms' | 'projects' | 'pulse';
+
+export interface ShellPlan {
+  /** `read_only` = view only: everything opens and reads, every change is refused by the server. */
+  readonly access: 'full' | 'read_only';
+  /** The plan banner under the top bar, or null. Words and link come from `@kitstak/billing`. */
+  readonly notice: AppPlanView['notice'];
+  /** Plan state per app for the app switcher. */
+  readonly badges: AppPlanView['badges'];
+  /** Where a row that is not in the plan goes: the Portal plan picker with that app turned on. */
+  readonly addHrefs: Readonly<Record<ProductId, string>>;
+  /** Set when the plan has no room for one more warehouse: the sentence with the price, and the link. */
+  readonly warehouseLimit: WarehouseLimitNotice | null;
 }
 
 /** Sibling modules the org holds (allow-all outside production, like the WMS gate). */
 async function loadEntitledApps(db: AppDb, orgId: string): Promise<NonNullable<ShellProps['entitledApps']>> {
-  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true };
+  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true, pulse: true };
   try {
-    const check = (module: 'crm' | 'projects') => hasModule(db as unknown as EntitlementsDb, orgId, module).catch(() => false);
-    const [crm, projects] = await Promise.all([check('crm'), check('projects')]);
-    return { crm, wms: true, projects };
+    const check = (module: 'crm' | 'projects' | 'pulse') => hasModule(db as unknown as EntitlementsDb, orgId, module).catch(() => false);
+    const [crm, projects, pulse] = await Promise.all([check('crm'), check('projects'), check('pulse')]);
+    return { crm, wms: true, projects, pulse };
   } catch {
-    return { crm: false, wms: true, projects: false };
+    return { crm: false, wms: true, projects: false, pulse: false };
   }
 }
 
@@ -97,9 +116,12 @@ export async function loadShellProps(): Promise<ShellProps | null> {
   const user = { id: auth.user.id, name: auth.user.name, email: auth.user.email, role: auth.user.role };
   const db = await getAppDb();
   const platformDb = await getPlatformDb();
-  // Module entitlement gate (BLUEPRINT.md §3.3): signed-in users of an unentitled org land
-  // on the branded /locked page instead of the shell (dev/test default to allow-all).
-  if (!(await wmsModuleEntitledForOrg(platformDb, auth.user.orgId))) redirect('/locked');
+  // Plan gate (docs/billing/CONTRACTS.md section 18): when WMS is not in the org's plan,
+  // signed-in users land on the lock screen instead of the shell. A view only org (trial over,
+  // payment late, paused, plan ended) still opens the shell, with the banner on top; the API
+  // refuses every change. Dev/test default to allow-all.
+  const planView = await getPlanView(platformDb, { orgId: auth.user.orgId, userId: auth.user.id });
+  if (planView.access === 'locked') redirect('/locked');
   const orgs = (await accessibleWmsOrgs(platformDb, auth.user.id)).map((o) => ({ id: o.orgId, name: o.name }));
   const initialContext = await loadInitialShellContext(db, auth);
   return {
@@ -113,5 +135,17 @@ export async function loadShellProps(): Promise<ShellProps | null> {
     entitledApps: await loadEntitledApps(platformDb, auth.user.orgId),
     org: { id: auth.user.orgId, name: auth.user.orgName },
     orgs,
+    plan: {
+      access: planView.access === 'read_only' ? 'read_only' : 'full',
+      notice: planView.notice,
+      badges: planView.badges,
+      addHrefs: {
+        crm: wmsPlanLink({ to: 'add', product: 'crm' }),
+        wms: wmsPlanLink({ to: 'add', product: 'wms' }),
+        projects: wmsPlanLink({ to: 'add', product: 'projects' }),
+        pulse: wmsPlanLink({ to: 'add', product: 'pulse' }),
+      },
+      warehouseLimit: planView.access === 'read_only' ? null : await warehouseLimitNotice(platformDb, auth.user.orgId),
+    },
   };
 }

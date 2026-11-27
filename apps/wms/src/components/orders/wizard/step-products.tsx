@@ -32,7 +32,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { EmptyState } from '@/components/ui/empty-state';
-import { KpiChip } from '@/components/ui/kpi-chip';
 import { TextField } from '@/components/ui/text-field';
 import { toast } from '@/components/ui/toast';
 import { DisabledReason } from '@/components/ui/tooltip';
@@ -261,9 +260,21 @@ export function StepProducts() {
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <KpiChip label="Number of SKU" value={fmt.quantity(totals.skuCount)} />
-        <KpiChip label="Number of kits" value={fmt.quantity(totals.kitCount)} />
-        <KpiChip label="Total qty" value={fmt.quantity(totals.totalQuantity)} tone="primary" />
+        {/* Totals of the lines below: plain text, the lines are right here. */}
+        <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" aria-label="Order totals">
+          {(
+            [
+              ['SKUs', totals.skuCount],
+              ['Kits', totals.kitCount],
+              ['Total qty', totals.totalQuantity],
+            ] as const
+          ).map(([label, value]) => (
+            <div key={label} className="flex items-baseline gap-1.5">
+              <dt className="text-secondary">{label}</dt>
+              <dd className="font-semibold tabular-nums text-foreground">{fmt.quantity(value)}</dd>
+            </div>
+          ))}
+        </dl>
         <div className="ml-auto flex items-center gap-2">
           <TextField
             size="sm"

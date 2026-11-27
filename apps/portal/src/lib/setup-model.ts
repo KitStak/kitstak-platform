@@ -11,15 +11,42 @@ export type SetupFocus = 'wms' | 'crm' | 'both';
 export type BusinessType = '3pl' | 'brand' | 'distributor' | 'other';
 export type TeamSize = 'solo' | 'small' | 'medium' | 'large';
 export type StartMode = 'fresh' | 'sample' | 'import';
+/** The four apps. The same ids as the billing catalog and `core.entitlements.module`. */
+export type SetupProduct = 'crm' | 'wms' | 'projects' | 'pulse';
 
 export interface SetupProfile {
+  /**
+   * Kept for stored profiles and for the CRM and WMS guides, which read it. New profiles derive it
+   * from `products` (see `focusFromProducts`).
+   */
   readonly focus: SetupFocus;
   readonly businessType: BusinessType;
   readonly teamSize: TeamSize;
   readonly startMode: StartMode;
+  /** The apps picked at signup. Missing on profiles saved before the four app signup. */
+  readonly products?: readonly SetupProduct[];
 }
 
 export const SETUP_FOCUSES: readonly SetupFocus[] = ['wms', 'crm', 'both'];
+export const SETUP_PRODUCTS: readonly SetupProduct[] = ['crm', 'wms', 'projects', 'pulse'];
+
+/** Keeps known app ids, in catalog order, with no repeats. Junk is dropped. */
+export function toSetupProducts(value: unknown): readonly SetupProduct[] {
+  if (!Array.isArray(value)) return [];
+  return SETUP_PRODUCTS.filter((product) => value.includes(product));
+}
+
+/**
+ * The old CRM or WMS answer, worked out from the apps a team picked. Both, or neither, reads as
+ * 'both': the app steps are filtered by what the team really has, so nothing extra shows up.
+ */
+export function focusFromProducts(products: readonly SetupProduct[]): SetupFocus {
+  const crm = products.includes('crm');
+  const wms = products.includes('wms');
+  if (crm && !wms) return 'crm';
+  if (wms && !crm) return 'wms';
+  return 'both';
+}
 export const BUSINESS_TYPES: readonly BusinessType[] = ['3pl', 'brand', 'distributor', 'other'];
 export const TEAM_SIZES: readonly TeamSize[] = ['solo', 'small', 'medium', 'large'];
 export const START_MODES: readonly StartMode[] = ['fresh', 'sample', 'import'];
@@ -49,7 +76,19 @@ export function parseSetupProfile(payload: unknown): SetupProfile | null {
     businessType: businessType as BusinessType,
     teamSize: teamSize as TeamSize,
     startMode: startMode as StartMode,
+    ...(Array.isArray(record.products) ? { products: toSetupProducts(record.products) } : {}),
   };
+}
+
+/**
+ * Where the team stands on paying, for the "Pick your plan" step (docs/billing/SPEC.md 5.7).
+ * `trial`: a free trial is running with no card. `trial_ended`: it is over and nothing is paid.
+ * `done`: a card is on file or the plan is paid.
+ */
+export interface SetupBillingSignal {
+  readonly state: 'trial' | 'trial_ended' | 'done';
+  /** The last day of the free trial in short words ("Dec 7"), when known. */
+  readonly trialEndsLabel: string | null;
 }
 
 /** Live signals read from the shared database. `null` = query failed (degrade to todo). */
@@ -71,9 +110,24 @@ export interface SetupSignals {
   readonly pmAssignedTasks?: number | null;
   /** Projects/tasks linked to a CRM or WMS record. */
   readonly pmLinks?: number | null;
+  /** KitStak Pulse module (omitted = not licensed: no Pulse steps). */
+  readonly pulseEntitled?: boolean;
+  /** Labor rates, or a default labor cost per hour in Pulse settings. */
+  readonly pulseLaborRates?: number | null;
+  /** Real jobs (sample data does not count). */
+  readonly pulseJobs?: number | null;
+  /** Days of work logged on a job (sample data does not count). */
+  readonly pulseEntries?: number | null;
+  /** Jobs linked to a CRM deal, a WMS work order or a project. */
+  readonly pulseLinks?: number | null;
+  /**
+   * Set only for a team that started a free trial or has a plan. Left out (or null) for teams on
+   * a manual grant and teams with no trial: they never see the "Pick your plan" step.
+   */
+  readonly billing?: SetupBillingSignal | null;
 }
 
-export type SetupScope = 'portal' | 'crm' | 'wms' | 'projects';
+export type SetupScope = 'portal' | 'crm' | 'wms' | 'projects' | 'pulse';
 export type SetupStepStatus = 'todo' | 'done' | 'skipped';
 
 export type SetupStepKey =
@@ -86,7 +140,12 @@ export type SetupStepKey =
   | 'wms_first_order'
   | 'projects_first_project'
   | 'projects_assign_task'
-  | 'projects_connect';
+  | 'projects_connect'
+  | 'pulse_labor_rate'
+  | 'pulse_first_job'
+  | 'pulse_first_entry'
+  | 'pulse_connect'
+  | 'billing_plan';
 
 export const SETUP_STEP_KEYS: readonly SetupStepKey[] = [
   'profile',
@@ -99,6 +158,11 @@ export const SETUP_STEP_KEYS: readonly SetupStepKey[] = [
   'projects_first_project',
   'projects_assign_task',
   'projects_connect',
+  'pulse_labor_rate',
+  'pulse_first_job',
+  'pulse_first_entry',
+  'pulse_connect',
+  'billing_plan',
 ];
 
 export function isSetupStepKey(value: string): value is SetupStepKey {
@@ -123,7 +187,8 @@ interface StepBlueprint {
   readonly key: SetupStepKey;
   readonly scope: SetupScope;
   readonly title: string;
-  readonly description: string;
+  /** Plain text, or text that follows the live signals (the plan step names the trial end date). */
+  readonly description: string | ((signals: SetupSignals) => string);
   readonly cta: string;
   readonly minutes: number;
   readonly auto: boolean;
@@ -144,6 +209,10 @@ const wantsProjects = (signals: SetupSignals): boolean => signals.projectsEntitl
 /** The cross-app step only makes sense when there is a CRM or WMS to connect to. */
 const wantsConnect = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
   wantsProjects(signals) && (wantsCrm(signals, profile) || wantsWms(signals, profile));
+const wantsPulse = (signals: SetupSignals): boolean => signals.pulseEntitled === true;
+/** Linking a job only makes sense when there is a CRM or WMS record to link it to. */
+const wantsPulseConnect = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
+  wantsPulse(signals) && (wantsCrm(signals, profile) || wantsWms(signals, profile));
 /** Solo founders skip the invite step — unless a teammate or invite shows up anyway. */
 const wantsInvite = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
   profile?.teamSize !== 'solo' || signals.memberCount > 1 || signals.pendingInvites > 0;
@@ -264,17 +333,135 @@ const BLUEPRINTS: readonly StepBlueprint[] = [
     requires: 'projects_first_project',
     include: wantsConnect,
   },
+  {
+    key: 'pulse_labor_rate',
+    scope: 'pulse',
+    title: 'Set your labor cost per hour',
+    description: 'One number is enough to start: what an hour of work really costs you.',
+    cta: 'Set the rate',
+    minutes: 2,
+    auto: true,
+    detect: (signals) => count(signals.pulseLaborRates ?? null) > 0,
+    include: (signals) => wantsPulse(signals),
+  },
+  {
+    key: 'pulse_first_job',
+    scope: 'pulse',
+    title: 'Add your first job',
+    description: 'A job is one piece of work for one client, with one price.',
+    cta: 'Add a job',
+    minutes: 2,
+    auto: true,
+    detect: (signals) => count(signals.pulseJobs ?? null) > 0,
+    include: (signals) => wantsPulse(signals),
+  },
+  {
+    key: 'pulse_first_entry',
+    scope: 'pulse',
+    title: 'Log a day of work',
+    description: 'Type the units made, the people and the hours. Pulse works out the profit.',
+    cta: 'Log work',
+    minutes: 1,
+    auto: true,
+    detect: (signals) => count(signals.pulseEntries ?? null) > 0,
+    requires: 'pulse_first_job',
+    include: (signals) => wantsPulse(signals),
+  },
+  {
+    key: 'pulse_connect',
+    scope: 'pulse',
+    title: 'Link a job to a deal or work order',
+    description: 'A linked job fills in its own client, quantity and price, and shows its profit on that record.',
+    cta: 'Link a job',
+    minutes: 1,
+    auto: true,
+    detect: (signals) => count(signals.pulseLinks ?? null) > 0,
+    requires: 'pulse_first_job',
+    include: wantsPulseConnect,
+  },
+  {
+    // Always the last step. `ready` during a free trial, `done` once a card is on file or the
+    // plan is paid. Never shown to teams on a manual grant or with no trial.
+    key: 'billing_plan',
+    scope: 'portal',
+    title: 'Pick your plan',
+    description: billingPlanDescription,
+    cta: 'Pick a plan',
+    minutes: 2,
+    auto: true,
+    detect: (signals) => signals.billing?.state === 'done',
+    include: (signals) => signals.billing !== undefined && signals.billing !== null,
+  },
 ];
+
+function billingPlanDescription(signals: SetupSignals): string {
+  const billing = signals.billing;
+  if (billing?.state === 'done') return 'Your plan is set.';
+  if (billing?.state === 'trial_ended') return 'Your free trial has ended. Pick a plan to keep working.';
+  return billing?.trialEndsLabel
+    ? `Pick a plan any time before ${billing.trialEndsLabel}. No charge until then.`
+    : 'Pick a plan any time during your free trial. No charge until it ends.';
+}
+
+/** Steps that always come last, whatever the scope order. */
+const LAST_STEPS: readonly SetupStepKey[] = ['billing_plan'];
 
 /** 3PLs and distributors set up the warehouse first; brands start from the pipeline. */
 function scopeOrder(profile: SetupProfile | null): readonly SetupScope[] {
   const wmsFirst =
     profile !== null && (profile.businessType === '3pl' || profile.businessType === 'distributor');
-  return wmsFirst ? ['portal', 'wms', 'crm', 'projects'] : ['portal', 'crm', 'wms', 'projects'];
+  return wmsFirst ? ['portal', 'wms', 'crm', 'projects', 'pulse'] : ['portal', 'crm', 'wms', 'projects', 'pulse'];
 }
 
 /** Explicit per-step override rows from core.onboarding_progress. */
 export type SetupOverrides = Readonly<Partial<Record<SetupStepKey, 'completed' | 'skipped'>>>;
+
+/** The org-level row that records the Portal guide itself being seen or dismissed. */
+export const GUIDE_STEP_KEY = 'guide';
+
+export interface ProgressRow {
+  readonly scope: string;
+  readonly stepKey: string;
+  readonly status: string;
+  readonly payload: unknown;
+}
+
+export interface ProgressState {
+  readonly profile: SetupProfile | null;
+  readonly overrides: SetupOverrides;
+  readonly dismissed: boolean;
+  readonly seen: boolean;
+}
+
+/**
+ * Folds the org-level core.onboarding_progress rows into the guide's saved state.
+ * CRM and WMS keep their own 'guide' rows under their own scope, so only the Portal's
+ * row decides whether the Portal guide was seen or dismissed.
+ */
+export function readProgressRows(rows: readonly ProgressRow[]): ProgressState {
+  let profile: SetupProfile | null = null;
+  let dismissed = false;
+  let seen = false;
+  const overrides: Partial<Record<SetupStepKey, 'completed' | 'skipped'>> = {};
+  for (const row of rows) {
+    if (row.stepKey === GUIDE_STEP_KEY) {
+      if (row.scope !== 'portal') continue;
+      seen = true;
+      dismissed = row.status === 'dismissed';
+      continue;
+    }
+    if (row.stepKey === 'profile' && row.status === 'completed') {
+      profile = parseSetupProfile(row.payload);
+      overrides.profile = 'completed';
+      continue;
+    }
+    if (isSetupStepKey(row.stepKey) && (row.status === 'completed' || row.status === 'skipped')) {
+      overrides[row.stepKey] = row.status;
+    }
+  }
+  return { profile, overrides, dismissed, seen };
+}
+
 
 export function buildSetupSteps(
   signals: SetupSignals,
@@ -287,7 +474,9 @@ export function buildSetupSteps(
     .map((blueprint, index) => ({ blueprint, index }))
     .sort(
       (a, b) =>
-        order.indexOf(a.blueprint.scope) - order.indexOf(b.blueprint.scope) || a.index - b.index,
+        Number(LAST_STEPS.includes(a.blueprint.key)) - Number(LAST_STEPS.includes(b.blueprint.key)) ||
+        order.indexOf(a.blueprint.scope) - order.indexOf(b.blueprint.scope) ||
+        a.index - b.index,
     )
     .map((entry) => entry.blueprint);
   const statusOf = new Map<SetupStepKey, SetupStepStatus>();
@@ -311,7 +500,8 @@ export function buildSetupSteps(
       key: blueprint.key,
       scope: blueprint.scope,
       title: blueprint.title,
-      description: blueprint.description,
+      description:
+        typeof blueprint.description === 'function' ? blueprint.description(signals) : blueprint.description,
       cta: blueprint.cta,
       minutes: blueprint.minutes,
       auto: blueprint.auto,
@@ -319,6 +509,28 @@ export function buildSetupSteps(
       lockedBy,
     };
   });
+}
+
+/**
+ * Steps only an owner or an admin can do: the welcome answers, inviting people, and setting up the
+ * first warehouse (the WMS lets only an owner or admin do that).
+ */
+export const MANAGER_STEP_KEYS: readonly SetupStepKey[] = ['profile', 'invite_team', 'wms_warehouse'];
+
+/**
+ * The plan as a plain member sees it (review round 3). A step that is still open and that only an
+ * owner or admin can do is left out, and so is every open step that waits on one of those: a step
+ * with no button is a dead end. A step that is done still shows, as done. PURE.
+ */
+export function stepsForMember(steps: readonly SetupStep[]): readonly SetupStep[] {
+  let kept = steps.filter((step) => step.status !== 'todo' || !MANAGER_STEP_KEYS.includes(step.key));
+  // Steps that wait on a step that is no longer listed go too, down the whole chain.
+  for (;;) {
+    const openTitles = new Set(kept.map((step) => step.title));
+    const next = kept.filter((step) => step.status !== 'todo' || step.lockedBy === null || openTitles.has(step.lockedBy));
+    if (next.length === kept.length) return next;
+    kept = next;
+  }
 }
 
 export interface SetupSummary {
@@ -356,4 +568,54 @@ export function summarizeSetup(steps: readonly SetupStep[]): SetupSummary {
     allSettled: totalCount > 0 && settled === totalCount,
     nextKey: next?.key ?? null,
   };
+}
+
+/** The quick start never lists fewer or more steps than this (docs/billing/SPEC.md 5.7, must have 27). */
+export const GUIDE_STEPS_MIN = 3;
+export const GUIDE_STEPS_MAX = 5;
+
+/**
+ * The quick start: the 3 to 5 steps the welcome screen promises and the launcher guide then shows,
+ * tied to the apps the team picked. The same list in both places, so the count and the minutes
+ * never change between the two screens.
+ *
+ * It is "Tell us about your business", then the first step of each area in turn (team, then each
+ * app), then the second of each, until the list is full. "Pick your plan" always closes the list
+ * when the team is in a free trial. The pick looks at what the plan contains, never at what is
+ * done, so the list does not reshuffle as steps are ticked off. Every other step is one of the
+ * "more steps" the guide folds away; each app's own guide carries those too.
+ */
+export function pickGuideSteps(steps: readonly SetupStep[], max: number = GUIDE_STEPS_MAX): readonly SetupStep[] {
+  const opening = steps.filter((step) => step.key === 'profile');
+  const closing = steps.filter((step) => LAST_STEPS.includes(step.key));
+  const rest = steps.filter((step) => step.key !== 'profile' && !LAST_STEPS.includes(step.key));
+  const room = Math.max(0, max - opening.length - closing.length);
+
+  // One queue per area, in plan order.
+  const queues: SetupStep[][] = [];
+  for (const step of rest) {
+    const queue = queues.find((entry) => entry[0]?.scope === step.scope);
+    if (queue) queue.push(step);
+    else queues.push([step]);
+  }
+  const chosen = new Set<SetupStepKey>();
+  for (let round = 0; chosen.size < room; round += 1) {
+    let took = false;
+    for (const queue of queues) {
+      const step = queue[round];
+      if (step && chosen.size < room) {
+        chosen.add(step.key);
+        took = true;
+      }
+    }
+    if (!took) break;
+  }
+  // Back in plan order, so a step never shows above the one that unlocks it.
+  return [...opening, ...rest.filter((step) => chosen.has(step.key)), ...closing];
+}
+
+/** The steps the quick start leaves out, in plan order. */
+export function moreGuideSteps(steps: readonly SetupStep[], max: number = GUIDE_STEPS_MAX): readonly SetupStep[] {
+  const picked = new Set(pickGuideSteps(steps, max).map((step) => step.key));
+  return steps.filter((step) => !picked.has(step.key));
 }

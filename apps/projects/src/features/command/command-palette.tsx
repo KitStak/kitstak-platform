@@ -1,27 +1,29 @@
 'use client';
 /**
  * ⌘/Ctrl+K command palette. Type to:
- *   - find tasks (by words or a key like OPS-42), people and goals (live server search),
+ *   - find tasks and builds (by words or a key like OPS-42), programs, people and goals (live server search),
+ *   - jump to a program, log output or plan builds (a program picker first), Floor today,
  *   - jump to any project, page, or a view of the project you're in,
  *   - create a task (the text becomes a quick-add sentence) or a project,
  *   - switch theme or organization, open CRM / WMS / Portal, sign out.
  * Local commands filter instantly as you type; server results are always shown alongside them.
  * Visual language matches the Portal/CRM palettes (same frame, group headings, row anatomy, footer).
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Command, defaultFilter, useCommandState } from 'cmdk';
+import { Command, useCommandState } from 'cmdk';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowUpRight,
   BarChart3,
   CalendarCheck2,
-  CornerDownLeft,
   FolderKanban,
   FolderPlus,
   House,
   Inbox,
+  Factory,
   Keyboard,
+  Repeat2,
   ClipboardList,
   LayoutTemplate,
   ListChecks,
@@ -45,6 +47,7 @@ import { organization, signOut } from '@/lib/auth-client';
 import { VIEW_TYPE_LABELS } from '@/lib/constants';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 import { useProjects, useSearch } from '@/lib/hooks/use-data';
+import { useProgram, usePrograms } from '@/lib/hooks/use-programs';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { PROJECT_TABS, routes, type ProjectTab } from '@/lib/routes';
 import { useShell } from '@/features/shell/shell-context';
@@ -52,19 +55,9 @@ import { orgInitials } from '@/features/shell/org-switcher';
 import { useShellStore } from '@/features/shell/store';
 import { markUsedSearch } from './usage-flags';
 import { useSelectionCommands } from './selection-commands';
-
-const groupClass =
-  '[&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-fg-muted';
-
-/** Server results always match (they were searched on the server); everything else uses cmdk's fuzzy score. */
-const REMOTE = 'remote:';
-function paletteFilter(value: string, search: string, keywords?: string[]): number {
-  if (value.startsWith(REMOTE)) return 0.5;
-  const score = defaultFilter(value, search, keywords);
-  // cmdk keeps anything above 0; drop the loose fuzzy hits ("pallets" → "Templates") so only real
-  // matches sit above the task results.
-  return score < (search.trim().length >= 3 ? 0.3 : 0.05) ? 0 : score;
-}
+import { Item, REMOTE, groupClass, paletteFilter } from './palette-item';
+import { ProgramCreateItems, ProgramPickerGroup, ProgramWorkspaceGroup, ProgramsGroup, RemoteProgramsGroup, programCreateLive, programKeyFromPath, type ProgramPick } from './program-commands';
+import { programPageLive } from '@/features/programs/kit/live-pages';
 
 const TAB_LABEL: Record<ProjectTab, string> = {
   overview: 'Overview',
@@ -73,56 +66,6 @@ const TAB_LABEL: Record<ProjectTab, string> = {
   activity: 'Activity',
   settings: 'Settings',
 };
-
-function Item({
-  value,
-  keywords,
-  onSelect,
-  icon,
-  children,
-  meta,
-  hint,
-  external,
-  forceMount,
-  testId = 'palette-item',
-}: {
-  readonly value: string;
-  readonly keywords?: readonly string[];
-  readonly onSelect: () => void;
-  readonly icon: ReactNode;
-  readonly children: ReactNode;
-  readonly meta?: ReactNode;
-  readonly hint?: ReactNode;
-  readonly external?: boolean;
-  readonly forceMount?: boolean;
-  readonly testId?: string;
-}) {
-  return (
-    <Command.Item
-      value={value}
-      keywords={keywords ? [...keywords] : undefined}
-      onSelect={onSelect}
-      forceMount={forceMount}
-      data-testid={testId}
-      className={cn(
-        'group/item mx-2 flex cursor-pointer items-center gap-3 rounded-md px-2 text-sm text-fg select-none',
-        meta ? 'min-h-12 py-1.5' : 'h-10',
-        'data-[selected=true]:bg-hover',
-      )}
-    >
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-sm text-icon">{icon}</span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate">{children}</span>
-        {meta ? <span className="truncate text-xs text-fg-muted">{meta}</span> : null}
-      </span>
-      {hint ? <span className="flex shrink-0 items-center gap-1 text-xs text-fg-muted pointer-coarse:has-[kbd]:hidden">{hint}</span> : null}
-      <span aria-hidden className="hidden shrink-0 items-center gap-1 text-fg-muted group-data-[selected=true]/item:flex">
-        {external ? <ArrowUpRight className="size-3.5" /> : null}
-        <CornerDownLeft className="size-3.5" />
-      </span>
-    </Command.Item>
-  );
-}
 
 /** "Nothing matches" only when neither local commands nor server results have anything. */
 function PaletteEmpty({ remoteCount, searching, fetching }: { readonly remoteCount: number; readonly searching: boolean; readonly fetching: boolean }) {
@@ -151,6 +94,10 @@ export function CommandPalette() {
   const debounced = useDebouncedValue(query.trim(), 150);
   const results = useSearch(debounced, { enabled: open && debounced.length > 0 });
   const projects = useProjects({}, { enabled: open });
+  const programs = usePrograms({}, { enabled: open, staleTime: 60_000 });
+  const programKey = programKeyFromPath(pathname);
+  const currentProgram = useProgram(programKey ?? '', { enabled: open && programKey !== null, staleTime: 30_000 });
+  const [pick, setPick] = useState<ProgramPick | null>(null);
   const selectionHeading = useSelectionCommands((state) => state.heading);
   const selectionCommands = useSelectionCommands((state) => state.commands);
 
@@ -158,7 +105,21 @@ export function CommandPalette() {
     if (open) markUsedSearch();
   }, [open]);
 
-  const close = useCallback(() => setOpen(false), [setOpen]);
+  const close = useCallback(() => {
+    setPick(null);
+    setOpen(false);
+  }, [setOpen]);
+  const newBuild = useCallback(() => {
+    setPick(null);
+    openQuickAdd({ mode: 'build', projectId: programKey && currentProgram.data ? currentProgram.data.id : undefined });
+  }, [openQuickAdd, programKey, currentProgram.data]);
+  const startPick = useCallback(
+    (next: ProgramPick) => {
+      setPick(next);
+      setQuery('');
+    },
+    [setQuery],
+  );
   const go = useCallback(
     (href: string) => {
       close();
@@ -208,7 +169,10 @@ export function CommandPalette() {
   const currentKey = /^\/p\/([^/?#]+)/.exec(pathname)?.[1];
   const currentProject = currentKey ? allProjects.find((p) => p.key === decodeURIComponent(currentKey).toUpperCase()) : undefined;
   const remote = searching ? results.data : undefined;
-  const remoteCount = (remote?.tasks.length ?? 0) + (remote?.people.length ?? 0) + (remote?.goals.length ?? 0);
+  const remoteCount = (remote?.tasks.length ?? 0) + (remote?.people.length ?? 0) + (remote?.goals.length ?? 0) + (remote?.programs?.length ?? 0);
+  const allPrograms = useMemo(() => (programs.data ?? []).filter((p) => !p.archivedAt), [programs.data]);
+  const programKeys = useMemo(() => new Set(allPrograms.map((p) => p.key)), [allPrograms]);
+  const inProgram = programKey && currentProgram.data?.key === programKey ? currentProgram.data : null;
 
   const pages: { value: string; label: string; href: string; icon: LucideIcon; keywords: string[]; chord?: string }[] = [
     { value: 'home', label: 'Home', href: routes.home(), icon: House, keywords: ['dashboard', 'start', 'today'], chord: 'H' },
@@ -216,6 +180,8 @@ export function CommandPalette() {
     { value: 'inbox', label: 'Inbox', href: routes.inbox(), icon: Inbox, keywords: ['notifications', 'mentions'], chord: 'I' },
     { value: 'search', label: 'Search', href: routes.search(), icon: TextSearch, keywords: ['find', 'comments'], chord: 'S' },
     { value: 'projects', label: 'Projects', href: routes.projects(), icon: FolderKanban, keywords: ['portfolio', 'all projects'], chord: 'P' },
+    ...(programPageLive('directory') ? [{ value: 'programs', label: 'Programs', href: routes.programs(), icon: Repeat2, keywords: ['program', 'recurring', 'kitting', 'repeat work'], chord: 'R' }] : []),
+    ...(programPageLive('floor') ? [{ value: 'floor-today-page', label: 'Floor today', href: routes.programsToday(), icon: Factory, keywords: ['floor', 'today', 'runs', 'production'], chord: 'F' }] : []),
     { value: 'goals', label: 'Goals', href: routes.goals(), icon: Target, keywords: ['okr', 'objectives'], chord: 'G' },
     { value: 'dashboards', label: 'Dashboards', href: routes.dashboards(), icon: BarChart3, keywords: ['reports', 'charts'] },
     { value: 'automations', label: 'Automations', href: routes.automations(), icon: Workflow, keywords: ['rules', 'when then'] },
@@ -229,6 +195,7 @@ export function CommandPalette() {
     const candidates: [string, string[]][] = [
       ...pages.map((p): [string, string[]] => [`go-${p.value}`, [p.label, ...p.keywords]]),
       ...allProjects.map((p): [string, string[]] => [`project-${p.key}`, [p.name, p.key]]),
+      ...allPrograms.map((p): [string, string[]] => [`program-${p.key}`, [p.name, p.key]]),
       ...(currentProject ? PROJECT_TABS.map((tab): [string, string[]] => [`tab-${tab}`, [TAB_LABEL[tab]]]) : []),
     ];
     return candidates.some(([value, keywords]) => paletteFilter(value, text, keywords) >= 0.6);
@@ -247,7 +214,10 @@ export function CommandPalette() {
   return (
     <Command.Dialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        if (!next) setPick(null);
+        setOpen(next);
+      }}
       label="Search and commands"
       filter={paletteFilter}
       value={selected}
@@ -265,13 +235,22 @@ export function CommandPalette() {
         <Command.Input
           value={query}
           onValueChange={setQuery}
-          placeholder="Search tasks, projects and people, or type a command…"
+          onKeyDown={(event) => {
+            if (pick && event.key === 'Backspace' && query === '') {
+              event.preventDefault();
+              setPick(null);
+            }
+          }}
+          placeholder={pick ? 'Type a program name or key' : 'Search tasks, projects, programs and people, or type a command…'}
           className="h-13 min-w-0 flex-1 bg-transparent text-md text-fg outline-none placeholder:text-fg-placeholder"
           data-testid="palette-input"
         />
         {results.isFetching && searching ? <Spinner size="xs" label={null} /> : <Kbd>Esc</Kbd>}
       </div>
       <Command.List className="min-h-0 flex-1 overflow-y-auto pb-2">
+        {pick ? <ProgramPickerGroup pick={pick} programs={allPrograms} go={go} onBack={() => setPick(null)} /> : null}
+        {pick ? null : (
+        <>
         <PaletteEmpty remoteCount={remoteCount} searching={searching} fetching={results.isFetching} />
 
 
@@ -306,8 +285,17 @@ export function CommandPalette() {
                 New project
               </Item>
             ) : null}
+            <ProgramCreateItems canCreate={can('project:create')} hasPrograms={allPrograms.length > 0} go={go} onNewBuild={newBuild} onPick={startPick} />
           </Command.Group>
         )}
+
+        {typing && programCreateLive(can('project:create'), allPrograms.length > 0 && !inProgram) ? (
+          <Command.Group heading="Program commands" className={groupClass}>
+            <ProgramCreateItems canCreate={can('project:create')} hasPrograms={allPrograms.length > 0 && !inProgram} go={go} onNewBuild={newBuild} onPick={startPick} />
+          </Command.Group>
+        ) : null}
+
+        {inProgram ? <ProgramWorkspaceGroup program={inProgram} typing={typing} go={go} onNewBuild={newBuild} /> : null}
 
         {currentProject ? (
           <Command.Group heading={`In ${currentProject.name}`} className={groupClass}>
@@ -348,6 +336,8 @@ export function CommandPalette() {
           </Command.Group>
         ) : null}
 
+        <ProgramsGroup programs={allPrograms} typing={typing} go={go} />
+
         <Command.Group heading="Go to" className={groupClass}>
           {pages.map((entry) => (
             <Item
@@ -384,6 +374,7 @@ export function CommandPalette() {
                 }}
                 icon={<StatusIcon category={task.statusCategory} />}
                 meta={`${task.key} · ${task.projectName}`}
+                hint={task.kind === 'build' ? <span className="rounded-sm bg-info-subtle px-1.5 py-px text-2xs font-semibold text-info-text">Build</span> : undefined}
               >
                 {task.title}
               </Item>
@@ -396,11 +387,13 @@ export function CommandPalette() {
             <Item value={`${REMOTE}create-task`} forceMount onSelect={() => openQuickAdd({ text: query.trim() })} icon={<Plus aria-hidden className="size-4" />} meta="Dates, !priority, @people and #labels are filled in for you" testId="palette-create-task">
               New task “{query.trim()}”
             </Item>
-            <Item value={`${REMOTE}search-all`} forceMount onSelect={() => go(routes.search(query.trim()))} icon={<TextSearch aria-hidden className="size-4" />} meta="Tasks, comments, projects, people and goals" testId="palette-search-all">
+            <Item value={`${REMOTE}search-all`} forceMount onSelect={() => go(routes.search(query.trim()))} icon={<TextSearch aria-hidden className="size-4" />} meta="Tasks, comments, projects, programs, people and goals" testId="palette-search-all">
               Search everything for “{query.trim()}”
             </Item>
           </Command.Group>
         ) : null}
+
+        {remote?.programs?.length ? <RemoteProgramsGroup hits={remote.programs} known={typing ? programKeys : new Set()} go={go} /> : null}
 
         {remote?.people.length ? (
           <Command.Group heading="People" className={groupClass} forceMount>
@@ -487,6 +480,8 @@ export function CommandPalette() {
             Sign out
           </Item>
         </Command.Group>
+        </>
+        )}
       </Command.List>
       <div className="hidden items-center gap-4 border-t border-border-subtle bg-sunken px-4 py-2 text-xs text-fg-muted sm:flex">
         <span className="flex items-center gap-1">

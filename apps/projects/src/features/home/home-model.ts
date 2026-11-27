@@ -1,6 +1,8 @@
 /** Pure Home logic: greeting, task buckets, summary stats and the getting-started checklist. */
-import { addDaysIso, startOfWeekIso, todayIso, type IsoDate } from '@/lib/dates';
-import type { TaskSummary } from '@/lib/types';
+import type { PillTone } from '@kitstak/ui/dashboard';
+import { addDaysIso, diffDays, startOfWeekIso, todayIso, type IsoDate } from '@/lib/dates';
+import type { CustomerPulseRowDTO, TaskSummary } from '@/lib/types';
+import type { ProgramListItemDTO, RunDTO } from '@/lib/program-types';
 
 /** The shared KitStak greeting (same boundaries as CRM). */
 export { greetingFor } from '@kitstak/ui/text';
@@ -62,7 +64,7 @@ export function summarySentence(stats: HomeStats): string {
   return 'Your plate is clear. Add a task or start a project to get going.';
 }
 
-export type GettingStartedStepId = 'project' | 'task' | 'due' | 'done' | 'search' | 'team';
+export type GettingStartedStepId = 'project' | 'task' | 'due' | 'done' | 'search' | 'team' | 'program';
 
 export interface GettingStartedInput {
   readonly projectCount: number;
@@ -70,6 +72,10 @@ export interface GettingStartedInput {
   readonly tasks: readonly TaskSummary[];
   readonly usedSearch: boolean;
   readonly peopleCount: number;
+  /** Programs the org has (any status). The optional "Set up a program" step shows only at 0. */
+  readonly programCount?: number;
+  /** The person can create projects (and so programs). */
+  readonly canCreateProgram?: boolean;
 }
 
 export interface GettingStartedStep {
@@ -77,6 +83,8 @@ export interface GettingStartedStep {
   readonly title: string;
   readonly description: string;
   readonly done: boolean;
+  /** Optional steps never count toward finishing the checklist. */
+  readonly optional?: boolean;
 }
 
 export function gettingStartedSteps(input: GettingStartedInput): GettingStartedStep[] {
@@ -117,5 +125,72 @@ export function gettingStartedSteps(input: GettingStartedInput): GettingStartedS
       description: 'Invite teammates from the KitStak Portal so you can assign work.',
       done: input.peopleCount > 1,
     },
+    ...(input.programCount === 0 && input.canCreateProgram
+      ? [
+          {
+            id: 'program' as const,
+            title: 'Set up a program',
+            description: 'For kits you build again and again for one customer, with one price card.',
+            done: false,
+            optional: true,
+          },
+        ]
+      : []),
   ];
+}
+
+/** Steps that count toward finishing the checklist (optional ones never do). */
+export function requiredSteps(steps: readonly GettingStartedStep[]): GettingStartedStep[] {
+  return steps.filter((step) => !step.optional);
+}
+
+/* Programs on Home ------------------------------------------------------------------------------ */
+
+export type CustomerProgram = Pick<ProgramListItemDTO, 'id' | 'key' | 'name' | 'icon' | 'color' | 'today'>;
+
+/** "Glove kits · 5 of 8 builds done today", or "Glove kits · No builds today". */
+export function customerProgramText(program: Pick<ProgramListItemDTO, 'name' | 'today'>): string {
+  const { builds, done } = program.today;
+  if (builds === 0) return `${program.name} · No builds today`;
+  return `${program.name} · ${done} of ${builds} ${builds === 1 ? 'build' : 'builds'} done today`;
+}
+
+/** Running programs per customer row: by CRM account id (the row key) or, failing that, by name. */
+export function programsByCustomer(programs: readonly ProgramListItemDTO[]): ReadonlyMap<string, readonly CustomerProgram[]> {
+  const map = new Map<string, CustomerProgram[]>();
+  for (const program of programs) {
+    if (!program.customer || program.archivedAt || (program.status !== 'active' && program.status !== 'on_hold')) continue;
+    for (const key of [program.customer.id, `name:${program.customer.name.toLowerCase()}`]) {
+      const list = map.get(key) ?? [];
+      list.push(program);
+      map.set(key, list);
+    }
+  }
+  return map;
+}
+
+/** One run that holds the whole day: its counts would only repeat the day line above it. */
+export function sameAsDay(run: Pick<RunDTO, 'builds' | 'plannedUnits' | 'builtUnits'>, builds: number, plannedUnits: string, builtUnits: string): boolean {
+  return run.builds === builds && run.plannedUnits === plannedUnits && run.builtUnits === builtUnits;
+}
+
+/* Customers on Home ----------------------------------------------------------------------------- */
+
+export interface CustomerRowState {
+  readonly tone: PillTone;
+  readonly text: string;
+}
+
+/**
+ * The one state pill a customer row may carry, worst first: late receipts, overdue work, a close
+ * date that passed, warehouse exceptions, then the deal outcome. Null when nothing needs saying.
+ */
+export function customerRowState(row: Pick<CustomerPulseRowDTO, 'lateReceipts' | 'exceptions' | 'deal' | 'projects'>, today: string = todayIso()): CustomerRowState | null {
+  if (row.lateReceipts > 0) return { tone: 'critical', text: 'Receipts late' };
+  if (row.projects.some((project) => project.overdue > 0)) return { tone: 'critical', text: 'Work overdue' };
+  if (row.deal && row.deal.outcome === 'open' && row.deal.closeDate && diffDays(today, row.deal.closeDate) < 0) return { tone: 'caution', text: 'Close date passed' };
+  if (row.exceptions > 0) return { tone: 'caution', text: 'Warehouse exceptions' };
+  if (row.deal?.outcome === 'won') return { tone: 'positive', text: 'Deal won' };
+  if (row.deal?.outcome === 'lost') return { tone: 'neutral', text: 'Deal lost' };
+  return null;
 }

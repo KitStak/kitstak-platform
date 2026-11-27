@@ -36,11 +36,14 @@ describe('projectHealth', () => {
 });
 
 describe('healthProgressTone', () => {
-  it('colours progress by health, never brand red for healthy work', () => {
+  it('draws progress as a quantity: the data color for every health, the pill says the state', () => {
     expect(healthProgressTone('on_track')).toBe('primary');
-    expect(healthProgressTone('at_risk')).toBe('warning');
-    expect(healthProgressTone('off_track')).toBe('danger');
-    expect(healthProgressTone('missed')).toBe('danger');
+    expect(healthProgressTone('at_risk')).toBe('primary');
+    expect(healthProgressTone('off_track')).toBe('primary');
+    expect(healthProgressTone('missed')).toBe('primary');
+  });
+
+  it('turns an achieved goal green', () => {
     expect(healthProgressTone('achieved')).toBe('success');
   });
 });

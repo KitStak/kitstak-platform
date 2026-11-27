@@ -43,6 +43,7 @@ const APP_URLS = {
   crm: process.env.NEXT_PUBLIC_CRM_URL ?? 'http://localhost:3100',
   wms: process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
   projects: process.env.NEXT_PUBLIC_PROJECTS_URL ?? 'http://localhost:3400',
+  pulse: process.env.NEXT_PUBLIC_PULSE_URL ?? 'http://localhost:3500',
 } as const;
 
 function HelpMenu() {
@@ -203,7 +204,14 @@ export function TopBar() {
             badge={<CountBadge count={unread} ringClassName="ring-[var(--surface-panel)]" />}
           />
         </nav>
-        <AppSwitcher current="crm" urls={apps?.urls ?? APP_URLS} entitled={apps?.entitled} notInPlan={apps?.notInPlan} />
+        <AppSwitcher
+          current="crm"
+          urls={apps?.urls ?? APP_URLS}
+          entitled={apps?.entitled}
+          notInPlan={apps?.notInPlan}
+          planBadges={apps?.planBadges}
+          addHref={apps?.addHrefs ? (app) => (app === 'portal' ? undefined : apps.addHrefs?.[app]) ?? `${apps.urls.portal}/billing/plan?add=${app}` : undefined}
+        />
         <UserMenu />
       </div>
     </header>

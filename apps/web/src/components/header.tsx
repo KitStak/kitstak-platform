@@ -7,14 +7,15 @@ import { Logo } from './logo';
 import { MobileMenu } from './nav/mobile-menu';
 import { PRIMARY_NAV, PRODUCT_PATHS, isCurrentPath } from './nav/nav-data';
 import { ProductsMenu } from './nav/products-menu';
-import { LINKS, ROUTES } from './site-links';
+import { LINKS, ROUTES, START_LABEL, startFreeHref } from './site-links';
 import styles from './header.module.css';
 
 const HEADER_HEIGHT = 72;
 const HOVER_CLOSE_MS = 140;
 const TINT_AFTER_PX = 8;
 
-export function Header() {
+/** `solid`: always the light bar, for pages that open on a light background (the docs). */
+export function Header({ solid = false }: { readonly solid?: boolean } = {}) {
   const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isTinted, setIsTinted] = useState(false);
@@ -103,7 +104,7 @@ export function Header() {
     setIsDrawerOpen(false);
   }, []);
 
-  const isSolid = isScrolled || isMenuOpen || isDrawerOpen;
+  const isSolid = solid || isScrolled || isMenuOpen || isDrawerOpen;
   const isProductPage = PRODUCT_PATHS.some((path) => isCurrentPath(pathname, path));
 
   return (
@@ -156,9 +157,10 @@ export function Header() {
           <a href={LINKS.portal} className={styles.signIn}>
             Sign in
           </a>
-          <Link href={ROUTES.getStarted} className={`btn btn-primary ${styles.cta}`} onClick={closeAll}>
-            Set up your Stak
-          </Link>
+          {/* The short road: four fields on portal sign-up. The wizard is "Help me choose" in the hero and the footer. */}
+          <a href={startFreeHref()} className={`btn btn-primary ${styles.cta}`} data-testid="header-start">
+            {START_LABEL}
+          </a>
           <button
             type="button"
             className={styles.burger}

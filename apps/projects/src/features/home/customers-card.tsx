@@ -2,15 +2,18 @@
 /**
  * Home "Your customers today": the cross-app view only KitStak can show. One row per customer
  * behind your active projects: CRM deal stage and close date, warehouse late receipts and
- * exceptions, open tasks, and a one-click "Create task". Above the rows, a "Mismatches" strip calls
- * out what no single app sees on its own (a task due before a deal closed is still open, receipts late while work
- * waits). Hidden when neither CRM nor WMS is connected.
+ * exceptions, open tasks, and a one-click "Create task". Above the rows, mismatch rows (a caution
+ * pill, neutral words) call out what no single app sees on its own (a task due before a deal
+ * closed is still open, receipts late while work waits). Each customer row is neutral text with at
+ * most one state pill (docs/design/UI-CLEANUP.md). Hidden when neither CRM nor WMS is connected.
  */
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, BellOff, Building2, Check, ExternalLink, Handshake, PackageX, Plus, Warehouse } from 'lucide-react';
-import { Button, Skeleton, cn, toast } from '@/components/ui';
+import { DashSection, EmptyNote, Pill, Tag } from '@kitstak/ui/dashboard';
+import { Button, Skeleton, toast } from '@/components/ui';
+import { routes } from '@/lib/routes';
 import { useCustomerPulse } from '@/lib/hooks/use-data';
 import { diffDays, formatDue, todayIso } from '@/lib/dates';
 import { qk } from '@/lib/query-keys';
@@ -18,6 +21,33 @@ import { formatMoney } from '@/lib/money';
 import type { CustomerMismatchDTO, CustomerPulseDTO, CustomerPulseRowDTO } from '@/lib/types';
 import { setTaskDoneAction } from '@/server/actions/tasks';
 import { useShellStore } from '@/features/shell/store';
+import { usePrograms } from '@/lib/hooks/use-programs';
+import { ProgramIcon } from '@/features/programs/kit/chips';
+import { programHref } from '@/features/programs/kit/live-pages';
+import { useHydrated } from '@/features/programs/kit/use-hydrated';
+import { customerProgramText, customerRowState, programsByCustomer, type CustomerProgram } from './home-model';
+
+function ProgramLine({ program }: { readonly program: CustomerProgram }) {
+  const href = programHref(program.key);
+  const body = (
+    <>
+      <ProgramIcon icon={program.icon} color={program.color} size={14} />
+      <Tag>{program.key}</Tag>
+      <span className="truncate text-fg-secondary tabular-nums">{customerProgramText(program)}</span>
+    </>
+  );
+  return (
+    <li className="inline-flex min-w-0 items-center gap-1.5" data-testid="home-customer-program">
+      {href ? (
+        <Link href={href} className="inline-flex min-w-0 items-center gap-1.5 hover:underline">
+          {body}
+        </Link>
+      ) : (
+        body
+      )}
+    </li>
+  );
+}
 
 /** The subtitle promises only what this org has: CRM deals, warehouse orders, or both. */
 export function customersSubtitle(sources: CustomerPulseDTO['sources']): string {
@@ -120,8 +150,13 @@ function MismatchRow({
     });
   };
   return (
-    <li className="flex flex-col gap-1.5 py-2 sm:flex-row sm:items-center sm:gap-3" data-testid="home-mismatch" aria-label={item.text}>
-      <p className={cn('min-w-0 flex-1 text-sm', item.tone === 'danger' ? 'text-danger-text' : 'text-fg')}>
+    <li className="flex flex-col gap-1.5 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3" data-testid="home-mismatch" aria-label={item.text}>
+      <span className="shrink-0">
+        <Pill tone={item.tone === 'danger' ? 'critical' : 'caution'} icon={<AlertTriangle />}>
+          Mismatch
+        </Pill>
+      </span>
+      <p className="min-w-0 flex-1 text-sm text-fg">
         {item.customer ? <span className="font-semibold">{item.customer}</span> : null}
         {item.customer ? <span aria-hidden className="text-fg-muted"> · </span> : null}
         <span>{item.fact}</span>
@@ -177,13 +212,14 @@ function closeText(closeDate: string | null, outcome: 'won' | 'lost' | 'open', t
   return `closes ${formatDue(closeDate, today)}`;
 }
 
-function CustomerRow({ row, today }: { readonly row: CustomerPulseRowDTO; readonly today: string }) {
+function CustomerRow({ row, today, programs }: { readonly row: CustomerPulseRowDTO; readonly today: string; readonly programs: readonly CustomerProgram[] }) {
   const openQuickAdd = useShellStore((state) => state.openQuickAdd);
   const openTasks = row.projects.reduce((sum, project) => sum + project.openTasks, 0);
   const overdue = row.projects.reduce((sum, project) => sum + project.overdue, 0);
   const close = row.deal ? closeText(row.deal.closeDate, row.deal.outcome, today) : null;
   const value = row.deal ? dealValueText(row.deal.amount, row.deal.currency) : null;
   const mainProject = row.projects[0];
+  const state = customerRowState(row, today);
   return (
     <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-4" data-testid="home-customer-row">
       <div className="min-w-0 flex-1">
@@ -204,42 +240,49 @@ function CustomerRow({ row, today }: { readonly row: CustomerPulseRowDTO; readon
               <a href={row.deal.url} className="truncate hover:underline">
                 {row.deal.name}
               </a>
-              <span className={cn('shrink-0 font-medium', row.deal.outcome === 'won' ? 'text-success-text' : row.deal.outcome === 'lost' ? 'text-danger-text' : 'text-fg')}>
+              <span className="shrink-0 font-medium text-fg">
                 {row.deal.stage ?? (row.deal.outcome === 'open' ? 'Open' : row.deal.outcome === 'won' ? 'Won' : 'Lost')}
               </span>
               {value ? <span className="shrink-0 font-medium text-fg">· {value}</span> : null}
-              {close ? <span className={cn('shrink-0', close.startsWith('close date passed') ? 'text-danger-text' : 'text-fg-muted')}>· {close}</span> : null}
+              {close ? <span className="shrink-0 text-fg-muted">· {close}</span> : null}
             </li>
           ) : null}
           {row.lateReceipts > 0 ? (
             <li>
-              <a href={row.receiptsUrl ?? '#'} className="inline-flex items-center gap-1.5 font-medium text-danger-text hover:underline">
-                <Warehouse aria-hidden className="size-3.5" />
+              <a href={row.receiptsUrl ?? '#'} className="inline-flex items-center gap-1.5 font-medium text-fg hover:underline">
+                <Warehouse aria-hidden className="size-3.5 text-icon" />
                 {row.lateReceipts} {row.lateReceipts === 1 ? 'receipt late' : 'receipts late'}
               </a>
             </li>
           ) : null}
           {row.exceptions > 0 ? (
             <li>
-              <a href={row.exceptionsUrl ?? '#'} className="inline-flex items-center gap-1.5 font-medium text-warning-text hover:underline">
-                <PackageX aria-hidden className="size-3.5" />
+              <a href={row.exceptionsUrl ?? '#'} className="inline-flex items-center gap-1.5 font-medium text-fg hover:underline">
+                <PackageX aria-hidden className="size-3.5 text-icon" />
                 {row.exceptions} warehouse {row.exceptions === 1 ? 'exception' : 'exceptions'}
               </a>
             </li>
           ) : null}
           {row.lateReceipts === 0 && row.exceptions === 0 && row.deal === null ? <li className="text-fg-muted">No open deal or warehouse issues</li> : null}
         </ul>
-        {row.projects.length <= 1 ? (
+        {programs.length ? (
+          <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs" data-testid="home-customer-programs">
+            {programs.map((program) => (
+              <ProgramLine key={program.id} program={program} />
+            ))}
+          </ul>
+        ) : null}
+        {row.projects.length === 0 && programs.length ? null : row.projects.length <= 1 ? (
           <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted" data-testid="home-customer-work">
-            <span className={cn('font-medium', openTasks ? 'text-fg-secondary' : '')}>
+            <span className={openTasks ? 'font-medium text-fg-secondary' : 'font-medium'}>
               {openTasks} open {openTasks === 1 ? 'task' : 'tasks'}
-              {overdue ? <span className="text-danger-text"> ({overdue} overdue)</span> : null}
+              {overdue ? ` (${overdue} overdue)` : null}
             </span>
             {mainProject ? (
               <>
                 <span aria-hidden>·</span>
-                <Link href={`/p/${mainProject.key}`} className="text-fg-link hover:underline">
-                  <span className="font-key">{mainProject.key}</span> {mainProject.name}
+                <Link href={routes.project(mainProject.key)} className="inline-flex min-w-0 items-center gap-1.5 text-fg-secondary hover:underline">
+                  <Tag>{mainProject.key}</Tag> {mainProject.name}
                 </Link>
               </>
             ) : null}
@@ -250,18 +293,23 @@ function CustomerRow({ row, today }: { readonly row: CustomerPulseRowDTO; readon
           <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted" data-testid="home-customer-work">
             {row.projects.map((project) => (
               <li key={project.id} className="inline-flex min-w-0 items-center gap-1.5">
-                <Link href={`/p/${project.key}`} className="truncate text-fg-link hover:underline">
-                  <span className="font-key">{project.key}</span> {project.name}
+                <Link href={routes.project(project.key)} className="inline-flex min-w-0 items-center gap-1.5 truncate text-fg-secondary hover:underline">
+                  <Tag>{project.key}</Tag> {project.name}
                 </Link>
-                <span className={cn('shrink-0 font-medium', project.openTasks ? 'text-fg-secondary' : '')}>
+                <span className={project.openTasks ? 'shrink-0 font-medium text-fg-secondary' : 'shrink-0 font-medium'}>
                   {project.openTasks} open {project.openTasks === 1 ? 'task' : 'tasks'}
-                  {project.overdue ? <span className="text-danger-text"> ({project.overdue} overdue)</span> : null}
+                  {project.overdue ? ` (${project.overdue} overdue)` : null}
                 </span>
               </li>
             ))}
           </ul>
         )}
       </div>
+      {state ? (
+        <span className="shrink-0 sm:pt-1" data-testid="home-customer-state">
+          <Pill tone={state.tone}>{state.text}</Pill>
+        </span>
+      ) : null}
       {mainProject ? (
         <Button size="sm" variant="secondary" leadingIcon={<Plus aria-hidden />} onClick={() => openQuickAdd({ projectId: mainProject.id })} className="shrink-0 self-start" aria-label={`Create a task for ${row.customerName}`}>
           Create task
@@ -273,6 +321,9 @@ function CustomerRow({ row, today }: { readonly row: CustomerPulseRowDTO; readon
 
 export function CustomersCard() {
   const pulse = useCustomerPulse();
+  const hydrated = useHydrated();
+  const programList = usePrograms({}, { staleTime: 60_000 });
+  const byCustomer = useMemo(() => programsByCustomer(hydrated ? (programList.data ?? []) : []), [hydrated, programList.data]);
   const today = todayIso();
   const data = pulse.data;
   const { snoozed, snooze, unsnooze } = useSnoozed();
@@ -294,19 +345,13 @@ export function CustomersCard() {
   if (data && !data.available.crm && !data.available.wms) return null;
   if (pulse.isError && !data) return null;
   return (
-    <section className="min-w-0 rounded-xl border border-border-subtle bg-panel shadow-xs" aria-labelledby="home-customers" data-testid="home-customers">
-      <header className="flex items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
-        <div className="min-w-0">
-          <h2 id="home-customers" className="text-base font-semibold text-fg">
-            Your customers today
-          </h2>
-          {data?.sources ? (
-            <p className="text-xs text-fg-muted" data-testid="home-customers-subtitle">
-              {customersSubtitle(data.sources)}
-            </p>
-          ) : null}
-        </div>
-      </header>
+    <DashSection
+      title="Your customers today"
+      description={data?.sources ? <span data-testid="home-customers-subtitle">{customersSubtitle(data.sources)}</span> : undefined}
+      action={{ label: 'All projects', href: routes.projects() }}
+      flush
+      data-testid="home-customers"
+    >
       {!data ? (
         <div className="flex flex-col gap-3 p-4" aria-busy="true" aria-label="Loading customers">
           <Skeleton height={44} rounded="md" />
@@ -315,29 +360,23 @@ export function CustomersCard() {
       ) : (
         <>
           {mismatches.length ? (
-            <div className="border-b border-border-subtle bg-warning-subtle/60 px-4 py-2.5" data-testid="home-mismatches">
-              <p className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-warning-text uppercase">
-                <AlertTriangle aria-hidden className="size-3.5" />
-                Mismatches
-              </p>
-              <ul className="mt-0.5 flex flex-col divide-y divide-border-subtle/70">
-                {mismatches.map((item) => (
-                  <MismatchRow key={item.id} item={item} onSnooze={onSnooze} onKeep={onKeep} />
-                ))}
-              </ul>
-            </div>
+            <ul className="flex flex-col divide-y divide-border-subtle border-b border-border-subtle" aria-label="Mismatches" data-testid="home-mismatches">
+              {mismatches.map((item) => (
+                <MismatchRow key={item.id} item={item} onSnooze={onSnooze} onKeep={onKeep} />
+              ))}
+            </ul>
           ) : null}
           {data.rows.length ? (
             <ul className="divide-y divide-border-subtle">
               {data.rows.slice(0, 6).map((row) => (
-                <CustomerRow key={row.key} row={row} today={today} />
+                <CustomerRow key={row.key} row={row} today={today} programs={byCustomer.get(row.key) ?? byCustomer.get(`name:${row.customerName.toLowerCase()}`) ?? []} />
               ))}
             </ul>
           ) : (
-            <p className="px-4 py-6 text-center text-sm text-fg-muted">Link a customer or CRM deal to a project to see its activity here.</p>
+            <EmptyNote action={{ label: 'Open your projects', href: routes.projects() }}>Link a customer or CRM deal to a project to see its activity here.</EmptyNote>
           )}
         </>
       )}
-    </section>
+    </DashSection>
   );
 }

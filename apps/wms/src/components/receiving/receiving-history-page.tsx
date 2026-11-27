@@ -72,7 +72,7 @@ export function ReceivingHistoryPage() {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
-        title="Receiving History"
+        title="Receiving history"
         tabs="receiving"
         actions={
           <>

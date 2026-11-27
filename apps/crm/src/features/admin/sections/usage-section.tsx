@@ -1,13 +1,21 @@
 'use client';
-/** Admin → Usage & billing: seats, content counts, automation runs, storage and the (demo) plan. */
-import { Boxes, FileStack, KeyRound, LayoutDashboard, Lock, Rows3, Sparkles, Zap } from 'lucide-react';
-import { ProgressBar, Skeleton } from '@/components/ui';
+/**
+ * Admin → Usage & billing: the "Plan and payment" row (rendered on the server from
+ * `@kitstak/billing` and passed in), then fair use meters, content counts and seats.
+ * Count tiles are the shared `StatTile`s: each one links to the list it counts.
+ */
+import type { ReactNode } from 'react';
+import { Meter, StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { Skeleton } from '@/components/ui';
+import { useOrg } from '@/features/shell/org-context';
+import { routes } from '@/features/shell/routes';
+import { useActiveWorkspaceId } from '@/features/shell/sidebar/sidebar';
 import { ORG_ROLES } from '@/server/rbac/permissions';
 import { useUsage } from '../api';
-import { formatBytes, formatDate, formatNumber, formatStorage, meterTone, percent, pluralize, ROLE_LABEL } from '../format';
-import { DemoBadge, ErrorPanel, SectionHeader, SettingsCard, StatTile } from '../ui';
+import { formatBytes, formatNumber, formatStorage, meterTone, percent, pluralize, ROLE_LABEL } from '../format';
+import { ErrorPanel, SectionHeader, SettingsCard } from '../ui';
 
-function Meter({ label, used, limit, format = formatNumber }: { readonly label: string; readonly used: number; readonly limit: number; readonly format?: (value: number) => string }) {
+function UsageMeter({ label, used, limit, format = formatNumber }: { readonly label: string; readonly used: number; readonly limit: number; readonly format?: (value: number) => string }) {
   const pct = percent(used, limit);
   const tone = meterTone(pct);
   return (
@@ -18,57 +26,34 @@ function Meter({ label, used, limit, format = formatNumber }: { readonly label: 
           {format(used)} <span className="text-fg-muted">of {format(limit)}</span>
         </span>
       </div>
-      <ProgressBar value={pct} label={`${label}: ${pct}% used`} tone={tone} />
-      {tone !== 'primary' ? (
-        <span className={tone === 'danger' ? 'text-sm text-danger-text' : 'text-sm text-warning-text'}>
-          {tone === 'danger' ? 'Limit reached' : `${pct}% used, approaching the limit`}
+      <Meter value={pct / 100} label={`${label}: ${pct}% used`} tone={tone} size="thick" />
+      {tone !== 'data' ? (
+        <span className={tone === 'critical' ? 'text-sm text-danger-text' : 'text-sm text-warning-text'}>
+          {tone === 'critical' ? 'Limit reached' : `${pct}% used, approaching the limit`}
         </span>
       ) : null}
     </div>
   );
 }
 
-export function UsageSection() {
+export function UsageSection({ planCard = null }: { readonly planCard?: ReactNode }) {
   const usage = useUsage();
+  const { org } = useOrg();
+  const workspace = useActiveWorkspaceId();
   const data = usage.data;
+  // Boards and items have no org wide list: they live in workspaces, so the tiles open the active one.
+  const boardsHref = workspace.id ? routes.workspace(org.slug, workspace.id) : routes.home(org.slug);
   return (
     <>
       <SectionHeader title="Usage & billing" />
+      {planCard}
       {usage.isError ? (
         <SettingsCard>
           <ErrorPanel title="Couldn't load usage" onRetry={() => void usage.refetch()} />
         </SettingsCard>
       ) : (
         <>
-          <section
-            aria-label="Plan"
-            data-testid="plan-card"
-            className="relative overflow-hidden rounded-lg border border-border-subtle bg-panel p-5 shadow-xs"
-          >
-            <div className="relative flex flex-wrap items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-fg">
-                  <Sparkles aria-hidden className="size-5" />
-                </span>
-                <div>
-                  <p className="flex flex-wrap items-center gap-2 text-lg font-semibold text-fg">
-                    {data ? data.plan.name : <Skeleton width={160} height={18} rounded="full" />}
-                    <DemoBadge>Demo plan · not billed</DemoBadge>
-                  </p>
-                  <p className="mt-1 max-w-xl text-sm text-fg-secondary">
-                    This workspace runs on a demonstration plan. Nothing is charged and no payment details are stored.
-                    {data?.plan.renewsAt ? ` Usage counters reset ${formatDate(data.plan.renewsAt)}.` : ''}
-                  </p>
-                </div>
-              </div>
-              <p className="flex items-center gap-1.5 text-sm text-fg-muted">
-                <Lock aria-hidden className="size-3.5 text-icon" />
-                Only owners can change the plan
-              </p>
-            </div>
-          </section>
-
-          <SettingsCard title="Plan limits" description="Meters turn amber at 80% and red at 100%." testId="usage-meters">
+          <SettingsCard title="Fair use limits" description="Meters turn amber at 80% and red at 100%." testId="usage-meters">
             {!data ? (
               <div data-skeleton aria-busy="true" className="flex flex-col gap-5">
                 {[0, 1, 2].map((index) => (
@@ -80,21 +65,21 @@ export function UsageSection() {
               </div>
             ) : (
               <div className="flex flex-col gap-5">
-                <Meter label="Seats" used={data.seats.active} limit={data.seats.limit} />
-                <Meter label="Automation runs this month" used={data.automationRuns.thisMonth} limit={data.automationRuns.limit} />
-                <Meter label="File storage" used={data.files.bytes} limit={data.files.limitBytes} format={formatBytes} />
+                <UsageMeter label="Automation runs this month" used={data.automationRuns.thisMonth} limit={data.automationRuns.limit} />
+                <UsageMeter label="File storage" used={data.files.bytes} limit={data.files.limitBytes} format={formatBytes} />
               </div>
             )}
           </SettingsCard>
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            <StatTile label="Boards" icon={<Boxes aria-hidden />} value={data ? formatNumber(data.boards) : '…'} hint={data ? `Across ${pluralize(data.workspaces, 'workspace')}` : '\u00a0'} testId="usage-boards" />
-            <StatTile label="Items" icon={<Rows3 aria-hidden />} value={data ? formatNumber(data.items) : '…'} hint="On live boards, excluding trash" testId="usage-items" />
-            <StatTile label="Automations" icon={<Zap aria-hidden />} value={data ? formatNumber(data.automations.total) : '…'} hint={data ? `${formatNumber(data.automations.enabled)} on · ${pluralize(data.automationRuns.failedThisMonth, 'failed run')} this month` : '\u00a0'} />
-            <StatTile label="Dashboards" icon={<LayoutDashboard aria-hidden />} value={data ? formatNumber(data.dashboards) : '…'} hint={data ? `Shared views over ${pluralize(data.boards, 'board')}` : '\u00a0'} />
-            <StatTile label="Files" icon={<FileStack aria-hidden />} value={data ? formatNumber(data.files.count) : '…'} hint={data ? `${formatStorage(data.files.bytes)} used` : '\u00a0'} />
-            <StatTile label="Active API tokens" icon={<KeyRound aria-hidden />} value={data ? formatNumber(data.apiTokens) : '…'} hint={data ? `${pluralize(data.apiTokensRevokedThisMonth, 'token')} revoked this month` : '\u00a0'} testId="usage-tokens" />
-          </div>
+          <StatRow label="Content">
+            <StatTile data-testid="usage-boards" label="Boards" href={boardsHref} value={data ? formatNumber(data.boards) : '…'} caption={data ? `Across ${pluralize(data.workspaces, 'workspace')}` : '\u00a0'} />
+            <StatTile data-testid="usage-items" label="Items" href={boardsHref} value={data ? formatNumber(data.items) : '…'} caption="On live boards, excluding trash" />
+            <StatTile label="Automations" href={routes.automations(org.slug)} value={data ? formatNumber(data.automations.total) : '…'} caption={data ? `${formatNumber(data.automations.enabled)} on · ${pluralize(data.automationRuns.failedThisMonth, 'failed run')} this month` : '\u00a0'} />
+            <StatTile label="Dashboards" href={routes.dashboards(org.slug)} value={data ? formatNumber(data.dashboards) : '…'} caption={data ? `Shared views over ${pluralize(data.boards, 'board')}` : '\u00a0'} />
+            {/* Files are listed per board (each board's Files view); there is no org wide list to open. */}
+            <StatTile label="Files" href={null} value={data ? formatNumber(data.files.count) : '…'} caption={data ? `${formatStorage(data.files.bytes)} used` : '\u00a0'} />
+            <StatTile data-testid="usage-tokens" label="Active API tokens" href={routes.apiTokens(org.slug)} value={data ? formatNumber(data.apiTokens) : '…'} caption={data ? `${pluralize(data.apiTokensRevokedThisMonth, 'token')} revoked this month` : '\u00a0'} />
+          </StatRow>
 
           <SettingsCard title="Seats by role" description="Deactivated members don’t use a seat.">
             {!data ? (

@@ -5,3 +5,6 @@ export * from './theme';
 export * from './handoff';
 export * from './status-icon';
 export * from './text';
+export * from './plan-banner';
+export * from './plan-lock';
+export * from './plan-summary';

@@ -14,6 +14,27 @@ export const WHEN_GROUPS: readonly { readonly key: WhenGroup; readonly label: st
   { key: 'done', label: 'Done lately', hint: 'Finished in the last 7 days' },
 ];
 
+/** The `when` filter on My work: one due-date group, or everything. */
+export type WhenFilter = 'all' | 'overdue' | 'today' | 'upcoming' | 'done';
+
+export const WHEN_FILTERS: readonly { readonly value: WhenFilter; readonly label: string }[] = [
+  { value: 'all', label: 'Any due date' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'today', label: 'Due today' },
+  { value: 'upcoming', label: 'Next 7 days' },
+  { value: 'done', label: 'Done lately' },
+];
+
+/**
+ * True when the task belongs to the `when` filter. A task finished during this visit (`keepIds`)
+ * stays in the group it was in, so checking it off does not make it jump away.
+ */
+export function matchesWhen(task: TaskSummary, when: WhenFilter, today: IsoDate = todayIso(), keepIds: ReadonlySet<string> = new Set()): boolean {
+  if (when === 'all') return true;
+  const group = keepIds.has(task.id) && when !== 'done' ? whenGroup({ ...task, statusCategory: 'todo' }, today) : whenGroup(task, today);
+  return group === when;
+}
+
 export const SORT_LABELS: Readonly<Record<MyWorkSort, string>> = {
   due: 'Due date',
   priority: 'Priority',
@@ -144,4 +165,33 @@ export function matchesText(task: TaskSummary, text: string, projectName: (id: s
   const q = text.trim().toLowerCase();
   if (!q) return true;
   return task.title.toLowerCase().includes(q) || task.key.toLowerCase().includes(q) || projectName(task.projectId).toLowerCase().includes(q);
+}
+
+/* Builds (docs/programs/SPEC.md 5.17) ------------------------------------------------------------ */
+
+export interface BuildRunGroup {
+  /** `${programKey}|${runId}` */
+  readonly key: string;
+  readonly programKey: string;
+  readonly runId: string;
+  readonly date: IsoDate;
+  readonly overdue: boolean;
+  readonly tasks: readonly TaskSummary[];
+}
+
+/** Open builds dated today or earlier, grouped by program and run: today first, then older days newest first. */
+export function groupBuildsByRun(builds: readonly TaskSummary[], today: IsoDate): BuildRunGroup[] {
+  const groups = new Map<string, { programKey: string; runId: string; date: IsoDate; tasks: TaskSummary[] }>();
+  for (const task of builds) {
+    const build = task.build as (TaskSummary['build'] & { readonly runId?: string }) | null | undefined;
+    if (task.kind !== 'build' || !build || isDone(task) || build.buildDate > today) continue;
+    const runId = build.runId ?? `run:manual:${build.buildDate}`;
+    const key = `${task.projectKey}|${runId}`;
+    const group = groups.get(key) ?? { programKey: task.projectKey, runId, date: build.buildDate, tasks: [] };
+    group.tasks.push(task);
+    groups.set(key, group);
+  }
+  return [...groups.entries()]
+    .map(([key, group]) => ({ key, ...group, overdue: group.date < today, tasks: [...group.tasks].sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true })) }))
+    .sort((a, b) => (a.date === b.date ? a.programKey.localeCompare(b.programKey) : b.date.localeCompare(a.date)));
 }

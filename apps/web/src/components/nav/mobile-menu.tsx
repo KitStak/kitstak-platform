@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
-import { LINKS, ROUTES } from '../site-links';
+import { LINKS, ROUTES, START_LABEL, startFreeHref } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import { PRIMARY_NAV, PRODUCT_NAV, isCurrentPath } from './nav-data';
@@ -53,13 +53,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
   }, [isOpen, onClose, id]);
 
   return (
-    <div
-      id={id}
-      ref={panelRef}
-      className={styles.panel}
-      data-open={isOpen || undefined}
-      inert={!isOpen}
-    >
+    <div id={id} ref={panelRef} className={styles.panel} data-open={isOpen || undefined} inert={!isOpen}>
       <nav aria-label="Menu" className={`container ${styles.inner}`}>
         <p className={styles.heading}>Products</p>
         <ul className={styles.products}>
@@ -73,7 +67,10 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
               >
                 <AppIcon app={product.id} size={40} />
                 <span>
-                  <span className={styles.productName}>{product.name}</span>
+                  <span className={styles.productName}>
+                    {product.name}
+                    {product.status ? <span className={styles.status}>{product.status}</span> : null}
+                  </span>
                   <span className={styles.blurb}>{product.blurb}</span>
                 </span>
               </Link>
@@ -107,7 +104,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
               </Link>
             </li>
           ))}
-          <li style={{ '--i': PRIMARY_NAV.length + 4 } as React.CSSProperties}>
+          <li style={{ '--i': PRIMARY_NAV.length + PRODUCT_NAV.length + 1 } as React.CSSProperties}>
             <Link href={ROUTES.founder} onClick={onClose}>
               Talk to the founder
             </Link>
@@ -115,9 +112,12 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
         </ul>
 
         <div className={styles.actions}>
-          <Link href={ROUTES.getStarted} className="btn btn-primary" onClick={onClose}>
-            Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
-          </Link>
+          <a href={startFreeHref()} className="btn btn-primary">
+            {START_LABEL}{' '}
+            <span className="btn-arrow" aria-hidden>
+              →
+            </span>
+          </a>
           <a href={LINKS.portal} className="btn btn-ghost">
             Sign in
           </a>

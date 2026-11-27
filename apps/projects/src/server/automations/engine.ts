@@ -20,6 +20,10 @@ export const MAX_AUTOMATION_DEPTH = 3;
 
 export interface EngineTask {
   readonly id: string;
+  /** `task` or `build` (docs/programs/SPEC.md 4.1); absent means task. */
+  readonly kind?: 'task' | 'build';
+  /** The build's variant (condition field `variant`). */
+  readonly variantId?: string | null;
   readonly projectId: string;
   readonly title: string;
   readonly statusId: string;
@@ -49,7 +53,17 @@ export type TaskEventType =
   /** A linked CRM record's stage changed (`stage`, `previousStage`). */
   | 'crm_stage_changed'
   /** A linked WMS order changed into a shipped status. */
-  | 'wms_order_shipped';
+  | 'wms_order_shipped'
+  /** Program sweep: every live build of a run is done (`run`). */
+  | 'run_done'
+  /** Program sweep: a run is below plan (`run.shortPercent`, `run.localTime`). */
+  | 'run_below_plan'
+  /** Output logged on a build (`output.units` is what this batch added). */
+  | 'build_output_logged'
+  /** A build was marked done or closed short below its plan. */
+  | 'build_done_short'
+  /** A build's built units went over its plan. */
+  | 'build_over_plan';
 
 export interface TaskEvent {
   readonly type: TaskEventType;
@@ -65,6 +79,25 @@ export interface TaskEvent {
   readonly previousStage?: string | null;
   /** Human name of the linked record ("Acme · Renewal"). */
   readonly targetTitle?: string | null;
+  /** run_done / run_below_plan: the run (its first build is `task`). */
+  readonly run?: {
+    readonly id: string;
+    readonly name: string;
+    readonly date: string;
+    readonly plannedUnits: string;
+    readonly builtUnits: string;
+    /** Whole percent the run is below plan (0 when at or over plan). */
+    readonly shortPercent: number;
+    /** Program time now, HH:MM. */
+    readonly localTime: string;
+  };
+  /** build_output_logged / build_done_short / build_over_plan: the build's units. */
+  readonly output?: {
+    readonly units: string;
+    readonly plannedUnits: string;
+    readonly builtUnits: string;
+    readonly date: string;
+  };
   /**
    * Scheduled events can be seen many times; a rule runs at most once per (rule, task, key).
    * The executor stores it on the run and skips repeats.
@@ -128,7 +161,28 @@ export function triggerMatches(trigger: AutomationTrigger, event: TaskEvent): bo
       return !trigger.toStage || (event.stage ?? '').trim().toLowerCase() === trigger.toStage.trim().toLowerCase();
     case 'wms_order_shipped':
       return event.type === 'wms_order_shipped';
+    case 'run_done':
+      return event.type === 'run_done' && event.run !== undefined;
+    case 'run_below_plan':
+      return (
+        event.type === 'run_below_plan' &&
+        event.run !== undefined &&
+        event.run.shortPercent > 0 &&
+        event.run.shortPercent >= trigger.percent &&
+        event.run.localTime >= trigger.at
+      );
+    case 'build_output_logged':
+      return event.type === 'build_output_logged' && event.output !== undefined && (trigger.minUnits === null || trigger.minUnits === undefined || Number(event.output.units) >= trigger.minUnits);
+    case 'build_done_short':
+      return event.type === 'build_done_short' && event.output !== undefined;
+    case 'build_over_plan':
+      return event.type === 'build_over_plan' && event.output !== undefined;
   }
+}
+
+/** Run and build triggers are about builds by nature: workspace rules never need the build condition. */
+export function isBuildNativeTrigger(type: AutomationTrigger['type']): boolean {
+  return type === 'run_done' || type === 'run_below_plan' || type === 'build_output_logged' || type === 'build_done_short' || type === 'build_over_plan';
 }
 
 export function conditionMatches(condition: AutomationCondition, task: EngineTask, today: string): boolean {
@@ -155,6 +209,10 @@ export function conditionMatches(condition: AutomationCondition, task: EngineTas
         return task.title;
       case 'isSubtask':
         return task.parentTaskId !== null;
+      case 'workKind':
+        return task.kind ?? 'task';
+      case 'variant':
+        return task.variantId ?? null;
     }
   })();
   const list = Array.isArray(actual) ? (actual as readonly string[]) : null;
@@ -183,6 +241,10 @@ export function planAutomations(event: TaskEvent, rules: readonly EngineRule[], 
   for (const rule of rules) {
     if (!rule.enabled) continue;
     if (rule.projectId && rule.projectId !== event.task.projectId) continue;
+    // Workspace wide rules skip builds unless they ask for them (docs/programs/SPEC.md 4.1).
+    // Run triggers are about builds by nature, so they never need the condition.
+    const runTrigger = isBuildNativeTrigger(rule.trigger.type);
+    if (!rule.projectId && event.task.kind === 'build' && !runTrigger && !rule.conditions.some((c) => c.field === 'workKind' && c.op === 'is' && c.value === 'build')) continue;
     if (!triggerMatches(rule.trigger, event)) continue;
     if (!rule.conditions.every((condition) => conditionMatches(condition, event.task, today))) continue;
     if (rule.actions.length === 0) continue;
@@ -193,6 +255,7 @@ export function planAutomations(event: TaskEvent, rules: readonly EngineRule[], 
 
 /** Names the describer needs to turn ids into words. Unknown ids fall back to generic words. */
 export interface DescribeLookups {
+  readonly variant?: (id: string) => string | undefined;
   readonly status?: (id: string) => string | undefined;
   readonly label?: (id: string) => string | undefined;
   readonly section?: (id: string) => string | undefined;
@@ -256,6 +319,16 @@ export function describeTrigger(trigger: AutomationTrigger, lookups: DescribeLoo
       return trigger.toStage ? `a linked CRM deal moves to “${trigger.toStage}”` : 'a linked CRM deal changes stage';
     case 'wms_order_shipped':
       return 'a linked WMS order ships';
+    case 'run_done':
+      return 'all builds of a run are done';
+    case 'run_below_plan':
+      return `a run is below plan by ${trigger.percent}% or more at ${trigger.at}`;
+    case 'build_output_logged':
+      return trigger.minUnits ? `output of ${trigger.minUnits.toLocaleString('en-US')} or more is logged on a build` : 'output is logged on a build';
+    case 'build_done_short':
+      return 'a build is done short of plan';
+    case 'build_over_plan':
+      return 'a build goes over plan';
   }
 }
 
@@ -337,6 +410,10 @@ function describeCondition(condition: AutomationCondition, lookups: DescribeLook
       return `the title contains “${value}”`;
     case 'isSubtask':
       return condition.value === false ? 'it is not a subtask' : 'it is a subtask';
+    case 'workKind':
+      return `it is ${condition.op === 'is_not' ? 'not ' : ''}a ${value === 'build' ? 'build' : 'task'}`;
+    case 'variant':
+      return `it is ${condition.op === 'is_not' ? 'not ' : ''}the ${quote(lookups.variant?.(value), 'chosen')} variant`.replace(/\s+/g, ' ');
   }
 }
 
@@ -406,5 +483,15 @@ export function automationEventHeadline(event: TaskEvent | undefined, taskLabel:
       return `${event.targetTitle ?? 'A linked CRM record'} moved to ${event.stage ?? 'a new stage'} (${taskLabel})`;
     case 'wms_order_shipped':
       return `${event.targetTitle ?? 'A linked WMS order'} shipped (${taskLabel})`;
+    case 'run_done':
+      return `Every build of ${event.run?.name ?? 'a run'} is done (${taskLabel})`;
+    case 'run_below_plan':
+      return `${event.run?.name ?? 'A run'} is ${event.run?.shortPercent ?? 0}% below plan (${taskLabel})`;
+    case 'build_output_logged':
+      return `${Number(event.output?.units ?? 0).toLocaleString('en-US')} logged on ${taskLabel}`;
+    case 'build_done_short':
+      return `${taskLabel} is done at ${Number(event.output?.builtUnits ?? 0).toLocaleString('en-US')} of ${Number(event.output?.plannedUnits ?? 0).toLocaleString('en-US')}`;
+    case 'build_over_plan':
+      return `${taskLabel} is over plan at ${Number(event.output?.builtUnits ?? 0).toLocaleString('en-US')} of ${Number(event.output?.plannedUnits ?? 0).toLocaleString('en-US')}`;
   }
 }

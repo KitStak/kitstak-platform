@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "bash ../../deploy/vercel-ignore.sh",
+  "crons": [
+    {
+      "path": "/api/billing/jobs/tick",
+      "schedule": "* * * * *"
+    }
+  ]
+}

@@ -59,22 +59,17 @@ function Card({ card, canCreate }: { readonly card: CatalogCard; readonly canCre
     >
       <span className="absolute right-3 top-3 flex gap-1">
         {card.availability === 'beta' || (card.hasLiveApi && !card.liveVerified && !noApi(card)) ? (
-          <Badge
-            size="sm"
-            tone="warning"
-            title={card.hasLiveApi && !card.liveVerified ? UNVERIFIED : undefined}
-          >
+          <Badge tone="warning" title={card.hasLiveApi && !card.liveVerified ? UNVERIFIED : undefined}>
             Beta
           </Badge>
         ) : null}
         {!card.hasLiveApi && !soon ? (
-          <Badge size="sm" tone="neutral" title={SANDBOX_ONLY[card.kind]}>
+          <Badge tone="neutral" title={SANDBOX_ONLY[card.kind]}>
             Sandbox only
           </Badge>
         ) : null}
         {card.key === 'custom-carrier' ? (
           <Badge
-            size="sm"
             tone="neutral"
             title="Your own carrier with manual tracking numbers: no carrier API is called"
           >
@@ -83,7 +78,6 @@ function Card({ card, canCreate }: { readonly card: CatalogCard; readonly canCre
         ) : null}
         {card.liveVerified && !noApi(card) ? (
           <Badge
-            size="sm"
             tone="success"
             title="Verified: a connected account in this workspace has completed successful live API calls"
           >
@@ -117,8 +111,7 @@ function Card({ card, canCreate }: { readonly card: CatalogCard; readonly canCre
       <div className="mt-auto flex h-[60px] w-full flex-col items-center justify-end gap-1.5">
         {card.connected > 0 ? (
           <div className="flex flex-col items-center gap-1.5">
-            <Badge size="sm" tone="success">
-              <CheckCircle2 className="h-3 w-3" aria-hidden />
+            <Badge tone="success" icon={CheckCircle2}>
               Connected ({card.connected})
             </Badge>
             <span className="flex items-center gap-2">

@@ -83,6 +83,7 @@ import {
 } from './wo-client';
 import { WorkOrderWizard } from './wizard/work-order-wizard';
 import { WoStatusFilterPill, WoStatusPill } from './wo-status';
+import { statusLabel } from '@/lib/status-colors';
 
 /** True once `pending` has stayed true for `ms` (default 10 s). */
 export function useStalled(pending: boolean, ms = 10_000): boolean {
@@ -148,7 +149,7 @@ export function WoStatusPills({ grid }: { readonly grid: GridUrlState }) {
           key={s}
           item={{
             key: s,
-            label: s,
+            label: statusLabel(s),
             count: fmt(data?.[s]),
             countTitle,
             status: s,

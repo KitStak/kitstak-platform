@@ -4,9 +4,10 @@
  * shown inline, and the pending invitations list (copy link, revoke with Undo).
  */
 import { useMemo, useState } from 'react';
+import { SeatLimitLink, seatLimitKind } from '@/features/shell/seat-limit-link';
 import { Check, Copy, Mail, UserPlus } from 'lucide-react';
 import {
-  Badge,
+  CountBadge,
   Button,
   DialogBody,
   DialogContent,
@@ -66,6 +67,8 @@ export function InviteMembersDialog({ open, onClose }: InviteMembersDialogProps)
   const [defaultRole, setDefaultRole] = useState<InviteRole>('member');
   const [teamId, setTeamId] = useState<string>('none');
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+  // The plan's seat limit (docs/billing/SPEC.md section 6.9): the whole sentence and the next step.
+  const seatMessage = Object.values(rowErrors).find((message) => seatLimitKind(message) !== null) ?? null;
   const [error, setError] = useState<{ message: string; retryable: boolean } | null>(null);
 
   const pendingEmails = useMemo(
@@ -109,7 +112,7 @@ export function InviteMembersDialog({ open, onClose }: InviteMembersDialogProps)
                 undoLabel: 'Copy invite link',
                 duration: 10_000,
                 onUndo: async () => {
-                  const ok = await copyText(inviteLink(window.location.origin, first.id));
+                  const ok = await copyText(inviteLink(window.location.origin, first.id, process.env.NEXT_PUBLIC_PORTAL_URL));
                   if (ok) toast.success('Invite link copied', `Send it to ${first.email}. They sign in with that email to join.`);
                   else toast.error('Couldn’t copy the link', 'Your browser blocked clipboard access. Copy it from Pending.');
                 },
@@ -161,7 +164,7 @@ export function InviteMembersDialog({ open, onClose }: InviteMembersDialogProps)
               </TabsTrigger>
               <TabsTrigger value="pending" data-testid="pending-tab" disabled={!canSeeMembers} className={TAB_FOCUS}>
                 Pending
-                {pendingCount ? <Badge size="sm" tone="primary">{pendingCount}</Badge> : null}
+                <CountBadge count={pendingCount} label="invitations" />
               </TabsTrigger>
             </TabsList>
             <TabsContent value="invite" className="flex min-h-0 flex-1 flex-col outline-none">
@@ -204,6 +207,16 @@ export function InviteMembersDialog({ open, onClose }: InviteMembersDialogProps)
                     ) : null}
                     {error ? (
                       <InlineError onRetry={error.retryable ? send : undefined}>{error.message}</InlineError>
+                    ) : null}
+                    {seatMessage ? (
+                      <div
+                        role="status"
+                        data-testid="invite-seat-limit"
+                        className="flex flex-col gap-1 rounded-md border border-warning/25 bg-warning-subtle px-3 py-2 text-sm text-warning-text"
+                      >
+                        <p>{seatMessage}</p>
+                        <SeatLimitLink text={seatMessage} />
+                      </div>
                     ) : null}
                   </>
                 )}
@@ -287,7 +300,7 @@ function PendingInvitations({
   }
 
   const copy = async (invitation: InvitationDto) => {
-    const ok = await copyText(inviteLink(window.location.origin, invitation.id));
+    const ok = await copyText(inviteLink(window.location.origin, invitation.id, process.env.NEXT_PUBLIC_PORTAL_URL));
     if (ok) {
       setCopied(invitation.id);
       toast.success('Invite link copied', `Send it to ${invitation.email}. They sign in with that email to join.`);

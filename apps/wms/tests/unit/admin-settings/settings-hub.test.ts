@@ -30,12 +30,13 @@ describe('settings hub', () => {
 import { roleTone } from '@/components/admin/users/role-tone';
 
 describe('roleTone', () => {
-  it('emphasises admin, separates client and viewer', () => {
-    expect(roleTone({ key: 'admin', name: 'Admin' })).toBe('solid');
-    expect(roleTone({ name: 'Client' })).toBe('warning');
+  it('marks privileged roles as info and keeps every other role neutral (roles are identities)', () => {
+    expect(roleTone({ key: 'admin', name: 'Admin' })).toBe('info');
+    expect(roleTone({ name: 'Owner' })).toBe('info');
+    expect(roleTone({ name: 'Client' })).toBe('neutral');
     expect(roleTone({ key: 'viewer', name: 'Viewer' })).toBe('neutral');
-    expect(roleTone({ key: 'manager', name: 'Warehouse Manager' })).toBe('info');
-    expect(roleTone({ key: 'operator', name: 'Warehouse Clerk' })).toBe('success');
+    expect(roleTone({ key: 'manager', name: 'Warehouse Manager' })).toBe('neutral');
+    expect(roleTone({ key: 'operator', name: 'Warehouse Clerk' })).toBe('neutral');
     expect(roleTone({ name: 'Custom' })).toBe('neutral');
     expect(roleTone({ name: 'KS-CRIT Role A' })).toBe('neutral');
   });

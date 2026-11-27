@@ -25,6 +25,7 @@ export interface ApiErrorInit {
   readonly status: number;
   readonly fieldErrors?: FieldErrors;
   readonly requestId?: string;
+  readonly planUrl?: string;
 }
 
 export class ApiError extends Error {
@@ -32,6 +33,8 @@ export class ApiError extends Error {
   readonly status: number;
   readonly fieldErrors: FieldErrors;
   readonly requestId?: string;
+  /** With `PLAN_WAREHOUSE_LIMIT` and `PLAN_SEAT_LIMIT`: where the person can make the plan bigger. */
+  readonly planUrl?: string;
 
   constructor(init: ApiErrorInit) {
     super(init.message);
@@ -40,6 +43,7 @@ export class ApiError extends Error {
     this.status = init.status;
     this.fieldErrors = init.fieldErrors ?? {};
     this.requestId = init.requestId;
+    this.planUrl = init.planUrl;
   }
 
   /** First message for a field (dot path), if the server reported one. */
@@ -154,6 +158,7 @@ function errorFromBody(status: number, body: unknown): ApiError {
       status,
       fieldErrors: toFieldErrors(body.fieldErrors),
       requestId: typeof body.requestId === 'string' ? body.requestId : undefined,
+      planUrl: typeof body.planUrl === 'string' ? body.planUrl : undefined,
     });
   }
   return new ApiError({

@@ -369,7 +369,7 @@ function ServicesStep({ form }: { readonly form: UseFormReturn<F> }) {
                     <td className="px-3 py-1.5">
                       {r.name}
                       {r.isInternational ? (
-                        <Badge size="sm" tone="info" className="ml-1.5">
+                        <Badge tone="info" className="ml-1.5">
                           Intl
                         </Badge>
                       ) : null}

@@ -3,6 +3,6 @@ import { markNotifications, markNotificationsSchema } from '@/server/services/no
 import { svc } from '../../_lib/route-helpers';
 
 /** `{ ids: [...] }` or `{ all: true }`; `read: false` marks unread. */
-export const POST = withApi({ permission: 'org:read', body: markNotificationsSchema }, (ctx) =>
+export const POST = withApi({ permission: 'org:read', planRead: true, body: markNotificationsSchema }, (ctx) =>
   markNotifications(svc(ctx), ctx.body),
 );

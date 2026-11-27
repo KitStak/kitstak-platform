@@ -15,6 +15,7 @@ import {
   type GridColumnDef,
   type RowAction,
 } from '@/components/grid';
+import { useShellPlan } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,11 +52,7 @@ import { WarehouseDrawer } from './warehouse-drawer';
 const PERMS = ['view', 'create', 'edit', 'delete'] as const;
 
 function ActivePill({ active }: { readonly active: boolean }) {
-  return (
-    <Badge tone={active ? 'success' : 'neutral'} size="sm" shape="pill">
-      {active ? 'Active' : 'Inactive'}
-    </Badge>
-  );
+  return <Badge tone={active ? 'success' : 'neutral'}>{active ? 'Active' : 'Inactive'}</Badge>;
 }
 
 const COLUMNS: GridColumnDef<WarehouseRow>[] = [
@@ -117,23 +114,14 @@ const COLUMNS: GridColumnDef<WarehouseRow>[] = [
     header: 'Type',
     size: 100,
     cell: ({ row }) => (
-      <Badge tone={row.original.type === 'Internal' ? 'neutral' : 'info'} size="sm">
-        {row.original.type}
-      </Badge>
+      <Badge tone={row.original.type === 'Internal' ? 'neutral' : 'info'}>{row.original.type}</Badge>
     ),
   },
   {
     id: 'isDefault',
     header: 'Default',
     size: 90,
-    cell: ({ row }) =>
-      row.original.isDefault ? (
-        <Badge tone="warning" size="sm" shape="pill">
-          Default
-        </Badge>
-      ) : (
-        <Muted>No</Muted>
-      ),
+    cell: ({ row }) => (row.original.isDefault ? <Badge tone="neutral">Default</Badge> : <Muted>No</Muted>),
   },
   {
     id: 'isActive',
@@ -216,14 +204,8 @@ function WarehouseDetailDrawer({
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap gap-1.5">
             <ActivePill active={d.isActive} />
-            {d.isDefault ? (
-              <Badge tone="warning" size="sm" shape="pill">
-                Default warehouse
-              </Badge>
-            ) : null}
-            <Badge tone="outline" size="sm">
-              {d.type}
-            </Badge>
+            {d.isDefault ? <Badge tone="neutral">Default warehouse</Badge> : null}
+            <Badge tone="outline">{d.type}</Badge>
           </div>
           <StatRow
             stats={[
@@ -307,6 +289,15 @@ export function WarehousesPage() {
     editId: null,
   });
   const [detailId, setDetailId] = React.useState<string | null>(null);
+  // The plan's warehouse limit is known before the form opens (docs/billing/SPEC.md 6.9). At the
+  // limit, "Create warehouse" shows the price and "Add to my plan" first, so nobody fills in the
+  // two step form and hears "not in your plan" at the last click. The server checks again on save.
+  const plan = useShellPlan();
+  const [limitOpen, setLimitOpen] = React.useState(false);
+  const openCreate = () => {
+    if (plan?.warehouseLimit) setLimitOpen(true);
+    else setDrawer({ open: true, editId: null });
+  };
   const [log, setLog] = React.useState<WarehouseRow | null>(null);
   const [deactivate, setDeactivate] = React.useState<readonly WarehouseRow[] | null>(null);
   const [activate, setActivate] = React.useState<readonly WarehouseRow[] | null>(null);
@@ -425,7 +416,8 @@ export function WarehousesPage() {
         helpHref="/locations/help#warehouses"
         actions={
           perms.create ? (
-            <Button variant="primary" onClick={() => setDrawer({ open: true, editId: null })}>
+            // `data-plan-write`: in view only this press opens the "view only" dialog (see ViewOnlyGuard).
+            <Button variant="primary" data-plan-write data-testid="warehouse-create" onClick={openCreate}>
               <Plus className="h-4 w-4" aria-hidden />
               Create warehouse
             </Button>
@@ -452,12 +444,26 @@ export function WarehousesPage() {
         }
         emptyAction={
           perms.create && !filtered ? (
-            <Button variant="primary" onClick={() => setDrawer({ open: true, editId: null })}>
+            <Button variant="primary" data-plan-write onClick={openCreate}>
               <Plus className="h-4 w-4" />
               Create warehouse
             </Button>
           ) : undefined
         }
+      />
+      <ConfirmDialog
+        open={limitOpen}
+        onOpenChange={setLimitOpen}
+        // An offer, not a warning: the calm header with no coloured band.
+        variant="offer"
+        title="This warehouse is not in your plan yet"
+        description={plan?.warehouseLimit?.message}
+        confirmLabel="Add to my plan"
+        cancelLabel="Not now"
+        onConfirm={() => {
+          // The Portal shows the price again and asks for a yes. Its "Back to WMS" link returns here.
+          if (plan?.warehouseLimit) window.location.assign(plan.warehouseLimit.planUrl);
+        }}
       />
       <WarehouseDrawer
         open={drawer.open}

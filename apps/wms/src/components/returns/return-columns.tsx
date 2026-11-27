@@ -8,7 +8,6 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { ChannelCell, DATE_TIME_COLUMN_WIDTH, DateCell, LinkCell } from '@/components/grid/cells';
 import { StatusPill } from '@/components/ui/status-pill';
-import { DARK_SAFE_PILL } from './returns-client';
 import type { ReturnLineRow } from './return-types';
 import { localDateFromIso } from './date-only';
 
@@ -122,7 +121,7 @@ export function buildReturnColumns(): Col[] {
       meta: { clip: false },
       cell: ({ row }) => (
         <span className="whitespace-nowrap">
-          <StatusPill status={row.original.status} domain="return" className={DARK_SAFE_PILL} />
+          <StatusPill status={row.original.status} domain="return" />
         </span>
       ),
     },
@@ -200,9 +199,7 @@ export function buildReturnColumns(): Col[] {
       header: 'Line status',
       size: 120,
       meta: { clip: false, defaultVisible: false },
-      cell: ({ row }) => (
-        <StatusPill status={row.original.lineStatus} domain="return" size="sm" className={DARK_SAFE_PILL} />
-      ),
+      cell: ({ row }) => <StatusPill status={row.original.lineStatus} domain="return" size="sm" />,
     },
     // Logiwa default column set includes Company name (blank for most B2C returns).
     plain('companyName', 'Company name', 150),

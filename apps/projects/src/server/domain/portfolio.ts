@@ -282,9 +282,13 @@ async function loadReportRows(where: SQL): Promise<ReportTaskRow[]> {
 
 const clampWeeks = (weeks: number | undefined) => Math.max(4, Math.min(26, Math.round(weeks ?? 8)));
 
-/** Reports for one project: burndown to its due date, velocity, cycle time, people. */
+/**
+ * Reports for one project: burndown to its due date, velocity, cycle time, people. Projects only
+ * (docs/programs/SPEC.md 4.1): a program's builds are not tasks to burn down, and its dashboard
+ * panels come from `dashboardPrograms`.
+ */
 export async function getProjectReport(ctx: DomainContext, ref: ProjectRefInput, options: { readonly weeks?: number } = {}): Promise<ReportDTO> {
-  const { project } = await requireProject(ctx, ref);
+  const { project } = await requireProject(ctx, ref, 'project:read', db, { kind: 'project' });
   const [rows, statusRows] = await Promise.all([
     loadReportRows(eq(tasks.projectId, project.id)),
     db.select().from(statuses).where(eq(statuses.projectId, project.id)).orderBy(sql`${statuses.position} COLLATE "C"`),

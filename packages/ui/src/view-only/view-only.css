@@ -1,0 +1,183 @@
+/*
+ * ViewOnlyGuard (docs/billing/SPEC.md section 9.4). tokens.css custom properties ONLY, so the dialog
+ * follows each app's light and dark theme. No app Tailwind utilities here; this file ships with
+ * @kitstak/ui.
+ */
+
+.ks-viewonly {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px));
+  max-width: none;
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-2xl);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  overflow: visible;
+}
+
+.ks-viewonly::backdrop {
+  background: color-mix(in srgb, var(--surface-overlay) 62%, transparent);
+}
+
+/* A create screen opened by its address: the message covers the form behind it. */
+.ks-viewonly[data-mode='page']::backdrop {
+  background: var(--surface-app);
+}
+
+/*
+ * A create screen opened by its address: the message sits in the page area of the app frame, in
+ * place of the form. The top bar and the plan banner stay where they are.
+ */
+.ks-viewonly-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  padding: var(--space-8) var(--space-4);
+  background: var(--surface-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+.ks-viewonly-page .ks-viewonly-card {
+  width: 100%;
+  max-width: 440px;
+  box-shadow: var(--elevation-md);
+}
+
+.ks-viewonly-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  padding: var(--space-8) var(--space-6) var(--space-6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-raised, var(--surface-panel));
+  box-shadow: var(--elevation-modal);
+  text-align: center;
+}
+
+.ks-viewonly[open] .ks-viewonly-card {
+  animation: ks-viewonly-in 180ms var(--ease-standard, ease-out) both;
+}
+
+.ks-viewonly-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--danger-subtle);
+  color: var(--danger-text);
+}
+
+.ks-viewonly-title {
+  margin: var(--space-4) 0 0;
+  font-size: var(--type-lg);
+  line-height: var(--type-lg-lh);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.ks-viewonly-text {
+  margin: var(--space-2) 0 0;
+  font-size: var(--type-base);
+  line-height: var(--type-base-lh);
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.ks-viewonly-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-6);
+}
+
+.ks-viewonly-primary,
+.ks-viewonly-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--type-base);
+  line-height: var(--type-base-lh);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.ks-viewonly-primary {
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+
+.ks-viewonly-primary:hover {
+  background: var(--primary-hover);
+}
+
+.ks-viewonly-secondary {
+  border-color: var(--border-input);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+}
+
+.ks-viewonly-secondary:hover {
+  border-color: var(--border-input-hover);
+  background: var(--surface-muted);
+}
+
+.ks-viewonly-primary:focus-visible,
+.ks-viewonly-secondary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/*
+ * While the plan is view only, a control that starts a change looks held back, so it does not read
+ * as a live button. It can still be pressed: the press opens the dialog above.
+ */
+[data-plan-view-only] [data-plan-write] {
+  opacity: 0.55;
+}
+
+/* A row in an open menu is read on a small surface: a lighter touch keeps the words easy to read. */
+[data-plan-view-only] [role='menuitem'][data-plan-write] {
+  opacity: 0.7;
+}
+
+@keyframes ks-viewonly-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-viewonly[open] .ks-viewonly-card {
+    animation: none;
+  }
+
+  .ks-viewonly-primary,
+  .ks-viewonly-secondary {
+    transition: none;
+  }
+}

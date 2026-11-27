@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
-import { PRICING, formatUsd, percentLabel } from '@/lib/pricing';
-import { ROUTES, getStartedHref } from '../site-links';
+import { BUNDLE_OFF, TRIAL_DAYS, priceInWords } from '@/lib/pricing';
+import { ROUTES, availabilityLabel, isAppLive, startLink, START_LABEL, HELP_LABEL, startFreeHref } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import styles from './products-sections.module.css';
@@ -27,6 +27,12 @@ const SLABS = [
     name: 'KitStak Projects',
     line: 'Tasks, timelines and workload, linked to the deals and orders they are for.',
   },
+  {
+    id: 'pulse',
+    href: ROUTES.pulse,
+    name: 'KitStak Pulse',
+    line: 'Profit by job, client and extra service, from what you log each day.',
+  },
 ] as const;
 
 /** The mark as navigation: each bar of the stack is a product you can open. */
@@ -36,18 +42,22 @@ export function StackHero() {
       <div className={`container ${styles.heroInner}`}>
         <div>
           <h1 id="hero-heading" className={styles.heroTitle}>
-            <span>Three products.</span>
+            <span>Four products.</span>
             <span>One stack.</span>
           </h1>
           <p className={styles.heroLead}>
-            A CRM for the people who sell, a WMS for the people who ship, and Projects for the work in between. Each one
-            stands on its own. Stack any two and they share customers, one sign-in and one bill, and cost{' '}
-            {percentLabel(PRICING.bundleDiscount)} less.
+            A CRM for the people who sell, a WMS for the people who ship, Projects for the work in between,
+            and Pulse to show which jobs make money. Each one stands on its own. Stack two or more and they
+            share one sign-in and one bill, and cost {BUNDLE_OFF} less.
+            {isAppLive('pulse') ? null : ' Pulse is coming soon.'}
           </p>
           <div className={styles.heroActions}>
-            <Link href={ROUTES.getStarted} className="btn btn-primary btn-lg">
-              Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
-            </Link>
+            <a href={startFreeHref()} className="btn btn-primary btn-lg">
+              {START_LABEL}{' '}
+              <span className="btn-arrow" aria-hidden>
+                →
+              </span>
+            </a>
             <Link href={ROUTES.pricing} className="btn btn-ghost-inverse btn-lg">
               Price your stack
             </Link>
@@ -74,7 +84,7 @@ export function StackHero() {
 /* ------------------------------------------------------------------ Line-up */
 
 interface ProductCard {
-  readonly id: 'wms' | 'crm' | 'projects';
+  readonly id: 'wms' | 'crm' | 'projects' | 'pulse';
   readonly name: string;
   readonly title: string;
   readonly body: string;
@@ -129,6 +139,22 @@ const CARDS: readonly ProductCard[] = [
     ],
     href: ROUTES.projects,
   },
+  {
+    id: 'pulse',
+    name: 'KitStak Pulse',
+    title: 'For the bottom line.',
+    body: 'What each job earned and what it really cost, so you know which jobs make money and which do not.',
+    // Every point is a screen or rule in docs/pulse/SPEC.md.
+    points: [
+      'Profit by job, job type, client and extra service',
+      'Log work: units, people and hours for each job',
+      'Quote vs actual, and why profit changed',
+      'The real cost of an hour, and material cost',
+      'Jobs at risk or losing money, with the reason',
+      'CSV import and export',
+    ],
+    href: ROUTES.pulse,
+  },
 ];
 
 export function Lineup() {
@@ -142,32 +168,44 @@ export function Lineup() {
           Most teams start with the one that hurts most today, and add the others when they are ready.
         </p>
         <div className={styles.cards}>
-          {CARDS.map((card, i) => (
-            <article key={card.id} className={styles.card} data-reveal style={{ '--reveal-delay': 100 * i } as React.CSSProperties}>
-              <header className={styles.cardHead}>
-                <AppIcon app={card.id} size={56} />
-                <span className={styles.cardName}>{card.name}</span>
-                <span className={styles.cardPrice}>
-                  from {formatUsd(PRICING[card.id].monthlyCents)} / {PRICING[card.id].unit}
-                </span>
-              </header>
-              <h3 className={styles.cardTitle}>{card.title}</h3>
-              <p className={styles.cardBody}>{card.body}</p>
-              <ul className={styles.cardPoints}>
-                {card.points.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
-              </ul>
-              <div className={styles.cardActions}>
-                <Link href={card.href} className="btn btn-ghost">
-                  Explore {card.name} <span className="btn-arrow" aria-hidden>→</span>
-                </Link>
-                <Link href={getStartedHref(card.id)} className="text-link">
-                  Start with {card.id === 'projects' ? 'Projects' : `the ${card.id.toUpperCase()}`}
-                </Link>
-              </div>
-            </article>
-          ))}
+          {CARDS.map((card, i) => {
+            const start = startLink(card.id);
+            const availability = availabilityLabel(card.id);
+            return (
+              <article
+                key={card.id}
+                className={styles.card}
+                data-reveal
+                style={{ '--reveal-delay': 100 * (i % 2) } as React.CSSProperties}
+              >
+                <header className={styles.cardHead}>
+                  <AppIcon app={card.id} size={56} />
+                  <span className={styles.cardName}>{card.name}</span>
+                  {availability ? <span className={styles.cardSoon}>{availability}</span> : null}
+                  <span className={styles.cardPrice}>{priceInWords(card.id)}</span>
+                </header>
+                <h3 className={styles.cardTitle}>{card.title}</h3>
+                <p className={styles.cardBody}>{card.body}</p>
+                <ul className={styles.cardPoints}>
+                  {card.points.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+                <div className={styles.cardActions}>
+                  <Link href={card.href} className="btn btn-ghost">
+                    Explore {card.name}{' '}
+                    <span className="btn-arrow" aria-hidden>
+                      →
+                    </span>
+                  </Link>
+                  {/* A product whose app is not open yet gets a walkthrough, not a start link. */}
+                  <Link href={start.href} className="text-link">
+                    {start.label}
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -183,31 +221,125 @@ interface Row {
   readonly crm: Cell;
   readonly wms: Cell;
   readonly projects: Cell;
+  readonly pulse: Cell;
   /** Two or more products together. */
   readonly stacked: Cell;
 }
 
 const ROWS: readonly Row[] = [
-  { label: 'One sign-in and one launcher', crm: true, wms: true, projects: true, stacked: true },
-  { label: 'Shared customer list', crm: true, wms: true, projects: true, stacked: true },
-  { label: 'Team invites that cover every app', crm: true, wms: true, projects: true, stacked: true },
-  { label: 'Boards, pipeline, automations, dashboards', crm: true, wms: false, projects: false, stacked: true },
-  { label: 'Receiving, inventory, picking, packing, shipping', crm: false, wms: true, projects: false, stacked: true },
-  { label: 'Tasks, timelines, workload and cycles', crm: false, wms: false, projects: true, stacked: true },
-  { label: 'Stock and open orders on the account page', crm: false, wms: false, projects: false, stacked: 'CRM + WMS' },
-  { label: 'Tasks linked to deals, orders and receipts', crm: false, wms: false, projects: false, stacked: 'With Projects' },
-  { label: 'A won deal starts its delivery project', crm: false, wms: false, projects: false, stacked: 'CRM + Projects' },
+  { label: 'One sign-in and one launcher', crm: true, wms: true, projects: true, pulse: true, stacked: true },
+  // Pulse keeps its own client list and links it to the shared one when another app is licensed.
+  { label: 'Shared customer list', crm: true, wms: true, projects: true, pulse: 'Own list', stacked: true },
+  // A new member gets no Pulse access until an admin grants it (SPEC 3), so the row promises the
+  // shared team list, not that one invite opens every app.
+  {
+    label: 'One team list for every app',
+    crm: true,
+    wms: true,
+    projects: true,
+    pulse: true,
+    stacked: true,
+  },
+  {
+    label: 'Boards, pipeline, automations, dashboards',
+    crm: true,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: true,
+  },
+  {
+    label: 'Receiving, inventory, picking, packing, shipping',
+    crm: false,
+    wms: true,
+    projects: false,
+    pulse: false,
+    stacked: true,
+  },
+  {
+    label: 'Tasks, timelines, workload and cycles',
+    crm: false,
+    wms: false,
+    projects: true,
+    pulse: false,
+    stacked: true,
+  },
+  {
+    label: 'Profit by job, job type, client and extra service',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: true,
+    stacked: true,
+  },
+  {
+    label: 'CSV in and out for every kind of Pulse data',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: true,
+    stacked: true,
+  },
+  {
+    label: 'Stock and open orders on the account page',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'CRM + WMS',
+  },
+  {
+    label: 'Tasks linked to deals, orders and receipts',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'With Projects',
+  },
+  {
+    label: 'A won deal starts its delivery project',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'CRM + Projects',
+  },
+  {
+    label: 'A won deal becomes a job with the quote filled in',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'CRM + Pulse',
+  },
+  {
+    label: 'Work orders and finished kits feed job profit',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'WMS + Pulse',
+  },
+  {
+    label: 'Project time counts as labor hours on the job',
+    crm: false,
+    wms: false,
+    projects: false,
+    pulse: false,
+    stacked: 'Projects + Pulse',
+  },
   {
     label: 'Bundle price',
     crm: 'List',
     wms: 'List',
     projects: 'List',
-    stacked: `${percentLabel(PRICING.bundleDiscount)} off each`,
+    pulse: 'List',
+    stacked: `${BUNDLE_OFF} off each`,
   },
 ];
 
-const COLUMNS = ['crm', 'wms', 'projects'] as const;
-const COLUMN_LABEL = { crm: 'CRM', wms: 'WMS', projects: 'Projects' } as const;
+const COLUMNS = ['crm', 'wms', 'projects', 'pulse'] as const;
+const COLUMN_LABEL = { crm: 'CRM', wms: 'WMS', projects: 'Projects', pulse: 'Pulse' } as const;
 
 function CellMark({ value }: { readonly value: Cell }) {
   if (typeof value === 'string') return <span className={styles.cellText}>{value}</span>;
@@ -230,17 +362,26 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
               Better stacked.
             </h2>
             <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-              Every app reads the same customer record. Link a CRM account to the customer your warehouse ships for, and
-              sales can see what is on the shelf. Add Projects, and the work for that customer points at the deal and the
-              order it is about.
+              Every app reads the same customer record. Link a CRM account to the customer your warehouse
+              ships for, and sales can see what is on the shelf. Add Projects, and the work for that customer
+              points at the deal and the order it is about. Add Pulse, and you can turn a won deal or a work
+              order into a job, then see its profit as the work is logged.
             </p>
           </div>
           <div data-reveal>{visual}</div>
         </div>
 
-        <div className={styles.tableWrap} data-reveal tabIndex={0} role="region" aria-label="Product comparison">
+        <div
+          className={styles.tableWrap}
+          data-reveal
+          tabIndex={0}
+          role="region"
+          aria-label="Product comparison"
+        >
           <table className={styles.table}>
-            <caption className="visually-hidden">What you get with each product and with two or more stacked</caption>
+            <caption className="visually-hidden">
+              What you get with each product and with two or more stacked
+            </caption>
             <thead>
               <tr>
                 <th scope="col">
@@ -282,16 +423,19 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
 
 const STEPS = [
   {
-    title: 'Set up your Stak',
-    body: 'Five short questions: which products, what kind of business, how big, and how you want to begin.',
+    title: 'Create your account',
+    body: 'Four fields: your name, your work email, a password and your company.',
   },
   {
-    title: 'Create your account',
-    body: 'Your name, your work email and your company. That creates your organization and your sign-in.',
+    title: 'Pick your apps',
+    body: `Switch on the apps you want. Your ${TRIAL_DAYS} day free trial starts right away. No card needed.`,
   },
   {
     title: 'Follow your setup plan',
-    body: 'A checklist built from your answers walks you through the first warehouse, the first board, the first order and the first project.',
+    // The first job is a Pulse step, so it is named only once the Pulse app is open.
+    body: isAppLive('pulse')
+      ? 'A checklist built from your answers walks you through the first warehouse, the first board, the first order, the first project and the first job.'
+      : 'A checklist built from your answers walks you through the first warehouse, the first board, the first order and the first project.',
   },
 ] as const;
 
@@ -304,11 +448,17 @@ export function StartSteps() {
             Set it up yourself.
           </h2>
           <p className="lead" data-reveal style={{ '--reveal-delay': 100 } as React.CSSProperties}>
-            No sales call required and no implementation project. Answer a few questions and KitStak builds the plan.
+            No sales call and no setup project. Create an account, pick your apps and KitStak builds the plan.
           </p>
           <div className={styles.startActions} data-reveal>
-            <Link href={ROUTES.getStarted} className="btn btn-primary btn-lg">
-              Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
+            <a href={startFreeHref()} className="btn btn-primary btn-lg">
+              {START_LABEL}{' '}
+              <span className="btn-arrow" aria-hidden>
+                →
+              </span>
+            </a>
+            <Link href={ROUTES.getStarted} className="btn btn-ghost btn-lg">
+              {HELP_LABEL}
             </Link>
           </div>
         </div>

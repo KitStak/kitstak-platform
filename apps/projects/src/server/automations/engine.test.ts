@@ -33,6 +33,29 @@ const completed: TaskEvent = {
   previous: { statusId: 'doing', statusCategory: 'in_progress' },
 };
 
+describe('build triggers', () => {
+  const build: EngineTask = { ...base, kind: 'build' };
+  const output = (type: TaskEvent['type'], units: string, built: string, planned = '100'): TaskEvent => ({ type, task: build, output: { units, builtUnits: built, plannedUnits: planned, date: '2026-11-25' } });
+
+  it('fires output logged for any batch, or only at or above the units asked for', () => {
+    const any = rule({ trigger: { type: 'build_output_logged', minUnits: null } });
+    const big = rule({ id: 'big', trigger: { type: 'build_output_logged', minUnits: 50 } });
+    expect(planAutomations(output('build_output_logged', '40', '40'), [any, big], '2026-11-25').map((r) => r.ruleId)).toEqual(['r']);
+    expect(planAutomations(output('build_output_logged', '60', '60'), [any, big], '2026-11-25').map((r) => r.ruleId)).toEqual(['r', 'big']);
+  });
+
+  it('fires done short and over plan on builds, even for workspace rules', () => {
+    expect(planAutomations(output('build_done_short', '0', '80'), [rule({ trigger: { type: 'build_done_short' } })], '2026-11-25')).toHaveLength(1);
+    expect(planAutomations(output('build_over_plan', '12', '112'), [rule({ trigger: { type: 'build_over_plan' } })], '2026-11-25')).toHaveLength(1);
+    expect(planAutomations(output('build_over_plan', '12', '112'), [rule({ trigger: { type: 'build_done_short' } })], '2026-11-25')).toHaveLength(0);
+  });
+
+  it('describes the build triggers in plain words', () => {
+    expect(describeAutomation({ trigger: { type: 'build_output_logged', minUnits: 1000 }, conditions: [], actions: [{ type: 'notify', target: 'project_owner' }] })).toMatch(/output of 1,000 or more is logged on a build/);
+    expect(describeAutomation({ trigger: { type: 'build_over_plan' }, conditions: [], actions: [{ type: 'notify', target: 'project_owner' }] })).toMatch(/a build goes over plan/);
+  });
+});
+
 describe('automation engine', () => {
   it('fires task_completed only on the transition into done', () => {
     expect(planAutomations(completed, [rule({})], '2026-11-13')).toHaveLength(1);

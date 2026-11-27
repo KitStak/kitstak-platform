@@ -126,7 +126,7 @@ function SessionsCard() {
                         <span className="max-w-[180px] truncate">
                           {entry.device.browser} · {entry.device.os}
                         </span>
-                        {entry.current ? <Badge tone="success" size="sm">This device</Badge> : null}
+                        {entry.current ? <Badge tone="success">This device</Badge> : null}
                       </span>
                     </td>
                     <td className={cn(TABLE_CELL, 'hidden font-mono text-xs text-fg-secondary md:table-cell')}>

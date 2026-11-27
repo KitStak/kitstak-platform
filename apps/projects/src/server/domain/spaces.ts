@@ -1,6 +1,6 @@
 /** Spaces: team / department groupings of projects shown in the sidebar. */
 import 'server-only';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, notInArray, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { projects, spaces, type Space } from '@/server/db/schema';
 import { invalid, notFound } from '@/server/errors';
@@ -33,7 +33,8 @@ export async function listSpaces(ctx: DomainContext, options: { includeArchived?
   const counts = await db
     .select({ spaceId: projects.spaceId, n: sql<number>`count(*)::int` })
     .from(projects)
-    .where(and(visibleProjectsWhere(ctx), isNull(projects.archivedAt), eq(projects.isTemplate, false)))
+    // Open work only, the same set the Projects page shows under Active: completed and archived projects stay out of the count.
+    .where(and(visibleProjectsWhere(ctx), isNull(projects.archivedAt), eq(projects.isTemplate, false), notInArray(projects.status, ['completed', 'archived'])))
     .groupBy(projects.spaceId);
   const byId = new Map(counts.map((row) => [row.spaceId, Number(row.n)]));
   return rows.map((row) => toDTO(row, byId.get(row.id) ?? 0));

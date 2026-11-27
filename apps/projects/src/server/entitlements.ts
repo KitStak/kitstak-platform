@@ -1,11 +1,21 @@
 /**
  * Projects module entitlement gate (CRM pattern). `ENTITLEMENTS_DEV_ALLOW_ALL` set → that value
- * wins; unset → allow-all everywhere except production. Production fails closed and needs a grant:
+ * wins; unset → allow-all everywhere except production. Production fails closed: access comes from
+ * a free trial, a paid plan (docs/billing) or a manual grant:
  *   pnpm --filter @kitstak/entitlements grant grant <org-slug> projects
  * Also exposes sibling-module flags for the app switcher and integration feature detection.
  */
 import 'server-only';
-import { getEntitlements, hasModule, isDevAllowAll, isEntitled, type EntitlementsDb, type Module } from '@kitstak/entitlements';
+import {
+  getEntitlements,
+  getModuleAccess,
+  hasModule,
+  isDevAllowAll,
+  isEntitled,
+  type EntitlementsDb,
+  type Module,
+  type ModuleAccess,
+} from '@kitstak/entitlements';
 import { db } from '@/server/db';
 
 export function entitlementsAllowAll(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -22,15 +32,26 @@ export async function orgHasProjectsModule(orgId: string): Promise<boolean> {
   return hasModule(entitlementsDb(), orgId, 'projects');
 }
 
+/**
+ * The org's access level to Projects (docs/billing/SPEC.md P14): `full`, `read_only` (view only:
+ * trial over, payment late, paused, plan ended) or `locked` (not in the plan). Allow-all answers
+ * `full`. A cached answer that is not `full` is read again, so a payment shows on the next request.
+ */
+export async function orgProjectsAccess(orgId: string): Promise<ModuleAccess> {
+  if (entitlementsAllowAll()) return 'full';
+  return getModuleAccess(entitlementsDb(), orgId, 'projects');
+}
+
 export type ModuleFlags = Readonly<Record<Module, boolean>>;
 
 /** Every module's entitlement for the org (app switcher + integration UI gating). */
 export async function orgModuleFlags(orgId: string): Promise<ModuleFlags> {
-  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true };
+  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true, pulse: true };
   const snapshot = await getEntitlements(entitlementsDb(), orgId);
   return {
     crm: isEntitled(snapshot.crm),
     wms: isEntitled(snapshot.wms),
     projects: isEntitled(snapshot.projects),
+    pulse: isEntitled(snapshot.pulse),
   };
 }

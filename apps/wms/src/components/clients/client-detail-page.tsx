@@ -7,22 +7,19 @@
  * Billing contracts · Activity (change log + notes). Tab state lives in the URL.
  */
 import { ClientProjectsStrip } from '@/components/projects/client-projects-strip';
+import { ClientProfitStrip } from '@/components/pulse/client-profit-strip';
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  Boxes,
   CircleCheck,
   CircleOff,
-  ClipboardList,
   History,
   MoreHorizontal,
-  PackageCheck,
   Pencil,
   Plus,
   ReceiptText,
   Trash2,
-  Truck,
 } from 'lucide-react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { apiRequest, isApiError } from '@/lib/api-client';
@@ -53,7 +50,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatTile } from '@/components/ui/stat-tile';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
 import { StatusPill } from '@/components/ui/status-pill';
 import { UnderlineTabs } from '@/components/ui/tabs';
 import { TabFocusGuard } from '@/components/organization/tab-focus-guard';
@@ -492,38 +489,32 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
             }
           />
         </div>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatRow label="Client totals">
           <StatTile
             label="Orders · 30 days"
             value={c.kpis.orders30d.toLocaleString('en-US')}
-            icon={ClipboardList}
-            tone="primary"
-            sublabel={`${c.kpis.openOrders} open now`}
             href={`/orders?f.clientId=in:${c.id}`}
+            caption={`${c.kpis.openOrders} open now`}
           />
           <StatTile
             label="Units shipped · 30 days"
             value={c.kpis.unitsShipped30d.toLocaleString('en-US')}
-            icon={Truck}
-            tone="success"
             href={`/orders/shipped?f.clientId=in:${c.id}`}
           />
           <StatTile
             label="Inventory units"
             value={c.kpis.inventoryUnits.toLocaleString('en-US')}
-            icon={Boxes}
-            sublabel={`${c.kpis.skusInStock} SKUs in stock · ${c.kpis.products} products`}
             href={`/inventory?f.clientId=in:${c.id}`}
+            caption={`${c.kpis.skusInStock} SKUs in stock · ${c.kpis.products} products`}
           />
           <StatTile
             label="Open POs"
             value={c.kpis.openPos.toLocaleString('en-US')}
-            icon={PackageCheck}
-            tone={c.kpis.openPos > 0 ? 'warning' : 'default'}
             href={`/purchase-orders?f.clientId=in:${c.id}`}
           />
-        </div>
+        </StatRow>
         <ClientProjectsStrip clientId={c.id} />
+        <ClientProfitStrip clientId={c.id} />
         <TabFocusGuard>
           <UnderlineTabs
             tabs={tabs}
@@ -562,9 +553,7 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
                 <td className="px-3 py-2 text-secondary">{u.email}</td>
                 <td className="px-3 py-2 capitalize">{u.role}</td>
                 <td className="px-3 py-2">
-                  <Badge tone={u.access === 'Assigned' ? 'primary' : 'neutral'} shape="pill">
-                    {u.access}
-                  </Badge>
+                  <Badge tone={u.access === 'Assigned' ? 'info' : 'neutral'}>{u.access}</Badge>
                 </td>
                 <td className="px-3 py-2">
                   <StatusPill status={u.isActive ? 'Active' : 'Inactive'} domain="active" size="sm" />
@@ -647,7 +636,7 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
                     <At value={b.lastCalculatedAt} />
                   </td>
                   <td className="px-3 py-2">
-                    <Badge tone={b.approvalStatus === 'Approved' ? 'success' : 'neutral'} shape="pill">
+                    <Badge tone={b.approvalStatus === 'Approved' ? 'success' : 'neutral'}>
                       {b.approvalStatus}
                     </Badge>
                   </td>

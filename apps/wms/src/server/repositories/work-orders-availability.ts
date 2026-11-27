@@ -8,13 +8,17 @@
  * reported separately (`lockedQty`, `lockedBy`) so the UI can say "0 free · 773 locked by
  * CNT000147" instead of "773 free".
  *
- * Every caller goes through `freeStockRows` + `classifyFree`; the count-lock rule itself is the
- * foundation's (`notCountLocked` / `countLockFor`), never re-written here.
+ * Every caller goes through `freeStockRows` + `classifyFree`. The free stock SQL (including the
+ * count-lock predicate, kept identical to the foundation's `notCountLocked`) is shared with Projects
+ * through `@kitstak/db/wms-free-stock`; plan codes still come from `countLockFor`.
  */
-import { and, eq, gt, inArray, sql } from 'drizzle-orm';
-import * as schema from '@/server/db/schema';
-import { countLockFor, notCountLocked } from '@/server/domain/ledger/count-locks';
+import { freeStockSql, mapFreeStockRows, type FreeStockFilter, type FreeStockRow, type FreeStockSqlRow } from '@kitstak/db/wms-free-stock';
+import { WMS_PLATFORM_SCHEMA } from '@kitstak/db/wms-tenants';
+import { dbAll } from '@/server/db/sql';
+import { countLockFor } from '@/server/domain/ledger/count-locks';
 import type { Tx } from '@/server/domain/types';
+
+export type { FreeStockFilter, FreeStockRow } from '@kitstak/db/wms-free-stock';
 
 export interface ComponentAvailability {
   /** Free stock FEFO allocation can actually take (unlocked, allocatable locations). */
@@ -34,18 +38,6 @@ export const EMPTY_AVAILABILITY: ComponentAvailability = {
   lockedBy: [],
 };
 
-/** One free (Stock, undamaged, unallocated > 0) bucket with its location's allocation flags. */
-export interface FreeStockRow {
-  readonly warehouseId: string;
-  readonly clientId: string | null;
-  readonly productId: string;
-  readonly locationId: string;
-  readonly free: number;
-  readonly locationLocked: boolean;
-  readonly preventAllocation: boolean;
-  readonly countLocked: boolean;
-}
-
 export type FreeClass = 'usable' | 'locked' | 'blocked';
 
 /** Pure classification of a free bucket (count lock wins over the location flags). */
@@ -57,50 +49,14 @@ export function classifyFree(
   return 'usable';
 }
 
-export interface FreeStockFilter {
-  readonly warehouseId?: string;
-  readonly clientId?: string | null;
-  readonly productIds?: readonly string[];
-}
-
-/** Free buckets (optionally filtered) with the lock flags, in one query. */
+/**
+ * Free buckets (optionally filtered) with the lock flags, in one query. The SQL is the shared
+ * `freeStockSql` (@kitstak/db/wms-free-stock, also read by Projects for kit shortages). It names
+ * the `wms` schema; a tenant handle rewrites that to the org's own schema on every statement.
+ */
 export async function freeStockRows(db: Tx, filter: FreeStockFilter = {}): Promise<FreeStockRow[]> {
-  const i = schema.inventory;
-  const l = schema.locations;
   if (filter.productIds && filter.productIds.length === 0) return [];
-  const rows = await db
-    .select({
-      warehouseId: i.warehouseId,
-      clientId: i.clientId,
-      productId: i.productId,
-      locationId: i.locationId,
-      free: sql<number>`${i.onHand} - ${i.allocated}`,
-      locked: l.isLocked,
-      prevent: l.preventAllocation,
-      countLocked: sql<number>`CASE WHEN ${notCountLocked(i.locationId)} THEN 0 ELSE 1 END`,
-    })
-    .from(i)
-    .innerJoin(l, eq(l.id, i.locationId))
-    .where(
-      and(
-        filter.productIds ? inArray(i.productId, [...new Set(filter.productIds)]) : undefined,
-        filter.warehouseId ? eq(i.warehouseId, filter.warehouseId) : undefined,
-        filter.clientId ? eq(i.clientId, filter.clientId) : undefined,
-        eq(i.status, 'Stock'),
-        sql`${i.damageReason} IS NULL`,
-        gt(sql`${i.onHand} - ${i.allocated}`, 0),
-      ),
-    );
-  return rows.map((r) => ({
-    warehouseId: r.warehouseId,
-    clientId: r.clientId,
-    productId: r.productId,
-    locationId: r.locationId,
-    free: Number(r.free),
-    locationLocked: Boolean(r.locked),
-    preventAllocation: Boolean(r.prevent),
-    countLocked: Number(r.countLocked) === 1,
-  }));
+  return mapFreeStockRows(await dbAll<FreeStockSqlRow>(db, freeStockSql(WMS_PLATFORM_SCHEMA, filter)));
 }
 
 /**

@@ -57,3 +57,29 @@ export function canEditProject(role: ProjectRole | null): boolean {
 export function isProjectRole(value: unknown): value is ProjectRole {
   return typeof value === 'string' && value in PROJECT_RANK;
 }
+
+/**
+ * Who may see program money (docs/programs/SPEC.md A10 and 8.1), mirrored from
+ * `apps/projects/src/lib/permissions.ts`. Both copies are tested against the shared case table
+ * `MONEY_READ_CASES` in `@kitstak/db/programs`, so CRM and WMS panels hide money for exactly
+ * the people Projects hides it for.
+ *
+ *  - org owners and admins always see money
+ *  - the program's owner sees money (not a guest)
+ *  - anyone else needs an EXPLICIT program role (pm.project_members) at or above the program's
+ *    `money_min_role`; the implicit editor role of an org member never counts
+ *  - guests and non members never see money
+ */
+export function canSeeProgramMoney(input: {
+  readonly orgRole: OrgRole | null;
+  readonly memberRole: ProjectRole | null;
+  readonly isProjectOwner?: boolean;
+  readonly moneyMinRole: ProjectRole;
+}): boolean {
+  const { orgRole, memberRole, isProjectOwner, moneyMinRole } = input;
+  if (!orgRole || orgRole === 'guest') return false;
+  if (orgRole === 'owner' || orgRole === 'admin') return true;
+  if (isProjectOwner) return true;
+  if (!memberRole) return false;
+  return PROJECT_RANK[memberRole] >= PROJECT_RANK[moneyMinRole];
+}

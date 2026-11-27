@@ -29,7 +29,10 @@ import {
   toast,
 } from '@/components/ui';
 import { PRIORITIES } from '@/lib/constants';
-import { useCycles, useProjectLinks, useProjectTasks } from '@/lib/hooks/use-data';
+import { useCycles, useProjectLinks } from '@/lib/hooks/use-data';
+import { useTaskSource } from '@/features/views/task-source';
+import { useCardExtras } from '@/features/views/card-extras';
+import { baseConfigFor, settingsFromConfig } from '@/features/views/view-state';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { compareRank } from '@/lib/rank';
@@ -253,7 +256,9 @@ function BodyCell({ def, task, ctx, ops, canEdit, active, editing, seed, width, 
   );
 
   let body: ReactNode = content;
-  if (editing && editable) {
+  if (editing && editable && def.renderEditor) {
+    body = def.renderEditor(task, () => onEdit(false), seed);
+  } else if (editing && editable) {
     if (def.editor === 'title') {
       body = (
         <span className="flex h-full items-center px-1">
@@ -580,11 +585,13 @@ function HeaderCell({
 
 /** An undragged Task column takes the leftover width between these two (Linear and Asana style). */
 const TITLE_MIN = 280;
+const PAGE_TITLE_MIN = 176;
 const TITLE_MAX = 520;
 
 export function TableView() {
   const { project, statusById, labelById, sectionById, capabilities } = useCurrentProject();
-  const tasksQuery = useProjectTasks(project.key);
+  const tasksQuery = useTaskSource();
+  const extras = useCardExtras();
   const view = useViewState('table');
   const ops = useTaskOps();
   const linksByTask = useTaskLinksMap(project.key);
@@ -606,9 +613,17 @@ export function TableView() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTitleFit(Math.min(TITLE_MAX, Math.ceil(longest) + 40));
   }, [all]);
-  const defs = useMemo(() => buildColumns(project.customFields), [project.customFields]);
+  const extraColumns = extras.extraColumns;
+  const defs = useMemo(() => [...buildColumns(project.customFields), ...(extraColumns ?? [])], [extraColumns, project.customFields]);
   const defByKey = useMemo(() => new Map(defs.map((def) => [def.key, def])), [defs]);
-  const columns = useMemo(() => resolveColumns(defs, view.settings.columns), [defs, view.settings.columns]);
+  const defaultHidden = extras.defaultHiddenColumns;
+  const columns = useMemo(() => {
+    const list = resolveColumns(defs, view.settings.columns);
+    // Page defaults (builds hide Points, Customer and the like) apply until the columns are changed.
+    const untouched = view.settings.columns.length === 0 || JSON.stringify(view.settings.columns) === JSON.stringify(settingsFromConfig('table', baseConfigFor('table')).columns);
+    if (!untouched || !defaultHidden) return list;
+    return list.map((column) => (defaultHidden.includes(column.key) ? { ...column, hidden: true } : column));
+  }, [defaultHidden, defs, view.settings.columns]);
   const [widthDraft, setWidthDraft] = useState<{ key: string; width: number } | null>(null);
   // The grid's visible width: the Task column grows to fill it, and an edge shadow shows when
   // more columns sit off to the right.
@@ -631,7 +646,9 @@ export function TableView() {
   // Phones scroll sideways by design: the Task column fits the screen next to the ID so the next
   // column peeks in. Wider grids fit every column, with Task as the flexible one (fitColumns).
   const phone = gridWidth > 0 && gridWidth < 640;
-  const titleCap = Math.max(TITLE_MIN, Math.min(TITLE_MAX, titleFit || TITLE_MAX));
+  // Page rows (builds) have short titles: their Task column may shrink further so every number column fits.
+  const titleMin = extras.extraColumns ? PAGE_TITLE_MIN : TITLE_MIN;
+  const titleCap = Math.max(titleMin, Math.min(TITLE_MAX, titleFit || TITLE_MAX));
   const layout = useMemo(() => {
     const others = shown.slice(1).map((column) => {
       const natural = widthOf(column);
@@ -654,9 +671,9 @@ export function TableView() {
       };
     }
     const target = titleResized ? widthOf(titleColumn) : titleCap;
-    const fit = fitColumns(others, gridWidth - fixed, target, titleResized ? target : TITLE_MIN);
+    const fit = fitColumns(others, gridWidth - fixed, target, titleResized ? target : titleMin);
     return { ...fit, titleWidth: titleResized ? target : Math.min(titleCap, fit.titleWidth) };
-  }, [defByKey, gridWidth, phone, shown, titleCap, titleColumn, titleResized, widthDraft, widthOf]);
+  }, [defByKey, gridWidth, phone, shown, titleCap, titleColumn, titleMin, titleResized, widthDraft, widthOf]);
   const compactGrid = layout.compact;
   const colWidth = (column: ViewColumn) => layout.widths.get(column.key) ?? widthOf(column);
   const sort = view.settings.sort;
@@ -670,7 +687,8 @@ export function TableView() {
   const [draft, setDraft] = useState('');
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const rows = useMemo(() => sorter(view.visible(all)), [all, sorter, view]);
+  const extraFilter = extras.filter;
+  const rows = useMemo(() => sorter(view.visible(all).filter((task) => !extraFilter || extraFilter(task))), [all, extraFilter, sorter, view]);
   const projectLinks = useProjectLinks(project.key);
   const projectCustomer = useMemo(() => (projectLinks.data ?? []).find((link) => !link.taskId && isCustomerLink(link)) ?? null, [projectLinks.data]);
   const showsCycle = shown.some((column) => column.key === 'cycle');
@@ -1137,14 +1155,14 @@ export function TableView() {
                               <MoreHorizontal aria-hidden className="size-4" />
                             </button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuContent align="end" className={task.kind === 'build' ? 'w-[280px]' : 'w-56'}>
                             <TaskMenuItems task={task} ops={ops} kind="dropdown" />
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
                     </tr>
                   </ContextMenuTrigger>
-                  <ContextMenuContent className="w-56">
+                  <ContextMenuContent className={task.kind === 'build' ? 'w-[280px]' : 'w-56'}>
                     <TaskMenuItems task={task} ops={ops} kind="context" />
                   </ContextMenuContent>
                 </ContextMenu>
@@ -1153,7 +1171,7 @@ export function TableView() {
           </tbody>
           {/* "Add a task" lives in the sticky footer, so a long table never hides it. */}
           <tfoot className="sticky bottom-0 z-[4]">
-            {canCreate ? (
+            {canCreate && !extras.hideCreate ? (
               <tr>
                 <td colSpan={shown.length + 2} className="border-t border-border-subtle bg-panel p-0">
                   <form
@@ -1174,7 +1192,7 @@ export function TableView() {
             ) : null}
             <tr>
               <td className="sticky left-0 z-[5] h-9 border-t border-r border-border-subtle bg-sunken px-3 text-xs font-medium whitespace-nowrap text-fg-secondary" style={{ width: ROW_HEADER_WIDTH }}>
-                {rows.length} {rows.length === 1 ? 'task' : 'tasks'}
+                {rows.length} {extras.noun ? (rows.length === 1 ? extras.noun.singular : extras.noun.plural) : rows.length === 1 ? 'task' : 'tasks'}
               </td>
               {shown.map((column, index) => (
                 <td key={column.key} className={cn('h-9 border-t border-r border-border-subtle bg-sunken px-2 text-xs font-medium text-fg-secondary tabular-nums', index === 0 && 'z-[5] md:sticky md:left-[var(--sticky-left)]', defByKey.get(column.key)?.align === 'right' && 'text-right')} style={index === 0 ? ({ '--sticky-left': `${ROW_HEADER_WIDTH}px` } as CSSProperties) : undefined}>

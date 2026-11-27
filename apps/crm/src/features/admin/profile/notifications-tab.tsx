@@ -3,11 +3,9 @@
 import { useState } from 'react';
 import { Bell, Mail } from 'lucide-react';
 import { Input, Select, Switch, toast } from '@/components/ui';
-import { NOTIFICATION_EVENTS, type ProfileDto } from '@/server/services/admin-contracts';
+import { defaultChannels, NOTIFICATION_EVENTS, type ProfileDto } from '@/server/services/admin-contracts';
 import { useUpdateProfile } from '../api';
 import { SettingRow, SettingsCard, SettingsSkeleton } from '../ui';
-
-const DEFAULT_CHANNELS = { inApp: true, email: false };
 
 export function NotificationsTab({ profile }: { readonly profile: ProfileDto | undefined }) {
   const update = useUpdateProfile();
@@ -49,7 +47,7 @@ export function NotificationsTab({ profile }: { readonly profile: ProfileDto | u
             </thead>
             <tbody>
               {NOTIFICATION_EVENTS.map((event) => {
-                const channels = prefs.notifications[event.key] ?? DEFAULT_CHANNELS;
+                const channels = prefs.notifications[event.key] ?? defaultChannels(event.key);
                 return (
                   <tr key={event.key} className="border-b border-border-subtle last:border-b-0 hover:bg-hover">
                     <th scope="row" className="px-5 py-3 text-left font-normal">

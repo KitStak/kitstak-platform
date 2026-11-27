@@ -353,6 +353,16 @@ export async function recordUpdate(
       userId: ctx.userId,
     });
   }
+  // KitStak Pulse: a work order that changes status or finished quantity refreshes its job. Never throws.
+  if (ref.entityType === 'work_order' && changes.some((c) => c.field === 'status' || c.field === 'processedQty')) {
+    const { notifyPulseOfWorkOrderChange } = await import('@/server/pulse/bridge');
+    await notifyPulseOfWorkOrderChange(tx as unknown as Parameters<typeof notifyPulseOfWorkOrderChange>[0], {
+      entityType: ref.entityType,
+      entityId: ref.entityId,
+      status: ref.after.status,
+      processedQty: ref.after.processedQty,
+    });
+  }
   // from/to stay machine-readable; the message gets "None" for an empty side and zoned datetimes.
   const zone = changes.some((c) => isIsoDateTime(c.from) || isIsoDateTime(c.to))
     ? await snapshotZone(tx, { ...ref.before, ...ref.after })

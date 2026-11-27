@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Building2, Check, ChevronsUpDown, Settings2 } from 'lucide-react';
+import { Check, ChevronDown, Settings2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,13 +56,14 @@ export function OrgSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
+        aria-label={`Organization: ${active.name}. Switch organization`}
         className={cn(
-          'inline-flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border-input bg-panel px-2 text-sm font-medium text-fg sm:max-w-[260px] sm:gap-2 sm:px-2.5',
+          // The name is capped, so a long organization name never pushes the bar wider than the screen.
+          'inline-flex h-9 min-w-0 shrink-0 items-center gap-1.5 rounded-lg border border-border-input bg-panel px-2 text-sm font-medium text-fg sm:max-w-[260px] sm:min-w-[136px] sm:justify-between sm:gap-3 sm:px-3',
           'hover:border-border-input-hover hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
           'data-[state=open]:bg-selected',
         )}
       >
-        <Building2 aria-hidden className="hidden size-4 shrink-0 text-icon sm:block" />
         {/* At phone widths the full name truncates to nothing useful; show an initials chip
             instead and let the dropdown carry the full name. */}
         <span
@@ -72,10 +73,10 @@ export function OrgSwitcher({
           {orgInitials(active.name)}
         </span>
         <span className="sr-only sm:hidden">{active.name}</span>
-        <span className="hidden truncate sm:block">{active.name}</span>
-        <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-icon" />
+        <span className="hidden truncate sm:block" title={active.name}>{active.name}</span>
+        <ChevronDown aria-hidden className="size-4 shrink-0 text-icon" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
+      <DropdownMenuContent align="end">
         <DropdownMenuLabel>Organizations</DropdownMenuLabel>
         {orgs.map((org) => (
           <DropdownMenuItem key={org.id} onSelect={() => void switchTo(org.id)}>

@@ -506,7 +506,6 @@ function UpdateBody({ onOpenChange, level, ids, onDone }: Omit<UpdateInventoryDi
                               {r.blocked ? (
                                 <Badge
                                   tone="warning"
-                                  size="sm"
                                   icon={Lock}
                                   title="Committed to orders: this line closes without posting"
                                 >
@@ -515,7 +514,6 @@ function UpdateBody({ onOpenChange, level, ids, onDone }: Omit<UpdateInventoryDi
                               ) : (r.unallocates ?? 0) > 0 ? (
                                 <Badge
                                   tone="info"
-                                  size="sm"
                                   icon={Unlink}
                                   title={`Shorts ${unitsLabel(r.unallocates ?? 0)} of unpicked allocations`}
                                 >
@@ -524,7 +522,6 @@ function UpdateBody({ onOpenChange, level, ids, onDone }: Omit<UpdateInventoryDi
                               ) : (r.allocated ?? 0) > 0 ? (
                                 <Badge
                                   tone="neutral"
-                                  size="sm"
                                   title={`${unitsLabel(r.allocated ?? 0)} allocated in this bucket`}
                                 >
                                   {r.allocated} alloc.

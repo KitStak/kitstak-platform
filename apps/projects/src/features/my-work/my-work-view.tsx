@@ -3,7 +3,8 @@
  * My work: every task on your plate across projects, grouped by when it's due (Overdue, Today,
  * Upcoming, Later, No date) or by project. Sort, filter, check off in one click, reschedule in
  * place or by dragging a task onto another group, and Focus mode for one-at-a-time work.
- * Layout choices live in the URL (?scope=&group=&sort=&done=1&project=) so they're shareable.
+ * Layout choices live in the URL (?scope=&group=&sort=&done=1&project=&when=) so they're shareable.
+ * `when` narrows the list to one due-date group (Home's number tiles link here with it).
  * Keys: J/K move · Enter open · D done · T due today · M due tomorrow.
  */
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -41,10 +42,12 @@ import {
   SORT_LABELS,
   WHEN_GROUPS,
   dueDateForDrop,
+  WHEN_FILTERS,
   focusQueue,
   groupByProject,
   groupByWhen,
   matchesText,
+  matchesWhen,
   type MyWorkSort,
   type TaskGroup,
   type WhenGroup,
@@ -52,6 +55,7 @@ import {
 import { MyWorkRow, TASK_DRAG_TYPE } from './my-work-row';
 import { copyTaskLink, letterKeysPaused, setDateWithUndo, writeWithUndo } from '@/features/task/task-keys';
 import { useCompleteTask } from './use-complete-task';
+import { MyWorkBuilds } from './my-work-builds';
 
 type Scope = 'assigned' | 'created' | 'watching';
 
@@ -78,7 +82,8 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
   const scope = pick(params.get('scope'), ['assigned', 'created', 'watching'] as const, 'assigned');
   const grouping = pick(params.get('group'), ['when', 'project'] as const, 'when');
   const sort = pick(params.get('sort'), SORTS, 'due');
-  const showDone = params.get('done') === '1';
+  const whenFilter = pick(params.get('when'), WHEN_FILTERS.map((entry) => entry.value), 'all');
+  const showDone = params.get('done') === '1' || whenFilter === 'done';
   const projectFilter = params.get('project');
 
   const setParam = useCallback(
@@ -108,25 +113,31 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
   const listRef = useRef<HTMLDivElement>(null);
   const today = todayIso();
 
-  const all = useMemo(() => tasks.data ?? [], [tasks.data]);
-  const filtered = useMemo(
-    () => all.filter((task) => (!projectFilter || task.projectId === projectFilter) && matchesText(task, text, projectName)),
-    [all, projectFilter, text, projectName],
-  );
+  // Builds have their own group below (by run); task groups and Focus mode hold tasks only.
+  const all = useMemo(() => (tasks.data ?? []).filter((task) => task.kind !== 'build'), [tasks.data]);
+  const showBuilds = params.get('builds') !== '0';
   const keepIds = useMemo(
     () => new Set(all.filter((t) => t.statusCategory === 'done' && t.completedAt && t.completedAt >= sessionStart).map((t) => t.id)),
     [all, sessionStart],
+  );
+  const filtered = useMemo(
+    () =>
+      all.filter(
+        (task) =>
+          (!projectFilter || task.projectId === projectFilter) && matchesText(task, text, projectName) && matchesWhen(task, whenFilter, today, keepIds),
+      ),
+    [all, projectFilter, text, projectName, whenFilter, today, keepIds],
   );
   const groups: TaskGroup[] = useMemo(() => {
     if (grouping === 'project') return groupByProject(filtered, projectName, { sort, showDone, keepIds });
     const list: TaskGroup[] = groupByWhen(filtered, { today, sort, showDone, keepIds, projectName });
     // Keep an (empty) Today group as a drop target so any task can be pulled into today.
-    if (list.length && !list.some((g) => g.key === 'today')) {
+    if (whenFilter === 'all' && list.length && !list.some((g) => g.key === 'today')) {
       const at = list.findIndex((g) => g.key !== 'overdue');
       list.splice(at === -1 ? list.length : at, 0, { key: 'today', label: 'Today', tasks: [] });
     }
     return list;
-  }, [grouping, filtered, projectName, sort, showDone, keepIds, today]);
+  }, [grouping, filtered, projectName, sort, showDone, keepIds, today, whenFilter]);
   const visibleTasks = useMemo(() => groups.flatMap((g) => (collapsed.has(g.key) ? [] : g.tasks)), [groups, collapsed]);
   const openCount = all.filter((t) => t.statusCategory !== 'done' && t.statusCategory !== 'cancelled').length;
   const queue = useMemo(() => focusQueue(scope === 'assigned' ? all : all.filter((t) => t.assigneeId === user.id), today), [all, scope, today, user.id]);
@@ -221,7 +232,7 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
       return next;
     });
 
-  const filtersActive = Boolean(text || projectFilter);
+  const filtersActive = Boolean(text || projectFilter || whenFilter !== 'all');
 
   return (
     <Page
@@ -264,6 +275,13 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
             ...(projects.data ?? []).map((p) => ({ value: p.id, label: p.name, icon: <EntityIcon icon={p.icon} color={p.color} size={16} /> })),
           ]}
         />
+        <Select
+          aria-label="Due"
+          className="w-full sm:w-40"
+          value={whenFilter}
+          onValueChange={(value) => setParam({ when: value === 'all' ? null : value })}
+          options={WHEN_FILTERS.map((entry) => ({ value: entry.value, label: entry.label }))}
+        />
         <ToggleGroup
           label="Group by"
           size="sm"
@@ -282,6 +300,7 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
           options={SORTS.map((value) => ({ value, label: `Sort: ${SORT_LABELS[value]}` }))}
         />
         <Checkbox label="Show done" checked={showDone} onCheckedChange={(value) => setParam({ done: value === true ? '1' : null })} className="ml-1" />
+        {scope === 'assigned' ? <Checkbox label="Show builds" checked={showBuilds} onCheckedChange={(value) => setParam({ builds: value === true ? null : '0' })} className="ml-1" /> : null}
       </div>
 
       {tasks.isPending ? (
@@ -306,10 +325,10 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
           size="sm"
           illustration="search"
           title={filtersActive ? 'No tasks match' : 'Nothing open right now'}
-          description={filtersActive ? 'Try a different word or project.' : 'Turn on “Show done” to see what you finished this week.'}
+          description={filtersActive ? 'Try a different word, project or due date.' : 'Turn on “Show done” to see what you finished this week.'}
           actions={
             filtersActive ? (
-              <Button variant="secondary" onClick={() => { setText(''); setParam({ project: null }); }}>
+              <Button variant="secondary" onClick={() => { setText(''); setParam({ project: null, when: null }); }}>
                 Clear filters
               </Button>
             ) : null
@@ -346,7 +365,7 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
                   <ul
                     className={cn(
                       'overflow-hidden rounded-xl border bg-panel shadow-xs transition-[border-color,box-shadow]',
-                      droppable && dropTarget === group.key ? 'border-primary ring-2 ring-primary/25' : 'border-border-subtle',
+                      droppable && dropTarget === group.key ? 'border-border-strong ring-2 ring-[var(--focus-ring-soft)]' : 'border-border-subtle',
                     )}
                   >
                     {group.tasks.length === 0 ? (
@@ -373,6 +392,7 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
               </section>
             );
           })}
+          {showBuilds && scope === 'assigned' ? <MyWorkBuilds userId={user.id} collapsed={collapsed.has('builds')} onToggle={() => toggleGroup('builds')} /> : null}
           <p className="hidden flex-wrap items-center gap-1 px-1 text-xs text-fg-muted md:flex">
             <Kbd>J</Kbd>
             <Kbd>K</Kbd> move · <Kbd>Enter</Kbd> open · <Kbd>{mod}</Kbd>

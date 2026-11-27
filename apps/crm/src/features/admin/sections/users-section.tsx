@@ -10,6 +10,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  CountBadge,
   ConfirmDialog,
   DropdownMenu,
   DropdownMenuContent,
@@ -229,7 +230,7 @@ export function UsersSection() {
             className={cn(
               'flex flex-col items-start rounded-lg border bg-panel px-4 py-3 text-left shadow-xs transition-[border-color,background-color] duration-[var(--duration-fast)]',
               'hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus active:bg-pressed',
-              status === key ? 'border-primary bg-primary-subtle' : 'border-border-subtle',
+              status === key ? 'border-border-strong bg-selected' : 'border-border-subtle',
             )}
           >
             <span className="text-sm text-fg-secondary">{label}</span>
@@ -274,9 +275,9 @@ export function UsersSection() {
             role="toolbar"
             aria-label="Bulk actions"
             data-testid="users-bulk-bar"
-            className="flex flex-wrap items-center gap-2 border-b border-border-subtle bg-primary-subtle px-4 py-2 animate-fade-in sm:px-5"
+            className="flex flex-wrap items-center gap-2 border-b border-border-subtle bg-selected px-4 py-2 animate-fade-in sm:px-5"
           >
-            <span className="text-sm font-semibold text-primary-text">{selectedRows.length} selected</span>
+            <span className="text-sm font-semibold text-fg">{selectedRows.length} selected</span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="secondary" loading={bulk.isPending}>Change role</Button>
@@ -397,7 +398,7 @@ export function UsersSection() {
           >
             <ChevronDown aria-hidden className={cn('size-4 text-icon transition-transform duration-[var(--duration-fast)]', !invitesOpen && '-rotate-90')} />
             <span className="text-md font-semibold text-fg">Pending invitations</span>
-            <Badge tone="warning">{invites.length}</Badge>
+            <CountBadge count={invites.length} label="pending" />
             <span className="ml-auto hidden text-sm text-fg-muted sm:inline">Waiting for people to accept · links expire after 7 days</span>
           </button>
           {invitesOpen ? (
@@ -497,8 +498,8 @@ function UserRow({
           <span className="min-w-0">
             <span className="flex items-center gap-1.5">
               <span className="truncate font-medium text-fg">{entry.name}</span>
-              {isMe ? <Badge size="sm" tone="outline">You</Badge> : null}
-              {deactivated ? <Badge size="sm" className="sm:hidden">Off</Badge> : null}
+              {isMe ? <Badge tone="outline">You</Badge> : null}
+              {deactivated ? <Badge className="sm:hidden">Off</Badge> : null}
             </span>
             <span className="block truncate text-sm text-fg-muted">{entry.email}</span>
           </span>
@@ -662,14 +663,12 @@ function TeamChips({ names }: { readonly names: readonly string[] }) {
   const [first, ...rest] = names;
   return (
     <span className="flex min-w-0 items-center gap-1" data-testid="user-teams">
-      <span className="inline-flex h-6 min-w-0 max-w-[150px] items-center rounded-full bg-sunken px-2.5 text-sm text-fg-secondary ring-1 ring-border-subtle">
-        <span className="truncate">{first}</span>
-      </span>
+      <Badge className="min-w-0 max-w-[150px]">{first}</Badge>
       {rest.length > 0 ? (
         <Tooltip content={names.join(', ')}>
           <span
             tabIndex={0}
-            className="inline-flex h-6 shrink-0 items-center rounded-full bg-muted px-2 text-xs font-semibold text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus"
+            className="inline-flex h-5 shrink-0 items-center rounded-full bg-muted px-2 text-xs font-medium text-fg-secondary focus-visible:outline-2 focus-visible:outline-focus"
             aria-label={`${rest.length} more teams: ${rest.join(', ')}`}
           >
             +{rest.length}

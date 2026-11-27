@@ -126,6 +126,8 @@ export const STACK_FEATURES: readonly Feature[] = [
     name: `${recordTriggers.length} cross-app rules`,
     note: list(recordTriggers.map((r) => r.title.toLowerCase())) + '.',
   },
+  // SPEC 8.4 of docs/pulse/SPEC.md: a "Job profit" strip on the project overview.
+  { name: 'Job profit with Pulse', note: 'With Pulse, a project shows the profit on its linked jobs.' },
   { name: 'Only what you license', note: 'Links and rules for an app appear only if your organization runs that app.' },
 ];
 

@@ -16,3 +16,4 @@ apps/wms/references
 apps/wms/seed-snapshot
 apps/wms/public
 apps/crm/public
+apps/web/public/google*.html

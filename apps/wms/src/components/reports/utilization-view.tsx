@@ -8,7 +8,8 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { pillStyle, TONES } from '@/lib/status-colors';
+import { Pill } from '@kitstak/ui/dashboard';
+import { statusLabel, TONES } from '@/lib/status-colors';
 import { useApiQuery } from '@/lib/query-client';
 import { cn } from '@/lib/utils';
 import {
@@ -23,16 +24,13 @@ const toneOf = (band: string) => TONES[BAND_TONE[band as UtilizationBand] ?? 'gr
 
 export function BandPill({ band, estimated }: { readonly band: string; readonly estimated?: boolean }) {
   const tone = toneOf(band);
+  const isEstimate = Boolean(estimated) && band !== 'Empty' && band !== 'No Capacity Set';
   return (
-    <span
-      data-band={band}
-      style={pillStyle(tone)}
-      className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold leading-4"
-    >
-      {band}
-      {estimated && band !== 'Empty' && band !== 'No Capacity Set' ? (
-        <span className="font-medium opacity-75">· est.</span>
-      ) : null}
+    <span data-band={band} className="contents">
+      <Pill tone={tone.pill} title={isEstimate ? 'Estimated from legacy capacity units' : undefined}>
+        {statusLabel(band)}
+        {isEstimate ? ', est.' : ''}
+      </Pill>
     </span>
   );
 }

@@ -405,11 +405,7 @@ function TestResult({
                   <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
                     <MapPin className="h-3.5 w-3.5 text-faint" aria-hidden />
                     {sug.code}
-                    {sug.areaType ? (
-                      <Badge size="sm" tone="info" shape="pill">
-                        {sug.areaType}
-                      </Badge>
-                    ) : null}
+                    {sug.areaType ? <Badge tone="info">{sug.areaType}</Badge> : null}
                     {sug.zone ? (
                       <span className="text-2xs font-normal text-faint">Zone {sug.zone}</span>
                     ) : null}

@@ -1,44 +1,68 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { EmptyState } from '@/components/ui';
+import { notFound, redirect } from 'next/navigation';
+import { PlanLockFrame, PlanLockScreen, billingOnlyLock } from '@kitstak/ui/plan-lock';
 import { Logo } from '@/features/shell/logo';
+import { findBillingOnlyOrg, findOrgMembership, getSession } from '@/server/auth/session';
+import { getPlanView, portalUrl } from '@/server/plan';
+import { LockedSwitcher } from './locked-switcher';
 
-export const metadata: Metadata = { title: 'CRM locked' };
+export const metadata: Metadata = { title: 'CRM is not in your plan' };
+
+interface LockedPageProps {
+  readonly params: Promise<{ orgSlug: string }>;
+}
 
 /**
- * Entitlement lock page (BLUEPRINT.md §3.3): `getPageOrgMembership` redirects members of
- * an org without the `crm` module here. Lives in its own route group — NOT under
- * (app)/[orgSlug] — so the gated layout never wraps it (no redirect loop). Billing lives
- * in the portal; the link only appears when NEXT_PUBLIC_PORTAL_URL is configured
- * (Stripe is deferred — access is restored by a manual grant).
+ * The CRM lock screen (docs/billing/SPEC.md section 9.3): `getPageOrgMembership` sends members of
+ * an org whose plan does not include the CRM here. It lives in its own route group, NOT under
+ * (app)/[orgSlug], so the gated layout never wraps it (no redirect loop). The words, the price and
+ * both links come from `planLockFor` in `@kitstak/billing`, the same in every KitStak app.
  */
-export default function LockedPage() {
-  const portalUrl = process.env.NEXT_PUBLIC_PORTAL_URL?.trim().replace(/\/+$/, '');
+export default async function LockedPage({ params }: LockedPageProps) {
+  const { orgSlug } = await params;
+  const session = await getSession();
+  if (!session) redirect(`/login?next=${encodeURIComponent(`/${orgSlug}`)}`);
+  const membership = await findOrgMembership(session.user.id, orgSlug);
+  if (!membership) {
+    // A person who only manages billing: no seat in any app. The same frame, with a way back to Billing.
+    const billingOrg = await findBillingOnlyOrg(session.user.id, orgSlug);
+    if (!billingOrg) notFound(); // signed in but not a member: do not reveal whether the org exists
+    return (
+      <PlanLockFrame
+        logo={
+          <Link href="/" aria-label="KitStak CRM home">
+            <Logo size={24} />
+          </Link>
+        }
+        orgName={billingOrg.name}
+        switcher={<LockedSwitcher billingOnly />}
+      >
+        <PlanLockScreen app="crm" lock={billingOnlyLock(billingOrg.name, portalUrl())} hidePoints />
+      </PlanLockFrame>
+    );
+  }
+
+  const plan = await getPlanView({
+    orgId: membership.organization.id,
+    userId: session.user.id,
+    role: membership.roleString,
+  });
+  // The CRM is in the plan (again): nothing to lock, back into the app.
+  if (!plan.lock) redirect(`/${membership.organization.slug}`);
+
+  // The same frame as the WMS, Projects and Pulse lock screens (`PlanLockFrame`).
   return (
-    <div className="flex min-h-dvh flex-col bg-app">
-      <header className="px-6 py-5">
-        <Link href="/" aria-label="KitStak home" className="inline-flex rounded-md">
-          <Logo size={28} />
+    <PlanLockFrame
+      logo={
+        <Link href="/" aria-label="KitStak CRM home">
+          <Logo size={24} />
         </Link>
-      </header>
-      <main className="flex flex-1 items-center justify-center px-4 pb-16">
-        <EmptyState
-          size="lg"
-          illustration="error"
-          title="CRM is not enabled for this organization"
-          description="Your organization doesn't have an active KitStak CRM subscription. Contact your organization owner to restore access."
-          actions={
-            portalUrl ? (
-              <a
-                href={`${portalUrl}/billing`}
-                className="inline-flex h-10 items-center rounded-sm bg-primary px-4 text-md font-medium text-primary-fg hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-              >
-                Manage billing
-              </a>
-            ) : undefined
-          }
-        />
-      </main>
-    </div>
+      }
+      orgName={membership.organization.name}
+      switcher={<LockedSwitcher badges={plan.badges} />}
+    >
+      <PlanLockScreen app="crm" lock={plan.lock} />
+    </PlanLockFrame>
   );
 }

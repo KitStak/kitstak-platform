@@ -188,9 +188,7 @@ export function IntegrationHelpCenter({
                         </td>
                         <td className="py-1.5 pr-3 capitalize text-secondary">{e.kind}</td>
                         <td className="py-1.5">
-                          <Badge size="sm" tone={st.tone}>
-                            {st.label}
-                          </Badge>
+                          <Badge tone={st.tone}>{st.label}</Badge>
                         </td>
                       </tr>
                     );
@@ -206,16 +204,7 @@ export function IntegrationHelpCenter({
             const st = status(e);
             const profile = CHANNEL_CREDENTIAL_PROFILES[e.key] ? channelCredentialProfile(e.key) : null;
             return (
-              <Section
-                key={e.key}
-                id={e.key}
-                title={e.name}
-                aside={
-                  <Badge size="sm" tone={st.tone}>
-                    {st.label}
-                  </Badge>
-                }
-              >
+              <Section key={e.key} id={e.key} title={e.name} aside={<Badge tone={st.tone}>{st.label}</Badge>}>
                 <p>{e.description}</p>
                 {e.key === 'kitstaks-sandbox' ? (
                   <p>
@@ -284,11 +273,7 @@ export function IntegrationHelpCenter({
                 key={e.key}
                 id={`carrier-${e.key}`}
                 title={e.name}
-                aside={
-                  <Badge size="sm" tone={st.tone}>
-                    {st.label}
-                  </Badge>
-                }
+                aside={<Badge tone={st.tone}>{st.label}</Badge>}
               >
                 <p>{e.description}</p>
                 {e.live && CARRIER_HELP[e.key] ? (

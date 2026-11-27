@@ -20,10 +20,16 @@
  *    instances. Note Better Auth still keys buckets by its header-derived client IP
  *    (spoofable without a trusted proxy) — the per-ACCOUNT lockout in the policy
  *    plugin is the durable, spoof-indifferent control.
- *  - There is deliberately NO shared "banned" sign-in gate: Better Auth's base `user`
- *    table has no banned/active column (that field belongs to its admin plugin, which
- *    we do not mount), so cross-instance deactivation is enforced by deleting the
- *    credential `core.account` row instead (H3 — see WMS `setUsersActive`).
+ *  - A switched off person is refused at every door of every instance (H3, and billing
+ *    review round 4). The fact is one row in `core.sign_in_blocks`, read by the hooks in
+ *    `./sign-in-block.ts`: no session, no password row, no Google or Microsoft link, no
+ *    reset code and no sign in code. The WMS writes the row when it deactivates a person
+ *    (`blockSignIn`), and still deletes the password row as a second lock. "Has no password
+ *    row" alone no longer means switched off: a person who signs in with an emailed code
+ *    has none either.
+ *  - Sessions are checked against the database on every request. There is no cookie cache
+ *    (`./options.ts`), so a session that was ended (password reset, sign out everywhere,
+ *    switched off) is refused on the very next request in every app.
  *
  * Client-IP resolution (round-2 NEW-3): Better Auth keys its database rate-limit
  * buckets (and session `ip_address`) on `advanced.ipAddress`. The factory exposes an
@@ -41,19 +47,26 @@ import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from 'bette
 import { createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { nextCookies } from 'better-auth/next-js';
-import { sharedAuthOptions } from './options';
+import { organizationPlugin, sharedAuthOptions, type OrganizationPluginExtras } from './options';
 import { createPasswordCompat, isBcryptHash, type PasswordCompatOptions } from './password-compat';
 import {
   passwordPolicyPlugin,
   type PasswordPolicyPluginOptions,
   type RawSqlExecutor,
 } from './password-policy-plugin';
+import { signInBlockPlugin, signInDatabaseHooks } from './sign-in-block';
 import { signOutCookieSweepPlugin } from './sign-out-cookie-sweep';
 
 type DrizzleDb = Parameters<typeof drizzleAdapter>[0];
 type DrizzleSchema = Parameters<typeof drizzleAdapter>[1]['schema'];
 
 const CREDENTIAL_PROVIDER = 'credential';
+
+/**
+ * Providers whose sign in is linked to an existing account by email without further proof. Keep
+ * this list to providers that always state whether the email is verified. Never add Microsoft.
+ */
+export const TRUSTED_LINK_PROVIDERS = ['google'] as const;
 
 /** Better Auth's own `advanced.ipAddress` shape (better-auth 1.7.21), passed through verbatim. */
 export type AuthIpAddressOptions = NonNullable<
@@ -123,6 +136,14 @@ export interface CreateAuthOptions {
   readonly extraPlugins?: BetterAuthPlugin[];
   /** App-specific global hooks (e.g. CRM's org-metadata guards — not baked in here). */
   readonly hooks?: BetterAuthOptions['hooks'];
+  /**
+   * Merged into the shared organization plugin: the invite email sender and the organization
+   * hooks. Every app passes `billingOrganizationOptions(...)` from `@kitstak/billing/server`
+   * here, so seat limits, invite emails and the delete guard hold at every door.
+   */
+  readonly organization?: OrganizationPluginExtras;
+  /** Social sign in providers, passed through when set (the portal builds them from env). */
+  readonly socialProviders?: BetterAuthOptions['socialProviders'];
 }
 
 interface CredentialAccountRow {
@@ -220,6 +241,13 @@ export function createAuth(options: CreateAuthOptions) {
         '/request-password-reset': { window: 60 * 10, max: 5 },
         '/reset-password': { window: 60 * 10, max: 10 },
         '/change-password': { window: 60, max: 5 },
+        // Email codes (the emailOTP plugin the portal mounts) and invites.
+        '/email-otp/send-verification-otp': { window: 60 * 10, max: 5 },
+        '/email-otp/verify-email': { window: 60 * 10, max: 10 },
+        '/email-otp/request-password-reset': { window: 60 * 10, max: 5 },
+        '/forget-password/email-otp': { window: 60 * 10, max: 5 },
+        '/email-otp/reset-password': { window: 60 * 10, max: 10 },
+        '/organization/invite-member': { window: 60 * 10, max: 30 },
       },
     },
     advanced: {
@@ -235,10 +263,38 @@ export function createAuth(options: CreateAuthOptions) {
         : {}),
     },
     telemetry: { enabled: false },
+    ...(options.socialProviders
+      ? {
+          socialProviders: options.socialProviders,
+          // A person who signs in with Google or Microsoft joins the account that has the same
+          // email, instead of getting a second one, but only when the provider PROVED the address.
+          //
+          // Google is trusted: it always says whether the address is verified. Microsoft is NOT in
+          // the trusted list on purpose (security review round 1). With the multi tenant `common`
+          // endpoint anyone can make their own Entra tenant and set a user's `email` to a customer's
+          // address. A trusted provider is linked even when it did not confirm the email, so that
+          // would be an account takeover. Left out of the list, a Microsoft sign in links only when
+          // its profile reports a verified email, and the portal reports that only for the `xms_edov`
+          // claim (`microsoftEmailVerified` in apps/portal/src/features/signup/social.ts).
+          account: { accountLinking: { enabled: true, trustedProviders: [...TRUSTED_LINK_PROVIDERS] } },
+        }
+      : {}),
     ...(options.hooks ? { hooks: options.hooks } : {}),
+    // The hard stops for a switched off person, the starting organization of a new session, and
+    // the note of the organization a person picked (./sign-in-block.ts). Needs the raw SQL seam,
+    // which every app's Drizzle handle has.
+    ...(rawDb ? { databaseHooks: signInDatabaseHooks(rawDb) } : {}),
     // nextCookies must be the last plugin so Set-Cookie works from Server Actions.
     plugins: [
-      ...sharedAuthOptions.plugins,
+      // The shared organization plugin, with this app's invite email and hooks merged in.
+      // `sharedAuthOptions.plugins` stays the plain one for the schema generator.
+      organizationPlugin(options.organization),
+      // Guards for the organization endpoints that need to know who is acting (see
+      // `OrganizationPluginExtras.guardPlugins`). Mounted here so no instance can leave them out.
+      ...(options.organization?.guardPlugins ?? []),
+      // A switched off address gets its neutral answer here, before the password policy plugin
+      // and before any plugin an app adds (./sign-in-block.ts).
+      ...(rawDb ? [signInBlockPlugin(rawDb)] : []),
       // H1: lockout + policy are factory behaviour, never instance opt-in.
       passwordPolicyPlugin({ ...(options.passwordPolicy ?? {}), rawDb }),
       legacyRehashPlugin(),

@@ -5,5 +5,6 @@
       "path": "/api/v1/integrations/events",
       "schedule": "*/5 * * * *"
     }
-  ]
+  ],
+  "ignoreCommand": "bash ../../deploy/vercel-ignore.sh"
 }

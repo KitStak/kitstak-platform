@@ -1032,11 +1032,7 @@ function TestPanel({ form }: { readonly form: Form }) {
             )}
             <span className="font-semibold">{result.orderCode}</span>
             {result.matched ? 'matches' : "doesn't match"}
-            {result.blockType ? (
-              <Badge tone="danger" size="sm">
-                Blocked · {result.blockType}
-              </Badge>
-            ) : null}
+            {result.blockType ? <Badge tone="danger">Blocked · {result.blockType}</Badge> : null}
           </p>
           {result.scopeNote ? <Callout variant="attention">{result.scopeNote}</Callout> : null}
           {result.conditions.length > 0 ? (
@@ -1128,15 +1124,7 @@ function RunHistory({ id }: { readonly id: string }) {
       header: 'Matched',
       size: 100,
       cell: ({ row }) =>
-        row.original.matched ? (
-          <Badge tone="success" size="sm" shape="pill">
-            Yes
-          </Badge>
-        ) : (
-          <Badge tone="neutral" size="sm" shape="pill">
-            No
-          </Badge>
-        ),
+        row.original.matched ? <Badge tone="success">Yes</Badge> : <Badge tone="neutral">No</Badge>,
     },
     {
       id: 'actionsApplied',
@@ -1152,13 +1140,7 @@ function RunHistory({ id }: { readonly id: string }) {
       size: 100,
       enableSorting: false,
       cell: ({ row }) =>
-        row.original.blockType ? (
-          <Badge tone="danger" size="sm">
-            {row.original.blockType}
-          </Badge>
-        ) : (
-          <Muted />
-        ),
+        row.original.blockType ? <Badge tone="danger">{row.original.blockType}</Badge> : <Muted />,
     },
     {
       id: 'error',

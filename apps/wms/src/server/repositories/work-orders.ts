@@ -1022,6 +1022,18 @@ export async function recordWorkOrderChanges(
       };
     }),
   );
+  // KitStak Pulse: a work order that changes status or finished quantity refreshes its job. Work
+  // orders write their change log here, not through `recordUpdate`, so the note is left here too.
+  // Never throws, and does nothing when Pulse is not installed.
+  if (changes.some((c) => c.field === 'status' || c.field === 'processedQty')) {
+    const { notifyPulseOfWorkOrderChange } = await import('@/server/pulse/bridge');
+    await notifyPulseOfWorkOrderChange(tx as unknown as Parameters<typeof notifyPulseOfWorkOrderChange>[0], {
+      entityType: WO_ENTITY,
+      entityId: record.id,
+      status: after.status,
+      processedQty: after.processedQty,
+    });
+  }
   return changes.length;
 }
 

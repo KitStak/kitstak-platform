@@ -905,10 +905,7 @@ function Body({
           </section>
           <section className="rounded-lg border border-border p-4">
             <h3 className="flex items-center gap-2 text-sm font-semibold">
-              Return label settings{' '}
-              <Badge size="sm" tone="info">
-                NEW
-              </Badge>
+              Return label settings <Badge tone="info">New</Badge>
             </h3>
             <Checkbox
               className="mt-2"

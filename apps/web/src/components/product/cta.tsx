@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { PRICING, percentLabel } from '@/lib/pricing';
+import { BUNDLE_OFF } from '@/lib/pricing';
+import { faqLd } from '@/lib/seo';
+import { JsonLd } from '../json-ld';
 import { ROUTES, getStartedHref } from '../site-links';
 import { StakMark } from '../stak-mark';
 import styles from './cta.module.css';
@@ -27,7 +29,7 @@ export function BundleBand({ from, title, body, points, visual }: BundleBandProp
         <div>
           <p className={styles.saving} data-reveal>
             <StakMark lit="both" size={28} />
-            Save {percentLabel(PRICING.bundleDiscount)} when you run both
+            Save {BUNDLE_OFF} when you run both
           </p>
           <h2 id="together-heading" className={`h2 ${styles.bundleTitle}`} data-reveal>
             {title}
@@ -117,6 +119,7 @@ interface FaqProps {
 export function Faq({ items, title = 'Questions, answered.' }: FaqProps) {
   return (
     <section id="faq" className={`section ${styles.faq}`} aria-labelledby="faq-heading">
+      <JsonLd data={faqLd(items)} />
       <div className={`container ${styles.faqGrid}`}>
         <div>
           <h2 id="faq-heading" className="h2" data-reveal>

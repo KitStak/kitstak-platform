@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { organization } from '@kitstak/db/schema';
 import { db } from '@/server/db';
+import { orgProjectsAccess } from '@/server/entitlements';
 import { formSubmissions, forms, projects, tasks, type Form } from '@/server/db/schema';
 import { DomainError, invalid, notFound } from '@/server/errors';
 import { PRIORITIES, type Priority } from '@/lib/constants';
@@ -247,6 +248,11 @@ export async function submitForm(input: SubmitFormInput): Promise<{ confirmation
   if (!row || !row.form.enabled || row.project.archivedAt) throw notFound('This form');
   const { form, project } = row;
   if (!form.isPublic && !input.viewer?.orgIds.includes(form.orgId)) throw new DomainError('UNAUTHENTICATED', 'Sign in to fill out this form.');
+  // A form answer becomes a task. While the org's plan is view only, or Projects is not in its
+  // plan, nothing may be written (docs/billing/SPEC.md section 9.4).
+  if ((await orgProjectsAccess(form.orgId)) !== 'full') {
+    throw new DomainError('FORBIDDEN', 'This form is not taking answers right now. Please try again later.');
+  }
   const errors: Record<string, string> = {};
   const answers: Record<string, unknown> = {};
   for (const field of form.fields) {
@@ -337,6 +343,33 @@ export async function submitForm(input: SubmitFormInput): Promise<{ confirmation
         title: `New “${form.name}” response in Triage: ${item.title}`,
         url: routes.projectTriage(project.key),
         projectId: project.id,
+      });
+    });
+    return { confirmation: form.settings.confirmationMessage ?? 'Thanks! Your request was sent to the team.' };
+  }
+  // Build forms (docs/programs/SPEC.md 5.17): on a program, `settings.build` maps a variant
+  // question and a qty question, and each answer makes a build dated today (or the mapped date).
+  const buildMode = (form.settings as { build?: { variantFieldId?: string; qtyFieldId?: string; dateFieldId?: string } }).build;
+  if (project.kind === 'program' && buildMode?.variantFieldId && buildMode.qtyFieldId) {
+    const { formBuild } = await import('./programs/form-builds');
+    const created = await formBuild(ctx, project, {
+      variantAnswer: answerText(form.fields.find((f) => f.id === buildMode.variantFieldId)!, answers[buildMode.variantFieldId]),
+      qtyAnswer: String(answers[buildMode.qtyFieldId] ?? ''),
+      dateAnswer: buildMode.dateFieldId && isIsoDate(answers[buildMode.dateFieldId]) ? (answers[buildMode.dateFieldId] as string) : null,
+      title: titleField ? title : null,
+      description: descriptionParts.join('') || null,
+    });
+    await db.transaction(async (tx) => {
+      await tx.insert(formSubmissions).values({ orgId: form.orgId, formId: form.id, taskId: created.taskId, data: answers, submitterName: submitter, submitterEmail: email, submittedBy: input.viewer?.userId ?? null });
+      await tx.update(forms).set({ submissionCount: sql`${forms.submissionCount} + 1` }).where(eq(forms.id, form.id));
+      await logActivity(tx, ctx, { verb: 'form.submitted', entityType: 'form', entityId: form.id, projectId: project.id, taskId: created.taskId, meta: { submitter, email, build: true } });
+      await notify(tx, ctx, {
+        recipients: [...(form.settings.notifyUserIds ?? []), project.ownerId],
+        kind: 'project',
+        title: `New “${form.name}” response: ${taskKey(project.key, created.number)} planned`,
+        url: routes.taskAny(project.kind, project.key, created.number),
+        projectId: project.id,
+        taskId: created.taskId,
       });
     });
     return { confirmation: form.settings.confirmationMessage ?? 'Thanks! Your request was sent to the team.' };

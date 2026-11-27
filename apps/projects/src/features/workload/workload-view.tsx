@@ -18,6 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
   Skeleton,
+  Switch,
   ToggleGroup,
   Tooltip,
   cn,
@@ -26,6 +27,7 @@ import {
 import { StatusIcon } from '@/components/pm';
 import { addDaysIso, parseIsoDate, startOfWeekIso, todayIso, type IsoDate } from '@/lib/dates';
 import { useProjectTasks } from '@/lib/hooks/use-data';
+import { useOrgCalendar } from '@/lib/hooks/use-programs';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { useTaskMutations } from '@/lib/hooks/use-task-mutations';
@@ -43,8 +45,12 @@ import {
   NO_DATE,
   UNASSIGNED,
   UNIT_LABELS,
+  buildUnitsText,
   buildWorkload,
   capacityFor,
+  isBuild,
+  visibleWork,
+  weeklyHoursFromDaily,
   formatLoad,
   loadLevel,
   readWorkloadSettings,
@@ -60,6 +66,8 @@ import {
 interface WorkloadPrefs {
   /** `auto` measures in points (or hours) when most open tasks carry that estimate, else in tasks. */
   readonly unit: LoadUnit | 'auto';
+  /** Builds count as work (docs/programs/SPEC.md 5.19). On by default. */
+  readonly showBuilds?: boolean;
   readonly weeks: '4' | '6' | '8' | '12';
   readonly hideIdle: boolean;
   readonly collapsed: readonly string[];
@@ -68,7 +76,7 @@ interface WorkloadPrefs {
 
 type WorkloadViewOptions = Pick<WorkloadPrefs, 'unit' | 'weeks' | 'hideIdle'>;
 
-const DEFAULT_PREFS: WorkloadPrefs = { unit: 'auto', weeks: '6', hideIdle: false, collapsed: [], viewId: null };
+const DEFAULT_PREFS: WorkloadPrefs = { unit: 'auto', weeks: '6', hideIdle: false, collapsed: [], viewId: null, showBuilds: true };
 
 function viewOptions(prefs: WorkloadPrefs): WorkloadViewOptions {
   return { unit: prefs.unit, weeks: prefs.weeks, hideIdle: prefs.hideIdle };
@@ -133,7 +141,11 @@ export function WorkloadView() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragRef = useRef<DragPayload | null>(null);
 
-  const openTasks = useMemo(() => (tasksQuery.data ?? []).filter((task) => !isClosed(task) && !task.isMilestone), [tasksQuery.data]);
+  const allOpen = useMemo(() => (tasksQuery.data ?? []).filter((task) => !isClosed(task) && !task.isMilestone), [tasksQuery.data]);
+  const hasBuilds = useMemo(() => allOpen.some((task) => isBuild(task)), [allOpen]);
+  const showBuilds = prefs.showBuilds !== false;
+  const openTasks = useMemo(() => visibleWork(allOpen, showBuilds), [allOpen, showBuilds]);
+  const orgCalendar = useOrgCalendar();
   const unit: LoadUnit = useMemo(() => (prefs.unit === 'auto' ? autoUnit(openTasks) : prefs.unit), [openTasks, prefs.unit]);
   // Show only the weeks that fit the screen (never a clipped last column).
   const [gridWidth, setGridWidth] = useState(0);
@@ -152,7 +164,7 @@ export function WorkloadView() {
   // Phones show one week at a time as a list of people (swipe or use the arrows for other weeks).
   const weekCount = narrow ? 1 : Math.min(12, Number(prefs.weeks), fitWeeks);
   const weeks = useMemo(() => weekStarts(anchor, weekCount), [anchor, weekCount]);
-  const settings = useMemo(() => readWorkloadSettings(project.settings, unit), [project.settings, unit]);
+  const settings = useMemo(() => readWorkloadSettings(project.settings, unit, unit === 'hours' ? weeklyHoursFromDaily(orgCalendar.data?.dailyCapacityHours) : null), [project.settings, unit, orgCalendar.data?.dailyCapacityHours]);
   const collapsed = useMemo(() => new Set(prefs.collapsed), [prefs.collapsed]);
 
   const taskById = useMemo(() => new Map(openTasks.map((task) => [task.id, task])), [openTasks]);
@@ -380,6 +392,11 @@ export function WorkloadView() {
             {task.title}
           </button>
           {overdue ? <span aria-label="Past its due date" className="size-1.5 shrink-0 rounded-full bg-danger" /> : null}
+          {isBuild(task) && buildUnitsText(task) ? (
+            <span className="shrink-0 rounded-xs bg-sunken px-1 text-2xs text-fg-secondary tabular-nums" title={`Build${task.build?.variantName ? ` · ${task.build.variantName}` : ''} · ${buildUnitsText(task)}`}>
+              {buildUnitsText(task)}
+            </span>
+          ) : null}
           {unit !== 'tasks' ? (
             <span className={cn('shrink-0 text-2xs tabular-nums', load === 0 ? 'text-warning-text' : 'text-fg-muted')} title={load === 0 ? 'No estimate yet' : undefined}>
               {load === 0 ? 'No estimate' : `${formatLoad(load)}${unitLabel.short}`}
@@ -427,6 +444,12 @@ export function WorkloadView() {
             { value: 'hours', label: 'Hours' },
           ]}
         />
+        {hasBuilds ? (
+          <label className="flex h-7 items-center gap-2 rounded-md px-1.5 text-sm text-fg" data-testid="workload-show-builds">
+            <Switch checked={showBuilds} onCheckedChange={(checked) => setPrefs({ showBuilds: checked })} aria-label="Show builds" />
+            Show builds
+          </label>
+        ) : null}
         <ToolbarSpacer />
         {overloads.length > 0 ? (
           <Tooltip

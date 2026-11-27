@@ -419,7 +419,7 @@ export function EndOfDayPage() {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader title="End Of The Day" tabs="shipments" />
+      <PageHeader title="End of the day" tabs="shipments" />
       <OverdueBanner
         canClose={canClose}
         onShow={() => {

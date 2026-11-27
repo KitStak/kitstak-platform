@@ -40,7 +40,6 @@ import {
   cn,
   toast,
 } from '@/components/ui';
-import { useProjectTasks } from '@/lib/hooks/use-data';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { qk } from '@/lib/query-keys';
 import { compareRank } from '@/lib/rank';
@@ -60,6 +59,8 @@ import { useTaskNav } from '@/features/views/use-task-nav';
 import { useTaskOps } from '@/features/views/use-task-ops';
 import { useViewState } from '@/features/views/use-view-state';
 import { ViewToolbar } from '@/features/views/view-toolbar';
+import { useTaskSource } from '@/features/views/task-source';
+import { useCardExtras } from '@/features/views/card-extras';
 import { GROUP_LABELS, LIST_GROUPS, ORDER_FIELDS, ORDER_LABELS, orderFieldOf, orderRules, type OrderField } from '@/features/views/view-state';
 import { ViewCursor } from '@/features/task/view-cursor';
 import { ListRow, ListRowOverlay } from './list-row';
@@ -180,6 +181,8 @@ interface GroupSectionProps {
   readonly groupKey: string;
   readonly meta: GroupMeta;
   readonly count: number;
+  /** The title already says how many (a run summary): skip the bare count. */
+  readonly hideCount?: boolean;
   readonly rowIds: readonly string[];
   readonly collapsed: boolean;
   readonly isOver: boolean;
@@ -192,7 +195,7 @@ interface GroupSectionProps {
   readonly title: React.ReactNode;
 }
 
-function GroupSection({ groupKey, meta, count, rowIds, collapsed, isOver, selectedCount, onToggle, onSelectAll, children, footer, menu, title }: GroupSectionProps) {
+function GroupSection({ groupKey, meta, count, rowIds, collapsed, isOver, selectedCount, onToggle, onSelectAll, children, footer, menu, title, hideCount }: GroupSectionProps) {
   const { setNodeRef } = useDroppable({ id: groupDropId(groupKey), data: { type: 'group' } });
   const info = meta.info(groupKey);
   const all = count > 0 && selectedCount === count;
@@ -220,7 +223,7 @@ function GroupSection({ groupKey, meta, count, rowIds, collapsed, isOver, select
           {collapsed ? <ChevronRight aria-hidden className="size-4 shrink-0 text-icon" /> : <ChevronDown aria-hidden className="size-4 shrink-0 text-icon" />}
           {info.icon}
           {title}
-          <span className="font-normal text-fg-muted tabular-nums">{count}</span>
+          {hideCount ? null : <span className="font-normal text-fg-muted tabular-nums">{count}</span>}
         </button>
         <span className="ml-1 flex items-center opacity-0 transition-opacity group-hover/header:opacity-100 focus-within:opacity-100 max-md:opacity-100">{menu}</span>
       </div>
@@ -239,7 +242,9 @@ function GroupSection({ groupKey, meta, count, rowIds, collapsed, isOver, select
 export function ListView() {
   const { project, statuses, statusById, labelById, capabilities } = useCurrentProject();
   const queryClient = useQueryClient();
-  const tasksQuery = useProjectTasks(project.key);
+  const tasksQuery = useTaskSource();
+  const extras = useCardExtras();
+  const extraFilter = extras.filter;
   const view = useViewState('list');
   const ops = useTaskOps();
   const linksByTask = useTaskLinksMap(project.key);
@@ -250,9 +255,13 @@ export function ListView() {
   const canManage = capabilities['structure:manage'];
   const all = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const groupBy = (LIST_GROUPS as readonly string[]).includes(view.settings.groupBy) ? view.settings.groupBy : 'section';
-  const meta = useGroupMeta(groupBy, all);
+  const fieldMeta = useGroupMeta(groupBy, all);
+  const extraGrouping = extras.groupings?.find((entry) => entry.value === extras.grouping) ?? null;
+  const display = extras.display;
+  const extraOrder = display?.orders?.find((entry) => entry.value === display.order) ?? null;
+  const noun = extras.noun?.plural ?? 'tasks';
   const order = orderFieldOf(view.settings.sort);
-  const manual = order === 'position';
+  const manual = !extraOrder && order === 'position';
   const collapsedGroups = useStoredSet(`ks.projects.list.collapsed.${project.id}.${groupBy}`);
   const toggledParents = useStoredSet(`ks.projects.list.subtasks.${project.id}`);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -268,9 +277,23 @@ export function ListView() {
 
   // Top-level tasks pass the filter bar; subtasks are nested under their parent instead.
   const visibleTop = useMemo(() => {
-    const passing = view.visible(all).filter((task) => !task.parentTaskId);
+    const passing = view.visible(all).filter((task) => !task.parentTaskId && (!extraFilter || extraFilter(task)));
+    if (extraOrder) return [...passing].sort(extraOrder.compare);
     return sortTasks(passing, manual ? [{ field: 'position', dir: 'asc' }] : orderRules(order));
-  }, [all, manual, order, view]);
+  }, [all, extraFilter, extraOrder, manual, order, view]);
+  /** A page grouping (Run, Day, Variant) stands in for the field grouping; its groups never take drags. */
+  const meta = useMemo<GroupMeta>(() => {
+    if (!extraGrouping) return fieldMeta;
+    return {
+      field: 'none',
+      order: extraGrouping.order(visibleTop),
+      info: (key: string) => extraGrouping.info(key, visibleTop.filter((task) => extraGrouping.keyOf(task) === key)),
+      move: () => null,
+      createDefaults: () => ({}),
+      showEmpty: false,
+    };
+  }, [extraGrouping, fieldMeta, visibleTop]);
+  const keysOf = useCallback((task: TaskSummary) => (extraGrouping ? [extraGrouping.keyOf(task)] : groupKeysOf(task, groupBy)), [extraGrouping, groupBy]);
   const childrenOf = useMemo(() => {
     const map = new Map<string, TaskSummary[]>();
     for (const task of all) {
@@ -293,12 +316,13 @@ export function ListView() {
   const groups = useMemo(() => {
     const present = new Map<string, TaskSummary[]>();
     for (const task of visibleTop) {
-      for (const key of groupKeysOf(task, groupBy)) {
+      for (const key of keysOf(task)) {
         const list = present.get(key);
         if (list) list.push(task);
         else present.set(key, [task]);
       }
     }
+    if (extraGrouping) return metaOrder.filter((key) => present.has(key));
     if (groupBy === 'none') return ['all'];
     return metaOrder.filter((key) => {
       if (present.has(key)) return true;
@@ -306,13 +330,13 @@ export function ListView() {
       if (groupBy === 'section') return key !== NO_GROUP || sectionCount === 0;
       return metaShowEmpty && key !== NO_GROUP;
     });
-  }, [filtering, groupBy, metaOrder, metaShowEmpty, sectionCount, visibleTop]);
+  }, [extraGrouping, filtering, groupBy, keysOf, metaOrder, metaShowEmpty, sectionCount, visibleTop]);
 
   /** Sortable ids per group: top-level rows plus expanded subtasks right under their parent. */
   const baseIds = useMemo<GroupMap>(() => {
     const map: GroupMap = new Map(groups.map((key) => [key, []]));
     for (const task of visibleTop) {
-      for (const key of groupKeysOf(task, groupBy)) {
+      for (const key of keysOf(task)) {
         const ids = map.get(key);
         if (!ids) continue;
         ids.push(rowId(key, task.id));
@@ -320,7 +344,7 @@ export function ListView() {
       }
     }
     return map;
-  }, [childrenOf, groupBy, groups, isExpanded, visibleTop]);
+  }, [childrenOf, groups, isExpanded, keysOf, visibleTop]);
   const shownIds = live ?? baseIds;
 
   const orderedTaskIds = useMemo(() => {
@@ -382,7 +406,7 @@ export function ListView() {
     const moved = from !== to;
     if (!moved && index === (baseIds.get(from) ?? []).indexOf(activeId)) return reset();
     if (!moved && !manual) {
-      toast.info(`Tasks are ordered by ${ORDER_LABELS[order].toLowerCase()}`, 'Switch “Order tasks by” to Manual in Display to arrange them yourself.');
+      toast.info(`Rows are ordered by ${(extraOrder?.label ?? ORDER_LABELS[order]).toLowerCase()}`, `Switch “Order ${noun} by” to Manual in Display to arrange them yourself.`);
       return reset();
     }
     // Neighbours among top-level rows only (subtasks keep their own order).
@@ -460,13 +484,43 @@ export function ListView() {
   const controls = ({ iconOnly }: { iconOnly: boolean }) => (
     <DisplayMenu
       iconOnly={iconOnly}
-      summary={[groupBy !== 'section' ? `Group: ${GROUP_LABELS[groupBy]}` : null, !manual ? `Order: ${ORDER_LABELS[order].split(' (')[0]}` : null].filter(Boolean).join(' · ') || null}
+      summary={[extraGrouping ? `Group: ${extraGrouping.label}` : groupBy !== 'section' ? `Group: ${GROUP_LABELS[groupBy]}` : null, extraOrder ? `Order: ${extraOrder.label}` : !manual ? `Order: ${ORDER_LABELS[order].split(' (')[0]}` : null].filter(Boolean).join(' · ') || null}
       choices={[
-        { label: 'Group by', value: groupBy, options: LIST_GROUPS.map((value) => ({ value, label: GROUP_LABELS[value] ?? value })), onChange: (value) => view.setSettings({ groupBy: value as GroupField }), testId: 'group' },
-        { label: 'Order tasks by', value: order, options: ORDER_FIELDS.map((value) => ({ value, label: ORDER_LABELS[value] })), onChange: (value) => view.setSettings({ sort: orderRules(value as OrderField) }), testId: 'order' },
+        {
+          label: 'Group by',
+          value: extraGrouping ? `x:${extraGrouping.value}` : groupBy,
+          options: [...(extras.groupings ?? []).map((entry) => ({ value: `x:${entry.value}`, label: entry.label })), ...LIST_GROUPS.filter((value) => !(extras.groupings && value === 'section')).map((value) => ({ value, label: GROUP_LABELS[value] ?? value }))],
+          onChange: (value) => {
+            if (value.startsWith('x:')) {
+              extras.onGroupingChange?.(value.slice(2));
+              return;
+            }
+            extras.onGroupingChange?.(null);
+            view.setSettings({ groupBy: value as GroupField });
+          },
+          testId: 'group',
+        },
+        {
+          label: `Order ${noun} by`,
+          value: extraOrder ? `x:${extraOrder.value}` : order,
+          options: [
+            ...(display?.orders ?? []).map((entry) => ({ value: `x:${entry.value}`, label: entry.label })),
+            ...ORDER_FIELDS.filter((value) => !display?.orders || value === 'position' || value === 'createdAt').map((value) => ({ value: value as string, label: ORDER_LABELS[value] })),
+          ],
+          onChange: (value) => {
+            if (value.startsWith('x:')) {
+              display?.onOrderChange?.(value.slice(2));
+              return;
+            }
+            display?.onOrderChange?.(null);
+            view.setSettings({ sort: orderRules(value as OrderField) });
+          },
+          testId: 'order',
+        },
       ]}
       toggles={[
-        { label: 'Done tasks', checked: view.settings.showCompleted, onChange: (checked) => view.setSettings({ showCompleted: checked }), testId: 'toggle-done' },
+        ...(display?.toggles ?? []),
+        { label: `Done ${noun}`, checked: view.settings.showCompleted, onChange: (checked) => view.setSettings({ showCompleted: checked }), testId: 'toggle-done' },
         { label: 'Subtasks opened', checked: view.settings.showSubtasks, onChange: (checked) => { toggledParents.set([]); view.setSettings({ showSubtasks: checked }); }, testId: 'toggle-subtasks' },
       ]}
     />
@@ -543,7 +597,8 @@ export function ListView() {
           {all.length > 0 ? (
             <div className="sticky top-0 z-[var(--z-sticky)] -mx-1 mb-1 hidden h-8 items-center gap-1 bg-app pr-2 pl-1 text-xs font-medium text-fg-muted md:flex" aria-hidden>
               <span className="w-[52px] shrink-0" />
-              <span className="min-w-0 flex-1 pl-7">Task</span>
+              <span className="min-w-0 flex-1 pl-7">{extras.noun ? `${extras.noun.singular.charAt(0).toUpperCase()}${extras.noun.singular.slice(1)}` : 'Task'}</span>
+              {extras.rowCellsHeader ?? null}
               <span className="w-32 pl-1.5 max-lg:hidden">Status</span>
               <span className="w-36 pl-1.5">Assignee</span>
               <span className="w-24 pl-1.5">Due</span>
@@ -566,6 +621,7 @@ export function ListView() {
                       groupKey={groupKey}
                       meta={meta}
                       count={topIds.length}
+                      hideCount={Boolean(extraGrouping && 'meta' in info && info.meta)}
                       rowIds={ids}
                       collapsed={collapsed}
                       isOver={Boolean(dragId) && overGroup === groupKey && fromGroup !== groupKey}
@@ -582,13 +638,19 @@ export function ListView() {
                       title={
                         section && renaming === section.id ? (
                           <SectionNameInput initial={section.name} label="Rename section" onSave={(name) => void renameSection(section.id, name)} onCancel={() => setRenaming(null)} />
+                        ) : extraGrouping ? (
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="truncate">{info.title}</span>
+                            {'meta' in info && info.meta ? <span className="min-w-0 truncate font-normal text-fg-secondary">{info.meta as React.ReactNode}</span> : null}
+                          </span>
                         ) : (
                           <span className="truncate">{info.title}</span>
                         )
                       }
                       menu={
                         <>
-                          {canCreate ? <IconButton size="sm" label={`Add a task to ${info.title}`} icon={<Plus aria-hidden />} onClick={() => openQuickAdd({ projectId: project.id, ...meta.createDefaults(groupKey) })} /> : null}
+                          {'actions' in info && info.actions ? (info.actions as React.ReactNode) : null}
+                          {canCreate && !extras.hideCreate ? <IconButton size="sm" label={`Add a task to ${info.title}`} icon={<Plus aria-hidden />} onClick={() => openQuickAdd({ projectId: project.id, ...meta.createDefaults(groupKey) })} /> : null}
                           {section && canManage ? (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -612,7 +674,7 @@ export function ListView() {
                           ) : null}
                         </>
                       }
-                      footer={canCreate ? <GroupComposer label={`Add a task to ${info.title}`} onAdd={(title) => ops.createTask({ projectId: project.id, title, at: 'bottom', ...meta.createDefaults(groupKey) }, project.key)} /> : null}
+                      footer={canCreate && !extras.hideCreate ? <GroupComposer label={`Add a task to ${info.title}`} onAdd={(title) => ops.createTask({ projectId: project.id, title, at: 'bottom', ...meta.createDefaults(groupKey) }, project.key)} /> : null}
                     >
                       {ids.map((id) => {
                         const task = taskById.get(taskIdOf(id));

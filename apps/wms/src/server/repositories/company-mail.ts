@@ -3,7 +3,8 @@
  *
  * - Settings live in `company_settings.defaults.mail`; the SMTP password is encrypted with the
  *   integration vault (AES-256-GCM) and never returned to the browser (only `••••last4`).
- * - Transport "log" writes the message to the server log (development). Transport "smtp" sends
+ * - Transport "log" means "no SMTP of our own": the message goes through KitStak's email service
+ *   (Resend) when the platform has it set up, else to the server log (development). Transport "smtp" sends
  *   through the configured server with a small built-in SMTP client: implicit TLS (465),
  *   STARTTLS (587) or plain (25, local relays only), AUTH PLAIN / LOGIN.
  * - `sendCompanyMail` reports what actually happened, so callers (welcome email, test send)
@@ -18,7 +19,10 @@ import type { AuthContext } from '@/server/auth/context';
 import * as s from '@/server/db/schema';
 import { decryptCredentials, encryptCredentials } from '@/server/integrations/crypto';
 import { log } from '@/server/log';
+import { resendReady, sendWithResend } from '@kitstak/mail';
+import { renderContent, type EmailContent } from '@kitstak/mail/layout';
 import type {
+  MailDelivery,
   MailSettingsInput,
   MailSettingsView,
   MailSecurity,
@@ -82,6 +86,7 @@ function view(m: StoredMail, version: number): MailSettingsView {
     passwordSet: password.length > 0,
     passwordHint: password ? password.slice(-2) : null,
     ready: m.transport === 'smtp' && Boolean(m.host && m.fromAddress),
+    platformMail: resendReady(),
     version,
   };
 }
@@ -152,11 +157,44 @@ export interface OutboundMail {
   readonly to: string;
   readonly subject: string;
   readonly text: string;
+  /**
+   * The designed email (src/server/mail/templates.ts). When set, the subject, HTML and text are
+   * rendered from it in the KitStak layout and `text` is only the fallback for an old caller.
+   */
+  readonly content?: EmailContent;
+}
+
+/** What actually goes out: plain text always, HTML when the mail was designed. */
+interface RenderedMail {
+  readonly to: string;
+  readonly subject: string;
+  readonly text: string;
+  readonly html?: string;
+}
+
+/** Renders the designed email, or keeps plain text, and adds the company's branding footer. */
+export function renderOutbound(input: OutboundMail, companyFooter?: string | null): RenderedMail {
+  const footer = companyFooter?.trim() ? companyFooter.trim() : null;
+  if (input.content) {
+    const content = footer
+      ? { ...input.content, footer: `${input.content.footer}\n${footer}` }
+      : input.content;
+    const rendered = renderContent(content);
+    return { to: input.to, subject: rendered.subject, text: rendered.text, html: rendered.html };
+  }
+  return {
+    to: input.to,
+    subject: input.subject,
+    text: footer ? `${input.text.trimEnd()}\n\n--\n${footer}\n` : input.text,
+  };
 }
 
 export interface MailResult {
-  /** "smtp" = accepted by the SMTP server; "log" = written to the server log only. */
-  readonly transport: MailTransport;
+  /**
+   * "smtp" = accepted by the company SMTP server; "resend" = accepted by KitStak's email service;
+   * "log" = written to the server log only.
+   */
+  readonly transport: MailDelivery;
   readonly delivered: boolean;
 }
 
@@ -223,34 +261,94 @@ class SmtpConversation {
 /** RFC 5322 header-safe text (no CR/LF injection). */
 const headerSafe = (v: string): string => v.replace(/[\r\n]+/g, ' ').trim();
 
-export function buildMessage(
-  from: { address: string; name: string },
-  mail: OutboundMail,
-  now = new Date(),
-): string {
-  const fromHeader = from.name
-    ? `"${headerSafe(from.name).replace(/"/g, "'")}" <${from.address}>`
-    : from.address;
-  const body = mail.text
+/**
+ * A header value a mail server can carry: plain ASCII stays as it is; anything else (a company
+ * called "Café") becomes RFC 2047 encoded words, each at most 75 characters, folded onto lines.
+ */
+export function encodeHeader(value: string): string {
+  const safe = headerSafe(value);
+  if (/^[\x20-\x7e]*$/.test(safe)) return safe;
+  const words: string[] = [];
+  let chunk = '';
+  for (const char of safe) {
+    // 45 UTF-8 bytes encode to 60 base64 characters, which keeps each word under 75.
+    if (Buffer.byteLength(chunk + char, 'utf8') > 45) {
+      words.push(chunk);
+      chunk = '';
+    }
+    chunk += char;
+  }
+  if (chunk) words.push(chunk);
+  return words.map((w) => `=?UTF-8?B?${Buffer.from(w, 'utf8').toString('base64')}?=`).join('\r\n ');
+}
+
+/** CRLF line endings and SMTP dot-stuffing (a line that starts with "." gets a second one). */
+function smtpText(text: string): string {
+  return text
     .replace(/\r?\n/g, '\r\n')
     .split('\r\n')
     .map((l) => (l.startsWith('.') ? `.${l}` : l))
     .join('\r\n');
-  return [
+}
+
+/** Base64 in 76 character lines (RFC 2045). HTML lines are long; SMTP allows 998 at most. */
+function base64Lines(value: string): string {
+  return (
+    Buffer.from(value, 'utf8')
+      .toString('base64')
+      .match(/.{1,76}/g) ?? []
+  ).join('\r\n');
+}
+
+export function buildMessage(
+  from: { address: string; name: string },
+  mail: RenderedMail,
+  now = new Date(),
+): string {
+  const name = headerSafe(from.name).replace(/"/g, "'");
+  const fromHeader = !name
+    ? from.address
+    : /^[\x20-\x7e]*$/.test(name)
+      ? `"${name}" <${from.address}>`
+      : `${encodeHeader(name)} <${from.address}>`;
+  const headers = [
     `From: ${fromHeader}`,
     `To: ${headerSafe(mail.to)}`,
-    `Subject: ${headerSafe(mail.subject)}`,
+    `Subject: ${encodeHeader(mail.subject)}`,
     `Date: ${now.toUTCString()}`,
     `Message-ID: <${now.getTime()}.${Math.random().toString(36).slice(2)}@${from.address.split('@')[1] ?? 'kitstaks.local'}>`,
     'MIME-Version: 1.0',
+  ];
+  if (!mail.html) {
+    return [
+      ...headers,
+      'Content-Type: text/plain; charset=utf-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      smtpText(mail.text),
+    ].join('\r\n');
+  }
+  // Text and HTML of the same email; a client shows the richest part it can.
+  const boundary = `ks-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return [
+    ...headers,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
     'Content-Type: text/plain; charset=utf-8',
     'Content-Transfer-Encoding: 8bit',
     '',
-    body,
+    smtpText(mail.text),
+    `--${boundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    base64Lines(mail.html),
+    `--${boundary}--`,
   ].join('\r\n');
 }
 
-async function smtpSend(m: StoredMail, password: string, mail: OutboundMail): Promise<void> {
+async function smtpSend(m: StoredMail, password: string, mail: RenderedMail): Promise<void> {
   const open = (): Promise<Socket | TLSSocket> =>
     new Promise((resolve, reject) => {
       const sock =
@@ -315,14 +413,43 @@ async function smtpSend(m: StoredMail, password: string, mail: OutboundMail): Pr
   }
 }
 
-/** Sends one email with the company transport and reports what really happened. */
+/**
+ * Sends through KitStak's own mail service (Resend, `@kitstak/mail`). A refused send throws, the
+ * same as a refused SMTP send, so callers never report a delivery that did not happen.
+ */
+async function platformSend(mail: RenderedMail, replyTo: string): Promise<MailResult> {
+  const result = await sendWithResend({
+    to: mail.to,
+    subject: mail.subject,
+    text: mail.text,
+    ...(mail.html ? { html: mail.html } : {}),
+    ...(replyTo ? { replyTo } : {}),
+  });
+  if (!result.ok) {
+    log.warn('mail via KitStak email service failed', {
+      component: 'mail',
+      to: mail.to,
+      subject: mail.subject,
+      kind: result.kind,
+      err: result.error,
+    });
+    throw new AppError('INVALID_STATE', `KitStak email could not send this message. ${result.error}`);
+  }
+  log.info('mail sent', { component: 'mail', to: mail.to, subject: mail.subject, via: 'resend' });
+  return { transport: 'resend', delivered: true };
+}
+
+/**
+ * Sends one email and reports what really happened. Order: the company's own SMTP server when
+ * it is set up, else KitStak's email service when the platform has RESEND_API_KEY and
+ * EMAIL_FROM, else the server log (development).
+ */
 export async function sendCompanyMail(db: AppDb, input: OutboundMail): Promise<MailResult> {
   const m = await readStored(db);
-  const footer = (await getBranding(db))?.emailFooter;
-  const mail: OutboundMail = footer
-    ? { ...input, text: `${input.text.trimEnd()}\n\n--\n${footer}\n` }
-    : input;
-  if (m.transport !== 'smtp' || !m.host || !m.fromAddress) {
+  const mail = renderOutbound(input, (await getBranding(db))?.emailFooter);
+  const smtpReady = m.transport === 'smtp' && Boolean(m.host && m.fromAddress);
+  if (!smtpReady && resendReady()) return platformSend(mail, m.fromAddress);
+  if (!smtpReady) {
     log.info('mail (server log; email delivery not set up)', {
       component: 'mail',
       to: mail.to,

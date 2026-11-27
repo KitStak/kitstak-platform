@@ -30,6 +30,8 @@ export async function updateOnboardingAction(input: z.input<typeof onboardingSch
       await updateUserPrefs(ctx, { onboarding });
       return onboarding;
     },
-    { revalidate: false },
+    // A personal "seen it" marker: it must still save while the plan is view only, or the
+    // welcome dialog would come back on every page.
+    { revalidate: false, read: true },
   );
 }

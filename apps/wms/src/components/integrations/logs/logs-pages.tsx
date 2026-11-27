@@ -236,7 +236,7 @@ export function ChannelMethodsPage() {
         row.original.pauseReason ? (
           <Tooltip content={row.original.pauseReason}>
             <span tabIndex={0}>
-              <Badge size="sm" tone={pauseLabel(row.original.pauseReason)?.tone ?? 'warning'}>
+              <Badge tone={pauseLabel(row.original.pauseReason)?.tone ?? 'warning'}>
                 {pauseLabel(row.original.pauseReason)?.label ?? 'Paused'}
               </Badge>
             </span>

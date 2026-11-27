@@ -2,8 +2,17 @@ import * as React from 'react';
 import { Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+/**
+ * The section surface, same as a dashboard section (docs/design/UI-CLEANUP.md "Surfaces"): a 1 px
+ * subtle border, the panel surface, `radius-xl` and `shadow-xs` at most. No tinted bands: a warning
+ * inside a card is a row with a caution icon or pill.
+ */
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn('rounded-lg border border-border-subtle bg-panel', className)}>{children}</div>;
+  return (
+    <div className={cn('rounded-xl border border-border-subtle bg-panel shadow-xs', className)}>
+      {children}
+    </div>
+  );
 }
 
 export function CardHeader({

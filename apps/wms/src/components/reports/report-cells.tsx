@@ -7,8 +7,9 @@
 import * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { DateCell, LinkCell, MoneyCell, QtyCell, YesNoPill } from '@/components/grid';
-import { StatusPill } from '@/components/ui/status-pill';
-import { differenceTone, pillStyle, TONES, type StatusTone } from '@/lib/status-colors';
+import { StatusPill, TonePill } from '@/components/ui/status-pill';
+import { statusLabel, TONES, type StatusTone } from '@/lib/status-colors';
+import { cn } from '@/lib/utils';
 import { useFormat } from '@/lib/format';
 import type { ReportColumn } from '@/lib/grid-defs/reports/types';
 
@@ -47,29 +48,26 @@ export function ReportPill({
   const tone = LOCAL_TONES[status.toLowerCase()];
   if (!tone) return <StatusPill status={status} />;
   return (
-    <span
-      data-status={status}
-      style={pillStyle(tone)}
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold leading-4 whitespace-nowrap"
-    >
-      {status}
-    </span>
+    <TonePill status={status} tone={tone}>
+      {statusLabel(status)}
+    </TonePill>
   );
 }
 
-/** Receiving difference pill (spec 07): negative red, positive green, blank at zero. */
+/** Receiving difference (spec 07): signed colored text, critical below zero, positive above, blank at zero. */
 export function DiffPill({ value }: { readonly value: number | null | undefined }) {
   const fmt = useFormat();
   if (value === null || value === undefined || value === 0) return <span className="text-faint">None</span>;
-  const tone = differenceTone(value);
   return (
     <span
       data-diff={value < 0 ? 'negative' : 'positive'}
-      style={pillStyle(tone)}
-      className="inline-flex rounded-[5px] px-1.5 py-0.5 text-2xs font-bold tabular-nums"
+      className={cn(
+        'whitespace-nowrap text-xs font-medium tabular-nums',
+        value < 0 ? 'text-danger-text' : 'text-success-text',
+      )}
     >
-      {value > 0 ? '+' : ''}
-      {fmt.quantity(value)}
+      {value > 0 ? '+' : '−'}
+      {fmt.quantity(Math.abs(value))}
     </span>
   );
 }

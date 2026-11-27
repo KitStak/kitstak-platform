@@ -8,11 +8,18 @@ const ORDERS = [
   { number: 'SO-10471', status: 'Shipped', token: 'green' },
 ] as const;
 
+interface AccountLinkProps {
+  /** The line under the card. The default fits a page about two apps. */
+  readonly caption?: string;
+}
+
 /**
  * The CRM account page with its "Warehouse (WMS)" card: the account is linked to the same
  * customer the warehouse ships for, and shows open shipment orders and on-hand units.
  */
-export function AccountLink() {
+export function AccountLink({
+  caption = 'One customer record, shared by both apps. Sample data.',
+}: AccountLinkProps) {
   return (
     <div className={mock.panel} data-lifted>
       <div className={mock.head}>
@@ -23,7 +30,10 @@ export function AccountLink() {
         <span
           className={mock.pill}
           style={
-            { '--tone-subtle': 'var(--label-green-subtle)', '--tone-text': 'var(--label-green-text)' } as React.CSSProperties
+            {
+              '--tone-subtle': 'var(--label-green-subtle)',
+              '--tone-text': 'var(--label-green-text)',
+            } as React.CSSProperties
           }
         >
           Active account
@@ -79,7 +89,7 @@ export function AccountLink() {
           </ul>
         </div>
       </div>
-      <p className={mock.caption}>One customer record, shared by both apps. Sample data.</p>
+      <p className={mock.caption}>{caption}</p>
     </div>
   );
 }

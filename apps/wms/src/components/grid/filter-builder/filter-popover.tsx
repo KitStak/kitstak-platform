@@ -6,6 +6,7 @@
  * any existing filter on the same field.
  */
 import * as React from 'react';
+import { Count } from '@kitstak/ui/dashboard';
 import { ArrowLeft, Bookmark, ChevronRight, ListFilter, Plus, Search, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { GridFilter } from '@/server/query/grid-query';
@@ -235,13 +236,11 @@ export function FilterPopover({
             <ListFilter className="h-3.5 w-3.5" aria-hidden />
             {/* Phones: icon + count only, so search + filter share one toolbar row. */}
             <span className="hidden md:inline">Filter</span>
-            {count > 0 ? (
-              <span className="rounded-full bg-primary px-1.5 text-2xs font-bold text-white">{count}</span>
-            ) : null}
+            {count > 0 ? <Count value={count} label="applied" /> : null}
           </Button>
         )}
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[320px] p-3">
+      <PopoverContent align="start" className="w-[320px] p-3" data-plan-read="">
         <div className="mb-3 flex items-center justify-between gap-2">
           <SegmentedTabs
             size="sm"

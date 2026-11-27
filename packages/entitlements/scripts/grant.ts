@@ -1,9 +1,10 @@
 /**
- * Manual entitlement CLI (the production write path while Stripe is deferred).
+ * Manual entitlement CLI. A manual grant is never billed and is never changed by trials, checkout
+ * or webhooks (docs/billing/SPEC.md P16).
  *
  * Usage (from the repo root; DATABASE_URL must point at the core database):
- *   pnpm --filter @kitstak/entitlements grant grant <org-slug> <crm|wms|projects>
- *   pnpm --filter @kitstak/entitlements grant revoke <org-slug> <crm|wms|projects>
+ *   pnpm --filter @kitstak/entitlements grant grant <org-slug> <crm|wms|projects|pulse>
+ *   pnpm --filter @kitstak/entitlements grant revoke <org-slug> <crm|wms|projects|pulse>
  *   pnpm --filter @kitstak/entitlements grant list <org-slug>
  *
  * Grants/revokes are written with source 'manual'.
@@ -12,12 +13,14 @@ import { eq } from 'drizzle-orm';
 import { createPgClient, schema } from '@kitstak/db/client-pg';
 import { grantModule, revokeModule } from '../src/grant';
 import { MODULES, isModule, type Module } from '../src/modules';
-import { getEntitlements, isEntitled } from '../src/read';
+import { getEntitlements, moduleAccess } from '../src/read';
 
 const USAGE = `Usage:
   grant <org-slug> <${MODULES.join('|')}>
   revoke <org-slug> <${MODULES.join('|')}>
   list <org-slug>`;
+
+const ACCESS_LABEL = { full: 'ENTITLED', read_only: 'VIEW ONLY', locked: 'BLOCKED' } as const;
 
 function fail(message: string): never {
   process.stderr.write(`${message}\n`);
@@ -56,7 +59,7 @@ async function main(): Promise<void> {
         const line = entry
           ? `${entry.status} (source ${entry.source}${
               entry.periodEnd ? `, period end ${entry.periodEnd.toISOString()}` : ''
-            }) → ${isEntitled(entry) ? 'ENTITLED' : 'BLOCKED'}`
+            }) → ${ACCESS_LABEL[moduleAccess(entry)]}`
           : 'no row → BLOCKED';
         process.stdout.write(`  ${module.padEnd(4)} ${line}\n`);
       }

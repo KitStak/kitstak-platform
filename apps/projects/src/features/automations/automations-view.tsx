@@ -46,6 +46,8 @@ import {
 } from '@/components/ui';
 import { EntityIcon } from '@/components/pm';
 import { Page } from '@/components/layout/page';
+import { routes } from '@/lib/routes';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
 import { SCHEDULED_TRIGGER_TYPES } from '@/lib/automation-types';
 import type { AutomationDTO, AutomationRunRowDTO, ProjectSummary } from '@/lib/types';
 import { describeAutomation } from '@/server/automations/engine';
@@ -57,11 +59,12 @@ import {
   updateAutomationAction,
 } from '@/server/actions/automations';
 import { useShell } from '@/features/shell/shell-context';
-import { CrossAppRecipes } from '@/features/integrations/cross-app-recipes';
+import { usePrograms } from '@/lib/hooks/use-programs';
+import { RecordRecipes } from './record-recipes';
 import { LocalTime } from '@/features/task/local-time';
 import { SampleProjectButton } from '@/features/onboarding/sample-project-button';
 import { AutomationBuilder, blankDraft, draftFromRule, type AutomationDraft } from './automation-builder';
-import { RECIPES, RECIPE_CATEGORIES, triggerOption, type Recipe, type RecipeCategory } from './catalog';
+import { RECIPES, RECIPE_CATEGORIES, actsOnBuilds, buildWords, triggerOption, type Recipe, type RecipeCategory } from './catalog';
 import { RunHistoryList, useRunHistory, type RunFilter } from './run-history';
 
 export interface AutomationRow extends AutomationDTO {
@@ -70,6 +73,12 @@ export interface AutomationRow extends AutomationDTO {
 
 type Tab = 'rules' | 'recipes' | 'history' | 'apps';
 type StateFilter = 'all' | 'on' | 'off';
+const STATE_FILTERS: readonly StateFilter[] = ['all', 'on', 'off'];
+const RUN_FILTERS: readonly RunFilter[] = ['all', 'success', 'failed'];
+
+function pickParam<T extends string>(value: string | null | undefined, allowed: readonly T[], fallback: T): T {
+  return value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
 
 function useUrlState() {
   const router = useRouter();
@@ -138,7 +147,7 @@ function RecipeCard({
       </p>
       <div className="flex items-center justify-between gap-2">
         {recipe.needs ? (
-          <Badge tone={connected ? 'info' : 'neutral'} size="sm">
+          <Badge tone={connected ? 'info' : 'neutral'}>
             {recipe.needs === 'crm' ? 'Uses KitStak CRM' : 'Uses KitStak WMS'}
             {connected ? '' : ' (not connected)'}
           </Badge>
@@ -153,6 +162,12 @@ function RecipeCard({
   );
 }
 
+/** The saved sentence in the words of where the rule runs: build words for rules on builds. */
+function plainSentence(rule: AutomationRow, project?: { readonly isProgram?: boolean }): string {
+  const onBuilds = Boolean(project?.isProgram) || actsOnBuilds(rule.trigger, rule.conditions);
+  return onBuilds ? buildWords(rule.sentence) : rule.sentence;
+}
+
 function RuleCard({
   rule,
   project,
@@ -165,7 +180,8 @@ function RuleCard({
   onDelete,
 }: {
   readonly rule: AutomationRow;
-  readonly project?: ProjectSummary;
+  /** The project or program the rule works in. */
+  readonly project?: { readonly name: string; readonly icon: string | null; readonly color: string | null; readonly isProgram?: boolean };
   readonly lastRun?: AutomationRunRowDTO;
   readonly canEdit: boolean;
   readonly onToggle: (enabled: boolean) => void;
@@ -205,7 +221,7 @@ function RuleCard({
             {rule.name}
           </button>
           <p className={cn('mt-0.5 text-sm', rule.enabled ? 'text-fg-secondary' : 'text-fg-muted')}>
-            {rule.sentence}
+            {plainSentence(rule, project)}
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-secondary">
             <span className="inline-flex items-center gap-1.5">
@@ -214,7 +230,7 @@ function RuleCard({
               ) : (
                 <Workflow aria-hidden className="size-3.5 text-icon" />
               )}
-              {project ? project.name : 'Every project'}
+              {project ? (project.isProgram ? `${project.name} (program)` : project.name) : 'Every project'}
             </span>
             <button
               type="button"
@@ -238,7 +254,7 @@ function RuleCard({
             ) : (
               <span className="text-fg-muted">Hasn’t run yet</span>
             )}
-            {!rule.enabled ? <Badge size="sm">Off</Badge> : null}
+            {!rule.enabled ? <Badge>Off</Badge> : null}
           </div>
         </div>
       </div>
@@ -291,30 +307,6 @@ function RuleCard({
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  readonly label: string;
-  readonly value: number;
-  readonly tone?: 'danger';
-}) {
-  return (
-    <div className="flex min-w-0 flex-col rounded-xl border border-border-subtle bg-panel px-4 py-3 shadow-xs">
-      <span
-        className={cn(
-          'text-2xl font-semibold tabular-nums',
-          tone === 'danger' && value > 0 ? 'text-danger-text' : 'text-fg',
-        )}
-      >
-        {value}
-      </span>
-      <span className="truncate text-xs text-fg-muted">{label}</span>
-    </div>
-  );
-}
-
 export function AutomationsView({
   rules,
   projects,
@@ -326,16 +318,21 @@ export function AutomationsView({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { can, integrations } = useShell();
+  const { can, integrations, user } = useShell();
   const { params, set } = useUrlState();
+  const programsQuery = usePrograms();
+  const programs = useMemo(() => (programsQuery.data ?? []).filter((program) => !program.archivedAt), [programsQuery.data]);
   const tab = (
     ['rules', 'recipes', 'apps', 'history'].includes(params?.get('tab') ?? '') ? params?.get('tab') : 'rules'
   ) as Tab;
   const projectFilter = params?.get('project') ?? 'all';
   const [query, setQuery] = useState('');
-  const [stateFilter, setStateFilter] = useState<StateFilter>('all');
+  // In the URL so the tiles above the list link to it already filtered (`?state=on`, `?result=failed`).
+  const stateFilter: StateFilter = pickParam(params?.get('state'), STATE_FILTERS, 'all');
+  const setStateFilter = (value: StateFilter) => set({ state: value === 'all' ? null : value });
   const [recipeCategory, setRecipeCategory] = useState<RecipeCategory | 'All'>('Popular');
-  const [runFilter, setRunFilter] = useState<RunFilter>('all');
+  const runFilter: RunFilter = pickParam(params?.get('result'), RUN_FILTERS, 'all');
+  const setRunFilter = (value: RunFilter) => set({ result: value === 'all' ? null : value });
   const [localEnabled, setLocalEnabled] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [builder, setBuilder] = useState<{ open: boolean; draft: AutomationDraft; recipeName?: string }>({
     open: false,
@@ -349,12 +346,26 @@ export function AutomationsView({
     () => projects.filter((p) => !p.archivedAt && (p.role === 'owner' || p.role === 'editor')),
     [projects],
   );
-  const byId = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
-  const canAdd = canManageGlobal || editableProjects.length > 0;
+  const byId = useMemo(
+    () =>
+      new Map<string, { name: string; icon: string | null; color: string | null; isProgram?: boolean }>([
+        ...projects.map((p) => [p.id, p] as const),
+        ...programs.map((p) => [p.id, { name: p.name, icon: p.icon, color: p.color, isProgram: true }] as const),
+      ]),
+    [programs, projects],
+  );
+  // Program rules: workspace managers and the program owner (the server checks the program role).
+  const editablePrograms = useMemo(
+    () => programs.filter((program) => canManageGlobal || program.owner?.id === user.id),
+    [canManageGlobal, programs, user.id],
+  );
+  const canAdd = canManageGlobal || editableProjects.length > 0 || editablePrograms.length > 0;
   const canEditRule = useCallback(
     (rule: AutomationDTO) =>
-      rule.projectId ? editableProjects.some((p) => p.id === rule.projectId) : canManageGlobal,
-    [canManageGlobal, editableProjects],
+      rule.projectId
+        ? editableProjects.some((p) => p.id === rule.projectId) || editablePrograms.some((p) => p.id === rule.projectId)
+        : canManageGlobal,
+    [canManageGlobal, editablePrograms, editableProjects],
   );
 
   const list = useMemo(
@@ -389,7 +400,7 @@ export function AutomationsView({
     if (
       projectFilter !== 'all' &&
       projectFilter !== 'workspace' &&
-      editableProjects.some((p) => p.id === projectFilter)
+      (editableProjects.some((p) => p.id === projectFilter) || editablePrograms.some((p) => p.id === projectFilter))
     )
       return projectFilter;
     if (canManageGlobal) return null;
@@ -508,8 +519,8 @@ export function AutomationsView({
   const historyRule = historyFor ? list.find((rule) => rule.id === historyFor) : undefined;
 
   const filterOptions = [
-    { value: 'all', label: 'All projects' },
-    { value: 'workspace', label: 'Every-project rules' },
+    { value: 'all', label: 'All rules' },
+    { value: 'workspace', label: 'Rules for everywhere' },
     ...projects
       .filter((p) => !p.archivedAt)
       .map((p) => ({
@@ -517,6 +528,12 @@ export function AutomationsView({
         label: p.name,
         icon: <EntityIcon icon={p.icon} color={p.color} size={16} />,
       })),
+    ...programs.map((p) => ({
+      value: p.id,
+      label: p.name,
+      description: 'Program',
+      icon: <EntityIcon icon={p.icon} color={p.color} size={16} />,
+    })),
   ];
 
   return (
@@ -613,12 +630,12 @@ export function AutomationsView({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Turned on" value={list.filter((r) => r.enabled).length} />
-              <Stat label="Turned off" value={list.filter((r) => !r.enabled).length} />
-              <Stat label="Runs in the last 7 days" value={runsThisWeek.length} />
-              <Stat label="Stopped with a problem" value={stoppedThisWeek} tone="danger" />
-            </div>
+            <StatRow label="Automation totals">
+              <StatTile label="Turned on" value={list.filter((r) => r.enabled).length} href={routes.automations({ state: 'on' })} />
+              <StatTile label="Turned off" value={list.filter((r) => !r.enabled).length} href={routes.automations({ state: 'off' })} />
+              <StatTile label="Runs in the last 7 days" value={runsThisWeek.length} href={routes.automations({ tab: 'history' })} />
+              <StatTile label="Stopped with a problem" value={stoppedThisWeek} href={routes.automations({ tab: 'history', result: 'failed' })} />
+            </StatRow>
             <div className="flex flex-wrap items-center gap-2">
               <SearchInput
                 value={query}
@@ -735,7 +752,7 @@ export function AutomationsView({
         </div>
       ) : null}
 
-      {tab === 'apps' ? <CrossAppRecipes /> : null}
+      {tab === 'apps' ? <RecordRecipes /> : null}
 
       {tab === 'history' ? (
         <div className="flex flex-col gap-3">
@@ -768,6 +785,7 @@ export function AutomationsView({
         initial={builder.draft}
         recipeName={builder.recipeName}
         projects={projects}
+        programIds={editablePrograms.map((program) => program.id)}
         canManageGlobal={canManageGlobal}
         onSaved={(rule, created) => {
           toast.success(

@@ -60,16 +60,6 @@ rect,path,circle{transform-box:fill-box}
   100% { transform: translate(0,0); }
 }
 
-/* 7 Pulse: cost eats into revenue, live */
-.ghost { opacity: .35; }
-.meter { animation: meter 2.4s ease-in-out infinite; animation-delay: -.8s; transform-origin: left center; }
-@keyframes meter {
-  0%, 100% { transform: scaleX(.55); }
-  30% { transform: scaleX(.95); }
-  55% { transform: scaleX(.7); }
-  80% { transform: scaleX(.88); }
-}
-
 @media (prefers-reduced-motion: reduce){*{animation:none!important}}
 </style>
 <rect class="orb o1" x="38" y="56" width="56" height="38" fill="#C8102E"/><rect class="orb o2" x="38" y="56" width="56" height="38" fill="#D65A6E"/><rect class="orb o3" x="38" y="56" width="56" height="38" fill="#C8102E"/><rect class="orb o4" x="38" y="56" width="56" height="38" fill="#D65A6E"/>

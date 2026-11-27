@@ -14,6 +14,7 @@ import { applyServerFieldErrors, useApiQuery } from '@/lib/query-client';
 import {
   MAIL_SECURITY_OPTIONS,
   mailSettingsSchema,
+  type MailDelivery,
   type MailSecurity,
   type MailSettingsView,
 } from '@/lib/grid-defs/admin/company-mail';
@@ -67,15 +68,18 @@ function TestSend({ disabled, defaultTo }: { readonly disabled: string | null; r
     setBusy(true);
     setResult(null);
     try {
-      const { data } = await apiRequest<{ delivered: boolean }>('/api/company/mail/test', {
-        method: 'POST',
-        body: { to },
-      });
+      const { data } = await apiRequest<{ delivered: boolean; transport: MailDelivery }>(
+        '/api/company/mail/test',
+        {
+          method: 'POST',
+          body: { to },
+        },
+      );
       setResult(
         data.delivered
           ? {
               tone: 'success',
-              text: `The mail server accepted the test email for ${to}. Check that inbox (and its spam folder).`,
+              text: `${data.transport === 'resend' ? 'KitStak email' : 'The mail server'} accepted the test email for ${to}. Check that inbox (and its spam folder).`,
             }
           : {
               tone: 'attention',
@@ -156,7 +160,9 @@ function Editor({
         'Email delivery saved',
         data.ready
           ? `Invites and password emails go out through ${data.host}.`
-          : 'Emails are written to the server log only.',
+          : data.platformMail
+            ? 'Invites and password emails go out through KitStak email.'
+            : 'Emails are written to the server log only.',
       );
       // The company row version moved: every section must reload it before its next save.
       await Promise.all([
@@ -203,9 +209,10 @@ function Editor({
                 },
                 {
                   value: 'log',
-                  title: 'Server log only',
-                  description:
-                    'Development: emails are written to the server log and never leave the server.',
+                  title: settings.platformMail ? 'KitStak email' : 'Server log only',
+                  description: settings.platformMail
+                    ? 'No setup needed: emails go out from KitStak’s own email service.'
+                    : 'Development: emails are written to the server log and never leave the server.',
                   icon: Mail,
                   disabled: !canEdit,
                 },
@@ -298,6 +305,12 @@ function Editor({
               </FormGrid>
             </FormSection>
           </>
+        ) : settings.platformMail ? (
+          <Callout title="Sent by KitStak email">
+            Welcome invites, password reset emails and scheduled report links go out from KitStak&apos;s own
+            email service.{settings.fromAddress ? ` Replies go to ${settings.fromAddress}.` : ''} Choose SMTP
+            server to send them from your own mail provider instead.
+          </Callout>
         ) : (
           <Callout variant="attention" title="No email leaves this server">
             Welcome invites and password reset emails are written to the server log. Choose SMTP server to
@@ -346,13 +359,11 @@ export function MailSection({
       <div className="flex items-center gap-2 text-xs text-secondary">
         Status:
         {m.ready ? (
-          <Badge tone="success" size="sm" shape="pill">
-            Sending through {m.host}
-          </Badge>
+          <Badge tone="success">Sending through {m.host}</Badge>
+        ) : m.platformMail ? (
+          <Badge tone="success">Sending through KitStak email</Badge>
         ) : (
-          <Badge tone="warning" size="sm" shape="pill">
-            Server log only
-          </Badge>
+          <Badge tone="warning">Server log only</Badge>
         )}
       </div>
       <Editor key={m.version} settings={m} canEdit={canEdit} defaultTo={defaultTo} />

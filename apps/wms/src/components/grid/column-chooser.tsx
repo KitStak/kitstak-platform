@@ -71,7 +71,7 @@ function Row({
       style={style}
       className={cn(
         'flex items-center gap-1.5 rounded-md bg-surface px-1 py-1',
-        isDragging && 'relative z-10 shadow-md ring-1 ring-primary/30',
+        isDragging && 'relative z-10 shadow-md ring-1 ring-focus/30',
       )}
     >
       <button
@@ -166,7 +166,7 @@ export function ColumnChooser({ columns, prefs, onApply, onReset, size = 'md' }:
           </Button>
         </PopoverTrigger>
       </Tooltip>
-      <PopoverContent align="end" className="flex w-[300px] flex-col gap-2 p-3">
+      <PopoverContent align="end" className="flex w-[300px] flex-col gap-2 p-3" data-plan-read="">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-foreground">Columns</p>
           <span className="text-2xs text-faint">

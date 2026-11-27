@@ -93,7 +93,7 @@ export function OptionList({
               {option.icon}
               <span className="min-w-0 flex-1 truncate">{option.label}</span>
               {option.hint ? <span className="shrink-0 text-xs text-fg-muted tabular-nums">{option.hint}</span> : null}
-              {!multiple && on ? <Check aria-hidden className="size-4 shrink-0 text-primary-text" /> : null}
+              {!multiple && on ? <Check aria-hidden className="size-4 shrink-0 text-fg" /> : null}
             </Command.Item>
           );
         })}

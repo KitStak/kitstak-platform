@@ -157,4 +157,8 @@ export interface BridgeAvailability {
   readonly installed: boolean;
   /** pm.integration_events exists (automation hooks). */
   readonly events: boolean;
+  /** `pm.projects.kind` exists (Projects 0006 applied): reads add the kind filters. */
+  readonly kinds: boolean;
+  /** The program tables exist (`pm.build_output`): program reads work. */
+  readonly programs: boolean;
 }

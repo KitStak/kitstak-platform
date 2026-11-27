@@ -3,13 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ExternalLink, Gauge, Settings2 } from 'lucide-react';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
 import { Button, EmptyState, buttonVariants, Select, Skeleton, ToggleGroup, cn, toast } from '@/components/ui';
 import { useOrg } from '@/features/shell/org-context';
 import { PageFrame } from '@/features/shell/pages/page-frame';
 import { routes } from '@/features/shell/routes';
 import { PIPELINE_PERIODS, type PipelineDto, type PipelinePeriod } from '@/server/services/crm-contracts';
 import { usePipeline, useSavePipelineSettings, useCrmBoards } from '../api';
-import { CardSkeleton, CrmCard, ErrorBlock, MetricTile } from '../components/crm-ui';
+import { CardSkeleton, CrmCard, ErrorBlock } from '../components/crm-ui';
 import { formatDay, formatExactMoney, formatMoney, formatPercent, noun, plural } from '../lib/format';
 import { ForecastChart } from './forecast-chart';
 import { PipelineFunnel } from './funnel';
@@ -192,45 +193,52 @@ function PipelineBody({
   const { summary, currency } = data;
   const term = data.board.itemTerminology;
   const empty = summary.openCount + summary.wonCount + summary.lostCount === 0;
+  const boardHref = routes.board(orgSlug, data.board.id);
   return (
     <div className={cn('flex flex-col gap-6 transition-opacity duration-[var(--duration-fast)]', stale && 'opacity-70')} aria-busy={stale || undefined}>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <MetricTile
-          testId="crm-metric-open"
+      {/*
+        Each tile opens what it counts: deals and win rate the deals board, the forecast the stage
+        funnel it is weighted by, won money the quota table, at risk the at risk list below.
+      */}
+      <StatRow label="Pipeline summary">
+        <StatTile
+          data-testid="crm-metric-open"
           label="Open pipeline"
+          href={boardHref}
           value={formatMoney(summary.openValue, currency)}
-          exact={formatExactMoney(summary.openValue, currency)}
-          hint={plural(summary.openCount, `open ${noun(term)}`, `open ${noun(term, 2)}`)}
+          help={formatExactMoney(summary.openValue, currency)}
+          caption={plural(summary.openCount, `open ${noun(term)}`, `open ${noun(term, 2)}`)}
         />
-        <MetricTile
-          testId="crm-metric-weighted"
+        <StatTile
+          data-testid="crm-metric-weighted"
           label="Weighted forecast"
-          tone="primary"
+          href="#crm-funnel-card"
           value={formatMoney(summary.weighted, currency)}
-          exact={formatExactMoney(summary.weighted, currency)}
-          hint="Value × stage probability"
+          help={formatExactMoney(summary.weighted, currency)}
+          caption="Value × stage probability"
         />
-        <MetricTile
+        <StatTile
           label="Won"
-          tone="success"
+          href="#crm-quota-card"
           value={formatMoney(summary.wonValue, currency)}
-          exact={formatExactMoney(summary.wonValue, currency)}
-          hint={plural(summary.wonCount, `${noun(term)} won`, `${noun(term, 2)} won`)}
+          help={formatExactMoney(summary.wonValue, currency)}
+          caption={plural(summary.wonCount, `${noun(term)} won`, `${noun(term, 2)} won`)}
         />
-        <MetricTile label="Win rate" value={formatPercent(summary.winRate)} hint={`${summary.wonCount} won · ${summary.lostCount} lost`} />
-        <MetricTile
+        <StatTile label="Win rate" href={boardHref} value={formatPercent(summary.winRate)} caption={`${summary.wonCount} won · ${summary.lostCount} lost`} />
+        <StatTile
           label="Avg won deal"
+          href="#crm-quota-card"
           value={summary.avgDealSize !== null ? formatMoney(summary.avgDealSize, currency) : 'None'}
-          exact={summary.avgDealSize !== null ? formatExactMoney(summary.avgDealSize, currency) : undefined}
-          hint="Closed won in period"
+          help={summary.avgDealSize !== null ? formatExactMoney(summary.avgDealSize, currency) : undefined}
+          caption="Closed won in period"
         />
-        <MetricTile
+        <StatTile
           label="At risk"
-          tone={data.atRisk.length > 0 ? 'danger' : 'default'}
+          href="#crm-risk-card"
           value={String(data.atRisk.length)}
-          hint={`Stale ${data.settings.staleDays}d+ or overdue`}
+          caption={`Stale ${data.settings.staleDays}d+ or overdue`}
         />
-      </div>
+      </StatRow>
 
       {empty ? (
         <EmptyState
@@ -321,9 +329,9 @@ function PipelineBody({
 function PipelineSkeleton() {
   return (
     <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading pipeline" data-skeleton>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {Array.from({ length: 6 }, (_, index) => (
-          <Skeleton key={index} height={86} rounded="lg" />
+          <Skeleton key={index} height={96} rounded="lg" />
         ))}
       </div>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">

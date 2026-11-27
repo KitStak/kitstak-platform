@@ -241,9 +241,12 @@ export async function listTasks(
   const { where, orderBy } = compileGrid(query, spec, fieldSqlFor(kind), {
     defaultSort: [{ field: 'taskNo', dir: 'desc' }],
     tiebreaker: sql`${qc(t.id)}`,
+    // `qc(...)`, not the bare columns: outside a plain single-table select Drizzle renders a
+    // column schema-qualified ("wms"."tasks"."x"), which cannot bind to the Count grid's derived
+    // table (aliased "tasks", see `countSource`). Same scope rules, same columns.
     extra: [
-      scopedWhere(t, auth.viewScope),
-      inArray(t.taskType, [...TASK_TYPES_BY_KIND[kind]] as (typeof t.taskType._.data)[]),
+      scopedWhere(t, auth.viewScope, { warehouseId: qc(t.warehouseId), clientId: qc(t.clientId) }),
+      inArray(qc(t.taskType), [...TASK_TYPES_BY_KIND[kind]]),
     ],
   });
   const source = kind === 'count' ? countSource() : null;

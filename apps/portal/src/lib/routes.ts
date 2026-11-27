@@ -47,3 +47,17 @@ export function safeReturnUrl(
   });
   return allowed ? url.toString() : fallback;
 }
+
+/**
+ * A page inside a KitStak app to go back to after a billing step (`?return=/settings/warehouses`).
+ * It is glued onto the app's own origin, so it must be a plain path: it starts with one slash and
+ * has no backslash, no control character, no `@`, no second slash at the start and no `..` part.
+ * Anything else gives null, and the link then goes to the app's front door.
+ */
+export function appReturnPath(value: string | null | undefined): string | null {
+  if (!value || value.length > 200) return null;
+  if (UNSAFE_PATH_CHARACTERS.test(value)) return null;
+  if (!value.startsWith('/') || value.startsWith('//')) return null;
+  if (value.includes('@') || value.split(/[/?#]/).includes('..')) return null;
+  return value;
+}

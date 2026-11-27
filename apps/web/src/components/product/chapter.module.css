@@ -42,6 +42,31 @@
   position: sticky;
   top: calc(var(--header-h) + var(--subnav-h) + 32px);
 }
+/* Stacked: heading on the left, feature list on the right, then the picture across the full width. */
+@media (min-width: 961px) {
+  .grid[data-stacked] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(40px, 5vw, 64px);
+  }
+  .grid[data-stacked] .copy {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    column-gap: clamp(40px, 6vw, 88px);
+    align-content: start;
+  }
+  .grid[data-stacked] .copy > * {
+    grid-column: 1;
+  }
+  .grid[data-stacked] .list {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    align-self: end;
+    margin-top: 0;
+  }
+  .grid[data-stacked] .visual {
+    position: static;
+  }
+}
 
 .label {
   display: flex;

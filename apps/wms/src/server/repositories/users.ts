@@ -11,9 +11,13 @@ import type { AppDb } from '@/server/api/db';
 import { AppError, fromZodError } from '@/server/api/errors';
 import type { AuthContext } from '@/server/auth/context';
 import {
+  assertAdminMaySetPassword,
   assertIdentityManagedHere,
   clearLockoutState,
-  deleteCredentialAccount,
+  mailboxProven,
+  PASSWORD_IS_THEIRS_MESSAGE,
+  switchOffSignIn,
+  switchOnSignIn,
   findCoreUserIdByEmail,
   identityManagedHere,
   isWarehouseOrgMember,
@@ -416,7 +420,9 @@ export async function createUser(
       'email',
       'This email already has a KitStak account outside your organization. Invite them to your organization first, then add them here.',
     );
-  const ownCredential = !existingId || (await identityManagedHere(tx, existingId));
+  // ...and one whose owner has proven the mailbox keeps its own password (review round 5).
+  const ownCredential =
+    !existingId || ((await identityManagedHere(tx, existingId)) && !(await mailboxProven(tx, existingId)));
   const now = new Date().toISOString();
   const legacyRole = legacyRoleFor(roles.map((r) => r.key));
   const row = (
@@ -455,6 +461,8 @@ export async function createUser(
     allClients: input.allClients,
     passwordChangedAt: new Date(now),
   });
+  // A person created inactive is switched off from the start, in every app.
+  if (!input.isActive && ownCredential) await switchOffSignIn(tx, row.id, actor.userId);
   await writeLinks(tx, row.id, input);
   await logCreate(tx, domainCtxOf(actor, auth), {
     entityType: USER_ENTITY,
@@ -505,6 +513,9 @@ export async function updateUser(
   const managed = await identityManagedHere(tx, id);
   if (!managed && input.password)
     throw fieldError('password', "This person's KitStak account is shared with another organization; only they can change its password.");
+  // Once the person proved the mailbox, the password is theirs alone (billing review round 5).
+  if (input.password && (await mailboxProven(tx, id)))
+    throw fieldError('password', PASSWORD_IS_THEIRS_MESSAGE);
   if (!managed && input.email.toLowerCase() !== before.email.toLowerCase())
     throw fieldError('email', "This person's KitStak account is shared with another organization; only they can change its email.");
   if (input.email.toLowerCase() !== before.email.toLowerCase()) await assertCoreEmailFree(tx, input.email, id);
@@ -578,7 +589,10 @@ export async function updateUser(
   // a submitted password cannot resurrect the credential of an inactive user.
   // Shared accounts: deactivation is local to this warehouse (the session check rejects an
   // inactive wms.users row) — their credential and other orgs' sessions are left alone.
-  if (!input.isActive && managed) await deleteCredentialAccount(tx, id);
+  // Since billing review round 4 the block row in core.sign_in_blocks is the fact every app reads:
+  // without it "Forgot password" in the Portal gave a deactivated person a new password.
+  if (!input.isActive && managed) await switchOffSignIn(tx, id, actor.userId);
+  if (input.isActive && managed) await switchOnSignIn(tx, id);
 
   // Access, status or password changes end every session of the user (BUILD_PLAN F3 note).
   const accessChanged =
@@ -628,11 +642,15 @@ export async function setUsersActive(
     // Shared accounts: reactivation/deactivation stay local to this warehouse (see updateUser) —
     // their lockout, credential and other orgs' sessions are not this warehouse's to touch.
     const managed = await identityManagedHere(inner, id);
-    if (isActive && managed) await clearLockoutState(inner, row.email);
+    if (isActive && managed) {
+      await clearLockoutState(inner, row.email);
+      await switchOnSignIn(inner, id);
+    }
     if (!isActive && managed) {
-      // H3: revoking sessions is not enough — the shared credential row must go too,
-      // or the deactivated user simply signs in again at crm.kitstak.io.
-      await deleteCredentialAccount(inner, id);
+      // H3: revoking sessions is not enough — the account must be switched off for every app
+      // (block row + no password row), or the deactivated user simply signs in again at
+      // crm.kitstak.io, or asks the Portal for a new password.
+      await switchOffSignIn(inner, id, actor.userId);
       await bumpSessionVersion(inner, id);
     }
   });
@@ -672,7 +690,7 @@ export async function resetUserPassword(
       'INVALID_STATE',
       `${row.name} is inactive. Activate the user first, then reset their password.`,
     );
-  await assertIdentityManagedHere(tx, id, 'reset its password');
+  await assertAdminMaySetPassword(tx, id, 'reset its password');
   const temporaryPassword = generateTemporaryPassword();
   await setCredentialPassword(tx, id, temporaryPassword, { passwordChangedAt: null });
   await tx

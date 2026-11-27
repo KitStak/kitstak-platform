@@ -73,10 +73,8 @@ export function CategoryChooser({ onPick }: { readonly onPick: (c: ProductCatego
 
 export function categoryBadge(category: ProductCategory): React.ReactNode {
   return (
-    <Badge
-      tone={category === 'Kit' ? 'info' : category === 'Packaging Material' ? 'warning' : 'neutral'}
-      className="ml-2 align-middle"
-    >
+    // A category is a type, so a neutral Tag (UI-CLEANUP "Pills"), not a coloured state.
+    <Badge tone="outline" className="ml-2 align-middle">
       {category === 'Packaging Material' ? 'Packaging material' : category}
     </Badge>
   );

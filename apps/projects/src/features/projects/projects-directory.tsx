@@ -401,7 +401,7 @@ function ProjectTable({
                     <span className="text-xs text-fg-secondary tabular-nums">
                       <strong className="font-semibold text-fg">{project.progress.percent}%</strong> · {project.progress.done}/{project.progress.total}
                     </span>
-                    {project.progress.overdue ? <Badge tone="danger" size="sm">{project.progress.overdue} late</Badge> : null}
+                    {project.progress.overdue ? <Badge tone="danger">{project.progress.overdue} late</Badge> : null}
                   </div>
                 </td>
                 <td className="px-3 py-2">
@@ -596,7 +596,7 @@ export function ProjectsDirectory({
     >
       <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="projects-filters">
         {customer ? (
-          <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-primary bg-primary-subtle pr-1 pl-2.5 text-sm font-medium text-primary-text" data-testid="customer-filter">
+          <span className="inline-flex h-8 items-center gap-1.5 rounded-md bg-selected pr-1 pl-2.5 text-sm font-medium text-fg" data-testid="customer-filter">
             Customer: {customer.name}
             <button type="button" onClick={() => setCustomer(null)} aria-label={`Show projects for every customer`} className="inline-flex size-6 items-center justify-center rounded-sm hover:bg-hover">
               <X aria-hidden className="size-3.5" />

@@ -1,0 +1,316 @@
+/**
+ * Checkout (docs/billing/CONTRACTS.md section 11.5): the first payment. The server prices the cart
+ * from the catalog, makes the gateway session, and builds the return URLs itself. Nothing from the
+ * browser but the cart is trusted.
+ */
+import { eq } from 'drizzle-orm';
+import { billingAccounts, billingSubscriptions, stripeCustomers } from '@kitstak/db/schema';
+import { CATALOG, normalizeSelection, type PlanSelection, productListLabel } from '../catalog';
+import { type BillingResult, billingError, billingOk } from '../errors';
+import { isLiveSubscriptionStatus, type PlanState } from '../plan-state';
+import { type Quote, quote } from '../quote';
+import { recordAuditOnce } from './audit';
+import { writeCart } from './cart';
+import { type BillingActor, type BillingDb, type BillingRuntime, errorText, logBilling } from './db';
+import { withOrgBillingTurn } from './lock';
+import { getBillingProfile, profileInput } from './profile';
+import { enforceRateLimit } from './rate-limit';
+import { getPlanState } from './state';
+import {
+  adoptGatewayCustomer,
+  applyInvoiceSnapshot,
+  applySubscriptionSnapshot,
+  clearBillingCaches,
+  customerIdForOrg,
+  fetchAndApplySubscription,
+  lockOrgBilling,
+  rejectSecondSubscription,
+  withCardFallback,
+} from './sync';
+
+const HOUR_MS = 60 * 60 * 1000;
+/** A gateway rule: a trial end must be at least 48 hours ahead. Five minutes of slack on top. */
+const MIN_TRIAL_AHEAD_MS = 48 * HOUR_MS + 5 * 60 * 1000;
+
+/**
+ * The plan cannot be smaller than what is in use. Returns the plain sentence, or null when it fits.
+ * Seats matter when a per user app or Pulse is in the stack; warehouses when WMS is.
+ */
+export function belowUsageMessage(selection: PlanSelection, state: PlanState): string | null {
+  const seatsMatter = selection.products.some(
+    (id) => CATALOG.products[id].quantityFrom === 'seats' || CATALOG.products[id].includedSeats !== null,
+  );
+  const perUser = selection.products.some((id) => CATALOG.products[id].quantityFrom === 'seats');
+  const used = state.usage.seatsUsed;
+  // An open invite holds a seat, so it counts toward the lowest number the plan can have.
+  const invites = state.usage.pendingInvites;
+  const floor = used + invites;
+  const people = `${used} ${used === 1 ? 'person' : 'people'}`;
+  if (seatsMatter && perUser && selection.seats < floor) {
+    if (invites === 0) return `You have ${used} people. Pick ${used} seats or more.`;
+    const open = `${invites} open ${invites === 1 ? 'invite' : 'invites'}`;
+    return `You have ${people} and ${open}. Each open invite holds a seat. Pick ${floor} seats or more, or cancel an invite first.`;
+  }
+  if (seatsMatter && !perUser) {
+    const included = CATALOG.products.pulse.includedSeats ?? 0;
+    if (used > included) return `Pulse covers up to ${included} seats and you have ${used} people. For a bigger team, talk to us.`;
+    if (floor > included) {
+      return `Pulse covers up to ${included} seats. You have ${people} and open invites for more. Cancel an invite first, or talk to us for a bigger team.`;
+    }
+  }
+  const warehouses = state.usage.warehousesUsed ?? 0;
+  if (selection.products.includes('wms') && selection.warehouses < warehouses) {
+    return `You have ${warehouses} warehouses. Pick ${warehouses} or more.`;
+  }
+  return null;
+}
+
+/** When the first charge happens and what is due today, for a cart and the plan as it is now. */
+export function firstChargeFor(state: PlanState, total: number, now: Date): { dueTodayCents: number; firstChargeAt: Date; trialEnd: Date | null } {
+  const trialRunning = state.phase === 'trial' && state.trial !== null;
+  if (trialRunning && state.trial) {
+    // Adding a card early never costs trial days. The gateway needs the date 48 hours ahead.
+    const trialEnd = new Date(Math.max(state.trial.endsAt.getTime(), now.getTime() + MIN_TRIAL_AHEAD_MS));
+    return { dueTodayCents: 0, firstChargeAt: trialEnd, trialEnd };
+  }
+  return { dueTodayCents: total, firstChargeAt: now, trialEnd: null };
+}
+
+/** What the review step shows. No gateway call. */
+export async function checkoutPreview(
+  rt: Pick<BillingRuntime, 'db' | 'mode' | 'now'>,
+  input: { orgId: string; selection: PlanSelection },
+): Promise<BillingResult<{ quote: Quote; dueTodayCents: number; firstChargeAt: Date; trialEnd: Date | null; taxNote: boolean }>> {
+  const selection = normalizeSelection(input.selection);
+  if (selection.products.length === 0) return billingError('invalid_selection');
+  const state = await getPlanState(rt, input.orgId);
+  const below = belowUsageMessage(selection, state);
+  if (below) return billingError('below_usage', below);
+  const priced = quote(selection);
+  const first = firstChargeFor(state, priced.totalCents, rt.now());
+  return billingOk({
+    quote: priced,
+    ...first,
+    // Tax is worked out on the gateway's pay page. Only the two Stripe modes can add it.
+    taxNote: rt.mode === 'live' || rt.mode === 'stripe_test',
+  });
+}
+
+type CheckoutOpened = BillingResult<{ url: string; sessionId: string; dueTodayCents: number; firstChargeAt: Date }>;
+
+export async function createCheckout(
+  rt: BillingRuntime,
+  input: { orgId: string; orgName: string; selection: PlanSelection; actor: BillingActor; actorEmail: string },
+): Promise<CheckoutOpened> {
+  if (!rt.gateway) return billingError('billing_unavailable');
+  const selection = normalizeSelection(input.selection);
+  if (selection.products.length === 0) return billingError('invalid_selection');
+
+  // Asked again inside the turn. Here it only keeps "you already have a plan" ahead of the try counter.
+  const [paid] = await rt.db
+    .select({ status: billingSubscriptions.status })
+    .from(billingSubscriptions)
+    .where(eq(billingSubscriptions.orgId, input.orgId));
+  if (paid && isLiveSubscriptionStatus(paid.status)) return billingError('already_subscribed');
+
+  const allowed = await enforceRateLimit(rt.db, { key: `checkout:${input.orgId}`, windowSeconds: 600, max: 10 });
+  // The message names the real wait: this limit's window is 10 minutes.
+  if (!allowed) return billingError('rate_limited', 'Too many tries. Wait 10 minutes and try again.');
+
+  // One at a time per organization (review round 2). Two calls at the same moment (two tabs, or an
+  // owner and a billing manager) used to make two gateway customers and leave two pay pages open.
+  // Now the second call waits, finds the customer the first one stored, and closes the first page.
+  try {
+    const turn = await withOrgBillingTurn(rt.db, { orgId: input.orgId, purpose: 'checkout' }, () =>
+      openCheckout(rt, { ...input, selection }),
+    );
+    return turn.ok ? turn.value : billingError('busy');
+  } catch (error) {
+    logBilling('error', 'create checkout failed', { orgId: input.orgId, error: errorText(error) });
+    return billingError('gateway_error');
+  }
+}
+
+/** The body of `createCheckout`. Only ever runs while the organization's billing turn is held. */
+async function openCheckout(
+  rt: BillingRuntime,
+  input: { orgId: string; orgName: string; selection: PlanSelection; actor: BillingActor; actorEmail: string },
+): Promise<CheckoutOpened> {
+  const gateway = rt.gateway;
+  if (!gateway) return billingError('billing_unavailable');
+  const { selection } = input;
+
+  const [existing] = await rt.db
+    .select({ status: billingSubscriptions.status })
+    .from(billingSubscriptions)
+    .where(eq(billingSubscriptions.orgId, input.orgId));
+  if (existing && isLiveSubscriptionStatus(existing.status)) return billingError('already_subscribed');
+
+  const state = await getPlanState(rt, input.orgId);
+  const below = belowUsageMessage(selection, state);
+  if (below) return billingError('below_usage', below);
+
+  await writeCart(rt.db, input.orgId, selection);
+
+  const priced = quote(selection);
+  const first = firstChargeFor(state, priced.totalCents, rt.now());
+  // Both URLs are built here from the runtime, never from input.
+  const successUrl = `${rt.portalUrl}/billing/checkout/success?session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = `${rt.portalUrl}/billing/checkout/canceled`;
+
+  try {
+    const profile = await getBillingProfile(rt.db, input.orgId);
+    // A customer made by another gateway is treated as missing and replaced.
+    const existingCustomerId = await customerIdForOrg(rt.db, input.orgId, gateway.kind);
+    const { customerId } = await gateway.ensureCustomer({
+      orgId: input.orgId,
+      existingCustomerId,
+      profile: profileInput(profile, { email: input.actorEmail, name: input.orgName }),
+    });
+    // Stored before anything else is asked of the gateway, so every later step and every event of
+    // this organization meets the same customer.
+    await rt.db
+      .insert(stripeCustomers)
+      .values({ orgId: input.orgId, stripeCustomerId: customerId })
+      .onConflictDoUpdate({ target: stripeCustomers.orgId, set: { stripeCustomerId: customerId } });
+    await rt.db
+      .update(billingAccounts)
+      .set({ gateway: gateway.kind, updatedAt: rt.now() })
+      .where(eq(billingAccounts.orgId, input.orgId));
+
+    // One plan per organization, checked at the gateway too. A plan that was paid a moment ago in
+    // another tab may not be in our tables yet (its event is still on the way). Take it in now and
+    // send the person to their plan instead of to a second pay page.
+    const atGateway = existingCustomerId ? await gateway.findSubscriptionForCustomer(customerId) : null;
+    if (atGateway && isLiveSubscriptionStatus(atGateway.status)) {
+      await rt.db.transaction(async (tx) => fetchAndApplySubscription(rt, tx, { orgId: input.orgId, subscriptionId: atGateway.id }));
+      clearBillingCaches(input.orgId);
+      return billingError('already_subscribed');
+    }
+    // Only one pay page can be open. Any older one (another tab, the back button) is closed first, so
+    // two pages can never both be paid. A customer that was replaced a moment ago is swept too.
+    await gateway.expireOpenCheckoutSessions(customerId);
+    if (existingCustomerId && existingCustomerId !== customerId) {
+      try {
+        await gateway.expireOpenCheckoutSessions(existingCustomerId);
+      } catch (error) {
+        // The old customer may be gone at the gateway. Then it has no pay page to close.
+        logBilling('warn', 'could not close the pay pages of a replaced customer', { orgId: input.orgId, error: errorText(error) });
+      }
+    }
+
+    const session = await gateway.createCheckoutSession({
+      orgId: input.orgId,
+      customerId,
+      selection,
+      trialEnd: first.trialEnd,
+      successUrl,
+      cancelUrl,
+    });
+    // Once per checkout: opening the pay page again with the same cart adds no second line.
+    await recordAuditOnce(rt.db, {
+      orgId: input.orgId,
+      actor: input.actor,
+      action: 'checkout.started',
+      summary: `${input.actor.label} started checkout for ${productListLabel(selection.products)}.`,
+      data: { selection, sessionId: session.id, totalCents: priced.totalCents },
+    });
+    return billingOk({
+      url: session.url,
+      sessionId: session.id,
+      dueTodayCents: first.dueTodayCents,
+      firstChargeAt: first.firstChargeAt,
+    });
+  } catch (error) {
+    logBilling('error', 'create checkout failed', { orgId: input.orgId, error: errorText(error) });
+    return billingError('gateway_error');
+  }
+}
+
+/**
+ * Applies a finished checkout session with the given database handle (a transaction in the webhook).
+ * A session that is not paid, or that belongs to another org, applies nothing. `duplicate` means the
+ * organization already had a plan: the second subscription was canceled and its payment sent back.
+ */
+export async function applyCheckoutSession(
+  rt: BillingRuntime,
+  db: BillingDb,
+  input: { orgId: string; sessionId: string; eventId?: string },
+): Promise<'applied' | 'not_complete' | 'not_found' | 'duplicate'> {
+  if (!rt.gateway) return 'not_found';
+  const session = await rt.gateway.getCheckoutSession(input.sessionId);
+  if (!session || session.orgId !== input.orgId) return 'not_found';
+  if (session.status !== 'complete' || !session.subscriptionId) return 'not_complete';
+  const subscription = await rt.gateway.getSubscription(session.subscriptionId);
+  if (!subscription) return 'not_complete';
+  if (subscription.orgId !== null && subscription.orgId !== input.orgId) return 'not_found';
+  if (session.customerId !== null && subscription.customerId !== session.customerId) return 'not_found';
+  // One writer per organization from here on.
+  await lockOrgBilling(db, input.orgId);
+  // A second paid session for an organization that already has a plan: canceled and refunded, never applied.
+  if (await rejectSecondSubscription(rt, db, { orgId: input.orgId, subscription, ...(input.eventId ? { eventId: input.eventId } : {}) })) {
+    return 'duplicate';
+  }
+
+  // The plan and the stored customer must agree (review round 2). The session is this
+  // organization's own and it is paid, so its customer becomes the stored one in the same
+  // transaction that writes the plan. Any pay page still open for the customer it replaces is closed.
+  const storedCustomerId = await customerIdForOrg(db, input.orgId, rt.gateway.kind);
+  if (storedCustomerId !== subscription.customerId) {
+    const adopted = await adoptGatewayCustomer(db, {
+      orgId: input.orgId,
+      gateway: rt.gateway.kind,
+      customerId: subscription.customerId,
+      now: rt.now(),
+    });
+    if (!adopted) return 'not_found';
+    if (storedCustomerId) {
+      try {
+        await rt.gateway.expireOpenCheckoutSessions(storedCustomerId);
+      } catch (error) {
+        logBilling('warn', 'could not close the pay pages of a replaced customer', { orgId: input.orgId, error: errorText(error) });
+      }
+    }
+  }
+
+  const latestInvoice = subscription.latestInvoiceId ? await rt.gateway.getInvoice(subscription.latestInvoiceId) : null;
+  if (latestInvoice) {
+    await applyInvoiceSnapshot(db, {
+      orgId: input.orgId,
+      gateway: rt.gateway.kind,
+      invoice: withCardFallback(latestInvoice, subscription),
+    });
+  }
+  await applySubscriptionSnapshot(db, {
+    orgId: input.orgId,
+    gateway: rt.gateway.kind,
+    subscription,
+    latestInvoice,
+    now: rt.now(),
+    portalUrl: rt.portalUrl,
+    ...(input.eventId ? { eventId: input.eventId } : {}),
+  });
+  return 'applied';
+}
+
+/**
+ * Called by the success page and by the webhook. Safe to call many times. The answer is the plan as
+ * it is now: when the gateway has not confirmed the payment yet, nothing is granted and the state
+ * simply shows no plan.
+ */
+export async function syncCheckoutSession(
+  rt: BillingRuntime,
+  input: { orgId: string; sessionId: string },
+): Promise<BillingResult<PlanState>> {
+  if (!rt.gateway) return billingError('billing_unavailable');
+  try {
+    const outcome = await rt.db.transaction(async (tx) => applyCheckoutSession(rt, tx, input));
+    if (outcome === 'not_found') return billingError('not_found');
+  } catch (error) {
+    logBilling('error', 'sync checkout session failed', { orgId: input.orgId, error: errorText(error) });
+    return billingError('gateway_error');
+  } finally {
+    clearBillingCaches(input.orgId);
+  }
+  return billingOk(await getPlanState(rt, input.orgId));
+}

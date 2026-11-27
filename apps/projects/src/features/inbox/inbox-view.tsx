@@ -23,9 +23,12 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
+  buttonVariants,
   cn,
 } from '@/components/ui';
+import Link from 'next/link';
 import { Page } from '@/components/layout/page';
+import { routes } from '@/lib/routes';
 import { apiGet, apiPath } from '@/lib/api-client';
 import { formatRelative } from '@/lib/dates';
 import { useProjects, useUnreadCount, type InboxPage } from '@/lib/hooks/use-data';
@@ -49,11 +52,12 @@ const FILTERS: readonly { value: InboxFilter; label: string }[] = [
   { value: 'assigned', label: 'Assigned' },
   { value: 'comments', label: 'Comments' },
   { value: 'due', label: 'Due dates' },
+  { value: 'programs', label: 'Programs' },
   { value: 'archived', label: 'Archive' },
 ];
 
 const EMPTY: Record<InboxFilter, { title: string; description?: string }> = {
-  all: { title: 'You’re all caught up' },
+  all: { title: 'You’re all caught up', description: 'New work assigned to you lands in My work.' },
   unread: { title: 'Nothing unread' },
   mentions: {
     title: 'No mentions yet',
@@ -64,6 +68,10 @@ const EMPTY: Record<InboxFilter, { title: string; description?: string }> = {
   due: {
     title: 'No due-date reminders',
     description: 'Reminders show here when a task of yours is due today, tomorrow, or is late.',
+  },
+  programs: {
+    title: 'No program news',
+    description: 'Missing output, price cards waiting for review, minimums at risk and months ready to close show here.',
   },
   archived: { title: 'Nothing archived' },
 };
@@ -298,6 +306,12 @@ export function InboxView({
               illustration={filter === 'unread' || filter === 'all' ? 'inbox' : 'notifications'}
               title={EMPTY[filter].title}
               description={EMPTY[filter].description}
+              // No dead ends (docs/design/UI-CLEANUP.md): an empty inbox points to where new work shows up.
+              actions={
+                <Link href={routes.myWork()} className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
+                  Open My work
+                </Link>
+              }
             />
           ) : (
             <ul
@@ -433,9 +447,9 @@ function InboxRow({
       onClick={onOpen}
       className={cn(
         'group relative flex cursor-pointer items-start gap-3 border-b border-border-subtle px-3 py-3 last:border-b-0 sm:px-4',
-        'hover:bg-hover has-[[data-row-main]:focus-visible]:bg-hover has-[[data-row-main]:focus-visible]:shadow-[inset_2px_0_0_var(--color-primary)]',
+        'hover:bg-hover has-[[data-row-main]:focus-visible]:bg-hover has-[[data-row-main]:focus-visible]:shadow-[inset_2px_0_0_var(--color-focus)]',
         selected && 'bg-selected hover:bg-selected-hover',
-        current && 'bg-selected shadow-[inset_3px_0_0_var(--color-primary)] hover:bg-selected-hover',
+        current && 'bg-selected shadow-[inset_3px_0_0_var(--color-border-strong)] hover:bg-selected-hover',
       )}
     >
       <span className="hidden pt-1.5 sm:block" onClick={(event) => event.stopPropagation()}>
@@ -512,7 +526,7 @@ function InboxRow({
       </span>
       <span className="flex h-5 w-2 shrink-0 items-center">
         {unread ? (
-          <span aria-hidden data-testid="unread-dot" className="size-2 rounded-full bg-primary" />
+          <span aria-hidden data-testid="unread-dot" className="size-2 rounded-full bg-info" />
         ) : null}
       </span>
     </li>

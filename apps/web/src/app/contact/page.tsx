@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/components/json-ld';
+import { breadcrumbLd } from '@/lib/seo';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { ClosingSection } from '@/components/closing/closing-section';
@@ -7,25 +9,25 @@ import styles from '@/components/contact/contact.module.css';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
 import { PageEffects } from '@/components/page-effects';
-import { ROUTES } from '@/components/site-links';
+import { ROUTES, START_LABEL, startFreeHref } from '@/components/site-links';
 import { StakMark } from '@/components/stak-mark';
 
 export const metadata: Metadata = {
   title: 'Contact KitStak - talk to the founder',
-  description: 'Talk to the founder, book a walkthrough of the CRM or the WMS, or ask about pricing and bundles.',
+  description: 'Talk to the founder, book a walkthrough of the CRM, the WMS, Projects or Pulse, or ask about pricing and bundles.',
   alternates: { canonical: '/contact' },
 };
 
 const PATHS = [
   {
     title: 'Set it up yourself',
-    body: 'Five questions, a price and a setup plan. No call needed.',
-    href: ROUTES.getStarted,
-    label: 'Set up your Stak',
+    body: 'Four fields, then pick your apps. No call needed.',
+    href: startFreeHref(),
+    label: START_LABEL,
   },
   {
     title: 'See what it costs',
-    body: 'Price the CRM, the WMS, Projects or a bundle for your team.',
+    body: 'Price the CRM, the WMS, Projects, Pulse or a bundle for your team.',
     href: ROUTES.pricing,
     label: 'Price your stack',
   },
@@ -43,6 +45,7 @@ export default function ContactPage() {
       <PageEffects />
       <Header />
       <main id="main">
+        <JsonLd data={breadcrumbLd([{ name: 'Contact', path: '/contact' }])} />
         <section id="top" className={styles.hero} aria-labelledby="contact-heading">
           <div className={`container ${styles.heroInner}`}>
             <div className={styles.heroCopy}>

@@ -9,25 +9,15 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  AlertTriangle,
-  Boxes,
-  ClipboardList,
-  Grid3x3,
-  ListChecks,
-  MapPin,
-  MessageSquareWarning,
-  Package,
-  PackageCheck,
-  ShoppingBasket,
-  Warehouse,
-} from 'lucide-react';
+import { ClipboardList, Grid3x3, ListChecks, MapPin, ShoppingBasket, Warehouse } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
 import { Kbd } from '@/components/ui/kbd';
 import { Select } from '@/components/ui/select';
-import { StatTile } from '@/components/ui/stat-tile';
+import { StatTile } from '@kitstak/ui/dashboard';
+import { InfoTip } from '@/components/ui/info-tip';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DisabledReason } from '@/components/ui/tooltip';
 import { useShortcut } from '@/lib/keyboard';
 import { useApiQuery } from '@/lib/query-client';
@@ -294,45 +284,80 @@ export function PackingDashboard() {
           </Card>
           <StatTile
             label="Orders packed today"
-            value={k?.ordersPackedToday ?? 'None'}
-            icon={PackageCheck}
-            tone="success"
-            loading={kpis.isPending && Boolean(warehouseId)}
-            info="Orders you completed packing today."
+            value={
+              kpis.isPending && Boolean(warehouseId) ? (
+                <Skeleton className="h-6 w-16" />
+              ) : (
+                (k?.ordersPackedToday ?? 'None')
+              )
+            }
+            href={null}
+            explain={
+              <InfoTip content="Orders you completed packing today." label="About orders packed today" />
+            }
           />
           <StatTile
             label="Products packed today"
-            value={k?.productsPackedToday ?? 'None'}
-            icon={Boxes}
-            tone="primary"
-            loading={kpis.isPending && Boolean(warehouseId)}
-            info="Units you packed today."
+            value={
+              kpis.isPending && Boolean(warehouseId) ? (
+                <Skeleton className="h-6 w-16" />
+              ) : (
+                (k?.productsPackedToday ?? 'None')
+              )
+            }
+            href={null}
+            explain={<InfoTip content="Units you packed today." label="About products packed today" />}
           />
           <StatTile
             label="Total orders to be packed"
-            value={k?.ordersToPack ?? 'None'}
-            icon={Package}
-            tone="warning"
-            loading={kpis.isPending && Boolean(warehouseId)}
+            value={
+              kpis.isPending && Boolean(warehouseId) ? (
+                <Skeleton className="h-6 w-16" />
+              ) : (
+                (k?.ordersToPack ?? 'None')
+              )
+            }
             href="/orders?f.status=in%3AReady%20to%20Pack%2CPacking%20Started"
-            info="Orders List and select would show: Ready to Pack or Packing Started, units left to pack, no open pack short."
+            explain={
+              <InfoTip
+                content="Orders List and select would show: Ready to Pack or Packing Started, units left to pack, no open pack short."
+                label="About total orders to be packed"
+              />
+            }
           />
           <StatTile
             label="Pack-short orders held"
-            value={k?.packShortHeld ?? 'None'}
-            icon={AlertTriangle}
-            tone={k?.packShortHeld ? 'danger' : 'default'}
-            loading={kpis.isPending && Boolean(warehouseId)}
+            value={
+              kpis.isPending && Boolean(warehouseId) ? (
+                <Skeleton className="h-6 w-16" />
+              ) : (
+                (k?.packShortHeld ?? 'None')
+              )
+            }
             href="/packing-station/hospitals"
-            info={`Orders with an open pack short: Report Issue moved their picked stock to a hospital location${k ? ` (${k.hospitalUnits ?? 0} unit${k.hospitalUnits === 1 ? '' : 's'} in hospitals now)` : ''}. Resolve the pack short on the order to pack it.`}
+            explain={
+              <InfoTip
+                content={`Orders with an open pack short: Report Issue moved their picked stock to a hospital location${k ? ` (${k.hospitalUnits ?? 0} unit${k.hospitalUnits === 1 ? '' : 's'} in hospitals now)` : ''}. Resolve the pack short on the order to pack it.`}
+                label="About pack-short orders held"
+              />
+            }
           />
           <StatTile
             label="Orders with packing warnings"
-            value={k?.ordersWithWarnings ?? 'None'}
-            icon={MessageSquareWarning}
-            tone={k?.ordersWithWarnings ? 'warning' : 'default'}
-            loading={kpis.isPending && Boolean(warehouseId)}
-            info="Orders to pack that carry a Packing Warning Type. The warning opens on the pack screen at its trigger and must be acknowledged."
+            value={
+              kpis.isPending && Boolean(warehouseId) ? (
+                <Skeleton className="h-6 w-16" />
+              ) : (
+                (k?.ordersWithWarnings ?? 'None')
+              )
+            }
+            href={null}
+            explain={
+              <InfoTip
+                content="Orders to pack that carry a Packing Warning Type. The warning opens on the pack screen at its trigger and must be acknowledged."
+                label="About orders with packing warnings"
+              />
+            }
           />
           <div data-testid="ps-station-kpis">
             <Card className="space-y-2 p-4">

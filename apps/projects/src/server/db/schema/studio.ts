@@ -1,7 +1,7 @@
 /** Automations, templates and intake forms. */
 import { sql } from 'drizzle-orm';
 import { boolean, index, integer, jsonb, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { AUTOMATION_RUN_STATUSES } from '@/lib/constants';
+import { AUTOMATION_RUN_STATUSES, TEMPLATE_KINDS } from '@/lib/constants';
 import type { AutomationAction, AutomationCondition, AutomationTrigger } from '@/lib/automation-types';
 import type { TemplatePayload } from '@/lib/template-types';
 import type { FormField, FormSettings } from '@/lib/form-types';
@@ -57,6 +57,8 @@ export const templates = pmSchema.table(
   {
     id: id(),
     orgId: orgId(),
+    /** `program` templates open in the program wizard; the project gallery lists `project` only. */
+    kind: text('kind', { enum: TEMPLATE_KINDS }).notNull().default('project'),
     name: text('name').notNull(),
     description: text('description'),
     category: text('category').notNull().default('General'),
@@ -70,7 +72,10 @@ export const templates = pmSchema.table(
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
   },
-  (t) => [index('templates_org_idx').on(t.orgId)],
+  (t) => [
+    index('templates_org_idx').on(t.orgId),
+    index('templates_org_kind_idx').on(t.orgId, t.kind).where(sql`${t.deletedAt} IS NULL`),
+  ],
 );
 
 /** Public intake form → creates a task in `project_id`. Served at /forms/<id>. */

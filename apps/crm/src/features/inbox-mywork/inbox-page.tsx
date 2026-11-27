@@ -179,7 +179,7 @@ export function InboxPage() {
           {feed.isPlaceholderData ? (
             <span
               aria-hidden
-              className="absolute -top-2 right-0 left-0 h-0.5 animate-pulse rounded-full bg-primary"
+              className="absolute -top-2 right-0 left-0 h-0.5 animate-pulse rounded-full bg-data"
             />
           ) : null}
           {feed.isPending ? (

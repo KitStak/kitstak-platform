@@ -9,6 +9,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  AlertTriangle,
   Check,
   Minus,
   Edit3,
@@ -31,7 +32,8 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatTile } from '@/components/ui/stat-tile';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { InfoTip } from '@/components/ui/info-tip';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toast } from '@/components/ui/toast';
 import { DisabledReason } from '@/components/ui/tooltip';
@@ -97,28 +99,25 @@ function ExpectedLoadTile({ plan }: { readonly plan: PlanDetail }) {
     unitCount: Number(plan.unitCount ?? 0),
   });
   return (
-    <div
-      className={cn(
-        'rounded-lg border bg-surface px-4 py-3.5 shadow-xs',
-        load.warning ? 'border-warning/40' : 'border-border',
-      )}
-    >
-      <span className="text-2xs font-semibold text-faint">Expected load</span>
-      <div className="mt-1 text-xl font-semibold leading-8 tracking-tight tabular-nums text-foreground">
-        {load.weightLb.toFixed(2)} lb
-      </div>
-      <div className="mt-1 flex min-w-0 flex-col gap-0.5 text-xs text-faint">
-        <span className="break-words">
-          {load.volumeFt3.toFixed(2)} ft³ · {load.sourceLabel}
-        </span>
-        {load.detail ? <span className="whitespace-normal break-words">{load.detail}</span> : null}
-        {load.warning ? (
-          <span className="whitespace-normal break-words text-warning" role="note">
-            {load.warning}
+    <StatTile
+      label="Expected load"
+      value={`${load.weightLb.toFixed(2)} lb`}
+      href={null}
+      caption={
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="break-words">
+            {load.volumeFt3.toFixed(2)} ft³ · {load.sourceLabel}
           </span>
-        ) : null}
-      </div>
-    </div>
+          {load.detail ? <span className="whitespace-normal break-words">{load.detail}</span> : null}
+          {load.warning ? (
+            <span className="flex items-start gap-1 whitespace-normal break-words text-warning" role="note">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+              {load.warning}
+            </span>
+          ) : null}
+        </span>
+      }
+    />
   );
 }
 
@@ -663,13 +662,13 @@ export function PlanDetailPage({ id }: { readonly id: string }) {
           </p>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Orders" value={p.orderCount} sublabel={plural(units, 'unit')} />
+      <StatRow label="Plan totals">
+        <StatTile label="Orders" value={p.orderCount} href={null} caption={plural(units, 'unit')} />
         <StatTile
           label="Loaded"
           value={`${p.loadedPercent}%`}
-          info="Orders that are Ready to Ship or already shipped, out of all orders on the plan."
-          sublabel={
+          href={null}
+          caption={
             <span className="flex w-full flex-col gap-1">
               <span>
                 {loadedCount} of {p.orderCount} ready or shipped
@@ -677,20 +676,26 @@ export function PlanDetailPage({ id }: { readonly id: string }) {
               <ProgressBar
                 value={p.loadedPercent}
                 size="sm"
-                tone={p.loadedPercent === 100 ? 'success' : 'primary'}
+                tone={p.loadedPercent === 100 ? 'success' : 'data'}
                 label="Loading progress"
               />
             </span>
           }
-          tone={p.loadedPercent === 100 ? 'success' : 'default'}
+          explain={
+            <InfoTip
+              content="Orders that are Ready to Ship or already shipped, out of all orders on the plan."
+              label="About loaded"
+            />
+          }
         />
         <StatTile
           label="Shipped"
           value={`${p.shippedCount} of ${p.orderCount}`}
-          sublabel={shippedTileNote(p.shippedCount, p.orderCount, dt(p.actualShipmentAt))}
+          href={null}
+          caption={shippedTileNote(p.shippedCount, p.orderCount, dt(p.actualShipmentAt))}
         />
         <ExpectedLoadTile plan={p} />
-      </div>
+      </StatRow>
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-5">
           <UnderlineTabs

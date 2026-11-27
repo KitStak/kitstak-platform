@@ -113,13 +113,7 @@ export function ReceiptDrawer({
           },
           {
             label: 'Damage reason',
-            value: r.damageReason ? (
-              <Badge tone="warning" size="sm">
-                {r.damageReason}
-              </Badge>
-            ) : (
-              'None'
-            ),
+            value: r.damageReason ? <Badge tone="warning">{r.damageReason}</Badge> : 'None',
           },
           { label: 'Received', value: `${formatZoned(r.receivedAt, r.timeZone)} · ${r.receivedBy}` },
           { label: 'Client / warehouse', value: `${r.clientName} · ${r.warehouseName}` },
@@ -141,11 +135,7 @@ export function ReceiptDrawer({
         <span className="flex items-center gap-2">
           <PackageCheck className="h-4 w-4 text-primary" aria-hidden />
           Receipt {r ? r.masterId : ''}
-          {r?.cancelledAt ? (
-            <Badge tone="danger" size="sm">
-              Cancelled
-            </Badge>
-          ) : null}
+          {r?.cancelledAt ? <Badge tone="danger">Cancelled</Badge> : null}
         </span>
       }
       description={r ? `${r.sku} · ${r.productName}` : undefined}
@@ -279,9 +269,7 @@ export function ReceiptDrawer({
               <ul className="flex flex-wrap gap-1.5">
                 {r.serials.map((s) => (
                   <li key={s.primary}>
-                    <Badge tone="outline" size="md">
-                      {s.primary}
-                    </Badge>
+                    <Badge tone="outline">{s.primary}</Badge>
                   </li>
                 ))}
               </ul>
@@ -303,11 +291,7 @@ export function ReceiptDrawer({
                     <span className="min-w-0 flex-1 truncate text-body">{s.sku}</span>
                     <span className="tabular-nums">{s.quantity.toLocaleString()}</span>
                     <span className="text-faint">{formatZoned(s.receivedAt, r.timeZone)}</span>
-                    {s.cancelledAt ? (
-                      <Badge tone="danger" size="sm">
-                        Cancelled
-                      </Badge>
-                    ) : null}
+                    {s.cancelledAt ? <Badge tone="danger">Cancelled</Badge> : null}
                   </li>
                 ))}
               </ul>

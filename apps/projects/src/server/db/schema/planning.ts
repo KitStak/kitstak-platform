@@ -12,7 +12,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import { GOAL_HEALTHS, GOAL_PROGRESS_MODES, KEY_RESULT_KINDS, VIEW_TYPES } from '@/lib/constants';
+import { GOAL_HEALTHS, GOAL_PROGRESS_MODES, KEY_RESULT_KINDS, VIEW_SURFACES, VIEW_TYPES } from '@/lib/constants';
 import type { ViewConfig } from '@/lib/view-config';
 import { createdAt, deletedAt, id, orgId, pmSchema, updatedAt } from './_shared';
 import { projects } from './projects';
@@ -96,6 +96,8 @@ export const savedViews = pmSchema.table(
     userId: uuid('user_id'),
     name: text('name').notNull(),
     type: text('type', { enum: VIEW_TYPES }).notNull(),
+    /** `work` (projects and My Work), `programs` (program directory) or `floor` (Floor today). */
+    surface: text('surface', { enum: VIEW_SURFACES }).notNull().default('work'),
     config: jsonb('config').$type<ViewConfig>().notNull().default(sql`'{}'::jsonb`),
     isDefault: boolean('is_default').notNull().default(false),
     position: text('position').notNull(),

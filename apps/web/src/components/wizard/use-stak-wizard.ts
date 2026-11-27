@@ -2,12 +2,18 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_ANSWERS, STEP_IDS, applyPrefill, canLeaveStep, parseAnswers } from '@/lib/stak';
+import { ROUTES } from '@/components/site-links';
+import {
+  DEFAULT_ANSWERS,
+  STEP_IDS,
+  applyPrefill,
+  asksOnlyForUnopenedProducts,
+  canLeaveStep,
+  parseAnswers,
+} from '@/lib/stak';
 import type { StakAnswers, StepId } from '@/lib/stak';
 
 const STORAGE_KEY = 'kitstak.stak.v1';
-/** The screen after the last step. Not a step in the progress bar. */
-export type WizardView = StepId | 'ready';
 
 function readStored(): StakAnswers {
   try {
@@ -39,12 +45,12 @@ function isStepId(value: string | null): value is StepId {
 export interface StakWizard {
   readonly isReady: boolean;
   readonly answers: StakAnswers;
-  readonly view: WizardView;
+  readonly view: StepId;
   readonly stepIndex: number;
   /** Index of the furthest step the visitor may open. */
   readonly reachableIndex: number;
   readonly update: (patch: Partial<StakAnswers>) => void;
-  readonly goTo: (view: WizardView) => void;
+  readonly goTo: (view: StepId) => void;
   readonly next: () => void;
   readonly back: () => void;
 }
@@ -52,20 +58,24 @@ export interface StakWizard {
 /**
  * Wizard state. Answers live in sessionStorage (so a refresh keeps them, and closing the tab
  * clears them); the current step lives in the URL (`?step=`), so the browser's back button
- * walks back through the steps. `canFinish` says whether the account details (held by the caller)
- * are valid; the final screen never shows without it.
+ * walks back through the steps. The last step hands off to portal sign-up (see `handoffUrl`).
  */
-export function useStakWizard(canFinish: boolean): StakWizard {
+export function useStakWizard(): StakWizard {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [answers, setAnswers] = useState<StakAnswers>(DEFAULT_ANSWERS);
   const [isReady, setIsReady] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
 
   // Saved answers first, then anything a deep link carries (?stack=, ?seats=, ...).
   useEffect(() => {
-    setAnswers(applyPrefill(readStored(), new URLSearchParams(window.location.search)));
+    const params = new URLSearchParams(window.location.search);
+    // An old or typed link for a product whose app is not open goes to the walkthrough form.
+    if (asksOnlyForUnopenedProducts(params)) {
+      router.replace(ROUTES.demo);
+      return;
+    }
+    setAnswers(applyPrefill(readStored(), params));
     setIsReady(true);
     // Runs once on mount: later URL changes are step changes, not new prefills.
   }, []);
@@ -78,18 +88,16 @@ export function useStakWizard(canFinish: boolean): StakWizard {
   const reachableIndex = blocked ? STEP_IDS.indexOf(blocked) : STEP_IDS.length - 1;
 
   const requested = searchParams.get('step');
-  const view: WizardView = useMemo(() => {
-    if (requested === 'ready' && isSubmitted && canFinish && !blocked) return 'ready';
-    // A reload on the last screen lands on the account step (the draft is not kept).
+  const view: StepId = useMemo(() => {
+    // Older links ended on a `ready` screen. That screen is gone: the account step is the last one.
     const wanted = requested === 'ready' ? 'account' : requested;
     if (!isStepId(wanted)) return STEP_IDS[0];
     // Never show a step whose earlier required answers are missing.
     return STEP_IDS[Math.min(STEP_IDS.indexOf(wanted), reachableIndex)]!;
-  }, [requested, isSubmitted, canFinish, blocked, reachableIndex]);
+  }, [requested, reachableIndex]);
 
   const goTo = useCallback(
-    (target: WizardView) => {
-      if (target === 'ready') setIsSubmitted(true);
+    (target: StepId) => {
       const params = new URLSearchParams();
       params.set('step', target);
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
@@ -98,12 +106,12 @@ export function useStakWizard(canFinish: boolean): StakWizard {
     [router, pathname],
   );
 
-  const stepIndex = view === 'ready' ? STEP_IDS.length : STEP_IDS.indexOf(view);
+  const stepIndex = STEP_IDS.indexOf(view);
 
   const next = useCallback(() => {
-    if (view === 'ready' || !canLeaveStep(view, answers)) return;
+    if (!canLeaveStep(view, answers)) return;
     const following = STEP_IDS[STEP_IDS.indexOf(view) + 1];
-    goTo(following ?? 'ready');
+    if (following) goTo(following);
   }, [view, answers, goTo]);
 
   const back = useCallback(() => {

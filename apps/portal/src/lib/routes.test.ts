@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { safeNextPath, safeReturnUrl } from './routes';
+import { appReturnPath, safeNextPath, safeReturnUrl } from './routes';
 
 const SIBLINGS = ['https://crm.kitstak.app', 'https://wms.kitstak.app'];
 
@@ -68,5 +68,25 @@ describe('safeReturnUrl', () => {
     expect(safeReturnUrl('https://crm.kitstak.app/a', ['not a url', 'https://crm.kitstak.app'])).toBe(
       'https://crm.kitstak.app/a',
     );
+  });
+});
+
+describe('appReturnPath', () => {
+  test('keeps a plain path inside the app', () => {
+    expect(appReturnPath('/settings/warehouses')).toBe('/settings/warehouses');
+    expect(appReturnPath('/settings/warehouses?tab=all')).toBe('/settings/warehouses?tab=all');
+  });
+
+  test('drops anything that could leave the app origin', () => {
+    expect(appReturnPath(undefined)).toBeNull();
+    expect(appReturnPath('')).toBeNull();
+    expect(appReturnPath('settings')).toBeNull();
+    expect(appReturnPath('//evil.example')).toBeNull();
+    expect(appReturnPath('/\\evil.example')).toBeNull();
+    expect(appReturnPath('/@evil.example')).toBeNull();
+    expect(appReturnPath('/a/../b')).toBeNull();
+    expect(appReturnPath('/\t/evil.example')).toBeNull();
+    expect(appReturnPath('https://evil.example/x')).toBeNull();
+    expect(appReturnPath(`/${'a'.repeat(300)}`)).toBeNull();
   });
 });

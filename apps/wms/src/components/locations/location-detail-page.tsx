@@ -401,9 +401,7 @@ export function LocationDetailPage({ id }: { readonly id: string }) {
                         <td className="px-3 py-2">{b.expiryDate ? fmt.date(b.expiryDate) : <Muted />}</td>
                         <td className="px-3 py-2">{b.lpNumber ?? <Muted />}</td>
                         <td className="px-3 py-2">
-                          <Badge size="sm" tone={b.status === 'Stock' ? 'success' : 'warning'}>
-                            {b.status}
-                          </Badge>
+                          <Badge tone={b.status === 'Stock' ? 'success' : 'warning'}>{b.status}</Badge>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{b.onHand}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
@@ -605,7 +603,7 @@ export function LocationDetailPage({ id }: { readonly id: string }) {
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {rules.map((r) => (
-                    <Badge key={r.key} tone="primary" title={r.hint}>
+                    <Badge key={r.key} tone="info" title={r.hint}>
                       {r.label}
                     </Badge>
                   ))}

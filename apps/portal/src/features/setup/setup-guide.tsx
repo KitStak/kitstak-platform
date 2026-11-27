@@ -1,39 +1,20 @@
 'use client';
 /**
- * The launcher's guided-setup card: live progress ring, auto-detected checklist with
- * operational ordering, deep links into the exact screens, skip/undo, and a celebration
- * when the org is ready for business. Re-checks on window focus so steps completed in
+ * The guided-setup card in Organization settings: live progress ring and the quick start, the 3 to 5
+ * steps the welcome screen promised (docs/billing/SPEC.md 5.7). The next step is open with its one
+ * outline button; the others are one line each. The deeper steps of each app sit behind "Show 3 more
+ * steps for later". Auto-detected ticks, deep links into the exact screens, skip and undo, and a
+ * celebration when the first steps are done. Re-checks on window focus so steps completed in
  * CRM/WMS check themselves off when the user comes back.
  */
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  Lock,
-  MoreHorizontal,
-  PartyPopper,
-  RotateCcw,
-} from 'lucide-react';
-import {
-  Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  buttonVariants,
-  cn,
-} from '@/components/ui';
+import { ArrowUpRight, Check, ChevronDown, Lock, PartyPopper, RotateCcw } from 'lucide-react';
+import { Badge, Button, buttonVariants, cn } from '@/components/ui';
 import type { SetupState, SetupStepView } from '@/server/onboarding';
-import {
-  dismissSetupGuide,
-  restoreSetupGuide,
-  skipSetupStep,
-  unskipSetupStep,
-} from '@/server/onboarding-actions';
-import { ConfettiBurst } from './confetti';
+import { skipSetupStep, unskipSetupStep } from '@/server/onboarding-actions';
+import { moreStepsLabel } from './step-labels';
 import { ProgressRing } from './progress-ring';
 
 const COLLAPSE_KEY = 'kitstak.portal.setupGuide.collapsed';
@@ -103,7 +84,9 @@ function StepStatusIcon({ step, index, isNext, justDone }: Omit<StepRowProps, 'c
     <span
       className={cn(
         'flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold tabular-nums',
-        isNext ? 'border-primary text-primary-text' : 'border-border-strong text-fg-muted',
+        // The open step is marked by an inked number and the words "Next step", never crimson
+        // (docs/integration/ONBOARDING.md, docs/design/UI-CLEANUP.md).
+        isNext ? 'border-fg text-fg' : 'border-border-strong text-fg-muted',
       )}
     >
       {index + 1}
@@ -117,10 +100,12 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
   const actionable = step.status === 'todo' && !locked;
   // The wizard writes org-level answers; members without a managing role can't take it.
   const canShowCta = step.key !== 'profile' || canManage;
-  const ctaClass = cn(
-    buttonVariants({ variant: isNext ? 'primary' : 'secondary', size: 'sm' }),
-    'shrink-0',
-  );
+  // The next step is open: its description shows and its button is the card's one outline button
+  // (the page header keeps the only crimson button). Every other row is one quiet line.
+  // On a phone a row with a link is two lines: the title on the first, the link under it. A title
+  // such as "Create your CRM workspace" then has the whole width and never wraps beside its link.
+  const stacked = isNext || (actionable && canShowCta);
+  const ctaClass = cn(buttonVariants({ variant: isNext ? 'secondary' : 'ghost', size: isNext ? 'md' : 'sm' }), 'shrink-0', !isNext && 'max-sm:-ml-2.5');
   const cta = actionable && canShowCta ? (
     step.external ? (
       <a href={step.href} target="_blank" rel="noopener" className={ctaClass}>
@@ -133,49 +118,64 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
       </Link>
     )
   ) : null;
+  const skip =
+    actionable && canManage && step.key !== 'profile' ? (
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={pending}
+        onClick={() => onSkip(step.key)}
+        aria-label={`Skip: ${step.title}`}
+        className={cn(
+          // On the open step Skip is always there. On the quiet rows it shows on hover and on
+          // keyboard focus, and not at all on touch screens, where the row has room for one button.
+          // On a narrow screen the row is stacked and Skip comes after the link, so the link starts
+          // where the step title starts, exactly like the outline button of the open step. (Before,
+          // the unseen Skip button still took its room and pushed the link about 54 px right.)
+          !isNext && 'opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:hidden max-sm:order-last',
+        )}
+      >
+        Skip
+      </Button>
+    ) : null;
 
   return (
     <li
+      data-testid={`setup-step-${step.key}`}
+      data-status={step.status}
       className={cn(
-        'group grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 px-5 py-3 sm:grid-cols-[auto_1fr_auto]',
-        isNext && 'bg-sunken/60',
+        'group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-5',
+        isNext ? 'gap-y-2 py-3.5' : 'min-h-11 py-1.5',
+        stacked && 'max-sm:grid-cols-[auto_minmax(0,1fr)]',
+        stacked && !isNext && 'max-sm:pt-2.5 max-sm:pb-1',
       )}
       aria-current={isNext ? 'step' : undefined}
     >
       <StepStatusIcon step={step} index={index} isNext={isNext} justDone={justDone} />
       <div className="min-w-0">
-        <div className="flex flex-wrap items-baseline gap-x-2">
-          <p
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span
             className={cn(
-              'text-sm font-medium sm:truncate',
-              settled ? 'text-fg-muted' : 'text-fg',
+              'text-sm font-medium',
+              settled || locked ? 'text-fg-muted' : 'text-fg',
               step.status === 'skipped' && 'line-through decoration-border-strong',
             )}
           >
             {step.title}
-          </p>
-          {step.status === 'todo' ? (
-            <span className="shrink-0 text-2xs text-fg-muted tabular-nums">~{step.minutes} min</span>
-          ) : null}
-        </div>
-        {step.status === 'todo' ? (
-          <p className="mt-0.5 truncate text-xs text-fg-muted">
-            {locked ? (
-              <>
-                Unlocks after <span className="font-medium text-fg-secondary">{step.lockedBy}</span>
-              </>
-            ) : (
-              step.description
-            )}
+          </span>
+          {isNext ? <span className="shrink-0 text-2xs font-medium text-fg-secondary">Next step</span> : null}
+          {step.status === 'todo' && !locked ? <span className="shrink-0 text-2xs text-fg-muted tabular-nums">{step.minutes} min</span> : null}
+        </p>
+        {/* Text wraps. It never ends in an ellipsis, so a promise is never cut mid sentence. */}
+        {isNext ? <p className="mt-0.5 text-sm text-fg-secondary">{step.description}</p> : null}
+        {locked ? (
+          <p className="text-xs text-fg-muted">
+            After <span className="font-medium text-fg-secondary">{step.lockedBy}</span>
           </p>
         ) : null}
       </div>
-      <div className="col-start-2 flex items-center gap-1.5 sm:col-start-auto">
-        {step.status === 'done' ? (
-          <span className="text-xs font-medium text-success-text">
-            Done{step.auto ? ' · detected' : ''}
-          </span>
-        ) : null}
+      <div className={cn('flex items-center justify-end gap-1.5', stacked && 'max-sm:col-start-2 max-sm:justify-start')}>
+        {step.status === 'done' ? <Badge tone="success">Done</Badge> : null}
         {step.status === 'skipped' && canManage ? (
           <Button
             variant="ghost"
@@ -183,24 +183,71 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
             disabled={pending}
             onClick={() => onUnskip(step.key)}
             leadingIcon={<RotateCcw aria-hidden />}
+            aria-label={`Undo skip: ${step.title}`}
           >
             Undo skip
           </Button>
         ) : null}
-        {actionable && canManage && !isNext ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={pending}
-            onClick={() => onSkip(step.key)}
-            className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-60"
-          >
-            Skip
-          </Button>
-        ) : null}
-        {cta}
+        {isNext ? (
+          <>
+            {cta}
+            {skip}
+          </>
+        ) : (
+          <>
+            {skip}
+            {cta}
+          </>
+        )}
       </div>
     </li>
+  );
+}
+
+/** The steps the quick start leaves out, folded away until asked for. */
+function MoreSteps({
+  steps,
+  open,
+  onToggle,
+  rowProps,
+  offset,
+  className,
+}: {
+  readonly steps: readonly SetupStepView[];
+  readonly open: boolean;
+  readonly onToggle: () => void;
+  readonly rowProps: Pick<StepRowProps, 'canManage' | 'pending' | 'onSkip' | 'onUnskip'>;
+  /** How many steps come before these, so the numbers carry on. */
+  readonly offset: number;
+  readonly className?: string;
+}) {
+  if (steps.length === 0) return null;
+  return (
+    <div className={cn('border-t border-border-subtle', className)}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls="setup-more-steps"
+        data-testid="setup-more-toggle"
+        className="flex min-h-11 w-full items-center justify-between gap-3 px-5 text-left text-sm font-medium text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+      >
+        <span>{open ? 'Hide the steps for later' : moreStepsLabel(steps.length)}</span>
+        <ChevronDown aria-hidden className={cn('size-4 shrink-0 transition-transform duration-[var(--duration-fast)] motion-reduce:transition-none', open && 'rotate-180')} />
+      </button>
+      {open ? (
+        <div id="setup-more-steps">
+          <p className="border-t border-border-subtle bg-sunken/40 px-5 py-2 text-xs text-fg-muted">
+            Do these when you are ready. They do not count toward your first steps, and each app shows them in its own guide too.
+          </p>
+          <ol start={offset + 1} className="divide-y divide-border-subtle border-t border-border-subtle" data-testid="setup-more-list">
+            {steps.map((step, index) => (
+              <StepRow key={step.key} step={step} index={offset + index} isNext={false} justDone={false} {...rowProps} />
+            ))}
+          </ol>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -208,10 +255,15 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [collapsed, setCollapsed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [justDoneKeys, setJustDoneKeys] = useState<readonly string[]>([]);
   const prevStatuses = useRef<ReadonlyMap<string, string> | null>(null);
   const lastRefresh = useRef(0);
-  const { steps, summary } = state;
+  // The guide is the quick start: 3 to 5 steps, the ones the welcome screen promised. The rest of
+  // the plan is folded behind "Show 3 more steps for later" and does not move the count or the minutes.
+  const { steps, summary } = state.quick;
+  const moreSteps = state.more;
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // Read the saved preference after mount (localStorage is client only) so SSR markup matches.
   useEffect(() => {
@@ -259,22 +311,40 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
     });
   };
 
-  const run = (action: () => Promise<{ ok: boolean }>) => {
+  const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
+    setError(null);
     startTransition(async () => {
-      await action();
+      try {
+        const result = await action();
+        if (!result.ok) setError(result.error ?? 'That did not save. Try again.');
+      } catch {
+        setError('We could not reach KitStak. Try again.');
+      }
       router.refresh();
     });
   };
 
-  // Celebration only when everything is genuinely DONE — skips never earn confetti.
+  const errorLine = error ? (
+    <p role="alert" className="mt-3 text-sm text-danger-text">
+      {error}
+    </p>
+  ) : null;
+
+  const rowProps = {
+    canManage,
+    pending,
+    onSkip: (key: string) => run(() => skipSetupStep(key)),
+    onUnskip: (key: string) => run(() => unskipSetupStep(key)),
+  };
+
+  // Celebration only when the quick start is genuinely DONE. Skips never earn confetti.
   if (summary.allDone) {
     return (
       <section
         aria-label="Setup complete"
-        className="relative overflow-hidden rounded-2xl border border-border-default bg-panel p-6 shadow-xs animate-fade-in"
+        className="relative overflow-hidden rounded-2xl border border-border-default bg-panel shadow-xs animate-fade-in"
       >
-        <ConfettiBurst />
-        <div className="relative flex flex-wrap items-center gap-4">
+        <div className="relative flex flex-wrap items-center gap-4 p-6">
           <span className="flex size-11 items-center justify-center rounded-full bg-success-subtle text-success-text">
             <PartyPopper aria-hidden className="size-5" />
           </span>
@@ -283,15 +353,12 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
               {orgName} is ready for business
             </h2>
             <p className="mt-0.5 text-sm text-fg-secondary">
-              Every setup step is done.
+              {moreSteps.some((step) => step.status === 'todo') ? 'Your first steps are done.' : 'Every setup step is done.'}
             </p>
           </div>
-          {canManage ? (
-            <Button variant="secondary" loading={pending} onClick={() => run(dismissSetupGuide)}>
-              Dismiss guide
-            </Button>
-          ) : null}
         </div>
+        {error ? <div className="px-6 pb-4">{errorLine}</div> : null}
+        <MoreSteps steps={moreSteps} open={moreOpen} onToggle={() => setMoreOpen((current) => !current)} rowProps={rowProps} offset={steps.length} />
       </section>
     );
   }
@@ -328,12 +395,10 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
                   Undo skip
                 </Button>
               ))}
-              <Button variant="secondary" size="sm" loading={pending} onClick={() => run(dismissSetupGuide)}>
-                Dismiss guide
-              </Button>
             </div>
           ) : null}
         </div>
+        {errorLine}
       </section>
     );
   }
@@ -343,51 +408,32 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
       aria-label="Setup guide"
       className="overflow-hidden rounded-2xl border border-border-default bg-panel shadow-xs animate-fade-in"
     >
-      {state.dismissed ? (
-        <div className="flex items-center justify-between gap-3 border-b border-border-subtle bg-sunken px-5 py-2.5">
-          <p className="text-xs text-fg-muted">
-            This guide is hidden from your launcher.
-          </p>
-          {canManage ? (
-            <Button variant="secondary" size="sm" loading={pending} onClick={() => run(restoreSetupGuide)}>
-              Show it again
-            </Button>
-          ) : null}
+      {/*
+        Phones: the ring, the title and the fold button share the first line. The progress line gets
+        the full width under the title, so "Set up Harbor Supply Co" and "2 of 5 done · about 7 min
+        left" never wrap into three or four short lines. From 640 px up it is one row.
+      */}
+      <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 px-5 py-4 sm:flex sm:gap-4">
+        <div className="max-sm:row-span-2 max-sm:self-start">
+          <ProgressRing percent={summary.percent} />
         </div>
-      ) : null}
-      <header className="flex items-center gap-4 px-5 py-4">
-        <ProgressRing percent={summary.percent} />
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-md font-semibold text-fg">Set up {orgName}</h2>
-          <p className="mt-0.5 text-sm text-fg-muted">
-            {summary.doneCount} of {summary.totalCount} complete
+        <div className="min-w-0 flex-1 max-sm:contents">
+          {/* The name wraps on a phone. It is never cut with an ellipsis. */}
+          <h2 className="min-w-0 text-md font-semibold text-balance break-words text-fg">Set up {orgName}</h2>
+          <p className="mt-0.5 text-sm text-fg-muted max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-2" data-testid="setup-progress">
+            {summary.doneCount} of {summary.totalCount} done
             {summary.skippedCount > 0 ? <> · {summary.skippedCount} skipped</> : null}
             {summary.remainingMinutes > 0 ? (
               <> · about {summary.remainingMinutes} min left</>
             ) : null}
           </p>
         </div>
-        {canManage ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Setup guide options"
-              className="flex size-8 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            >
-              <MoreHorizontal aria-hidden className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => run(dismissSetupGuide)}>
-                Dismiss setup guide
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
         <button
           type="button"
           onClick={toggleCollapsed}
           aria-expanded={!collapsed}
           aria-label={collapsed ? 'Expand setup guide' : 'Collapse setup guide'}
-          className="flex size-8 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus max-sm:col-start-3 max-sm:row-start-1"
         >
           <ChevronDown
             aria-hidden
@@ -398,22 +444,29 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
           />
         </button>
       </header>
+      {error ? <div className="px-5 pb-3">{errorLine}</div> : null}
       {collapsed ? null : (
-        <ol className="divide-y divide-border-subtle border-t border-border-subtle">
-          {steps.map((step, index) => (
-            <StepRow
-              key={step.key}
-              step={step}
-              index={index}
-              isNext={step.key === summary.nextKey}
-              justDone={justDoneKeys.includes(step.key)}
-              canManage={canManage}
-              pending={pending}
-              onSkip={(key) => run(() => skipSetupStep(key))}
-              onUnskip={(key) => run(() => unskipSetupStep(key))}
-            />
-          ))}
-        </ol>
+        <>
+          <ol className="divide-y divide-border-subtle border-t border-border-subtle" data-testid="setup-steps">
+            {steps.map((step, index) => (
+              <StepRow
+                key={step.key}
+                step={step}
+                index={index}
+                isNext={step.key === summary.nextKey}
+                justDone={justDoneKeys.includes(step.key)}
+                {...rowProps}
+              />
+            ))}
+          </ol>
+          <MoreSteps
+            steps={moreSteps}
+            open={moreOpen}
+            onToggle={() => setMoreOpen((current) => !current)}
+            rowProps={rowProps}
+            offset={steps.length}
+          />
+        </>
       )}
     </section>
   );

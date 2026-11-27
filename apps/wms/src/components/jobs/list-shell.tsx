@@ -15,6 +15,7 @@ import type { PageTabGroupKey } from '@/config/page-tabs';
 import type { GridFilter } from '@/server/query/grid-query';
 import type { GridRow } from './jobs-client';
 import { useApiQuery } from '@/lib/query-client';
+import { Count } from '@kitstak/ui/dashboard';
 import { cn } from '@/lib/utils';
 
 /** One-click toggle filter shown above the grid, with a live count (critic R5: "Overdue"). */
@@ -88,25 +89,15 @@ function QuickFilterButton({
       onClick={onToggle}
       data-testid={`quick-filter-${qf.key}`}
       className={cn(
-        'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+        'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30',
         active
-          ? 'border-primary bg-primary text-white'
-          : danger
-            ? 'border-[#F2B8AE] bg-[#FDF1EE] text-[var(--danger-text)] hover:bg-[#FBE3DD] dark:border-[#6B2A20] dark:bg-[#2B1612] dark:text-[var(--label-red-light)]'
-            : 'border-border bg-surface text-body hover:bg-surface-sunken',
+          ? 'border-border-strong bg-selected text-fg'
+          : 'border-border bg-surface text-body hover:border-border-strong hover:bg-surface-sunken',
       )}
     >
       {qf.label}
-      {typeof n === 'number' ? (
-        <span
-          className={cn(
-            'rounded-full px-1.5 text-2xs tabular-nums',
-            active ? 'bg-white/20' : 'bg-black/5 dark:bg-white/10',
-          )}
-        >
-          {n.toLocaleString('en-US')}
-        </span>
-      ) : null}
+      {/* Neutral count; only a count of overdue or broken things is critical (UI-CLEANUP "Pills" rule 6). */}
+      {typeof n === 'number' ? <Count value={n} tone={danger ? 'critical' : 'neutral'} /> : null}
     </button>
   );
 }

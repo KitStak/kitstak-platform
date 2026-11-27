@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskSummary } from '@/lib/types';
-import { compareTasks, dueDateForDrop, focusQueue, groupByProject, groupByWhen, matchesText, whenGroup } from './my-work-model';
+import { compareTasks, dueDateForDrop, focusQueue, groupBuildsByRun, groupByProject, groupByWhen, matchesText, matchesWhen, whenGroup } from './my-work-model';
 
 const TODAY = '2026-11-11';
 
@@ -123,5 +123,37 @@ describe('matchesText', () => {
     expect(matchesText(t, 'warehouse', () => 'Warehouse go-live')).toBe(true);
     expect(matchesText(t, 'zebra')).toBe(false);
     expect(matchesText(t, '  ')).toBe(true);
+  });
+});
+
+describe('groupBuildsByRun', () => {
+  const b = (id: string, projectKey: string, date: string, runId: string, status: TaskSummary['statusCategory'] = 'todo') =>
+    ({ id, key: `${projectKey}-${id}`, kind: 'build', projectKey, statusCategory: status, build: { buildDate: date, runId, plannedQty: '100', builtQty: '0' } }) as unknown as TaskSummary;
+  it('groups open builds of today and earlier by program and run, newest first', () => {
+    const groups = groupBuildsByRun([b('1', 'GLOVE', '2026-11-25', 'r1'), b('2', 'GLOVE', '2026-11-25', 'r1'), b('3', 'GLOVE', '2026-11-24', 'r0'), b('4', 'GLOVE', '2026-11-26', 'r2'), b('5', 'ECOMM', '2026-11-25', 'r9', 'done')], '2026-11-25');
+    expect(groups.map((group) => [group.key, group.tasks.length, group.overdue])).toEqual([
+      ['GLOVE|r1', 2, false],
+      ['GLOVE|r0', 1, true],
+    ]);
+  });
+});
+
+describe('matchesWhen', () => {
+  it('keeps every task for "all"', () => {
+    expect(matchesWhen(task('a', { dueDate: '2026-11-01' }), 'all', TODAY)).toBe(true);
+  });
+
+  it('narrows to one due-date group', () => {
+    expect(matchesWhen(task('a', { dueDate: '2026-11-10' }), 'overdue', TODAY)).toBe(true);
+    expect(matchesWhen(task('a', { dueDate: TODAY }), 'overdue', TODAY)).toBe(false);
+    expect(matchesWhen(task('b', { dueDate: TODAY }), 'today', TODAY)).toBe(true);
+    expect(matchesWhen(task('c', { dueDate: '2026-11-14' }), 'upcoming', TODAY)).toBe(true);
+    expect(matchesWhen(task('d', { statusCategory: 'done', dueDate: TODAY }), 'done', TODAY)).toBe(true);
+    expect(matchesWhen(task('d', { statusCategory: 'done', dueDate: TODAY }), 'today', TODAY)).toBe(false);
+  });
+
+  it('keeps a task finished during this visit in the group it was in', () => {
+    const finished = task('e', { statusCategory: 'done', dueDate: TODAY });
+    expect(matchesWhen(finished, 'today', TODAY, new Set(['e']))).toBe(true);
   });
 });

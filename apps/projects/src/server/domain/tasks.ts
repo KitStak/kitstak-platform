@@ -28,7 +28,7 @@ import {
 } from '@/server/db/schema';
 import { invalid, notFound } from '@/server/errors';
 import { sanitizeRichText } from '@/server/sanitize';
-import type { DependencyKind, Priority, StatusCategory } from '@/lib/constants';
+import type { DependencyKind, Priority, StatusCategory, TaskKind } from '@/lib/constants';
 import { addDaysIso, isIsoDate, todayIso } from '@/lib/dates';
 import { compareRank, rankAfter, rankBefore, rankBetween } from '@/lib/rank';
 import { routes } from '@/lib/routes';
@@ -41,6 +41,14 @@ import { logActivity, type ActivityEntry } from './activity';
 import { addWatchers, listWatcherIds, notify } from './notifications';
 import { filterOrgMembers, isOrgMember } from './people';
 import { selectTaskRefs, selectTaskSummaries, selectTaskSummary } from './task-queries';
+import {
+  afterBuildTaskUpdate,
+  afterBuildsChanged,
+  assertTaskMoveTime,
+  beforeBuildTaskUpdate,
+  beforeDeleteTasks,
+  restoreBuildOutput,
+} from './programs/build-hooks';
 
 // --- Inputs ---------------------------------------------------------------------------------
 
@@ -117,7 +125,7 @@ function assertDateOrder(start: string | null, due: string | null): void {
   }
 }
 
-async function projectStatuses(executor: Executor, projectId: string): Promise<Status[]> {
+export async function projectStatuses(executor: Executor, projectId: string): Promise<Status[]> {
   return executor
     .select()
     .from(statuses)
@@ -125,7 +133,7 @@ async function projectStatuses(executor: Executor, projectId: string): Promise<S
     .orderBy(sql`${statuses.position} COLLATE "C"`);
 }
 
-function defaultStatus(list: readonly Status[]): Status {
+export function defaultStatus(list: readonly Status[]): Status {
   const status = list.find((s) => s.isDefault) ?? list.find((s) => s.category === 'todo') ?? list[0];
   if (!status) throw invalid('This project has no statuses yet. Add one in project settings.');
   return status;
@@ -220,7 +228,7 @@ async function placementRank(
   return rankAfter(last?.position);
 }
 
-async function nextTaskNumber(executor: Executor, projectId: string): Promise<number> {
+export async function nextTaskNumber(executor: Executor, projectId: string): Promise<number> {
   const [row] = await executor
     .update(projects)
     .set({ taskSeq: sql`${projects.taskSeq} + 1` })
@@ -240,6 +248,8 @@ async function engineTask(executor: Executor, taskId: string): Promise<TaskEvent
   if (!summary) return null;
   return {
     id: summary.id,
+    kind: summary.kind ?? 'task',
+    variantId: summary.build?.variantId ?? null,
     projectId: summary.projectId,
     title: summary.title,
     statusId: summary.statusId,
@@ -269,6 +279,8 @@ export interface ListProjectTasksOptions {
   readonly includeCompleted?: boolean;
   /** Include subtasks (default true). */
   readonly includeSubtasks?: boolean;
+  /** Tasks, builds or both (default `'all'`: projects can hold builds, docs/programs/SPEC.md 4.1). */
+  readonly workKind?: 'tasks' | 'builds' | 'all';
 }
 
 /** Every live task of a project, in manual (position) order. */
@@ -281,7 +293,8 @@ export async function listProjectTasks(
   const conditions: SQL[] = [eq(tasks.projectId, projectId), eq(tasks.orgId, ctx.orgId)];
   if (options.includeSubtasks === false) conditions.push(isNull(tasks.parentTaskId));
   if (options.includeCompleted === false) conditions.push(sql`${statuses.category} not in ('done', 'cancelled')`);
-  return selectTaskSummaries(and(...conditions));
+  const kind = options.workKind === 'tasks' ? 'task' : options.workKind === 'builds' ? 'build' : 'all';
+  return selectTaskSummaries(and(...conditions), { kind });
 }
 
 export type MyTasksScope = 'assigned' | 'created' | 'watching' | 'all';
@@ -289,10 +302,19 @@ export type MyTasksScope = 'assigned' | 'created' | 'watching' | 'all';
 /** Tasks across every project the actor can see (My Work, Home). */
 export async function listMyTasks(
   ctx: DomainContext,
-  options: { readonly scope?: MyTasksScope; readonly includeCompleted?: boolean; readonly limit?: number } = {},
+  options: {
+    readonly scope?: MyTasksScope;
+    readonly includeCompleted?: boolean;
+    readonly limit?: number;
+    /** Default `'tasks'`; My Work passes `'all'` and groups builds by run (4.1). */
+    readonly include?: 'tasks' | 'builds' | 'all';
+  } = {},
 ): Promise<TaskSummary[]> {
   const scope = options.scope ?? 'assigned';
-  const conditions: SQL[] = [eq(tasks.orgId, ctx.orgId), visibleProjectsWhere(ctx), isNull(projects.archivedAt)];
+  const include = options.include ?? 'tasks';
+  const conditions: SQL[] = [eq(tasks.orgId, ctx.orgId), visibleProjectsWhere(ctx, { kind: 'any' }), isNull(projects.archivedAt)];
+  if (include === 'tasks') conditions.push(eq(tasks.kind, 'task'));
+  if (include === 'builds') conditions.push(eq(tasks.kind, 'build'));
   const watching = sql`exists (select 1 from ${watchers} w where w.task_id = ${tasks.id} and w.user_id = ${ctx.userId})`;
   if (scope === 'assigned') conditions.push(eq(tasks.assigneeId, ctx.userId));
   if (scope === 'created') conditions.push(eq(tasks.createdBy, ctx.userId));
@@ -393,8 +415,22 @@ export async function insertTask(
   ctx: DomainContext,
   project: Project,
   input: CreateTaskInput,
-  options: { readonly statusList?: readonly Status[]; readonly logVerb?: string; readonly activityMeta?: Record<string, unknown> } = {},
+  options: {
+    readonly statusList?: readonly Status[];
+    readonly logVerb?: string;
+    readonly activityMeta?: Record<string, unknown>;
+    /**
+     * Internal (docs/programs/SPEC.md 4.1): default `'task'`. Only `domain/programs/builds.ts`
+     * passes `'build'` (and inserts the pm.builds row in the same transaction). Generic callers
+     * (forms in task mode, triage, templates, automations, recurrence, duplicate) make tasks.
+     */
+    readonly kind?: TaskKind;
+    /** Skip the "assigned you" notification (bulk build generation sends one summary instead). */
+    readonly quiet?: boolean;
+  } = {},
 ): Promise<Task> {
+  const kind: TaskKind = options.kind ?? 'task';
+  if (kind === 'build' && input.parentTaskId) throw invalid('A build is never a subtask.');
   const title = cleanText(input.title);
   if (!title) throw invalid('Give the task a name.', { title: 'Give the task a name.' });
   if (title.length > 500) throw invalid('Task names can be up to 500 characters.', { title: 'Too long.' });
@@ -422,6 +458,7 @@ export async function insertTask(
     .values({
       orgId: ctx.orgId,
       projectId: project.id,
+      kind,
       number,
       title,
       description: sanitizeRichText(input.description ?? null),
@@ -455,15 +492,15 @@ export async function insertTask(
     entityId: task.id,
     projectId: project.id,
     taskId: task.id,
-    after: { title, number, statusId: status.id, parentTaskId: task.parentTaskId },
+    after: { title, number, statusId: status.id, parentTaskId: task.parentTaskId, ...(kind === 'build' ? { kind } : {}) },
     meta: options.activityMeta,
   });
-  if (input.assigneeId) {
+  if (input.assigneeId && !options.quiet) {
     await notify(tx, ctx, {
       recipients: [input.assigneeId],
       kind: 'assigned',
       title: `${ctx.userName} assigned you ${taskKey(project.key, number)}: ${title}`,
-      url: taskUrl(project.key, number),
+      url: routes.taskAny(project.kind, project.key, number),
       projectId: project.id,
       taskId: task.id,
     });
@@ -609,6 +646,17 @@ export async function applyTaskUpdate(
   }
   if (changed.length === 0 && customFieldsChanged.length === 0) return { task: current, events: [] };
 
+  // Builds: date edits keep pm.builds.build_date equal to the due date and respect locks (4.1).
+  const buildBefore = await beforeBuildTaskUpdate(tx, ctx, current, {
+    startDate: changed.includes('startDate') ? next.startDate : undefined,
+    dueDate: changed.includes('dueDate') ? next.dueDate : undefined,
+  });
+  if (buildBefore && changed.includes('startDate') && !changed.includes('dueDate') && next.startDate) {
+    next.dueDate = next.startDate;
+    changed.push('dueDate');
+    await beforeBuildTaskUpdate(tx, ctx, current, { dueDate: next.startDate });
+  }
+
   const set: Partial<typeof tasks.$inferInsert> = {};
   for (const field of changed) (set as Record<string, unknown>)[field] = next[field];
   if (customFieldsChanged.length) set.customFields = mergedCustom;
@@ -623,6 +671,8 @@ export async function applyTaskUpdate(
   }
   set.updatedAt = new Date();
   const [updated] = await tx.update(tasks).set(set).where(eq(tasks.id, current.id)).returning();
+  // Builds: the finish trigger has moved finished_on; refresh the ledger in this transaction (A7, A13).
+  await afterBuildTaskUpdate(tx, ctx, buildBefore, Boolean(statusEvent));
 
   const entries: ActivityEntry[] = changed.map((field) => ({
     verb: 'task.updated',
@@ -901,6 +951,7 @@ export async function moveTaskToProject(
   options: { readonly statusId?: string } = {},
 ): Promise<TaskSummary> {
   const { task, project: source } = await requireTask(ctx, taskId, 'task:delete');
+  if (task.kind === 'build') throw invalid('Use Move to program or Move to project for builds.');
   if (task.parentTaskId) throw invalid('Move the parent task instead; subtasks move with it.');
   const { project: target } = await requireProject(ctx, { id: targetProjectId }, 'task:create');
   if (target.id === source.id) return getTaskSummary(ctx, taskId);
@@ -915,6 +966,8 @@ export async function moveTaskToProject(
       .select()
       .from(tasks)
       .where(and(or(eq(tasks.id, task.id), eq(tasks.parentTaskId, task.id)), isNull(tasks.deletedAt)));
+    // Time on a closed program day cannot move (4.1); the per hour fees of both sides refresh.
+    const timeMove = await assertTaskMoveTime(tx, ctx, family.map((member) => member.id), source.id, target.id);
     const [last] = await tx
       .select({ position: tasks.position })
       .from(tasks)
@@ -963,6 +1016,7 @@ export async function moveTaskToProject(
         },
       ]);
     }
+    await afterBuildsChanged(tx, ctx, timeMove);
   });
   return getTaskSummary(ctx, taskId);
 }
@@ -975,6 +1029,12 @@ export async function duplicateTask(
   options: { readonly includeSubtasks?: boolean; readonly title?: string } = {},
 ): Promise<TaskSummary> {
   const { task, project } = await requireTask(ctx, taskId, 'task:create');
+  if (task.kind === 'build') {
+    // Builds duplicate through the program domain (copies the builds row, never the output).
+    const { duplicateBuild } = await import('./programs/builds');
+    const copy = await duplicateBuild(ctx, taskId, { to: 'here' });
+    return getTaskSummary(ctx, copy.id);
+  }
   const copy = await db.transaction(async (tx) => {
     const labelRows = await tx.select({ labelId: taskLabels.labelId }).from(taskLabels).where(eq(taskLabels.taskId, task.id));
     const base = (source: Task, parentTaskId: string | null, labelIds: string[], title: string): CreateTaskInput => ({
@@ -1027,12 +1087,15 @@ export async function deleteTasks(ctx: DomainContext, taskIds: readonly string[]
     const { task, project } = await requireTask(ctx, id, 'task:delete');
     await db.transaction(async (tx) => {
       const now = new Date();
+      // Builds: refused with output in a closed month; open output goes with the build (4.3.6).
+      const buildChange = task.kind === 'build' ? await beforeDeleteTasks(tx, ctx, [task.id]) : { programIds: [], months: [] };
       const rows = await tx
         .update(tasks)
         .set({ deletedAt: now, updatedAt: now })
         .where(and(or(eq(tasks.id, task.id), eq(tasks.parentTaskId, task.id)), isNull(tasks.deletedAt)))
         .returning({ id: tasks.id });
       deleted.push(...rows.map((row) => row.id));
+      await afterBuildsChanged(tx, ctx, buildChange);
       await logActivity(tx, ctx, {
         verb: 'task.deleted',
         entityType: 'task',
@@ -1051,7 +1114,7 @@ export async function deleteTasks(ctx: DomainContext, taskIds: readonly string[]
 export async function restoreTasks(ctx: DomainContext, taskIds: readonly string[]): Promise<number> {
   if (taskIds.length === 0) return 0;
   const rows = await db
-    .select({ id: tasks.id, projectId: tasks.projectId, title: tasks.title })
+    .select({ id: tasks.id, projectId: tasks.projectId, title: tasks.title, kind: tasks.kind })
     .from(tasks)
     .where(and(inArray(tasks.id, [...taskIds]), eq(tasks.orgId, ctx.orgId)));
   let restored = 0;
@@ -1059,6 +1122,7 @@ export async function restoreTasks(ctx: DomainContext, taskIds: readonly string[
     await requireProject(ctx, { id: row.projectId }, 'task:delete');
     await db.transaction(async (tx) => {
       await tx.update(tasks).set({ deletedAt: null, updatedAt: new Date() }).where(eq(tasks.id, row.id));
+      if (row.kind === 'build') await afterBuildsChanged(tx, ctx, await restoreBuildOutput(tx, ctx, row.id));
       await logActivity(tx, ctx, {
         verb: 'task.restored',
         entityType: 'task',

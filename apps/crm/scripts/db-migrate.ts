@@ -5,6 +5,11 @@ import pg from 'pg';
 import { loadEnv } from '../src/server/env';
 
 async function main(): Promise<void> {
+  if (process.env.VERCEL_ENV === 'preview') {
+    // Preview deploys share the production database. Unmerged branches must never change it.
+    process.stdout.write('db:migrate - skipped on a Vercel preview build (production deploys apply migrations).\n');
+    return;
+  }
   const env = loadEnv();
   const pool = new pg.Pool({ connectionString: env.DATABASE_URL_UNPOOLED ?? env.DATABASE_URL, max: 1 });
   try {

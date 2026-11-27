@@ -53,6 +53,8 @@ const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.url().optional(),
   /** KitStak Projects origin (deep links, app switcher). */
   NEXT_PUBLIC_PROJECTS_URL: z.url().default('http://localhost:3400'),
+  /** KitStak Pulse origin (app switcher, Profit tab deep links). */
+  NEXT_PUBLIC_PULSE_URL: z.url().default('http://localhost:3500'),
   TRUSTED_ORIGINS: commaList,
   /**
    * Cookie Domain for cross-subdomain SSO (`.kitstak.io` in prod). Leave unset in dev —
@@ -73,6 +75,8 @@ const envSchema = z.object({
    */
   TRUST_PROXY: z.string().optional(),
   LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+  /** Bearer token for scheduled routes (Vercel Cron sends `Authorization: Bearer $CRON_SECRET`). */
+  CRON_SECRET: z.string().min(16).optional(),
   /** Optional token that unlocks the detailed /api/v1/health payload in production. */
   HEALTH_TOKEN: z.string().min(24, 'HEALTH_TOKEN must be at least 24 characters').optional(),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
@@ -80,6 +84,12 @@ const envSchema = z.object({
   /** Vercel Blob credentials. When either is set, uploads go to Blob instead of local disk. */
   BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
   BLOB_STORE_ID: z.string().min(1).optional(),
+  /**
+   * Supabase Storage credentials (server only). When both are set, uploads go to the private
+   * `crm-files` bucket. This is the preferred store: data and files live with one provider.
+   */
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   MAX_UPLOAD_BYTES: z.coerce
     .number()
     .int()
@@ -152,6 +162,12 @@ export const env: Readonly<ServerEnv> = new Proxy({} as ServerEnv, {
 });
 
 export const isProduction = (): boolean => getEnv().NODE_ENV === 'production';
+
+/** This app's public origin (links in emails). */
+export function appUrl(): string {
+  const current = getEnv();
+  return (current.NEXT_PUBLIC_APP_URL ?? current.BETTER_AUTH_URL).replace(/\/+$/, '');
+}
 
 /** All origins allowed to perform mutating requests (app URL + configured extras). */
 export function trustedOrigins(): string[] {

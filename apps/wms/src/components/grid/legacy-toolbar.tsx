@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { Count } from '@kitstak/ui/dashboard';
 import { ListFilter, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -64,14 +65,10 @@ export function FilterButton({
     <>
       <Dropdown
         trigger={(open) => (
-          <Button variant="secondary" size="md" className={cn(open && 'border-primary text-primary')}>
+          <Button variant="secondary" size="md" className={cn(open && 'border-border-strong')}>
             <ListFilter className="h-3.5 w-3.5" aria-hidden />
             Filter
-            {appliedCount > 0 ? (
-              <span className="rounded-full bg-primary px-1.5 text-2xs font-bold text-white">
-                {appliedCount}
-              </span>
-            ) : null}
+            {appliedCount > 0 ? <Count value={appliedCount} label="applied" /> : null}
           </Button>
         )}
         panelClassName="w-64 p-3"

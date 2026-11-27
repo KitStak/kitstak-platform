@@ -160,9 +160,15 @@ export const notifications = crmSchema.table(
     updateId: uuid('update_id').references(() => updates.id, { onDelete: 'cascade' }),
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
     readAt: timestamp('read_at', { withTimezone: true, mode: 'date' }),
+    /** The email scheduler is done with this row: sent, read first, or off in settings (drizzle/0008). */
+    emailHandledAt: timestamp('email_handled_at', { withTimezone: true, mode: 'date' }),
+    /** The email that carried this row went out. */
+    emailedAt: timestamp('emailed_at', { withTimezone: true, mode: 'date' }),
     ...timestamps(),
   },
   (t) => [
+    index('notifications_email_pending_idx').on(t.userId, t.createdAt).where(sql`${t.emailHandledAt} is null`),
+    index('notifications_emailed_idx').on(t.userId, t.emailedAt).where(sql`${t.emailedAt} is not null`),
     index('notifications_user_created_idx').on(t.userId, t.createdAt),
     index('notifications_user_unread_idx')
       .on(t.userId)

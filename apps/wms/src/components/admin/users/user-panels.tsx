@@ -159,9 +159,7 @@ export function UserDetailDrawer({
                   value: d.passwordChangedAt ? (
                     fmt.gridDateTime(d.passwordChangedAt)
                   ) : (
-                    <Badge tone="warning" size="sm">
-                      Change required at next sign-in
-                    </Badge>
+                    <Badge tone="warning">Change required at next sign-in</Badge>
                   ),
                 },
                 {
@@ -217,11 +215,7 @@ export function UserDetailDrawer({
                   <li key={sess.id} className="px-3 py-2.5">
                     <p className="flex items-center gap-2 text-sm font-medium text-foreground">
                       {deviceOf(sess.userAgent).label}
-                      {sess.isCurrent ? (
-                        <Badge tone="success" size="sm">
-                          This device
-                        </Badge>
-                      ) : null}
+                      {sess.isCurrent ? <Badge tone="success">This device</Badge> : null}
                     </p>
                     <p className="text-2xs text-faint">
                       {sess.ip ?? 'Unknown IP'} · signed in {fmt.gridDateTime(sess.createdAt)}
@@ -245,7 +239,7 @@ function AccessRow({ label, values }: { readonly label: string; readonly values:
       <div className="flex flex-wrap gap-1">
         {values.length ? (
           values.map((v) => (
-            <Badge key={v} tone="primary" size="md" shape="pill">
+            <Badge key={v} tone="info">
               {v}
             </Badge>
           ))
@@ -373,11 +367,7 @@ export function UserSessionsDrawer({
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2 text-sm font-medium text-foreground">
                     {device.label}
-                    {sess.isCurrent ? (
-                      <Badge tone="success" size="sm">
-                        This device
-                      </Badge>
-                    ) : null}
+                    {sess.isCurrent ? <Badge tone="success">This device</Badge> : null}
                   </p>
                   <p className="text-2xs text-faint">
                     {sess.ip ?? 'Unknown IP'} · signed in {fmt.gridDateTime(sess.createdAt)} · last active{' '}

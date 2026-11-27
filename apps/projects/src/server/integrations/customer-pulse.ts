@@ -13,9 +13,10 @@ import { integrationLinks } from '@/server/db/schema';
 import type { DomainContext } from '@/server/domain/_shared';
 import { listProjects } from '@/server/domain';
 import { crmItemUrl, getCrmItems } from './crm';
-import { customer360, type Customer360 } from './customer360';
+import { customer360, toCustomerProgram, type Customer360, type CustomerProgram } from './customer360';
 import { integrationAvailability } from './detect';
 import { closedDealTaskNeedsReview } from '@/lib/closed-deal-review';
+import type { ProgramListItemDTO } from '@/lib/program-types';
 
 export interface CustomerPulseRow {
   readonly key: string;
@@ -37,6 +38,8 @@ export interface CustomerPulseRow {
   readonly receiptsUrl: string | null;
   readonly exceptionsUrl: string | null;
   readonly risks: readonly { readonly id: string; readonly tone: 'danger' | 'warning'; readonly text: string; readonly href: string | null }[];
+  /** This customer's live programs (docs/programs/SPEC.md 4.1), the program directory's numbers. */
+  readonly programs: readonly CustomerProgram[];
 }
 
 /**
@@ -102,8 +105,9 @@ export async function customerPulse(ctx: DomainContext): Promise<CustomerPulse> 
   const sources = { deals: available.crm && (await orgHasDeals(ctx)), warehouse: available.wms };
   if (!available.crm && !available.wms) return { available, sources, ...EMPTY };
   const projects = (await listProjects(ctx)).filter((project) => project.status !== 'completed' && project.status !== 'archived');
-  if (projects.length === 0) return { available, sources, ...EMPTY };
-  const linked = await db
+  const programs = await livePrograms(ctx);
+  if (projects.length === 0 && programs.length === 0) return { available, sources, ...EMPTY };
+  const linked = projects.length === 0 ? [] : await db
     .selectDistinct({ projectId: integrationLinks.projectId })
     .from(integrationLinks)
     .where(
@@ -156,6 +160,7 @@ export async function customerPulse(ctx: DomainContext): Promise<CustomerPulse> 
       receiptsUrl: c360.wms?.receiptsUrl ?? null,
       exceptionsUrl: c360.wms?.exceptionsUrl ?? null,
       risks: [],
+      programs: [],
     };
     row.projects = [...row.projects, { id: project.id, key: project.key, name: project.name, openTasks, overdue: project.progress.overdue }];
     row.risks = [...row.risks, ...c360.risks.filter((risk) => !row.risks.some((seen) => seen.id === risk.id)).map(({ id, tone, text, href }) => ({ id, tone, text, href }))];
@@ -302,15 +307,53 @@ export async function customerPulse(ctx: DomainContext): Promise<CustomerPulse> 
           receiptsUrl: null,
           exceptionsUrl: null,
           risks: [],
+          programs: [],
         });
       }
     }
+  }
+
+  // Programs join the row of their customer (by id, else by name); a customer with programs only gets its own row.
+  for (const program of programs) {
+    const customer = program.customer;
+    if (!customer) continue;
+    const existing = byCustomer.get(customer.id) ?? [...byCustomer.values()].find((row) => sameName(row.customerName, customer.name));
+    const entry = toCustomerProgram(program);
+    if (existing) {
+      if (!existing.programs.some((p) => p.id === entry.id)) existing.programs = [...existing.programs, entry];
+      continue;
+    }
+    byCustomer.set(customer.id, {
+      key: customer.id,
+      customerName: undash(customer.name),
+      customerUrl: null,
+      projects: [],
+      deal: null,
+      lateReceipts: 0,
+      exceptions: 0,
+      openOrders: 0,
+      receiptsUrl: null,
+      exceptionsUrl: null,
+      risks: [],
+      programs: [entry],
+    });
   }
 
   const rows = [...byCustomer.values()].sort(
     (a, b) => b.risks.length + b.lateReceipts + b.exceptions - (a.risks.length + a.lateReceipts + a.exceptions) || a.customerName.localeCompare(b.customerName),
   );
   return { available, sources, rows, mismatches: mismatches.slice(0, 6) };
+}
+
+/** Live programs the viewer can see (fails soft to none). */
+async function livePrograms(ctx: DomainContext): Promise<ProgramListItemDTO[]> {
+  try {
+    const { listPrograms } = await import('@/server/domain/programs');
+    return (await listPrograms(ctx)).filter((program) => program.status !== 'completed' && program.status !== 'archived');
+  } catch (error) {
+    console.error('[projects] customer pulse programs read failed', error);
+    return [];
+  }
 }
 
 /** Deal id to its close date (YYYY-MM-DD) from the deal's Close date column. */

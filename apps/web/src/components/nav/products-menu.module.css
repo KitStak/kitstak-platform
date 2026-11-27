@@ -23,23 +23,30 @@
 }
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 0.9fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
   padding-top: 32px;
   padding-bottom: 28px;
   row-gap: 24px;
 }
+/* Each product shares the two rows of the panel (head, then links), so the link lists start on one
+   line even when a head runs a line longer, as it does with a status badge. */
 .product {
-  padding-right: 28px;
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  row-gap: 0;
+  align-items: start;
+  padding-right: 24px;
 }
 .product + .product {
-  padding-left: 28px;
+  padding-left: 24px;
   border-left: 1px solid var(--border-subtle);
 }
 .productHead {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 12px;
   padding: 12px;
   margin: -12px;
   border-radius: var(--radius-lg);
@@ -70,6 +77,19 @@
   opacity: 1;
   transform: none;
 }
+.status {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  color: var(--text-secondary);
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .blurb {
   display: block;
   margin-top: 4px;
@@ -80,7 +100,7 @@
 .links {
   list-style: none;
   margin: 24px 0 0;
-  padding: 0 0 0 60px;
+  padding: 0 0 0 56px;
   display: grid;
   gap: 2px;
 }
@@ -98,35 +118,37 @@
   transform: translateX(4px);
 }
 
+/* Four products fill the row, so the bundle is a band underneath them. */
 .bundle {
   --stak-lower: #8f122c;
-  margin-left: 40px;
-  padding: 28px;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 20px 24px;
   border-radius: var(--radius-xl);
   background: var(--surface-brand);
   color: var(--brand-cream);
 }
 .bundleTitle {
-  margin-top: 20px;
   font-size: var(--type-xl);
   font-weight: var(--weight-bold);
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
 .bundleBody {
-  margin-top: 8px;
+  flex: 1 1 280px;
   font-size: var(--type-base);
   color: rgb(244 241 233 / 0.72);
 }
 .bundleCta {
-  margin-top: 20px;
   height: 40px;
   padding: 0 16px;
   font-size: var(--type-base);
 }
 .all {
   display: block;
-  margin-top: 16px;
   font-size: var(--type-sm);
   color: rgb(244 241 233 / 0.72);
   text-decoration: underline;
@@ -136,26 +158,22 @@
   color: var(--brand-cream);
 }
 
-/* Three products and the bundle do not fit one row on smaller desktops: the bundle drops below. */
-@media (max-width: 1180px) {
-  .grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+/* Smaller desktops: tighter columns. Under 901px the drawer takes over from this menu. */
+@media (max-width: 1100px) {
+  .product {
+    padding-right: 16px;
   }
-  .bundle {
-    grid-column: 1 / -1;
-    margin-left: 0;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px 20px;
-    padding: 20px 24px;
+  .product + .product {
+    padding-left: 16px;
   }
-  .bundle .bundleTitle,
-  .bundle .bundleBody,
-  .bundle .bundleCta {
-    margin: 0;
+  .productHead {
+    flex-direction: column;
+    gap: 8px;
   }
-  .bundle .bundleBody {
-    flex: 1 1 280px;
+  .productHead > img {
+    margin: -6px 0 0 -6px;
+  }
+  .links {
+    padding-left: 0;
   }
 }

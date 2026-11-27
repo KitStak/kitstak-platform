@@ -40,12 +40,16 @@ interface BrandLogoProps {
   readonly wordmarkClassName?: string;
 }
 
-/** The KitStak lockup (bars + wordtype artwork), with the WMS product tag when requested. */
+/**
+ * The KitStak lockup (bars + wordtype artwork). With `showProduct` it is the WMS lockup: the WMS
+ * icon in place of the bars and the WMS product tag.
+ */
 export function BrandLogo({ tone = 'dark', height = 20, showProduct = false, className }: BrandLogoProps) {
   return (
     <Logo
       size={Math.round(height / 0.8)}
       product={showProduct ? 'WMS' : undefined}
+      app={showProduct ? 'wms' : undefined}
       tone={tone === 'dark' ? 'inverse' : 'auto'}
       className={className}
     />

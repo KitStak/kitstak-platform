@@ -377,6 +377,28 @@ export const NOTIFICATION_EVENTS = [
   { key: 'invitation', label: 'Invitations to boards & workspaces', description: 'When someone adds me' },
 ] as const;
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number]['key'];
+
+/** Events emailed unless the person turns email off for them (Profile, Notifications). */
+export const EMAIL_ON_BY_DEFAULT: ReadonlySet<string> = new Set(['mention', 'assigned', 'item_update']);
+
+/** The channels for an event the person never changed. */
+export function defaultChannels(event: string): { inApp: boolean; email: boolean } {
+  return { inApp: true, email: EMAIL_ON_BY_DEFAULT.has(event) };
+}
+
+/** Which settings row governs a notification kind. Reactions and board shares stay in the app. */
+export const EVENT_FOR_KIND: Readonly<Record<string, NotificationEvent | null>> = {
+  mention: 'mention',
+  assigned: 'assigned',
+  update_reply: 'item_update',
+  update_on_subscribed: 'item_update',
+  status_change: 'status_change',
+  due_date: 'due_date',
+  automation: 'automation',
+  invitation: 'invitation',
+  board_shared: 'invitation',
+  reaction: null,
+};
 const EVENT_KEYS = NOTIFICATION_EVENTS.map((event) => event.key) as [NotificationEvent, ...NotificationEvent[]];
 
 export const NOTIFICATION_CHANNELS = ['inApp', 'email'] as const;
@@ -408,7 +430,7 @@ export const profilePrefsSchema = z.object({
   notifications: z
     .record(z.string(), channelPrefSchema)
     .catch({}),
-  emailDigest: z.enum(['instant', 'daily', 'weekly', 'off']).catch('daily'),
+  emailDigest: z.enum(['instant', 'daily', 'weekly', 'off']).catch('instant'),
   quietHours: z
     .object({ enabled: z.boolean(), from: timeOfDay, to: timeOfDay })
     .catch({ enabled: false, from: '19:00', to: '08:00' }),

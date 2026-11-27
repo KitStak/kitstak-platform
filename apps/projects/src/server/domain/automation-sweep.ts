@@ -33,6 +33,9 @@ const CRM_TYPES: readonly IntegrationTargetType[] = ['crm_item', 'crm_account'];
 export function engineTaskFromSummary(summary: TaskSummary): TaskEvent['task'] {
   return {
     id: summary.id,
+    // Builds must say so, or workspace rules would treat them as tasks (docs/programs/SPEC.md 4.1).
+    kind: summary.kind ?? 'task',
+    variantId: summary.build?.variantId ?? null,
     projectId: summary.projectId,
     title: summary.title,
     statusId: summary.statusId,
@@ -239,6 +242,10 @@ export async function sweepAutomations(ctx: DomainContext, options: { readonly f
   lastSweep.set(ctx.orgId, now);
   if (lastSweep.size > 5000) lastSweep.clear();
   try {
+    // Automations change tasks. A view only org (trial over, payment late, paused, plan ended)
+    // gets no background writes; the sweep runs again once the plan is back to full access.
+    const { orgProjectsAccess } = await import('@/server/entitlements');
+    if ((await orgProjectsAccess(ctx.orgId)) !== 'full') return 0;
     // Cross-app recipes (CRM deal won, WMS receipt discrepancy, count variance): own throttle, never throws.
     const { runRecordTriggers } = await import('@/server/integrations/record-triggers');
     await runRecordTriggers(ctx, options);

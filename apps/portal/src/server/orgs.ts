@@ -5,6 +5,8 @@
  */
 import 'server-only';
 import { asc, eq } from 'drizzle-orm';
+import { defaultOrgIdFor } from '@kitstak/auth/sign-in-block';
+import type { RawSqlExecutor } from '@kitstak/auth/password-policy';
 import { member, organization, user } from '@kitstak/db/schema';
 import { db } from '@/server/db';
 import type { Session } from '@/server/session';
@@ -65,30 +67,15 @@ export async function getOrgOwner(orgId: string): Promise<OrgOwner | null> {
   return owner ? { name: owner.name, email: owner.email } : null;
 }
 
-export interface OrgGlance {
-  /** Active (non-deactivated) memberships. */
-  readonly memberCount: number;
-  readonly createdAt: Date;
-}
-
-/** Headline numbers for the launcher's org-at-a-glance strip; null when the org vanished. */
-export async function getOrgGlance(orgId: string): Promise<OrgGlance | null> {
-  const [orgRow] = await db
-    .select({ createdAt: organization.createdAt })
-    .from(organization)
-    .where(eq(organization.id, orgId));
-  if (!orgRow) return null;
-  const memberRows = await db
-    .select({ role: member.role })
-    .from(member)
-    .where(eq(member.organizationId, orgId));
-  const memberCount = memberRows.filter((row) => !row.role.startsWith(DEACTIVATED_PREFIX)).length;
-  return { memberCount, createdAt: orgRow.createdAt };
-}
-
 /**
- * The org the launcher should show: the session's active organization when the user is
- * still a member of it, otherwise the first org, otherwise null (no-org empty state).
+ * The org the launcher should show: the session's active organization when the user is still a
+ * member of it. Otherwise the one they worked in last, else one they own, else the one they joined
+ * first (`defaultOrgIdFor` in @kitstak/auth, the same rule a new session starts with). null when
+ * they are in none (no-org empty state).
+ *
+ * It was "otherwise the first by name" before (review round 4): an owner who is also a member of
+ * an organization earlier in the alphabet landed there after every sign in, and the one button of
+ * her failed payment email told her to ask someone else.
  */
 export async function resolveActiveOrg(
   session: Session,
@@ -97,5 +84,44 @@ export async function resolveActiveOrg(
   const memberships = orgs ?? (await listUserOrgs(session.user.id));
   if (memberships.length === 0) return null;
   const activeId = session.session.activeOrganizationId;
-  return memberships.find((org) => org.id === activeId) ?? memberships[0];
+  const active = memberships.find((org) => org.id === activeId);
+  if (active) return active;
+  if (memberships.length === 1) return memberships[0] ?? null;
+  let preferredId: string | null = null;
+  try {
+    preferredId = await defaultOrgIdFor(db as unknown as RawSqlExecutor, session.user.id);
+  } catch (error: unknown) {
+    console.error('[portal] could not read the starting organization', error);
+  }
+  return memberships.find((org) => org.id === preferredId) ?? memberships[0] ?? null;
+}
+
+export interface OrgMemberSummary {
+  readonly userId: string;
+  readonly name: string;
+  readonly email: string;
+  /** First role of the membership. */
+  readonly role: string;
+}
+
+/** Active members of an org by name. Used by the billing team page to pick a billing manager. */
+export async function listOrgMembers(orgId: string): Promise<OrgMemberSummary[]> {
+  const rows = await db
+    .select({ userId: user.id, name: user.name, email: user.email, role: member.role })
+    .from(member)
+    .innerJoin(user, eq(member.userId, user.id))
+    .where(eq(member.organizationId, orgId))
+    .orderBy(asc(user.name));
+  return rows
+    .filter((row) => !row.role.startsWith(DEACTIVATED_PREFIX))
+    .map((row) => ({ ...row, role: row.role.split(',')[0]?.trim() || 'member' }));
+}
+
+/** True when the user is an active member of the org. The test gateway pages check this themselves. */
+export async function isActiveOrgMember(userId: string, orgId: string): Promise<boolean> {
+  const rows = await db
+    .select({ role: member.role, userId: member.userId })
+    .from(member)
+    .where(eq(member.organizationId, orgId));
+  return rows.some((row) => row.userId === userId && !row.role.startsWith(DEACTIVATED_PREFIX));
 }

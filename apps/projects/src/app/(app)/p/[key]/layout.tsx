@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { headers } from 'next/headers';
+import { notFound, redirect } from 'next/navigation';
 import { cache } from 'react';
 import { ProjectFrame, ProjectProvider } from '@/features/projects';
 import { getProjectDetail, listOrgPeople, listProjectTasks, recordVisit } from '@/server/domain';
@@ -33,6 +34,13 @@ export async function generateMetadata({ params }: { readonly params: Promise<{ 
 export default async function ProjectLayout({ children, params }: { readonly children: React.ReactNode; readonly params: Promise<{ key: string }> }) {
   const { key } = await params;
   const { ctx, project } = await loadProject(decodeURIComponent(key));
+  if (project.kind === 'program') {
+    // Programs live at /programs/KEY (docs/programs/SPEC.md 4.1): keep the tab or build number.
+    const path = (await headers()).get('x-ks-path') ?? '';
+    const rest = path.replace(/^\/p\/[^/?#]+/, '');
+    const tab = /^\/(board|list|table|calendar|timeline)(?:[/?#]|$)/.exec(rest);
+    redirect(tab ? `/programs/${project.key}/builds/${tab[1]}` : `/programs/${project.key}${rest}`);
+  }
   // Tasks and people ride along with the first HTML so every tab (board, list, table, timeline,
   // calendar, workload, overview) paints real rows instead of skeletons. The layout persists across
   // tab switches, so the client cache seeded here makes later switches instant.

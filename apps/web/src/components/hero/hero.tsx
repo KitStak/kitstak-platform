@@ -1,8 +1,10 @@
 import Link from 'next/link';
-import { ROUTES } from '../site-links';
-import { HeroLoop } from './hero-loop';
+import { TRIAL_LINE } from '@/lib/pricing';
+import { HELP_LABEL, ROUTES, START_LABEL, startFreeHref } from '../site-links';
+import { OrderStack } from './order-stack';
 import styles from './hero.module.css';
 
+/** The chip loop (./hero-loop) is unmounted, not deleted. The hero uses the original animated order stack. */
 export function Hero() {
   return (
     <section id="top" className={styles.hero} aria-labelledby="hero-heading">
@@ -12,20 +14,25 @@ export function Hero() {
             Put the whole operation on <span className={styles.accent}>one stack.</span>
           </h1>
           <p className={styles.lead}>
-            KitStak runs your customers, your warehouse and your projects on one database and one sign-in. The deal your
-            team closes is the order your floor picks, and the project that delivers it.
+            KitStak runs your customers, your warehouse, your projects and your job profit on one database and one
+            sign-in. The deal your team closes is the order your floor picks, the project that delivers it and the job
+            you see the profit on.
           </p>
           <div className={styles.actions}>
-            <Link href={ROUTES.getStarted} className="btn btn-primary">
-              Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
-            </Link>
-            <Link href={ROUTES.products} className="btn btn-ghost-inverse">
-              See the products
+            <a href={startFreeHref()} className="btn btn-primary" data-testid="hero-start">
+              {START_LABEL} <span className="btn-arrow" aria-hidden>→</span>
+            </a>
+            <Link href={ROUTES.getStarted} className="btn btn-ghost-inverse" data-testid="hero-help">
+              {HELP_LABEL}
             </Link>
           </div>
+          {/* What "Start free" means, right under the button. The number comes from the one catalog. */}
+          <p className={styles.note} data-testid="hero-trial-note">
+            {TRIAL_LINE}
+          </p>
         </div>
+        <OrderStack />
       </div>
-      <HeroLoop />
     </section>
   );
 }

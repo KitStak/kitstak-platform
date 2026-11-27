@@ -10,6 +10,7 @@ const SIBLING_APP_URLS = [
   process.env.NEXT_PUBLIC_PORTAL_URL ?? 'http://localhost:3300',
   process.env.NEXT_PUBLIC_CRM_URL ?? 'http://localhost:3100',
   process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
+  process.env.NEXT_PUBLIC_PULSE_URL ?? 'http://localhost:3500',
 ];
 
 /* KitStak type: Inter for all UI text and headings (same face as Portal, CRM and WMS). */

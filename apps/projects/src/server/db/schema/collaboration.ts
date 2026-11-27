@@ -120,6 +120,7 @@ export const timeEntries = pmSchema.table(
   (t) => [
     index('time_entries_task_idx').on(t.taskId),
     index('time_entries_user_idx').on(t.orgId, t.userId, t.startedAt),
+    index('time_entries_project_started_idx').on(t.projectId, t.startedAt).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 
@@ -142,9 +143,15 @@ export const notifications = pmSchema.table(
     url: text('url'),
     readAt: tstz('read_at'),
     archivedAt: tstz('archived_at'),
+    /** The email scheduler is done with this row: sent, read first, or not for email (drizzle/0007). */
+    emailHandledAt: tstz('email_handled_at'),
+    /** The email that carried this row went out. */
+    emailedAt: tstz('emailed_at'),
     createdAt: createdAt(),
   },
   (t) => [
+    index('notifications_email_pending_idx').on(t.userId, t.createdAt).where(sql`${t.emailHandledAt} IS NULL`),
+    index('notifications_emailed_idx').on(t.userId, t.emailedAt).where(sql`${t.emailedAt} IS NOT NULL`),
     index('notifications_inbox_idx').on(t.orgId, t.userId, t.createdAt),
     index('notifications_unread_idx')
       .on(t.orgId, t.userId)

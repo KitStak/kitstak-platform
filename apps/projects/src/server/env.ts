@@ -28,6 +28,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_PORTAL_URL: z.url().default('http://localhost:3300'),
   NEXT_PUBLIC_CRM_URL: z.url().default('http://localhost:3100'),
   NEXT_PUBLIC_WMS_URL: z.url().default('http://localhost:3000'),
+  NEXT_PUBLIC_PULSE_URL: z.url().default('http://localhost:3500'),
   AUTH_COOKIE_DOMAIN: z
     .string()
     .regex(
@@ -87,13 +88,14 @@ export function appUrl(): string {
 }
 
 /** Absolute URLs of every KitStak app (app switcher, deep links). */
-export function appUrls(): { portal: string; crm: string; wms: string; projects: string } {
+export function appUrls(): { portal: string; crm: string; wms: string; projects: string; pulse: string } {
   const current = getEnv();
   return {
     portal: current.NEXT_PUBLIC_PORTAL_URL.replace(/\/+$/, ''),
     crm: current.NEXT_PUBLIC_CRM_URL.replace(/\/+$/, ''),
     wms: current.NEXT_PUBLIC_WMS_URL.replace(/\/+$/, ''),
     projects: appUrl(),
+    pulse: current.NEXT_PUBLIC_PULSE_URL.replace(/\/+$/, ''),
   };
 }
 
@@ -102,7 +104,7 @@ export function trustedOrigins(): string[] {
   const current = getEnv();
   const origins = new Set<string>([new URL(current.BETTER_AUTH_URL).origin]);
   if (current.NEXT_PUBLIC_APP_URL) origins.add(new URL(current.NEXT_PUBLIC_APP_URL).origin);
-  for (const sibling of [current.NEXT_PUBLIC_PORTAL_URL, current.NEXT_PUBLIC_CRM_URL, current.NEXT_PUBLIC_WMS_URL]) {
+  for (const sibling of [current.NEXT_PUBLIC_PORTAL_URL, current.NEXT_PUBLIC_CRM_URL, current.NEXT_PUBLIC_WMS_URL, current.NEXT_PUBLIC_PULSE_URL]) {
     origins.add(new URL(sibling).origin);
   }
   for (const origin of current.TRUSTED_ORIGINS) {

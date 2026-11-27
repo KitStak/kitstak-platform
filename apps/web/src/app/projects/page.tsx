@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/components/json-ld';
+import { breadcrumbLd, softwareApplicationLd } from '@/lib/seo';
 import { ClosingSection } from '@/components/closing/closing-section';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
@@ -24,10 +26,10 @@ import {
 import { CrossRecipes, CustomerCard, TemplateGrid } from '@/components/projects/projects-static-visuals';
 import { QuickAdd } from '@/components/projects/quick-add';
 import { RecipeBrowser } from '@/components/projects/recipe-browser';
-import { LINKS, getStartedHref } from '@/components/site-links';
+import { LINKS, startFreeHref } from '@/components/site-links';
 import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
 
-const START = getStartedHref('projects');
+const START = startFreeHref('projects', 'product');
 
 export const metadata: Metadata = {
   title: 'KitStak Projects - plans, tasks and timelines on the same stack',
@@ -48,6 +50,7 @@ export default function ProjectsPage() {
       <PageEffects />
       <Header />
       <main id="main">
+        <JsonLd data={[softwareApplicationLd('projects'), breadcrumbLd([{ name: 'KitStak Projects', path: '/projects' }])]} />
         <ProductHero
           product="KitStak Projects"
           app="projects"
@@ -144,7 +147,7 @@ export default function ProjectsPage() {
           title="Put the third bar on your stack."
           startHref={START}
           startLabel="Start with Projects"
-          note="Runs on its own, or alongside the CRM and the WMS with one sign-in."
+          note="Runs on its own, or alongside the CRM, the WMS and Pulse with one sign-in."
         />
       </main>
       <Footer />

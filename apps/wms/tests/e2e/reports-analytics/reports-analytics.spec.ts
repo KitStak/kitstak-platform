@@ -99,7 +99,7 @@ test.describe('dashboard drilldowns', () => {
 
   test('Jobs card labels what each tab counts', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.getByText('Progress for Today')).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText('Progress for today')).toBeVisible({ timeout: 90_000 });
     await expect(page.getByTestId('jobs-scope')).toContainText('Open jobs');
     await page.getByLabel('Group jobs by').getByText('Status', { exact: true }).click();
     await expect(page.getByTestId('jobs-scope')).toContainText('completed today');

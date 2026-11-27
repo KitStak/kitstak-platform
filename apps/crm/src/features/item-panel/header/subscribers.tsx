@@ -27,28 +27,49 @@ const MAX_VISIBLE = 3;
 const OVERLAP = 2;
 const RING = { boxShadow: '0 0 0 2px var(--surface-raised)' } as const;
 
+/** Overflow chip: "+N" with every hidden name in its tooltip. */
+function MoreChip({ people, className }: { readonly people: readonly UserSummaryDto[]; readonly className?: string }) {
+  const names = people.map((person) => person.name).join(', ');
+  return (
+    <Tooltip content={names} side="bottom">
+      <span
+        tabIndex={0}
+        aria-label={`${people.length} more: ${names}`}
+        className={cn(
+          'relative items-center justify-center rounded-full bg-muted text-2xs font-semibold text-fg-secondary tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+          'size-6',
+          className,
+        )}
+        style={{ ...RING, zIndex: MAX_VISIBLE + 1, marginLeft: OVERLAP }}
+      >
+        +{people.length}
+      </span>
+    </Tooltip>
+  );
+}
+
+/**
+ * Overlapping avatars. On a wide panel up to three show before "+N"; at the default panel width
+ * the stack collapses to one avatar and "+N" sooner, so the breadcrumb and the close button
+ * always keep their room.
+ */
 function SubscriberStack({ people }: { readonly people: readonly UserSummaryDto[] }) {
   const visible = people.slice(0, MAX_VISIBLE);
   const hidden = people.slice(MAX_VISIBLE);
+  const narrowHidden = people.slice(1);
   return (
     <div role="group" aria-label={`${people.length} subscribers`} className="isolate hidden shrink-0 items-center pl-0.5 @min-[480px]:flex">
       {visible.map((person, index) => (
-        <span key={person.id} className="relative inline-flex rounded-full" style={{ ...RING, zIndex: index + 1, marginLeft: index === 0 ? 0 : -OVERLAP }}>
+        <span
+          key={person.id}
+          className={cn('relative rounded-full', index === 0 ? 'inline-flex' : 'hidden @min-[760px]:inline-flex')}
+          style={{ ...RING, zIndex: index + 1, marginLeft: index === 0 ? 0 : -OVERLAP }}
+        >
           <Avatar name={person.name} src={person.image} colorKey={person.id} size="sm" showTooltip />
         </span>
       ))}
-      {hidden.length > 0 ? (
-        <Tooltip content={hidden.map((person) => person.name).join(', ')} side="bottom">
-          <span
-            tabIndex={0}
-            aria-label={`${hidden.length} more: ${hidden.map((person) => person.name).join(', ')}`}
-            className="relative inline-flex size-6 items-center justify-center rounded-full bg-muted text-2xs font-semibold text-fg-secondary tabular-nums focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            style={{ ...RING, zIndex: MAX_VISIBLE + 1, marginLeft: OVERLAP }}
-          >
-            +{hidden.length}
-          </span>
-        </Tooltip>
-      ) : null}
+      {narrowHidden.length > 0 ? <MoreChip people={narrowHidden} className="inline-flex @min-[760px]:hidden" /> : null}
+      {hidden.length > 0 ? <MoreChip people={hidden} className="hidden @min-[760px]:inline-flex" /> : null}
     </div>
   );
 }
@@ -93,7 +114,7 @@ export function Subscribers({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="secondary" size="sm" leadingIcon={<UserPlus aria-hidden />} aria-label={`Subscribers: ${people.length}. Invite`}>
-            <span className="hidden sm:inline">Invite</span>
+            <span className="hidden @min-[760px]:inline">Invite</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="flex w-[300px] flex-col gap-2 p-2" aria-label="Subscribers">

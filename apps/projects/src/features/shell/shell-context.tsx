@@ -5,6 +5,8 @@
  * flags. Read it anywhere with `useShell()`.
  */
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import type { PlanBannerNotice } from '@kitstak/ui/plan-banner';
+import type { AppSwitcherPlanBadge } from '@kitstak/ui/plan-badges';
 import { canOrg, type OrgAction, type OrgRole } from '@/lib/permissions';
 
 export interface ShellOrg {
@@ -20,11 +22,27 @@ export interface ShellContextValue {
   readonly org: ShellOrg;
   readonly orgRole: OrgRole;
   readonly orgs: readonly ShellOrg[];
-  readonly appUrls: { readonly portal: string; readonly crm: string; readonly wms: string; readonly projects: string };
-  readonly modules: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  readonly appUrls: { readonly portal: string; readonly crm: string; readonly wms: string; readonly projects: string; readonly pulse?: string };
+  readonly modules: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean; readonly pulse?: boolean };
   readonly integrations: { readonly crm: boolean; readonly wms: boolean };
   /** Sibling apps this org cannot use on any plan (app switcher shows them as "Not in your plan"). */
   readonly notInPlan?: readonly ('crm' | 'wms')[];
+  /** Plan state per app for the app switcher (`AppPlanView.badges`). */
+  readonly planBadges?: Readonly<Partial<Record<ShellProductId, AppSwitcherPlanBadge>>>;
+  /** Where a row that is not in the plan goes: the Portal plan picker with that app turned on. */
+  readonly addHrefs?: Readonly<Partial<Record<ShellProductId, string>>>;
+  /** The organization's plan as the shell needs it. Omitted outside the signed-in app. */
+  readonly plan?: ShellPlan;
+}
+
+export type ShellProductId = 'crm' | 'wms' | 'projects' | 'pulse';
+
+/** docs/billing/CONTRACTS.md section 18. */
+export interface ShellPlan {
+  /** `read_only` = view only: everything opens and reads, every change is refused by the server. */
+  readonly access: 'full' | 'read_only';
+  /** The plan banner under the top bar, or null. Words and link come from `@kitstak/billing`. */
+  readonly notice: PlanBannerNotice | null;
 }
 
 interface ShellContextApi extends ShellContextValue {
@@ -43,6 +61,11 @@ export function useShell(): ShellContextApi {
   const context = useContext(ShellContext);
   if (!context) throw new Error('useShell must be used inside the signed-in app shell');
   return context;
+}
+
+/** True while the organization's plan is view only. UI hint only; the server refuses every write. */
+export function usePlanReadOnly(): boolean {
+  return useContext(ShellContext)?.plan?.access === 'read_only';
 }
 
 /** Same as useShell but null outside the shell (public pages). */

@@ -4,9 +4,11 @@
  */
 import 'server-only';
 import { headers } from 'next/headers';
+import type { AppPlanView } from '@kitstak/billing/server';
 import { getPlatformDb } from '@/server/api/db';
 import { getWmsAuth } from '@/server/auth/auth';
-import { listWmsOrgs, openableOrgs, setupCandidates } from './registry';
+import { getPlanView, portalUrl } from '@/server/auth/plan';
+import { isSetupRole, listWmsOrgs, openableOrgs, setupCandidates } from './registry';
 
 export interface SetupOffers {
   readonly signedIn: boolean;
@@ -15,6 +17,31 @@ export interface SetupOffers {
   readonly hasWarehouse: boolean;
   /** Orgs that hold WMS but whose owner/admin has not set the warehouse up yet. */
   readonly waitingOn: readonly string[];
+  /**
+   * The first organization this person could set a warehouse up for, if its plan were not view
+   * only (the trial ended, the plan ended, a payment is late). They are an owner or admin, so
+   * "ask an owner or admin" would be a dead end: the page shows the plan words and the way to
+   * fix it instead. null when there is none.
+   */
+  readonly needsPlan: {
+    readonly orgName: string;
+    /** The plan banner's words for this person ("Your free trial ended on Dec 7. ..."). */
+    readonly text: string | null;
+    /** The banner's button ("Pick a plan"), or null for a person who cannot manage billing. */
+    readonly action: { readonly label: string; readonly href: string } | null;
+  } | null;
+  /** The Portal, for a way out of this page that always works. */
+  readonly portalHref: string;
+  /**
+   * What the page frame shows for the organization this screen is about: its name, the plan
+   * banner (for example "Free trial. 14 days left.") and the plan state of each app for the app
+   * switcher. null when the person has no organization this screen can be about.
+   */
+  readonly frame: {
+    readonly orgName: string;
+    readonly notice: AppPlanView['notice'];
+    readonly badges: AppPlanView['badges'];
+  } | null;
 }
 
 export async function loadSetupOffers(): Promise<SetupOffers> {
@@ -23,14 +50,40 @@ export async function loadSetupOffers(): Promise<SetupOffers> {
   const session = await auth.api
     .getSession({ headers: requestHeaders, query: { disableCookieCache: true } })
     .catch(() => null);
-  if (!session) return { signedIn: false, offers: [], hasWarehouse: false, waitingOn: [] };
-  const choices = await listWmsOrgs(await getPlatformDb(), session.user.id);
+  const portalHref = portalUrl();
+  if (!session) return { signedIn: false, offers: [], hasWarehouse: false, waitingOn: [], needsPlan: null, portalHref, frame: null };
+  const platformDb = await getPlatformDb();
+  const choices = await listWmsOrgs(platformDb, session.user.id);
   const offers = setupCandidates(choices).map((c) => ({ orgId: c.orgId, orgName: c.name }));
   const offered = new Set(offers.map((o) => o.orgId));
+  // An owner or admin of a view only organization with no warehouse yet: setting one up is a
+  // change, so it waits for a plan. The reader IS the owner, so the page must not say "ask an owner".
+  const held = choices.find((c) => c.entitled && c.viewOnly === true && !c.schemaName && isSetupRole(c.memberRole));
+  let needsPlan: SetupOffers['needsPlan'] = null;
+  let frame: SetupOffers['frame'] = null;
+  if (held) {
+    const view = await getPlanView(platformDb, { orgId: held.orgId, userId: session.user.id, role: held.memberRole }).catch(() => null);
+    needsPlan = {
+      orgName: held.name,
+      text: view?.notice?.text ?? null,
+      action: view?.notice?.action ? { label: view.notice.action.label, href: view.notice.action.href } : null,
+    };
+    // The page already says the plan words in its card, so the frame does not repeat them in a banner.
+    if (view) frame = { orgName: held.name, notice: null, badges: view.badges };
+  }
+  // The organization the setup form is for (the first one offered), or the one a member waits on.
+  const about = setupCandidates(choices)[0] ?? choices.find((c) => c.entitled && !c.schemaName && c.orgId !== held?.orgId);
+  if (!frame && about) {
+    const view = await getPlanView(platformDb, { orgId: about.orgId, userId: session.user.id, role: about.memberRole }).catch(() => null);
+    if (view) frame = { orgName: about.name, notice: view.notice, badges: view.badges };
+  }
   return {
     signedIn: true,
     offers,
     hasWarehouse: openableOrgs(choices).length > 0,
-    waitingOn: choices.filter((c) => c.entitled && !c.schemaName && !offered.has(c.orgId)).map((c) => c.name),
+    waitingOn: choices.filter((c) => c.entitled && !c.schemaName && !offered.has(c.orgId) && c.orgId !== held?.orgId).map((c) => c.name),
+    needsPlan,
+    portalHref,
+    frame,
   };
 }

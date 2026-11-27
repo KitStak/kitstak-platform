@@ -20,6 +20,7 @@ import { useShell } from '@/features/shell/shell-context';
 import { ProjectHealthBadge, healthMismatch } from '@/features/projects/health';
 import { healthProgressTone } from '@/lib/health';
 import { ProgressRing } from './charts';
+import { ProgramsSection, type ProgramsDashboardData } from './program-panels';
 import { BurnPanel, CompletedPanel, CycleTimePanel, KpiTiles, OverduePanel, StatusPanel, VelocityPanel, WorkloadPanel } from './report-panels';
 
 export interface DashboardsFilters {
@@ -128,7 +129,7 @@ function ReportSkeleton() {
   );
 }
 
-export function DashboardsView({ initialReport, initialProjects, initialFilters }: { readonly initialReport: ReportDTO | null; readonly initialProjects: ProjectSummary[]; readonly initialFilters: DashboardsFilters }) {
+export function DashboardsView({ initialReport, initialProjects, initialFilters, programs = null }: { readonly initialReport: ReportDTO | null; readonly initialProjects: ProjectSummary[]; readonly initialFilters: DashboardsFilters; readonly programs?: ProgramsDashboardData | null }) {
   const pathname = usePathname() ?? '/dashboards';
   const searchParams = useSearchParams();
   const { can } = useShell();
@@ -269,6 +270,7 @@ export function DashboardsView({ initialReport, initialProjects, initialFilters 
             {data.scope.kind === 'portfolio' ? <PortfolioProjects projects={portfolioProjects} spaces={spaceById} /> : null}
             <CompletedPanel report={data} taskHref={taskHref} />
           </div>
+          {programs && data.scope.kind === 'portfolio' ? <ProgramsSection data={programs} /> : null}
           {selected ? (
             <p className="text-center text-xs text-fg-muted">
               Owner <PersonAvatar userId={selected.ownerId} size="xs" showName className="align-middle" /> · Reports count top-level tasks; subtasks roll up into their parent.

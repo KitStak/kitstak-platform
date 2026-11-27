@@ -15,6 +15,15 @@ const commaList = z
       .filter((entry) => entry.length > 0),
   );
 
+/** An optional string where an empty value (a blank line in an env file) means "not set". */
+const optionalText = z
+  .string()
+  .optional()
+  .transform((value) => {
+    const trimmed = value?.trim() ?? '';
+    return trimmed === '' ? undefined : trimmed;
+  });
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z
@@ -29,8 +38,9 @@ const envSchema = z.object({
   NEXT_PUBLIC_CRM_URL: z.url().default('http://localhost:3100'),
   NEXT_PUBLIC_WMS_URL: z.url().default('http://localhost:3000'),
   NEXT_PUBLIC_PROJECTS_URL: z.url().default('http://localhost:3400'),
+  NEXT_PUBLIC_PULSE_URL: z.url().default('http://localhost:3500'),
   /**
-   * Cookie domain for cross-subdomain SSO (`.kitstak.io` in prod). Leave unset in dev —
+   * Cookie domain for cross-subdomain SSO (`.kitstak.io` in prod). Leave unset in dev:
    * localhost ports already share host-only `kitstak.*` cookies (BLUEPRINT.md §1.2).
    */
   AUTH_COOKIE_DOMAIN: z
@@ -44,11 +54,65 @@ const envSchema = z.object({
   TRUST_PROXY: z.string().optional(),
   /**
    * Slug of the org that owns the (single-tenant) WMS install. The launcher's setup
-   * guide shows WMS steps only for this org — WMS tables are not org-scoped, so reading
+   * guide shows WMS steps only for this org: WMS tables are not org-scoped, so reading
    * them for any other org would leak the install's state (docs/integration/ONBOARDING.md).
    */
   WMS_PLATFORM_ORG_SLUG: z.string().min(1).default('kitstak'),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(5),
+
+  // Signup and billing (docs/billing/CONTRACTS.md section 16.1). All optional. Secrets are read
+  // here and from nowhere else; none of them ever belongs in the repo.
+  /**
+   * Stripe secret key. Absent outside production: the built in test gateway runs and screens say
+   * "Test mode". Absent in production: billing is off and says so. Never a fake charge.
+   */
+  STRIPE_SECRET_KEY: optionalText,
+  /** Signing secret (whsec_...) of the portal webhook endpoint. Required together with the key. */
+  STRIPE_WEBHOOK_SECRET: optionalText,
+  /** Billing Portal configuration id (bpc_...) from `pnpm -F @kitstak/billing stripe:setup apply`. */
+  STRIPE_PORTAL_CONFIGURATION_ID: optionalText,
+  /** `1` turns Stripe Tax on. Off by default: Stripe Tax needs registrations set in the account. */
+  STRIPE_AUTOMATIC_TAX: optionalText,
+  /** Optional fixed signing secret for the test gateway. Default: derived from BETTER_AUTH_SECRET. */
+  BILLING_TEST_WEBHOOK_SECRET: optionalText,
+  /** Bearer secret for the billing jobs tick route. Required in production. */
+  CRON_SECRET: optionalText,
+  /** `resend` or `outbox`. Default: Resend when its key is set, else the dev outbox outside production. */
+  EMAIL_PROVIDER: z.enum(['resend', 'outbox']).optional(),
+  RESEND_API_KEY: optionalText,
+  /** For example `KitStak <billing@your-domain>`. Required for Resend. Set at go live. */
+  EMAIL_FROM: optionalText,
+  EMAIL_REPLY_TO: optionalText,
+  /** Google sign in. The button shows only when both are set. */
+  GOOGLE_CLIENT_ID: optionalText,
+  GOOGLE_CLIENT_SECRET: optionalText,
+  /** Microsoft sign in. The button shows only when id and secret are set. Tenant defaults to `common`. */
+  MICROSOFT_CLIENT_ID: optionalText,
+  MICROSOFT_CLIENT_SECRET: optionalText,
+  MICROSOFT_TENANT_ID: optionalText,
+  /**
+   * Who sells: printed in the "From" block of every invoice on screen. The name defaults to the
+   * company that holds the Stripe account. The address (parts split with `|`) and the tax ID are
+   * left out until the owner sets them. Nothing is made up.
+   */
+  BILLING_SELLER_NAME: optionalText,
+  BILLING_SELLER_ADDRESS: optionalText,
+  BILLING_SELLER_TAX_ID: optionalText,
+  /**
+   * Billing help, shown at the foot of every billing page. The address defaults to the one the
+   * marketing site publishes. The reply time ("1 business day") is a promise only the owner can
+   * make: the page says "We reply within ..." only once it is set here. Nothing is made up.
+   */
+  BILLING_SUPPORT_EMAIL: z.email().default('hello@kitstak.com'),
+  BILLING_SUPPORT_REPLY_TIME: optionalText,
+  /** Marketing site origin, for "Talk to us" and pricing links. */
+  // The marketing site ("Talk to us", Terms, Privacy, pricing). With no value set, local dev uses the
+  // local site on port 3600 (docs/billing/DEV.md), so those links never leave the machine. Production
+  // uses the real site.
+  NEXT_PUBLIC_SITE_URL: z.url().default(process.env.NODE_ENV === 'production' ? 'https://kitstak.com' : 'http://localhost:3600'),
+  /** Legal links on the signup and sign in screens. Default: the Terms and Privacy pages of the marketing site. */
+  NEXT_PUBLIC_TERMS_URL: z.url().optional(),
+  NEXT_PUBLIC_PRIVACY_URL: z.url().optional(),
 });
 
 export type ServerEnv = z.infer<typeof envSchema>;
@@ -86,6 +150,19 @@ export const env: Readonly<ServerEnv> = new Proxy({} as ServerEnv, {
 });
 
 export const isProduction = (): boolean => getEnv().NODE_ENV === 'production';
+
+/**
+ * Terms and Privacy links. Default: the pages on the marketing site, which carry the billing rules
+ * (renewal, canceling, refunds, tax) and the site's own header, not an app's navigation.
+ */
+export function legalUrls(): { terms: string; privacy: string } {
+  const current = getEnv();
+  const site = current.NEXT_PUBLIC_SITE_URL.replace(/\/+$/, '');
+  return {
+    terms: current.NEXT_PUBLIC_TERMS_URL ?? `${site}/terms`,
+    privacy: current.NEXT_PUBLIC_PRIVACY_URL ?? `${site}/privacy`,
+  };
+}
 
 /** All origins allowed to perform mutating requests (own URL + sibling apps + extras). */
 export function trustedOrigins(): string[] {

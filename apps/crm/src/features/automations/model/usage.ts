@@ -3,7 +3,8 @@ export interface UsageSummary {
   readonly used: number;
   readonly allowance: number;
   readonly percent: number;
-  readonly tone: 'primary' | 'warning' | 'danger';
+  /** `data` until the warning line, then warning, then danger at the allowance. */
+  readonly tone: 'data' | 'warning' | 'danger';
   /** Linear projection of runs at month end. */
   readonly forecast: number;
   readonly forecastOver: boolean;
@@ -25,7 +26,7 @@ export function summarizeUsage(input: {
     used: input.used,
     allowance,
     percent: Math.min(100, ratio * 100),
-    tone: ratio >= 1 ? 'danger' : ratio >= WARNING_RATIO ? 'warning' : 'primary',
+    tone: ratio >= 1 ? 'danger' : ratio >= WARNING_RATIO ? 'warning' : 'data',
     forecast,
     forecastOver: forecast > allowance,
   };

@@ -1,11 +1,11 @@
 import { headers } from 'next/headers';
-import { notFound } from 'next/navigation';
-import { AppShell, LockedScreen } from '@/features/shell';
+import { notFound, redirect } from 'next/navigation';
+import { AppShell, LockedFrame } from '@/features/shell';
 import { loadShell } from '@/features/shell/shell-frame';
 import { getProjectDetail, listOrgPeople, resolveTaskKey } from '@/server/domain';
+import { requireProgram } from '@/server/domain/programs';
 import { isDomainError } from '@/server/errors';
 import { requirePageContext } from '@/server/session';
-import { canOrg } from '@/lib/permissions';
 
 /** Org people for the shell's people cache, stamped with when they were read (undefined on failure). */
 async function loadPeople(ctx: Parameters<typeof listOrgPeople>[0]) {
@@ -21,13 +21,9 @@ export default async function AppLayout({ children }: { readonly children: React
   const path = (await headers()).get('x-ks-path') ?? '/';
   const context = await requirePageContext(path);
   const shell = await loadShell(context);
-  if (!shell.entitled) {
-    return (
-      <AppShell context={shell.shellContext} initialProjects={[]} initialSpaces={[]} initialUnread={0}>
-        <LockedScreen orgName={context.org.name} portalUrl={shell.urls.portal} canManage={canOrg(context.orgRole, 'workspace:manage')} />
-      </AppShell>
-    );
-  }
+  // Not in the plan: the lock screen in the same quiet frame as the CRM and the WMS. No sidebar
+  // and no "New task" button, because nothing can be opened or made in a locked app.
+  if (shell.plan.lock) return <LockedFrame lock={shell.plan.lock} context={shell.shellContext} />;
   const { ctx, projects } = shell;
   // Org people ride along with the first HTML so names (goal owners, workload rows, assignees)
   // render on the server instead of a placeholder that swaps in on the client.
@@ -44,9 +40,35 @@ export default async function AppLayout({ children }: { readonly children: React
       throw error;
     };
     let exists = projects.some((project) => project.key.toUpperCase() === key);
-    if (!exists) exists = await getProjectDetail(ctx, { key }).then(() => true, found);
+    let programKey: string | null = null;
+    if (!exists) {
+      const detail = await getProjectDetail(ctx, { key }).catch((error: unknown) => (found(error), null));
+      exists = detail !== null;
+      if (detail?.kind === 'program') programKey = detail.key;
+    }
     if (!exists) notFound();
+    // A program under /p/KEY goes to /programs/KEY before anything streams (docs/programs/SPEC.md 4.1).
+    if (programKey) {
+      const rest = path.replace(/^\/p\/[^/?#]+/, '');
+      const tab = /^\/(board|list|table|calendar|timeline)(?:[/?#]|$)/.exec(rest);
+      redirect(tab ? `/programs/${programKey}/builds/${tab[1]}` : `/programs/${programKey}${rest}`);
+    }
     const number = match[2] ? Number(match[2]) : null;
+    if (number !== null && !(await resolveTaskKey(ctx, key, number).then(() => true, found))) notFound();
+  }
+  // Program URLs (docs/programs/SPEC.md 4.1): /programs/KEY and /programs/KEY/NUMBER must be a
+  // live program (a project key answers 404 here; /p/KEY redirects the other way).
+  const programMatch = /^\/programs\/([^/?#]+)(?:\/(\d+))?(?:[/?#]|$)/.exec(path);
+  const programKey = programMatch ? decodeURIComponent(programMatch[1] ?? '') : '';
+  if (programMatch && programKey !== 'new' && programKey !== 'today') {
+    const key = programKey.toUpperCase();
+    const found = (error: unknown) => {
+      if (isDomainError(error) && (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')) return false;
+      throw error;
+    };
+    const exists = await requireProgram(ctx, key).then(() => true, found);
+    if (!exists) notFound();
+    const number = programMatch[2] ? Number(programMatch[2]) : null;
     if (number !== null && !(await resolveTaskKey(ctx, key, number).then(() => true, found))) notFound();
   }
   const people = await peoplePromise;

@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./permissions": "./src/permissions.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./programs": "./src/programs.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -14,6 +15,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@kitstak/db": "workspace:*",
+    "@kitstak/programs-engine": "workspace:*",
     "fractional-indexing": "^4.0.0"
   },
   "peerDependencies": {

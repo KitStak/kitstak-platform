@@ -47,6 +47,18 @@ export async function dispatchItemEvents(ctx: ServiceContext, events: readonly I
   if (stageChanges.length > 0) {
     const projects = await import('./projects-bridge');
     for (const change of stageChanges) await projects.notifyProjectsOfStageChange(ctx, change);
+    // KitStak Programs: program chips cache the deal's title and stage on core.record_links. Never throws.
+    const programs = await import('./programs-bridge');
+    for (const change of stageChanges) await programs.refreshProgramLinks(ctx, change);
+    // KitStak Pulse: a deal that changes stage may now be won (a job to start) or reopened. Never throws.
+    const dealStages = stageChanges.filter((change) => change.columnKey === 'stage');
+    if (dealStages.length > 0) {
+      const pulse = await import('./pulse-bridge');
+      for (const change of dealStages) {
+        const after = change.after as { labelId?: unknown } | null;
+        await pulse.notifyPulseOfStageChange(ctx, change.itemId, typeof after?.labelId === 'string' ? after.labelId : null);
+      }
+    }
   }
   const depth = ctx.automation?.depth ?? 0;
   if (depth >= MAX_AUTOMATION_DEPTH) {

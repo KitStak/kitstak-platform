@@ -4,6 +4,11 @@ import { versionField } from './common';
 
 export const MAIL_TRANSPORTS = ['log', 'smtp'] as const;
 export type MailTransport = (typeof MAIL_TRANSPORTS)[number];
+/**
+ * How one email actually went out: the company SMTP server, KitStak's own email service (used
+ * when the company has no SMTP of its own and the platform has Resend set up), or the server log.
+ */
+export type MailDelivery = 'smtp' | 'resend' | 'log';
 export const MAIL_SECURITIES = ['starttls', 'tls', 'none'] as const;
 export type MailSecurity = (typeof MAIL_SECURITIES)[number];
 
@@ -55,6 +60,11 @@ export interface MailSettingsView {
   readonly passwordHint: string | null;
   /** True when real email is sent (SMTP with server and From address). */
   readonly ready: boolean;
+  /**
+   * True when KitStak's email service is set up for this install (RESEND_API_KEY and EMAIL_FROM).
+   * Without company SMTP, invites, password resets and report links then go out through it.
+   */
+  readonly platformMail: boolean;
   readonly version: number;
 }
 
@@ -87,7 +97,7 @@ export function inviteEmail(input: {
 export function welcomeToastText(input: {
   readonly name: string;
   readonly requested: boolean;
-  readonly transport: MailTransport | null;
+  readonly transport: MailDelivery | null;
   readonly error?: string | null;
 }): { tone: 'success' | 'attention'; text: string } {
   if (!input.requested)
@@ -97,7 +107,7 @@ export function welcomeToastText(input: {
       tone: 'attention',
       text: `${input.name} was created, but the invite email failed: ${input.error}. They can sign in with the password you set.`,
     };
-  if (input.transport === 'smtp')
+  if (input.transport === 'smtp' || input.transport === 'resend')
     return {
       tone: 'success',
       text: `Invite emailed to ${input.name}. The link lets them choose their own password within ${INVITE_TTL_HOURS / 24} days; the password you set works until then.`,

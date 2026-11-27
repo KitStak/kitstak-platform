@@ -1,6 +1,7 @@
 import Link from 'next/link';
+import { TRIAL_LINE } from '@/lib/pricing';
 import { Logo } from '../logo';
-import { ROUTES } from '../site-links';
+import { HELP_LABEL, ROUTES, START_LABEL, startFreeHref } from '../site-links';
 import styles from './closing-section.module.css';
 
 interface ClosingSectionProps {
@@ -10,19 +11,23 @@ interface ClosingSectionProps {
   readonly startLabel?: string;
   /** Small print under the buttons. */
   readonly note?: string;
+  /** A product lockup shown in place of the KitStak one. It must read on navy in both themes. */
+  readonly logo?: React.ReactNode;
 }
 
 export function ClosingSection({
-  title = 'Sell it. Stock it. Ship it.',
-  startHref = ROUTES.getStarted,
-  startLabel = 'Set up your Stak',
-  note = 'About five minutes. No card needed to set up.',
+  // Each short sentence stays whole: the line can only break between sentences, never before "it."
+  title = 'Sell\u00a0it. Stock\u00a0it. Ship\u00a0it.',
+  startHref = startFreeHref(),
+  startLabel = START_LABEL,
+  note = TRIAL_LINE,
+  logo,
 }: ClosingSectionProps) {
   return (
     <section className={styles.band} aria-labelledby="closing-heading">
       <div className={`container ${styles.inner}`}>
         <div className={styles.mark} aria-hidden data-reveal>
-          <Logo height={34} tone="inverse" />
+          {logo ?? <Logo height={34} tone="inverse" />}
         </div>
         <h2 id="closing-heading" className={styles.title} data-reveal>
           {title}
@@ -36,7 +41,7 @@ export function ClosingSection({
           </Link>
         </div>
         <p className={styles.note} data-reveal style={{ '--reveal-delay': 200 } as React.CSSProperties}>
-          {note}
+          {note} Not sure which apps you need? <Link href={ROUTES.getStarted}>{HELP_LABEL}</Link>.
         </p>
       </div>
     </section>

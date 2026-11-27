@@ -15,12 +15,13 @@ import type { TaskSummary } from '@/lib/types';
 import { duplicateTaskAction, moveTaskAction, moveTaskToProjectAction, setTaskLabelsAction, updateTaskAction } from '@/server/actions/tasks';
 import { useCurrentProject } from '@/features/projects/project-context';
 import type { GroupMove } from './group-meta';
+import { useTaskSourceKey } from './task-source';
 
 export function useTaskOps() {
   const { project, statusById } = useCurrentProject();
   const queryClient = useQueryClient();
   const mutations = useTaskMutations({ statusCategory: (id) => statusById.get(id)?.category });
-  const tasksKey = qk.projectTasks(project.key);
+  const tasksKey = useTaskSourceKey();
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: qk.project(project.key) });

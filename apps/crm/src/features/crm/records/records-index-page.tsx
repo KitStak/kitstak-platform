@@ -184,7 +184,7 @@ function RecordsTable({
                   <span
                     aria-hidden
                     className={cn(
-                      'flex size-7 shrink-0 items-center justify-center bg-primary-subtle text-2xs font-semibold text-primary-text',
+                      'flex size-7 shrink-0 items-center justify-center bg-muted text-2xs font-semibold text-fg-secondary',
                       kind === 'contacts' ? 'rounded-full' : 'rounded-md',
                     )}
                   >
