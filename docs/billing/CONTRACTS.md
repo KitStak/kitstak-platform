@@ -2253,7 +2253,7 @@ What the integration gate changed after the two round 4 lanes were joined.
 | `deploy/dev/stop.sh` waits | It reports "stopped" only when the whole process group of the dev server is gone (up to 15 seconds, then it ends what is left). Before, it returned as soon as the port closed, while the server was still writing its dev cache. | everyone who runs the dev stack |
 | `deploy/dev/app-start.sh` starts clean | It removes `apps/<app>/.next/dev` before it starts a server, unless another `next dev` already runs from that folder. `KITSTAK_KEEP_DEV_CACHE=1` keeps the folder. A broken dev cache made a page reload without end in the CRM and in Pulse (dev only, never in a production build). See `DEV.md`, "A page reloads itself over and over". | everyone who runs the dev stack |
 | App specs follow the one front door | `apps/crm/e2e/health.spec.ts` and `apps/pulse/e2e/smoke.spec.ts` accept both answers for a signed out visit: the Portal sign in with the full app address in `next`, or the app's own page with the path when no Portal address is set. | crm, pulse |
-| Verdicts | `docs/billing/reviews/round-4-verdicts.json` holds the four round 4 reviewer verdicts. | docs |
+| Verdicts | `docs/archive/billing-reviews/round-4-verdicts.json` holds the four round 4 reviewer verdicts. | docs |
 
 
 ### 2026-11-24, real Stripe sandbox run

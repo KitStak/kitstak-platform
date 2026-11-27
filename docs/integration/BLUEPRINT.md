@@ -1,8 +1,14 @@
 # KitStak Platform — Integration Blueprint
 
+> **Status: historical (built).** This is the original plan for merging the CRM and WMS into one platform. It has been
+> built and is kept for the reasoning behind shared auth, the `core` schema and entitlements. Some details are out of date:
+> it uses the old `kitstak.io` domains (the apps now run on `kitstak.app` and the website on `kitstak.com`, see
+> [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md)) and it predates Projects, Pulse, the website and later packages. For how the
+> platform works today, start with the root [`README.md`](../../README.md) and [`docs/README.md`](../README.md).
+
 **Scope:** merge `apps/crm` (kitstak-crm, Next 16.4.5, port 3100, Better Auth 1.7.18 + Drizzle/pg) and `apps/wms` (kitstak-wms, Next 16.4.5, port 3000, hand-rolled jose/bcryptjs auth + Drizzle/postgres-js) into one platform on one Supabase Postgres, one Better Auth SSO, Stripe test-mode entitlements, a `packages/` layer, and a portal/launcher — while each app stays independently buildable and runnable at every phase.
 
-Root: `C:/Users/Mike Lunsford/Desktop/Work/Projects/KitStak WMS CRM Bridge` (pnpm@10.18.1 workspace, turbo 2.5.8, `pnpm-workspace.yaml` already declares `apps/*`, `packages/*`; `packages/` does not exist yet).
+Root: the repository root (pnpm@10.18.1 workspace, turbo 2.5.8, `pnpm-workspace.yaml` already declares `apps/*`, `packages/*`; `packages/` does not exist yet).
 
 ---
 

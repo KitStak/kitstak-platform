@@ -242,15 +242,20 @@ More on each package in [`packages/README.md`](packages/README.md).
 
 ## Docs
 
-| Topic                                       | Where                                                                                                    |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| How the apps share auth, data and licensing | [`docs/integration/BLUEPRINT.md`](docs/integration/BLUEPRINT.md)                                         |
-| Onboarding and demo workspaces              | [`docs/integration/ONBOARDING.md`](docs/integration/ONBOARDING.md)                                       |
-| Sign-up, trials and billing                 | [`docs/billing/SPEC.md`](docs/billing/SPEC.md), [`docs/billing/CONTRACTS.md`](docs/billing/CONTRACTS.md) |
-| Projects                                    | [`docs/projects/SPEC.md`](docs/projects/SPEC.md)                                                         |
-| Pulse                                       | [`docs/pulse/SPEC.md`](docs/pulse/SPEC.md)                                                               |
-| WMS multi-tenancy                           | [`apps/wms/docs/MULTI_TENANCY.md`](apps/wms/docs/MULTI_TENANCY.md)                                       |
-| Deploying to Vercel                         | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)                                                               |
+| Topic                                       | Where                                                                                                                |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| How the apps share auth, data and licensing | [`docs/integration/BLUEPRINT.md`](docs/integration/BLUEPRINT.md)                                                     |
+| Onboarding and demo workspaces              | [`docs/integration/ONBOARDING.md`](docs/integration/ONBOARDING.md)                                                   |
+| Sign-up, trials and billing                 | [`docs/billing/SPEC.md`](docs/billing/SPEC.md), [`docs/billing/CONTRACTS.md`](docs/billing/CONTRACTS.md)             |
+| Projects                                    | [`docs/projects/SPEC.md`](docs/projects/SPEC.md)                                                                     |
+| Pulse                                       | [`docs/pulse/SPEC.md`](docs/pulse/SPEC.md)                                                                           |
+| Programs (recurring work on one price card) | [`docs/programs/SPEC.md`](docs/programs/SPEC.md)                                                                     |
+| WMS multi-tenancy                           | [`apps/wms/docs/MULTI_TENANCY.md`](apps/wms/docs/MULTI_TENANCY.md)                                                   |
+| Dashboard layout shared by every app        | [`docs/design/UI-CLEANUP.md`](docs/design/UI-CLEANUP.md)                                                             |
+| Deploying to Vercel                         | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)                                                                           |
+| Plans: shared onboarding, master search     | [`docs/onboarding/`](docs/onboarding/SHARED-ONBOARDING-PLAN.md), [`docs/search/`](docs/search/MASTER-SEARCH-PLAN.md) |
+
+Every doc in `docs/`, with what it is for and whether it is still current, is listed in [`docs/README.md`](docs/README.md).
 
 ## Security
 
