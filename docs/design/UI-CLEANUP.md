@@ -168,14 +168,35 @@ A headline-number scan finds no unlinked numbers on Portal, CRM, WMS or Projects
 the only ones left are the figures inside the two line answer, which the tiles under it link,
 and the donut total.
 
-Left for step 3 and beyond:
+### Status (2026-11-27)
 
-- Shared pieces outside the homes still break the rules: Projects `TaskRow` priority bars,
-  the tinted inbox `NotificationAvatar`, the crimson-outlined timer in the Projects top bar,
-  and the Portal SetupGuide's crimson current-step button (ONBOARDING.md now forbids it).
-- WMS status names come from the server in Title Case ("Ready to Pick").
-- CRM `routes.templates()` points at a page that does not exist.
-- Module asks from the rollout: a count next to a section title, a button action for
-  `EmptyNote`, a tooltip on `DashSection`, `Legend` toggles and a thicker `Meter` for WMS tables.
+Step 3 is done. Each app's `badge.tsx` draws the shared `Pill` (states) or `Tag` (outline
+identities), with no crimson tones and one size; counts use the shared `Count`. CRM, Projects and
+Pulse keep one byte-identical `badge.tsx`; their unused `card.tsx` is deleted. Every app KPI tile
+(CRM `StatTile`/`MetricTile`, Projects and Pulse `KpiTile`, WMS `StatTile`/`KpiChip`) is the shared
+`StatTile`, linked to what it counts. WMS status pills use the five tones through
+`status-colors.ts`, and `statusLabel()` gives sentence case ("Ready to pick").
+
+The open items from 2026-11-25 are closed:
+
+- Projects priority bars are neutral ink, inbox avatars have no tinted circles, the top bar timer
+  is a neutral pill with a static green dot, and progress is drawn in the data color whatever the
+  health. The Portal SetupGuide's current step has an outline button and the words "Next step".
+- CRM `routes.templates()` opens the template center (`/{org}?wizard=templates`).
+- The module has `DashSection` `count`/`countTone`/`help`, an `EmptyNote` button action, `Legend`
+  `onToggle`, `Meter` `size="thick"`, `Count` `placement="icon"`, and fallbacks for every
+  `--dash-*` variable so the pieces work outside a `DashboardFrame`.
+
+Still open:
+
+- Crimson text links (`text-primary-text`) and tinted icon squares remain in dialogs, drawers,
+  wizards and side screens that step 3 did not sweep (CRM automation builder and create dialogs,
+  Pulse kiosk/welcome/import/close, WMS analytics, reports hub and automation canvas). Form
+  controls (checkbox, radio, selected cards) still use crimson for their checked state.
+- WMS navigation labels and drawer titles are still Title Case (`nav-config.ts`, Logiwa parity).
+- Unlinked numbers: CRM "Seats by role" and the Files tile on Usage (no org-wide files list),
+  and WMS "Orders with packing warnings" (no order filter for it).
+- CRM and Projects board label pills keep the user's label colors: they are user data, not status.
+  They follow the pill shape (20 px, no border, one dot).
 - Pulse's two line answer repeats two tiles. It is in the Pulse spec, so it stays until the
   spec changes.
