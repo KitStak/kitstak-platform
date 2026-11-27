@@ -35,29 +35,20 @@ const SHOTS = [
   // A 430 pixel phone, so the change chip on the Cost tile fits its tile.
   { name: 'home', view: 'phone', widths: [860] },
   { name: 'profit', view: 'desktop', widths: DESKTOP },
-  { name: 'profit', view: 'tablet', widths: TABLET },
   { name: 'profit', view: 'phone', widths: PHONE },
   { name: 'jobs', view: 'desktop', widths: DESKTOP },
-  { name: 'jobs', view: 'tablet', widths: TABLET },
   { name: 'jobs', view: 'phone', widths: PHONE },
-  // The left part of the Jobs table alone, 929 CSS pixels wide, for the home page column.
-  { name: 'jobs', view: 'close', widths: [929, 1858] },
+  // The left part of the Jobs table alone, 922 CSS pixels wide, for the home page column.
+  { name: 'jobs', view: 'close', widths: [922, 1844] },
   { name: 'log', view: 'desktop', widths: DESKTOP },
   { name: 'log', view: 'tablet', widths: TABLET },
   { name: 'log', view: 'phone', widths: PHONE },
   { name: 'why', view: 'desktop', widths: DESKTOP },
   { name: 'why', view: 'tablet', widths: TABLET },
   { name: 'why', view: 'phone', widths: PHONE },
-  // The "How we got this" panel alone, 340 CSS pixels wide, taken at three device pixels to one. The
-  // panel sits on a part pixel, so the capture has a sliver of the page behind it on the left and
-  // the right. The crop takes those off.
-  {
-    name: 'how',
-    view: 'desktop',
-    widths: [340, 680, 1020],
-    scale: 3,
-    crop: { left: 2, top: 0, width: 1020, height: 1485 },
-  },
+  // The "How we got this" panel alone, 340 CSS pixels wide, taken at three device pixels to one.
+  // The capture is exactly the panel, so it needs no crop.
+  { name: 'how', view: 'desktop', widths: [340, 680, 1020], scale: 3 },
   // The dialog alone, 760 by 876 CSS pixels.
   { name: 'rates', view: 'desktop', widths: [760, 1520] },
   // On a phone: the Rates tab, scrolled to the card of the Packer labor class.
@@ -66,13 +57,13 @@ const SHOTS = [
   { name: 'import', view: 'desktop', widths: DESKTOP, crop: { left: 0, top: 0, width: 2880, height: 1520 } },
   { name: 'import', view: 'tablet', widths: TABLET },
   { name: 'import', view: 'phone', widths: PHONE },
-  // The settings column is 832 CSS pixels wide in the middle of the window, under the top bar. The
-  // crop ends under the Projects card.
+  // The settings column is 832 CSS pixels wide at the left of the window, under the top bar. The
+  // crop keeps 20 CSS pixels of page on each side and ends under the KitStak WMS card.
   {
     name: 'connected-apps',
     view: 'desktop',
     widths: [872, 1744],
-    crop: { left: 568, top: 112, width: 1744, height: 1460 },
+    crop: { left: 8, top: 112, width: 1744, height: 1228 },
   },
   // Starts under the rule above the KitStak WMS card. The crop takes off the app's top bar and the
   // strip of the card before it.

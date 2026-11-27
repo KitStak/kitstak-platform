@@ -139,7 +139,7 @@ const SLOTS = [
       desktop: { height: 1100, clip: downToLastRow(NEED_YOU_ROWS, 1000) },
       phone: {
         width: 430,
-        height: 1300,
+        height: 1700,
         clip: downToBottomOf((page) =>
           page.locator('section', { hasText: 'Jobs that need you' }).locator('li').first(),
         ),
@@ -222,9 +222,9 @@ const SLOTS = [
   {
     name: 'why',
     route: `/jobs/${JOB}/plan`,
-    // A wide window is tall enough for the whole page in one picture: the job, the Quote vs actual
+    // A wide window is tall enough for the whole page in one picture: the job, the Plan vs actual
     // table with its column headings, and Why profit changed. On a phone the page is about three
-    // screens long. The phone picture leaves out the job header and starts at the Quote vs actual
+    // screens long. The phone picture leaves out the job header and starts at the Plan vs actual
     // card, with every row, so the quote and the actual are both in it. It ends under the three
     // cards that follow the Why profit changed chart.
     views: {
@@ -233,9 +233,10 @@ const SLOTS = [
       phone: {
         height: 2600,
         clip: async (page) => {
+          // The card is titled "Plan vs actual". With no budget, the plan is the quote.
           const quote = await page
-            .locator('main section', { hasText: 'Quote vs actual' })
-            .last()
+            .locator('main section', { hasText: 'Plan vs actual' })
+            .first()
             .boundingBox();
           // The Biggest lift card is the nearest box with a border around its label.
           const liftBottom = await page.getByText('Biggest lift', { exact: true }).evaluate((el) => {
@@ -265,7 +266,8 @@ const SLOTS = [
     // The window is tall, so the whole panel fits under its button.
     views: { desktop: { height: 1200, element: 'dialog', scale: 3 }, tablet: null, phone: null },
     prepare: async (page) => {
-      await page.getByRole('button', { name: 'How we got company profit' }).click();
+      // The button in the "Your jobs made ..." line. The margin card has one too, for the same panel.
+      await page.getByTestId('company-bridge').getByRole('button', { name: 'How we got company profit' }).click();
       await page.getByRole('dialog').waitFor();
       await page.waitForTimeout(700);
     },

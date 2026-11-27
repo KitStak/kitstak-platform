@@ -136,10 +136,10 @@ const TABLET: PulseShotView = {
 const DESKTOP: PulseShotView = { view: 'desktop', width: 1440, height: 900, widths: [1200, 1800, 2400] };
 
 /** The Jobs screen, scrolled so the status chips sit under the top bar. Each view ends under a job. */
-const JOBS_PHONE = phoneOfHeight(671);
-const JOBS_DESKTOP: PulseShotView = { ...DESKTOP, height: 749 };
+const JOBS_PHONE = phoneOfHeight(712);
+const JOBS_DESKTOP: PulseShotView = { ...DESKTOP, height: 693 };
 /** The left part of the Jobs table alone: job, client, status with its reason, and units done. */
-const JOBS_CLOSE: PulseShotView = { view: 'close', width: 929, height: 503, widths: [929, 1858] };
+const JOBS_CLOSE: PulseShotView = { view: 'close', width: 922, height: 446, widths: [922, 1844] };
 
 /**
  * The Jobs slot shown in a side column, as on the home page, where the picture gets about half the
@@ -165,20 +165,20 @@ const BUNDLE_BAND_STACKS_AT = 900;
 const APPS_PHONE = phoneOfHeight(652);
 
 /** The Connected apps card on its own: the capture is cropped to the WMS and Projects cards. */
-const APPS_DESKTOP: PulseShotView = { view: 'desktop', width: 872, height: 730, widths: [872, 1744] };
+const APPS_DESKTOP: PulseShotView = { view: 'desktop', width: 872, height: 614, widths: [872, 1744] };
 
 export const PULSE_SHOTS: Readonly<Record<PulseShotId, PulseShotSlot>> = {
   hero: {
     route: '/',
     capture:
-      'Home for this month, at the top of the page. The desktop picture ends under the fourth job in Jobs that need you, where the Alerts card beside it also ends on a whole alert.',
-    alt: 'KitStak Pulse Home. It greets the signed in person and says in words what the jobs made this month, the margin, what the company made after time not on a job and overhead, and how many jobs need you. Six tiles show revenue, cost, profit on jobs, margin after all costs, labor as a percent of revenue and units per person per hour. Below the tiles a list called Jobs that need you starts, worst first. Each job has the reason in a sentence, the projected profit and its status. A phone or a tablet shows the first job, which is losing money. A wide screen shows four jobs, three losing money and one at risk, beside the entries logged today and the first open alerts.',
+      'Home for this month, at the top of the page. The desktop picture ends under the third job in Jobs that need you, where the alerts card beside it also ends on a whole alert.',
+    alt: 'KitStak Pulse Home. It greets the signed in person and says in words what the jobs made this month, the margin, what the company made after time not on a job and overhead, and how many jobs need you. Six tiles show revenue, cost, profit on jobs, job margin with the company margin beside it, labor as a percent of revenue and units per person per hour, each with its change from the period before. Below the tiles a list called Jobs that need you starts, worst first. Each job has the reason in a sentence, the projected profit and its status. A phone shows the first job, which is losing money. A wide screen shows three jobs, all losing money, beside the entries logged today and the first open alert.',
     label: 'Home',
     name: 'home',
     views: [
-      { view: 'phone', width: 430, height: 1057, widths: [860], upTo: PHONE_UP_TO },
+      { view: 'phone', width: 430, height: 1496, widths: [860], upTo: PHONE_UP_TO },
       TABLET,
-      { ...DESKTOP, height: 984 },
+      { ...DESKTOP, height: 925 },
     ],
     sizes: WIDE_SIZES,
     priority: true,
@@ -188,10 +188,10 @@ export const PULSE_SHOTS: Readonly<Record<PulseShotId, PulseShotSlot>> = {
     route: '/profit',
     capture:
       'Profit on the Jobs tab for this month, Table view. On the desktop picture the Units per hour column is hidden with the Columns button, so the table ends on a whole column.',
-    alt: 'The Profit page in KitStak Pulse on the Jobs tab. Tabs across the top switch between jobs, clients, job types, extra services, sites, months, weeks and days. Six tiles show revenue, cost, profit, margin after all costs with its target, margin before shared costs and units per person per hour. Under them the jobs are listed by profit, each with its revenue, profit and margin. A wide screen shows the list as a table that adds the status, labor, material, other cost, time not on a job, units, hours and a profit trend line.',
+    alt: 'The Profit page in KitStak Pulse on the Jobs tab. Tabs across the top switch between jobs, clients, job types, extra services, sites, programs, months, weeks and days. Six tiles show revenue, cost, profit, job margin with its target, company margin after overhead and paid time not on any job, and units per person per hour. Under them the jobs are listed by profit, each with its revenue, profit and margin. A wide screen shows the list as a table that adds the status, labor, material, other cost, time not on a job, units and labor hours.',
     label: 'Profit by job',
     name: 'profit',
-    views: [phoneOnTablet(1215), { ...DESKTOP, height: 859 }],
+    views: [phoneOnTablet(1134), { ...DESKTOP, height: 878 }],
     sizes: WIDE_SIZES,
     phoneOnTablet: true,
     ready: true,
@@ -200,10 +200,10 @@ export const PULSE_SHOTS: Readonly<Record<PulseShotId, PulseShotSlot>> = {
     route: '/profit',
     capture:
       'Profit for this month, with the How we got this panel open on the company profit line. The picture is the panel alone.',
-    alt: 'A How we got this panel in KitStak Pulse for company profit. It says in words that company profit starts from profit on jobs and takes away the costs no job carried. Then it lists each step with its figure: profit on jobs, less time not on a job that no job carried, less paid time not on any job, less overhead the hourly rate did not cover, equals company profit. Two warning lines say what is missing: some days have units and no hours, so labor cost is too low, and one job has no price, so revenue is too low. A link at the bottom says See where paid time went.',
+    alt: 'A How we got this panel in KitStak Pulse for company profit. It says in words that company profit starts from profit on jobs and takes away the costs no job carried, and that company costs are monthly, so part of a month counts its share by calendar day. Then it lists each step with its figure: profit on jobs, less paid time not on any job, plus the overhead the hourly rate covered beyond what was spent, the company costs counted for these days and the overhead the hourly rates covered on those days, equals company profit. Three warning lines say what is missing: some days have units and no hours, so labor cost is too low, one job has no price, so revenue is too low, and company costs are in for only part of the month. A link at the bottom says See where paid time went.',
     label: 'How we got this',
     name: 'how',
-    views: [{ view: 'desktop', width: 340, height: 495, widths: [340, 680, 1020] }],
+    views: [{ view: 'desktop', width: 340, height: 576, widths: [340, 680, 1020] }],
     sizes: '(min-width: 480px) 400px, 92vw',
     maxWidth: 400,
     ready: true,
@@ -211,21 +211,21 @@ export const PULSE_SHOTS: Readonly<Record<PulseShotId, PulseShotSlot>> = {
   log: {
     route: '/log',
     capture: 'Log work on the Day tab for today at the main site.',
-    alt: 'Log work in KitStak Pulse for one day at one site. Each job has boxes for good units, scrap, rework, the crew, people, hours each, labor hours and overtime. Under a filled job a chip compares the pace with the target for an hour and says On pace or Too slow, with the labor cost and margin for the day. A wider screen also shows a second crew line for a line lead.',
+    alt: 'Log work in KitStak Pulse for one day at one site. Each job has boxes for good units, scrap, rework, the labor class, people, hours each, labor hours, overtime and a note, with a task picker under each crew line. Beside a filled job a chip compares the pace with the target for an hour and says On pace or Too slow, with the labor cost and margin for the day. A wider screen also shows a second crew line for a line lead and a bar of totals for the day: units, labor hours, jobs logged, labor cost, earned and margin.',
     label: 'Log work',
     name: 'log',
-    views: [phoneOfHeight(747), TABLET, DESKTOP],
+    views: [phoneOfHeight(904), TABLET, DESKTOP],
     sizes: WIDE_SIZES,
     ready: true,
   },
   plan: {
     route: '/jobs/[ref]/plan',
     capture:
-      'Plan vs actual for a job that is losing money. A wide window holds the whole page. The phone picture leaves out the job header: it starts at the Quote vs actual card and ends under the three cards that follow the Why profit changed chart.',
-    alt: 'Plan vs actual for one job in KitStak Pulse. First comes Quote vs actual. Its rows run from units, labor hours and units per person per hour through each cost to revenue, profit and margin. Each row has the plan for the work done, the actual, the difference and the figure at finish. Below it a Why profit changed chart steps from the plan to the actual profit with bars for price, labor rate, labor efficiency, scrap, material, time not on a job and other. Three cards name the gap, the biggest drag and the biggest lift in a sentence each. A phone shows each row as a small card with Plan, Actual and At finish. A wide screen shows a table with the columns Quote for the work done, Actual, Difference, Difference percent and Projected at finish, under the job and its Losing money status.',
+      'Plan vs actual for a job that is losing money. A wide window holds the whole page. The phone picture leaves out the job header: it starts at the Plan vs actual card and ends under the three cards that follow the Why profit changed chart.',
+    alt: 'Plan vs actual for one job in KitStak Pulse. The card says there is no budget yet, so the plan is the quote. Its rows run from units, labor hours and units per person per hour through each cost to revenue, profit and margin. Each row has the plan for the work done, the actual, the difference and the figure at finish. Below it a Why profit changed chart steps from the plan to the actual profit with bars for price, labor rate, labor efficiency, scrap, material, time not on a job and other. Three cards name the gap, the biggest drag and the biggest lift in a sentence each. A phone shows each row as a small card with Quote, Actual and At finish. A wide screen shows a table with the columns Quote for the work done, Actual, Difference, Difference percent and Projected at finish, under the job and its Losing money status.',
     label: 'Plan vs actual',
     name: 'why',
-    views: [phoneOfHeight(1770), { ...TABLET, height: 1366 }, { ...DESKTOP, height: 1350 }],
+    views: [phoneOfHeight(1857), { ...TABLET, height: 1421 }, { ...DESKTOP, height: 1371 }],
     sizes: WIDE_SIZES,
     ready: true,
   },
@@ -243,8 +243,8 @@ export const PULSE_SHOTS: Readonly<Record<PulseShotId, PulseShotSlot>> = {
   },
   risk: {
     route: '/jobs',
-    capture: 'Jobs on the Open tab, sorted worst first, scrolled so the status chips sit under the top bar.',
-    alt: 'The Jobs list in KitStak Pulse on the Open tab, worst first. Chips count the open jobs by status: Losing money, At risk, Not enough data, Heads up and On track. Each job has its client, a status with the reason in a sentence, units done, the margin now and the profit at finish. The jobs that are losing money come first. A wide screen shows them as a table, with the jobs at risk next. It adds the target margin, a trend line and the due date.',
+    capture: 'Jobs, sorted worst first, scrolled so the status chips sit under the top bar.',
+    alt: 'The Jobs list in KitStak Pulse, worst first. Chips count the open jobs by status: Losing money, At risk, Not enough data, Heads up and On track. Each job has its client, a status with the reason in a sentence, units done, the margin now and the profit at finish. The jobs that are losing money come first. A wide screen shows them as a table, with the jobs at risk next. It adds the target margin, a trend line and the due date, and a row to add a job in one line.',
     label: 'Jobs',
     name: 'jobs',
     views: [{ ...JOBS_PHONE, upTo: PHONE_ON_TABLET_UP_TO }, JOBS_DESKTOP],
@@ -265,7 +265,7 @@ export const PULSE_SHOTS: Readonly<Record<PulseShotId, PulseShotSlot>> = {
   stack: {
     route: '/settings/apps',
     capture: 'Settings, Connected apps, after the first sync, scrolled to the KitStak WMS card.',
-    alt: 'Connected apps in KitStak Pulse settings. KitStak WMS shows as Connected with the time of the last sync and a Sync now button. One list says what comes into Pulse, with switches: kits built, parts used, warehouse bills and work orders short of parts. Another says what shows in WMS: a Job profit card on work orders and a Client profit line. It says 8 jobs are linked. A wide screen also shows KitStak Projects, Connected, with 9 jobs linked.',
+    alt: 'Connected apps in KitStak Pulse settings. KitStak WMS shows as Connected with the time of the last sync and a Sync now button. One list says what comes into Pulse: kits built, then switches for parts used, warehouse bills and warehouse contract rates that set job prices, and work orders short of parts. Another says what shows in WMS: a Job profit card on work orders and a Client profit line. It says 8 jobs are linked. A wide screen also shows a summary of the last sync: work orders, days of kits built, bill lines, extra service records and the extra service entries that have no price yet.',
     label: 'Connected apps',
     name: 'connected-apps',
     // Beside the copy from 961 pixels up. Until 1280 that column is too narrow for the desktop capture.

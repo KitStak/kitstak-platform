@@ -547,6 +547,11 @@ export const getSummary = scoped(async function getSummary(ctx: DomainContext, f
   const site = await resolveSite(ctx, filters.siteId);
   const today = todayInZone(site.timezone);
   const siteFilter = filters.siteId ? sql`AND j.site_id = ${filters.siteId}` : sql``;
+  // The week so far: its working days before today. Reviewed days are counted over the same days.
+  const weekStartDay = addDays(today, -((new Date(`${today}T00:00:00Z`).getUTCDay() - settings.weekStart + 7) % 7));
+  let workDays = 0;
+  for (let day = weekStartDay; day < today; day = addDays(day, 1)) if (settings.workingDays.includes(new Date(`${day}T00:00:00Z`).getUTCDay())) workDays += 1;
+  const workingDayList = sql`ARRAY[${sql.join(settings.workingDays.map((d) => sql`${d}`), sql`, `)}]::int[]`;
   const [profit, bridge, counts, progress, fix, alerts, serviceNoPrice] = await Promise.all([
     getProfit(ctx, 'month', filters, { comparePrior: true }),
     getCompanyBridge(ctx, filters),
@@ -561,8 +566,10 @@ export const getSummary = scoped(async function getSummary(ctx: DomainContext, f
             (SELECT count(*) FROM pulse.jobs j WHERE j.org_id = ${ctx.orgId} AND j.deleted_at IS NULL AND j.status = 'active' AND (j.start_date IS NULL OR j.start_date <= ${today}::date) ${siteFilter})::int AS active,
             (SELECT count(DISTINCT p.job_id) FROM pulse.production_entries p JOIN pulse.jobs j ON j.id = p.job_id
               WHERE p.org_id = ${ctx.orgId} AND p.work_date = ${today}::date AND p.deleted_at IS NULL AND j.status = 'active' AND j.deleted_at IS NULL ${siteFilter})::int AS logged,
-            (SELECT count(*) FROM pulse.day_reviews r WHERE r.org_id = ${ctx.orgId} AND r.status = 'approved'
-              AND r.work_date BETWEEN (${today}::date - ((EXTRACT(DOW FROM ${today}::date)::int - ${settings.weekStart}::int + 7) % 7)) AND ${today}::date
+            -- A day counts once, however many sites approved it, and only the days workDays counts.
+            (SELECT count(DISTINCT r.work_date) FROM pulse.day_reviews r WHERE r.org_id = ${ctx.orgId} AND r.status = 'approved'
+              AND r.work_date >= ${weekStartDay}::date AND r.work_date < ${today}::date
+              AND EXTRACT(DOW FROM r.work_date)::int = ANY(${workingDayList})
               ${filters.siteId ? sql`AND r.site_id = ${filters.siteId}` : sql``})::int AS reviewed,
             (SELECT COALESCE(sum(st.revenue_cents - st.billed_cents), 0) FROM pulse.job_stats st JOIN pulse.jobs j ON j.id = st.job_id
               WHERE st.org_id = ${ctx.orgId} AND j.deleted_at IS NULL AND j.status <> 'cancelled' ${siteFilter})::text AS unbilled`,
@@ -581,9 +588,6 @@ export const getSummary = scoped(async function getSummary(ctx: DomainContext, f
     countServiceEntriesNoPrice(db, ctx.orgId, { siteId: filters.siteId ?? null }),
   ]);
   const byRisk = new Map(counts.map((row) => [row.risk ?? 'none', row.n]));
-  const weekStartDay = addDays(today, -((new Date(`${today}T00:00:00Z`).getUTCDay() - settings.weekStart + 7) % 7));
-  let workDays = 0;
-  for (let day = weekStartDay; day < today; day = addDays(day, 1)) if (settings.workingDays.includes(new Date(`${day}T00:00:00Z`).getUTCDay())) workDays += 1;
   const totalPrior = profit.total.prior;
   return {
     from: filters.from,
