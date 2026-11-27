@@ -10,6 +10,7 @@ This spec is the single source of truth for Programs across Projects, Pulse, CRM
 - `docs/projects/SPEC.md`, `docs/projects/CONTRACTS.md` (Projects rules and quality bar).
 - `docs/pulse/SPEC.md` 4.2 (money), 4.8 (revenue), 4.16 (month close), and the "Tasks on a job" section; `docs/pulse/CONTRACTS.md`.
 - `docs/integration/BLUEPRINT.md` 2.2 (core conventions) and 3.3 (gating).
+- `docs/programs/PROGRAM_TYPES_SPEC.md` (approved 2026-11-27): program types (kitting, ecommerce, production, other), dated output sources, the WMS order sync and how programs work with one app or all of them. Once approved it replaces the ecommerce sentence in A7.
 
 Conventions used in this document:
 
