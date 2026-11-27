@@ -150,15 +150,7 @@ export function integrationDomain(status: string | null | undefined): 'integrati
 }
 
 export function YesNo({ value }: { readonly value: boolean | null | undefined }) {
-  return value ? (
-    <Badge tone="success" size="sm" shape="pill">
-      Yes
-    </Badge>
-  ) : (
-    <Badge tone="neutral" size="sm" shape="pill">
-      No
-    </Badge>
-  );
+  return value ? <Badge tone="success">Yes</Badge> : <Badge tone="neutral">No</Badge>;
 }
 
 export function Muted({ children }: { readonly children?: React.ReactNode }) {

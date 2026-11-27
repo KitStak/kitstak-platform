@@ -26,6 +26,7 @@ import {
   YAxis,
 } from 'recharts';
 import { DataGrid, GridToolbar, useGrid, type GridColumnDef } from '@/components/grid';
+import { Count } from '@kitstak/ui/dashboard';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Combobox } from '@/components/ui/combobox';
@@ -170,7 +171,7 @@ export function HealthOverviewPage() {
               tabIndex={0}
               className="inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-full"
             >
-              <Badge size="sm" shape="pill" tone={pauseLabel(row.original.pauseReason)?.tone ?? 'warning'}>
+              <Badge tone={pauseLabel(row.original.pauseReason)?.tone ?? 'warning'}>
                 {pauseLabel(row.original.pauseReason)?.label ?? 'Paused'}
               </Badge>
             </span>
@@ -344,9 +345,10 @@ function CardShell({
         <h3 className="text-xs font-semibold text-secondary">{title}</h3>
         <InfoTip content={tip} />
         {count !== undefined ? (
-          <Badge size="sm" tone={count > 0 ? 'danger' : 'neutral'} className="ml-1">
-            {count}
-          </Badge>
+          // A count of failed or blocked items: the critical Count (UI-CLEANUP "Pills" rule 6).
+          <span className="ml-1">
+            <Count value={count} tone="critical" label="need attention" />
+          </span>
         ) : null}
         {href ? (
           <Link href={href} className="ml-auto text-xs font-medium text-primary hover:underline">

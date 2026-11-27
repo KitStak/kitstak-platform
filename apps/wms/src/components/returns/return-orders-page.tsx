@@ -40,8 +40,8 @@ import { DisabledReason } from '@/components/ui/tooltip';
 import { useApiQuery } from '@/lib/query-client';
 import { RETURN_STATUSES, type ReturnStatus } from '@/lib/enums';
 import { RETURN_ORDERS_GRID_KEY, RETURN_STATUS_HELP } from '@/lib/grid-defs/returns/return-orders';
-import { statusTone } from '@/lib/status-colors';
-import { cn } from '@/lib/utils';
+import { statusLabel, statusTone } from '@/lib/status-colors';
+import { FilterChip } from '@/components/ui/filter-chip';
 import { BulkReturnInfoModal } from './bulk-return-info-modal';
 import { ImportReturnsDialog } from './import-returns-dialog';
 import { ChangeStatusModal } from './change-status-modal';
@@ -83,48 +83,29 @@ function StatusPills({
       aria-label="Filter by status"
       className="flex flex-wrap items-center gap-1.5 px-6 pb-2"
     >
-      <button
-        type="button"
-        aria-pressed={active === null}
+      <FilterChip
+        active={active === null}
         title="Counts are return lines: one grid row per RMA line"
         onClick={() => onPick(null)}
-        className={cn(
-          'inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-          active === null
-            ? 'border-foreground bg-foreground text-surface [[data-theme=dark]_&]:border-white/35 [[data-theme=dark]_&]:bg-white/10 [[data-theme=dark]_&]:text-foreground'
-            : 'border-border bg-surface text-body hover:bg-surface-sunken',
-        )}
-      >
-        <span className="sr-only">Counts are lines. </span>All lines{' '}
-        <span className="tabular-nums opacity-70">{counts ? total.toLocaleString() : '…'}</span>
-      </button>
+        label={
+          <>
+            <span className="sr-only">Counts are lines. </span>All lines
+          </>
+        }
+        count={counts ? total.toLocaleString() : '…'}
+      />
       {RETURN_STATUSES.map((s) => {
-        const t = statusTone(s, 'return');
-        // Tone as CSS variables: light mode keeps the pastel tint; dark mode uses a translucent fill of the hue.
-        const vars = { '--pill-bg': t.bg, '--pill-fg': t.fg } as React.CSSProperties;
         const on = active === s;
         return (
-          <button
+          <FilterChip
             key={s}
-            type="button"
-            aria-pressed={on}
+            active={on}
             title={RETURN_STATUS_HELP[s]}
             onClick={() => onPick(on ? null : s)}
-            className={cn(
-              'inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-              'bg-[var(--pill-bg)] text-[var(--pill-fg)]',
-              on
-                ? 'border-[var(--pill-fg)] shadow-sm ring-1 ring-current'
-                : 'border-transparent hover:brightness-95',
-            )}
-            style={vars}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-            {s}
-            <span className="tabular-nums opacity-80">
-              {counts ? (counts[s] ?? 0).toLocaleString() : '…'}
-            </span>
-          </button>
+            dot={statusTone(s, 'return').dot}
+            label={statusLabel(s)}
+            count={counts ? (counts[s] ?? 0).toLocaleString() : '…'}
+          />
         );
       })}
     </div>
@@ -478,7 +459,7 @@ export function ReturnOrdersPage() {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
-        title="Return Orders"
+        title="Return orders"
         breadcrumbs={[{ label: 'Fulfillment' }, { label: 'Outbound' }, { label: 'Return Orders' }]}
         tabs="orders"
         actions={actions}

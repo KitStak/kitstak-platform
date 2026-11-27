@@ -86,18 +86,13 @@ export function PackCard({
         {hasIncompleteDimensions(pack) ? (
           <Badge
             tone="warning"
-            size="sm"
             title="Length, width or height is 0. Cubing and box selection need all three."
           >
             Incomplete dimensions
           </Badge>
         ) : null}
         {hasMissingWeight(pack) ? (
-          <Badge
-            tone="warning"
-            size="sm"
-            title="Weight is 0. Rate shopping and shipping labels need a weight."
-          >
+          <Badge tone="warning" title="Weight is 0. Rate shopping and shipping labels need a weight.">
             No weight
           </Badge>
         ) : null}

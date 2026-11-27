@@ -254,11 +254,7 @@ export function CarrierErrorsPage({ step }: { readonly step: CallStep }) {
             enableSorting: false,
             cell: ({ row }) =>
               row.original.destinationType ? (
-                <Badge
-                  size="sm"
-                  shape="pill"
-                  tone={row.original.destinationType === 'International' ? 'info' : 'neutral'}
-                >
+                <Badge tone={row.original.destinationType === 'International' ? 'info' : 'neutral'}>
                   {row.original.destinationType}
                 </Badge>
               ) : (
@@ -302,7 +298,7 @@ export function CarrierErrorsPage({ step }: { readonly step: CallStep }) {
               tabIndex={0}
               className="inline-flex min-w-0 max-w-full rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <Badge tone="danger" size="sm" shape="pill" className="min-w-0 max-w-full">
+              <Badge tone="danger" className="min-w-0 max-w-full">
                 <span className="min-w-0 truncate">{brandText(row.original.error)}</span>
               </Badge>
             </span>

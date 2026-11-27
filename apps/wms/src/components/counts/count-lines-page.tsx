@@ -421,7 +421,7 @@ export function CountLinesPage({ kind }: { readonly kind: Kind }) {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
-        title={kind === 'locations' ? 'Count Location Details' : 'Count SKU Details'}
+        title={kind === 'locations' ? 'Count location details' : 'Count SKU details'}
         tabs="counts"
         actions={
           <MoreDetailsButton

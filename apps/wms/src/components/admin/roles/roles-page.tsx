@@ -87,7 +87,7 @@ function columns(onOpen: (id: string) => void): GridColumnDef<RoleRow>[] {
         row.original.restrictions.length ? (
           <span className="flex flex-wrap gap-1">
             {row.original.restrictions.map((k) => (
-              <Badge key={k} tone="warning" size="sm" shape="pill">
+              <Badge key={k} tone="warning">
                 {restrictionLabel(k)}
               </Badge>
             ))}
@@ -135,15 +135,7 @@ function columns(onOpen: (id: string) => void): GridColumnDef<RoleRow>[] {
       header: 'Type',
       size: 90,
       cell: ({ row }) =>
-        row.original.isSystem ? (
-          <Badge tone="neutral" size="sm">
-            System
-          </Badge>
-        ) : (
-          <Badge tone="neutral" size="sm" className="bg-transparent ring-1 ring-inset ring-border">
-            Custom
-          </Badge>
-        ),
+        row.original.isSystem ? <Badge tone="neutral">System</Badge> : <Badge tone="neutral">Custom</Badge>,
     },
     {
       id: 'updatedAt',

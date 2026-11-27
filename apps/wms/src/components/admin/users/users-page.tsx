@@ -82,7 +82,7 @@ function Pills({ value, roles }: { readonly value: string | null; readonly roles
   return (
     <span className="flex items-center gap-1 overflow-hidden">
       {parts.slice(0, 2).map((p) => (
-        <Badge key={p} tone={roleTone(roles.find((r) => r.name === p) ?? { name: p })} size="sm" shape="pill">
+        <Badge key={p} tone={roleTone(roles.find((r) => r.name === p) ?? { name: p })}>
           {p}
         </Badge>
       ))}
@@ -114,11 +114,7 @@ function columns(
         >
           <Avatar name={row.original.name} size="sm" />
           <span className="truncate font-medium">{row.original.name}</span>
-          {row.original.id === meId ? (
-            <Badge size="sm" tone="neutral">
-              You
-            </Badge>
-          ) : null}
+          {row.original.id === meId ? <Badge tone="neutral">You</Badge> : null}
         </button>
       ),
     },

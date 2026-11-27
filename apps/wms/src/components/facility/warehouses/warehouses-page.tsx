@@ -52,11 +52,7 @@ import { WarehouseDrawer } from './warehouse-drawer';
 const PERMS = ['view', 'create', 'edit', 'delete'] as const;
 
 function ActivePill({ active }: { readonly active: boolean }) {
-  return (
-    <Badge tone={active ? 'success' : 'neutral'} size="sm" shape="pill">
-      {active ? 'Active' : 'Inactive'}
-    </Badge>
-  );
+  return <Badge tone={active ? 'success' : 'neutral'}>{active ? 'Active' : 'Inactive'}</Badge>;
 }
 
 const COLUMNS: GridColumnDef<WarehouseRow>[] = [
@@ -118,23 +114,14 @@ const COLUMNS: GridColumnDef<WarehouseRow>[] = [
     header: 'Type',
     size: 100,
     cell: ({ row }) => (
-      <Badge tone={row.original.type === 'Internal' ? 'neutral' : 'info'} size="sm">
-        {row.original.type}
-      </Badge>
+      <Badge tone={row.original.type === 'Internal' ? 'neutral' : 'info'}>{row.original.type}</Badge>
     ),
   },
   {
     id: 'isDefault',
     header: 'Default',
     size: 90,
-    cell: ({ row }) =>
-      row.original.isDefault ? (
-        <Badge tone="warning" size="sm" shape="pill">
-          Default
-        </Badge>
-      ) : (
-        <Muted>No</Muted>
-      ),
+    cell: ({ row }) => (row.original.isDefault ? <Badge tone="neutral">Default</Badge> : <Muted>No</Muted>),
   },
   {
     id: 'isActive',
@@ -217,14 +204,8 @@ function WarehouseDetailDrawer({
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap gap-1.5">
             <ActivePill active={d.isActive} />
-            {d.isDefault ? (
-              <Badge tone="warning" size="sm" shape="pill">
-                Default warehouse
-              </Badge>
-            ) : null}
-            <Badge tone="outline" size="sm">
-              {d.type}
-            </Badge>
+            {d.isDefault ? <Badge tone="neutral">Default warehouse</Badge> : null}
+            <Badge tone="outline">{d.type}</Badge>
           </div>
           <StatRow
             stats={[

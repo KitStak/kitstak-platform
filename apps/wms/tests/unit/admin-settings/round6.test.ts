@@ -20,6 +20,6 @@ describe('settings nav active state', () => {
 describe('role tone', () => {
   it('never paints custom roles with a danger tone', () => {
     expect(roleTone({ name: 'Night shift QA' })).toBe('neutral');
-    expect(roleTone({ key: 'client', name: 'Client', category: 'Client' })).toBe('warning');
+    expect(roleTone({ key: 'client', name: 'Client', category: 'Client' })).toBe('neutral');
   });
 });

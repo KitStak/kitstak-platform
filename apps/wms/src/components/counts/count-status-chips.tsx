@@ -9,10 +9,9 @@ import * as React from 'react';
 import { AlertTriangle, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { KpiChip } from '@/components/ui/kpi-chip';
 import { statusLabel } from '@/lib/status-colors';
 import { countToneOf } from './count-status-pill';
-import { cn } from '@/lib/utils';
+import { FilterChip } from '@/components/ui/filter-chip';
 import { useApiQuery } from '@/lib/query-client';
 import { COUNT_QUERY_TIMEOUT_MS } from './counts-client';
 import type { GridUrlState } from '@/lib/use-url-state';
@@ -34,29 +33,20 @@ function StatusChip({
   active,
   onClick,
 }: {
-  readonly status: string;
+  /** null = the "All" chip (no dot). */
+  readonly status: string | null;
   readonly value: string;
   readonly active: boolean;
   readonly onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <FilterChip
+      active={active}
       onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors hover:border-border-strong hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
-        active ? 'border-primary bg-primary-soft text-primary' : 'border-border bg-surface text-body',
-      )}
-    >
-      <span
-        className="h-2 w-2 rounded-full"
-        style={{ backgroundColor: countToneOf(status, 'count').fg }}
-        aria-hidden
-      />
-      <span className="text-secondary">{statusLabel(status)}</span>
-      <span className="font-semibold tabular-nums text-foreground">{value}</span>
-    </button>
+      dot={status ? countToneOf(status, 'count').dot : undefined}
+      label={status ? statusLabel(status) : 'All'}
+      count={value}
+    />
   );
 }
 
@@ -117,8 +107,8 @@ export function CountStatusChips({
   }
   return (
     <div className="flex flex-wrap items-center gap-2 px-6 pt-3" role="group" aria-label="Filter by status">
-      <KpiChip
-        label="All"
+      <StatusChip
+        status={null}
         value={data.total.toLocaleString()}
         active={!current}
         onClick={() => grid.removeFilter('status')}

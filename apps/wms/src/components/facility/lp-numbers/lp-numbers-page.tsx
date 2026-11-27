@@ -60,11 +60,7 @@ const hidden = { defaultVisible: false } as const;
 const STATUS_TONE = { Empty: 'success', Occupied: 'warning', Shipped: 'info', Removed: 'danger' } as const;
 
 export function LpStatusPill({ status }: { readonly status: LpNumberRow['status'] }) {
-  return (
-    <Badge tone={STATUS_TONE[status]} size="sm" shape="pill">
-      {status}
-    </Badge>
-  );
+  return <Badge tone={STATUS_TONE[status]}>{status}</Badge>;
 }
 
 const right = (v: number) => (
@@ -294,21 +290,9 @@ function LpDetailDrawer({
 }
 
 const OUTCOME = {
-  delete: (
-    <Badge tone="danger" size="sm">
-      Delete
-    </Badge>
-  ),
-  void: (
-    <Badge tone="warning" size="sm">
-      Void
-    </Badge>
-  ),
-  blocked: (
-    <Badge tone="neutral" size="sm">
-      Skipped
-    </Badge>
-  ),
+  delete: <Badge tone="danger">Delete</Badge>,
+  void: <Badge tone="warning">Void</Badge>,
+  blocked: <Badge tone="neutral">Skipped</Badge>,
 } as const;
 
 type RemoveResult = BulkResponse & {

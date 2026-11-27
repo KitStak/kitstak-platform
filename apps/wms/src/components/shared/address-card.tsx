@@ -64,13 +64,9 @@ export function AddressCard({ title = 'Address', address, onEdit, className }: A
             </div>
           ) : null}
           <div className="flex flex-wrap gap-1.5">
-            {address.addressType ? (
-              <Badge tone="neutral" size="sm">
-                {address.addressType}
-              </Badge>
-            ) : null}
+            {address.addressType ? <Badge tone="neutral">{address.addressType}</Badge> : null}
             {address.taxType && address.taxId ? (
-              <Badge tone="info" size="sm">
+              <Badge tone="info">
                 {address.taxType}: {address.taxId}
               </Badge>
             ) : null}

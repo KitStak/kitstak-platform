@@ -6,6 +6,7 @@
  * Management actions; tabs Orders (remove from job) · Tasks (Execute / Update / Cancel) ·
  * Pick path (walking-path sequence) · Timeline (field-level change log).
  */
+import { Pill } from '@kitstak/ui/dashboard';
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -459,7 +460,7 @@ function PickPathTab({ detail }: { readonly detail: Detail }) {
                   'absolute -left-[37px] top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 text-2xs font-bold',
                   done
                     ? 'border-[var(--success-text)] bg-[var(--label-green-subtle)] text-success'
-                    : 'border-primary bg-surface text-primary',
+                    : 'border-border-strong bg-surface text-fg',
                 )}
               >
                 {i + 1}
@@ -567,10 +568,9 @@ function Header({ detail, onChanged }: { readonly detail: Detail; readonly onCha
               </span>
             ) : null}
             {Number(j.hasPickShort) ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--label-brown-subtle)] px-2 py-0.5 text-2xs font-semibold text-[var(--label-brown-text)]">
-                <AlertTriangle className="h-3 w-3" aria-hidden />
+              <Pill tone="caution" icon={<AlertTriangle aria-hidden />}>
                 Pick short
-              </span>
+              </Pill>
             ) : null}
             {overdue ? <OverduePill title={`Planned to finish by ${dt(j.plannedEndAt)}`} /> : null}
           </div>

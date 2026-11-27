@@ -153,7 +153,7 @@ function Capacity({ defs }: { readonly defs: readonly DefRow[] }) {
       {CUSTOM_FIELD_TYPES.map((t) => {
         const used = defs.filter((d) => slotType(d.slot) === t).length;
         return (
-          <Badge key={t} tone={used >= SLOT_LIMITS[t] ? 'warning' : 'neutral'} size="sm" shape="pill">
+          <Badge key={t} tone={used >= SLOT_LIMITS[t] ? 'warning' : 'neutral'}>
             {CUSTOM_FIELD_TYPE_LABELS[t]} {used}/{SLOT_LIMITS[t]}
           </Badge>
         );

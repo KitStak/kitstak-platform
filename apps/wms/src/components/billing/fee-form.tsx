@@ -51,7 +51,6 @@ import {
 } from '@/lib/grid-defs/organization/billing';
 import { apiRequest, isApiError } from '@/lib/api-client';
 import { applyServerFieldErrors, useApiQuery } from '@/lib/query-client';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Combobox } from '@/components/ui/combobox';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -977,18 +976,15 @@ export function FeeForm({
           {conditions.length ? (
             <div className="flex flex-wrap gap-2">
               {conditions.map((c, i) => (
-                <Badge
+                <span
                   key={`${c.field}-${i}`}
-                  tone="primary"
-                  size="md"
-                  shape="pill"
-                  className="gap-1.5 py-1 pl-2.5 pr-1"
+                  className="inline-flex h-6 items-center gap-1.5 rounded-full bg-muted pl-2.5 pr-1 text-xs font-medium text-fg-secondary"
                 >
                   {conditionText(c)}
                   <button
                     type="button"
                     aria-label={`Remove condition ${conditionText(c)}`}
-                    className="rounded-full p-0.5 hover:bg-primary/15"
+                    className="rounded-full p-0.5 text-icon hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
                     onClick={() =>
                       set(
                         'conditions',
@@ -998,7 +994,7 @@ export function FeeForm({
                   >
                     <X className="h-3 w-3" />
                   </button>
-                </Badge>
+                </span>
               ))}
             </div>
           ) : (

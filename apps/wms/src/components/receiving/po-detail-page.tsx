@@ -10,6 +10,7 @@
  * under the wizard with Cancel.
  */
 import * as React from 'react';
+import { Pill } from '@kitstak/ui/dashboard';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -277,12 +278,14 @@ function PreAdvicePanel({ po }: { readonly po: PoDetail }) {
               </p>
               <div className="flex flex-wrap gap-1">
                 {shown.map((x) => (
-                  <span
-                    key={x.serial}
-                    className={`rounded-full border px-2 py-px font-mono text-2xs ${x.received ? 'border-success/40 bg-success-soft text-success' : 'border-border bg-surface-sunken text-body'}`}
-                    title={x.received ? 'Received' : 'Expected'}
-                  >
-                    {x.serial}
+                  <span key={x.serial} className="contents">
+                    <Pill
+                      tone={x.received ? 'positive' : 'neutral'}
+                      dot
+                      title={x.received ? 'Received' : 'Expected'}
+                    >
+                      <span className="font-mono">{x.serial}</span>
+                    </Pill>
                   </span>
                 ))}
                 {list.length > shown.length ? (

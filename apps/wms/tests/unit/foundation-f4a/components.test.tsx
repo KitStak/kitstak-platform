@@ -139,13 +139,23 @@ describe('Toaster', () => {
 });
 
 describe('display & inputs', () => {
-  it('StatusPill uses the domain palette and P mini-pill', () => {
+  it('StatusPill draws the shared Pill in a domain tone, sentence case, with the half-filled partial dot', () => {
     render(<StatusPill status="Partially Shipped" domain="shipmentOrder" />);
-    const pill = screen.getByText('Partially Shipped').closest('[data-status]') as HTMLElement;
-    // Tones are shared label-palette tokens (AA text on the tint in both themes).
-    expect(pill.style.color).toContain('var(--label-green-text)');
-    expect(pill.style.backgroundColor).toBe('var(--label-green-subtle)');
-    expect(screen.getByLabelText('Partial')).toBeTruthy();
+    const wrapper = screen.getByText('Partially shipped').closest('[data-status]') as HTMLElement;
+    expect(wrapper.getAttribute('data-status')).toBe('Partially Shipped');
+    const pill = wrapper.querySelector('.ks-dash-pill') as HTMLElement;
+    expect(pill.getAttribute('data-tone')).toBe('positive');
+    // One marker: the partial dot is an SVG icon (no gradient), never a second dot.
+    expect(screen.getByLabelText('Partial').tagName.toLowerCase()).toBe('svg');
+    expect(pill.querySelector('.ks-dash-pill-dot')).toBeNull();
+    expect(pill.getAttribute('style')).toBeNull();
+  });
+
+  it('StatusPill gives a plain status one dot and the info tone for in-process work', () => {
+    render(<StatusPill status="Ready to Pick" domain="shipmentOrder" />);
+    const pill = screen.getByText('Ready to pick').closest('.ks-dash-pill') as HTMLElement;
+    expect(pill.getAttribute('data-tone')).toBe('info');
+    expect(pill.querySelectorAll('.ks-dash-pill-dot')).toHaveLength(1);
   });
 
   it('Checkbox supports the indeterminate state', async () => {

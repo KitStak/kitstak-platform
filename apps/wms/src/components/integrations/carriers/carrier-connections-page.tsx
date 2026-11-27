@@ -188,7 +188,7 @@ export function CarrierConnectionsPage({ provider: slug }: { readonly provider: 
                         {r.setupName}
                       </button>
                       {!r.hasCredentials && r.environment === 'Production' ? (
-                        <Badge size="sm" tone="danger" className="ml-2">
+                        <Badge tone="danger" className="ml-2">
                           No credentials
                         </Badge>
                       ) : null}

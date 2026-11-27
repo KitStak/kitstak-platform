@@ -510,15 +510,7 @@ function LineReceive({
               <span className="font-mono font-semibold" data-testid="rf-location">
                 {locCode}
               </span>
-              {fromSuggestion ? (
-                <Badge tone="info" size="sm">
-                  Suggested
-                </Badge>
-              ) : (
-                <Badge tone="neutral" size="sm">
-                  Scanned
-                </Badge>
-              )}
+              {fromSuggestion ? <Badge tone="info">Suggested</Badge> : <Badge tone="neutral">Scanned</Badge>}
             </span>
           ) : undefined
         }
@@ -728,11 +720,7 @@ export function RfReceivePage() {
           <ArrowLeft className="h-5 w-5" aria-hidden />
         </Link>
         <h1 className="flex-1 text-lg font-semibold text-foreground">RF receiving</h1>
-        {log.length > 0 ? (
-          <Badge tone="success" size="sm">
-            {log.length} received
-          </Badge>
-        ) : null}
+        {log.length > 0 ? <Badge tone="success">{log.length} received</Badge> : null}
       </div>
 
       <StepCard

@@ -58,11 +58,7 @@ const PERMS = ['view', 'create', 'edit', 'delete', 'change_log', 'duplicate'] as
 const hidden = { defaultVisible: false } as const;
 
 function StatusBadge({ active }: { readonly active: boolean }) {
-  return (
-    <Badge tone={active ? 'success' : 'neutral'} shape="pill" size="sm">
-      {active ? 'Active' : 'Passive'}
-    </Badge>
-  );
+  return <Badge tone={active ? 'success' : 'neutral'}>{active ? 'Active' : 'Passive'}</Badge>;
 }
 
 function columns(onOpen: (id: string) => void): GridColumnDef<PrintoutRow>[] {
@@ -111,14 +107,7 @@ function columns(onOpen: (id: string) => void): GridColumnDef<PrintoutRow>[] {
       header: 'Default',
       size: 90,
       meta: hidden,
-      cell: ({ row }) =>
-        row.original.isDefault ? (
-          <Badge tone="warning" size="sm">
-            Default
-          </Badge>
-        ) : (
-          <Muted>No</Muted>
-        ),
+      cell: ({ row }) => (row.original.isDefault ? <Badge tone="neutral">Default</Badge> : <Muted>No</Muted>),
     },
     {
       id: 'clientCount',

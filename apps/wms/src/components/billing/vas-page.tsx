@@ -106,7 +106,7 @@ const COLUMNS: GridColumnDef<VasRow>[] = [
     header: 'Calculation type',
     size: 140,
     cell: ({ row }) => (
-      <Badge tone={row.original.calculationType === 'Total Price' ? 'warning' : 'info'} shape="pill">
+      <Badge tone="neutral">
         {row.original.calculationType === 'Vas Quantity' ? 'VAS quantity' : 'Total price'}
       </Badge>
     ),
@@ -282,9 +282,7 @@ function VasForm({
             <span className="text-xs font-medium text-secondary">Calculation type</span>
             <div className="flex h-8 items-center">
               {type ? (
-                <Badge tone={isPrice ? 'warning' : 'info'} shape="pill">
-                  {isPrice ? 'Total price' : 'VAS quantity'}
-                </Badge>
+                <Badge tone="neutral">{isPrice ? 'Total price' : 'VAS quantity'}</Badge>
               ) : (
                 <span className="text-xs text-faint">Set by the VAS type</span>
               )}
@@ -507,7 +505,7 @@ function VasDetailsDrawer({
                 key: 'calc',
                 label: 'Calculation type',
                 value: (
-                  <Badge tone={row.calculationType === 'Total Price' ? 'warning' : 'info'} shape="pill">
+                  <Badge tone="neutral">
                     {row.calculationType === 'Vas Quantity' ? 'VAS quantity' : 'Total price'}
                   </Badge>
                 ),

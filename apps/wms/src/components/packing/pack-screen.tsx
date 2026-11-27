@@ -1245,7 +1245,7 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
                     <ProgressBar
                       value={totals.packed}
                       max={Math.max(1, totals.toPack)}
-                      tone={totals.packed >= totals.toPack ? 'success' : 'primary'}
+                      tone={totals.packed >= totals.toPack ? 'success' : 'data'}
                       className="flex-1"
                     />
                   </div>

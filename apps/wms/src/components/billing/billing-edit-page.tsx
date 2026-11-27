@@ -176,23 +176,13 @@ function FeeBadges({ fee }: { readonly fee: FeeView }) {
   return (
     <>
       <OperationPill operation={fee.operationType} />
-      {fee.calculationType ? (
-        <Badge tone="neutral" shape="pill">
-          {fee.calculationType}
-        </Badge>
-      ) : null}
-      {fee.vasTypeName ? (
-        <Badge tone="neutral" shape="pill">
-          {fee.vasTypeName}
-        </Badge>
-      ) : null}
+      {fee.calculationType ? <Badge tone="neutral">{fee.calculationType}</Badge> : null}
+      {fee.vasTypeName ? <Badge tone="neutral">{fee.vasTypeName}</Badge> : null}
       {fee.calculationType !== 'Split Month Storage' && fee.tiers.length > 1 ? (
-        <Badge tone="outline" shape="pill">
-          {PRICING_MODE_META[fee.pricingMode].title}
-        </Badge>
+        <Badge tone="outline">{PRICING_MODE_META[fee.pricingMode].title}</Badge>
       ) : null}
       {fee.chargeOneTime ? (
-        <Badge tone="info" shape="pill" title="Billed on the next successful bill only, then skipped">
+        <Badge tone="info" title="Billed on the next successful bill only, then skipped">
           One-time
         </Badge>
       ) : null}
@@ -728,7 +718,7 @@ export function BillingEditPage({ id }: { readonly id: string }) {
                       <td className="sticky left-0 z-10 max-w-[220px] bg-surface px-3 py-2 font-medium text-foreground shadow-[1px_0_0_var(--border)] group-hover/row:bg-surface-sunken">
                         {f.name}
                         {f.chargeOneTime ? (
-                          <Badge tone="info" shape="pill" size="sm" className="ml-1.5 align-middle">
+                          <Badge tone="info" className="ml-1.5 align-middle">
                             One-time
                           </Badge>
                         ) : null}

@@ -41,7 +41,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatTile } from '@/components/ui/stat-tile';
+import { Meter, StatRow, StatTile } from '@kitstak/ui/dashboard';
 import { StatusPill } from '@/components/ui/status-pill';
 import { UnderlineTabs } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/toast';
@@ -507,82 +507,81 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div>
       </header>
 
-      <div className="grid grid-cols-1 gap-3 px-6 md:grid-cols-2 lg:pr-10 xl:grid-cols-4">
-        <div className="flex flex-col justify-between gap-2 rounded-lg border border-border bg-surface p-4 shadow-xs">
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs font-semibold text-secondary">Kits built</span>
-            <span className="text-xs tabular-nums text-secondary">{pct}%</span>
-          </div>
-          <p className="text-xl font-semibold tabular-nums text-foreground">
-            {wo.processedQty}
-            <span className="text-base font-normal text-secondary"> / {wo.requestedQty}</span>
-          </p>
-          <ProgressBar
-            value={wo.processedQty}
-            max={Math.max(1, wo.requestedQty)}
-            tone={pct >= 100 ? 'success' : 'primary'}
+      <div className="px-6 lg:pr-10">
+        <StatRow label="Work order totals">
+          <StatTile
             label="Kits built"
+            value={
+              <>
+                {wo.processedQty}
+                <span className="text-base font-normal text-secondary"> / {wo.requestedQty}</span>
+              </>
+            }
+            href={null}
+            caption={
+              <span className="flex w-full flex-col gap-1">
+                <span className="flex items-center gap-2">
+                  <Meter
+                    value={wo.processedQty / Math.max(1, wo.requestedQty)}
+                    label="Kits built"
+                    size="thick"
+                  />
+                  <span className="shrink-0 tabular-nums">{pct}%</span>
+                </span>
+                {data.disassembledQty > 0 ? <span>{data.disassembledQty} disassembled since</span> : null}
+              </span>
+            }
           />
-          {data.disassembledQty > 0 ? (
-            <p className="text-2xs text-secondary">{data.disassembledQty} disassembled since</p>
-          ) : null}
-        </div>
-        <StatTile
-          label={wo.status === 'Cancelled' ? 'Not built' : 'Left to build'}
-          value={(wo.status === 'Cancelled'
-            ? Math.max(0, wo.requestedQty - wo.processedQty)
-            : terminal
-              ? 0
-              : remaining
-          ).toLocaleString()}
-          sublabel={
-            terminalCopy ??
-            (coverage.locked.length && buildable < remaining
-              ? `Usable stock covers ${buildable.toLocaleString()} kit${buildable === 1 ? '' : 's'} · rest locked by ${coverage.plans.join(', ')}`
-              : `Usable stock covers ${Math.min(buildable, remaining).toLocaleString()} of ${remaining.toLocaleString()} kit${remaining === 1 ? '' : 's'}`)
-          }
-          tone={terminal ? 'default' : remaining > 0 && buildable < remaining ? 'warning' : 'default'}
-        />
-        <StatTile
-          label="Components"
-          value={components.length.toLocaleString()}
-          sublabel={
-            terminal
-              ? wo.status === 'Cancelled'
-                ? 'Work order cancelled; nothing is reserved'
-                : 'All components consumed'
-              : coverage.locked.length
-                ? `${coverage.locked.length} locked by ${coverage.plans.join(', ')}${short.length > coverage.locked.length ? ` · ${short.length - coverage.locked.length} short` : ''}`
-                : short.length
-                  ? `${short.length} short: ${short
-                      .slice(0, 2)
-                      .map((c) => c.sku)
-                      .join(', ')}${short.length > 2 ? '…' : ''}`
-                  : 'Usable stock covers every component'
-          }
-          tone={terminal ? 'default' : short.length ? 'danger' : 'success'}
-        />
-        <StatTile
-          label="Job"
-          value={
-            job ? (
-              <Link href={`/jobs/${job.id}`} className="text-primary hover:underline">
-                {job.code}
-              </Link>
-            ) : (
-              'None'
-            )
-          }
-          sublabel={
-            job
-              ? `${job.completedTaskCount} of ${job.taskCount} tasks done · ${job.assigneeName ?? 'Unassigned'}`
+          <StatTile
+            label={wo.status === 'Cancelled' ? 'Not built' : 'Left to build'}
+            value={(wo.status === 'Cancelled'
+              ? Math.max(0, wo.requestedQty - wo.processedQty)
               : terminal
-                ? 'No picking job'
-                : wo.type === 'Work Order with Picking'
-                  ? 'Run Picking/job operations to create one'
-                  : 'Built without picking'
-          }
-        />
+                ? 0
+                : remaining
+            ).toLocaleString()}
+            href={null}
+            caption={
+              terminalCopy ??
+              (coverage.locked.length && buildable < remaining
+                ? `Usable stock covers ${buildable.toLocaleString()} kit${buildable === 1 ? '' : 's'} · rest locked by ${coverage.plans.join(', ')}`
+                : `Usable stock covers ${Math.min(buildable, remaining).toLocaleString()} of ${remaining.toLocaleString()} kit${remaining === 1 ? '' : 's'}`)
+            }
+          />
+          <StatTile
+            label="Components"
+            value={components.length.toLocaleString()}
+            href={null}
+            caption={
+              terminal
+                ? wo.status === 'Cancelled'
+                  ? 'Work order cancelled; nothing is reserved'
+                  : 'All components consumed'
+                : coverage.locked.length
+                  ? `${coverage.locked.length} locked by ${coverage.plans.join(', ')}${short.length > coverage.locked.length ? ` · ${short.length - coverage.locked.length} short` : ''}`
+                  : short.length
+                    ? `${short.length} short: ${short
+                        .slice(0, 2)
+                        .map((c) => c.sku)
+                        .join(', ')}${short.length > 2 ? '…' : ''}`
+                    : 'Usable stock covers every component'
+            }
+          />
+          <StatTile
+            label="Job"
+            value={job ? job.code : 'None'}
+            href={job ? `/jobs/${job.id}` : null}
+            caption={
+              job
+                ? `${job.completedTaskCount} of ${job.taskCount} tasks done · ${job.assigneeName ?? 'Unassigned'}`
+                : terminal
+                  ? 'No picking job'
+                  : wo.type === 'Work Order with Picking'
+                    ? 'Run Picking/job operations to create one'
+                    : 'Built without picking'
+            }
+          />
+        </StatRow>
       </div>
 
       {wo.status === 'Shortage' ? (

@@ -79,11 +79,7 @@ import { ZoneGroupsDialog } from './zone-groups-dialog';
 
 type F = LookupFormValues;
 
-const yesNo = (on: boolean) => (
-  <Badge tone={on ? 'success' : 'neutral'} size="sm" shape="pill">
-    {on ? 'Yes' : 'No'}
-  </Badge>
-);
+const yesNo = (on: boolean) => <Badge tone={on ? 'success' : 'neutral'}>{on ? 'Yes' : 'No'}</Badge>;
 const num = (v: unknown) => (
   <span className="block text-right tabular-nums">
     {typeof v === 'number' ? v.toLocaleString('en-US') : 'None'}
@@ -154,7 +150,7 @@ function typeColumns(
             return keys.length ? (
               <span className="flex flex-wrap gap-1">
                 {keys.map((k) => (
-                  <Badge key={k} tone="info" size="sm" shape="pill">
+                  <Badge key={k} tone="info">
                     {MERGE_CRITERIA.find((c) => c.key === k)?.label ?? k}
                   </Badge>
                 ))}
@@ -196,15 +192,11 @@ function typeColumns(
             return (
               <span className="flex flex-wrap gap-1" title={on.map(soTypeFlagLabel).join('\n')}>
                 {on.slice(0, 2).map((k) => (
-                  <Badge key={k} tone="info" size="sm" shape="pill">
+                  <Badge key={k} tone="info">
                     {soTypeFlagLabel(k)}
                   </Badge>
                 ))}
-                {on.length > 2 ? (
-                  <Badge tone="neutral" size="sm" shape="pill">
-                    +{on.length - 2}
-                  </Badge>
-                ) : null}
+                {on.length > 2 ? <Badge tone="neutral">+{on.length - 2}</Badge> : null}
               </span>
             );
           },

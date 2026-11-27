@@ -46,7 +46,7 @@ export function ComingSoonBadge({
   readonly title?: string;
 }) {
   return (
-    <Badge tone="neutral" size="sm" shape="pill" className="shrink-0" title={title}>
+    <Badge tone="neutral" className="shrink-0" title={title}>
       Coming soon
     </Badge>
   );
@@ -506,7 +506,7 @@ function SoTypeFlags() {
                 title={
                   <span className="flex items-center gap-2">
                     {section.title}
-                    <Badge tone={on ? 'info' : 'neutral'} size="sm" shape="pill">
+                    <Badge tone={on ? 'info' : 'neutral'}>
                       {on}/{section.flags.length}
                     </Badge>
                   </span>

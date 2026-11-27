@@ -249,12 +249,8 @@ export function BulkResultModal({
         </div>
         <DialogBody className="flex flex-col gap-3">
           <div className="flex items-center gap-2" aria-label="Result counts">
-            <Badge tone="success" shape="pill">
-              Success {ok}
-            </Badge>
-            <Badge tone="danger" shape="pill">
-              Error {bad}
-            </Badge>
+            <Badge tone="success">Success {ok}</Badge>
+            <Badge tone="danger">Error {bad}</Badge>
           </div>
           <div className="ks-scroll max-h-[300px] overflow-auto rounded-md border border-border">
             <table className="w-full border-collapse text-left text-xs">

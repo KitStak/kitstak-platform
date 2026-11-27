@@ -96,11 +96,7 @@ function SortRow({ row, index }: { readonly row: WorkflowRow; readonly index: nu
           {row.stopProcessing ? ' · stops processing' : ''}
         </p>
       </div>
-      {!row.isActive ? (
-        <Badge size="sm" tone="neutral">
-          Inactive
-        </Badge>
-      ) : null}
+      {!row.isActive ? <Badge tone="neutral">Inactive</Badge> : null}
       <button
         type="button"
         aria-label={`Move ${row.name}`}
@@ -255,9 +251,7 @@ export function WorkflowsPage() {
           {row.original.stopProcessing ? (
             <Tooltip content="Stops the chain when it matches">
               <span>
-                <Badge size="sm" tone="warning">
-                  Stop
-                </Badge>
+                <Badge tone="warning">Stop</Badge>
               </span>
             </Tooltip>
           ) : null}
@@ -346,7 +340,7 @@ export function WorkflowsPage() {
             tabIndex={0}
             className="flex min-w-0 items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            <Badge size="sm" tone="info" className="shrink-0">
+            <Badge tone="info" className="shrink-0">
               {row.original.match === 'All' ? 'All' : 'Any'} · {row.original.conditionCount}
             </Badge>
             <span className="line-clamp-2 whitespace-normal break-words text-xs leading-4 text-secondary">

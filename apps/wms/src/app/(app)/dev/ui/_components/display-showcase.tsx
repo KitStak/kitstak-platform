@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { Boxes, PackageCheck, Plus, Truck, Upload } from 'lucide-react';
-import { STATUS_DOMAINS, statusLabel, type StatusDomain } from '@/lib/status-colors';
+import { Boxes, Plus, Upload } from 'lucide-react';
+import { Delta, StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { STATUS_DOMAINS, type StatusDomain } from '@/lib/status-colors';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Barcode } from '@/components/ui/barcode';
@@ -10,12 +11,11 @@ import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Kbd, KeyCombo } from '@/components/ui/kbd';
-import { KpiChip } from '@/components/ui/kpi-chip';
+import { FilterChip } from '@/components/ui/filter-chip';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { Skeleton, SkeletonTable } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
-import { StatTile } from '@/components/ui/stat-tile';
 import {
   ChannelBadge,
   DifferencePill,
@@ -51,7 +51,7 @@ function StatusMaps() {
           </p>
           <div className="flex flex-wrap gap-1.5">
             {Object.keys(STATUS_DOMAINS[domain as keyof typeof STATUS_DOMAINS]).map((status) => (
-              <StatusPill key={status} status={statusLabel(status)} domain={domain} />
+              <StatusPill key={status} status={status} domain={domain} />
             ))}
           </div>
         </div>
@@ -88,14 +88,12 @@ export function DisplayShowcase() {
         </Button>
       </Specimen>
       <Specimen label="Badges">
-        {(['neutral', 'primary', 'success', 'warning', 'danger', 'info', 'solid', 'outline'] as const).map(
-          (tone) => (
-            <Badge key={tone} tone={tone}>
-              {tone}
-            </Badge>
-          ),
-        )}
-        <Badge tone="primary" shape="pill" icon={Boxes}>
+        {(['neutral', 'success', 'warning', 'danger', 'info', 'outline'] as const).map((tone) => (
+          <Badge key={tone} tone={tone}>
+            {tone}
+          </Badge>
+        ))}
+        <Badge tone="info" icon={Boxes}>
           Kit
         </Badge>
       </Specimen>
@@ -130,33 +128,41 @@ export function DisplayShowcase() {
         </div>
         <Spinner />
       </Specimen>
-      <Specimen label="Stat tiles & KPI chips">
-        <div className="grid w-full gap-3 sm:grid-cols-3">
-          <StatTile
-            label="Orders to ship"
-            value="1,284"
-            icon={Truck}
-            delta={{ value: 12, label: 'vs yesterday' }}
-            info="Open orders due today"
-          />
-          <StatTile
-            label="Units picked"
-            value="18,402"
-            icon={PackageCheck}
-            tone="success"
-            sublabel="Last 24h"
-          />
-          <StatTile
-            label="Shortages"
-            value="7"
-            tone="danger"
-            delta={{ value: -30, invert: true }}
-            loading={false}
-          />
+      <Specimen label="Stat tiles & filter chips">
+        <div className="w-full">
+          <StatRow label="Example totals">
+            <StatTile
+              label="Orders to ship"
+              value="1,284"
+              href="/orders"
+              delta={{ text: '+12%', direction: 'up', tone: 'neutral' }}
+              deltaLabel="vs yesterday"
+            />
+            <StatTile label="Units picked" value="18,402" href="/inventory" caption="Last 24 h" />
+            <StatTile
+              label="Shortages"
+              value="7"
+              href="/orders?f.status=in%3AShortage"
+              delta={{ text: '-30%', direction: 'down', tone: 'good' }}
+            />
+          </StatRow>
         </div>
-        <KpiChip label="Open" value={412} tone="success" />
-        <KpiChip label="Ready to Pick" value={86} tone="primary" active />
-        <KpiChip label="Shortage" value={7} tone="danger" />
+        <Delta text="+4" direction="up" tone="bad" />
+        <FilterChip label="All" count="412" active onClick={() => undefined} />
+        <FilterChip
+          label="Ready to pick"
+          count="86"
+          dot="var(--info)"
+          active={false}
+          onClick={() => undefined}
+        />
+        <FilterChip
+          label="Shortage"
+          count="7"
+          dot="var(--warning)"
+          active={false}
+          onClick={() => undefined}
+        />
       </Specimen>
       <Specimen label="Callouts">
         <div className="grid w-full gap-2 md:grid-cols-2">

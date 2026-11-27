@@ -52,11 +52,8 @@ function InfoStep({ typeKey, isDefault }: { readonly typeKey: string; readonly i
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-2 text-sm text-secondary">
-        Type{' '}
-        <Badge tone="primary" shape="pill">
-          {typeTitle(typeKey)}
-        </Badge>
-        {isDefault ? <Badge tone="warning">Default template</Badge> : null}
+        Type <Badge tone="info">{typeTitle(typeKey)}</Badge>
+        {isDefault ? <Badge tone="neutral">Default template</Badge> : null}
       </div>
       <FormSection title="Printout information">
         <FormGrid>

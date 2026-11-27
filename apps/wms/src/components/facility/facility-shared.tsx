@@ -26,6 +26,7 @@ import {
   type FacilityField,
 } from '@/lib/grid-defs/facility/common';
 import type { FilterFieldDef } from '@/components/grid';
+import { Pill } from '@kitstak/ui/dashboard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
@@ -282,24 +283,12 @@ export function planLimitAction(error: unknown): { label: string; onClick: () =>
 /* ---------------- cells ---------------- */
 
 export function YesNo({ value }: { readonly value: boolean | null | undefined }) {
-  return value ? (
-    <Badge tone="success" size="sm" shape="pill">
-      Yes
-    </Badge>
-  ) : (
-    <span className="text-xs text-faint">No</span>
-  );
+  return value ? <Badge tone="success">Yes</Badge> : <span className="text-xs text-faint">No</span>;
 }
 
 /** Locked is a blocking state (no picks / putaway), so Yes reads as a warning, never as green "good". */
 export function LockedPill({ value }: { readonly value: boolean | null | undefined }) {
-  return value ? (
-    <Badge tone="warning" size="sm" shape="pill">
-      Locked
-    </Badge>
-  ) : (
-    <span className="text-xs text-faint">No</span>
-  );
+  return value ? <Badge tone="warning">Locked</Badge> : <span className="text-xs text-faint">No</span>;
 }
 
 /**
@@ -311,10 +300,9 @@ export const AVAILABILITY_TONE = { Available: 'success', Occupied: 'warning' } a
 export function AvailabilityPill({ status }: { readonly status: string }) {
   const occupied = status === 'Occupied';
   return (
-    <Badge tone={occupied ? AVAILABILITY_TONE.Occupied : AVAILABILITY_TONE.Available} size="sm" shape="pill">
-      <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', occupied ? 'bg-warning' : 'bg-success')} />
+    <Pill tone={occupied ? 'caution' : 'positive'} dot>
       {status}
-    </Badge>
+    </Pill>
   );
 }
 
@@ -704,7 +692,7 @@ export function EntityChangeLogDrawer({
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start gap-2">
-                      <Badge tone={meta.tone} size="sm" className="mt-px shrink-0">
+                      <Badge tone={meta.tone} className="mt-px shrink-0">
                         {r.type}
                       </Badge>
                       <span className="sr-only">: </span>
@@ -751,7 +739,7 @@ export function EntityChangeLogDrawer({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start gap-2">
-                    <Badge tone="neutral" size="sm" className="mt-px shrink-0">
+                    <Badge tone="neutral" className="mt-px shrink-0">
                       Created
                     </Badge>
                     <span className="sr-only">: </span>

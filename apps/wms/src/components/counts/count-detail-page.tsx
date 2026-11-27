@@ -42,7 +42,7 @@ import { Callout } from '@/components/ui/callout';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
-import { StatTile } from '@/components/ui/stat-tile';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
 import { CountStatusPill } from './count-status-pill';
 import { UnderlineTabs } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/toast';
@@ -542,89 +542,93 @@ function Loaded({
           </Callout>
         </div>
       ) : null}
-      <div className="grid grid-cols-2 gap-3 px-6 pb-4 lg:grid-cols-5">
-        <StatTile
-          label={lines.length > active.length ? 'Active lines' : 'Lines'}
-          value={active.length.toLocaleString()}
-          sublabel={
-            lines.length > active.length
-              ? [
-                  superseded ? `${superseded} superseded by recount` : null,
-                  cancelledLines ? `${cancelledLines} cancelled` : null,
-                  `${lines.length} total`,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')
-              : `${plural(plan.locationCount, 'location', 'locations')} · ${plural(plan.skuCount, 'SKU', 'SKUs')}`
-          }
-        />
-        <StatTile
-          label="Counted"
-          value={`${accuracyLines.length} / ${active.length}`}
-          sublabel={
-            active.length
-              ? `${Math.round((accuracyLines.length / active.length) * 100)}% complete`
-              : 'Nothing to count'
-          }
-          tone="primary"
-        />
-        <StatTile
-          label="Counted vs system"
-          value={
-            accuracyLines.length ? (
-              <span className="flex items-center gap-2">
-                {countedTotal.toLocaleString()}
-                <span className="text-sm font-normal text-secondary">/ {systemTotal.toLocaleString()}</span>
-              </span>
-            ) : (
-              'None'
-            )
-          }
-          sublabel={
-            accuracyLines.length ? (
-              <span className="inline-flex items-center gap-1.5">
-                <DifferenceBadge value={percentDifference(systemTotal, countedTotal)} />
-                <span>
-                  {accuracyLines.length === 1
-                    ? 'counted line only'
-                    : `${accuracyLines.length} counted lines only`}
+      <div className="px-6 pb-4">
+        <StatRow label="Count totals">
+          <StatTile
+            label={lines.length > active.length ? 'Active lines' : 'Lines'}
+            value={active.length.toLocaleString()}
+            href={null}
+            caption={
+              lines.length > active.length
+                ? [
+                    superseded ? `${superseded} superseded by recount` : null,
+                    cancelledLines ? `${cancelledLines} cancelled` : null,
+                    `${lines.length} total`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                : `${plural(plan.locationCount, 'location', 'locations')} · ${plural(plan.skuCount, 'SKU', 'SKUs')}`
+            }
+          />
+          <StatTile
+            label="Counted"
+            value={`${accuracyLines.length} / ${active.length}`}
+            href={null}
+            caption={
+              active.length
+                ? `${Math.round((accuracyLines.length / active.length) * 100)}% complete`
+                : 'Nothing to count'
+            }
+          />
+          <StatTile
+            label="Counted vs system"
+            value={
+              accuracyLines.length ? (
+                <span className="flex items-center gap-2">
+                  {countedTotal.toLocaleString()}
+                  <span className="text-sm font-normal text-secondary">/ {systemTotal.toLocaleString()}</span>
                 </span>
-              </span>
-            ) : (
-              `${plural(scopeSystemTotal, 'system unit', 'system units')} to count`
-            )
-          }
-        />
-        <StatTile
-          label="Unit variance"
-          value={
-            !accuracyLines.length ? (
-              'None'
-            ) : (
-              <span className="tabular-nums">
-                {varianceUnits > 0
-                  ? `+${varianceUnits.toLocaleString()}`
-                  : varianceUnits < 0
-                    ? `−${Math.abs(varianceUnits).toLocaleString()}`
-                    : '0'}
-              </span>
-            )
-          }
-          sublabel={
-            !accuracyLines.length
-              ? 'Shown once a line is counted'
-              : differingBuckets === 1
-                ? '1 bucket differs'
-                : `${differingBuckets.toLocaleString()} buckets differ`
-          }
-          tone={!accuracyLines.length ? 'default' : varianceUnits === 0 ? 'success' : 'warning'}
-        />
-        <StatTile
-          label="Exact lines"
-          value={accuracyLines.length ? `${Math.round((exact / accuracyLines.length) * 100)}%` : 'None'}
-          sublabel={`${exact} of ${plural(accuracyLines.length, 'counted line', 'counted lines')} ${exact === 1 && accuracyLines.length === 1 ? 'matches' : 'match'}`}
-          tone={accuracyLines.length && exact === accuracyLines.length ? 'success' : 'default'}
-        />
+              ) : (
+                'None'
+              )
+            }
+            href={null}
+            caption={
+              accuracyLines.length ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <DifferenceBadge value={percentDifference(systemTotal, countedTotal)} />
+                  <span>
+                    {accuracyLines.length === 1
+                      ? 'counted line only'
+                      : `${accuracyLines.length} counted lines only`}
+                  </span>
+                </span>
+              ) : (
+                `${plural(scopeSystemTotal, 'system unit', 'system units')} to count`
+              )
+            }
+          />
+          <StatTile
+            label="Unit variance"
+            value={
+              !accuracyLines.length ? (
+                'None'
+              ) : (
+                <span className="tabular-nums">
+                  {varianceUnits > 0
+                    ? `+${varianceUnits.toLocaleString()}`
+                    : varianceUnits < 0
+                      ? `−${Math.abs(varianceUnits).toLocaleString()}`
+                      : '0'}
+                </span>
+              )
+            }
+            href={null}
+            caption={
+              !accuracyLines.length
+                ? 'Shown once a line is counted'
+                : differingBuckets === 1
+                  ? '1 bucket differs'
+                  : `${differingBuckets.toLocaleString()} buckets differ`
+            }
+          />
+          <StatTile
+            label="Exact lines"
+            value={accuracyLines.length ? `${Math.round((exact / accuracyLines.length) * 100)}%` : 'None'}
+            href={null}
+            caption={`${exact} of ${plural(accuracyLines.length, 'counted line', 'counted lines')} ${exact === 1 && accuracyLines.length === 1 ? 'matches' : 'match'}`}
+          />
+        </StatRow>
       </div>
       {/* KitStak Projects work linked to this count (hidden when Projects is not available). */}
       <div className="px-6 pb-4 empty:hidden">

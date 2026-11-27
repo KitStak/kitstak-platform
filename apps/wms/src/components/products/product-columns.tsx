@@ -51,7 +51,7 @@ export const NewProductContext = React.createContext<string | null>(null);
 function NewBadge({ id }: { readonly id: string }) {
   const newId = React.useContext(NewProductContext);
   return newId === id ? (
-    <Badge tone="success" size="sm" className="shrink-0">
+    <Badge tone="success" className="shrink-0">
       New
     </Badge>
   ) : null;
@@ -93,7 +93,7 @@ export function buildProductColumns(): Col[] {
             {row.original.sku}
           </LinkCell>
           {row.original.productCategory === 'Kit' ? (
-            <Badge tone="info" size="sm" className="shrink-0">
+            <Badge tone="info" className="shrink-0">
               Kit
             </Badge>
           ) : null}
@@ -114,9 +114,7 @@ export function buildProductColumns(): Col[] {
             <span
               title={`Barcode shared with ${row.original.barcodeConflictCount} other product${row.original.barcodeConflictCount === 1 ? '' : 's'} of this client. Scans are ambiguous`}
             >
-              <Badge tone="warning" size="sm">
-                Conflict
-              </Badge>
+              <Badge tone="warning">Conflict</Badge>
             </span>
           ) : null}
         </span>

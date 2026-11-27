@@ -13,6 +13,7 @@
  * permissions (counts edit / mobile cycle count), scope, audit and ledger rules are identical.
  */
 import * as React from 'react';
+import { Meter } from '@kitstak/ui/dashboard';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ChevronRight, ClipboardList, Hand, Inbox, ScanLine, User, Zap } from 'lucide-react';
@@ -354,15 +355,8 @@ function JobList({
                 {j.remainingLocations > 3 ? ` +${j.remainingLocations - 3}` : ''}
               </span>
             ) : null}
-            <span
-              className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-neutral-soft"
-              role="progressbar"
-              aria-label={`${j.code} progress`}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={pct}
-            >
-              <span className="block h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+            <span className="mt-0.5 block w-full">
+              <Meter value={pct / 100} label={`${j.code} progress`} />
             </span>
           </span>
         );

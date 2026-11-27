@@ -5,7 +5,7 @@
  * bulk Delete, row ⋯ Show details · Edit · Change log · Delete (blocked while LP numbers exist).
  */
 import * as React from 'react';
-import { Eye, History, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, Eye, History, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   DataGrid,
   GridToolbar,
@@ -248,8 +248,11 @@ function LpTypeDetailDrawer({
             <h3 className="text-xs font-semibold text-secondary">Parameters</h3>
             <div className="flex flex-wrap gap-1.5">
               {LP_TYPE_PARAMETERS.map((p) => (
-                <Badge key={p.key} tone={d[p.key] ? 'success' : 'outline'} size="md" shape="pill">
-                  {d[p.key] ? '✓ ' : ''}
+                <Badge
+                  key={p.key}
+                  tone={d[p.key] ? 'success' : 'neutral'}
+                  icon={d[p.key] ? Check : undefined}
+                >
                   {p.label}
                 </Badge>
               ))}

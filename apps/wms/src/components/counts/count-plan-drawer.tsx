@@ -945,7 +945,7 @@ function TasksStep({
               className={cn(
                 'flex items-center gap-3 rounded-lg border p-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/30',
                 active
-                  ? 'border-primary bg-primary-soft'
+                  ? 'border-border-strong bg-selected'
                   : 'border-border bg-surface hover:border-border-strong',
                 readOnly && 'cursor-default',
               )}
@@ -953,7 +953,7 @@ function TasksStep({
               <span
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-md',
-                  active ? 'bg-primary text-white' : 'bg-surface-sunken text-secondary',
+                  active ? 'bg-foreground text-surface' : 'bg-surface-sunken text-secondary',
                 )}
               >
                 <Icon className="h-4 w-4" aria-hidden />

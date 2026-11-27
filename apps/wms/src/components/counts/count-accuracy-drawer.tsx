@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { Drawer } from '@/components/ui/drawer';
 import { SkeletonText } from '@/components/ui/skeleton';
-import { StatTile } from '@/components/ui/stat-tile';
+import { StatTile } from '@kitstak/ui/dashboard';
 import { Tooltip } from '@/components/ui/tooltip';
 import { DeltaBadge } from './count-badges';
 
@@ -118,13 +118,14 @@ function Body() {
             <StatTile
               label="Record accuracy"
               value={pct(d.totals.exactBuckets, d.totals.buckets)}
-              sublabel={`${d.totals.exactBuckets.toLocaleString()} of ${d.totals.buckets.toLocaleString()} buckets matched`}
-              tone={d.totals.exactBuckets === d.totals.buckets ? 'success' : 'primary'}
+              href={null}
+              caption={`${d.totals.exactBuckets.toLocaleString()} of ${d.totals.buckets.toLocaleString()} buckets matched`}
             />
             <StatTile
               label="Counted"
               value={d.totals.lines.toLocaleString()}
-              sublabel={`lines in ${d.totals.plans.toLocaleString()} ${d.totals.plans === 1 ? 'plan' : 'plans'}`}
+              href={null}
+              caption={`lines in ${d.totals.plans.toLocaleString()} ${d.totals.plans === 1 ? 'plan' : 'plans'}`}
             />
             <StatTile
               label="Unit accuracy"
@@ -133,7 +134,8 @@ function Body() {
                   ? `${Math.max(0, Math.round((1 - d.totals.absVarianceUnits / d.totals.systemUnits) * 1000) / 10)}%`
                   : 'None'
               }
-              sublabel={`${d.totals.absVarianceUnits.toLocaleString()} units off of ${d.totals.systemUnits.toLocaleString()}`}
+              href={null}
+              caption={`${d.totals.absVarianceUnits.toLocaleString()} units off of ${d.totals.systemUnits.toLocaleString()}`}
             />
             <StatTile
               label="Net variance"
@@ -143,8 +145,8 @@ function Body() {
                   {Math.abs(d.totals.netVarianceUnits).toLocaleString()}
                 </span>
               }
-              sublabel="counted minus system units"
-              tone={d.totals.netVarianceUnits === 0 ? 'success' : 'warning'}
+              href={null}
+              caption="counted minus system units"
             />
           </div>
           <WeeklyChart weekly={d.weekly} />

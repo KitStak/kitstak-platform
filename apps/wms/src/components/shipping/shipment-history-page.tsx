@@ -142,7 +142,7 @@ export function ShipmentHistoryPage() {
   const hasState = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader title="Shipment History" />
+      <PageHeader title="Shipment history" />
       <GridToolbar
         {...g.toolbarProps}
         searchPlaceholder="Order code, SKU, tracking or store order #"

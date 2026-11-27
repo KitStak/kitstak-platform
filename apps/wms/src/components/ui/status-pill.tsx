@@ -1,11 +1,10 @@
 import * as React from 'react';
 import { ArrowUp, ChevronsUp, FileText, ShoppingBag, Store, Truck, Zap } from 'lucide-react';
+import { Pill } from '@kitstak/ui/dashboard';
 import { cn } from '@/lib/utils';
 import {
   differenceTone,
   isPartialStatus,
-  pillClass,
-  pillStyle,
   statusLabel,
   statusTone,
   type StatusTone,
@@ -13,35 +12,89 @@ import {
 } from '@/lib/status-colors';
 
 /**
- * Status pill (BUILD_PLAN 0.5). Colours come from `@/lib/status-colors`; pass `domain`
- * for entity-specific semantics (e.g. "Open" is green for orders, teal for shipment
- * plans). Without a domain the generic map is used, so existing call sites keep working.
+ * Status pill (BUILD_PLAN 0.5), drawn with the shared `Pill` (docs/design/UI-CLEANUP.md "Pills"):
+ * one of five flat tones, one dot, sentence case, one size. Tones come from `@/lib/status-colors`;
+ * pass `domain` for entity-specific semantics. Without a domain the generic map is used, so
+ * existing call sites keep working.
+ *
+ * The `data-status` wrapper is `display: contents`, so it adds no box around the pill.
  */
 export function StatusPill({
   status,
   domain = 'generic',
   partial,
-  size = 'md',
   className,
 }: {
   status: string;
   domain?: StatusDomain;
   /** Force/disable the half-filled "partial" dot; defaults to statuses starting with "Partially". */
   partial?: boolean;
+  /** @deprecated Pills have one size; kept so existing call sites compile. */
   size?: 'sm' | 'md';
   className?: string;
 }) {
   const tone = statusTone(status, domain);
-  const showPartial = partial ?? isPartialStatus(status);
   return (
-    <span data-status={status} style={pillStyle(tone)} className={cn(pillClass(size), className)}>
-      <PillDot tone={tone} partial={showPartial} />
-      <span className="truncate">{statusLabel(status)}</span>
+    <TonePill status={status} tone={tone} partial={partial ?? isPartialStatus(status)} className={className}>
+      {statusLabel(status)}
+    </TonePill>
+  );
+}
+
+/**
+ * A status `Pill` for a tone you already have (order, work order, inventory pills), with the
+ * `data-status` attribute tests and e2e specs look for. A partial status gets the half-filled dot.
+ */
+export function TonePill({
+  status,
+  tone,
+  partial = false,
+  className,
+  children,
+}: {
+  readonly status: string;
+  readonly tone: StatusTone;
+  readonly partial?: boolean;
+  readonly className?: string;
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <span data-status={status} className="contents">
+      {partial ? (
+        <Pill tone={tone.pill} icon={<PartialDot />} className={className}>
+          {children}
+        </Pill>
+      ) : (
+        <Pill tone={tone.pill} dot className={className}>
+          {children}
+        </Pill>
+      )}
     </span>
   );
 }
 
-/** Leading 6px dot. A partial status draws it half-filled instead of adding a second mark. */
+/**
+ * The half-filled "partial" dot: a 6 px SVG in the pill's own mark colour (`--pill-mark`), so a
+ * partial status keeps one marker instead of adding a second mark. No gradients.
+ */
+export function PartialDot() {
+  return (
+    <svg
+      role="img"
+      aria-label="Partial"
+      viewBox="0 0 6 6"
+      style={{ width: 6, height: 6 }}
+      fill="none"
+      stroke="var(--pill-mark, currentColor)"
+    >
+      <title>Partial</title>
+      <circle cx="3" cy="3" r="2.5" strokeWidth="1" />
+      <path d="M3 0.5a2.5 2.5 0 0 0 0 5z" fill="var(--pill-mark, currentColor)" stroke="none" />
+    </svg>
+  );
+}
+
+/** Leading 6px dot in a tone's colour, for status marks drawn outside a Pill (chips, timelines). */
 export function PillDot({
   tone,
   partial = false,
@@ -51,16 +104,9 @@ export function PillDot({
 }) {
   if (partial) {
     return (
-      <span
-        role="img"
-        aria-label="Partial"
-        title="Partial"
-        className="inline-block h-1.5 w-1.5 shrink-0 rounded-full border"
-        style={{
-          borderColor: tone.dot,
-          background: `linear-gradient(90deg, ${tone.dot} 50%, transparent 50%)`,
-        }}
-      />
+      <span className="inline-flex shrink-0" style={{ ['--pill-mark' as string]: tone.dot }}>
+        <PartialDot />
+      </span>
     );
   }
   return (
@@ -72,7 +118,7 @@ export function PillDot({
   );
 }
 
-/** One soft treatment for every priority; High gets an up arrow, Urgent a double arrow. */
+/** One treatment for every priority: a caution pill; High gets an up arrow, Urgent a double arrow. */
 export function PriorityFlag({ priority }: { priority: string | null }) {
   if (!priority || priority.toLowerCase() === 'none') {
     return <span className="text-xs text-fg-muted">None</span>;
@@ -81,9 +127,14 @@ export function PriorityFlag({ priority }: { priority: string | null }) {
   const tone = statusTone(priority, 'priority');
   const Icon = key === 'urgent' ? ChevronsUp : key === 'high' ? ArrowUp : null;
   return (
-    <span data-priority={key} style={pillStyle(tone)} className={cn(pillClass(), 'gap-0.5')}>
-      {Icon ? <Icon className="h-3 w-3" aria-hidden /> : null}
-      {statusLabel(priority)}
+    <span data-priority={key} className="contents">
+      {Icon ? (
+        <Pill tone={tone.pill} icon={<Icon aria-hidden />}>
+          {statusLabel(priority)}
+        </Pill>
+      ) : (
+        <Pill tone={tone.pill}>{statusLabel(priority)}</Pill>
+      )}
     </span>
   );
 }
@@ -91,48 +142,52 @@ export function PriorityFlag({ priority }: { priority: string | null }) {
 /** Canonical name for the shared priority pill; every grid uses this one map. */
 export const PriorityPill = PriorityFlag;
 
-/** Receiving difference pill: "-3" red-orange, "+2" green, "0" grey. */
+/** Text colour for each difference sign (a number is colored text, not a pill). */
+const DIFFERENCE_TEXT = {
+  critical: 'text-danger-text',
+  positive: 'text-success-text',
+  neutral: 'text-fg-muted',
+} as const;
+
+/** Receiving difference: "−3" critical, "+2" positive, "0" muted. Signed tabular text, not a pill. */
 export function DifferencePill({ value, className }: { value: number; className?: string }) {
-  const tone = differenceTone(value);
+  const tone = differenceTone(value).pill;
+  const text = value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : '0';
   return (
     <span
-      style={pillStyle(tone)}
-      className={cn('inline-flex rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums', className)}
+      data-difference={value}
+      className={cn(
+        'whitespace-nowrap text-xs font-medium tabular-nums',
+        DIFFERENCE_TEXT[tone === 'critical' || tone === 'positive' ? tone : 'neutral'],
+        className,
+      )}
     >
-      {value > 0 ? `+${value}` : value}
+      {text}
     </span>
   );
 }
 
-/** Green Yes / grey No pill. */
+/** Yes / No pill (positive / neutral). */
 export function YesNoPill({ value }: { value: boolean }) {
   return <StatusPill status={value ? 'Yes' : 'No'} domain="yesNo" />;
 }
 
-/** Sales-channel badge with brand-flavored icon tiles */
-const CHANNEL_META: Record<
-  string,
-  { icon: React.ComponentType<{ className?: string }>; tile: string; label?: string }
-> = {
-  shopify: { icon: ShoppingBag, tile: 'bg-[#e8f5e2] text-[#5e8e3e]' },
-  amazon: { icon: Store, tile: 'bg-[#fff3e0] text-[#e47911]' },
-  'tiktok shop': { icon: Zap, tile: 'bg-[#111]/5 text-[#111]' },
-  walmart: { icon: Store, tile: 'bg-[#e8f0fe] text-[var(--label-blue-text)]' },
-  wholesale: { icon: Truck, tile: 'bg-info-soft text-info' },
-  manual: { icon: FileText, tile: 'bg-success-soft text-success', label: 'Created Manually' },
+/** Sales-channel badge: a neutral icon and the channel name (no brand-tinted icon squares). */
+const CHANNEL_META: Record<string, { icon: React.ComponentType<{ className?: string }>; label?: string }> = {
+  shopify: { icon: ShoppingBag },
+  amazon: { icon: Store },
+  'tiktok shop': { icon: Zap },
+  walmart: { icon: Store },
+  wholesale: { icon: Truck },
+  manual: { icon: FileText, label: 'Created manually' },
 };
 
 export function ChannelBadge({ channel, store }: { channel: string; store?: string | null }) {
-  const meta = CHANNEL_META[channel.toLowerCase()] ?? {
-    icon: Store,
-    tile: 'bg-neutral-soft text-neutral',
-  };
+  const meta = CHANNEL_META[channel.toLowerCase()] ?? { icon: Store };
   const Icon = meta.icon;
   return (
     <span className="inline-flex items-center gap-1.5 min-w-0">
-      <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded', meta.tile)}>
-        <Icon className="h-3 w-3" aria-hidden />
-      </span>
+      <Icon className="h-3.5 w-3.5 shrink-0 text-icon" aria-hidden />
       <span className="flex min-w-0 flex-col leading-tight">
         <span className="truncate text-xs font-medium text-body">{meta.label ?? channel}</span>
         {store ? <span className="truncate text-2xs text-faint">{store}</span> : null}
