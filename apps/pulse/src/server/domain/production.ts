@@ -828,12 +828,15 @@ export const getLogGrid = scoped(async function getLogGrid(ctx: DomainContext, o
   const taggedIds = [...new Set(entries.map((item) => item.row.pmTaskId).filter((id): id is string => Boolean(id)))];
   const allTasks = links.length > 0 ? await tasksOfProjects(ctx, [...new Set(links.map((link) => link.projectId))], taggedIds) : [];
   const linkedJobIds = [...new Set(links.map((link) => link.jobId))];
+  // The last task a person typed. Build and program time lines from Projects (`pmb:`, `pmt:`) hold
+  // their own task, so a new grid line on that task would land on the Projects line and be refused.
   const lastTasks = linkedJobIds.length > 0
     ? await rows<{ job_id: string; pm_task_id: string }>(
         db,
         sql`SELECT DISTINCT ON (job_id) job_id::text AS job_id, pm_task_id::text AS pm_task_id
               FROM pulse.production_entries
              WHERE org_id = ${ctx.orgId} AND deleted_at IS NULL AND pm_task_id IS NOT NULL AND work_date <= ${date}::date
+               AND (source_ref IS NULL OR (source_ref NOT LIKE 'pmb:%' AND source_ref NOT LIKE 'pmt:%'))
                AND job_id IN (${sql.join(linkedJobIds.map((id) => sql`${id}::uuid`), sql`, `)})
              ORDER BY job_id, work_date DESC, updated_at DESC`,
       )
