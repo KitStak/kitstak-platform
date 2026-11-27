@@ -1,6 +1,6 @@
 # Program types: kitting, ecommerce, production and other
 
-Status: approved for build (2026-11-27). Builds on `docs/programs/SPEC.md` (Programs v2) and `docs/programs/PULSE_PROGRAMS_SPEC.md`. Where they disagree, this file wins for program types. The questions that were open are settled in section 2. Two facts are still to check before building, each marked "To check before building" where it applies (the `shipped_at` format in 4.4, the WMS plan check in 8).
+Status: approved for build (2026-11-27). Builds on `docs/programs/SPEC.md` (Programs v2) and `docs/programs/PULSE_PROGRAMS_SPEC.md`. Where they disagree, this file wins for program types. The questions that were open are settled in section 2. The two facts to check before building were checked on 2026-11-27 (the `shipped_at` format in 4.4, the WMS plan check in 8).
 
 Conventions are the ones in SPEC.md: UI copy is plain 8th grade English with no em dash, en dash or double dash; money is whole cents; work dates are `YYYY-MM-DD`; file paths are repo relative.
 
@@ -166,7 +166,8 @@ New sweep step 8 in `scheduleProgramSweep` (SPEC.md 4.9), file `apps/projects/sr
 What counts:
 
 - WMS `shipment_orders` rows with `client_id = wms_client_id` and `status IN ('Shipped', 'Partially Shipped', 'Delivered')`.
-- The work date is `shipped_at` as a day in the program time zone. To check before building: the format of `shipped_at` (stored as text). If it can be a date with no time or zone, read it as that day.
+- The work date is `shipped_at` as a day in the program time zone. Checked 2026-11-27: `shipped_at` is text holding a full UTC instant (`2026-11-25T21:04:00.000Z`). The only writer is `shipOrders` (`apps/wms/src/server/domain/shipping/ship.ts`, `at.toISOString()`), and the ship API accepts only a full date and time (`shipOrdersSchema`, `z.iso.datetime()`). WMS's own analytics and billing engine compare it as text against instant bounds, so the reader does the same: per program day, the bounds are that day's start and the next day's start in the program time zone, as UTC instants. Never cut the first 10 characters (`substr(shipped_at, 1, 10)`, which a WMS seed does): that is the UTC day, and an order shipped at 9 PM in Chicago would count on the next day. Not checked: the values in real tenant rows (reading a database was not allowed in that session); the db test in 10 runs the reader on seeded orders near midnight.
+- Orders that are `Cancelled` are left out by the status filter above. The orders grid shows a cancel date in the ship column (`COALESCE(shipped_at, cancelled_at)`), so never count from the grid's column.
 - `count = 'orders'`: one per order. `count = 'units'`: `total_quantity`.
 - `splitBy` picks the variant: `none` is the program's single variant, `store` uses `store_name` (empty is "No store"), `order_type` uses `order_type` (D2C, B2B). A store or type with no mapped variant gets a new variant the first time it is seen, named after it, with no rate (so the card rate applies).
 
@@ -282,7 +283,9 @@ Other: the Variants step shows "One line, no variants" (default) or the matrix. 
 
 Place: the WMS client detail page (`apps/wms/src/app/(app)/clients/[id]`), in the side column.
 
-- Shown when the WMS Projects bridge says `not_licensed` (`apps/wms/src/server/projects/bridge.ts`) and the plan can add Projects. The plan check is the one the Projects locked frame uses (`notInPlan` and `addHrefs` in `apps/projects/src/features/shell/locked-frame.tsx`); to check before building: whether the WMS shell already exposes those two values, else add them the same way. Hidden on manual grants. Dismissible per person.
+- The WMS shell already has what this needs (checked 2026-11-27). `loadShellProps` (`apps/wms/src/server/shell/shell-props.ts`) builds `plan.badges` with `planBadgeFor` from `@kitstak/billing` and `plan.addHrefs` (the Portal plan picker with that app turned on), and pages read them with `useShellPlan()` (`apps/wms/src/components/layout/shell-context.tsx`). No new shell field is needed. (`notInPlan` in the Projects shell is an older field that Projects sets to an empty list; it is not the check.)
+- Shown when `useShellPlan()?.badges.projects === 'not_in_plan'` and `useShellPlan()?.badges.wms` is not `'included'`. `'included'` means KitStak granted WMS by hand, so the team does not buy through Portal and the card stays hidden. Hidden when `useShellPlan()` is null (tests and harnesses) and when the plan is view only (`access === 'read_only'`). Dismissible per person.
+- The button goes to `useShellPlan().addHrefs.projects`.
 - Title "Track this client as a program". Body "Add Projects to track this client as a program." Second line "See their orders against a monthly minimum and a target, and close each month." Button "Add Projects" opens Portal billing with Projects added.
 - When the org has Projects, the same place shows "Programs for this client": `listLinkedPrograms` with a `core_customer` target equal to the client id, each with key, name, type label and this month's orders. Empty: "No programs for this client yet." with "Start a program" (`newProgramUrl` in `packages/pm-bridge/src/programs.ts` gains an optional `type`; here `type=ecommerce` and the customer).
 
@@ -306,6 +309,7 @@ Unit (vitest, pure):
 DB tests (`*.db.test.ts`):
 
 - Source periods: no overlap, no start or end inside a locked month, switch closes the old period in the same transaction.
+- Sync day bounds: orders shipped at 11:30 PM and 12:30 AM program time (America/Chicago) on a seeded tenant land on the right two days, and an order at 9 PM Chicago is not counted on the next UTC day.
 - Sync: idempotent (two runs, same rows); a failed read writes and deletes nothing; a cancelled order removes the row on an open day and leaves a locked day alone with the note; WMS rows refuse hand edits.
 - Losing WMS: `waiting`, nothing deleted, typed output allowed after `synced_through`, resume keeps typed days until the person chooses.
 - Overlap check: shows with overlapping fees, silent without WMS, the confirm is recorded on the version.
