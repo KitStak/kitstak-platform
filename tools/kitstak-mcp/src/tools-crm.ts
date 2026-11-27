@@ -242,7 +242,14 @@ export function registerCrmTools(server: McpServer, ctx: CrmContext): void {
             ${a.board ? tx`AND (b.id::text = ${a.board} OR b.name = ${a.board})` : tx``}
             ${a.kind ? tx`AND b.kind = ${a.kind}` : tx``}
             ${a.group ? tx`AND g.title = ${a.group}` : tx``}
-            ${a.query ? tx`AND (i.name ILIKE ${like(a.query)} OR i.values::text ILIKE ${like(a.query)})` : tx``}
+            ${
+              a.query
+                ? // String values only, so JSON keys ("labelIds", "amount"...) never match.
+                  tx`AND (i.name ILIKE ${like(a.query)} OR EXISTS (
+                    SELECT 1 FROM jsonb_path_query(i.values, 'strict $.** ? (@.type() == "string")') v
+                    WHERE v #>> '{}' ILIKE ${like(a.query)}))`
+                : tx``
+            }
           ORDER BY i.updated_at DESC
           LIMIT ${lim(a.limit)}`;
         const columns = await loadColumns(tx, ctx, [...new Set(rows.map((r) => r.board_id))]);

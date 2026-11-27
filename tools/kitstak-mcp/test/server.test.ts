@@ -1,8 +1,9 @@
 /**
  * End-to-end: starts the real server over stdio and calls every tool through an MCP client.
  *
- * Needs a Postgres with the WMS + core migrations, test/fixture.sql and sql/readonly-role.sql
- * applied (tenant_schema=wms_11111111222243338444555555555555). Then:
+ * Needs a Postgres with the migrations applied in journal order (apps/crm, packages/db,
+ * apps/wms, apps/projects), then test/fixture.sql and sql/readonly-role.sql
+ * (tenant_schema=wms_11111111222243338444555555555555). Then:
  *
  *   KITSTAK_MCP_TEST_DATABASE_URL=postgres://kitstak_mcp_ro:<pw>@localhost:5432/<db> \
  *   KITSTAK_MCP_TEST_ADMIN_URL=postgres://postgres@localhost:5432/<db> npm test
@@ -191,6 +192,9 @@ describe('kitstak-mcp', { skip: !roleUrl && 'KITSTAK_MCP_TEST_DATABASE_URL not s
     }
     const leak = await call(client, 'crm_search_items', { query: 'secret' });
     assert.deepEqual(leak.data, []);
+    // Text search looks at string values, never at JSON keys of stored cells.
+    const keys = await call(client, 'crm_search_items', { query: 'labelId' });
+    assert.deepEqual(keys.data, []);
   });
 
   it('reads projects and tasks, hiding private projects and other orgs', async () => {
@@ -199,6 +203,7 @@ describe('kitstak-mcp', { skip: !roleUrl && 'KITSTAK_MCP_TEST_DATABASE_URL not s
       {
         key: 'OPS',
         name: 'Logiwa go-live',
+        kind: 'project',
         status: 'active',
         health: 'on_track',
         health_note: null,
@@ -318,6 +323,39 @@ describe('kitstak-mcp', { skip: !roleUrl && 'KITSTAK_MCP_TEST_DATABASE_URL not s
       await narrow.close();
     }
   });
+
+  it(
+    'grants the role no secrets',
+    { skip: !adminUrl && 'KITSTAK_MCP_TEST_ADMIN_URL not set' },
+    async () => {
+      const admin = postgres(adminUrl!, { onnotice: () => {} });
+      try {
+        const T = 'wms_11111111222243338444555555555555';
+        const [row] = await admin<Record<string, boolean>[]>`
+          SELECT
+            has_table_privilege('kitstak_mcp_ro', ${`${T}.clients`}, 'SELECT') AS clients,
+            has_table_privilege('kitstak_mcp_ro', ${`${T}.users`}, 'SELECT') AS users,
+            has_table_privilege('kitstak_mcp_ro', ${`${T}.user_sessions`}, 'SELECT') AS sessions,
+            has_table_privilege('kitstak_mcp_ro', ${`${T}.password_reset_tokens`}, 'SELECT') AS reset_tokens,
+            has_table_privilege('kitstak_mcp_ro', ${`${T}.channel_connections`}, 'SELECT') AS channels,
+            has_column_privilege('kitstak_mcp_ro', 'core.entitlements', 'stripe_subscription_id', 'SELECT') AS stripe_sub,
+            has_column_privilege('kitstak_mcp_ro', 'core.entitlements', 'module', 'SELECT') AS module,
+            has_column_privilege('kitstak_mcp_ro', 'core.organization', 'metadata', 'SELECT') AS org_metadata`;
+        assert.deepEqual(row, {
+          clients: true,
+          users: false,
+          sessions: false,
+          reset_tokens: false,
+          channels: false,
+          stripe_sub: false,
+          module: true,
+          org_metadata: false,
+        });
+      } finally {
+        await admin.end();
+      }
+    },
+  );
 
   it(
     'refuses a role that can write',

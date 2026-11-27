@@ -8,8 +8,8 @@ one organization.
 It lives outside the pnpm workspace (`tools/`, its own `package-lock.json`) so it does not
 change the root lockfile or trigger any app build or Vercel deploy.
 
-Books, People and Pulse are not covered: Books and People are not in the repo yet, and
-Pulse only exists on its own unmerged branch. They can be added once they land on main.
+Books, People and Pulse are not covered yet: Books and People are not in the repo, and Pulse
+(now on main) has no tools here so far.
 
 ## Tools
 
@@ -32,8 +32,8 @@ The server offers a module's tools only when its database role can read that mod
 | `crm_list_boards`          | CRM boards with kind, workspace and item count                                    |
 | `crm_search_items`         | Records by text, board, kind or group, with readable field values                 |
 | `crm_get_item`             | One record with fields, subitems, linked records and latest updates               |
-| `projects_list`            | Projects with status, health, owner, dates and task counts                        |
-| `projects_search_tasks`    | Tasks by project, status, assignee, due date, overdue or text                     |
+| `projects_list`            | Projects and Programs (`kind`) with status, health, owner, dates and task counts  |
+| `projects_search_tasks`    | Tasks and Program builds (`kind`) by project, status, assignee, due date or text  |
 | `projects_get_task`        | One task (e.g. `OPS-42`) with description, subtasks and comments                  |
 
 Private and shareable CRM boards, closed CRM workspaces and private projects are hidden
@@ -45,10 +45,12 @@ unless `KITSTAK_MCP_INCLUDE_PRIVATE=1`.
 - The warehouse schema comes from `core.wms_tenants` and is validated with the same
   `^wms(_[0-9a-f]{32})?$` rule the platform uses; `search_path` is pinned per transaction
   (`SET LOCAL`), so it is safe on the Supabase transaction pooler.
-- It connects as a dedicated role (`sql/readonly-role.sql`) with `SELECT` on that one WMS
-  schema and on chosen CRM, Projects and core tables. It gets no sessions, accounts,
-  password data, API tokens, webhooks or billing ids, and only user id, name and title.
-  On startup it refuses any role that can insert, update or delete.
+- It connects as a dedicated role (`sql/readonly-role.sql`) with `SELECT` on the nine WMS
+  tables the tools read (in that one org's schema) and on chosen CRM, Projects and core
+  tables. It gets no WMS users, sessions, reset tokens, channel or carrier credentials or
+  audit log, no Better Auth sessions or accounts, no API tokens or webhooks, no Stripe ids,
+  and only user id, name and title. A test checks these grants. New WMS tables are not
+  granted automatically. On startup it refuses any role that can insert, update or delete.
 - CRM, Projects and core tables are shared by every org, so the database grant covers all
   orgs' rows there; the server filters every query to its one org (tested).
 - `KITSTAK_MCP_CLIENTS` narrows every tool to some clients.
@@ -102,14 +104,16 @@ claude mcp add kitstak \
 ## Tests
 
 `npm test` starts the server over stdio and calls every tool. It needs a Postgres with the
-WMS and core migrations, `test/fixture.sql`, and the role script applied; see the header of
+migrations applied in journal order (`apps/crm`, then `packages/db`, `apps/wms`,
+`apps/projects`), then `test/fixture.sql` and the role script; see the header of
 `test/server.test.ts`. It checks that a second organization's data, private boards and
 projects, and other clients never show up, that search text cannot inject SQL, that only
-granted apps get tools, and that a writable role is refused.
+granted apps get tools, that the role cannot read secret tables or Stripe ids, and that a
+writable role is refused.
 
 ## Later
 
 - Write tools (create orders, adjust inventory) behind explicit confirmation.
 - A hosted version inside the WMS app (`/api/mcp`) with Better Auth OAuth, so each user gets
   their own warehouse and client scope instead of one shared read-only role.
-- Books, People and Pulse once they are on main.
+- Pulse tools, then Books and People once they are on main.

@@ -164,6 +164,25 @@ export async function canRead(sql: Sql, table: string): Promise<boolean> {
 }
 
 /**
+ * Whether the role can read these columns of a table. For tables granted column by column
+ * (core.organization, core.entitlements), where has_table_privilege is false.
+ */
+export async function canReadColumns(sql: Sql, table: string, columns: readonly string[]): Promise<boolean> {
+  const [schema, name] = splitTable(table);
+  const [row] = await sql.begin('read only', async (tx) => {
+    return await tx<{ ok: boolean }[]>`
+      SELECT COALESCE((
+        SELECT has_schema_privilege(n.oid, 'USAGE')
+          AND bool_and(has_column_privilege(c.oid, col, 'SELECT'))
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          CROSS JOIN unnest(${tx.array(columns as string[])}::text[]) AS col
+        WHERE n.nspname = ${schema} AND c.relname = ${name}
+        GROUP BY n.oid), false) AS ok`;
+  });
+  return row?.ok === true;
+}
+
+/**
  * Refuses to run as a role that can change data, unless explicitly allowed. Checks
  * superuser status and INSERT/UPDATE/DELETE on a sample table of every module in use.
  */

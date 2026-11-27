@@ -39,13 +39,14 @@ export function registerProjectsTools(server: McpServer, ctx: ProjectsContext): 
     {
       title: 'List projects',
       description:
-        'Projects with status, health and its note, owner, dates, and open, done and overdue task counts.',
+        'Projects and Programs (kind "program": recurring work under one price card) with status, health and its note, owner, dates, and open, done and overdue task counts.',
       inputSchema: {
         status: z
           .enum(['planning', 'active', 'on_hold', 'completed', 'archived'])
           .optional()
           .describe('Leave empty for everything not completed or archived.'),
         health: z.enum(['on_track', 'at_risk', 'off_track']).optional(),
+        kind: z.enum(['project', 'program']).optional().describe('Leave empty for both.'),
         query: z.string().optional().describe('Part of the project name or key.'),
         limit: limitArg,
       },
@@ -56,7 +57,7 @@ export function registerProjectsTools(server: McpServer, ctx: ProjectsContext): 
         await readShared(
           ctx.sql,
           (tx) => tx`
-            SELECT p.key, p.name, p.status, p.health, p.health_note, ${userName(tx, ctx, 'p.owner_id')} AS owner,
+            SELECT p.key, p.name, p.kind, p.status, p.health, p.health_note, ${userName(tx, ctx, 'p.owner_id')} AS owner,
               p.start_date::text, p.due_date::text,
               count(t.id) FILTER (WHERE s.category IN ('todo', 'in_progress')) AS open_tasks,
               count(t.id) FILTER (WHERE s.category = 'done') AS done_tasks,
@@ -67,6 +68,7 @@ export function registerProjectsTools(server: McpServer, ctx: ProjectsContext): 
             WHERE ${visibleProjects(tx, ctx)}
               ${a.status ? tx`AND p.status = ${a.status}` : tx`AND p.status NOT IN ('completed', 'archived')`}
               ${a.health ? tx`AND p.health = ${a.health}` : tx``}
+              ${a.kind ? tx`AND p.kind = ${a.kind}` : tx``}
               ${a.query ? tx`AND (p.name ILIKE ${like(a.query)} OR p.key ILIKE ${like(a.query)})` : tx``}
             GROUP BY p.id
             ORDER BY p.due_date NULLS LAST, p.name
@@ -80,7 +82,7 @@ export function registerProjectsTools(server: McpServer, ctx: ProjectsContext): 
     {
       title: 'Search project tasks',
       description:
-        'Tasks across projects. Filter by project key, status category, assignee name, due date, overdue, or text in the title and description.',
+        'Tasks across projects and Programs (kind "build" rows are Program builds). Filter by project key, status category, assignee name, due date, overdue, or text in the title and description.',
       inputSchema: {
         project_key: z.string().optional().describe('e.g. "OPS".'),
         status: z
@@ -95,12 +97,15 @@ export function registerProjectsTools(server: McpServer, ctx: ProjectsContext): 
       },
       annotations: READ_ONLY,
     },
-    async (a) =>
-      json(
+    async (a) => {
+      if (a.assignee && !ctx.canReadUsers) {
+        return fail('Cannot filter by assignee: this database role cannot read user names.');
+      }
+      return json(
         await readShared(
           ctx.sql,
           (tx) => tx`
-            SELECT p.key || '-' || t.number AS task, t.title, p.name AS project, s.name AS status,
+            SELECT p.key || '-' || t.number AS task, t.kind, t.title, p.name AS project, s.name AS status,
               s.category, t.priority, ${userName(tx, ctx, 't.assignee_id')} AS assignee,
               t.start_date::text, t.due_date::text, t.is_milestone, count(*) OVER () AS total_matching
             FROM pm.tasks t
@@ -116,7 +121,7 @@ export function registerProjectsTools(server: McpServer, ctx: ProjectsContext): 
               ${a.overdue_only ? tx`AND t.due_date < current_date` : tx``}
               ${a.due_before ? tx`AND t.due_date <= ${a.due_before}::date` : tx``}
               ${
-                a.assignee && ctx.canReadUsers
+                a.assignee
                   ? tx`AND t.assignee_id IN (SELECT u.id FROM core."user" u WHERE u.name ILIKE ${like(a.assignee)})`
                   : tx``
               }
@@ -124,7 +129,8 @@ export function registerProjectsTools(server: McpServer, ctx: ProjectsContext): 
             ORDER BY t.due_date NULLS LAST, p.key, t.number
             LIMIT ${lim(a.limit)}`,
         ),
-      ),
+      );
+    },
   );
 
   server.registerTool(
@@ -139,7 +145,8 @@ export function registerProjectsTools(server: McpServer, ctx: ProjectsContext): 
       const [, key, num] = TASK_KEY_RE.exec(task)!;
       const result = await readShared(ctx.sql, async (tx) => {
         const [row] = await tx<{ id: string; description: string | null }[]>`
-          SELECT t.id::text, p.key || '-' || t.number AS task, t.title, p.name AS project, s.name AS status,
+          SELECT t.id::text, p.key || '-' || t.number AS task, t.kind, t.title, p.name AS project, p.kind AS project_kind,
+            s.name AS status,
             s.category, t.priority, ${userName(tx, ctx, 't.assignee_id')} AS assignee,
             ${userName(tx, ctx, 't.reporter_id')} AS reporter, t.start_date::text, t.due_date::text, t.completed_at,
             m.name AS milestone, t.description, t.created_at, t.updated_at

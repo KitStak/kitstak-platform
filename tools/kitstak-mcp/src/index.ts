@@ -7,9 +7,17 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { loadConfig } from './config.js';
-import { assertReadOnlyRole, canRead, canReadUserNames, connect, resolveOrg, resolveTenant } from './db.js';
+import {
+  assertReadOnlyRole,
+  canRead,
+  canReadColumns,
+  canReadUserNames,
+  connect,
+  resolveOrg,
+  resolveTenant,
+} from './db.js';
 import { registerCrmTools } from './tools-crm.js';
-import { registerOrgTools } from './tools-org.js';
+import { ENTITLEMENT_COLUMNS, registerOrgTools } from './tools-org.js';
 import { registerProjectsTools } from './tools-projects.js';
 import { registerWmsTools } from './tools-wms.js';
 
@@ -28,7 +36,8 @@ async function main(): Promise<void> {
       r.every(Boolean),
     ),
     canReadUserNames(sql),
-    canRead(sql, 'core.entitlements'),
+    // Granted column by column (no Stripe ids), so check the columns org_overview reads.
+    canReadColumns(sql, 'core.entitlements', ENTITLEMENT_COLUMNS),
   ]);
   const modules = [tenant && 'wms', crm && 'crm', projects && 'projects'].filter((m): m is string => !!m);
   if (modules.length === 0) {

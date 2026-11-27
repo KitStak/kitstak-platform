@@ -11,7 +11,9 @@ DO $$
 DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['clients','warehouses','locations','products','kit_components','inventory',
-                           'shipment_orders','order_lines','work_orders'] LOOP
+                           'shipment_orders','order_lines','work_orders',
+                           -- Secret-bearing tables: the role script must not grant these.
+                           'users','user_sessions','password_reset_tokens','channel_connections'] LOOP
     EXECUTE format('CREATE TABLE wms_11111111222243338444555555555555.%I (LIKE wms.%I INCLUDING ALL)', t, t);
   END LOOP;
 END $$;

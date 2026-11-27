@@ -3,6 +3,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { readShared, type Org, type Sql, type Tenant } from './db.js';
 import { json, READ_ONLY } from './util.js';
 
+/** The core.entitlements columns the role is granted and org_overview reads (no Stripe ids). */
+export const ENTITLEMENT_COLUMNS = ['org_id', 'module', 'status', 'source', 'seats', 'current_period_end'] as const;
+
 export interface OrgContext {
   readonly sql: Sql;
   readonly org: Org;

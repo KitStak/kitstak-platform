@@ -32,7 +32,7 @@ export const limitArg = z
 
 export const dateArg = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}/)
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
   .optional();
 
 /** Strips HTML tags and collapses whitespace (rich-text descriptions). */
