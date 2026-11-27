@@ -8,12 +8,14 @@ import { env } from '@/server/env';
 import { drainIntegrationEvents, orgsWithPendingEvents } from '@/server/integrations/events';
 import { orgsWithRecordTriggers } from '@/server/integrations/record-triggers';
 import { runProgramSweep } from '@/server/domain/programs';
+import { deliverNotificationEmails } from '@/server/domain/notification-emails';
 
 /**
  * The scheduler's heartbeat (Vercel Cron, every 5 minutes, with CRON_SECRET set):
  *   1. drains CRM/WMS events (pm.integration_events) for every org that has some, and
  *   2. runs scheduled automations ("due soon", "overdue", CRM stage, WMS shipped) and cross-app
- *      recipes (deal won, receipt discrepancy, count variance) for every org with such a rule,
+ *      recipes (deal won, receipt discrepancy, count variance) for every org with such a rule, then
+ *   3. emails each active member their new notifications (server/domain/notification-emails.ts),
  * so automations fire even when nobody has Projects open. Signed-in use also does both lazily.
  */
 function authorized(request: Request): boolean {
@@ -69,5 +71,10 @@ export async function GET(request: Request) {
       }
     }
   }
-  return NextResponse.json({ data: { orgs: orgIds.length, handled, checked } }, { headers: { 'Cache-Control': 'no-store' } });
+  // Last, so the reminders made above go out on this run. A mail failure never fails the heartbeat.
+  const emails = await deliverNotificationEmails().catch((error: unknown) => {
+    console.warn('[projects] notification emails failed', error instanceof Error ? error.message : error);
+    return null;
+  });
+  return NextResponse.json({ data: { orgs: orgIds.length, handled, checked, emails } }, { headers: { 'Cache-Control': 'no-store' } });
 }

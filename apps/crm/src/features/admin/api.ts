@@ -32,6 +32,7 @@ import type {
   UsageDto,
   AdminInvitationDto,
 } from '@/server/services/admin-contracts';
+import { defaultChannels } from '@/server/services/admin-contracts';
 
 export const adminKeys = {
   root: (orgId: string) => ['org', orgId, 'admin'] as const,
@@ -379,7 +380,7 @@ export function useUpdateProfile() {
         const { name, title, timezone, image, notifications, ...prefs } = input;
         const mergedNotifications = { ...saved.prefs.notifications };
         for (const [event, channels] of Object.entries(notifications ?? {})) {
-          const base = mergedNotifications[event] ?? { inApp: true, email: false };
+          const base = mergedNotifications[event] ?? defaultChannels(event);
           mergedNotifications[event] = { ...base, ...channels };
         }
         queryClient.setQueryData<ProfileDto>(key, {

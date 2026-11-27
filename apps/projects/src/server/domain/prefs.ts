@@ -10,8 +10,11 @@ import type { DomainContext } from './_shared';
 export interface UserPrefs {
   /** Per-kind inbox toggles; missing = on. */
   readonly notifications?: Partial<Record<NotificationKind, boolean>>;
-  /** Email digest preference (delivery handled outside this app). */
-  readonly emailDigest?: 'off' | 'daily' | 'weekly';
+  /**
+   * How often new notifications are emailed (server/domain/notification-emails.ts). Missing means
+   * 'instant': one grouped email every few minutes while there is something new.
+   */
+  readonly emailDigest?: 'instant' | 'daily' | 'weekly' | 'off';
   readonly onboarding?: {
     readonly completedSteps?: readonly string[];
     readonly dismissed?: boolean;

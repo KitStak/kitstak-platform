@@ -18,6 +18,7 @@ export async function SettingsPage() {
     <SettingsView
       spaces={spaces}
       notificationPrefs={prefs.notifications ?? {}}
+      emailDigest={prefs.emailDigest ?? 'instant'}
       integrationSummary={summary}
       planCard={plan ? <PlanSummaryCard summary={plan} headingLevel={3} /> : null}
     />

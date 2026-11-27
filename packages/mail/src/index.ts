@@ -15,3 +15,15 @@ export {
   type SendOptions,
   type SendResult,
 } from './resend';
+export {
+  emailDue,
+  inQuietHours,
+  localClock,
+  renderNotificationEmail,
+  MAX_LINES as MAX_NOTIFICATION_LINES,
+  type EmailFrequency,
+  type EmailDueInput,
+  type NotificationEmailInput,
+  type NotificationLine,
+  type QuietHours,
+} from './notifications';
