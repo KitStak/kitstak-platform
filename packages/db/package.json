@@ -2,7 +2,7 @@
   "name": "@kitstak/db",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared KitStak core database layer: Drizzle schema for the core/crm/wms pgSchemas, driver factories, and core migrations (TypeScript source-shipped \u2014 consumers transpile via Next transpilePackages).",
+  "description": "Shared KitStak core database layer: Drizzle schema for the core/crm/wms pgSchemas, driver factories, and core migrations (TypeScript source-shipped — consumers transpile via Next transpilePackages).",
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
@@ -13,6 +13,7 @@
     "./wms-tenants": "./src/wms-tenants.ts",
     "./wms-free-stock": "./src/wms-free-stock.ts",
     "./record-links": "./src/record-links.ts",
+    "./api-tokens": "./src/api-tokens.ts",
     "./crm-deal-facts": "./src/crm-deal-facts.ts",
     "./programs": "./src/programs/index.ts",
     "./client-pg": "./src/client-pg.ts",
