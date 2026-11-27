@@ -14,7 +14,8 @@ import { HeatmapCalendar, type HeatmapDay } from './heatmap';
 import { DonutChart, Gauge, ProgressRing } from './radial';
 import { shiftDate, weekdayOf } from './scale';
 import { Sparkline } from './sparkline';
-import { DeltaBadge, KpiTile, MarginPill, marginHealth } from './stats';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { DeltaBadge, DeltaPending, MarginPill, StatSparkline, StatTileLoading, marginHealth, statValue, toDelta } from './stats';
 
 /** A fixed wave so server and browser draw the same picture. */
 function wave(index: number, base: number, swing: number, drift = 0, phase = 0): number {
@@ -105,13 +106,14 @@ export function ChartGallery() {
         <p className="mt-1 text-sm text-fg-muted">Every Pulse chart with sample numbers. This page only exists on a dev server.</p>
       </header>
 
-      <Section id="stats" title="Stat helpers" note="KpiTile, DeltaBadge, MarginPill and Sparkline.">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiTile
+      <Section id="stats" title="Stat helpers" note="StatTile, DeltaBadge, MarginPill and Sparkline.">
+        <StatRow label="Sample tiles">
+          <StatTile
             label="Profit on jobs"
-            value={formatMoneyWhole(profitTotal)}
-            delta={{ delta: 412_300, text: formatMoneyDelta(412_300, { cents: false }), label: 'vs last month' }}
-            sparkline={{ values: profit30, format: 'money' }}
+            href="#stats"
+            value={statValue(formatMoneyWhole(profitTotal))}
+            delta={toDelta({ delta: 412_300, text: formatMoneyDelta(412_300, { cents: false }) })}
+            trend={<StatSparkline values={profit30} label="Profit trend" format="money" />}
             explain={
               <Explain
                 title="Profit on jobs"
@@ -124,14 +126,14 @@ export function ChartGallery() {
               />
             }
           />
-          <KpiTile label="Labor cost" value={formatMoneyWhole(18_420_000)} delta={{ delta: 1_250_000, text: formatMoneyDelta(1_250_000, { cents: false }), goodWhen: 'down', label: 'vs last month' }} sparkline={{ values: cost30, format: 'money', tone: 'bad' }} />
-          <KpiTile label="Margin" value={formatPercentBp(marginBp)} delta={{ delta: -180, text: formatPointsDelta(-180), label: 'vs last month' }} footer={<MarginPill health={marginHealth(marginBp, 3000)} size="sm" />} />
-          <KpiTile label="Ready to bill" value={null} emptyText="Nothing to bill yet" />
-          <KpiTile label="Loading tile" value={null} loading />
-          <KpiTile label="Units shipped" value={null} error="We could not load this number. Try again in a minute." />
-          <KpiTile label="A very long tile label that has to be cut off cleanly" value={formatMoney(123_456_789)} delta={{ delta: 0, text: formatMoneyDelta(0), label: 'vs the same four weeks last year' }} />
-          <KpiTile label="Single point trend" value="42" sparkline={{ values: [42] }} delta={{ delta: null, text: '' }} />
-        </div>
+          <StatTile label="Labor cost" href="#stats" value={statValue(formatMoneyWhole(18_420_000))} delta={toDelta({ delta: 1_250_000, text: formatMoneyDelta(1_250_000, { cents: false }), goodWhen: 'down' })} trend={<StatSparkline values={cost30} label="Labor cost trend" format="money" tone="bad" />} />
+          <StatTile label="Margin" href="#stats" value={statValue(formatPercentBp(marginBp))} delta={toDelta({ delta: -180, text: formatPointsDelta(-180) })} caption={<MarginPill health={marginHealth(marginBp, 3000)} />} />
+          <StatTile label="Ready to bill" href="#stats" value={statValue(null, 'Nothing to bill yet')} />
+          <StatTileLoading label="Loading tile" />
+          <StatTile label="A very long tile label that has to be cut off cleanly" href={null} value={statValue(formatMoney(123_456_789))} delta={toDelta({ delta: 0, text: formatMoneyDelta(0) })} />
+          <StatTile label="Single point trend" href={null} value={statValue('42')} trend={<StatSparkline values={[42]} label="Single point trend" />} delta={toDelta({ delta: null, text: '' })} />
+          <StatTile label="Comparing" href={null} value={statValue('7')} caption={<DeltaPending />} />
+        </StatRow>
         <div className={`${GRID} mt-4`}>
           <Tile title="DeltaBadge and MarginPill" note="Arrows and icons carry the meaning, color only helps.">
             <div className="flex flex-wrap items-center gap-3">

@@ -117,7 +117,7 @@ function RowName({ by, row, onDrill, range }: { readonly by: ProfitGroup; readon
             }}
             aria-label={drill.words}
             data-testid="drill"
-            className="group/drill inline-flex max-w-full items-center gap-1 rounded-sm text-left font-medium text-fg hover:text-primary-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            className="group/drill inline-flex max-w-full items-center gap-1 rounded-sm text-left font-medium text-fg hover:text-fg-link focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
             <span className="truncate">{name}</span>
             <ChevronRight aria-hidden className="size-3.5 shrink-0 text-icon transition-transform group-hover/drill:translate-x-0.5" />

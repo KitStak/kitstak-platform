@@ -18,7 +18,8 @@ import {
   toast,
 } from '@/components/ui';
 import { BarChart } from '@/components/charts/cartesian';
-import { KpiTile } from '@/components/charts/stats';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { statValue } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { ExplainStatic } from '@/components/pulse/explain';
@@ -47,6 +48,7 @@ const hoursShareBp = (part: number, whole: number): number | null =>
 export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[]; readonly today: string }) {
   const { state, setState } = useRange(today, 'last_30');
   const params = { from: state.from, to: state.to, siteId: state.siteId };
+  const entriesHref = routes.logEntries({ from: state.from, to: state.to });
   const summary = useLaborSummary(params);
   const byType = useProfit('type', params);
   const byClient = useProfit('client', params);
@@ -68,11 +70,11 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
     return (
       <div className="flex flex-col gap-4" aria-busy="true">
         <RangeBar state={state} onChange={setState} sites={sites} today={today} />
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatRow label="Labor cost numbers">
           {Array.from({ length: 4 }, (_, index) => (
             <Skeleton key={index} height={96} className="w-full" rounded="lg" />
           ))}
-        </div>
+        </StatRow>
       </div>
     );
 
@@ -140,9 +142,10 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
         </Panel>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiTile
+          <StatRow label="Labor cost numbers">
+            <StatTile
               label="Labor cost on jobs"
+              href={entriesHref}
               explain={
                 <ExplainStatic
                   title="Labor cost on jobs"
@@ -153,19 +156,22 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
                   ]}
                 />
               }
-              value={formatMoney(totals.labor, { cents: false })}
-              footer={
-                <span className="text-xs text-fg-muted">
+              value={statValue(formatMoney(totals.labor, { cents: false }))}
+              caption={
+                <span>
                   {formatHours(totals.direct, { maxDigits: 0 })} labor hours
                 </span>
               }
             />
-            <KpiTile
+            <StatTile
               label="Real cost of an hour, on average"
-              value={formatMoneyPerHour(perHour(totals.labor, totals.direct.toFixed(2)), {
-                empty: 'No hours',
-              })}
-              footer={<span className="text-xs text-fg-muted">Labor cost divided by labor hours</span>}
+              href={null}
+              value={statValue(
+                formatMoneyPerHour(perHour(totals.labor, totals.direct.toFixed(2)), {
+                  empty: 'No hours',
+                }),
+              )}
+              caption={<span>Labor cost divided by labor hours</span>}
               explain={
                 <Popover>
                   <PopoverTrigger asChild>
@@ -193,8 +199,9 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
                 </Popover>
               }
             />
-            <KpiTile
+            <StatTile
               label="Labor as a share of revenue"
+              href={routes.profit({ by: 'job', from: state.from, to: state.to })}
               explain={
                 <ExplainStatic
                   title="Labor as a share of revenue"
@@ -206,18 +213,18 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
                   ]}
                 />
               }
-              value={revenue !== null && revenue > 0 ? formatPercentBp(ratioBp(totals.labor, revenue)) : null}
-              emptyText="No revenue yet"
-              footer={
-                <span className="text-xs text-fg-muted">
+              value={statValue(revenue !== null && revenue > 0 ? formatPercentBp(ratioBp(totals.labor, revenue)) : null, 'No revenue yet')}
+              caption={
+                <span>
                   {revenue !== null
                     ? `Of ${formatMoney(revenue, { cents: false })} earned`
                     : 'Labor cost divided by earned revenue'}
                 </span>
               }
             />
-            <KpiTile
+            <StatTile
               label="Overtime share"
+              href={entriesHref}
               explain={
                 <ExplainStatic
                   title="Overtime share"
@@ -229,15 +236,15 @@ export function CostView({ sites, today }: { readonly sites: readonly SiteDTO[];
                   ]}
                 />
               }
-              value={totals.hours > 0 ? formatPercentBp(hoursShareBp(totals.overtime, totals.hours)) : null}
-              footer={
-                <span className="text-xs text-fg-muted">
+              value={statValue(totals.hours > 0 ? formatPercentBp(hoursShareBp(totals.overtime, totals.hours)) : null, 'No hours yet')}
+              caption={
+                <span>
                   {formatHours(totals.overtime, { maxDigits: 0 })} overtime hours of{' '}
                   {formatHours(totals.hours, { maxDigits: 0 })}
                 </span>
               }
             />
-          </div>
+          </StatRow>
 
           <Panel title="Labor cost by labor class">
             <BarChart

@@ -1,12 +1,12 @@
 'use client';
 /**
- * Small stat helpers: KpiTile (one headline number with its change, trend and a "how we got
- * this" slot), DeltaBadge (a change with an arrow and a good or bad tone) and MarginPill (margin
- * health as icon plus words, so it reads the same for color blind people).
+ * Small stat helpers: fillers for the shared StatTile (value, sparkline, loading), DeltaBadge (a
+ * change with an arrow and a good or bad tone) and MarginPill (margin health as icon plus words, so
+ * it reads the same for color blind people).
  */
 import type { ReactNode } from 'react';
 import { CircleCheck, CircleHelp, Eye, TrendingDown, TriangleAlert, type LucideIcon } from 'lucide-react';
-import { Delta, Pill, StatTile, type DeltaProps, type PillTone } from '@kitstak/ui/dashboard';
+import { Delta, Pill, type DeltaProps, type PillTone } from '@kitstak/ui/dashboard';
 import { cn } from '@/components/ui/cn';
 import { PULSE_STATUS_LABELS, type PulseStatus } from '@/lib/constants';
 import { deltaDirection, deltaTone, formatPercentBp } from '@/lib/format';
@@ -68,10 +68,13 @@ export const MARGIN_HEALTH_LABELS: Readonly<Record<MarginHealth, string>> = {
   none: 'Not enough data',
 };
 
-/** Five pill tones, no more (docs/design/UI-CLEANUP.md). Watch is neutral: the eye and the word carry it. */
+/**
+ * Five pill tones, no more (docs/design/UI-CLEANUP.md). Watch and at risk share the caution tone
+ * (both "might go wrong"); the eye or the triangle and the words tell them apart.
+ */
 const HEALTH_STYLE: Readonly<Record<MarginHealth, { icon: LucideIcon; tone: PillTone }>> = {
   healthy: { icon: CircleCheck, tone: 'positive' },
-  watch: { icon: Eye, tone: 'neutral' },
+  watch: { icon: Eye, tone: 'caution' },
   at_risk: { icon: TriangleAlert, tone: 'caution' },
   losing: { icon: TrendingDown, tone: 'critical' },
   none: { icon: CircleHelp, tone: 'neutral' },
@@ -131,92 +134,44 @@ export function MarginPill({ health, status, marginBp, label, className }: Margi
   );
 }
 
-// --- KpiTile ------------------------------------------------------------------------------
+// --- StatTile helpers -----------------------------------------------------------------------
+// Headline numbers are the shared StatTile inside a StatRow (`@kitstak/ui/dashboard`). These small
+// pieces fill its slots the Pulse way: quiet empty words, a sparkline in the data color, and a
+// skeleton of the same size while the number loads.
 
-export interface KpiTileProps {
-  /** Sentence case, no colon: "Profit on jobs". */
-  readonly label: string;
-  /** The headline, already formatted. `null` shows the empty words. */
-  readonly value: string | null;
-  /** Change against the previous period. */
-  readonly delta?: DeltaBadgeProps;
-  /** True while the number to compare with is still loading: the tile keeps room for the change so it does not grow later. */
-  readonly deltaPending?: boolean;
-  /** A trend under the number. */
-  readonly sparkline?: { readonly values: readonly (number | null)[]; readonly label?: string; readonly format?: ChartFormat; readonly tone?: 'accent' | 'good' | 'bad' | 'neutral' };
-  /** The "how we got this" control: a popover or drawer trigger built from the same inputs. */
-  readonly explain?: ReactNode;
-  /** One line under the number: a MarginPill, a target, a note. */
-  readonly footer?: ReactNode;
-  /** Words when `value` is `null`: say what fills the tile. */
-  readonly emptyText?: string;
-  readonly loading?: boolean;
-  /** A plain sentence when the number could not load. */
-  readonly error?: string | null;
-  /**
-   * Where the number goes: the list or report it sums up. On Home and other summary pages every
-   * tile needs one (no dead ends). Leave it out only on the page the number already explains.
-   */
-  readonly href?: string | null;
-  /** Leave out the "vs before" words when the page header already says what the change is against. */
-  readonly hideDeltaLabel?: boolean;
-  readonly className?: string;
+/** The value slot: the number, or quiet words that say what fills the tile. */
+export function statValue(value: string | null, emptyText = 'No data yet'): ReactNode {
+  return value !== null ? <span title={value}>{value}</span> : <span className="text-md font-medium text-fg-muted">{emptyText}</span>;
 }
 
-/**
- * One headline number, drawn by the shared StatTile (`@kitstak/ui/dashboard`) so it looks the same
- * as every KitStak app. The "how we got this" control sits in the corner, outside the tile link.
- */
-export function KpiTile({ label, value, delta, deltaPending, sparkline, explain, footer, emptyText = 'No data yet', loading, error, href = null, hideDeltaLabel = false, className }: KpiTileProps) {
-  if (loading) {
-    return (
-      <div role="status" aria-busy="true" data-testid="kpi-tile" className={cn('ks-dash-stat min-h-[112px]', className)}>
-        <span className="ks-dash-stat-link">
-          <span className="sr-only">{`Loading ${label}`}</span>
-          <span aria-hidden className="ks-skeleton block h-3 w-24 rounded-full" />
-          <span aria-hidden className="ks-skeleton mt-1 block h-7 w-32 rounded-md" />
-          <span aria-hidden className="ks-skeleton mt-1 block h-3 w-40 max-w-full rounded-full" />
-        </span>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <StatTile
-        data-testid="kpi-tile"
-        className={className}
-        label={label}
-        href={null}
-        explain={explain}
-        value={
-          <span role="alert" className="text-sm font-normal whitespace-normal text-danger-text">
-            {error}
-          </span>
-        }
-      />
-    );
-  }
-  const shown = value !== null;
-  const pending = !delta && deltaPending && shown ? <span aria-hidden data-testid="kpi-delta-pending" className="ks-skeleton inline-block h-4 w-32 max-w-full rounded-sm align-middle" /> : null;
+export interface StatSparklineProps {
+  readonly values: readonly (number | null)[];
+  /** Read out with the trend summary: "Revenue trend". */
+  readonly label: string;
+  readonly format?: ChartFormat;
+  readonly tone?: 'accent' | 'good' | 'bad' | 'neutral';
+}
+
+/** A trend for the StatTile `trend` slot, sized for a tile. */
+export function StatSparkline({ values, label, format, tone }: StatSparklineProps) {
+  return <Sparkline values={values} label={label} format={format} tone={tone} width={88} height={28} />;
+}
+
+/** Keeps room for the change while the number to compare with loads, so the tile does not grow later. */
+export function DeltaPending() {
+  return <span aria-hidden data-testid="kpi-delta-pending" className="ks-skeleton inline-block h-4 w-32 max-w-full rounded-sm align-middle" />;
+}
+
+/** A tile while its number loads: the StatTile frame with a skeleton, so nothing moves when it lands. */
+export function StatTileLoading({ label, className, ...rest }: { readonly label: string; readonly className?: string; readonly 'data-testid'?: string }) {
   return (
-    <StatTile
-      data-testid="kpi-tile"
-      className={cn('min-h-[112px]', className)}
-      label={label}
-      href={href}
-      explain={explain}
-      value={shown ? <span title={value}>{value}</span> : <span className="text-md font-medium text-fg-muted">{emptyText}</span>}
-      trend={sparkline && shown ? <Sparkline values={sparkline.values} label={sparkline.label ?? `${label} trend`} format={sparkline.format} tone={sparkline.tone} width={88} height={28} /> : undefined}
-      delta={delta && shown ? toDelta(delta) : undefined}
-      deltaLabel={delta && shown && !hideDeltaLabel ? delta.label : undefined}
-      caption={
-        pending || footer ? (
-          <>
-            {pending}
-            {footer}
-          </>
-        ) : undefined
-      }
-    />
+    <div role="status" aria-busy="true" data-testid={rest['data-testid']} className={cn('ks-dash-stat min-h-[104px]', className)}>
+      <span className="ks-dash-stat-link">
+        <span className="sr-only">{`Loading ${label}`}</span>
+        <span aria-hidden className="ks-skeleton block h-3 w-24 rounded-full" />
+        <span aria-hidden className="ks-skeleton mt-1 block h-7 w-32 rounded-md" />
+        <span aria-hidden className="ks-skeleton mt-1 block h-3 w-40 max-w-full rounded-full" />
+      </span>
+    </div>
   );
 }

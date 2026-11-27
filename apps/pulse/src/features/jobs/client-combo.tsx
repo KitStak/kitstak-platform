@@ -189,7 +189,7 @@ export function ClientCombo({
             data-client-id={value.clientId ?? undefined}
             trailing={
               value.createNew ? (
-                <Badge tone="info" size="sm">
+                <Badge tone="info">
                   New
                 </Badge>
               ) : value.clientId ? (

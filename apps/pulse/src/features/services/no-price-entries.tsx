@@ -46,7 +46,7 @@ export function NoPriceEntries({ month, services, onShowAll }: { readonly month:
       bodyClassName="p-0"
       testId="services-no-price"
       action={
-        <button type="button" onClick={onShowAll} className="rounded-sm text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="services-no-price-back">
+        <button type="button" onClick={onShowAll} className="rounded-sm text-sm font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="services-no-price-back">
           Show every service
         </button>
       }
@@ -101,7 +101,7 @@ export function NoPriceEntries({ month, services, onShowAll }: { readonly month:
                       <TableCell className="max-w-[260px]">
                         <span className="block truncate">{targets.clientLabel(entry.clientId) ?? 'Client'}</span>
                         {jobNumber ? (
-                          <Link href={routes.jobTab(jobNumber, 'money-in')} className="rounded-sm text-xs text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                          <Link href={routes.jobTab(jobNumber, 'money-in')} className="rounded-sm text-xs text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                             {targets.jobLabel(entry.jobId)}
                           </Link>
                         ) : (

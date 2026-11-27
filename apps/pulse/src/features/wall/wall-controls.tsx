@@ -238,7 +238,7 @@ function TvLinkDialog({ sites, siteId, onClose }: { readonly sites: WallControls
                       </span>
                     </span>
                     <span className="flex items-center gap-2">
-                      <Badge tone="success" size="sm">
+                      <Badge tone="success">
                         Active
                       </Badge>
                       <Button size="sm" variant="secondary" onClick={() => void turnOff(link)} data-testid="wall-link-off">

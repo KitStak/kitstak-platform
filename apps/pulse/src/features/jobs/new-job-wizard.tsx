@@ -1619,7 +1619,7 @@ export function NewJobWizard(props: NewJobWizardProps) {
                 />
               </dl>
               {!preview.ready ? (
-                <p className="mt-4 flex items-start gap-2 rounded-lg bg-[var(--label-yellow-subtle)] px-3 py-2.5 text-sm text-[var(--label-yellow-text)]">
+                <p className="mt-4 flex items-start gap-2 rounded-lg bg-warning-subtle px-3 py-2.5 text-sm text-warning-text">
                   <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
                   No price or plan yet. You can save the job now and add them on its Plan tab, but Pulse
                   cannot tell you if it is on track until you do.

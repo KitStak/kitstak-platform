@@ -142,7 +142,7 @@ function ProgramCard({ job, data, holdsProgram }: { readonly job: JobDetailDTO; 
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
                       <span className="truncate">{block.name}</span>
-                      <Badge tone="outline" size="sm">
+                      <Badge tone="outline">
                         {block.key}
                       </Badge>
                     </p>
@@ -532,11 +532,11 @@ export function LinkProgramDialog({ job, open, onOpenChange }: { readonly job: J
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-fg">
                             {item.name}
-                            <Badge tone="outline" size="sm">
+                            <Badge tone="outline">
                               {item.key}
                             </Badge>
                             {item.sameCustomer ? (
-                              <Badge tone="success" size="sm">
+                              <Badge tone="success">
                                 Same client
                               </Badge>
                             ) : null}

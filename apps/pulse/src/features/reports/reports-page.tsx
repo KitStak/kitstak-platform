@@ -61,7 +61,7 @@ export async function ReportsPage({ searchParams }: { readonly searchParams?: Pr
                     <li key={report.slug}>
                       {locked ? (
                         <div className="flex h-full items-start gap-3 rounded-xl border border-border-subtle bg-sunken p-4" data-testid={`report-${report.slug}`}>
-                          <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-icon">
+                          <span aria-hidden className="flex size-9 shrink-0 items-center justify-center text-icon">
                             <Lock className="size-[18px]" />
                           </span>
                           <span className="min-w-0 flex-1">
@@ -75,7 +75,7 @@ export async function ReportsPage({ searchParams }: { readonly searchParams?: Pr
                           data-testid={`report-${report.slug}`}
                           className="group flex h-full items-start gap-3 rounded-xl border border-border-subtle bg-panel p-4 shadow-xs transition-colors hover:border-border-strong hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                         >
-                          <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-subtle text-primary-text">
+                          <span aria-hidden className="flex size-9 shrink-0 items-center justify-center text-icon">
                             <FileText className="size-[18px]" />
                           </span>
                           <span className="min-w-0 flex-1">

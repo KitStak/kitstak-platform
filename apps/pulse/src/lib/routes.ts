@@ -108,7 +108,9 @@ export const routes = {
   alerts: () => '/alerts',
   alertRules: () => '/alerts/rules',
   reports: () => '/reports',
-  report: (slug: string) => `/reports/${encodeURIComponent(slug)}`,
+  /** A report. `client`, `from` and `to` open it already filtered to one client and those days. */
+  report: (slug: string, opts?: { client?: string; from?: string; to?: string }) =>
+    withQuery(`/reports/${encodeURIComponent(slug)}`, { client: opts?.client, from: opts?.from, to: opts?.to }),
   importCenter: () => '/import',
   newImport: (stream?: string) => withQuery('/import/new', { stream }),
   importBatch: (batchId: string) => `/import/${encodeURIComponent(batchId)}`,

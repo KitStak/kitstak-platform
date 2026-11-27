@@ -133,7 +133,7 @@ export function SavedViewsBar({ page, ignore = [], label = 'Views', className }:
     setDialog({ mode: 'rename', view });
   };
 
-  const chip = 'inline-flex h-7 items-center gap-1.5 rounded-full border text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
+  const chip = 'inline-flex h-7 items-center gap-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 
   return (
     // On a phone the views sit on one line that scrolls sideways. A wrapping list changed height
@@ -153,7 +153,7 @@ export function SavedViewsBar({ page, ignore = [], label = 'Views', className }:
         const on = active?.id === view.id;
         const canChange = view.mine || canShare;
         return (
-          <span key={view.id} className={cn(chip, 'pr-0.5 pl-0', on ? 'border-primary bg-primary-subtle text-primary-text' : 'border-border-subtle bg-panel text-fg-secondary hover:bg-hover')} data-testid={`view-${view.name}`} data-active={on ? 'yes' : 'no'}>
+          <span key={view.id} className={cn(chip, 'pr-0.5 pl-0', on ? 'bg-selected text-fg hover:bg-selected-hover' : 'bg-transparent text-fg-secondary hover:bg-hover hover:text-fg')} data-testid={`view-${view.name}`} data-active={on ? 'yes' : 'no'}>
             <button
               type="button"
               aria-pressed={on}

@@ -1,6 +1,7 @@
 'use client';
 import { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
+import { Count } from '@kitstak/ui/dashboard';
 import { cn } from './cn';
 
 /** The tabs root may shrink inside a flex row, so a long tab list scrolls sideways instead of pushing the page wide. */
@@ -54,7 +55,7 @@ export const TabsList = forwardRef<ElementRef<typeof TabsPrimitive.List>, TabsLi
 export interface TabsTriggerProps extends ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger> {
   readonly variant?: TabsVariant;
   readonly icon?: ReactNode;
-  /** Count shown after the label. */
+  /** Count shown after the label as the shared neutral Count (left out when 0). */
   readonly count?: number;
 }
 
@@ -89,11 +90,7 @@ export const TabsTrigger = forwardRef<ElementRef<typeof TabsPrimitive.Trigger>, 
     >
       {icon}
       {children}
-      {count !== undefined ? (
-        <span className="min-w-5 rounded-full bg-muted px-1.5 text-center text-xs font-semibold text-fg-secondary">
-          {count}
-        </span>
-      ) : null}
+      {count ? <Count value={count} /> : null}
     </TabsPrimitive.Trigger>
   );
 });

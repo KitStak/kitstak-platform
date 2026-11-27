@@ -51,7 +51,7 @@ function BarLink({ entry, badge, active, parked }: { readonly entry: NavEntry; r
       className={triggerClass}
     >
       {entry.label}
-      {badge > 0 ? <CountBadge count={badge} ringClassName="ring-[var(--surface-panel)]" /> : null}
+      {badge > 0 ? <CountBadge count={badge} /> : null}
       <ActiveUnderline show={active} />
     </Link>
   );
@@ -69,7 +69,7 @@ function MenuLink({ entry, badge, active }: { readonly entry: NavEntry; readonly
         className="ks-menu-item aria-[current=page]:bg-selected aria-[current=page]:font-medium aria-[current=page]:text-primary-text [&[aria-current=page]>svg]:text-primary-text"
       >
         <MenuItemBody icon={<Icon aria-hidden />}>{entry.label}</MenuItemBody>
-        {badge > 0 ? <CountBadge count={badge} ringClassName="ring-transparent" /> : null}
+        {badge > 0 ? <CountBadge count={badge} /> : null}
       </Link>
     </Menu.Item>
   );

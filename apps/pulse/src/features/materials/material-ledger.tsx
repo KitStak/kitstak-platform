@@ -235,7 +235,7 @@ export function MaterialLedger({ jobId, jobRef, clientId, from, to, today, title
   const pullButton = canPull ? (
     <Button size="sm" variant="secondary" leadingIcon={<PackageSearch aria-hidden />} onClick={() => setPull(true)} data-testid="usage-pull">
       Pull from the warehouse
-      {preview && preview.rowsToAdd > 0 ? <Badge tone="primary" size="sm">{preview.rowsToAdd} new</Badge> : null}
+      {preview && preview.rowsToAdd > 0 ? <Badge tone="info">{preview.rowsToAdd} new</Badge> : null}
     </Button>
   ) : null;
 
@@ -309,7 +309,7 @@ export function MaterialLedger({ jobId, jobRef, clientId, from, to, today, title
         rowName={(row) => `${row.itemName ?? row.itemSku ?? 'the part'} used on ${shortDate(row.usageDate)}`}
         onCommit={onCommit}
         onDelete={(picked) => void actions.removeRows(picked)}
-        rowBadges={(row) => (row.source !== 'manual' ? <Badge size="sm" tone="neutral">{row.source === 'csv' ? 'Imported' : row.source === 'wms' ? 'Warehouse' : 'Synced'}</Badge> : null)}
+        rowBadges={(row) => (row.source !== 'manual' ? <Badge tone="neutral">{row.source === 'csv' ? 'Imported' : row.source === 'wms' ? 'Warehouse' : 'Synced'}</Badge> : null)}
       />
       <BulkAddDialog<Omit<SaveMaterialUsageActionInput, 'id' | 'version'>>
         open={bulk}

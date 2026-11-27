@@ -12,7 +12,8 @@ import { ArrowRight, Check, Pencil, X } from 'lucide-react';
 import { ComboChart } from '@/components/charts/cartesian';
 import { trendMarginLine } from './trend-margin';
 import { DonutChart } from '@/components/charts/radial';
-import { KpiTile, MarginPill, marginHealth } from '@/components/charts/stats';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { MarginPill, StatSparkline, StatTileLoading, marginHealth, statValue, toDelta, type DeltaBadgeProps } from '@/components/charts/stats';
 import { ExplainNumber } from '@/components/pulse/explain';
 import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
@@ -124,6 +125,8 @@ function TargetMargin({ client, fallbackBp, canManage }: { readonly client: Clie
   );
 }
 
+const TILE_LABELS = ['Revenue', 'Cost to serve', 'Profit', 'Job margin', 'Labor as % of revenue', 'Not billed yet'] as const;
+
 export function ClientView({ client: initialClient, today, weekStart, defaultTargetMarginBp, canManage }: { readonly client: ClientDTO; readonly today: string; readonly weekStart: number; readonly defaultTargetMarginBp: number; readonly canManage: boolean }) {
   const { get, set } = useQueryState();
   const client = useClient(initialClient.id, { initialData: initialClient }).data ?? initialClient;
@@ -153,14 +156,22 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
   const serviceRows = useMemo(() => (services.data?.rows ?? []).filter((row) => row.key !== 'none').sort((a, b) => (b.revenueCents ?? 0) - (a.revenueCents ?? 0)), [services.data]);
   const noActivity = trend.data !== undefined && trend.data.rows.length === 0;
   const notBilled = total && total.revenueCents !== null && total.billedCents !== null;
+  const jobsHref = routes.profit({ by: 'job', client: client.id, from: period.from, to: period.to });
+  const delta = (change: DeltaBadgeProps | undefined) => (change ? toDelta(change) : undefined);
+  const trendOf = (label: string, pick: (row: ProfitRowDTO) => number | null, tone?: 'accent' | 'bad') => (points.length > 1 ? <StatSparkline values={points.map(pick)} label={`${label} trend`} tone={tone} /> : undefined);
 
   if (trend.isError && !trend.data) return <LoadError what="this client’s numbers" message={trend.error instanceof Error ? trend.error.message : undefined} onRetry={() => void trend.refetch()} />;
 
   return (
     <div className="flex flex-col gap-4" data-testid="client-view">
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <PeriodPicker period={period} onChange={setPeriod} showCompare={false} />
-        <Link href={`${routes.profit({ by: 'job', client: client.id, from: period.from, to: period.to })}`} className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="client-open-profit">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <PeriodPicker period={period} onChange={setPeriod} showCompare={false} />
+          <p className="text-xs text-fg-muted" data-testid="client-compare">
+            Changes compare with {rangeLabel(prior)}.
+          </p>
+        </div>
+        <Link href={jobsHref} className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="client-open-profit">
           Open in the Profit explorer
           <ArrowRight aria-hidden className="size-3.5" />
         </Link>
@@ -169,28 +180,27 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
       {noActivity ? (
         <div className="rounded-lg border border-dashed border-border-default bg-panel px-4 py-3 text-sm text-fg-secondary" data-testid="client-empty-period">
           No work, revenue or cost for {client.name} is dated {rangeLabel(period)}. Pick a longer period, or{' '}
-          <Link href={routes.newJob({ client: client.id })} className="rounded-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+          <Link href={routes.newJob({ client: client.id })} className="rounded-sm font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
             start a job for this client
           </Link>
           .
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6" data-testid="client-tiles">
-        <KpiTile label="Revenue" loading={!total} value={total ? formatMoneyWhole(total.revenueCents) : null} delta={total ? moneyDelta(total.revenueCents, previous?.revenueCents, 'up', vs) : undefined} sparkline={points.length > 1 ? { values: points.map((row) => row.revenueCents) } : undefined} explain={<ExplainNumber metric="revenue" scope={scope} />} />
-        <KpiTile label="Cost to serve" loading={!total} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, previous?.costCents, 'down', vs) : undefined} sparkline={points.length > 1 ? { values: points.map((row) => row.costCents) } : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
-        <KpiTile label="Profit" loading={!total} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, previous?.profitCents, 'up', vs) : undefined} sparkline={points.length > 1 ? { values: points.map((row) => row.profitCents), tone: (total?.profitCents ?? 0) < 0 ? 'bad' : 'accent' } : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />
-        <KpiTile
-          label="Job margin"
-          loading={!total}
-          value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null}
-          delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined}
-          explain={<ExplainNumber metric="margin" scope={scope} />}
-          footer={total && total.marginBp !== null ? <MarginPill health={marginHealth(total.marginBp, targetBp)} size="sm" /> : undefined}
-        />
-        <KpiTile label="Labor as % of revenue" loading={!total} value={total ? formatPercentBp(total.laborPctBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.laborPctBp, previous?.laborPctBp, 'down', vs) : undefined} explain={<ExplainNumber metric="labor_pct" scope={scope} />} />
-        <KpiTile label="Not billed yet" loading={!total} value={notBilled ? formatMoneyWhole(notBilledCents(total)) : null} emptyText="Nothing earned yet" explain={<ExplainNumber metric="not_billed" scope={scope} />} footer={total ? <span className="text-xs text-fg-muted tabular-nums">{formatMoneyWhole(total.billedCents)} billed in this period</span> : undefined} />
-      </div>
+      <StatRow label="Headline numbers" data-testid="client-tiles">
+        {!total ? (
+          TILE_LABELS.map((label) => <StatTileLoading key={label} label={label} />)
+        ) : (
+          <>
+            <StatTile label="Revenue" href={jobsHref} value={statValue(formatMoneyWhole(total.revenueCents))} delta={delta(moneyDelta(total.revenueCents, previous?.revenueCents, 'up', vs))} trend={trendOf('Revenue', (row) => row.revenueCents)} explain={<ExplainNumber metric="revenue" scope={scope} />} />
+            <StatTile label="Cost to serve" href={jobsHref} value={statValue(formatMoneyWhole(total.costCents))} delta={delta(moneyDelta(total.costCents, previous?.costCents, 'down', vs))} trend={trendOf('Cost to serve', (row) => row.costCents)} explain={<ExplainNumber metric="cost" scope={scope} />} />
+            <StatTile label="Profit" href={jobsHref} value={statValue(formatMoneyWhole(total.profitCents))} delta={delta(moneyDelta(total.profitCents, previous?.profitCents, 'up', vs))} trend={trendOf('Profit', (row) => row.profitCents, (total.profitCents ?? 0) < 0 ? 'bad' : 'accent')} explain={<ExplainNumber metric="profit" scope={scope} />} />
+            <StatTile label="Job margin" href={jobsHref} value={statValue(formatPercentBp(total.marginBp, { empty: 'No revenue yet' }))} delta={delta(pointsDelta(total.marginBp, previous?.marginBp, 'up', vs))} explain={<ExplainNumber metric="margin" scope={scope} />} caption={total.marginBp !== null ? <MarginPill health={marginHealth(total.marginBp, targetBp)} /> : undefined} />
+            <StatTile label="Labor as % of revenue" href={jobsHref} value={statValue(formatPercentBp(total.laborPctBp, { empty: 'No revenue yet' }))} delta={delta(pointsDelta(total.laborPctBp, previous?.laborPctBp, 'down', vs))} explain={<ExplainNumber metric="labor_pct" scope={scope} />} />
+            <StatTile label="Not billed yet" href={routes.report('ready-to-bill', { client: client.id, from: period.from, to: period.to })} value={statValue(notBilled ? formatMoneyWhole(notBilledCents(total)) : null, 'Nothing earned yet')} explain={<ExplainNumber metric="not_billed" scope={scope} />} caption={<span className="tabular-nums">{formatMoneyWhole(total.billedCents)} billed in this period</span>} />
+          </>
+        )}
+      </StatRow>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <Section title="Trend" hint={`${rangeLabel(period)}, by ${bucket}`} testId="client-trend">
@@ -407,7 +417,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
             ) : serviceRows.length === 0 ? (
               <p className="px-4 py-6 text-sm text-fg-secondary">
                 No extra services for this client in this period. Labeling, rework and special packing show here once they are logged.{' '}
-                <Link href={routes.services()} className="rounded-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                <Link href={routes.services()} className="rounded-sm font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                   See the service list
                 </Link>
               </p>
@@ -471,7 +481,7 @@ export function ClientView({ client: initialClient, today, weekStart, defaultTar
                   <dd className="min-w-0 text-right text-fg">
                     {client.contactName ? <span className="block">{client.contactName}</span> : null}
                     {client.contactEmail ? (
-                      <a href={`mailto:${client.contactEmail}`} className="block truncate rounded-sm text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                      <a href={`mailto:${client.contactEmail}`} className="block truncate rounded-sm text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                         {client.contactEmail}
                       </a>
                     ) : null}

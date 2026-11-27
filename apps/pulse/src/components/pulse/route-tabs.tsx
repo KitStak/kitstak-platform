@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Count } from '@kitstak/ui/dashboard';
 import { cn } from '@/components/ui/cn';
 import { ScrollX } from '@/components/ui/scroll-x';
 
@@ -36,7 +37,7 @@ export function RouteTabs({ tabs, active, label }: { readonly tabs: readonly Rou
                 )}
               >
                 {tab.label}
-                {tab.count ? <span className="min-w-5 rounded-full bg-muted px-1.5 text-center text-xs font-semibold text-fg-secondary tabular-nums">{tab.count}</span> : null}
+                {tab.count ? <Count value={tab.count} /> : null}
               </Link>
             </li>
           );
