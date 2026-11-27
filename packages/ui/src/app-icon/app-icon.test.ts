@@ -14,6 +14,8 @@ describe('AppIcon', () => {
     ['wms', 8],
     ['projects', 3],
     ['pulse', 2],
+    ['ledger', 2],
+    ['crew', 2],
   ])('draws the %s icon with the same number of shapes as the brand file', (app, shapes) => {
     expect(shapeCount(render(app))).toBe(shapes);
   });
@@ -23,6 +25,21 @@ describe('AppIcon', () => {
 
     expect(markup).toContain('points="40,71 82,71 100,53 118,71 160,71 160,101 118,101 100,83 82,101 40,101" fill="#C8102E"');
     expect(markup).toContain('points="40,117 82,117 100,99 118,117 160,117 160,147 118,147 100,129 82,147 40,147" fill="#D65A6E"');
+    expect(markup).not.toContain('<rect ');
+  });
+
+  test('draws the planned Ledger icon as the red bar over the pink stem', () => {
+    const markup = render('ledger');
+
+    expect(markup).toContain('x="40" y="40" width="120" height="30" fill="#C8102E"');
+    expect(markup).toContain('x="85" y="86" width="30" height="74" fill="#D65A6E"');
+  });
+
+  test('draws the planned Crew icon from the brand file "people" shapes', () => {
+    const markup = render('crew');
+
+    expect(markup).toContain('points="70,44 130,44 100,96" fill="#D65A6E"');
+    expect(markup).toContain('points="40,156 100,104 160,156 125.38,156 100,134 74.62,156" fill="#C8102E"');
     expect(markup).not.toContain('<rect ');
   });
 
