@@ -2,7 +2,7 @@
 /** Settings → Profile: who you are in this workspace, what lands in your inbox and email digests. */
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Avatar, Badge, Button, Checkbox, Field, Input, Switch, toast } from '@/components/ui';
+import { Avatar, Badge, Button, Checkbox, Field, Input, Select, Switch, toast } from '@/components/ui';
 import { authClient } from '@/lib/auth-client';
 import { Panel } from '@/components/layout/page';
 import type { NotificationKind } from '@/lib/constants';
@@ -52,6 +52,15 @@ const NOTIFICATION_GROUPS: readonly {
   },
 ];
 
+export type EmailDigest = 'instant' | 'daily' | 'weekly' | 'off';
+
+const EMAIL_OPTIONS: readonly { value: EmailDigest; label: string }[] = [
+  { value: 'instant', label: 'As things happen' },
+  { value: 'daily', label: 'Once a day' },
+  { value: 'weekly', label: 'Once a week (Monday)' },
+  { value: 'off', label: 'Never email me' },
+];
+
 const ROLE_WORDS: Readonly<Record<string, string>> = {
   owner: 'Owner',
   admin: 'Admin',
@@ -62,12 +71,15 @@ const ROLE_WORDS: Readonly<Record<string, string>> = {
 
 export function ProfileSection({
   notificationPrefs,
+  emailDigest = 'instant',
 }: {
   readonly notificationPrefs: Partial<Record<NotificationKind, boolean>>;
+  readonly emailDigest?: EmailDigest;
 }) {
   const router = useRouter();
   const { user, org, orgRole } = useShell();
   const [prefs, setPrefs] = useState(notificationPrefs);
+  const [digest, setDigest] = useState<EmailDigest>(emailDigest);
   const [name, setName] = useState(user.name);
   const [nameError, setNameError] = useState<string | null>(null);
   const [savingName, setSavingName] = useState(false);
@@ -103,6 +115,15 @@ export function ProfileSection({
     const result = await updatePrefsAction({ notifications: next });
     if (!result.ok) {
       setPrefs(before);
+      toast.error("Couldn't save that setting", result.error.message);
+    }
+  };
+  const setEmail = async (value: EmailDigest) => {
+    const before = digest;
+    setDigest(value);
+    const result = await updatePrefsAction({ emailDigest: value });
+    if (!result.ok) {
+      setDigest(before);
       toast.error("Couldn't save that setting", result.error.message);
     }
   };
@@ -206,6 +227,25 @@ export function ProfileSection({
               </ul>
             </div>
           ))}
+        </div>
+      </Panel>
+
+      <Panel title="Email">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-fg">Email me</p>
+            <p className="text-xs text-fg-muted">
+              Assigned tasks, mentions, comments, status changes, due soon and overdue. Sent to {user.email}.
+              Anything you already read in the inbox is left out.
+            </p>
+          </div>
+          <Select
+            value={digest}
+            onValueChange={(value) => void setEmail(value as EmailDigest)}
+            options={EMAIL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+            className="sm:w-56"
+            aria-label="Email me"
+          />
         </div>
       </Panel>
     </div>

@@ -1,4 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/v1/cron/notification-emails",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "ignoreCommand": "bash ../../deploy/vercel-ignore.sh"
 }

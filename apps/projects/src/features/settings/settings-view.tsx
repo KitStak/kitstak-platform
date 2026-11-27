@@ -15,7 +15,7 @@ import type { SpaceDTO } from '@/lib/types';
 import type { IntegrationLinkSummary } from '@/server/domain/integration-summary';
 import { AppearanceSection } from './appearance-section';
 import { IntegrationsSection } from './integrations-section';
-import { ProfileSection } from './profile-section';
+import { ProfileSection, type EmailDigest } from './profile-section';
 import { ShortcutsSection } from './shortcuts-section';
 import { WorkspaceSection } from './workspace-section';
 
@@ -57,11 +57,13 @@ const SECTIONS: readonly { id: SettingsSectionId; label: string; hint: string; i
 export function SettingsView({
   spaces,
   notificationPrefs,
+  emailDigest,
   integrationSummary,
   planCard = null,
 }: {
   readonly spaces: SpaceDTO[];
   readonly notificationPrefs: Partial<Record<NotificationKind, boolean>>;
+  readonly emailDigest: EmailDigest;
   readonly integrationSummary: IntegrationLinkSummary;
   /** The "Plan and payment" row, rendered on the server from `@kitstak/billing`. */
   readonly planCard?: ReactNode;
@@ -130,7 +132,7 @@ export function SettingsView({
           <h2 id="settings-section-title" className="mb-4 text-lg font-semibold text-fg">
             {current.label}
           </h2>
-          {section === 'profile' ? <ProfileSection notificationPrefs={notificationPrefs} /> : null}
+          {section === 'profile' ? <ProfileSection notificationPrefs={notificationPrefs} emailDigest={emailDigest} /> : null}
           {section === 'appearance' ? <AppearanceSection /> : null}
           {section === 'workspace' ? (
             <div className="flex flex-col gap-5">

@@ -43,6 +43,9 @@ importers:
       '@kitstak/entitlements':
         specifier: workspace:*
         version: link:../../packages/entitlements
+      '@kitstak/mail':
+        specifier: workspace:*
+        version: link:../../packages/mail
       '@kitstak/pm-bridge':
         specifier: workspace:*
         version: link:../../packages/pm-bridge
@@ -235,7 +238,7 @@ importers:
         version: 9.39.5(jiti@2.7.0)
       eslint-config-next:
         specifier: 16.4.5
-        version: 16.4.5(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
+        version: 16.4.5(@typescript-eslint/parser@8.72.2(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
       jsdom:
         specifier: ^31.0.0
         version: 31.0.0(@noble/hashes@2.4.0)
@@ -350,7 +353,7 @@ importers:
         version: 9.39.5(jiti@2.7.0)
       eslint-config-next:
         specifier: 16.4.5
-        version: 16.4.5(@typescript-eslint/parser@8.72.2(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
+        version: 16.4.5(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
       prettier:
         specifier: ^3.9.10
         version: 3.10.0
@@ -387,6 +390,9 @@ importers:
       '@kitstak/entitlements':
         specifier: workspace:*
         version: link:../../packages/entitlements
+      '@kitstak/mail':
+        specifier: workspace:*
+        version: link:../../packages/mail
       '@kitstak/programs-engine':
         specifier: workspace:*
         version: link:../../packages/programs-engine
