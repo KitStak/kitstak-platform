@@ -19,6 +19,7 @@ import {
   getOpenSignupIntent,
   INVITE_NEEDS_PROVEN_MAILBOX_CODE,
   INVITE_NEEDS_PROVEN_MAILBOX_MESSAGE,
+  moveQueuedEmails,
   recordAudit,
   upsertSignupIntent,
 } from '@kitstak/billing/server';
@@ -27,7 +28,20 @@ import { cleanCode, companyIssue, emailIssue, nameIssue } from '@/features/signu
 import { passwordIssue } from '@/features/signup/password-rules';
 import { safeNextPath, safeReturnUrl } from '@/lib/routes';
 import { slugWithSuffix, slugify } from '@/lib/slug';
-import { auth, clearSignInLockout, emailCodeApi, hasPassword, maySignInWithCode, withSignInCode, withoutSignupCode } from '@/server/auth';
+import {
+  auth,
+  clearSignInLockout,
+  createCodeOnlyUser,
+  emailCodeApi,
+  hasPassword,
+  mailInviteJoinCode,
+  maySignInWithCode,
+  reserveEmailCode,
+  signInProvenMailbox,
+  withCodeSendReserved,
+  withSignInCode,
+  withoutSignupCode,
+} from '@/server/auth';
 import { db } from '@/server/db';
 import { env, trustedOrigins } from '@/server/env';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
@@ -41,7 +55,9 @@ export interface SignupActionResult {
   /** Which field the error belongs to, when it belongs to one. */
   readonly field?: 'name' | 'password' | 'email';
   /** A short machine word for the cases a form treats in a special way. */
-  readonly code?: 'account_exists' | 'no_seat' | 'password_removed' | 'needs_invite_link';
+  readonly code?: 'account_exists' | 'no_seat' | 'password_removed' | 'needs_invite_link' | 'code_sent_recently';
+  /** With `code_sent_recently`: seconds until a new code can be asked for. The last code still works. */
+  readonly retryAfterSeconds?: number;
 }
 
 const SIGN_IN_AGAIN = 'Please sign in again.';
@@ -50,7 +66,7 @@ const NEEDS_INVITE_LINK = INVITE_NEEDS_PROVEN_MAILBOX_MESSAGE;
 // Every limit that answers with this sentence has a 10 minute window, so the wait it names is true.
 const TOO_MANY_TRIES = 'Too many tries. Wait 10 minutes and try again.';
 const NO_NETWORK = 'We could not reach KitStak. Check your connection and try again.';
-const WORKSPACE_FAILED = 'Your account is ready, but we could not set up your workspace. Try again.';
+const WORKSPACE_FAILED = 'Your account is ready, but we could not set up your organization. Try again.';
 const CODE_WRONG = 'That code is not right. Check it and try again.';
 const CODE_OLD = 'That code is too old. Send a new one.';
 const CODE_USED_UP = 'Too many tries with that code. Send a new one.';
@@ -217,7 +233,8 @@ export async function resendVerificationAction(): Promise<SignupActionResult> {
     });
     return { ok: true };
   } catch (error: unknown) {
-    if (errorStatus(error) === 429) return fail(TOO_MANY_TRIES);
+    // The limit names its own, true wait (review round 5).
+    if (errorStatus(error) === 429) return fail(errorMessage(error) ?? TOO_MANY_TRIES);
     console.error('[portal] resendVerificationAction failed', error);
     return fail('We could not send the code. Try again.');
   }
@@ -227,7 +244,8 @@ function codeError(error: unknown): string {
   const code = errorCode(error);
   if (code === 'OTP_EXPIRED') return CODE_OLD;
   if (code === 'TOO_MANY_ATTEMPTS') return CODE_USED_UP;
-  if (errorStatus(error) === 429) return TOO_MANY_TRIES;
+  // The limit names its own, true wait: 10 minutes, or tomorrow (review round 5).
+  if (errorStatus(error) === 429) return errorMessage(error) ?? TOO_MANY_TRIES;
   return CODE_WRONG;
 }
 
@@ -301,12 +319,15 @@ export async function requestPasswordResetAction(input: unknown): Promise<Signup
   if (issue) return fail(issue);
   const requestHeaders = await headers();
   if (!(await allowAnonymous('reset-request', requestHeaders, 5))) return fail(TOO_MANY_TRIES);
+  // Asked before the answer, so the screen never says "on its way" when nothing is sent (review
+  // round 5). The same answer for an address with no account.
+  const slot = await reserveEmailCode('forget-password', email, requestHeaders);
+  if (!slot.allowed) return { ...fail(slot.message), code: 'code_sent_recently', retryAfterSeconds: slot.retryAfterSeconds };
   after(async () => {
     try {
-      await emailCodeApi().requestPasswordResetEmailOTP({ body: { email } });
+      await withCodeSendReserved(() => emailCodeApi().requestPasswordResetEmailOTP({ body: { email } }));
     } catch (error: unknown) {
-      // The per address limit answers here. The person was already told the neutral sentence.
-      if (errorStatus(error) !== 429) console.error('[portal] requestPasswordResetAction failed', error);
+      console.error('[portal] requestPasswordResetAction failed', error);
     }
   });
   return { ok: true };
@@ -317,8 +338,9 @@ export async function requestPasswordResetAction(input: unknown): Promise<Signup
 /**
  * Sends a 6 digit sign in code. It always answers the same way and takes the same time, so it never
  * says whether an address has an account. The code goes out after the response, and only to an
- * account that may sign in (`maySignInWithCode`). The same limits as every other code: 5 per 10
- * minutes and 20 per day for one address.
+ * account that may sign in (`maySignInWithCode`). Sends for one address are spaced, never walled
+ * for a day (`@kitstak/billing/server` code-limits.ts). When the last code is too fresh for a new
+ * one, the answer says so with the real wait (`code: 'code_sent_recently'`): that code still works.
  */
 export async function requestSignInCodeAction(input: unknown): Promise<SignupActionResult> {
   const parsed = emailSchema.safeParse(input);
@@ -327,13 +349,14 @@ export async function requestSignInCodeAction(input: unknown): Promise<SignupAct
   if (issue) return { ...fail(issue), field: 'email' };
   const requestHeaders = await headers();
   if (!(await allowAnonymous('signin-code-request', requestHeaders, 5))) return fail(TOO_MANY_TRIES);
+  const slot = await reserveEmailCode('sign-in', email, requestHeaders);
+  if (!slot.allowed) return { ...fail(slot.message), code: 'code_sent_recently', retryAfterSeconds: slot.retryAfterSeconds };
   after(async () => {
     try {
       if (!(await maySignInWithCode(email))) return;
-      await withSignInCode(() => emailCodeApi().sendVerificationOTP({ body: { email, type: 'sign-in' } }));
+      await withCodeSendReserved(() => withSignInCode(() => emailCodeApi().sendVerificationOTP({ body: { email, type: 'sign-in' } })));
     } catch (error: unknown) {
-      // The per address limit answers here. The person was already told the neutral sentence.
-      if (errorStatus(error) !== 429) console.error('[portal] requestSignInCodeAction failed', error);
+      console.error('[portal] requestSignInCodeAction failed', error);
     }
   });
   return { ok: true };
@@ -426,7 +449,8 @@ export async function resetPasswordAction(input: unknown): Promise<SignupActionR
   }
 
   try {
-    await emailCodeApi().resetPasswordEmailOTP({ body: { email, otp: code, password } });
+    // The headers go along so a browser this account knows is counted on its own (review round 5).
+    await emailCodeApi().resetPasswordEmailOTP({ body: { email, otp: code, password }, headers: requestHeaders });
   } catch (error: unknown) {
     if (!(error instanceof APIError)) {
       console.error('[portal] resetPasswordAction failed', error);
@@ -447,7 +471,11 @@ export async function resetPasswordAction(input: unknown): Promise<SignupActionR
   return { ok: true, next: '/login' };
 }
 
-const inviteSchema = z.object({ invitationId: z.string().uuid() });
+const inviteSchema = z.object({
+  invitationId: z.string().uuid(),
+  /** The 6 digit code from `requestInviteCodeAction`, for a signed in person whose email was never verified. */
+  code: z.string().max(40).optional(),
+});
 
 type InviteFacts = NonNullable<Awaited<ReturnType<typeof getInviteView>>>;
 
@@ -502,7 +530,10 @@ async function acceptInvitation(view: InviteFacts, requestHeaders: Headers): Pro
 const joinSchema = z.object({
   invitationId: z.string().uuid(),
   name: z.string().max(200),
-  password: z.string().max(200),
+  /** Optional since review round 5: left out or empty, the person joins with no password. */
+  password: z.string().max(200).optional(),
+  /** The 6 digit code from `requestInviteCodeAction`, for a link that carries no proof. */
+  code: z.string().max(40).optional(),
   timezone: z.string().max(80).optional(),
 });
 
@@ -522,8 +553,15 @@ function sessionCookieFrom(responseHeaders: Headers): string | null {
  * never leaves an account behind. If the join still fails after the account exists (the plan shrank
  * in that very second), the account that was just made is removed again.
  *
- * A person who came from the link in the invite email owns that mailbox, so their email is marked
- * verified and no code email is sent.
+ * The mailbox must be proven before anything is made, in one of two ways (review rounds 4 and 5):
+ *  - the person came from the link in the invite email, which carries a proof only that mailbox has,
+ *  - or they typed the 6 digit code that `requestInviteCodeAction` mailed to the invited address
+ *    (a copied link, a link from the CRM, an email that lost its proof).
+ * Either way the email is marked verified and no further code is asked for.
+ *
+ * A password is optional (review round 5). Without one the account is made with no password at
+ * all: the person signs in with an emailed code next time, and can set a password on their account
+ * page. An owner can start that way, so the people they invite can too.
  */
 export async function joinInviteAction(input: unknown): Promise<SignupActionResult> {
   const parsed = joinSchema.safeParse(input);
@@ -539,9 +577,12 @@ export async function joinInviteAction(input: unknown): Promise<SignupActionResu
   const name = parsed.data.name.trim();
   const nameProblem = nameIssue(name);
   if (nameProblem) return { ...fail(nameProblem), field: 'name' };
-  // The same check the invite form runs: not built on the invited address, nor on the team's name.
-  const passwordProblem = passwordIssue(parsed.data.password, { email: view.email, company: view.orgName });
-  if (passwordProblem) return { ...fail(passwordProblem), field: 'password' };
+  const password = parsed.data.password ?? '';
+  if (password !== '') {
+    // The same check the invite form runs: not built on the invited address, nor on the team's name.
+    const passwordProblem = passwordIssue(password, { email: view.email, company: view.orgName });
+    if (passwordProblem) return { ...fail(passwordProblem), field: 'password' };
+  }
 
   const requestHeaders = await headers();
   if (!(await allowAnonymous('invite-join', requestHeaders, 5))) return fail(TOO_MANY_TRIES);
@@ -552,51 +593,79 @@ export async function joinInviteAction(input: unknown): Promise<SignupActionResu
   // Before any account exists: is there room on the team?
   if (!view.seatAvailable) return { ...fail(noSeatMessage(view.inviterName)), code: 'no_seat' };
 
-  // Before any account exists: did this person come from the link in the invite email? Only that
-  // mailbox has the link's proof. Without it nothing is made (review round 4): the invitation id by
-  // itself is not a secret, because the people who manage the team can read it, and one of them
-  // could otherwise make the account for the invited address and take the invite.
-  const proven = await inviteProofValid(view.id, view.email);
-  if (!proven) return { ...fail(NEEDS_INVITE_LINK), code: 'needs_invite_link' };
-  const signUp = () =>
-    auth.api.signUpEmail({
-      body: {
-        name,
-        email: view.email,
-        password: parsed.data.password,
-        ...(parsed.data.timezone ? { timezone: parsed.data.timezone } : {}),
-      },
-      headers: requestHeaders,
-      returnHeaders: true,
-    });
-  let created: Awaited<ReturnType<typeof signUp>>;
+  // Before any account exists: is the mailbox proven? Without that nothing is made (review round
+  // 4): the invitation id by itself is not a secret, because the people who manage the team can
+  // read it, and one of them could otherwise make the account for the invited address and take the
+  // invite. The link from the invite email proves it. So does the code mailed to that address.
+  const byLink = await inviteProofValid(view.id, view.email);
+  const typedCode = cleanCode(parsed.data.code ?? '');
+  if (!byLink) {
+    if (typedCode.length !== 6) return { ...fail(NEEDS_INVITE_LINK), code: 'needs_invite_link' };
+    const wrong = await inviteCodeProblem(view.email, typedCode, requestHeaders);
+    if (wrong) return fail(wrong);
+  }
+
+  let userId: string;
+  let sessionCookie: string | null;
   try {
-    // With the proof, the address is already known to be theirs: no code email goes out.
-    created = proven ? await withoutSignupCode(view.email, signUp) : await signUp();
+    if (password !== '') {
+      // With a proven mailbox no code email goes out.
+      const created = await withoutSignupCode(view.email, () =>
+        auth.api.signUpEmail({
+          body: { name, email: view.email, password, ...(parsed.data.timezone ? { timezone: parsed.data.timezone } : {}) },
+          headers: requestHeaders,
+          returnHeaders: true,
+        }),
+      );
+      userId = created.response.user.id;
+      sessionCookie = sessionCookieFrom(created.headers);
+      await markEmailVerified(userId);
+    } else {
+      // No password: the account is made verified, and the person is signed in on the proof.
+      userId = await createCodeOnlyUser({ name, email: view.email, ...(parsed.data.timezone ? { timezone: parsed.data.timezone } : {}) });
+      sessionCookie = null;
+    }
   } catch (error: unknown) {
     const code = errorCode(error);
     if (code?.startsWith('PASSWORD_')) {
       return { ...fail(errorMessage(error) ?? 'Pick a stronger password.'), field: 'password' };
     }
-    if (code === 'USER_ALREADY_EXISTS' || code === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL') {
+    if (code === 'USER_ALREADY_EXISTS' || code === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL' || (error as { code?: string } | null)?.code === '23505') {
       return { ...fail('An account with this email already exists. Sign in to accept the invite.'), code: 'account_exists' };
     }
     console.error('[portal] joinInviteAction could not make the account', code ?? error);
     return fail(error instanceof APIError ? 'We could not create your account. Try again.' : NO_NETWORK);
   }
 
-  const userId = created.response.user.id;
-  const sessionCookie = sessionCookieFrom(created.headers);
+  /** The join did not go through after the account was made. Leave nothing behind. */
+  const removeAccount = async (): Promise<void> => {
+    try {
+      const memberships = await db.select({ id: member.id }).from(member).where(eq(member.userId, userId)).limit(1);
+      if (memberships.length === 0) await db.delete(user).where(eq(user.id, userId));
+    } catch (error: unknown) {
+      console.error('[portal] could not remove the account of a refused join', error);
+    }
+  };
+
+  if (password === '') {
+    try {
+      // The typed code is used up here. A person who came from the email link needs none.
+      const signedIn = await signInProvenMailbox({ email: view.email, headers: requestHeaders, ...(byLink ? {} : { code: typedCode }) });
+      sessionCookie = sessionCookieFrom(signedIn);
+    } catch (error: unknown) {
+      console.error('[portal] joinInviteAction could not sign the new person in', errorCode(error) ?? error);
+      await removeAccount();
+      return fail(error instanceof APIError ? codeError(error) : NO_NETWORK);
+    }
+  }
   if (!sessionCookie) {
-    console.error('[portal] joinInviteAction got no session after sign up');
+    console.error('[portal] joinInviteAction got no session after the account was made');
     return { ok: true, next: `/login?next=${encodeURIComponent(`/invite/${view.id}`)}` };
   }
   // The calls below act as the new person. Only the session token is passed on, so each one reads
   // the person fresh from the database and the cookie they write back is up to date.
   const asNewUser = new Headers(requestHeaders);
   asNewUser.set('cookie', sessionCookie);
-
-  if (proven) await markEmailVerified(userId);
 
   const failure = await acceptInvitation(view, asNewUser);
   if (failure) {
@@ -606,12 +675,7 @@ export async function joinInviteAction(input: unknown): Promise<SignupActionResu
     } catch (error: unknown) {
       console.error('[portal] could not sign out after a refused join', errorCode(error) ?? error);
     }
-    try {
-      const memberships = await db.select({ id: member.id }).from(member).where(eq(member.userId, userId)).limit(1);
-      if (memberships.length === 0) await db.delete(user).where(eq(user.id, userId));
-    } catch (error: unknown) {
-      console.error('[portal] could not remove the account of a refused join', error);
-    }
+    await removeAccount();
     return failure;
   }
 
@@ -622,6 +686,78 @@ export async function joinInviteAction(input: unknown): Promise<SignupActionResu
   }
   revalidatePath('/', 'layout');
   return { ok: true, next: '/' };
+}
+
+/**
+ * Is this the code that was mailed to an invited address with no account? null when it is right.
+ * The code is checked and not used up: it signs the person in a moment later. Every call is one
+ * try at the code, counted like any other (5 per code, and the count for the address).
+ */
+async function inviteCodeProblem(email: string, code: string, requestHeaders: Headers): Promise<string | null> {
+  try {
+    await emailCodeApi().checkVerificationOTP({ body: { email, type: 'sign-in', otp: code }, headers: requestHeaders });
+    return null;
+  } catch (error: unknown) {
+    if (!(error instanceof APIError)) {
+      console.error('[portal] could not check an invite code', error);
+      return NO_NETWORK;
+    }
+    // The check looks at the code first and at the account second. "No account with this email"
+    // is therefore the answer to a RIGHT code here: the account is made in the next step.
+    if (errorCode(error) === 'USER_NOT_FOUND') return null;
+    return codeError(error);
+  }
+}
+
+const inviteCodeSchema = z.object({ invitationId: z.string().uuid() });
+
+/**
+ * "Email me a code" on the invite page, for a link that carries no proof of the mailbox (a copied
+ * link, a link opened from the CRM): mails a 6 digit code to the invited address, and only there.
+ * The code proves the mailbox, so the join goes through: `joinInviteAction({ code })` for a person
+ * with no account, `acceptInviteAction({ code })` for one who is signed in with an address that
+ * was never verified. A person who has an account and is signed out signs in first; the sign in
+ * page has its own code door.
+ */
+export async function requestInviteCodeAction(input: unknown): Promise<SignupActionResult> {
+  const parsed = inviteCodeSchema.safeParse(input);
+  if (!parsed.success) return fail('This invite is no longer active.');
+  const view = await getInviteView(parsed.data.invitationId);
+  if (!view) return fail('This invite is no longer active.');
+  if (view.status !== 'pending') return fail(`This invite is no longer active. Ask ${view.inviterName} to send a new one.`);
+  const requestHeaders = await headers();
+  if (!(await allowAnonymous('invite-code', requestHeaders, 5))) return fail(TOO_MANY_TRIES);
+
+  const session = await getSession();
+  if (session) {
+    if (session.user.email.trim().toLowerCase() !== view.email) {
+      return fail(`This invite is for ${view.email}. Sign out and open the link again.`);
+    }
+    const [fresh] = await db.select({ emailVerified: user.emailVerified }).from(user).where(eq(user.id, session.user.id));
+    // Already proven: nothing to send, the join works as it is.
+    if (fresh?.emailVerified === true) return { ok: true };
+    try {
+      await emailCodeApi().sendVerificationOTP({ body: { email: view.email, type: 'email-verification' }, headers: requestHeaders });
+      return { ok: true };
+    } catch (error: unknown) {
+      if (errorStatus(error) === 429) return { ...fail(errorMessage(error) ?? TOO_MANY_TRIES), code: 'code_sent_recently' };
+      console.error('[portal] requestInviteCodeAction failed', error);
+      return fail('We could not send the code. Try again.');
+    }
+  }
+
+  if (view.accountExists) {
+    return { ...fail('An account with this email already exists. Sign in to accept the invite.'), code: 'account_exists' };
+  }
+  const slot = await reserveEmailCode('sign-in', view.email, requestHeaders);
+  if (!slot.allowed) return { ...fail(slot.message), code: 'code_sent_recently', retryAfterSeconds: slot.retryAfterSeconds };
+  try {
+    await mailInviteJoinCode(view.email);
+  } catch (error: unknown) {
+    console.error('[portal] requestInviteCodeAction could not mail the code', error);
+    return fail('We could not send the code. Try again.');
+  }
+  return { ok: true };
 }
 
 const changeEmailSchema = z.object({ email: z.string().max(320) });
@@ -677,6 +813,10 @@ export async function changeUnverifiedEmailAction(input: unknown): Promise<Signu
       await tx.delete(verification).where(sql`${verification.identifier} LIKE ${`%${oldEmail}`}`);
       // Receipts went to the old address by default. Move them along, only where this person set it.
       const orgs = await tx.select({ orgId: member.organizationId }).from(member).where(eq(member.userId, userId));
+      // Mail that was queued for the old address (the welcome email of the trial) follows the
+      // person, and one that already left is sent again to the right address (review round 5).
+      // The old address is a typo: it may be a stranger's mailbox.
+      await moveQueuedEmails(tx, { orgIds: orgs.map((row) => row.orgId), from: oldEmail, to: email });
       if (orgs.length > 0) {
         await tx
           .update(billingAccounts)
@@ -731,7 +871,7 @@ export async function changeUnverifiedEmailAction(input: unknown): Promise<Signu
   } catch (error: unknown) {
     if (errorStatus(error) === 429) {
       revalidatePath('/', 'layout');
-      return { ok: true, error: 'Your email is changed. We sent many codes already, so wait 10 minutes, then press Send a new code.' };
+      return { ok: true, error: `Your email is changed. ${errorMessage(error) ?? 'We sent many codes already, so wait 10 minutes, then press Send a new code.'}` };
     }
     console.error('[portal] could not send a code to the new address', error);
   }
@@ -766,8 +906,23 @@ export async function acceptInviteAction(input: unknown): Promise<SignupActionRe
   if (fresh?.emailVerified !== true) {
     // An address nobody has proven yet, and no link from the invite email: the invite stays where
     // it is (review round 4). The link proves the mailbox, and so does the emailed code.
-    if (!(await inviteProofValid(view.id, view.email))) return { ...fail(NEEDS_INVITE_LINK), code: 'needs_invite_link' };
-    await markEmailVerified(session.user.id);
+    if (await inviteProofValid(view.id, view.email)) {
+      await markEmailVerified(session.user.id);
+    } else {
+      // No link from the email: the code mailed to the invited address proves it just as well
+      // (review round 5). It is the normal verification code, checked by the normal door.
+      const code = cleanCode(parsed.data.code ?? '');
+      if (code.length !== 6) return { ...fail(NEEDS_INVITE_LINK), code: 'needs_invite_link' };
+      try {
+        await emailCodeApi().verifyEmailOTP({ body: { email: view.email, otp: code }, headers: requestHeaders });
+      } catch (error: unknown) {
+        if (!(error instanceof APIError)) {
+          console.error('[portal] acceptInviteAction could not check the code', error);
+          return fail(NO_NETWORK);
+        }
+        return fail(codeError(error));
+      }
+    }
     // Read the person fresh from the database from here on, so the new cookie says "verified".
     requestHeaders = withoutSessionCache(requestHeaders);
   }

@@ -526,11 +526,11 @@ export function BulkView({
                         <>
                           <span className="text-fg-muted">{weekdayName(row.date).slice(0, 3)}</span>
                           {entry ? (
-                            <Badge tone="warning" size="sm">
+                            <Badge tone="warning">
                               Replaces what is logged
                             </Badge>
                           ) : row.jobId && !isBlank(row.values) ? (
-                            <Badge tone="success" size="sm">
+                            <Badge tone="success">
                               New
                             </Badge>
                           ) : null}

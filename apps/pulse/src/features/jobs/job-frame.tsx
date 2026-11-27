@@ -54,6 +54,8 @@ import { JobMaterials } from './job-materials';
 import { JobMoneyIn } from './job-money-in';
 import { JobOverview } from './job-overview';
 import { JobPlan } from './job-plan';
+import { ProgramBadge, ProgramJobBanner, ProgramPlanNote } from './job-program';
+import { programJobTabs, type JobProgramPageDTO } from './program-job';
 import { JobStatusBadge, RiskPill } from './job-ui';
 import { JobWork } from './job-work';
 import { STATUS_MOVES, callAction, statusMoveLabel, useJobActions } from './use-job-actions';
@@ -69,6 +71,8 @@ export interface JobFrameProps {
   readonly laborClasses: readonly LaborClassDTO[];
   readonly services: readonly VasServiceDTO[];
   readonly jobTypes: readonly JobTypeDTO[];
+  /** Set for a program job (PULSE_PROGRAMS_SPEC 5.3): it lives under Programs, and its plan and prices come from the program. */
+  readonly program?: JobProgramPageDTO | null;
 }
 
 export function JobFrame({
@@ -79,6 +83,7 @@ export function JobFrame({
   laborClasses,
   services,
   jobTypes,
+  program = null,
 }: JobFrameProps) {
   const shell = useShell();
   const router = useRouter();
@@ -120,15 +125,35 @@ export function JobFrame({
     });
   };
 
-  const tabs = JOB_TABS.filter((id) => shell.seesMoney || !MONEY_TABS.includes(id));
-  const tabProps = { job, today, settings, laborClasses, services };
+  // A program job has no Plan vs actual: its plan comes from the program in Projects.
+  const tabs = programJobTabs(JOB_TABS, Boolean(program)).filter((id) => shell.seesMoney || !MONEY_TABS.includes(id));
+  const tabProps = { job, today, settings, laborClasses, services, program };
+  // The front page of a program job goes to its program, so its Overview tab keeps `?view=job`.
+  const tabHref = (id: JobTab): string => (program && id === 'overview' ? routes.programJob(job.number) : routes.jobTab(job.number, id));
   const ownerName = people.data?.find((person) => person.id === job.ownerId)?.name;
 
   return (
     <Page
       title={job.name}
-      subtitle={`${job.number} · ${job.clientName} · ${job.jobTypeName}${job.siteName ? ` · ${job.siteName}` : ''}`}
-      breadcrumbs={[{ label: 'Jobs', href: routes.jobs() }, { label: job.number }]}
+      subtitle={
+        <>
+          {job.number} ·{' '}
+          <Link
+            href={routes.client(job.clientId)}
+            className="text-fg-secondary hover:text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            data-testid="job-client-link"
+          >
+            {job.clientName}
+          </Link>{' '}
+          · {job.jobTypeName}
+          {job.siteName ? ` · ${job.siteName}` : ''}
+        </>
+      }
+      breadcrumbs={
+        program
+          ? [{ label: 'Programs', href: routes.programs() }, { label: program.program.key, href: program.program.path }, { label: job.number }]
+          : [{ label: 'Jobs', href: routes.jobs() }, { label: job.number }]
+      }
       actions={
         <>
           {shell.can('production:log') && job.status !== 'completed' && job.status !== 'cancelled' ? (
@@ -185,6 +210,13 @@ export function JobFrame({
                 <DropdownMenuItem
                   variant="danger"
                   icon={<Trash2 aria-hidden />}
+                  // Projects owns the program link, so the server refuses the delete until it is gone (SPEC 6.1).
+                  disabled={Boolean(job.program)}
+                  description={
+                    job.program
+                      ? `${job.program.key ?? 'A program'} bills to this job. Remove the link in Projects first.`
+                      : undefined
+                  }
                   onSelect={() => actions.askRemove(job)}
                   data-testid="job-delete"
                 >
@@ -234,6 +266,7 @@ export function JobFrame({
               </span>
             ) : null}
             <RiskPill job={job} />
+            {job.program ? <ProgramBadge program={job.program} /> : null}
 
             {canManage ? (
               <DropdownMenu>
@@ -349,14 +382,9 @@ export function JobFrame({
               </span>
             ) : null}
 
-            <Link
-              href={routes.client(job.clientId)}
-              className="inline-flex h-7 items-center rounded-md px-1.5 text-sm text-primary-text hover:underline pointer-coarse:h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            >
-              {job.clientName}
-            </Link>
             {job.links
-              .filter((link) => link.url || link.title)
+              // The Program badge above already names the program and its builds.
+              .filter((link) => (link.url || link.title) && !(job.program && (link.targetType === 'pm_program' || link.targetType === 'pm_build')))
               .slice(0, 3)
               .map((link) =>
                 link.url ? (
@@ -387,13 +415,14 @@ export function JobFrame({
           <RouteTabs
             label="Job sections"
             active={tab}
-            tabs={tabs.map((id) => ({ id, label: JOB_TAB_LABELS[id], href: routes.jobTab(job.number, id) }))}
+            tabs={tabs.map((id) => ({ id, label: JOB_TAB_LABELS[id], href: tabHref(id) }))}
           />
         </div>
       }
     >
+      {program ? <ProgramJobBanner program={program.program} /> : null}
       {tab === 'overview' ? <JobOverview {...tabProps} /> : null}
-      {tab === 'plan' ? <JobPlan {...tabProps} /> : null}
+      {tab === 'plan' ? program ? <ProgramPlanNote job={job} program={program.program} /> : <JobPlan {...tabProps} /> : null}
       {tab === 'work' ? <JobWork {...tabProps} /> : null}
       {tab === 'materials' ? <JobMaterials {...tabProps} /> : null}
       {tab === 'money-in' ? <JobMoneyIn {...tabProps} /> : null}

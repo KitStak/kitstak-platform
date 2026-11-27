@@ -1,5 +1,6 @@
 'use client';
 import { Dialog, DialogBody, DialogContent, DialogHeader, Kbd, useModKey } from '@/components/ui';
+import { useShell } from './shell-context';
 import { useShellStore } from './store';
 
 /** Every keyboard shortcut, registered by the shell and by pages. Keep in step with use-shell-hotkeys and the log grid. */
@@ -20,11 +21,12 @@ export const SHORTCUT_GROUPS: readonly { title: string; items: readonly { keys: 
     items: [
       { keys: ['G', 'H'], label: 'Home' },
       { keys: ['G', 'J'], label: 'Jobs' },
+      { keys: ['G', 'R'], label: 'Programs' },
       { keys: ['G', 'L'], label: 'Log work' },
       { keys: ['G', 'P'], label: 'Profit' },
       { keys: ['G', 'A'], label: 'Alerts' },
       { keys: ['G', 'B'], label: 'Labor' },
-      { keys: ['G', 'R'], label: 'Reports' },
+      { keys: ['G', 'E'], label: 'Reports' },
       { keys: ['G', 'T'], label: 'Target pace' },
       { keys: ['G', 'C'], label: 'Calculator' },
       { keys: ['G', 'O'], label: 'Goals' },
@@ -48,13 +50,16 @@ export function ShortcutsDialog() {
   const open = useShellStore((state) => state.shortcutsOpen);
   const close = useShellStore((state) => state.closeShortcuts);
   const mod = useModKey();
+  const { programs } = useShell();
+  // Programs has a shortcut only where the program tracker is on.
+  const groups = programs ? SHORTCUT_GROUPS : SHORTCUT_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => item.label !== 'Programs') }));
   return (
     <Dialog open={open} onOpenChange={(value) => (value ? undefined : close())}>
       <DialogContent size="lg" data-testid="shortcuts-dialog">
         <DialogHeader title="Keyboard shortcuts" />
         <DialogBody className="relative pb-0">
           <div className="columns-1 gap-8 sm:columns-2 lg:columns-3">
-            {SHORTCUT_GROUPS.map((group) => (
+            {groups.map((group) => (
               <section key={group.title} className="mb-6 break-inside-avoid">
                 <h3 className="mb-2 text-xs font-semibold tracking-[0.06em] text-fg-muted uppercase">{group.title}</h3>
                 <ul className="flex flex-col gap-1.5">

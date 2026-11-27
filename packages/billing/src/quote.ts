@@ -32,7 +32,7 @@ export interface QuoteLine {
   /** unitCents x quantity. */
   readonly amountCents: number;
   readonly priceKey: PriceKey;
-  /** 'CRM: 5 users x $29 = $145 per month'. Pulse: 'Pulse: $29 per month for your whole team, up to 5 seats'. */
+  /** 'CRM: 5 users x $29 = $145 per month'. Pulse alone: 'Pulse: $29 per month for your whole team, up to 5 seats'. With CRM or Projects the line ends at 'team'. */
   readonly math: string;
 }
 
@@ -58,11 +58,15 @@ export interface Quote {
   readonly pulseSeatNote: string | null;
 }
 
-function mathLine(product: ProductId, quantity: number, unitLabel: string): string {
+/**
+ * `seatsFromPlan`: the plan has an app priced per seat (CRM or Projects). The flat price then
+ * covers every seat in the plan (`seatLimitFor`), so the line does not say "up to 5 seats".
+ */
+function mathLine(product: ProductId, quantity: number, unitLabel: string, seatsFromPlan: boolean): string {
   const pricing = CATALOG.products[product];
   const list = formatMoney(pricing.cents.monthly, { trimZeroCents: true });
   if (pricing.quantityFrom === 'flat') {
-    const seats = pricing.includedSeats === null ? '' : `, up to ${pricing.includedSeats} seats`;
+    const seats = pricing.includedSeats === null || seatsFromPlan ? '' : `, up to ${pricing.includedSeats} seats`;
     return `${pricing.shortName}: ${list} per month for your whole team${seats}`;
   }
   const amount = formatMoney(pricing.cents.monthly * quantity, { trimZeroCents: true });
@@ -74,6 +78,7 @@ export function quote(selection: PlanSelection): Quote {
   const normalized = normalizeSelection(selection);
   const bundle = isBundle(normalized.products);
   const periodMonths: 1 | 12 = normalized.interval === 'yearly' ? 12 : 1;
+  const seatsFromPlan = normalized.products.some((id) => CATALOG.products[id].quantityFrom === 'seats');
 
   let listMonthlyCents = 0;
   let beforeBundleCents = 0;
@@ -93,7 +98,7 @@ export function quote(selection: PlanSelection): Quote {
       unitCents: unit,
       amountCents: unit * quantity,
       priceKey: priceKey(product, normalized.interval, bundle),
-      math: mathLine(product, quantity, unitLabel),
+      math: mathLine(product, quantity, unitLabel, seatsFromPlan),
     };
   });
 

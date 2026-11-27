@@ -1,5 +1,9 @@
-/** Badge tone for a role pill: privileged roles stand out, limited roles stay quiet. */
-export type RoleTone = 'solid' | 'info' | 'success' | 'warning' | 'neutral' | 'primary';
+/**
+ * Badge tone for a role. A role name is an identity, not a state (docs/design/UI-CLEANUP.md
+ * "Pills"), so roles stay neutral. Only privileged roles (admin, owner) get the info tone so
+ * they can be found at a glance; no role reads as a warning, success or danger.
+ */
+export type RoleTone = 'info' | 'neutral';
 
 export function roleTone(role: {
   readonly key?: string | null;
@@ -8,12 +12,6 @@ export function roleTone(role: {
 }): RoleTone {
   const key = (role.key ?? '').toLowerCase();
   const name = role.name.toLowerCase();
-  const category = (role.category ?? '').toLowerCase();
-  if (key === 'admin' || key === 'owner' || /\b(admin|owner|administrator)\b/.test(name)) return 'solid';
-  if (category === 'client' || /\bclient\b/.test(name)) return 'warning';
-  if (key === 'viewer' || /\b(viewer|read[- ]?only)\b/.test(name)) return 'neutral';
-  if (key === 'manager' || /\b(manager|supervisor|lead)\b/.test(name)) return 'info';
-  if (key === 'operator' || /\b(clerk|operator|picker|packer)\b/.test(name)) return 'success';
-  // Custom roles read as neutral metadata, never as a warning or danger tone.
+  if (key === 'admin' || key === 'owner' || /\b(admin|owner|administrator)\b/.test(name)) return 'info';
   return 'neutral';
 }

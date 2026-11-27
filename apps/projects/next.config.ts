@@ -42,7 +42,7 @@ const nextConfig: NextConfig = {
   devIndicators: { position: 'bottom-right' },
   reactStrictMode: true,
   // Workspace packages are shipped as TypeScript source; Next transpiles them.
-  transpilePackages: ['@kitstak/auth', '@kitstak/billing', '@kitstak/mail', '@kitstak/db', '@kitstak/entitlements', '@kitstak/pulse-bridge', '@kitstak/ui'],
+  transpilePackages: ['@kitstak/auth', '@kitstak/billing', '@kitstak/mail', '@kitstak/db', '@kitstak/entitlements', '@kitstak/programs-engine', '@kitstak/pulse-bridge', '@kitstak/ui'],
   serverExternalPackages: ['pg'],
   turbopack: {
     rules: {

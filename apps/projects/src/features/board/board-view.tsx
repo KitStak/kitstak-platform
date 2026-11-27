@@ -29,7 +29,6 @@ import { ChevronDown, ChevronLeft, ChevronRight, KanbanSquare, Plus } from 'luci
 import { Button, EmptyState, Skeleton, cn, toast } from '@/components/ui';
 import { PRIORITY_LABELS } from '@/lib/constants';
 import { addDaysIso, todayIso } from '@/lib/dates';
-import { useProjectTasks } from '@/lib/hooks/use-data';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { qk } from '@/lib/query-keys';
 import { NO_GROUP, sortTasks } from '@/lib/task-filters';
@@ -38,13 +37,15 @@ import { updateStatusAction } from '@/server/actions/structure';
 import { useCurrentProject } from '@/features/projects/project-context';
 import { useShellStore } from '@/features/shell/store';
 import { DisplayMenu } from '@/features/views/display-menu';
-import { useGroupMeta } from '@/features/views/group-meta';
+import { useGroupMeta, type GroupMeta } from '@/features/views/group-meta';
 import { useTaskLinksMap } from '@/features/views/link-chips';
 import { useStoredSet } from '@/features/views/use-stored-set';
 import { useTaskNav } from '@/features/views/use-task-nav';
 import { useTaskOps } from '@/features/views/use-task-ops';
 import { useViewState } from '@/features/views/use-view-state';
 import { ViewToolbar } from '@/features/views/view-toolbar';
+import { useTaskSource } from '@/features/views/task-source';
+import { useCardExtras } from '@/features/views/card-extras';
 import { GROUP_LABELS, ORDER_FIELDS, ORDER_LABELS, orderFieldOf, orderRules, SWIMLANES, type OrderField, type Swimlane } from '@/features/views/view-state';
 import { ViewCursor } from '@/features/task/view-cursor';
 import { LinkFilterBar, hasLinkLane, linkLaneKeys, useLinkFilter, useLinkLaneMeta } from '@/features/integrations/link-lanes';
@@ -142,7 +143,10 @@ const RECENT_DONE_DAYS = 14;
 export function BoardView() {
   const { project, statuses, statusById, labelById, capabilities } = useCurrentProject();
   const queryClient = useQueryClient();
-  const tasksQuery = useProjectTasks(project.key);
+  const tasksQuery = useTaskSource();
+  const extras = useCardExtras();
+  const extraFilter = extras.filter;
+  const [foldOpen, setFoldOpen] = useState(false);
   const view = useViewState('board');
   const ops = useTaskOps();
   const linksByTask = useTaskLinksMap(project.key);
@@ -152,18 +156,30 @@ export function BoardView() {
   const canCreate = capabilities['task:create'];
   const canManage = capabilities['structure:manage'];
   const all = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
+  const display = extras.display;
+  const extraOrder = display?.orders?.find((entry) => entry.value === display.order) ?? null;
+  const extraLane = display?.lanes?.find((entry) => entry.value === display.lane) ?? null;
   const order = orderFieldOf(view.settings.sort);
-  const manual = order === 'position';
-  const lane = view.settings.swimlane;
+  const manual = !extraOrder && order === 'position';
+  const lane: Swimlane = extraLane ? 'none' : view.settings.swimlane;
+  const swimlanes = lane !== 'none' || extraLane !== null;
   const fieldLaneMeta = useGroupMeta(lane === 'none' || lane === 'crm' || lane === 'wms' ? 'none' : lane, all);
   const linkLaneMeta = useLinkLaneMeta(lane, linksByTask);
   const linkFilter = useLinkFilter(linksByTask);
-  const laneMeta = linkLaneMeta ?? fieldLaneMeta;
+  const extraLaneMeta = useMemo<GroupMeta | null>(
+    () =>
+      extraLane
+        ? { field: 'none', order: [], info: (key: string) => extraLane.info(key), move: () => null, createDefaults: () => ({}), showEmpty: false }
+        : null,
+    [extraLane],
+  );
+  const laneMeta = extraLaneMeta ?? linkLaneMeta ?? fieldLaneMeta;
+  const keysOfTask = useCallback((task: TaskSummary) => (extraLane ? [extraLane.keyOf(task)] : laneKeysOf(task, lane, linksByTask)), [extraLane, lane, linksByTask]);
   const storedCollapsed = useStoredSet(`ks.projects.board.collapsed.${project.id}`);
   const expandedColumns = useStoredSet(`ks.projects.board.expanded.${project.id}`);
   const boardPrefs = useStoredSet(`ks.projects.board.prefs.${project.id}`);
   const recentDoneOnly = boardPrefs.has('recent-done');
-  const collapsedLanes = useStoredSet(`ks.projects.board.lanes.${project.id}.${lane}`);
+  const collapsedLanes = useStoredSet(`ks.projects.board.lanes.${project.id}.${extraLane ? `x-${extraLane.value}` : lane}`);
   const [composer, setComposer] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [live, setLive] = useState<ContainerMap | null>(null);
@@ -173,34 +189,50 @@ export function BoardView() {
 
   const visible = useMemo(() => {
     let shown = view.visible(all);
+    if (extraFilter) shown = shown.filter(extraFilter);
     if (linkFilter.key) shown = shown.filter((task) => linkFilter.matches(task));
     if (recentDoneOnly) {
       // "Done in the last 14 days": older finished work leaves the board but stays in List and Table.
       const cutoff = addDaysIso(todayIso(), -RECENT_DONE_DAYS);
       shown = shown.filter((task) => !(task.statusCategory === 'done' || task.statusCategory === 'cancelled') || !task.completedAt || task.completedAt.slice(0, 10) >= cutoff);
     }
+    if (extraOrder) return [...shown].sort(extraOrder.compare);
     return sortTasks(shown, manual ? [{ field: 'position', dir: 'asc' }] : orderRules(order));
-  }, [all, linkFilter, manual, order, recentDoneOnly, view]);
+  }, [all, extraFilter, extraOrder, linkFilter, manual, order, recentDoneOnly, view]);
+  /** Done cards older than the range fold into "Done earlier (n)" at the top of Done (programs). */
+  const foldBefore = extras.foldBefore;
+  const folded = useMemo(() => {
+    const ids = new Set<string>();
+    if (!foldBefore) return ids;
+    for (const task of visible) if (task.statusCategory === 'done' && foldBefore(task)) ids.add(task.id);
+    return ids;
+  }, [foldBefore, visible]);
+  const foldedByStatus = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of visible) if (folded.has(task.id)) counts.set(task.statusId, (counts.get(task.statusId) ?? 0) + 1);
+    return counts;
+  }, [folded, visible]);
   const taskById = useMemo(() => new Map(all.map((task) => [task.id, task])), [all]);
 
   const lanes = useMemo<string[]>(() => {
-    if (lane === 'none') return ['all'];
+    if (!swimlanes) return ['all'];
     const present = new Set<string>();
-    for (const task of visible) for (const key of laneKeysOf(task, lane, linksByTask)) present.add(key);
-    const keys = laneMeta.order.filter((key) => present.has(key));
+    for (const task of visible) for (const key of keysOfTask(task)) present.add(key);
+    const keys = (extraLane ? extraLane.order(visible) : laneMeta.order).filter((key) => present.has(key));
     return keys.length ? keys : [];
-  }, [lane, laneMeta.order, linksByTask, visible]);
+  }, [extraLane, keysOfTask, laneMeta, swimlanes, visible]);
 
   const baseIds = useMemo<ContainerMap>(() => {
     const map: ContainerMap = new Map();
     for (const laneKey of lanes) for (const status of statuses) map.set(cellId(laneKey, status.id), []);
     for (const task of visible) {
-      for (const laneKey of laneKeysOf(task, lane, linksByTask)) {
+      if (!foldOpen && folded.has(task.id)) continue;
+      for (const laneKey of swimlanes ? keysOfTask(task) : ['all']) {
         map.get(cellId(laneKey, task.statusId))?.push(cardId(laneKey, task.id));
       }
     }
     return map;
-  }, [lane, lanes, linksByTask, statuses, visible]);
+  }, [folded, foldOpen, keysOfTask, lanes, statuses, swimlanes, visible]);
   const shownIds = live ?? baseIds;
 
   const columnCounts = useMemo(() => {
@@ -213,7 +245,7 @@ export function BoardView() {
    * count) unless you expanded them. This keeps every working column on screen at 1440px.
    */
   const collapsedColumns = useMemo(() => {
-    const auto = (id: string) => statusById.get(id)?.category === 'cancelled' && !(columnCounts.get(id) ?? 0);
+    const auto = (id: string) => (display?.collapseEmptyColumns || statusById.get(id)?.category === 'cancelled') && !(columnCounts.get(id) ?? 0);
     const has = (id: string) => storedCollapsed.has(id) || (auto(id) && !expandedColumns.has(id));
     return {
       has,
@@ -222,7 +254,7 @@ export function BoardView() {
         else storedCollapsed.toggle(id);
       },
     };
-  }, [columnCounts, expandedColumns, statusById, storedCollapsed]);
+  }, [columnCounts, display?.collapseEmptyColumns, expandedColumns, statusById, storedCollapsed]);
   /** Work-in-progress limits always count every top-level task in the status (filters don't hide work). */
   const wipCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -240,8 +272,8 @@ export function BoardView() {
     if (!container) return 'a column';
     const { lane: laneKey, statusId } = parseCell(container);
     const status = statusById.get(statusId)?.name ?? 'a column';
-    return lane === 'none' ? status : `${status}, ${laneMeta.info(laneKey).title}`;
-  }, [lane, laneMeta, statusById]);
+    return !swimlanes ? status : `${status}, ${laneMeta.info(laneKey).title}`;
+  }, [laneMeta, statusById, swimlanes]);
   const titleOf = useCallback((id: string) => taskById.get(taskIdOf(id))?.title ?? 'task', [taskById]);
 
   const reset = () => {
@@ -288,12 +320,21 @@ export function BoardView() {
     const moved = from !== to;
     if (!moved && index === originalIndex) return reset();
     if (!moved && !manual) {
-      toast.info(`Cards are ordered by ${ORDER_LABELS[order].toLowerCase()}`, 'Switch “Order cards by” to Manual in Display to arrange them yourself.');
+      toast.info(`Cards are ordered by ${(extraOrder?.label ?? ORDER_LABELS[order]).toLowerCase()}`, 'Switch “Order cards by” to Manual in Display to arrange them yourself.');
       return reset();
     }
     const target = parseCell(to);
     const source = parseCell(from);
-    const laneMove = lane !== 'none' && source.lane !== target.lane ? laneMeta.move(task, source.lane, target.lane) : null;
+    if (extraLane && source.lane !== target.lane) {
+      // Page lanes (variant, day) move through the page: it changes the build, then the status.
+      const accepted = extraLane.move?.(task, target.lane) ?? false;
+      if (!accepted) {
+        toast.info(`Cards can't move between ${extraLane.label.toLowerCase()} lanes here`, 'Open the card to change it.');
+        return reset();
+      }
+      if (target.statusId === task.statusId) return reset();
+    }
+    const laneMove = !extraLane && lane !== 'none' && source.lane !== target.lane ? laneMeta.move(task, source.lane, target.lane) : null;
     const siblings = ids.filter((id) => id !== activeId).map((id) => taskById.get(taskIdOf(id))).filter((entry): entry is TaskSummary => Boolean(entry));
     const neighbours = manual ? { above: siblings[index - 1] ?? null, below: siblings[index] ?? null } : undefined;
     const status = statusById.get(target.statusId);
@@ -376,7 +417,6 @@ export function BoardView() {
   const draggingTask = dragId ? taskById.get(taskIdOf(dragId)) : undefined;
   const overContainer = dragId && live ? containerOf(live, dragId) : undefined;
   const isFiltered = view.activeFilterCount > 0;
-  const swimlanes = lane !== 'none';
 
   const renderCards = (container: string) =>
     (shownIds.get(container) ?? []).map((id) => {
@@ -399,8 +439,26 @@ export function BoardView() {
       );
     });
 
+  const foldToggle = (statusId: string) => {
+    const count = foldedByStatus.get(statusId) ?? 0;
+    if (!count) return null;
+    return (
+      <button
+        type="button"
+        onClick={() => setFoldOpen((open) => !open)}
+        aria-expanded={foldOpen}
+        className="flex h-8 w-full shrink-0 items-center gap-1.5 rounded-lg border border-dashed border-border-default bg-panel/60 px-2.5 text-xs font-medium text-fg-secondary outline-none hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
+        data-testid="board-done-fold"
+      >
+        {foldOpen ? <ChevronDown aria-hidden className="size-3.5 text-icon" /> : <ChevronRight aria-hidden className="size-3.5 text-icon" />}
+        <span>{foldOpen ? 'Hide done earlier' : 'Done earlier'}</span>
+        <span className="ml-auto text-fg-muted tabular-nums">{count}</span>
+      </button>
+    );
+  };
+
   const addButton = (laneKey: string, statusId: string, label: string) =>
-    canCreate ? (
+    canCreate && !extras.hideCreate ? (
       composer === cellId(laneKey, statusId) ? (
         <div className="px-1.5 pb-1.5">
           <BoardComposer label={`New task in ${label}`} onAdd={(title) => addTask(laneKey, statusId, title)} onClose={() => setComposer(null)} />
@@ -426,30 +484,69 @@ export function BoardView() {
       status={status}
       count={columnCounts.get(status.id) ?? 0}
       wipCount={wipCounts.get(status.id) ?? 0}
-      canCreate={canCreate}
+      canCreate={canCreate && !extras.hideCreate}
       canManage={canManage}
       sticky={sticky}
       onAdd={() => (swimlanes ? openQuickAdd({ projectId: project.id, statusId: status.id }) : setComposer(cellId('all', status.id)))}
+      onAddBuild={extras.hideCreate ? undefined : () => openQuickAdd({ projectId: project.id, statusId: status.id, mode: 'build', text: `build +${project.key} ` })}
       onCollapse={() => collapsedColumns.toggle(status.id)}
       onWipLimit={(limit) => void setWip(status.id, limit)}
     />
   );
 
-  const laneOptions = SWIMLANES.filter((value) => (value === 'crm' || value === 'wms' ? value === lane || hasLinkLane(value, linksByTask) : true)).map((value) => ({
-    value,
-    label: value === 'none' ? 'No swimlanes' : GROUP_LABELS[value] ?? value,
-  }));
+  const sharedLanes = display?.sharedLanes;
+  const laneOptions = [
+    ...SWIMLANES.filter((value) => (value === 'crm' || value === 'wms' ? value === lane || hasLinkLane(value, linksByTask) : true))
+      .filter((value) => !sharedLanes || value === 'none' || sharedLanes.includes(value))
+      .map((value) => ({ value: value as string, label: value === 'none' ? 'No swimlanes' : GROUP_LABELS[value] ?? value })),
+  ];
+  if (display?.lanes) laneOptions.splice(1, 0, ...display.lanes.map((entry) => ({ value: `x:${entry.value}`, label: entry.label })));
+  const orderOptions = [
+    ...(display?.orders ?? []).map((entry) => ({ value: `x:${entry.value}`, label: entry.label })),
+    ...ORDER_FIELDS.filter((value) => !display?.orders || value === 'position' || value === 'createdAt').map((value) => ({ value: value as string, label: ORDER_LABELS[value] })),
+  ];
+  const noun = extras.noun?.plural ?? 'tasks';
+  const laneSummary = extraLane ? `Lanes: ${extraLane.label}` : lane !== 'none' ? `Lanes: ${GROUP_LABELS[lane]}` : null;
+  const orderSummary = extraOrder ? `Order: ${extraOrder.label}` : !manual ? `Order: ${ORDER_LABELS[order].split(' (')[0]}` : null;
   const controls = ({ iconOnly }: { iconOnly: boolean }) => (
     <DisplayMenu
       iconOnly={iconOnly}
-      summary={[lane !== 'none' ? `Lanes: ${GROUP_LABELS[lane]}` : null, !manual ? `Order: ${ORDER_LABELS[order].split(' (')[0]}` : null].filter(Boolean).join(' · ') || null}
+      summary={[laneSummary, orderSummary].filter(Boolean).join(' · ') || null}
       choices={[
-        { label: 'Swimlanes', value: lane, options: laneOptions, onChange: (value) => view.setSettings({ swimlane: value as Swimlane }), testId: 'swimlane' },
-        { label: 'Order cards by', value: order, options: ORDER_FIELDS.map((value) => ({ value, label: ORDER_LABELS[value] })), onChange: (value) => view.setSettings({ sort: orderRules(value as OrderField) }), testId: 'order' },
+        {
+          label: 'Swimlanes',
+          value: extraLane ? `x:${extraLane.value}` : lane,
+          options: laneOptions,
+          onChange: (value) => {
+            if (value.startsWith('x:')) {
+              display?.onLaneChange?.(value.slice(2));
+              if (view.settings.swimlane !== 'none') view.setSettings({ swimlane: 'none' });
+              return;
+            }
+            display?.onLaneChange?.(null);
+            view.setSettings({ swimlane: value as Swimlane });
+          },
+          testId: 'swimlane',
+        },
+        {
+          label: 'Order cards by',
+          value: extraOrder ? `x:${extraOrder.value}` : order,
+          options: orderOptions,
+          onChange: (value) => {
+            if (value.startsWith('x:')) {
+              display?.onOrderChange?.(value.slice(2));
+              return;
+            }
+            display?.onOrderChange?.(null);
+            view.setSettings({ sort: orderRules(value as OrderField) });
+          },
+          testId: 'order',
+        },
       ]}
       toggles={[
-        { label: 'Done tasks', checked: view.settings.showCompleted, onChange: (checked) => view.setSettings({ showCompleted: checked }), testId: 'toggle-done' },
-        { label: 'Subtasks as cards', checked: view.settings.showSubtasks, onChange: (checked) => view.setSettings({ showSubtasks: checked }), testId: 'toggle-subtasks' },
+        ...(display?.toggles ?? []),
+        { label: `Done ${noun}`, checked: view.settings.showCompleted, onChange: (checked) => view.setSettings({ showCompleted: checked }), testId: 'toggle-done' },
+        ...(display ? [] : [{ label: 'Subtasks as cards', checked: view.settings.showSubtasks, onChange: (checked: boolean) => view.setSettings({ showSubtasks: checked }), testId: 'toggle-subtasks' }]),
         { label: `Only done in the last ${RECENT_DONE_DAYS} days`, checked: recentDoneOnly, onChange: () => boardPrefs.toggle('recent-done'), testId: 'toggle-recent-done' },
       ]}
     />
@@ -476,7 +573,11 @@ export function BoardView() {
   }
 
   const banner =
-    all.length === 0 ? (
+    all.length === 0 && extras.renderEmpty ? (
+      extras.renderEmpty()
+    ) : visible.length === 0 && extras.renderEmpty && !isFiltered ? (
+      extras.renderEmpty()
+    ) : all.length === 0 ? (
       <div className="mx-4 mt-3 flex items-center gap-3 rounded-lg border border-border-subtle bg-panel px-4 py-3 text-sm sm:mx-6" data-testid="board-empty">
         <KanbanSquare aria-hidden className="size-5 shrink-0 text-icon" />
         <span className="min-w-0 flex-1 text-fg-secondary">
@@ -539,6 +640,7 @@ export function BoardView() {
                     <section key={status.id} aria-label={`${status.name}, ${columnCounts.get(status.id) ?? 0} tasks`} data-testid="board-column" data-status-id={status.id} className={cn('flex h-full shrink-0 snap-start flex-col rounded-xl bg-sunken', COLUMN_WIDTH)}>
                       {header(status, false)}
                       <BoardCell containerId={container} cardIds={shownIds.get(container) ?? []} isOver={overContainer === container && dragId !== null} dragging={dragId !== null} fill footer={addButton('all', status.id, status.name)}>
+                        {status.category === 'done' ? foldToggle(status.id) : null}
                         {renderCards(container)}
                       </BoardCell>
                     </section>

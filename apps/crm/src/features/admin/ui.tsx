@@ -107,9 +107,9 @@ export function SettingRow({
   );
 }
 
+/** A role is an identity, not a state: one neutral pill for every role (UI-CLEANUP.md, "Pills"). */
 export function RoleBadge({ role }: { readonly role: OrgRole }) {
-  const tone = role === 'owner' ? 'primary' : role === 'admin' ? 'info' : role === 'guest' ? 'warning' : 'neutral';
-  return <Badge tone={tone}>{ROLE_LABEL[role]}</Badge>;
+  return <Badge>{ROLE_LABEL[role]}</Badge>;
 }
 
 /** Inline error panel with retry (never raw JSON). */
@@ -173,32 +173,6 @@ export function TableSkeleton({ rows = 6, columns = 4 }: { readonly rows?: numbe
   );
 }
 
-/** Metric tile for usage / overview. */
-export function StatTile({
-  label,
-  value,
-  hint,
-  icon,
-  testId,
-}: {
-  readonly label: string;
-  readonly value: ReactNode;
-  readonly hint?: ReactNode;
-  readonly icon?: ReactNode;
-  readonly testId?: string;
-}) {
-  return (
-    <div data-testid={testId} className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-panel p-4 shadow-xs">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-fg-secondary">{label}</span>
-        {icon ? <span className="text-icon [&_svg]:size-4">{icon}</span> : null}
-      </div>
-      <span className="text-2xl font-semibold text-fg tabular-nums">{value}</span>
-      {hint ? <span className="text-sm text-fg-muted">{hint}</span> : null}
-    </div>
-  );
-}
-
 /** Small "demo / not available in this build" label. */
 export function DemoBadge({ children = 'Demo' }: { readonly children?: ReactNode }) {
   return <Badge tone="warning">{children}</Badge>;
@@ -210,7 +184,8 @@ export const TABLE_CELL = 'px-4 py-2.5 align-middle first:pl-5 last:pr-5';
 export const TABLE_ROW = 'border-b border-border-subtle transition-colors duration-[var(--duration-instant)] last:border-b-0 hover:bg-hover';
 
 /**
- * Top-of-page title shared by Admin, Profile and Trash so H1 size, icon tile and rhythm match.
+ * Top-of-page title shared by Admin, Profile and Trash so H1 size, icon and rhythm match. The icon
+ * sits in a plain outlined square in the muted icon color: no tint, never crimson (UI-CLEANUP.md).
  */
 export function PageTitle({
   title,
@@ -227,7 +202,7 @@ export function PageTitle({
     <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-6">
       <div className="flex min-w-0 items-center gap-3">
         {icon ? (
-          <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-subtle text-primary-text [&_svg]:size-5">
+          <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border-subtle bg-panel text-icon [&_svg]:size-5">
             {icon}
           </span>
         ) : null}

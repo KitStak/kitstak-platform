@@ -271,7 +271,7 @@ describe('timeline copy', () => {
         lineLabel: 'B-1',
         parentEntityType: 'count_plan',
       }),
-    ).toBe('B-1: Recount line created (Ready to Count)');
+    ).toBe('B-1: Recount line created (Ready to count)');
     expect(
       countChangeMessage({
         type: 'Update',
@@ -283,6 +283,6 @@ describe('timeline copy', () => {
         lineLabel: null,
         parentEntityType: null,
       }),
-    ).toBe('Status changed from Pending to Ready to Count');
+    ).toBe('Status changed from Pending to Ready to count');
   });
 });

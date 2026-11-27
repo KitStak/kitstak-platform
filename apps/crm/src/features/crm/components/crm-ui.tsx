@@ -1,5 +1,5 @@
 'use client';
-/** Small CRM building blocks: cards, metric tiles, stage pills, user chips, error blocks. */
+/** Small CRM building blocks: cards, stage pills, user chips, error blocks. KPI tiles are the shared StatTile. */
 import type { ReactNode } from 'react';
 import { AlertTriangle, RotateCw } from 'lucide-react';
 import {
@@ -7,7 +7,6 @@ import {
   Button,
   Skeleton,
   StatusPill,
-  Tooltip,
   cn,
   labelColorStyle,
   toLabelColor,
@@ -53,47 +52,6 @@ export function CrmCard({
       </header>
       <div className={cn('min-w-0 flex-1', bodyClassName ?? 'p-4 sm:p-5')}>{children}</div>
     </section>
-  );
-}
-
-export function MetricTile({
-  label,
-  value,
-  exact,
-  hint,
-  tone = 'default',
-  testId,
-}: {
-  readonly label: string;
-  readonly value: string;
-  readonly exact?: string;
-  readonly hint?: ReactNode;
-  readonly tone?: 'default' | 'primary' | 'success' | 'danger';
-  readonly testId?: string;
-}) {
-  const valueNode = (
-    <span
-      tabIndex={exact ? 0 : undefined}
-      className={cn(
-        'rounded-sm text-xl font-semibold tabular-nums tracking-[-0.01em] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-        tone === 'primary' && 'text-primary-text',
-        tone === 'success' && 'text-success-text',
-        tone === 'danger' && 'text-danger-text',
-        tone === 'default' && 'text-fg',
-      )}
-    >
-      {value}
-    </span>
-  );
-  return (
-    <div
-      data-testid={testId}
-      className="flex min-w-0 flex-col gap-1 rounded-lg border border-border-subtle bg-panel px-4 py-3 shadow-xs transition-shadow duration-[var(--duration-fast)] hover:shadow-sm"
-    >
-      <span className="truncate text-sm font-medium text-fg-secondary">{label}</span>
-      {exact ? <Tooltip content={exact}>{valueNode}</Tooltip> : valueNode}
-      {hint ? <span className="truncate text-xs text-fg-muted">{hint}</span> : null}
-    </div>
   );
 }
 

@@ -25,8 +25,20 @@ export function jobPageTitle(ref: string, tab: JobTab): string {
   return tab === 'overview' ? ref.toUpperCase() : `${ref.toUpperCase()} · ${JOB_TAB_LABELS[tab]}`;
 }
 
-export const PROFIT_VIEWS = ['job', 'client', 'type', 'service', 'site', 'month', 'week', 'day'] as const;
+export const PROFIT_VIEWS = ['job', 'client', 'type', 'service', 'site', 'program', 'month', 'week', 'day'] as const;
 export type ProfitView = (typeof PROFIT_VIEWS)[number];
+
+/** Tabs of a program page (docs/programs/PULSE_PROGRAMS_SPEC.md 7.3), carried as `?tab=`. */
+export const PROGRAM_TABS = ['overview', 'variants', 'months', 'days', 'labor'] as const;
+export type ProgramTab = (typeof PROGRAM_TABS)[number];
+
+export const PROGRAM_TAB_LABELS: Readonly<Record<ProgramTab, string>> = {
+  overview: 'Overview',
+  variants: 'By variant',
+  months: 'By month',
+  days: 'Days',
+  labor: 'Labor',
+};
 
 export const LABOR_TABS = ['rates', 'time', 'cost'] as const;
 export type LaborTab = (typeof LABOR_TABS)[number];
@@ -71,6 +83,13 @@ export const routes = {
   logBulk: () => '/log/bulk',
   profit: (opts?: { by?: ProfitView; client?: string; jobType?: string; from?: string; to?: string }) =>
     withQuery('/profit', { by: opts?.by, client: opts?.client, jobType: opts?.jobType, from: opts?.from, to: opts?.to }),
+  /** The Programs list. `month` is `YYYY-MM` (this month when left out). */
+  programs: (opts?: { month?: string; q?: string }) => withQuery('/programs', { month: opts?.month ? opts.month.slice(0, 7) : undefined, q: opts?.q }),
+  /** One program page by key (`/programs/GLOVE`). `tab` is left out for the Overview; `month` is `YYYY-MM`. */
+  program: (key: string, opts?: { month?: string; tab?: ProgramTab }) =>
+    withQuery(`/programs/${encodeURIComponent(key)}`, { month: opts?.month ? opts.month.slice(0, 7) : undefined, tab: opts?.tab && opts.tab !== 'overview' ? opts.tab : undefined }),
+  /** The raw job page of a program job, without the redirect to its program (`?view=job`). */
+  programJob: (ref: string) => withQuery(`/jobs/${encodeURIComponent(ref)}`, { view: 'job' }),
   client: (id: string) => `/clients/${encodeURIComponent(id)}`,
   services: () => '/services',
   /**
@@ -89,7 +108,9 @@ export const routes = {
   alerts: () => '/alerts',
   alertRules: () => '/alerts/rules',
   reports: () => '/reports',
-  report: (slug: string) => `/reports/${encodeURIComponent(slug)}`,
+  /** A report. `client`, `from` and `to` open it already filtered to one client and those days. */
+  report: (slug: string, opts?: { client?: string; from?: string; to?: string }) =>
+    withQuery(`/reports/${encodeURIComponent(slug)}`, { client: opts?.client, from: opts?.from, to: opts?.to }),
   importCenter: () => '/import',
   newImport: (stream?: string) => withQuery('/import/new', { stream }),
   importBatch: (batchId: string) => `/import/${encodeURIComponent(batchId)}`,

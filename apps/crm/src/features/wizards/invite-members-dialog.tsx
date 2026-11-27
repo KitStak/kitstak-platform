@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react';
 import { SeatLimitLink, seatLimitKind } from '@/features/shell/seat-limit-link';
 import { Check, Copy, Mail, UserPlus } from 'lucide-react';
 import {
-  Badge,
+  CountBadge,
   Button,
   DialogBody,
   DialogContent,
@@ -112,7 +112,7 @@ export function InviteMembersDialog({ open, onClose }: InviteMembersDialogProps)
                 undoLabel: 'Copy invite link',
                 duration: 10_000,
                 onUndo: async () => {
-                  const ok = await copyText(inviteLink(window.location.origin, first.id));
+                  const ok = await copyText(inviteLink(window.location.origin, first.id, process.env.NEXT_PUBLIC_PORTAL_URL));
                   if (ok) toast.success('Invite link copied', `Send it to ${first.email}. They sign in with that email to join.`);
                   else toast.error('Couldn’t copy the link', 'Your browser blocked clipboard access. Copy it from Pending.');
                 },
@@ -164,7 +164,7 @@ export function InviteMembersDialog({ open, onClose }: InviteMembersDialogProps)
               </TabsTrigger>
               <TabsTrigger value="pending" data-testid="pending-tab" disabled={!canSeeMembers} className={TAB_FOCUS}>
                 Pending
-                {pendingCount ? <Badge size="sm" tone="primary">{pendingCount}</Badge> : null}
+                <CountBadge count={pendingCount} label="invitations" />
               </TabsTrigger>
             </TabsList>
             <TabsContent value="invite" className="flex min-h-0 flex-1 flex-col outline-none">
@@ -300,7 +300,7 @@ function PendingInvitations({
   }
 
   const copy = async (invitation: InvitationDto) => {
-    const ok = await copyText(inviteLink(window.location.origin, invitation.id));
+    const ok = await copyText(inviteLink(window.location.origin, invitation.id, process.env.NEXT_PUBLIC_PORTAL_URL));
     if (ok) {
       setCopied(invitation.id);
       toast.success('Invite link copied', `Send it to ${invitation.email}. They sign in with that email to join.`);

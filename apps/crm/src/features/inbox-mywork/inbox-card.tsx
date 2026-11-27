@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { memo, useId, useRef, useState } from 'react';
 import { AtSign, Check, ChevronRight, MessageSquare, ThumbsUp, Undo2 } from 'lucide-react';
-import { Avatar, Button, IconButton, Tooltip, cn } from '@/components/ui';
+import { Avatar, Badge, Button, IconButton, Tooltip, cn } from '@/components/ui';
 import { UpdateEditor, type UpdateEditorHandle } from '@/features/item-panel/updates/update-editor';
 import { docText, type RichDoc } from '@/features/item-panel/lib/rich-text';
 import { formatFullTime, formatShortTime } from '@/features/notifications/describe';
@@ -28,7 +28,7 @@ function UpdateText({
     <p className="text-base leading-[22px] whitespace-pre-line text-fg [overflow-wrap:anywhere]">
       {splitMentions(shown, names).map((part, index) =>
         part.mention ? (
-          <span key={index} className="rounded-xs bg-primary-subtle px-0.5 font-medium text-primary-text">
+          <span key={index} className="rounded-xs bg-info-subtle px-0.5 font-medium text-info-text">
             {part.text}
           </span>
         ) : (
@@ -77,7 +77,7 @@ function UnreadDot({ className, label }: { readonly className: string; readonly 
       role="img"
       aria-label={label}
       data-testid="inbox-unread-dot"
-      className={cn('absolute size-2 rounded-full bg-primary', className)}
+      className={cn('absolute size-2 rounded-full bg-info', className)}
     />
   );
 }
@@ -225,9 +225,9 @@ export const InboxCard = memo(function InboxCard({
               {formatShortTime(update.createdAt, now)}
             </time>
             {thread.mentionsMe ? (
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-primary-subtle px-1.5 text-xs font-medium text-primary-text">
-                <AtSign aria-hidden className="size-3" /> Mentioned you
-              </span>
+              <Badge tone="info" icon={<AtSign aria-hidden />}>
+                Mentioned you
+              </Badge>
             ) : null}
           </div>
           <nav
@@ -298,7 +298,7 @@ export const InboxCard = memo(function InboxCard({
         >
           Reply{replies.length ? ` · ${replies.length}` : ''}
           {newReplies > 0 ? (
-            <span className="font-semibold text-primary-text" data-testid="inbox-new-replies">
+            <span className="font-semibold text-fg" data-testid="inbox-new-replies">
               {`(${newReplies} new)`}
             </span>
           ) : null}

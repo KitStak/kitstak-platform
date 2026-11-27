@@ -128,11 +128,11 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
       </span>
     ) : item.canOpen ? (
       <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <a href={apiPath(`reports/runs/${item.id}`, { format: 'csv' })} download className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid={`run${suffix}-csv`}>
+        <a href={apiPath(`reports/runs/${item.id}`, { format: 'csv' })} download className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid={`run${suffix}-csv`}>
           <Download aria-hidden className="size-3.5" />
           CSV
         </a>
-        <a href={apiPath(`reports/runs/${item.id}`, { format: 'html' })} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid={`run${suffix}-html`}>
+        <a href={apiPath(`reports/runs/${item.id}`, { format: 'html' })} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid={`run${suffix}-html`}>
           <FileText aria-hidden className="size-3.5" />
           Page to print
         </a>
@@ -183,7 +183,7 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
                 <div className="flex items-start gap-3">
                   <div className="min-w-0 flex-1">
                     <span className="block truncate font-medium text-fg">{schedule.name}</span>
-                    <Link href={routes.report(schedule.report)} className="rounded-sm text-xs text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                    <Link href={routes.report(schedule.report)} className="rounded-sm text-xs text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                       {schedule.reportName}
                     </Link>
                     {schedule.includeMoney ? <span className="ml-2 text-xs text-fg-muted">with money</span> : null}
@@ -238,7 +238,7 @@ export function ReportsScheduled({ highlightRun }: { readonly highlightRun?: str
                     <TableRow key={schedule.id} data-testid="schedule-row">
                       <TableCell className="max-w-[260px]">
                         <span className="block truncate font-medium text-fg">{schedule.name}</span>
-                        <Link href={routes.report(schedule.report)} className="rounded-sm text-xs text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                        <Link href={routes.report(schedule.report)} className="rounded-sm text-xs text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                           {schedule.reportName}
                         </Link>
                         {schedule.includeMoney ? <span className="ml-2 text-xs text-fg-muted">with money</span> : null}

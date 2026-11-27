@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { statusLabel } from '@/lib/status-colors';
+import { statusLabel, statusTone } from '@/lib/status-colors';
 import { RECORD_SEARCH_TIMEOUT_MS, withTimeout } from '@/components/layout/search-utils';
 import { internalTargetPath, trickle } from '@/components/layout/route-progress';
 import { isTaskFinished, visibleTasks, type BackgroundTask } from '@/components/layout/transactions-tray';
@@ -14,15 +14,30 @@ import {
 import { isGridRequest, orderGridParams } from '@/server/repositories/orders-grid';
 import { breadcrumbsFor } from '@/config/route-registry';
 
-describe('statusLabel (single casing source)', () => {
+describe('statusLabel (single casing source, sentence case)', () => {
   it.each([
-    ['Ready To Pick', 'Ready to Pick'],
-    ['ready to ship', 'Ready to Ship'],
-    ['Ready to Pick', 'Ready to Pick'],
-    ['On Hold', 'On Hold'],
-    ['Partially Shipped', 'Partially Shipped'],
-    ['EOD closed', 'EOD Closed'],
+    ['Ready To Pick', 'Ready to pick'],
+    ['ready to ship', 'Ready to ship'],
+    ['Ready to Pick', 'Ready to pick'],
+    ['READY TO PICK', 'Ready to pick'],
+    ['On Hold', 'On hold'],
+    ['Partially Shipped', 'Partially shipped'],
+    ['EOD closed', 'EOD closed'],
+    ['eod closed', 'EOD closed'],
+    ['Missing SKU', 'Missing SKU'],
+    ['Sku Mismatch', 'SKU mismatch'],
+    ['VAS Pending', 'VAS pending'],
+    ['LTL Ready', 'LTL ready'],
+    ['ASN Received', 'ASN received'],
+    ['Synced To eBay', 'Synced to eBay'],
+    ['  Count   Completed ', 'Count completed'],
   ])('%s → %s', (input, expected) => expect(statusLabel(input)).toBe(expected));
+
+  it('only changes what people read: tone lookups stay case-insensitive', () => {
+    expect(statusTone('READY TO PICK', 'shipmentOrder')).toEqual(
+      statusTone('Ready to pick', 'shipmentOrder'),
+    );
+  });
 });
 
 describe('record search timeout', () => {

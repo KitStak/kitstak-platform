@@ -259,7 +259,16 @@
 /* ------------------------------------------------------------ Tab strip (scrolls when narrow) */
 .ks-tab-strip {
   scrollbar-width: none;
-  scroll-padding-inline: 16px;
+  /* Every resting position starts on a whole tab, clear of the left chevron. */
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 32px;
+}
+.ks-tab-strip [role='tab'] {
+  scroll-snap-align: start;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.ks-tab-strip [role='tab'][data-clipped]:not(:focus-visible) {
+  opacity: 0;
 }
 .ks-tab-strip::-webkit-scrollbar {
   display: none;
@@ -268,7 +277,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 28px;
+  width: 56px;
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--duration-fast) var(--ease-out);
@@ -278,9 +287,43 @@
 }
 .ks-tab-fade-left {
   left: 0;
-  background: linear-gradient(to right, var(--surface-raised), transparent);
+  background: linear-gradient(to right, var(--surface-raised) 40%, transparent);
 }
 .ks-tab-fade-right {
   right: 0;
-  background: linear-gradient(to left, var(--surface-raised), transparent);
+  background: linear-gradient(to left, var(--surface-raised) 40%, transparent);
+}
+/* Scroll chevrons: shown only on a side that has hidden tabs. */
+.ks-tab-chevron {
+  position: absolute;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-top: -12px;
+  border-radius: 6px;
+  color: var(--text-secondary, currentColor);
+  background: var(--surface-raised);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+.ks-tab-chevron[data-on] {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.ks-tab-chevron:hover {
+  background: linear-gradient(var(--surface-hover), var(--surface-hover)), var(--surface-raised);
+  color: var(--text-primary, currentColor);
+}
+.ks-tab-chevron-left {
+  left: 4px;
+}
+.ks-tab-chevron-right {
+  right: 4px;
 }

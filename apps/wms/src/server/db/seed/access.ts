@@ -256,6 +256,8 @@ export async function seedAccess(tx: Tx, org: OrgRefs, password: string): Promis
     // which also exercises the WMS-migration verify path on every demo sign-in.
     await upsertCoreIdentity(tx, {
       replaceEmailClash: true,
+      // Demo logins only: they behave like people who proved their mailbox.
+      seedVerified: true,
       userId: id,
       email: u.email,
       name,

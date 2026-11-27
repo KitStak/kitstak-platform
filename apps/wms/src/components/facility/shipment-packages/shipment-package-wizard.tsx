@@ -340,9 +340,7 @@ function AccessStep({ form }: { readonly form: UseFormReturn<F> }) {
                             className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                             aria-label={`${on ? 'Disable' : 'Enable'} ${c.label}`}
                           >
-                            <Badge tone={on ? 'success' : 'outline'} size="sm" shape="pill">
-                              {on ? 'Enabled' : 'Disabled'}
-                            </Badge>
+                            <Badge tone={on ? 'success' : 'outline'}>{on ? 'Enabled' : 'Disabled'}</Badge>
                           </button>
                         </td>
                       </tr>

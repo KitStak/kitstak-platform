@@ -382,7 +382,7 @@ export function RatesView({
                   {item.currentLoadedRateCents !== null ? (
                     formatMoney(item.currentLoadedRateCents)
                   ) : (
-                    <Badge tone="warning" size="sm">
+                    <Badge tone="warning">
                       No rate
                     </Badge>
                   )}

@@ -105,7 +105,7 @@ export function ProjectActivity() {
                   return (
                     <li key={event.id} className="flex gap-3" data-testid="activity-item">
                       {automated ? (
-                        <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-primary-text">
+                        <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-sunken text-icon">
                           <Zap className="size-3.5" />
                         </span>
                       ) : (

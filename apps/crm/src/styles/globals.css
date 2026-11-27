@@ -7,6 +7,14 @@
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 /*
+ * CRM's data color (docs/design/UI-CLEANUP.md section 3) for bars, meters and charts outside a
+ * DashboardFrame, so a quantity is never drawn in crimson. Inside a frame the frame sets it too.
+ */
+:root {
+  --dash-data: var(--label-indigo);
+}
+
+/*
  * Tailwind theme → design tokens. `inline` makes utilities read the token variables directly,
  * so a theme switch is a single attribute change with no class churn.
  */
@@ -50,6 +58,8 @@
   --color-primary-fg: var(--primary-fg);
   --color-primary-text: var(--primary-text);
   --color-focus: var(--focus-ring);
+  /* Quantities (bars, meters, sparklines): the app data color, never crimson. */
+  --color-data: var(--dash-data);
 
   --color-success: var(--success);
   --color-success-hover: var(--success-hover);

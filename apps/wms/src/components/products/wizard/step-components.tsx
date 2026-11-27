@@ -119,11 +119,7 @@ export function StepComponents() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
                       {o.sku}
-                      {o.category === 'Kit' ? (
-                        <Badge tone="info" size="sm">
-                          Kit to stock
-                        </Badge>
-                      ) : null}
+                      {o.category === 'Kit' ? <Badge tone="info">Kit to stock</Badge> : null}
                     </span>
                     <span className="block truncate text-xs text-secondary">{o.name}</span>
                   </span>

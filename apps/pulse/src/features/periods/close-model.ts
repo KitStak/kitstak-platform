@@ -44,7 +44,7 @@ export function bridgeSteps(bridge: { readonly sharedGapCents: number | null; re
 export interface MonthStatus {
   readonly key: 'closed' | 'in_progress' | 'to_fix' | 'ready';
   readonly label: string;
-  readonly tone: 'neutral' | 'primary' | 'danger' | 'success';
+  readonly tone: 'neutral' | 'info' | 'danger' | 'success';
 }
 
 /**
@@ -54,7 +54,7 @@ export interface MonthStatus {
  */
 export function monthStatus(month: { readonly status: 'open' | 'closed'; readonly inProgress: boolean }, toFix: number | null): MonthStatus {
   if (month.status === 'closed') return { key: 'closed', label: 'Closed', tone: 'neutral' };
-  if (month.inProgress) return { key: 'in_progress', label: 'In progress', tone: 'primary' };
+  if (month.inProgress) return { key: 'in_progress', label: 'In progress', tone: 'info' };
   if (toFix !== null && toFix > 0) return { key: 'to_fix', label: `${toFix} ${toFix === 1 ? 'thing' : 'things'} to fix`, tone: 'danger' };
   return { key: 'ready', label: 'Ready to close', tone: 'success' };
 }

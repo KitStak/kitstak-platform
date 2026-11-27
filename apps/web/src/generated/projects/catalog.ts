@@ -186,6 +186,36 @@ export const PROJECTS_CATALOG = {
         "needs": null
       },
       {
+        "type": "run_done",
+        "label": "all builds of a run are done",
+        "group": "Programs",
+        "needs": null
+      },
+      {
+        "type": "run_below_plan",
+        "label": "a run is below plan",
+        "group": "Programs",
+        "needs": null
+      },
+      {
+        "type": "build_output_logged",
+        "label": "output is logged on a build",
+        "group": "Programs",
+        "needs": null
+      },
+      {
+        "type": "build_done_short",
+        "label": "a build is done short of plan",
+        "group": "Programs",
+        "needs": null
+      },
+      {
+        "type": "build_over_plan",
+        "label": "a build goes over plan",
+        "group": "Programs",
+        "needs": null
+      },
+      {
         "type": "crm_stage_changed",
         "label": "a linked CRM deal changes stage",
         "group": "Other KitStak apps",
@@ -272,6 +302,9 @@ export const PROJECTS_CATALOG = {
     ],
     "conditions": [
       "the project",
+      "the program",
+      "the variant",
+      "the work type",
       "the priority",
       "the labels",
       "the assignee",
@@ -279,10 +312,40 @@ export const PROJECTS_CATALOG = {
       "the exact status",
       "the section",
       "the due date",
-      "the task name",
+      "the name",
       "subtasks"
     ],
     "recipes": [
+      {
+        "id": "run-done-notify",
+        "name": "Tell the owner when a run is done",
+        "blurb": "When every build of the day is done, the program owner hears about it.",
+        "categories": [
+          "Programs"
+        ],
+        "needs": null,
+        "sentence": "When all builds of a run are done, send a notification."
+      },
+      {
+        "id": "run-behind-afternoon",
+        "name": "Flag a slow run in the afternoon",
+        "blurb": "At 2:00 PM, a run 20% or more behind plan pings the owner.",
+        "categories": [
+          "Programs"
+        ],
+        "needs": null,
+        "sentence": "When a run is below plan, send a notification."
+      },
+      {
+        "id": "build-done-follow-up",
+        "name": "Check finished builds",
+        "blurb": "A finished build gets a quick quality check task in the same program.",
+        "categories": [
+          "Programs"
+        ],
+        "needs": null,
+        "sentence": "When a task is marked done (with conditions), create a follow-up task."
+      },
       {
         "id": "done-notify-owner",
         "name": "Tell the owner when work is done",

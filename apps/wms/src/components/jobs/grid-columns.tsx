@@ -8,35 +8,24 @@ import * as React from 'react';
 import type { ColumnDef, CellContext } from '@tanstack/react-table';
 import { DATE_TIME_COLUMN_WIDTH, DateCell, QtyCell, YesNoPill } from '@/components/grid/cells';
 import { PriorityFlag, StatusPill } from '@/components/ui/status-pill';
-import { statusToneName, type StatusDomain } from '@/lib/status-colors';
+import { Pill } from '@kitstak/ui/dashboard';
+import type { StatusDomain } from '@/lib/status-colors';
 import type { JobsColumnDef } from '@/lib/grid-defs/jobs/columns';
 
 export type CellRenderer<T> = (ctx: CellContext<T, unknown>) => React.ReactNode;
 
 export const Dash = () => <span className="text-faint">None</span>;
 
-/**
- * Critic R4 (dark mode): the shared tones are light tints set inline, so the neutral grey
- * ("Pending") glared as a near-white chip on dark surfaces. Neutral / hold tones get a dark
- * token here (`!` beats the inline style); every other tone keeps the shared palette.
- */
-const DARK_NEUTRAL =
-  '[[data-theme=dark]_&]:!bg-[#2A313C] [[data-theme=dark]_&]:!text-[#C9D1DB] [[data-theme=dark]_&]:ring-1 [[data-theme=dark]_&]:ring-inset [[data-theme=dark]_&]:ring-white/10';
-
 export function JobsStatusPill({
   status,
   domain = 'generic',
-  size = 'md',
 }: {
   readonly status: string;
   readonly domain?: StatusDomain;
+  /** @deprecated Pills have one size; kept so existing call sites compile. */
   readonly size?: 'sm' | 'md';
 }) {
-  const tone = statusToneName(status, domain);
-  const neutral = tone === 'grey' || tone === 'hold';
-  return (
-    <StatusPill status={status} domain={domain} size={size} className={neutral ? DARK_NEUTRAL : undefined} />
-  );
+  return <StatusPill status={status} domain={domain} />;
 }
 
 export function textCell(v: unknown): React.ReactNode {
@@ -54,11 +43,8 @@ export function JobPriorityPill({ priority }: { readonly priority: unknown }) {
   const v = String(priority ?? 'None');
   if (v === 'None' || v === '') {
     return (
-      <span
-        data-priority="normal"
-        className="inline-flex whitespace-nowrap rounded-full bg-surface-sunken px-2 py-0.5 text-2xs font-semibold text-secondary"
-      >
-        None
+      <span data-priority="normal" className="contents">
+        <Pill>None</Pill>
       </span>
     );
   }
@@ -68,12 +54,9 @@ export function JobPriorityPill({ priority }: { readonly priority: unknown }) {
 /** Overdue badge: a live job past its planned finish (critic R5; Logiwa shows only raw dates). */
 export function OverduePill({ title }: { readonly title?: string }) {
   return (
-    <span
-      className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-[#FDE7E3] px-1.5 py-px text-2xs font-semibold leading-4 text-[var(--danger-text)] dark:bg-[#3A1A16] dark:text-[var(--label-red-light)]"
-      title={title ?? 'Past its planned finish date'}
-    >
+    <Pill tone="critical" title={title ?? 'Past its planned finish date'} className="shrink-0">
       Overdue
-    </span>
+    </Pill>
   );
 }
 
@@ -82,9 +65,9 @@ export function ShortPill({ value }: { readonly value: unknown }) {
   if (v === 'None') return <span className="text-xs text-faint">None</span>;
   if (v === 'Open')
     return (
-      <span className="inline-flex rounded-full bg-[var(--label-brown-subtle)] px-1.5 py-px text-2xs font-semibold leading-4 text-[var(--label-brown-text)]">
+      <Pill tone="caution" dot>
         Open
-      </span>
+      </Pill>
     );
   return <StatusPill status={v} size="sm" />;
 }

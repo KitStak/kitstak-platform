@@ -400,16 +400,14 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
                         {r.storeName}
                       </button>
                       {r.isSandbox ? (
-                        <Badge size="sm" tone="info" className="ml-2">
+                        <Badge tone="info" className="ml-2">
                           Sandbox
                         </Badge>
                       ) : null}
                       {r.demoFeed ? (
                         <Tooltip content={DEMO_FEED_NOTE}>
                           <span tabIndex={0} className="ml-2 rounded-full">
-                            <Badge size="sm" tone="neutral">
-                              Demo feed
-                            </Badge>
+                            <Badge tone="neutral">Demo feed</Badge>
                           </span>
                         </Tooltip>
                       ) : null}
@@ -418,9 +416,7 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
                           href={`/integrations/monitoring/missing-orders?f.connectionId=in:${r.id}`}
                           className="ml-2"
                         >
-                          <Badge size="sm" tone="danger">
-                            {r.openMissing} missing
-                          </Badge>
+                          <Badge tone="danger">{r.openMissing} missing</Badge>
                         </Link>
                       ) : null}
                     </td>
@@ -448,7 +444,7 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
                       {r.pauseReason ? (
                         <Tooltip content={r.pauseReason}>
                           <span tabIndex={0}>
-                            <Badge size="sm" tone={pauseLabel(r.pauseReason)?.tone ?? 'warning'}>
+                            <Badge tone={pauseLabel(r.pauseReason)?.tone ?? 'warning'}>
                               {pauseLabel(r.pauseReason)?.label ?? 'Paused'}
                             </Badge>
                           </span>

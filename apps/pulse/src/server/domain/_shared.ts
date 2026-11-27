@@ -112,6 +112,9 @@ const UNIQUE_MESSAGES: Readonly<Record<string, string>> = {
   job_links_job_target_key: 'This job is already linked to that record.',
   job_links_work_order_key: 'Another job is already linked to that work order.',
   job_links_project_time_key: 'Another job already imports time from that project.',
+  job_links_program_key: 'That program already bills to another job. Remove that link in Projects first.',
+  job_links_one_program_per_job: 'This job already takes revenue from another program.',
+  job_links_build_key: 'That build already bills to another job.',
 };
 
 /** Turns database refusals (closed month, unique keys, bad references) into plain DomainErrors. */

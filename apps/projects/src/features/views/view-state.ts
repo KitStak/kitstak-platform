@@ -43,7 +43,14 @@ export interface QuickFilters {
   /** Label ids or `none`. */
   readonly labels: readonly string[];
   readonly due: DueFilter | null;
+  /** Work type in projects that hold builds: tasks only, builds only, or both (the default). */
+  readonly work?: WorkFilter;
 }
+
+export type WorkFilter = 'both' | 'task' | 'build';
+export const WORK_FILTERS: readonly WorkFilter[] = ['both', 'task', 'build'];
+export const WORK_FILTER_LABELS: Readonly<Record<WorkFilter, string>> = { both: 'Tasks and builds', task: 'Tasks', build: 'Builds' };
+const isWork = (value: string): value is WorkFilter => (WORK_FILTERS as readonly string[]).includes(value);
 
 export const EMPTY_QUICK: QuickFilters = { q: '', mine: false, assignees: [], statuses: [], priorities: [], labels: [], due: null };
 
@@ -91,7 +98,7 @@ export interface ViewSettings {
 }
 
 /** Every URL parameter this module owns (everything else, e.g. `task`, is left alone). */
-export const VIEW_PARAMS = ['view', 'q', 'mine', 'assignee', 'status', 'priority', 'label', 'due', 'group', 'gfield', 'lane', 'sort', 'done', 'subtasks'] as const;
+export const VIEW_PARAMS = ['view', 'q', 'work', 'mine', 'assignee', 'status', 'priority', 'label', 'due', 'group', 'gfield', 'lane', 'sort', 'done', 'subtasks'] as const;
 export type ViewParam = (typeof VIEW_PARAMS)[number];
 
 const LIST_SEP = ',';
@@ -183,6 +190,7 @@ export function quickFromConfig(config: ViewConfig | undefined): { quick: QuickF
         priorities: Array.isArray(stored.priorities) ? stored.priorities.map(String).filter(isPriority) : [],
         labels: Array.isArray(stored.labels) ? stored.labels.map(String) : [],
         due: typeof stored.due === 'string' && isDue(stored.due) ? stored.due : null,
+        ...(typeof stored.work === 'string' && isWork(stored.work) && stored.work !== 'both' ? { work: stored.work } : {}),
       },
       extra: [],
     };
@@ -243,6 +251,10 @@ export function applyParams(
     const due = params.get('due') ?? '';
     quick = { ...quick, due: isDue(due) ? due : null };
   }
+  if (params.has('work')) {
+    const work = params.get('work') ?? '';
+    quick = { ...quick, work: isWork(work) ? work : 'both' };
+  }
   if (params.has('group')) settings = { ...settings, groupBy: (params.get('group') || 'none') as GroupField };
   if (params.has('gfield')) settings = { ...settings, groupFieldId: params.get('gfield') || null };
   if (params.has('lane')) {
@@ -283,6 +295,7 @@ export function writeParams(
   put('priority', !sameList(nq.priorities, bq.priorities), nq.priorities.join(LIST_SEP));
   put('label', !sameList(nq.labels, bq.labels), nq.labels.join(LIST_SEP));
   put('due', nq.due !== bq.due, nq.due ?? '');
+  put('work', (nq.work ?? 'both') !== (bq.work ?? 'both'), nq.work ?? 'both');
   put('group', ns.groupBy !== bs.groupBy, ns.groupBy);
   put('gfield', ns.groupFieldId !== bs.groupFieldId, ns.groupFieldId ?? '');
   put('lane', ns.swimlane !== bs.swimlane, ns.swimlane);
@@ -317,7 +330,8 @@ export function countActiveFilters(quick: QuickFilters): number {
     (quick.statuses.length ? 1 : 0) +
     (quick.priorities.length ? 1 : 0) +
     (quick.labels.length ? 1 : 0) +
-    (quick.due ? 1 : 0)
+    (quick.due ? 1 : 0) +
+    (quick.work && quick.work !== 'both' ? 1 : 0)
   );
 }
 
@@ -357,6 +371,8 @@ export function matchesQuick(task: TaskSummary, quick: QuickFilters, me: string,
     if (!ok) return false;
   }
   if (quick.due && !matchesDue(task, quick.due, today)) return false;
+  if (quick.work === 'task' && task.kind === 'build') return false;
+  if (quick.work === 'build' && task.kind !== 'build') return false;
   return true;
 }
 

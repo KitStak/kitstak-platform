@@ -33,6 +33,8 @@ describe.skipIf(!available)('services (integration)', async () => {
   let groupIds: string[];
 
   beforeAll(async () => {
+    // Integration flows, not the billing gate: keep modules open even under ENTITLEMENTS_DEV_ALLOW_ALL=0.
+    vi.stubEnv('ENTITLEMENTS_DEV_ALLOW_ALL', '1');
     fixture = await createTestOrgs([
       { key: 'a', users: { owner: 'owner', rep: 'member', viewer: 'viewer', other: 'member' } },
       { key: 'b', users: { owner: 'owner' } },
@@ -54,6 +56,7 @@ describe.skipIf(!available)('services (integration)', async () => {
   }, 30_000);
 
   afterAll(async () => {
+    vi.unstubAllEnvs();
     await fixture?.cleanup();
   });
 
@@ -285,7 +288,14 @@ describe.skipIf(!available)('RBAC at the route layer', async () => {
   const { createTestOrgs: create, ctxFor: forUser } = await import('./db-fixture');
   let cleanup: () => Promise<void> = async () => undefined;
 
-  afterAll(async () => cleanup());
+  // Tests the RBAC gate, not the billing gate: keep modules open under ENTITLEMENTS_DEV_ALLOW_ALL=0.
+  beforeAll(() => {
+    vi.stubEnv('ENTITLEMENTS_DEV_ALLOW_ALL', '1');
+  });
+  afterAll(async () => {
+    vi.unstubAllEnvs();
+    await cleanup();
+  });
 
   it('denies item writes to viewers with 403 and records the denial', async () => {
     const created = await create([{ key: 'rbac', users: { owner: 'owner', viewer: 'viewer' } }]);

@@ -11,7 +11,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CircleHelp, Download, Pencil, Power, TriangleAlert } from 'lucide-react';
 import { ComboChart } from '@/components/charts/cartesian';
 import { formatDateLong } from '@/components/charts/scale';
-import { KpiTile, MarginPill, marginHealth } from '@/components/charts/stats';
+import { StatRow, StatTile, type StatTileProps } from '@kitstak/ui/dashboard';
+import { MarginPill, StatSparkline, StatTileLoading, marginHealth, statValue } from '@/components/charts/stats';
 import { ExplainNumber } from '@/components/pulse/explain';
 import { ExplainStatic } from '@/components/pulse/explain';
 import { Button } from '@/components/ui/button';
@@ -60,6 +61,7 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
   const period = useMemo(() => parsePeriod(get, today, weekStart, DEFAULTS), [get, today, weekStart]);
   const bucket = suggestBucket(period);
   const scope = { from: period.from, to: period.to, serviceId: service.id };
+  const byServiceHref = routes.profit({ by: 'service', from: period.from, to: period.to });
   const onlyNoPrice = get('entries') === 'no-price';
   const [formOpen, setFormOpen] = useState(false);
 
@@ -144,29 +146,30 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
       {trend.isError && !trend.data ? (
         <LoadError what="this service’s numbers" message={trend.error instanceof Error ? trend.error.message : undefined} onRetry={() => void trend.refetch()} />
       ) : (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6" data-testid="service-tiles">
-          <KpiTile label="Revenue" loading={!total} value={total ? formatMoneyWhole(total.revenueCents) : null} sparkline={points.length > 1 ? { values: points.map((row) => row.revenueCents) } : undefined} explain={<ExplainNumber metric="revenue" scope={scope} />} />
-          <KpiTile label="Cost" loading={!total} value={total ? (total.costMissing ? NOT_KNOWN : formatMoneyWhole(total.costCents)) : null} footer={total?.costMissing ? <span className="text-xs text-fg-muted">No hours or parts logged</span> : undefined} sparkline={points.length > 1 ? { values: points.map((row) => (row.costMissing ? null : row.costCents)) } : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
+        <StatRow label="Service numbers" data-testid="service-tiles">
+          <ServiceTile label="Revenue" href={byServiceHref} loading={!total} value={statValue(total ? formatMoneyWhole(total.revenueCents) : null)} trend={points.length > 1 ? <StatSparkline values={points.map((row) => row.revenueCents)} label="Revenue trend" /> : undefined} explain={<ExplainNumber metric="revenue" scope={scope} />} />
+          <ServiceTile label="Cost" href={byServiceHref} loading={!total} value={statValue(total ? (total.costMissing ? NOT_KNOWN : formatMoneyWhole(total.costCents)) : null)} caption={total?.costMissing ? <span>No hours or parts logged</span> : undefined} trend={points.length > 1 ? <StatSparkline values={points.map((row) => (row.costMissing ? null : row.costCents))} label="Cost trend" /> : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
           {/* With no cost known, profit is not known either: it is never shown as the revenue (round four, designer issue 4). */}
-          <KpiTile label="Profit" loading={!total} value={total ? (total.costMissing ? NOT_KNOWN : formatMoneyWhole(total.profitCents)) : null} footer={total?.costMissing ? <span className="text-xs text-fg-muted" data-testid="service-profit-not-known">{NO_COST_REASON}</span> : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />
-          <KpiTile
+          <ServiceTile label="Profit" href={byServiceHref} loading={!total} value={statValue(total ? (total.costMissing ? NOT_KNOWN : formatMoneyWhole(total.profitCents)) : null)} caption={total?.costMissing ? <span data-testid="service-profit-not-known">{NO_COST_REASON}</span> : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />
+          <ServiceTile
             label="Margin"
+            href={byServiceHref}
             loading={!total}
-            value={total ? (total.costMissing ? NO_COST_WORDS : formatPercentBp(total.marginBp, { empty: 'No revenue yet' })) : null}
+            value={statValue(total ? (total.costMissing ? NO_COST_WORDS : formatPercentBp(total.marginBp, { empty: 'No revenue yet' })) : null)}
             explain={<ExplainNumber metric="margin" scope={scope} />}
-            footer={
+            caption={
               total?.costMissing ? (
-                <span className="text-xs text-fg-muted" data-testid="service-no-cost">
+                <span data-testid="service-no-cost">
                   {NO_COST_REASON}
                 </span>
               ) : total && total.marginBp !== null ? (
-                <MarginPill health={marginHealth(total.marginBp, targetMarginBp)} size="sm" />
+                <MarginPill health={marginHealth(total.marginBp, targetMarginBp)} />
               ) : undefined
             }
           />
-          <KpiTile label={`Volume, ${service.unitLabel}`} explain={<ExplainStatic title={`Volume, ${service.unitLabel}`} rule="How many, added up over every entry of this service in the period." rows={[{ label: 'Entries', value: formatNumber(entries.data?.length ?? 0) }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 3 }), kind: 'total' }]} />} loading={!entries.data} value={entries.data ? formatNumber(volume, { maxDigits: 3 }) : null} footer={entries.data ? <span className="text-xs text-fg-muted">{entries.data.length} {entries.data.length === 1 ? 'entry' : 'entries'}</span> : undefined} />
-          <KpiTile label={`Earned for one ${unit}`} explain={<ExplainStatic title={`Earned for one ${unit}`} rule="Revenue from this service in the period divided by its volume. The cost to do one is its cost divided the same way." rows={[{ label: 'Revenue', value: total ? formatMoney(total.revenueCents, { empty: 'Hidden' }) : 'None' }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 3 }) }, { label: 'Earned for one', value: line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : 'No volume yet', kind: 'total' }]} />} loading={!total || !entries.data} value={line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : null} emptyText="No volume yet" footer={line.costPerUnit ? <span className="text-xs text-fg-muted tabular-nums">{formatUnitPrice(line.costPerUnit)} to do one</span> : undefined} />
-        </div>
+          <ServiceTile href={null} label={`Volume, ${service.unitLabel}`} explain={<ExplainStatic title={`Volume, ${service.unitLabel}`} rule="How many, added up over every entry of this service in the period." rows={[{ label: 'Entries', value: formatNumber(entries.data?.length ?? 0) }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 3 }), kind: 'total' }]} />} loading={!entries.data} value={statValue(entries.data ? formatNumber(volume, { maxDigits: 3 }) : null)} caption={entries.data ? <span>{entries.data.length} {entries.data.length === 1 ? 'entry' : 'entries'}</span> : undefined} />
+          <ServiceTile href={null} label={`Earned for one ${unit}`} explain={<ExplainStatic title={`Earned for one ${unit}`} rule="Revenue from this service in the period divided by its volume. The cost to do one is its cost divided the same way." rows={[{ label: 'Revenue', value: total ? formatMoney(total.revenueCents, { empty: 'Hidden' }) : 'None' }, { label: 'Volume', value: formatNumber(volume, { maxDigits: 3 }) }, { label: 'Earned for one', value: line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : 'No volume yet', kind: 'total' }]} />} loading={!total || !entries.data} value={statValue(line.revenuePerUnit ? formatUnitPrice(line.revenuePerUnit) : null, 'No volume yet')} caption={line.costPerUnit ? <span className="tabular-nums">{formatUnitPrice(line.costPerUnit)} to do one</span> : undefined} />
+        </StatRow>
       )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
@@ -332,11 +335,11 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
                         <TableCell className="max-w-[260px]">
                           <span className="block truncate">{info?.clientName ?? 'Client'}</span>
                           {info?.jobNumber ? (
-                            <Link href={routes.jobTab(info.jobNumber, 'money-in')} className="rounded-sm text-xs text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                            <Link href={routes.jobTab(info.jobNumber, 'money-in')} className="rounded-sm text-xs text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                               {info.jobNumber} {info.jobName}
                             </Link>
                           ) : entry.jobId ? (
-                            <Link href={routes.jobTab(entry.jobId, 'money-in')} className="rounded-sm text-xs text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                            <Link href={routes.jobTab(entry.jobId, 'money-in')} className="rounded-sm text-xs text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
                               Open the job
                             </Link>
                           ) : (
@@ -375,4 +378,9 @@ export function ServiceView({ service: initialService, today, weekStart, targetM
       <ServiceFormDialog open={formOpen} onOpenChange={setFormOpen} service={service} rateCents={rate} targetMarginBp={targetMarginBp} onSaved={(saved) => queryClient.setQueryData(qk.service(service.id), saved)} />
     </div>
   );
+}
+
+/** A service headline: the shared StatTile, with a skeleton of the same size while it loads. */
+function ServiceTile({ loading, ...tile }: StatTileProps & { readonly loading: boolean }) {
+  return loading ? <StatTileLoading label={tile.label} /> : <StatTile {...tile} />;
 }

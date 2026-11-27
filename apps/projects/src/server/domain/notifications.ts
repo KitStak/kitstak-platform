@@ -10,7 +10,7 @@
  * Participants (creator, assignee, commenters, mentioned) automatically become watchers.
  */
 import 'server-only';
-import { and, count, desc, eq, inArray, isNotNull, isNull, lt, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
 import { notifications, userPrefs, watchers } from '@/server/db/schema';
 import type { NotificationKind } from '@/lib/constants';
@@ -89,7 +89,8 @@ function toDTO(row: typeof notifications.$inferSelect): NotificationDTO {
   };
 }
 
-export type InboxFilter = 'all' | 'unread' | 'archived' | 'mentions' | 'assigned' | 'comments' | 'due';
+/** `programs`: the inbox "Programs" chip (docs/programs/SPEC.md 5.17), notifications about program work only. */
+export type InboxFilter = 'all' | 'unread' | 'archived' | 'mentions' | 'assigned' | 'comments' | 'due' | 'programs';
 
 export interface InboxPage {
   readonly items: readonly NotificationDTO[];
@@ -111,6 +112,7 @@ export async function listNotifications(
   if (filter === 'assigned') conditions.push(eq(notifications.kind, 'assigned'));
   if (filter === 'comments') conditions.push(eq(notifications.kind, 'comment'));
   if (filter === 'due') conditions.push(inArray(notifications.kind, ['due_soon', 'overdue']));
+  if (filter === 'programs') conditions.push(sql`exists (select 1 from pm.projects p where p.id = ${notifications.projectId} and p.kind = 'program')`);
   if (options.before) conditions.push(lt(notifications.createdAt, new Date(options.before)));
   const rows = await db
     .select()

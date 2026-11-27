@@ -8,6 +8,7 @@ import {
   Gauge,
   House,
   Package,
+  Repeat2,
   Settings2,
   Target,
   Users,
@@ -19,6 +20,7 @@ import type { NavId } from '@/lib/nav';
 export const NAV_ICONS: Readonly<Record<NavId, LucideIcon>> = {
   home: House,
   jobs: Package,
+  programs: Repeat2,
   log: ClipboardPen,
   profit: CircleDollarSign,
   labor: Users,

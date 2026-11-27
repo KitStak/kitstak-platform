@@ -171,6 +171,8 @@ async function rolloverEndedCycles(ctx: DomainContext, projectId: string): Promi
 
 export async function listCycles(ctx: DomainContext, ref: ProjectRefInput): Promise<CycleListDTO> {
   const { project } = await requireProject(ctx, ref);
+  // Programs have no cycles (docs/programs/SPEC.md 4.1).
+  if (project.kind === 'program') return { cycles: [], currentId: null, backlogCount: 0, taskCycle: {} };
   await rolloverEndedCycles(ctx, project.id);
   const rows = await db
     .select()
@@ -354,10 +356,11 @@ export async function setTasksCycle(ctx: DomainContext, taskIds: readonly string
   const ids = [...new Set(taskIds)].slice(0, 500);
   if (!ids.length) return { changed: 0 };
   const rows = await db
-    .select({ id: tasks.id, projectId: tasks.projectId, parentTaskId: tasks.parentTaskId })
+    .select({ id: tasks.id, projectId: tasks.projectId, parentTaskId: tasks.parentTaskId, kind: tasks.kind })
     .from(tasks)
     .where(and(inArray(tasks.id, ids), eq(tasks.orgId, ctx.orgId), isNull(tasks.deletedAt)));
   if (rows.length !== ids.length) throw notFound('One of those tasks');
+  if (rows.some((row) => row.kind === 'build')) throw invalid('Builds are planned by date, not in cycles.');
   const projectIds = new Set(rows.map((row) => row.projectId));
   if (projectIds.size !== 1) throw invalid('Pick tasks from one project at a time.');
   const projectId = rows[0]!.projectId;

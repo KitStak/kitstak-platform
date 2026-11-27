@@ -17,7 +17,7 @@ export interface TriggerOption {
   readonly type: AutomationTriggerType;
   /** Plain words after "When". */
   readonly label: string;
-  readonly group: 'Task changes' | 'Dates' | 'Other KitStak apps';
+  readonly group: 'Task changes' | 'Dates' | 'Programs' | 'Other KitStak apps';
   readonly needs?: IntegrationNeed;
   /** The trigger refers to project-specific things (a status or section by id). */
   readonly make: () => AutomationTrigger;
@@ -36,6 +36,11 @@ export const TRIGGER_OPTIONS: readonly TriggerOption[] = [
   { type: 'subtasks_completed', label: 'all subtasks are done', group: 'Task changes', make: () => ({ type: 'subtasks_completed' }) },
   { type: 'due_date_approaching', label: 'a due date is coming up', group: 'Dates', make: () => ({ type: 'due_date_approaching', days: 1 }) },
   { type: 'task_overdue', label: 'a task becomes overdue', group: 'Dates', make: () => ({ type: 'task_overdue' }) },
+  { type: 'run_done', label: 'all builds of a run are done', group: 'Programs', make: () => ({ type: 'run_done' }) },
+  { type: 'run_below_plan', label: 'a run is below plan', group: 'Programs', make: () => ({ type: 'run_below_plan', percent: 20, at: '14:00' }) },
+  { type: 'build_output_logged', label: 'output is logged on a build', group: 'Programs', make: () => ({ type: 'build_output_logged', minUnits: null }) },
+  { type: 'build_done_short', label: 'a build is done short of plan', group: 'Programs', make: () => ({ type: 'build_done_short' }) },
+  { type: 'build_over_plan', label: 'a build goes over plan', group: 'Programs', make: () => ({ type: 'build_over_plan' }) },
   { type: 'crm_stage_changed', label: 'a linked CRM deal changes stage', group: 'Other KitStak apps', needs: 'crm', make: () => ({ type: 'crm_stage_changed' }) },
   { type: 'wms_order_shipped', label: 'a linked WMS order ships', group: 'Other KitStak apps', needs: 'wms', make: () => ({ type: 'wms_order_shipped' }) },
 ];
@@ -78,24 +83,99 @@ export const actionOption = (type: AutomationActionType): ActionOption =>
   ACTION_OPTIONS.find((option) => option.type === type) ?? ACTION_OPTIONS[0];
 
 export interface ConditionOption {
+  /** Picker id. Two options can share a stored field: "the program" is a `project` rule on a program. */
+  readonly key: string;
   readonly field: AutomationConditionField;
   readonly label: string;
   readonly needsProject?: boolean;
+  /** Needs "Works in" set to one program (variants belong to one program). */
+  readonly needsProgram?: boolean;
+  /** Offered only when the workspace has programs. */
+  readonly forPrograms?: boolean;
   readonly make: () => AutomationCondition;
 }
 
 export const CONDITION_OPTIONS: readonly ConditionOption[] = [
-  { field: 'project', label: 'the project', make: () => ({ field: 'project', op: 'is', value: '' }) },
-  { field: 'priority', label: 'the priority', make: () => ({ field: 'priority', op: 'is', value: 'high' }) },
-  { field: 'label', label: 'the labels', make: () => ({ field: 'label', op: 'is', value: '' }) },
-  { field: 'assignee', label: 'the assignee', make: () => ({ field: 'assignee', op: 'empty' }) },
-  { field: 'statusCategory', label: 'the kind of status', make: () => ({ field: 'statusCategory', op: 'is', value: 'todo' }) },
-  { field: 'status', label: 'the exact status', needsProject: true, make: () => ({ field: 'status', op: 'is', value: '' }) },
-  { field: 'section', label: 'the section', needsProject: true, make: () => ({ field: 'section', op: 'is', value: '' }) },
-  { field: 'dueDate', label: 'the due date', make: () => ({ field: 'dueDate', op: 'overdue' }) },
-  { field: 'title', label: 'the task name', make: () => ({ field: 'title', op: 'contains', value: '' }) },
-  { field: 'isSubtask', label: 'subtasks', make: () => ({ field: 'isSubtask', op: 'is', value: false }) },
+  { key: 'project', field: 'project', label: 'the project', make: () => ({ field: 'project', op: 'is', value: '' }) },
+  { key: 'program', field: 'project', label: 'the program', forPrograms: true, make: () => ({ field: 'project', op: 'is', value: '' }) },
+  { key: 'variant', field: 'variant', label: 'the variant', forPrograms: true, needsProgram: true, make: () => ({ field: 'variant', op: 'is', value: '' }) },
+  { key: 'workKind', field: 'workKind', label: 'the work type', forPrograms: true, make: () => ({ field: 'workKind', op: 'is', value: 'build' }) },
+  { key: 'priority', field: 'priority', label: 'the priority', make: () => ({ field: 'priority', op: 'is', value: 'high' }) },
+  { key: 'label', field: 'label', label: 'the labels', make: () => ({ field: 'label', op: 'is', value: '' }) },
+  { key: 'assignee', field: 'assignee', label: 'the assignee', make: () => ({ field: 'assignee', op: 'empty' }) },
+  { key: 'statusCategory', field: 'statusCategory', label: 'the kind of status', make: () => ({ field: 'statusCategory', op: 'is', value: 'todo' }) },
+  { key: 'status', field: 'status', label: 'the exact status', needsProject: true, make: () => ({ field: 'status', op: 'is', value: '' }) },
+  { key: 'section', field: 'section', label: 'the section', needsProject: true, make: () => ({ field: 'section', op: 'is', value: '' }) },
+  { key: 'dueDate', field: 'dueDate', label: 'the due date', make: () => ({ field: 'dueDate', op: 'overdue' }) },
+  { key: 'title', field: 'title', label: 'the name', make: () => ({ field: 'title', op: 'contains', value: '' }) },
+  { key: 'isSubtask', field: 'isSubtask', label: 'subtasks', make: () => ({ field: 'isSubtask', op: 'is', value: false }) },
 ];
+
+/**
+ * The picker id of a stored rule: a `project` rule whose value is a program shows as "the program".
+ * `programIds` are the workspace's program ids.
+ */
+export function conditionKey(condition: AutomationCondition, programIds: ReadonlySet<string>, pending?: string | null): string {
+  if (condition.field !== 'project') return condition.field;
+  const value = typeof condition.value === 'string' ? condition.value : '';
+  if (value) return programIds.has(value) ? 'program' : 'project';
+  return pending === 'program' ? 'program' : 'project';
+}
+
+export const conditionOptionByKey = (key: string): ConditionOption =>
+  CONDITION_OPTIONS.find((option) => option.key === key) ?? CONDITION_OPTIONS[0];
+
+/** Actions that never run on builds (5.17): builds stay in their program. */
+export const NOT_FOR_BUILDS: readonly AutomationActionType[] = ['move_to_project', 'move_to_section', 'create_subtask', 'complete_parent'];
+
+/** True for the triggers about program runs and builds (they act on builds only). */
+export const isRunTrigger = (trigger: AutomationTrigger): boolean =>
+  trigger.type === 'run_done' || trigger.type === 'run_below_plan' || trigger.type === 'build_output_logged' || trigger.type === 'build_done_short' || trigger.type === 'build_over_plan';
+
+/** Smallest batch that fires "output is logged on a build" (the stepper's range and step). */
+export const OUTPUT_UNITS = { min: 1, max: 100_000, step: 10, start: 100 } as const;
+
+/**
+ * True when a rule acts on builds: a run trigger, a rule that works in one program, a "the work type
+ * is a build" rule, or a "the program is" or "the variant is" rule.
+ */
+export function actsOnBuilds(
+  trigger: AutomationTrigger,
+  conditions: readonly AutomationCondition[],
+  scope: { readonly programIds?: ReadonlySet<string>; readonly projectId?: string | null } = {},
+): boolean {
+  if (isRunTrigger(trigger)) return true;
+  if (scope.projectId && scope.programIds?.has(scope.projectId)) return true;
+  return conditions.some(
+    (condition) =>
+      (condition.field === 'workKind' && condition.op === 'is' && condition.value === 'build') ||
+      (condition.field === 'variant' && condition.op === 'is') ||
+      (condition.field === 'project' && condition.op === 'is' && typeof condition.value === 'string' && Boolean(scope.programIds?.has(condition.value))),
+  );
+}
+
+/** Task words as build words, for rules that only run on builds ("a build is marked done"). */
+export function buildWords(text: string): string {
+  return text
+    .replace(/\ba task\b/g, 'a build')
+    .replace(/\bA task\b/g, 'A build')
+    .replace(/\bthe task\b/g, 'the build')
+    .replace(/\bthe project owner\b/g, 'the program owner');
+}
+
+/** Triggers that do not fit builds: builds have no subtasks. */
+export const NOT_FOR_BUILD_TRIGGERS: readonly AutomationTriggerType[] = ['subtasks_completed'];
+
+/** Run below plan choices: percent short and the time of day it is checked (program time). */
+export const RUN_BELOW_PERCENTS: readonly number[] = [5, 10, 15, 20, 25, 30, 40, 50];
+export const RUN_CHECK_TIMES: readonly string[] = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+
+/** "2:00 PM" for "14:00". */
+export function clockText(time: string): string {
+  const [h, m] = time.split(':').map(Number) as [number, number];
+  const hour = ((h + 11) % 12) + 1;
+  return `${hour}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
 
 export const conditionOption = (field: AutomationConditionField): ConditionOption =>
   CONDITION_OPTIONS.find((option) => option.field === field) ?? CONDITION_OPTIONS[0];
@@ -103,8 +183,8 @@ export const conditionOption = (field: AutomationConditionField): ConditionOptio
 /** CRM deal stages offered as suggestions (any text works; matching ignores case). */
 export const CRM_STAGE_SUGGESTIONS: readonly string[] = ['Lead', 'Discovery', 'Proposal', 'Negotiation', 'Won', 'Lost'];
 
-export type RecipeCategory = 'Popular' | 'Reminders' | 'Hand-offs' | 'Tidy up' | 'CRM and WMS';
-export const RECIPE_CATEGORIES: readonly RecipeCategory[] = ['Popular', 'Reminders', 'Hand-offs', 'Tidy up', 'CRM and WMS'];
+export type RecipeCategory = 'Popular' | 'Reminders' | 'Hand-offs' | 'Tidy up' | 'Programs' | 'CRM and WMS';
+export const RECIPE_CATEGORIES: readonly RecipeCategory[] = ['Popular', 'Reminders', 'Hand-offs', 'Tidy up', 'Programs', 'CRM and WMS'];
 
 export interface Recipe {
   readonly id: string;
@@ -118,6 +198,31 @@ export interface Recipe {
 }
 
 export const RECIPES: readonly Recipe[] = [
+  {
+    id: 'run-done-notify',
+    name: 'Tell the owner when a run is done',
+    blurb: 'When every build of the day is done, the program owner hears about it.',
+    categories: ['Programs'],
+    trigger: { type: 'run_done' },
+    actions: [{ type: 'notify', target: 'project_owner', message: 'Every build in {task} is done.' }],
+  },
+  {
+    id: 'run-behind-afternoon',
+    name: 'Flag a slow run in the afternoon',
+    blurb: 'At 2:00 PM, a run 20% or more behind plan pings the owner.',
+    categories: ['Programs'],
+    trigger: { type: 'run_below_plan', percent: 20, at: '14:00' },
+    actions: [{ type: 'notify', target: 'project_owner', message: 'Today’s run is behind plan ({task}).' }],
+  },
+  {
+    id: 'build-done-follow-up',
+    name: 'Check finished builds',
+    blurb: 'A finished build gets a quick quality check task in the same program.',
+    categories: ['Programs'],
+    trigger: { type: 'task_completed' },
+    conditions: [{ field: 'workKind', op: 'is', value: 'build' }],
+    actions: [{ type: 'create_follow_up', title: 'Quality check {task}', dueInDays: 1, assignTo: 'assignee' }],
+  },
   {
     id: 'done-notify-owner',
     name: 'Tell the owner when work is done',
@@ -264,3 +369,17 @@ export const MESSAGE_VARIABLES: readonly { readonly token: string; readonly labe
   { token: '{stage}', label: 'CRM stage' },
   { token: '{record}', label: 'Linked record' },
 ];
+
+/** The same words for a rule on builds: {task} is the build name, {project} the program name. */
+export const BUILD_MESSAGE_VARIABLES: readonly { readonly token: string; readonly label: string }[] = [
+  { token: '{task}', label: 'Build' },
+  { token: '{project}', label: 'Program' },
+];
+
+/** The variables that fit a rule: build words for builds, linked record words only for CRM and WMS triggers. */
+export function messageVariables(trigger: AutomationTrigger, forBuilds: boolean): readonly { readonly token: string; readonly label: string }[] {
+  if (forBuilds) return BUILD_MESSAGE_VARIABLES;
+  if (trigger.type === 'crm_stage_changed') return MESSAGE_VARIABLES.filter((variable) => variable.token !== '{record}');
+  if (trigger.type === 'wms_order_shipped') return MESSAGE_VARIABLES.filter((variable) => variable.token !== '{stage}');
+  return MESSAGE_VARIABLES.slice(0, 2);
+}

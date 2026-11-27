@@ -74,10 +74,11 @@ export function percent(used: number, limit: number): number {
   return Math.min(100, Math.max(0, Math.round((used / limit) * 100)));
 }
 
-export function meterTone(pct: number): 'primary' | 'warning' | 'danger' {
-  if (pct >= 100) return 'danger';
-  if (pct >= 80) return 'warning';
-  return 'primary';
+/** Meter tone for a usage share: the data color until 80%, then caution, then critical at 100%. */
+export function meterTone(pct: number): 'data' | 'caution' | 'critical' {
+  if (pct >= 100) return 'critical';
+  if (pct >= 80) return 'caution';
+  return 'data';
 }
 
 // ---------------------------------------------------------------------------------------------

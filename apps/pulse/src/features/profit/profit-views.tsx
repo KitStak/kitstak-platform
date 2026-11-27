@@ -68,6 +68,8 @@ function pageHref(by: ProfitGroup, row: ProfitRowDTO): { href: string; label: st
   if (by === 'job') return { href: routes.job(row.label), label: `Open the job page of ${row.label}` };
   if (by === 'client') return { href: routes.client(row.key), label: `Open the client page of ${row.label}` };
   if (by === 'service') return { href: routes.service(row.key), label: `Open the service page of ${row.label}` };
+  // A program row opens its program page (PULSE_PROGRAMS_SPEC 5.4). The key is the row's sublabel.
+  if (by === 'program' && row.sublabel) return { href: routes.program(row.sublabel), label: `Open the program page of ${row.sublabel}` };
   return null;
 }
 
@@ -77,6 +79,7 @@ const NONE_HINT: Readonly<Record<string, string>> = {
   client: 'Rows with no client.',
   type: 'Rows with no job type.',
   site: 'Rows with no site.',
+  program: 'Jobs no KitStak program feeds.',
 };
 
 /* ------------------------------------------------------------------ table */
@@ -114,11 +117,20 @@ function RowName({ by, row, onDrill, range }: { readonly by: ProfitGroup; readon
             }}
             aria-label={drill.words}
             data-testid="drill"
-            className="group/drill inline-flex max-w-full items-center gap-1 rounded-sm text-left font-medium text-fg hover:text-primary-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            className="group/drill inline-flex max-w-full items-center gap-1 rounded-sm text-left font-medium text-fg hover:text-fg-link focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
             <span className="truncate">{name}</span>
             <ChevronRight aria-hidden className="size-3.5 shrink-0 text-icon transition-transform group-hover/drill:translate-x-0.5" />
           </button>
+        ) : by === 'program' && page ? (
+          <Link
+            href={page.href}
+            onClick={(event) => event.stopPropagation()}
+            data-testid="profit-program-link"
+            className="inline-flex max-w-full items-center gap-1 rounded-sm font-medium text-fg hover:text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          >
+            <span className="truncate">{name}</span>
+          </Link>
         ) : (
           <Tooltip content={NONE_HINT[by] ?? 'There is nothing below this row.'}>
             <span tabIndex={0} className="inline-block max-w-full truncate rounded-sm font-medium text-fg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
@@ -127,15 +139,16 @@ function RowName({ by, row, onDrill, range }: { readonly by: ProfitGroup; readon
           </Tooltip>
         )}
         {sub ? <span className="block truncate text-xs font-normal text-fg-muted">{sub}</span> : null}
+        {row.laborMissing ? (
+          <Tooltip content="Something is missing here, like hours on a day, a price or a pay rate, so profit is not complete yet. Open the job to fix it.">
+            <span tabIndex={0} className="mt-0.5 flex w-fit items-center gap-1 rounded-sm text-2xs font-medium whitespace-nowrap text-warning-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="profit-labor-missing">
+              <TriangleAlert aria-hidden className="size-3" />
+              Not complete
+            </span>
+          </Tooltip>
+        ) : null}
       </div>
       {by === 'job' && row.riskStatus ? <MarginPill status={row.riskStatus} size="sm" className="hidden lg:inline-flex" /> : null}
-      {row.laborMissing ? (
-        <Tooltip content="Some labor is missing here, so profit is not complete yet.">
-          <span tabIndex={0} role="img" aria-label="Some labor is missing here, so profit is not complete yet." className="inline-flex rounded-sm text-warning-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-            <TriangleAlert aria-hidden className="size-3.5" />
-          </span>
-        </Tooltip>
-      ) : null}
       {page ? (
         <Link href={page.href} aria-label={page.label} title={page.label} onClick={(event) => event.stopPropagation()} className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-icon hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus">
           <ExternalLink aria-hidden className="size-3.5" />
@@ -196,6 +209,8 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
   const noCostNote = total.costMissing ? null : noCostTotalNote(rows, VIEW_NOUN[by], `${VIEW_NOUN[by]}s`);
   // The answer columns stay pinned to the right edge from 768 px while the rest scrolls under them
   // (the same pattern as a built report), so Profit and Job margin are on screen without scrolling.
+  // A wide table drops the trend below 1536px, so no column is cut off at the right edge.
+  const trendClass = columns.length + (comparing ? 2 : 0) >= 9 ? 'hidden 2xl:table-cell' : undefined;
   const pinned = columns.length + (comparing ? 2 : 0) + (showTrend ? 1 : 0) >= 7 ? columns.filter((column) => PINNED_COLUMNS.includes(column.id)) : [];
   const pin = (id: string, surface: string, head = false): { readonly className: string; readonly style: { readonly right: string } } | null => {
     const index = pinned.findIndex((column) => column.id === id);
@@ -231,7 +246,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
                   );
                 })}
               </dl>
-              {drill ? null : <p className="text-xs text-fg-muted">{NONE_HINT[by]}</p>}
+              {drill || (by === 'program' && row.key !== 'none') ? null : <p className="text-xs text-fg-muted">{NONE_HINT[by]}</p>}
             </li>
           );
         })}
@@ -244,7 +259,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
         <Table className="min-w-max" data-testid="profit-table">
           <TableHead>
             <tr>
-              <TableHeaderCell className="sticky left-0 z-[2] min-w-[240px] bg-panel max-lg:w-[150px] max-lg:max-w-[150px] max-lg:min-w-[150px] lg:max-xl:w-[220px] lg:max-xl:max-w-[220px] lg:max-xl:min-w-[220px]" aria-sort={sort.column === 'name' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+              <TableHeaderCell className="sticky left-0 z-[2] min-w-[200px] bg-panel max-lg:w-[150px] max-lg:max-w-[150px] max-lg:min-w-[150px] lg:max-xl:w-[220px] lg:max-xl:max-w-[220px] lg:max-xl:min-w-[220px]" aria-sort={sort.column === 'name' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
                 <SortHeader id="name" label={nameLabel} sort={sort} onSort={onSort} />
               </TableHeaderCell>
               {columns.map((column) => {
@@ -265,7 +280,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
                   </TableHeaderCell>
                 </>
               ) : null}
-              {showTrend ? <TableHeaderCell>{seesMoney ? 'Profit trend' : 'Units trend'}</TableHeaderCell> : null}
+              {showTrend ? <TableHeaderCell className={trendClass}>{seesMoney ? 'Profit trend' : 'Units trend'}</TableHeaderCell> : null}
             </tr>
           </TableHead>
           <TableBody>
@@ -290,7 +305,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
                     );
                   })}
                   {comparing ? <ChangeCells compared={compared.get(row.key)} /> : null}
-                  {showTrend ? <TableCell>{row.trend && row.trend.length > 1 && !(seesMoney && row.costMissing) ? <Sparkline values={[...row.trend]} label={`${rowLabel(by, row)} ${seesMoney ? 'profit' : 'units'} over the period`} format={seesMoney ? 'money' : 'number'} width={88} height={24} tone={seesMoney && (row.profitCents ?? 0) < 0 ? 'bad' : 'accent'} /> : null}</TableCell> : null}
+                  {showTrend ? <TableCell className={trendClass}>{row.trend && row.trend.length > 1 && !(seesMoney && row.costMissing) ? <Sparkline values={[...row.trend]} label={`${rowLabel(by, row)} ${seesMoney ? 'profit' : 'units'} over the period`} format={seesMoney ? 'money' : 'number'} width={64} height={24} tone={seesMoney && (row.profitCents ?? 0) < 0 ? 'bad' : 'accent'} /> : null}</TableCell> : null}
                 </TableRow>
               );
             })}
@@ -310,7 +325,7 @@ export function TableView({ by, rows, total, columns, compared, totalCompared, c
                 );
               })}
               {comparing ? <ChangeCells compared={totalCompared} /> : null}
-              {showTrend ? <TableCell /> : null}
+              {showTrend ? <TableCell className={trendClass} /> : null}
             </tr>
           </tfoot>
         </Table>

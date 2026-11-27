@@ -3,7 +3,7 @@
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDifference, percentDifference } from '@/lib/grid-defs/counts/count-math';
-import { pillStyle, TONES, type ToneName } from '@/lib/status-colors';
+import type { ToneName } from '@/lib/status-colors';
 
 /**
  * % Difference tolerance band, coloured by ABSOLUTE magnitude (an overage is as much an accuracy
@@ -34,7 +34,14 @@ const BAND_LABEL: Record<DifferenceBand, string> = {
   over: `overage beyond the ±${DIFFERENCE_TOLERANCE_PCT}% tolerance`,
 };
 
-function Pill({
+/** Text colour per band tone: a difference is a number, so it is colored text, never a pill. */
+const BAND_TEXT: Readonly<Partial<Record<ToneName, string>>> = {
+  grey: 'text-fg-muted',
+  amber: 'text-warning-text',
+  red: 'text-danger-text',
+};
+
+function DifferenceText({
   band,
   sign,
   children,
@@ -49,17 +56,14 @@ function Pill({
   readonly className?: string;
   readonly dataAttrs?: Record<string, string | number>;
 }) {
-  const toneName = bandTone(band);
-  const tone = TONES[toneName];
   return (
     <span
       {...dataAttrs}
       data-band={band}
       title={title}
-      style={pillStyle(tone)}
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums',
-        DARK_BY_TONE[toneName],
+        'inline-flex items-center gap-0.5 whitespace-nowrap text-xs font-medium tabular-nums',
+        BAND_TEXT[bandTone(band)],
         className,
       )}
     >
@@ -73,14 +77,7 @@ function Pill({
   );
 }
 
-/** Dark-theme classes for the three band tones (same palette as the count pills). */
-const DARK_BY_TONE: Partial<Record<ToneName, string>> = {
-  grey: '[[data-theme=dark]_&]:!bg-[rgba(148,163,184,0.14)] [[data-theme=dark]_&]:!text-[#CBD5E1]',
-  amber: '[[data-theme=dark]_&]:!bg-[rgba(245,158,11,0.16)] [[data-theme=dark]_&]:!text-[#FCD34D]',
-  red: '[[data-theme=dark]_&]:!bg-[rgba(239,68,68,0.18)] [[data-theme=dark]_&]:!text-[#FCA5A5]',
-};
-
-/** "% Difference" pill: grey at 0, amber within tolerance, red beyond (either sign), arrow for direction. */
+/** "% Difference": muted at 0, amber within tolerance, red beyond (either sign), arrow for direction. */
 export function DifferenceBadge({
   value,
   suffix = '%',
@@ -93,7 +90,7 @@ export function DifferenceBadge({
   if (value === null || value === undefined) return <span className="text-faint">None</span>;
   const band = differenceBand(value);
   return (
-    <Pill
+    <DifferenceText
       band={band}
       sign={value}
       className={className}
@@ -102,7 +99,7 @@ export function DifferenceBadge({
     >
       {formatDifference(value)}
       {suffix}
-    </Pill>
+    </DifferenceText>
   );
 }
 
@@ -115,12 +112,12 @@ export function DeltaBadge({ value, system }: { readonly value: number; readonly
   const band: DifferenceBand = value === 0 ? 'none' : pct === null ? 'minor' : differenceBand(pct);
   const label = value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : '0';
   return (
-    <Pill
+    <DifferenceText
       band={band}
       sign={value}
       title={`${label} units${pct === null ? '' : ` (${formatDifference(pct)}%)`}: ${BAND_LABEL[band]}`}
     >
       {label}
-    </Pill>
+    </DifferenceText>
   );
 }

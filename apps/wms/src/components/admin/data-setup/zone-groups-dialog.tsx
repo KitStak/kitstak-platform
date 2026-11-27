@@ -165,16 +165,8 @@ export function ZoneGroupsDialog({
                               {z.name}
                             </span>
                             {z.code ? <span className="shrink-0 text-2xs text-faint">{z.code}</span> : null}
-                            {!z.isActive ? (
-                              <Badge size="sm" tone="neutral">
-                                Inactive
-                              </Badge>
-                            ) : null}
-                            {dirty ? (
-                              <Badge size="sm" tone="info">
-                                Changed
-                              </Badge>
-                            ) : null}
+                            {!z.isActive ? <Badge tone="neutral">Inactive</Badge> : null}
+                            {dirty ? <Badge tone="info">Changed</Badge> : null}
                           </span>
                           <Combobox
                             multiple

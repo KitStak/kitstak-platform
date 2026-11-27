@@ -199,7 +199,8 @@ function MyWorkRowView({ row, bucket, orgSlug, leaving, onStatus, onDate, onDone
 
 const TONE: Readonly<Record<MyWorkSection['tone'], string>> = {
   danger: 'text-danger-text',
-  primary: 'text-primary-text',
+  // "Today" is emphasis, not brand: crimson is for the logo and the primary button only.
+  primary: 'text-fg',
   neutral: 'text-fg',
 };
 

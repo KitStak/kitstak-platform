@@ -17,10 +17,14 @@ import {
   Eye,
   FolderInput,
   Handshake,
+  Factory,
   Info,
   ListChecks,
   ListPlus,
   MessageSquare,
+  Minus,
+  PackageCheck,
+  PackageMinus,
   Plus,
   Rows3,
   Signal,
@@ -28,6 +32,8 @@ import {
   Tag,
   Tags as TagsIcon,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   Truck,
   UserRound,
   Zap,
@@ -63,12 +69,22 @@ import { useShell } from '@/features/shell/shell-context';
 import type { OptionItem } from '@/features/views/option-list';
 import {
   ACTION_OPTIONS,
+  NOT_FOR_BUILDS,
+  NOT_FOR_BUILD_TRIGGERS,
+  buildWords,
+  OUTPUT_UNITS,
+  RUN_BELOW_PERCENTS,
+  RUN_CHECK_TIMES,
+  actsOnBuilds,
+  clockText,
   CONDITION_OPTIONS,
   CRM_STAGE_SUGGESTIONS,
-  MESSAGE_VARIABLES,
   TRIGGER_OPTIONS,
   actionOption,
-  conditionOption,
+  conditionKey,
+  conditionOptionByKey,
+  isRunTrigger,
+  messageVariables,
   triggerOption,
 } from './catalog';
 import {
@@ -79,11 +95,13 @@ import {
   personOptions,
   plainCategoryOptions,
   priorityOptions,
+  programOptions,
   projectOptions,
   sectionOptions,
   sentenceFor,
   statusOptions,
   useBuilderLookups,
+  variantOptions,
   type BuilderLookups,
 } from './lookups';
 import { TokenChip, TokenGroupedSelect, TokenSelect, type GroupedOption } from './token';
@@ -130,7 +148,8 @@ function draftProblems(draft: AutomationDraft, lookups: BuilderLookups): Problem
   const statusIds = new Set(lookups.statuses.map((s) => s.id));
   const sectionIds = new Set(lookups.sections.map((s) => s.id));
   const labelIds = new Set(lookups.labels.map((l) => l.id));
-  const projectIds = new Set(lookups.projects.map((p) => p.id));
+  const projectIds = new Set([...lookups.projects, ...lookups.programs].map((p) => p.id));
+  const variantIds = new Set(lookups.variants.map((v) => v.id));
   const t = draft.trigger;
   if (t.type === 'status_changed' && t.toStatusId && !statusIds.has(t.toStatusId))
     problems.set('trigger', 'Pick a status from this project.');
@@ -150,7 +169,9 @@ function draftProblems(draft: AutomationDraft, lookups: BuilderLookups): Problem
       problems.set(key, 'Pick a section from this project.');
     else if (condition.field === 'label' && value && !labelIds.has(value)) problems.set(key, 'Pick a label.');
     else if (condition.field === 'project' && value && !projectIds.has(value))
-      problems.set(key, 'Pick a project.');
+      problems.set(key, 'Pick a project or program.');
+    else if (condition.field === 'variant' && value && !variantIds.has(value))
+      problems.set(key, lookups.program ? 'Pick a variant of this program.' : 'Variants belong to one program. Pick a program at the top first.');
   });
   if (draft.actions.length === 0) problems.set('actions', 'Add at least one thing for the automation to do.');
   draft.actions.forEach((action, index) => {
@@ -224,8 +245,23 @@ function cleanAction(action: AutomationAction): AutomationAction {
   return action;
 }
 
+/**
+ * Rules for every project skip builds unless they say "the work type is a build" (5.17). A rule
+ * that names a program already means builds, so that rule is added for the person when they save.
+ */
+function withBuildRule<T extends Pick<AutomationDraft, 'projectId' | 'conditions'>>(draft: T, programIds: ReadonlySet<string>): T {
+  if (draft.projectId) return draft;
+  const namesProgram = draft.conditions.some(
+    (c) => c.field === 'project' && c.op === 'is' && typeof c.value === 'string' && programIds.has(c.value),
+  );
+  const saysBuild = draft.conditions.some((c) => c.field === 'workKind' && c.op === 'is' && c.value === 'build');
+  if (!namesProgram || saysBuild) return draft;
+  return { ...draft, conditions: [...draft.conditions, { field: 'workKind', op: 'is', value: 'build' }] };
+}
+
 function suggestName(draft: AutomationDraft, lookups: BuilderLookups): string {
-  const sentence = sentenceFor(draft, lookups.describe)
+  const programIds = new Set(lookups.programs.map((program) => program.id));
+  const sentence = sentenceFor(draft, lookups.describe, lookups.programs.map((program) => program.name), actsOnBuilds(draft.trigger, draft.conditions, { programIds, projectId: draft.projectId }))
     .replace(/^When /, '')
     .replace(/\.$/, '');
   const first = sentence.split(', ')[1] ?? sentence;
@@ -302,11 +338,17 @@ function Line({
   );
 }
 
-function VariableHints({ onInsert }: { readonly onInsert: (token: string) => void }) {
+function VariableHints({
+  onInsert,
+  variables,
+}: {
+  readonly onInsert: (token: string) => void;
+  readonly variables: readonly { readonly token: string; readonly label: string }[];
+}) {
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-fg-muted">
       <span>Insert:</span>
-      {MESSAGE_VARIABLES.map((variable) => (
+      {variables.map((variable) => (
         <button
           key={variable.token}
           type="button"
@@ -344,6 +386,11 @@ function TriggerGlyph({ type }: { readonly type: AutomationTrigger['type'] }) {
     task_overdue: AlarmClock,
     crm_stage_changed: Handshake,
     wms_order_shipped: Truck,
+    run_done: Factory,
+    run_below_plan: TrendingDown,
+    build_output_logged: PackageCheck,
+    build_done_short: PackageMinus,
+    build_over_plan: TrendingUp,
   }[type];
   return <Icon aria-hidden className={GLYPH} />;
 }
@@ -376,17 +423,20 @@ function TriggerSentence({
   lookups,
   problem,
   integrations,
+  forBuilds,
 }: {
+  /** The rule runs on builds only: task triggers read as build triggers. */
+  readonly forBuilds?: boolean;
   readonly trigger: AutomationTrigger;
   readonly onChange: (trigger: AutomationTrigger) => void;
   readonly lookups: BuilderLookups;
   readonly problem?: string;
   readonly integrations: { readonly crm: boolean; readonly wms: boolean };
 }) {
-  const options: GroupedOption[] = TRIGGER_OPTIONS.map((option) => ({
+  const options: GroupedOption[] = TRIGGER_OPTIONS.filter((option) => !forBuilds || !NOT_FOR_BUILD_TRIGGERS.includes(option.type) || option.type === trigger.type).map((option) => ({
     value: option.type,
-    label: option.label,
-    group: option.group,
+    label: forBuilds ? buildWords(option.label) : option.label,
+    group: forBuilds && option.group === 'Task changes' ? 'Build changes' : option.group,
     keywords: option.group,
     icon: <TriggerGlyph type={option.type} />,
     note: option.needs && !integrations[option.needs] ? 'Not connected' : undefined,
@@ -518,8 +568,76 @@ function TriggerSentence({
           />
         </>
       ) : null}
+      {trigger.type === 'run_below_plan' ? (
+        <>
+          <span className="text-fg-secondary">by at least</span>
+          <TokenSelect
+            label="How far behind"
+            value={String(trigger.percent)}
+            options={RUN_BELOW_PERCENTS.map((percent) => ({ value: String(percent), label: `${percent}%` }))}
+            placeholder="20%"
+            onChange={(value) => onChange({ ...trigger, percent: Number(value) })}
+          />
+          <span className="text-fg-secondary">at</span>
+          <TokenSelect
+            label="When to check"
+            value={trigger.at}
+            options={RUN_CHECK_TIMES.map((time) => ({ value: time, label: clockText(time) }))}
+            placeholder="2:00 PM"
+            onChange={(value) => onChange({ ...trigger, at: value })}
+          />
+        </>
+      ) : null}
+      {trigger.type === 'build_output_logged' ? (
+        <>
+          <span className="text-fg-secondary">when the batch is</span>
+          <TokenSelect
+            label="Batch size"
+            value={trigger.minUnits === null ? 'any' : 'at_least'}
+            options={[
+              { value: 'any', label: 'any amount' },
+              { value: 'at_least', label: 'at least' },
+            ]}
+            placeholder="any amount"
+            onChange={(value) => onChange({ type: 'build_output_logged', minUnits: value === 'any' ? null : (trigger.minUnits ?? OUTPUT_UNITS.start) })}
+          />
+          {trigger.minUnits !== null ? (
+            <>
+              <UnitsStepper value={trigger.minUnits} onChange={(minUnits) => onChange({ type: 'build_output_logged', minUnits })} />
+              <span className="text-fg-secondary">units</span>
+            </>
+          ) : null}
+        </>
+      ) : null}
       {trigger.type === 'crm_stage_changed' ? <CrmStageToken trigger={trigger} onChange={onChange} /> : null}
     </Line>
+  );
+}
+
+/** The smallest batch for "output is logged on a build": type it or step by 10. */
+function UnitsStepper({ value, onChange }: { readonly value: number; readonly onChange: (value: number) => void }) {
+  const clamp = (next: number) => Math.min(OUTPUT_UNITS.max, Math.max(OUTPUT_UNITS.min, next));
+  return (
+    <span className="inline-flex h-7 items-center rounded-md border border-border-input bg-panel" role="group" aria-label="Units in the batch">
+      <button type="button" aria-label="Fewer units" disabled={value <= OUTPUT_UNITS.min} onClick={() => onChange(clamp(value - OUTPUT_UNITS.step))} className="grid size-7 place-items-center rounded-l-md text-icon hover:bg-hover disabled:opacity-40">
+        <Minus aria-hidden className="size-3.5" />
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        aria-label="Units in the batch"
+        value={value.toLocaleString('en-US')}
+        onChange={(event) => {
+          const next = Number.parseInt(event.target.value.replace(/\D/g, ''), 10);
+          if (Number.isFinite(next)) onChange(clamp(next));
+        }}
+        className="h-full w-16 bg-transparent text-center text-sm font-medium tabular-nums outline-none"
+        data-testid="automation-output-units"
+      />
+      <button type="button" aria-label="More units" disabled={value >= OUTPUT_UNITS.max} onClick={() => onChange(clamp(value + OUTPUT_UNITS.step))} className="grid size-7 place-items-center rounded-r-md text-icon hover:bg-hover disabled:opacity-40">
+        <Plus aria-hidden className="size-3.5" />
+      </button>
+    </span>
   );
 }
 
@@ -591,17 +709,38 @@ function ConditionSentence({
   onRemove,
   lookups,
   problem,
+  pendingKey,
+  onPendingKey,
 }: {
   readonly condition: AutomationCondition;
   readonly onChange: (condition: AutomationCondition) => void;
   readonly onRemove: () => void;
   readonly lookups: BuilderLookups;
   readonly problem?: string;
+  /** "program" while a new "the program is" rule has no program picked yet. */
+  readonly pendingKey?: string | null;
+  readonly onPendingKey: (key: string | null) => void;
 }) {
-  const fieldOptions: OptionItem[] = CONDITION_OPTIONS.map((option) => ({
-    value: option.field,
+  const programIds = new Set(lookups.programs.map((program) => program.id));
+  const key = conditionKey(condition, programIds, pendingKey);
+  const hasPrograms = lookups.programs.length > 0;
+  const fieldOptions: OptionItem[] = CONDITION_OPTIONS.filter(
+    (option) =>
+      option.key === key ||
+      ((!option.forPrograms || hasPrograms) &&
+        // "the program is" only makes sense for a rule that works everywhere.
+        !(option.key === 'program' && lookups.projectId) &&
+        // The variant list needs one program; a rule in a project has no variants.
+        !(option.needsProgram && lookups.projectId && !lookups.program)),
+  ).map((option) => ({
+    value: option.key,
     label: option.label,
-    hint: option.needsProject && !lookups.projectId ? 'Needs a project' : undefined,
+    hint:
+      option.needsProject && !lookups.projectId
+        ? 'Needs a project or program'
+        : option.needsProgram && !lookups.program
+          ? 'Needs a program'
+          : undefined,
   }));
   const value = typeof condition.value === 'string' ? condition.value : '';
   const opToken = (labels: { is: string; is_not: string }) => (
@@ -630,10 +769,29 @@ function ConditionSentence({
   let rest: ReactNode = null;
   switch (condition.field) {
     case 'project':
+      rest =
+        key === 'program' ? (
+          <>
+            {opToken({ is: 'is', is_not: 'is not' })}
+            {valueToken('Program', programOptions(lookups), 'pick a program')}
+          </>
+        ) : (
+          <>
+            {opToken({ is: 'is', is_not: 'is not' })}
+            {valueToken('Project', projectOptions(lookups), 'pick a project')}
+          </>
+        );
+      break;
+    case 'variant':
       rest = (
         <>
           {opToken({ is: 'is', is_not: 'is not' })}
-          {valueToken('Project', projectOptions(lookups), 'pick a project')}
+          {valueToken(
+            'Variant',
+            variantOptions(lookups),
+            'pick a variant',
+            lookups.program ? (lookups.variants.length ? undefined : 'This program has no variants yet') : 'Pick a program at the top first',
+          )}
         </>
       );
       break;
@@ -751,6 +909,14 @@ function ConditionSentence({
         </>
       );
       break;
+    case 'workKind':
+      rest = (
+        <>
+          {opToken({ is: 'is', is_not: 'is not' })}
+          {valueToken('Work type', [{ value: 'task', label: 'a task' }, { value: 'build', label: 'a build' }], 'a build')}
+        </>
+      );
+      break;
     case 'isSubtask':
       rest = (
         <TokenSelect
@@ -771,10 +937,13 @@ function ConditionSentence({
       <span className="text-fg-secondary">and</span>
       <TokenSelect
         label="Check"
-        value={condition.field}
+        value={key}
         options={fieldOptions}
         placeholder="pick what to check"
-        onChange={(field) => onChange(conditionOption(field as AutomationCondition['field']).make())}
+        onChange={(next) => {
+          onPendingKey(next === 'program' ? 'program' : null);
+          onChange(conditionOptionByKey(next).make());
+        }}
       />
       {rest}
     </Line>
@@ -791,6 +960,7 @@ function PersonTargetToken({
   onChange,
   allow = ['assignee', 'reporter', 'project_owner', 'watchers', 'actor'],
   invalid,
+  forBuilds,
 }: {
   readonly label: string;
   readonly target: AutomationPersonTarget;
@@ -799,9 +969,13 @@ function PersonTargetToken({
   readonly onChange: (target: AutomationPersonTarget, userId?: string) => void;
   readonly allow?: readonly AutomationPersonTarget[];
   readonly invalid?: boolean;
+  /** Builds: the owner is the program owner. */
+  readonly forBuilds?: boolean;
 }) {
   const options: OptionItem[] = [
-    ...PERSON_TARGET_OPTIONS.filter((option) => allow.includes(option.value as AutomationPersonTarget)),
+    ...PERSON_TARGET_OPTIONS.filter((option) => allow.includes(option.value as AutomationPersonTarget)).map((option) =>
+      forBuilds && option.value === 'project_owner' ? { ...option, label: 'the program owner' } : option,
+    ),
     ...personOptions(lookups).map((option) => ({
       ...option,
       value: `user:${option.value}`,
@@ -829,6 +1003,8 @@ function insertAt(value: string, token: string): string {
 }
 
 function ActionSentence({
+  forBuilds,
+  variables,
   action,
   onChange,
   onRemove,
@@ -842,8 +1018,12 @@ function ActionSentence({
   readonly lookups: BuilderLookups;
   readonly problem?: string;
   readonly first: boolean;
+  /** The rule acts on builds: hide actions that do not fit a build (5.17). */
+  readonly forBuilds?: boolean;
+  /** Insert chips that fit the rule ({task} reads Build on build rules). */
+  readonly variables: readonly { readonly token: string; readonly label: string }[];
 }) {
-  const typeOptions: GroupedOption[] = ACTION_OPTIONS.map((option) => ({
+  const typeOptions: GroupedOption[] = ACTION_OPTIONS.filter((option) => !forBuilds || !NOT_FOR_BUILDS.includes(option.type)).map((option) => ({
     value: option.type,
     label: option.label,
     group: option.group,
@@ -976,6 +1156,7 @@ function ActionSentence({
             userId={action.userId}
             lookups={lookups}
             invalid={invalid}
+            forBuilds={forBuilds}
             onChange={(target, userId) => onChange({ ...action, target, userId })}
           />
         </>
@@ -986,11 +1167,12 @@ function ActionSentence({
             size="sm"
             value={action.message ?? ''}
             onChange={(event) => onChange({ ...action, message: event.target.value })}
-            placeholder="Message (optional). Leave empty for “Automation name: task”"
+            placeholder={forBuilds ? 'Message (optional). Leave empty for “Automation name: build”' : 'Message (optional). Leave empty for “Automation name: task”'}
             aria-label="Notification message"
             maxLength={300}
           />
           <VariableHints
+            variables={variables}
             onInsert={(token) => onChange({ ...action, message: insertAt(action.message ?? '', token) })}
           />
         </div>
@@ -1008,7 +1190,7 @@ function ActionSentence({
             maxLength={2000}
             aria-invalid={invalid || undefined}
           />
-          <VariableHints onInsert={(token) => onChange({ ...action, body: insertAt(action.body, token) })} />
+          <VariableHints variables={variables} onInsert={(token) => onChange({ ...action, body: insertAt(action.body, token) })} />
         </div>
       );
       break;
@@ -1022,6 +1204,7 @@ function ActionSentence({
             userId={action.userId}
             lookups={lookups}
             invalid={invalid}
+            forBuilds={forBuilds}
             onChange={(target, userId) => onChange({ ...action, target, userId })}
           />
         </>
@@ -1112,6 +1295,7 @@ function ActionSentence({
             invalid={invalid && !action.title.trim()}
           />
           <VariableHints
+            variables={variables}
             onInsert={(token) => onChange({ ...action, title: insertAt(action.title, token) })}
           />
         </div>
@@ -1144,6 +1328,8 @@ export interface AutomationBuilderProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly initial: AutomationDraft;
   readonly projects: readonly ProjectSummary[];
+  /** Programs the person may add rules to (5.17). */
+  readonly programIds?: readonly string[];
   /** Projects the person may add rules to; `canManageGlobal` allows "Every project". */
   readonly canManageGlobal: boolean;
   readonly onSaved: (rule: AutomationDTO, created: boolean) => void;
@@ -1156,6 +1342,7 @@ export function AutomationBuilder({
   onOpenChange,
   initial,
   projects,
+  programIds: editableProgramIds,
   canManageGlobal,
   onSaved,
   recipeName,
@@ -1165,6 +1352,8 @@ export function AutomationBuilder({
   const [showProblems, setShowProblems] = useState(false);
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(Boolean(initial.name));
+  // A new "the program is" rule shows as a program rule until a program is picked.
+  const [pendingKeys, setPendingKeys] = useState<readonly (string | null)[]>([]);
   // Start fresh whenever a new draft is handed in (adjusting state during render, not in an effect).
   const [loaded, setLoaded] = useState(initial);
   if (open && loaded !== initial) {
@@ -1172,6 +1361,7 @@ export function AutomationBuilder({
     setDraft(initial);
     setShowProblems(false);
     setNameTouched(Boolean(initial.name));
+    setPendingKeys([]);
   }
 
   const editable = useMemo(
@@ -1180,23 +1370,54 @@ export function AutomationBuilder({
   );
   const lookups = useBuilderLookups(draft.projectId, projects);
   const problems = useMemo(() => draftProblems(draft, lookups), [draft, lookups]);
-  const sentence = useMemo(() => sentenceFor(draft, lookups.describe), [draft, lookups.describe]);
+  const programIds = useMemo(() => new Set(lookups.programs.map((program) => program.id)), [lookups.programs]);
+  const forBuilds = actsOnBuilds(draft.trigger, draft.conditions, { programIds, projectId: draft.projectId });
+  const sentence = useMemo(
+    () => sentenceFor(withBuildRule(draft, programIds), lookups.describe, lookups.programs.map((program) => program.name), forBuilds),
+    [draft, programIds, lookups.describe, lookups.programs, forBuilds],
+  );
+  const variables = messageVariables(draft.trigger, forBuilds);
+  const scopeProgram = lookups.program;
+
   const scheduled = SCHEDULED_TRIGGER_TYPES.includes(draft.trigger.type);
   const need = triggerOption(draft.trigger.type).needs;
   const missingApp = need && !integrations[need];
   const visibleProblem = (key: string) => (showProblems || key === 'trigger' ? problems.get(key) : undefined);
 
   const update = (patch: Partial<AutomationDraft>) => setDraft((current) => ({ ...current, ...patch }));
+  const hasPrograms = lookups.programs.length > 0;
   const scopeOptions = [
     ...(canManageGlobal || draft.projectId === null
-      ? [{ value: 'all', label: 'Every project', description: 'Runs on tasks in all projects' }]
+      ? [
+          {
+            value: 'all',
+            label: hasPrograms ? 'Every project and program' : 'Every project',
+            description: hasPrograms ? 'Tasks everywhere, and builds when the rule says so' : 'Runs on tasks in all projects',
+          },
+        ]
       : []),
     ...editable.map((project) => ({
       value: project.id,
       label: project.name,
+      description: 'Project',
       icon: <EntityIcon icon={project.icon} color={project.color} size={16} />,
     })),
+    ...lookups.programs.filter((program) => !editableProgramIds || editableProgramIds.includes(program.id) || program.id === draft.projectId).map((program) => ({
+      value: program.id,
+      label: program.name,
+      description: 'Program, runs on its builds',
+      icon: <EntityIcon icon={program.icon} color={program.color} size={16} />,
+    })),
   ];
+  const whereWords = scopeProgram
+    ? `Only in the ${scopeProgram.name} program.`
+    : draft.projectId
+      ? `Only in ${projects.find((p) => p.id === draft.projectId)?.name ?? 'this project'}.`
+      : isRunTrigger(draft.trigger)
+        ? 'In every program.'
+        : forBuilds
+          ? 'On builds in every program.'
+          : 'In every project.';
 
   const save = async () => {
     setShowProblems(true);
@@ -1205,11 +1426,12 @@ export function AutomationBuilder({
       return;
     }
     const name = draft.name.trim() || suggestName(draft, lookups);
+    const ready = withBuildRule(draft, programIds);
     const body = {
       name,
       enabled: draft.enabled,
       trigger: draft.trigger,
-      conditions: [...draft.conditions],
+      conditions: [...ready.conditions],
       actions: draft.actions.map(cleanAction),
     };
     setSaving(true);
@@ -1275,6 +1497,7 @@ export function AutomationBuilder({
           <div className="group/steps mt-5">
             <StepCard step="When" title="When this happens">
               <TriggerSentence
+                forBuilds={forBuilds}
                 trigger={draft.trigger}
                 onChange={(trigger) => update({ trigger })}
                 lookups={lookups}
@@ -1284,9 +1507,23 @@ export function AutomationBuilder({
               {scheduled ? (
                 <p className="mt-2 flex items-start gap-1.5 text-xs text-fg-muted">
                   <CalendarClock aria-hidden className="mt-px size-3.5 shrink-0" />
-                  {draft.trigger.type === 'crm_stage_changed' || draft.trigger.type === 'wms_order_shipped'
+                  {isRunTrigger(draft.trigger)
+                    ? 'Works on program runs. KitStak checks every few minutes in each program\u2019s time zone, and each run sets this off once a day. Actions run on the run\u2019s first build.'
+                    : draft.trigger.type === 'crm_stage_changed' || draft.trigger.type === 'wms_order_shipped'
                     ? 'Works on tasks linked to a CRM deal or WMS order. KitStak checks every few minutes and right away when someone opens the task.'
                     : 'KitStak checks every few minutes. Each task triggers this once per due date, and done tasks are skipped.'}
+                </p>
+              ) : null}
+              {draft.projectId === null && !forBuilds && hasPrograms ? (
+                <p className="mt-2 flex items-start gap-1.5 text-xs text-fg-muted" data-testid="applies-to-tasks">
+                  <Info aria-hidden className="mt-px size-3.5 shrink-0" />
+                  Applies to tasks. To run it on program builds, pick a program in Works in or add the rule “the program is”.
+                </p>
+              ) : null}
+              {scopeProgram && !isRunTrigger(draft.trigger) ? (
+                <p className="mt-2 flex items-start gap-1.5 text-xs text-fg-muted" data-testid="applies-to-builds">
+                  <Factory aria-hidden className="mt-px size-3.5 shrink-0" />
+                  Runs on the builds of {scopeProgram.name}. Steps that would move a build out of its program are hidden.
                 </p>
               ) : null}
               {missingApp ? (
@@ -1314,10 +1551,19 @@ export function AutomationBuilder({
                     condition={condition}
                     lookups={lookups}
                     problem={visibleProblem(`condition-${index}`)}
+                    pendingKey={pendingKeys[index] ?? null}
+                    onPendingKey={(key) => setPendingKeys((current) => {
+                      const next = [...current];
+                      next[index] = key;
+                      return next;
+                    })}
                     onChange={(next) =>
                       update({ conditions: draft.conditions.map((c, i) => (i === index ? next : c)) })
                     }
-                    onRemove={() => update({ conditions: draft.conditions.filter((_, i) => i !== index) })}
+                    onRemove={() => {
+                      setPendingKeys((current) => current.filter((_, i) => i !== index));
+                      update({ conditions: draft.conditions.filter((_, i) => i !== index) });
+                    }}
                   />
                 ))}
                 <div>
@@ -1343,6 +1589,8 @@ export function AutomationBuilder({
                 {draft.actions.map((action, index) => (
                   <ActionSentence
                     key={index}
+                    forBuilds={forBuilds}
+                    variables={variables}
                     first={index === 0}
                     action={action}
                     lookups={lookups}
@@ -1388,9 +1636,7 @@ export function AutomationBuilder({
             </p>
             <p className="mt-1 text-sm text-fg">{sentence}</p>
             <p className="mt-1 text-xs text-fg-muted">
-              {draft.projectId
-                ? `Only in ${projects.find((p) => p.id === draft.projectId)?.name ?? 'this project'}.`
-                : 'In every project.'}{' '}
+              {whereWords}{' '}
               Changes made by automations never set off the same automation again in a loop.
             </p>
           </div>

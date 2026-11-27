@@ -163,6 +163,11 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
       return bundleChangeNote({ before: current, after: selection, beforeRecurringCents: currentQuote.totalCents, afterRecurringCents: q.totalCents });
     }
     if (q.isBundle || lastBundle === null) return null;
+    // Before any trial or plan exists nothing is removed from a plan, and no price "goes from" one
+    // amount to another (review round 5). One fact is enough: what the discount needs.
+    if (activeMode === 'trial') {
+      return { tone: 'info' as const, text: `The ${percentLabel(CATALOG.bundlePercentOff)} bundle discount needs ${CATALOG.bundleMinProducts} apps.` };
+    }
     const before: PlanSelection = { ...lastBundle, seats: selection.seats, warehouses: selection.warehouses, interval: selection.interval };
     return bundleChangeNote({ before, after: selection, beforeRecurringCents: quote(before).totalCents, afterRecurringCents: q.totalCents });
   }, [activeMode, current, currentQuote, lastBundle, q, selection]);
@@ -527,7 +532,8 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
                     ) : (
                       <span className="mt-1 block text-sm text-fg">
                         <span className="font-semibold">{pickerPriceWords(id, selection.interval, bundleIfOn).list}</span>
-                        {pricing.includedSeats !== null ? <span className="text-fg-muted">. Up to {pricing.includedSeats} seats.</span> : null}
+                        {/* With CRM or Projects on, Pulse covers every seat in the plan, so no limit is named. */}
+                        {pricing.includedSeats !== null && !usesSeats(selection) ? <span className="text-fg-muted">. Up to {pricing.includedSeats} seats.</span> : null}
                         {discounted ? (
                           // "Your price" is only said about an app that is switched on. An app that is
                           // off shows what it would cost, and says why it is lower.
@@ -621,7 +627,9 @@ export function PlanPicker({ mode, initialSelection, planState, focus, doneHref,
             <p role="status" data-testid="plan-pulse-note" data-tone="warning" className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning-subtle px-3 py-2 text-sm font-medium text-warning-text">
               <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
               <span>
-                Pulse alone covers up to {pulseSeats} people, and you have {pulsePeople}. Add CRM or Projects to cover everyone, or{' '}
+                {/* True for what is on screen: the team's own size when it is over, else the number picked. */}
+                Pulse alone covers up to {pulseSeats} people, and{' '}
+                {seatsUsed > pulseSeats ? `you have ${seatsUsed}` : `you picked ${selection.seats} seats`}. Add CRM or Projects to cover everyone, or{' '}
                 <a href={`${SITE_URL}/contact?topic=sales`} className="underline underline-offset-2">
                   talk to us
                 </a>

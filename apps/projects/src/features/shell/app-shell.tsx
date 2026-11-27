@@ -2,7 +2,8 @@
 /**
  * Signed-in application frame (CRM/WMS anatomy): 56px top bar, collapsible left sidebar,
  * scrollable main area. Hosts the global surfaces every page can open: command palette,
- * quick add, task drawer (`?task=KEY`) and the shortcuts sheet.
+ * quick add, task drawer (`?task=KEY`), the program overlays (`?log`, `?plan`, `?import`,
+ * `?report`; docs/programs/SPEC.md 5.5) and the shortcuts sheet.
  */
 import { useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
@@ -11,6 +12,7 @@ import { CommandPalette } from '@/features/command/command-palette';
 import { OnboardingHost } from '@/features/onboarding/onboarding-host';
 import { QuickAddDialog } from '@/features/quick-add/quick-add-dialog';
 import { TaskDrawerHost } from '@/features/task/task-drawer';
+import { ProgramOverlaysHost } from '@/features/programs/overlays/program-overlays-host';
 import type { OrgPerson, ProjectSummary, SpaceDTO } from '@/lib/types';
 import { usePeople } from '@/lib/hooks/use-data';
 import { MobileNav } from './mobile-nav';
@@ -124,6 +126,7 @@ function ShellBody({ context, initialProjects, initialSpaces, initialUnread, ini
       <CommandPalette />
       <QuickAddDialog />
       <TaskDrawerHost />
+      <ProgramOverlaysHost />
       <ShortcutsDialog />
       <OnboardingHost />
       <PlanViewOnly plan={context.plan} />

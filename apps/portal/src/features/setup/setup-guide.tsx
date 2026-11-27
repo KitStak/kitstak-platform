@@ -2,7 +2,7 @@
 /**
  * The guided-setup card in Organization settings: live progress ring and the quick start, the 3 to 5
  * steps the welcome screen promised (docs/billing/SPEC.md 5.7). The next step is open with its one
- * filled button; the others are one line each. The deeper steps of each app sit behind "Show 3 more
+ * outline button; the others are one line each. The deeper steps of each app sit behind "Show 3 more
  * steps for later". Auto-detected ticks, deep links into the exact screens, skip and undo, and a
  * celebration when the first steps are done. Re-checks on window focus so steps completed in
  * CRM/WMS check themselves off when the user comes back.
@@ -11,7 +11,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowUpRight, Check, ChevronDown, Lock, PartyPopper, RotateCcw } from 'lucide-react';
-import { Button, buttonVariants, cn } from '@/components/ui';
+import { Badge, Button, buttonVariants, cn } from '@/components/ui';
 import type { SetupState, SetupStepView } from '@/server/onboarding';
 import { skipSetupStep, unskipSetupStep } from '@/server/onboarding-actions';
 import { moreStepsLabel } from './step-labels';
@@ -84,7 +84,9 @@ function StepStatusIcon({ step, index, isNext, justDone }: Omit<StepRowProps, 'c
     <span
       className={cn(
         'flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold tabular-nums',
-        isNext ? 'border-primary text-primary-text' : 'border-border-strong text-fg-muted',
+        // The open step is marked by an inked number and the words "Next step", never crimson
+        // (docs/integration/ONBOARDING.md, docs/design/UI-CLEANUP.md).
+        isNext ? 'border-fg text-fg' : 'border-border-strong text-fg-muted',
       )}
     >
       {index + 1}
@@ -98,12 +100,12 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
   const actionable = step.status === 'todo' && !locked;
   // The wizard writes org-level answers; members without a managing role can't take it.
   const canShowCta = step.key !== 'profile' || canManage;
-  // The next step is open: its description shows and its button is the one filled button of the
-  // card. Every other row is one quiet line.
+  // The next step is open: its description shows and its button is the card's one outline button
+  // (the page header keeps the only crimson button). Every other row is one quiet line.
   // On a phone a row with a link is two lines: the title on the first, the link under it. A title
   // such as "Create your CRM workspace" then has the whole width and never wraps beside its link.
   const stacked = isNext || (actionable && canShowCta);
-  const ctaClass = cn(buttonVariants({ variant: isNext ? 'primary' : 'ghost', size: isNext ? 'md' : 'sm' }), 'shrink-0', !isNext && 'max-sm:-ml-2.5');
+  const ctaClass = cn(buttonVariants({ variant: isNext ? 'secondary' : 'ghost', size: isNext ? 'md' : 'sm' }), 'shrink-0', !isNext && 'max-sm:-ml-2.5');
   const cta = actionable && canShowCta ? (
     step.external ? (
       <a href={step.href} target="_blank" rel="noopener" className={ctaClass}>
@@ -128,7 +130,7 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
           // On the open step Skip is always there. On the quiet rows it shows on hover and on
           // keyboard focus, and not at all on touch screens, where the row has room for one button.
           // On a narrow screen the row is stacked and Skip comes after the link, so the link starts
-          // where the step title starts, exactly like the filled button of the open step. (Before,
+          // where the step title starts, exactly like the outline button of the open step. (Before,
           // the unseen Skip button still took its room and pushed the link about 54 px right.)
           !isNext && 'opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:hidden max-sm:order-last',
         )}
@@ -143,7 +145,7 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
       data-status={step.status}
       className={cn(
         'group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 px-5',
-        isNext ? 'gap-y-2 bg-sunken/60 py-3.5' : 'min-h-11 py-1.5',
+        isNext ? 'gap-y-2 py-3.5' : 'min-h-11 py-1.5',
         stacked && 'max-sm:grid-cols-[auto_minmax(0,1fr)]',
         stacked && !isNext && 'max-sm:pt-2.5 max-sm:pb-1',
       )}
@@ -161,6 +163,7 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
           >
             {step.title}
           </span>
+          {isNext ? <span className="shrink-0 text-2xs font-medium text-fg-secondary">Next step</span> : null}
           {step.status === 'todo' && !locked ? <span className="shrink-0 text-2xs text-fg-muted tabular-nums">{step.minutes} min</span> : null}
         </p>
         {/* Text wraps. It never ends in an ellipsis, so a promise is never cut mid sentence. */}
@@ -172,7 +175,7 @@ function StepRow({ step, index, isNext, justDone, canManage, pending, onSkip, on
         ) : null}
       </div>
       <div className={cn('flex items-center justify-end gap-1.5', stacked && 'max-sm:col-start-2 max-sm:justify-start')}>
-        {step.status === 'done' ? <span className="text-xs font-medium text-success-text">Done</span> : null}
+        {step.status === 'done' ? <Badge tone="success">Done</Badge> : null}
         {step.status === 'skipped' && canManage ? (
           <Button
             variant="ghost"

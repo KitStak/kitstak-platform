@@ -239,7 +239,7 @@ function StepPill({
     >
       <span
         aria-hidden
-        className={`flex h-4 w-4 items-center justify-center rounded-full text-2xs font-semibold ${active ? 'bg-primary text-white' : done ? 'bg-success-soft text-success' : 'bg-neutral-soft text-secondary'}`}
+        className={`flex h-4 w-4 items-center justify-center rounded-full text-2xs font-semibold ${active ? 'bg-foreground text-surface' : done ? 'bg-success-soft text-success' : 'bg-neutral-soft text-secondary'}`}
       >
         {done ? '✓' : n}
       </span>

@@ -78,7 +78,7 @@ const KIND_META = {
   Create: { icon: FilePlus2, dot: 'bg-success text-white' },
   Update: { icon: PencilLine, dot: 'bg-info text-white' },
   Delete: { icon: Trash2, dot: 'bg-danger text-white' },
-  Ledger: { icon: ArrowLeftRight, dot: 'bg-primary text-white' },
+  Ledger: { icon: ArrowLeftRight, dot: 'bg-fg-muted text-white' },
 } as const;
 
 const PAGE = 50;

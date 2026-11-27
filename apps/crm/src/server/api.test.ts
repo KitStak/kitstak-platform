@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 const sessionMock = vi.hoisted(() => ({
@@ -53,10 +53,17 @@ async function json(response: Response) {
 }
 
 beforeEach(() => {
+  // These suites test the API envelope, not the billing gate: keep the module gate open even when
+  // the run sets ENTITLEMENTS_DEV_ALLOW_ALL=0 (the entitlement tests cover the gate on their own).
+  vi.stubEnv('ENTITLEMENTS_DEV_ALLOW_ALL', '1');
   sessionMock.getSessionFromHeaders.mockResolvedValue({ user: USER, session: { id: 's1' } });
   sessionMock.findOrgMembership.mockResolvedValue(membership('owner'));
   auditMock.recordAudit.mockClear();
   passwordChangeMock.mustChangePassword.mockResolvedValue(false);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('withApi', () => {

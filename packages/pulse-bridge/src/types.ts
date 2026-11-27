@@ -71,6 +71,8 @@ export const PULSE_RECORD_TYPES = [
   'core_customer',
   'pm_project',
   'pm_task',
+  'pm_program',
+  'pm_build',
 ] as const;
 export type PulseRecordType = (typeof PULSE_RECORD_TYPES)[number];
 
@@ -197,7 +199,7 @@ export interface PulseOrgSummary {
 
 export type PulseOrgSummaryResult = PulseOrgSummary | PulseUnavailable;
 
-export const BRIDGE_EVENT_KINDS = ['wms_work_order_changed', 'crm_deal_stage_changed', 'pm_time_logged'] as const;
+export const BRIDGE_EVENT_KINDS = ['wms_work_order_changed', 'crm_deal_stage_changed', 'pm_time_logged', 'pm_program_changed'] as const;
 export type BridgeEventKind = (typeof BRIDGE_EVENT_KINDS)[number];
 
 export interface BridgeEventInput {

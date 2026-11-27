@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Mail } from 'lucide-react';
 import { HandoffScreen } from '@kitstak/ui/handoff';
@@ -80,7 +80,15 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
   const [sendingCode, setSendingCode] = useState(false);
+  /** True when the last ask sent no new code, because the one before it is still good. */
+  const [noNewCode, setNoNewCode] = useState(false);
   const codeInput = useRef<HTMLInputElement | null>(null);
+  /** The step the person just asked for. Its field gets the focus once that step is on the page. */
+  const focusAfterStep = useRef<'code' | 'password' | null>(null);
+  const focusStepField = (step: 'code' | 'password') => {
+    if (!prefersAutoFocus()) return;
+    (step === 'code' ? codeInput.current : passwordInput.current)?.focus({ preventScroll: true });
+  };
 
   /** The address of this screen with or without the code step. Everything else in the link is kept. */
   const stepUrl = (step: 'code' | 'password', forEmail: string): string => {
@@ -158,14 +166,28 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
           destination = '/';
         }
       }
-      router.replace(destination);
-      router.refresh();
+      leaveTo(destination);
     } catch {
       setError(NO_NETWORK_MESSAGE);
       submitting.current = false;
       setPending(false);
       setSignedIn(false);
     }
+  };
+
+  /**
+   * Leaves the sign in page. A Portal path goes through the router. A page in another app (the CRM,
+   * the WMS, Projects or Pulse send their signed out visitors here with a full address) is a plain
+   * browser visit: the router would first try to fetch it from here, which the browser blocks and
+   * logs as three console errors before it falls back.
+   */
+  const leaveTo = (destination: string) => {
+    if (!destination.startsWith('/')) {
+      window.location.assign(destination);
+      return;
+    }
+    router.replace(destination);
+    router.refresh();
   };
 
   const forgotHref = email.trim() ? `/forgot-password#${encodeHandoffIdentity({ email: email.trim() })}` : '/forgot-password';
@@ -181,8 +203,7 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
         destination = '/';
       }
     }
-    router.replace(destination);
-    router.refresh();
+    leaveTo(destination);
   };
 
   /** Mails a 6 digit sign in code to the address in the form and opens the code step. */
@@ -200,16 +221,23 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
     setSendingCode(true);
     try {
       const result = await requestSignInCodeAction({ email: email.trim() });
-      if (!result.ok) {
+      // 'code_sent_recently': no new code went out, because the last one is still fresh and still
+      // works. The code step opens all the same and says so, with the real wait.
+      const lastCodeStillGood = !result.ok && result.code === 'code_sent_recently';
+      if (!result.ok && !lastCodeStillGood) {
         setError(result.error ?? NO_NETWORK_MESSAGE);
       } else {
         setCode('');
+        setNoNewCode(lastCodeStillGood);
+        if (lastCodeStillGood) setCodeError(result.error ?? null);
         // The code step gets its own entry in the history, with the address after the "#". Asking
         // for a new code on the step itself keeps the one entry.
         const url = stepUrl('code', email.trim());
         if (onCodeStep) window.history.replaceState(null, '', url);
         else window.history.pushState(null, '', url);
-        requestAnimationFrame(() => codeInput.current?.focus());
+        focusAfterStep.current = 'code';
+        // Asking again on the code step itself: the field is already on the page.
+        if (onCodeStep) focusStepField('code');
       }
     } catch {
       setError(NO_NETWORK_MESSAGE);
@@ -242,8 +270,7 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
       // when an old password that was never confirmed was removed (it carries the way on).
       if (result.next) {
         setSignedIn(true);
-        router.replace(result.next);
-        router.refresh();
+        leaveTo(result.next);
         return;
       }
       await goOn();
@@ -258,6 +285,15 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
   // The step comes from the address. An address with no email (after the "#" was read) is not a code step.
   const codeEmail = email.trim();
   const mode: 'password' | 'code' = onCodeStep && (!hashRead || codeEmail !== '') ? 'code' : 'password';
+
+  // The step changes a moment after the address does, so the field of the new step is focused here,
+  // once it is on the page. Only after the person switched steps, and only with a mouse or trackpad:
+  // a phone keeps its keyboard down until the person taps a field.
+  useEffect(() => {
+    if (focusAfterStep.current !== mode) return;
+    focusAfterStep.current = null;
+    focusStepField(mode);
+  }, [mode]);
 
   if (mode === 'code') {
     return (
@@ -277,13 +313,13 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
           <p className="text-base text-fg-secondary" role="status" data-testid="login-code-sent">
             {codeEmail ? (
               <>
-                If <span className="font-medium text-fg [overflow-wrap:anywhere]">{codeEmail}</span> has a KitStak account, a code is on its way.
+                If <span className="font-medium text-fg [overflow-wrap:anywhere]">{codeEmail}</span> has a KitStak account, {noNewCode ? 'we sent it a code a moment ago.' : 'a code is on its way.'}
               </>
             ) : (
               // The address is read from the link a moment after the page shows.
               'If that address has a KitStak account, a code is on its way.'
             )}{' '}
-            It works for 10 minutes.
+            {noNewCode ? null : 'It works for 10 minutes.'}
           </p>
           {/* The same pill as on the verify email and reset password screens. */}
           {devOutbox ? <OutboxHint testId="login-code-dev" /> : null}
@@ -325,7 +361,7 @@ export function LoginForm({ next, notice, handoff, providers, legal, providerErr
                 // Back to the normal form, at its own address. The email stays in the field.
                 window.history.replaceState(null, '', stepUrl('password', ''));
                 setCodeError(null);
-                requestAnimationFrame(() => passwordInput.current?.focus());
+                focusAfterStep.current = 'password';
               }}
             >
               Use my password instead

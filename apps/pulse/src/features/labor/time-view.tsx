@@ -24,7 +24,8 @@ import {
 } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { BarChart } from '@/components/charts/cartesian';
-import { KpiTile } from '@/components/charts/stats';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { statValue } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { ExplainStatic } from '@/components/pulse/explain';
@@ -79,6 +80,7 @@ export function TimeView({
 }) {
   const shell = useShell();
   const { state, setState } = useRange(today, 'last_30');
+  const paidTimeHref = routes.report('paid-time-not-on-any-job', { from: state.from, to: state.to });
   const fromServer = Boolean(initialSummary) && state.from === initialSummary?.from && state.to === initialSummary?.to && !state.siteId;
   const summary = useLaborSummary({ from: state.from, to: state.to, siteId: state.siteId }, { initialData: fromServer ? initialSummary?.summary : undefined });
   const data = summary.data;
@@ -114,10 +116,12 @@ export function TimeView({
         </Button>
       </div>
       {summary.isLoading ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-busy="true">
-          {Array.from({ length: 4 }, (_, index) => (
-            <Skeleton key={index} height={96} className="w-full" rounded="lg" />
-          ))}
+        <div aria-busy="true">
+          <StatRow label="Labor time numbers">
+            {Array.from({ length: 4 }, (_, index) => (
+              <Skeleton key={index} height={96} className="w-full" rounded="lg" />
+            ))}
+          </StatRow>
         </div>
       ) : summary.isError ? (
         <Panel>
@@ -158,9 +162,10 @@ export function TimeView({
         </Panel>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiTile
+          <StatRow label="Labor time numbers">
+            <StatTile
               label="Hours on jobs"
+              href={routes.logEntries({ from: state.from, to: state.to })}
               explain={
                 <ExplainStatic
                   title="Hours on jobs"
@@ -168,11 +173,12 @@ export function TimeView({
                   rows={[{ label: 'Hours on jobs', value: formatHours(bridge.directHours, { style: 'unit' }), kind: 'total' }]}
                 />
               }
-              value={formatHours(bridge.directHours, { maxDigits: 0, style: 'unit' })}
-              footer={<span className="text-xs text-fg-muted">Production and extra services</span>}
+              value={statValue(formatHours(bridge.directHours, { maxDigits: 0, style: 'unit' }))}
+              caption={<span>Production and extra services</span>}
             />
-            <KpiTile
+            <StatTile
               label="Time not on a job"
+              href={null}
               explain={
                 <ExplainStatic
                   title="Time not on a job"
@@ -180,21 +186,21 @@ export function TimeView({
                   rows={[{ label: 'Time not on a job', value: formatHours(bridge.indirectHours, { style: 'unit' }), kind: 'total' }]}
                 />
               }
-              value={formatHours(bridge.indirectHours, { maxDigits: 0, style: 'unit' })}
-              footer={
-                <span className="text-xs text-fg-muted">
+              value={statValue(formatHours(bridge.indirectHours, { maxDigits: 0, style: 'unit' }))}
+              caption={
+                <span>
                   {bridge.indirectCents !== null
                     ? `${formatMoney(bridge.indirectCents, { cents: false })} of meetings, cleanup and waiting`
                     : 'Meetings, cleanup and waiting'}
                 </span>
               }
             />
-            <KpiTile
+            <StatTile
               label="Paid time not on any job"
-              value={hasPaid ? formatHours(bridge.missingHours, { maxDigits: 0, style: 'unit' }) : null}
-              emptyText="Type paid hours to see this"
-              footer={
-                <span className="text-xs text-fg-muted">
+              href={paidTimeHref}
+              value={statValue(hasPaid ? formatHours(bridge.missingHours, { maxDigits: 0, style: 'unit' }) : null, 'Type paid hours to see this')}
+              caption={
+                <span>
                   {hasPaid
                     ? bridge.missingCostCents !== null
                       ? `${formatMoney(bridge.missingCostCents, { cents: false })} is the cost of those hours`
@@ -235,11 +241,12 @@ export function TimeView({
                 </Explain>
               }
             />
-            <KpiTile
+            <StatTile
               label="Share of paid time on jobs"
-              value={bridge.utilizationBp === null ? null : formatPercentBp(bridge.utilizationBp)}
-              footer={
-                <span className="text-xs text-fg-muted">
+              href={paidTimeHref}
+              value={statValue(bridge.utilizationBp === null ? null : formatPercentBp(bridge.utilizationBp))}
+              caption={
+                <span>
                   {hasPaid
                     ? 'Hours on jobs divided by paid hours'
                     : 'Hours on jobs divided by all logged hours'}
@@ -259,7 +266,7 @@ export function TimeView({
                 </Explain>
               }
             />
-          </div>
+          </StatRow>
 
           <PayrollCheck data={data} settings={settings} />
 

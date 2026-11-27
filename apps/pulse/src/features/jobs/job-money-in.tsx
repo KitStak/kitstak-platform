@@ -19,8 +19,10 @@ import {
 } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { BarChart } from '@/components/charts/cartesian';
-import { KpiTile } from '@/components/charts/stats';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { statValue } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
+import { ProgramPricePanel } from './job-program';
 import { RevenueLedger } from '@/features/revenue/revenue-ledger';
 import { ServiceLedger } from '@/features/revenue/service-ledger';
 import { useShell } from '@/features/shell/shell-context';
@@ -34,7 +36,7 @@ import { singularUnit } from './job-math';
 import type { JobTabProps } from './job-overview';
 import { Explain, LoadError } from './job-ui';
 
-export function JobMoneyIn({ job, today }: JobTabProps) {
+export function JobMoneyIn({ job, today, program = null }: JobTabProps) {
   const shell = useShell();
   const refresh = useRefreshJob();
   const canRevenue = shell.can('revenue:manage');
@@ -80,11 +82,12 @@ export function JobMoneyIn({ job, today }: JobTabProps) {
 
   return (
     <div className="flex flex-col gap-5" data-testid="job-money-in">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <KpiTile
+      <StatRow label="Money in numbers">
+        <StatTile
           label="Earned"
-          value={formatMoney(stats.revenueCents, { cents: false })}
-          footer={<span className="text-xs text-fg-muted">Revenue from the work done so far</span>}
+          href={null}
+          value={statValue(formatMoney(stats.revenueCents, { cents: false }))}
+          caption={<span className="text-xs text-fg-muted">Revenue from the work done so far</span>}
           explain={
             <Explain
               title="Earned"
@@ -98,8 +101,9 @@ export function JobMoneyIn({ job, today }: JobTabProps) {
             />
           }
         />
-        <KpiTile
+        <StatTile
           label="Billed"
+          href={null}
           explain={
             <Explain
               title="Billed"
@@ -110,17 +114,18 @@ export function JobMoneyIn({ job, today }: JobTabProps) {
               ]}
             />
           }
-          value={formatMoney(stats.billedCents, { cents: false })}
-          footer={<span className="text-xs text-fg-muted">Approved invoices. Never counted as profit.</span>}
+          value={statValue(formatMoney(stats.billedCents, { cents: false }))}
+          caption={<span className="text-xs text-fg-muted">Approved invoices. Never counted as profit.</span>}
         />
-        <KpiTile
+        <StatTile
           label="Not billed yet"
-          value={formatMoney(stats.notBilledYetCents, { cents: false })}
-          footer={
+          href={null}
+          value={statValue(formatMoney(stats.notBilledYetCents, { cents: false }))}
+          caption={
             <span
               className={cn(
                 'text-xs',
-                (stats.notBilledYetCents ?? 0) > 0 ? 'text-[var(--label-yellow-text)]' : 'text-fg-muted',
+                (stats.notBilledYetCents ?? 0) > 0 ? 'text-warning-text' : 'text-fg-muted',
               )}
             >
               {(stats.notBilledYetCents ?? 0) > 0
@@ -140,8 +145,11 @@ export function JobMoneyIn({ job, today }: JobTabProps) {
             />
           }
         />
-      </div>
+      </StatRow>
 
+      {job.program ? (
+        <ProgramPricePanel job={job} program={program} />
+      ) : (
       <Panel
         title="Price"
         action={
@@ -216,6 +224,7 @@ export function JobMoneyIn({ job, today }: JobTabProps) {
           </p>
         </div>
       </Panel>
+      )}
 
       <Panel title="Earned by day" bodyClassName="p-4 min-w-0">
         <BarChart

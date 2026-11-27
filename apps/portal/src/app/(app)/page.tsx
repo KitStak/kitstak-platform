@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { Module } from '@kitstak/entitlements';
 import { formatDayShort } from '@kitstak/billing/catalog';
+import { DashboardFrame, DashboardHeader } from '@kitstak/ui/dashboard';
 import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
@@ -11,6 +12,7 @@ import { getOrgPlan, type ModuleState } from '@/server/entitlements';
 import { wasInOrganization } from '@/server/signup';
 import { plural, viewOnlyAsk, viewOnlyFix } from '@/features/billing/format';
 import { AppLauncher, type LauncherApp, type LauncherPlanNote } from '@/features/launcher/app-launcher';
+import { getProjectsCardCounts } from '@/server/onboarding';
 import { CreateOrgForm } from '@/features/launcher/create-org-form';
 import { LogoMark } from '@/features/shell/logo';
 
@@ -24,7 +26,7 @@ interface ProductCopy {
 const PRODUCTS: Readonly<Record<Module, ProductCopy>> = {
   crm: { name: 'KitStak CRM', tagline: 'Deals and pipelines' },
   wms: { name: 'KitStak WMS', tagline: 'Warehouse operations' },
-  projects: { name: 'KitStak Projects', tagline: 'Projects and tasks' },
+  projects: { name: 'KitStak Projects', tagline: 'Projects, programs and tasks' },
   pulse: { name: 'KitStak Pulse', tagline: 'Job performance and profitability' },
 };
 
@@ -42,21 +44,18 @@ function productUrl(module: Module): string {
 }
 
 /**
- * Two kinds of people are in no organization. A new one (signed up, no workspace yet) is asked to
- * name it. One who was in an organization before (removed, or left) is told so, in the same words
- * wherever they land: Billing and every signup step send them here (review round 4).
+ * A person who was in an organization before (removed, or left) and is in none now. They are told
+ * so in the same words wherever they land: Billing and every signup step send them here (review
+ * round 4). A person who never had one is not shown this screen: they name their organization on
+ * the signup step, the one screen for that (review round 5).
  */
-function NoOrganization({ former }: { readonly former: boolean }) {
+function NoOrganization() {
   return (
-    <section data-testid={former ? 'no-org-former' : 'no-org-new'} className="flex flex-col items-center py-20 text-center">
+    <section data-testid="no-org-former" className="flex flex-col items-center py-20 text-center">
       <LogoMark size={40} />
-      <h1 className="mt-8 text-2xl font-semibold tracking-[-0.02em] text-balance text-fg">
-        {former ? 'You are no longer in an organization' : 'Create your organization'}
-      </h1>
+      <h1 className="mt-8 text-2xl font-semibold tracking-[-0.02em] text-balance text-fg">You are no longer in an organization</h1>
       <p className="mt-2 max-w-md text-md text-pretty text-fg-secondary">
-        {former
-          ? 'Your account still works, but you are not on a team right now. Ask a teammate to invite you again. Or start your own organization below.'
-          : 'You are not in an organization yet. Create one, or ask a teammate for an invitation.'}
+        Your account still works, but you are not on a team right now. Ask a teammate to invite you again. Or start your own organization below.
       </p>
       <div className="mt-8 flex w-full justify-center">
         <CreateOrgForm />
@@ -87,7 +86,16 @@ function NoAppsOnPlan({ canSeeBilling, canStartTrial, askWho }: { readonly canSe
         >
           {canStartTrial ? 'Start free trial' : 'See plans'}
         </Link>
-      ) : null}
+      ) : (
+        // A member cannot add an app. Billing is where they ask for one, with one click (review round 5).
+        <Link
+          href="/billing"
+          data-testid="launcher-ask"
+          className="mt-5 inline-flex h-9 items-center rounded-md border border-border-default bg-panel px-4 text-sm font-medium text-fg hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus pointer-coarse:h-11"
+        >
+          Ask for an app
+        </Link>
+      )}
     </div>
   );
 }
@@ -97,7 +105,12 @@ export default async function LauncherPage() {
   const session = await requirePageSession('/');
   const orgs = await listUserOrgs(session.user.id);
   const activeOrg = await resolveActiveOrg(session, orgs);
-  if (!activeOrg) return <NoOrganization former={await wasInOrganization(session.user.id, session.user.email)} />;
+  if (!activeOrg) {
+    // Never had an organization: the signup step names it (docs/billing/SPEC.md 5.6), so this
+    // person sees one screen and one word for that step, whichever page they opened.
+    if (!(await wasInOrganization(session.user.id, session.user.email))) redirect('/signup/company');
+    return <NoOrganization />;
+  }
 
   // A person who only manages billing has no apps to open (review round 2). Billing is their home.
   if (activeOrg.role === 'billing') redirect('/billing');
@@ -147,19 +160,25 @@ export default async function LauncherPage() {
     }
   };
 
+  // The Projects card says what is in it ("9 projects · 4 programs") once anything is.
+  const projectsCounts = modules.some((state) => state.module === 'projects' && state.entitled)
+    ? await getProjectsCardCounts(activeOrg.id)
+    : null;
+
   // Apps that are not on the plan are left out; Billing lists them. A view only app still opens.
   const apps: readonly LauncherApp[] = modules
     .filter((state) => state.entitled)
     .map((state) => ({
       module: state.module,
       ...PRODUCTS[state.module],
+      ...(state.module === 'projects' && projectsCounts ? { tagline: projectsCounts.label } : {}),
       href: productUrl(state.module),
       planNote: planNoteFor(state),
     }));
 
   return (
-    <div className="mx-auto flex w-full max-w-[1110px] flex-col gap-8">
-      <h1 className="text-2xl font-semibold tracking-[-0.02em] text-fg sm:text-[40px] sm:leading-[48px]">Your apps</h1>
+    <DashboardFrame app="portal" className="mx-auto w-full max-w-[1110px]">
+      <DashboardHeader title="Your apps" />
       {apps.length > 0 ? (
         <AppLauncher apps={apps} />
       ) : (
@@ -169,6 +188,6 @@ export default async function LauncherPage() {
           askWho={askWho}
         />
       )}
-    </div>
+    </DashboardFrame>
   );
 }

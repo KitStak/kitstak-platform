@@ -45,13 +45,13 @@ export function drawerBadgeLabel(entry: NavEntry, badge: number): string | undef
 
 /** The signed-in person's entries, split the way every surface shows them: main links and the More group. */
 export function useNavGroups(): { readonly main: readonly NavEntry[]; readonly more: readonly NavEntry[]; readonly badges: ShellBadges | undefined } {
-  const { pulseRole, seesMoney, badges } = useShell();
+  const { pulseRole, seesMoney, badges, programs } = useShell();
   return useMemo(() => {
-    const entries = navFor(pulseRole, seesMoney);
+    const entries = navFor(pulseRole, seesMoney, { programs });
     return {
       main: entries.filter((entry) => entry.group === 'main'),
       more: entries.filter((entry) => entry.group === 'more'),
       badges,
     };
-  }, [pulseRole, seesMoney, badges]);
+  }, [pulseRole, seesMoney, badges, programs]);
 }

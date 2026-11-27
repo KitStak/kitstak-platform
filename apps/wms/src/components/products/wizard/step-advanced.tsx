@@ -101,13 +101,9 @@ function Section({
             <span className="block truncate text-xs text-secondary">{description}</span>
           </span>
           {invalid ? (
-            <Badge tone="danger" size="sm">
-              Needs attention
-            </Badge>
+            <Badge tone="danger">Needs attention</Badge>
           ) : summary ? (
-            <Badge tone="success" size="sm">
-              {summary}
-            </Badge>
+            <Badge tone="success">{summary}</Badge>
           ) : null}
         </button>
       </h3>

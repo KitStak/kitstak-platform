@@ -16,7 +16,7 @@ import { LinkChip, cleanTitle } from '@/features/views/link-chips';
 import { CollapsingRow } from '@/features/list/collapsing-row';
 import { Repeat2, Timer } from 'lucide-react';
 
-export type EditorKind = 'title' | 'status' | 'priority' | 'assignee' | 'date' | 'labels' | 'section' | 'number' | 'text' | 'checkbox' | 'select' | 'multiselect' | 'person' | 'readonly';
+export type EditorKind = 'title' | 'status' | 'priority' | 'assignee' | 'date' | 'labels' | 'section' | 'number' | 'text' | 'checkbox' | 'select' | 'multiselect' | 'person' | 'readonly' | 'custom';
 
 export interface ColumnDef {
   readonly key: string;
@@ -33,6 +33,11 @@ export interface ColumnDef {
   /** Built-in date field the date editor writes. */
   readonly dateField?: 'dueDate' | 'startDate';
   readonly sum?: (tasks: readonly TaskSummary[]) => string | null;
+  /** Page columns (programs): their own cell, CSV text, editor and default visibility. */
+  readonly render?: (task: TaskSummary) => ReactNode;
+  readonly csv?: (task: TaskSummary) => string;
+  readonly renderEditor?: (task: TaskSummary, close: () => void, seed: string | null) => ReactNode;
+  readonly defaultVisible?: boolean;
 }
 
 export interface RenderContext {
@@ -262,7 +267,7 @@ export function resolveColumns(defs: readonly ColumnDef[], saved: readonly ViewC
     if (seen.has(def.key)) continue;
     // Fresh tables show the first few custom fields too; columns added later start hidden.
     // Built-in columns introduced after a view was saved (Customer) show up too, so nobody misses them.
-    const visible = saved.length === 0 ? DEFAULT_VISIBLE.has(def.key) || (def.field !== undefined && customShown++ < 4) : LATER_DEFAULTS.has(def.key);
+    const visible = def.defaultVisible === true || (saved.length === 0 ? DEFAULT_VISIBLE.has(def.key) || (def.field !== undefined && customShown++ < 4) : LATER_DEFAULTS.has(def.key));
     out.push({ key: def.key, width: def.defaultWidth, hidden: !visible });
   }
   // The task name always comes first.
@@ -278,6 +283,7 @@ function customValue(task: TaskSummary, field: CustomFieldDTO): unknown {
 
 /** Plain-text value (for search-free display checks and aria labels). */
 export function cellText(def: ColumnDef, task: TaskSummary, ctx: RenderContext): string {
+  if (def.csv) return def.csv(task);
   switch (def.key) {
     case TITLE_KEY:
       return task.title;
@@ -303,6 +309,7 @@ export function cellText(def: ColumnDef, task: TaskSummary, ctx: RenderContext):
 }
 
 export function renderCell(def: ColumnDef, task: TaskSummary, ctx: RenderContext): ReactNode {
+  if (def.render) return def.render(task);
   const done = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
   switch (def.key) {
     case 'status': {
@@ -437,6 +444,7 @@ export function fieldOptions(field: CustomFieldDTO) {
 
 /** Plain value for CSV export (what a spreadsheet should show). */
 export function csvValue(def: ColumnDef, task: TaskSummary, ctx: RenderContext, personName: (id: string) => string): string {
+  if (def.csv) return def.csv(task);
   switch (def.key) {
     case TITLE_KEY:
       return task.title;

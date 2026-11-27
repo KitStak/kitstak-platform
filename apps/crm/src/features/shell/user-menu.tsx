@@ -148,7 +148,7 @@ export function UserMenu() {
             <Building2 aria-hidden className="size-3.5 shrink-0" />
             <span className="truncate">{org.name}</span>
           </span>
-          <Badge size="sm" tone="primary">
+          <Badge>
             {ROLE_LABEL[role] ?? role}
           </Badge>
         </DropdownMenuLabel>

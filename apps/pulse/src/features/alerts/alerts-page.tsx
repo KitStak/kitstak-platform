@@ -1,11 +1,15 @@
+import { Suspense } from 'react';
 import { Page } from '@/components/layout/page';
 import { RouteTabs } from '@/components/pulse/route-tabs';
 import { PageBlocked } from '@/features/access/page-blocked';
 import { routes } from '@/lib/routes';
 import { getSettings, listAlertRules, listAlerts, listClients, listJobTypes, listSites } from '@/server/domain';
 import { todayInZone } from '@/server/domain/_shared';
-import { pulsePage } from '@/server/page';
+import { pulsePage, type PulsePage } from '@/server/page';
 import { AlertsView } from './alerts-view';
+import type { ProgramAlertsDTO } from './program-alerts';
+import { ProgramAlertsView } from './program-alerts-view';
+import { listProgramAlerts } from './server/program-alerts';
 import { RulesView } from './rules-view';
 
 function Frame({ view, children }: { readonly view: 'inbox' | 'rules'; readonly children: React.ReactNode }) {
@@ -29,13 +33,31 @@ function Frame({ view, children }: { readonly view: 'inbox' | 'rules'; readonly 
   );
 }
 
-/** Alerts inbox: open, snoozed and done alerts, each with why it fired and the next step. */
+/**
+ * Program alerts (P1 to P7) of this month, worked out from the tracked programs when the page
+ * opens. Streamed in, so a slow read of Projects never holds the inbox back. Nothing when no
+ * program has one, or programs are not shown here.
+ */
+async function ProgramAlerts({ page }: { readonly page: PulsePage }) {
+  let data: ProgramAlertsDTO | null = null;
+  try {
+    data = await listProgramAlerts(page.ctx);
+  } catch {
+    data = null;
+  }
+  return data ? <ProgramAlertsView data={data} /> : null;
+}
+
+/** Alerts inbox: open, snoozed and done alerts, each with why it fired and the next step. Program alerts sit on top. */
 export async function AlertsPage() {
   const page = await pulsePage(routes.alerts(), 'alerts');
   if (page.blocked) return <PageBlocked title="Alerts" role={page.access.role} />;
   const [open, snoozed, settings] = await Promise.all([listAlerts(page.ctx, { status: 'open', limit: 500 }), listAlerts(page.ctx, { status: 'snoozed', limit: 500 }), getSettings(page.ctx)]);
   return (
     <Frame view="inbox">
+      <Suspense fallback={null}>
+        <ProgramAlerts page={page} />
+      </Suspense>
       <AlertsView initialOpen={open} initialSnoozed={snoozed} today={todayInZone(settings.timezone)} canManageRules={page.can('alert:manage')} />
     </Frame>
   );

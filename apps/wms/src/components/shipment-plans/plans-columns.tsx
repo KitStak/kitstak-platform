@@ -124,7 +124,7 @@ export function planColumnSpecs(h: PlanColumnHandlers): readonly ColumnSpec<Plan
           <ProgressBar
             value={r.loadedPercent}
             size="sm"
-            tone={r.loadedPercent === 100 ? 'success' : 'primary'}
+            tone={r.loadedPercent === 100 ? 'success' : 'data'}
             className="flex-1"
             label={`${r.loadedPercent}% loaded`}
           />

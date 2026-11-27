@@ -24,6 +24,8 @@ import {
   type PulseMonthPoint,
   type PulsePeriodProfit,
 } from '@kitstak/pulse-bridge';
+import { dealFacts as sharedDealFacts, type Executor as DealFactsExecutor } from '@kitstak/db/crm-deal-facts';
+import { fromScaled } from '@kitstak/programs-engine/money';
 import { env } from '@/server/env';
 import { orgModuleFlags } from '@/server/entitlements';
 import { logger } from '@/server/logger';
@@ -118,42 +120,25 @@ interface DealFacts {
   readonly coreCustomerId: string | null;
 }
 
-/** Value, stage and account of a deal, read from the item's own cells. */
+/**
+ * Value, stage and account of a deal through the shared deal facts reader
+ * (`@kitstak/db/crm-deal-facts`, docs/programs/SPEC.md 6.2), the same read Projects uses to
+ * prefill a program, with the shared won rule (A12).
+ */
 async function dealFacts(ctx: ServiceContext, itemId: string): Promise<DealFacts> {
-  const rows = rowsOf<{
-    amount: string | null;
-    currency: string | null;
-    won: boolean | null;
-    account_item_id: string | null;
-    account_name: string | null;
-    core_customer_id: string | null;
-  }>(
-    await ctx.db.execute(sql`
-      select case when (i.values #>> '{deal_value,amount}') ~ '^-?[0-9]+(\\.[0-9]+)?$' then i.values #>> '{deal_value,amount}' end as amount,
-             i.values #>> '{deal_value,currency}' as currency,
-             exists (
-               select 1 from crm.columns c,
-                      jsonb_array_elements(case when jsonb_typeof(c.settings -> 'labels') = 'array' then c.settings -> 'labels' else '[]'::jsonb end) l
-                where c.board_id = i.board_id and c.key = 'stage' and c.deleted_at is null
-                  and coalesce(l ->> 'isDone', 'false') = 'true' and l ->> 'id' = i.values #>> '{stage,labelId}') as won,
-             i.values #>> '{account,itemIds,0}' as account_item_id,
-             a.name as account_name,
-             (select cl.core_customer_id::text from crm.customer_links cl where cl.item_id = a.id limit 1) as core_customer_id
-        from crm.items i
-        left join crm.items a on a.id::text = i.values #>> '{account,itemIds,0}' and a.org_id = i.org_id and a.deleted_at is null
-       where i.id = ${itemId} and i.org_id = ${ctx.orgId}`),
-  );
-  const row = rows[0];
-  const amount = row?.amount ?? null;
-  const cents = amount === null ? null : Math.round(Number(amount) * 100);
+  const facts = await sharedDealFacts(ctx.db as unknown as DealFactsExecutor, ctx.orgId, itemId).catch(() => null);
+  const cents = facts?.valueCents ?? null;
+  const asNumber = cents === null ? null : Number(cents);
+  // Whole currency units as CRM stores them ("386400", "386400.5"), for the Pulse prefill link.
+  const valueUnits = cents === null ? null : fromScaled(cents, 2).replace(/\.?0+$/, '');
   return {
-    valueCents: cents !== null && Number.isSafeInteger(cents) ? cents : null,
-    valueUnits: amount,
-    currency: row?.currency || 'USD',
-    won: row?.won === true,
-    accountItemId: row?.account_item_id && UUID.test(row.account_item_id) ? row.account_item_id : null,
-    accountName: row?.account_name ?? null,
-    coreCustomerId: row?.core_customer_id ?? null,
+    valueCents: asNumber !== null && Number.isSafeInteger(asNumber) ? asNumber : null,
+    valueUnits,
+    currency: facts?.currency || 'USD',
+    won: facts?.won === true,
+    accountItemId: facts?.accountItemId && UUID.test(facts.accountItemId) ? facts.accountItemId : null,
+    accountName: facts?.accountName ?? null,
+    coreCustomerId: facts?.coreCustomerId ?? null,
   };
 }
 

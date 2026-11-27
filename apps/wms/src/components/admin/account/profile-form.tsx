@@ -63,7 +63,7 @@ export function ProfileForm({ profile }: { readonly profile: ProfileData }) {
           </p>
           <p className="flex flex-wrap items-center gap-1 text-xs text-faint">
             {profile.roles.map((r) => (
-              <Badge key={r} tone="primary" size="sm" shape="pill">
+              <Badge key={r} tone="info">
                 {r}
               </Badge>
             ))}

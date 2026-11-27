@@ -22,6 +22,7 @@ import { getClientRow, getSiteRow, getVasServiceRow, insertItem, resolveSite } f
 import { getJobRow } from './jobs';
 import { assertReadableRefs, liveRefsOnly } from './deleted';
 import { assertOpen, closedMonths, finishWrite, newTouched, restampUsage, restampVas, touchDay, touchJob } from './recalc';
+import { feeReadOnly, isFeeRef } from './program-feed';
 import { defaultSiteId } from './settings';
 
 type Access = Pick<PulseAccess, 'seesMoney'>;
@@ -378,8 +379,17 @@ function toRevenueDTO(row: RevenueRow, access: Access, closed: ReadonlySet<strin
     vasServiceId: row.vasServiceId,
     serviceLabel: row.serviceLabel,
     approved: row.approved,
+    fromProgram: isFeeRef(row.sourceRef) ? feeOrigin(row) : null,
   };
 }
+
+/** A fee row the program sync owns (`pmf:` ref): where it came from in Projects. */
+function feeOrigin(row: RevenueRow): { key: string | null; message: string; path: string | null } {
+  const key = typeof row.meta?.programKey === 'string' ? row.meta.programKey : null;
+  return { key, message: `This fee comes from the ${key ?? 'program'} price card in Projects.`, path: key ? `/programs/${encodeURIComponent(key)}/price-card` : null };
+}
+
+const feeKeyOf = (row: RevenueRow): string | null => (typeof row.meta?.programKey === 'string' ? row.meta.programKey : null);
 
 export const listRevenue = scoped(async function listRevenue(ctx: DomainContext, filters: EntryFilters & { kind?: StoredRevenueKind | null } = {}): Promise<RevenueEntryDTO[]> {
   const access = await requirePulse(ctx, 'pulse:read');
@@ -436,8 +446,11 @@ export const saveRevenue = scoped(async function saveRevenue(ctx: DomainContext,
       [existing] = isUuid(input.id) ? await tx.select().from(revenueEntries).where(and(eq(revenueEntries.orgId, ctx.orgId), eq(revenueEntries.id, input.id), isNull(revenueEntries.deletedAt))) : [];
       if (!existing) throw notFound('That revenue row');
       if (existing.kind === 'fixed_true_up') throw conflict('Pulse writes the fixed price true up by itself. Change the fixed price or the planned units instead.');
+      if (isFeeRef(existing.sourceRef)) throw conflict(feeReadOnly(feeKeyOf(existing)));
       assertVersion(existing.version, input.version);
     }
+    // Only the program sync writes program fee rows (sync-programs.ts, its own statements).
+    if (isFeeRef(input.sourceRef)) throw conflict(feeReadOnly(null));
     await assertOpen(tx, ctx.orgId, [input.revenueDate, existing?.revenueDate]);
     const job = input.jobId ? await getJobRow(ctx, input.jobId, tx) : null;
     const client = job ? await getClientRow(ctx, job.clientId, tx, true) : input.clientId ? await getClientRow(ctx, input.clientId, tx) : null;
@@ -492,6 +505,7 @@ async function toggleRevenue(ctx: DomainContext, id: string, restore: boolean): 
     const [row] = isUuid(id) ? await tx.select().from(revenueEntries).where(and(eq(revenueEntries.orgId, ctx.orgId), eq(revenueEntries.id, id))) : [];
     if (!row || (row.deletedAt !== null) !== restore) throw notFound('That revenue row');
     if (row.kind === 'fixed_true_up') throw conflict('Pulse writes the fixed price true up by itself. Reopen the job to remove it.');
+    if (isFeeRef(row.sourceRef)) throw conflict(feeReadOnly(feeKeyOf(row)));
     await assertOpen(tx, ctx.orgId, [row.revenueDate]);
     const [after] = await tx.update(revenueEntries).set({ deletedAt: restore ? null : new Date(), version: sql`version + 1`, updatedBy: ctx.userId, updatedAt: new Date() }).where(eq(revenueEntries.id, row.id)).returning();
     await logActivity(tx, ctx, { verb: restore ? 'revenue.restored' : 'revenue.deleted', entityType: 'revenue', entityId: row.id, jobId: row.jobId, clientId: row.clientId, before: restore ? undefined : { revenueDate: row.revenueDate, kind: row.kind, amountCents: row.amountCents } });

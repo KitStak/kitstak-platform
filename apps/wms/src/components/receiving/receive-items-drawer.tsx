@@ -496,7 +496,7 @@ function LineCard({
 
   return (
     <section
-      className={`rounded-lg border ${include ? 'border-primary/40 bg-surface shadow-xs' : 'border-border bg-surface-sunken/40'} p-3`}
+      className={`rounded-lg border ${include ? 'border-border-strong bg-surface shadow-xs' : 'border-border bg-surface-sunken/40'} p-3`}
       aria-label={`Receive ${line.sku}`}
     >
       <div className="flex items-center gap-3">
@@ -525,31 +525,11 @@ function LineCard({
           </p>
         </div>
         <div className="flex gap-1">
-          {t.lot ? (
-            <Badge tone="info" size="sm">
-              Lot
-            </Badge>
-          ) : null}
-          {t.expiry ? (
-            <Badge tone="info" size="sm">
-              Expiry
-            </Badge>
-          ) : null}
-          {t.production ? (
-            <Badge tone="info" size="sm">
-              Prod. date
-            </Badge>
-          ) : null}
-          {t.serial ? (
-            <Badge tone="info" size="sm">
-              Serial
-            </Badge>
-          ) : null}
-          {over && include ? (
-            <Badge tone="success" size="sm">
-              +{(qty - remaining).toLocaleString()} over
-            </Badge>
-          ) : null}
+          {t.lot ? <Badge tone="info">Lot</Badge> : null}
+          {t.expiry ? <Badge tone="info">Expiry</Badge> : null}
+          {t.production ? <Badge tone="info">Prod. date</Badge> : null}
+          {t.serial ? <Badge tone="info">Serial</Badge> : null}
+          {over && include ? <Badge tone="success">+{(qty - remaining).toLocaleString()} over</Badge> : null}
         </div>
       </div>
       {include ? (

@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatTile } from '@/components/ui/stat-tile';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
 import { toast } from '@/components/ui/toast';
 import { DisabledReason } from '@/components/ui/tooltip';
 import { apiRequest } from '@/lib/api-client';
@@ -285,11 +285,23 @@ export function HospitalLocationsPage() {
         }
       />
       <div className="grid gap-4 px-6 pt-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatTile label="Hospital locations" value={!warehouseId || q.isPending ? '…' : list.length} />
-          <StatTile label="Units in hospitals" value={!warehouseId || q.isPending ? '…' : units} />
-          <StatTile label="Pack-short orders held" value={!warehouseId || q.isPending ? '…' : held} />
-        </div>
+        <StatRow label="Hospital totals">
+          <StatTile
+            label="Hospital locations"
+            value={!warehouseId || q.isPending ? '…' : list.length}
+            href={null}
+          />
+          <StatTile
+            label="Units in hospitals"
+            value={!warehouseId || q.isPending ? '…' : units}
+            href={null}
+          />
+          <StatTile
+            label="Pack-short orders held"
+            value={!warehouseId || q.isPending ? '…' : held}
+            href={null}
+          />
+        </StatRow>
         {q.isError ? (
           <Callout
             variant="error"

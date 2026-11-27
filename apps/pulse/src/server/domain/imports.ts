@@ -74,6 +74,7 @@ import { upsertPlan, type PlanInput, type PlanLineInput } from './plans';
 import { dayLockReason } from './production';
 import { rollupPunches } from './punches';
 import { closedMonths, finishWrite, newTouched, recalcOrg, restampFixedJob, restampIndirect, restampProduction, restampUsage, restampVas, touchDay, touchJob } from './recalc';
+import { TYPED_UNITS_REFUSED } from './program-feed';
 import { loadSettings, type SettingsRow } from './settings';
 
 type BatchRow = typeof importBatches.$inferSelect;
@@ -153,13 +154,14 @@ async function loadEnv(executor: Executor, ctx: DomainContext, access: PulseAcce
   await simple('service', sql`SELECT id, code, name, default_price, billing FROM pulse.vas_services WHERE org_id = ${org} AND deleted_at IS NULL`);
   await simple('item', sql`SELECT id, sku AS code, name, uom, unit_cost FROM pulse.items WHERE org_id = ${org} AND deleted_at IS NULL`);
   // Jobs are found by number only: a job name is not a safe key.
-  for (const row of await rows<{ id: string; number: string; client_id: string; site_id: string; pricing_model: string; entries: number }>(
+  for (const row of await rows<{ id: string; number: string; client_id: string; site_id: string; pricing_model: string; entries: number; fed_by_program: boolean }>(
     executor,
     sql`SELECT j.id, j.number, j.client_id, j.site_id, j.pricing_model,
-               (SELECT count(*)::int FROM pulse.production_entries p WHERE p.job_id = j.id AND p.deleted_at IS NULL) AS entries
+               (SELECT count(*)::int FROM pulse.production_entries p WHERE p.job_id = j.id AND p.deleted_at IS NULL) AS entries,
+               EXISTS (SELECT 1 FROM pulse.job_links pl WHERE pl.job_id = j.id AND pl.target_type IN ('pm_program', 'pm_build')) AS fed_by_program
           FROM pulse.jobs j WHERE j.org_id = ${org} AND j.deleted_at IS NULL`,
   )) {
-    lookups.job.add({ id: row.id, code: row.number, name: '', data: { clientId: row.client_id, siteId: row.site_id, pricingModel: row.pricing_model, entries: row.entries } });
+    lookups.job.add({ id: row.id, code: row.number, name: '', data: { clientId: row.client_id, siteId: row.site_id, pricingModel: row.pricing_model, entries: row.entries, fedByProgram: Boolean(row.fed_by_program) } });
   }
   const sites = await rows<{ id: string }>(executor, sql`SELECT id FROM pulse.sites WHERE org_id = ${org} AND deleted_at IS NULL ORDER BY is_default DESC, created_at LIMIT 1`);
   const defaultSite = lookups.site.id(sites[0]?.id);
@@ -558,6 +560,12 @@ const HANDLERS: Readonly<Record<StreamId, Handler>> = {
       const job = codeRef(env, 'job', rec, 'jobNumber', 'job_number', issues);
       if (rec.shift === null) rec.shift = 'day';
       else rec.shift = String(rec.shift).toLowerCase();
+      // A job fed by KitStak Programs gets its units from builds: a file may bring hours and crew only.
+      if (job?.data.fedByProgram) {
+        for (const [field, column] of [['unitsGood', 'units_good'], ['unitsScrap', 'units_scrap'], ['unitsRework', 'units_rework']] as const) {
+          if (rec[field] !== null && rec[field] !== undefined && Number(rec[field]) !== 0) issues.push({ level: 'error', column, message: TYPED_UNITS_REFUSED });
+        }
+      }
       taskRef(env, job, rec, issues);
       return { job, site: jobSite(env, job), laborClass: codeRef(env, 'labor_class', rec, 'laborClass', 'labor_class', issues) };
     },

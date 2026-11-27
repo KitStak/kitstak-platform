@@ -28,9 +28,9 @@ export function QuotaTable({
   return (
     <div className="flex flex-col gap-3" data-testid="crm-quota">
       {!anyQuota && hasPeriodQuota ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-primary-subtle px-3 py-2 text-sm text-primary-text">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border-subtle px-3 py-2 text-sm text-fg-secondary">
           <span className="flex items-center gap-2">
-            <Target aria-hidden className="size-4" />
+            <Target aria-hidden className="size-4 text-icon" />
             Set quarterly quotas to track attainment.
           </span>
           {canEdit ? (
@@ -43,7 +43,8 @@ export function QuotaTable({
       <ul className="flex flex-col divide-y divide-border-subtle">
         {reps.map((rep) => {
           const attainment = rep.attainment;
-          const tone = attainment === null ? 'var(--primary)' : attainment >= 1 ? 'var(--success)' : attainment >= 0.6 ? 'var(--primary)' : 'var(--warning)';
+          // The data color until the rep crosses a line that matters: quota met (success) or under 60% (warning).
+          const tone = attainment === null ? 'var(--dash-data)' : attainment >= 1 ? 'var(--success)' : attainment >= 0.6 ? 'var(--dash-data)' : 'var(--warning)';
           return (
             <li key={rep.user.id} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1.5 py-2.5 first:pt-0 last:pb-0">
               <div className="flex min-w-0 items-center gap-2">
@@ -195,7 +196,7 @@ export function VelocityStrip({ stages }: { readonly stages: readonly StageVeloc
               </span>
               <span className="text-sm text-fg-secondary">avg days in stage</span>
             </div>
-            <Meter value={stage.avgDays ?? 0} max={max} color={isSlowest ? 'var(--warning)' : 'var(--primary)'} />
+            <Meter value={stage.avgDays ?? 0} max={max} color={isSlowest ? 'var(--warning)' : 'var(--dash-data)'} />
             <dl className="grid grid-cols-2 gap-x-3 text-xs">
               <div className="flex flex-col">
                 <dt className="text-fg-muted">Here now</dt>

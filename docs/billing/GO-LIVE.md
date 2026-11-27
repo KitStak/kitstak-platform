@@ -589,6 +589,60 @@ The short form, for the day itself.
 - [ ] A row in `core.billing_locks` older than 2 minutes means a server stopped in the middle of a billing
       step. It ends by itself. If you see many, look at the gateway's response times.
 
+## Review round 5, second pass: what changed and what you decide
+
+No database migration. Production stays at core migration 0011. Deploy the Portal, the CRM and the WMS
+together: the three fixes below span them.
+
+- [ ] **Accounts made in the WMS are born unverified.** "Add user" in the WMS used to write
+      `email_verified = true` for any address the warehouse admin typed. That flag is the proof every invite
+      door trusts, so a warehouse admin could take an invite meant for someone else. Now such an account is
+      born with `email_verified = false`, and the flag goes back to false whenever the WMS changes an
+      account's email. Only the mailbox proves the mailbox: the emailed code in the Portal, or the proof in
+      an invite email. At that first proof the Portal removes any password that was on the account and
+      every session, and tells the person in one sentence.
+- [ ] **A warehouse admin can no longer set or reset the password of an account whose email is verified.**
+      "Reset password" and a password typed in "Edit user" answer: "This person confirmed their email, so
+      only they can change their password. They can use "Forgot password" on the sign in page." For an
+      account that is not verified yet, both work as before.
+- [ ] **DECISION FOR YOU: WMS accounts that exist today.** Every account the WMS made before this release
+      has `email_verified = true`, because it was born that way. This release does not touch them. What that
+      means:
+      1. They keep working. Nobody is signed out, no password changes, invites work as before.
+      2. Their warehouse admin can no longer reset their password. The person uses "Forgot password" on
+         the sign in page, which mails a code.
+      3. A person whose address cannot receive mail (a made up address for a shared scanner login) can no
+         longer get a new password from anyone. For those accounts run the statement below. It marks them
+         unverified, and the admin reset works again. It is safe to run more than once.
+      Look first:
+      `select u.email, o.slug from core."user" u join core.member m on m.user_id = u.id join core.organization o on o.id = m.organization_id where u.email_verified and o.slug = '<organization slug>' order by 1;`
+      Then, for the addresses that cannot receive mail:
+      `update core."user" set email_verified = false, updated_at = now() where lower(email) in ('<address 1>', '<address 2>');`
+      If you would rather treat every old WMS account as unproven (the strict reading: nobody ever proved
+      those mailboxes), run the update for all members of the organizations that own a warehouse. The cost:
+      each of those people sees "Verify your email" in the Portal, must enter a code before they can pay or
+      invite, and loses their password the first time they sign in with an emailed code. We did not do this
+      by default because it changes what every existing warehouse user sees on day one.
+- [ ] **A new cookie.** The Portal sets `kitstak.known_device` at every sign in: HttpOnly, one year, signed
+      with `BETTER_AUTH_SECRET`, holds the ids of up to 5 people who signed in on that browser. It gives no
+      access. It only puts that browser's requests for email codes on counters that strangers cannot fill.
+      Add it to the cookie list of the privacy page if you keep one.
+- [ ] **Email code limits changed.** The "20 codes a day per address" wall is gone: any stranger could use
+      it up and lock the owner of a no password account out for a day. Sends are now spaced per address and
+      per kind of code: two at once, then one a minute, then one every 10 minutes, then one every 30
+      minutes (`CODE_SEND_GAPS` in `packages/billing/src/server/code-limits.ts`). The tries at a code are
+      counted as before (5 per code, 10 per 10 minutes and 30 a day per address for sign in codes), and a
+      browser that signed in to the account before has counters of its own. One limit is new: tries at a
+      reset code and at a verification code are now also counted per address (100 and 30 a day).
+- [ ] **Invites from the CRM send the invite email now**, through the same door as the Portal: the inviter's
+      own email must be verified (accounts made before `INVITE_NEEDS_VERIFIED_EMAIL_SINCE` may still
+      invite), the day's count applies, and the link in the email proves the mailbox. The CRM has no mail
+      key of its own, so the email is queued and the Portal's one minute job sends it. "Copy link" in the
+      CRM now copies the Portal's invite page. A copied link carries no proof: the person confirms the
+      address with an emailed code on that page.
+- [ ] **Joining from an invite needs no password.** The form asks for a name. "Set a password" is one click
+      away. A person who joins without one signs in with an emailed code.
+
 ## Questions the owner still has to answer
 
 These do not block go live. Each sits in one place and is a small change later (`SPEC.md` section 17).

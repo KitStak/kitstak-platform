@@ -6,7 +6,8 @@
  */
 import { useCallback, useMemo } from 'react';
 import { ChevronRight, CircleDollarSign, Columns3, Download, PackagePlus, Rocket, SearchX, X } from 'lucide-react';
-import { KpiTile } from '@/components/charts/stats';
+import { StatRow, StatTile, type StatTileProps } from '@kitstak/ui/dashboard';
+import { StatTileLoading, statValue, toDelta, type DeltaBadgeProps } from '@/components/charts/stats';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { ExplainNumber } from '@/components/pulse/explain';
 import { Teach } from '@/components/pulse/teach';
@@ -73,6 +74,7 @@ const EMPTY_COPY: Readonly<Record<ProfitGroup, { title: string; why: string }>> 
   client: { title: 'No client profit yet', why: 'See which clients make you money and which ones cost you. Each client adds up the revenue and cost of all its jobs and extra services.' },
   type: { title: 'No profit by job type yet', why: 'Group your jobs by the kind of work, like kitting or relabeling, to see which kind pays best and where your pace is strongest.' },
   service: { title: 'No profit from extra services yet', why: 'Extra services are the small billable things around a job, like labeling or rework. Each one has its own revenue, cost and margin here.' },
+  program: { title: 'No program profit yet', why: 'Jobs a KitStak program feeds add up here per program: units, revenue, labor, material, profit and margin. Link a program to a job to start.' },
   site: { title: 'No profit by site yet', why: 'With more than one site, this tab puts them side by side: margin, pace and time not on a job.' },
   month: { title: 'No monthly profit yet', why: 'Each month shows what your jobs made. Closed months are locked so the numbers stay put.' },
   week: { title: 'No weekly profit yet', why: 'Week by week revenue, cost and margin, so you can spot a bad week while there is still time to fix the month.' },
@@ -266,7 +268,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
       {/* The drill path */}
       {crumbs.length > 0 ? (
         <nav aria-label="Where you are" className="flex flex-wrap items-center gap-1.5 text-sm" data-testid="drill-path">
-          <button type="button" onClick={() => set({ site: null, client: null, jobType: null, job: null, service: null }, { push: true })} className="rounded-md px-1.5 py-0.5 font-medium text-primary-text hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus" data-testid="drill-root">
+          <button type="button" onClick={() => set({ site: null, client: null, jobType: null, job: null, service: null }, { push: true })} className="rounded-md px-1.5 py-0.5 font-medium text-fg-link hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus" data-testid="drill-root">
             Everything
           </button>
           {crumbs.map((crumb) => (
@@ -335,30 +337,33 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
       ) : (
         <>
           {/* Totals for what is on screen */}
-          <div className={cn('grid grid-cols-2 gap-3 md:grid-cols-3', comparing ? 'min-[1680px]:grid-cols-6' : 'xl:grid-cols-6')} data-testid="profit-tiles">
-            {seesMoney ? (
-              <>
-                <KpiTile label="Revenue" loading={!total} value={total ? formatMoneyWhole(total.revenueCents) : null} delta={total ? moneyDelta(total.revenueCents, prior?.revenueCents, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="revenue" scope={scope} />} />
-                <KpiTile label="Cost" loading={!total} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, prior?.costCents, 'down', compareLabel) : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />
-                <KpiTile label="Profit" loading={!total} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, prior?.profitCents, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />
-                <KpiTile label="Job margin" loading={!total} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue' }) : null} delta={total ? pointsDelta(total.marginBp, prior?.marginBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin" scope={scope} />} footer={!comparing && total?.marginBp !== null && total ? <span className="text-xs text-fg-muted">Target {formatPercentWhole(targetMarginBp)}</span> : undefined} />
-                {/* The company margin only exists for the whole company: a client or a job type has no overhead of its own. */}
-                {wholeCompany ? (
-                  <div className="contents" data-testid="profit-company-margin">
-                    <KpiTile
-                      label="Company margin"
-                      loading={!total || bridge.isLoading}
-                      value={total && bridge.data ? (companyMargin === null ? null : formatPercentBp(companyMargin)) : null}
-                      emptyText={bridge.isError ? 'Could not load' : 'No revenue'}
-                      explain={<ExplainNumber metric="company_profit" scope={{ from: period.from, to: period.to, siteId: filters.siteId, spread }} label="How we got company profit" />}
-                      footer={companyMargin !== null && bridge.data ? <span className="text-xs text-fg-muted" data-testid="profit-company-margin-words">{companyWords(bridge.data).tile}</span> : undefined}
-                    />
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-            <KpiTile label="Units per person per hour" loading={!total} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(total.uph === null ? null : Number(total.uph), prior ? (prior.uph === null ? null : Number(prior.uph)) : undefined, 'up', compareLabel, 1) : undefined} explain={<ExplainNumber metric="uph" scope={scope} />} />
-          </div>
+          <StatRow label="Totals for what is on screen" data-testid="profit-tiles">
+            {[
+              ...(seesMoney
+                ? [
+                    <ProfitTile key="revenue" loading={!total} label="Revenue" value={statValue(total ? formatMoneyWhole(total.revenueCents) : null)} delta={total ? moneyDelta(total.revenueCents, prior?.revenueCents, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="revenue" scope={scope} />} />,
+                    <ProfitTile key="cost" loading={!total} label="Cost" value={statValue(total ? formatMoneyWhole(total.costCents) : null)} delta={total ? moneyDelta(total.costCents, prior?.costCents, 'down', compareLabel) : undefined} explain={<ExplainNumber metric="cost" scope={scope} />} />,
+                    <ProfitTile key="profit" loading={!total} label="Profit" value={statValue(total ? formatMoneyWhole(total.profitCents) : null)} delta={total ? moneyDelta(total.profitCents, prior?.profitCents, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="profit" scope={scope} />} />,
+                    <ProfitTile key="margin" loading={!total} label="Job margin" value={statValue(total ? formatPercentBp(total.marginBp, { empty: 'No revenue' }) : null)} delta={total ? pointsDelta(total.marginBp, prior?.marginBp, 'up', compareLabel) : undefined} explain={<ExplainNumber metric="margin" scope={scope} />} caption={!comparing && total?.marginBp !== null && total ? <span>Target {formatPercentWhole(targetMarginBp)}</span> : undefined} />,
+                    // The company margin only exists for the whole company: a client or a job type has no overhead of its own.
+                    ...(wholeCompany
+                      ? [
+                          <ProfitTile
+                            key="company"
+                            data-testid="profit-company-margin"
+                            loading={!total || bridge.isLoading}
+                            label="Company margin"
+                            value={statValue(total && bridge.data ? (companyMargin === null ? null : formatPercentBp(companyMargin)) : null, bridge.isError ? 'Could not load' : 'No revenue')}
+                            explain={<ExplainNumber metric="company_profit" scope={{ from: period.from, to: period.to, siteId: filters.siteId, spread }} label="How we got company profit" />}
+                            caption={companyMargin !== null && bridge.data ? <span data-testid="profit-company-margin-words">{companyWords(bridge.data).tile}</span> : undefined}
+                          />,
+                        ]
+                      : []),
+                  ]
+                : []),
+              <ProfitTile key="uph" loading={!total} label="Units per person per hour" value={statValue(total ? formatPace(total.uph, { empty: 'No hours yet' }) : null)} delta={total ? numberDelta(total.uph === null ? null : Number(total.uph), prior ? (prior.uph === null ? null : Number(prior.uph)) : undefined, 'up', compareLabel, 1) : undefined} explain={<ExplainNumber metric="uph" scope={scope} />} />,
+            ]}
+          </StatRow>
 
           {/* Jobs are not the company: say what the company made */}
           {wholeCompany && seesMoney && bridge.data && total && bridge.data.companyProfitCents !== null ? (
@@ -373,7 +378,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
               {bridge.data.hasCompanyCosts && bridge.data.companyCostPartial ? (
                 <button
                   type="button"
-                  className="text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus print:hidden"
+                  className="text-sm font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus print:hidden"
                   onClick={() => set({ spread: bridge.data!.companyCostSpread === 'work_days' ? 'calendar' : 'work_days' })}
                   data-testid="company-cost-spread-switch"
                 >
@@ -449,7 +454,7 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
           {comparing && before.isError ? <p className="text-sm text-danger-text">We could not load the period to compare with. The change columns are blank.</p> : null}
           {data && mode === 'table' ? (
             <p className="text-xs text-fg-muted">
-              Click {withArticle(VIEW_NOUN[by])} to go one level down. The total of each level matches the row you clicked. {seesMoney ? `Profit on this page is ${formatMoney(total?.profitCents ?? null)}.` : ''}
+              {by === 'program' ? 'Each program adds up the jobs it feeds. Open a program to see it by variant and by day.' : `Click ${withArticle(VIEW_NOUN[by])} to go one level down. The total of each level matches the row you clicked.`} {seesMoney ? `Profit on this page is ${formatMoney(total?.profitCents ?? null)}.` : ''}
             </p>
           ) : null}
         </>
@@ -466,4 +471,13 @@ export function ProfitExplorer({ by, today, weekStart, targetMarginBp, sites, cl
       />
     </div>
   );
+}
+
+/**
+ * A total for what is on screen. It sits on the page it counts, so it links nowhere; the period
+ * picker says what a change compares with, so the tile does not repeat it.
+ */
+function ProfitTile({ loading, delta, ...tile }: Omit<StatTileProps, 'href' | 'delta'> & { readonly loading: boolean; readonly delta?: DeltaBadgeProps }) {
+  if (loading) return <StatTileLoading label={tile.label} data-testid={tile['data-testid']} />;
+  return <StatTile {...tile} href={null} delta={delta ? toDelta(delta) : undefined} />;
 }

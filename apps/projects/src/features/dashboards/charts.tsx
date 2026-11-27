@@ -95,7 +95,7 @@ export function ProgressRing({
   const clamped = Math.max(0, Math.min(100, Math.round(percent)));
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const color = clamped === 100 ? 'var(--success)' : tone === 'primary' ? 'var(--logo-ink)' : `var(--${tone})`;
+  const color = clamped === 100 ? 'var(--success)' : tone === 'primary' ? 'var(--dash-data, var(--chart-4))' : `var(--${tone})`;
   return (
     <span className={cn('relative inline-flex shrink-0 items-center justify-center', className)} style={{ width: size, height: size }} role="img" aria-label={`${label}: ${clamped}%`}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden className="-rotate-90">
@@ -227,7 +227,17 @@ export interface LineSeries {
   readonly area?: boolean;
 }
 
-const PAD = { top: 12, right: 12, bottom: 26, left: 34 };
+const FULL_PAD = { top: 12, right: 12, bottom: 26, left: 34 };
+const MINI_PAD = { top: 4, right: 2, bottom: 4, left: 2 };
+
+/** A horizontal line at a value (target, minimum): dashed by default, labeled at the right edge. */
+export interface ChartReference {
+  readonly id: string;
+  readonly label: string;
+  readonly value: number;
+  readonly color?: string;
+  readonly dashed?: boolean;
+}
 
 export function LineChart({
   series,
@@ -238,6 +248,10 @@ export function LineChart({
   markerLabel = 'Today',
   title,
   valueSuffix = '',
+  references = [],
+  formatValue,
+  mini = false,
+  hideLegend = false,
 }: {
   readonly series: readonly LineSeries[];
   /** One label per point (dates). */
@@ -249,12 +263,23 @@ export function LineChart({
   readonly markerLabel?: string;
   readonly title: string;
   readonly valueSuffix?: string;
+  /** Horizontal reference lines (a target, a minimum). They count toward the y scale. */
+  readonly references?: readonly ChartReference[];
+  /** Axis and tooltip text for a value (money, units). Defaults to the number plus `valueSuffix`. */
+  readonly formatValue?: (value: number) => string;
+  /** Sparkline: no axes, grid, legend or tooltip; one accessible label. */
+  readonly mini?: boolean;
+  readonly hideLegend?: boolean;
 }) {
   const [ref, width] = useElementWidth<HTMLDivElement>();
+  const basePad = mini ? MINI_PAD : FULL_PAD;
+  const text = (value: number) => (formatValue ? formatValue(value) : `${Number.isInteger(value) ? value : value.toFixed(1)}${valueSuffix}`);
   const gradientId = useId().replace(/:/g, '');
   const count = labels.length;
   const roving = useRoving(count);
-  const max = tightNiceMax(Math.max(0, ...series.flatMap((s) => s.values.filter((v): v is number => v !== null))));
+  const max = tightNiceMax(Math.max(0, ...series.flatMap((s) => s.values.filter((v): v is number => v !== null)), ...references.map((r) => r.value)));
+  // Money axis labels ("$12,000") need more room than plain counts.
+  const PAD = formatValue && !mini ? { ...basePad, left: Math.max(basePad.left, Math.round(Math.max(...[0, max / 2, max].map((t) => formatValue(t).length)) * 6.2) + 12) } : basePad;
   const innerW = Math.max(0, width - PAD.left - PAD.right);
   const innerH = height - PAD.top - PAD.bottom;
   const x = (index: number) => PAD.left + (count <= 1 ? innerW / 2 : (index / (count - 1)) * innerW);
@@ -294,12 +319,30 @@ export function LineChart({
     return `M${first[0]},${PAD.top + innerH}${points.map(([px, py]) => `L${px.toFixed(1)},${py.toFixed(1)}`).join('')}L${last[0]},${PAD.top + innerH}Z`;
   };
 
-  const active = roving.active;
+  const active = mini ? null : roving.active;
   const tooltipLeft = active === null ? 0 : x(active);
+
+  if (mini) {
+    return (
+      <div ref={ref} className="relative w-full" style={{ height }} role="img" aria-label={title}>
+        {width > 0 ? (
+          <svg width={width} height={height} aria-hidden className="block overflow-visible">
+            {references.map((r) => (
+              <line key={r.id} x1={PAD.left} x2={PAD.left + innerW} y1={y(r.value)} y2={y(r.value)} stroke={r.color ?? 'var(--chart-axis)'} strokeWidth="1" strokeDasharray={r.dashed === false ? undefined : '3 3'} />
+            ))}
+            {series.map((s) => (s.area ? <path key={`${s.id}-area`} d={areaPath(s.values)} fill={s.color} fillOpacity="0.12" /> : null))}
+            {series.map((s) => (
+              <path key={s.id} d={path(s.values)} fill="none" stroke={s.color} strokeWidth={s.dashed ? 1.25 : 1.75} strokeDasharray={s.dashed ? '4 4' : undefined} strokeLinejoin="round" strokeLinecap="round" />
+            ))}
+          </svg>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3">
-      <ChartLegend items={series.map((s) => ({ label: s.label, color: s.color, dashed: s.dashed }))} />
+      {hideLegend ? null : <ChartLegend items={[...series.map((s) => ({ label: s.label, color: s.color, dashed: s.dashed })), ...references.map((r) => ({ label: r.label, color: r.color ?? 'var(--chart-axis)', dashed: r.dashed !== false }))]} />}
       <div
         ref={ref}
         className="relative w-full rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
@@ -329,7 +372,7 @@ export function LineChart({
               <g key={tick}>
                 <line x1={PAD.left} x2={PAD.left + innerW} y1={y(tick)} y2={y(tick)} stroke="var(--chart-grid)" strokeDasharray={index === 0 ? undefined : '3 4'} />
                 <text x={PAD.left - 8} y={y(tick)} dy="0.32em" textAnchor="end" fontSize="11" fill="var(--chart-axis)" className="tabular-nums">
-                  {Number.isInteger(tick) ? tick : tick.toFixed(1)}
+                  {formatValue ? formatValue(tick) : Number.isInteger(tick) ? tick : tick.toFixed(1)}
                 </text>
               </g>
             ))}
@@ -340,12 +383,17 @@ export function LineChart({
             ))}
             {markerIndex !== null && markerIndex !== undefined && markerIndex >= 0 && markerIndex < count ? (
               <g>
-                <line x1={x(markerIndex)} x2={x(markerIndex)} y1={PAD.top} y2={PAD.top + innerH} stroke="var(--primary)" strokeWidth="1.5" strokeDasharray="2 3" />
+                <line x1={x(markerIndex)} x2={x(markerIndex)} y1={PAD.top} y2={PAD.top + innerH} stroke="var(--text-muted)" strokeWidth="1.5" strokeDasharray="2 3" />
                 <text x={x(markerIndex)} y={PAD.top - 2} textAnchor={markerIndex > count * 0.85 ? 'end' : 'middle'} fontSize="10" fontWeight="600" fill="var(--primary-text)">
                   {markerLabel}
                 </text>
               </g>
             ) : null}
+            {references.map((r) => (
+              <g key={r.id} data-testid={`chart-reference-${r.id}`}>
+                <line x1={PAD.left} x2={PAD.left + innerW} y1={y(r.value)} y2={y(r.value)} stroke={r.color ?? 'var(--chart-axis)'} strokeWidth="1.25" strokeDasharray={r.dashed === false ? undefined : '6 4'} />
+              </g>
+            ))}
             {series.map((s) =>
               s.area ? <path key={`${s.id}-area`} d={areaPath(s.values)} fill={`url(#area-${gradientId})`} /> : null,
             )}
@@ -360,6 +408,13 @@ export function LineChart({
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
+            ))}
+            {/* Reference labels sit at the left end, above their line, drawn after the series with a
+                halo in the panel color, so the Today marker (right side) and the lines never cross them. */}
+            {references.map((r) => (
+              <text key={`${r.id}-label`} x={PAD.left + 4} y={y(r.value) - 5} textAnchor="start" fontSize="10" fontWeight="600" fill={r.color ?? 'var(--chart-axis)'} stroke="var(--surface-panel)" strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
+                {r.label} · {text(r.value)}
+              </text>
             ))}
             {active !== null ? (
               <g>
@@ -387,7 +442,7 @@ export function LineChart({
                 <p key={s.id} className="flex items-center gap-2 text-fg-secondary">
                   <span aria-hidden className="size-2 rounded-full" style={{ background: s.color }} />
                   <span className="flex-1">{s.label}</span>
-                  <span className="font-medium text-fg tabular-nums">{value === null || value === undefined ? 'No data' : `${value}${valueSuffix}`}</span>
+                  <span className="font-medium text-fg tabular-nums">{value === null || value === undefined ? 'No data' : text(value)}</span>
                 </p>
               );
             })}

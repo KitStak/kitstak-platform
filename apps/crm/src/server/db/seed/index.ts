@@ -33,12 +33,15 @@ import { initialPositions } from '@/server/services/positions';
 import { seedAutomations, seedNotifications, seedPersonal, seedUpdates } from './collaboration';
 import { generateCrmData, type BoardKey, type UserIds } from './crm-data';
 import { DEMO_EMAIL_DOMAIN, DEMO_ORG, DEMO_TEAMS, DEMO_USERS } from './fixtures';
+import { addRateColumns, grantDemoApps, programItems } from './programs';
 import { createRng, startOfDay } from './rng';
 import { writeActivity, writeItems, writeLinks, writeWmsLinks, type BoardTarget } from './writer';
 
 /** Dev-only demo password shared by every seeded user (documented in README.md). */
 const DEMO_PASSWORD = 'Northwind-Demo-2026!';
 const SEED = 20_261_105;
+/** Fixed org id, so Projects and Pulse seed ids (uuidv5 of the org) stay the same across reseeds. */
+const DEMO_ORG_ID = '0c4a7d2e-5b1f-4e8a-9d3c-6f2b8a1e4c70';
 
 const demoEmail = (key: string): string => `${key}@${DEMO_EMAIL_DOMAIN}`;
 
@@ -80,6 +83,7 @@ async function seed(): Promise<void> {
     const [org] = await tx
       .insert(organization)
       .values({
+        id: DEMO_ORG_ID,
         name: DEMO_ORG.name,
         slug: DEMO_ORG.slug,
         createdAt: new Date(today.getTime() - 400 * 86_400_000),
@@ -207,6 +211,10 @@ async function seed(): Promise<void> {
       ]),
     );
     const dataset = generateCrmData(rng, users, today);
+    // Program accounts and deals (docs/programs/SPEC.md 7.1) with the rate columns on Deals.
+    dataset.items.push(...programItems(users, today));
+    await addRateColumns(tx, org.id, boardIdOf('crm-deals'), users.maya);
+    await grantDemoApps(tx, org.id);
     await writeItems(tx, org.id, targets, dataset.items);
     const connectKeys = new Set(
       allBoards.flatMap((entry) =>

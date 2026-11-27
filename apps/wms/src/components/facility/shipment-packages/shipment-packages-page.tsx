@@ -236,13 +236,9 @@ function PackageDetailDrawer({
               {
                 label: 'Status',
                 value: d.isActive ? (
-                  <Badge tone="success" size="sm" shape="pill">
-                    Active
-                  </Badge>
+                  <Badge tone="success">Active</Badge>
                 ) : (
-                  <Badge tone="outline" size="sm" shape="pill">
-                    Inactive
-                  </Badge>
+                  <Badge tone="outline">Inactive</Badge>
                 ),
               },
               { label: 'Shipments', value: d.usage.shipments },
@@ -296,7 +292,7 @@ function PackageDetailDrawer({
                 {d.access
                   .filter((a) => a.hasAccess)
                   .map((a) => (
-                    <Badge key={a.clientId} tone="success" size="sm" shape="pill">
+                    <Badge key={a.clientId} tone="success">
                       {a.code}
                     </Badge>
                   ))}

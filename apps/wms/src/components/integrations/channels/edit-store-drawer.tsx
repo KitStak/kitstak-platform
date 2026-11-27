@@ -369,14 +369,12 @@ function Body({
                 <KeyRound className="h-4 w-4 text-secondary" />
                 <p className="flex-1 text-sm font-medium">Authorization · {detail.authMethod}</p>
                 {Object.entries(detail.credentialHints).map(([k, v]) => (
-                  <Badge key={k} size="sm" tone="neutral">
+                  <Badge key={k} tone="neutral">
                     {k} {maskSecret(v)}
                   </Badge>
                 ))}
                 {Object.keys(detail.credentialHints).length === 0 ? (
-                  <Badge size="sm" tone="danger">
-                    No credentials stored
-                  </Badge>
+                  <Badge tone="danger">No credentials stored</Badge>
                 ) : null}
               </div>
               {!rotate ? (

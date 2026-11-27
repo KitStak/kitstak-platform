@@ -1,58 +1,70 @@
-import type { CSSProperties } from 'react';
+import type { PillTone } from '@kitstak/ui/dashboard';
+
+export type { PillTone };
 
 /**
- * Status pill color maps (BUILD_PLAN 0.5). Status semantics on the shared label palette.
- * Every status in the product renders through `<StatusPill domain=… status=…>` using
- * these tones. Lookups are case-insensitive; unknown statuses fall back to the
- * generic map and finally to neutral grey.
+ * Status pill tone maps (BUILD_PLAN 0.5, docs/design/UI-CLEANUP.md "Pills"). Every status in the
+ * product renders through `<StatusPill domain=… status=…>`, drawn with the shared Pill in one of
+ * five tones. Lookups are case-insensitive; unknown statuses fall back to the generic map and
+ * finally to neutral.
  */
 
 export interface StatusTone {
-  /** Tinted pill background (`--label-*-subtle`). */
+  /** Which of the five shared pill tones this status uses (`@kitstak/ui/dashboard` Pill). */
+  readonly pill: PillTone;
+  /** Tinted background (`--{tone}-subtle`), for the rare status mark drawn outside a Pill. */
   readonly bg: string;
-  /** Pill text colour: `--label-*-text` with ink mixed in (see `pillText`), AA on the tint. */
+  /** Text colour on that tint (`--{tone}-text`). */
   readonly fg: string;
-  /** Solid dot colour (`--label-*`). */
+  /** Solid dot colour (`--{tone}`). */
   readonly dot: string;
 }
 
-/**
- * Pill text colour: the label's text colour with a share of ink mixed in (`--pill-text-mix`, set
- * per theme in the shared tokens) so it stays AA on its own tint for every label colour.
- */
-export function pillText(name: string): string {
-  return `color-mix(in srgb, var(--label-${name}-text), var(--text-primary) var(--pill-text-mix))`;
+/** Token family behind each pill tone (same tokens as the shared Pill in dashboard.css). */
+const PILL_TOKENS: Readonly<Record<PillTone, Omit<StatusTone, 'pill'>>> = {
+  neutral: { bg: 'var(--surface-muted)', fg: 'var(--text-secondary)', dot: 'var(--text-muted)' },
+  positive: { bg: 'var(--success-subtle)', fg: 'var(--success-text)', dot: 'var(--success)' },
+  caution: { bg: 'var(--warning-subtle)', fg: 'var(--warning-text)', dot: 'var(--warning)' },
+  critical: { bg: 'var(--danger-subtle)', fg: 'var(--danger-text)', dot: 'var(--danger)' },
+  info: { bg: 'var(--info-subtle)', fg: 'var(--info-text)', dot: 'var(--info)' },
+};
+
+/** The colours of one pill tone, for a dot or mark that sits outside a Pill. */
+export function pillToneColors(pill: PillTone): StatusTone {
+  return { pill, ...PILL_TOKENS[pill] };
 }
 
-/** A tone from the shared label palette (@kitstak/ui/styles/tokens.css, same tokens as KitStak CRM). */
-function label(name: string): StatusTone {
-  return { bg: `var(--label-${name}-subtle)`, fg: pillText(name), dot: `var(--label-${name})` };
-}
-
 /**
- * Status tones. Every tone is a label-palette token trio, so pills follow the light and dark
- * themes without per-theme overrides and match the CRM status pill exactly.
+ * Status tone names (kept so call sites and maps keep their words) mapped onto the five pill
+ * tones the UI contract allows (docs/design/UI-CLEANUP.md, "Pills"). Several names share a tone
+ * on purpose: the pill's words say which in-process step it is, the colour only says
+ * "done", "in motion", "needs a look", "broken" or "nothing to do".
  */
-export const TONES = {
-  green: label('green'),
-  blue: label('blue'),
-  /** "Ready …" queue states (Ready To Pick / Pack / Sort). */
-  readyBlue: label('sky'),
-  /** "… Started" in-progress states (Picking / Packing / Sorting Started). */
-  indigo: label('indigo'),
-  purple: label('purple'),
-  shortage: label('brown'),
-  hold: label('gray'),
-  red: label('red'),
-  grey: label('gray'),
-  amber: label('orange'),
-  teal: label('teal'),
-  priorityHigh: label('peach'),
-  exportDone: label('green'),
-  negativeDiff: label('red'),
-} as const satisfies Readonly<Record<string, StatusTone>>;
+export const TONE_PILL = {
+  green: 'positive',
+  blue: 'info',
+  /** "Ready …" queue states (Ready to pick / pack / sort). */
+  readyBlue: 'info',
+  /** "… started" in-progress states (Picking / Packing / Sorting started). */
+  indigo: 'info',
+  purple: 'info',
+  shortage: 'caution',
+  hold: 'neutral',
+  red: 'critical',
+  grey: 'neutral',
+  amber: 'caution',
+  teal: 'info',
+  priorityHigh: 'caution',
+  exportDone: 'positive',
+  negativeDiff: 'critical',
+} as const satisfies Readonly<Record<string, PillTone>>;
 
-export type ToneName = keyof typeof TONES;
+export type ToneName = keyof typeof TONE_PILL;
+
+/** Every tone name as its pill tone plus the matching colours. */
+export const TONES = Object.fromEntries(
+  Object.entries(TONE_PILL).map(([name, pill]) => [name, pillToneColors(pill)]),
+) as Readonly<Record<ToneName, StatusTone>>;
 
 /** Solid accent per tone, for icons and dots drawn outside a pill. */
 export const TONE_ACCENTS: Readonly<Partial<Record<ToneName, string>>> = {
@@ -65,10 +77,11 @@ export const TONE_ACCENTS: Readonly<Partial<Record<ToneName, string>>> = {
 
 type StatusMap = Readonly<Record<string, ToneName>>;
 
-// Logiwa shipment-order palette: Open green, every in-process status blue (#0D36A3 on
-// #D5E5F2), Ready to Ship purple, Shortage rust, On Hold slate, Cancelled red.
+// Shipment orders: every in-process status is info, done is positive, Shortage caution,
+// On hold neutral, Cancelled critical.
 const SHIPMENT_ORDER: StatusMap = {
-  open: 'green',
+  // "Open" means new work, not done: teal (info) as on work orders and shipment plans.
+  open: 'teal',
   'ready to pick': 'blue',
   'picking started': 'blue',
   'ready to pack': 'blue',
@@ -107,7 +120,8 @@ const COUNT: StatusMap = {
   // Counted-but-not-posted, posted and superseded must read differently.
   'count completed': 'teal',
   'inventory updated': 'green',
-  'recount created': 'purple',
+  // Superseded by a recount: nothing left to do on this line.
+  'recount created': 'grey',
   cancelled: 'red',
 };
 // "Started" is blue everywhere (PO, job, wave, return) so one word means one colour.
@@ -246,61 +260,69 @@ export function statusTone(status: string | null | undefined, domain: StatusDoma
   return TONES[statusToneName(status, domain)];
 }
 
-/** Inline style for a pill: tinted background and text colour, both theme-aware tokens. */
-export function pillStyle(tone: StatusTone): CSSProperties {
-  return { backgroundColor: tone.bg, color: tone.fg };
-}
-
-/**
- * The one status pill shape, shared with KitStak CRM: tinted background, text colour and a
- * solid 6px dot, 22px tall (18px at `sm`), 12px medium text.
- */
-export function pillClass(size: 'sm' | 'md' = 'md'): string {
-  return `inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full font-medium ${size === 'sm' ? 'h-[18px] px-1.5 text-2xs' : 'h-[22px] px-2 text-xs'}`;
-}
-
-/** Receiving difference pill: negative red-orange, positive green, zero grey. */
+/** Receiving difference tone: negative critical, positive positive, zero neutral. */
 export function differenceTone(diff: number): StatusTone {
   if (diff < 0) return TONES.negativeDiff;
   if (diff > 0) return TONES.green;
   return TONES.grey;
 }
 
-/** Statuses that get the small "P" mini-pill (partial). */
+/** Statuses that get the half-filled "partial" dot. */
 export function isPartialStatus(status: string | null | undefined): boolean {
   return (status ?? '').trim().toLowerCase().startsWith('partially');
 }
 
-/** Short words kept lowercase inside a status label ("Ready to Pick", "Count of Lines"). */
-const MINOR_WORDS: ReadonlySet<string> = new Set([
-  'a',
-  'an',
-  'and',
-  'as',
-  'at',
-  'by',
-  'for',
-  'in',
-  'of',
-  'or',
-  'the',
-  'to',
-  'via',
+/** Warehouse acronyms that stay in capitals inside a sentence case label. */
+const ACRONYMS: ReadonlySet<string> = new Set([
+  'api',
+  'asn',
+  'bol',
+  'csv',
+  'eod',
+  'fba',
+  'ftl',
+  'id',
+  'lp',
+  'lpn',
+  'ltl',
+  'pdf',
+  'po',
+  'qc',
+  'rma',
+  'sku',
+  'so',
+  'ups',
+  'upc',
+  'uom',
+  'usps',
+  'vas',
+  'wms',
 ]);
+
+function keepsItsCase(word: string, allCaps: boolean): boolean {
+  const bare = word.replace(/[^A-Za-z]/g, '');
+  if (bare.length === 0) return true;
+  // A word typed in capitals inside a mixed-case label is an acronym ("LP", "3PL").
+  if (!allCaps && bare.length > 1 && bare === bare.toUpperCase()) return true;
+  // A brand written with an inner capital ("eBay", "TikTok") keeps it.
+  return /[a-z]/.test(bare) && /[A-Z]/.test(bare.slice(1));
+}
 
 /**
  * The ONE display casing for every status label (pills, rails, mini-tables, filters):
- * Title Case with minor words lowercase, so "ready to pick", "Ready To Pick" and
- * "Ready to Pick" all render "Ready to Pick". Acronyms ("EOD", "LP") are kept.
+ * sentence case, so "ready to pick", "Ready To Pick" and "READY TO PICK" all render
+ * "Ready to pick". Acronyms ("EOD", "SKU", "LTL") and brands ("eBay") keep their capitals.
+ * Lookups (`statusTone`) stay case-insensitive, so this only changes what people read.
  */
 export function statusLabel(status: string): string {
-  return status
-    .trim()
-    .split(/\s+/)
+  const words = status.trim().split(/\s+/).filter(Boolean);
+  const allCaps = status === status.toUpperCase();
+  return words
     .map((word, index) => {
       const lower = word.toLowerCase();
-      if (index > 0 && MINOR_WORDS.has(lower)) return lower;
-      return word.charAt(0).toUpperCase() + word.slice(1);
+      if (ACRONYMS.has(lower.replace(/[^a-z]/g, ''))) return word.toUpperCase();
+      if (keepsItsCase(word, allCaps)) return word;
+      return index === 0 ? lower.charAt(0).toUpperCase() + lower.slice(1) : lower;
     })
     .join(' ');
 }

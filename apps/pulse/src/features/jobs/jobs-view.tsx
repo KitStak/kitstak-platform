@@ -23,6 +23,7 @@ import {
   MoreHorizontal,
   Package,
   PackagePlus,
+  Repeat,
   SearchX,
   Trash2,
   UserRound,
@@ -63,6 +64,7 @@ import {
   IsoDatePicker,
 } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
+import { Count } from '@kitstak/ui/dashboard';
 import { MarginPill } from '@/components/charts/stats';
 import { Panel } from '@/components/layout/page';
 import { ButtonLink } from '@/components/pulse/button-link';
@@ -100,6 +102,7 @@ import { DEFAULT_VIEW, GROUP_OPTIONS, type GroupKey, type JobsViewConfig } from 
 import { JobsViewsBar } from './jobs-views-bar';
 import { DeleteJobDialog } from './delete-job-dialog';
 import { QuickAddJob } from './quick-add';
+import { trackedProgramsLine } from './program-job';
 import { STATUS_MOVES, statusMoveLabel, useJobActions } from './use-job-actions';
 
 const EMPTY: Readonly<
@@ -171,6 +174,29 @@ export interface JobsViewProps {
   readonly sites: readonly SiteDTO[];
   readonly today: string;
   readonly initialViewId?: string | null;
+  /** Programs tracked under Programs. Their jobs are not in this list (PULSE_PROGRAMS_SPEC 5.4). */
+  readonly trackedPrograms?: number;
+}
+
+/** "3 programs are tracked under Programs." under the list, with a link to Programs. */
+function TrackedProgramsNote({ count }: { readonly count: number }) {
+  const line = trackedProgramsLine(count);
+  if (!line) return null;
+  const [before] = line.split('Programs.');
+  return (
+    <p className="text-xs text-fg-muted" data-testid="jobs-programs-note">
+      <Repeat aria-hidden className="mr-1 inline size-3.5 align-[-2px]" />
+      {before}
+      <Link
+        href={routes.programs()}
+        className="rounded-sm font-medium text-fg-secondary underline-offset-2 hover:text-primary-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        data-testid="jobs-programs-link"
+      >
+        Programs
+      </Link>
+      .
+    </p>
+  );
 }
 
 export function JobsView({
@@ -183,6 +209,7 @@ export function JobsView({
   sites,
   today,
   initialViewId,
+  trackedPrograms = 0,
 }: JobsViewProps) {
   const shell = useShell();
   const router = useRouter();
@@ -234,7 +261,7 @@ export function JobsView({
   }, [view.risk, view.q]);
 
   const jobsQuery = useJobs(
-    { tab, includeArchived: showArchived || undefined },
+    { tab, includeArchived: showArchived || undefined, programJobs: 'exclude' },
     { initialData: !showArchived && initialJobs ? [...initialJobs] : undefined },
   );
   const trendQuery = useProfit('job', { from: shiftDate(today, -83), to: today, trend: true });
@@ -299,9 +326,10 @@ export function JobsView({
       if (view.ownerId && job.ownerId !== view.ownerId) return false;
       if (view.dueFrom && (!job.dueDate || job.dueDate < view.dueFrom)) return false;
       if (view.dueTo && (!job.dueDate || job.dueDate > view.dueTo)) return false;
+      if (view.fedByProgram && !job.program) return false;
       return true;
     });
-  }, [all, view.q, view.clientId, view.jobTypeId, view.siteId, view.ownerId, view.dueFrom, view.dueTo]);
+  }, [all, view.q, view.clientId, view.jobTypeId, view.siteId, view.ownerId, view.dueFrom, view.dueTo, view.fedByProgram]);
 
   const riskCounts = useMemo(() => {
     const counts: Record<PulseStatus, number> = {
@@ -341,6 +369,10 @@ export function JobsView({
                 ? [job.ownerId ?? 'none', peopleName(job.ownerId) || 'No owner']
                 : view.group === 'status'
                   ? [job.status, JOB_STATUS_LABELS[job.status]]
+                  : view.group === 'program'
+                    ? job.program
+                      ? [`program:${job.program.programId ?? job.program.key ?? ''}`, job.program.name ? `${job.program.key} ${job.program.name}` : (job.program.key ?? 'Program')]
+                      : ['none', 'Not fed by a program']
                   : [
                       job.stats.riskStatus ?? 'none',
                       job.stats.riskStatus ? PULSE_STATUS_LABELS[job.stats.riskStatus] : 'No status yet',
@@ -378,6 +410,7 @@ export function JobsView({
     view.ownerId,
     view.dueFrom,
     view.dueTo,
+    view.fedByProgram,
   ].filter(Boolean).length;
   const anyFilter = filterCount > 0 || view.risk.length > 0 || view.q.trim() !== '';
   const clearFilters = () => {
@@ -391,6 +424,7 @@ export function JobsView({
       ownerId: null,
       dueFrom: null,
       dueTo: null,
+      fedByProgram: false,
     });
   };
 
@@ -474,6 +508,7 @@ export function JobsView({
             }
           />
         </Panel>
+        <TrackedProgramsNote count={trackedPrograms} />
       </div>
     );
   }
@@ -500,17 +535,16 @@ export function JobsView({
               aria-pressed={on}
               data-testid={`risk-chip-${status}`}
               onClick={() => toggleRisk(status)}
+              aria-label={`${PULSE_STATUS_LABELS[status]}, ${riskCounts[status] === 1 ? '1 job' : `${riskCounts[status]} jobs`}`}
               className={cn(
-                'inline-flex h-8 items-center gap-2 rounded-full border px-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-                on
-                  ? 'border-primary bg-primary-subtle text-fg'
-                  : 'border-border-subtle bg-panel text-fg-secondary hover:bg-hover',
-                // An empty status stays readable (no dimming): a dashed outline and a quiet count say "none".
-                riskCounts[status] === 0 && !on && 'border-dashed bg-transparent',
+                // A plain toggle: the status Pill and a neutral Count. Selected is a neutral surface
+                // and aria-pressed, never a border or crimson (docs/design/UI-CLEANUP.md).
+                'inline-flex h-8 items-center gap-1.5 rounded-full px-1.5 text-sm transition-colors duration-[var(--duration-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+                on ? 'bg-selected hover:bg-selected-hover' : 'bg-transparent hover:bg-hover',
               )}
             >
-              <MarginPill status={status} size="sm" />
-              <span className={cn('tabular-nums', riskCounts[status] === 0 ? 'text-fg-muted' : 'font-semibold text-fg')}>{riskCounts[status]}</span>
+              <MarginPill status={status} />
+              {riskCounts[status] > 0 ? <Count value={riskCounts[status]} /> : <span className="px-1 text-xs text-fg-muted tabular-nums">0</span>}
             </button>
           );
         })}
@@ -623,6 +657,14 @@ export function JobsView({
                   )}
                 </Field>
               </div>
+              {shell.integrations.projects ? (
+                <Checkbox
+                  checked={view.fedByProgram}
+                  onCheckedChange={(value) => patch({ fedByProgram: value === true })}
+                  label="Fed by a program"
+                  data-testid="filter-fed-by-program"
+                />
+              ) : null}
               {tab !== 'all' ? (
                 <Checkbox
                   checked={showArchived}
@@ -643,6 +685,7 @@ export function JobsView({
                       ownerId: null,
                       dueFrom: null,
                       dueTo: null,
+                      fedByProgram: false,
                     })
                   }
                 >
@@ -791,7 +834,7 @@ export function JobsView({
           role="region"
           aria-label="Bulk actions"
           data-testid="jobs-bulk"
-          className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-primary bg-raised px-3 py-2 shadow-md"
+          className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border-strong bg-raised px-3 py-2 shadow-md"
         >
           <span className="text-sm font-medium text-fg">{selectedJobs.length} selected</span>
           {canManage ? (
@@ -987,6 +1030,12 @@ export function JobsView({
                             {columns.some((column) => column.id === 'client') ? (
                               <span className="min-w-0 truncate xl:hidden">· {job.clientName}</span>
                             ) : null}
+                            {job.program ? (
+                              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-muted px-1 text-2xs font-medium text-fg-secondary" data-testid="job-program-chip">
+                                <Repeat aria-hidden className="size-2.5" />
+                                {job.program.kind === 'program' ? (job.program.key ?? 'Program') : `${job.program.key ?? 'Program'} builds`}
+                              </span>
+                            ) : null}
                             {job.archivedAt ? (
                               <span className="rounded-sm bg-muted px-1 text-2xs font-medium text-fg-secondary">
                                 Archived
@@ -1034,8 +1083,15 @@ export function JobsView({
                           className="min-w-0 flex-1 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                         >
                           <span className="block truncate font-medium text-fg">{job.name}</span>
-                          <span className="block truncate text-xs text-fg-muted">
-                            {job.number} · {job.clientName}
+                          <span className="flex min-w-0 items-center gap-1.5 text-xs text-fg-muted">
+                            <span className="shrink-0">{job.number}</span>
+                            {job.program ? (
+                              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-muted px-1 text-2xs font-medium text-fg-secondary" data-testid="job-card-program-chip">
+                                <Repeat aria-hidden className="size-2.5" />
+                                {job.program.kind === 'program' ? (job.program.key ?? 'Program') : `${job.program.key ?? 'Program'} builds`}
+                              </span>
+                            ) : null}
+                            <span className="min-w-0 truncate">· {job.clientName}</span>
                           </span>
                         </Link>
                         <RowMenu job={job} canManage={canManage} actions={actions} />
@@ -1101,6 +1157,7 @@ export function JobsView({
           : `${sorted.length} of ${all.length} jobs`}
         {trendQuery.isError ? '. Trends could not load.' : ''}
       </p>
+      <TrackedProgramsNote count={trackedPrograms} />
       <DeleteJobDialog actions={actions} />
     </div>
   );

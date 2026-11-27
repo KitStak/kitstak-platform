@@ -1,6 +1,8 @@
 /** Account emails: the two 6 digit codes and the invite (docs/billing/SPEC.md section 10). */
 import type { EmailContent } from '../layout';
-import { EmailPayloadError, asPayload, date, day, portal, text, wholeNumber } from './shared';
+import { CATALOG, isProductId } from '../../catalog';
+import { billingLink } from '../../links';
+import { EmailPayloadError, asPayload, date, day, optionalText, orgOf, portal, text, wholeNumber } from './shared';
 
 const CODE_RE = /^\d{4,8}$/;
 
@@ -78,5 +80,29 @@ export function invitation(raw: unknown): EmailContent {
     ],
     button: { label: 'Accept invite', url: text(payload, 'acceptUrl', 500) },
     footer: `You get this email because ${inviterName} invited this address to KitStak.`,
+  };
+}
+
+/** "Ana Reyes asked for Projects": sent to the people who can change the plan, at most once a day per app. */
+export function appRequest(raw: unknown): EmailContent {
+  const payload = asPayload(raw);
+  const orgName = text(payload, 'orgName', 120);
+  const askerName = text(payload, 'askerName', 120);
+  const product = text(payload, 'product', 40);
+  if (!isProductId(product)) throw new EmailPayloadError('The email payload names no app.');
+  const name = CATALOG.products[product].shortName;
+  const portalUrl = portal(payload);
+  const priceLine = optionalText(payload, 'priceLine', 200);
+  return {
+    subject: `${askerName} asked for ${name}`,
+    preheader: `Add ${name} to the plan for ${orgName} in two clicks.`,
+    heading: `${askerName} asked for ${name}`,
+    blocks: [
+      { kind: 'text', text: `${askerName} would like to use ${name} at ${orgName}. It is not in your plan yet.` },
+      ...(priceLine ? [{ kind: 'text' as const, text: priceLine }] : []),
+      { kind: 'note', text: 'You see the price before anything is added. Nothing changes until you confirm.' },
+    ],
+    button: { label: `Add ${name}`, url: billingLink(portalUrl, { to: 'add', product }, undefined, orgOf(payload)) },
+    footer: `You get this email because you manage billing for ${orgName} on KitStak.`,
   };
 }

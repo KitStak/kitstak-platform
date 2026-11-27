@@ -20,7 +20,14 @@ import {
   countryOptions,
   subdivisionsFor,
 } from '@/lib/countries';
-import { STATUS_DOMAINS, TONES, differenceTone, isPartialStatus, statusTone } from '@/lib/status-colors';
+import {
+  STATUS_DOMAINS,
+  TONES,
+  TONE_PILL,
+  differenceTone,
+  isPartialStatus,
+  statusTone,
+} from '@/lib/status-colors';
 import { INTEGRATION_ERRORS, integrationError } from '@/lib/integration-errors';
 import { CARRIERS, CHANNELS, findIntegration, isConnectable } from '@/lib/channel-catalog';
 import { comboTokens, formatCombo, matchesCombo, parseCombo } from '@/lib/keyboard';
@@ -105,12 +112,44 @@ describe('countries', () => {
 
 describe('status colors', () => {
   it('applies domain semantics', () => {
-    expect(statusTone('Open', 'shipmentOrder')).toEqual(TONES.green);
+    // "Open" is new work, not done: info on orders, plans and work orders alike.
+    expect(statusTone('Open', 'shipmentOrder')).toEqual(TONES.teal);
+    expect(statusTone('Open', 'shipmentOrder').pill).toBe('info');
+    expect(statusTone('Shipped', 'shipmentOrder').pill).toBe('positive');
     expect(statusTone('Open', 'shipmentPlan')).toEqual(TONES.teal);
     expect(statusTone('Ready to Ship', 'shipmentOrder')).toEqual(TONES.purple);
     expect(statusTone('Started', 'return')).toEqual(TONES.blue);
     expect(statusTone('Completed', 'workOrder')).toEqual(TONES.green);
     expect(statusTone('Cancelled', 'purchaseOrder')).toEqual(TONES.red);
+  });
+
+  it('maps every tone name onto one of the five shared pill tones (UI-CLEANUP "Pills")', () => {
+    const allowed = new Set(['neutral', 'positive', 'caution', 'critical', 'info']);
+    for (const tone of Object.values(TONES)) expect(allowed.has(tone.pill)).toBe(true);
+    expect(TONE_PILL).toMatchObject({
+      green: 'positive',
+      exportDone: 'positive',
+      blue: 'info',
+      readyBlue: 'info',
+      indigo: 'info',
+      purple: 'info',
+      teal: 'info',
+      amber: 'caution',
+      shortage: 'caution',
+      priorityHigh: 'caution',
+      red: 'critical',
+      negativeDiff: 'critical',
+      grey: 'neutral',
+      hold: 'neutral',
+    });
+    // Tones use the semantic tokens, never the 14 label colours.
+    expect(TONES.readyBlue).toEqual({
+      pill: 'info',
+      bg: 'var(--info-subtle)',
+      fg: 'var(--info-text)',
+      dot: 'var(--info)',
+    });
+    expect(JSON.stringify(TONES)).not.toContain('--label-');
   });
 
   it('is case-insensitive and falls back to grey', () => {

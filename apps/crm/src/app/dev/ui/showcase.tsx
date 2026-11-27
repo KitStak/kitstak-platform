@@ -219,7 +219,7 @@ export function Showcase() {
             <AvatarGroup people={PEOPLE} max={4} size="md" />
           </Row>
           <Row label="Badges">
-            {(['neutral', 'primary', 'success', 'warning', 'danger', 'info', 'solid', 'outline'] as const).map((tone) => (
+            {(['neutral', 'success', 'warning', 'danger', 'info', 'outline'] as const).map((tone) => (
               <Badge key={tone} tone={tone}>
                 {tone}
               </Badge>

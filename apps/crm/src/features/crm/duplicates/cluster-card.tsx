@@ -138,10 +138,10 @@ export function ClusterCard({ cluster, kind, orgSlug, canEdit }: ClusterCardProp
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={isPossible ? 'neutral' : 'primary'}>{isPossible ? 'Possible' : 'High confidence'}</Badge>
+          <Badge tone={isPossible ? 'neutral' : 'info'}>{isPossible ? 'Possible' : 'High confidence'}</Badge>
           <span className="text-sm text-fg-secondary">{REASON[cluster.reason]}</span>
           {conflicts.length > 0 ? (
-            <Badge tone="warning" size="sm">
+            <Badge tone="warning">
               {plural(conflicts.length, 'field')} differ
             </Badge>
           ) : null}
@@ -238,7 +238,7 @@ function CompareTable({ cluster, kind, orgSlug, canEdit, primaryId, included, ch
                       >
                         {record.name}
                       </Link>
-                      {isPrimary ? <Badge tone="primary">Keep</Badge> : null}
+                      {isPrimary ? <Badge tone="info">Keep</Badge> : null}
                     </div>
                     {canEdit ? (
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">

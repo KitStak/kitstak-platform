@@ -39,7 +39,8 @@ export function ForgotPasswordForm() {
     setBusy(true);
     try {
       const result = await requestPasswordResetAction({ email: email.trim() });
-      if (result.ok) {
+      // 'code_sent_recently': the last code is still fresh and still works, so the next step is the same.
+      if (result.ok || result.code === 'code_sent_recently') {
         // The address rides after the "#": it never reaches a server log.
         router.push(`/reset-password?sent=1#${encodeHandoffIdentity({ email: email.trim() })}`);
         return;

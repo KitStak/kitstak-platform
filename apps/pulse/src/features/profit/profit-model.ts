@@ -22,6 +22,7 @@ export const VIEW_LABELS: Readonly<Record<ProfitGroup, string>> = {
   type: 'Job types',
   service: 'Extra services',
   site: 'Sites',
+  program: 'Programs',
   month: 'Months',
   week: 'Weeks',
   day: 'Days',
@@ -37,6 +38,7 @@ export const VIEW_NOUN: Readonly<Record<ProfitGroup, string>> = {
   type: 'job type',
   service: 'extra service',
   site: 'site',
+  program: 'program',
   month: 'month',
   week: 'week',
   day: 'day',
@@ -98,7 +100,7 @@ export const PROFIT_COLUMNS: readonly ProfitColumn[] = [
   { id: 'labor_pct', label: 'Labor % of revenue', help: 'Labor cost as a share of revenue. Lower is better.', kind: 'percent', get: (row) => row.laborPctBp, metric: 'labor_pct', goodWhen: 'down', byDefault: false, money: true },
   { id: 'units', label: 'Units', help: 'Good units logged. Scrap is left out.', kind: 'number', get: (row) => dec(row.unitsGood), metric: 'units', byDefault: true, money: false },
   { id: 'hours', label: 'Labor hours', help: 'Labor hours: people times hours each.', kind: 'hours', get: (row) => dec(row.hours), metric: 'hours', byDefault: true, money: false },
-  { id: 'uph', label: 'Units per hour', help: 'Units per person per hour: good units over all labor hours.', kind: 'pace', get: (row) => dec(row.uph), metric: 'uph', goodWhen: 'up', byDefault: true, money: false },
+  { id: 'uph', label: 'Units per hour', help: 'Units per person per hour: all good units over all labor hours, setup and days still waiting for hours included. The job page pace counts only days with hours, so it can read a little different.', kind: 'pace', get: (row) => dec(row.uph), metric: 'uph', goodWhen: 'up', byDefault: true, money: false },
   { id: 'cost_per_unit', label: 'Cost per unit', help: 'All cost over good units.', kind: 'money', get: (row) => row.costPerUnitCents, metric: 'cost_per_unit', goodWhen: 'down', byDefault: false, money: true },
 ];
 
@@ -234,6 +236,9 @@ export function rowScope(by: ProfitGroup, key: string, range: { from: string; to
       return { serviceId: key };
     case 'site':
       return { siteId: key };
+    case 'program':
+      // No program filter on the entries: "How we got this" for a program row uses the page scope.
+      return null;
     case 'month':
     case 'week':
     case 'day': {
@@ -271,6 +276,9 @@ export function drillTarget(by: ProfitGroup, row: Pick<ProfitRowDTO, 'key' | 'la
       return { patch: { by: 'client', service: row.key, ...sortReset }, words: `See the clients using ${name}` };
     case 'job':
       return { patch: { by: 'day', job: row.key, ...sortReset }, words: `See ${name} day by day` };
+    case 'program':
+      // A program row adds up the jobs it feeds; the job page holds its variants.
+      return null;
     case 'month':
     case 'week': {
       const scope = rowScope(by, row.key, range) as { from: string; to: string };

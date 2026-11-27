@@ -20,6 +20,7 @@ const createViewSchema = z.object({
   config: jsonObject,
   shared: z.boolean().optional(),
   isDefault: z.boolean().optional(),
+  surface: z.enum(['work', 'programs', 'floor']).optional(),
 });
 export async function createSavedViewAction(input: z.input<typeof createViewSchema>) {
   return runAction(createViewSchema, input, (data, ctx) => createSavedView(ctx, { ...data, config: data.config as ViewConfig }));

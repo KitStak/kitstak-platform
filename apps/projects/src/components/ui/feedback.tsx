@@ -56,9 +56,9 @@ export interface ProgressBarProps {
 
 export function ProgressBar({ value, label, showValue, tone = 'primary', size = 'md', className }: ProgressBarProps) {
   const clamped = value === undefined ? undefined : Math.min(100, Math.max(0, value));
-  // 'primary' is neutral ink (navy on light, cream on dark): progress is not an error, so never brand red.
+  // 'primary' is the Projects data color (violet, --chart-4): progress is a quantity, never brand red.
   const fill = {
-    primary: 'bg-[var(--logo-ink)]',
+    primary: 'bg-[var(--dash-data,var(--chart-4))]',
     success: 'bg-success',
     warning: 'bg-warning-accent',
     danger: 'bg-danger',

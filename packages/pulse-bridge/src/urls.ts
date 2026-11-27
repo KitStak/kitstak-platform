@@ -25,6 +25,16 @@ export interface NewJobFromDeal {
   readonly coreCustomerId?: string | null;
 }
 
+export interface NewJobFromProgram {
+  readonly programId: string;
+  /** Program name, used as the job name. */
+  readonly name?: string | null;
+  /** The program's customer: a core customer id or a CRM account item id. Pulse matches it to a client. */
+  readonly clientHint?: string | null;
+  /** The program's unit label (plural), like "kits". */
+  readonly unitLabel?: string | null;
+}
+
 export interface PulseUrls {
   home(): string;
   /** `ref` is a job number (J-1042) or id. */
@@ -35,6 +45,8 @@ export interface PulseUrls {
   newJobFromDeal(deal: NewJobFromDeal): string;
   newJobFromWorkOrder(workOrderId: string): string;
   newJobFromProject(projectId: string, name?: string | null): string;
+  /** A new ongoing per unit job that links the program on save (docs/programs/SPEC.md 6.1). */
+  newJobFromProgram(program: NewJobFromProgram): string;
   /** Opens the job for a sibling record, or a prefilled new job when there is none. */
   byLink(type: PulseRecordType, id: string): string;
   /** The daily log, on a job when one is given. */
@@ -67,6 +79,8 @@ export function pulseUrls(base: string): PulseUrls {
       ),
     newJobFromWorkOrder: (workOrderId) => abs(withQuery('/jobs/new', { wmsWorkOrder: workOrderId })),
     newJobFromProject: (projectId, name) => abs(withQuery('/jobs/new', { project: projectId, name })),
+    newJobFromProgram: (program) =>
+      abs(withQuery('/jobs/new', { program: program.programId, name: program.name, clientHint: program.clientHint, unitLabel: program.unitLabel })),
     byLink: (type, id) => abs(withQuery('/jobs/by-link', { type, id })),
     log: (jobRef, date) => abs(withQuery('/log', { job: jobRef, date })),
     client: (ref) =>

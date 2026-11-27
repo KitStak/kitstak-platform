@@ -22,7 +22,7 @@ export interface DrawerContentProps extends Omit<ComponentPropsWithoutRef<typeof
 
 /** Right-side panel (item card, notifications, activity). */
 export const DrawerContent = forwardRef<ElementRef<typeof DialogPrimitive.Content>, DrawerContentProps>(
-  function DrawerContent({ className, width = 560, modal = true, title, description, actions, children, style, ...props }, ref) {
+  function DrawerContent({ className, width = 560, modal = true, title, description, actions, children, style, onOpenAutoFocus, ...props }, ref) {
     return (
       <DialogPrimitive.Portal>
         {modal ? (
@@ -36,6 +36,14 @@ export const DrawerContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
             'data-[state=open]:animate-slide-in-right data-[state=closed]:animate-slide-out-right',
             className,
           )}
+          // Focus the panel itself on open, not the first button: the close button would get focus
+          // and show its "Close panel Esc" tooltip over the header every time the panel opens.
+          onOpenAutoFocus={(event) => {
+            onOpenAutoFocus?.(event);
+            if (event.defaultPrevented) return;
+            event.preventDefault();
+            (event.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
+          }}
           {...props}
         >
           <header className="flex items-start gap-3 border-b border-border-subtle px-6 py-4">

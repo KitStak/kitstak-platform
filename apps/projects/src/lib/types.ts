@@ -12,11 +12,14 @@ import type {
   KeyResultKind,
   NotificationKind,
   Priority,
+  Posting,
   ProjectHealth,
+  ProjectKind,
   ProjectRole,
   ProjectStatus,
   ProjectVisibility,
   StatusCategory,
+  TaskKind,
   TimeEntrySource,
   ViewType,
 } from './constants';
@@ -125,6 +128,8 @@ export interface ProjectProgress {
 
 export interface ProjectSummary {
   readonly id: string;
+  /** `project` or `program` (docs/programs/SPEC.md D2). */
+  readonly kind: ProjectKind;
   readonly key: string;
   readonly name: string;
   readonly status: ProjectStatus;
@@ -179,7 +184,27 @@ export interface TaskRef {
   readonly statusCategory: StatusCategory;
 }
 
+/** The build facts shown on generic task surfaces (board cards, My Work, search). */
+export interface TaskBuildBlock {
+  readonly programId: string | null;
+  readonly variantId: string | null;
+  readonly variantName: string | null;
+  readonly variantColor: string | null;
+  readonly buildDate: IsoDate;
+  readonly plannedQty: string;
+  readonly builtQty: string;
+  readonly unplanned: boolean;
+  /** Where the latest output went; null before any output. */
+  readonly posting: Posting | null;
+}
+
 export interface TaskSummary extends TaskRef {
+  /** `task` or `build` (docs/programs/SPEC.md D2). Always set by the server; optional for client fixtures. */
+  readonly kind?: TaskKind;
+  /** The container's kind. Always set by the server. */
+  readonly projectKind?: ProjectKind;
+  /** Set for builds only (null for tasks). */
+  readonly build?: TaskBuildBlock | null;
   readonly sectionId: string | null;
   readonly priority: Priority;
   readonly assigneeId: string | null;
@@ -519,9 +544,23 @@ export interface DashboardDTO {
 }
 
 /** Result of the global search (command palette, /search). */
+/** A program hit in search (docs/programs/SPEC.md 4.1). */
+export interface ProgramSearchHit {
+  readonly id: string;
+  readonly key: string;
+  readonly name: string;
+  readonly color: string;
+  readonly icon: string;
+  readonly status: ProjectStatus;
+}
+
 export interface SearchResults {
-  readonly tasks: readonly (TaskRef & { readonly projectName: string; readonly assigneeId: string | null })[];
+  /** Builds are included with `kind: 'build'` and `projectKind: 'program'` when they live in a program. */
+  readonly tasks: readonly (TaskRef & { readonly projectName: string; readonly assigneeId: string | null; readonly kind?: TaskKind; readonly projectKind?: ProjectKind })[];
+  /** Projects only (`kind = 'project'`). */
   readonly projects: readonly Pick<ProjectSummary, 'id' | 'key' | 'name' | 'color' | 'icon' | 'status'>[];
+  /** Programs (`kind = 'program'`). */
+  readonly programs?: readonly ProgramSearchHit[];
   readonly people: readonly OrgPerson[];
   readonly goals: readonly Pick<GoalDTO, 'id' | 'name' | 'health'>[];
 }
@@ -542,6 +581,8 @@ export interface CommentSearchHit {
 }
 
 export type FullSearchType = 'all' | 'tasks' | 'projects' | 'comments' | 'people' | 'goals';
+/** The /search tabs including Programs (docs/programs/SPEC.md 4.1); the API accepts `type=programs`. */
+export type FullSearchTypeWithPrograms = FullSearchType | 'programs';
 
 /** GET /api/v1/search/full — the /search results page (nav team). */
 export interface FullSearchResults {
@@ -551,8 +592,10 @@ export interface FullSearchResults {
   readonly comments: readonly CommentSearchHit[];
   readonly people: readonly OrgPerson[];
   readonly goals: readonly GoalDTO[];
+  /** Programs (docs/programs/SPEC.md 4.1); absent on older servers. */
+  readonly programs?: readonly ProgramSearchHit[];
   /** Total matches per type before the page limit. */
-  readonly counts: Readonly<Record<Exclude<FullSearchType, 'all'>, number>>;
+  readonly counts: Readonly<Record<Exclude<FullSearchType, 'all'>, number>> & { readonly programs?: number };
 }
 
 // --- Portfolio team: status updates, goal check-ins, reports ------------------------------

@@ -5,12 +5,15 @@
  * overdue by person and "finished this week". All read a `ReportDTO` from `useReport()`.
  */
 import Link from 'next/link';
-import { useState, type ReactNode } from 'react';
-import { AlarmClock, CheckCircle2, CircleDashed, Gauge, Inbox, TrendingDown, TrendingUp, Timer, UserX } from 'lucide-react';
-import { ToggleGroup, Tooltip, cn } from '@/components/ui';
+import { useState } from 'react';
+import { CheckCircle2, Inbox, UserX } from 'lucide-react';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { ToggleGroup } from '@/components/ui';
 import { PersonAvatar } from '@/components/pm';
 import { Panel } from '@/components/layout/page';
 import { shortDate } from '@/lib/report-math';
+import { routes } from '@/lib/routes';
+import { NONE } from '@/features/views/view-state';
 import type { ReportDTO } from '@/lib/types';
 import { LocalTime } from '@/features/task/local-time';
 import { ColumnChart, DonutChart, LineChart, StackedBars } from './charts';
@@ -29,59 +32,60 @@ export const SERIES = {
 
 const days = (value: number | null) => (value === null ? 'No data' : value < 1 ? '<1 day' : `${value} ${value === 1 ? 'day' : 'days'}`);
 
-function Kpi({
-  label,
-  value,
-  hint,
-  icon,
-  tone,
-  help,
-}: {
-  readonly label: string;
-  readonly value: ReactNode;
-  readonly hint?: ReactNode;
-  readonly icon: ReactNode;
-  readonly tone?: 'danger' | 'success' | 'warning';
-  readonly help: string;
-}) {
-  return (
-    <Tooltip content={help} side="bottom">
-      <div tabIndex={0} className="flex min-w-0 flex-col gap-1 rounded-xl border border-border-subtle bg-panel p-4 shadow-xs outline-none focus-visible:outline-2 focus-visible:outline-focus" data-testid="report-kpi">
-        <div className="flex items-center gap-2 text-xs font-medium text-fg-muted">
-          <span className={cn('inline-flex size-6 items-center justify-center rounded-md bg-sunken text-icon [&_svg]:size-3.5', tone === 'danger' && 'bg-danger-subtle text-danger-text', tone === 'success' && 'bg-success-subtle text-success-text', tone === 'warning' && 'bg-warning-subtle text-warning-text')}>{icon}</span>
-          <span className="truncate">{label}</span>
-        </div>
-        <p className={cn('text-2xl font-semibold tracking-[-0.01em] tabular-nums', tone === 'danger' ? 'text-danger-text' : 'text-fg')}>{value}</p>
-        {hint ? <p className="truncate text-xs text-fg-muted">{hint}</p> : null}
-      </div>
-    </Tooltip>
-  );
+/** Anchors for the sections a KPI tile can point at on this page. */
+const SECTION_ID = {
+  velocity: 'report-velocity',
+  cycle: 'report-cycle-time',
+  workload: 'report-workload',
+  overdue: 'report-overdue',
+  completed: 'report-completed',
+} as const;
+
+const anchor = (id: string) => `#${id}`;
+
+interface KpiLinks {
+  readonly open: string;
+  readonly overdue: string;
+  readonly unassigned: string;
 }
 
+/**
+ * Where each count goes. One project: its list view, already filtered. The whole portfolio has no
+ * single task list, so the tiles go to the breakdown of the same count further down this page.
+ */
+function kpiLinks(scope: ReportDTO['scope']): KpiLinks {
+  if (scope.kind === 'project') {
+    const list = routes.projectTab(scope.key, 'list');
+    return {
+      open: `${list}?done=hide`,
+      overdue: `${list}?due=overdue&done=hide`,
+      unassigned: `${list}?assignee=${NONE}&done=hide`,
+    };
+  }
+  return { open: anchor(SECTION_ID.workload), overdue: anchor(SECTION_ID.overdue), unassigned: anchor(SECTION_ID.workload) };
+}
+
+/** The headline numbers: the shared StatTile, each one a link to what it counts. */
 export function KpiTiles({ report }: { readonly report: ReportDTO }) {
   const t = report.totals;
   const delta = t.completedThisWeek - t.completedLastWeek;
+  const links = kpiLinks(report.scope);
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-testid="report-kpis">
-      <Kpi label="Open tasks" value={t.open} hint={`${t.inProgress} being worked on`} icon={<CircleDashed aria-hidden />} help="Tasks that are not done yet, the same count as the Portal tile. Subtasks count with their parent task." />
-      <Kpi
+    <StatRow label="Report totals" data-testid="report-kpis">
+      <StatTile label="Open tasks" value={t.open} href={links.open} caption={`${t.inProgress} being worked on`} help="Tasks that are not done yet, the same count as the Portal tile. Subtasks count with their parent task." data-testid="report-kpi" />
+      <StatTile
         label="Done this week"
         value={t.completedThisWeek}
-        tone={t.completedThisWeek > 0 ? 'success' : undefined}
-        hint={
-          <span className="inline-flex items-center gap-1">
-            {delta > 0 ? <TrendingUp aria-hidden className="size-3 text-success-text" /> : delta < 0 ? <TrendingDown aria-hidden className="size-3 text-danger-text" /> : null}
-            {delta === 0 ? 'Same as last week' : `${Math.abs(delta)} ${delta > 0 ? 'more' : 'fewer'} than last week`}
-          </span>
-        }
-        icon={<CheckCircle2 aria-hidden />}
+        href={anchor(SECTION_ID.completed)}
+        delta={{ text: delta === 0 ? 'Same as last week' : `${Math.abs(delta)} ${delta > 0 ? 'more' : 'fewer'} than last week`, direction: delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat', tone: delta > 0 ? 'good' : delta < 0 ? 'bad' : 'neutral' }}
         help="Tasks finished since Monday, compared with all of last week."
+        data-testid="report-kpi"
       />
-      <Kpi label="Overdue" value={t.overdue} tone={t.overdue ? 'danger' : undefined} hint={t.overdue ? 'Past their due date' : 'Nothing is late'} icon={<AlarmClock aria-hidden />} help="Open tasks whose due date has passed." />
-      <Kpi label="Finished per week" value={t.averageVelocity} hint="Average per full week" icon={<Gauge aria-hidden />} help="How many tasks the team finishes in a normal week (velocity)." />
-      <Kpi label="Time to finish" value={days(t.medianCycleDays)} hint="Typical task" icon={<Timer aria-hidden />} help="Median days from when work starts (or the task is created) until it is done (cycle time)." />
-      <Kpi label="Unassigned" value={t.unassigned} tone={t.unassigned ? 'warning' : undefined} hint={t.unassigned ? 'Need an owner' : 'Everyone has an owner'} icon={<UserX aria-hidden />} help="Open tasks nobody is assigned to yet." />
-    </div>
+      <StatTile label="Overdue" value={t.overdue} href={links.overdue} caption={t.overdue ? 'Past their due date' : 'Nothing is late'} help="Open tasks whose due date has passed." data-testid="report-kpi" />
+      <StatTile label="Finished per week" value={t.averageVelocity} href={anchor(SECTION_ID.velocity)} caption="Average per full week" help="How many tasks the team finishes in a normal week (velocity)." data-testid="report-kpi" />
+      <StatTile label="Time to finish" value={days(t.medianCycleDays)} href={anchor(SECTION_ID.cycle)} caption="Typical task" help="Median days from when work starts (or the task is created) until it is done (cycle time)." data-testid="report-kpi" />
+      <StatTile label="Unassigned" value={t.unassigned} href={links.unassigned} caption={t.unassigned ? 'Need an owner' : 'Everyone has an owner'} help="Open tasks nobody is assigned to yet." data-testid="report-kpi" />
+    </StatRow>
   );
 }
 
@@ -157,6 +161,7 @@ export function VelocityPanel({ report, className }: { readonly report: ReportDT
   const average = full.length ? Math.round((full.reduce((sum, v) => sum + v, 0) / full.length) * 10) / 10 : 0;
   return (
     <Panel
+      id={SECTION_ID.velocity}
       className={className}
       title="Velocity"
       action={
@@ -195,7 +200,7 @@ export function VelocityPanel({ report, className }: { readonly report: ReportDT
 export function CycleTimePanel({ report, className }: { readonly report: ReportDTO; readonly className?: string }) {
   const current = report.weeks.length - 1;
   return (
-    <Panel className={className} title="Time to finish">
+    <Panel id={SECTION_ID.cycle} className={className} title="Time to finish">
       <p className="mb-3 text-sm text-fg-secondary">
         Typical days from starting a task to finishing it. {report.totals.medianCycleDays !== null ? <>Overall: <strong className="font-semibold text-fg">{days(report.totals.medianCycleDays)}</strong>.</> : null}
       </p>
@@ -224,7 +229,7 @@ function personLabel(id: string | null) {
 
 export function WorkloadPanel({ report, className, personText }: { readonly report: ReportDTO; readonly className?: string; readonly personText: (id: string | null) => string }) {
   return (
-    <Panel className={className} title="Workload">
+    <Panel id={SECTION_ID.workload} className={className} title="Workload">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-fg-secondary">Open tasks per person.</p>
         <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-secondary" aria-hidden>
@@ -265,11 +270,11 @@ export function WorkloadPanel({ report, className, personText }: { readonly repo
 export function OverduePanel({ report, className, personText }: { readonly report: ReportDTO; readonly className?: string; readonly personText: (id: string | null) => string }) {
   const rows = report.people.filter((person) => person.overdue > 0).sort((a, b) => b.overdue - a.overdue);
   return (
-    <Panel className={className} title="Overdue by person">
+    <Panel id={SECTION_ID.overdue} className={className} title="Overdue by person">
       {rows.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-md bg-success-subtle px-4 py-8 text-center">
-          <CheckCircle2 aria-hidden className="size-6 text-success-text" />
-          <p className="text-sm font-medium text-success-text">Nothing is overdue</p>
+        <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+          <CheckCircle2 aria-hidden className="size-6 text-icon" />
+          <p className="text-sm font-medium text-fg">Nothing is overdue</p>
           <p className="text-xs text-fg-secondary">Every open task is still on schedule.</p>
         </div>
       ) : (
@@ -292,7 +297,7 @@ export function OverduePanel({ report, className, personText }: { readonly repor
 export function CompletedPanel({ report, className, taskHref }: { readonly report: ReportDTO; readonly className?: string; readonly taskHref: (key: string) => string }) {
   const list = report.completedThisWeek;
   return (
-    <Panel className={className} title={`Finished this week (${report.totals.completedThisWeek})`} bodyClassName="p-2">
+    <Panel id={SECTION_ID.completed} className={className} title={`Finished this week (${report.totals.completedThisWeek})`} bodyClassName="p-2">
       {list.length === 0 ? (
         <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
           <Inbox aria-hidden className="size-6 text-icon" />

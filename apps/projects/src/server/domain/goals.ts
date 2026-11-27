@@ -1,8 +1,9 @@
 /** Goals (OKRs) with key results, linked projects and progress rollups (src/lib/rollups.ts). */
 import 'server-only';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { workDaysInMonth } from '@kitstak/programs-engine/calendar';
 import { db } from '@/server/db';
-import { goalKeyResults, goalProjects, goals, projects, statuses, tasks, type Goal, type GoalKeyResult } from '@/server/db/schema';
+import { goalKeyResults, goalProjects, goals, programSettings, projects, statuses, tasks, type Goal, type GoalKeyResult } from '@/server/db/schema';
 import { invalid, notFound } from '@/server/errors';
 import type { GoalHealth, GoalProgressMode, KeyResultKind } from '@/lib/constants';
 import { isIsoDate } from '@/lib/dates';
@@ -12,9 +13,54 @@ import type { GoalDTO, KeyResultDTO } from '@/lib/types';
 import { cleanText, isoRequired, type DomainContext } from './_shared';
 import { requireOrg, requireProject, visibleProjectsWhere } from './access';
 import { logActivity } from './activity';
+import { seesMoneyFor } from './programs/access';
+import { programMonthStats } from './programs/stats';
+
+/** A goal that tracks a program moves with the program's percent of target this month, capped at 100 (4.1). */
+export function programGoalPercent(targetBp: number | null): number {
+  if (targetBp === null || targetBp <= 0) return 0;
+  return Math.min(100, Math.floor(targetBp / 100));
+}
+
+/**
+ * The same goal for a viewer who cannot see the program's money: units built this month over the
+ * unit goal (daily units target times the month's work days, else the units planned this month),
+ * capped at 100. A percent of a money target would show money they are not allowed to see.
+ */
+export function programGoalUnitsPercent(builtUnits: string, goalUnits: number | null): number {
+  const built = Number(builtUnits);
+  if (goalUnits === null || !(goalUnits > 0) || !Number.isFinite(built) || built <= 0) return 0;
+  return Math.min(100, Math.floor((built / goalUnits) * 100));
+}
+
+async function programPercents(ctx: DomainContext, ids: readonly string[]): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ id: projects.id, timezone: programSettings.timezone, monthlyTargetCents: programSettings.monthlyTargetCents, dailyTargetUnits: programSettings.dailyTargetUnits })
+    .from(projects)
+    .innerJoin(programSettings, eq(programSettings.programId, projects.id))
+    .where(and(inArray(projects.id, [...ids]), visibleProjectsWhere(ctx, { kind: 'program' })));
+  const out = new Map<string, number>();
+  if (rows.length === 0) return out;
+  const money = await seesMoneyFor(ctx, rows.map((row) => row.id));
+  for (const row of rows) {
+    const stats = await programMonthStats(db, ctx, { id: row.id }, row);
+    if (money.has(row.id)) {
+      out.set(row.id, programGoalPercent(stats.forecast.targetBp));
+      continue;
+    }
+    const daily = row.dailyTargetUnits === null || row.dailyTargetUnits === undefined ? null : Number(row.dailyTargetUnits);
+    const goalUnits = daily !== null && daily > 0
+      ? daily * workDaysInMonth(stats.calendar, stats.month).length
+      : stats.planned.reduce((sum, day) => sum + Number(day.qty), 0);
+    out.set(row.id, programGoalUnitsPercent(stats.result.units, goalUnits));
+  }
+  return out;
+}
 
 async function projectPercents(ctx: DomainContext, projectIds: readonly string[]): Promise<Map<string, number>> {
   if (projectIds.length === 0) return new Map();
+  // Projects roll up done tasks; programs use their percent of target (never their builds).
+  const programs = await programPercents(ctx, projectIds);
   const rows = await db
     .select({
       projectId: tasks.projectId,
@@ -26,7 +72,9 @@ async function projectPercents(ctx: DomainContext, projectIds: readonly string[]
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(inArray(tasks.projectId, [...projectIds]), isNull(tasks.deletedAt), isNull(tasks.parentTaskId), visibleProjectsWhere(ctx)))
     .groupBy(tasks.projectId);
-  return new Map(rows.map((row) => [row.projectId, projectPercent({ total: Number(row.total), done: Number(row.done) })]));
+  const out = new Map(rows.map((row) => [row.projectId, projectPercent({ total: Number(row.total), done: Number(row.done) })]));
+  for (const [id, percent] of programs) out.set(id, percent);
+  return out;
 }
 
 function krDTO(row: GoalKeyResult, percents: Map<string, number>): KeyResultDTO {

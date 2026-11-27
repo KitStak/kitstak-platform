@@ -17,6 +17,8 @@
  * - `calculator`  breakeven and the what if quote calculator
  * - `clients`     cost to serve and profit rankings
  * - `trends`      period over period comparison and trend helpers
+ * - `program`     the program tracker: month figures, the plan from Projects, cost forecast, target
+ * - `program-risk` program alerts P1 to P7
  * - `calendar`    date math on YYYY-MM-DD strings
  */
 export * from './types';
@@ -36,3 +38,5 @@ export * from './calculator';
 export * from './clients';
 export * from './trends';
 export * from './words';
+export * from './program';
+export * from './program-risk';

@@ -171,26 +171,10 @@ function EditorForm({
             <p className="truncate text-xs text-secondary">{line.productName}</p>
           </div>
           <div className="flex flex-wrap justify-end gap-1">
-            {t.lot ? (
-              <Badge tone="info" size="sm">
-                Lot
-              </Badge>
-            ) : null}
-            {t.expiry ? (
-              <Badge tone="info" size="sm">
-                Expiry
-              </Badge>
-            ) : null}
-            {t.production ? (
-              <Badge tone="info" size="sm">
-                Production date
-              </Badge>
-            ) : null}
-            {t.serial ? (
-              <Badge tone="info" size="sm">
-                Serial
-              </Badge>
-            ) : null}
+            {t.lot ? <Badge tone="info">Lot</Badge> : null}
+            {t.expiry ? <Badge tone="info">Expiry</Badge> : null}
+            {t.production ? <Badge tone="info">Production date</Badge> : null}
+            {t.serial ? <Badge tone="info">Serial</Badge> : null}
           </div>
         </div>
         <FormGrid>

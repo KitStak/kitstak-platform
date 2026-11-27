@@ -71,6 +71,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui';
 import { FIELD_TYPE_LABELS, blankField, newFieldId } from './form-starters';
 import { FormFieldControl } from './public-form';
 
+import { BuildFormPanel } from './build-form-panel';
+import type { BuildFormSettings, FormProgram } from './build-form';
+
 export type BuilderTab = 'questions' | 'settings' | 'share' | 'responses';
 
 const TYPE_ICONS: Readonly<Record<FormFieldType, typeof Type>> = {
@@ -465,7 +468,7 @@ function LabelsField({
         >
           {chosen.length ? (
             chosen.map((label) => (
-              <Badge key={label.id} size="sm">
+              <Badge key={label.id}>
                 {label.name}
               </Badge>
             ))
@@ -618,12 +621,15 @@ function Responses({ form, fields }: { readonly form: FormDTO; readonly fields: 
 export function FormBuilder({
   form,
   project,
+  program,
   tab,
   onTab,
   onBack,
 }: {
   readonly form: FormDTO;
   readonly project: ProjectSummary | undefined;
+  /** Set when the form lives on a program: it makes builds (docs/programs/SPEC.md 5.17). */
+  readonly program?: FormProgram;
   readonly tab: BuilderTab;
   readonly onTab: (tab: BuilderTab) => void;
   readonly onBack: () => void;
@@ -728,23 +734,23 @@ export function FormBuilder({
         <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
           {project ? (
             <span className="inline-flex items-center gap-1.5">
-              <EntityIcon icon={project.icon} color={project.color} size={16} /> Answers become tasks in{' '}
+              <EntityIcon icon={project.icon} color={project.color} size={16} /> {program ? 'Answers become builds in' : 'Answers become tasks in'}{' '}
               {project.name}
             </span>
           ) : null}
           {draft.enabled ? (
-            <Badge tone="success" size="sm">
+            <Badge tone="success">
               Accepting responses
             </Badge>
           ) : (
-            <Badge size="sm">Turned off</Badge>
+            <Badge>Turned off</Badge>
           )}
           {draft.isPublic ? (
-            <Badge size="sm" tone="info">
+            <Badge tone="info">
               Anyone with the link
             </Badge>
           ) : (
-            <Badge size="sm">Workspace only</Badge>
+            <Badge>Workspace only</Badge>
           )}
         </span>
       }
@@ -884,6 +890,16 @@ export function FormBuilder({
 
       {tab === 'settings' ? (
         <div className="flex max-w-[760px] flex-col gap-4">
+          {program ? (
+            <BuildFormPanel
+              program={program}
+              fields={draft.fields}
+              mapping={(draft.settings as BuildFormSettings).build}
+              onMapping={(build) => setSettings({ build } as Partial<FormSettings>)}
+              onField={(id, next) => setField(id, next)}
+            />
+          ) : null}
+          {program ? null : (
           <Panel title="New tasks">
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Start in status">
@@ -963,8 +979,10 @@ export function FormBuilder({
               </div>
             </div>
           </Panel>
+          )}
           <Panel title="After someone sends it">
             <div className="flex flex-col gap-4">
+              {program ? null : (
               <label className="flex items-center justify-between gap-4 rounded-lg border border-border-subtle px-3 py-2.5">
                 <span>
                   <span className="block text-sm font-medium text-fg">Send responses to Triage first</span>
@@ -978,6 +996,7 @@ export function FormBuilder({
                   aria-label="Send responses to Triage first"
                 />
               </label>
+              )}
               <Field label="Thank-you message">
                 {({ inputId }) => (
                   <Textarea

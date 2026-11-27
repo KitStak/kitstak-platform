@@ -168,6 +168,39 @@ export interface JobSpec {
   expect?: PulseStatus | 'none';
 }
 
+/**
+ * A job that a Projects program feeds (docs/programs/SPEC.md 7.3). `bills_to` jobs get no typed
+ * units: the program's output and fees reach them through `syncPrograms`. A `related` job keeps
+ * its own money (`revenueCents` this month) and shows under "All linked work" on the program.
+ */
+export interface ProgramJobSpec {
+  n: string;
+  name: string;
+  client: string;
+  type: string;
+  program: string;
+  relation: 'bills_to' | 'related';
+  pricing: 'per_unit' | 'fixed';
+  /** Unit price on the job card (the program's card still sets the money). */
+  unitPrice?: string;
+  /** Fixed price and the one invoice of a related one time job, in cents. */
+  fixedCents?: number;
+  revenue?: { cents: number; desc: string; invoice: string };
+  /**
+   * One month of work as the job's quote (an ongoing job reads its plan as a month). Its labor
+   * hours are the hours of the last 30 days and its labor cost uses the crew's real loaded rate,
+   * so the plan, the target pace and the labor so far agree.
+   */
+  plan?: { units: number; revenueCents: number };
+  /**
+   * Hours only labor lines per work day of the program, no units. Each day totals crew x hours:
+   * time the builders logged on that day's builds in Projects counts toward it.
+   */
+  crew?: number;
+  hours?: number;
+  pinned?: string;
+}
+
 export interface OrgPlan {
   seed: string;
   sites: SiteSpec[];
@@ -191,4 +224,6 @@ export interface OrgPlan {
   goals: { scope: TargetScope; ref?: string; metric: TargetMetric; value: string; monthly?: boolean }[];
   views: { page: 'jobs' | 'profit' | 'log' | 'labor' | 'reports' | 'alerts'; name: string; config: Record<string, unknown>; shared?: boolean; isDefault?: boolean }[];
   clientNotes: { client: string; body: string }[];
+  /** Jobs fed by Projects programs (skipped quietly when the program is not in Projects). */
+  programJobs?: ProgramJobSpec[];
 }

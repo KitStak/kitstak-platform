@@ -10,16 +10,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import {
-  ClipboardList,
-  Hand,
-  ListChecks,
-  MapPin,
-  PackageCheck,
-  ScanLine,
-  Undo2,
-  Warehouse,
-} from 'lucide-react';
+import { ClipboardList, Hand, ListChecks, MapPin, ScanLine, Warehouse } from 'lucide-react';
 import { useStationMemory } from '@/components/packing/station-memory';
 import { PageHeader } from '@/components/layout/page-header';
 import { Avatar } from '@/components/ui/avatar';
@@ -31,7 +22,8 @@ import { Combobox } from '@/components/ui/combobox';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { StickyFooterToastOffset } from '@/components/packing/toast-offset';
 import { Select } from '@/components/ui/select';
-import { StatTile } from '@/components/ui/stat-tile';
+import { StatTile } from '@kitstak/ui/dashboard';
+import { InfoTip } from '@/components/ui/info-tip';
 import { DisabledReason } from '@/components/ui/tooltip';
 import { apiRequest } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/query-client';
@@ -237,7 +229,7 @@ export function ReturnStationPage() {
     <div className="pb-8">
       {mode !== 'home' ? <StickyFooterToastOffset /> : null}
       <PageHeader
-        title="Return Station"
+        title="Return station"
         breadcrumbs={[{ label: 'Fulfillment' }, { label: 'Outbound' }, { label: 'Return Station' }]}
         actions={
           <Link href="/orders/returns" className={buttonVariants({ variant: 'secondary' })}>
@@ -474,28 +466,49 @@ export function ReturnStationPage() {
           </Card>
           <StatTile
             label="Returned orders today"
-            value={k?.returnedOrdersToday ?? 'None'}
-            icon={Undo2}
-            loading={meLoading || (kpis.isPending && Boolean(warehouseId))}
-            tone="primary"
-            info="RMAs you received at least one unit of today."
+            value={
+              meLoading || (kpis.isPending && Boolean(warehouseId)) ? (
+                <Skeleton className="h-6 w-16" />
+              ) : (
+                (k?.returnedOrdersToday ?? 'None')
+              )
+            }
+            href={null}
+            explain={
+              <InfoTip
+                content="RMAs you received at least one unit of today."
+                label="About returned orders today"
+              />
+            }
           />
           <StatTile
             label="Returned products today"
-            value={k?.returnedProductsToday ?? 'None'}
-            icon={PackageCheck}
-            loading={meLoading || (kpis.isPending && Boolean(warehouseId))}
-            tone="success"
-            info="Units you received today."
+            value={
+              meLoading || (kpis.isPending && Boolean(warehouseId)) ? (
+                <Skeleton className="h-6 w-16" />
+              ) : (
+                (k?.returnedProductsToday ?? 'None')
+              )
+            }
+            href={null}
+            explain={<InfoTip content="Units you received today." label="About returned products today" />}
           />
           <StatTile
             label="Open RMAs"
-            value={k?.openReturns ?? 'None'}
-            icon={ClipboardList}
-            loading={meLoading || (kpis.isPending && Boolean(warehouseId))}
-            tone="warning"
+            value={
+              meLoading || (kpis.isPending && Boolean(warehouseId)) ? (
+                <Skeleton className="h-6 w-16" />
+              ) : (
+                (k?.openReturns ?? 'None')
+              )
+            }
             href="/orders/returns?f.status=in%3APending%2CIn%20Transit%2CStarted"
-            info="Counts RMAs (not lines): pending, in transit or started in this warehouse. The Return Orders status pills count lines."
+            explain={
+              <InfoTip
+                content="Counts RMAs (not lines): pending, in transit or started in this warehouse. The Return Orders status pills count lines."
+                label="About open rmas"
+              />
+            }
           />
           <ReturnRulesCard stationCode={station?.code ?? null} targetCode={mem.targetCode ?? null} />
         </div>

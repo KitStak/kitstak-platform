@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskSummary } from '@/lib/types';
-import { gettingStartedSteps, greetingFor, homeBuckets, homeStats, summarySentence } from './home-model';
+import type { ProgramListItemDTO } from '@/lib/program-types';
+import { customerProgramText, customerRowState, gettingStartedSteps, greetingFor, homeBuckets, homeStats, programsByCustomer, requiredSteps, sameAsDay, summarySentence } from './home-model';
 
 const TODAY = '2026-11-11'; // Wednesday
 
@@ -118,5 +119,67 @@ describe('gettingStartedSteps', () => {
       search: true,
       team: false,
     });
+  });
+});
+
+describe('gettingStartedSteps program step', () => {
+  const base = { projectCount: 1, createdTaskCount: 1, tasks: [], usedSearch: true, peopleCount: 2 };
+  it('offers an optional program step when the org has none and the person can create', () => {
+    const steps = gettingStartedSteps({ ...base, programCount: 0, canCreateProgram: true });
+    const step = steps.find((entry) => entry.id === 'program');
+    expect(step).toMatchObject({ title: 'Set up a program', optional: true, done: false });
+    expect(requiredSteps(steps).some((entry) => entry.id === 'program')).toBe(false);
+  });
+  it('hides it once a program exists or when the person cannot create', () => {
+    expect(gettingStartedSteps({ ...base, programCount: 1, canCreateProgram: true }).some((entry) => entry.id === 'program')).toBe(false);
+    expect(gettingStartedSteps({ ...base, programCount: 0, canCreateProgram: false }).some((entry) => entry.id === 'program')).toBe(false);
+    expect(gettingStartedSteps(base).some((entry) => entry.id === 'program')).toBe(false);
+  });
+});
+
+describe('programs on home', () => {
+  const today = { date: '2026-11-25', builds: 8, done: 5, plannedUnits: '800.000', builtUnits: '500.000' };
+  const program = (patch: Partial<ProgramListItemDTO> = {}) =>
+    ({ id: 'g', key: 'GLOVE', name: 'Glove kits', icon: 'repeat', color: 'amber', status: 'active', archivedAt: null, customer: { kind: 'crm_account', id: 'acct-1', name: 'Bluestone Foods' }, today, ...patch }) as ProgramListItemDTO;
+
+  it('says how far a customer program is today', () => {
+    expect(customerProgramText(program())).toBe('Glove kits · 5 of 8 builds done today');
+    expect(customerProgramText(program({ today: { ...today, builds: 1, done: 0 } }))).toBe('Glove kits · 0 of 1 build done today');
+    expect(customerProgramText(program({ today: { ...today, builds: 0, done: 0 } }))).toBe('Glove kits · No builds today');
+  });
+
+  it('groups running programs by customer id and name', () => {
+    const map = programsByCustomer([program(), program({ id: 'old', key: 'OLD', status: 'completed' }), program({ id: 'n', key: 'NOCUST', customer: null })]);
+    expect(map.get('acct-1')?.map((p) => p.key)).toEqual(['GLOVE']);
+    expect(map.get('name:bluestone foods')?.map((p) => p.key)).toEqual(['GLOVE']);
+    expect(map.size).toBe(2);
+  });
+
+  it('spots a single run that is the whole day', () => {
+    expect(sameAsDay({ builds: 8, plannedUnits: '800.000', builtUnits: '500.000' }, 8, '800.000', '500.000')).toBe(true);
+    expect(sameAsDay({ builds: 5, plannedUnits: '500.000', builtUnits: '500.000' }, 8, '800.000', '500.000')).toBe(false);
+  });
+});
+
+describe('customerRowState', () => {
+  const base = { lateReceipts: 0, exceptions: 0, deal: null, projects: [] };
+  const deal = (patch: Partial<NonNullable<Parameters<typeof customerRowState>[0]['deal']>>) => ({ name: 'D', stage: null, outcome: 'open' as const, closeDate: null, amount: null, currency: null, url: '#', ...patch });
+  const project = (overdue: number) => ({ id: 'p', key: 'OPS', name: 'Ops', openTasks: 3, overdue });
+
+  it('says nothing when nothing needs saying', () => {
+    expect(customerRowState(base, TODAY)).toBeNull();
+    expect(customerRowState({ ...base, deal: deal({ closeDate: '2026-12-01' }) }, TODAY)).toBeNull();
+  });
+
+  it('picks the worst single state', () => {
+    expect(customerRowState({ ...base, lateReceipts: 2, exceptions: 1, projects: [project(1)] }, TODAY)).toEqual({ tone: 'critical', text: 'Receipts late' });
+    expect(customerRowState({ ...base, exceptions: 1, projects: [project(1)] }, TODAY)).toEqual({ tone: 'critical', text: 'Work overdue' });
+    expect(customerRowState({ ...base, exceptions: 1, deal: deal({ closeDate: '2026-11-01' }) }, TODAY)).toEqual({ tone: 'caution', text: 'Close date passed' });
+    expect(customerRowState({ ...base, exceptions: 1 }, TODAY)).toEqual({ tone: 'caution', text: 'Warehouse exceptions' });
+  });
+
+  it('names the deal outcome last', () => {
+    expect(customerRowState({ ...base, deal: deal({ outcome: 'won' }) }, TODAY)).toEqual({ tone: 'positive', text: 'Deal won' });
+    expect(customerRowState({ ...base, deal: deal({ outcome: 'lost' }) }, TODAY)).toEqual({ tone: 'neutral', text: 'Deal lost' });
   });
 });

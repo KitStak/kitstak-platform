@@ -34,6 +34,8 @@ export function InviteAccept({
         return;
       }
       setError(result.error ?? 'This invite is no longer active.');
+      // The page has its own calm screen for "open the link in your invite email".
+      if (result.code === 'needs_invite_link') router.refresh();
     } catch {
       setError(NO_NETWORK_MESSAGE);
     }

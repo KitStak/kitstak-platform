@@ -483,7 +483,7 @@ function buildColumns(canMove: boolean, open: (row: PutawayTaskRow) => void): Co
         <span className="flex min-w-0 items-center gap-1.5">
           <Nowrap mono>{row.original.fromLocationCode}</Nowrap>
           {row.original.blockedReason ? (
-            <Badge tone="warning" size="sm" icon={Lock} title={row.original.blockedReason}>
+            <Badge tone="warning" icon={Lock} title={row.original.blockedReason}>
               Locked
             </Badge>
           ) : null}

@@ -372,30 +372,20 @@ export function PackTypesTab({
                 {hasIncompleteDimensions(pt) ? (
                   <Badge
                     tone="warning"
-                    size="sm"
                     title="Length, width or height is 0. Cubing and box selection need all three."
                   >
                     Incomplete dimensions
                   </Badge>
                 ) : null}
                 {hasMissingWeight(pt) ? (
-                  <Badge
-                    tone="warning"
-                    size="sm"
-                    title="Weight is 0. Rate shopping and shipping labels need a weight."
-                  >
+                  <Badge tone="warning" title="Weight is 0. Rate shopping and shipping labels need a weight.">
                     No weight
                   </Badge>
                 ) : null}
-                {pt.shipPackage ? (
-                  <Badge tone="neutral" size="sm">
-                    Box {pt.shipPackage}
-                  </Badge>
-                ) : null}
+                {pt.shipPackage ? <Badge tone="neutral">Box {pt.shipPackage}</Badge> : null}
                 {pt.useOwnBox ? (
                   <Badge
                     tone="info"
-                    size="sm"
                     title="Packing puts each unit in its own package, with nothing else in it."
                   >
                     Ships in own box
@@ -841,11 +831,7 @@ export function KitTab({ data }: { readonly data: D }) {
                 align: 'right',
                 render: (r) => (
                   <span className="inline-flex items-center justify-end gap-1.5">
-                    {showLimiting && limitingIds.has(r.id) ? (
-                      <Badge tone="warning" size="sm">
-                        Limiting
-                      </Badge>
-                    ) : null}
+                    {showLimiting && limitingIds.has(r.id) ? <Badge tone="warning">Limiting</Badge> : null}
                     <span className="font-semibold tabular-nums">{buildableFromComponent(r)}</span>
                   </span>
                 ),

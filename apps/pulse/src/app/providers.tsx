@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { DashboardLinkProvider } from '@kitstak/ui/dashboard';
 import { ThemeHandoff } from '@kitstak/ui/theme-handoff';
 import { Toaster, TooltipProvider, toast } from '@/components/ui';
 import { ApiClientError } from '@/lib/api-client';
@@ -55,7 +57,8 @@ export function Providers({ siblingUrls, children }: { readonly siblingUrls: rea
       <TooltipProvider delayDuration={400} skipDelayDuration={200}>
         {/* Carries the stored theme on links into Portal / CRM / WMS (stores are per origin). */}
         <ThemeHandoff appUrls={siblingUrls} />
-        {children}
+        {/* Tiles, rows and section links in @kitstak/ui/dashboard navigate client side. */}
+        <DashboardLinkProvider component={Link}>{children}</DashboardLinkProvider>
         <Toaster theme={theme} />
       </TooltipProvider>
     </QueryClientProvider>

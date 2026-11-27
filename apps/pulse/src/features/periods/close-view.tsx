@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarCheck2, CircleAlert, CircleCheck, History, Lock, LockOpen, TriangleAlert } from 'lucide-react';
+import { CalendarCheck2, ChevronRight, CircleAlert, CircleCheck, Clock, History, Lock, LockOpen, Repeat2, TriangleAlert } from 'lucide-react';
 import { Badge, Button, Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, Field, Skeleton, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, toast } from '@/components/ui';
 import { cn } from '@/components/ui/cn';
 import { ScrollX } from '@/components/ui/scroll-x';
@@ -27,7 +27,7 @@ import { endOfMonth } from '@/lib/profit/calendar';
 import { qk } from '@/lib/query-keys';
 import { routes } from '@/lib/routes';
 import { closePeriodAction, reopenPeriodAction } from '@/server/actions/planning';
-import type { CloseBoardDTO, CloseDetailDTO, CloseEventDTO, CloseItemDTO, CloseMonthDTO } from '@/server/domain/period-ops';
+import type { CloseBoardDTO, CloseDetailDTO, CloseEventDTO, CloseItemDTO, CloseMonthDTO, CloseProgramRowDTO } from '@/server/domain/period-ops';
 import { bridgeSteps, closableFrom, monthStatus } from './close-model';
 
 const keys = {
@@ -36,9 +36,10 @@ const keys = {
   events: () => ['periods', 'events'] as const,
 };
 
-const ITEM_ICON = { ok: CircleCheck, fix: CircleAlert, check: TriangleAlert } as const;
-const ITEM_TONE = { ok: 'text-success', fix: 'text-danger-text', check: 'text-warning-text' } as const;
-const ITEM_WORD = { ok: 'Done', fix: 'Fix this first', check: 'Worth a look' } as const;
+const ITEM_ICON = { ok: CircleCheck, fix: CircleAlert, check: TriangleAlert, wait: Clock } as const;
+const ITEM_TONE = { ok: 'text-success', fix: 'text-danger-text', check: 'text-warning-text', wait: 'text-fg-muted' } as const;
+const ITEM_WORD = { ok: 'Done', fix: 'Fix this first', check: 'Worth a look', wait: 'Waiting for month end' } as const;
+const ITEM_BADGE = { ok: 'success', fix: 'danger', check: 'warning', wait: 'neutral' } as const;
 
 const money = (cents: number | null, hidden: boolean): string => (cents === null ? (hidden ? 'Hidden' : 'No numbers yet') : Math.abs(cents) >= 1_000_000 ? formatMoneyWhole(cents) : formatMoney(cents));
 
@@ -548,9 +549,10 @@ function ChecklistItem({ item, closed }: { readonly item: CloseItemDTO; readonly
           {item.detail}
           {item.amountCents !== null && item.amountCents !== 0 ? <span className="tabular-nums"> {item.key === 'payroll' ? `The payroll gap is ${formatMoney(Math.abs(item.amountCents))}.` : `They add up to ${formatMoney(item.amountCents)}.`}</span> : null}
         </p>
+        {item.programs && item.programs.length > 0 ? <ProgramRows programs={item.programs} /> : null}
       </div>
       {item.state !== 'ok' ? (
-        <Badge tone={item.state === 'fix' ? 'danger' : 'warning'} className="mt-0.5">
+        <Badge tone={ITEM_BADGE[item.state]} className="mt-0.5">
           {ITEM_WORD[item.state]}
         </Badge>
       ) : null}
@@ -566,6 +568,40 @@ function ChecklistItem({ item, closed }: { readonly item: CloseItemDTO; readonly
         )
       ) : null}
     </li>
+  );
+}
+
+/** Each program of the month close, settled or not, linking to its program page (PULSE_PROGRAMS_SPEC 5.4). */
+function ProgramRows({ programs }: { readonly programs: readonly CloseProgramRowDTO[] }) {
+  return (
+    <ul className="mt-2 flex flex-col gap-1" aria-label="Programs" data-testid="close-programs">
+      {programs.map((program) => {
+        const body = (
+          <>
+            <Repeat2 aria-hidden className="size-3.5 shrink-0 text-fg-muted" />
+            <span className="font-medium text-fg">{program.key}</span>
+            <span className="min-w-0 truncate text-fg-secondary">{program.name}</span>
+            <span className={cn('ml-auto shrink-0 text-xs', program.settled ? 'text-success-text' : 'text-fg-muted')}>{program.settled ? 'Settled' : 'Not settled yet'}</span>
+          </>
+        );
+        return (
+          <li key={program.key}>
+            {program.href ? (
+              <Link
+                href={program.href}
+                className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus sm:max-w-md"
+                data-testid="close-program-link"
+              >
+                {body}
+                <ChevronRight aria-hidden className="size-3.5 shrink-0 text-icon transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            ) : (
+              <span className="flex items-center gap-2 px-2 py-1.5 text-sm sm:max-w-md">{body}</span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

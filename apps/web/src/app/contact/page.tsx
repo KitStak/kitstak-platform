@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/components/json-ld';
+import { breadcrumbLd } from '@/lib/seo';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { ClosingSection } from '@/components/closing/closing-section';
@@ -43,6 +45,7 @@ export default function ContactPage() {
       <PageEffects />
       <Header />
       <main id="main">
+        <JsonLd data={breadcrumbLd([{ name: 'Contact', path: '/contact' }])} />
         <section id="top" className={styles.hero} aria-labelledby="contact-heading">
           <div className={`container ${styles.heroInner}`}>
             <div className={styles.heroCopy}>

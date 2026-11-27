@@ -14,7 +14,8 @@ const HEADER_HEIGHT = 72;
 const HOVER_CLOSE_MS = 140;
 const TINT_AFTER_PX = 8;
 
-export function Header() {
+/** `solid`: always the light bar, for pages that open on a light background (the docs). */
+export function Header({ solid = false }: { readonly solid?: boolean } = {}) {
   const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isTinted, setIsTinted] = useState(false);
@@ -103,7 +104,7 @@ export function Header() {
     setIsDrawerOpen(false);
   }, []);
 
-  const isSolid = isScrolled || isMenuOpen || isDrawerOpen;
+  const isSolid = solid || isScrolled || isMenuOpen || isDrawerOpen;
   const isProductPage = PRODUCT_PATHS.some((path) => isCurrentPath(pathname, path));
 
   return (

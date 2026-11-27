@@ -7,7 +7,9 @@
 import { useMemo, useState } from 'react';
 import { Pencil } from 'lucide-react';
 import { Button, ToggleGroup, toast } from '@/components/ui';
-import { KpiTile } from '@/components/charts/stats';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
+import { statValue } from '@/components/charts/stats';
+import { routes } from '@/lib/routes';
 import { Panel } from '@/components/layout/page';
 import { CostLedger } from '@/features/costs/cost-ledger';
 import { MaterialLedger } from '@/features/materials/material-ledger';
@@ -60,16 +62,15 @@ export function JobMaterials({ job, today }: JobTabProps) {
 
   return (
     <div className="flex flex-col gap-5" data-testid="job-materials">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StatRow label="Material numbers">
         {seesMoney ? (
-          <KpiTile
+          <StatTile
             label="Material cost so far"
-            value={
-              partsOwner === 'client' && (job.stats.materialCents ?? 0) === 0
+            href={null}
+            value={statValue(partsOwner === 'client' && (job.stats.materialCents ?? 0) === 0
                 ? 'Client supplies'
-                : formatMoney(job.stats.materialCents, { cents: false })
-            }
-            footer={
+                : formatMoney(job.stats.materialCents, { cents: false }))}
+            caption={
               <span className="text-xs text-fg-muted">
                 {formatMoney(job.stats.scrapCents, { cents: false })} of that is scrap
               </span>
@@ -90,8 +91,9 @@ export function JobMaterials({ job, today }: JobTabProps) {
             }
           />
         ) : null}
-        <KpiTile
+        <StatTile
           label="Scrapped"
+          href={routes.jobTab(job.number, 'work')}
           explain={
             <Explain
               title="Scrapped"
@@ -103,16 +105,17 @@ export function JobMaterials({ job, today }: JobTabProps) {
               ]}
             />
           }
-          value={formatNumber(job.stats.unitsScrap, { maxDigits: 0 })}
-          footer={
+          value={statValue(formatNumber(job.stats.unitsScrap, { maxDigits: 0 }))}
+          caption={
             <span className="text-xs text-fg-muted">
               {scrapBp === null ? 'no units yet' : `${formatPercentBp(scrapBp)} of what was made`}
             </span>
           }
         />
         {seesMoney ? (
-          <KpiTile
+          <StatTile
             label="Other costs so far"
+            href={null}
             explain={
               <Explain
                 title="Other costs so far"
@@ -122,16 +125,17 @@ export function JobMaterials({ job, today }: JobTabProps) {
                 ]}
               />
             }
-            value={formatMoney(job.stats.otherCents, { cents: false })}
-            footer={
+            value={statValue(formatMoney(job.stats.otherCents, { cents: false }))}
+            caption={
               <span className="text-xs text-fg-muted">
                 {costRows.length} {costRows.length === 1 ? 'row' : 'rows'}
               </span>
             }
           />
         ) : null}
-        <KpiTile
+        <StatTile
           label="Usage rows"
+          href={null}
           explain={
             <Explain
               title="Usage rows"
@@ -143,14 +147,14 @@ export function JobMaterials({ job, today }: JobTabProps) {
               rows={[{ label: 'Rows under Material used', value: formatNumber(usageRows.length), kind: 'total' }]}
             />
           }
-          value={formatNumber(usageRows.length)}
-          footer={
+          value={statValue(formatNumber(usageRows.length))}
+          caption={
             <span className="text-xs text-fg-muted">
               {job.materialMethod === 'actual' ? 'these set the material cost' : 'for your records'}
             </span>
           }
         />
-      </div>
+      </StatRow>
 
       <Panel title="How material is costed">
         <div className="grid gap-5 md:grid-cols-2">

@@ -1,6 +1,38 @@
 'use client';
 import { Dialog, DialogBody, DialogContent, DialogHeader, Kbd, useModKey } from '@/components/ui';
+import { newBuildLive, programPageLive } from '@/features/programs/kit/live-pages';
 import { useShellStore } from './store';
+
+type ShortcutItem = { keys: readonly string[]; label: string };
+
+/** Program shortcuts, listed only once the page each one opens exists (features/programs/kit/live-pages.ts). */
+function programShortcutGroups(): { title: string; items: readonly ShortcutItem[] }[] {
+  const overlays = programPageLive('workspace') && programPageLive('overlays');
+  const items: ShortcutItem[] = [
+    ...(programPageLive('directory') ? [{ keys: ['G', 'R'], label: 'Go to Programs' }] : []),
+    ...(programPageLive('floor') ? [{ keys: ['G', 'F'], label: 'Go to Floor today' }] : []),
+    ...(overlays ? [{ keys: ['O'], label: 'In a program: log output for today' }] : []),
+    ...(newBuildLive() ? [{ keys: ['B'], label: 'In a program: new build' }] : []),
+    ...(overlays
+      ? [
+          { keys: ['Shift', 'B'], label: 'In a program: plan builds' },
+          { keys: ['/'], label: 'Log output: focus "Scan or type a SKU"' },
+          { keys: ['Enter'], label: 'Log output: next row' },
+          { keys: ['Shift', 'Enter'], label: 'Log output: previous row' },
+          { keys: ['='], label: 'Log output: fill the remaining qty' },
+          { keys: ['mod', 'Enter'], label: 'Log output: save' },
+          { keys: ['Esc'], label: 'Log output: close (asks about unsaved rows)' },
+          { keys: ['←', '→', '↑', '↓'], label: 'Planner: move between cells' },
+          { keys: ['mod', 'D'], label: 'Planner: fill right' },
+          { keys: ['mod', 'Shift', 'D'], label: 'Planner: fill down' },
+          { keys: ['Delete'], label: 'Planner: clear cells' },
+          { keys: ['mod', 'V'], label: 'Planner: paste a block from a spreadsheet' },
+          { keys: ['mod', 'Enter'], label: 'Planner: create builds' },
+        ]
+      : []),
+  ];
+  return items.length > 0 ? [{ title: 'Programs', items }] : [];
+}
 
 /** Every keyboard shortcut, registered by the shell and feature teams. Keep in sync with use-shell-hotkeys + views. */
 export const SHORTCUT_GROUPS: readonly { title: string; items: readonly { keys: readonly string[]; label: string }[] }[] = [
@@ -22,6 +54,7 @@ export const SHORTCUT_GROUPS: readonly { title: string; items: readonly { keys: 
       { keys: ['mod', 'Z'], label: 'Undo the last change' },
     ],
   },
+  ...programShortcutGroups(),
   {
     title: 'Any task (List, Board, My work, task panel)',
     items: [

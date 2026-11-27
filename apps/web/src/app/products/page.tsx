@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '@/components/json-ld';
+import { breadcrumbLd } from '@/lib/seo';
 import Link from 'next/link';
 import { ClosingSection } from '@/components/closing/closing-section';
 import { Footer } from '@/components/footer';
@@ -73,6 +75,7 @@ export default function ProductsPage() {
       <PageEffects />
       <Header />
       <main id="main">
+        <JsonLd data={breadcrumbLd([{ name: 'Products', path: '/products' }])} />
         <StackHero />
         <SubNav current="products" sections={SECTIONS} />
         <Lineup />

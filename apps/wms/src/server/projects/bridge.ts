@@ -14,6 +14,7 @@ import {
   isBridgeError,
   listLinkedWork,
   listOrgPeople,
+  listProgramsForKit,
   listWritableProjects,
   pmAvailability,
   removeLink,
@@ -23,6 +24,7 @@ import {
   type BridgePerson,
   type BridgePriority,
   type BridgeTask,
+  type KitProgram,
   type LinkedWork,
   type WritableProject,
 } from '@kitstak/pm-bridge';
@@ -391,4 +393,39 @@ export async function getClientProjects(db: AppDb, auth: AuthContext, clientId: 
     { projectsUrl: base },
   );
   return { available: true, projectsUrl: base, projects: work.projects, openTasks: work.openTasks, filteredUrl };
+}
+
+export interface ProductProgramsDto {
+  /** Projects is licensed, installed (with Programs) and this person is in the workspace. */
+  readonly available: boolean;
+  readonly projectsUrl: string;
+  readonly programs: readonly KitProgram[];
+}
+
+/**
+ * "Programs using this kit" on a kit product (docs/programs/SPEC.md 6.3): the KitStak Projects
+ * programs whose variants build this product, matched by its core item or its WMS id. Units
+ * only, never money. Read only: planned builds never reserve stock or make work orders.
+ */
+export async function getProductPrograms(db: AppDb, auth: AuthContext, productId: string): Promise<ProductProgramsDto> {
+  const base = projectsUrl();
+  const hidden: ProductProgramsDto = { available: false, projectsUrl: base, programs: [] };
+  const t = schema.products;
+  const [product] = await db
+    .select({ id: t.id, coreItemId: t.coreItemId, clientId: t.clientId })
+    .from(t)
+    .where(eq(t.id, productId))
+    .limit(1);
+  if (!product) throw notFoundError('Product');
+  assertInScope(auth.scope, product, 'Product');
+  const { reason, orgId } = await unavailable(db, auth);
+  if (reason || !orgId) return hidden;
+  const result = await listProgramsForKit(
+    bridgeDb(db),
+    { orgId, userId: auth.user.id },
+    { coreItemId: product.coreItemId, wmsProductId: product.id },
+    { projectsUrl: base },
+  );
+  if (!result.available) return hidden;
+  return { available: true, projectsUrl: base, programs: result.programs };
 }

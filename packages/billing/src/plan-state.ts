@@ -576,6 +576,18 @@ export interface NoticeContext {
   readonly appsOpen?: boolean;
 }
 
+/** 'Ask Dana to add Projects', or 'Ask for Projects' when the owner has no name on file. */
+function askLabel(viewer: PlanViewer, appName: string): string {
+  const first = viewer.ownerName?.trim().split(/\s+/)[0];
+  return first ? `Ask ${first} to add ${appName}` : `Ask for ${appName}`;
+}
+
+/** The member's Billing page in the Portal, with the ask for this app in focus. */
+function askHref(portalUrl: string, module: ProductId, orgId: string | null | undefined): string {
+  const home = billingLink(portalUrl, { to: 'home' }, module, orgId);
+  return `${home}${home.includes('?') ? '&' : '?'}ask=${module}`;
+}
+
 function askWho(viewer: PlanViewer): string {
   return viewer.ownerName ? viewer.ownerName : 'your organization owner';
 }
@@ -868,7 +880,10 @@ export function planLockFor(state: PlanState, context: NoticeContext & { module:
       title: `${name} is not in your plan yet`,
       body: `Ask ${askWho(viewer)} to add it.`,
       priceLine: null,
-      primary: null,
+      // One button that leads to the ask itself (review round 5): the member's Billing page, where
+      // "Ask Dana to add Projects" for this app holds the focus and one click emails the owner.
+      // An admin sees Billing in full and has no ask there, so only a member gets the button.
+      primary: viewer.canView ? null : { label: askLabel(viewer, name), href: askHref(portalUrl, module, context.orgId) },
     };
   }
 

@@ -53,6 +53,7 @@ export const NOTIFICATION_KINDS = [
   'automation',
   'integration',
   'project',
+  'program',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -211,4 +212,187 @@ export const DEFAULT_STATUSES: readonly { name: string; category: StatusCategory
   { name: 'In progress', category: 'in_progress', color: 'blue' },
   { name: 'In review', category: 'in_progress', color: 'purple' },
   { name: 'Done', category: 'done', color: 'green' },
+];
+
+/* Programs (docs/programs/SPEC.md 2.2.17). Each list is mirrored by a CHECK in drizzle/0006_programs.sql. */
+
+export const PROJECT_KINDS = ['project', 'program'] as const;
+export type ProjectKind = (typeof PROJECT_KINDS)[number];
+
+export const TASK_KINDS = ['task', 'build'] as const;
+export type TaskKind = (typeof TASK_KINDS)[number];
+
+export const TEMPLATE_KINDS = ['project', 'program'] as const;
+export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
+
+export const VIEW_SURFACES = ['work', 'programs', 'floor'] as const;
+export type ViewSurface = (typeof VIEW_SURFACES)[number];
+
+export const PRICE_LINE_KINDS = ['per_unit', 'per_order', 'per_hour', 'flat_monthly', 'monthly_minimum'] as const;
+export type PriceLineKind = (typeof PRICE_LINE_KINDS)[number];
+
+export const LEDGER_KINDS = ['per_order', 'per_hour', 'flat_monthly', 'setup', 'adjustment', 'minimum_top_up'] as const;
+export type LedgerKind = (typeof LEDGER_KINDS)[number];
+
+export const ONE_TIME_KINDS = ['setup', 'adjustment'] as const;
+export type OneTimeKind = (typeof ONE_TIME_KINDS)[number];
+
+export const PRICE_SOURCES = ['build', 'variant', 'card', 'job', 'none'] as const;
+export type PriceSource = (typeof PRICE_SOURCES)[number];
+
+export const POSTINGS = ['program', 'program_job', 'build_job', 'unbilled'] as const;
+export type Posting = (typeof POSTINGS)[number];
+
+/** Postings a ledger row can have (fees go to the program's job, else the program). */
+export const LEDGER_POSTINGS = ['program', 'program_job'] as const;
+export type LedgerPosting = (typeof LEDGER_POSTINGS)[number];
+
+export const PLANNED_FROM = ['manual', 'schedule', 'variant_default', 'planner', 'unplanned', 'split', 'import', 'form'] as const;
+export type PlannedFrom = (typeof PLANNED_FROM)[number];
+
+export const OUTPUT_SOURCES = ['manual', 'scan', 'import', 'form'] as const;
+export type OutputSource = (typeof OUTPUT_SOURCES)[number];
+
+export const SCHEDULE_PATTERNS = ['daily', 'weekdays', 'custom_days', 'every_n_weeks'] as const;
+export type SchedulePattern = (typeof SCHEDULE_PATTERNS)[number];
+
+export const SCHEDULE_STATUSES = ['active', 'paused', 'ended'] as const;
+export type ScheduleStatus = (typeof SCHEDULE_STATUSES)[number];
+
+export const VARIANT_STATUSES = ['active', 'retired'] as const;
+export type VariantStatus = (typeof VARIANT_STATUSES)[number];
+
+export const REVIEW_STATUSES = ['none', 'waiting', 'sent_back'] as const;
+export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
+
+export const HOURLY_TIME_BASES = ['billable', 'all'] as const;
+export type HourlyTimeBasis = (typeof HOURLY_TIME_BASES)[number];
+
+export const VERSION_STATUSES = ['draft', 'published'] as const;
+export type VersionStatus = (typeof VERSION_STATUSES)[number];
+
+export const VERSION_SOURCES = ['manual', 'crm_deal', 'copy', 'template', 'seed', 'variant_tab'] as const;
+export type VersionSource = (typeof VERSION_SOURCES)[number];
+
+export const RATE_RULE_OPS = ['add', 'set'] as const;
+export type RateRuleOp = (typeof RATE_RULE_OPS)[number];
+
+export const WIZARD_DRAFT_KINDS = ['program'] as const;
+export type WizardDraftKind = (typeof WIZARD_DRAFT_KINDS)[number];
+
+/** Derived from `effective_from` and today (4.4.1); only `draft` and `published` are stored. */
+export const VERSION_STATES = ['draft', 'scheduled', 'in_force', 'ended'] as const;
+export type VersionState = (typeof VERSION_STATES)[number];
+
+export const UNIT_PRESETS = [
+  { singular: 'kit', plural: 'kits' },
+  { singular: 'order', plural: 'orders' },
+  { singular: 'unit', plural: 'units' },
+  { singular: 'pack', plural: 'packs' },
+  { singular: 'box', plural: 'boxes' },
+] as const;
+
+/** The workspace calendar default zone (pm.org_calendar.timezone default). */
+export const DEFAULT_PROGRAM_TIMEZONE = 'America/Chicago';
+
+/** Max live attributes per program (domain check, 2.2.5). */
+export const MAX_PROGRAM_ATTRIBUTES = 4;
+/** Max values per attribute (2.2.5). */
+export const MAX_ATTRIBUTE_VALUES = 30;
+/** Max variants one generator run may make (3.9). */
+export const MAX_GENERATED_VARIANTS = 200;
+
+/** Shared project statuses in program words. */
+export const PROGRAM_STATUS_LABELS: Readonly<Record<ProjectStatus, string>> = {
+  planning: 'Setting up',
+  active: 'Running',
+  on_hold: 'Paused',
+  completed: 'Ended',
+  archived: 'Archived',
+};
+
+/** `per_unit` uses the program's unit word: "Per kit". */
+export const PRICE_LINE_LABELS: Readonly<Record<PriceLineKind, string>> = {
+  per_unit: 'Per {unit}',
+  per_order: 'Per batch',
+  per_hour: 'Per hour',
+  flat_monthly: 'Monthly fee',
+  monthly_minimum: 'Monthly minimum',
+};
+
+export const LEDGER_LABELS: Readonly<Record<LedgerKind, string>> = {
+  per_order: 'Per batch',
+  per_hour: 'Per hour',
+  flat_monthly: 'Monthly fee',
+  setup: 'Setup fee',
+  adjustment: 'Adjustment',
+  minimum_top_up: 'Minimum top up',
+};
+
+/** Shown after "Revenue goes to". */
+export const POSTING_LABELS: Readonly<Record<Posting, string>> = {
+  program: 'This program',
+  program_job: "The program's Pulse job",
+  build_job: "This build's Pulse job",
+  unbilled: 'Not billed',
+};
+
+/** Shown after "Price from". */
+export const PRICE_SOURCE_LABELS: Readonly<Record<PriceSource, string>> = {
+  build: 'Build rate',
+  variant: 'Variant rate',
+  card: 'Card rate',
+  job: 'Job price',
+  none: 'No price',
+};
+
+export const VERSION_STATE_LABELS: Readonly<Record<VersionState, string>> = {
+  draft: 'Draft',
+  scheduled: 'Scheduled',
+  in_force: 'In force',
+  ended: 'Ended',
+};
+
+export const PLANNED_FROM_LABELS: Readonly<Record<PlannedFrom, string>> = {
+  manual: 'Typed',
+  schedule: 'Schedule',
+  variant_default: 'Variant default',
+  planner: 'Planner',
+  unplanned: 'Unplanned',
+  split: 'Moved from another build',
+  import: 'Import',
+  form: 'Form',
+};
+
+export const SCHEDULE_PATTERN_LABELS: Readonly<Record<SchedulePattern, string>> = {
+  daily: 'Every day',
+  weekdays: 'Every work day',
+  custom_days: 'Chosen days',
+  every_n_weeks: 'Every few weeks',
+};
+
+export const SCHEDULE_STATUS_LABELS: Readonly<Record<ScheduleStatus, string>> = {
+  active: 'Active',
+  paused: 'Paused',
+  ended: 'Ended',
+};
+
+export const VARIANT_STATUS_LABELS: Readonly<Record<VariantStatus, string>> = {
+  active: 'Active',
+  retired: 'Retired',
+};
+
+export const HOURLY_TIME_BASIS_LABELS: Readonly<Record<HourlyTimeBasis, string>> = {
+  billable: 'Billable time only',
+  all: 'All time',
+};
+
+/** Default workflow for a new program (inserted instead of DEFAULT_STATUSES when kind is program). */
+export const DEFAULT_PROGRAM_STATUSES: readonly { name: string; category: StatusCategory; color: LabelColor; isDefault?: boolean }[] = [
+  { name: 'Planned', category: 'todo', color: 'gray', isDefault: true },
+  { name: 'Staged', category: 'todo', color: 'sky' },
+  { name: 'Building', category: 'in_progress', color: 'blue' },
+  { name: 'Quality check', category: 'in_progress', color: 'purple' },
+  { name: 'Done', category: 'done', color: 'green' },
+  { name: 'Cancelled', category: 'cancelled', color: 'gray' },
 ];

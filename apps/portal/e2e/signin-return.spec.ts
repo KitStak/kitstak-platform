@@ -12,7 +12,7 @@ async function signIn(page: Page, person: Person): Promise<void> {
 }
 
 test.describe('a signed out link keeps where it was going', () => {
-  test('the "Update card" button of the failed payment email: sign in, land on billing with the card in focus', async ({ page, context }) => {
+  test('the "Update card" button of the failed payment email: sign in, land on the card form', async ({ page, context }) => {
     const { person } = await paidAccount(page, 'returnto', CART_PULSE);
 
     // The session ends (the email is opened days later, or on another device).
@@ -30,10 +30,23 @@ test.describe('a signed out link keeps where it was going', () => {
     await page.goto('/billing?fix=payment');
     await page.waitForURL(/\/login\?next=%2Fbilling%3Ffix%3Dpayment/);
     await signIn(page, person);
-    await page.waitForURL(/\/billing\?(.*&)?fix=payment/);
+    // Review round 5: "Update card" opens the card form itself. No second press on billing home.
+    await page.waitForURL(/\/test-gateway\/card\//, { timeout: 90_000 });
+    await expect(page.getByRole('heading', { name: 'Update your card' })).toBeVisible();
+    // "Back. Keep my card." and the browser's Back both show billing home, and the form does not open again.
+    await page.getByTestId('test-back').click();
+    await page.waitForURL((url) => url.pathname === '/billing', { timeout: 90_000 });
     await expect(page.getByTestId('billing-home')).toBeVisible();
     await expectPhase(page, 'active');
-    // The Payment method card is brought into view and its "Update card" button holds the focus.
+    await page.goto('/billing?fix=payment');
+    await page.waitForURL(/\/test-gateway\/card\//, { timeout: 90_000 });
+    await page.goBack();
+    await page.waitForURL((url) => url.pathname === '/billing' && !url.searchParams.has('fix'), { timeout: 90_000 });
+    await expect(page.getByTestId('billing-home')).toBeVisible();
+    await page.waitForTimeout(3_000);
+    expect(new URL(page.url()).pathname, 'Back does not open the card form a second time').toBe('/billing');
+    // "Pay the bill instead" (focus=payment) keeps the old way: the card in view, its button in focus.
+    await page.goto('/billing?focus=payment');
     await expect(page.getByTestId('billing-payment-method').getByRole('button', { name: 'Update card' })).toBeFocused();
 
     // 3. And for "Pick a plan" style links with their own query.

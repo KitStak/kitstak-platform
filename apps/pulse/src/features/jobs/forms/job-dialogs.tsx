@@ -477,7 +477,7 @@ export function PlanDialog({
       size="lg"
     >
       {hasLines ? (
-        <p className="rounded-lg bg-[var(--label-yellow-subtle)] px-3 py-2 text-sm text-[var(--label-yellow-text)] sm:col-span-2">
+        <p className="rounded-lg bg-warning-subtle px-3 py-2 text-sm text-warning-text sm:col-span-2">
           This {word} was built from lines. Saving totals here keeps the lines for the line by line table, and
           the totals below become the plan.
         </p>

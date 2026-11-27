@@ -5,6 +5,7 @@
  */
 import { addDaysIso, diffDays, parseIsoDate, startOfWeekIso, type IsoDate } from '@/lib/dates';
 import type { TaskSummary } from '@/lib/types';
+import { formatQty, quantityToScaled } from '@kitstak/programs-engine';
 
 export type LoadUnit = 'tasks' | 'points' | 'hours';
 
@@ -42,9 +43,10 @@ function unitBlock(settings: Readonly<Record<string, unknown>> | null | undefine
  * Capacity for `unit` from `project.settings.workload` (free-form JSON, read defensively):
  * `{ capacity: { tasks: { perWeek, perPerson: { [userId]: n } }, points: {...}, hours: {...} } }`.
  */
-export function readWorkloadSettings(settings: Readonly<Record<string, unknown>> | null | undefined, unit: LoadUnit): WorkloadSettings {
+export function readWorkloadSettings(settings: Readonly<Record<string, unknown>> | null | undefined, unit: LoadUnit, fallbackPerWeek?: number | null): WorkloadSettings {
   const block = unitBlock(settings, unit);
-  const perWeek = validCapacity(block.perWeek) && block.perWeek > 0 ? block.perWeek : DEFAULT_CAPACITY[unit];
+  const fallback = fallbackPerWeek && fallbackPerWeek > 0 ? fallbackPerWeek : DEFAULT_CAPACITY[unit];
+  const perWeek = validCapacity(block.perWeek) && block.perWeek > 0 ? block.perWeek : fallback;
   const perPerson: Record<string, number> = {};
   if (block.perPerson && typeof block.perPerson === 'object' && !Array.isArray(block.perPerson)) {
     for (const [id, n] of Object.entries(block.perPerson as Record<string, unknown>)) if (validCapacity(n)) perPerson[id] = n;
@@ -239,4 +241,36 @@ export function shiftToWeek(
     ...(task.startDate ? { startDate: addDaysIso(task.startDate, delta) } : {}),
     ...(task.dueDate ? { dueDate: addDaysIso(task.dueDate, delta) } : {}),
   };
+}
+
+/* ---------------------------------------------------------------------------------------------- */
+/* Builds (docs/programs/SPEC.md 5.19)                                                            */
+/* ---------------------------------------------------------------------------------------------- */
+
+export function isBuild(task: Pick<TaskSummary, 'kind'>): boolean {
+  return task.kind === 'build';
+}
+
+/** Tasks to count: builds drop out when "Show builds" is off. */
+export function visibleWork<T extends Pick<TaskSummary, 'kind'>>(tasks: readonly T[], showBuilds: boolean): T[] {
+  return showBuilds ? [...tasks] : tasks.filter((task) => !isBuild(task));
+}
+
+/** The weekly hours a workspace day capacity gives (daily hours times 5 work days), or null. */
+export function weeklyHoursFromDaily(dailyCapacityHours: string | null | undefined, workDays = 5): number | null {
+  if (!dailyCapacityHours) return null;
+  const hours = Number(dailyCapacityHours);
+  return Number.isFinite(hours) && hours > 0 ? Math.round(hours * workDays * 100) / 100 : null;
+}
+
+/** "100 planned" for a build chip: the planned units still to make. */
+export function buildUnitsText(task: Pick<TaskSummary, 'build'>): string | null {
+  const build = task.build;
+  if (!build) return null;
+  try {
+    const built = quantityToScaled(build.builtQty || '0');
+    return built > BigInt(0) ? `${formatQty(build.builtQty)} of ${formatQty(build.plannedQty)}` : `${formatQty(build.plannedQty)} planned`;
+  } catch {
+    return null;
+  }
 }

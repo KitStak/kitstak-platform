@@ -191,7 +191,7 @@ export function GoalsView({ initial }: { readonly initial: GoalsBoardDTO }) {
               {(['ahead', 'close', 'behind', 'no_data'] as const).map((status) =>
                 counts[status] > 0 ? (
                   <li key={status}>
-                    <Badge tone={STATUS_TONE[status]} size="md">
+                    <Badge tone={STATUS_TONE[status]}>
                       {counts[status]} {GOAL_STATUS_LABELS[status].toLowerCase()}
                     </Badge>
                   </li>

@@ -71,7 +71,7 @@ function Row({
       style={style}
       className={cn(
         'flex items-center gap-1.5 rounded-md bg-surface px-1 py-1',
-        isDragging && 'relative z-10 shadow-md ring-1 ring-primary/30',
+        isDragging && 'relative z-10 shadow-md ring-1 ring-focus/30',
       )}
     >
       <button

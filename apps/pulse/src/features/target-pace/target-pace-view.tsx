@@ -456,7 +456,7 @@ export function TargetPaceView({
                     <TableCell>
                       {row.jobTypeId ? typeName(row.jobTypeId) : serviceName(row.vasServiceId)}
                       {row.vasServiceId ? (
-                        <Badge size="sm" className="ml-1.5">
+                        <Badge className="ml-1.5">
                           Extra service
                         </Badge>
                       ) : null}
@@ -469,7 +469,7 @@ export function TargetPaceView({
                     <TableCell className="whitespace-nowrap">
                       {shortDate(row.effectiveFrom)}, {row.effectiveFrom.slice(0, 4)}
                       {row.effectiveFrom > today ? (
-                        <Badge tone="info" size="sm" className="ml-1.5">
+                        <Badge tone="info" className="ml-1.5">
                           Later
                         </Badge>
                       ) : null}

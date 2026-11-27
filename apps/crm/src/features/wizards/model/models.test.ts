@@ -152,6 +152,10 @@ describe('invites', () => {
 
   it('builds links and expiry labels', () => {
     expect(inviteLink('http://localhost:3100/', 'abc')).toBe('http://localhost:3100/welcome/invite/abc');
+    // With a Portal address the link is the Portal's invite page: the one place a person joins.
+    expect(inviteLink('http://localhost:3100/', 'abc', 'http://localhost:3300/')).toBe('http://localhost:3300/invite/abc');
+    expect(inviteLink('http://localhost:3100/', 'abc', '  ')).toBe('http://localhost:3100/welcome/invite/abc');
+    expect(inviteLink('http://localhost:3100/', 'abc', null)).toBe('http://localhost:3100/welcome/invite/abc');
     const now = Date.parse('2026-11-05T00:00:00Z');
     expect(expiresIn('2026-11-12T00:00:00Z', now)).toBe('Expires in 7 days');
     expect(expiresIn('2026-11-04T00:00:00Z', now)).toBe('Expired');

@@ -206,16 +206,16 @@ export function RulesView({ initialRules, canManage, options, facts = {} }: { re
             {[scope, tellSentence(rule.notifyRoles, names)].filter(Boolean).join(' · ')}
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <Badge tone={SEVERITY_TONE[rule.severity]} size="sm">
+            <Badge tone={SEVERITY_TONE[rule.severity]}>
               {SEVERITY_LABEL[rule.severity]}
             </Badge>
             {quiet ? (
-              <Badge tone="neutral" size="sm" icon={<MoonStar aria-hidden />}>
+              <Badge tone="neutral" icon={<MoonStar aria-hidden />}>
                 {quietSentence(quiet)}
               </Badge>
             ) : null}
             <span data-testid="rule-state">
-              <Badge tone={rule.enabled ? 'success' : 'neutral'} size="sm">
+              <Badge tone={rule.enabled ? 'success' : 'neutral'}>
                 {rule.enabled ? 'On' : 'Off'}
               </Badge>
             </span>

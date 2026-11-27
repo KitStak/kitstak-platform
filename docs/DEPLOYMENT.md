@@ -150,6 +150,64 @@ Pulse migrates last: `@kitstak/db` migration `0006_core_pulse_module` must alrea
 (CRM's `vercel-build.sh` also runs its migrations on deploy; WMS deploys run
 theirs. Seeding is optional — `db:seed` in each app for demo data.)
 
+## Programs release (migration and seed order)
+
+The Programs feature (docs/programs/SPEC.md section 2) adds `@kitstak/db` migration `0007_core_record_links`,
+Projects migration `0006_programs` and Pulse migration `0015_program_builds`. On a database that
+already runs KitStak, apply them in this order:
+
+```bash
+DATABASE_URL=<direct> pnpm --filter @kitstak/db db:migrate                          # 1. core.record_links (0007)
+DATABASE_URL=<direct> pnpm --filter kitstak-projects db:migrate                     # 2. pm programs (0006)
+# 3. deploy CRM (it reads pm.projects.kind through pm-bridge, so 0006 goes first)
+DATABASE_URL=<direct> DIRECT_URL=<direct> pnpm --filter kitstak-wms db:migrate      # 4. WMS (no new tables, deploy after CRM)
+DATABASE_URL=<direct> DIRECT_URL=<direct> pnpm --filter kitstak-pulse db:migrate    # 5. pulse program builds (0015), always last
+```
+
+Projects 0006 moves ahead of the CRM deploy because pm-bridge reads `pm.projects.kind`. Every cross
+app read of a new column or table is also feature detected (SPEC 6.5), so a partial database or a
+different order never breaks a sibling app; panels hide until their tables exist.
+
+Production status (checked 2026-11-25): all three migrations are already applied, and the hashes in
+`drizzle.__kitstak_*_migrations` match the committed files, so the production deploy skips them.
+`0007_core_record_links` keeps its tag but sits at journal idx 12, after the billing files
+`0007_core_billing` to `0011_core_sign_in_round4`, because the two were written in parallel. A fresh
+database applies the billing files first, then the link graph. Never edit an applied migration: add a new one.
+
+Preview builds never migrate: every `db:migrate` script exits early when `VERCEL_ENV=preview`, because
+previews share the production database. Only production deploys apply migrations.
+
+### Pulse program tracker (0016)
+
+The Pulse Programs section (docs/programs/PULSE_PROGRAMS_SPEC.md) adds one Pulse migration,
+`0016_program_tracker`: the column `pulse.jobs.program_job` with a backfill from `pm_program` links.
+It moves no money. The production Pulse deploy applies it like any other Pulse migration.
+
+Check that money did not move:
+
+1. Before the deploy, run `docs/programs/pulse-tracker-money-check.sql` (read only) against
+   production and save the output.
+2. After the deploy and the first program sync, run it again. Every row must match. Rows can only
+   grow when a new build posts between the two runs, so run them close together.
+3. Check that `select number from pulse.jobs where program_job` lists exactly the program jobs.
+
+### Demo seeds
+
+The seeds build on each other. Run them in this order, every time:
+
+```bash
+pnpm --filter kitstak-crm db:seed        # 1. Northwind org, users, CRM accounts and won program deals
+pnpm --filter kitstak-projects db:seed   # 2. projects and programs (GLOVE, DUDE, MAHCO, ECOMM, TEES), then the seed check
+pnpm --filter kitstak-pulse db:seed      # 3. Pulse jobs; program jobs J-1040 to J-1042 sync and must match Projects to the cent
+```
+
+The CRM seed recreates the Northwind org (same org id every run), which removes its Projects and
+Pulse rows, so the Projects and Pulse seeds must follow it. Each seed is idempotent: two full runs
+give the same counts and the same program, variant, build and output ids. The Projects seed prints
+the SPEC 7.4 facts and fails when a GLOVE value differs on a 2026-11-25 run; the Pulse seed fails
+when a program month differs between Pulse and Projects. To print the facts again without seeding:
+`pnpm --filter kitstak-projects db:seed -- --org=northwind-robotics --check-only --with-pulse`.
+
 ## After first deploy
 
 - `TRUSTED_ORIGINS` / `NEXT_PUBLIC_*_URL`: come back and fill with the real

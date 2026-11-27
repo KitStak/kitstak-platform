@@ -1,7 +1,8 @@
 'use client';
 /**
- * Left navigation: Home, My work, Inbox (unread badge), Projects, Goals, Dashboards, Automations,
- * Templates, starred projects, Spaces with their projects, Settings. Collapses to a 56px icon
+ * Left navigation: Home, My work, Inbox (unread badge), Projects, Programs (running count) and
+ * Floor today, Goals, Dashboards, Automations, Templates, starred projects and programs, the
+ * PROGRAMS section, Spaces with their projects, Settings. Collapses to a 56px icon
  * rail (persisted); below md it renders inside the mobile drawer (variant="drawer").
  */
 import Link from 'next/link';
@@ -19,7 +20,9 @@ import {
   House,
   Inbox,
   ClipboardList,
+  Factory,
   LayoutTemplate,
+  Repeat2,
   Plus,
   Settings2,
   Star,
@@ -35,6 +38,8 @@ import { routes } from '@/lib/routes';
 import type { ProjectSummary, SpaceDTO } from '@/lib/types';
 import { useShell } from './shell-context';
 import { useShellStore } from './store';
+import { floorTodayHref, programsHref } from '@/features/programs/kit/live-pages';
+import { ProgramRow, SidebarProgramsSection, useProgramNavCounts, useStarredPrograms } from './sidebar-programs';
 
 const RAIL_WIDTH = 56;
 const SIDEBAR_WIDTH = 252;
@@ -53,6 +58,10 @@ interface NavItem {
   readonly icon: ReactNode;
   readonly match: (pathname: string) => boolean;
   readonly badge?: number;
+  readonly badgeTone?: 'neutral' | 'critical';
+  readonly badgeLabel?: string;
+  /** Indent under the item above (Floor today under Programs). */
+  readonly nested?: boolean;
   readonly testId: string;
 }
 
@@ -61,7 +70,7 @@ function NavLink({ item, collapsed }: { readonly item: NavItem; readonly collaps
   const active = item.match(pathname);
   if (collapsed) {
     return (
-      <Tooltip content={item.badge ? `${item.label} (${item.badge} unread)` : item.label} side="right">
+      <Tooltip content={item.badge ? `${item.label} (${item.badge} ${item.badgeLabel ?? 'unread'})` : item.label} side="right">
         <Link
           href={item.href}
           aria-label={item.label}
@@ -72,7 +81,7 @@ function NavLink({ item, collapsed }: { readonly item: NavItem; readonly collaps
           {item.icon}
           {item.badge ? (
             <span className="absolute -top-0.5 -right-0.5">
-              <CountBadge count={item.badge} ringClassName="ring-[var(--surface-app)]" />
+              <CountBadge count={item.badge} tone={item.badgeTone ?? 'neutral'} ringClassName="ring-[var(--surface-app)]" />
             </span>
           ) : null}
         </Link>
@@ -80,12 +89,12 @@ function NavLink({ item, collapsed }: { readonly item: NavItem; readonly collaps
     );
   }
   return (
-    <Link href={item.href} aria-current={active ? 'page' : undefined} data-testid={item.testId} className={rowClass}>
+    <Link href={item.href} aria-current={active ? 'page' : undefined} data-testid={item.testId} className={cn(rowClass, item.nested && 'h-7 pl-7 text-sm')}>
       <span data-row-icon className="flex size-5 shrink-0 items-center justify-center text-icon">
         {item.icon}
       </span>
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
-      {item.badge ? <CountBadge count={item.badge} tone="danger" /> : null}
+      {item.badge ? <CountBadge count={item.badge} tone={item.badgeTone ?? 'neutral'} label={item.badgeLabel} /> : null}
     </Link>
   );
 }
@@ -168,6 +177,11 @@ export function Sidebar({ variant = 'docked', initialProjects, initialSpaces, in
   const projects = useProjects({}, { initialData: initialProjects ? [...initialProjects] : undefined });
   const spaces = useSpaces({ initialData: initialSpaces ? [...initialSpaces] : undefined });
   const unread = useUnreadCount({ initialData: initialUnread !== undefined ? { count: initialUnread } : undefined });
+  const programCounts = useProgramNavCounts();
+  const starredPrograms = useStarredPrograms();
+  // Program pages land in later layers; the nav shows them only once they exist (kit/live-pages.ts).
+  const programsNav = programsHref();
+  const floorNav = floorTodayHref();
   // The layout re-renders after every server action (revalidatePath); push its fresh data into the cache.
   const queryClient = useQueryClient();
   useEffect(() => {
@@ -198,6 +212,32 @@ export function Sidebar({ variant = 'docked', initialProjects, initialSpaces, in
       match: (p) => p === '/projects' || p.startsWith('/projects/'),
       testId: 'nav-projects',
     },
+    ...(programsNav
+      ? [
+          {
+            href: programsNav,
+            label: 'Programs',
+            icon: <Repeat2 aria-hidden className="size-[18px]" />,
+            match: (p: string) => p === '/programs' || p === '/programs/new' || (p.startsWith('/programs/') && !p.startsWith('/programs/today')),
+            badge: programCounts.running,
+            badgeTone: 'neutral',
+            badgeLabel: 'running programs',
+            testId: 'nav-programs',
+          } satisfies NavItem,
+        ]
+      : []),
+    ...(floorNav && programCounts.running > 0
+      ? [
+          {
+            href: floorNav,
+            label: 'Floor today',
+            icon: <Factory aria-hidden className="size-4" />,
+            match: (p: string) => p.startsWith('/programs/today'),
+            nested: Boolean(programsNav),
+            testId: 'nav-floor-today',
+          } satisfies NavItem,
+        ]
+      : []),
   ];
   const secondary: NavItem[] = [
     { href: routes.goals(), label: 'Goals', icon: <Target aria-hidden className="size-[18px]" />, match: (p) => p.startsWith('/goals'), testId: 'nav-goals' },
@@ -261,7 +301,7 @@ export function Sidebar({ variant = 'docked', initialProjects, initialSpaces, in
                 </li>
               ))}
             </ul>
-            {starred.length > 0 ? (
+            {starred.length > 0 || starredPrograms.length > 0 ? (
               <div>
                 <SectionHeading>
                   <span className="inline-flex items-center gap-1">
@@ -274,9 +314,15 @@ export function Sidebar({ variant = 'docked', initialProjects, initialSpaces, in
                       <ProjectRow project={project} />
                     </li>
                   ))}
+                  {starredPrograms.map((program) => (
+                    <li key={program.id}>
+                      <ProgramRow program={program} />
+                    </li>
+                  ))}
                 </ul>
               </div>
             ) : null}
+            <SidebarProgramsSection canCreate={can('project:create')} />
             <div data-testid="sidebar-spaces">
               <SectionHeading
                 action={

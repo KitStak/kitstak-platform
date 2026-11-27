@@ -77,6 +77,81 @@ app_ready_path() {
   esac
 }
 
+# app_mem_cap_mb <app>: the memory budget of one dev server and its helpers, in MB. Over it,
+# app-supervise.sh restarts the server. KITSTAK_DEV_MEM_MB_<APP> sets one app, KITSTAK_DEV_MEM_MB
+# all of them. The defaults add up to 13 GB. A fresh server uses about a third of its budget, and when
+# the machine itself runs short the biggest server is restarted first (KITSTAK_DEV_MIN_FREE_MB), so six
+# apps and a browser fit in 16 GB.
+app_mem_cap_mb() {
+  local name value
+  name="KITSTAK_DEV_MEM_MB_$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+  value="${!name:-${KITSTAK_DEV_MEM_MB:-}}"
+  if [ -z "$value" ]; then
+    case "$1" in
+      portal) value=3000 ;;
+      wms) value=2600 ;;
+      crm | projects) value=2200 ;;
+      pulse) value=1800 ;;
+      *) value=1200 ;;
+    esac
+  fi
+  echo "$value"
+}
+
+# group_rss_mb <pgid>: memory in use by every process of a process group, in MB. 0 when it is gone.
+group_rss_mb() {
+  local pids total=0 rss
+  pids="$(pgrep -g "$1" 2>/dev/null | tr '\n' ',' | sed 's/,$//')"
+  [ -z "$pids" ] && { echo 0; return 0; }
+  for rss in $(ps -o rss= -p "$pids" 2>/dev/null); do total=$((total + rss)); done
+  echo $((total / 1024))
+}
+
+# mem_available_mb: memory that dev processes can still get, in MB. Empty where it cannot be read
+# (macOS). It is the smaller of two numbers: what the machine has left, and what the memory group
+# (cgroup) of this shell has left. In a dev container the group is the real limit: the system stops
+# the biggest process of the group when the group is full, long before the machine is.
+mem_available_mb() {
+  local avail="" group dir limit="" usage="" cache="" room
+  [ -r /proc/meminfo ] && avail="$(awk '/^MemAvailable:/ { printf "%d", $2 / 1024 }' /proc/meminfo)"
+  if [ -r /proc/self/cgroup ]; then
+    group="$(awk -F: '$2 == "memory" { print $3; exit }' /proc/self/cgroup)"
+    dir="/sys/fs/cgroup/memory$group"
+    if [ -n "$group" ] && [ -r "$dir/memory.limit_in_bytes" ]; then
+      # cgroup v1. File cache that can be dropped does not count as used.
+      limit="$(cat "$dir/memory.limit_in_bytes" 2>/dev/null)"
+      usage="$(cat "$dir/memory.usage_in_bytes" 2>/dev/null)"
+      cache="$(awk '$1 == "total_inactive_file" { print $2; exit }' "$dir/memory.stat" 2>/dev/null)"
+    else
+      group="$(awk -F: '$1 == "0" { print $3; exit }' /proc/self/cgroup)"
+      dir="/sys/fs/cgroup$group"
+      if [ -r "$dir/memory.max" ]; then
+        # cgroup v2. "max" means no limit.
+        limit="$(cat "$dir/memory.max" 2>/dev/null)"
+        usage="$(cat "$dir/memory.current" 2>/dev/null)"
+        cache="$(awk '$1 == "inactive_file" { print $2; exit }' "$dir/memory.stat" 2>/dev/null)"
+      fi
+    fi
+    case "$limit" in
+      '' | *[!0-9]*) ;;
+      *)
+        # A limit above 1 TB stands for "no limit".
+        if [ "${#limit}" -le 12 ] && [ -n "$usage" ]; then
+          room=$(((limit - usage + ${cache:-0}) / 1048576))
+          [ "$room" -lt 0 ] && room=0
+          if [ -z "$avail" ] || [ "$room" -lt "$avail" ]; then avail="$room"; fi
+        fi
+        ;;
+    esac
+  fi
+  echo "$avail"
+}
+
+# file_mtime <file>: when the file last changed, in seconds since 1970 (Linux and macOS).
+file_mtime() {
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
+}
+
 port_open() {
   (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
 }

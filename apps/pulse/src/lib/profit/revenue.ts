@@ -1,37 +1,14 @@
 /**
  * Revenue (docs/pulse/SPEC.md 4.8). Earned revenue is the only profit basis: what the work done
  * is worth at the agreed price. Invoices are a second number, billed, and never change profit.
- * Pure functions.
+ * Pure functions. Per unit and hourly revenue and `priceFor` live in the shared engine
+ * (docs/programs/SPEC.md 3.1) and are re-exported here.
  */
-import { type Cents, type CentsLike, type Decimal, ZERO, divRound, mulHoursRate, mulQuantityPrice, quantityToScaled, toCents } from '../money';
+import { type Cents, type CentsLike, type Decimal, ZERO, divRound, mulQuantityPrice, quantityToScaled, toCents } from '../money';
 import type { IsoDate } from './types';
 
-/** Per unit pricing: `units good x unit price`. 3,000 units at $2.75 is $8,250.00. */
-export function perUnitRevenue(unitsGood: Decimal, unitPrice: Decimal | null | undefined): Cents {
-  if (unitPrice === null || unitPrice === undefined || unitPrice === '') return ZERO;
-  return mulQuantityPrice(unitsGood, unitPrice);
-}
-
-/** Hourly pricing: `hours x bill rate`. */
-export function hourlyRevenue(hours: Decimal, billRateCents: CentsLike | null | undefined): Cents {
-  if (billRateCents === null || billRateCents === undefined) return ZERO;
-  return mulHoursRate(hours, billRateCents);
-}
-
-/** A dated price row of a job (`pulse.job_prices`). */
-export interface DatedRow {
-  readonly effectiveFrom: IsoDate;
-}
-
-/** The price row in force on a work date: the row with the latest `effectiveFrom` on or before it. */
-export function priceFor<T extends DatedRow>(rows: readonly T[], workDate: IsoDate): T | null {
-  let best: T | null = null;
-  for (const row of rows) {
-    if (row.effectiveFrom > workDate) continue;
-    if (!best || row.effectiveFrom > best.effectiveFrom) best = row;
-  }
-  return best;
-}
+export { hourlyRevenue, perUnitRevenue } from '@kitstak/programs-engine/accrual';
+export { type DatedRow, priceFor } from '@kitstak/programs-engine/price';
 
 /** A production entry of a fixed price job, in stamp order. */
 export interface FixedEntry {

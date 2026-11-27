@@ -2,7 +2,8 @@
 /** Project health pill (On track / At risk / Off track), shared by the directory, header, overview and dashboards. */
 import { useState } from 'react';
 import { AlertTriangle, CheckCircle2, OctagonAlert } from 'lucide-react';
-import { Badge, Button, Popover, PopoverContent, PopoverTrigger, cn } from '@/components/ui';
+import { Pill, type PillTone } from '@kitstak/ui/dashboard';
+import { Button, Popover, PopoverContent, PopoverTrigger, cn } from '@/components/ui';
 import { useServerAction } from '@/lib/hooks/use-action';
 import { qk } from '@/lib/query-keys';
 import { postProjectUpdateAction } from '@/server/actions/portfolio';
@@ -28,11 +29,28 @@ export function HealthIcon({ health, className = 'size-3' }: { readonly health: 
   return <Icon aria-hidden className={className} />;
 }
 
-export function HealthBadge({ health, size = 'md' }: { readonly health: ProjectHealth; readonly size?: 'sm' | 'md' }) {
+/** The shared dashboard pill tones (docs/design/UI-CLEANUP.md, "Pills"). */
+export const HEALTH_PILL_TONE: Readonly<Record<ProjectHealth, PillTone>> = {
+  on_track: 'positive',
+  at_risk: 'caution',
+  off_track: 'critical',
+};
+
+/**
+ * The health pill: the shared Pill recipe, one size everywhere (`size` is kept for callers and no
+ * longer changes the pill). With `check`, the numbers disagree with the owner: that second signal
+ * goes into the words ("On track, check") and the tooltip, never as a dot on top of the pill.
+ */
+export function HealthBadge({ health, check = false, title }: { readonly health: ProjectHealth; readonly size?: 'sm' | 'md'; readonly check?: boolean; readonly title?: string }) {
   return (
-    <Badge tone={HEALTH_TONE[health]} size={size} icon={<HealthIcon health={health} />}>
+    <Pill tone={HEALTH_PILL_TONE[health]} icon={<HealthIcon health={health} />} title={title}>
       {PROJECT_HEALTH_LABELS[health]}
-    </Badge>
+      {check ? (
+        <span data-testid="health-mismatch-dot" className="font-normal">
+          , check
+        </span>
+      ) : null}
+    </Pill>
   );
 }
 
@@ -54,36 +72,24 @@ export function healthMismatch(project: HealthInputs, today?: string): boolean {
   return projectHealth(project, today).suggested !== null;
 }
 
-/** The amber "numbers disagree" dot, drawn on top of a chip or a health dot. */
-function MismatchDot({ size }: { readonly size: 'xs' | 'sm' | 'md' }) {
-  return (
-    <span
-      aria-hidden
-      data-testid="health-mismatch-dot"
-      className={cn('absolute -top-0.5 -right-0.5 rounded-full bg-warning ring-2 ring-[var(--surface-panel)]', size === 'xs' ? 'size-1.5 ring-1' : size === 'sm' ? 'size-2' : 'size-2.5')}
-    />
-  );
-}
-
 /**
  * Static (non-interactive) version of the health chip, for places that sit inside a link (search
- * results). Same chip, same amber dot, same words as the header.
+ * results). Same chip, same words ("On track, check") as the header.
  */
 export function ProjectHealthMark({ project, size = 'sm', className }: { readonly project: HealthInputs; readonly size?: 'sm' | 'md'; readonly className?: string }) {
   const view = projectHealth(project);
   const hint = healthHint(view);
   return (
-    <span className={cn('relative inline-flex shrink-0', className)} title={hint ?? undefined} data-testid={hint ? 'health-mismatch' : 'health-chip'} data-health={view.health}>
-      <HealthBadge health={view.health} size={size} />
-      {hint ? <MismatchDot size={size} /> : null}
+    <span className={cn('inline-flex shrink-0', className)} title={hint ?? undefined} data-testid={hint ? 'health-mismatch' : 'health-chip'} data-health={view.health}>
+      <HealthBadge health={view.health} size={size} check={Boolean(hint)} />
       {hint ? <span className="sr-only">. {hint}</span> : null}
     </span>
   );
 }
 
 /**
- * Compact health dot: the owner's colour. With `showHint`, the amber dot rides on it when the
- * numbers disagree (Goals project chips). The sidebar passes `hideOnTrack` and no hint: it is
+ * Compact health dot: the owner's colour. With `showHint`, a small amber dot sits beside it (never
+ * on top of it) when the numbers disagree (Goals project chips). The sidebar passes `hideOnTrack` and no hint: it is
  * navigation, so it only marks projects whose owner says At risk or Off track.
  */
 export function ProjectHealthDot({ project, hideOnTrack = false, showHint = true }: { readonly project: HealthInputs; readonly hideOnTrack?: boolean; readonly showHint?: boolean }) {
@@ -92,16 +98,16 @@ export function ProjectHealthDot({ project, hideOnTrack = false, showHint = true
   if (hideOnTrack && view.health === 'on_track' && !hint) return null;
   const label = `${PROJECT_HEALTH_LABELS[view.health]}${hint ? `. ${hint}` : ''}`;
   return (
-    <span role="img" aria-label={label} title={label} className="relative inline-flex size-2 shrink-0 items-center justify-center" data-testid="health-dot" data-health={view.health} data-suggested={view.suggested ?? undefined}>
+    <span role="img" aria-label={label} title={label} className="inline-flex h-2 shrink-0 items-center gap-0.5" data-testid="health-dot" data-health={view.health} data-suggested={view.suggested ?? undefined}>
       <span className={cn('size-1.5 rounded-full', HEALTH_DOT_CLASS[view.health])} />
-      {hint ? <MismatchDot size="xs" /> : null}
+      {hint ? <span aria-hidden data-testid="health-mismatch-dot" className="size-1.5 rounded-full bg-warning" /> : null}
     </span>
   );
 }
 
 /**
  * One truth for health: the owner's chip, and only that chip. When the numbers (time used vs
- * tasks done) disagree, a small amber dot sits on the chip with a tooltip ("Numbers suggest At
+ * tasks done) disagree, the chip says so in its words ("On track, check") with a tooltip ("Numbers suggest At
  * risk · Update status"); clicking explains why and, for editors, updates the status in one click.
  * Customer 360 risks (late receipts, inventory exceptions) never change the project's health: they
  * are listed in the same popover as a separate customer note.
@@ -150,11 +156,10 @@ export function ProjectHealthBadge({
           aria-label={suggested ? `${owner}, set by the owner. Numbers suggest ${suggested}. Show why` : `${owner}. ${tip}`}
           title={tip}
           onClick={(event) => event.stopPropagation()}
-          className="relative inline-flex min-w-0 items-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          className="inline-flex min-w-0 items-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           data-testid={suggested ? 'health-mismatch' : 'health-chip'}
         >
-          <HealthBadge health={project.health} size={size} />
-          {suggested ? <MismatchDot size={size} /> : null}
+          <HealthBadge health={project.health} size={size} check={Boolean(suggested)} />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72" onClick={(event) => event.stopPropagation()}>

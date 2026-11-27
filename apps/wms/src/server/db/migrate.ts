@@ -210,6 +210,11 @@ function isDirectRun(): boolean {
 }
 
 if (isDirectRun()) {
+  if (process.env.VERCEL_ENV === 'preview') {
+    // Preview deploys share the production database. Unmerged branches must never change it.
+    process.stdout.write('db:migrate - skipped on a Vercel preview build (production deploys apply migrations).\n');
+    process.exit(0);
+  }
   const url = migrationUrl();
   const target = url ? 'Postgres (DIRECT_URL/DATABASE_URL)' : 'local PGlite (.data/pglite)';
   (url ? migrateUrl(url) : migratePglite())

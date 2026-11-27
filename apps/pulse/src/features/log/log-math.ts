@@ -173,6 +173,44 @@ export const sameValues = (a: LineValues, b: LineValues): boolean =>
     (field) => (parseTyped(a[field]) ?? -1) === (parseTyped(b[field]) ?? -1),
   );
 
+/**
+ * The spot one line takes on a day: shift, labor class (no class means the job's own) and task.
+ * Two lines of a job may not share it: the second would land on the first line's row.
+ */
+export function lineSlot(
+  shift: string,
+  laborClassId: string | null,
+  pmTaskId: string | null,
+  defaultClassId: string | null,
+): string {
+  return `${shift}|${laborClassId ?? defaultClassId ?? ''}|${pmTaskId ?? ''}`;
+}
+
+export interface SlotChoice {
+  readonly laborClassId: string | null;
+  readonly pmTaskId: string | null;
+}
+
+/**
+ * Where a new crew line goes: the first task and labor class, in the order given, that no line of
+ * the job holds yet. Tasks are tried one at a time across every class. Null when all are taken.
+ */
+export function freeSlot(options: {
+  readonly taken: ReadonlySet<string>;
+  readonly shift: string;
+  readonly defaultClassId: string | null;
+  readonly classIds: readonly (string | null)[];
+  readonly taskIds: readonly (string | null)[];
+}): SlotChoice | null {
+  for (const pmTaskId of options.taskIds) {
+    for (const laborClassId of options.classIds) {
+      if (!options.taken.has(lineSlot(options.shift, laborClassId, pmTaskId, options.defaultClassId)))
+        return { laborClassId, pmTaskId };
+    }
+  }
+  return null;
+}
+
 const fixed = (text: string, places: number): string => (parseTyped(text) ?? 0).toFixed(places);
 
 /** The body the server takes for one line. */

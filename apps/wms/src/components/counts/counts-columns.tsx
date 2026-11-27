@@ -133,7 +133,7 @@ function jobLinks(codes: string | null, refs: string | null | undefined) {
               type="button"
               onClick={(e) => e.stopPropagation()}
               aria-label={`Show all ${parsed.length} jobs`}
-              className="shrink-0 rounded-full border border-border bg-surface-sunken px-1.5 text-2xs font-semibold leading-[18px] text-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="shrink-0 rounded-full bg-muted px-1.5 text-2xs font-semibold leading-[18px] text-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
             >
               +{rest.length}
             </button>
@@ -367,7 +367,7 @@ function SkuListCell({ list, name }: { readonly list: string | null; readonly na
       >
         <span className="truncate font-medium text-foreground">{shown}</span>
         {rest > 0 ? (
-          <span className="shrink-0 rounded-full border border-border bg-surface-sunken px-1.5 text-2xs font-semibold leading-[18px] text-secondary">
+          <span className="shrink-0 rounded-full bg-muted px-1.5 text-2xs font-semibold leading-[18px] text-secondary">
             +{rest}
           </span>
         ) : null}

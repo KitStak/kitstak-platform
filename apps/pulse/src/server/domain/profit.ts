@@ -8,6 +8,7 @@ import 'server-only';
 import { sql, type SQL } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { scoped } from '@/server/db/scope';
+import { programsReady } from '@/server/integrations/programs';
 import { invalid } from '@/server/errors';
 import { PROFIT_GROUPS, type FactKind, type ProfitGroup, type PulseStatus } from '@/lib/constants';
 import { marginBp } from '@/lib/money';
@@ -99,6 +100,16 @@ function groupSql(by: ProfitGroup, weekStart: number): { key: SQL; label: SQL; s
       return { key: sql`f.vas_service_id::text`, label: sql`max(vs.name)`, sublabel: sql`max(vs.code)`, joins: sql`LEFT JOIN pulse.vas_services vs ON vs.id = f.vas_service_id` };
     case 'site':
       return { key: sql`f.site_id::text`, label: sql`max(s.name)`, sublabel: sql`max(s.code)`, joins: sql`LEFT JOIN pulse.sites s ON s.id = f.site_id` };
+    case 'program':
+      // KitStak Programs: a job a program (or its builds) feeds counts toward that program.
+      return { key: sql`prog.program_id`, label: sql`COALESCE(max(prog.program_name), max(prog.program_key))`, sublabel: sql`max(prog.program_key)`, joins: sql.raw(`LEFT JOIN LATERAL (
+        SELECT CASE WHEN pl.target_type = 'pm_program' THEN pl.target_id ELSE pl.meta ->> 'programId' END AS program_id,
+               CASE WHEN pl.target_type = 'pm_program' THEN pl.meta ->> 'key' ELSE pl.meta ->> 'programKey' END AS program_key,
+               CASE WHEN pl.target_type = 'pm_program' THEN pl.meta ->> 'name' ELSE NULL END AS program_name
+          FROM pulse.job_links pl
+         WHERE pl.job_id = f.job_id AND pl.target_type IN ('pm_program', 'pm_build')
+         ORDER BY (pl.target_type = 'pm_program') DESC, pl.created_at LIMIT 1
+      ) prog ON true`) };
     case 'month':
       return { key: sql`to_char(date_trunc('month', f.work_date), 'YYYY-MM-DD')`, label: sql`NULL::text`, sublabel: sql`NULL::text`, joins: sql`` };
     case 'week':
@@ -114,6 +125,7 @@ const NULL_LABELS: Readonly<Record<ProfitGroup, string>> = {
   type: 'No job type',
   service: 'Core job work',
   site: 'No site',
+  program: 'Not fed by a program',
   month: '',
   week: '',
   day: '',
@@ -274,7 +286,7 @@ async function trends(orgId: string, by: ProfitGroup, filters: ProfitFilters, we
     sql`SELECT ${group.key} AS key, to_char(${bucketExpr}, 'YYYY-MM-DD') AS b,
                COALESCE(sum(CASE WHEN f.kind IN ('revenue_base', 'revenue_vas', 'revenue_other') THEN f.amount_cents WHEN f.kind = 'billed_memo' THEN 0 ELSE -f.amount_cents END), 0)::text AS profit,
                COALESCE(sum(f.units_good) FILTER (WHERE f.kind = 'revenue_base'), 0)::text AS units
-          FROM pulse.fact_days f LEFT JOIN pulse.jobs j ON j.id = f.job_id
+          FROM pulse.fact_days f LEFT JOIN pulse.jobs j ON j.id = f.job_id ${group.joins}
          WHERE ${whereOf(orgId, filters)}
          GROUP BY 1, 2 ORDER BY 2`,
   );
@@ -514,11 +526,13 @@ export const getCompanyBridge = scoped(async function getCompanyBridge(ctx: Doma
 export const getBadges = scoped(async function getBadges(ctx: DomainContext): Promise<BadgesDTO> {
   const access = await requirePulse(ctx, 'pulse:read').catch(() => null);
   if (!access) return { jobsAtRisk: 0, openAlerts: 0, unreadNotifications: 0 };
+  // The Jobs badge counts the jobs the Jobs list shows: program jobs live under Programs.
+  const hideProgramJobs = await programsReady(ctx);
   const [row] = await rows<{ risk: number; alerts: number; unread: number }>(
     db,
     sql`SELECT
           (SELECT count(*) FROM pulse.job_stats st JOIN pulse.jobs j ON j.id = st.job_id
-            WHERE st.org_id = ${ctx.orgId} AND st.risk_status IN ('losing', 'at_risk') AND j.deleted_at IS NULL AND j.archived_at IS NULL AND j.status = 'active')::int AS risk,
+            WHERE st.org_id = ${ctx.orgId} AND st.risk_status IN ('losing', 'at_risk') AND j.deleted_at IS NULL AND j.archived_at IS NULL AND j.status = 'active' ${hideProgramJobs ? sql`AND NOT j.program_job` : sql``})::int AS risk,
           (SELECT count(*) FROM pulse.alerts a WHERE a.org_id = ${ctx.orgId} AND a.status = 'open')::int AS alerts,
           (SELECT count(*) FROM pulse.notifications n WHERE n.org_id = ${ctx.orgId} AND n.user_id = ${ctx.userId} AND n.read_at IS NULL AND n.archived_at IS NULL)::int AS unread`,
   );
@@ -533,6 +547,11 @@ export const getSummary = scoped(async function getSummary(ctx: DomainContext, f
   const site = await resolveSite(ctx, filters.siteId);
   const today = todayInZone(site.timezone);
   const siteFilter = filters.siteId ? sql`AND j.site_id = ${filters.siteId}` : sql``;
+  // The week so far: its working days before today. Reviewed days are counted over the same days.
+  const weekStartDay = addDays(today, -((new Date(`${today}T00:00:00Z`).getUTCDay() - settings.weekStart + 7) % 7));
+  let workDays = 0;
+  for (let day = weekStartDay; day < today; day = addDays(day, 1)) if (settings.workingDays.includes(new Date(`${day}T00:00:00Z`).getUTCDay())) workDays += 1;
+  const workingDayList = sql`ARRAY[${sql.join(settings.workingDays.map((d) => sql`${d}`), sql`, `)}]::int[]`;
   const [profit, bridge, counts, progress, fix, alerts, serviceNoPrice] = await Promise.all([
     getProfit(ctx, 'month', filters, { comparePrior: true }),
     getCompanyBridge(ctx, filters),
@@ -547,8 +566,10 @@ export const getSummary = scoped(async function getSummary(ctx: DomainContext, f
             (SELECT count(*) FROM pulse.jobs j WHERE j.org_id = ${ctx.orgId} AND j.deleted_at IS NULL AND j.status = 'active' AND (j.start_date IS NULL OR j.start_date <= ${today}::date) ${siteFilter})::int AS active,
             (SELECT count(DISTINCT p.job_id) FROM pulse.production_entries p JOIN pulse.jobs j ON j.id = p.job_id
               WHERE p.org_id = ${ctx.orgId} AND p.work_date = ${today}::date AND p.deleted_at IS NULL AND j.status = 'active' AND j.deleted_at IS NULL ${siteFilter})::int AS logged,
-            (SELECT count(*) FROM pulse.day_reviews r WHERE r.org_id = ${ctx.orgId} AND r.status = 'approved'
-              AND r.work_date BETWEEN (${today}::date - ((EXTRACT(DOW FROM ${today}::date)::int - ${settings.weekStart}::int + 7) % 7)) AND ${today}::date
+            -- A day counts once, however many sites approved it, and only the days workDays counts.
+            (SELECT count(DISTINCT r.work_date) FROM pulse.day_reviews r WHERE r.org_id = ${ctx.orgId} AND r.status = 'approved'
+              AND r.work_date >= ${weekStartDay}::date AND r.work_date < ${today}::date
+              AND EXTRACT(DOW FROM r.work_date)::int = ANY(${workingDayList})
               ${filters.siteId ? sql`AND r.site_id = ${filters.siteId}` : sql``})::int AS reviewed,
             (SELECT COALESCE(sum(st.revenue_cents - st.billed_cents), 0) FROM pulse.job_stats st JOIN pulse.jobs j ON j.id = st.job_id
               WHERE st.org_id = ${ctx.orgId} AND j.deleted_at IS NULL AND j.status <> 'cancelled' ${siteFilter})::text AS unbilled`,
@@ -567,9 +588,6 @@ export const getSummary = scoped(async function getSummary(ctx: DomainContext, f
     countServiceEntriesNoPrice(db, ctx.orgId, { siteId: filters.siteId ?? null }),
   ]);
   const byRisk = new Map(counts.map((row) => [row.risk ?? 'none', row.n]));
-  const weekStartDay = addDays(today, -((new Date(`${today}T00:00:00Z`).getUTCDay() - settings.weekStart + 7) % 7));
-  let workDays = 0;
-  for (let day = weekStartDay; day < today; day = addDays(day, 1)) if (settings.workingDays.includes(new Date(`${day}T00:00:00Z`).getUTCDay())) workDays += 1;
   const totalPrior = profit.total.prior;
   return {
     from: filters.from,

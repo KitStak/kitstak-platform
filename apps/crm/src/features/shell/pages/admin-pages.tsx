@@ -18,14 +18,6 @@ const ROLE_LABEL: Record<OrgRole, string> = {
   guest: 'Guest',
 };
 
-const ROLE_TONE: Record<OrgRole, 'primary' | 'info' | 'neutral' | 'warning'> = {
-  owner: 'primary',
-  admin: 'info',
-  member: 'neutral',
-  viewer: 'neutral',
-  guest: 'warning',
-};
-
 function NoAccess() {
   const { org } = useOrg();
   return (
@@ -102,7 +94,7 @@ function MemberRow({ member }: { readonly member: MemberDto }) {
       </td>
       <td className="hidden px-5 py-3 text-fg-secondary md:table-cell">{member.title ?? 'None'}</td>
       <td className="px-5 py-3">
-        <Badge tone={ROLE_TONE[member.role]}>{ROLE_LABEL[member.role]}</Badge>
+        <Badge>{ROLE_LABEL[member.role]}</Badge>
       </td>
       <td className="hidden px-5 py-3 text-sm text-fg-muted sm:table-cell">
         {new Date(member.joinedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}

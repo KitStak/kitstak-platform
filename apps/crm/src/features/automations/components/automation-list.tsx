@@ -223,14 +223,14 @@ export function AutomationList({
                             onClick={() => onViewRuns(automation)}
                             className="rounded-xs focus-visible:outline-2 focus-visible:outline-focus"
                           >
-                            <Badge tone="danger" size="sm" icon={<CircleAlert aria-hidden />}>
+                            <Badge tone="danger" icon={<CircleAlert aria-hidden />}>
                               {automation.failureCount} failed
                             </Badge>
                           </button>
                         </Tooltip>
                       ) : null}
                       {!automation.enabled ? (
-                        <Badge tone="neutral" size="sm">
+                        <Badge tone="neutral">
                           Off
                         </Badge>
                       ) : null}

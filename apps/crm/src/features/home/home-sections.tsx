@@ -1,44 +1,19 @@
 'use client';
-/** Main-column sections of the home page: recently visited, my work this week, updates feed. */
+/**
+ * Main-column sections of the home page: recently visited, my work this week, updates feed.
+ * Sections are `DashSection`s from `@kitstak/ui/dashboard`: one real header link at most, and
+ * every empty state names the next step with a link (docs/design/UI-CLEANUP.md, "No dead ends").
+ */
 import Link from 'next/link';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowRight, CalendarClock, Clock, MessageSquareText } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowRight } from 'lucide-react';
+import { DashSection, EmptyNote } from '@kitstak/ui/dashboard';
 import { Avatar, Button, EmptyState, Skeleton, StatusPill, cn, toLabelColor } from '@/components/ui';
 import type { HomeRecentDto, HomeUpdateDto, HomeWorkItemDto } from '@/features/shell/api';
 import { EntityIcon } from '@/features/shell/entity-icon';
 import { useOrg } from '@/features/shell/org-context';
 import { routes } from '@/features/shell/routes';
 import { columnsThatFit, formatDueLabel, formatRelativeTime, pluralize, proportions } from './format';
-
-/** Vivid strip color per board kind (decorative; text never sits on it). */
-export function SectionCard({
-  id,
-  icon,
-  title,
-  aside,
-  children,
-  className,
-}: {
-  readonly id: string;
-  readonly icon: ReactNode;
-  readonly title: string;
-  readonly aside?: ReactNode;
-  readonly children: ReactNode;
-  readonly className?: string;
-}) {
-  return (
-    <section aria-labelledby={id} className={cn('flex min-w-0 flex-col rounded-xl border border-border-subtle bg-panel shadow-xs', className)}>
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border-subtle px-4">
-        <h2 id={id} className="flex items-center gap-2 text-md font-semibold text-fg">
-          <span className="text-icon [&_svg]:size-4">{icon}</span>
-          {title}
-        </h2>
-        {aside}
-      </header>
-      {children}
-    </section>
-  );
-}
 
 /** Shared error state for every section fed by the home query (never a false "all clear"). */
 export function SectionError({ what, onRetry }: { readonly what: string; readonly onRetry: () => void }) {
@@ -59,18 +34,6 @@ export function SectionError({ what, onRetry }: { readonly what: string; readonl
 
 /** Fixed card height so board and dashboard cards (and their skeletons) never shift the page. */
 const RECENT_CARD_HEIGHT = 136;
-
-export function SeeAll({ href, children }: { readonly href: string; readonly children: ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="group inline-flex h-7 items-center gap-1 rounded-sm px-2 text-sm font-medium text-primary-text transition-colors hover:bg-primary-subtle focus-visible:outline-2 focus-visible:outline-focus"
-    >
-      {children}
-      <ArrowRight aria-hidden className="size-3.5 transition-transform duration-[var(--duration-fast)] group-hover:translate-x-0.5" />
-    </Link>
-  );
-}
 
 function RecentCard({ recent }: { readonly recent: HomeRecentDto }) {
   const { org } = useOrg();
@@ -205,8 +168,7 @@ export function RecentSection({
   return (
     <section ref={ref} aria-labelledby="home-recents" className="flex flex-col gap-3" style={gridStyle}>
       <div className="flex items-center justify-between gap-3">
-        <h2 id="home-recents" className="flex items-center gap-2 text-lg font-semibold text-fg">
-          <Clock aria-hidden className="size-4 text-icon" />
+        <h2 id="home-recents" className="text-md font-semibold text-fg">
           Recently visited
         </h2>
         {!loading && !error && (hidden > 0 || canToggleMobile) ? (
@@ -215,8 +177,9 @@ export function RecentSection({
             aria-expanded={expanded}
             data-testid="home-recents-toggle"
             onClick={() => setExpanded((value) => !value)}
+            // Same neutral look as a section's header link (crimson is reserved for the primary button).
             className={cn(
-              'inline-flex h-7 items-center gap-1 rounded-sm px-1.5 text-sm font-medium text-primary-text transition-colors duration-[var(--duration-fast)] hover:bg-primary-subtle focus-visible:outline-2 focus-visible:outline-focus active:bg-primary-selected',
+              'ks-dash-section-action h-7 cursor-pointer border-0 bg-transparent px-1.5 focus-visible:outline-2 focus-visible:outline-focus',
               hidden === 0 && 'sm:hidden',
             )}
           >
@@ -274,7 +237,7 @@ function WorkRow({ item, today }: { readonly item: HomeWorkItemDto; readonly tod
         className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-2.5 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus sm:grid-cols-[minmax(0,1fr)_112px_88px]"
       >
         <span className="flex min-w-0 flex-col">
-          <span className="truncate font-medium text-fg group-hover:text-primary-text" title={item.name}>
+          <span className="truncate font-medium text-fg underline-offset-2 group-hover:underline" title={item.name}>
             {item.name}
           </span>
           <span className="flex min-w-0 items-center gap-1 truncate text-xs text-fg-muted">
@@ -332,12 +295,21 @@ export function MyWorkSection({
 }) {
   const { org } = useOrg();
   const overdue = work.filter((item) => item.overdue).length;
+  const empty = !loading && !error && work.length === 0;
   return (
-    <SectionCard
-      id="home-work"
-      icon={<CalendarClock aria-hidden />}
+    <DashSection
       title="My work due this week"
-      aside={<SeeAll href={routes.myWork(org.slug)}>My work</SeeAll>}
+      // Overdue is a number that matters: colored words in the header, not a tinted band.
+      description={
+        overdue > 0 ? (
+          <span className="font-medium text-danger-text" data-testid="home-work-overdue">
+            {overdue} overdue
+          </span>
+        ) : undefined
+      }
+      // The empty note carries the link when there is nothing to list (said once).
+      action={empty ? undefined : { label: 'All my work', href: routes.myWork(org.slug) }}
+      flush
     >
       {loading ? (
         <div className={cn('flex flex-col gap-2 p-4', WORK_BODY_MIN)} data-skeleton aria-hidden>
@@ -350,25 +322,17 @@ export function MyWorkSection({
           <SectionError what="your work" onRetry={() => onRetry?.()} />
         </div>
       ) : work.length === 0 ? (
-        <div className={cn('flex flex-col items-center justify-center gap-1 px-6 py-8 text-center', WORK_BODY_MIN)}>
-          <p className="font-semibold text-fg">You&apos;re all caught up</p>
-          <p className="text-sm text-fg-muted">Nothing assigned to you is due before the weekend.</p>
-        </div>
+        <EmptyNote action={{ label: 'See everything assigned to you', href: routes.myWork(org.slug) }}>
+          You&apos;re all caught up. Nothing assigned to you is due before the weekend.
+        </EmptyNote>
       ) : (
-        <>
-          {overdue > 0 ? (
-            <p className="border-b border-border-subtle bg-danger-subtle px-4 py-2 text-sm text-danger-text">
-              {overdue} overdue {overdue === 1 ? 'item needs' : 'items need'} attention
-            </p>
-          ) : null}
-          <ul className={cn('flex flex-col divide-y divide-border-subtle py-1', WORK_BODY_MIN)}>
-            {work.map((item) => (
-              <WorkRow key={item.id} item={item} today={today} />
-            ))}
-          </ul>
-        </>
+        <ul className={cn('flex flex-col divide-y divide-border-subtle py-1', WORK_BODY_MIN)}>
+          {work.map((item) => (
+            <WorkRow key={item.id} item={item} today={today} />
+          ))}
+        </ul>
       )}
-    </SectionCard>
+    </DashSection>
   );
 }
 
@@ -385,7 +349,7 @@ export function UpdatesSection({
 }) {
   const { org } = useOrg();
   return (
-    <SectionCard id="home-updates" icon={<MessageSquareText aria-hidden />} title="Latest updates">
+    <DashSection title="Latest updates" flush>
       {loading ? (
         <div className={cn('flex flex-col gap-3 p-4', UPDATES_BODY_MIN)} data-skeleton aria-hidden>
           {[0, 1].map((index) => (
@@ -397,9 +361,9 @@ export function UpdatesSection({
           <SectionError what="updates" onRetry={() => onRetry?.()} />
         </div>
       ) : updates.length === 0 ? (
-        <p className={cn('flex items-center justify-center px-6 py-10 text-center text-sm text-fg-muted', UPDATES_BODY_MIN)}>
+        <EmptyNote action={{ label: 'Open your work to post one', href: routes.myWork(org.slug) }}>
           No updates yet. Comments your team posts on items will appear here.
-        </p>
+        </EmptyNote>
       ) : (
         <ul className={cn('flex flex-col divide-y divide-border-subtle', UPDATES_BODY_MIN)}>
           {updates.map((update) => (
@@ -424,6 +388,6 @@ export function UpdatesSection({
           ))}
         </ul>
       )}
-    </SectionCard>
+    </DashSection>
   );
 }

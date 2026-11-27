@@ -14,6 +14,13 @@ import { OrgBuilder, type OrgSeedStats } from './builder';
 import { kitstakSeed } from './data/kitstak';
 import { northwindSeed } from './data/northwind';
 import type { OrgSeed } from './types';
+import { ProgramBuilder } from './program-builder';
+import { northwindPrograms } from './data/northwind-programs';
+import { kitstakPrograms } from './data/kitstak-programs';
+import type { OrgProgramsSeed } from './program-types';
+import { seedCheck } from './seed-check';
+import { seedContext } from './context';
+import { todayIn } from '@kitstak/programs-engine/schedule';
 
 const ALL: readonly OrgSeed[] = [kitstakSeed, northwindSeed];
 
@@ -65,13 +72,49 @@ async function report(spec: OrgSeed, stats: OrgSeedStats): Promise<void> {
   if (stats.warnings.length) process.stdout.write(`  ${stats.warnings.length} warning(s), see above\n`);
 }
 
+/** WMS net kitting capacity of APX-KIT-TEE3 at seed time (SPEC 7.2), 200 when WMS has no row yet. */
+async function teeCapacity(): Promise<number> {
+  try {
+    const result = await db.execute<{ net: string | null }>(sql`select sum(s.net_kitting_capacity)::text as net from wms.kit_inventory_stats s
+      join wms.products p on p.id::text = s.kit_product_id::text where p.sku = 'APX-KIT-TEE3'`);
+    const net = Number(result.rows[0]?.net ?? 0);
+    return net > 0 ? net : 200;
+  } catch {
+    return 200;
+  }
+}
+
+async function programsFor(slug: string): Promise<OrgProgramsSeed | null> {
+  if (slug === 'northwind-robotics') return northwindPrograms;
+  if (slug === 'kitstak') return kitstakPrograms(await teeCapacity());
+  return null;
+}
+
 async function main(): Promise<void> {
-  const orgs = selectedOrgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const orgs = selectedOrgs(argv);
   const started = Date.now();
   const results: [OrgSeed, OrgSeedStats][] = [];
-  for (const spec of orgs) results.push([spec, await new OrgBuilder(spec).run()]);
+  const problems: string[] = [];
+  const today = todayIn('America/Chicago', new Date());
+  for (const spec of orgs) {
+    if (!argv.includes('--check-only')) {
+      results.push([spec, await new OrgBuilder(spec).run()]);
+      const programs = await programsFor(spec.slug);
+      if (programs) {
+        const built = await new ProgramBuilder(programs).run();
+        process.stdout.write(`  ${spec.slug}: ${built.programs.length} programs, ${built.idsMoved} rows given stable ids\n`);
+      }
+    }
+    const programs = await programsFor(spec.slug);
+    if (programs) {
+      const email = programs.people[programs.me]!;
+      problems.push(...(await seedCheck(await seedContext(spec.slug, email), { today, pulse: argv.includes('--with-pulse') })));
+    }
+  }
   for (const [spec, stats] of results) await report(spec, stats);
   process.stdout.write(`\nSeed finished in ${Math.round((Date.now() - started) / 1000)}s\n`);
+  if (problems.length > 0) throw new Error(`Seed check failed: ${problems.length} value(s) differ from docs/programs/SPEC.md 7.4`);
 }
 
 main()

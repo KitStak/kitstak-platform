@@ -17,7 +17,8 @@ import { fullMonthViewWords, monthName, rows, todayInZone, type DomainContext } 
 import { requirePulse } from './access';
 import { listActivity } from './activity';
 import { getPeople } from './people';
-import { closeFixCounts, getCloseChecklist, listPeriods } from './periods';
+import { listProgramJobLinks } from './jobs';
+import { closeFixCounts, getCloseChecklist, listPeriods, programCloseCheck } from './periods';
 import { getCompanyBridge, getProfit } from './profit';
 import { loadSettings } from './settings';
 
@@ -146,16 +147,31 @@ export const getCloseBoard = scoped(async function getCloseBoard(ctx: DomainCont
 });
 
 export interface CloseItemDTO {
-  readonly key: 'rates' | 'hours' | 'prices' | 'reviews' | 'payroll' | 'company_costs';
+  readonly key: 'rates' | 'hours' | 'prices' | 'reviews' | 'payroll' | 'company_costs' | 'programs_settled' | 'programs_synced';
   readonly title: string;
   readonly detail: string;
-  /** `ok`: nothing to do. `fix`: should be fixed before closing. `check`: worth a look, does not block. */
-  readonly state: 'ok' | 'fix' | 'check';
+  /**
+   * `ok`: nothing to do. `fix`: should be fixed before closing. `check`: worth a look, does not block.
+   * `wait`: happens on its own once the month is over; nothing to do yet, and the month cannot close until it has.
+   */
+  readonly state: 'ok' | 'fix' | 'check' | 'wait';
   readonly count: number;
   readonly href: string | null;
   readonly hrefLabel: string | null;
   /** Money behind the step, in cents (the payroll gap, the company costs). Null when hidden or not money. */
   readonly amountCents: number | null;
+  /** `programs_settled`: one row per program, each linking to its program page when Pulse tracks it (PULSE_PROGRAMS_SPEC 5.4). */
+  readonly programs?: readonly CloseProgramRowDTO[];
+}
+
+/** One program on the month close checklist. */
+export interface CloseProgramRowDTO {
+  readonly key: string;
+  readonly name: string;
+  /** The program added the month's charges. */
+  readonly settled: boolean;
+  /** The program page for this month, or null when only its builds bill here (no program page yet). */
+  readonly href: string | null;
 }
 
 export interface CloseDetailDTO {
@@ -282,6 +298,54 @@ export const getCloseDetail = scoped(async function getCloseDetail(ctx: DomainCo
       amountCents: access.seesMoney ? Number(count.company_cents) : null,
     },
   ];
+  // KitStak programs feeding jobs here: their charges must be in, and the sync caught up (A5).
+  const feeding = checklist.programsFeeding ?? 0;
+  if (feeding > 0) {
+    // Programs settle and sync on their own after the month ends: while it runs, that is a wait, not a fix.
+    const running = end >= todayInZone((await loadSettings(ctx.orgId)).timezone);
+    const late = checklist.programsUnsettled ?? [];
+    const [check, tracked] = await Promise.all([programCloseCheck(ctx, start), listProgramJobLinks(ctx).catch(() => [])]);
+    const trackedKeys = new Set(tracked.map((link) => link.key.toUpperCase()));
+    const programRows: CloseProgramRowDTO[] = check.programs.map((program) => ({
+      key: program.key,
+      name: program.name,
+      settled: program.settled,
+      href: trackedKeys.has(program.key.toUpperCase()) ? routes.program(program.key, { month: start }) : null,
+    }));
+    const lateWords = late.length <= 2 ? late.join(' and ') : `${late.slice(0, -1).join(', ')} and ${late[late.length - 1]}`;
+    items.push(
+      {
+        key: 'programs_settled',
+        title: 'Programs settled',
+        detail:
+          late.length === 0
+            ? `${plural(feeding, 'program has', 'programs have')} added ${monthName(start)}'s monthly charges.`
+            : running
+              ? `${lateWords} ${late.length === 1 ? 'settles' : 'settle'} ${monthName(start)} after the month ends.`
+              : `${lateWords} ${late.length === 1 ? 'has' : 'have'} not settled ${monthName(start)} yet. This happens on its own a few minutes after the month ends. If it is still missing, sync Projects.`,
+        state: late.length === 0 ? 'ok' : running ? 'wait' : 'fix',
+        count: late.length,
+        href: null,
+        hrefLabel: null,
+        amountCents: null,
+        programs: programRows,
+      },
+      {
+        key: 'programs_synced',
+        title: 'Programs synced',
+        detail: checklist.programsSynced
+          ? 'Pulse has every change from Projects programs.'
+          : (checklist.programsPending ?? 0) > 0
+            ? 'Some program changes from Projects are not in Pulse yet. Sync Projects, then close the month.'
+            : `Pulse syncs Projects again once ${monthName(start)} is over, so the last days and the monthly charges are in.`,
+        state: checklist.programsSynced ? 'ok' : running && (checklist.programsPending ?? 0) === 0 ? 'wait' : 'fix',
+        count: checklist.programsSynced ? 0 : 1,
+        href: checklist.programsSynced || (running && (checklist.programsPending ?? 0) === 0) ? null : routes.settingsApps(),
+        hrefLabel: 'Open connected apps',
+        amountCents: null,
+      },
+    );
+  }
   const toFix = items.filter((item) => item.state === 'fix').length;
   const locks = [
     { label: 'Work log entries', count: count.production },
@@ -301,7 +365,7 @@ export const getCloseDetail = scoped(async function getCloseDetail(ctx: DomainCo
     periodMonth: start,
     label: name,
     items,
-    ready: toFix === 0,
+    ready: toFix === 0 && !items.some((item) => item.state === 'wait'),
     toFix,
     locks,
     totalRows: locks.reduce((sum, item) => sum + item.count, 0),

@@ -116,3 +116,15 @@ describe('workload model', () => {
     expect(readWorkloadSettings(withCapacity(next, 'tasks', { perWeek: 5, person: { id: 'jo', value: 3 } }), 'tasks')).toEqual({ unit: 'tasks', perWeek: 5, perPerson: { jo: 3 } });
   });
 });
+
+describe('builds in workload (docs/programs/SPEC.md 5.19)', () => {
+  it('hides builds when the toggle is off and reads planned units', async () => {
+    const { visibleWork, buildUnitsText, weeklyHoursFromDaily } = await import('./workload-model');
+    const tasks = [{ kind: 'task' as const }, { kind: 'build' as const }];
+    expect(visibleWork(tasks, true)).toHaveLength(2);
+    expect(visibleWork(tasks, false)).toEqual([{ kind: 'task' }]);
+    expect(buildUnitsText({ build: { programId: null, variantId: null, variantName: null, variantColor: null, buildDate: '2026-11-25', plannedQty: '100.000', builtQty: '60.000', unplanned: false, posting: null } })).toBe('60 of 100');
+    expect(weeklyHoursFromDaily('16.00')).toBe(80);
+    expect(weeklyHoursFromDaily(null)).toBeNull();
+  });
+});

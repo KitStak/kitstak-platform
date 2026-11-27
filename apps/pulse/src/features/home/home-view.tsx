@@ -7,24 +7,26 @@
  */
 import Link from 'next/link';
 import { useCallback, useMemo } from 'react';
-import { ArrowRight, BellRing, CircleCheck, ClipboardPen, PackagePlus, Rocket, Wrench } from 'lucide-react';
+import { CircleCheck, ClipboardPen, PackagePlus, Rocket } from 'lucide-react';
+import { ActionList, ActionRow, DashboardFrame, DashSection, EmptyNote, Meter, StatRow, StatTile, type StatTileProps } from '@kitstak/ui/dashboard';
 import { BarChart, ComboChart } from '@/components/charts/cartesian';
 import { DonutChart, ProgressRing } from '@/components/charts/radial';
-import { KpiTile, MarginPill } from '@/components/charts/stats';
+import { DeltaPending, MarginPill, StatSparkline, StatTileLoading, statValue, toDelta, type DeltaBadgeProps } from '@/components/charts/stats';
 import { ButtonLink } from '@/components/pulse/button-link';
 import { ExplainNumber } from '@/components/pulse/explain';
 import { ExplainStatic } from '@/components/pulse/explain';
 import { StepList, Teach } from '@/components/pulse/teach';
-import { ProgressBar } from '@/components/ui/feedback';
 import { cn } from '@/components/ui/cn';
 import { HOME_ATTENTION_LIMIT } from '@/lib/constants';
 import { formatHours, formatMoney, formatMoneyWhole, formatNumber, formatPace, formatPercentBp } from '@/lib/format';
 import { useAlerts, useJobsNeedingAttention, useProfit, useSummary } from '@/lib/hooks/use-data';
 import { CONFIDENCE_LABELS } from '@/lib/profit/types';
 import { companyMarginBp, companySentence, companyWords } from './company-margin';
+import { HomeProgramsCard } from './home-programs-card';
 import { suggestBucket } from '@/lib/profit/trends';
 import { compareRange, rangeLabel, type RangePreset } from '@/lib/reports';
-import { routes } from '@/lib/routes';
+import { routes, type ProfitView } from '@/lib/routes';
+import type { ProgramListDTO } from '@/lib/program-types';
 import type { JobListItemDTO, ProfitResponse, ProfitRowDTO, SummaryDTO } from '@/lib/types';
 import { parsePeriod, periodQuery } from '@/features/profit/period';
 import { PeriodPicker, type PeriodChange } from '@/features/profit/period-picker';
@@ -47,13 +49,20 @@ const PERIOD_WORDS: Readonly<Record<RangePreset, string>> = {
 
 const num = (value: string | null | undefined): number | null => (value === null || value === undefined || value === '' ? null : Number(value));
 
-function SeeAll({ href, children }: { readonly href: string; readonly children: string }) {
-  return (
-    <Link href={href} className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus print:hidden">
-      {children}
-      <ArrowRight aria-hidden className="size-3.5" />
-    </Link>
+/** The period for Home, in the page header next to the actions. It reads and writes the URL, like the view. */
+export function HomePeriodPicker({ today, weekStart }: { readonly today: string; readonly weekStart: number }) {
+  const { get, set } = useQueryState();
+  const period = useMemo(() => parsePeriod(get, today, weekStart), [get, today, weekStart]);
+  const setPeriod = useCallback(
+    (change: PeriodChange) => set(periodQuery({ preset: change.preset ?? period.preset, from: change.from ?? period.from, to: change.to ?? period.to, compare: 'none' })),
+    [period, set],
   );
+  return <PeriodPicker period={period} onChange={setPeriod} showCompare={false} className="print:hidden" />;
+}
+
+/** Profit for a period, the destination of every money tile on Home. */
+function profitFor(by: ProfitView, period: { readonly from: string; readonly to: string }): string {
+  return routes.profit({ by, from: period.from, to: period.to });
 }
 
 function ranking(rows: readonly ProfitRowDTO[], pick: (row: ProfitRowDTO) => number | null, limit = 6): ProfitRowDTO[] {
@@ -74,13 +83,15 @@ export interface HomeViewProps {
   /** The period right before, for the "vs before" chips. */
   readonly initialBefore?: ProfitResponse;
   readonly initialAttention?: JobListItemDTO[];
+  /** Tracked programs this month, for "Programs this month" (only where the program tracker is on). */
+  readonly initialPrograms?: ProgramListDTO;
   /** The period the server read, so its data is only used for that period. */
   readonly initialRange: { readonly from: string; readonly to: string };
 }
 
-export function HomeView({ today, weekStart, targetMarginBp, initialSummary, initialTrend, initialBefore, initialAttention, initialRange }: HomeViewProps) {
+export function HomeView({ today, weekStart, targetMarginBp, initialSummary, initialTrend, initialBefore, initialAttention, initialPrograms, initialRange }: HomeViewProps) {
   const { seesMoney, can } = useShell();
-  const { get, set } = useQueryState();
+  const { get } = useQueryState();
   const period = useMemo(() => parsePeriod(get, today, weekStart), [get, today, weekStart]);
   const prior = useMemo(() => compareRange('prior', period) as { from: string; to: string }, [period]);
   const bucket = suggestBucket(period);
@@ -93,12 +104,8 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
   const byClient = useProfit('client', scope);
   const byType = useProfit('type', scope);
   const attention = useJobsNeedingAttention(HOME_ATTENTION_LIMIT, { initialData: initialAttention });
-  const alerts = useAlerts({ status: 'open', limit: 4 });
-
-  const setPeriod = useCallback(
-    (change: PeriodChange) => set(periodQuery({ preset: change.preset ?? period.preset, from: change.from ?? period.from, to: change.to ?? period.to, compare: 'none' })),
-    [period, set],
-  );
+  // More than are shown: alerts about a job already under "Jobs that need you" are left out here.
+  const alerts = useAlerts({ status: 'open', limit: 12 });
 
   const total = trend.data?.total ?? summary.data?.total ?? null;
   const previous = comparable(before.data);
@@ -110,7 +117,8 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
   const data = summary.data;
   const needYou = data ? data.losing + data.atRisk : 0;
   const words = period.preset === 'custom' ? `from ${rangeLabel(period)}` : PERIOD_WORDS[period.preset];
-  const vs = 'vs before';
+  // Said once, under the answer, instead of "vs before" on every tile.
+  const vs = `vs ${rangeLabel(prior)}`;
   const firstRun = data !== undefined && data.openJobs === 0 && total !== null && Number(total.unitsGood) === 0 && (total.revenueCents ?? 0) === 0 && period.preset === 'this_month';
 
   if (summary.isError && !data) return <LoadError what="your numbers" message={summary.error instanceof Error ? summary.error.message : undefined} onRetry={() => void summary.refetch()} />;
@@ -171,7 +179,12 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
   const typeRows = ranking(byType.data?.rows ?? [], (row) => (seesMoney ? row.profitCents : num(row.unitsGood)));
   const cost = total && seesMoney ? [{ id: 'labor', label: 'Labor', value: total.laborCents ?? 0 }, { id: 'material', label: 'Material', value: total.materialCents ?? 0 }, { id: 'other', label: 'Other costs', value: total.otherCents ?? 0 }, { id: 'shared', label: 'Time not on a job', value: total.sharedCents ?? 0 }].filter((slice) => slice.value > 0) : [];
 
+  const jobHrefs = new Set((attention.data ?? []).map((job) => routes.job(job.number)));
+  // One list of jobs that need you: an alert about one of those jobs is not shown twice.
+  const otherAlerts = alerts.data?.filter((alert) => !alert.url || !jobHrefs.has(alert.url)).slice(0, 4);
+
   return (
+    <DashboardFrame app="pulse">
     <div className="flex flex-col gap-4" data-testid="home-view">
       {/* The answer, in two lines */}
       <section className="flex flex-col gap-3 rounded-xl border border-border-subtle bg-panel p-4 shadow-xs sm:p-5" data-testid="home-answer">
@@ -235,33 +248,37 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                 )}
               </p>
             ) : null}
+            {data ? (
+              <p className="mt-2 text-sm text-fg-muted" data-testid="home-compare">
+                The changes below compare with {rangeLabel(prior)}.
+              </p>
+            ) : null}
           </div>
-          <PeriodPicker period={period} onChange={setPeriod} showCompare={false} className="print:hidden" />
         </div>
       </section>
 
       {/* Headline numbers against the period before */}
       {seesMoney ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 min-[1680px]:grid-cols-6" data-testid="home-tiles">
-          <KpiTile label="Revenue" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatMoneyWhole(total.revenueCents) : null} delta={total ? moneyDelta(total.revenueCents, previous?.revenueCents, 'up', vs) : undefined} sparkline={spark((row) => row.revenueCents)} explain={<ExplainNumber metric="revenue" scope={scope} />} />
-          <KpiTile label="Cost" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatMoneyWhole(total.costCents) : null} delta={total ? moneyDelta(total.costCents, previous?.costCents, 'down', vs) : undefined} sparkline={spark((row) => row.costCents)} explain={<ExplainNumber metric="cost" scope={scope} />} />
-          <KpiTile label="Profit on jobs" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatMoneyWhole(total.profitCents) : null} delta={total ? moneyDelta(total.profitCents, previous?.profitCents, 'up', vs) : undefined} sparkline={spark((row) => row.profitCents)} explain={<ExplainNumber metric="profit" scope={scope} />} />
-          <KpiTile label="Job margin" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined} sparkline={spark((row) => row.marginBp)} explain={<ExplainNumber metric="margin" scope={scope} />} footer={companyMargin !== null ? <span className="text-xs text-fg-muted" data-testid="home-company-margin">Company margin: <span className="font-medium text-fg tabular-nums">{formatPercentBp(companyMargin)}</span></span> : undefined} />
-          <KpiTile label="Labor as % of revenue" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPercentBp(total.laborPctBp, { empty: 'No revenue yet' }) : null} delta={total ? pointsDelta(total.laborPctBp, previous?.laborPctBp, 'down', vs) : undefined} sparkline={spark((row) => row.laborPctBp)} explain={<ExplainNumber metric="labor_pct" scope={scope} />} />
-          <KpiTile label="Units per person per hour" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
-        </div>
+        <StatRow label="Headline numbers" data-testid="home-tiles">
+          <HomeTile label="Revenue" href={profitFor(bucket, period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatMoneyWhole(total.revenueCents) : null)} delta={total ? moneyDelta(total.revenueCents, previous?.revenueCents, 'up', vs) : undefined} sparkline={spark((row) => row.revenueCents)} explain={<ExplainNumber metric="revenue" scope={scope} />} />
+          <HomeTile label="Cost" href={profitFor(bucket, period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatMoneyWhole(total.costCents) : null)} delta={total ? moneyDelta(total.costCents, previous?.costCents, 'down', vs) : undefined} sparkline={spark((row) => row.costCents)} explain={<ExplainNumber metric="cost" scope={scope} />} />
+          <HomeTile label="Profit on jobs" href={profitFor('job', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatMoneyWhole(total.profitCents) : null)} delta={total ? moneyDelta(total.profitCents, previous?.profitCents, 'up', vs) : undefined} sparkline={spark((row) => row.profitCents)} explain={<ExplainNumber metric="profit" scope={scope} />} />
+          <HomeTile label="Job margin" href={profitFor('job', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatPercentBp(total.marginBp, { empty: 'No revenue yet' }) : null)} delta={total ? pointsDelta(total.marginBp, previous?.marginBp, 'up', vs) : undefined} sparkline={spark((row) => row.marginBp)} explain={<ExplainNumber metric="margin" scope={scope} />} caption={companyMargin !== null ? <span data-testid="home-company-margin">Company margin <span className="font-medium text-fg tabular-nums">{formatPercentBp(companyMargin)}</span></span> : undefined} />
+          <HomeTile label="Labor as % of revenue" href={routes.labor('cost', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatPercentBp(total.laborPctBp, { empty: 'No revenue yet' }) : null)} delta={total ? pointsDelta(total.laborPctBp, previous?.laborPctBp, 'down', vs) : undefined} sparkline={spark((row) => row.laborPctBp)} explain={<ExplainNumber metric="labor_pct" scope={scope} />} />
+          <HomeTile label="Units per person per hour" href={routes.labor('time', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatPace(total.uph, { empty: 'No hours yet' }) : null)} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
+        </StatRow>
       ) : (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="home-tiles-floor">
-          <KpiTile label="Units finished" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatNumber(total.unitsGood, { maxDigits: 0 }) : null} delta={total ? numberDelta(num(total.unitsGood), previous ? num(previous.unitsGood) : undefined, 'up', vs) : undefined} sparkline={spark((row) => num(row.unitsGood))} explain={<ExplainNumber metric="units" scope={scope} />} />
-          <KpiTile label="Labor hours" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatHours(total.hours, { maxDigits: 0 }) : null} sparkline={spark((row) => num(row.hours))} explain={<ExplainNumber metric="hours" scope={scope} />} />
-          <KpiTile label="Units per person per hour" loading={loadingTiles} deltaPending={deltaPending} value={total ? formatPace(total.uph, { empty: 'No hours yet' }) : null} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
-          <KpiTile label="Share of paid time spent on jobs" explain={<ExplainStatic title="Share of paid time spent on jobs" rule="Hours on jobs divided by paid hours. When no paid hours are typed for these days, it is hours on jobs divided by hours on jobs plus time not on a job." rows={bridge ? [{ label: 'Hours on jobs', value: formatHours(bridge.directHours) }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours) }, { label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Share on jobs', value: formatPercentBp(bridge.utilizationBp, { empty: 'No hours yet' }), kind: 'total' }] : []} />} loading={!data} value={data ? formatPercentBp(bridge?.utilizationBp ?? null, { empty: 'No hours yet' }) : null} footer={bridge ? <span className="text-xs text-fg-muted">{formatHours(bridge.indirectHours, { maxDigits: 0 })} hours not on a job</span> : undefined} />
-        </div>
+        <StatRow label="Headline numbers" data-testid="home-tiles-floor">
+          <HomeTile label="Units finished" href={routes.logEntries({ from: period.from, to: period.to })} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatNumber(total.unitsGood, { maxDigits: 0 }) : null)} delta={total ? numberDelta(num(total.unitsGood), previous ? num(previous.unitsGood) : undefined, 'up', vs) : undefined} sparkline={spark((row) => num(row.unitsGood))} explain={<ExplainNumber metric="units" scope={scope} />} />
+          <HomeTile label="Labor hours" href={routes.labor('time', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatHours(total.hours, { maxDigits: 0 }) : null)} sparkline={spark((row) => num(row.hours))} explain={<ExplainNumber metric="hours" scope={scope} />} />
+          <HomeTile label="Units per person per hour" href={routes.labor('time', period)} loading={loadingTiles} deltaPending={deltaPending} value={statValue(total ? formatPace(total.uph, { empty: 'No hours yet' }) : null)} delta={total ? numberDelta(num(total.uph), previous ? num(previous.uph) : undefined, 'up', vs, 1) : undefined} sparkline={spark((row) => num(row.uph))} explain={<ExplainNumber metric="uph" scope={scope} />} />
+          <HomeTile label="Share of paid time spent on jobs" href={routes.report('paid-time-not-on-any-job')} explain={<ExplainStatic title="Share of paid time spent on jobs" rule="Hours on jobs divided by paid hours. When no paid hours are typed for these days, it is hours on jobs divided by hours on jobs plus time not on a job." rows={bridge ? [{ label: 'Hours on jobs', value: formatHours(bridge.directHours) }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours) }, { label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Share on jobs', value: formatPercentBp(bridge.utilizationBp, { empty: 'No hours yet' }), kind: 'total' }] : []} />} loading={!data} value={statValue(data ? formatPercentBp(bridge?.utilizationBp ?? null, { empty: 'No hours yet' }) : null)} caption={bridge ? <span>{formatHours(bridge.indirectHours, { maxDigits: 0 })} hours not on a job</span> : undefined} />
+        </StatRow>
       )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         {/* Jobs that need you */}
-        <Section title="Jobs that need you" hint="Worst first, with the reason." action={<SeeAll href={routes.jobs({ tab: 'open' })}>All open jobs</SeeAll>} bodyClassName="p-0" testId="home-attention">
+        <DashSection title="Jobs that need you" action={{ label: 'All open jobs', href: routes.jobs({ tab: 'open' }) }} flush data-testid="home-attention">
           {attention.isError ? (
             <div className="p-4">
               <LoadError what="the jobs that need you" onRetry={() => void attention.refetch()} compact />
@@ -280,37 +297,30 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
               <p className="max-w-md text-sm text-fg-secondary">Jobs show up here when they are losing money, heading under your target margin or missing data. Nothing is flagged right now.</p>
             </div>
           ) : (
-            <ul className="divide-y divide-border-subtle">
+            <ActionList label="Jobs that need you, worst first">
               {attention.data.map((job) => (
-                <li key={job.id}>
-                  <Link href={routes.job(job.number)} data-testid="home-attention-row" className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus">
-                    <div className="min-w-0 flex-1 basis-[260px]">
-                      <p className="flex items-center gap-2 text-sm font-medium text-fg">
-                        <span className="tabular-nums">{job.number}</span>
-                        <span className="truncate font-normal text-fg-secondary">{job.name}</span>
-                      </p>
-                      <p className="mt-0.5 text-sm text-fg-secondary">{job.stats.headline || 'Open the job to see what is missing.'}</p>
-                      <p className="mt-0.5 text-xs text-fg-muted">{job.clientName}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      {seesMoney && job.stats.projectedProfitCents !== null ? (
-                        <div className="text-right">
-                          <p className={cn('text-sm font-semibold tabular-nums', job.stats.projectedProfitCents < 0 ? 'text-danger-text' : 'text-fg')}>{formatMoney(job.stats.projectedProfitCents, { cents: false })}</p>
-                          <p className="text-xs text-fg-muted">{job.stats.mode === 'actuals' ? 'profit, last 30 days' : job.stats.mode === 'final' ? 'final profit' : 'projected profit'}{job.stats.confidence ? `, ${CONFIDENCE_LABELS[job.stats.confidence].toLowerCase()}` : ''}</p>
-                        </div>
-                      ) : null}
-                      {job.stats.riskStatus ? <MarginPill status={job.stats.riskStatus} /> : null}
-                    </div>
-                  </Link>
-                </li>
+                <ActionRow
+                  key={job.id}
+                  href={routes.job(job.number)}
+                  data-testid="home-attention-row"
+                  shape={seesMoney ? 'full' : 'pill'}
+                  tag={job.number}
+                  title={job.name}
+                  reason={job.stats.headline || 'Open the job to see what is missing.'}
+                  meta={job.clientName}
+                  value={seesMoney && job.stats.projectedProfitCents !== null ? formatMoney(job.stats.projectedProfitCents, { cents: false }) : undefined}
+                  valueTone={seesMoney && (job.stats.projectedProfitCents ?? 0) < 0 ? 'critical' : 'neutral'}
+                  valueCaption={seesMoney && job.stats.projectedProfitCents !== null ? `${job.stats.mode === 'actuals' ? 'profit, last 30 days' : job.stats.mode === 'final' ? 'final profit' : 'projected profit'}${job.stats.confidence ? `, ${CONFIDENCE_LABELS[job.stats.confidence].toLowerCase()}` : ''}` : undefined}
+                  pill={job.stats.riskStatus ? <MarginPill status={job.stats.riskStatus} /> : undefined}
+                />
               ))}
-            </ul>
+            </ActionList>
           )}
-        </Section>
+        </DashSection>
 
         <div className="flex min-w-0 flex-col gap-4">
           {/* Today's entries */}
-          <Section title="Today’s entries" action={can('production:log') ? <SeeAll href={routes.log()}>Log work</SeeAll> : undefined} testId="home-entries">
+          <DashSection title="Today’s entries" action={can('production:log') ? { label: 'Log work', href: routes.log() } : { label: 'Entries', href: routes.logEntries() }} data-testid="home-entries">
             {!progress ? (
               <span role="status" aria-busy="true" className="ks-skeleton block h-16 rounded-md">
                 <span className="sr-only">Loading today’s entries</span>
@@ -333,69 +343,74 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                   </div>
                 </div>
                 {progress.workDaysThisWeek > 0 ? (
-                  <div className="flex flex-col gap-1.5">
-                    <p className="text-sm text-fg-secondary" data-testid="home-reviewed">
+                  <Link href={routes.logReview()} className="flex flex-col gap-1.5 rounded-md outline-none hover:[&>p]:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+                    <p className="text-sm text-fg-secondary underline-offset-2" data-testid="home-reviewed">
                       {progress.daysReviewedThisWeek} of {progress.workDaysThisWeek} work {progress.workDaysThisWeek === 1 ? 'day' : 'days'} reviewed this week
                     </p>
-                    <ProgressBar value={Math.min(100, Math.round((progress.daysReviewedThisWeek / progress.workDaysThisWeek) * 100))} label={`${progress.daysReviewedThisWeek} of ${progress.workDaysThisWeek} work ${progress.workDaysThisWeek === 1 ? 'day' : 'days'} reviewed this week`} tone={progress.daysReviewedThisWeek >= progress.workDaysThisWeek ? 'success' : 'primary'} size="sm" />
-                  </div>
+                    <Meter value={progress.daysReviewedThisWeek / progress.workDaysThisWeek} label={`${progress.daysReviewedThisWeek} of ${progress.workDaysThisWeek} work ${progress.workDaysThisWeek === 1 ? 'day' : 'days'} reviewed this week`} tone={progress.daysReviewedThisWeek >= progress.workDaysThisWeek ? 'positive' : 'data'} />
+                  </Link>
                 ) : <p className="text-sm text-fg-secondary">The week just started. Days to review show up here from tomorrow.</p>}
               </div>
             )}
-          </Section>
+          </DashSection>
+
+          {/* Programs this month: program jobs are not in Jobs that need you, so they show here. */}
+          <HomeProgramsCard initial={initialPrograms} />
 
           {/* Open alerts */}
-          <Section title={`Alerts${data && data.openAlerts > 0 ? `, ${data.openAlerts} open` : ''}`} action={<SeeAll href={routes.alerts()}>All alerts</SeeAll>} bodyClassName="p-0" testId="home-alerts">
+          <DashSection
+            title={otherAlerts && otherAlerts.length < (alerts.data?.length ?? 0) ? 'Other alerts' : 'Alerts'}
+            description={data && data.openAlerts > 0 ? `${data.openAlerts} open in all` : undefined}
+            action={{ label: 'All alerts', href: routes.alerts() }}
+            flush
+            data-testid="home-alerts"
+          >
             {alerts.isError ? (
               <div className="p-4">
                 <LoadError what="your alerts" onRetry={() => void alerts.refetch()} compact />
               </div>
-            ) : !alerts.data ? (
+            ) : !otherAlerts ? (
               <div role="status" aria-busy="true" className="p-4">
                 <span className="sr-only">Loading alerts</span>
                 <span aria-hidden className="ks-skeleton block h-14 rounded-md" />
               </div>
-            ) : alerts.data.length === 0 ? (
-              <div className="flex items-start gap-3 p-4" data-testid="home-alerts-empty">
-                <BellRing aria-hidden className="mt-0.5 size-5 shrink-0 text-icon" />
-                <p className="text-sm text-fg-secondary">
-                  No open alerts. Pulse tells you here when a job heads under your target margin, a day has no hours, or work sits unbilled.{' '}
-                  <Link href={routes.alertRules()} className="rounded-sm font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-                    See the rules
-                  </Link>
-                </p>
+            ) : otherAlerts.length === 0 ? (
+              <div data-testid="home-alerts-empty">
+                <EmptyNote action={{ label: alerts.data && alerts.data.length > 0 ? 'All alerts' : 'See the rules', href: alerts.data && alerts.data.length > 0 ? routes.alerts() : routes.alertRules() }}>
+                  {alerts.data && alerts.data.length > 0
+                    ? 'Every open alert is about a job under Jobs that need you.'
+                    : 'No open alerts. Pulse tells you here when a job heads under your target margin, a day has no hours, or work sits unbilled.'}
+                </EmptyNote>
               </div>
             ) : (
-              <ul className="divide-y divide-border-subtle">
-                {alerts.data.map((alert) => (
-                  <li key={alert.id}>
-                    <Link href={alert.url ?? routes.alerts()} className="flex items-start gap-3 px-4 py-2.5 hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus">
-                      <span aria-hidden className={cn('mt-1.5 size-2 shrink-0 rounded-full', alert.severity === 'critical' ? 'bg-danger' : alert.severity === 'warning' ? 'bg-[var(--warning-accent)]' : 'bg-info')} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-fg">
-                          <span className="sr-only">{alert.severity === 'critical' ? 'Urgent: ' : alert.severity === 'warning' ? 'Warning: ' : ''}</span>
-                          {alert.title}
-                        </span>
-                        <span className="block truncate text-sm text-fg-secondary">{alert.body}</span>
-                      </span>
-                      {seesMoney && alert.impactCents !== null && alert.impactCents !== 0 ? (
-                        <span className="shrink-0 text-right text-sm text-danger-text tabular-nums" data-testid="home-alert-stake">
-                          {formatMoney(alert.impactCents, { cents: false })}
-                          {alert.impactAsOf === 'fired' ? <span className="block text-xs text-fg-muted">when it fired</span> : null}
-                        </span>
-                      ) : null}
-                    </Link>
-                  </li>
+              <ActionList label="Open alerts">
+                {otherAlerts.map((alert) => (
+                  <ActionRow
+                    key={alert.id}
+                    href={alert.url ?? routes.alerts()}
+                    shape="value"
+                    marker={alert.severity === 'critical' ? 'critical' : alert.severity === 'warning' ? 'caution' : 'info'}
+                    title={
+                      <>
+                        <span className="sr-only">{alert.severity === 'critical' ? 'Urgent: ' : alert.severity === 'warning' ? 'Warning: ' : ''}</span>
+                        {alert.title}
+                      </>
+                    }
+                    reason={<span className="line-clamp-2">{alert.body}</span>}
+                    value={seesMoney && alert.impactCents !== null && alert.impactCents !== 0 ? <span data-testid="home-alert-stake">{formatMoney(alert.impactCents, { cents: false })}</span> : undefined}
+                    valueTone={seesMoney && (alert.impactCents ?? 0) < 0 ? 'critical' : 'neutral'}
+                    valueCaption={seesMoney && alert.impactCents && alert.impactAsOf === 'fired' ? 'when it fired' : undefined}
+                  />
                 ))}
-              </ul>
+              </ActionList>
             )}
-          </Section>
+          </DashSection>
         </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         {/* Trend */}
-        <Section title={seesMoney ? 'Margin trend' : 'Units and pace'} hint={`${rangeLabel(period)}, by ${bucket}`} action={seesMoney ? <SeeAll href={routes.profit({ by: bucket, from: period.from, to: period.to })}>Open in Profit</SeeAll> : undefined} testId="home-trend">
+        <DashSection title={seesMoney ? 'Margin trend' : 'Units and pace'} description={`${rangeLabel(period)}, by ${bucket}`} action={seesMoney ? { label: 'Open in Profit', href: profitFor(bucket, period) } : { label: 'Open the log', href: routes.logEntries({ from: period.from, to: period.to }) }} data-testid="home-trend">
           {trend.isError ? (
             <LoadError what="the trend" onRetry={() => void trend.refetch()} compact />
           ) : seesMoney ? (
@@ -437,16 +452,16 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
               emptyHint="Log a day of work and the trend starts here."
             />
           )}
-        </Section>
+        </DashSection>
 
         {seesMoney ? (
-          <Section title="Where the cost went" hint={rangeLabel(period)} action={<ExplainNumber metric="cost" scope={scope} />} testId="home-cost-split">
+          <DashSection title="Where the cost went" description={rangeLabel(period)} aside={<ExplainNumber metric="cost" scope={scope} />} action={{ label: 'Labor cost', href: routes.labor('cost', period) }} data-testid="home-cost-split">
             <DonutChart title="Cost split" description="Each slice is one kind of cost." loading={!total} slices={cost} format="money" centerLabel="total cost" emptyTitle="No costs in this period yet" emptyHint="Costs show up as work is logged." />
-          </Section>
+          </DashSection>
         ) : (
-          <Section title="Hours on jobs and off" hint={rangeLabel(period)} testId="home-hours-split">
+          <DashSection title="Hours on jobs and off" description={rangeLabel(period)} action={{ label: 'Labor time', href: routes.labor('time', period) }} data-testid="home-hours-split">
             <DonutChart title="Where paid time went" description="Hours on jobs against hours not on a job." loading={!bridge} slices={bridge ? [{ id: 'on', label: 'On jobs', value: Number(bridge.directHours) }, { id: 'off', label: 'Not on a job', value: Number(bridge.indirectHours) }, { id: 'missing', label: 'Paid, not logged', value: Number(bridge.missingHours) }].filter((slice) => slice.value > 0) : []} format="hours" centerLabel="hours" emptyTitle="No hours in this period yet" emptyHint="Hours show up as work is logged." />
-          </Section>
+          </DashSection>
         )}
       </div>
 
@@ -458,7 +473,7 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
             { id: 'type', title: seesMoney ? 'Profit by job type' : 'Units by job type', query: byType, rows: typeRows, link: routes.profit({ by: 'type' }), all: 'All job types' },
           ] as const
         ).map((panel) => (
-          <Section key={panel.id} title={panel.title} hint={panel.rows.length < (panel.query.data?.rows.filter((row) => row.key !== 'none').length ?? 0) ? 'The best and the worst' : rangeLabel(period)} action={seesMoney ? <SeeAll href={panel.link}>{panel.all}</SeeAll> : undefined} testId={`home-by-${panel.id}`}>
+          <DashSection key={panel.id} title={panel.title} description={panel.rows.length < (panel.query.data?.rows.filter((row) => row.key !== 'none').length ?? 0) ? 'The best and the worst' : rangeLabel(period)} action={seesMoney ? { label: panel.all, href: panel.link } : undefined} data-testid={`home-by-${panel.id}`}>
             {panel.query.isError ? (
               <LoadError what={panel.title.toLowerCase()} onRetry={() => void panel.query.refetch()} compact />
             ) : (
@@ -478,42 +493,45 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
                 emptyHint="Work logged in this period shows up here."
               />
             )}
-          </Section>
+          </DashSection>
         ))}
       </div>
 
       {/* Money waiting and things to fix */}
       <div className="grid gap-4 lg:grid-cols-3">
         {seesMoney ? (
-          <KpiTile label="Not billed yet" explain={<ExplainNumber metric="not_billed" scope={scope} />} loading={!data} value={data ? formatMoneyWhole(data.notBilledYetCents) : null} footer={<SeeAll href={routes.report('ready-to-bill')}>Ready to bill</SeeAll>} emptyText="Nothing waiting" />
+          <HomeTile label="Not billed yet" href={routes.report('ready-to-bill')} explain={<ExplainNumber metric="not_billed" scope={scope} />} loading={!data} value={statValue(data ? formatMoneyWhole(data.notBilledYetCents) : null, 'Nothing waiting')} caption="Finished work that is not on an invoice" />
         ) : null}
-        <KpiTile label="Paid time not on any job" explain={<ExplainStatic title="Paid time not on any job" rule="For each site and day: paid hours, less hours on jobs, less time not on a job. It is never below zero." rows={bridge ? [{ label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Hours on jobs', value: formatHours(bridge.directHours), kind: 'minus' }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours), kind: 'minus' }, { label: 'Paid, on no job', value: formatHours(bridge.missingHours), kind: 'total' }] : []} footnote="Worked out day by day, so the lines above may not subtract to the total." />} loading={!bridge} value={bridge ? formatHours(bridge.missingHours, { style: 'unit', maxDigits: 0 }) : null} footer={<span className="flex flex-wrap items-center gap-x-2 text-xs text-fg-muted">{seesMoney && bridge?.missingCostCents ? <span className="tabular-nums">{formatMoney(bridge.missingCostCents, { cents: false })} of pay nobody logged</span> : <span>Hours paid that nobody logged</span>}<SeeAll href={routes.report('paid-time-not-on-any-job')}>See the days</SeeAll></span>} />
-        <Section title="Things to fix" className={cn(!seesMoney && 'lg:col-span-2')} testId="home-fix">
+        <HomeTile label="Paid time not on any job" href={routes.report('paid-time-not-on-any-job')} explain={<ExplainStatic title="Paid time not on any job" rule="For each site and day: paid hours, less hours on jobs, less time not on a job. It is never below zero." rows={bridge ? [{ label: 'Paid hours', value: formatHours(bridge.paidHours) }, { label: 'Hours on jobs', value: formatHours(bridge.directHours), kind: 'minus' }, { label: 'Time not on a job', value: formatHours(bridge.indirectHours), kind: 'minus' }, { label: 'Paid, on no job', value: formatHours(bridge.missingHours), kind: 'total' }] : []} footnote="Worked out day by day, so the lines above may not subtract to the total." />} loading={!bridge} value={statValue(bridge ? formatHours(bridge.missingHours, { style: 'unit', maxDigits: 0 }) : null)} caption={seesMoney && bridge?.missingCostCents ? <span className="tabular-nums">{formatMoney(bridge.missingCostCents, { cents: false })} of pay nobody logged</span> : <span>Hours paid that nobody logged</span>} />
+        <DashSection title="Things to fix" className={cn(!seesMoney && 'lg:col-span-2')} flush data-testid="home-fix">
           {!fix ? (
-            <span role="status" aria-busy="true" className="ks-skeleton block h-10 rounded-md">
-              <span className="sr-only">Loading things to fix</span>
-            </span>
+            <div className="p-4">
+              <span role="status" aria-busy="true" className="ks-skeleton block h-10 rounded-md">
+                <span className="sr-only">Loading things to fix</span>
+              </span>
+            </div>
           ) : fixes.length === 0 ? (
-            <p className="flex items-center gap-2 text-sm text-fg-secondary" data-testid="home-fix-empty">
+            <p className="flex items-center gap-2 p-4 text-sm text-fg-secondary" data-testid="home-fix-empty">
               <CircleCheck aria-hidden className="size-4 text-success" />
               Nothing to fix. Every number on this page is complete.
             </p>
           ) : (
-            <ul className="flex flex-col gap-2">
+            <ActionList label="Things to fix">
               {fixes.map((item) => (
-                <li key={item.one} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="flex min-w-0 items-center gap-2 text-fg">
-                    <Wrench aria-hidden className="size-4 shrink-0 text-warning-text" />
-                    <span>
+                <ActionRow
+                  key={item.one}
+                  href={item.href}
+                  title={
+                    <>
                       <strong className="font-semibold tabular-nums">{item.count}</strong> {item.count === 1 ? item.one : item.many}
-                    </span>
-                  </span>
-                  <SeeAll href={item.href}>{item.action}</SeeAll>
-                </li>
+                    </>
+                  }
+                  cta={item.action}
+                />
               ))}
-            </ul>
+            </ActionList>
           )}
-        </Section>
+        </DashSection>
       </div>
       {can('production:log') && !seesMoney ? (
         <div className="flex justify-start print:hidden">
@@ -523,5 +541,36 @@ export function HomeView({ today, weekStart, targetMarginBp, initialSummary, ini
         </div>
       ) : null}
     </div>
+    </DashboardFrame>
+  );
+}
+
+type HomeTileProps = Omit<StatTileProps, 'delta' | 'trend'> & {
+  readonly loading: boolean;
+  /** True while the period before loads: keeps room for the change so the tile does not grow later. */
+  readonly deltaPending?: boolean;
+  readonly delta?: DeltaBadgeProps;
+  readonly sparkline?: { readonly values: readonly (number | null)[] };
+};
+
+/** A home headline: the shared StatTile, with a skeleton of the same size while the period loads. */
+function HomeTile({ loading, deltaPending, delta, sparkline, caption, ...tile }: HomeTileProps) {
+  if (loading) return <StatTileLoading label={tile.label} data-testid="kpi-tile" />;
+  const pending = !delta && deltaPending ? <DeltaPending /> : null;
+  return (
+    <StatTile
+      data-testid="kpi-tile"
+      {...tile}
+      delta={delta ? toDelta(delta) : undefined}
+      trend={sparkline ? <StatSparkline values={sparkline.values} label={`${tile.label} trend`} /> : undefined}
+      caption={
+        pending || caption ? (
+          <>
+            {pending}
+            {caption}
+          </>
+        ) : undefined
+      }
+    />
   );
 }

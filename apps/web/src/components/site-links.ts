@@ -116,6 +116,12 @@ export const ROUTES = {
   contact: '/contact',
   terms: '/terms',
   privacy: '/privacy',
+  security: '/security',
+  articles: '/articles',
+  docs: '/docs',
+  customers: '/customers',
+  /** The Team 1 customer story. */
+  team1: '/customers/team-1',
   founder: '/contact?topic=founder',
   demo: '/contact?topic=demo',
 } as const;

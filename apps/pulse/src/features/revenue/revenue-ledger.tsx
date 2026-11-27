@@ -15,7 +15,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BadgeDollarSign, Plus } from 'lucide-react';
-import { Badge, Button } from '@/components/ui';
+import { Badge, Button, Tooltip } from '@/components/ui';
 import { Panel } from '@/components/layout/page';
 import { Teach } from '@/components/pulse/teach';
 import { How } from '@/features/calculator/how';
@@ -63,7 +63,8 @@ export function RevenueLedger({ jobId, clientId, from, to, today, title = 'Invoi
 
   const toInput = (row: RevenueEntryDTO): RowInput => ({ id: row.id, version: row.version, jobId: row.jobId, clientId: row.jobId ? null : row.clientId, revenueDate: row.revenueDate, kind: row.kind === 'fixed_true_up' ? 'adjustment' : row.kind, description: row.description, amountCents: row.amountCents ?? 0, invoiceNumber: row.invoiceNumber, note: row.note });
   const actions = useLedgerActions<RevenueEntryDTO, RowInput>({ overlay, save: saveRevenueAction, remove: deleteRevenueAction, restore: restoreRevenueAction, toInput, noun: 'row', refresh });
-  const editable = (row: RevenueEntryDTO): boolean => row.kind !== 'fixed_true_up';
+  // Pulse writes the fixed price true up; program fees come from a Projects price card (`pmf:` rows).
+  const editable = (row: RevenueEntryDTO): boolean => row.kind !== 'fixed_true_up' && !row.fromProgram;
 
   const columns = useMemo<LedgerColumn<RevenueEntryDTO>[]>(
     () => [
@@ -211,7 +212,28 @@ export function RevenueLedger({ jobId, clientId, from, to, today, title = 'Invoi
         rowName={(row) => `the ${REVENUE_KIND_LABELS[row.kind].toLowerCase()} of ${shortDate(row.revenueDate)}`}
         onCommit={onCommit}
         onDelete={(picked) => void actions.removeRows(picked.filter(editable))}
-        rowBadges={(row) => (row.kind === 'fixed_true_up' ? <Badge size="sm" tone="neutral">By Pulse</Badge> : row.source !== 'manual' ? <Badge size="sm" tone="neutral">{row.source === 'csv' ? 'Imported' : 'Synced'}</Badge> : null)}
+        lockReason={(row) =>
+          row.fromProgram
+            ? `${row.fromProgram.message} Change it there.`
+            : row.kind === 'fixed_true_up'
+              ? 'Pulse writes this row so the fixed price adds up. It changes when the price or the work changes.'
+              : null
+        }
+        rowBadges={(row) =>
+          row.kind === 'fixed_true_up' ? (
+            <Badge tone="neutral">By Pulse</Badge>
+          ) : row.fromProgram ? (
+            <Tooltip content={`${row.fromProgram.message} Change it there.`}>
+              <span tabIndex={0} className="rounded-sm focus-visible:outline-2 focus-visible:outline-focus" data-testid="revenue-from-program">
+                <Badge tone="info">
+                  {row.fromProgram.key ? `${row.fromProgram.key} price card` : 'Price card'}
+                </Badge>
+              </span>
+            </Tooltip>
+          ) : row.source !== 'manual' ? (
+            <Badge tone="neutral">{row.source === 'csv' ? 'Imported' : 'Synced'}</Badge>
+          ) : null
+        }
       />
       <BulkAddDialog<BulkRow>
         open={bulk}

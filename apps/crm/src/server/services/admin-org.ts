@@ -21,6 +21,7 @@ import type {
   UpdateOrgPolicyInput,
   UpdateProfileInput,
 } from './admin-contracts';
+import { defaultChannels } from './admin-contracts';
 import {
   decodeMemberRole,
   emailDomainAllowed,
@@ -357,7 +358,7 @@ export async function updateProfile(ctx: ServiceContext, input: UpdateProfileInp
       const current: ProfilePrefs = profileFor(meta, userId);
       const notifications = { ...current.notifications };
       for (const [event, channels] of Object.entries(input.notifications ?? {})) {
-        const existing = notifications[event] ?? { inApp: true, email: false };
+        const existing = notifications[event] ?? defaultChannels(event);
         notifications[event] = { ...existing, ...channels };
       }
       const next = { ...current, ...prefPatch, notifications } as ProfilePrefs;

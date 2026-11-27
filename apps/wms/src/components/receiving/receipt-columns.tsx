@@ -148,13 +148,9 @@ export function buildReceiptColumns(openReceipt: (row: ReceiptRow) => void): Col
       meta: { clip: false, headerTip: 'Cancelled receipts were reversed; their stock was taken back out.' },
       cell: ({ row }) =>
         row.original.cancelledAt ? (
-          <Badge tone="danger" size="sm">
-            Cancelled
-          </Badge>
+          <Badge tone="danger">Cancelled</Badge>
         ) : (
-          <Badge tone="success" size="sm">
-            Received
-          </Badge>
+          <Badge tone="success">Received</Badge>
         ),
     },
     {
@@ -169,7 +165,7 @@ export function buildReceiptColumns(openReceipt: (row: ReceiptRow) => void): Col
         headerTip: 'What created this receipt. Only Purchase Order receipts carry a PO number and PO type.',
       },
       cell: ({ row }) => (
-        <Badge tone={row.original.type === 'Purchase Order' ? 'info' : 'neutral'} size="sm">
+        <Badge tone={row.original.type === 'Purchase Order' ? 'info' : 'neutral'}>
           {receivingTypeLabel(row.original.type)}
         </Badge>
       ),
@@ -215,15 +211,7 @@ export function buildReceiptColumns(openReceipt: (row: ReceiptRow) => void): Col
       size: 150,
       meta: { clip: false },
       cell: ({ getValue }) =>
-        getValue() ? (
-          <Badge tone="success" size="sm">
-            Yes
-          </Badge>
-        ) : (
-          <Badge tone="neutral" size="sm">
-            No
-          </Badge>
-        ),
+        getValue() ? <Badge tone="success">Yes</Badge> : <Badge tone="neutral">No</Badge>,
     },
     plain('note', 'Note', 180),
     plain('lineNote', 'Purchase order line note', 190),

@@ -11,7 +11,8 @@ import { ChartGallery } from './gallery';
 import { HeatmapCalendar, heatStep } from './heatmap';
 import { DonutChart, Gauge, ProgressRing } from './radial';
 import { Sparkline, sparklineSummary } from './sparkline';
-import { DeltaBadge, KpiTile, MarginPill, healthFromStatus, marginHealth } from './stats';
+import { StatTile } from '@kitstak/ui/dashboard';
+import { DeltaBadge, DeltaPending, MarginPill, StatSparkline, StatTileLoading, healthFromStatus, marginHealth, statValue, toDelta } from './stats';
 
 vi.mock('./charts.css', () => ({}));
 
@@ -231,19 +232,16 @@ describe('stat helpers', () => {
     expect(html(<DeltaBadge delta={null} text="" />)).toContain('No change yet');
   });
 
-  it('KpiTile shows value, empty, loading and error', () => {
-    const tile = html(<KpiTile label="Profit" value="$1,200" delta={{ delta: 3, text: '+3%', label: 'vs last month' }} sparkline={{ values: [1, 2, 3] }} explain={<button type="button">How we got this</button>} />);
+  it('stat tile helpers fill the shared StatTile', () => {
+    const tile = html(<StatTile label="Profit" href="/profit" value={statValue('$1,200')} delta={toDelta({ delta: 3, text: '+3%' })} trend={<StatSparkline values={[1, 2, 3]} label="Profit trend" />} explain={<button type="button">How we got this</button>} />);
     expect(tile).toContain('$1,200');
-    expect(tile).toContain('vs last month');
+    expect(tile).toContain('href="/profit"');
+    expect(tile).toContain('Up, better:');
     expect(tile).toContain('How we got this');
-    expect(html(<KpiTile label="Profit" value={null} emptyText="No profit yet" />)).toContain('No profit yet');
-    expect(html(<KpiTile label="Profit" value={null} loading />)).toContain('Loading Profit');
+    expect(html(<StatTile label="Profit" href={null} value={statValue(null, 'No profit yet')} />)).toContain('No profit yet');
+    expect(html(<StatTileLoading label="Profit" />)).toContain('Loading Profit');
     // While the number to compare with loads, the tile keeps room for the change so it does not grow later.
-    const pending = html(<KpiTile label="Profit" value="$1,200" deltaPending />);
-    expect(pending).toContain('data-testid="kpi-delta-pending"');
-    expect(html(<KpiTile label="Profit" value="$1,200" deltaPending delta={{ delta: 3, text: '+3%', label: 'vs before' }} />)).not.toContain('kpi-delta-pending');
-    expect(html(<KpiTile label="Profit" value={null} deltaPending />)).not.toContain('kpi-delta-pending');
-    expect(html(<KpiTile label="Profit" value={null} error="Could not load." />)).toContain('role="alert"');
+    expect(html(<DeltaPending />)).toContain('data-testid="kpi-delta-pending"');
   });
 });
 

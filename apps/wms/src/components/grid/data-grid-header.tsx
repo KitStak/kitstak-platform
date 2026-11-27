@@ -158,8 +158,8 @@ function HeaderCell<T>({ header, sort, onSort, reorderable, stickyRightOffset }:
           onTouchStart={header.getResizeHandler()}
           onDoubleClick={() => column.resetSize()}
           className={cn(
-            'absolute right-0 top-1/2 h-5 w-1.5 -translate-y-1/2 cursor-col-resize touch-none rounded-full transition-colors hover:bg-primary/40',
-            column.getIsResizing() ? 'bg-primary' : 'bg-transparent group-hover/th:bg-border-strong',
+            'absolute right-0 top-1/2 h-5 w-1.5 -translate-y-1/2 cursor-col-resize touch-none rounded-full transition-colors hover:bg-border-strong',
+            column.getIsResizing() ? 'bg-focus' : 'bg-transparent group-hover/th:bg-border-strong',
           )}
         />
       ) : null}

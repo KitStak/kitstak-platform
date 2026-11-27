@@ -35,12 +35,15 @@ export function Page({
 
 /** Section card used on Home, Overview and Settings. */
 export function Panel({
+  id,
   title,
   action,
   children,
   className,
   bodyClassName,
 }: {
+  /** Anchor so a headline number elsewhere on the page can link to this section. */
+  readonly id?: string;
   readonly title?: ReactNode;
   readonly action?: ReactNode;
   readonly children: ReactNode;
@@ -48,7 +51,7 @@ export function Panel({
   readonly bodyClassName?: string;
 }) {
   return (
-    <section className={cn('rounded-xl border border-border-subtle bg-panel shadow-xs', className)}>
+    <section id={id} className={cn('scroll-mt-4 rounded-xl border border-border-subtle bg-panel shadow-xs', className)}>
       {title ? (
         <header className="flex items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
           <h2 className="text-base font-semibold text-fg">{title}</h2>

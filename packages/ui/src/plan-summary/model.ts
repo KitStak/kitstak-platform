@@ -205,9 +205,11 @@ function facts(input: PlanSummaryInput): { facts: string[]; extra: PlanSummaryLi
       };
     }
     if (usage.seatsPaid !== null) {
+      // With CRM or Projects in the plan Pulse covers every seat, for the same flat price. So no
+      // limit is named here and nobody is sent to sales (review round 5).
       return {
-        facts: [seatFact(usage), `Your seat count comes from your other apps. Pulse covers ${included} seats.`],
-        extra: usage.seatsPaid > included ? extra : null,
+        facts: [seatFact(usage), 'Your seat count comes from your other apps. Pulse covers every seat for one flat price.'],
+        extra: null,
       };
     }
     return { facts: [`Pulse is one flat price for up to ${included} seats.`], extra: null };

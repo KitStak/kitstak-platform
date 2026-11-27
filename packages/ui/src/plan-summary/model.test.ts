@@ -141,12 +141,14 @@ describe('planSummaryFor', () => {
 
   it('says the seat count comes from the other apps when Pulse is in a bundle', () => {
     const small = planSummaryFor(input({ app: 'pulse' }));
-    expect(small.facts).toEqual(['4 of 5 seats in use.', 'Your seat count comes from your other apps. Pulse covers 5 seats.']);
+    expect(small.facts).toEqual(['4 of 5 seats in use.', 'Your seat count comes from your other apps. Pulse covers every seat for one flat price.']);
     expect(small.extra).toBeNull();
+    // A bigger team is covered too: no "5 seats" and no "Talk to us" (review round 5).
     const big = planSummaryFor(
       input({ app: 'pulse', state: { usage: { seatsUsed: 7, seatsPaid: 8, seatLimit: 8, warehousesUsed: null, warehousesPaid: null } } }),
     );
-    expect(big.extra?.label).toBe('Talk to us');
+    expect(big.facts).toEqual(['7 of 8 seats in use.', 'Your seat count comes from your other apps. Pulse covers every seat for one flat price.']);
+    expect(big.extra).toBeNull();
   });
 
   it('tells a member who to ask, with no link and no money', () => {

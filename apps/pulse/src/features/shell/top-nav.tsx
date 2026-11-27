@@ -1,6 +1,7 @@
 'use client';
 /**
- * Primary navigation in the top bar (lg and up): Home, Jobs, Log work, Profit, Labor, Alerts and
+ * Primary navigation in the top bar (lg and up): Home, Jobs, Programs (where the program tracker
+ * is on), Log work, Profit, Labor, Alerts and
  * Reports as links, then a More menu with Target pace, Calculator, Goals, Import and export and
  * Settings. The list comes from src/lib/nav.ts, filtered by the person's Pulse role.
  *
@@ -50,7 +51,7 @@ function BarLink({ entry, badge, active, parked }: { readonly entry: NavEntry; r
       className={triggerClass}
     >
       {entry.label}
-      {badge > 0 ? <CountBadge count={badge} ringClassName="ring-[var(--surface-panel)]" /> : null}
+      {badge > 0 ? <CountBadge count={badge} /> : null}
       <ActiveUnderline show={active} />
     </Link>
   );
@@ -68,7 +69,7 @@ function MenuLink({ entry, badge, active }: { readonly entry: NavEntry; readonly
         className="ks-menu-item aria-[current=page]:bg-selected aria-[current=page]:font-medium aria-[current=page]:text-primary-text [&[aria-current=page]>svg]:text-primary-text"
       >
         <MenuItemBody icon={<Icon aria-hidden />}>{entry.label}</MenuItemBody>
-        {badge > 0 ? <CountBadge count={badge} ringClassName="ring-transparent" /> : null}
+        {badge > 0 ? <CountBadge count={badge} /> : null}
       </Link>
     </Menu.Item>
   );

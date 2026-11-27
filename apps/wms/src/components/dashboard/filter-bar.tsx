@@ -61,8 +61,8 @@ export function MultiSelect({
           type="button"
           aria-label={`${label}: ${summary}`}
           className={cn(
-            'inline-flex h-8 max-w-[260px] items-center gap-1.5 rounded-md border bg-surface px-2.5 text-xs transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
-            value.length > 0 ? 'border-primary/40 text-foreground' : 'border-border text-secondary',
+            'inline-flex h-8 max-w-[260px] items-center gap-1.5 rounded-md border bg-surface px-2.5 text-xs transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+            value.length > 0 ? 'border-border-strong text-foreground' : 'border-border text-secondary',
           )}
         >
           <span className="text-faint">{label}:</span>
@@ -96,7 +96,7 @@ export function MultiSelect({
           {shown.length === 0 ? <li className="px-3 py-2 text-xs text-faint">No matches</li> : null}
           {shown.map((o) => (
             <li key={o.id} role="option" aria-selected={draft.includes(o.id)}>
-              <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-primary/5">
+              <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-hover">
                 <Checkbox
                   checked={draft.includes(o.id)}
                   onCheckedChange={() => toggle(o.id)}
@@ -166,7 +166,7 @@ export function DashboardFilterBar({
         <button
           type="button"
           onClick={() => onChange({ warehouseIds: [], clientIds: [] })}
-          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-secondary hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-secondary hover:bg-hover hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <X className="h-3.5 w-3.5" aria-hidden />
           Reset

@@ -214,7 +214,7 @@ export function ReportTable({ report, pageSize = 100 }: { readonly report: Pick<
           <span>
             Showing {visible.length} of {rows.length} rows
           </span>
-          <button type="button" onClick={() => setShown((count) => count + pageSize * 2)} className="rounded-md font-medium text-primary-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="report-more">
+          <button type="button" onClick={() => setShown((count) => count + pageSize * 2)} className="rounded-md font-medium text-fg-link underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" data-testid="report-more">
             Show more rows
           </button>
         </div>

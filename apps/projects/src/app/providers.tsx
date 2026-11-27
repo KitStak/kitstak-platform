@@ -2,6 +2,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeHandoff } from '@kitstak/ui/theme-handoff';
+import { DashboardLinkProvider } from '@kitstak/ui/dashboard';
+import { DashNextLink } from '@/components/layout/dash-link';
 import { Toaster, TooltipProvider, toast } from '@/components/ui';
 import { ApiClientError } from '@/lib/api-client';
 
@@ -55,7 +57,7 @@ export function Providers({ siblingUrls, children }: { readonly siblingUrls: rea
       <TooltipProvider delayDuration={400} skipDelayDuration={200}>
         {/* Carries the stored theme on links into Portal / CRM / WMS (stores are per origin). */}
         <ThemeHandoff appUrls={siblingUrls} />
-        {children}
+        <DashboardLinkProvider component={DashNextLink}>{children}</DashboardLinkProvider>
         <Toaster theme={theme} />
       </TooltipProvider>
     </QueryClientProvider>

@@ -25,6 +25,8 @@ export interface XYSeries {
   /** Words for a gap at that position ("Not known"). Left out, a gap reads "No data". */
   readonly gapText?: readonly (string | null)[];
   readonly color: string;
+  /** Lines only: draw it dashed, for a forecast or a plan next to the real line. Never filled as an area. */
+  readonly dashed?: boolean;
 }
 
 /** What a gap reads at one position: the series' own words, else "No data". */
@@ -124,7 +126,7 @@ export function XYChart(props: XYProps) {
   const legend: LegendItem[] = [];
   if (!floats && bars.length + lines.length > 1) {
     for (const series of bars) legend.push({ id: series.id, label: series.label, color: series.color, shape: 'box' });
-    for (const series of lines) legend.push({ id: series.id, label: series.label, color: series.color, shape: 'line' });
+    for (const series of lines) legend.push({ id: series.id, label: series.label, color: series.color, shape: series.dashed ? 'dash' : 'line' });
   }
   if (props.signColors && bars.length === 1 && bars[0]!.values.some((value) => (value ?? 0) < 0)) {
     legend.push({ id: 'above', label: 'Above zero', color: bars[0]!.color, shape: 'box' }, { id: 'below', label: 'Below zero', color: CHART_COLORS.down, shape: 'box' });
@@ -495,8 +497,8 @@ function Plot(props: PlotProps) {
           });
           return (
             <g key={series.id}>
-              {props.area ? <path d={areaPath(xs, ys, baseline)} fill={series.color} fillOpacity={0.12} /> : null}
-              <path d={linePath(xs, ys)} fill="none" stroke={series.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+              {props.area && !series.dashed ? <path d={areaPath(xs, ys, baseline)} fill={series.color} fillOpacity={0.12} /> : null}
+              <path d={linePath(xs, ys)} fill="none" stroke={series.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={series.dashed ? '6 5' : undefined} />
               {ys.map((y, index) => {
                 if (y === null) return null;
                 const alone = (ys[index - 1] ?? null) === null && (ys[index + 1] ?? null) === null;

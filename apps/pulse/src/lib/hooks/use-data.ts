@@ -27,6 +27,8 @@ import type {
   JobListItemDTO,
   JobPlansDTO,
   JobPriceDTO,
+  JobProgramDTO,
+  ProgramToLinkDTO,
   JobTypeDTO,
   LaborClassDTO,
   LaborRateDTO,
@@ -128,6 +130,8 @@ export interface JobListParams {
   risk?: readonly PulseStatus[];
   includeArchived?: boolean;
   includeDeleted?: boolean;
+  /** `exclude`: leave out program jobs, as the Jobs list does (they live under Programs). */
+  programJobs?: 'include' | 'exclude';
   limit?: number;
 }
 const jobQuery = (params: JobListParams): Query => ({
@@ -141,6 +145,7 @@ const jobQuery = (params: JobListParams): Query => ({
   risk: list(params.risk),
   archived: params.includeArchived,
   deleted: params.includeDeleted,
+  programJobs: params.programJobs,
   limit: params.limit,
 });
 export const useJobs = (params: JobListParams = {}, opts?: Opts<JobListItemDTO[]>) =>
@@ -163,6 +168,12 @@ export const useJobPrices = (ref: string | null | undefined, opts?: Opts<JobPric
 /** A job's numbers per day, week or month over its whole life. */
 export const useJobDays = (ref: string | null | undefined, by: 'day' | 'week' | 'month' = 'day', opts?: Opts<ProfitResponse>) =>
   useQuery({ queryKey: qk.jobDays(ref ?? '', by), queryFn: get<ProfitResponse>(`jobs/${encodeURIComponent(ref ?? '')}/days`, { by }), enabled: Boolean(ref), staleTime: SHORT, ...opts });
+/** The KitStak program side of a job: Program card and By variant table. */
+export const useJobProgram = (ref: string | null | undefined, opts?: Opts<JobProgramDTO>) =>
+  useQuery({ queryKey: qk.jobProgram(ref ?? ''), queryFn: get<JobProgramDTO>(`jobs/${encodeURIComponent(ref ?? '')}/program`), enabled: Boolean(ref), staleTime: 30_000, refetchInterval: 120_000, ...opts });
+/** Programs a manager can link to a job (the Link a program picker). */
+export const useProgramsToLink = (jobId: string | null | undefined, q: string, opts?: Opts<ProgramToLinkDTO[]>) =>
+  useQuery({ queryKey: qk.programsToLink(q, jobId ?? ''), queryFn: get<ProgramToLinkDTO[]>(`jobs/${encodeURIComponent(jobId ?? '')}/program/link`, { q }), enabled: Boolean(jobId), staleTime: SHORT, placeholderData: keepPreviousData, ...opts });
 /** Hours, labor cost and task units of a job by Projects task (0014). Empty rows when the job has no project. */
 export const useJobTaskCosts = (ref: string | null | undefined, opts?: Opts<JobTaskCostsDTO>) =>
   useQuery({ queryKey: qk.jobTaskCosts(ref ?? ''), queryFn: get<JobTaskCostsDTO>(`jobs/${encodeURIComponent(ref ?? '')}/tasks/costs`), enabled: Boolean(ref), staleTime: SHORT, ...opts });

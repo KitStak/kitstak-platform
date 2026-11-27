@@ -165,7 +165,7 @@ export function ApiTokensPanel({ allowOrgScope = false }: { readonly allowOrgSco
                   <td className={TABLE_CELL}>
                     <span className={cn('flex max-w-[240px] flex-wrap gap-1', token.status !== 'active' && 'opacity-60')}>
                       {token.scopes.map((entry) => (
-                        <Badge key={entry} size="sm" tone="outline">
+                        <Badge key={entry} tone="outline">
                           {entry}
                         </Badge>
                       ))}

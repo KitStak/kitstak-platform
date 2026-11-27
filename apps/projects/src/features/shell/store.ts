@@ -18,6 +18,8 @@ export interface QuickAddDefaults {
   readonly parentTaskId?: string | null;
   /** Prefilled text (natural-language parser input). */
   readonly text?: string;
+  /** `build` opens quick add in build mode (docs/programs/SPEC.md 5.2, 5.17). */
+  readonly mode?: 'task' | 'build';
 }
 
 interface ShellState {
@@ -28,6 +30,10 @@ interface ShellState {
   readonly paletteQuery: string;
   readonly quickAdd: { readonly open: boolean; readonly defaults: QuickAddDefaults };
   readonly shortcutsOpen: boolean;
+  /** The sidebar PROGRAMS section is open (persisted). */
+  readonly programsOpen: boolean;
+  setProgramsOpen(open: boolean): void;
+  toggleProgramsOpen(): void;
   setSidebarCollapsed(collapsed: boolean): void;
   toggleSidebar(): void;
   toggleSpace(spaceId: string): void;
@@ -51,6 +57,9 @@ export const useShellStore = create<ShellState>()(
       paletteQuery: '',
       quickAdd: { open: false, defaults: {} },
       shortcutsOpen: false,
+      programsOpen: true,
+      setProgramsOpen: (programsOpen) => set({ programsOpen }),
+      toggleProgramsOpen: () => set((state) => ({ programsOpen: !state.programsOpen })),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       toggleSpace: (spaceId) =>
@@ -70,7 +79,7 @@ export const useShellStore = create<ShellState>()(
     }),
     {
       name: 'kitstak-projects-shell',
-      partialize: (state) => ({ sidebarCollapsed: state.sidebarCollapsed, collapsedSpaceIds: state.collapsedSpaceIds }),
+      partialize: (state) => ({ sidebarCollapsed: state.sidebarCollapsed, collapsedSpaceIds: state.collapsedSpaceIds, programsOpen: state.programsOpen }),
     },
   ),
 );

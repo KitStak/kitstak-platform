@@ -94,7 +94,7 @@ function columns(onOpen: (id: string) => void): GridColumnDef<ScreenConfigRow>[]
       enableSorting: false,
       cell: ({ row }) =>
         row.original.conditionCount ? (
-          <Badge tone="info" size="sm" shape="pill">
+          <Badge tone="info">
             {row.original.conditionCount} {row.original.conditionCount === 1 ? 'condition' : 'conditions'}
           </Badge>
         ) : (
@@ -114,7 +114,7 @@ function columns(onOpen: (id: string) => void): GridColumnDef<ScreenConfigRow>[]
       header: 'Is active',
       size: 100,
       cell: ({ row }) => (
-        <Badge tone={row.original.isActive ? 'success' : 'neutral'} size="sm" shape="pill">
+        <Badge tone={row.original.isActive ? 'success' : 'neutral'}>
           {row.original.isActive ? 'Yes' : 'No'}
         </Badge>
       ),

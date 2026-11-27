@@ -55,6 +55,8 @@ import {
 } from '@/server/actions/templates';
 import { useShell } from '@/features/shell/shell-context';
 import { SaveAsTemplateDialog, TEMPLATE_CATEGORIES } from './save-as-template-dialog';
+import { ProgramTemplates } from './program-templates';
+import type { ProgramTemplateDTO } from '@/lib/program-types';
 import { TemplatePreview } from './template-preview';
 
 const TEAM = 'Your team';
@@ -125,21 +127,21 @@ function TemplateCard({
         </ol>
         <div className="flex min-h-5 flex-wrap gap-1.5">
           {template.builtIn ? null : (
-            <Badge size="sm" tone="primary">
+            <Badge tone="neutral">
               Your team
             </Badge>
           )}
           {automations ? (
-            <Badge size="sm" tone="warning" icon={<Zap aria-hidden />}>
+            <Badge tone="neutral" icon={<Zap aria-hidden />}>
               {automations} {automations === 1 ? 'automation' : 'automations'}
             </Badge>
           ) : null}
           {payload.asksForCustomer ? (
-            <Badge size="sm" tone="info">
+            <Badge tone="info">
               Links a client
             </Badge>
           ) : null}
-          {!template.builtIn && template.useCount ? <Badge size="sm">Used {template.useCount}×</Badge> : null}
+          {!template.builtIn && template.useCount ? <Badge>Used {template.useCount}×</Badge> : null}
         </div>
       </div>
       <div className="flex items-center gap-2 border-t border-border-subtle px-4 py-3">
@@ -277,9 +279,11 @@ function EditTemplateDialog({
 export function TemplatesView({
   templates,
   projects,
+  programTemplates = [],
 }: {
   readonly templates: TemplateDTO[];
   readonly projects: ProjectSummary[];
+  readonly programTemplates?: readonly ProgramTemplateDTO[];
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? '/templates';
@@ -448,7 +452,7 @@ export function TemplatesView({
           ))}
           {canManage && category !== TEAM && !q ? (
             <li className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong p-6 text-center">
-              <span className="inline-flex size-10 items-center justify-center rounded-lg bg-info-subtle text-info-text">
+              <span className="inline-flex size-10 items-center justify-center rounded-lg bg-sunken text-icon">
                 <LayoutTemplate aria-hidden className="size-5" />
               </span>
               <p className="font-semibold text-fg">Make your own</p>
@@ -467,6 +471,8 @@ export function TemplatesView({
           ) : null}
         </ul>
       )}
+
+      <ProgramTemplates templates={programTemplates} canUse={canUse} />
 
       <Sheet open={Boolean(preview)} onOpenChange={(open) => !open && setParam('preview', null)}>
         {preview ? <TemplatePreview template={preview} canUse={canUse} /> : null}

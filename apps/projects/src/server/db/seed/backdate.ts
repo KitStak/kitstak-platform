@@ -83,7 +83,7 @@ function intoWorkHours(ms: number): number {
 }
 
 /** Re-stamps activity rows matched by `where` to `ts` (keeping their order with 1-second steps). */
-async function restampActivity(tx: Executor, where: SQL, ts: Date): Promise<void> {
+export async function restampActivity(tx: Executor, where: SQL, ts: Date): Promise<void> {
   await tx.execute(sql`
     with moved as (delete from pm.activity a where ${where} returning a.*),
     ordered as (select moved.*, row_number() over (order by created_at, id) as rn from moved)

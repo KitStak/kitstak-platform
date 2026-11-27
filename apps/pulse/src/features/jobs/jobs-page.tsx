@@ -6,7 +6,7 @@ import { PageBlocked } from '@/features/access/page-blocked';
 import { JOB_TABS, PULSE_STATUSES, type JobTab, type PulseStatus } from '@/lib/constants';
 import { routes } from '@/lib/routes';
 import type { ClientDTO, JobListItemDTO, JobTypeDTO, SiteDTO } from '@/lib/types';
-import { listClients, listJobTypes, listJobs, listSites, todayInZone } from '@/server/domain';
+import { countTrackedPrograms, listClients, listJobTypes, listJobs, listSites, todayInZone } from '@/server/domain';
 import { pulsePage } from '@/server/page';
 import { JobsView } from './jobs-view';
 
@@ -57,11 +57,13 @@ export async function JobsPage({
   const page = await pulsePage(routes.jobs({ tab: tab === 'open' ? undefined : tab }), 'jobs');
   if (page.blocked) return <PageBlocked title="Jobs" role={page.access.role} />;
   const canManage = page.can('job:manage');
-  const [jobs, clients, jobTypes, sites] = await Promise.all([
-    soft<JobListItemDTO[]>(listJobs(page.ctx, { tab })),
+  const [jobs, clients, jobTypes, sites, programs] = await Promise.all([
+    // Program jobs live under Programs (PULSE_PROGRAMS_SPEC 5.4); the client asks the same way.
+    soft<JobListItemDTO[]>(listJobs(page.ctx, { tab, programJobs: 'exclude' })),
     soft<ClientDTO[]>(listClients(page.ctx, {})),
     soft<JobTypeDTO[]>(listJobTypes(page.ctx)),
     soft<SiteDTO[]>(listSites(page.ctx)),
+    soft<number>(countTrackedPrograms(page.ctx)),
   ]);
   const risk = first(query.risk)
     .split(',')
@@ -104,6 +106,7 @@ export async function JobsPage({
         sites={sites ?? []}
         today={site?.today ?? todayInZone('UTC')}
         initialViewId={first(query.view) || null}
+        trackedPrograms={programs ?? 0}
       />
     </Page>
   );

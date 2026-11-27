@@ -182,7 +182,8 @@ function TopBar({
           <GlobalSearch menus={menus} extraPages={extraPages} />
           <OrgSwitcher org={org} orgs={orgs} />
           <ContextSwitcher />
-          <div className="flex min-w-0 items-center gap-0.5">
+          {/* shrink-0: the icon buttons never squeeze under each other or the notification badge. */}
+          <div className="flex shrink-0 items-center gap-0.5">
             <span className="hidden sm:contents">
               <TransactionsTray />
               <PrintersPopover />

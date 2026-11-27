@@ -67,9 +67,9 @@ async function fetchBucket(bucket: Bucket): Promise<AlertDTO[]> {
 }
 
 const SEVERITY = {
-  critical: { label: 'Urgent', icon: CircleAlert, chip: 'bg-danger-subtle text-danger-text', tone: 'danger' },
-  warning: { label: 'Heads up', icon: TriangleAlert, chip: 'bg-warning-subtle text-warning-text', tone: 'warning' },
-  info: { label: 'Good to know', icon: Info, chip: 'bg-muted text-icon-strong', tone: 'neutral' },
+  critical: { label: 'Urgent', icon: CircleAlert, tone: 'danger' },
+  warning: { label: 'Heads up', icon: TriangleAlert, tone: 'warning' },
+  info: { label: 'Good to know', icon: Info, tone: 'neutral' },
 } as const;
 
 export interface AlertsViewProps {
@@ -428,7 +428,7 @@ function AlertRow({
   return (
     <li className={cn('flex gap-3 px-4 py-3.5', picked && 'bg-selected')} data-testid="alert-row" data-kind={alert.kind} data-status={alert.status} data-alert-id={alert.id}>
       {canAct ? <Checkbox size="sm" className="mt-1.5" aria-label={`Pick: ${alert.title}`} checked={picked} onCheckedChange={(value) => onPick(value === true)} /> : null}
-      <span aria-hidden className={cn('mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg', severity.chip)}>
+      <span aria-hidden className="mt-0.5 flex size-8 shrink-0 items-center justify-center text-icon">
         <Icon className="size-4" />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-start lg:gap-4">
@@ -437,21 +437,21 @@ function AlertRow({
             <h3 className="text-sm font-semibold text-fg" data-testid="alert-title">
               {alert.title}
             </h3>
-            <Badge tone={severity.tone} size="sm">
+            <Badge tone={severity.tone}>
               {severity.label}
             </Badge>
             {alert.status === 'snoozed' && alert.snoozedUntil ? (
-              <Badge tone="neutral" size="sm" icon={<AlarmClock aria-hidden />}>
+              <Badge tone="neutral" icon={<AlarmClock aria-hidden />}>
                 Back on {shortDate(alert.snoozedUntil)}
               </Badge>
             ) : null}
             {alert.status === 'resolved' ? (
-              <Badge tone="success" size="sm" icon={<Check aria-hidden />}>
+              <Badge tone="success" icon={<Check aria-hidden />}>
                 {alert.resolution === 'cleared' ? 'Cleared on its own' : 'Marked done'}
               </Badge>
             ) : null}
             {alert.status === 'dismissed' ? (
-              <Badge tone="neutral" size="sm" icon={<BellOff aria-hidden />}>
+              <Badge tone="neutral" icon={<BellOff aria-hidden />}>
                 Dismissed
               </Badge>
             ) : null}

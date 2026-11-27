@@ -109,7 +109,7 @@ export function ProfilePage() {
                     <span>{data.user.title ?? 'No title yet'}</span>
                     <span aria-hidden className="text-fg-muted">·</span>
                     <span>{data.user.email}</span>
-                    <Badge tone="primary">{ROLE_LABEL[data.role]}</Badge>
+                    <Badge>{ROLE_LABEL[data.role]}</Badge>
                   </p>
                   <p className="mt-1 h-5 text-sm leading-5 text-fg-muted">Member since {formatDate(data.user.createdAt)}</p>
                 </>
