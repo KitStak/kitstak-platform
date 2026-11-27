@@ -18,6 +18,11 @@ empty search box suggests what they will probably want next.
 | Projects | Quick + full search | `apps/projects/src/server/domain/search.ts`, `search-full.ts` |
 | Pulse | Search page + API | `apps/pulse/src/server/domain/search.ts` |
 | Cross-app | Projects and Pulse already search CRM/WMS records for link pickers | `apps/projects/src/server/integrations/*`, `apps/pulse/src/server/integrations` |
+| Cross-app links | One link graph from any record to any record (`core.record_links`, added with Programs) | `packages/db/src/schema/core/record-links.ts`, `packages/db/src/record-links.ts` |
+
+`core.record_links` is useful for ranking and display: a hit can show what it is linked to
+("Order #1042 · linked to Acme deal"), and records linked to something the person just opened can
+rank higher. It is not a search index, and permission checks still belong to each app.
 
 All apps share one Postgres. WMS data lives in a per-org schema (`@kitstak/db/wms-tenants`).
 Every app already knows how to search its own records with its own permission checks.
@@ -133,7 +138,9 @@ attached to. Searching inside file contents (PDF text, OCR) is a later phase.
    - Create `packages/search` (types, signed token helpers, merge + rank functions with unit tests).
    - Build `MasterSearch` in the Portal; wire it into the home box and the Ctrl/Cmd+K palette.
 2. **Providers**, one app at a time, each behind its entitlement:
-   - Projects: projects, tasks, files, people.
+   - Projects: projects, Programs (`pm.projects.kind = 'program'`), tasks and builds
+     (`pm.tasks.kind = 'build'`), files, people. Programs and builds get their own `type` so they
+     group and filter apart from plain projects and tasks.
    - CRM: deals, accounts, contacts, files.
    - WMS: orders, work orders, receipts, SKUs, clients, files.
    - Pulse: jobs, customers.
