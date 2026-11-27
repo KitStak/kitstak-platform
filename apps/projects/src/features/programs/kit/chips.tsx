@@ -18,17 +18,21 @@ import { HEALTH_TEXT, healthBasisText, lockText, paletteColor, targetText, targe
 /* Program identity                                                                               */
 /* ---------------------------------------------------------------------------------------------- */
 
-/** The program glyph tile. Programs default to the repeat glyph in their color. */
-export function ProgramIcon({ icon, color, size = 20, className }: { readonly icon?: string | null; readonly color?: string | null; readonly size?: number; readonly className?: string }) {
+/**
+ * The program mark: the program's glyph (the repeat glyph by default) in KitStak red, with no tile
+ * or backdrop behind it. Every program shows the same red mark; `color` still tints other program
+ * pieces (variant dots, charts) but not this one. It keeps its `size` box so rows stay aligned.
+ */
+export function ProgramIcon({ icon, size = 20, className }: { readonly icon?: string | null; readonly color?: string | null; readonly size?: number; readonly className?: string }) {
   const glyph = (icon && ENTITY_ICONS[icon]) || Repeat2;
-  const tone = paletteColor(color);
   return (
     <span
       aria-hidden
-      className={cn('inline-flex shrink-0 items-center justify-center rounded-md', className)}
-      style={{ width: size, height: size, background: `var(--label-${tone}-subtle)`, color: `var(--label-${tone}-text)` }}
+      data-testid="program-icon"
+      className={cn('inline-flex shrink-0 items-center justify-center', className)}
+      style={{ width: size, height: size, color: 'var(--primary)' }}
     >
-      {createElement(glyph, { style: { width: Math.round(size * 0.62), height: Math.round(size * 0.62) } })}
+      {createElement(glyph, { style: { width: Math.round(size * 0.8), height: Math.round(size * 0.8) } })}
     </span>
   );
 }

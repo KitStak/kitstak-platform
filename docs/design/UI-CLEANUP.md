@@ -13,7 +13,7 @@ Audit date: 2026-11-25, local dev, `admin@kitstak.io` on org `kitstak`, 1440 px 
 
 | Color | Means | Used for | Never used for |
 | --- | --- | --- | --- |
-| Crimson (`--primary`) | KitStak, "do this" | Logo, the one primary button, active nav underline | Data bars, progress, meters, bad news |
+| Crimson (`--primary`) | KitStak, "do this" | Logo, the one primary button, active nav underline, the Projects program mark (bare glyph, no tile) | Data bars, progress, meters, bad news |
 | Danger (`--danger`) | Losing, broken, late | Critical pills, a negative number that matters | Brand, buttons that are not destructive |
 | Warning (`--warning`) | Might go wrong | Caution pills | Highlighted bands, whole rows |
 | Success (`--success`) | Done, healthy | Positive pills, a good delta | Times, plain counts |
