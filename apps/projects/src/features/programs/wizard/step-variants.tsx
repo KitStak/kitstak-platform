@@ -17,7 +17,7 @@ function KitCell({ row, items, onLink }: { readonly row: EditorRow; readonly ite
   if (linked) {
     return (
       <span className="inline-flex max-w-full items-center gap-1">
-        <Badge tone="success" size="sm" icon={<CheckCircle2 aria-hidden />} className="min-w-0"><span className="truncate" title={linked.name}>Kit found</span></Badge>
+        <Badge tone="success" icon={<CheckCircle2 aria-hidden />} className="min-w-0"><span className="truncate" title={linked.name}>Kit found</span></Badge>
         <IconButton size="sm" label={`Unlink ${linked.name}`} icon={<X aria-hidden />} onClick={() => onLink(null)} className="size-5" />
       </span>
     );

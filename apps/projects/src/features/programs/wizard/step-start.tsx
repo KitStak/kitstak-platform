@@ -130,7 +130,7 @@ export function StepStart({ state, set, data, onPickDeal, onPickTemplate, onPick
               </span>
               {deal.programKey ? (
                 <Tooltip content={`This deal already has a program: ${deal.programKey}`}>
-                  <span tabIndex={0} className="rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-focus"><Badge tone="info" size="sm">Has a program</Badge></span>
+                  <span tabIndex={0} className="rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-focus"><Badge tone="info">Has a program</Badge></span>
                 </Tooltip>
               ) : null}
             </Option>

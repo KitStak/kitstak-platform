@@ -139,7 +139,7 @@ function ProjectTabs({ tabs, active, projectKey, triageCount }: { readonly tabs:
       <>
         <Icon aria-hidden className="size-4" />
         {meta.label}
-        {t === 'triage' && triageCount > 0 ? <CountBadge count={triageCount} tone="primary" ringClassName="ring-transparent" label={`${triageCount} waiting`} /> : null}
+        {t === 'triage' && triageCount > 0 ? <CountBadge count={triageCount} tone="neutral" label={`${triageCount} waiting`} /> : null}
       </>
     );
   };

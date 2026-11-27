@@ -81,12 +81,12 @@ function VersionsRail({ versions, selectedId, onSelect, onNew, onAction }: { rea
                 <span className="flex flex-wrap items-center gap-1.5">
                   <span className="rounded-sm bg-sunken px-1.5 text-xs font-semibold text-fg tabular-nums">{versionName(version)}</span>
                   {version.status === 'published' ? (
-                    <Badge tone={STATE_TONE[version.state]} size="sm">
+                    <Badge tone={STATE_TONE[version.state]}>
                       {stateText(version)}
                     </Badge>
                   ) : null}
-                  {version.reviewStatus === 'waiting' ? <Badge tone="warning" size="sm">Waiting for review</Badge> : null}
-                  {version.reviewStatus === 'sent_back' ? <Badge tone="danger" size="sm">Sent back</Badge> : null}
+                  {version.reviewStatus === 'waiting' ? <Badge tone="warning">Waiting for review</Badge> : null}
+                  {version.reviewStatus === 'sent_back' ? <Badge tone="danger">Sent back</Badge> : null}
                 </span>
                 <span className="text-xs text-fg-secondary tabular-nums">{ranges.get(version.id)}</span>
                 {version.label ? <span className="truncate text-xs font-medium text-fg">{version.label}</span> : null}
@@ -643,7 +643,7 @@ function OtherPrices() {
                     </span>
                     <span className="flex items-center gap-2">
                       <span className="tabular-nums">{formatUnitPrice(job.unitPrice)}</span>
-                      {job.mismatch && card ? <Badge tone="warning" size="sm">{`Pulse bills ${formatUnitPrice(job.unitPrice)}, card says ${formatUnitPrice(card)}`}</Badge> : <Badge tone="success" size="sm">Matches the card</Badge>}
+                      {job.mismatch && card ? <Badge tone="warning">{`Pulse bills ${formatUnitPrice(job.unitPrice)}, card says ${formatUnitPrice(card)}`}</Badge> : <Badge tone="success">Matches the card</Badge>}
                     </span>
                   </li>
                 ))}
@@ -661,7 +661,7 @@ function OtherPrices() {
                         <span className="min-w-0 truncate text-fg">{fee.name}</span>
                         <span className="flex items-center gap-2">
                           <span className="tabular-nums">{formatUnitPrice(rate)}</span>
-                          {mismatch ? <Badge tone="warning" size="sm">{`WMS bills ${formatUnitPrice(rate)}, card says ${formatUnitPrice(card)}`}</Badge> : null}
+                          {mismatch ? <Badge tone="warning">{`WMS bills ${formatUnitPrice(rate)}, card says ${formatUnitPrice(card)}`}</Badge> : null}
                         </span>
                       </li>
                     );

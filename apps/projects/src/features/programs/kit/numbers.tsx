@@ -146,7 +146,7 @@ export function RunLine({ run, unit, withDate = true, showState = true, moneyHid
         <span className="shrink-0 text-fg-secondary tabular-nums">{doneOfText(run.done, run.builds, 'done')}</span>
       </span>
       {showState ? (
-        <Badge tone={RUN_STATE_TONE[run.state]} size="sm" className="shrink-0">
+        <Badge tone={RUN_STATE_TONE[run.state]} className="shrink-0">
           {RUN_STATE_TEXT[run.state]}
         </Badge>
       ) : null}

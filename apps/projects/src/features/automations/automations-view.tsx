@@ -46,6 +46,8 @@ import {
 } from '@/components/ui';
 import { EntityIcon } from '@/components/pm';
 import { Page } from '@/components/layout/page';
+import { routes } from '@/lib/routes';
+import { StatRow, StatTile } from '@kitstak/ui/dashboard';
 import { SCHEDULED_TRIGGER_TYPES } from '@/lib/automation-types';
 import type { AutomationDTO, AutomationRunRowDTO, ProjectSummary } from '@/lib/types';
 import { describeAutomation } from '@/server/automations/engine';
@@ -71,6 +73,12 @@ export interface AutomationRow extends AutomationDTO {
 
 type Tab = 'rules' | 'recipes' | 'history' | 'apps';
 type StateFilter = 'all' | 'on' | 'off';
+const STATE_FILTERS: readonly StateFilter[] = ['all', 'on', 'off'];
+const RUN_FILTERS: readonly RunFilter[] = ['all', 'success', 'failed'];
+
+function pickParam<T extends string>(value: string | null | undefined, allowed: readonly T[], fallback: T): T {
+  return value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
 
 function useUrlState() {
   const router = useRouter();
@@ -139,7 +147,7 @@ function RecipeCard({
       </p>
       <div className="flex items-center justify-between gap-2">
         {recipe.needs ? (
-          <Badge tone={connected ? 'info' : 'neutral'} size="sm">
+          <Badge tone={connected ? 'info' : 'neutral'}>
             {recipe.needs === 'crm' ? 'Uses KitStak CRM' : 'Uses KitStak WMS'}
             {connected ? '' : ' (not connected)'}
           </Badge>
@@ -246,7 +254,7 @@ function RuleCard({
             ) : (
               <span className="text-fg-muted">Hasn’t run yet</span>
             )}
-            {!rule.enabled ? <Badge size="sm">Off</Badge> : null}
+            {!rule.enabled ? <Badge>Off</Badge> : null}
           </div>
         </div>
       </div>
@@ -299,30 +307,6 @@ function RuleCard({
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  readonly label: string;
-  readonly value: number;
-  readonly tone?: 'danger';
-}) {
-  return (
-    <div className="flex min-w-0 flex-col rounded-xl border border-border-subtle bg-panel px-4 py-3 shadow-xs">
-      <span
-        className={cn(
-          'text-2xl font-semibold tabular-nums',
-          tone === 'danger' && value > 0 ? 'text-danger-text' : 'text-fg',
-        )}
-      >
-        {value}
-      </span>
-      <span className="truncate text-xs text-fg-muted">{label}</span>
-    </div>
-  );
-}
-
 export function AutomationsView({
   rules,
   projects,
@@ -343,9 +327,12 @@ export function AutomationsView({
   ) as Tab;
   const projectFilter = params?.get('project') ?? 'all';
   const [query, setQuery] = useState('');
-  const [stateFilter, setStateFilter] = useState<StateFilter>('all');
+  // In the URL so the tiles above the list link to it already filtered (`?state=on`, `?result=failed`).
+  const stateFilter: StateFilter = pickParam(params?.get('state'), STATE_FILTERS, 'all');
+  const setStateFilter = (value: StateFilter) => set({ state: value === 'all' ? null : value });
   const [recipeCategory, setRecipeCategory] = useState<RecipeCategory | 'All'>('Popular');
-  const [runFilter, setRunFilter] = useState<RunFilter>('all');
+  const runFilter: RunFilter = pickParam(params?.get('result'), RUN_FILTERS, 'all');
+  const setRunFilter = (value: RunFilter) => set({ result: value === 'all' ? null : value });
   const [localEnabled, setLocalEnabled] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [builder, setBuilder] = useState<{ open: boolean; draft: AutomationDraft; recipeName?: string }>({
     open: false,
@@ -643,12 +630,12 @@ export function AutomationsView({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Turned on" value={list.filter((r) => r.enabled).length} />
-              <Stat label="Turned off" value={list.filter((r) => !r.enabled).length} />
-              <Stat label="Runs in the last 7 days" value={runsThisWeek.length} />
-              <Stat label="Stopped with a problem" value={stoppedThisWeek} tone="danger" />
-            </div>
+            <StatRow label="Automation totals">
+              <StatTile label="Turned on" value={list.filter((r) => r.enabled).length} href={routes.automations({ state: 'on' })} />
+              <StatTile label="Turned off" value={list.filter((r) => !r.enabled).length} href={routes.automations({ state: 'off' })} />
+              <StatTile label="Runs in the last 7 days" value={runsThisWeek.length} href={routes.automations({ tab: 'history' })} />
+              <StatTile label="Stopped with a problem" value={stoppedThisWeek} href={routes.automations({ tab: 'history', result: 'failed' })} />
+            </StatRow>
             <div className="flex flex-wrap items-center gap-2">
               <SearchInput
                 value={query}

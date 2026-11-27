@@ -90,7 +90,15 @@ export const routes = {
   goals: () => '/goals',
   goal: (id: string) => `/goals?goal=${encodeURIComponent(id)}`,
   dashboards: () => '/dashboards',
-  automations: () => '/automations',
+  /** Automations, optionally on a tab and filtered: `/automations?state=on`, `/automations?tab=history&result=failed`. */
+  automations: (opts?: { tab?: 'rules' | 'recipes' | 'apps' | 'history'; state?: 'on' | 'off'; result?: 'success' | 'failed' }) => {
+    const params = new URLSearchParams();
+    if (opts?.tab && opts.tab !== 'rules') params.set('tab', opts.tab);
+    if (opts?.state) params.set('state', opts.state);
+    if (opts?.result) params.set('result', opts.result);
+    const query = params.toString();
+    return query ? `/automations?${query}` : '/automations';
+  },
   templates: () => '/templates',
   publicForm: (token: string) => `/forms/${encodeURIComponent(token)}`,
   /** Intake forms list (studio); `form(id, tab?)` opens the builder for one form. */

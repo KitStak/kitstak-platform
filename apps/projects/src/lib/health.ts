@@ -49,15 +49,12 @@ export function healthHint(view: HealthView): string | null {
 export type ProgressTone = 'primary' | 'success' | 'warning' | 'danger';
 
 /**
- * Progress rings and bars are coloured by the one health, never by how full they are. On track
- * is neutral ink (progress is not an error, and red is the brand colour); amber only for at risk,
- * red only for off track. A full ring turns green on its own.
+ * Progress is a quantity, so rings and bars are drawn in the Projects data color whatever the
+ * health (docs/design/UI-CLEANUP.md): the health pill next to them already says at risk or off
+ * track, and an amber or red bar would say it twice. Only an achieved goal turns green.
  */
 export function healthProgressTone(health: ProjectHealth | GoalHealth): ProgressTone {
-  if (health === 'off_track' || health === 'missed') return 'danger';
-  if (health === 'at_risk') return 'warning';
-  if (health === 'achieved') return 'success';
-  return 'primary';
+  return health === 'achieved' ? 'success' : 'primary';
 }
 
 /** Tailwind background class for a small health dot (sidebar, home). On track stays green. */

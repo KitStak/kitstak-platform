@@ -237,7 +237,7 @@ function KpiRow({ summary, lastMonth, lastMonthLoading }: { readonly summary: Pr
         extra={
           <div className="flex flex-wrap items-center gap-1.5">
             {targetBp !== null && target ? (
-              <Badge tone={topUp > BigInt(0) ? 'warning' : targetTone(targetBp)} size="sm" icon={<Target aria-hidden />}>
+              <Badge tone={topUp > BigInt(0) ? 'warning' : targetTone(targetBp)} icon={<Target aria-hidden />}>
                 {`${formatPercentBp(targetBp)} of ${formatCents(target)} target`}
               </Badge>
             ) : null}

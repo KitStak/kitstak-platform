@@ -351,7 +351,7 @@ export function VariantsTab({ kitItems }: { readonly kitItems: readonly KitItem[
                   <span className="flex items-center gap-2">
                     <span aria-hidden className="inline-block size-2 shrink-0 rounded-full" style={{ background: colors.get(variant.id) }} />
                     <span className={cn('min-w-0 flex-1 truncate text-sm font-medium', retired ? 'text-fg-muted' : 'text-fg')}>{variant.name}</span>
-                    <Badge tone={retired ? 'neutral' : 'success'} size="sm">
+                    <Badge tone={retired ? 'neutral' : 'success'}>
                       {retired ? 'Retired' : 'Active'}
                     </Badge>
                   </span>
@@ -518,7 +518,7 @@ export function VariantsTab({ kitItems }: { readonly kitItems: readonly KitItem[
                       {moneyHidden ? null : <span className="block text-2xs text-fg-muted tabular-nums">{formatCents(variant.monthRevenueCents, { cents: true })}</span>}
                     </td>
                     <td className="px-1.5">
-                      <Badge tone={retired ? 'neutral' : 'success'} size="sm">
+                      <Badge tone={retired ? 'neutral' : 'success'}>
                         {retired ? 'Retired' : 'Active'}
                       </Badge>
                     </td>

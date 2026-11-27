@@ -134,7 +134,7 @@ function TemplateCard({ template, selected, onSelect, onOpen }: { readonly templ
           <p className="truncate font-semibold text-fg">{template?.name ?? 'Blank project'}</p>
           {template ? (
             <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-fg-muted">
-              {template.builtIn === false ? <Badge tone="info" size="sm">Your team</Badge> : null}
+              {template.builtIn === false ? <Badge tone="info">Your team</Badge> : null}
               {[template.category, taskCountText(template), duration].filter(Boolean).map((part, index) => (
                 // The dot travels with the part after it, so a wrapped line never ends on "·".
                 <span key={part} className="whitespace-nowrap">
@@ -217,7 +217,7 @@ function TemplatePreview({ template, onUse }: { readonly template: TemplateDTO |
             {visible.map((task, index) => (
               <li key={`${index}-${task.title}`} className="flex items-center gap-2 truncate text-fg-secondary">
                 {task.isMilestone ? (
-                  <Flag aria-label="Milestone" className="size-3 shrink-0 text-primary-text" />
+                  <Flag aria-label="Milestone" className="size-3 shrink-0 text-icon" />
                 ) : (
                   <span aria-hidden className="mx-[3px] size-1.5 shrink-0 rounded-full bg-border-strong" />
                 )}

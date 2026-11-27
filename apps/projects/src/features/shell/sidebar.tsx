@@ -58,7 +58,7 @@ interface NavItem {
   readonly icon: ReactNode;
   readonly match: (pathname: string) => boolean;
   readonly badge?: number;
-  readonly badgeTone?: 'danger' | 'neutral' | 'primary';
+  readonly badgeTone?: 'neutral' | 'critical';
   readonly badgeLabel?: string;
   /** Indent under the item above (Floor today under Programs). */
   readonly nested?: boolean;
@@ -81,7 +81,7 @@ function NavLink({ item, collapsed }: { readonly item: NavItem; readonly collaps
           {item.icon}
           {item.badge ? (
             <span className="absolute -top-0.5 -right-0.5">
-              <CountBadge count={item.badge} tone={item.badgeTone ?? 'danger'} ringClassName="ring-[var(--surface-app)]" />
+              <CountBadge count={item.badge} tone={item.badgeTone ?? 'neutral'} ringClassName="ring-[var(--surface-app)]" />
             </span>
           ) : null}
         </Link>
@@ -94,7 +94,7 @@ function NavLink({ item, collapsed }: { readonly item: NavItem; readonly collaps
         {item.icon}
       </span>
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
-      {item.badge ? <CountBadge count={item.badge} tone={item.badgeTone ?? 'danger'} label={item.badgeLabel} /> : null}
+      {item.badge ? <CountBadge count={item.badge} tone={item.badgeTone ?? 'neutral'} label={item.badgeLabel} /> : null}
     </Link>
   );
 }

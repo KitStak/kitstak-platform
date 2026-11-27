@@ -35,7 +35,7 @@ export const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(f
         'disabled:pointer-events-none disabled:opacity-[0.38] data-[state=open]:bg-selected',
         iconOnly ? 'w-8 justify-center' : 'px-2.5',
         active
-          ? 'bg-primary-selected text-primary-text hover:bg-primary-selected-hover data-[state=open]:bg-primary-selected-hover'
+          ? 'bg-primary-selected text-fg hover:bg-primary-selected-hover data-[state=open]:bg-primary-selected-hover'
           : 'text-fg',
         className,
       )}
@@ -46,7 +46,7 @@ export const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(f
       {badge ? (
         <span
           className={cn(
-            'inline-flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs leading-4 font-semibold text-primary-fg tabular-nums',
+            'inline-flex min-w-4 items-center justify-center rounded-full bg-muted px-1 text-2xs leading-4 font-semibold text-fg-secondary tabular-nums',
             iconOnly && 'absolute -top-1 -right-1 ring-2 ring-[var(--surface-panel)]',
           )}
         >
@@ -95,7 +95,7 @@ export function ToolbarPopover({ icon, label, text, active, badge, iconOnly, wid
             type="button"
             aria-label={`Clear ${label.toLowerCase()}`}
             onClick={onClear}
-            className="inline-flex h-8 w-6 items-center justify-center rounded-r-sm bg-primary-selected text-primary-text outline-none hover:bg-primary-selected-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            className="inline-flex h-8 w-6 items-center justify-center rounded-r-sm bg-primary-selected text-fg outline-none hover:bg-primary-selected-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
             <X aria-hidden className="size-3.5" />
           </button>

@@ -217,7 +217,7 @@ export function ProgramFrame({ children }: { readonly children: React.ReactNode 
               />
               <ProgramStatusPill status={program.status} className="shrink-0" />
               <span className="max-sm:hidden">
-                <HealthWithBasis health={program.health} basis={program.healthBasis} auto={program.healthAuto} size="md" />
+                <HealthWithBasis health={program.health} basis={program.healthBasis} auto={program.healthAuto} />
               </span>
             </div>
             <MetaLine program={program} className="mt-0.5" />

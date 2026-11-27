@@ -166,12 +166,12 @@ function CycleListItem({ cycle, selected, onSelect }: { readonly cycle: CycleDTO
         data-testid="cycle-item"
         className={cn(
           'flex w-full flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left outline-none transition-colors focus-visible:outline-2 focus-visible:outline-focus',
-          selected ? 'border-primary bg-primary-subtle/40' : 'border-transparent hover:bg-hover',
+          selected ? 'border-border-strong bg-selected' : 'border-transparent hover:bg-hover',
         )}
       >
         <span className="flex items-center justify-between gap-2">
           <span className="truncate text-sm font-semibold text-fg">{cycleName(cycle)}</span>
-          {cycle.state === 'current' ? <Badge tone="primary" size="sm">Current</Badge> : cycle.state === 'upcoming' ? <Badge tone="outline" size="sm">Upcoming</Badge> : null}
+          {cycle.state === 'current' ? <Badge tone="info">Current</Badge> : cycle.state === 'upcoming' ? <Badge tone="neutral">Upcoming</Badge> : null}
         </span>
         <span className="text-xs text-fg-muted">{formatRange(cycle.startDate, cycle.endDate)}</span>
         <span className="flex items-center gap-2">
@@ -238,7 +238,7 @@ function CycleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
         <DialogHeader
-          icon={<Repeat aria-hidden className="size-5 text-primary-text" />}
+          icon={<Repeat aria-hidden className="size-5 text-icon" />}
           title={cycle ? `Edit ${cycleName(cycle)}` : 'Plan a cycle'}
           description="A short round of work, usually one or two weeks."
         />
@@ -477,7 +477,7 @@ function CycleDetail({ cycleId, backlog, onDeleted, onSelect }: { readonly cycle
         <div className="min-w-[min(100%,260px)] flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-fg">{cycleName(cycle)}</h2>
-            <Badge tone={cycle.state === 'current' ? 'primary' : cycle.state === 'done' ? 'success' : 'outline'}>{STATE_LABEL[cycle.state]}</Badge>
+            <Badge tone={cycle.state === 'current' ? 'info' : cycle.state === 'done' ? 'success' : 'neutral'}>{STATE_LABEL[cycle.state]}</Badge>
           </div>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg-secondary">
             <span className="inline-flex items-center gap-1">
@@ -494,7 +494,7 @@ function CycleDetail({ cycleId, backlog, onDeleted, onSelect }: { readonly cycle
           </p>
           {cycle.goal ? (
             <p className="mt-2 flex items-start gap-1.5 text-sm text-fg">
-              <Target aria-hidden className="mt-0.5 size-4 shrink-0 text-primary-text" />
+              <Target aria-hidden className="mt-0.5 size-4 shrink-0 text-icon" />
               {cycle.goal}
             </p>
           ) : null}

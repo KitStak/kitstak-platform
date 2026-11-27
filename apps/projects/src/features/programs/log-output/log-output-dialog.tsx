@@ -552,7 +552,7 @@ function LogBody({ programKey, date, runId, buildIds, startOnClose, onDateChange
           </Button>
         ) : null}
         {buildIds?.length ? (
-          <Badge tone="info" size="sm">
+          <Badge tone="info">
             {buildIds.length} {buildIds.length === 1 ? 'build' : 'builds'} picked
           </Badge>
         ) : (
@@ -699,8 +699,8 @@ function LogBody({ programKey, date, runId, buildIds, startOnClose, onDateChange
                 <StatusIcon category={row.statusCategory} size={16} />
                 <span className="w-[68px] shrink-0 font-key text-xs text-fg-muted">{row.key}</span>
                 {row.variant ? <VariantChip name={row.variant.name} color={row.variant.color} size="md" /> : <span className="truncate text-sm text-fg">{row.title}</span>}
-                {row.unplanned ? <Badge tone="info" size="sm">Unplanned</Badge> : null}
-                {isCarried(row, date) ? <Badge tone="neutral" size="sm">From {shortDate(row.buildDate)}</Badge> : null}
+                {row.unplanned ? <Badge tone="info">Unplanned</Badge> : null}
+                {isCarried(row, date) ? <Badge tone="neutral">From {shortDate(row.buildDate)}</Badge> : null}
                 {conflict ? <span className="basis-full text-xs font-medium text-danger-text" role="alert">{conflict}</span> : null}
               </span>
               <span role="gridcell" className="w-16 text-right text-sm text-fg-secondary tabular-nums max-sm:w-auto">
@@ -784,7 +784,7 @@ function LogBody({ programKey, date, runId, buildIds, startOnClose, onDateChange
               <Plus aria-hidden className="size-4 text-icon" />
               <span className="w-[68px] shrink-0 text-xs text-fg-muted">New</span>
               <VariantChip name={entry.variantName} color={entry.variantColor} size="md" />
-              <Badge tone="info" size="sm">
+              <Badge tone="info">
                 Unplanned
               </Badge>
             </span>

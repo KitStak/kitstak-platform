@@ -129,17 +129,17 @@ export function ImportDialog({ programKey, kind, onClose }: { readonly programKe
           ) : (
             <>
               <div className="flex flex-wrap gap-2">
-                <Badge tone="success" size="md">
+                <Badge tone="success">
                   {okRows.length} {okRows.length === 1 ? 'row' : 'rows'} ready
                 </Badge>
-                <Badge tone="neutral" size="md">
+                <Badge tone="neutral">
                   {unitLabel(preview.totals.units, unit)}
                 </Badge>
-                <Badge tone="info" size="md">
+                <Badge tone="info">
                   {preview.totals.builds} {preview.totals.builds === 1 ? 'build' : 'builds'} made
                 </Badge>
                 {problems.length ? (
-                  <Badge tone="warning" size="md">
+                  <Badge tone="warning">
                     {problems.length} could not be read
                   </Badge>
                 ) : null}

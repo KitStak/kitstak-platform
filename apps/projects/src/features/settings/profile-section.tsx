@@ -152,7 +152,7 @@ export function ProfileSection({
               )}
             </Field>
             <p className="flex flex-wrap items-center gap-1.5 text-sm text-fg-secondary sm:col-span-2">
-              <Badge tone="primary">{ROLE_WORDS[orgRole] ?? orgRole}</Badge> in {org.name}
+              <Badge tone="neutral">{ROLE_WORDS[orgRole] ?? orgRole}</Badge> in {org.name}
             </p>
           </div>
         </div>

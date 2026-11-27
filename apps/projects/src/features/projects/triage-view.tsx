@@ -315,7 +315,7 @@ function RequestRow({ item, selected, onSelect }: { readonly item: TriageItemDTO
         data-testid="triage-item"
         className={cn(
           'flex w-full items-start gap-2.5 border-l-2 px-3 py-2.5 text-left outline-none focus-visible:bg-hover',
-          selected ? 'border-primary bg-primary-subtle/40' : 'border-transparent hover:bg-hover',
+          selected ? 'border-border-strong bg-selected' : 'border-transparent hover:bg-hover',
         )}
       >
         <span className="mt-0.5 shrink-0">{item.priority !== 'none' ? <PriorityIcon priority={item.priority} /> : <span className="block size-4 rounded-full border border-dashed border-border-strong" aria-hidden />}</span>
@@ -330,7 +330,7 @@ function RequestRow({ item, selected, onSelect }: { readonly item: TriageItemDTO
           </span>
         </span>
         {item.state !== 'pending' && item.state !== 'snoozed' ? (
-          <Badge size="sm" tone={item.state === 'accepted' ? 'success' : item.state === 'merged' ? 'info' : 'neutral'}>
+          <Badge tone={item.state === 'accepted' ? 'success' : item.state === 'merged' ? 'info' : 'neutral'}>
             {STATE_TEXT[item.state]}
           </Badge>
         ) : null}
@@ -358,10 +358,10 @@ function RequestDetail({ item, onAction }: { readonly item: TriageItemDTO; reado
     <article className="flex min-w-0 flex-col gap-4 p-5" data-testid="triage-detail" aria-label={item.title}>
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
-          <Badge tone="outline" size="sm" icon={item.source === 'form' ? <ClipboardList aria-hidden /> : <FileText aria-hidden />}>
+          <Badge tone="neutral" icon={item.source === 'form' ? <ClipboardList aria-hidden /> : <FileText aria-hidden />}>
             {item.sourceLabel ?? SOURCE_TEXT[item.source]}
           </Badge>
-          <Badge size="sm" tone={item.state === 'accepted' ? 'success' : item.state === 'declined' ? 'neutral' : item.state === 'merged' ? 'info' : 'warning'}>
+          <Badge tone={item.state === 'accepted' ? 'success' : item.state === 'declined' ? 'neutral' : item.state === 'merged' ? 'info' : 'warning'}>
             {STATE_TEXT[item.state]}
             {item.state === 'snoozed' && item.snoozedUntil ? ` until ${item.snoozedUntil}` : ''}
           </Badge>

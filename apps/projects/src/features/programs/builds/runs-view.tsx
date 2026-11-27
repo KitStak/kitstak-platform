@@ -75,8 +75,8 @@ function BuildRow({ task, sheetRow, date, onSaved }: { readonly task: TaskSummar
         <StatusIcon category={task.statusCategory} color={status?.color} size={16} />
         <span className="w-20 shrink-0 font-key text-xs text-fg-muted">{task.key}</span>
         {build.variantName ? <VariantChip name={build.variantName} color={build.variantColor} size="md" /> : <span className="truncate text-fg">{task.title}</span>}
-        {build.unplanned ? <Badge tone="info" size="sm">Unplanned</Badge> : null}
-        {build.closedShort ? <Badge tone="warning" size="sm">Closed short</Badge> : null}
+        {build.unplanned ? <Badge tone="info">Unplanned</Badge> : null}
+        {build.closedShort ? <Badge tone="warning">Closed short</Badge> : null}
       </button>
       <PersonAvatar userId={task.assigneeId} size="xs" />
       <span className="w-44 shrink-0 max-md:w-auto">
@@ -136,9 +136,9 @@ function RunBlock({ run, tasks, open, onToggle }: { readonly run: RunDTO; readon
             </span>
           </span>
         </button>
-        <Badge tone={RUN_STATE_TONE[run.state]} size="sm" className="shrink-0 max-sm:hidden">
-          {RUN_STATE_TEXT[run.state]}
-        </Badge>
+        <span className="inline-flex shrink-0 max-sm:hidden">
+          <Badge tone={RUN_STATE_TONE[run.state]}>{RUN_STATE_TEXT[run.state]}</Badge>
+        </span>
         {!moneyHidden && run.revenueCents !== null && (run.revenueCents !== '0' || run.done > 0) ? <MoneyText cents={run.revenueCents} className="w-24 shrink-0 text-right text-sm font-semibold text-fg max-sm:hidden" /> : null}
         {capabilities.canLog && loggable ? (
           <Tooltip content="Log output for this run">

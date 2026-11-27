@@ -468,7 +468,7 @@ function LabelsField({
         >
           {chosen.length ? (
             chosen.map((label) => (
-              <Badge key={label.id} size="sm">
+              <Badge key={label.id}>
                 {label.name}
               </Badge>
             ))
@@ -739,18 +739,18 @@ export function FormBuilder({
             </span>
           ) : null}
           {draft.enabled ? (
-            <Badge tone="success" size="sm">
+            <Badge tone="success">
               Accepting responses
             </Badge>
           ) : (
-            <Badge size="sm">Turned off</Badge>
+            <Badge>Turned off</Badge>
           )}
           {draft.isPublic ? (
-            <Badge size="sm" tone="info">
+            <Badge tone="info">
               Anyone with the link
             </Badge>
           ) : (
-            <Badge size="sm">Workspace only</Badge>
+            <Badge>Workspace only</Badge>
           )}
         </span>
       }

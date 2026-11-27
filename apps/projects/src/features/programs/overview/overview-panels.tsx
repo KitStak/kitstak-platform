@@ -92,8 +92,8 @@ function RunBlock({ run, unit, builds }: { readonly run: RunDTO; readonly unit: 
                       ) : (
                         <span className="truncate text-sm text-fg">{item.title}</span>
                       )}
-                      {over > 0 ? <Badge tone="warning" size="sm">{`${unitLabel(String(over), unit)} over`}</Badge> : null}
-                      {item.build.locked && run.date < today ? <Badge tone="neutral" size="sm">Locked</Badge> : null}
+                      {over > 0 ? <Badge tone="warning">{`${unitLabel(String(over), unit)} over`}</Badge> : null}
+                      {item.build.locked && run.date < today ? <Badge tone="neutral">Locked</Badge> : null}
                     </span>
                     <QtyProgress built={item.build.builtQty} planned={item.build.plannedQty} unit={unit} className="col-span-2 col-start-2 sm:col-span-1 sm:col-start-auto sm:justify-self-end" />
                     <span className="row-start-1 col-start-3 sm:col-start-auto sm:row-start-auto">{item.assigneeId ? <PersonAvatar userId={item.assigneeId} size="xs" /> : <span className="inline-block size-5" />}</span>
@@ -181,7 +181,7 @@ export function PriceCardPanel() {
   return (
     <Panel
       title="Price card"
-      action={current?.number ? <Badge tone="success" size="sm">{`v${current.number} · since ${shortDate(current.effectiveFrom)}`}</Badge> : null}
+      action={current?.number ? <Badge tone="success">{`v${current.number} · since ${shortDate(current.effectiveFrom)}`}</Badge> : null}
     >
       {!current ? (
         <div className="flex flex-col gap-2">
@@ -200,9 +200,9 @@ export function PriceCardPanel() {
         </ul>
       )}
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {next?.number && current ? <Badge tone="info" size="sm">{`v${next.number} starts ${shortDate(next.effectiveFrom)}`}</Badge> : null}
-        {program.pendingRateChanges ? <Badge tone="warning" size="sm">{`${program.pendingRateChanges.count} rate ${program.pendingRateChanges.count === 1 ? 'change' : 'changes'} waiting`}</Badge> : null}
-        {program.draftsCount > 0 && !program.pendingRateChanges ? <Badge tone="neutral" size="sm">{program.draftsCount === 1 ? '1 draft' : `${program.draftsCount} drafts`}</Badge> : null}
+        {next?.number && current ? <Badge tone="info">{`v${next.number} starts ${shortDate(next.effectiveFrom)}`}</Badge> : null}
+        {program.pendingRateChanges ? <Badge tone="warning">{`${program.pendingRateChanges.count} rate ${program.pendingRateChanges.count === 1 ? 'change' : 'changes'} waiting`}</Badge> : null}
+        {program.draftsCount > 0 && !program.pendingRateChanges ? <Badge tone="neutral">{program.draftsCount === 1 ? '1 draft' : `${program.draftsCount} drafts`}</Badge> : null}
       </div>
       <div className="mt-3 flex flex-wrap gap-2 border-t border-border-subtle pt-3">
         <Button size="sm" variant="secondary" onClick={() => router.push(routes.programTab(key, 'price-card'))}>
@@ -360,7 +360,7 @@ export function PulsePanel({ parity }: { readonly parity: PulseParityDTO }) {
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="shrink-0 rounded-sm bg-sunken px-1.5 py-px text-2xs font-semibold tracking-[0.04em] text-fg-secondary tabular-nums">{parity.job.number}</span>
             <span className="min-w-0 truncate text-sm font-medium text-fg">{parity.job.name}</span>
-            {job ? <Badge tone={job.status === 'active' ? 'success' : 'neutral'} size="sm">{job.status === 'active' ? 'Active' : job.status.replace(/_/g, ' ')}</Badge> : null}
+            {job ? <Badge tone={job.status === 'active' ? 'success' : 'neutral'}>{job.status === 'active' ? 'Active' : job.status.replace(/_/g, ' ')}</Badge> : null}
           </div>
           {moneyHidden ? null : pulse.isLoading ? (
             <Skeleton height={36} />

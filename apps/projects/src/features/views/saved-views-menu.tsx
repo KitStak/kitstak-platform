@@ -167,7 +167,7 @@ export function SavedViewsMenu({ view, compact = false }: { readonly view: ViewS
               <Bookmark aria-hidden className="size-4 shrink-0 text-icon" />
             )}
             <span className={cn('truncate', compact && 'max-w-24')}>{title}</span>
-            {view.dirty ? <span aria-label="Unsaved changes" title="Unsaved changes" className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
+            {view.dirty ? <span aria-label="Unsaved changes" title="Unsaved changes" className="size-1.5 shrink-0 rounded-full bg-icon-strong" /> : null}
             <ChevronDown aria-hidden className="size-3.5 shrink-0 text-icon" />
           </button>
         </DropdownMenuTrigger>
@@ -176,7 +176,7 @@ export function SavedViewsMenu({ view, compact = false }: { readonly view: ViewS
           <DropdownMenuItem icon={<Bookmark aria-hidden />} onSelect={() => view.selectView(null)} description={`Every ${extras.noun?.singular ?? 'task'}, with your own filters`}>
             <span className="inline-flex items-center gap-2">
               {allLabel}
-              {!active ? <Check aria-hidden className="size-3.5 text-primary-text" /> : null}
+              {!active ? <Check aria-hidden className="size-3.5 text-fg" /> : null}
             </span>
           </DropdownMenuItem>
           {view.views.map((saved) => (
@@ -190,7 +190,7 @@ export function SavedViewsMenu({ view, compact = false }: { readonly view: ViewS
               <span className="inline-flex min-w-0 items-center gap-2">
                 <span className="truncate">{saved.name}</span>
                 {saved.isDefault ? <Star aria-hidden className="size-3 shrink-0 fill-warning text-warning" /> : null}
-                {active?.id === saved.id ? <Check aria-hidden className="size-3.5 shrink-0 text-primary-text" /> : null}
+                {active?.id === saved.id ? <Check aria-hidden className="size-3.5 shrink-0 text-fg" /> : null}
               </span>
             </DropdownMenuItem>
           ))}

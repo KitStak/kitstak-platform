@@ -50,7 +50,7 @@ export function MyWorkRow({
       onFocus={onFocusRow}
       className={cn(
         'group relative flex min-h-11 items-center gap-2 border-b border-border-subtle px-2 py-1.5 last:border-b-0 sm:gap-2.5 sm:pr-3',
-        'hover:bg-hover focus-within:bg-hover data-[active=true]:shadow-[inset_2px_0_0_var(--color-primary)]',
+        'hover:bg-hover focus-within:bg-hover data-[active=true]:shadow-[inset_2px_0_0_var(--color-border-strong)]',
       )}
     >
       <GripVertical aria-hidden className={cn('hidden size-3.5 shrink-0 text-fg-disabled opacity-0 sm:block', canEdit && 'cursor-grab group-hover:opacity-100')} />

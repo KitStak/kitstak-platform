@@ -110,7 +110,7 @@ function LabelRow({ label, count, canEdit, onDelete }: { readonly label: LabelDT
         </span>
       )}
       <span className="ml-auto flex items-center gap-2">
-        {shared ? <Badge size="sm">Every project</Badge> : <LabelPill name={name || label.name} color={label.color} className="hidden sm:inline-flex" />}
+        {shared ? <Badge>Every project</Badge> : <LabelPill name={name || label.name} color={label.color} className="hidden sm:inline-flex" />}
         <span className="w-14 text-right text-xs text-fg-muted tabular-nums">{count} {count === 1 ? 'task' : 'tasks'}</span>
         <IconButton label={`Delete label ${label.name}`} icon={<Trash2 aria-hidden />} size="sm" disabled={!canEdit || shared} onClick={onDelete} />
       </span>
@@ -389,8 +389,8 @@ export function CustomFieldsSettings({ highlight }: { readonly highlight?: boole
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2 truncate text-sm font-medium text-fg">
                     {field.name}
-                    {field.required ? <Badge size="sm" tone="warning">Required</Badge> : null}
-                    {shared ? <Badge size="sm">Every project</Badge> : null}
+                    {field.required ? <Badge tone="warning">Required</Badge> : null}
+                    {shared ? <Badge>Every project</Badge> : null}
                   </p>
                   <p className="truncate text-xs text-fg-muted">
                     {CUSTOM_FIELD_TYPE_LABELS[field.type]}

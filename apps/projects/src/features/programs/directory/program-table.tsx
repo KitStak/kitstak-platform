@@ -133,7 +133,7 @@ export function ProgramTable({ programs, ops, access, sort, dir, onSort, hidden,
       case 'status':
         return <ProgramStatusPill status={effectiveStatus(program)} />;
       case 'health':
-        return <HealthWithBasis health={program.health} basis={program.healthBasis} auto={program.healthAuto} size="sm" />;
+        return <HealthWithBasis health={program.health} basis={program.healthBasis} auto={program.healthAuto} />;
       case 'today':
         return program.today.builds === 0 ? <span className="text-fg-muted">No builds</span> : `${program.today.done} of ${program.today.builds}`;
       case 'units':
@@ -152,7 +152,7 @@ export function ProgramTable({ programs, ops, access, sort, dir, onSort, hidden,
           <span className="text-fg-muted">No target</span>
         ) : (
           <span title={targetText(program.month.targetBp)}>
-            <Badge tone={targetTone(program.month.targetBp)} size="sm" className="tabular-nums">
+            <Badge tone={targetTone(program.month.targetBp)} className="tabular-nums">
               {formatPercentBp(program.month.targetBp)}
             </Badge>
           </span>

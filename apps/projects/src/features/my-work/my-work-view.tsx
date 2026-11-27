@@ -365,7 +365,7 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
                   <ul
                     className={cn(
                       'overflow-hidden rounded-xl border bg-panel shadow-xs transition-[border-color,box-shadow]',
-                      droppable && dropTarget === group.key ? 'border-primary ring-2 ring-primary/25' : 'border-border-subtle',
+                      droppable && dropTarget === group.key ? 'border-border-strong ring-2 ring-[var(--focus-ring-soft)]' : 'border-border-subtle',
                     )}
                   >
                     {group.tasks.length === 0 ? (

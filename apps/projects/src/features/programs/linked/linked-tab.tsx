@@ -77,7 +77,7 @@ function LinkRow({ link, canEdit, onRemove }: { readonly link: LinkedRecordDTO; 
         <LinkedRecordChip record={withStatusLabel(link)} />
       </span>
       <span className="flex shrink-0 items-center gap-1.5 text-xs text-fg-muted">
-        {link.source !== 'record_links' ? <Badge tone="outline" size="sm">Older link</Badge> : null}
+        {link.source !== 'record_links' ? <Badge tone="outline">Older link</Badge> : null}
         {link.direction === 'in' ? <span className="max-sm:hidden">Links here</span> : null}
         <span className="max-sm:hidden">{TYPE_LABEL[link.type]}</span>
       </span>
@@ -229,7 +229,7 @@ export function LinkedTab({ initialLinks }: { readonly initialLinks: readonly Li
                           <LinkedRecordMark record={{ type: variant.coreItem ? 'core_item' : 'wms_product', app: variant.coreItem ? 'core' : 'wms' }} />
                           <span className="font-key text-xs text-fg-secondary">{kit.sku ?? ''}</span>
                           <span className="min-w-0 flex-1 truncate text-fg">{kit.name}</span>
-                          <Badge tone="neutral" size="sm">{`Uses kit · ${variant.name}`}</Badge>
+                          <Badge tone="neutral">{`Uses kit · ${variant.name}`}</Badge>
                         </li>
                       ))
                     : null}
