@@ -92,6 +92,13 @@
       "when": 1795478400000,
       "tag": "0007_core_record_links",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795564800000,
+      "tag": "0012_core_api_tokens",
+      "breakpoints": true
     }
   ]
 }

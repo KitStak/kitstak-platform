@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CreditCard, LayoutGrid, LogOut, Moon, Settings2, Sun, UserRound } from 'lucide-react';
+import { CreditCard, KeyRound, LayoutGrid, LogOut, Moon, Settings2, Sun, UserRound } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,6 +80,13 @@ export function UserMenu({
           <Link href="/settings/account" data-testid="menu-account">
             <UserRound aria-hidden className="size-4 text-icon" />
             My account
+          </Link>
+        </DropdownMenuItem>
+        {/* Personal tokens for programs such as Claude (docs/integration/AGENT_WRITE_API.md). */}
+        <DropdownMenuItem asChild>
+          <Link href="/settings/api-tokens" data-testid="menu-api-tokens">
+            <KeyRound aria-hidden className="size-4 text-icon" />
+            API tokens
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={toggleTheme} data-testid="menu-theme">
