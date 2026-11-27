@@ -1213,7 +1213,7 @@ signs in with that password. Five wrong tries lock a login for 15 minutes (`core
 
 ### 19.9 Round four fixes (the issues from the round three critics)
 
-Every major issue from `docs/pulse/round-3-critics.json` except CI, and the minor ones. CI and email reports stay
+Every major issue from `docs/archive/pulse-reviews/round-3-critics.json` except CI, and the minor ones. CI and email reports stay
 deferred.
 
 - **Company profit for any days.** Company costs are monthly, so a range that is not whole calendar months counts its
@@ -1269,7 +1269,7 @@ were reserved and not used.
 
 ### 19.10 Round five fixes (the issues from the round four critics)
 
-Every major and minor issue from `docs/pulse/round-4-critics.json` except CI. Email reports stay deferred.
+Every major and minor issue from `docs/archive/pulse-reviews/round-4-critics.json` except CI. Email reports stay deferred.
 
 - **Calendar day or work day.** Company costs are shared by calendar day unless the workspace picks work days in
   Settings (`settings.company_cost_spread`, migration 0013). Profit has a toggle for one look (`?spread=work_days`) that

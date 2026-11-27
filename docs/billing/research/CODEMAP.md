@@ -452,7 +452,7 @@ config.
 - `apps/pulse/AGENTS.md`: house rules (data access through domain functions, money as bigint cents, routes
   through builders, copy rule, no placeholders or dead buttons, every empty state teaches).
 - Copy rule enforcement: `apps/pulse/eslint.config.mjs` plus `apps/pulse/src/lib/copy-rules.test.ts`.
-- Critic rounds: `docs/pulse/round-1-critics.json` to `round-5-critics.json`. Each file is an array of three
+- Critic rounds: `docs/archive/pulse-reviews/round-1-critics.json` to `round-5-critics.json`. Each file is an array of three
   verdicts from three lenses: a buyer (VP of Operations), a principal product designer, and a staff engineer.
   Each verdict has `lens`, `overall_score_0_100`, a competitor baseline score, `pulse_is_better_product`,
   `wowed`, `category_scores` (10 categories with scores for both products and evidence), `blocking_issues`
