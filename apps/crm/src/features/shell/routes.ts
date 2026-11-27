@@ -9,7 +9,12 @@ export const routes = {
   /** Board with the item panel open (the board module reads `?item=`). */
   item: (orgSlug: string, boardId: string, itemId: string) => `/${orgSlug}/boards/${boardId}?item=${itemId}`,
   person: (orgSlug: string, userId: string) => `/${orgSlug}/admin/members?user=${userId}`,
-  templates: (orgSlug: string) => `/${orgSlug}/workspaces?templates=1`,
+  /**
+   * The template center. It is a wizard, not a page: `?wizard=templates` on any app URL opens it
+   * (WizardDeepLink in the shell), so the link lands on Home with the wizard open.
+   */
+  templates: (orgSlug: string, templateId?: string) =>
+    `/${orgSlug}?wizard=templates${templateId ? `&template=${encodeURIComponent(templateId)}` : ''}`,
   dashboard: (orgSlug: string, dashboardId: string) => `/${orgSlug}/dashboards/${dashboardId}`,
   importData: (orgSlug: string) => `/${orgSlug}/import`,
   admin: (orgSlug: string) => `/${orgSlug}/admin`,
