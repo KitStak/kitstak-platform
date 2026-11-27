@@ -40,7 +40,7 @@ export function ProgramBadge({ program, className }: { readonly program: JobProg
   const label = program.kind === 'program' ? `Program ${program.key ?? ''}`.trim() : `Builds of ${program.key ?? 'a program'}`;
   const tip = program.kind === 'program' ? `${program.name ?? program.key ?? 'A program'} in Projects bills to this job. Units, prices and fees come from it.` : `${program.buildCount === 1 ? 'A build' : `${program.buildCount} builds`} in Projects bill to this job.`;
   const body = (
-    <span className={cn('inline-flex h-7 items-center gap-1.5 rounded-md border border-border-subtle bg-primary-subtle px-2 text-xs font-medium text-primary-text pointer-coarse:h-11', className)} data-testid="job-program-badge">
+    <span className={cn('inline-flex h-7 items-center gap-1.5 rounded-md border border-border-subtle bg-panel px-2 text-xs font-medium text-fg pointer-coarse:h-11', className)} data-testid="job-program-badge">
       <Repeat aria-hidden className="size-3.5" />
       {label}
       {href ? <ExternalLink aria-hidden className="size-3" /> : null}
@@ -136,7 +136,7 @@ function ProgramCard({ job, data, holdsProgram }: { readonly job: JobDetailDTO; 
             <li key={block.programId} className="flex flex-col gap-3 px-4 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-subtle text-primary-text">
+                  <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border-subtle text-icon">
                     <Repeat className="size-4" />
                   </span>
                   <div className="min-w-0">
@@ -524,7 +524,7 @@ export function LinkProgramDialog({ job, open, onOpenChange }: { readonly job: J
                         onClick={() => setPicked(item)}
                         className={cn(
                           'flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus',
-                          selected ? 'border-primary bg-primary-subtle' : 'border-border-subtle hover:bg-hover',
+                          selected ? 'border-border-strong bg-selected' : 'border-border-subtle hover:bg-hover',
                           (blocked || item.linkedHere) && 'cursor-not-allowed opacity-70 hover:bg-transparent',
                         )}
                       >
@@ -580,11 +580,11 @@ export function ProgramJobBanner({ program }: { readonly program: JobProgramPage
   return (
     <section
       aria-label={`${program.key} program`}
-      className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary-subtle px-4 py-3"
+      className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-subtle bg-panel px-4 py-3"
       data-testid="program-job-banner"
     >
       <p className="flex min-w-0 flex-1 items-start gap-2 text-sm text-fg">
-        <Repeat aria-hidden className="mt-0.5 size-4 shrink-0 text-primary-text" />
+        <Repeat aria-hidden className="mt-0.5 size-4 shrink-0 text-icon" />
         <span>{programJobBanner(program.key)}</span>
       </p>
       <ButtonLink href={program.path} size="sm" icon={<Repeat aria-hidden />} testId="program-job-open">
