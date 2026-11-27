@@ -54,6 +54,11 @@ describe('stylesheet contract (docs/design/UI-CLEANUP.md)', () => {
     expect(rule('.ks-dash-meter-fill')).toMatch(/background: var\(--dash-data/);
   });
 
+  it('works outside a frame: every feel variable has a fallback', () => {
+    // List pages use tiles, sections and pills without a DashboardFrame around them.
+    expect(css).not.toMatch(/var\(--dash-[a-z-]+\)/);
+  });
+
   it('gives every app its own data color and nothing more', () => {
     for (const app of ['portal', 'crm', 'wms', 'projects', 'pulse']) {
       expect(rule(`.ks-dash[data-app='${app}']`)).toMatch(/--dash-data: var\(--(chart|label|pulse-series)-/);
