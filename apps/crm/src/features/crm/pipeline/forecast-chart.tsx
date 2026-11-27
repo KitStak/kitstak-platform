@@ -19,7 +19,7 @@ export function niceMax(value: number): number {
 }
 
 /**
- * Forecast by close month: won (green) + weighted open (primary) stacked, best case as a dashed
+ * Forecast by close month: won (green) + weighted open (blue) stacked, best case as a dashed
  * ghost bar behind, value labels above each stack and light gridlines with axis labels. Bars
  * are a roving-tabindex group (←/→/Home/End), each opening its breakdown tooltip on focus.
  */

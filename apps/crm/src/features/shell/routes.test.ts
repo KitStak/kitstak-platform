@@ -15,3 +15,16 @@ describe('routes.templates', () => {
     expect(routes.templates('acme')).not.toContain('/workspaces');
   });
 });
+
+describe('list routes behind headline numbers', () => {
+  it('builds the automations list, optionally filtered by status', () => {
+    expect(routes.automations('acme')).toBe('/acme/automations');
+    expect(routes.automations('acme', 'failing')).toBe('/acme/automations?status=failing');
+  });
+
+  it('builds the dashboards, API token and pipeline pages', () => {
+    expect(routes.dashboards('acme')).toBe('/acme/dashboards');
+    expect(routes.apiTokens('acme')).toBe('/acme/admin/api');
+    expect(routes.pipeline('acme')).toBe('/acme/crm/pipeline');
+  });
+});

@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react';
 import { SeatLimitLink, seatLimitKind } from '@/features/shell/seat-limit-link';
 import { Check, Copy, Mail, UserPlus } from 'lucide-react';
 import {
-  Badge,
+  CountBadge,
   Button,
   DialogBody,
   DialogContent,
@@ -164,7 +164,7 @@ export function InviteMembersDialog({ open, onClose }: InviteMembersDialogProps)
               </TabsTrigger>
               <TabsTrigger value="pending" data-testid="pending-tab" disabled={!canSeeMembers} className={TAB_FOCUS}>
                 Pending
-                {pendingCount ? <Badge size="sm" tone="primary">{pendingCount}</Badge> : null}
+                <CountBadge count={pendingCount} label="invitations" />
               </TabsTrigger>
             </TabsList>
             <TabsContent value="invite" className="flex min-h-0 flex-1 flex-col outline-none">

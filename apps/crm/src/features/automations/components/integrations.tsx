@@ -128,10 +128,10 @@ const CARDS: readonly IntegrationCard[] = [
 ];
 
 const STATUS_BADGE: Readonly<
-  Record<IntegrationCard['status'], { label: string; tone: 'success' | 'primary' | 'neutral' | 'warning' }>
+  Record<IntegrationCard['status'], { label: string; tone: 'success' | 'info' | 'neutral' | 'warning' }>
 > = {
   available: { label: 'Available', tone: 'success' },
-  'via-webhook': { label: 'Via webhook', tone: 'primary' },
+  'via-webhook': { label: 'Via webhook', tone: 'info' },
   'built-in': { label: 'Built in', tone: 'neutral' },
   'needs-config': { label: 'Requires configuration', tone: 'warning' },
 };
@@ -178,7 +178,7 @@ export function Integrations({ boardId, canManageWebhooks, canEditBoard }: Integ
                 >
                   <Icon className="size-5" />
                 </span>
-                <Badge tone={badge.tone} size="sm">
+                <Badge tone={badge.tone}>
                   {badge.label}
                 </Badge>
               </div>

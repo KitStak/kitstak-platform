@@ -16,6 +16,12 @@ export const routes = {
   templates: (orgSlug: string, templateId?: string) =>
     `/${orgSlug}?wizard=templates${templateId ? `&template=${encodeURIComponent(templateId)}` : ''}`,
   dashboard: (orgSlug: string, dashboardId: string) => `/${orgSlug}/dashboards/${dashboardId}`,
+  dashboards: (orgSlug: string) => `/${orgSlug}/dashboards`,
+  /** Every automation the caller can see; `status` preselects the list filter. */
+  automations: (orgSlug: string, status?: 'on' | 'off' | 'failing') =>
+    `/${orgSlug}/automations${status ? `?status=${status}` : ''}`,
+  apiTokens: (orgSlug: string) => `/${orgSlug}/admin/api`,
+  pipeline: (orgSlug: string) => `/${orgSlug}/crm/pipeline`,
   importData: (orgSlug: string) => `/${orgSlug}/import`,
   admin: (orgSlug: string) => `/${orgSlug}/admin`,
   members: (orgSlug: string) => `/${orgSlug}/admin/members`,

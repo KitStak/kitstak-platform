@@ -1,73 +1,68 @@
 import type { ReactNode } from 'react';
-import { cva, type VariantProps } from 'class-variance-authority';
+import { Count, Pill, Tag, type PillTone } from '@kitstak/ui/dashboard';
 import { X } from 'lucide-react';
 import { cn } from './cn';
 import { PILL_TEXT_CLASS, labelColorStyle, type LabelColor } from './label-color';
 
-const badgeVariants = cva(
-  'inline-flex items-center gap-1 whitespace-nowrap rounded-sm font-medium [&_svg]:size-3 [&_svg]:shrink-0',
-  {
-    variants: {
-      tone: {
-        neutral: 'bg-muted text-fg-secondary',
-        primary: 'bg-primary-subtle text-primary-text',
-        success: 'bg-success-subtle text-success-text',
-        warning: 'bg-warning-subtle text-warning-text',
-        danger: 'bg-danger-subtle text-danger-text',
-        info: 'bg-info-subtle text-info-text',
-        solid: 'bg-primary text-primary-fg',
-        outline: 'border border-border-default bg-transparent text-fg-secondary',
-      },
-      size: { sm: 'h-[18px] px-1.5 text-2xs', md: 'h-5 px-2 text-xs' },
-    },
-    defaultVariants: { tone: 'neutral', size: 'md' },
-  },
-);
+/**
+ * Badge tones. `outline` is an identity (a key, a code, a type) and draws as the shared Tag; every
+ * other tone is a state and draws as the shared Pill (docs/design/UI-CLEANUP.md, "Pills").
+ * There is no crimson tone: crimson is for the brand and the one primary button.
+ */
+export type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'outline';
 
-export interface BadgeProps extends VariantProps<typeof badgeVariants> {
+const PILL_TONE: Readonly<Record<Exclude<BadgeTone, 'outline'>, PillTone>> = {
+  neutral: 'neutral',
+  success: 'positive',
+  warning: 'caution',
+  danger: 'critical',
+  info: 'info',
+};
+
+export interface BadgeProps {
   readonly children: ReactNode;
+  readonly tone?: BadgeTone;
+  /** One leading marker. Ignored on `outline` (a Tag carries no marker). */
   readonly icon?: ReactNode;
+  /** Tooltip. */
+  readonly title?: string;
+  /** Layout only (margins, alignment). Never colors, borders, heights or case. */
   readonly className?: string;
 }
 
-/** Small status/meta label, e.g. "Beta", "Private", "Admin". */
-export function Badge({ children, icon, tone, size, className }: BadgeProps) {
+/** Small status or meta label, e.g. "Archived", "Sample", "You". One size everywhere. */
+export function Badge({ children, icon, tone = 'neutral', title, className }: BadgeProps) {
+  if (tone === 'outline') {
+    return (
+      <Tag title={title} className={className}>
+        {children}
+      </Tag>
+    );
+  }
   return (
-    <span className={cn(badgeVariants({ tone, size }), className)}>
-      {icon}
+    <Pill tone={PILL_TONE[tone]} icon={icon ?? undefined} title={title} className={className}>
       {children}
-    </span>
+    </Pill>
   );
 }
 
 export interface CountBadgeProps {
   readonly count: number;
-  readonly max?: number;
-  readonly tone?: 'danger' | 'primary' | 'neutral';
-  /** Ring color that "cuts" the badge out of the surface behind it. */
+  /** Neutral for unread or open counts. Critical only for things that are overdue, failed or broken. */
+  readonly tone?: 'neutral' | 'critical';
+  /** Ring color that "cuts" the count out of the icon behind it. Leave it out when it sits beside a word. */
   readonly ringClassName?: string;
   readonly className?: string;
   /** Accessible description, e.g. "unread notifications". */
   readonly label?: string;
 }
 
-/** Numeric pill for unread counts. Renders nothing for 0. */
-export function CountBadge({ count, max = 99, tone = 'danger', ringClassName, className, label }: CountBadgeProps) {
+/** A count in a tab, nav item or on an icon, drawn by the shared Count. Renders nothing for 0. */
+export function CountBadge({ count, tone = 'neutral', ringClassName, className, label }: CountBadgeProps) {
   if (count <= 0) return null;
-  const text = count > max ? `${max}+` : String(count);
   return (
-    <span
-      className={cn(
-        'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-2xs leading-none font-bold tabular-nums ring-2',
-        tone === 'danger' && 'bg-danger text-white',
-        tone === 'primary' && 'bg-primary text-primary-fg',
-        tone === 'neutral' && 'bg-muted text-fg-secondary',
-        ringClassName ?? 'ring-[var(--surface-app)]',
-        className,
-      )}
-    >
-      {text}
-      {label ? <span className="sr-only"> {label}</span> : null}
+    <span className={cn('inline-flex rounded-full', ringClassName && cn('ring-2', ringClassName), className)}>
+      <Count value={count} tone={tone} label={label} />
     </span>
   );
 }
@@ -112,7 +107,7 @@ export function Chip({
     !colored && appearance !== 'outline' && 'bg-muted text-fg',
     !colored && appearance === 'outline' && 'border border-border-default text-fg',
     onClick && 'cursor-pointer hover:shadow-[inset_0_0_0_100px_var(--surface-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus',
-    selected && 'ring-2 ring-primary',
+    selected && 'ring-2 ring-border-strong',
     onRemove && 'pr-1',
     className,
   );
@@ -153,15 +148,15 @@ export interface StatusPillProps {
 }
 
 /**
- * The one status pill (shared recipe with KitStak WMS): tinted background, the label colour as
- * text and a solid dot. Use it for any status or priority outside the board grid.
+ * A pill in a user defined label color (board labels): the Pill recipe (20 px, flat tint, no border)
+ * with one dot in the label color. App states use `Badge`, which draws the shared Pill.
  */
 export function StatusPill({ label, color, className }: StatusPillProps) {
   return (
     <span
       style={labelColorStyle(color)}
       className={cn(
-        'inline-flex h-[22px] max-w-full items-center gap-1.5 rounded-full bg-[var(--lc-subtle)] px-2 text-xs font-medium',
+        'inline-flex h-5 max-w-full items-center gap-1 rounded-full bg-[var(--lc-subtle)] px-2 text-xs font-medium',
         PILL_TEXT_CLASS,
         className,
       )}

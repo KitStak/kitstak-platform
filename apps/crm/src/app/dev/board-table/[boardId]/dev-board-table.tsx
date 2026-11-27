@@ -81,11 +81,11 @@ function Harness({ boardId, userId, perfRows }: DevBoardTableProps) {
             <h1 className="truncate text-xl font-medium text-fg">
               {board.data?.board.name ?? 'Board'}
             </h1>
-            <Badge tone="neutral" size="sm">
+            <Badge tone="neutral">
               Board table · dev
             </Badge>
             {perfRows ? (
-              <Badge tone="warning" size="sm" icon={<Gauge aria-hidden />}>
+              <Badge tone="warning" icon={<Gauge aria-hidden />}>
                 +{perfRows.toLocaleString()} synthetic rows (read-only)
               </Badge>
             ) : null}

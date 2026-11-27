@@ -107,7 +107,7 @@ function JobCard({ job, moneyHidden, canLog, dealValueCents }: { readonly job: I
           <ProgressBar
             value={done}
             size="sm"
-            tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'primary'}
+            tone={tone === 'bad' ? 'danger' : tone === 'warn' ? 'warning' : 'data'}
             label={`${job.number} is ${done} percent done`}
           />
         )}

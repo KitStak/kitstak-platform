@@ -1,6 +1,8 @@
 /**
  * Shared chrome for top-level shell destinations (Inbox, My work, workspace overview, admin…):
- * an icon tile, title, description, optional actions and a content area with consistent rhythm.
+ * an icon, title, description, optional actions and a content area with consistent rhythm.
+ * The icon sits in a plain outlined square in the muted icon color: no tint, never crimson
+ * (docs/design/UI-CLEANUP.md, "Surfaces").
  */
 import type { ReactNode } from 'react';
 import { cn, type BreadcrumbItem } from '@/components/ui';
@@ -10,10 +12,6 @@ export interface PageFrameProps {
   readonly title: string;
   readonly description?: ReactNode;
   readonly icon?: ReactNode;
-  /** Tile tint (CSS color); defaults to the primary subtle surface. */
-  readonly iconColor?: string;
-  /** `solid` = primary tile with primary-fg icon (feature hubs such as Automations). */
-  readonly iconTone?: 'subtle' | 'solid';
   readonly actions?: ReactNode;
   readonly children: ReactNode;
   readonly width?: 'default' | 'wide';
@@ -25,8 +23,6 @@ export function PageFrame({
   title,
   description,
   icon,
-  iconColor,
-  iconTone = 'subtle',
   actions,
   children,
   width = 'default',
@@ -46,17 +42,11 @@ export function PageFrame({
           </div>
         )}
         <header className="flex flex-wrap items-start justify-between gap-4">
-          <div className={cn('flex min-w-0 gap-3', iconTone === 'solid' ? 'items-start' : 'items-center')}>
+          <div className="flex min-w-0 items-center gap-3">
             {icon ? (
               <span
                 aria-hidden
-                className={cn(
-                  'flex size-10 shrink-0 items-center justify-center rounded-lg [&_svg]:size-5',
-                  iconTone === 'solid'
-                    ? 'bg-primary text-primary-fg shadow-sm'
-                    : 'bg-primary-subtle text-primary-text',
-                )}
-                style={iconColor ? { background: iconColor, color: 'var(--text-inverse)' } : undefined}
+                className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border-subtle bg-panel text-icon [&_svg]:size-5"
               >
                 {icon}
               </span>

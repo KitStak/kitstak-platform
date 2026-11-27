@@ -73,9 +73,9 @@ describe('number helpers', () => {
     expect(percent(8, 50)).toBe(16);
     expect(percent(80, 0)).toBe(0);
     expect(percent(120, 100)).toBe(100);
-    expect(meterTone(79)).toBe('primary');
-    expect(meterTone(80)).toBe('warning');
-    expect(meterTone(100)).toBe('danger');
+    expect(meterTone(79)).toBe('data');
+    expect(meterTone(80)).toBe('caution');
+    expect(meterTone(100)).toBe('critical');
     expect(pluralize(1, 'member')).toBe('1 member');
     expect(pluralize(2, 'entry', 'entries')).toBe('2 entries');
   });

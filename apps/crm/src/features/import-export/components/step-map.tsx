@@ -216,12 +216,12 @@ export function StepMap({ model, showErrors, onChange }: StepMapProps) {
                       {profile.samples.length ? profile.samples.join(' · ') : 'Empty column'}
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <Badge size="sm" tone="neutral" className="gap-1 text-xs">
+                      <Badge tone="neutral">
                         <ColumnTypeIcon type={profile.inferred as ColumnType} size="sm" />
                         {INFERRED_LABEL[profile.inferred] ?? 'Text'}
                       </Badge>
                       {misfitCount(profile.nonEmpty, profile.confidence) > 0 && target.kind !== 'skip' ? (
-                        <Badge size="sm" tone="warning" className="text-xs">
+                        <Badge tone="warning">
                           {misfitCount(profile.nonEmpty, profile.confidence)}{' '}
                           {misfitCount(profile.nonEmpty, profile.confidence) === 1
                             ? "value won't fit"
@@ -229,17 +229,17 @@ export function StepMap({ model, showErrors, onChange }: StepMapProps) {
                         </Badge>
                       ) : null}
                       {profile.inferred === 'date' ? (
-                        <Badge size="sm" tone="info">
+                        <Badge tone="info">
                           {dateOrderLabel(profile.dateOrder)}
                         </Badge>
                       ) : null}
                       {profile.inferred === 'status' ? (
-                        <Badge size="sm" tone="neutral">
+                        <Badge tone="neutral">
                           {profile.distinctCount} labels
                         </Badge>
                       ) : null}
                       {issueCount && target.kind !== 'skip' ? (
-                        <Badge size="sm" tone="warning">
+                        <Badge tone="warning">
                           {issueCount} {issueCount === 1 ? 'problem' : 'problems'}
                         </Badge>
                       ) : null}

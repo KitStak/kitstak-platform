@@ -311,16 +311,16 @@ export function FormView({ boardId, view, className }: BoardViewProps) {
           ]}
         />
         {settings.published ? (
-          <Badge tone="success" size="sm">
+          <Badge tone="success">
             Live
           </Badge>
         ) : (
-          <Badge tone="neutral" size="sm">
+          <Badge tone="neutral">
             Draft
           </Badge>
         )}
         {settings.closed ? (
-          <Badge tone="warning" size="sm">
+          <Badge tone="warning">
             Closed
           </Badge>
         ) : null}

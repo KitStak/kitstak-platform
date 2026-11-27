@@ -286,7 +286,7 @@ describe('helpers', () => {
 
   it('summarizes usage with warning and danger thresholds and a forecast', () => {
     expect(summarizeUsage({ used: 100, allowance: 1000, dayOfMonth: 10, daysInMonth: 30 })).toMatchObject({
-      tone: 'primary',
+      tone: 'data',
       forecast: 300,
       forecastOver: false,
     });

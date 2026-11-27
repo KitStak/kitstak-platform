@@ -49,15 +49,16 @@ export interface ProgressBarProps {
   readonly value?: number;
   readonly label: string;
   readonly showValue?: boolean;
-  readonly tone?: 'primary' | 'success' | 'warning' | 'danger';
+  /** `data` (the app data color) for a plain quantity; progress is never crimson (UI-CLEANUP.md). */
+  readonly tone?: 'data' | 'success' | 'warning' | 'danger';
   readonly size?: 'sm' | 'md';
   readonly className?: string;
 }
 
-export function ProgressBar({ value, label, showValue, tone = 'primary', size = 'md', className }: ProgressBarProps) {
+export function ProgressBar({ value, label, showValue, tone = 'data', size = 'md', className }: ProgressBarProps) {
   const clamped = value === undefined ? undefined : Math.min(100, Math.max(0, value));
   const fill = {
-    primary: 'bg-primary',
+    data: 'bg-data',
     success: 'bg-success',
     warning: 'bg-warning-accent',
     danger: 'bg-danger',

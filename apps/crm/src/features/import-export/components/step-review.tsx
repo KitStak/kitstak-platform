@@ -1,7 +1,7 @@
 'use client';
 import { useState, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, Download, Rows3, SkipForward } from 'lucide-react';
-import { Badge, Button, Checkbox, Combobox, Input, Skeleton, Switch, Tooltip, cn } from '@/components/ui';
+import { Badge, Button, Checkbox, CountBadge, Combobox, Input, Skeleton, Switch, Tooltip, cn } from '@/components/ui';
 import { errorMessage } from '@/lib/hooks';
 import { buildErrorReport, baseFileName, downloadBlob } from '../lib/error-report';
 import { overrideKey } from '../lib/plan';
@@ -41,7 +41,7 @@ function StatTile({ icon, label, value, tone, testId, note }: StatTileProps) {
           'hidden size-9 shrink-0 items-center justify-center rounded-md sm:inline-flex [&_svg]:size-[18px]',
           tone === 'success' && 'bg-success-subtle text-success-text',
           tone === 'warning' && 'bg-warning-subtle text-warning-text',
-          tone === 'neutral' && 'bg-primary-subtle text-primary-text',
+          tone === 'neutral' && 'bg-muted text-icon',
           tone === 'muted' && 'bg-muted text-fg-secondary',
         )}
       >
@@ -108,7 +108,7 @@ function ProblemMessage({ severity, forced, message }: { severity: IssueSeverity
   return (
     <span className="flex flex-wrap items-center gap-1.5">
       {forced ? (
-        <Badge size="sm" tone="neutral">
+        <Badge tone="neutral">
           Skipped
         </Badge>
       ) : null}
@@ -349,7 +349,7 @@ export function StepReview({ model, onDraft }: StepReviewProps) {
       <section className="flex flex-col gap-3" aria-labelledby="import-problems-title">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 id="import-problems-title" className="flex items-center gap-2 text-base font-semibold text-fg">
-            Problems <Badge tone={built.issues.length ? 'warning' : 'success'}>{built.issues.length}</Badge>
+            Problems <CountBadge count={built.issues.length} tone="critical" label={built.issues.length === 1 ? 'problem' : 'problems'} />
           </h3>
           <div className="flex flex-wrap items-center gap-3">
             <Switch

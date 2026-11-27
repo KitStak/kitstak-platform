@@ -320,7 +320,7 @@ function ChoiceCard({
 
 function MatchBadge({ match }: { readonly match: MatchCandidateDto }) {
   return (
-    <Badge tone={match.confidence === 'high' ? 'primary' : 'neutral'} size="sm">
+    <Badge tone={match.confidence === 'high' ? 'info' : 'neutral'}>
       {match.confidence === 'high' ? 'Recommended' : 'Possible match'} · {REASON_TEXT[match.reason]}
     </Badge>
   );

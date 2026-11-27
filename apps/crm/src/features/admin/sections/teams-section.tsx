@@ -306,7 +306,7 @@ function TeamDetail({
                   <span className="flex items-center gap-1.5">
                     <span className="truncate font-medium text-fg">{entry.name}</span>
                     {isOwner ? (
-                      <Badge tone="primary" icon={<Crown aria-hidden />}>
+                      <Badge icon={<Crown aria-hidden />}>
                         Owner
                       </Badge>
                     ) : null}

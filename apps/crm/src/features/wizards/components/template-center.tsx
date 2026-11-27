@@ -342,17 +342,17 @@ function TemplateCard({
         <p className="line-clamp-2 text-sm text-fg-secondary">{entry.description}</p>
         <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-2">
           {entry.type === 'solution' ? (
-            <Badge size="sm" tone="primary" icon={<Layers aria-hidden />}>
+            <Badge icon={<Layers aria-hidden />}>
               {entry.boards.length} connected boards
             </Badge>
           ) : null}
           <span className="text-xs text-fg-muted">{entrySummary(entry)}</span>
           {entry.includesDashboard ? (
-            <Badge size="sm" icon={<LayoutDashboard aria-hidden />}>
+            <Badge icon={<LayoutDashboard aria-hidden />}>
               Dashboard
             </Badge>
           ) : null}
-          {entry.includesForm && entry.type === 'board' ? <Badge size="sm">Includes form</Badge> : null}
+          {entry.includesForm && entry.type === 'board' ? <Badge>Includes form</Badge> : null}
         </div>
       </div>
     </li>

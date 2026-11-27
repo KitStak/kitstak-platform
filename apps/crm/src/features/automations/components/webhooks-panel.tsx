@@ -209,7 +209,7 @@ export function WebhooksPanel({
                     </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       {webhook.events.map((event) => (
-                        <Badge key={event} tone="outline" size="sm">
+                        <Badge key={event} tone="outline">
                           {WEBHOOK_EVENT_LABELS[event].title}
                         </Badge>
                       ))}
@@ -219,7 +219,7 @@ export function WebhooksPanel({
                           : 'No deliveries yet'}
                       </span>
                       {failing ? (
-                        <Badge tone="danger" size="sm" icon={<CircleAlert aria-hidden />}>
+                        <Badge tone="danger" icon={<CircleAlert aria-hidden />}>
                           {webhook.failureCount} failed in a row
                         </Badge>
                       ) : null}
