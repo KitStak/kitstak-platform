@@ -17,6 +17,11 @@
   /* The fourth bar (Pulse): the lightest step of the same crimson family. Ink on it is navy, not white. */
   --stak-pulse: #ec8b9a;
   --stak-pulse-ink: var(--brand-navy);
+  /* Ready for when Crew and Ledger go live: the ramp extended both ways. Crew is the deepest step
+     (white ink), Ledger the palest (navy ink, like Pulse). */
+  --stak-crew: #5e0b1d;
+  --stak-ledger: #f5bcc5;
+  --stak-ledger-ink: var(--brand-navy);
 }
 
 *,

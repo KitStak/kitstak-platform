@@ -4,17 +4,23 @@
  * Where the reference lists an open question (section 9), the page leaves it out or says it is
  * still being decided. Copy rules: plain words, short sentences, no em or en dash.
  */
+import { TRIAL_LINE } from '@/lib/pricing';
+import { isAppLive } from '../site-links';
 import type { Feature } from '../product/chapter';
 import type { FaqItem } from '../product/cta';
 import type { HeroFact } from '../product/product-hero';
 import type { SubNavSection } from '../product/sub-nav';
 
+/** The page's go-live switch (CREW_IS_LIVE in site-links.ts). Copy below reads it. */
+const IS_LIVE = isAppLive('crew');
+
 export const META = {
-  title: 'KitStak Crew - schedules, time clock and labor planning for the floor (coming soon)',
-  description:
-    'KitStak Crew is coming soon: people, shifts, a time clock kiosk, attendance, skills and a labor plan for kitting, 3PL and contract packaging floors.',
+  title: IS_LIVE ? 'KitStak Crew - schedules, time clock and labor planning for the floor' : 'KitStak Crew - schedules, time clock and labor planning for the floor (coming soon)',
+  description: IS_LIVE
+    ? 'KitStak Crew: people, shifts, a time clock kiosk, attendance, skills and a labor plan for kitting, 3PL and contract packaging floors.'
+    : 'KitStak Crew is coming soon: people, shifts, a time clock kiosk, attendance, skills and a labor plan for kitting, 3PL and contract packaging floors.',
   socialTitle: 'KitStak Crew. Staff it. Clock it. Plan it.',
-  socialDescription: 'The people app for the floor, on the same stack as Pulse, the WMS and Projects. Coming soon.',
+  socialDescription: IS_LIVE ? 'The people app for the floor, on the same stack as Pulse, the WMS and Projects.' : 'The people app for the floor, on the same stack as Pulse, the WMS and Projects. Coming soon.',
   url: 'https://kitstak.com/crew',
 } as const;
 
@@ -194,11 +200,16 @@ export const PRICE_INCLUDED: readonly string[] = [
 export const FAQ_TITLE = 'Before you ask.';
 
 export const FAQ: readonly FaqItem[] = [
-  {
-    question: 'When can I use Crew?',
-    answer:
-      'Crew is coming soon and cannot be bought yet. Ask to be told when it is ready and we will email you once, when you can start.',
-  },
+  IS_LIVE
+    ? {
+        question: 'How do I start with Crew?',
+        answer: `Start a free trial with Crew switched on. ${TRIAL_LINE} Add it to an organization you already run from Billing.`,
+      }
+    : {
+        question: 'When can I use Crew?',
+        answer:
+          'Crew is coming soon and cannot be bought yet. Ask to be told when it is ready and we will email you once, when you can start.',
+      },
   {
     question: 'Does Crew run payroll?',
     answer:
@@ -233,5 +244,7 @@ export const FAQ: readonly FaqItem[] = [
 
 export const CLOSING = {
   title: 'The fifth bar is for the people.',
-  note: 'Crew is coming soon. It will run on its own, or alongside Pulse, the WMS and Projects with one sign-in.',
+  note: IS_LIVE
+    ? `${TRIAL_LINE} Crew runs on its own, or alongside Pulse, the WMS and Projects with one sign-in.`
+    : 'Crew is coming soon. It will run on its own, or alongside Pulse, the WMS and Projects with one sign-in.',
 } as const;

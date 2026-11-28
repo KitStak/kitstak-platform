@@ -2,15 +2,17 @@
 
 import { useState } from 'react';
 import { FULL_STACK, PRODUCT_IDS, availabilityLabel, toggleProduct } from '../site-links';
-import type { ProductId, Stack } from '../site-links';
+import type { ProductId, SiteProductId, Stack } from '../site-links';
 import { planFor } from './licensing-plans';
 import styles from './licensing-section.module.css';
 
-const NAME: Readonly<Record<ProductId, string>> = {
+const NAME: Readonly<Record<SiteProductId, string>> = {
   crm: 'KitStak CRM',
   wms: 'KitStak WMS',
   projects: 'KitStak Projects',
   pulse: 'KitStak Pulse',
+  crew: 'KitStak Crew',
+  ledger: 'KitStak Ledger',
 };
 
 export function LicensingSection() {

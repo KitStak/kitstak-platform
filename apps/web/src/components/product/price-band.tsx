@@ -17,7 +17,8 @@ import {
   ROUTES,
   availabilityLabel,
   isAppLive,
-  isPlannedProductId,
+  isAnnouncedApp,
+  isProductId,
   pricingHref,
   startLink,
   START_LABEL,
@@ -37,7 +38,8 @@ interface PriceBandProps {
 export function PriceBand({ product, included }: PriceBandProps) {
   const price = priceOf(product);
   const isOpen = isAppLive(product);
-  const isPlanned = isPlannedProductId(product);
+  // Crew or Ledger before launch: a planned price, no trial, and a link to the coming soon cards.
+  const isPlanned = !isOpen && isAnnouncedApp(product);
   const walkthrough = startLink(product);
   const availability = availabilityLabel(product);
   const seats = includedSeatsLabel(product);
@@ -85,7 +87,7 @@ export function PriceBand({ product, included }: PriceBandProps) {
           </p>
           {/* A product whose app is not open yet gets a walkthrough, not a start button. */}
           {isPlanned ? <p className={styles.seats}>{PLANNED_PRICE_NOTE}</p> : null}
-          {isOpen && !isPlanned ? (
+          {isOpen && isProductId(product) ? (
             <a
               href={trialUrl({ products: [product], seats: 1, warehouses: 1, interval: 'monthly' }, 'product')}
               className="btn btn-primary btn-lg btn-block"
@@ -104,7 +106,7 @@ export function PriceBand({ product, included }: PriceBandProps) {
             </Link>
           )}
           {isOpen ? <p className={styles.trust}>{TRIAL_LINE}</p> : null}
-          <Link href={isPlanned ? ROUTES.pricingPlanned : pricingHref(product)} className={`text-link ${styles.calc}`}>
+          <Link href={isProductId(product) && !isPlanned ? pricingHref(product) : ROUTES.pricingPlanned} className={`text-link ${styles.calc}`}>
             {isPlanned ? 'See all prices' : 'Price your stack'}{' '}
             <span className="btn-arrow" aria-hidden>
               →

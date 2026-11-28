@@ -1,6 +1,7 @@
+import { isAppLive } from '@/components/site-links';
 import { OG_CONTENT_TYPE, OG_SIZE, ogImage } from '@/lib/og-image';
 
-export const alt = 'KitStak Ledger. Bill it. Pay it. Close it. Coming soon.';
+export const alt = `KitStak Ledger. Bill it. Pay it. Close it.${isAppLive('ledger') ? '' : ' Coming soon.'}`;
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 

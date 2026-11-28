@@ -27,14 +27,22 @@ import { Chapter, TileGrid } from '@/components/product/chapter';
 import { Faq } from '@/components/product/cta';
 import { PriceBand } from '@/components/product/price-band';
 import { ProductHero } from '@/components/product/product-hero';
-import { ShotPlaceholder } from '@/components/product/shot-placeholder';
+import { AppShot } from '@/components/product/app-shot';
+import type { AppShotSlot } from '@/components/product/app-shot';
+import { LEDGER_SHOTS } from '@/components/ledger/ledger-shots';
 import { SubNav } from '@/components/product/sub-nav';
-import { NOTIFY_LABEL, ROUTES, availabilityLabel, notifyHref } from '@/components/site-links';
-import { breadcrumbLd, plannedApplicationLd } from '@/lib/seo';
+import { LINKS, ROUTES, availabilityLabel, isAppLive, startLink } from '@/components/site-links';
+import { breadcrumbLd, softwareApplicationLd } from '@/lib/seo';
 
-/** Ledger cannot be bought yet, so the main action asks to be told when it can. */
-const PRIMARY = { href: notifyHref('ledger'), label: NOTIFY_LABEL };
-const SECONDARY = { href: `#${CHAPTERS.invoices.id}`, label: HERO.howLabel };
+/**
+ * Before launch the main action asks to be told when Ledger opens ("Tell me when it's ready"). Once
+ * LEDGER_IS_LIVE is on, it starts a trial with Ledger switched on and the second button signs in.
+ */
+const IS_LIVE = isAppLive('ledger');
+const PRIMARY = startLink('ledger');
+const SECONDARY = IS_LIVE
+  ? { href: LINKS.ledger, label: 'Sign in' }
+  : { href: `#${CHAPTERS.invoices.id}`, label: HERO.howLabel };
 
 export const metadata: Metadata = {
   title: META.title,
@@ -50,9 +58,9 @@ export const metadata: Metadata = {
   twitter: { card: 'summary_large_image', title: META.socialTitle, description: META.socialDescription },
 };
 
-/** Every picture is a placeholder until the Ledger app exists (docs/ledger/REFERENCE.md). */
-const shot = (screen: string, note: string, extra?: { rows?: number; shape?: 'wide' | 'narrow'; onBrand?: boolean }) => (
-  <ShotPlaceholder app="ledger" product={HERO.product} screen={screen} note={note} {...extra} />
+/** Each picture is a screenshot slot: a placeholder until its file is filled in (ledger-shots.ts). */
+const shot = (slot: AppShotSlot, onBrand = false) => (
+  <AppShot app="ledger" product={HERO.product} slot={slot} onBrand={onBrand} />
 );
 
 export default function LedgerPage() {
@@ -61,7 +69,7 @@ export default function LedgerPage() {
       <PageEffects />
       <Header />
       <main id="main">
-        <JsonLd data={[plannedApplicationLd('ledger'), breadcrumbLd([{ name: 'KitStak Ledger', path: ROUTES.ledger }])]} />
+        <JsonLd data={[softwareApplicationLd('ledger'), breadcrumbLd([{ name: 'KitStak Ledger', path: ROUTES.ledger }])]} />
         <ProductHero
           product={HERO.product}
           app="ledger"
@@ -69,7 +77,7 @@ export default function LedgerPage() {
           lead={HERO.lead}
           primary={PRIMARY}
           secondary={SECONDARY}
-          visual={shot('Money home', 'What you are owed, what is due, and how close the month is.', { rows: 7 })}
+          visual={shot(LEDGER_SHOTS.hero)}
           badge={availabilityLabel('ledger') ?? undefined}
           layout="stacked"
           facts={HERO_FACTS}
@@ -84,7 +92,7 @@ export default function LedgerPage() {
         <Chapter
           {...CHAPTERS.invoices}
           features={INVOICE_FEATURES}
-          visual={shot('Draft invoice', 'A month of WMS bill lines for one client, ready to send.', { rows: 6 })}
+          visual={shot(LEDGER_SHOTS.invoices)}
           tone="sunken"
           isStacked
         />
@@ -92,13 +100,13 @@ export default function LedgerPage() {
         <Chapter
           {...CHAPTERS.collections}
           features={COLLECTION_FEATURES}
-          visual={shot('Aging', 'Open invoices by customer and bucket.')}
+          visual={shot(LEDGER_SHOTS.collections)}
         />
 
         <Chapter
           {...CHAPTERS.bills}
           features={BILL_FEATURES}
-          visual={shot('Bills', 'Vendor bills waiting for approval and payment.')}
+          visual={shot(LEDGER_SHOTS.bills)}
           tone="sunken"
           isFlipped
         />
@@ -106,13 +114,13 @@ export default function LedgerPage() {
         <Chapter
           {...CHAPTERS.expenses}
           features={EXPENSE_FEATURES}
-          visual={shot('Expense', 'A receipt photo tagged to a job.', { shape: 'narrow', rows: 4 })}
+          visual={shot(LEDGER_SHOTS.expenses)}
         />
 
         <Chapter
           {...CHAPTERS.bank}
           features={BANK_FEATURES}
-          visual={shot('Reconcile', 'Bank lines matched to invoices and bills.', { rows: 6 })}
+          visual={shot(LEDGER_SHOTS.bank)}
           tone="sunken"
           isStacked
         />
@@ -120,14 +128,14 @@ export default function LedgerPage() {
         <Chapter
           {...CHAPTERS.close}
           features={CLOSE_FEATURES}
-          visual={shot('Close the month', 'The checklist, the accruals and the lock.')}
+          visual={shot(LEDGER_SHOTS.close)}
           isFlipped
         />
 
         <Chapter
           {...CHAPTERS.stack}
           features={STACK_FEATURES}
-          visual={shot('Earned vs billed', 'Pulse’s earned revenue beside what was billed and collected.', { onBrand: true })}
+          visual={shot(LEDGER_SHOTS.stack, true)}
           tone="brand"
         />
 

@@ -13,7 +13,7 @@ import {
 } from '@/lib/pricing';
 import type { BillingInterval, Quote } from '@/lib/pricing';
 import { PRODUCT_IDS, ROUTES } from '../site-links';
-import type { ProductId, Stack } from '../site-links';
+import type { ProductId, SiteProductId, Stack } from '../site-links';
 import styles from './stak-parts.module.css';
 
 /* ------------------------------------------------------------------ The stack, drawn large */
@@ -24,11 +24,13 @@ interface StakVisualProps {
   readonly extras?: readonly string[];
 }
 
-const SLAB_LABEL: Readonly<Record<ProductId, string>> = {
+const SLAB_LABEL: Readonly<Record<SiteProductId, string>> = {
   crm: 'CRM',
   wms: 'WMS',
   projects: 'Projects',
   pulse: 'Pulse',
+  crew: 'Crew',
+  ledger: 'Ledger',
 };
 
 /** The stack as a live diagram: one bar per product, lit when it is in the stack. */

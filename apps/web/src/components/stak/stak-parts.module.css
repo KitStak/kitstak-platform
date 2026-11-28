@@ -45,8 +45,17 @@
 .slab[data-product='pulse'][data-on] {
   background: var(--stak-pulse);
 }
+.slab[data-product='crew'][data-on] {
+  background: var(--stak-crew);
+}
+.slab[data-product='ledger'][data-on] {
+  background: var(--stak-ledger);
+}
 .slab[data-product='pulse'] span {
   color: var(--stak-pulse-ink);
+}
+.slab[data-product='ledger'] span {
+  color: var(--stak-ledger-ink);
 }
 .extra {
   display: flex;

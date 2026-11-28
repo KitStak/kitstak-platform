@@ -60,6 +60,12 @@
 .switch[data-product='pulse'][aria-checked='true'] .slab {
   background: var(--stak-pulse);
 }
+.switch[data-product='crew'][aria-checked='true'] .slab {
+  background: var(--stak-crew);
+}
+.switch[data-product='ledger'][aria-checked='true'] .slab {
+  background: var(--stak-ledger);
+}
 .switchLabel {
   font-weight: var(--weight-semibold);
 }
@@ -119,6 +125,12 @@
 }
 .stack span[data-product='pulse'][data-on] {
   background: var(--stak-pulse);
+}
+.stack span[data-product='crew'][data-on] {
+  background: var(--stak-crew);
+}
+.stack span[data-product='ledger'][data-on] {
+  background: var(--stak-ledger);
 }
 .stack span[data-on] {
   transform: none;

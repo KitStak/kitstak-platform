@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { Logo } from './logo';
 import { PLANNED_NAV, PRODUCT_NAV } from './nav/nav-data';
-import { HELP_LABEL, LINKS, PULSE_IS_LIVE, ROUTES, START_LABEL, startFreeHref } from './site-links';
+import { ANNOUNCED_APP_IDS, HELP_LABEL, LINKS, PULSE_IS_LIVE, ROUTES, START_LABEL, isAppLive, startFreeHref, startLink } from './site-links';
+
+const APP_NAME = { crew: 'KitStak Crew', ledger: 'KitStak Ledger' } as const;
 import styles from './footer.module.css';
 
 interface FooterLink {
@@ -30,6 +32,7 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: startFreeHref('crm', 'product'), label: 'Start with the CRM', external: true },
       { href: startFreeHref('projects', 'product'), label: 'Start with Projects', external: true },
       ...(PULSE_IS_LIVE ? [{ href: startFreeHref('pulse', 'product'), label: 'Start with Pulse', external: true }] : []),
+      ...ANNOUNCED_APP_IDS.filter(isAppLive).map((id) => ({ ...startLink(id), external: true })),
       { href: ROUTES.demo, label: 'Book a walkthrough' },
     ],
   },
@@ -55,6 +58,8 @@ const COLUMNS: readonly { readonly title: string; readonly links: readonly Foote
       { href: LINKS.crm, label: 'KitStak CRM', external: true },
       { href: LINKS.projects, label: 'KitStak Projects', external: true },
       ...(PULSE_IS_LIVE ? [{ href: LINKS.pulse, label: 'KitStak Pulse', external: true }] : []),
+      // Crew and Ledger get a sign in link once their go-live switch is on.
+      ...ANNOUNCED_APP_IDS.filter(isAppLive).map((id) => ({ href: LINKS[id], label: APP_NAME[id], external: true })),
     ],
   },
 ];

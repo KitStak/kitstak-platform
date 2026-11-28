@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { PROJECTS_CATALOG } from '@/generated/projects/catalog';
 import { BUNDLE_OFF, TRIAL_DAYS, priceInWords } from '@/lib/pricing';
-import { ROUTES, availabilityLabel, isAppLive, startLink, START_LABEL, HELP_LABEL, startFreeHref } from '../site-links';
+import { ROUTES, availabilityLabel, comingSoonSentence, isAppLive, startLink, START_LABEL, HELP_LABEL, startFreeHref } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import styles from './products-sections.module.css';
@@ -49,7 +49,7 @@ export function StackHero() {
             A CRM for the people who sell, a WMS for the people who ship, Projects for the work in between,
             and Pulse to show which jobs make money. Each one stands on its own. Stack two or more and they
             share one sign-in and one bill, and cost {BUNDLE_OFF} less.
-            {isAppLive('pulse') ? ' Crew and Ledger are coming soon.' : ' Pulse, Crew and Ledger are coming soon.'}
+            {comingSoonSentence(isAppLive('pulse') ? [] : ['Pulse'])}
           </p>
           <div className={styles.heroActions}>
             <a href={startFreeHref()} className="btn btn-primary btn-lg">

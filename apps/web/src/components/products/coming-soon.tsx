@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { PLANNED_PRICE_NOTE, priceInWords } from '@/lib/pricing';
 import { AppIcon } from '../app-icon';
-import { COMING_SOON, ROUTES, startLink } from '../site-links';
+import { COMING_SOON, ROUTES, isAppLive, startLink } from '../site-links';
 import type { PlannedProductId } from '../site-links';
 // The same card as the live line-up, so the two rows read as one set.
 import styles from './products-sections.module.css';
@@ -60,6 +60,9 @@ export function ComingSoon({
   title = 'Next on the stack.',
   lead = 'Two more apps are on the way: Crew for the people on your floor, and Ledger for the money. Both will share the same sign-in, customers and bill as the rest. The prices are planned: you cannot buy either yet.',
 }: ComingSoonProps) {
+  // A card leaves when its app goes live. With both live, the section is gone.
+  const cards = CARDS.filter((card) => !isAppLive(card.id));
+  if (cards.length === 0) return null;
   return (
     <section id="coming-soon" className="section" aria-labelledby="coming-soon-heading">
       <div className="container">
@@ -70,7 +73,7 @@ export function ComingSoon({
           {lead}
         </p>
         <div className={styles.cards}>
-          {CARDS.map((card, i) => {
+          {cards.map((card, i) => {
             const notify = startLink(card.id);
             return (
               <article

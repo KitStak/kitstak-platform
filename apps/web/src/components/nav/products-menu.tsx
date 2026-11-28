@@ -16,7 +16,8 @@ interface ProductsMenuProps {
 export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuProps) {
   return (
     <div id={id} className={styles.panel} data-open={isOpen || undefined} inert={!isOpen}>
-      <div className={`container ${styles.grid}`}>
+      {/* One column per live app: four today, up to six when Crew and Ledger go live. */}
+      <div className={`container ${styles.grid}`} style={{ '--menu-cols': PRODUCT_NAV.length } as React.CSSProperties}>
         {PRODUCT_NAV.map((product) => (
           <section key={product.id} className={styles.product} aria-label={product.name}>
             <Link
@@ -49,7 +50,8 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
           </section>
         ))}
 
-        {/* The apps coming soon: one slim row under the four live ones, so the grid stays four wide. */}
+        {/* The apps coming soon: one slim row under the live ones. Gone once both are live. */}
+        {PLANNED_NAV.length > 0 ? (
         <section className={styles.planned} aria-label="Coming soon">
           <p className={styles.plannedLabel}>Coming soon</p>
           {PLANNED_NAV.map((product) => (
@@ -68,6 +70,7 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
             </Link>
           ))}
         </section>
+        ) : null}
 
         <aside className={styles.bundle} aria-label="Bundle">
           <StakMark lit="both" size={36} />
